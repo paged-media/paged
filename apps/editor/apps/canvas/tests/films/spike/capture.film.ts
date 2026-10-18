@@ -47,10 +47,16 @@ async function clapper(page: Page, log: string): Promise<void> {
       "position:fixed;left:8px;top:8px;width:24px;height:24px;background:#00ff00;z-index:2147483647";
     document.body.appendChild(d);
   });
-  appendFileSync(log, `${JSON.stringify({ mark: "clapper-on", wall: Date.now() })}\n`);
+  appendFileSync(
+    log,
+    `${JSON.stringify({ mark: "clapper-on", wall: Date.now() })}\n`,
+  );
   await page.waitForTimeout(250);
   await page.evaluate(() => document.getElementById("film-clapper")?.remove());
-  appendFileSync(log, `${JSON.stringify({ mark: "clapper-off", wall: Date.now() })}\n`);
+  appendFileSync(
+    log,
+    `${JSON.stringify({ mark: "clapper-off", wall: Date.now() })}\n`,
+  );
 }
 
 async function sequence(page: Page, dir: string): Promise<void> {
@@ -64,7 +70,10 @@ async function sequence(page: Page, dir: string): Promise<void> {
   const shot = async (name: string) => {
     const wall = Date.now();
     await page.screenshot({ path: join(shots, `${name}.png`) });
-    appendFileSync(marks, `${JSON.stringify({ mark: `shot:${name}`, wall, done: Date.now() })}\n`);
+    appendFileSync(
+      marks,
+      `${JSON.stringify({ mark: `shot:${name}`, wall, done: Date.now() })}\n`,
+    );
   };
 
   await clapper(page, marks);
@@ -74,7 +83,10 @@ async function sequence(page: Page, dir: string): Promise<void> {
   const slot = page.locator('[data-tool-slot="shape"]');
   const box = await slot.boundingBox();
   if (!box) throw new Error("no shape tool slot");
-  await pointer.click({ x: box.x + box.width / 2, y: box.y + box.height / 2 }, { targetWidth: box.width });
+  await pointer.click(
+    { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+    { targetWidth: box.width },
+  );
   const a = await screenPoint(page, 90, 260);
   const b = await screenPoint(page, 520, 560);
   await pointer.drag(a, b);
@@ -82,7 +94,12 @@ async function sequence(page: Page, dir: string): Promise<void> {
   await shot("rect");
 
   // Type into a text frame.
-  const { storyId } = await designer.addTextFrame({ x0: 90, y0: 90, x1: 520, y1: 220 });
+  const { storyId } = await designer.addTextFrame({
+    x0: 90,
+    y0: 90,
+    x1: 520,
+    y1: 220,
+  });
   expect(storyId).toBeTruthy();
   await designer.placeCaret(storyId!, 0);
   const t = await screenPoint(page, 300, 150);
@@ -103,7 +120,10 @@ async function sequence(page: Page, dir: string): Promise<void> {
   }
   await page.waitForTimeout(500);
   await shot("panned");
-  appendFileSync(marks, `${JSON.stringify({ mark: "end", wall: Date.now() })}\n`);
+  appendFileSync(
+    marks,
+    `${JSON.stringify({ mark: "end", wall: Date.now() })}\n`,
+  );
 }
 
 async function boot(page: Page): Promise<void> {
@@ -112,7 +132,9 @@ async function boot(page: Page): Promise<void> {
   await designer.newDocument();
   await expect.poll(() => designer.gpuActive(), { timeout: 30_000 }).toBe(true);
   // The Vite error overlay is dev chrome; it must never be filmed.
-  await page.addStyleTag({ content: "vite-error-overlay{display:none!important}" });
+  await page.addStyleTag({
+    content: "vite-error-overlay{display:none!important}",
+  });
   await page.waitForTimeout(800);
 }
 
@@ -131,7 +153,17 @@ test("S1 · B · screencast frames", async ({ page }) => {
   await cap.stop();
   writeFileSync(
     join(dir, "meta.json"),
-    JSON.stringify({ method: "screencast", frames: cap.count, ms: Date.now() - t0, dpr: DPR, view: VIEW }, null, 2),
+    JSON.stringify(
+      {
+        method: "screencast",
+        frames: cap.count,
+        ms: Date.now() - t0,
+        dpr: DPR,
+        view: VIEW,
+      },
+      null,
+      2,
+    ),
   );
 });
 
@@ -155,7 +187,13 @@ test("S1 · A · recordVideo", async ({ browser }) => {
   writeFileSync(
     join(dir, "meta.json"),
     JSON.stringify(
-      { method: "recordVideo", contextCreated: created, sequenceStart: t0, video: await video?.path(), view: VIEW },
+      {
+        method: "recordVideo",
+        contextCreated: created,
+        sequenceStart: t0,
+        video: await video?.path(),
+        view: VIEW,
+      },
       null,
       2,
     ),

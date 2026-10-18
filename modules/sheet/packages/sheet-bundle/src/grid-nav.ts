@@ -100,15 +100,24 @@ export function advance(m: SelectionModel, dir: AdvanceDir): SelectionModel {
     : (m.active.col - r.anchorCol) * r.rows + (m.active.row - r.anchorRow);
   const i = (((i0 + step) % n) + n) % n;
   const active = rowMajor
-    ? { row: r.anchorRow + Math.floor(i / r.cols), col: r.anchorCol + (i % r.cols) }
-    : { row: r.anchorRow + (i % r.rows), col: r.anchorCol + Math.floor(i / r.rows) };
+    ? {
+        row: r.anchorRow + Math.floor(i / r.cols),
+        col: r.anchorCol + (i % r.cols),
+      }
+    : {
+        row: r.anchorRow + (i % r.rows),
+        col: r.anchorCol + Math.floor(i / r.rows),
+      };
   return { anchor: m.anchor, focus: m.focus, active };
 }
 
 /** The target rectangle of a fill-handle drag from `source` to the cell
  *  under the pointer: the source extended along the axis the pointer left
  *  it by the most (Excel), or null while the pointer is inside it. */
-export function fillTarget(source: GridSelection, cell: Cell): GridSelection | null {
+export function fillTarget(
+  source: GridSelection,
+  cell: Cell,
+): GridSelection | null {
   const top = source.anchorRow;
   const left = source.anchorCol;
   const bottom = top + source.rows - 1;
@@ -122,12 +131,32 @@ export function fillTarget(source: GridSelection, cell: Cell): GridSelection | n
   if (vertical <= 0 && horizontal <= 0) return null;
   if (vertical >= horizontal) {
     return below > 0
-      ? { anchorRow: top, anchorCol: left, rows: source.rows + below, cols: source.cols }
-      : { anchorRow: cell.row, anchorCol: left, rows: source.rows + above, cols: source.cols };
+      ? {
+          anchorRow: top,
+          anchorCol: left,
+          rows: source.rows + below,
+          cols: source.cols,
+        }
+      : {
+          anchorRow: cell.row,
+          anchorCol: left,
+          rows: source.rows + above,
+          cols: source.cols,
+        };
   }
   return after > 0
-    ? { anchorRow: top, anchorCol: left, rows: source.rows, cols: source.cols + after }
-    : { anchorRow: top, anchorCol: cell.col, rows: source.rows, cols: source.cols + before };
+    ? {
+        anchorRow: top,
+        anchorCol: left,
+        rows: source.rows,
+        cols: source.cols + after,
+      }
+    : {
+        anchorRow: top,
+        anchorCol: cell.col,
+        rows: source.rows,
+        cols: source.cols + before,
+      };
 }
 
 /** How many leading rows / columns of a window are FULLY visible within
@@ -153,9 +182,11 @@ export function scrollToShow(
 ): { firstRow: number; firstCol: number } {
   let { firstRow, firstCol } = origin;
   if (cell.row < firstRow) firstRow = cell.row;
-  else if (cell.row >= firstRow + visible.rows) firstRow = cell.row - visible.rows + 1;
+  else if (cell.row >= firstRow + visible.rows)
+    firstRow = cell.row - visible.rows + 1;
   if (cell.col < firstCol) firstCol = cell.col;
-  else if (cell.col >= firstCol + visible.cols) firstCol = cell.col - visible.cols + 1;
+  else if (cell.col >= firstCol + visible.cols)
+    firstCol = cell.col - visible.cols + 1;
   return { firstRow: Math.max(0, firstRow), firstCol: Math.max(0, firstCol) };
 }
 
@@ -237,7 +268,8 @@ export function gridKeyAction(
   }
   if (editing) {
     if (key === "Enter") return { kind: "commit", then: shift ? "up" : "down" };
-    if (key === "Tab") return { kind: "commit", then: shift ? "left" : "right" };
+    if (key === "Tab")
+      return { kind: "commit", then: shift ? "left" : "right" };
     if (key === "Escape") return { kind: "cancel" };
     if (key === "Backspace") return { kind: "backspace" };
     if (key in ARROWS) {

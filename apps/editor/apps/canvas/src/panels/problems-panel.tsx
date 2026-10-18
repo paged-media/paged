@@ -66,9 +66,7 @@ export function ProblemsPanel() {
   // The bundle's primary panel: first registered panel whose id sits
   // under the bundle namespace (`media.paged.web` → `…web.panel.…`).
   const panelForBundle = (bundleId: string): string | undefined =>
-    registries.panels
-      .list()
-      .find((p) => p.id.startsWith(bundleId + "."))?.id;
+    registries.panels.list().find((p) => p.id.startsWith(bundleId + "."))?.id;
 
   const focus = (entry: ProblemEntry) => {
     const panelId = panelForBundle(entry.bundleId);

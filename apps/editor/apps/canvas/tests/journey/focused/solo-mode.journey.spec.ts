@@ -95,14 +95,18 @@ test.describe("journey · solo mode (paged.draw)", () => {
     await designer.open({ search: SOLO });
     // No `newDocument()` — solo MUST already have one. That absence is
     // the assertion.
-    await expect.poll(async () => (await probe(page)).pageCount, {
-      timeout: 25_000,
-    }).toBe(1);
+    await expect
+      .poll(async () => (await probe(page)).pageCount, {
+        timeout: 25_000,
+      })
+      .toBe(1);
 
     const p = await probe(page);
 
     // ── 1. THE BOOT ARTBOARD ──
-    expect(p.pageSize, "one page, square, artboard-sized").toEqual([2000, 2000]);
+    expect(p.pageSize, "one page, square, artboard-sized").toEqual([
+      2000, 2000,
+    ]);
 
     // ── 2. DRAW'S MENU IS PRESENT *AND LIVE* ──
     expect(p.topLevels, "draw's own top-level menu").toContain("Draw");
@@ -137,14 +141,21 @@ test.describe("journey · solo mode (paged.draw)", () => {
       "paged.tool.ellipse",
       "paged.tool.type",
     ]) {
-      expect(p.toolIds, `${id} is present — solo must be able to draw`).toContain(id);
+      expect(
+        p.toolIds,
+        `${id} is present — solo must be able to draw`,
+      ).toContain(id);
     }
     // …and the page-layout tools are not.
     for (const id of ["paged.tool.page", "paged.tool.gap", "paged.tool.note"]) {
       expect(p.toolIds, `${id} is DTP furniture`).not.toContain(id);
     }
     // Navigation is never taken away.
-    for (const id of ["paged.tool.select", "paged.tool.hand", "paged.tool.zoom"]) {
+    for (const id of [
+      "paged.tool.select",
+      "paged.tool.hand",
+      "paged.tool.zoom",
+    ]) {
       expect(p.toolIds).toContain(id);
     }
 
@@ -161,7 +172,6 @@ test.describe("journey · solo mode (paged.draw)", () => {
     // nothing.
     expect(p.switcher).toBe(0);
   });
-
 
   // ── EVERY PROFILE ──────────────────────────────────────────────────
   //

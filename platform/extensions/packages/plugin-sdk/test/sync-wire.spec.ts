@@ -164,7 +164,9 @@ describe("sync-wire: --check", () => {
   it("UNRESOLVABLE source FAILS (not a pass)", () => {
     const target = join(tmp, "wire.d.ts");
     writeFileSync(target, "// whatever\n");
-    const res = withoutNodePath(() => checkVendored({ resolveFrom: tmp, target }));
+    const res = withoutNodePath(() =>
+      checkVendored({ resolveFrom: tmp, target }),
+    );
     expect(res.ok).toBe(false);
     expect(res.reason).toMatch(/not resolvable|--source/);
   });
@@ -175,19 +177,44 @@ describe("sync-wire: --check", () => {
     // does their order.
     const trampoline = (hash: string, sig: string) =>
       `    readonly wasm_bindgen__convert__closures_____invoke__h${hash}: ${sig};\n`;
-    const initOutput = (...lines: string[]) => `export interface InitOutput {\n${lines.join("")}}\n`;
+    const initOutput = (...lines: string[]) =>
+      `export interface InitOutput {\n${lines.join("")}}\n`;
     const two = "(a: number, b: number) => void";
     const one = "(a: number) => void";
-    writePackage("0.34.0", DTS_BODY + initOutput(trampoline("1111111111111111", two), trampoline("2222222222222222", one)));
+    writePackage(
+      "0.34.0",
+      DTS_BODY +
+        initOutput(
+          trampoline("1111111111111111", two),
+          trampoline("2222222222222222", one),
+        ),
+    );
     const target = join(tmp, "wire.d.ts");
     writeFileSync(target, buildVendored(resolveSource({ resolveFrom: tmp })));
 
     // Same signatures under other hashes, in another order: in sync.
-    writePackage("0.34.0", DTS_BODY + initOutput(trampoline("bbbbbbbbbbbbbbbb", one), trampoline("aaaaaaaaaaaaaaaa", two)));
+    writePackage(
+      "0.34.0",
+      DTS_BODY +
+        initOutput(
+          trampoline("bbbbbbbbbbbbbbbb", one),
+          trampoline("aaaaaaaaaaaaaaaa", two),
+        ),
+    );
     expect(checkVendored({ resolveFrom: tmp, target }).ok).toBe(true);
 
     // A trampoline whose signature changed is drift.
-    writePackage("0.34.0", DTS_BODY + initOutput(trampoline("aaaaaaaaaaaaaaaa", "(a: number, b: number, c: any) => void"), trampoline("bbbbbbbbbbbbbbbb", one)));
+    writePackage(
+      "0.34.0",
+      DTS_BODY +
+        initOutput(
+          trampoline(
+            "aaaaaaaaaaaaaaaa",
+            "(a: number, b: number, c: any) => void",
+          ),
+          trampoline("bbbbbbbbbbbbbbbb", one),
+        ),
+    );
     const res = checkVendored({ resolveFrom: tmp, target });
     expect(res.ok).toBe(false);
     expect(res.reason).toMatch(/drift/);
@@ -200,14 +227,28 @@ describe("sync-wire: --check", () => {
       `    readonly wasm_bindgen__convert__closures_____invoke__h${hash}: ${sig};\n`;
     const v99 = (types: string, sig: string) =>
       `    readonly wasm_bindgen_cb391a3e032f37a7___convert__closures_____invoke___${types}_true_: ${sig};\n`;
-    const exp = (name: string) => `    readonly ${name}: (a: number) => number;\n`;
-    const initOutput = (...lines: string[]) => `export interface InitOutput {\n${lines.join("")}}\n`;
+    const exp = (name: string) =>
+      `    readonly ${name}: (a: number) => number;\n`;
+    const initOutput = (...lines: string[]) =>
+      `export interface InitOutput {\n${lines.join("")}}\n`;
     const sig = "(a: number, b: number, c: any) => void";
-    writePackage("0.34.0", DTS_BODY + initOutput(exp("alpha"), old("1111111111111111", sig), exp("beta")));
+    writePackage(
+      "0.34.0",
+      DTS_BODY +
+        initOutput(exp("alpha"), old("1111111111111111", sig), exp("beta")),
+    );
     const target = join(tmp, "wire.d.ts");
     writeFileSync(target, buildVendored(resolveSource({ resolveFrom: tmp })));
 
-    writePackage("0.34.0", DTS_BODY + initOutput(exp("beta"), v99("wasm_bindgen_cb391a3e032f37a7___JsValue_____", sig), exp("alpha")));
+    writePackage(
+      "0.34.0",
+      DTS_BODY +
+        initOutput(
+          exp("beta"),
+          v99("wasm_bindgen_cb391a3e032f37a7___JsValue_____", sig),
+          exp("alpha"),
+        ),
+    );
     expect(checkVendored({ resolveFrom: tmp, target }).ok).toBe(true);
 
     // An export that disappeared is still drift.

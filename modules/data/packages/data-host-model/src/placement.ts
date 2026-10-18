@@ -35,7 +35,10 @@ export interface Placement {
 export const DEFAULT_INSET_PT = 36;
 
 /** A default top-left placement sized to a lowered region's content box. */
-export function defaultPlacement(pageId: PageId, bounds: ContentBox): Placement {
+export function defaultPlacement(
+  pageId: PageId,
+  bounds: ContentBox,
+): Placement {
   const top = DEFAULT_INSET_PT;
   const left = DEFAULT_INSET_PT;
   return {

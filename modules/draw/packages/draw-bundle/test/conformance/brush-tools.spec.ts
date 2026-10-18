@@ -117,7 +117,8 @@ function sweep(
 ): void {
   handler.onActivate(undefined as never);
   handler.onPointerDown(pointer(pageId, points[0]));
-  for (const p of points.slice(1)) handler.onPointerMove(pointer(pageId, p, 20));
+  for (const p of points.slice(1))
+    handler.onPointerMove(pointer(pageId, p, 20));
   handler.onPointerUp(pointer(pageId, points[points.length - 1], 20));
 }
 
@@ -135,7 +136,12 @@ describe("draw conformance — brush tools v0", () => {
         path: "outlineStrokeVariable",
         value: {
           type: "outlineStrokeVariable",
-          value: { widths: [2, 4, 6], cap: "round", join: "round", miterLimit: 4 },
+          value: {
+            widths: [2, 4, 6],
+            cap: "round",
+            join: "round",
+            miterLimit: 4,
+          },
         },
       },
     });
@@ -186,7 +192,9 @@ describe("draw conformance — brush tools v0", () => {
 
       // The document's creation defaults are RESTORED after the sweep.
       const meta1 = await h.host.document.meta();
-      expect(meta1.defaultFillColor ?? null).toBe(meta0.defaultFillColor ?? null);
+      expect(meta1.defaultFillColor ?? null).toBe(
+        meta0.defaultFillColor ?? null,
+      );
       expect(meta1.defaultStrokeColor ?? null).toBe(
         meta0.defaultStrokeColor ?? null,
       );
@@ -296,9 +304,12 @@ describe("draw conformance — brush tools v0", () => {
       const ua = await h.host.document.pathAnchors(UA);
       expect(ua!.anchors.length).toBeGreaterThan(uaBefore);
       // The targets stayed selected (the eraser never re-selects).
-      expect(h.host.selection.get().map((s) => s.id).sort()).toEqual(
-        [UA.id, UB.id].sort(),
-      );
+      expect(
+        h.host.selection
+          .get()
+          .map((s) => s.id)
+          .sort(),
+      ).toEqual([UA.id, UB.id].sort());
     });
 
     it("with nothing selected the eraser is a NO-OP (no stray shape)", async () => {

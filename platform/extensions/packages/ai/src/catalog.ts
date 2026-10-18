@@ -24,11 +24,23 @@
 /** The slice of the catalog this package reads. The full catalog carries
  *  more (operations, elements, path aliases); extra fields are ignored. */
 export interface ApiCatalog {
-  hostFunctions: ReadonlyArray<{ name: string; params: string; returns: string; kind: string; summary: string }>;
+  hostFunctions: ReadonlyArray<{
+    name: string;
+    params: string;
+    returns: string;
+    kind: string;
+    summary: string;
+  }>;
   idGrammar: ReadonlyArray<{ form: string; example: string; note: string }>;
   settablePaths: readonly string[];
   constraints: readonly string[];
-  propertySchemas?: ReadonlyArray<{ addressKind: string; path: string; type: unknown; nullable?: boolean; access?: string }>;
+  propertySchemas?: ReadonlyArray<{
+    addressKind: string;
+    path: string;
+    type: unknown;
+    nullable?: boolean;
+    access?: string;
+  }>;
 }
 
 /** The compact reference block that goes into the cached system prompt:
@@ -37,9 +49,14 @@ export interface ApiCatalog {
  *  path up with the `lookup_api` tool instead. */
 export function renderCatalog(catalog: ApiCatalog): string {
   const fns = catalog.hostFunctions
-    .map((f) => `- \`${f.name}${f.params}\` -> ${f.returns}  [${f.kind}] ${f.summary}`)
+    .map(
+      (f) =>
+        `- \`${f.name}${f.params}\` -> ${f.returns}  [${f.kind}] ${f.summary}`,
+    )
     .join("\n");
-  const ids = catalog.idGrammar.map((g) => `- \`${g.form}\`  e.g. \`${g.example}\` — ${g.note}`).join("\n");
+  const ids = catalog.idGrammar
+    .map((g) => `- \`${g.form}\`  e.g. \`${g.example}\` — ${g.note}`)
+    .join("\n");
   const constraints = catalog.constraints.map((c) => `- ${c}`).join("\n");
   return [
     "## Host functions",
@@ -63,20 +80,32 @@ const LOOKUP_LIMIT = 40;
  *  of paths that contain it. Case-insensitive. */
 export function lookupApi(catalog: ApiCatalog, query: string): string {
   const q = query.trim().toLowerCase();
-  if (!q) return "Empty query. Pass part of a function name (insertTextFrame) or a property path (characterFontSize).";
-  const fns = catalog.hostFunctions.filter((f) => f.name.toLowerCase().includes(q));
-  const rows = (catalog.propertySchemas ?? []).filter((r) => r.path.toLowerCase().includes(q));
+  if (!q)
+    return "Empty query. Pass part of a function name (insertTextFrame) or a property path (characterFontSize).";
+  const fns = catalog.hostFunctions.filter((f) =>
+    f.name.toLowerCase().includes(q),
+  );
+  const rows = (catalog.propertySchemas ?? []).filter((r) =>
+    r.path.toLowerCase().includes(q),
+  );
   const ids = catalog.idGrammar.filter((g) => g.form.toLowerCase().includes(q));
   if (fns.length + rows.length + ids.length === 0) {
     return `Nothing in the catalog matches "${query}". Check the spelling against the host functions and settable paths in the system prompt.`;
   }
   const out: string[] = [];
-  for (const f of fns.slice(0, LOOKUP_LIMIT)) out.push(`fn ${f.name}${f.params} -> ${f.returns} [${f.kind}] ${f.summary}`);
+  for (const f of fns.slice(0, LOOKUP_LIMIT))
+    out.push(
+      `fn ${f.name}${f.params} -> ${f.returns} [${f.kind}] ${f.summary}`,
+    );
   for (const r of rows.slice(0, LOOKUP_LIMIT)) {
-    out.push(`path ${r.addressKind}.${r.path}: ${JSON.stringify(r.type)}${r.nullable ? " | null" : ""}${r.access && r.access !== "readWrite" ? ` [${r.access}]` : ""}`);
+    out.push(
+      `path ${r.addressKind}.${r.path}: ${JSON.stringify(r.type)}${r.nullable ? " | null" : ""}${r.access && r.access !== "readWrite" ? ` [${r.access}]` : ""}`,
+    );
   }
-  for (const g of ids) out.push(`address ${g.form} e.g. ${g.example} — ${g.note}`);
+  for (const g of ids)
+    out.push(`address ${g.form} e.g. ${g.example} — ${g.note}`);
   const total = fns.length + rows.length;
-  if (total > 2 * LOOKUP_LIMIT) out.push(`(${total - 2 * LOOKUP_LIMIT}+ more matches; narrow the query)`);
+  if (total > 2 * LOOKUP_LIMIT)
+    out.push(`(${total - 2 * LOOKUP_LIMIT}+ more matches; narrow the query)`);
   return out.join("\n");
 }

@@ -66,7 +66,9 @@ describe("host.parts — the .paged container door (v51)", () => {
     const { host } = makeHost();
     expect(await host.parts.read("o1/spec.json")).toBeNull();
     await host.parts.write("o1/spec.json", new Uint8Array([1, 2, 3]));
-    expect(Array.from((await host.parts.read("o1/spec.json"))!)).toEqual([1, 2, 3]);
+    expect(Array.from((await host.parts.read("o1/spec.json"))!)).toEqual([
+      1, 2, 3,
+    ]);
   });
 
   it("list returns relative paths within the plugin namespace", async () => {

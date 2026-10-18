@@ -38,36 +38,49 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const [left, , right] = contentBox(page);
 
   // ── the opener block ─────────────────────────────────────────────
-  const number = await proseFrame(ctx, page, [left, 56, 150, 128], [
-    { text: "20", style: STYLE.chapterNumber },
-  ]);
-  const title = await proseFrame(ctx, page, [160, 60, right, 128], [
-    { text: "Imposition & Proof", style: STYLE.chapterTitle },
-  ]);
+  const number = await proseFrame(
+    ctx,
+    page,
+    [left, 56, 150, 128],
+    [{ text: "20", style: STYLE.chapterNumber }],
+  );
+  const title = await proseFrame(
+    ctx,
+    page,
+    [160, 60, right, 128],
+    [{ text: "Imposition & Proof", style: STYLE.chapterTitle }],
+  );
   elements.push(number.frameId, title.frameId);
 
-  const deck = await proseFrame(ctx, page, [left, 150, right - 40, 240], [
-    {
-      text:
-        "The last chapter of the body is about leaving well: what the press needs, what the container carries, and what every exit admits it cannot take.",
-      style: STYLE.deck,
-    },
-  ]);
+  const deck = await proseFrame(
+    ctx,
+    page,
+    [left, 150, right - 40, 240],
+    [
+      {
+        text: "The last chapter of the body is about leaving well: what the press needs, what the container carries, and what every exit admits it cannot take.",
+        style: STYLE.deck,
+      },
+    ],
+  );
   elements.push(deck.frameId);
 
   // ── the thesis ───────────────────────────────────────────────────
-  const thesis = await proseFrame(ctx, page, [left, 268, right, 560], [
-    {
-      text:
-        "Six pages follow. A plate draws the sheet's anatomy — trim, bleed, marks — in the page's own native geometry. A preflight runs the real PDF export door against this very document and prints what it reported. The container is opened and its parts are listed, written and read back through the same doors a plugin uses. The loss ledger prints, verbatim, what the IDML interchange twin must leave behind. And the exit inventory names every artifact this book has already sent into other applications' hands.",
-      style: STYLE.bodyFirst,
-    },
-    {
-      text:
-        "Two doors are deliberately absent from those pages. paged.pdf's import opens a PDF as a new native document, and paged.publish's IDML open does the same for an interchange package — and both REPLACE the document they are invoked over. That is the correct shape for an import (a PDF becomes the document), and it is exactly why neither runs inline here: invoking either would end this book at this sentence. They are doors out of this build, exercised as exit paths at assembly — export, reopen, compare — and their import lanes are proven where imports are proven, by their own journeys. A demonstration that pretended otherwise would be a screenshot, not a specimen.",
-      style: STYLE.body,
-    },
-  ]);
+  const thesis = await proseFrame(
+    ctx,
+    page,
+    [left, 268, right, 560],
+    [
+      {
+        text: "Six pages follow. A plate draws the sheet's anatomy — trim, bleed, marks — in the page's own native geometry. A preflight runs the real PDF export door against this very document and prints what it reported. The container is opened and its parts are listed, written and read back through the same doors a plugin uses. The loss ledger prints, verbatim, what the IDML interchange twin must leave behind. And the exit inventory names every artifact this book has already sent into other applications' hands.",
+        style: STYLE.bodyFirst,
+      },
+      {
+        text: "Two doors are deliberately absent from those pages. paged.pdf's import opens a PDF as a new native document, and paged.publish's IDML open does the same for an interchange package — and both REPLACE the document they are invoked over. That is the correct shape for an import (a PDF becomes the document), and it is exactly why neither runs inline here: invoking either would end this book at this sentence. They are doors out of this build, exercised as exit paths at assembly — export, reopen, compare — and their import lanes are proven where imports are proven, by their own journeys. A demonstration that pretended otherwise would be a screenshot, not a specimen.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(thesis.frameId);
 
   elements.push(

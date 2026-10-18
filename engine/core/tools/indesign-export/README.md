@@ -96,7 +96,7 @@ the scenario reported STALE; record it again with the change that moved it.
 ## Caveats
 
 - The driver runs with `userInteractionLevel = NEVER_INTERACT`, which
-  suppresses *most* dialogs but not all. Missing fonts, missing
+  suppresses _most_ dialogs but not all. Missing fonts, missing
   links, or permission prompts will still pop. Plan a one-time
   manual pass after each new sample lands.
 - Every InDesign export advances the application's recently-opened-

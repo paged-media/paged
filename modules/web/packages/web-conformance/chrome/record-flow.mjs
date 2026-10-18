@@ -33,7 +33,13 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { chromium } from "playwright";
 
-import { HERE, assertInterLoaded, fontFaceStyle, injectHead, sha256 } from "./shared.mjs";
+import {
+  HERE,
+  assertInterLoaded,
+  fontFaceStyle,
+  injectHead,
+  sha256,
+} from "./shared.mjs";
 
 const FIXTURES = join(HERE, "flow-fixtures");
 const OUT = join(HERE, "recorded-flow");
@@ -77,7 +83,8 @@ function fragment({ w, h, n }) {
       cols[col] += t[i];
     }
     // a block boundary is a word boundary
-    for (let c = 0; c < cols.length; c++) if (cols[c] && !cols[c].endsWith(" ")) cols[c] += " ";
+    for (let c = 0; c < cols.length; c++)
+      if (cols[c] && !cols[c].endsWith(" ")) cols[c] += " ";
   }
   return cols.map((c) => c.replace(/\s+/g, " ").trim());
 }
@@ -102,9 +109,13 @@ async function main() {
       const w = frames[0].widthPx;
       const h = frames[0].heightPx;
       if (!frames.every((f) => f.widthPx === w && f.heightPx === h)) {
-        throw new Error(`${name}: the Chrome flow oracle models equal frames only`);
+        throw new Error(
+          `${name}: the Chrome flow oracle models equal frames only`,
+        );
       }
-      const page = await browser.newPage({ viewport: { width: w * (frames.length + 4), height: h + 100 } });
+      const page = await browser.newPage({
+        viewport: { width: w * (frames.length + 4), height: h + 100 },
+      });
       await page.setContent(injectHead(src, face), { waitUntil: "load" });
       await assertInterLoaded(page);
       const cols = await page.evaluate(fragment, { w, h, n: frames.length });
@@ -116,9 +127,14 @@ async function main() {
         frameText: frames.map((_, i) => cols[i] ?? ""),
         oversetText: cols.slice(frames.length).filter(Boolean).join(" "),
       };
-      writeFileSync(join(OUT, `${name}.json`), JSON.stringify(rec, null, 1) + "\n");
+      writeFileSync(
+        join(OUT, `${name}.json`),
+        JSON.stringify(rec, null, 1) + "\n",
+      );
       await page.close();
-      console.log(`record-flow: ${name} ${rec.frameText.map((t) => t.split(" ").length).join("/")} words, overset ${rec.oversetText ? "yes" : "no"}`);
+      console.log(
+        `record-flow: ${name} ${rec.frameText.map((t) => t.split(" ").length).join("/")} words, overset ${rec.oversetText ? "yes" : "no"}`,
+      );
     }
   } finally {
     await browser.close();

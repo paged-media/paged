@@ -25,21 +25,43 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
 
 import { loadIdml, openCanvas, openPanel } from "./fidelity/canvas-driver";
-import { FIXTURE, opacity, SUMMARY_TURN, TEXT_FRAME_ID, TOOL_TURN } from "./ai-fixtures";
+import {
+  FIXTURE,
+  opacity,
+  SUMMARY_TURN,
+  TEXT_FRAME_ID,
+  TOOL_TURN,
+} from "./ai-fixtures";
 
 async function selectFrame(page: Page): Promise<void> {
   await page.evaluate((id) => {
-    const c = (globalThis as unknown as { __canvas: { setElementSelection(ids: unknown[], mode: string): void } }).__canvas;
+    const c = (
+      globalThis as unknown as {
+        __canvas: { setElementSelection(ids: unknown[], mode: string): void };
+      }
+    ).__canvas;
     c.setElementSelection([{ kind: "textFrame", id }], "replace");
   }, TEXT_FRAME_ID);
 }
 
-async function stubClaude(page: Page, sent: Array<{ mode: string | null; prompt: unknown }>): Promise<void> {
+async function stubClaude(
+  page: Page,
+  sent: Array<{ mode: string | null; prompt: unknown }>,
+): Promise<void> {
   await page.route("**/api/ai/v1/messages", async (route: Route) => {
     const req = route.request();
-    const body = req.postDataJSON() as { messages: Array<{ content: unknown }> };
-    sent.push({ mode: req.headers()["x-paged-ai-mode"] ?? null, prompt: body.messages[0]!.content });
-    await route.fulfill({ status: 200, contentType: "text/event-stream", body: sent.length % 2 === 1 ? TOOL_TURN : SUMMARY_TURN });
+    const body = req.postDataJSON() as {
+      messages: Array<{ content: unknown }>;
+    };
+    sent.push({
+      mode: req.headers()["x-paged-ai-mode"] ?? null,
+      prompt: body.messages[0]!.content,
+    });
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: sent.length % 2 === 1 ? TOOL_TURN : SUMMARY_TURN,
+    });
   });
 }
 
@@ -51,7 +73,9 @@ test.describe("AI Assistant panel", () => {
     await selectFrame(page);
   });
 
-  test("a suggestion runs Claude on the selection, and Undo reverts it @feat:editor-shell.ai-assistant @feat:editor-shell.panels.properties @level:happy", async ({ page }) => {
+  test("a suggestion runs Claude on the selection, and Undo reverts it @feat:editor-shell.ai-assistant @feat:editor-shell.panels.properties @level:happy", async ({
+    page,
+  }) => {
     const sent: Array<{ mode: string | null; prompt: unknown }> = [];
     await stubClaude(page, sent);
     const card = page.locator("[data-ai-assistant]");
@@ -60,7 +84,9 @@ test.describe("AI Assistant panel", () => {
     const before = await opacity(page);
 
     await card.locator("[data-ai-suggestion]").first().click();
-    await expect(card.locator("[data-ai-summary]")).toHaveText("Set the frame's opacity to 40%.");
+    await expect(card.locator("[data-ai-summary]")).toHaveText(
+      "Set the frame's opacity to 40%.",
+    );
     await expect(card.locator("[data-ai-step=ok]")).toHaveCount(1);
     expect(await opacity(page)).toBe(40);
 
@@ -73,7 +99,9 @@ test.describe("AI Assistant panel", () => {
     expect(await opacity(page)).toEqual(before);
   });
 
-  test("Undo refuses once the document was edited after Claude @feat:editor-shell.ai-assistant @feat:editor-shell.panels.properties @level:edge", async ({ page }) => {
+  test("Undo refuses once the document was edited after Claude @feat:editor-shell.ai-assistant @feat:editor-shell.panels.properties @level:edge", async ({
+    page,
+  }) => {
     await stubClaude(page, []);
     const card = page.locator("[data-ai-assistant]");
     await card.locator("[data-ai-input]").fill("make it lighter");
@@ -82,11 +110,22 @@ test.describe("AI Assistant panel", () => {
 
     // The user edits after Claude finished.
     await page.evaluate(
-      (id) => (globalThis as unknown as { __canvas: { client: { executeScript(s: string): Promise<unknown> } } }).__canvas.client.executeScript(`paged.set("textFrame:${id}", "frameOpacity", 70)`),
+      (id) =>
+        (
+          globalThis as unknown as {
+            __canvas: {
+              client: { executeScript(s: string): Promise<unknown> };
+            };
+          }
+        ).__canvas.client.executeScript(
+          `paged.set("textFrame:${id}", "frameOpacity", 70)`,
+        ),
       TEXT_FRAME_ID,
     );
     await card.locator("[data-cockpit-action=ai-undo]").click();
-    await expect(card.locator("[data-ai-error]")).toContainText("changed after Claude's edit");
+    await expect(card.locator("[data-ai-error]")).toContainText(
+      "changed after Claude's edit",
+    );
     expect(await opacity(page)).toBe(70);
   });
 });

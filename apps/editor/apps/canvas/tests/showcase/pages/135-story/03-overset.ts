@@ -52,25 +52,38 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const elements: string[] = [];
   const page = p(36);
 
-  const head = await prose(ctx, page, [60, 104, 492, 130], [
-    { text: "Overset, honestly", style: STYLE.head1 },
-  ]);
-  const intro = await prose(ctx, page, [60, 134, 492, 200], [
-    {
-      text:
-        "The tinted frame below holds more text than it can show. Overset " +
-        "text is editor state: retained by the model, saved by the " +
-        "container, clipped by the render, and reported by the engine as a " +
-        "diagnostic — the assertion under this page reads that diagnostic, " +
-        "not the pixels.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await prose(
+    ctx,
+    page,
+    [60, 104, 492, 130],
+    [{ text: "Overset, honestly", style: STYLE.head1 }],
+  );
+  const intro = await prose(
+    ctx,
+    page,
+    [60, 134, 492, 200],
+    [
+      {
+        text:
+          "The tinted frame below holds more text than it can show. Overset " +
+          "text is editor state: retained by the model, saved by the " +
+          "container, clipped by the render, and reported by the engine as a " +
+          "diagnostic — the assertion under this page reads that diagnostic, " +
+          "not the pixels.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // The exhibit: a plate marks the too-small frame's true extent, so
   // the clip boundary is visible against the tint.
-  const backing = await plate(ctx, page, [60, 216, 312, 320], SWATCH.vermilionTint);
+  const backing = await plate(
+    ctx,
+    page,
+    [60, 216, 312, 320],
+    SWATCH.vermilionTint,
+  );
   const exhibit = await pourOne(
     ctx,
     page,
@@ -91,7 +104,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const summary = (await storySummaries(ctx.page)).find(
     (s) => s.selfId === pouredStory,
   );
-  expect(summary, "the poured story is missing from paged.stories()").toBeTruthy();
+  expect(
+    summary,
+    "the poured story is missing from paged.stories()",
+  ).toBeTruthy();
   expect(
     summary?.overset,
     "a frame holding more text than fits must report overset",

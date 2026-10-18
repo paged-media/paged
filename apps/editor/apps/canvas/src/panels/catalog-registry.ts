@@ -25,7 +25,10 @@
 // also work (CatalogRegistry is plain data) but the singleton
 // keeps the registration cost a one-time event.
 
-import { createCatalogRegistry, type CatalogRegistry } from "@paged-media/catalog";
+import {
+  createCatalogRegistry,
+  type CatalogRegistry,
+} from "@paged-media/catalog";
 import {
   PAGED_INPUT_BOUNDS,
   registerBuiltInCatalogEntries,

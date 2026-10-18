@@ -112,7 +112,9 @@ export function createEyedropperHandler(): GestureHandler {
     try {
       const pages = await client
         .collection<{ selfId: string; sizePt: [number, number] }>("pages")
-        .catch(() => [] as readonly { selfId: string; sizePt: [number, number] }[]);
+        .catch(
+          () => [] as readonly { selfId: string; sizePt: [number, number] }[],
+        );
       const page = pages.find((p) => p.selfId === e.pageId);
       if (!page) return;
 
@@ -185,7 +187,9 @@ export function createEyedropperHandler(): GestureHandler {
         })),
       ];
       await client.mutate(
-        ops.length === 1 ? (ops[0] as never) : ({ op: "batch", args: { ops } } as never),
+        ops.length === 1
+          ? (ops[0] as never)
+          : ({ op: "batch", args: { ops } } as never),
       );
     } finally {
       sampling = false;

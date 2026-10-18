@@ -30,34 +30,50 @@ import type { PageContext, PageReport } from "../../types";
 export async function build(ctx: PageContext): Promise<PageReport> {
   const elements: string[] = [];
 
-  const number = await proseFrame(ctx, p(19), [48, 54, 480, 132], [
-    { text: "2", style: STYLE.chapterNumber },
-  ]);
+  const number = await proseFrame(
+    ctx,
+    p(19),
+    [48, 54, 480, 132],
+    [{ text: "2", style: STYLE.chapterNumber }],
+  );
   elements.push(number.frameId);
 
-  const title = await proseFrame(ctx, p(19), [48, 140, 480, 208], [
-    { text: "The Letter", style: STYLE.chapterTitle },
-  ]);
+  const title = await proseFrame(
+    ctx,
+    p(19),
+    [48, 140, 480, 208],
+    [{ text: "The Letter", style: STYLE.chapterTitle }],
+  );
   elements.push(title.frameId);
 
-  const deck = await proseFrame(ctx, p(19), [48, 218, 480, 288], [
-    {
-      text: "A type specimen does not prove that a face is beautiful. It proves that the engine can ask the face the right questions.",
-      style: STYLE.deck,
-    },
-  ]);
+  const deck = await proseFrame(
+    ctx,
+    p(19),
+    [48, 218, 480, 288],
+    [
+      {
+        text: "A type specimen does not prove that a face is beautiful. It proves that the engine can ask the face the right questions.",
+        style: STYLE.deck,
+      },
+    ],
+  );
   elements.push(deck.frameId);
 
-  const prose = await proseFrame(ctx, p(19), [48, 300, 480, 580], [
-    {
-      text: "The faces in this book carry real feature tables: EB Garamond answers for swashes, small capitals, old-style figures and seven stylistic sets; JetBrains Mono for the slashed zero; Space Grotesk for tabular figures. The next spread asks for each feature by its property path and shows both states side by side.",
-      style: STYLE.bodyFirst,
-    },
-    {
-      text: "The terms are strict. A row whose feature the composer actually drives — ligatures, case, position, and every metric transform on the closing page — shows a genuine difference. A row whose feature the wire can only record is printed anyway, twice and identically, with the margin naming the limit. A specimen that hid its second kind of row would be an advertisement.",
-      style: STYLE.body,
-    },
-  ]);
+  const prose = await proseFrame(
+    ctx,
+    p(19),
+    [48, 300, 480, 580],
+    [
+      {
+        text: "The faces in this book carry real feature tables: EB Garamond answers for swashes, small capitals, old-style figures and seven stylistic sets; JetBrains Mono for the slashed zero; Space Grotesk for tabular figures. The next spread asks for each feature by its property path and shows both states side by side.",
+        style: STYLE.bodyFirst,
+      },
+      {
+        text: "The terms are strict. A row whose feature the composer actually drives — ligatures, case, position, and every metric transform on the closing page — shows a genuine difference. A row whose feature the wire can only record is printed anyway, twice and identically, with the margin naming the limit. A specimen that hid its second kind of row would be an advertisement.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(prose.frameId);
 
   elements.push(

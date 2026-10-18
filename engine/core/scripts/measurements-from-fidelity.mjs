@@ -150,7 +150,8 @@ for (const fixture of fixtures) {
   if (pages.length === 0) continue;
 
   const gated = pages.filter(
-    (p) => typeof p.page === "number" && p.page <= (gate.pages_checked ?? Infinity),
+    (p) =>
+      typeof p.page === "number" && p.page <= (gate.pages_checked ?? Infinity),
   );
   const scope = gated.length > 0 ? gated : pages;
   const th = gate.thresholds ?? {};
@@ -159,7 +160,12 @@ for (const fixture of fixtures) {
     ? "no FOGRA39 profile on this runner — excluded from the trend"
     : undefined;
 
-  push("fidelity.worst_mean_de", max(scope, "mean_de"), "de2000", th.max_mean_de);
+  push(
+    "fidelity.worst_mean_de",
+    max(scope, "mean_de"),
+    "de2000",
+    th.max_mean_de,
+  );
   push("fidelity.worst_p99_de", max(scope, "p99_de"), "de2000", th.max_p99_de);
   push("fidelity.worst_ssim", min(scope, "ssim"), "ssim", th.min_ssim);
   push("fidelity.pages_checked", scope.length, "count", undefined);
@@ -248,7 +254,5 @@ console.log(
       ? ` (${inconclusiveCount} INCONCLUSIVE — excluded from any trend)`
       : "") +
     ` -> ${mPath}` +
-    (unreadable.length
-      ? `\n  UNREADABLE    : ${unreadable.join(", ")}`
-      : ""),
+    (unreadable.length ? `\n  UNREADABLE    : ${unreadable.join(", ")}` : ""),
 );

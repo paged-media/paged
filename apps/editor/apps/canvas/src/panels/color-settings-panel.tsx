@@ -69,7 +69,8 @@ export function ColorSettingsPanel() {
   useEffect(() => {
     refresh();
     const off = client.subscribe((msg) => {
-      if (msg.kind === "documentLoaded" || msg.kind === "mutationApplied") refresh();
+      if (msg.kind === "documentLoaded" || msg.kind === "mutationApplied")
+        refresh();
       if (msg.kind === "colorProfileRegistered") {
         setProfiles((prev) =>
           prev.includes(msg.payload.name) ? prev : [...prev, msg.payload.name],
@@ -131,7 +132,10 @@ export function ColorSettingsPanel() {
   };
 
   return (
-    <div className="p-3 text-sm flex flex-col gap-3" data-color-settings="ready">
+    <div
+      className="p-3 text-sm flex flex-col gap-3"
+      data-color-settings="ready"
+    >
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
         Working spaces
       </div>

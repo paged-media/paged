@@ -60,9 +60,12 @@ async function tiles(
   columns: number,
 ): Promise<string[]> {
   const elements: string[] = [];
-  const head = await proseFrame(ctx, page, [54, 60, 486, 112], [
-    { text: heading, style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [54, 60, 486, 112],
+    [{ text: heading, style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
   const w = (432 - (columns - 1) * 12) / columns;
   for (const [i, [name, count]] of entries.entries()) {
@@ -79,10 +82,15 @@ async function tiles(
         LAYER.background,
       ),
     );
-    const label = await proseFrame(ctx, page, [x + 10, y + 12, x + w - 10, y + 84], [
-      { text: name, style: STYLE.head2 },
-      { text: count, style: STYLE.specValue },
-    ]);
+    const label = await proseFrame(
+      ctx,
+      page,
+      [x + 10, y + 12, x + w - 10, y + 84],
+      [
+        { text: name, style: STYLE.head2 },
+        { text: count, style: STYLE.specValue },
+      ],
+    );
     elements.push(label.frameId);
   }
   return elements;

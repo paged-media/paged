@@ -1,6 +1,6 @@
 # RFC: data-provider consumer — source a sheet from a governed dataset (S-15)
 
-*Design note, written in June 2026 as a proposal, before the implementation; it was then built. What was built is recorded in [ADR 014](https://github.com/paged-media/plugin-data/blob/main/docs/adr/014-data-provider-arrow-seam.md) (in plugin-data); where this plugin's consumer differs from the proposal, a status note says so.*
+_Design note, written in June 2026 as a proposal, before the implementation; it was then built. What was built is recorded in [ADR 014](https://github.com/paged-media/plugin-data/blob/main/docs/adr/014-data-provider-arrow-seam.md) (in plugin-data); where this plugin's consumer differs from the proposal, a status note says so._
 
 **Origin:** the plugin-data concept §7.1 (`plugin-data: docs/concept.md`), which names the
 sheets plugin as the canonical consumer, so that a sheet can be sourced from a governed
@@ -16,7 +16,7 @@ provider side is already implemented + tested in plugin-data
 
 ## Problem
 
-*Status note (2026-10-02): this section predates the implementation; the door asked for below exists now, as `host.dataProviders`, announced by `host.supports("dataProviders@1")`.*
+_Status note (2026-10-02): this section predates the implementation; the door asked for below exists now, as `host.dataProviders`, announced by `host.supports("dataProviders@1")`._
 
 A `paged.sheet` workbook is sourced today from an **`.xlsx` import** or
 hand entry. plugin-data §7.1 calls for a more powerful composition: a sheet
@@ -35,7 +35,7 @@ Two constraints shape how this is allowed to work:
 
 2. **§1.1 no-network / publishing-first — and the external-link exclusion.**
    `paged.sheet` deliberately **never follows external references**: xlsx
-   external-workbook links are *preserved on round-trip, never interpreted*
+   external-workbook links are _preserved on round-trip, never interpreted_
    (§1.1, a permanent product decision). This RFC does **not** breach that. A
    data-sourced sheet does not follow a link or open a socket — it **receives an
    already-resolved `RecordSet` snapshot** handed to it by the platform, exactly
@@ -69,13 +69,22 @@ in the counterpart RFC):
 ```ts
 interface DataProvidersSurface {
   // ── Consumer side (paged.sheet uses these three) ───────────────────────────
-  discover(category?: string): readonly DataProviderInfo[];   // schema + revision, NO rows
-  get(id: string): Promise<DataProviderSnapshot | null>;      // pull the rows
+  discover(category?: string): readonly DataProviderInfo[]; // schema + revision, NO rows
+  get(id: string): Promise<DataProviderSnapshot | null>; // pull the rows
   onDidChange(id: string, listener: (revision: string) => void): Disposable;
   // register(...) is the provider side — paged.sheet never calls it.
 }
-interface DataProviderInfo     { id: string; category: string; schema: ProviderSchema; revision: string }
-interface DataProviderSnapshot { id: string; revision: string; records: RecordSet }
+interface DataProviderInfo {
+  id: string;
+  category: string;
+  schema: ProviderSchema;
+  revision: string;
+}
+interface DataProviderSnapshot {
+  id: string;
+  revision: string;
+  records: RecordSet;
+}
 ```
 
 `ProviderSchema` / `RecordSet` are the Arrow-aligned interchange substrate
@@ -85,7 +94,7 @@ already handles internally for the grid, so the mapping is mechanical.
 
 ### Stage 3 — `paged.sheet` integration
 
-*Status note (2026-10-02): this section predates the implementation, and what was built differs. Sourcing a dataset starts a fresh workbook that replaces the open one: row 0 holds the schema field names, and every value is written as text and typed by the engine. The session keeps the provider id, the revision and a stale flag; a newer revision marks the sheet stale and the Datasets panel offers "Re-source". A linked range inside an existing workbook, pin and unlink are not built, and the provider link is not stored with the workbook. See `packages/sheet-bundle/src/session.ts` (`sourceFromDataset`) and `packages/sheet-bundle/src/panels/datasets-panel.tsx`.*
+_Status note (2026-10-02): this section predates the implementation, and what was built differs. Sourcing a dataset starts a fresh workbook that replaces the open one: row 0 holds the schema field names, and every value is written as text and typed by the engine. The session keeps the provider id, the revision and a stale flag; a newer revision marks the sheet stale and the Datasets panel offers "Re-source". A linked range inside an existing workbook, pin and unlink are not built, and the provider link is not stored with the workbook. See `packages/sheet-bundle/src/session.ts` (`sourceFromDataset`) and `packages/sheet-bundle/src/panels/datasets-panel.tsx`._
 
 **A "New sheet from dataset" command + panel.**
 `discover("dataset")` → present the providers (id + the schema's field labels) →
@@ -93,6 +102,7 @@ on pick, `get(id)` → seed a sheet from the snapshot.
 
 **The `RecordSet` → cell-model mapping (the sheet-specific work).** One provider
 snapshot → one sheet (or a named range):
+
 - a **header row** from the schema field labels/names;
 - one column per `RecordSet` column, each `FieldType` mapping to a native sheet
   cell value: `text → text`, `int`/`float → number`, `bool → boolean`,
@@ -103,14 +113,14 @@ snapshot → one sheet (or a named range):
 sync).** The seeded range is a **linked** region: the bundle remembers
 `(providerId, lastRevision, anchor)` in the workbook payload. Formulas and edits
 the author writes **around** the range are untouched; only the linked cells
-track the source. `onDidChange(id, rev)` → mark the range *stale* and offer a
+track the source. `onDidChange(id, rev)` → mark the range _stale_ and offer a
 one-click refresh (`get(id)` → re-seed the linked cells). The author can **pin**
 a range (freeze the snapshot) or **unlink** it (convert to plain values) — the
 same Linked / Pinned / Overridden posture plugin-data uses (§8 there).
 
 **Persistence honesty (§1.1-consistent).** The linked range stores
 `(providerId, revision)` in the workbook payload, but the **cell values are
-committed content** — the snapshot travels *with* the document. Reopening a
+committed content** — the snapshot travels _with_ the document. Reopening a
 workbook shows the saved values and **does not auto-refetch**; a refresh is an
 explicit author action. (No silent network on open — the sheet never fetches at
 all; it asks the SDK, which asks the governed provider.)
@@ -144,7 +154,7 @@ paths. Neither plugin hard-depends on the other; both depend only on the SDK.
 - **A shared `@paged-media/*` package, or calling `paged.data` directly** —
   violates §2.1 (build-time / runtime coupling) and couples release cycles.
 - **Model it as an external-workbook link** — wrong model and a §1.1 breach:
-  external links are live xlsx-link semantics deliberately *excluded* (preserved,
+  external links are live xlsx-link semantics deliberately _excluded_ (preserved,
   never interpreted). A data-sourced range is a platform-delivered governed
   snapshot, not a followed link.
 

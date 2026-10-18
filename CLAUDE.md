@@ -5,6 +5,7 @@ and server. Each component keeps its own `CLAUDE.md` and `docs/`; read the one
 next to the code you change. This file holds only what crosses components.
 
 ## Layout
+
 - `engine/core` — Rust engine (own Cargo workspace and `rust-toolchain.toml`).
 - `modules/<name>` — built-in modules; each keeps its own Cargo workspace for now.
 - JavaScript: ONE Bun workspace at the root (`package.json` `workspaces`, `bun.lock`,
@@ -18,10 +19,12 @@ next to the code you change. This file holds only what crosses components.
 - `tooling/import` — how this repository was assembled; do not edit history-related files by hand.
 
 ## Tasks (Moon)
+
 Moon (`.moon/`, version pinned in `.prototools`) runs every component's tasks
 from anywhere in the repository. One project per Cargo workspace and JS component root:
 `core`, `core-idml-viewer`, `publish`, `image`, `draw`, `sheet`, `data`, `doc`,
 `slide`, `web`, `web-render`, `extensions`, `editor`, `server`.
+
 - `moon run <project>:test` — also `:fmt`, `:check`, `:lint`, `:build`, and
   `:wasm` where the component ships a wasm artifact. `moon run :lint` runs it
   everywhere. The language halves are `rust-*` and `js-*` (`moon tasks <project>`).
@@ -35,6 +38,7 @@ from anywhere in the repository. One project per Cargo workspace and JS componen
   rust-toolchain.toml). A change in `git status` after a Moon run is a bug in `.moon/`.
 
 ## Lint
+
 - `bun run lint` (root): `bun lint` over the whole repository with the one config,
   `bunfig.toml` `[lint]` (docs/adr/PM-0003). It runs an exact canary build through
   `tooling/js/bun-canary.sh`; plain `bun` stays at the `.prototools` version. Never add
@@ -49,8 +53,10 @@ from anywhere in the repository. One project per Cargo workspace and JS componen
   A one-line exception says why: `// eslint-disable-next-line <rule> -- <reason>`.
 
 ## Agent tools (MCP)
+
 `.mcp.json` registers two servers; `.claude/settings.json` allows their read
 tools and asks before anything that writes.
+
 - `moon` (`moon mcp`): projects, tasks, changed files. Speaks the stateless MCP
   protocol `2026-07-28`, so it needs a client that does too.
 - `serena` (Serena 2.0.0, `.serena/project.yml`): symbol navigation and edits
@@ -58,6 +64,7 @@ tools and asks before anything that writes.
   TypeScript/JavaScript. Setup and caveats: `docs/development/code-intelligence.md`.
 
 ## Invariants
+
 - The public repository builds and passes its gates without private resources
   (corpus, licensed profiles/fonts). Optional resources are reached through env
   vars and report `unavailable`, never a silent pass: in Rust through

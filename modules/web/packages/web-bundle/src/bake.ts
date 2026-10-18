@@ -58,7 +58,11 @@ import {
 
 import { resolveBindings } from "./bindings";
 import { engineDocument } from "./engine-document";
-import { faceDiagnostics, prepareEngineInputs, resourceDiagnostics } from "./engine-inputs";
+import {
+  faceDiagnostics,
+  prepareEngineInputs,
+  resourceDiagnostics,
+} from "./engine-inputs";
 import type { WebEngine } from "./engine-loader";
 import { renderWithPolicy } from "./overflow";
 import { describeRefusal, loadWebSource } from "./source-part";
@@ -108,17 +112,25 @@ export function framesWithLayers(host: BundleHost): Set<string> {
  *  `null` when the host wires no scene channel. Never disposed here — it
  *  lives for the host's lifetime so the submitted layer persists. Submits
  *  and clears are recorded in {@link framesWithLayers}. */
-export function persistentSceneSurface(host: BundleHost): SceneLayerSurface | null {
+export function persistentSceneSurface(
+  host: BundleHost,
+): SceneLayerSurface | null {
   if (!host.supports("rendering.sceneLayer@1")) return null;
   let surface = sceneSurfaces.get(host);
   if (!surface) {
     const inner = host.contribute.sceneLayer();
     const held = framesWithLayers(host);
     surface = Object.assign(Object.create(inner) as SceneLayerSurface, {
-      submit: async (id: string, layer: Parameters<SceneLayerSurface["submit"]>[1]) => {
+      submit: async (
+        id: string,
+        layer: Parameters<SceneLayerSurface["submit"]>[1],
+      ) => {
         // From protocol 68 the reply names the faces drawn in the default
         // font (`{ fontFallbacks }`); an older host answers nothing.
-        const reply: SceneLayerSubmitResult | void = await inner.submit(id, layer);
+        const reply: SceneLayerSubmitResult | void = await inner.submit(
+          id,
+          layer,
+        );
         held.add(id);
         return reply;
       },
@@ -212,7 +224,15 @@ export async function bakeWebFrame(
   // the engine NOT loaded (or it threw): the honest not-loaded path.
   const bound = (await resolveBindings(host, id, source)).vars;
   const result: WebRenderResult = engine
-    ? await renderWithEngine(host, id, engine, source, bounds ?? null, opts?.allowGrow ?? true, bound)
+    ? await renderWithEngine(
+        host,
+        id,
+        engine,
+        source,
+        bounds ?? null,
+        opts?.allowGrow ?? true,
+        bound,
+      )
     : renderWebFrame({
         html: source.html,
         css: source.css,
@@ -282,7 +302,11 @@ async function renderWithEngine(
   const notLoaded: WebRenderResult = {
     sceneLayer: null,
     diagnostics: [
-      { severity: "info", message: ENGINE_NOT_LOADED_MESSAGE, source: "render" },
+      {
+        severity: "info",
+        message: ENGINE_NOT_LOADED_MESSAGE,
+        source: "render",
+      },
     ],
   };
   const frameWidthPt = bounds ? Math.max(0, bounds[3] - bounds[1]) : 0;
@@ -290,13 +314,22 @@ async function renderWithEngine(
   // Apply the §6.2 deterministic template pass (with the bound values),
   // then compose the document.
   const rendered = renderWebFrameSource(source, bound);
-  const html = composeSrcdoc({ ...source, html: rendered.html, css: rendered.css });
+  const html = composeSrcdoc({
+    ...source,
+    html: rendered.html,
+    css: rendered.css,
+  });
   const widthPx = Math.round(frameWidthPt * PX_PER_PT);
   const heightPx = Math.round(frameHeightPt * PX_PER_PT);
   const policy = source.options.overflow;
   // The faces the source names and the resources it points at, from the
   // document (never the network).
-  const faceProblems = await prepareEngineInputs(host, engine, html, asFrameTarget(id)?.id);
+  const faceProblems = await prepareEngineInputs(
+    host,
+    engine,
+    html,
+    asFrameTarget(id)?.id,
+  );
   // A threaded source's policy is its flow (render-flow-command.ts); a
   // single-frame render of it shows its own frame, clipped.
   const fit = renderWithPolicy(engine, html, widthPx, heightPx, policy);
@@ -316,7 +349,10 @@ async function renderWithEngine(
       const out = target
         ? await host.document.mutate({
             op: "resizeFrame",
-            args: { frameId: target.id, bounds: [bounds[0], bounds[1], bounds[0] + contentPt, bounds[3]] },
+            args: {
+              frameId: target.id,
+              bounds: [bounds[0], bounds[1], bounds[0] + contentPt, bounds[3]],
+            },
           })
         : { applied: false, error: "not a page item" };
       if (!out.applied) {
@@ -438,7 +474,11 @@ export async function bakeWebFlow(
       submittedCount: 0,
       overset: false,
       diagnostics: [
-        { severity: "info", message: ENGINE_NOT_LOADED_MESSAGE, source: "render" },
+        {
+          severity: "info",
+          message: ENGINE_NOT_LOADED_MESSAGE,
+          source: "render",
+        },
       ],
       layers: chain.map(() => null),
     };
@@ -462,7 +502,12 @@ export async function bakeWebFlow(
   // subtree flows across the chain (Stylo ignores the property, so the plugin
   // parses it). Absent → the whole body flows.
   const flowRoot = flowRootSelector(rendered.css);
-  const faceProblems = await prepareEngineInputs(host, engine, html, asFrameTarget(sourceId)?.id);
+  const faceProblems = await prepareEngineInputs(
+    host,
+    engine,
+    html,
+    asFrameTarget(sourceId)?.id,
+  );
   const flow = engine.renderFlow(html, framesPx, flowRoot);
   const missing = [...resourceDiagnostics(engine), ...faceProblems];
   if (flow === null) {
@@ -472,7 +517,11 @@ export async function bakeWebFlow(
       submittedCount: 0,
       overset: false,
       diagnostics: [
-        { severity: "info", message: ENGINE_NOT_LOADED_MESSAGE, source: "render" },
+        {
+          severity: "info",
+          message: ENGINE_NOT_LOADED_MESSAGE,
+          source: "render",
+        },
       ],
       layers: chain.map(() => null),
     };
@@ -493,7 +542,12 @@ export async function bakeWebFlow(
     // string-id page item (asFrameTarget → null) can't receive a layer.
     const target = asFrameTarget(chain[i]);
     if (doSubmit && surface && layer && target) {
-      faces.push(...faceDiagnostics(await surface.submit(target.id, layer as never), host));
+      faces.push(
+        ...faceDiagnostics(
+          await surface.submit(target.id, layer as never),
+          host,
+        ),
+      );
       submittedCount += 1;
     }
   }
@@ -586,12 +640,16 @@ export async function bakeWebFlows(
   const faces: WebDiagnostic[] = [];
   let submittedCount = 0;
   let anyOverset = false;
-  diagnostics.push(...(await prepareEngineInputs(host, engine, doc.html, sourceTarget.id)));
+  diagnostics.push(
+    ...(await prepareEngineInputs(host, engine, doc.html, sourceTarget.id)),
+  );
 
   // Every group's frame geometry in ONE read (was one read per group).
   const allFrames = groups.flatMap((g) => g.frames as unknown as ElementId[]);
   const allGeos = await host.document.elementGeometry(allFrames);
-  const geoById = new Map(allGeos.map((g) => [(g.id as { id?: unknown }).id, g]));
+  const geoById = new Map(
+    allGeos.map((g) => [(g.id as { id?: unknown }).id, g]),
+  );
 
   for (const group of groups) {
     // A frame of the chain that no longer exists (deleted; undo can bring
@@ -623,7 +681,12 @@ export async function bakeWebFlows(
       layers.push(layer);
       const target = asFrameTarget(groupFrames[i]);
       if (surface && layer && target) {
-        faces.push(...faceDiagnostics(await surface.submit(target.id, layer as never), host));
+        faces.push(
+          ...faceDiagnostics(
+            await surface.submit(target.id, layer as never),
+            host,
+          ),
+        );
         submittedCount += 1;
       }
     }

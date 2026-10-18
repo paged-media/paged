@@ -179,7 +179,8 @@ export function attachTextToPathMutationFor(
     args: {
       elementId,
       storyId,
-      ...(spec.pathTypeAlignment === undefined || spec.pathTypeAlignment === null
+      ...(spec.pathTypeAlignment === undefined ||
+      spec.pathTypeAlignment === null
         ? {}
         : { pathTypeAlignment: spec.pathTypeAlignment }),
       ...(spec.flipPathEffect === undefined || spec.flipPathEffect === null

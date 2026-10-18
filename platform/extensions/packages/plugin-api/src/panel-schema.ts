@@ -69,7 +69,12 @@
 import type { ComponentType } from "react";
 
 import type { BindingsSurface } from "./host";
-import type { Address, PropertyPathName, Selector, StructEdit } from "./object-model";
+import type {
+  Address,
+  PropertyPathName,
+  Selector,
+  StructEdit,
+} from "./object-model";
 import type { PropertyPath, Value } from "./wire";
 
 // ---------------------------------------------------------------- value binding
@@ -248,10 +253,7 @@ export interface SchemaListSpec {
  *   · `{ addresses }` — explicit addresses, as given.
  */
 export type PropertyFieldAddress =
-  | "selection"
-  | Selector
-  | { bind: string }
-  | { addresses: readonly Address[] };
+  "selection" | Selector | { bind: string } | { addresses: readonly Address[] };
 
 /** How a property row presents an `enum` (or a text row offering a
  *  collection): the host picks from the schema row otherwise. */

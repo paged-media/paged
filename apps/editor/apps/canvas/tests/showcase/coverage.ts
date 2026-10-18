@@ -92,7 +92,9 @@ export interface CoverageReport {
  * note does today, and the alternative was adding a YAML parser to the
  * editor's dependency tree to answer a yes/no question in a test.
  */
-export function loadRegistry(registryDir: string | null): Map<string, RegistryRow> {
+export function loadRegistry(
+  registryDir: string | null,
+): Map<string, RegistryRow> {
   const out = new Map<string, RegistryRow>();
   if (registryDir === null || !existsSync(registryDir)) return out;
   for (const file of readdirSync(registryDir)) {

@@ -432,7 +432,9 @@ describe("the brush-library session lane (real reader, real bytes)", () => {
 
   it("refuses non-.abr bytes with the reader's own reason", async () => {
     const { session, handle } = await ready();
-    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const png = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    ]);
     expect(await session.loadBrushLibrary("not-a-brush.png", png)).toBe(false);
     expect(session.state().brushLibrary).toBeNull();
     // The message names the file AND carries the reader's diagnosis —

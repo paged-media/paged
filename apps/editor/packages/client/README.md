@@ -13,12 +13,12 @@ the editor's own client, published.
 
 Paged ships two, and they are different on purpose.
 
-| | `@paged-media/idml-viewer` | `@paged-media/client` (this one) |
-|---|---|---|
-| what it does | shows a document | **changes** a document |
-| engine deps | renderer-core only | the full canvas engine |
-| writes | none, structurally | all 117 mutations |
-| runs in | any page with WebGPU | a page with cross-origin isolation (SharedArrayBuffer) |
+|              | `@paged-media/idml-viewer` | `@paged-media/client` (this one)                       |
+| ------------ | -------------------------- | ------------------------------------------------------ |
+| what it does | shows a document           | **changes** a document                                 |
+| engine deps  | renderer-core only         | the full canvas engine                                 |
+| writes       | none, structurally         | all 117 mutations                                      |
+| runs in      | any page with WebGPU       | a page with cross-origin isolation (SharedArrayBuffer) |
 
 The viewer is read-only by design — "sibling, not a shrunk app" — and
 growing it into a write surface would undo that decision. If you want to
@@ -42,7 +42,10 @@ browser bundle, and already runs a bundler.
 import { CanvasClient } from "@paged-media/client";
 
 const client = new CanvasClient({
-  workerFactory: () => new Worker(new URL("./canvas.worker.ts", import.meta.url), { type: "module" }),
+  workerFactory: () =>
+    new Worker(new URL("./canvas.worker.ts", import.meta.url), {
+      type: "module",
+    }),
 });
 
 await client.loadDocument(idmlBytes);

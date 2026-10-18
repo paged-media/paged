@@ -28,7 +28,12 @@
 // valid: it falls back to the first row when its object is gone. Pure data
 // over `host.objects` + `host.bindings`; no React.
 
-import type { Address, BundleHost, Disposable, ElementId } from "@paged-media/plugin-api";
+import type {
+  Address,
+  BundleHost,
+  Disposable,
+  ElementId,
+} from "@paged-media/plugin-api";
 
 import { fromElementId } from "./object-address.js";
 
@@ -54,10 +59,15 @@ export interface PublishObjectListOptions {
 }
 
 const text = (v: { kind: string; value?: unknown }): string | null =>
-  v.kind === "value" && v.value !== null && v.value !== undefined ? String(v.value) : null;
+  v.kind === "value" && v.value !== null && v.value !== undefined
+    ? String(v.value)
+    : null;
 
 /** Publish the list and keep it live. Dispose to stop. */
-export function publishObjectList(host: BundleHost, opts: PublishObjectListOptions): Disposable & {
+export function publishObjectList(
+  host: BundleHost,
+  opts: PublishObjectListOptions,
+): Disposable & {
   /** Re-read now (resolves when published). */
   refresh(): Promise<void>;
 } {
@@ -72,16 +82,28 @@ export function publishObjectList(host: BundleHost, opts: PublishObjectListOptio
   const refresh = async (ids?: readonly ElementId[]): Promise<void> => {
     const mine = ++generation;
     if (ids) lastIds = ids;
-    const selection = (ids ?? lastIds ?? host.selection.get()).map((id: ElementId) => fromElementId(id));
+    const selection = (ids ?? lastIds ?? host.selection.get()).map(
+      (id: ElementId) => fromElementId(id),
+    );
     const selector = opts.selector(selection);
     let rows: ObjectListRow[] = [];
     if (selector) {
-      const addresses = await host.objects.query(selector).catch(() => [] as Address[]);
+      const addresses = await host.objects
+        .query(selector)
+        .catch(() => [] as Address[]);
       rows = await Promise.all(
         addresses.map(async (selfId) => {
-          const name = text(await host.objects.get(selfId, labelPath).catch(() => ({ kind: "absent" })));
+          const name = text(
+            await host.objects
+              .get(selfId, labelPath)
+              .catch(() => ({ kind: "absent" })),
+          );
           const secondary = opts.secondaryPath
-            ? text(await host.objects.get(selfId, opts.secondaryPath).catch(() => ({ kind: "absent" })))
+            ? text(
+                await host.objects
+                  .get(selfId, opts.secondaryPath)
+                  .catch(() => ({ kind: "absent" })),
+              )
             : null;
           return {
             selfId,

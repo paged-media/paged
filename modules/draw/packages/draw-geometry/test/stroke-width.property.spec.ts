@@ -97,7 +97,10 @@ describe("pressure — clampPressure / strokeWidthFromPressure (properties)", ()
         const lo = strokeWidthFromPressure(Math.min(p1, p2), profile);
         const hi = strokeWidthFromPressure(Math.max(p1, p2), profile);
         const tol = 1e-9 * Math.max(1, min, max);
-        assertTrue(max >= min ? lo <= hi + tol : lo >= hi - tol, `${lo} → ${hi}`);
+        assertTrue(
+          max >= min ? lo <= hi + tol : lo >= hi - tol,
+          `${lo} → ${hi}`,
+        );
       }),
     );
   });
@@ -137,29 +140,56 @@ describe("brush — calligraphicWidth (properties)", () => {
   it("at neutral pressure is the un-scaled model: size·(r + (1 − r)·|sin(tangent − θ)|)", () => {
     fc.assert(
       fc.property(angleRad, nib, (tangent, n) => {
-        const model = n.size * (n.roundness + (1 - n.roundness) * Math.abs(Math.sin(tangent - n.angle)));
+        const model =
+          n.size *
+          (n.roundness +
+            (1 - n.roundness) * Math.abs(Math.sin(tangent - n.angle)));
         const expected = Math.max(model, n.size * MIN_BRUSH_WIDTH_RATIO);
-        assertClose(calligraphicWidth(tangent, n), expected, 1e-9 * n.size, "default pressure");
-        assertClose(calligraphicWidth(tangent, n, NEUTRAL_PRESSURE), expected, 1e-9 * n.size);
+        assertClose(
+          calligraphicWidth(tangent, n),
+          expected,
+          1e-9 * n.size,
+          "default pressure",
+        );
+        assertClose(
+          calligraphicWidth(tangent, n, NEUTRAL_PRESSURE),
+          expected,
+          1e-9 * n.size,
+        );
       }),
     );
   });
 
   it("depends only on the angle BETWEEN stroke and nib, and not on the stroke's direction of travel", () => {
     fc.assert(
-      fc.property(angleRad, nib, unit, angleRad, (tangent, n, pressure, turn) => {
-        const w = calligraphicWidth(tangent, n, pressure);
-        const tol = 1e-9 * n.size;
-        // Turn the stroke and the nib together.
-        assertClose(
-          calligraphicWidth(tangent + turn, { ...n, angle: n.angle + turn }, pressure),
-          w,
-          tol,
-          "turned together",
-        );
-        // Travel the other way along the same line.
-        assertClose(calligraphicWidth(tangent + Math.PI, n, pressure), w, tol, "reversed");
-      }),
+      fc.property(
+        angleRad,
+        nib,
+        unit,
+        angleRad,
+        (tangent, n, pressure, turn) => {
+          const w = calligraphicWidth(tangent, n, pressure);
+          const tol = 1e-9 * n.size;
+          // Turn the stroke and the nib together.
+          assertClose(
+            calligraphicWidth(
+              tangent + turn,
+              { ...n, angle: n.angle + turn },
+              pressure,
+            ),
+            w,
+            tol,
+            "turned together",
+          );
+          // Travel the other way along the same line.
+          assertClose(
+            calligraphicWidth(tangent + Math.PI, n, pressure),
+            w,
+            tol,
+            "reversed",
+          );
+        },
+      ),
     );
   });
 
@@ -170,7 +200,10 @@ describe("brush — calligraphicWidth (properties)", () => {
         const across = calligraphicWidth(n.angle + Math.PI / 2, n, pressure);
         const along = calligraphicWidth(n.angle, n, pressure);
         const tol = 1e-9 * n.size;
-        assertTrue(w <= across + tol && w >= along - tol, `${along} ≤ ${w} ≤ ${across} fails`);
+        assertTrue(
+          w <= across + tol && w >= along - tol,
+          `${along} ≤ ${w} ≤ ${across} fails`,
+        );
       }),
     );
   });
@@ -196,7 +229,12 @@ describe("brush — calligraphicWidth (properties)", () => {
         assertTrue(lo <= hi + 1e-12 * n.size, `${lo} → ${hi}`);
         const neutral = calligraphicWidth(tangent, n, NEUTRAL_PRESSURE);
         if (neutral > n.size * MIN_BRUSH_WIDTH_RATIO) {
-          assertClose(calligraphicWidth(tangent, n, 1), 2 * neutral, 1e-9 * n.size, "full pressure");
+          assertClose(
+            calligraphicWidth(tangent, n, 1),
+            2 * neutral,
+            1e-9 * n.size,
+            "full pressure",
+          );
         }
       }),
     );
@@ -204,27 +242,39 @@ describe("brush — calligraphicWidth (properties)", () => {
 
   it("clamps roundness to [0, 1], reads a non-finite roundness as round, and a bad size as no width", () => {
     fc.assert(
-      fc.property(angleRad, nib, unit, real(0, 5), (tangent, n, pressure, over) => {
-        const tol = 1e-12 * n.size;
-        assertClose(
-          calligraphicWidth(tangent, { ...n, roundness: 1 + over }, pressure),
-          calligraphicWidth(tangent, { ...n, roundness: 1 }, pressure),
-          tol,
-        );
-        assertClose(
-          calligraphicWidth(tangent, { ...n, roundness: -over }, pressure),
-          calligraphicWidth(tangent, { ...n, roundness: 0 }, pressure),
-          tol,
-        );
-        assertClose(
-          calligraphicWidth(tangent, { ...n, roundness: Number.NaN }, pressure),
-          calligraphicWidth(tangent, { ...n, roundness: 1 }, pressure),
-          tol,
-        );
-        for (const bad of [0, -n.size, Number.NaN, Infinity]) {
-          expect(calligraphicWidth(tangent, { ...n, size: bad }, pressure)).toBe(0);
-        }
-      }),
+      fc.property(
+        angleRad,
+        nib,
+        unit,
+        real(0, 5),
+        (tangent, n, pressure, over) => {
+          const tol = 1e-12 * n.size;
+          assertClose(
+            calligraphicWidth(tangent, { ...n, roundness: 1 + over }, pressure),
+            calligraphicWidth(tangent, { ...n, roundness: 1 }, pressure),
+            tol,
+          );
+          assertClose(
+            calligraphicWidth(tangent, { ...n, roundness: -over }, pressure),
+            calligraphicWidth(tangent, { ...n, roundness: 0 }, pressure),
+            tol,
+          );
+          assertClose(
+            calligraphicWidth(
+              tangent,
+              { ...n, roundness: Number.NaN },
+              pressure,
+            ),
+            calligraphicWidth(tangent, { ...n, roundness: 1 }, pressure),
+            tol,
+          );
+          for (const bad of [0, -n.size, Number.NaN, Infinity]) {
+            expect(
+              calligraphicWidth(tangent, { ...n, size: bad }, pressure),
+            ).toBe(0);
+          }
+        },
+      ),
     );
   });
 });
@@ -235,19 +285,33 @@ describe("brush — anchorTangentAngle (properties)", () => {
 
   it("a smooth anchor's tangent is its left → right handle chord", () => {
     fc.assert(
-      fc.property(smallVec2, smallVec2, fc.boolean(), (anchor, drag, closed) => {
-        fc.pre(drag[0] !== 0 || drag[1] !== 0);
-        const a = {
-          anchor,
-          left: [anchor[0] - drag[0], anchor[1] - drag[1]] as [number, number],
-          right: [anchor[0] + drag[0], anchor[1] + drag[1]] as [number, number],
-        };
-        const run = [cornerOf([-99, 7]), a, cornerOf([42, 42])];
-        assertTrue(
-          sameDirection(anchorTangentAngle(run, 1, closed), Math.atan2(drag[1], drag[0])),
-          "tangent is not along the handles",
-        );
-      }),
+      fc.property(
+        smallVec2,
+        smallVec2,
+        fc.boolean(),
+        (anchor, drag, closed) => {
+          fc.pre(drag[0] !== 0 || drag[1] !== 0);
+          const a = {
+            anchor,
+            left: [anchor[0] - drag[0], anchor[1] - drag[1]] as [
+              number,
+              number,
+            ],
+            right: [anchor[0] + drag[0], anchor[1] + drag[1]] as [
+              number,
+              number,
+            ],
+          };
+          const run = [cornerOf([-99, 7]), a, cornerOf([42, 42])];
+          assertTrue(
+            sameDirection(
+              anchorTangentAngle(run, 1, closed),
+              Math.atan2(drag[1], drag[0]),
+            ),
+            "tangent is not along the handles",
+          );
+        },
+      ),
     );
   });
 
@@ -300,13 +364,18 @@ describe("brush — anchorTangentAngle (properties)", () => {
 
   it("an out-of-range index, a lone anchor and a fully collapsed run all answer 0", () => {
     fc.assert(
-      fc.property(smallVec2, fc.integer({ min: 1, max: 5 }), fc.boolean(), (p, n, closed) => {
-        const stacked = Array.from({ length: n }, () => cornerOf(p));
-        expect(anchorTangentAngle(stacked, 0, closed)).toBe(0);
-        expect(anchorTangentAngle(stacked, n, closed)).toBe(0);
-        expect(anchorTangentAngle(stacked, -1, closed)).toBe(0);
-        expect(anchorTangentAngle([], 0, closed)).toBe(0);
-      }),
+      fc.property(
+        smallVec2,
+        fc.integer({ min: 1, max: 5 }),
+        fc.boolean(),
+        (p, n, closed) => {
+          const stacked = Array.from({ length: n }, () => cornerOf(p));
+          expect(anchorTangentAngle(stacked, 0, closed)).toBe(0);
+          expect(anchorTangentAngle(stacked, n, closed)).toBe(0);
+          expect(anchorTangentAngle(stacked, -1, closed)).toBe(0);
+          expect(anchorTangentAngle([], 0, closed)).toBe(0);
+        },
+      ),
     );
   });
 });
@@ -320,76 +389,125 @@ describe("width — peakedWidthProfile (properties)", () => {
 
   it("is one non-negative, finite width per anchor", () => {
     fc.assert(
-      fc.property(n, index, widthPt, widthPt, falloff, (count, peakIndex, peak, base, f) => {
-        const out = peakedWidthProfile(count, peakIndex, peak, base, f);
-        expect(out).toHaveLength(count);
-        for (const w of out) assertTrue(Number.isFinite(w) && w >= 0, `width ${w}`);
-      }),
+      fc.property(
+        n,
+        index,
+        widthPt,
+        widthPt,
+        falloff,
+        (count, peakIndex, peak, base, f) => {
+          const out = peakedWidthProfile(count, peakIndex, peak, base, f);
+          expect(out).toHaveLength(count);
+          for (const w of out)
+            assertTrue(Number.isFinite(w) && w >= 0, `width ${w}`);
+        },
+      ),
     );
   });
 
   it("peaks at the (clamped, rounded) index and has fully decayed `falloff` anchors away", () => {
     fc.assert(
-      fc.property(n, index, widthPt, widthPt, falloff, (count, peakIndex, peak, base, f) => {
-        const out = peakedWidthProfile(count, peakIndex, peak, base, f);
-        const at = Math.min(count - 1, Math.max(0, Math.round(peakIndex)));
-        const reach = Math.max(1, f);
-        // `base + (peak − base)` is `peak` only to an ulp.
-        assertClose(out[at], peak, 1e-12 * Math.max(1, peak, base), "the peak");
-        out.forEach((w, i) => {
-          if (Math.abs(i - at) >= reach) assertClose(w, base, 0, `stop ${i}`);
-        });
-      }),
+      fc.property(
+        n,
+        index,
+        widthPt,
+        widthPt,
+        falloff,
+        (count, peakIndex, peak, base, f) => {
+          const out = peakedWidthProfile(count, peakIndex, peak, base, f);
+          const at = Math.min(count - 1, Math.max(0, Math.round(peakIndex)));
+          const reach = Math.max(1, f);
+          // `base + (peak − base)` is `peak` only to an ulp.
+          assertClose(
+            out[at],
+            peak,
+            1e-12 * Math.max(1, peak, base),
+            "the peak",
+          );
+          out.forEach((w, i) => {
+            if (Math.abs(i - at) >= reach) assertClose(w, base, 0, `stop ${i}`);
+          });
+        },
+      ),
     );
   });
 
   it("every width lies between base and peak, and falls away monotonically either side", () => {
     fc.assert(
-      fc.property(n, index, widthPt, widthPt, falloff, (count, peakIndex, peak, base, f) => {
-        const out = peakedWidthProfile(count, peakIndex, peak, base, f);
-        const at = Math.min(count - 1, Math.max(0, Math.round(peakIndex)));
-        const lo = Math.min(base, peak);
-        const hi = Math.max(base, peak);
-        const tol = 1e-9 * Math.max(1, hi);
-        out.forEach((w, i) => {
-          assertTrue(w >= lo - tol && w <= hi + tol, `width ${w} outside [${lo}, ${hi}]`);
-          if (i === at) return;
-          // One step nearer the peak is at least as far toward `peak`.
-          const nearer = out[i < at ? i + 1 : i - 1];
-          assertTrue(
-            peak >= base ? nearer >= w - tol : nearer <= w + tol,
-            `not monotone at ${i}: ${w} then ${nearer}`,
-          );
-        });
-      }),
+      fc.property(
+        n,
+        index,
+        widthPt,
+        widthPt,
+        falloff,
+        (count, peakIndex, peak, base, f) => {
+          const out = peakedWidthProfile(count, peakIndex, peak, base, f);
+          const at = Math.min(count - 1, Math.max(0, Math.round(peakIndex)));
+          const lo = Math.min(base, peak);
+          const hi = Math.max(base, peak);
+          const tol = 1e-9 * Math.max(1, hi);
+          out.forEach((w, i) => {
+            assertTrue(
+              w >= lo - tol && w <= hi + tol,
+              `width ${w} outside [${lo}, ${hi}]`,
+            );
+            if (i === at) return;
+            // One step nearer the peak is at least as far toward `peak`.
+            const nearer = out[i < at ? i + 1 : i - 1];
+            assertTrue(
+              peak >= base ? nearer >= w - tol : nearer <= w + tol,
+              `not monotone at ${i}: ${w} then ${nearer}`,
+            );
+          });
+        },
+      ),
     );
   });
 
   it("is symmetric about the peak", () => {
     fc.assert(
-      fc.property(n, index, widthPt, widthPt, falloff, (count, peakIndex, peak, base, f) => {
-        const out = peakedWidthProfile(count, peakIndex, peak, base, f);
-        const at = Math.min(count - 1, Math.max(0, Math.round(peakIndex)));
-        for (let d = 1; at - d >= 0 && at + d < count; d++) {
-          expect(out[at - d]).toBe(out[at + d]);
-        }
-      }),
+      fc.property(
+        n,
+        index,
+        widthPt,
+        widthPt,
+        falloff,
+        (count, peakIndex, peak, base, f) => {
+          const out = peakedWidthProfile(count, peakIndex, peak, base, f);
+          const at = Math.min(count - 1, Math.max(0, Math.round(peakIndex)));
+          for (let d = 1; at - d >= 0 && at + d < count; d++) {
+            expect(out[at - d]).toBe(out[at + d]);
+          }
+        },
+      ),
     );
   });
 
   it("is the stated formula, floored at 0 — a thinning peak is allowed, a negative stop is not", () => {
     const signed = real(-50, 200);
     fc.assert(
-      fc.property(n, index, signed, signed, falloff, (count, peakIndex, peak, base, f) => {
-        const out = peakedWidthProfile(count, peakIndex, peak, base, f);
-        const at = Math.min(count - 1, Math.max(0, Math.round(peakIndex)));
-        const reach = Math.max(1, f);
-        out.forEach((w, i) => {
-          const influence = Math.max(0, 1 - Math.abs(i - at) / reach);
-          assertClose(w, Math.max(0, base + (peak - base) * influence), 1e-9 * 200, `stop ${i}`);
-          assertTrue(w >= 0, `negative stop ${w}`);
-        });
-      }),
+      fc.property(
+        n,
+        index,
+        signed,
+        signed,
+        falloff,
+        (count, peakIndex, peak, base, f) => {
+          const out = peakedWidthProfile(count, peakIndex, peak, base, f);
+          const at = Math.min(count - 1, Math.max(0, Math.round(peakIndex)));
+          const reach = Math.max(1, f);
+          out.forEach((w, i) => {
+            const influence = Math.max(0, 1 - Math.abs(i - at) / reach);
+            assertClose(
+              w,
+              Math.max(0, base + (peak - base) * influence),
+              1e-9 * 200,
+              `stop ${i}`,
+            );
+            assertTrue(w >= 0, `negative stop ${w}`);
+          });
+        },
+      ),
     );
   });
 
@@ -397,7 +515,9 @@ describe("width — peakedWidthProfile (properties)", () => {
     fc.assert(
       fc.property(real(-10, 0.99), real(1, 30), (few, fractional) => {
         expect(peakedWidthProfile(few, 0, 4, 1)).toEqual([]);
-        expect(peakedWidthProfile(fractional, 0, 4, 1)).toHaveLength(Math.floor(fractional));
+        expect(peakedWidthProfile(fractional, 0, 4, 1)).toHaveLength(
+          Math.floor(fractional),
+        );
         for (const bad of [Number.NaN, Infinity, -Infinity]) {
           expect(peakedWidthProfile(bad, 0, 4, 1)).toEqual([]);
           expect(peakedWidthProfile(5, bad, 4, 1)).toEqual([]);

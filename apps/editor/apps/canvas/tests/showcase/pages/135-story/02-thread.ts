@@ -109,19 +109,27 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const elements: string[] = [];
 
   // ── p34: heading + intro ──────────────────────────────────────────
-  const head = await prose(ctx, p(34), [60, 104, 492, 130], [
-    { text: "One story, four frames", style: STYLE.head1 },
-  ]);
-  const intro = await prose(ctx, p(34), [60, 134, 492, 186], [
-    {
-      text:
-        "The flagship demonstration of this chapter: the paragraphs below " +
-        "were poured once and flow through four linked frames — two on this " +
-        "page, two on the facing one — one address space of text wearing " +
-        "four coats.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await prose(
+    ctx,
+    p(34),
+    [60, 104, 492, 130],
+    [{ text: "One story, four frames", style: STYLE.head1 }],
+  );
+  const intro = await prose(
+    ctx,
+    p(34),
+    [60, 134, 492, 186],
+    [
+      {
+        text:
+          "The flagship demonstration of this chapter: the paragraphs below " +
+          "were poured once and flow through four linked frames — two on this " +
+          "page, two on the facing one — one address space of text wearing " +
+          "four coats.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── the chain: four EMPTY frames, linked before the pour ──────────
@@ -195,8 +203,16 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     ] as const) {
       chains[name] = {
         id,
-        next: await readEntry(ctx.page, { kind: "textFrame", id }, "nextTextFrame"),
-        bounds: await readEntry(ctx.page, { kind: "textFrame", id }, "frameBounds"),
+        next: await readEntry(
+          ctx.page,
+          { kind: "textFrame", id },
+          "nextTextFrame",
+        ),
+        bounds: await readEntry(
+          ctx.page,
+          { kind: "textFrame", id },
+          "frameBounds",
+        ),
       };
     }
     writeFileSync(

@@ -70,19 +70,27 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const beforeRecto = await doc.renderPage(p(67));
 
   // ── p66 furniture ────────────────────────────────────────────────
-  const head = await proseFrame(ctx, p(66), [60, 58, 492, 88], [
-    { text: "One table, two pages", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, p(66), [60, 92, 492, 144], [
-    {
-      text:
-        "The table below is taller than the frame that holds it, on " +
-        "purpose. Its story is threaded into a second frame on the facing " +
-        "page; the break falls mid-body, and the header and footer bands " +
-        "say themselves again on the other side of the gutter.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(66),
+    [60, 58, 492, 88],
+    [{ text: "One table, two pages", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    p(66),
+    [60, 92, 492, 144],
+    [
+      {
+        text:
+          "The table below is taller than the frame that holds it, on " +
+          "purpose. Its story is threaded into a second frame on the facing " +
+          "page; the break falls mid-body, and the header and footer bands " +
+          "say themselves again on the other side of the gutter.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── the chain: two frames, linked EMPTY (linkFrames refuses a
@@ -130,8 +138,18 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   // Live sizing: both bands taller than a body row, and the two
   // right-hand columns re-cut so the measure stays exactly 432.
-  await doc.mutate("setRowHeight", { storyId, tableId, row: headerRow, height: 28 });
-  await doc.mutate("setRowHeight", { storyId, tableId, row: footerRow, height: 28 });
+  await doc.mutate("setRowHeight", {
+    storyId,
+    tableId,
+    row: headerRow,
+    height: 28,
+  });
+  await doc.mutate("setRowHeight", {
+    storyId,
+    tableId,
+    row: footerRow,
+    height: 28,
+  });
   await doc.mutate("setColumnWidth", { storyId, tableId, col: 2, width: 62 });
   await doc.mutate("setColumnWidth", { storyId, tableId, col: 3, width: 74 });
 
@@ -153,7 +171,15 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   const headers = ["NO.", "CHAPTER", "PAGES", "LEAVES"];
   for (const [col, label] of headers.entries()) {
-    await pourStyledCell(doc, storyId, tableId, headerRow, col, label, tableHead);
+    await pourStyledCell(
+      doc,
+      storyId,
+      tableId,
+      headerRow,
+      col,
+      label,
+      tableHead,
+    );
   }
   for (const [i, entry] of ANNUAL_PLAN.entries()) {
     const row = 1 + i;
@@ -217,7 +243,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   // must not read as "not overset".
   const [chainStory] = await doc.storyIds(storyId);
   const summary = summaries.find((s) => s.selfId === chainStory);
-  expect(summary, "the table's story is missing from paged.stories()").toBeTruthy();
+  expect(
+    summary,
+    "the table's story is missing from paged.stories()",
+  ).toBeTruthy();
   expect(
     summary?.overset ?? false,
     "the chain holds the whole table — a truncated flagship must fail, not pass",

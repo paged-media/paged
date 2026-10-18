@@ -147,11 +147,7 @@ export interface TextPrim {
 
 /** One chart-geometry primitive (the tagged union). */
 export type ChartPrimitive =
-  | RectPrim
-  | LinePrim
-  | PolygonPrim
-  | WedgePrim
-  | TextPrim;
+  RectPrim | LinePrim | PolygonPrim | WedgePrim | TextPrim;
 
 /** The generated geometry for one chart: the content-box size + ordered
  *  primitive list (`get_chart_geometry`'s return shape). */
@@ -215,7 +211,10 @@ export const LABEL_FIT_ALLOWANCE_PT = 0.5;
 /** The ESTIMATE a label falls back to when the host cannot measure it —
  *  the chart engine's own (sheet-chart `ADVANCE_EM`, 0.55 em per char) and
  *  an ascent/descent of 0.8 / 0.2 em. */
-export function estimateLabelMetrics(text: string, sizePt: number): LabelMetrics {
+export function estimateLabelMetrics(
+  text: string,
+  sizePt: number,
+): LabelMetrics {
   return {
     advance: [...text].length * 0.55 * sizePt,
     ascender: 0.8 * sizePt,
@@ -225,7 +224,11 @@ export function estimateLabelMetrics(text: string, sizePt: number): LabelMetrics
 
 /** The paragraph justification that keeps a label's text at its anchor. */
 export function labelJustification(anchor: TextAnchor): string {
-  return anchor === "middle" ? "CenterAlign" : anchor === "end" ? "RightAlign" : "LeftAlign";
+  return anchor === "middle"
+    ? "CenterAlign"
+    : anchor === "end"
+      ? "RightAlign"
+      : "LeftAlign";
 }
 
 /** The ops that SET a poured label at the chart's size and justify it to its
@@ -233,7 +236,10 @@ export function labelJustification(anchor: TextAnchor): string {
  *  `$h:` handle bound to the label's frame — core resolves a frame handle in
  *  a `story_id` position to the frame's story). Without them the text kept
  *  the document's 12 pt in a box sized for 8 pt. */
-export function labelStyleOps(storyId: string, label: ChartTextLabel): Mutation[] {
+export function labelStyleOps(
+  storyId: string,
+  label: ChartTextLabel,
+): Mutation[] {
   const range: ElementId = {
     kind: "storyRange",
     id: { story_id: storyId, start: 0, end: label.text.length },
@@ -241,7 +247,11 @@ export function labelStyleOps(storyId: string, label: ChartTextLabel): Mutation[
   return [
     {
       op: "setElementProperty",
-      args: { elementId: range, path: "characterFontSize", value: { type: "length", value: label.sizePt } },
+      args: {
+        elementId: range,
+        path: "characterFontSize",
+        value: { type: "length", value: label.sizePt },
+      },
     },
     {
       op: "setElementProperty",
@@ -272,7 +282,8 @@ export function labelBox(
   const h = lineH + LABEL_FIT_ALLOWANCE_PT;
   const ax = ox + prim.x;
   const bottom = oy + prim.y;
-  let left = prim.anchor === "middle" ? ax - w / 2 : prim.anchor === "end" ? ax - w : ax;
+  let left =
+    prim.anchor === "middle" ? ax - w / 2 : prim.anchor === "end" ? ax - w : ax;
   // Inside the chart: a label never hangs past the chart's own box (the
   // value-axis labels used to start 20 pt LEFT of it, off the page).
   if (w <= widthPt) {
@@ -582,7 +593,8 @@ export function chartGeometryToMutations(
         // and oversat, value-axis labels hung off the page, category labels
         // ran into each other.
         const metrics =
-          labelMetrics?.[texts.length] ?? estimateLabelMetrics(prim.s, prim.sizePt);
+          labelMetrics?.[texts.length] ??
+          estimateLabelMetrics(prim.s, prim.sizePt);
         const bounds = labelBox(prim, metrics, left, top, geom.widthPt);
         ops.push({
           op: "insertTextFrame",

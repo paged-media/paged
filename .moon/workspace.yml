@@ -7,36 +7,36 @@
 # not projects: their scripts run through the component root
 # (`bun run --filter ...`), as the component CI does.
 # See docs/adr/PM-0006-proto-moon-mcp.md.
-$schema: './cache/schemas/workspace.json'
+$schema: "./cache/schemas/workspace.json"
 
 projects:
   # Engine
-  core: 'engine/core'
-  core-idml-viewer: 'engine/core/web/idml-viewer'
+  core: "engine/core"
+  core-idml-viewer: "engine/core/web/idml-viewer"
   # Built-in modules
-  publish: 'modules/publish'
-  image: 'modules/image'
-  draw: 'modules/draw'
-  sheet: 'modules/sheet'
-  data: 'modules/data'
-  doc: 'modules/doc'
-  slide: 'modules/slide'
-  web: 'modules/web'
-  web-render: 'modules/web/packages/web-render'
+  publish: "modules/publish"
+  image: "modules/image"
+  draw: "modules/draw"
+  sheet: "modules/sheet"
+  data: "modules/data"
+  doc: "modules/doc"
+  slide: "modules/slide"
+  web: "modules/web"
+  web-render: "modules/web/packages/web-render"
   # Internal shared code of the built-ins (docs/adr/PM-0002)
-  test-kit: 'platform/shared/test-kit'
-  test-resources: 'platform/shared/test-resources'
+  test-kit: "platform/shared/test-kit"
+  test-resources: "platform/shared/test-resources"
   # Extension contract and SDK
-  extensions: 'platform/extensions'
+  extensions: "platform/extensions"
   # Applications
-  editor: 'apps/editor'
-  server: 'apps/server/server'
+  editor: "apps/editor"
+  server: "apps/server/server"
 
 vcs:
-  client: 'git'
-  provider: 'github'
-  defaultBranch: 'main'
-  remoteCandidates: ['origin']
+  client: "git"
+  provider: "github"
+  defaultBranch: "main"
+  remoteCandidates: ["origin"]
   # Moon must not write git hooks.
   sync: false
 

@@ -54,8 +54,13 @@ function panelHost() {
       },
     },
     document: {
-      getMetadata: async (id: ElementId) => labels.get(String((id as { id: unknown }).id)) ?? null,
-      setMetadata: async () => ({ applied: true, createdId: null, pageIds: [] }),
+      getMetadata: async (id: ElementId) =>
+        labels.get(String((id as { id: unknown }).id)) ?? null,
+      setMetadata: async () => ({
+        applied: true,
+        createdId: null,
+        pageIds: [],
+      }),
       collection: async () => [],
       // The panel sizes its preview from the frame's geometry; no geometry
       // here, so it keeps its default size.
@@ -65,7 +70,11 @@ function panelHost() {
         return { dispose: () => docListeners.delete(l) };
       },
     },
-    parts: { read: async () => null, write: async () => {}, list: async () => [] },
+    parts: {
+      read: async () => null,
+      write: async () => {},
+      list: async () => [],
+    },
     storage: { get: () => undefined, delete: () => {} },
     diagnostics: { set: () => {} },
     assets: { getFontFace: async () => null },
@@ -93,9 +102,13 @@ const settle = async () => {
 };
 
 const htmlEditor = (r: ReactTestRenderer) =>
-  r.root.find((n) => n.type === "textarea" && n.props["aria-label"] === "Web frame HTML");
+  r.root.find(
+    (n) => n.type === "textarea" && n.props["aria-label"] === "Web frame HTML",
+  );
 const dirtyFlag = (r: ReactTestRenderer) =>
-  r.root.find((n) => n.props["data-web-dirty"] !== undefined).props["data-web-dirty"];
+  r.root.find((n) => n.props["data-web-dirty"] !== undefined).props[
+    "data-web-dirty"
+  ];
 
 async function mountOn(h: ReturnType<typeof panelHost>, id: ElementId) {
   const Panel = makeWebSourcePanel(h.host);
@@ -114,7 +127,9 @@ describe("unsaved panel edits are kept per frame", () => {
     const r = await mountOn(h, A);
     expect(htmlEditor(r).props.value).toBe("<p>A saved</p>");
 
-    await act(async () => htmlEditor(r).props.onChange({ target: { value: "<p>A edited</p>" } }));
+    await act(async () =>
+      htmlEditor(r).props.onChange({ target: { value: "<p>A edited</p>" } }),
+    );
     expect(dirtyFlag(r)).toBe("true");
 
     await act(async () => h.select([B]));
@@ -131,12 +146,15 @@ describe("unsaved panel edits are kept per frame", () => {
   it("an undo that reverts the source keeps the draft, shown as unsaved", async () => {
     const h = panelHost();
     const r = await mountOn(h, A);
-    await act(async () => htmlEditor(r).props.onChange({ target: { value: "<p>A edited</p>" } }));
+    await act(async () =>
+      htmlEditor(r).props.onChange({ target: { value: "<p>A edited</p>" } }),
+    );
     // The document's source changes under the panel (an undo elsewhere).
     const labels = h.host.document as unknown as {
       getMetadata: (id: ElementId) => Promise<unknown>;
     };
-    labels.getMetadata = async () => envelopeFor({ ...DEFAULT_SOURCE, html: "<p>A reverted</p>" });
+    labels.getMetadata = async () =>
+      envelopeFor({ ...DEFAULT_SOURCE, html: "<p>A reverted</p>" });
     await act(async () => h.emit("undoApplied"));
     await settle();
     expect(htmlEditor(r).props.value).toBe("<p>A edited</p>");

@@ -24,10 +24,19 @@
 import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
-import { DEFAULT_SOURCE, storeSource, type WebFrameSource } from "@paged-media/web-model";
+import {
+  DEFAULT_SOURCE,
+  storeSource,
+  type WebFrameSource,
+} from "@paged-media/web-model";
 
 import { startPartsCollector } from "../src/parts-gc";
-import { DOCUMENT_VALUES_PART, readDocumentValues, writeDocumentValues, writeWebSource } from "../src/source-part";
+import {
+  DOCUMENT_VALUES_PART,
+  readDocumentValues,
+  writeDocumentValues,
+  writeWebSource,
+} from "../src/source-part";
 
 const big = (tag: string): WebFrameSource => ({
   ...DEFAULT_SOURCE,
@@ -52,8 +61,14 @@ function modelHost(opts: { canDelete?: boolean; docMeta?: boolean } = {}) {
       (f === "document.documentMetadata@1" && opts.docMeta !== false),
     document: {
       tree: async () =>
-        [...items].map((id) => ({ id: { kind: "rectangle", id }, kind: "Rectangle", label: id, children: [] })),
-      getMetadata: async (id: ElementId) => labels.get((id as { id: string }).id) ?? null,
+        [...items].map((id) => ({
+          id: { kind: "rectangle", id },
+          kind: "Rectangle",
+          label: id,
+          children: [],
+        })),
+      getMetadata: async (id: ElementId) =>
+        labels.get((id as { id: string }).id) ?? null,
       setMetadata: async (id: ElementId, env: unknown) => {
         labels.set((id as { id: string }).id, env);
         return { applied: true };
@@ -76,10 +91,18 @@ function modelHost(opts: { canDelete?: boolean; docMeta?: boolean } = {}) {
     parts: {
       read: async (p: string) => parts.get(p) ?? null,
       write: async (p: string, b: Uint8Array) => void parts.set(p, b),
-      list: async (prefix = "") => [...parts.keys()].filter((p) => p.startsWith(prefix)),
+      list: async (prefix = "") =>
+        [...parts.keys()].filter((p) => p.startsWith(prefix)),
       delete: async (p: string) => parts.delete(p),
     },
-    editor: { client: { subscribe: (l: (m: { kind: string }) => void) => (loaded.push(l), () => {}) } },
+    editor: {
+      client: {
+        subscribe: (l: (m: { kind: string }) => void) => (
+          loaded.push(l),
+          () => {}
+        ),
+      },
+    },
     log: { debug() {}, info() {}, warn() {}, error() {} },
   } as unknown as BundleHost;
   return {
@@ -117,7 +140,11 @@ describe("source-part collector (modelled host)", () => {
     await m.open();
     await m.save();
     expect([...m.parts.keys()].sort()).toEqual(
-      [`sources/${named.ref.hash}.json`, "other/thing.bin", "uB/source.json"].sort(),
+      [
+        `sources/${named.ref.hash}.json`,
+        "other/thing.bin",
+        "uB/source.json",
+      ].sort(),
     );
   });
 
@@ -130,7 +157,9 @@ describe("source-part collector (modelled host)", () => {
     await writeWebSource(m.host, a, big("two"));
     await m.open(); // a reopen marks again; the session's writes still count
     await m.save();
-    expect([...m.parts.keys()].filter((p) => p.startsWith("sources/"))).toHaveLength(2);
+    expect(
+      [...m.parts.keys()].filter((p) => p.startsWith("sources/")),
+    ).toHaveLength(2);
   });
 
   it("keeps a marked part that a label names again by the time of the save", async () => {
@@ -187,7 +216,9 @@ describe("the migrated document-values part", () => {
     startPartsCollector(m.host);
     await m.open();
     const values = await readDocumentValues(m.host);
-    expect((await writeDocumentValues(m.host, { ...values, year: "2026" })).applied).toBe(true);
+    expect(
+      (await writeDocumentValues(m.host, { ...values, year: "2026" })).applied,
+    ).toBe(true);
     await m.save();
     expect(m.parts.has(DOCUMENT_VALUES_PART)).toBe(true);
     m.undoDocMeta();

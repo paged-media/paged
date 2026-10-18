@@ -151,7 +151,9 @@ test.describe("B-08 — pointer pressure/tilt plumbing", () => {
         globalThis as unknown as {
           __canvas?: {
             registries?: {
-              tools?: { get?: (id: string) => { gesture?: unknown } | undefined };
+              tools?: {
+                get?: (id: string) => { gesture?: unknown } | undefined;
+              };
             };
           };
         }

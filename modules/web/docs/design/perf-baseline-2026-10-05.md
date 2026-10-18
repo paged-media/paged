@@ -7,13 +7,13 @@ and is lowered only in the commit that earns it.
 
 ## How it is measured
 
-| Lane | Where | What it counts | Run |
-|---|---|---|---|
-| Engine counters | `packages/web-render/src/perf.rs` (feature `perf-counters`) | HTML parses, style/layout resolves, paint captures, painted draw commands, run-match comparisons in text recovery, font-context builds, bytes in/out across the wasm boundary | thread-local; zero cost with the feature off (every `bump` is an empty inline fn) |
-| Engine budgets | `packages/web-render/tests/perf_budgets.rs` | the counters above per workload | `cargo test --features blitz,perf-counters --test perf_budgets` |
-| Engine benches | `packages/web-render/benches/render.rs` | wall-clock, trended | `cargo bench --features blitz --bench render` |
-| Host budgets | `packages/web-bundle/test/perf/perf-budgets.spec.ts` | every host door call per command (a Proxy over the real headless host), wasm calls, boundary bytes, rows read back from `collection` | `pnpm --filter @paged-media/web test` (`PERF_SHOW=1` prints one `PERF` line per scenario) |
-| Counting wasm | `scripts/build-wasm-perf.sh` → `packages/web-render/target/perf-wasm/` | adds `perf_counters()` / `perf_counters_reset()` exports; when present the host spec also prints the engine counters | never shipped; the bundled `bin/` artifact stays the non-counting build |
+| Lane            | Where                                                                  | What it counts                                                                                                                                                                | Run                                                                                       |
+| --------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Engine counters | `packages/web-render/src/perf.rs` (feature `perf-counters`)            | HTML parses, style/layout resolves, paint captures, painted draw commands, run-match comparisons in text recovery, font-context builds, bytes in/out across the wasm boundary | thread-local; zero cost with the feature off (every `bump` is an empty inline fn)         |
+| Engine budgets  | `packages/web-render/tests/perf_budgets.rs`                            | the counters above per workload                                                                                                                                               | `cargo test --features blitz,perf-counters --test perf_budgets`                           |
+| Engine benches  | `packages/web-render/benches/render.rs`                                | wall-clock, trended                                                                                                                                                           | `cargo bench --features blitz --bench render`                                             |
+| Host budgets    | `packages/web-bundle/test/perf/perf-budgets.spec.ts`                   | every host door call per command (a Proxy over the real headless host), wasm calls, boundary bytes, rows read back from `collection`                                          | `pnpm --filter @paged-media/web test` (`PERF_SHOW=1` prints one `PERF` line per scenario) |
+| Counting wasm   | `scripts/build-wasm-perf.sh` → `packages/web-render/target/perf-wasm/` | adds `perf_counters()` / `perf_counters_reset()` exports; when present the host spec also prints the engine counters                                                          | never shipped; the bundled `bin/` artifact stays the non-counting build                   |
 
 The workloads are built in code (no corpus files): a 40-paragraph article (each paragraph
 ~5 lines at 400 px), a 300-row three-column table, one paragraph of 200 colour-styled spans,
@@ -21,13 +21,13 @@ and a 200-cell flex grid (one text run per cell) for the bake.
 
 ## Engine (native, `perf_budgets.rs`)
 
-| Workload | parses | resolves | paint captures | painted cmds | run-match comparisons | font ctx | bytes in | bytes out | wall-clock (release) |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| article, 1 frame (400 × 8192 px) | 1 | 1 | 1 | 243 | 40 000 | 1 | 8 894 | 58 784 | 4.1 ms |
-| article flowed into 4 frames (400 × 1500 px) | 1 | 4 | 4 | 514 | 60 896 | 1 | 9 023 | 64 594 | 9.1 ms |
-| article flowed into 12 frames (400 × 500 px) | 1 | 12 | 12 | 1 360 | 150 365 | 1 | 9 267 | 78 153 | 27.7 ms |
-| 300-row table, 1 frame | 1 | 1 | 1 | 2 121 | 815 409 | 1 | 15 942 | 814 706 | 23.1 ms |
-| 200 styled runs, 1 frame | 1 | 1 | 1 | 403 | 159 201 | 1 | 7 722 | 71 303 | 2.1 ms |
+| Workload                                     | parses | resolves | paint captures | painted cmds | run-match comparisons | font ctx | bytes in | bytes out | wall-clock (release) |
+| -------------------------------------------- | -----: | -------: | -------------: | -----------: | --------------------: | -------: | -------: | --------: | -------------------: |
+| article, 1 frame (400 × 8192 px)             |      1 |        1 |              1 |          243 |                40 000 |        1 |    8 894 |    58 784 |               4.1 ms |
+| article flowed into 4 frames (400 × 1500 px) |      1 |        4 |              4 |          514 |                60 896 |        1 |    9 023 |    64 594 |               9.1 ms |
+| article flowed into 12 frames (400 × 500 px) |      1 |       12 |             12 |        1 360 |               150 365 |        1 |    9 267 |    78 153 |              27.7 ms |
+| 300-row table, 1 frame                       |      1 |        1 |              1 |        2 121 |               815 409 |        1 |   15 942 |   814 706 |              23.1 ms |
+| 200 styled runs, 1 frame                     |      1 |        1 |              1 |          403 |               159 201 |        1 |    7 722 |    71 303 |               2.1 ms |
 
 Shapes the numbers show (asserted in `baseline_shapes_are_per_frame_and_quadratic`):
 
@@ -43,13 +43,13 @@ Shapes the numbers show (asserted in `baseline_shapes_are_per_frame_and_quadrati
 
 ## Host (bundle, `perf-budgets.spec.ts`, real headless host + real engine wasm)
 
-| Command | door calls | document reads | `mutate` | `collection` | rows read back | wasm calls | bytes in / out | wall-clock |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| render one frame (40-paragraph article, 400 × 960 px) | 8 | 2 | 0 | 0 | 0 | 1 | 8 936 / 12 788 | 62 ms |
-| render one flow into 12 frames | 9 | 1 | 0 | 0 | 0 | 1 | 9 309 / 78 153 | 37 ms |
-| bake a frame of 200 text runs | **1 410** | 403 | **801** | **400** (all `stories`) | **40 000** story rows | 1 | 3 628 / 152 754 | 891 ms |
-| 1 000 document changes, panel font watch live | 1 003 | 1 002 | 0 | **1 001** (all `fonts`) | 0 | 0 | — | 1 416 ms (incl. the 1 000 edits) |
-| cold boot (all of the above) | — | — | — | — | — | 1 instantiation, 1 loader import | — | 10 ms |
+| Command                                               | door calls | document reads | `mutate` |            `collection` |        rows read back |                       wasm calls |  bytes in / out |                       wall-clock |
+| ----------------------------------------------------- | ---------: | -------------: | -------: | ----------------------: | --------------------: | -------------------------------: | --------------: | -------------------------------: |
+| render one frame (40-paragraph article, 400 × 960 px) |          8 |              2 |        0 |                       0 |                     0 |                                1 |  8 936 / 12 788 |                            62 ms |
+| render one flow into 12 frames                        |          9 |              1 |        0 |                       0 |                     0 |                                1 |  9 309 / 78 153 |                            37 ms |
+| bake a frame of 200 text runs                         |  **1 410** |            403 |  **801** | **400** (all `stories`) | **40 000** story rows |                                1 | 3 628 / 152 754 |                           891 ms |
+| 1 000 document changes, panel font watch live         |      1 003 |          1 002 |        0 | **1 001** (all `fonts`) |                     0 |                                0 |               — | 1 416 ms (incl. the 1 000 edits) |
+| cold boot (all of the above)                          |          — |              — |        — |                       — |                     — | 1 instantiation, 1 loader import |               — |                            10 ms |
 
 The headless host wires no scene channel (`rendering.sceneLayer@1` is false), so the render
 commands stop before `contribute.sceneLayer().submit`: in the editor the frame render adds one
@@ -101,13 +101,13 @@ host now boots the published `@paged-media/canvas-wasm` 0.67.0, pinned as a devD
 before, it resolved whatever copy sat in a parent `node_modules`). Each pin was lowered in the
 commit that earned it, beside a behaviour assertion.
 
-| Command | door calls | `mutate` | `collection` | stories reads / rows | other | wall-clock |
-|---|---:|---:|---:|---:|---|---:|
-| render one frame | 8 → **6** | 0 | 0 | 0 / 0 | no `parts.read` | 62 → 81 ms |
-| render one flow into 12 frames | 11 → **7** | 0 | 0 | 0 / 0 | no `parts.read` (9 before ADR 409) | 37 → 35 ms |
-| bake a frame of 200 text runs | 1 410 → **207** | 801 → **1** (batch of 1 001 ops) | 400 → **1** (`swatches`) | 400 / 40 000 → **0 / 0** | 200 `measureString` | 891 → 120 ms |
-| 1 000 document changes, font watch live | 1 003 → **3** | 0 | 1 001 → **2** (`fonts`) | — | panel updates 1 001 → 1 | (the edits dominate) |
-| cold boot | — | — | — | — | 1 instantiation, 1 loader import | — |
+| Command                                 |      door calls |                         `mutate` |             `collection` |     stories reads / rows | other                              |           wall-clock |
+| --------------------------------------- | --------------: | -------------------------------: | -----------------------: | -----------------------: | ---------------------------------- | -------------------: |
+| render one frame                        |       8 → **6** |                                0 |                        0 |                    0 / 0 | no `parts.read`                    |           62 → 81 ms |
+| render one flow into 12 frames          |      11 → **7** |                                0 |                        0 |                    0 / 0 | no `parts.read` (9 before ADR 409) |           37 → 35 ms |
+| bake a frame of 200 text runs           | 1 410 → **207** | 801 → **1** (batch of 1 001 ops) | 400 → **1** (`swatches`) | 400 / 40 000 → **0 / 0** | 200 `measureString`                |         891 → 120 ms |
+| 1 000 document changes, font watch live |   1 003 → **3** |                                0 |  1 001 → **2** (`fonts`) |                        — | panel updates 1 001 → 1            | (the edits dominate) |
+| cold boot                               |               — |                                — |                        — |                        — | 1 instantiation, 1 loader import   |                    — |
 
 What changed:
 
@@ -151,13 +151,13 @@ Same workloads, same counters, measured on a warm engine (the font context is bu
 counters are reset). Every lowered count is the new pin in `perf_budgets.rs`, lowered in the
 commit that earned it.
 
-| Workload | parses | resolves | paint captures | painted cmds | run-match comparisons | font ctx | bytes in | bytes out | wall-clock (release) |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| article, 1 frame (400 × 8192 px) | 1 | 1 | 1 | 243 → **200** | 40 000 → **200** | 1 → **0** | 8 894 | 58 784 → **31 634** | 4.1 → 3.1 ms |
-| article flowed into 4 frames (400 × 1500 px) | 1 | 4 | 4 | 514 → **217** | 60 896 → **217** | 1 → **0** | 9 023 | 64 594 → **31 646** | 9.1 → 6.2 ms |
-| article flowed into 12 frames (400 × 500 px) | 1 | 12 | 12 | 1 360 → **250** | 150 365 → **250** | 1 → **0** | 9 267 | 78 153 → **31 873** | 27.7 → 14.8 ms |
-| 300-row table, 1 frame | 1 | 1 | 1 | 2 121 → **1 214** | 815 409 → **903** | 1 → **0** | 15 942 | 814 706 → **190 761** | 23.1 → 17.1 ms |
-| 200 styled runs, 1 frame | 1 | 1 | 1 | 403 → **399** | 159 201 → **200** | 1 → **0** | 7 722 | 71 303 → **26 515** | 2.1 → 2.3 ms |
+| Workload                                     | parses | resolves | paint captures |      painted cmds | run-match comparisons |  font ctx | bytes in |             bytes out | wall-clock (release) |
+| -------------------------------------------- | -----: | -------: | -------------: | ----------------: | --------------------: | --------: | -------: | --------------------: | -------------------: |
+| article, 1 frame (400 × 8192 px)             |      1 |        1 |              1 |     243 → **200** |      40 000 → **200** | 1 → **0** |    8 894 |   58 784 → **31 634** |         4.1 → 3.1 ms |
+| article flowed into 4 frames (400 × 1500 px) |      1 |        4 |              4 |     514 → **217** |      60 896 → **217** | 1 → **0** |    9 023 |   64 594 → **31 646** |         9.1 → 6.2 ms |
+| article flowed into 12 frames (400 × 500 px) |      1 |       12 |             12 |   1 360 → **250** |     150 365 → **250** | 1 → **0** |    9 267 |   78 153 → **31 873** |       27.7 → 14.8 ms |
+| 300-row table, 1 frame                       |      1 |        1 |              1 | 2 121 → **1 214** |     815 409 → **903** | 1 → **0** |   15 942 | 814 706 → **190 761** |       23.1 → 17.1 ms |
+| 200 styled runs, 1 frame                     |      1 |        1 |              1 |     403 → **399** |     159 201 → **200** | 1 → **0** |    7 722 |   71 303 → **26 515** |         2.1 → 2.3 ms |
 
 Host side (`perf-budgets.spec.ts`), engine bytes out: render one frame 12 788 → **6 302**,
 render one flow into 12 frames 78 153 → **31 873**; the bake's one engine call 152 754 → 24 023
@@ -204,7 +204,6 @@ Recorded, not built:
   needs a different fragmentation model, not a cache.
 - **Parse once per flow group** (target 7) is host-side (the bundle calls the engine per group).
 
-
 ## The wasm build profile (2026-10-17)
 
 The engine wasm moved from cargo's default release profile (no cross-crate LTO, 16 codegen
@@ -212,9 +211,9 @@ units) to the crate's `wasm-release` profile (release, `lto = "fat"`, `codegen-u
 `wasm-opt -Oz` was kept. Both builds used the CI pins: Rust 1.93.0, wasm-bindgen 0.2.125
 and binaryen 119.
 
-| | raw bytes | brotli |
-|---|---:|---:|
-| release profile (to 0.1.0-canary.17) | 10 723 939 | 2 612 273 |
+|                                       |     raw bytes |        brotli |
+| ------------------------------------- | ------------: | ------------: |
+| release profile (to 0.1.0-canary.17)  |    10 723 939 |     2 612 273 |
 | `wasm-release` (from 0.1.0-canary.18) | **9 016 823** | **2 496 172** |
 
 Those are local builds. CI's builds differ by a few hundred bytes from the embedded build
@@ -226,14 +225,14 @@ in node on one machine. Each build ran 10 alternating rounds of 40 iterations pe
 and the table gives the median of the round medians. It is for information only and is not
 gated:
 
-| Workload | release | `wasm-release` |
-|---|---:|---:|
-| article, 1 frame (400 × 8192 px) | 5.16 ms | 4.84 ms |
-| article flowed into 4 frames | 8.90 ms | 8.82 ms |
-| article flowed into 12 frames | 21.40 ms | 21.12 ms |
-| 300-row table, 1 frame | 12.18 ms | 12.16 ms |
-| 200 styled runs, 1 frame | 2.10 ms | 2.03 ms |
-| instantiation | 9.9 ms | 8.7 ms |
+| Workload                         |  release | `wasm-release` |
+| -------------------------------- | -------: | -------------: |
+| article, 1 frame (400 × 8192 px) |  5.16 ms |        4.84 ms |
+| article flowed into 4 frames     |  8.90 ms |        8.82 ms |
+| article flowed into 12 frames    | 21.40 ms |       21.12 ms |
+| 300-row table, 1 frame           | 12.18 ms |       12.16 ms |
+| 200 styled runs, 1 frame         |  2.10 ms |        2.03 ms |
+| instantiation                    |   9.9 ms |         8.7 ms |
 
 For every workload, the two builds return byte-identical JSON. The host budgets in
 `perf-budgets.spec.ts` give the same counts for both.

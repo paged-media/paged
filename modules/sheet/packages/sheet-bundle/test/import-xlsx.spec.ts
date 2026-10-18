@@ -44,7 +44,9 @@ function fakeHost(opts: {
   pickFile?: (o?: {
     accept?: readonly string[];
     multiple?: boolean;
-  }) => Promise<readonly { name: string; bytes: Uint8Array; mimeType: string }[]>;
+  }) => Promise<
+    readonly { name: string; bytes: Uint8Array; mimeType: string }[]
+  >;
 }) {
   const opened: string[] = [];
   const host = {

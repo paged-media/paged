@@ -105,7 +105,8 @@ function tokenizeCss(src: string): Token[] {
   CSS_RULE.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = CSS_RULE.exec(src)) !== null) {
-    if (m.index > last) tokens.push({ cls: null, text: src.slice(last, m.index) });
+    if (m.index > last)
+      tokens.push({ cls: null, text: src.slice(last, m.index) });
     if (m[1]) tokens.push({ cls: "comment", text: m[1] });
     else if (m[2]) tokens.push({ cls: "selector", text: m[2] });
     else if (m[3]) tokens.push({ cls: "prop", text: m[3] });

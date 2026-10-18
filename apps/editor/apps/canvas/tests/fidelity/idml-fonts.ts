@@ -63,7 +63,8 @@ export function declaredFonts(idmlPath: string): DeclaredFont[] {
  */
 export function parseFontsXml(xml: string): DeclaredFont[] {
   const out: DeclaredFont[] = [];
-  const familyRe = /<FontFamily\b[^>]*\bName="([^"]+)"[^>]*>([\s\S]*?)<\/FontFamily>/g;
+  const familyRe =
+    /<FontFamily\b[^>]*\bName="([^"]+)"[^>]*>([\s\S]*?)<\/FontFamily>/g;
   for (const familyMatch of xml.matchAll(familyRe)) {
     const family = familyMatch[1];
     const body = familyMatch[2];

@@ -119,11 +119,7 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
   "tool-typePath": (
     <>
       <path d="M7.5 4 L16.5 4 L16.5 6.2 L13.1 6.2 L13.1 13.5 L10.9 13.5 L10.9 6.2 L7.5 6.2 Z" />
-      <path
-        d="M4 18 Q7 15 10 18 T16 18 T20 18"
-        {...LINE}
-        strokeWidth={1.7}
-      />
+      <path d="M4 18 Q7 15 10 18 T16 18 T20 18" {...LINE} strokeWidth={1.7} />
     </>
   ),
 
@@ -137,7 +133,11 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
   // Pen — a bezier pen nib: triangular nib, center slit, small tip line.
   "tool-pen": (
     <>
-      <path d="M9 3.5 L15 3.5 L13.2 13 L10.8 13 Z" {...LINE} strokeWidth={1.7} />
+      <path
+        d="M9 3.5 L15 3.5 L13.2 13 L10.8 13 Z"
+        {...LINE}
+        strokeWidth={1.7}
+      />
       <line x1={12} y1={5} x2={12} y2={13} {...LINE} strokeWidth={1.4} />
       <line x1={12} y1={13} x2={12} y2={20.5} {...LINE} strokeWidth={1.7} />
     </>
@@ -146,7 +146,11 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
   // Add anchor point — pen nib with a small "+" badge.
   "tool-addAnchor": (
     <>
-      <path d="M7 3.5 L13 3.5 L11.2 12.5 L8.8 12.5 Z" {...LINE} strokeWidth={1.6} />
+      <path
+        d="M7 3.5 L13 3.5 L11.2 12.5 L8.8 12.5 Z"
+        {...LINE}
+        strokeWidth={1.6}
+      />
       <line x1={10} y1={5} x2={10} y2={12.5} {...LINE} strokeWidth={1.3} />
       <line x1={10} y1={12.5} x2={10} y2={19.5} {...LINE} strokeWidth={1.6} />
       <line x1={17} y1={5} x2={17} y2={11} {...LINE} strokeWidth={1.6} />
@@ -157,7 +161,11 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
   // Delete anchor point — pen nib with a small "−" badge.
   "tool-deleteAnchor": (
     <>
-      <path d="M7 3.5 L13 3.5 L11.2 12.5 L8.8 12.5 Z" {...LINE} strokeWidth={1.6} />
+      <path
+        d="M7 3.5 L13 3.5 L11.2 12.5 L8.8 12.5 Z"
+        {...LINE}
+        strokeWidth={1.6}
+      />
       <line x1={10} y1={5} x2={10} y2={12.5} {...LINE} strokeWidth={1.3} />
       <line x1={10} y1={12.5} x2={10} y2={19.5} {...LINE} strokeWidth={1.6} />
       <line x1={14} y1={8} x2={20} y2={8} {...LINE} strokeWidth={1.6} />
@@ -189,7 +197,11 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
   // Smooth — a pencil tip over a smooth wavy line.
   "tool-smooth": (
     <>
-      <path d="M14 4 L20 10 L13 17 L9.5 18 L10.5 14.5 Z" {...LINE} strokeWidth={1.6} />
+      <path
+        d="M14 4 L20 10 L13 17 L9.5 18 L10.5 14.5 Z"
+        {...LINE}
+        strokeWidth={1.6}
+      />
       <path d="M3.5 20 Q6 16.5 9 18 T14.5 18.5" {...LINE} strokeWidth={1.6} />
     </>
   ),
@@ -222,7 +234,15 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
   // Rectangle frame — rectangle with an X through it (image placeholder).
   "tool-rectangleFrame": (
     <>
-      <rect x={4} y={5.5} width={16} height={13} rx={0.6} {...LINE} strokeWidth={1.7} />
+      <rect
+        x={4}
+        y={5.5}
+        width={16}
+        height={13}
+        rx={0.6}
+        {...LINE}
+        strokeWidth={1.7}
+      />
       <line x1={4} y1={5.5} x2={20} y2={18.5} {...LINE} strokeWidth={1.5} />
       <line x1={20} y1={5.5} x2={4} y2={18.5} {...LINE} strokeWidth={1.5} />
     </>
@@ -240,7 +260,11 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
   // Polygon frame — pentagon with an X through it.
   "tool-polygonFrame": (
     <>
-      <path d="M12 3.5 L20 9.3 L16.9 18.7 L7.1 18.7 L4 9.3 Z" {...LINE} strokeWidth={1.7} />
+      <path
+        d="M12 3.5 L20 9.3 L16.9 18.7 L7.1 18.7 L4 9.3 Z"
+        {...LINE}
+        strokeWidth={1.7}
+      />
       <line x1={7.1} y1={18.7} x2={16.9} y2={9.3} {...LINE} strokeWidth={1.5} />
       <line x1={16.9} y1={18.7} x2={7.1} y2={9.3} {...LINE} strokeWidth={1.5} />
     </>
@@ -249,7 +273,15 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
   // Rectangle — plain outline.
   "tool-rectangle": (
     <>
-      <rect x={4} y={5.5} width={16} height={13} rx={0.8} {...LINE} strokeWidth={1.8} />
+      <rect
+        x={4}
+        y={5.5}
+        width={16}
+        height={13}
+        rx={0.8}
+        {...LINE}
+        strokeWidth={1.8}
+      />
     </>
   ),
 
@@ -263,7 +295,11 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
   // Polygon — plain pentagon outline.
   "tool-polygon": (
     <>
-      <path d="M12 3.5 L20 9.3 L16.9 18.7 L7.1 18.7 L4 9.3 Z" {...LINE} strokeWidth={1.8} />
+      <path
+        d="M12 3.5 L20 9.3 L16.9 18.7 L7.1 18.7 L4 9.3 Z"
+        {...LINE}
+        strokeWidth={1.8}
+      />
     </>
   ),
 
@@ -281,7 +317,14 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
   // Free transform — bounding box with square handles at the 4 corners.
   "tool-freeTransform": (
     <>
-      <rect x={6.5} y={6.5} width={11} height={11} {...LINE} strokeWidth={1.5} />
+      <rect
+        x={6.5}
+        y={6.5}
+        width={11}
+        height={11}
+        {...LINE}
+        strokeWidth={1.5}
+      />
       <rect x={4} y={4} width={3} height={3} />
       <rect x={17} y={4} width={3} height={3} />
       <rect x={4} y={17} width={3} height={3} />
@@ -292,11 +335,7 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
   // Rotate — a curved arrow forming most of a circle.
   "tool-rotate": (
     <>
-      <path
-        d="M19 9 A7.5 7.5 0 1 0 19.6 14.5"
-        {...LINE}
-        strokeWidth={1.8}
-      />
+      <path d="M19 9 A7.5 7.5 0 1 0 19.6 14.5" {...LINE} strokeWidth={1.8} />
       <path d="M14.6 8.2 L19.4 8.2 L19.4 13" {...LINE} strokeWidth={1.8} />
     </>
   ),
@@ -329,7 +368,15 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
         <rect x={14.2} y={5} width={3.4} height={14} opacity={0.3} />
         <rect x={17.6} y={5} width={2.4} height={14} opacity={0.15} />
       </g>
-      <rect x={4} y={5} width={16} height={14} rx={2} {...LINE} strokeWidth={1.4} />
+      <rect
+        x={4}
+        y={5}
+        width={16}
+        height={14}
+        rx={2}
+        {...LINE}
+        strokeWidth={1.4}
+      />
     </>
   ),
 
@@ -346,11 +393,7 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
   // Note — a sticky note / small page with a folded corner and 2 lines.
   "tool-note": (
     <>
-      <path
-        d="M5 4 L19 4 L19 15 L15 20 L5 20 Z"
-        {...LINE}
-        strokeWidth={1.7}
-      />
+      <path d="M5 4 L19 4 L19 15 L15 20 L5 20 Z" {...LINE} strokeWidth={1.7} />
       <path d="M19 15 L15 15 L15 20" {...LINE} strokeWidth={1.7} />
       <line x1={8} y1={9} x2={16} y2={9} {...LINE} strokeWidth={1.5} />
       <line x1={8} y1={12.5} x2={14} y2={12.5} {...LINE} strokeWidth={1.5} />
@@ -393,7 +436,14 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
       <g transform="rotate(-45 12 12)">
         <line x1={6.5} y1={9.5} x2={6.5} y2={12} {...LINE} strokeWidth={1.4} />
         <line x1={10} y1={9.5} x2={10} y2={13} {...LINE} strokeWidth={1.4} />
-        <line x1={13.5} y1={9.5} x2={13.5} y2={12} {...LINE} strokeWidth={1.4} />
+        <line
+          x1={13.5}
+          y1={9.5}
+          x2={13.5}
+          y2={12}
+          {...LINE}
+          strokeWidth={1.4}
+        />
         <line x1={17} y1={9.5} x2={17} y2={13} {...LINE} strokeWidth={1.4} />
       </g>
     </>
@@ -419,9 +469,30 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
   "tool-zoom": (
     <>
       <circle cx={10.5} cy={10.5} r={6.5} {...LINE} strokeWidth={1.8} />
-      <line x1={15.2} y1={15.2} x2={20.5} y2={20.5} {...LINE} strokeWidth={1.9} />
-      <line x1={10.5} y1={7.5} x2={10.5} y2={13.5} {...LINE} strokeWidth={1.5} />
-      <line x1={7.5} y1={10.5} x2={13.5} y2={10.5} {...LINE} strokeWidth={1.5} />
+      <line
+        x1={15.2}
+        y1={15.2}
+        x2={20.5}
+        y2={20.5}
+        {...LINE}
+        strokeWidth={1.9}
+      />
+      <line
+        x1={10.5}
+        y1={7.5}
+        x2={10.5}
+        y2={13.5}
+        {...LINE}
+        strokeWidth={1.5}
+      />
+      <line
+        x1={7.5}
+        y1={10.5}
+        x2={13.5}
+        y2={10.5}
+        {...LINE}
+        strokeWidth={1.5}
+      />
     </>
   ),
 
@@ -440,7 +511,15 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
   // between two endpoint handles (the gradient direction). paged.draw.
   "tool-gradient": (
     <>
-      <rect x={4} y={4} width={16} height={16} rx={1.6} {...LINE} strokeWidth={1.6} />
+      <rect
+        x={4}
+        y={4}
+        width={16}
+        height={16}
+        rx={1.6}
+        {...LINE}
+        strokeWidth={1.6}
+      />
       <line x1={7.5} y1={16.5} x2={16.5} y2={7.5} {...LINE} strokeWidth={1.6} />
       <circle cx={7.5} cy={16.5} r={1.5} />
       <circle cx={16.5} cy={7.5} r={1.5} />
@@ -450,7 +529,15 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
   // Shape builder — two overlapping shapes being united. paged.draw.
   "tool-shapeBuilder": (
     <>
-      <rect x={4} y={8} width={11} height={11} rx={1.4} {...LINE} strokeWidth={1.6} />
+      <rect
+        x={4}
+        y={8}
+        width={11}
+        height={11}
+        rx={1.4}
+        {...LINE}
+        strokeWidth={1.6}
+      />
       <circle cx={15.5} cy={13.5} r={5.5} {...LINE} strokeWidth={1.6} />
     </>
   ),
@@ -523,8 +610,16 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
   // width profile. paged.draw.
   "tool-width": (
     <>
-      <path d="M3 12 C7 12 8 5.5 12 5.5 C16 5.5 17 12 21 12" {...LINE} strokeWidth={1.7} />
-      <path d="M3 12 C7 12 8 18.5 12 18.5 C16 18.5 17 12 21 12" {...LINE} strokeWidth={1.7} />
+      <path
+        d="M3 12 C7 12 8 5.5 12 5.5 C16 5.5 17 12 21 12"
+        {...LINE}
+        strokeWidth={1.7}
+      />
+      <path
+        d="M3 12 C7 12 8 18.5 12 18.5 C16 18.5 17 12 21 12"
+        {...LINE}
+        strokeWidth={1.7}
+      />
       <path d="M12 5.5 L12 18.5" {...LINE} strokeWidth={1.3} />
     </>
   ),
@@ -538,7 +633,11 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
         {...LINE}
         strokeWidth={1.7}
       />
-      <path d="M7.6 15.4 C7 17.6 7.6 19.4 9.2 20.3" {...LINE} strokeWidth={1.6} />
+      <path
+        d="M7.6 15.4 C7 17.6 7.6 19.4 9.2 20.3"
+        {...LINE}
+        strokeWidth={1.6}
+      />
       <circle cx="9.9" cy="20.6" r="1.4" {...LINE} strokeWidth={1.4} />
     </>
   ),
@@ -579,7 +678,11 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
         {...LINE}
         strokeWidth={1.7}
       />
-      <path d="M8.4 16.2 C7.6 18.4 8.4 20.2 10.4 20.8" {...LINE} strokeWidth={1.6} />
+      <path
+        d="M8.4 16.2 C7.6 18.4 8.4 20.2 10.4 20.8"
+        {...LINE}
+        strokeWidth={1.6}
+      />
     </>
   ),
 
@@ -602,14 +705,35 @@ export const TOOL_GLYPHS: Record<string, ReactNode> = {
   "tool-clone": (
     <>
       <circle cx={12} cy={5.4} r={2.4} {...LINE} strokeWidth={1.6} />
-      <line x1={10.9} y1={7.7} x2={10.9} y2={14.4} {...LINE} strokeWidth={1.6} />
-      <line x1={13.1} y1={7.7} x2={13.1} y2={14.4} {...LINE} strokeWidth={1.6} />
+      <line
+        x1={10.9}
+        y1={7.7}
+        x2={10.9}
+        y2={14.4}
+        {...LINE}
+        strokeWidth={1.6}
+      />
+      <line
+        x1={13.1}
+        y1={7.7}
+        x2={13.1}
+        y2={14.4}
+        {...LINE}
+        strokeWidth={1.6}
+      />
       <path
         d="M5 18 L5 16.5 C5 15.2 6.1 14.4 7.5 14.4 L16.5 14.4 C17.9 14.4 19 15.2 19 16.5 L19 18 Z"
         {...LINE}
         strokeWidth={1.6}
       />
-      <line x1={4.5} y1={20.5} x2={19.5} y2={20.5} {...LINE} strokeWidth={1.7} />
+      <line
+        x1={4.5}
+        y1={20.5}
+        x2={19.5}
+        y2={20.5}
+        {...LINE}
+        strokeWidth={1.7}
+      />
     </>
   ),
 

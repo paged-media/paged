@@ -67,7 +67,11 @@ test("assert: warns loudly in prod when NOT isolated", () => {
   let message = "";
   let reportSeen = null;
   assertCrossOriginIsolated({
-    env: { crossOriginIsolated: false, hasSharedArrayBuffer: false, isProd: true },
+    env: {
+      crossOriginIsolated: false,
+      hasSharedArrayBuffer: false,
+      isProd: true,
+    },
     onWarn: (msg, report) => {
       message = msg;
       reportSeen = report;
@@ -86,5 +90,9 @@ test("assert: warns in dev too (softer) when NOT isolated", () => {
       warned = true;
     },
   });
-  assert.equal(warned, true, "dev should still warn if a proxy stripped headers");
+  assert.equal(
+    warned,
+    true,
+    "dev should still warn if a proxy stripped headers",
+  );
 });

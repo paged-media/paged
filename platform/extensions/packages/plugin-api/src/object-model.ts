@@ -74,15 +74,11 @@ export type PropertyPathName = string;
 
 /** The page-item kinds (core's `ElementId` string-id kinds). */
 export type PageItemKind =
-  | "textFrame"
-  | "rectangle"
-  | "oval"
-  | "polygon"
-  | "graphicLine"
-  | "group";
+  "textFrame" | "rectangle" | "oval" | "polygon" | "graphicLine" | "group";
 
 /** Style families a `style:` address names (= core's `StyleCollection`). */
-export type StyleFamily = "paragraph" | "character" | "object" | "cell" | "table";
+export type StyleFamily =
+  "paragraph" | "character" | "object" | "cell" | "table";
 
 /** A parsed address — what the SDK's `parseAddress` returns and
  *  `formatAddress` takes. Plain data. */
@@ -162,7 +158,12 @@ export type ValueType =
    *  `open: true` accepts fields `fields` does not list — core's catalog
    *  (protocol 71) names the shape but not its fields, and the engine
    *  validates them. */
-  | { kind: "struct"; fields: Readonly<Record<string, StructField>>; shape?: string; open?: true };
+  | {
+      kind: "struct";
+      fields: Readonly<Record<string, StructField>>;
+      shape?: string;
+      open?: true;
+    };
 
 export type ValueTypeKind = ValueType["kind"];
 
@@ -331,7 +332,11 @@ export interface PartChange {
  * before anything applies.
  */
 export type ObjectWrite =
-  | { kind: "mutations"; mutations: readonly MutationInput[]; created?: readonly Address[] }
+  | {
+      kind: "mutations";
+      mutations: readonly MutationInput[];
+      created?: readonly Address[];
+    }
   | {
       kind: "state";
       parts: readonly PartChange[];
@@ -393,8 +398,15 @@ export interface ObjectKindContribution {
    *  `page:x > plugin:…` selectors. May answer asynchronously. */
   hostOf(address: Address): Address | null | Promise<Address | null>;
   list(query: ObjectQuery): readonly Address[] | Promise<readonly Address[]>;
-  get(address: Address, path: PropertyPathName): ObjectValue | Promise<ObjectValue>;
-  set?(address: Address, path: PropertyPathName, value: unknown): ObjectWrite | Promise<ObjectWrite>;
+  get(
+    address: Address,
+    path: PropertyPathName,
+  ): ObjectValue | Promise<ObjectValue>;
+  set?(
+    address: Address,
+    path: PropertyPathName,
+    value: unknown,
+  ): ObjectWrite | Promise<ObjectWrite>;
   /** Preferred over repeated `set`: many ops, one write, one undo step.
    *  Receives this kind's `set` / `create` / `delete` ops. Ignored when
    *  the contribution has a plugin-level `batch`. */
@@ -500,7 +512,10 @@ export interface ObjectsSurface {
   get(address: Address, path: PropertyPathName): Promise<ObjectValue>;
   /** Every schema path of the object, read — except `heavy` rows (and
    *  `content`), which are read only with `{ content: true }`. */
-  getAll(address: Address, opts?: { content?: boolean }): Promise<Record<string, ObjectValue>>;
+  getAll(
+    address: Address,
+    opts?: { content?: boolean },
+  ): Promise<Record<string, ObjectValue>>;
   set(
     address: Address,
     path: PropertyPathName,
@@ -509,7 +524,10 @@ export interface ObjectsSurface {
   ): Promise<ObjectWriteResult>;
   /** All-or-nothing: validated and planned before anything applies; core
    *  ops and plugin plans land as ONE engine batch = one undo step. */
-  batch(ops: readonly ObjectOp[], opts?: { label?: string }): Promise<ObjectWriteResult>;
+  batch(
+    ops: readonly ObjectOp[],
+    opts?: { label?: string },
+  ): Promise<ObjectWriteResult>;
   /** The rows of an address's kind, or of a qualified kind name. Empty
    *  when the kind is unknown. */
   schema(addressOrKind: Address | string): Promise<readonly PropertySchema[]>;

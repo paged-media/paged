@@ -8,7 +8,7 @@ Sections not relevant outside the original planning context have been removed; n
 
 ## 1. Purpose and scope
 
-*Status note (2026-10-02): this section predates the implementation; see `status.md` for what is built (the tools, selections, brush engine and layer editing listed below as out of scope are built in this repo), [ADR 450](adr/450-gpu-only-kernels.md) for GPU-only execution, and [ADR 453](adr/453-tolerance-not-golden-bytes.md) for how GPU output is verified (CI has no GPU adapter, software or otherwise).*
+_Status note (2026-10-02): this section predates the implementation; see `status.md` for what is built (the tools, selections, brush engine and layer editing listed below as out of scope are built in this repo), [ADR 450](adr/450-gpu-only-kernels.md) for GPU-only execution, and [ADR 453](adr/453-tolerance-not-golden-bytes.md) for how GPU output is verified (CI has no GPU adapter, software or otherwise)._
 
 `paged.image` is the raster subsystem of the Paged ecosystem: a Rust/WASM/
 WebGPU image processing engine delivered as a **Paged plugin**, serving:
@@ -32,7 +32,7 @@ phased in:
   tooling = the same WGSL through wgpu on Vulkan/Metal/DX12; CI = pinned
   software adapter. What remains on the CPU is what is inherently CPU work:
   codec entropy coding, PSD structural parse/write, CMS transform
-  *compilation*, and orchestration.
+  _compilation_, and orchestration.
 - **Plugin isolation** (§2). `paged.image` does not touch, patch, fork, or
   link against Paged core internals. Its only contact surface is the
   published plugin SDK (`@paged-media/plugin-api` / `plugin-sdk`) and other
@@ -42,8 +42,8 @@ phased in:
   outside the registry; no registry row ships below its claimed conformance
   tier; coverage is a CI-computed invariant, not a goal.
 
-**Out of scope** (separate companion specs): layer-tree *editing semantics*
-and tools UX (the PSD-faithful layer *data model* is in scope — required for
+**Out of scope** (separate companion specs): layer-tree _editing semantics_
+and tools UX (the PSD-faithful layer _data model_ is in scope — required for
 round-trip), selections-as-UX, brush engine, history UI, plugin end-user API
 surface via Boa, editor shell panels, IDML recipe/bake semantics.
 
@@ -59,7 +59,7 @@ surface via Boa, editor shell panels, IDML recipe/bake semantics.
 - No browser fallback paths of any kind (no WebGL, no CPU rendering, no
   nosimd builds).
 - **No camera-RAW developing and no HEIC/HEIF ingestion.** `paged.image`'s
-  lane is the *editable RGBA / PSD* pipeline — the published-design raster
+  lane is the _editable RGBA / PSD_ pipeline — the published-design raster
   surface — not a RAW developer or an HEVC/HEIF container reader. Camera-RAW
   (CR2/CR3/NEF/ARW/DNG/…) is a whole demosaic + per-sensor color-science +
   highlight-recovery subsystem, not a codec, and its decoders are
@@ -67,7 +67,7 @@ surface via Boa, editor shell panels, IDML recipe/bake semantics.
   are LGPL-2.1 — off the cargo-deny allow-list). HEIC/HEIF decode needs
   libheif (C, LGPL-3) over an HEVC/AV1 decoder, hitting both the
   no-C-in-default-build rule (§1.1) and the same AV1 wall as AVIF. If a
-  *placed* RAW/HEIC asset must be ingested, that is a document-link /
+  _placed_ RAW/HEIC asset must be ingested, that is a document-link /
   host-side external-rasterize concern (a native pre-rasterize step handing
   RGBA in), never a codec adapter this crate ships. (Decode/encode of AVIF
   and JPEG XL are separately tracked deferrals, not non-goals — see §10.3
@@ -103,11 +103,11 @@ plugin platform has.
 
 ### 2.1 Isolation contract
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 460](adr/460-document-is-not-the-store.md) (edits live in the plugin session and leave through save-back, not as document Operations) and, in plugin-sdk, [ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md) (the isolation contract) and [ADR 319](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/319-trust-line.md) (first-party bundles run in-process; the glue here is a TypeScript bundle, not Boa-side script).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 460](adr/460-document-is-not-the-store.md) (edits live in the plugin session and leave through save-back, not as document Operations) and, in plugin-sdk, [ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md) (the isolation contract) and [ADR 319](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/319-trust-line.md) (first-party bundles run in-process; the glue here is a TypeScript bundle, not Boa-side script)._
 
 1. **Zero core contact.** No imports from `core/` or `editor/` internals, no
    patched Paged builds, no feature flags inside Paged existing for this
-   plugin. CI builds against *published* SDK canaries only; a build that
+   plugin. CI builds against _published_ SDK canaries only; a build that
    reaches around the SDK fails the pipeline.
 2. **Capability-gated everything.** The manifest declares all needs
    (document read scopes, asset bytes, panel surfaces, worker spawn, OPFS
@@ -131,17 +131,17 @@ plugin platform has.
 
 ### 2.2 Required SDK surface (gap analysis → RFCs)
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 459](adr/459-scene-layer-image-and-tiles.md) for how results reach the page (a scene-layer image plus a tile provider; the shared-GPU-texture row was deferred, see core [ADR 018](https://github.com/paged-media/core/blob/main/docs/adr/018-stage-b-gpu-texture-defer-record-only.md)), and, in plugin-sdk, [ADR 017](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/017-importer-exporter-door-shape.md) (importer/exporter registration) and [ADR 318](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/318-host-spawned-workers.md) (workers). The OPFS tier is a stub, and the viewer-grade bundle described at the end of this section is not built.*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 459](adr/459-scene-layer-image-and-tiles.md) for how results reach the page (a scene-layer image plus a tile provider; the shared-GPU-texture row was deferred, see core [ADR 018](https://github.com/paged-media/core/blob/main/docs/adr/018-stage-b-gpu-texture-defer-record-only.md)), and, in plugin-sdk, [ADR 017](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/017-importer-exporter-door-shape.md) (importer/exporter registration) and [ADR 318](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/318-host-spawned-workers.md) (workers). The OPFS tier is a stub, and the viewer-grade bundle described at the end of this section is not built._
 
-| Need | Likely status in plugin spec | If missing |
-|---|---|---|
-| Read access to placed-asset bytes + link metadata | covered (read capability) | — |
-| Commit Operations / participate in undo via op log | covered (mutation surface) | — |
-| Declarative panels + custom canvas region for viewport | panels covered; embedded canvas/texture surface to verify | **RFC: plugin-owned `GPUCanvasContext` or texture-share handle** — the single most consequential row; a per-frame copy across this boundary breaks the §13 interactive budgets |
-| Spawn dedicated workers + SharedArrayBuffer within bundle | to verify | RFC: worker capability with COOP/COEP guarantees |
-| OPFS quota for swap tier + pyramid cache | to verify | RFC: storage capability with quota declaration |
-| Register document/asset type handlers (PSD opens via plugin) | to verify | RFC: importer/exporter registration capability |
-| Provide image resources back to Vello (pyramid tiles for placed assets) | to verify | RFC: texture/image resource provider contract |
+| Need                                                                    | Likely status in plugin spec                              | If missing                                                                                                                                                                     |
+| ----------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Read access to placed-asset bytes + link metadata                       | covered (read capability)                                 | —                                                                                                                                                                              |
+| Commit Operations / participate in undo via op log                      | covered (mutation surface)                                | —                                                                                                                                                                              |
+| Declarative panels + custom canvas region for viewport                  | panels covered; embedded canvas/texture surface to verify | **RFC: plugin-owned `GPUCanvasContext` or texture-share handle** — the single most consequential row; a per-frame copy across this boundary breaks the §13 interactive budgets |
+| Spawn dedicated workers + SharedArrayBuffer within bundle               | to verify                                                 | RFC: worker capability with COOP/COEP guarantees                                                                                                                               |
+| OPFS quota for swap tier + pyramid cache                                | to verify                                                 | RFC: storage capability with quota declaration                                                                                                                                 |
+| Register document/asset type handlers (PSD opens via plugin)            | to verify                                                 | RFC: importer/exporter registration capability                                                                                                                                 |
+| Provide image resources back to Vello (pyramid tiles for placed assets) | to verify                                                 | RFC: texture/image resource provider contract                                                                                                                                  |
 
 If `paged.image` can be built without touching core, the plugin platform is
 real — that is the dogfooding thesis of this project.
@@ -155,19 +155,19 @@ mirroring `EditorSession extends ViewerSession` at the plugin level.
 
 ## 3. Legal and methodological ground rules
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 461](adr/461-clean-room-protocol.md) for the protocol as the repository states it, and [ADR 453](adr/453-tolerance-not-golden-bytes.md) for verification (no libvips or GEGL oracle runs in CI; the registry rows name the intended oracle).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 461](adr/461-clean-room-protocol.md) for the protocol as the repository states it, and [ADR 453](adr/453-tolerance-not-golden-bytes.md) for verification (no libvips or GEGL oracle runs in CI; the registry rows name the intended oracle)._
 
-| Rule | Detail |
-|---|---|
-| **Clean-room** | libvips (LGPL-2.1+), GEGL/babl (LGPL-3+), GIMP (GPL-3+), Photoshop/PSD documentation of any provenance: **oracles and concept references only**. No transliteration of source. Implementation derives from published documentation, academic literature (Mitchell–Netravali, Lanczos, CIE colorimetry, Porter–Duff, W3C compositing & blending), and black-box behavior. |
-| **Oracle use** | Native libvips and GEGL run in CI as differential-testing oracles (§12.4). Behavior is not copyrightable; expression is. PSD files carry their own oracle (the embedded merged composite). |
-| **Provenance log** | Every kernel and PSD block handler records its specification sources in a `provenance:` block in its registry entry (paper, spec URL, oracle). Mirrors the IDML clean-room content protocol. |
-| **Naming** | The streaming-pipeline crate group is product-neutral to maximize OSS adoption beyond Paged. The `vips` crate name on crates.io belongs to FFI bindings — not contested. |
-| **License** | See `LICENSE.md`. CLA applies (`CLA.md`). |
+| Rule               | Detail                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Clean-room**     | libvips (LGPL-2.1+), GEGL/babl (LGPL-3+), GIMP (GPL-3+), Photoshop/PSD documentation of any provenance: **oracles and concept references only**. No transliteration of source. Implementation derives from published documentation, academic literature (Mitchell–Netravali, Lanczos, CIE colorimetry, Porter–Duff, W3C compositing & blending), and black-box behavior. |
+| **Oracle use**     | Native libvips and GEGL run in CI as differential-testing oracles (§12.4). Behavior is not copyrightable; expression is. PSD files carry their own oracle (the embedded merged composite).                                                                                                                                                                               |
+| **Provenance log** | Every kernel and PSD block handler records its specification sources in a `provenance:` block in its registry entry (paper, spec URL, oracle). Mirrors the IDML clean-room content protocol.                                                                                                                                                                             |
+| **Naming**         | The streaming-pipeline crate group is product-neutral to maximize OSS adoption beyond Paged. The `vips` crate name on crates.io belongs to FFI bindings — not contested.                                                                                                                                                                                                 |
+| **License**        | See `LICENSE.md`. CLA applies (`CLA.md`).                                                                                                                                                                                                                                                                                                                                |
 
 ### 3.1 Reference mounts: `references/gegl`, `references/libvips`
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 461](adr/461-clean-room-protocol.md). `references/` is gitignored and never committed; the CI guard and the `Cargo.toml` `exclude` entries described below do not exist.*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 461](adr/461-clean-room-protocol.md). `references/` is gitignored and never committed; the CI guard and the `Cargo.toml` `exclude` entries described below do not exist._
 
 The GEGL and libvips source trees are mounted **read-only** at
 `references/gegl` and `references/libvips`. They
@@ -178,17 +178,19 @@ claim for the one place it legally matters (kernels and engine code). The
 protocol therefore distinguishes two roles:
 
 **Analyst role (may read `references/`):**
-- Reads reference sources to understand *behavior, architecture, edge
-  cases, parameter semantics, and test expectations*.
+
+- Reads reference sources to understand _behavior, architecture, edge
+  cases, parameter semantics, and test expectations_.
 - Produces **behavior specifications** as internal design notes (prose, math,
   diagrams, tables of expected outputs) and proposes oracle test cases for
   `image-conformance`.
 - Never writes implementation code in the same work session, and never
   pastes, transliterates, or closely paraphrases reference code or comments
-  into any artifact. Analyst output contains *facts about behavior*, not
+  into any artifact. Analyst output contains _facts about behavior_, not
   expression.
 
 **Implementer role (must not read `references/`):**
+
 - Implements kernels, engines, and PSD handlers from: this spec, the
   behavior specs, the public documentation and academic
   literature (§3), and the oracle/differential tests.
@@ -197,6 +199,7 @@ protocol therefore distinguishes two roles:
   implementation work (`CLAUDE.md` states the rule).
 
 **Hygiene:**
+
 - `references/` is excluded from every published artifact: `exclude` in all
   `Cargo.toml` package manifests, `files` whitelist in `package.json`,
   excluded from the plugin bundle build, and excluded from source archives.
@@ -212,7 +215,7 @@ protocol therefore distinguishes two roles:
 
 ## 4. Crate architecture
 
-*Status note (2026-10-02): this section predates the implementation; see `architecture.md` for the crates as built, and [ADR 450](adr/450-gpu-only-kernels.md) and [ADR 451](adr/451-one-kernel-definition.md) for the scalar references (the generated ones live in `image-kernels` behind the test-only `reference` feature, which only `image-conformance` enables). The TypeScript import rule is checked by a lint rule (`/bunfig.toml`, PM-0003).*
+_Status note (2026-10-02): this section predates the implementation; see `architecture.md` for the crates as built, and [ADR 450](adr/450-gpu-only-kernels.md) and [ADR 451](adr/451-one-kernel-definition.md) for the scalar references (the generated ones live in `image-kernels` behind the test-only `reference` feature, which only `image-conformance` enables). The TypeScript import rule is checked by a lint rule (`/bunfig.toml`, PM-0003)._
 
 Repository `paged-media/plugin-image` (isolation enforced by repo boundary +
 CI building against published SDK canaries):
@@ -276,18 +279,18 @@ pub struct PixelFormat {
 
 ### 5.2 Working space
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 455](adr/455-pixel-model.md) (the shipped ingest lane hands the kernels straight, not premultiplied, values with no transfer cast; no `BlendSpace` flag exists) and [ADR 457](adr/457-colour-management.md) (colour transforms run on the CPU at ingest).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 455](adr/455-pixel-model.md) (the shipped ingest lane hands the kernels straight, not premultiplied, values with no transfer cast; no `BlendSpace` flag exists) and [ADR 457](adr/457-colour-management.md) (colour transforms run on the CPU at ingest)._
 
-| Path | Format | Rationale |
-|---|---|---|
-| Production (GPU) | `RGBA · F16 · Premultiplied · Linear · doc-working-space` | `rgba16float` storage textures; premultiplied for correct filtering; linear for correct resampling/convolution |
-| Conformance reference (test-only) | `RGBA · F32 · Premultiplied · Linear` | headroom for bit-stable goldens; F16 quantization applied as the final step before diffing against GPU output |
-| PSD-compat blending | per-document flag `BlendSpace::Gamma` | Photoshop composites 8/16-bit documents in gamma space; PSD-origin documents default to gamma-space blending; linear is opt-in (§8.4) |
+| Path                              | Format                                                    | Rationale                                                                                                                             |
+| --------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Production (GPU)                  | `RGBA · F16 · Premultiplied · Linear · doc-working-space` | `rgba16float` storage textures; premultiplied for correct filtering; linear for correct resampling/convolution                        |
+| Conformance reference (test-only) | `RGBA · F32 · Premultiplied · Linear`                     | headroom for bit-stable goldens; F16 quantization applied as the final step before diffing against GPU output                         |
+| PSD-compat blending               | per-document flag `BlendSpace::Gamma`                     | Photoshop composites 8/16-bit documents in gamma space; PSD-origin documents default to gamma-space blending; linear is opt-in (§8.4) |
 
 **Working-space policy (v1):** editing happens in an RGB working space —
 the linearized form of the document profile (default: linear sRGB). CMYK
 sources transform to working space at ingest and back at export;
-soft-proofing is a display-chain pass (§10.1). Native CMYK *editing*
+soft-proofing is a display-chain pass (§10.1). Native CMYK _editing_
 (per-ink documents) is deferred to a v2 decision; `PixelFormat`
 already expresses it, so nothing in the core forecloses it.
 
@@ -328,7 +331,7 @@ whole images.
 
 ## 6. Kernel model (`image-kernels`) — WGSL is the implementation
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 450](adr/450-gpu-only-kernels.md) (GPU-only execution), [ADR 451](adr/451-one-kernel-definition.md) (one definition feeds both lanes), [ADR 452](adr/452-kernel-abi.md) (the ABI as amended to v1.1; `KernelDef` gained `inputs` and `module`) and [ADR 453](adr/453-tolerance-not-golden-bytes.md) (GPU output is checked against the scalar reference by the Rust harness in `image-conformance` where a GPU adapter is present; CI has none, there is no Playwright harness, and no libvips or GEGL oracle runner exists).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 450](adr/450-gpu-only-kernels.md) (GPU-only execution), [ADR 451](adr/451-one-kernel-definition.md) (one definition feeds both lanes), [ADR 452](adr/452-kernel-abi.md) (the ABI as amended to v1.1; `KernelDef` gained `inputs` and `module`) and [ADR 453](adr/453-tolerance-not-golden-bytes.md) (GPU output is checked against the scalar reference by the Rust harness in `image-conformance` where a GPU adapter is present; CI has none, there is no Playwright harness, and no libvips or GEGL oracle runner exists)._
 
 A kernel is **a WGSL compute function plus a typed param block plus
 metadata**. The WGSL is the production implementation; the scalar Rust twin
@@ -417,7 +420,7 @@ speed.
 
 ## 7. Engine A — streaming pipeline (`image-pipeline`)
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 454](adr/454-two-evaluation-engines.md). Decode workers are spawned through the host's worker door (plugin-sdk [ADR 318](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/318-host-spawned-workers.md)), not `wasm-bindgen-rayon`; the `to_pyramid` sink and the native ingest tool are not built.*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 454](adr/454-two-evaluation-engines.md). Decode workers are spawned through the host's worker door (plugin-sdk [ADR 318](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/318-host-spawned-workers.md)), not `wasm-bindgen-rayon`; the `to_pyramid` sink and the native ingest tool are not built._
 
 The libvips-shaped engine: bounded memory, one pass, source → sink.
 
@@ -466,7 +469,7 @@ libvips' famous thumbnail performance and the headline benchmark (§13).
 
 ## 8. Engine B — buffer graph (`image-graph`)
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 454](adr/454-two-evaluation-engines.md) (the shipped editing surface is a layer stack folded through the `compose.*` kernels, with Engine B supplying the undo journal; no per-document `BlendSpace` exists) and [ADR 460](adr/460-document-is-not-the-store.md) (edits and their undo live in the plugin session, not in the document's operation log as §8.5 describes).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 454](adr/454-two-evaluation-engines.md) (the shipped editing surface is a layer stack folded through the `compose.*` kernels, with Engine B supplying the undo journal; no per-document `BlendSpace` exists) and [ADR 460](adr/460-document-is-not-the-store.md) (edits and their undo live in the plugin session, not in the document's operation log as §8.5 describes)._
 
 The GEGL-shaped engine: persistent mutable state, incremental
 re-evaluation, sub-frame interactive updates.
@@ -513,7 +516,7 @@ kernels).
 
 Layer compositing is a kernel family (`compose.*`) executed like any other
 node — the layer tree (companion spec) lowers to a graph. Commitments made
-*now* because they shape kernels:
+_now_ because they shape kernels:
 
 - Porter–Duff `over` on premultiplied data is the spine.
 - The Photoshop blend-mode set is specified kernel-by-kernel against dual
@@ -528,11 +531,11 @@ node — the layer tree (companion spec) lowers to a graph. Commitments made
 Direct mapping onto the Paged mutation model, expressed through the SDK
 mutation surface (§2.1.2):
 
-| Paged concept | image-graph realization |
-|---|---|
-| **Gesture** (ephemeral) | A param override on one `OpNode`, applied to the live graph only; recompute of visible invalid tiles; never serialized; replaced at high frequency (slider drag, filter preview) |
-| **Operation** (committed) | `SetParams(node, block)` · `EditGraph(insert/remove/rewire)` · `WriteBuffer(buffer, sparse tile-delta payload)` — submitted through the SDK, appended to the document op log |
-| **Undo** | Inverse op from the log; `WriteBuffer` undo restores COW-journaled `Arc<Tile>` snapshots — O(changed tiles), never O(canvas) |
+| Paged concept             | image-graph realization                                                                                                                                                          |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Gesture** (ephemeral)   | A param override on one `OpNode`, applied to the live graph only; recompute of visible invalid tiles; never serialized; replaced at high frequency (slider drag, filter preview) |
+| **Operation** (committed) | `SetParams(node, block)` · `EditGraph(insert/remove/rewire)` · `WriteBuffer(buffer, sparse tile-delta payload)` — submitted through the SDK, appended to the document op log     |
+| **Undo**                  | Inverse op from the log; `WriteBuffer` undo restores COW-journaled `Arc<Tile>` snapshots — O(changed tiles), never O(canvas)                                                     |
 
 A brush stroke (companion spec) is a stream of Gestures rendering into a
 scratch tile set, committing on pointer-up as one `WriteBuffer` Operation
@@ -542,7 +545,7 @@ with the sparse delta as payload.
 
 ## 9. GPU execution layer (`image-gpu`) — the only execution layer
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 450](adr/450-gpu-only-kernels.md) and [ADR 452](adr/452-kernel-abi.md) (the ABI, amended to v1.1 for handwritten modules). Tier 2 (OPFS) is a stub. Of the adapters in §9.3, neither CI lane nor the native ingest tool is set up; GPU tests run where a local adapter is present.*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 450](adr/450-gpu-only-kernels.md) and [ADR 452](adr/452-kernel-abi.md) (the ABI, amended to v1.1 for handwritten modules). Tier 2 (OPFS) is a stub. Of the adapters in §9.3, neither CI lane nor the native ingest tool is set up; GPU tests run where a local adapter is present._
 
 ### 9.1 Residency: three tiers
 
@@ -580,12 +583,12 @@ workgroup: 16×16 over the tile grid
 
 ### 9.3 Adapters
 
-| Context | Adapter | Notes |
-|---|---|---|
-| Browser (production) | WebGPU, Chrome-only | platform decision; no fallback of any kind |
-| Native ingest (server-side tooling) | wgpu → Vulkan/Metal/DX12 | same WGSL, same results within tolerance |
-| CI (merge-gating) | pinned SwiftShader/Lavapipe | reproducible run-to-run; version pinned in CI image |
-| CI (scheduled matrix) | real adapters (NVIDIA/AMD/Intel/Apple) | informational driver-divergence watch (D-10) |
+| Context                             | Adapter                                | Notes                                               |
+| ----------------------------------- | -------------------------------------- | --------------------------------------------------- |
+| Browser (production)                | WebGPU, Chrome-only                    | platform decision; no fallback of any kind          |
+| Native ingest (server-side tooling) | wgpu → Vulkan/Metal/DX12               | same WGSL, same results within tolerance            |
+| CI (merge-gating)                   | pinned SwiftShader/Lavapipe            | reproducible run-to-run; version pinned in CI image |
+| CI (scheduled matrix)               | real adapters (NVIDIA/AMD/Intel/Apple) | informational driver-divergence watch (D-10)        |
 
 ---
 
@@ -593,11 +596,11 @@ workgroup: 16×16 over the tile grid
 
 ### 10.1 CMS (`image-cms`) — audit-gated engine choice
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 457](adr/457-colour-management.md). The engine choice was made: the hybrid, qcms for display and moxcms for the print lane, behind one `CmsEngine` trait. "Apply on GPU" is not wired: no `cms.apply` kernel exists, and transforms run on the CPU at ingest (see [design/colour-management-at-ingest.md](design/colour-management-at-ingest.md)).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 457](adr/457-colour-management.md). The engine choice was made: the hybrid, qcms for display and moxcms for the print lane, behind one `CmsEngine` trait. "Apply on GPU" is not wired: no `cms.apply` kernel exists, and transforms run on the CPU at ingest (see [design/colour-management-at-ingest.md](design/colour-management-at-ingest.md))._
 
 **Status: open pending A-0 / D-11.** Paged core currently uses **qcms**
 (FirefoxGraphics) for color management. The plugin's isolation contract
-means it *may* choose a different CMS without touching core — but two
+means it _may_ choose a different CMS without touching core — but two
 constraints govern the choice, and the A-0 existing-systems audit (M0 phase 0) decides
 it with data rather than assumption:
 
@@ -618,11 +621,11 @@ it with data rather than assumption:
 
 **Decision matrix (D-11), resolved by the audit:**
 
-| Option | Pros | Cons |
-|---|---|---|
-| qcms throughout (match core) | trivially consistent with core; one engine in the ecosystem | likely insufficient CMYK/v4/intent coverage; upstream is Firefox-driven |
-| moxcms throughout | pure Rust, SIMD, CMYK-capable, intents/BPC | consistency with core's qcms must be *proven* per profile class (the §10.1.1 test); two engines in the ecosystem |
-| Hybrid: qcms-equivalent display path + moxcms for CMYK ingest/proof/export | consistency where the eye compares; capability where print needs it | two code paths to conformance-test; boundary discipline needed |
+| Option                                                                     | Pros                                                                | Cons                                                                                                             |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| qcms throughout (match core)                                               | trivially consistent with core; one engine in the ecosystem         | likely insufficient CMYK/v4/intent coverage; upstream is Firefox-driven                                          |
+| moxcms throughout                                                          | pure Rust, SIMD, CMYK-capable, intents/BPC                          | consistency with core's qcms must be _proven_ per profile class (the §10.1.1 test); two engines in the ecosystem |
+| Hybrid: qcms-equivalent display path + moxcms for CMYK ingest/proof/export | consistency where the eye compares; capability where print needs it | two code paths to conformance-test; boundary discipline needed                                                   |
 
 Whatever the outcome: **compile on CPU, apply on GPU** stands. The chosen
 engine builds the transform; GPU-path application bakes it into a 3D LUT
@@ -658,26 +661,26 @@ native builds. Codecs are inherently CPU work and remain so — "GPU-only"
 
 ### 10.3 Format matrix (v1 commitment)
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 456](adr/456-codecs.md) and `registry/codecs.yaml`. The PNG adapter is `zune-png`. JPEG, PNG and PSD/PSB are built; TIFF, WebP, GIF and PDF/AI rasterization are not.*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 456](adr/456-codecs.md) and `registry/codecs.yaml`. The PNG adapter is `zune-png`. JPEG, PNG and PSD/PSB are built; TIFF, WebP, GIF and PDF/AI rasterization are not._
 
-| Format | Decode | Encode | Crate | Risk / note |
-|---|---|---|---|---|
-| JPEG (incl. CMYK/YCCK) | ✅ | ✅ | `zune-jpeg` / `jpeg-encoder` | low; APP14 Adobe handling conformance-tested |
-| PNG | ✅ | ✅ | `zune-png` or `image-rs/png` (D-4) | low |
-| TIFF (print profile: 16-bit, CMYK, JPEG-in-TIFF, clipping paths) | ✅ | ✅ | `image-tiff` + upstream patches | **highest-risk dependency**; `libtiff-sys` FFI behind native-only `codec-libtiff` feature as escape hatch |
-| WebP | ✅ | lossless ✅ / lossy ⚠ | `image-webp` | lossy-encode gap acceptable v1 (export prefers JPEG/PNG/AVIF) |
-| AVIF | ⏸ | ⏸ | `rav1d` (dec) / `ravif`+`rav1e` (enc) | **decode blocked** — rav1d is still C-API-only (2026-06-13), no permissive pure-Rust *library* AV1 decoder passes cargo-deny; **encode** is license-clear (ravif BSD-3 / rav1e BSD-2) but deferred on the 8 MiB wasm budget + no round-trip oracle. See `registry/codecs.yaml`. |
-| PSD/PSB | ✅ full structural | ✅ round-trip-safe | `image-psd` (§10.4) | constitutive from M0; fidelity ladder per feature, lossless preservation always |
-| PDF/AI (placed) | rasterize ✅ | — | `hayro` (Vello-ecosystem PDF) | evaluate vs need; PDFium rejected (Emscripten) |
-| GIF | ✅ | ✅ | `image-rs/gif` + quantizer | low priority |
-| JPEG XL | ⏸ | ⏸ | `jxl-oxide` (decode) | v2. Decode is now license-clear (`jxl-oxide`, MIT OR Apache-2.0, pure-Rust) — deferred on v2 scope + the wasm budget. **Encode blocked-on-ecosystem**: the only pure-Rust JXL encoder (`jxl-encoder`) is AGPL-3.0/commercial → fails cargo-deny; libjxl is C++. See `registry/codecs.yaml`. |
+| Format                                                           | Decode             | Encode                | Crate                                 | Risk / note                                                                                                                                                                                                                                                                                 |
+| ---------------------------------------------------------------- | ------------------ | --------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| JPEG (incl. CMYK/YCCK)                                           | ✅                 | ✅                    | `zune-jpeg` / `jpeg-encoder`          | low; APP14 Adobe handling conformance-tested                                                                                                                                                                                                                                                |
+| PNG                                                              | ✅                 | ✅                    | `zune-png` or `image-rs/png` (D-4)    | low                                                                                                                                                                                                                                                                                         |
+| TIFF (print profile: 16-bit, CMYK, JPEG-in-TIFF, clipping paths) | ✅                 | ✅                    | `image-tiff` + upstream patches       | **highest-risk dependency**; `libtiff-sys` FFI behind native-only `codec-libtiff` feature as escape hatch                                                                                                                                                                                   |
+| WebP                                                             | ✅                 | lossless ✅ / lossy ⚠ | `image-webp`                          | lossy-encode gap acceptable v1 (export prefers JPEG/PNG/AVIF)                                                                                                                                                                                                                               |
+| AVIF                                                             | ⏸                  | ⏸                     | `rav1d` (dec) / `ravif`+`rav1e` (enc) | **decode blocked** — rav1d is still C-API-only (2026-06-13), no permissive pure-Rust _library_ AV1 decoder passes cargo-deny; **encode** is license-clear (ravif BSD-3 / rav1e BSD-2) but deferred on the 8 MiB wasm budget + no round-trip oracle. See `registry/codecs.yaml`.             |
+| PSD/PSB                                                          | ✅ full structural | ✅ round-trip-safe    | `image-psd` (§10.4)                   | constitutive from M0; fidelity ladder per feature, lossless preservation always                                                                                                                                                                                                             |
+| PDF/AI (placed)                                                  | rasterize ✅       | —                     | `hayro` (Vello-ecosystem PDF)         | evaluate vs need; PDFium rejected (Emscripten)                                                                                                                                                                                                                                              |
+| GIF                                                              | ✅                 | ✅                    | `image-rs/gif` + quantizer            | low priority                                                                                                                                                                                                                                                                                |
+| JPEG XL                                                          | ⏸                  | ⏸                     | `jxl-oxide` (decode)                  | v2. Decode is now license-clear (`jxl-oxide`, MIT OR Apache-2.0, pure-Rust) — deferred on v2 scope + the wasm budget. **Encode blocked-on-ecosystem**: the only pure-Rust JXL encoder (`jxl-encoder`) is AGPL-3.0/commercial → fails cargo-deny; libjxl is C++. See `registry/codecs.yaml`. |
 
 Corpus rule: before M1 freeze, run the format/feature frequency audit over
 the project's IDML corpus `Links`; this matrix is adjusted by data, not taste.
 
 ### 10.4 PSD core (`image-psd`) — round-trip first
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 458](adr/458-psd-preservation.md). The ecosystem oracle that exists is `psd-tools`, run locally on request (`image-conformance/tests/it/psd_ecosystem.rs`); it does not run in CI, and there is no GIMP lane.*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 458](adr/458-psd-preservation.md). The ecosystem oracle that exists is `psd-tools`, run locally on request (`image-conformance/tests/it/psd_ecosystem.rs`); it does not run in CI, and there is no GIMP lane._
 
 PSD support is engineered the way IDML was: **full structural parse +
 lossless preservation + byte-faithful re-write first; semantic fidelity
@@ -694,13 +697,13 @@ fills, adjustment-layer parameter blocks, `TySh`/`Txt2` text records,
 `SoLd`/`lnkD` smart objects, `vmsk`/`vsms` paths); global sections (image
 resources incl. ICC, resolution, guides, slices; merged composite). This
 model is the seed of the editor's layer-tree document model — the companion
-editing-semantics spec *lowers from* this structure.
+editing-semantics spec _lowers from_ this structure.
 
 **Preservation invariant.** Every block the parser does not semantically
 understand is retained as an opaque, position-independent byte payload
 attached to its owner node and re-emitted verbatim on write. Understood
 blocks re-encode from the model. Consequence: opening and saving a PSD
-without touching an unmodeled feature is lossless *by construction* —
+without touching an unmodeled feature is lossless _by construction_ —
 including Adobe-private and undocumented blocks. The writer maintains the
 merged composite and section lengths so files stay valid for strict readers.
 
@@ -714,7 +717,7 @@ while remaining round-trip-safe; `image.psd.smartobject` reaches `rendered`
 early (embedded payloads decode through `image-codecs`) and `mutatable`
 only with the editing-semantics spec.
 
-**Write semantics under editing.** When a document *is* edited, the writer
+**Write semantics under editing.** When a document _is_ edited, the writer
 re-encodes the touched subtree from the model, refreshes the merged
 composite via Engine A (flatten pipeline through `compose.*` kernels,
 gamma/linear per document `BlendSpace`), recomputes RLE/ZIP channel data,
@@ -734,23 +737,23 @@ bug pipeline like the IDML corpus does.
 
 ## 11. Operation inventory and tiering
 
-*Status note (2026-10-02): this section predates the implementation; see `registry/kernels.yaml` for the kernels that exist. `cms.apply` and the frequency (FFT) operations are not among them.*
+_Status note (2026-10-02): this section predates the implementation; see `registry/kernels.yaml` for the kernels that exist. `cms.apply` and the frequency (FFT) operations are not among them._
 
 Operations live in the registry as `image.*` features (§12.3). Tiers:
 
-| Tier | Content | Schedule |
-|---|---|---|
-| **T0 — generated families** | arithmetic, relational, boolean, linear, casts, band ops, min/max/clamp | codegen; M0 |
-| **T1 — crown jewels** | resample (`lanczos3`, `mitchell`, `cubic`, `nearest`, shrink planner), colour (`cms.apply`, premultiply, transfer), convolution (gaussian, unsharp, generic conv, separable planner), `compose.*` blend modes (required by the PSD merged-composite writer) | M1 |
-| **T2 — editor-bearing** | curves, levels, HSL, exposure/WB, crop/flip/rotate90, gradient/noise generators, histogram/statistics reductions | M2 |
-| **T3 — breadth** | morphology, median/rank, frequency (`rustfft` reference / GPU FFT), draw ops, distance transform | M3+ |
-| **T∞ — never** | mosaicing/astronomy, FITS/Matlab/CSV/Analyze, ImageMagick delegation, GUI-era leftovers | excluded by design |
+| Tier                        | Content                                                                                                                                                                                                                                                     | Schedule           |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| **T0 — generated families** | arithmetic, relational, boolean, linear, casts, band ops, min/max/clamp                                                                                                                                                                                     | codegen; M0        |
+| **T1 — crown jewels**       | resample (`lanczos3`, `mitchell`, `cubic`, `nearest`, shrink planner), colour (`cms.apply`, premultiply, transfer), convolution (gaussian, unsharp, generic conv, separable planner), `compose.*` blend modes (required by the PSD merged-composite writer) | M1                 |
+| **T2 — editor-bearing**     | curves, levels, HSL, exposure/WB, crop/flip/rotate90, gradient/noise generators, histogram/statistics reductions                                                                                                                                            | M2                 |
+| **T3 — breadth**            | morphology, median/rank, frequency (`rustfft` reference / GPU FFT), draw ops, distance transform                                                                                                                                                            | M3+                |
+| **T∞ — never**              | mosaicing/astronomy, FITS/Matlab/CSV/Analyze, ImageMagick delegation, GUI-era leftovers                                                                                                                                                                     | excluded by design |
 
 ---
 
 ## 12. Conformance, testing, and the verification invariant
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 453](adr/453-tolerance-not-golden-bytes.md) for how output is verified and plugin-sdk [ADR 317](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/317-registry-driven-dispatch.md) for registry-driven dispatch. The build-consumed registry is `registry/*.yaml` in this repo, and the test harness is the Rust crate `image-conformance`. This repo has no Playwright suite and no `#[feature_test]` macro; no libvips or GEGL oracle runner exists; CI runs the GPU parity tests without an adapter, so they skip.*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 453](adr/453-tolerance-not-golden-bytes.md) for how output is verified and plugin-sdk [ADR 317](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/317-registry-driven-dispatch.md) for registry-driven dispatch. The build-consumed registry is `registry/*.yaml` in this repo, and the test harness is the Rust crate `image-conformance`. This repo has no Playwright suite and no `#[feature_test]` macro; no libvips or GEGL oracle runner exists; CI runs the GPU parity tests without an adapter, so they skip._
 
 ### 12.1 Identical environment to Paged core
 
@@ -776,7 +779,7 @@ deviation**:
 claimed tier; nothing else is reachable.** Enforced three ways:
 
 1. **Registry-driven dispatch.** Kernel and PSD-block registration is
-   generated *from* the registry YAML at build time. An implementation
+   generated _from_ the registry YAML at build time. An implementation
    without a registry row does not get a dispatch entry — unregistered
    operations are unreachable by construction, not by policy.
 2. **Coverage gate.** CI computes, per registry row, the presence of tests
@@ -803,7 +806,7 @@ To be added to the project's feature registry alongside this spec's adoption:
   - kernels: `implemented → parity-ref-oracle → parity-gpu-ref → incremental-correct`
   - PSD: `parsed → preserved → rendered → mutatable → round-trips`
   - codecs/pipeline/plugin: the standard `parsed → rendered → mutatable →
-    round-trips` ladder where applicable.
+round-trips` ladder where applicable.
 
 Sample rows:
 
@@ -812,7 +815,7 @@ Sample rows:
 id: image.kernel.conv.gaussian
 title: Gaussian blur (separable, mip-scaled)
 class: windowed
-oracle: both            # libvips + GEGL
+oracle: both # libvips + GEGL
 mip_exact: true
 gpu_tolerance: { kind: channel_eps_f16, value: 2 }
 status: planned
@@ -828,7 +831,7 @@ tests:
 # registry/features/image.psd.yaml
 id: image.psd.layer.mask.raster
 title: PSD raster layer masks
-tier: preserved          # current; target: round-trips
+tier: preserved # current; target: round-trips
 oracle: embedded_composite
 status: in-progress
 provenance:
@@ -871,16 +874,16 @@ launch marketing for the standalone crates.
 
 ## 13. Performance gates (CI-enforced on the pinned adapter; informational on hardware matrix)
 
-*Status note (2026-10-02): this section predates the implementation; see `status.md`. These gates are not built: no test or CI step enforces these budgets, and the one benchmark target in the repo is the PNG codec comparison in `image-conformance/benches/png_d4.rs`.*
+_Status note (2026-10-02): this section predates the implementation; see `status.md`. These gates are not built: no test or CI step enforces these budgets, and the one benchmark target in the repo is the PNG codec comparison in `image-conformance/benches/png_d4.rs`._
 
-| Benchmark | Target |
-|---|---|
-| `thumbnail` 8000×6000 JPEG → 256px (wasm, 4 workers + GPU) | ≥ wasm-vips ×2; within ×1.5 of native sharp |
-| Pointwise gesture, 4K viewport, level-0 tiles | < 8 ms wall per update |
-| Gaussian σ=5 full-viewport recompute | < 16 ms |
-| 100 MP / 30-node graph, pan at level 2 | no level-0 evaluation triggered; < 4 ms residency misses per frame |
-| Undo of 500-tile `WriteBuffer` | < 10 ms |
-| PSD zero-edit round-trip, 500 MB PSB | streaming, peak heap < 512 MB |
+| Benchmark                                                  | Target                                                             |
+| ---------------------------------------------------------- | ------------------------------------------------------------------ |
+| `thumbnail` 8000×6000 JPEG → 256px (wasm, 4 workers + GPU) | ≥ wasm-vips ×2; within ×1.5 of native sharp                        |
+| Pointwise gesture, 4K viewport, level-0 tiles              | < 8 ms wall per update                                             |
+| Gaussian σ=5 full-viewport recompute                       | < 16 ms                                                            |
+| 100 MP / 30-node graph, pan at level 2                     | no level-0 evaluation triggered; < 4 ms residency misses per frame |
+| Undo of 500-tile `WriteBuffer`                             | < 10 ms                                                            |
+| PSD zero-edit round-trip, 500 MB PSB                       | streaming, peak heap < 512 MB                                      |
 
 Note: the interactive budgets assume the §2.2 GPU-surface contract avoids
 per-frame copies across the plugin boundary — this is the single most

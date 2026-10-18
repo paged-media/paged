@@ -30,7 +30,13 @@
 // Tapes live in the website's media package: <media>/tapes/<film>/<n>.json.
 
 import type { Page } from "@playwright/test";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 export interface Tape {
@@ -42,21 +48,37 @@ export interface Tape {
   chunks: Array<{ t: number; text: string }>;
 }
 
-export async function aiTape(page: Page, mediaRoot: string, film: string): Promise<"record" | "replay"> {
+export async function aiTape(
+  page: Page,
+  mediaRoot: string,
+  film: string,
+): Promise<"record" | "replay"> {
   // AI_TAPE_DIR points a rehearsal at scratch tapes; a take recorded that way
   // is marked in take.json and must never be published.
   const dir = process.env.AI_TAPE_DIR ?? join(mediaRoot, "tapes", film);
   if (process.env.AI_TAPE === "record") {
     mkdirSync(dir, { recursive: true });
-    for (const f of readdirSync(dir)) if (f.endsWith(".json")) throw new Error(`${dir} already has tapes: remove them to record again`);
+    for (const f of readdirSync(dir))
+      if (f.endsWith(".json"))
+        throw new Error(
+          `${dir} already has tapes: remove them to record again`,
+        );
     let n = 0;
     await page.exposeBinding("__filmTape", (_src, tape: Tape) => {
-      writeFileSync(join(dir, `${String(n++).padStart(2, "0")}.json`), `${JSON.stringify(tape, null, 1)}\n`);
+      writeFileSync(
+        join(dir, `${String(n++).padStart(2, "0")}.json`),
+        `${JSON.stringify(tape, null, 1)}\n`,
+      );
     });
     await page.addInitScript(() => {
       const real = window.fetch.bind(window);
       window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.href
+              : input.url;
         if (!url.includes("/api/ai/")) return real(input, init);
         const t0 = performance.now();
         const res = await real(input, init);
@@ -68,7 +90,10 @@ export async function aiTape(page: Page, mediaRoot: string, film: string): Promi
           for (;;) {
             const { done, value } = await reader.read();
             if (done) break;
-            chunks.push({ t: Math.round(performance.now() - t0), text: dec.decode(value, { stream: true }) });
+            chunks.push({
+              t: Math.round(performance.now() - t0),
+              text: dec.decode(value, { stream: true }),
+            });
           }
           (window as unknown as { __filmTape(t: unknown): void }).__filmTape({
             url,
@@ -78,13 +103,19 @@ export async function aiTape(page: Page, mediaRoot: string, film: string): Promi
             chunks,
           });
         })();
-        return new Response(theirs, { status: res.status, headers: res.headers });
+        return new Response(theirs, {
+          status: res.status,
+          headers: res.headers,
+        });
       };
     });
     return "record";
   }
 
-  if (!existsSync(dir)) throw new Error(`no tapes for "${film}": record them once with AI_TAPE=record`);
+  if (!existsSync(dir))
+    throw new Error(
+      `no tapes for "${film}": record them once with AI_TAPE=record`,
+    );
   const tapes = readdirSync(dir)
     .filter((f) => f.endsWith(".json"))
     .sort()
@@ -93,10 +124,16 @@ export async function aiTape(page: Page, mediaRoot: string, film: string): Promi
     const real = window.fetch.bind(window);
     let next = 0;
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
       if (!url.includes("/api/ai/")) return real(input, init);
       const tape = list[next++];
-      if (!tape) throw new Error(`film tape: call ${next} to ${url} has no recording`);
+      if (!tape)
+        throw new Error(`film tape: call ${next} to ${url} has no recording`);
       const enc = new TextEncoder();
       const body = new ReadableStream<Uint8Array>({
         async start(ctrl) {
@@ -109,7 +146,10 @@ export async function aiTape(page: Page, mediaRoot: string, film: string): Promi
           ctrl.close();
         },
       });
-      return new Response(body, { status: tape.status, headers: { "content-type": tape.contentType } });
+      return new Response(body, {
+        status: tape.status,
+        headers: { "content-type": tape.contentType },
+      });
     };
   }, tapes);
   return "replay";

@@ -1158,7 +1158,11 @@ export class CanvasClient {
     } as never)) as unknown as {
       kind: string;
       payload?: {
-        metrics?: Array<{ advance: number; ascender: number; descender: number }>;
+        metrics?: Array<{
+          advance: number;
+          ascender: number;
+          descender: number;
+        }>;
       };
     };
     const metrics = reply.payload?.metrics;
@@ -1231,7 +1235,9 @@ export class CanvasClient {
   }
 
   /** v66 — a byte READ on the binary doors (`directBytesReply`). */
-  private postDirectBytes<T>(msg: Record<string, unknown> & { op: string }): Promise<T> {
+  private postDirectBytes<T>(
+    msg: Record<string, unknown> & { op: string },
+  ): Promise<T> {
     if (this.fatal) return Promise.reject(this.fatal);
     const seq = this.nextSeq++;
     const promise = new Promise<T>((resolve, reject) => {
@@ -1340,7 +1346,10 @@ export class CanvasClient {
 
   /** v66 — read a `.paged` part's bytes, or `null` when absent. */
   readPagedPartBinary(path: string): Promise<Uint8Array | null> {
-    return this.postDirectBytes<Uint8Array | null>({ op: "readPagedPart", path });
+    return this.postDirectBytes<Uint8Array | null>({
+      op: "readPagedPart",
+      path,
+    });
   }
 
   /** v66 — delete a `.paged` part. Resolves whether it existed; a part
@@ -1414,7 +1423,10 @@ export class CanvasClient {
     baseHeight: number;
     revision: number;
   }): Promise<void> {
-    const reply = await this.send({ kind: "claimImageResource", payload: claim });
+    const reply = await this.send({
+      kind: "claimImageResource",
+      payload: claim,
+    });
     if (reply.kind === "resourceClaimApplied") {
       this.emitTilesNeeded(reply.payload.needed);
       return;
@@ -1502,9 +1514,11 @@ export class CanvasClient {
    * console.* output, any thrown error, and which runtime budget (if
    * any) stopped it.
    */
-  async executeScript(
-    source: string,
-  ): Promise<{ output: string[]; error: string | null; budgetKind: string | null }> {
+  async executeScript(source: string): Promise<{
+    output: string[];
+    error: string | null;
+    budgetKind: string | null;
+  }> {
     const answer = this.hostObjects;
     let reply = (await this.send({
       kind: "executeScript",
@@ -1514,21 +1528,38 @@ export class CanvasClient {
     // address suspends; answer its calls through the host's object
     // registry until the worker replies with the result.
     while (reply.kind === "requestHostObjects" && answer) {
-      const { session, calls } = reply.payload as { session: number; calls: HostObjectCallWire[] };
+      const { session, calls } = reply.payload as {
+        session: number;
+        calls: HostObjectCallWire[];
+      };
       const round = await answer(calls);
-      const { answers, committed = [] } = Array.isArray(round) ? { answers: round } : round;
+      const { answers, committed = [] } = Array.isArray(round)
+        ? { answers: round }
+        : round;
       // Protocol 71 folds only a script's OWN undo records into its step:
       // the writes made answering this round are named by their applied
       // seqs, so they join it; a UI edit made while the script waits is
       // never named and stays its own step.
       reply = (await this.send({
         kind: "hostObjectsResult",
-        payload: { session, answers, ...(committed.length > 0 ? { committed } : {}) },
+        payload: {
+          session,
+          answers,
+          ...(committed.length > 0 ? { committed } : {}),
+        },
       } as unknown as MainToWorkerKind)) as { kind: string; payload?: unknown };
     }
     if (reply.kind === "scriptResult") {
-      const p = reply.payload as { output: string[]; error?: string | null; budgetKind?: string | null };
-      return { output: p.output, error: p.error ?? null, budgetKind: p.budgetKind ?? null };
+      const p = reply.payload as {
+        output: string[];
+        error?: string | null;
+        budgetKind?: string | null;
+      };
+      return {
+        output: p.output,
+        error: p.error ?? null,
+        budgetKind: p.budgetKind ?? null,
+      };
     }
     throw new Error(`unexpected reply: ${reply.kind}`);
   }
@@ -1571,7 +1602,9 @@ export class CanvasClient {
     });
     if (reply.kind === "gestureBegun") return reply.payload.handle;
     if (reply.kind === "gestureFailed") {
-      throw new Error(`beginGesture failed: ${describeGestureFailure(reply.payload.error)}`);
+      throw new Error(
+        `beginGesture failed: ${describeGestureFailure(reply.payload.error)}`,
+      );
     }
     throw new Error(`unexpected reply: ${reply.kind}`);
   }
@@ -1611,7 +1644,9 @@ export class CanvasClient {
       };
     }
     if (reply.kind === "gestureFailed") {
-      throw new Error(`updateGesture failed: ${describeGestureFailure(reply.payload.error)}`);
+      throw new Error(
+        `updateGesture failed: ${describeGestureFailure(reply.payload.error)}`,
+      );
     }
     throw new Error(`unexpected reply: ${reply.kind}`);
   }
@@ -1635,7 +1670,9 @@ export class CanvasClient {
       };
     }
     if (reply.kind === "gestureFailed") {
-      throw new Error(`commitGesture failed: ${describeGestureFailure(reply.payload.error)}`);
+      throw new Error(
+        `commitGesture failed: ${describeGestureFailure(reply.payload.error)}`,
+      );
     }
     throw new Error(`unexpected reply: ${reply.kind}`);
   }
@@ -1651,7 +1688,9 @@ export class CanvasClient {
     });
     if (reply.kind === "gestureCancelled") return reply.payload.pageIds;
     if (reply.kind === "gestureFailed") {
-      throw new Error(`cancelGesture failed: ${describeGestureFailure(reply.payload.error)}`);
+      throw new Error(
+        `cancelGesture failed: ${describeGestureFailure(reply.payload.error)}`,
+      );
     }
     throw new Error(`unexpected reply: ${reply.kind}`);
   }
@@ -1852,7 +1891,8 @@ export class CanvasClient {
     // A face asked for during a load is for the document that was open
     // when it was asked for; once the load has settled, that may be gone.
     while (this.loading) await this.loading.catch(() => undefined);
-    if (owner === null) throw new Error("no document is open to give the face to");
+    if (owner === null)
+      throw new Error("no document is open to give the face to");
     if (this.openDocId !== owner) {
       throw new Error("the document the face was given for has closed");
     }
@@ -1882,7 +1922,12 @@ export class CanvasClient {
         sameBytes(f.bytes, bytes),
     );
     if (held) return null;
-    const face: RegistryFace = { family, style, bytes: bytes.slice(), owner: null };
+    const face: RegistryFace = {
+      family,
+      style,
+      bytes: bytes.slice(),
+      owner: null,
+    };
     this.fontRegistry.push(face);
     return face;
   }
@@ -1899,7 +1944,11 @@ export class CanvasClient {
     if (kind.kind === "registerFont") {
       const p = kind.payload;
       if ((p.scope ?? "document") !== "document") return null;
-      return this.addSessionFace(p.family, p.style ?? null, Uint8Array.from(p.bytes));
+      return this.addSessionFace(
+        p.family,
+        p.style ?? null,
+        Uint8Array.from(p.bytes),
+      );
     }
     if (kind.kind === "clearFontRegistry") {
       if ((kind.payload?.scope ?? "document") === "document") {
@@ -1946,7 +1995,9 @@ export class CanvasClient {
     if (dropped.length > 0) {
       const keep = this.fontRegistry.filter((f) => f.owner === null);
       this.fontRegistry.length = 0;
-      this.post({ kind: "clearFontRegistry", payload: null }).catch(() => undefined);
+      this.post({ kind: "clearFontRegistry", payload: null }).catch(
+        () => undefined,
+      );
       for (const face of keep) this.repostFace(face);
     }
     const pending = start();
@@ -2122,7 +2173,10 @@ export class CanvasClient {
   /** A reply that could not be deserialised. We cannot tell which request it
    *  answered, so reject what is pending; the worker itself is still alive. */
   private readonly onMessageError = () => {
-    this.failAll(new Error("canvas worker reply could not be deserialised"), false);
+    this.failAll(
+      new Error("canvas worker reply could not be deserialised"),
+      false,
+    );
   };
 
   /** The worker's lifecycle warnings that mean a request will never be
@@ -2134,13 +2188,19 @@ export class CanvasClient {
     switch (w.kind) {
       // The wasm never loaded: nothing will ever answer.
       case "initFailed":
-        this.failAll(new Error(`canvas engine failed to start: ${details}`), true);
+        this.failAll(
+          new Error(`canvas engine failed to start: ${details}`),
+          true,
+        );
         return;
       // Engine and bundle disagree on the wire or on the shared-memory
       // layout. Carrying on would read wrong bytes as camera/selection
       // state, so refuse every request (ADR 031).
       case "protocolMismatch":
-        this.failAll(new Error(`canvas engine/bundle mismatch: ${details}`), true);
+        this.failAll(
+          new Error(`canvas engine/bundle mismatch: ${details}`),
+          true,
+        );
         return;
       // One request's dispatch threw; the worker reports it with that
       // request's seq. Only that caller is rejected.

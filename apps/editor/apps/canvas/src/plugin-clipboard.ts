@@ -91,10 +91,7 @@ function tsvToRows(text: string): string[][] {
 
 /** Escape a cell's text for safe inclusion in the HTML `<table>` body. */
 function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /** Rows → a minimal `<table>` HTML fragment. Excel/Sheets/Word read this
@@ -117,7 +114,10 @@ function rowsToHtmlTable(rows: readonly (readonly string[])[]): string {
 export function createEditorClipboardBackend(): ClipboardBackend {
   return {
     async read(): Promise<ClipboardPayload | null> {
-      if (!hasClipboard() || typeof navigator.clipboard.readText !== "function") {
+      if (
+        !hasClipboard() ||
+        typeof navigator.clipboard.readText !== "function"
+      ) {
         return null;
       }
       // `readText` may reject (no gesture / permission) — let it propagate;

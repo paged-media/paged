@@ -67,7 +67,9 @@ interface CanvasGlobal {
       delta: [number, number],
       modifiers: { shift: boolean; alt: boolean },
     ) => Promise<string[]>;
-    commitGesture: (handle: number) => Promise<{ appliedSeq: number; pageIds: string[] }>;
+    commitGesture: (
+      handle: number,
+    ) => Promise<{ appliedSeq: number; pageIds: string[] }>;
     cancelGesture: (handle: number) => Promise<string[]>;
     undo: () => Promise<unknown>;
     redo: () => Promise<unknown>;
@@ -97,7 +99,12 @@ async function hitTopmostFrame(
         const reply = (await c.client.send({
           kind: "hitTest",
           payload: { pageId, docPoint: [x, y], filter: "any" },
-        })) as { payload: { element: ElementId | null; itemTransform: number[] | null } };
+        })) as {
+          payload: {
+            element: ElementId | null;
+            itemTransform: number[] | null;
+          };
+        };
         const el = reply.payload.element;
         const transform = reply.payload.itemTransform;
         if (!el) continue;
@@ -116,7 +123,10 @@ async function hitTopmostFrame(
   );
 }
 
-async function frameBoundsRaw(page: Page, el: ElementId): Promise<[number, number, number, number]> {
+async function frameBoundsRaw(
+  page: Page,
+  el: ElementId,
+): Promise<[number, number, number, number]> {
   return page.evaluate(
     async ({ el }) => {
       const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
@@ -125,8 +135,11 @@ async function frameBoundsRaw(page: Page, el: ElementId): Promise<[number, numbe
       const r = (await c.client.send({
         kind: "requestElementGeometry",
         payload: { ids: [el] },
-      })) as { payload: { items: Array<{ bounds: [number, number, number, number] }> } };
-      if (r.payload.items.length === 0) throw new Error("no geometry for element");
+      })) as {
+        payload: { items: Array<{ bounds: [number, number, number, number] }> };
+      };
+      if (r.payload.items.length === 0)
+        throw new Error("no geometry for element");
       return r.payload.items[0].bounds;
     },
     { el },
@@ -160,7 +173,8 @@ test.describe("Phase B — translate gesture", () => {
 
     await page.evaluate(
       async ({ target, delta }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture([target], { kind: "translate" });
         await c.client.updateGesture(h, delta, { shift: false, alt: false });
         await c.client.commitGesture(h);
@@ -171,10 +185,18 @@ test.describe("Phase B — translate gesture", () => {
     const after = await frameBoundsRaw(page, target);
     // Channel returns `[top, left, bottom, right]`. Snap may have
     // nudged the delta by up to ~4pt; assert within that tolerance.
-    expect(Math.abs(after[0] - (before[0] + delta[1]))).toBeLessThanOrEqual(4.5);
-    expect(Math.abs(after[1] - (before[1] + delta[0]))).toBeLessThanOrEqual(4.5);
-    expect(Math.abs(after[2] - (before[2] + delta[1]))).toBeLessThanOrEqual(4.5);
-    expect(Math.abs(after[3] - (before[3] + delta[0]))).toBeLessThanOrEqual(4.5);
+    expect(Math.abs(after[0] - (before[0] + delta[1]))).toBeLessThanOrEqual(
+      4.5,
+    );
+    expect(Math.abs(after[1] - (before[1] + delta[0]))).toBeLessThanOrEqual(
+      4.5,
+    );
+    expect(Math.abs(after[2] - (before[2] + delta[1]))).toBeLessThanOrEqual(
+      4.5,
+    );
+    expect(Math.abs(after[3] - (before[3] + delta[0]))).toBeLessThanOrEqual(
+      4.5,
+    );
     // Rigidity: the frame moved by a CONSISTENT delta (all four
     // edges shifted by the same amount within float noise).
     const dx = after[1] - before[1];
@@ -183,13 +205,16 @@ test.describe("Phase B — translate gesture", () => {
     expect(after[2] - before[2]).toBeCloseTo(dy, 1);
   });
 
-  test("AC-E-8 — undo restores, redo replays @feat:editor-tools.move.translate @level:happy", async ({ page }) => {
+  test("AC-E-8 — undo restores, redo replays @feat:editor-tools.move.translate @level:happy", async ({
+    page,
+  }) => {
     const before = await frameBoundsRaw(page, target);
     const delta: [number, number] = [125.0, 95.0];
 
     await page.evaluate(
       async ({ target, delta }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture([target], { kind: "translate" });
         await c.client.updateGesture(h, delta, { shift: false, alt: false });
         await c.client.commitGesture(h);
@@ -206,17 +231,27 @@ test.describe("Phase B — translate gesture", () => {
     });
     const redone = await frameBoundsRaw(page, target);
     // Redo lands within snap tolerance of (before + delta).
-    expect(Math.abs(redone[0] - (before[0] + delta[1]))).toBeLessThanOrEqual(4.5);
-    expect(Math.abs(redone[1] - (before[1] + delta[0]))).toBeLessThanOrEqual(4.5);
+    expect(Math.abs(redone[0] - (before[0] + delta[1]))).toBeLessThanOrEqual(
+      4.5,
+    );
+    expect(Math.abs(redone[1] - (before[1] + delta[0]))).toBeLessThanOrEqual(
+      4.5,
+    );
   });
 
-  test("cancel restores @feat:editor-tools.move.translate @level:edge", async ({ page }) => {
+  test("cancel restores @feat:editor-tools.move.translate @level:edge", async ({
+    page,
+  }) => {
     const before = await frameBoundsRaw(page, target);
     await page.evaluate(
       async ({ target }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture([target], { kind: "translate" });
-        await c.client.updateGesture(h, [50.0, 50.0], { shift: false, alt: false });
+        await c.client.updateGesture(h, [50.0, 50.0], {
+          shift: false,
+          alt: false,
+        });
         await c.client.cancelGesture(h);
       },
       { target },
@@ -225,7 +260,9 @@ test.describe("Phase B — translate gesture", () => {
     for (let i = 0; i < 4; i++) expect(after[i]).toBeCloseTo(before[i], 2);
   });
 
-  test("AC-E-9 — gesture delta is camera-independent @feat:editor-tools.move.translate @level:gesture", async ({ page }) => {
+  test("AC-E-9 — gesture delta is camera-independent @feat:editor-tools.move.translate @level:gesture", async ({
+    page,
+  }) => {
     const before = await frameBoundsRaw(page, target);
     // Use a delta large enough that snap is in the noise — the
     // property under test is that doc-space delta != viewport delta,
@@ -234,9 +271,19 @@ test.describe("Phase B — translate gesture", () => {
     const dy = 113.0;
     await page.evaluate(
       async ({ target, dx, dy }) => {
-        const c = (globalThis as unknown as {
-          __canvas: { client: { setCamera: (c: { scale: number; tx: number; ty: number }) => void } } & CanvasGlobal;
-        }).__canvas;
+        const c = (
+          globalThis as unknown as {
+            __canvas: {
+              client: {
+                setCamera: (c: {
+                  scale: number;
+                  tx: number;
+                  ty: number;
+                }) => void;
+              };
+            } & CanvasGlobal;
+          }
+        ).__canvas;
         // Change camera before & after to prove the doc-space delta
         // is what counts.
         c.client.setCamera({ scale: 0.5, tx: 100, ty: 100 });

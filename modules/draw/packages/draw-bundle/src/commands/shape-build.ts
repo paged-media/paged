@@ -82,7 +82,11 @@ import {
   type CompoundPaint,
 } from "./compound-path";
 import { MAX_PLANAR_INPUTS } from "../handlers/planar-regions";
-import { SPREAD_ORIGIN, storedTransformOf, type PageOrigin } from "../page-origin";
+import {
+  SPREAD_ORIGIN,
+  storedTransformOf,
+  type PageOrigin,
+} from "../page-origin";
 import { faceTable } from "./knife";
 import { pathfinderFacesMutationFor } from "./pathfinder-region";
 import {
@@ -97,11 +101,19 @@ export const shapeBuildPieceHandle = (k: number): string => `sb-piece-${k}`;
 export const shapeBuildMergeHandle = (k: number): string => `sb-merge-${k}`;
 
 const isIdentity = (m: Affine | null): boolean =>
-  !m || (m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1 && m[4] === 0 && m[5] === 0);
+  !m ||
+  (m[0] === 1 &&
+    m[1] === 0 &&
+    m[2] === 0 &&
+    m[3] === 1 &&
+    m[4] === 0 &&
+    m[5] === 0);
 
 /** A face as the table a piece / rewrite writes: closed, holes wound for the
  *  engine's non-zero fill. */
-function pieceTable(face: Pick<PlanarFace, "anchors" | "subpathStarts">): AnchorTable {
+function pieceTable(
+  face: Pick<PlanarFace, "anchors" | "subpathStarts">,
+): AnchorTable {
   return orientForNonZeroHoles(faceTable(face));
 }
 
@@ -110,17 +122,29 @@ function paintOps(id: ElementId, paint: CompoundPaint): MutationInput[] {
   const ops: MutationInput[] = [
     {
       op: "setElementProperty",
-      args: { elementId: id, path: "frameFillColor", value: { type: "colorRef", value: paint.fill } },
+      args: {
+        elementId: id,
+        path: "frameFillColor",
+        value: { type: "colorRef", value: paint.fill },
+      },
     },
     {
       op: "setElementProperty",
-      args: { elementId: id, path: "frameStrokeColor", value: { type: "colorRef", value: paint.stroke } },
+      args: {
+        elementId: id,
+        path: "frameStrokeColor",
+        value: { type: "colorRef", value: paint.stroke },
+      },
     },
   ];
   if (typeof paint.weight === "number") {
     ops.push({
       op: "setElementProperty",
-      args: { elementId: id, path: "frameStrokeWeight", value: { type: "length", value: paint.weight } },
+      args: {
+        elementId: id,
+        path: "frameStrokeWeight",
+        value: { type: "length", value: paint.weight },
+      },
     });
   }
   return ops;
@@ -162,7 +186,11 @@ export function insertRawPathOps(
   if (box) {
     ops.push({
       op: "setElementProperty",
-      args: { elementId: id, path: "frameBounds", value: { type: "bounds", value: box } },
+      args: {
+        elementId: id,
+        path: "frameBounds",
+        value: { type: "bounds", value: box },
+      },
     });
   }
   if (!isIdentity(stored)) {
@@ -171,7 +199,17 @@ export function insertRawPathOps(
       args: {
         elementId: id,
         path: "frameTransform",
-        value: { type: "transform", value: [...stored!] as [number, number, number, number, number, number] },
+        value: {
+          type: "transform",
+          value: [...stored!] as [
+            number,
+            number,
+            number,
+            number,
+            number,
+            number,
+          ],
+        },
       },
     });
   }
@@ -186,7 +224,11 @@ function rewriteOps(id: ElementId, table: AnchorTable): MutationInput[] {
   if (box) {
     ops.push({
       op: "setElementProperty",
-      args: { elementId: id, path: "frameBounds", value: { type: "bounds", value: box } },
+      args: {
+        elementId: id,
+        path: "frameBounds",
+        value: { type: "bounds", value: box },
+      },
     });
   }
   return ops;
@@ -256,7 +298,10 @@ export function shapeBuildBatchFor(
     const handle = shapeBuildPieceHandle(k);
     inserts.push(
       ...insertRawPathOps(ctx.pageId, t, handle, stored),
-      ...paintOps(handleElementId(handle), ctx.paints.get(ins.paintFrom) ?? noPaint),
+      ...paintOps(
+        handleElementId(handle),
+        ctx.paints.get(ins.paintFrom) ?? noPaint,
+      ),
     );
   }
 
@@ -298,12 +343,21 @@ export function shapeBuildBatchFor(
     // eleven onto the carrier, each run growing it.
     for (let k = 0; k < rest.length; k += MAX_PLANAR_INPUTS - 1) {
       const run = rest.slice(k, k + MAX_PLANAR_INPUTS - 1);
-      union.push(pathfinderFacesMutationFor([carrierId, ...run], [], "remove") as MutationInput);
+      union.push(
+        pathfinderFacesMutationFor(
+          [carrierId, ...run],
+          [],
+          "remove",
+        ) as MutationInput,
+      );
     }
   }
 
   for (const i of plan.deletes) {
-    deletes.push({ op: "deleteFrame", args: { frameId: String(ctx.inputs[i]!.id) } });
+    deletes.push({
+      op: "deleteFrame",
+      args: { frameId: String(ctx.inputs[i]!.id) },
+    });
   }
   return batchMutationFor([...inserts, ...rewrites, ...union, ...deletes]);
 }

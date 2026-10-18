@@ -68,7 +68,11 @@ import {
   useOptionalTool,
   useSelection,
 } from "@paged-media/shell";
-import { DirectSelectSession, engineSnapPoint, isPathEditKey } from "@paged-media/tools";
+import {
+  DirectSelectSession,
+  engineSnapPoint,
+  isPathEditKey,
+} from "@paged-media/tools";
 
 import { problemsSink } from "../panels/problems-store";
 

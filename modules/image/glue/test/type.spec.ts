@@ -163,7 +163,6 @@ describe("the raster type lane", () => {
     handle.dispose();
   });
 
-
   it("keeps its settings on the SESSION, so several runs share them", async () => {
     const { session, handle } = await withFont(null);
     expect(session.state().type).toEqual({

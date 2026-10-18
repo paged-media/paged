@@ -93,15 +93,24 @@ export function tableDataBarOps(
   const bars = tableDataBars(content, widths);
   if (bars.length === 0) return [];
   const [top, left] = origin;
-  const ops: Mutation[] = [...barSwatchOps({ ...content, databars: bars }, known)];
+  const ops: Mutation[] = [
+    ...barSwatchOps({ ...content, databars: bars }, known),
+  ];
   bars.forEach((bar, i) => {
     const drawn = dataBarOps(bar, pageId, top, left);
     if (drawn.length === 0) return;
     const handle = `bar${i}`;
-    ops.push(drawn[0], { op: "bindCreated", args: { handle } }, ...drawn.slice(1));
+    ops.push(
+      drawn[0],
+      { op: "bindCreated", args: { handle } },
+      ...drawn.slice(1),
+    );
     ops.push({
       op: "reorderElement",
-      args: { elementId: { kind: "polygon", id: `$h:${handle}` }, to: "backward" },
+      args: {
+        elementId: { kind: "polygon", id: `$h:${handle}` },
+        to: "backward",
+      },
     });
   });
   return ops;

@@ -51,7 +51,10 @@ export interface FrameRecord {
   wall: number;
 }
 
-export async function startCapture(page: Page, opts: CaptureOptions): Promise<Capture> {
+export async function startCapture(
+  page: Page,
+  opts: CaptureOptions,
+): Promise<Capture> {
   const framesDir = join(opts.dir, "frames");
   mkdirSync(framesDir, { recursive: true });
   const index = join(opts.dir, "frames.jsonl");
@@ -68,7 +71,9 @@ export async function startCapture(page: Page, opts: CaptureOptions): Promise<Ca
     writeFileSync(join(framesDir, file), Buffer.from(ev.data, "base64"));
     const rec: FrameRecord = { file, ts: ev.metadata.timestamp ?? 0, wall };
     appendFileSync(index, `${JSON.stringify(rec)}\n`);
-    void cdp.send("Page.screencastFrameAck", { sessionId: ev.sessionId }).catch(() => {});
+    void cdp
+      .send("Page.screencastFrameAck", { sessionId: ev.sessionId })
+      .catch(() => {});
   });
   await cdp.send("Page.startScreencast", {
     format: "jpeg",

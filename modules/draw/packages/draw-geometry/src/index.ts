@@ -64,11 +64,7 @@ export {
   type Affine,
 } from "./affine";
 // SVG interchange — the round-trip path/shape/document layer (Phase 8).
-export {
-  parsePathData,
-  serializePathData,
-  quadToCubic,
-} from "./svg-path";
+export { parsePathData, serializePathData, quadToCubic } from "./svg-path";
 export { arcToCubics, type ArcCubic } from "./svg-arc";
 export {
   rectToPath,
@@ -89,12 +85,7 @@ export {
   type FillRule,
   type SvgWriteOptions,
 } from "./svg-doc";
-export {
-  parseCssColor,
-  rgbToHex,
-  cmykToRgb,
-  type Rgb,
-} from "./svg-color";
+export { parseCssColor, rgbToHex, cmykToRgb, type Rgb } from "./svg-color";
 export {
   NEUTRAL_PRESSURE,
   clampPressure,

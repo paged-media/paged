@@ -128,9 +128,12 @@ test.describe("journey · paged.image panels", () => {
     // ── 3. And the panel says WHY it is partial, where the designer is
     //    standing rather than in a changelog: the Channels section's
     //    collapsed "About" (2026-10-11 panel pass) says it once opened. ──
-    const channelsAbout = page.locator("[data-image-channels-section] details", {
-      has: page.locator("summary", { hasText: "About" }),
-    });
+    const channelsAbout = page.locator(
+      "[data-image-channels-section] details",
+      {
+        has: page.locator("summary", { hasText: "About" }),
+      },
+    );
     await channelsAbout.locator("summary").click();
     await expect(channelsAbout.getByText("no threshold")).toBeVisible();
   });

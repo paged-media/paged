@@ -17,7 +17,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The uncaptured ledger (ADR 025 §8) — what the journal CANNOT see.
 //
 // This is a direct generalisation of `UncapturedTally` in
@@ -211,7 +210,8 @@ export const KNOWN_BLIND_SPOTS: readonly BlindSpot[] = [
       "directly rather than going through the command registry, so the journal " +
       "knows a mutation happened but not which surface caused it. This is the " +
       "same gap the action recorder documents in shell/src/actions/model.ts.",
-    wouldCost: "Routing panel edits through commands, or a mutation-source tag.",
+    wouldCost:
+      "Routing panel edits through commands, or a mutation-source tag.",
   },
   {
     id: "single-error-boundary",

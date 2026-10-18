@@ -119,8 +119,15 @@ import {
 import { satisfiesApiVersion, API_VERSION } from "./version.js";
 import { createCoreObjects } from "./core-objects.js";
 import { documentChangeOf } from "./document-change.js";
-import { createObjectRegistry, type ObjectRegistry } from "./object-registry.js";
-import { runScriptWithObjects, type ScriptRunResult, type ScriptSend } from "./script-bridge.js";
+import {
+  createObjectRegistry,
+  type ObjectRegistry,
+} from "./object-registry.js";
+import {
+  runScriptWithObjects,
+  type ScriptRunResult,
+  type ScriptSend,
+} from "./script-bridge.js";
 import {
   loadHeadlessEngine,
   type HeadlessCanvasWorker,
@@ -157,7 +164,8 @@ export interface RecordedContribution {
 }
 
 export interface HarnessOptions
-  extends LoadHeadlessEngineOptions,
+  extends
+    LoadHeadlessEngineOptions,
     Pick<
       CreateBundleHostOptions,
       | "console"
@@ -410,7 +418,10 @@ export interface HeadlessHost {
    *  async host bridge armed (ADR 323, engine protocol 71): its `plugin:`
    *  addresses are answered by `objects`, so core and plugin writes of one
    *  script land as ONE undo step. */
-  runScript(source: string, options?: { budget?: unknown }): Promise<ScriptRunResult>;
+  runScript(
+    source: string,
+    options?: { budget?: unknown },
+  ): Promise<ScriptRunResult>;
   /** The SHARED data-provider registry (D-09) injected into every bundle
    *  host here, so a provider bundle and a consumer bundle rendezvous
    *  headlessly and `supports("dataProviders@1")` is true. */
@@ -500,7 +511,11 @@ function makeEngineEditor(
   onToolPreviews: (value: readonly ToolPreviewShape[] | null) => void,
   overlayLayers: Map<string, readonly ToolPreviewShape[]>,
   engineShaper = false,
-): { editor: PagedEditor; fanOut: (reply: WorkerToMain) => void; loads: DocumentLoads } {
+): {
+  editor: PagedEditor;
+  fanOut: (reply: WorkerToMain) => void;
+  loads: DocumentLoads;
+} {
   const protocol = worker.protocolVersion;
   const listeners = new Set<(msg: WorkerToMain) => void>();
 
@@ -529,7 +544,8 @@ function makeEngineEditor(
   const registry: RegistryFace[] = [];
   let openDocId: string | null = null;
   const documentScope = (payload: unknown): boolean =>
-    ((payload as { scope?: string } | null | undefined)?.scope ?? "document") === "document";
+    ((payload as { scope?: string } | null | undefined)?.scope ??
+      "document") === "document";
   const registerFace = (face: RegistryFace): boolean => {
     const reply = dispatch("registerFont", {
       family: face.family,
@@ -543,10 +559,27 @@ function makeEngineEditor(
   };
   /** Keep the ledger in step with a message the engine answered. */
   const note = (kind: string, payload: unknown, reply: WorkerToMain): void => {
-    if (kind === "registerFont" && reply.kind === "fontRegistered" && documentScope(payload)) {
-      const p = payload as { family: string; style?: string | null; bytes: number[] };
-      registry.push({ family: p.family, style: p.style ?? null, bytes: p.bytes, owner: null });
-    } else if (kind === "clearFontRegistry" && reply.kind === "fontRegistryCleared" && documentScope(payload)) {
+    if (
+      kind === "registerFont" &&
+      reply.kind === "fontRegistered" &&
+      documentScope(payload)
+    ) {
+      const p = payload as {
+        family: string;
+        style?: string | null;
+        bytes: number[];
+      };
+      registry.push({
+        family: p.family,
+        style: p.style ?? null,
+        bytes: p.bytes,
+        owner: null,
+      });
+    } else if (
+      kind === "clearFontRegistry" &&
+      reply.kind === "fontRegistryCleared" &&
+      documentScope(payload)
+    ) {
       registry.length = 0;
     }
   };
@@ -695,9 +728,20 @@ function makeEngineEditor(
       return () => listeners.delete(listener);
     },
     async registerDocumentFont(family, bytes, style) {
-      if (openDocId === null) throw new Error("no document is open to give the face to");
-      const face: RegistryFace = { family, style, bytes: Array.from(bytes), owner: openDocId };
-      const reply = dispatch("registerFont", { family, style, bytes: face.bytes, scope: "document" });
+      if (openDocId === null)
+        throw new Error("no document is open to give the face to");
+      const face: RegistryFace = {
+        family,
+        style,
+        bytes: Array.from(bytes),
+        owner: openDocId,
+      };
+      const reply = dispatch("registerFont", {
+        family,
+        style,
+        bytes: face.bytes,
+        scope: "document",
+      });
       if (reply.kind === "fontRegistered") registry.push(face);
       return reply;
     },
@@ -711,8 +755,12 @@ function makeEngineEditor(
       commands: recordingRegistry<CommandContribution, "command">("command"),
       keybindings: keybindingRegistry,
       overlays: recordingRegistry<OverlayContribution, "overlay">("overlay"),
-      importers: recordingRegistry<ImporterContribution, "importer">("importer"),
-      exporters: recordingRegistry<ExporterContribution, "exporter">("exporter"),
+      importers: recordingRegistry<ImporterContribution, "importer">(
+        "importer",
+      ),
+      exporters: recordingRegistry<ExporterContribution, "exporter">(
+        "exporter",
+      ),
     },
     selection: {
       get elementSelection() {
@@ -771,9 +819,16 @@ function makeEngineEditor(
   const measureText = worker.measureText?.bind(worker);
   if (engineShaper && measureText) {
     const zero = { advance: 0, ascender: 0, descender: 0 };
-    const one = (family: string, style: string | null, t: string, sizePt: number) => {
+    const one = (
+      family: string,
+      style: string | null,
+      t: string,
+      sizePt: number,
+    ) => {
       const m = measureText(family, style, t, sizePt);
-      return m ? { advance: m.advance, ascender: m.ascender, descender: m.descender } : zero;
+      return m
+        ? { advance: m.advance, ascender: m.ascender, descender: m.descender }
+        : zero;
     };
     editor.text = {
       async measure(family, style, t, sizePt) {
@@ -853,12 +908,21 @@ export async function createHeadlessHost(
   // `documentLoaded` reply is FANNED OUT to subscribers, as the editor's
   // client broadcasts it (a bundle that resets on a document switch sees
   // this one too).
-  const opened: Array<{ name: string | null; requester: string; pageIds: string[] }> = [];
+  const opened: Array<{
+    name: string | null;
+    requester: string;
+    pageIds: string[];
+  }> = [];
   const documentsBackend: DocumentsBackend = {
     async exportPaged() {
-      const reply = await editor.client.send({ kind: "exportPaged", payload: {} });
-      if (reply.kind === "pagedExported") return Uint8Array.from(reply.payload.bytes);
-      if (reply.kind === "pagedPartFailed") throw new Error(reply.payload.error);
+      const reply = await editor.client.send({
+        kind: "exportPaged",
+        payload: {},
+      });
+      if (reply.kind === "pagedExported")
+        return Uint8Array.from(reply.payload.bytes);
+      if (reply.kind === "pagedPartFailed")
+        throw new Error(reply.payload.error);
       throw new Error(`unexpected reply: ${reply.kind}`);
     },
     async open(bytes, request) {
@@ -868,7 +932,11 @@ export async function createHeadlessHost(
       } catch {
         dirty = false; // no document: nothing to lose
       }
-      if (dirty && options.confirmReplace && !(await options.confirmReplace(request))) {
+      if (
+        dirty &&
+        options.confirmReplace &&
+        !(await options.confirmReplace(request))
+      ) {
         return { opened: false, reason: "declined" };
       }
       const reply = loadDirect(bytes);
@@ -924,7 +992,9 @@ export async function createHeadlessHost(
   const objects =
     options.objects ??
     createObjectRegistry({
-      core: createCoreObjects(() => editor, { protocol: engine.protocolVersion }),
+      core: createCoreObjects(() => editor, {
+        protocol: engine.protocolVersion,
+      }),
       log: options.console ?? console,
     });
   // Protocol 66 batch — the save hook and the tool-options store, shared
@@ -1120,7 +1190,12 @@ export async function createHeadlessHost(
     bindingProviders,
     objects,
     runScript(source, opts) {
-      return runScriptWithObjects(editor.client.send.bind(editor.client) as unknown as ScriptSend, objects, source, opts);
+      return runScriptWithObjects(
+        editor.client.send.bind(editor.client) as unknown as ScriptSend,
+        objects,
+        source,
+        opts,
+      );
     },
     dataProviders,
     willSave,
@@ -1140,7 +1215,11 @@ export async function createHeadlessHost(
     async newBlank(widthPt: number, heightPt: number): Promise<string[]> {
       const reply = (await editor.client.send({
         kind: "newBlankDocument",
-        payload: { widthPt, heightPt, font: options.defaultFont ? Array.from(options.defaultFont) : null },
+        payload: {
+          widthPt,
+          heightPt,
+          font: options.defaultFont ? Array.from(options.defaultFont) : null,
+        },
       } as MainToWorkerKind)) as WorkerToMain;
       if (reply.kind === "documentLoaded") {
         objects.core?.invalidate();
@@ -1151,24 +1230,41 @@ export async function createHeadlessHost(
     },
     async exportDocument(format, exportOptions = {}) {
       const send = (kind: string, payload: unknown) =>
-        editor.client.send({ kind, payload } as MainToWorkerKind) as Promise<{ kind: string; payload: any }>;
+        editor.client.send({ kind, payload } as MainToWorkerKind) as Promise<{
+          kind: string;
+          payload: any;
+        }>;
       if (format === "paged") {
         return { bytes: await documentsBackend.exportPaged(), diagnostics: [] };
       }
       if (format === "idml") {
-        const reply = await send("exportIdml", { linkBase: exportOptions.linkBase ?? null });
+        const reply = await send("exportIdml", {
+          linkBase: exportOptions.linkBase ?? null,
+        });
         if (reply.kind === "idmlExported") {
           return {
             bytes: Uint8Array.from(reply.payload.idmlBytes as number[]),
             diagnostics: [],
-            ...(reply.payload.lost ? { lost: reply.payload.lost as string[] } : {}),
+            ...(reply.payload.lost
+              ? { lost: reply.payload.lost as string[] }
+              : {}),
           };
         }
-        throw new Error(reply.kind === "exportIdmlFailed" ? String(reply.payload.error) : `unexpected reply: ${reply.kind}`);
+        throw new Error(
+          reply.kind === "exportIdmlFailed"
+            ? String(reply.payload.error)
+            : `unexpected reply: ${reply.kind}`,
+        );
       }
       const fail = (reply: { kind: string; payload: any }): Error =>
-        new Error(reply.kind === "exportPdfFailed" ? String(reply.payload.error) : `unexpected reply: ${reply.kind}`);
-      const begun = await send("exportPdfBegin", { options: exportOptions.pdf ?? {} });
+        new Error(
+          reply.kind === "exportPdfFailed"
+            ? String(reply.payload.error)
+            : `unexpected reply: ${reply.kind}`,
+        );
+      const begun = await send("exportPdfBegin", {
+        options: exportOptions.pdf ?? {},
+      });
       if (begun.kind !== "exportPdfBegun") throw fail(begun);
       const session = begun.payload.session as number;
       try {
@@ -1178,7 +1274,10 @@ export async function createHeadlessHost(
         }
         const done = await send("exportPdfFinish", { session });
         if (done.kind !== "pdfExported") throw fail(done);
-        return { bytes: Uint8Array.from(done.payload.pdfBytes as number[]), diagnostics: done.payload.diagnostics as string[] };
+        return {
+          bytes: Uint8Array.from(done.payload.pdfBytes as number[]),
+          diagnostics: done.payload.diagnostics as string[],
+        };
       } catch (err) {
         await send("exportPdfCancel", { session }).catch(() => undefined);
         throw err;
@@ -1196,7 +1295,9 @@ export async function createHeadlessHost(
         );
       }
       if (loaded.some((b) => b.id === manifest.id)) {
-        throw new Error(`headless host: ${manifest.id} is already loaded — dispose it first`);
+        throw new Error(
+          `headless host: ${manifest.id} is already loaded — dispose it first`,
+        );
       }
       // The first bundle retires the neutral driver host.
       if (loaded.length === 0) disposeHostFacades();
@@ -1342,12 +1443,16 @@ export interface ManifestConformanceReport {
 }
 
 /** What a bundle registered, per category, as the check reads it back. */
-export type RegisteredContributions = Record<ContributionCategory, readonly string[]>;
+export type RegisteredContributions = Record<
+  ContributionCategory,
+  readonly string[]
+>;
 
 /** A `panels[]` entry that is a `*.panel.json` path is a design prototype
  *  the host does not interpret (see `PluginContributions.panels`), not an
  *  id the bundle promises to register. */
-const isPanelPrototype = (entry: string): boolean => entry.endsWith(".panel.json");
+const isPanelPrototype = (entry: string): boolean =>
+  entry.endsWith(".panel.json");
 
 /**
  * The comparison itself, pure: the manifest's declarations against what
@@ -1366,7 +1471,10 @@ export function diffManifestContributions(
     panels: (c.panels ?? []).filter((p) => !isPanelPrototype(p)),
     commands: c.commands ?? [],
     // A flag, not a list: declared means "this bundle registers keybindings".
-    keybindings: manifest.capabilities?.keybindings === true ? ["capabilities.keybindings"] : [],
+    keybindings:
+      manifest.capabilities?.keybindings === true
+        ? ["capabilities.keybindings"]
+        : [],
     editContexts: (c.editContexts ?? []).map((e) => e.type),
     objectTypes: (c.objectTypes ?? []).map((e) => e.type),
     importers: c.importers ?? [],
@@ -1383,7 +1491,11 @@ export function diffManifestContributions(
   }
   const used = new Set<ManifestAllowance>();
   const excused: ManifestAllowance[] = [];
-  const excuse = (category: ContributionCategory, direction: keyof CategoryDrift, id: string): boolean => {
+  const excuse = (
+    category: ContributionCategory,
+    direction: keyof CategoryDrift,
+    id: string,
+  ): boolean => {
     const a = allow.find(
       (x) =>
         x.category === category &&
@@ -1479,8 +1591,12 @@ export async function checkManifestConformance(
     const prefix = `plugin:${id}/`;
     const kinds = (await h.objects.kinds())
       .filter((k) => k.owner === id)
-      .map((k) => (k.kind.startsWith(prefix) ? k.kind.slice(prefix.length) : k.kind));
-    const commands = (await h.objects.commands()).filter((k) => k.owner === id).map((k) => k.id);
+      .map((k) =>
+        k.kind.startsWith(prefix) ? k.kind.slice(prefix.length) : k.kind,
+      );
+    const commands = (await h.objects.commands())
+      .filter((k) => k.owner === id)
+      .map((k) => k.id);
     const registered: RegisteredContributions = {
       tools: ids("tool"),
       // A schema panel registers both a synthesized React panel and its
@@ -1489,7 +1605,10 @@ export async function checkManifestConformance(
       commands: ids("command"),
       keybindings: mine
         .filter((e) => e.kind === "keybinding")
-        .map((e) => `${(e.value as KeybindingContribution).key} → ${(e.value as KeybindingContribution).command}`),
+        .map(
+          (e) =>
+            `${(e.value as KeybindingContribution).key} → ${(e.value as KeybindingContribution).command}`,
+        ),
       editContexts: ids("editContext"),
       objectTypes: ids("objectType"),
       importers: ids("importer"),

@@ -1,53 +1,53 @@
-$schema: '../../.moon/cache/schemas/project.json'
+$schema: "../../.moon/cache/schemas/project.json"
 
 # paged.data: a Cargo workspace (data-* crates) and JS packages
 # (data-bundle, data-host-model).
-language: 'rust'
-layer: 'library'
-stack: 'data'
-tags: ['rust', 'node', 'module', 'wasm']
+language: "rust"
+layer: "library"
+stack: "data"
+tags: ["rust", "node", "module", "wasm"]
 
 project:
-  title: 'modules/data'
-  description: 'Database publishing module: DSL, bindings, DuckDB-WASM query engine.'
+  title: "modules/data"
+  description: "Database publishing module: DSL, bindings, DuckDB-WASM query engine."
 
 # validate:manifest runs the in-tree plugin-cli.
 dependsOn:
-  - id: 'extensions'
-    scope: 'development'
-  - id: 'test-kit'
-    scope: 'development'
+  - id: "extensions"
+    scope: "development"
+  - id: "test-kit"
+    scope: "development"
 
 tasks:
   js-test:
     # data-vitest.yml builds the engine wasm and vendors DuckDB before bun test.
-    deps: ['~:wasm', '~:duckdb']
+    deps: ["~:wasm", "~:duckdb"]
 
   duckdb:
-    description: 'Vendor the pinned DuckDB-WASM build and stage it into packages/data-bundle/bin/ (scripts/vendor-duckdb.sh).'
-    command: 'bash scripts/vendor-duckdb.sh'
+    description: "Vendor the pinned DuckDB-WASM build and stage it into packages/data-bundle/bin/ (scripts/vendor-duckdb.sh)."
+    command: "bash scripts/vendor-duckdb.sh"
     inputs:
-      - 'scripts/vendor-duckdb.sh'
-      - 'scripts/bundle-duckdb-api.mjs'
-      - 'packages/data-bundle/manifest.json'
-      - '/bun.lock'
+      - "scripts/vendor-duckdb.sh"
+      - "scripts/bundle-duckdb-api.mjs"
+      - "packages/data-bundle/manifest.json"
+      - "/bun.lock"
     options:
       # Downloads from npm; data-vitest runs it in CI.
-      runInCI: 'skip'
+      runInCI: "skip"
 
   wasm:
-    description: 'data-js wasm into packages/data-bundle/bin/ (scripts/build-wasm.sh).'
-    toolchains: ['rust']
-    command: 'bash scripts/build-wasm.sh'
+    description: "data-js wasm into packages/data-bundle/bin/ (scripts/build-wasm.sh)."
+    toolchains: ["rust"]
+    command: "bash scripts/build-wasm.sh"
     inputs:
-      - '@group(rust-sources)'
-      - 'scripts/build-wasm.sh'
-      - 'scripts/source-hash.mjs'
-      - 'packages/data-bundle/manifest.json'
+      - "@group(rust-sources)"
+      - "scripts/build-wasm.sh"
+      - "scripts/source-hash.mjs"
+      - "packages/data-bundle/manifest.json"
     outputs:
-      - 'packages/data-bundle/bin/data_js*'
-      - 'packages/data-bundle/bin/SOURCE_HASH'
+      - "packages/data-bundle/bin/data_js*"
+      - "packages/data-bundle/bin/SOURCE_HASH"
     options:
       # Needs wasm-bindgen-cli at the Cargo.lock version; data-rust and
       # data-vitest build it in CI.
-      runInCI: 'skip'
+      runInCI: "skip"

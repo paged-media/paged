@@ -16,7 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The OBJECTS ON PATH panel, RENDERED (happy-dom) against the real engine:
 // behaviour first (empty state, records, buttons asserted on the
 // DOCUMENT), then its reload budgets as counts at the host doors — the
@@ -86,7 +85,6 @@ const trio = (i: number): ElementId[] => [
 ];
 
 const PANEL = "[data-draw-onpath-panel]";
-
 
 /** Per-leaf `getMetadata` one link walk costs on this engine (RFI C-65:
  *  1 before tree rows carried metadata, 0 after), and what a walk over
@@ -187,14 +185,18 @@ describe("Objects on path panel — rendered against the engine", () => {
       expect(await transformOf(poly("o0"))).not.toEqual(home);
       const library = await readObjectsOnPathLibrary(h.host);
       expect(
-        library.associations.map((r) => [r.id, r.path?.id, r.objects.map((o) => o.id)]),
+        library.associations.map((r) => [
+          r.id,
+          r.path?.id,
+          r.objects.map((o) => o.id),
+        ]),
       ).toEqual([["op-1", "l0", ["o0", "q0"]]]);
-      expect(onPathObjectOf(await h.host.document.getMetadata(poly("o0")))?.onPath).toBe(
-        "op-1",
-      );
-      expect(onPathSpineOf(await h.host.document.getMetadata(poly("l0")))?.onPath).toBe(
-        "op-1",
-      );
+      expect(
+        onPathObjectOf(await h.host.document.getMetadata(poly("o0")))?.onPath,
+      ).toBe("op-1");
+      expect(
+        onPathSpineOf(await h.host.document.getMetadata(poly("l0")))?.onPath,
+      ).toBe("op-1");
       // ONE batch (the note's "ONE undo step"), and no refusal.
       expect(panel.work.mutations.map((m) => m.op)).toEqual(["batch"]);
       expect(panel.work.count("log.warn")).toBe(0);
@@ -229,21 +231,20 @@ describe("Objects on path panel — rendered against the engine", () => {
     // value). The form now follows the record (`useFollowedDraft`) and
     // takes its options only when the record, or what is saved for it,
     // changes.
-    it(
-      "typed options survive the selection change that + On path needs (one record in the library)",
-      async () => {
-        expect((await readObjectsOnPathLibrary(h.host)).associations).toHaveLength(1);
-        const panel = await mountPanel(h, makeObjectsOnPathPanel);
-        const offset = () =>
-          panel.get<HTMLInputElement>('[data-draw-onpath-field="startOffsetPt"]')
-            .value;
-        await drive(() => h.host.selection.set([]), panel.work);
-        panel.change('[data-draw-onpath-field="startOffsetPt"]', "25");
-        expect(offset()).toBe("25");
-        await drive(() => h.host.selection.set(trio(1)), panel.work);
-        expect(offset()).toBe("25");
-      },
-    );
+    it("typed options survive the selection change that + On path needs (one record in the library)", async () => {
+      expect(
+        (await readObjectsOnPathLibrary(h.host)).associations,
+      ).toHaveLength(1);
+      const panel = await mountPanel(h, makeObjectsOnPathPanel);
+      const offset = () =>
+        panel.get<HTMLInputElement>('[data-draw-onpath-field="startOffsetPt"]')
+          .value;
+      await drive(() => h.host.selection.set([]), panel.work);
+      panel.change('[data-draw-onpath-field="startOffsetPt"]', "25");
+      expect(offset()).toBe("25");
+      await drive(() => h.host.selection.set(trio(1)), panel.work);
+      expect(offset()).toBe("25");
+    });
 
     it("Release puts every object back EXACTLY where it was", async () => {
       const panel = await mountPanel(h, makeObjectsOnPathPanel);
@@ -251,7 +252,9 @@ describe("Objects on path panel — rendered against the engine", () => {
 
       expect((await readObjectsOnPathLibrary(h.host)).associations).toEqual([]);
       expect(await transformOf(poly("o0"))).toEqual(home);
-      expect(onPathObjectOf(await h.host.document.getMetadata(poly("o0")))).toBeNull();
+      expect(
+        onPathObjectOf(await h.host.document.getMetadata(poly("o0"))),
+      ).toBeNull();
       expect(await leafIds(h)).toHaveLength(PRISTINE);
       expect(panel.count("[data-draw-onpath-row]")).toBe(0);
     });
@@ -270,7 +273,10 @@ describe("Objects on path panel — rendered against the engine", () => {
       expect(panel.count("[data-draw-onpath-row]")).toBe(1);
       const id = (await readObjectsOnPathLibrary(h.host)).associations[0]!.id;
 
-      await drive(() => applyReleaseObjectsOnPath(h.host, { onPathId: id }), panel.work);
+      await drive(
+        () => applyReleaseObjectsOnPath(h.host, { onPathId: id }),
+        panel.work,
+      );
       expect((await readObjectsOnPathLibrary(h.host)).associations).toEqual([]);
       expect(panel.count("[data-draw-onpath-row]")).toBe(0);
     });
@@ -296,11 +302,14 @@ describe("Objects on path panel — rendered against the engine", () => {
           await drive(async () => {
             await h.host.selection.set(trio(k - 1));
             const made = await applyMakeObjectsOnPath(h.host, {});
-            if (made.length !== 2) throw new Error(`association ${k} was not built`);
+            if (made.length !== 2)
+              throw new Error(`association ${k} was not built`);
             await h.host.selection.set([]);
           }, panel.work);
         }
-        walksByRecords.push((await panel.costOf(() => plainChange(h, k))).walks);
+        walksByRecords.push(
+          (await panel.costOf(() => plainChange(h, k))).walks,
+        );
       }
       unmountAll();
     });
@@ -309,9 +318,9 @@ describe("Objects on path panel — rendered against the engine", () => {
 
     it("the document is the one the budgets name", async () => {
       expect(await leafIds(h)).toHaveLength(PLAIN_LEAVES + RECORDS * 3);
-      expect((await readObjectsOnPathLibrary(h.host)).associations).toHaveLength(
-        RECORDS,
-      );
+      expect(
+        (await readObjectsOnPathLibrary(h.host)).associations,
+      ).toHaveLength(RECORDS);
     });
 
     it("ONE WALK PER RELOAD, whatever the record count", () => {
@@ -385,15 +394,12 @@ describe("Objects on path panel — rendered against the engine", () => {
     // WAS A BUG (measured, then fixed) — the last reload to FINISH won,
     // not the last to start, and the panel showed "" with an object of
     // op-1 selected; see blend-panel.dom.test.tsx for the mechanism.
-    it(
-      "the panel ends on the LATEST selection when a slower, older reload is still in flight",
-      async () => {
-        const panel = await mountPanel(h, makeObjectsOnPathPanel);
-        expect(panel.attr(PANEL, "data-draw-onpath-active")).toBe("");
-        await selectDuringWalk(h, panel, [poly("o0")]);
-        expect(panel.attr(PANEL, "data-draw-onpath-active")).toBe("op-1");
-        expect(panel.cost()).toMatchObject({ reloads: 2, walks: 1 });
-      },
-    );
+    it("the panel ends on the LATEST selection when a slower, older reload is still in flight", async () => {
+      const panel = await mountPanel(h, makeObjectsOnPathPanel);
+      expect(panel.attr(PANEL, "data-draw-onpath-active")).toBe("");
+      await selectDuringWalk(h, panel, [poly("o0")]);
+      expect(panel.attr(PANEL, "data-draw-onpath-active")).toBe("op-1");
+      expect(panel.cost()).toMatchObject({ reloads: 2, walks: 1 });
+    });
   });
 });

@@ -34,7 +34,9 @@ describe("splitSegmentDeCasteljau", () => {
     const end = [30, 10] as const;
     const split = splitSegmentDeCasteljau(start, startRight, endLeft, end, 0.5);
     // The mid anchor lies ON the original curve at t=0.5.
-    expect(split.midAnchor).toEqual(evalCubic(start, startRight, endLeft, end, 0.5));
+    expect(split.midAnchor).toEqual(
+      evalCubic(start, startRight, endLeft, end, 0.5),
+    );
     // First half at its own t=0.5 equals the original at t=0.25.
     const firstHalfMid = evalCubic(
       start,

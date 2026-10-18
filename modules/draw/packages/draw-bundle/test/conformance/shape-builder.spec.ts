@@ -373,7 +373,8 @@ describe("draw conformance — Shape Builder REGION lane (B-22)", () => {
         xs: [Math.round(Math.min(...xs)), Math.round(Math.max(...xs))],
       };
     };
-    const sameId = (a: ElementId, b: ElementId) => a.kind === b.kind && String(a.id) === String(b.id);
+    const sameId = (a: ElementId, b: ElementId) =>
+      a.kind === b.kind && String(a.id) === String(b.id);
 
     // F4's arrangement, inputs top-to-bottom [ub, ua]: "0#0" = ub alone,
     // "0-1#0" = the overlap, "1#0" = ua alone.
@@ -400,7 +401,9 @@ describe("draw conformance — Shape Builder REGION lane (B-22)", () => {
       // ...ua keeps its own L-shaped remainder, in place...
       expect(await outline(A)).toEqual({ anchors: 6, xs: [100, 300] });
       // ...and ub's remainder stays too, as a piece of its own.
-      const pieces = (await leafIds()).filter((id) => !sameId(id, A) && !sameId(id, B));
+      const pieces = (await leafIds()).filter(
+        (id) => !sameId(id, A) && !sameId(id, B),
+      );
       expect(pieces).toHaveLength(1);
       expect(await outline(pieces[0])).toEqual({ anchors: 6, xs: [200, 400] });
 

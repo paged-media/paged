@@ -32,7 +32,8 @@ const require = createRequire(import.meta.url);
 export const ENGINE_PROTOCOL: number = (() => {
   try {
     const pkg = require.resolve("@paged-media/canvas-wasm/package.json");
-    const v = (JSON.parse(readFileSync(pkg, "utf8")) as { version: string }).version;
+    const v = (JSON.parse(readFileSync(pkg, "utf8")) as { version: string })
+      .version;
     return Number(v.split(".")[1]) || 0;
   } catch {
     return 0;
@@ -50,14 +51,28 @@ export async function sessionLabel(page: Page): Promise<string | null> {
   return page.evaluate(async () => {
     const c = (
       globalThis as unknown as {
-        __canvas: { client: { send(m: { kind: string }): Promise<{ kind: string; payload: { meta?: { pluginMetadata?: { key: string; value: string }[] } } }> } };
+        __canvas: {
+          client: {
+            send(m: { kind: string }): Promise<{
+              kind: string;
+              payload: {
+                meta?: { pluginMetadata?: { key: string; value: string }[] };
+              };
+            }>;
+          };
+        };
       }
     ).__canvas;
     const reply = await c.client.send({ kind: "requestDocumentMeta" });
-    const entry = (reply.payload?.meta?.pluginMetadata ?? []).find((e) => e.key === "x-paged:media.paged.data");
+    const entry = (reply.payload?.meta?.pluginMetadata ?? []).find(
+      (e) => e.key === "x-paged:media.paged.data",
+    );
     if (!entry) return null;
     try {
-      return (JSON.parse(entry.value) as { data?: { session?: string } }).data?.session ?? null;
+      return (
+        (JSON.parse(entry.value) as { data?: { session?: string } }).data
+          ?.session ?? null
+      );
     } catch {
       return null;
     }
@@ -65,7 +80,10 @@ export async function sessionLabel(page: Page): Promise<string | null> {
 }
 
 /** A container part of the open document, as text (null when absent). */
-export async function partText(page: Page, path: string): Promise<string | null> {
+export async function partText(
+  page: Page,
+  path: string,
+): Promise<string | null> {
   return page.evaluate(async (p) => {
     const paged = (
       globalThis as unknown as {
@@ -83,28 +101,41 @@ export async function partText(page: Page, path: string): Promise<string | null>
  *  with them), and — from protocol 71 — the custom TEXT VARIABLES named
  *  `paged:<binding key>` whose contents are the value (ADR 559: InDesign
  *  keeps a text variable through a save, where it drops a placeholder). */
-export async function dataFields(page: Page): Promise<{ plugin: string; key: string; value: string | null }[]> {
+export async function dataFields(
+  page: Page,
+): Promise<{ plugin: string; key: string; value: string | null }[]> {
   const items = await page.evaluate(async () => {
     const c = (
       globalThis as unknown as {
         __canvas: {
-          client: { send(m: { kind: string }): Promise<{ kind: string; payload: { items?: unknown[] } }> };
+          client: {
+            send(m: {
+              kind: string;
+            }): Promise<{ kind: string; payload: { items?: unknown[] } }>;
+          };
           objects?: {
             query(selector: string): Promise<string[]>;
-            get(address: string, path: string): Promise<{ kind: string; value?: unknown }>;
+            get(
+              address: string,
+              path: string,
+            ): Promise<{ kind: string; value?: unknown }>;
           } | null;
         };
       }
     ).__canvas;
     const reply = await c.client.send({ kind: "requestDocumentPlaceholders" });
-    const out = (reply.kind === "documentPlaceholders" ? (reply.payload.items ?? []) : []) as {
+    const out = (
+      reply.kind === "documentPlaceholders" ? (reply.payload.items ?? []) : []
+    ) as {
       plugin: string;
       key: string;
       value: string | null;
     }[];
     const o = c.objects;
     if (o) {
-      const vars = await o.query('textVariable[name^="paged:"]').catch(() => [] as string[]);
+      const vars = await o
+        .query('textVariable[name^="paged:"]')
+        .catch(() => [] as string[]);
       for (const address of vars) {
         const name = await o.get(address, "textVariableName");
         const contents = await o.get(address, "textVariableContents");
@@ -112,7 +143,10 @@ export async function dataFields(page: Page): Promise<{ plugin: string; key: str
         out.push({
           plugin: "media.paged.data",
           key: name.value.slice("paged:".length),
-          value: contents.kind === "value" && typeof contents.value === "string" ? contents.value : null,
+          value:
+            contents.kind === "value" && typeof contents.value === "string"
+              ? contents.value
+              : null,
         });
       }
     }
@@ -122,7 +156,14 @@ export async function dataFields(page: Page): Promise<{ plugin: string; key: str
 }
 
 /** The kinds the Bindings panel's authoring row offers (`[data-data-bind-kind]`). */
-export type BindKind = "variable" | "image" | "barcode" | "table" | "visibility" | "rule" | "recordFlow";
+export type BindKind =
+  | "variable"
+  | "image"
+  | "barcode"
+  | "table"
+  | "visibility"
+  | "rule"
+  | "recordFlow";
 
 /** What the panel says once each kind's binding is defined. */
 const DEFINED: Record<BindKind, RegExp> = {
@@ -158,12 +199,16 @@ export async function addBindingThroughPanel(
   await author.locator("[data-data-bind-field]").fill(field);
   const msg = page.locator("[data-data-bind-msg]");
   const read = async (): Promise<string> =>
-    (await msg.count()) > 0 ? ((await msg.first().textContent()) ?? "").trim() : "";
+    (await msg.count()) > 0
+      ? ((await msg.first().textContent()) ?? "").trim()
+      : "";
   const before = await read();
   await author.locator("[data-data-bind-add]").click();
   await expect.poll(read, { timeout: 10_000 }).not.toBe(before);
   const said = await read();
-  expect(said, `the panel confirmed the ${kind} binding`).toMatch(DEFINED[kind]);
+  expect(said, `the panel confirmed the ${kind} binding`).toMatch(
+    DEFINED[kind],
+  );
   // Every confirmation reads "<kind words> <id> …" with the id third.
   return said.split(/\s+/)[2];
 }

@@ -39,7 +39,12 @@ test.describe("journey · image", () => {
     await designer.open();
     await designer.newDocument();
 
-    const id = await designer.drawRectangle({ x0: 90, y0: 120, x1: 350, y1: 320 });
+    const id = await designer.drawRectangle({
+      x0: 90,
+      y0: 120,
+      x1: 350,
+      y1: 320,
+    });
     expect(id, "frame should be created by the drag").toBeTruthy();
 
     // Set the image link (→ Image context) and serve the pixels (→ render).

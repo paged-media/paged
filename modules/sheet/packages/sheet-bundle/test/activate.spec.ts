@@ -59,7 +59,10 @@ function fakeHost() {
     manifest: sheetBundle.manifest,
     log: { debug() {}, info() {}, warn() {}, error() {} },
     // The document doors every host has; nothing here fires them.
-    document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+    document: {
+      onDidChange: () => ({ dispose() {} }),
+      onDidOpen: () => ({ dispose() {} }),
+    },
     // The IO contribution doors are wired; the host file picker is NOT,
     // so importXlsx exercises the panel-fallback path (S-11 fallback).
     supports: (f: string) =>
@@ -102,9 +105,18 @@ function fakeHost() {
         return track();
       },
     },
-    bindings: { publish() {}, get: () => undefined, delete() {}, onDidChange: () => ({ dispose() {} }) },
+    bindings: {
+      publish() {},
+      get: () => undefined,
+      delete() {},
+      onDidChange: () => ({ dispose() {} }),
+    },
     selection: { get: () => [], onDidChange: () => ({ dispose() {} }) },
-    objects: { query: async () => [], get: async () => ({ kind: "absent" }), onDidChange: () => ({ dispose() {} }) },
+    objects: {
+      query: async () => [],
+      get: async () => ({ kind: "absent" }),
+      onDidChange: () => ({ dispose() {} }),
+    },
     shell: {
       openPanel(id: string) {
         openedPanels.push(id);
@@ -178,7 +190,8 @@ describe("sheet_plugin_bundle_activate", () => {
     const fake = fakeHost();
     sheetBundle.activate(fake.host);
     const title = (suffix: string) =>
-      fake.commands.find((c) => c.id === `media.paged.sheet.command.${suffix}`)?.title;
+      fake.commands.find((c) => c.id === `media.paged.sheet.command.${suffix}`)
+        ?.title;
     expect(title("lowerToFrame")).toBe("Place selection on page");
     expect(title("lowerChartToFrame")).toBe("Place chart on page");
   });
@@ -224,9 +237,7 @@ describe("sheet_plugin_bundle_activate", () => {
   it("importXlsx command falls back to opening the panel when no host picker (S-11 fallback)", () => {
     const fake = fakeHost();
     sheetBundle.activate(fake.host);
-    const importCmd = fake.commands.find((c) =>
-      c.id.endsWith("importXlsx"),
-    );
+    const importCmd = fake.commands.find((c) => c.id.endsWith("importXlsx"));
     // The fake reports no shell.pickFile@1, so pickAndImport opens the
     // workbook panel (the panel's <input> is the no-picker path).
     importCmd?.handler(undefined);

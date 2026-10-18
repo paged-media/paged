@@ -54,9 +54,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const right = x1;
   const top = y0;
 
-  const head = await proseFrame(ctx, p(18), [left, top, right, top + 30], [
-    { text: "Conditions and variables", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(18),
+    [left, top, right, top + 30],
+    [{ text: "Conditions and variables", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   // ── the same sentence set, three ways ───────────────────────────
@@ -90,12 +93,17 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     );
   }
 
-  const legend = await proseFrame(ctx, p(18), [left, top + 152, right, top + 180], [
-    {
-      text: `Line one carries ${CONDITION.printOnly}, line two ${CONDITION.screenOnly}, line three ${CONDITION.specNotes}. While this page was set, ${CONDITION.screenOnly} was switched off and the second line left the render; switched back on, it returned.`,
-      style: STYLE.caption,
-    },
-  ]);
+  const legend = await proseFrame(
+    ctx,
+    p(18),
+    [left, top + 152, right, top + 180],
+    [
+      {
+        text: `Line one carries ${CONDITION.printOnly}, line two ${CONDITION.screenOnly}, line three ${CONDITION.specNotes}. While this page was set, ${CONDITION.screenOnly} was switched off and the second line left the render; switched back on, it returned.`,
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(legend.frameId);
 
   // Filtering, pixel-proved both ways.
@@ -134,7 +142,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
         : v.headerStyle !== null
           ? `picks up ${v.headerUse ?? "FirstOnPage"} of its named style`
           : "resolves at composition time";
-    return { text: `${v.name} — ${v.variableType} — ${detail}`, style: STYLE.catalogEntry };
+    return {
+      text: `${v.name} — ${v.variableType} — ${detail}`,
+      style: STYLE.catalogEntry,
+    };
   });
   const inventory = await proseFrame(
     ctx,

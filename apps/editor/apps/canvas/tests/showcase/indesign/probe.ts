@@ -29,7 +29,13 @@
 // ExtendScript that walks the open document, and returns its counts.
 
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,7 +46,9 @@ export const INDESIGN_APP = "Adobe InDesign 2025";
 /** Is the application installed here? (macOS only; the probe is a
  *  local act, never a CI lane.) */
 export function inDesignAvailable(): boolean {
-  return process.platform === "darwin" && existsSync(`/Applications/${INDESIGN_APP}`);
+  return (
+    process.platform === "darwin" && existsSync(`/Applications/${INDESIGN_APP}`)
+  );
 }
 
 export interface ItemCounts {
@@ -71,7 +79,11 @@ export interface InDesignReport {
   master_items: ItemCounts | null;
   swatches: number | null;
   swatch_names: Array<string | null>;
-  tint_swatches: Array<{ name: string | null; base: string | null; tint: number | null }>;
+  tint_swatches: Array<{
+    name: string | null;
+    base: string | null;
+    tint: number | null;
+  }>;
   paragraph_styles: number | null;
   character_styles: number | null;
   object_styles: number | null;

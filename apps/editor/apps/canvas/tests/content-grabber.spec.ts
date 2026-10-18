@@ -62,7 +62,9 @@ interface CanvasGlobal {
       d: [number, number],
       mods: { shift: boolean; alt: boolean },
     ) => Promise<{ pageIds: string[]; snapLines: unknown[] }>;
-    commitGesture: (h: number) => Promise<{ appliedSeq: number; pageIds: string[] }>;
+    commitGesture: (
+      h: number,
+    ) => Promise<{ appliedSeq: number; pageIds: string[] }>;
     cancelGesture: (h: number) => Promise<string[]>;
     undo: () => Promise<unknown>;
     marqueeHits: (
@@ -177,7 +179,8 @@ test.describe("Phase F — content grabber gesture", () => {
 
     const reply = await page.evaluate(
       async ({ target }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture([target], {
           kind: "translateContent",
         });
@@ -208,13 +211,16 @@ test.describe("Phase F — content grabber gesture", () => {
     }
   });
 
-  test("TranslateContent undo round-trips @feat:editor-tools.content-transform @level:happy", async ({ page }) => {
+  test("TranslateContent undo round-trips @feat:editor-tools.content-transform @level:happy", async ({
+    page,
+  }) => {
     const hit = await findImageBearingRectangle(page, pageIds, pageSizesPt);
     test.skip(hit === null, "pack has no image-bearing rectangles to grab");
     const target = hit!.element;
     const reply = await page.evaluate(
       async ({ target }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture([target], {
           kind: "translateContent",
         });
@@ -231,13 +237,16 @@ test.describe("Phase F — content grabber gesture", () => {
     expect(reply.appliedSeq).toBeGreaterThan(0);
   });
 
-  test("TranslateContent cancel restores @feat:editor-tools.content-transform @level:edge", async ({ page }) => {
+  test("TranslateContent cancel restores @feat:editor-tools.content-transform @level:edge", async ({
+    page,
+  }) => {
     const hit = await findImageBearingRectangle(page, pageIds, pageSizesPt);
     test.skip(hit === null, "pack has no image-bearing rectangles to grab");
     const target = hit!.element;
     await page.evaluate(
       async ({ target }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture([target], {
           kind: "translateContent",
         });

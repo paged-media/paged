@@ -86,13 +86,23 @@ describe("pathAsRect", () => {
 describe("sceneLayerToBakePlan — text", () => {
   it("maps a text run to a BakeText + a deduped swatch it references", () => {
     const layer: SceneLayer = {
-      items: [{ kind: "text", x: 12, y: 40, text: "Hello", size: 16, paint: RED }],
+      items: [
+        { kind: "text", x: 12, y: 40, text: "Hello", size: 16, paint: RED },
+      ],
     };
     const plan = sceneLayerToBakePlan(layer);
     expect(plan.texts).toEqual([
-      { left: 12, baseline: 40, text: "Hello", sizePt: 16, fillColorId: "Color/wb-ff0000" },
+      {
+        left: 12,
+        baseline: 40,
+        text: "Hello",
+        sizePt: 16,
+        fillColorId: "Color/wb-ff0000",
+      },
     ]);
-    expect(plan.swatches).toEqual([{ id: "Color/wb-ff0000", r: 255, g: 0, b: 0 }]);
+    expect(plan.swatches).toEqual([
+      { id: "Color/wb-ff0000", r: 255, g: 0, b: 0 },
+    ]);
     expect(plan.rects).toEqual([]);
     expect(plan.deferred).toEqual({});
   });
@@ -101,7 +111,14 @@ describe("sceneLayerToBakePlan — text", () => {
     const layer: SceneLayer = {
       items: [
         { kind: "text", x: 0, y: 10, text: "", size: 12, paint: BLACK },
-        { kind: "text", x: 0, y: 20, text: "ghost", size: 12, paint: { r: 0, g: 0, b: 0, a: 0 } },
+        {
+          kind: "text",
+          x: 0,
+          y: 20,
+          text: "ghost",
+          size: 12,
+          paint: { r: 0, g: 0, b: 0, a: 0 },
+        },
       ],
     };
     const plan = sceneLayerToBakePlan(layer);
@@ -127,25 +144,41 @@ describe("sceneLayerToBakePlan — text", () => {
   it("rounds 0..1 channels to 0..255 in both the id and the value", () => {
     const layer: SceneLayer = {
       items: [
-        { kind: "text", x: 0, y: 10, text: "x", size: 12, paint: { r: 0.5, g: 0.2, b: 0.8, a: 1 } },
+        {
+          kind: "text",
+          x: 0,
+          y: 10,
+          text: "x",
+          size: 12,
+          paint: { r: 0.5, g: 0.2, b: 0.8, a: 1 },
+        },
       ],
     };
     const plan = sceneLayerToBakePlan(layer);
     // 0.5*255=127.5→128 (0x80), 0.2*255=51 (0x33), 0.8*255=204 (0xcc)
-    expect(plan.swatches[0]).toEqual({ id: "Color/wb-8033cc", r: 128, g: 51, b: 204 });
+    expect(plan.swatches[0]).toEqual({
+      id: "Color/wb-8033cc",
+      r: 128,
+      g: 51,
+      b: 204,
+    });
   });
 });
 
 describe("sceneLayerToBakePlan — fills", () => {
   it("maps a rectangular fill path to a BakeRect + swatch", () => {
     const layer: SceneLayer = {
-      items: [{ kind: "fillPath", path: rectPath(10, 20, 110, 60), paint: BLACK }],
+      items: [
+        { kind: "fillPath", path: rectPath(10, 20, 110, 60), paint: BLACK },
+      ],
     };
     const plan = sceneLayerToBakePlan(layer);
     expect(plan.rects).toEqual([
       { bounds: [20, 10, 60, 110], fillColorId: "Color/wb-000000" },
     ]);
-    expect(plan.swatches).toEqual([{ id: "Color/wb-000000", r: 0, g: 0, b: 0 }]);
+    expect(plan.swatches).toEqual([
+      { id: "Color/wb-000000", r: 0, g: 0, b: 0 },
+    ]);
   });
 
   it("bakes a non-rectangular single-subpath fill as a native PATH (Phase F)", () => {
@@ -232,8 +265,26 @@ describe("sceneLayerToBakePlan — deferred kinds", () => {
   it("plans images as native image frames @feat:plugin-web.bake-to-native", () => {
     const layer: SceneLayer = {
       items: [
-        { kind: "image", rgba: [0, 0, 0, 255], width: 1, height: 1, x: 0, y: 0, w: 10, h: 10 },
-        { kind: "image", rgba: [0, 0, 0, 255], width: 1, height: 1, x: 0, y: 0, w: 10, h: 10 },
+        {
+          kind: "image",
+          rgba: [0, 0, 0, 255],
+          width: 1,
+          height: 1,
+          x: 0,
+          y: 0,
+          w: 10,
+          h: 10,
+        },
+        {
+          kind: "image",
+          rgba: [0, 0, 0, 255],
+          width: 1,
+          height: 1,
+          x: 0,
+          y: 0,
+          w: 10,
+          h: 10,
+        },
       ],
     };
     const plan = sceneLayerToBakePlan(layer);
@@ -249,9 +300,22 @@ describe("sceneLayerToBakePlan — deferred kinds", () => {
   it("mixes text + rect + deferred in one layer", () => {
     const layer: SceneLayer = {
       items: [
-        { kind: "fillPath", path: rectPath(0, 0, 200, 100), paint: { r: 0.8, g: 0.9, b: 1, a: 1 } },
+        {
+          kind: "fillPath",
+          path: rectPath(0, 0, 200, 100),
+          paint: { r: 0.8, g: 0.9, b: 1, a: 1 },
+        },
         { kind: "text", x: 8, y: 24, text: "Title", size: 18, paint: BLACK },
-        { kind: "image", rgba: [0], width: 1, height: 1, x: 0, y: 0, w: 5, h: 5 },
+        {
+          kind: "image",
+          rgba: [0],
+          width: 1,
+          height: 1,
+          x: 0,
+          y: 0,
+          w: 5,
+          h: 5,
+        },
       ],
     };
     const plan = sceneLayerToBakePlan(layer);
@@ -278,7 +342,12 @@ describe("bakeBatchOps — the whole bake as ONE batch", () => {
       { plan, pageId: "uP", top: 100, left: 50, metrics: [M] },
     ]);
     expect(swatchIds).toEqual(["Color/wb-ff0000", "Color/wb-000000"]);
-    expect(handles).toEqual({ rects: ["r0"], paths: [], texts: ["t0"], images: [] });
+    expect(handles).toEqual({
+      rects: ["r0"],
+      paths: [],
+      texts: ["t0"],
+      images: [],
+    });
     expect(ops.map((o) => o.op)).toEqual([
       "createSwatch",
       "createSwatch",
@@ -292,14 +361,23 @@ describe("bakeBatchOps — the whole bake as ONE batch", () => {
       "setElementProperty",
     ]);
     // The rectangle sits at the frame's page origin.
-    expect(ops[2]).toEqual({ op: "insertFrame", args: { pageId: "uP", bounds: [100, 50, 200, 250] } });
+    expect(ops[2]).toEqual({
+      op: "insertFrame",
+      args: { pageId: "uP", bounds: [100, 50, 200, 250] },
+    });
     expect(ops[4]).toMatchObject({
-      args: { elementId: { kind: "rectangle", id: "$h:r0" }, path: "frameFillColor" },
+      args: {
+        elementId: { kind: "rectangle", id: "$h:r0" },
+        path: "frameFillColor",
+      },
     });
     // The text frame: baseline-exact bounds from the measured metrics.
     expect(ops[5]).toEqual({
       op: "insertTextFrame",
-      args: { pageId: "uP", bounds: [124 - 9, 58, 124 + 3, 58 + 40 + TEXT_PAD_PT] },
+      args: {
+        pageId: "uP",
+        bounds: [124 - 9, 58, 124 + 3, 58 + 40 + TEXT_PAD_PT],
+      },
     });
     expect(ops[6]).toEqual({ op: "bindCreated", args: { handle: "t0" } });
     // The minted STORY is addressed through the frame's handle.
@@ -307,10 +385,17 @@ describe("bakeBatchOps — the whole bake as ONE batch", () => {
       op: "insertText",
       args: { storyId: "$h:t0", offset: 0, text: "Title" },
     });
-    const range = { kind: "storyRange", id: { story_id: "$h:t0", start: 0, end: 5 } };
+    const range = {
+      kind: "storyRange",
+      id: { story_id: "$h:t0", start: 0, end: 5 },
+    };
     expect(ops[8]).toEqual({
       op: "setElementProperty",
-      args: { elementId: range, path: "characterFontSize", value: { type: "length", value: 18 } },
+      args: {
+        elementId: range,
+        path: "characterFontSize",
+        value: { type: "length", value: 18 },
+      },
     });
     expect(ops[9]).toEqual({
       op: "setElementProperty",
@@ -334,23 +419,36 @@ describe("bakeBatchOps — the whole bake as ONE batch", () => {
     expect(swatchIds).toEqual(["Color/wb-000000"]);
     expect(ops.filter((o) => o.op === "createSwatch")).toHaveLength(1);
     // Handles stay unique across the frames of one batch.
-    expect(handles).toEqual({ rects: ["r0", "r1"], paths: [], texts: ["t0", "t1"], images: [] });
+    expect(handles).toEqual({
+      rects: ["r0", "r1"],
+      paths: [],
+      texts: ["t0", "t1"],
+      images: [],
+    });
   });
 
   it("a story range ends at the CHARACTER count (the engine's), not UTF-16 units", () => {
     expect(charCount("a😀b")).toBe(3);
     const plan = sceneLayerToBakePlan({
-      items: [{ kind: "text", x: 0, y: 10, text: "a😀b", size: 10, paint: BLACK }],
+      items: [
+        { kind: "text", x: 0, y: 10, text: "a😀b", size: 10, paint: BLACK },
+      ],
     });
-    const { ops } = bakeBatchOps([{ plan, pageId: "uP", top: 0, left: 0, metrics: [M] }]);
+    const { ops } = bakeBatchOps([
+      { plan, pageId: "uP", top: 0, left: 0, metrics: [M] },
+    ]);
     const size = ops.find(
-      (o) => o.op === "setElementProperty" && (o.args as { path: string }).path === "characterFontSize",
+      (o) =>
+        o.op === "setElementProperty" &&
+        (o.args as { path: string }).path === "characterFontSize",
     ) as { args: { elementId: { id: { end: number } } } };
     expect(size.args.elementId.id.end).toBe(3);
   });
 
   it("an empty plan is an empty batch", () => {
     const plan = sceneLayerToBakePlan({ items: [] });
-    expect(bakeBatchOps([{ plan, pageId: "uP", top: 0, left: 0, metrics: [] }]).ops).toEqual([]);
+    expect(
+      bakeBatchOps([{ plan, pageId: "uP", top: 0, left: 0, metrics: [] }]).ops,
+    ).toEqual([]);
   });
 });

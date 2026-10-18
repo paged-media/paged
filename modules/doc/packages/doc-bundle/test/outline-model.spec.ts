@@ -66,7 +66,9 @@ function doc(overrides: Partial<LoweredDoc> = {}): LoweredDoc {
             { text: "Body with a " },
             { text: "link", hyperlinkUrl: "https://example.com" },
           ],
-          images: [{ widthPt: 10, heightPt: 10, uri: "data:image/png;base64,x" }],
+          images: [
+            { widthPt: 10, heightPt: 10, uri: "data:image/png;base64,x" },
+          ],
           sourceIndex: 1,
         },
         {
@@ -186,7 +188,12 @@ describe("heading navigation", () => {
   const para = (text: string) => ({ runs: [{ text }] });
 
   it("finds a heading's range by text, counting one mark per paragraph", () => {
-    const paras = [para("Intro"), para("Body text here."), para("Methods"), para("More.")];
+    const paras = [
+      para("Intro"),
+      para("Body text here."),
+      para("Methods"),
+      para("More."),
+    ];
     // "Intro\n" (6) + "Body text here.\n" (16) = 22 → "Methods" at 22..29
     expect(paragraphRange(paras, "Methods")).toEqual({ start: 22, end: 29 });
     expect(paragraphRange(paras, "Intro")).toEqual({ start: 0, end: 5 });

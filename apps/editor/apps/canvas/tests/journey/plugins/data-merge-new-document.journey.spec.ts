@@ -79,7 +79,11 @@ async function pageTexts(page: Page): Promise<string[][]> {
       }
     ).__canvas;
     const tree = await c.client.send({ kind: "requestSceneTree" });
-    type Node = { kind: string; id?: { kind: string; id: string } | null; children?: Node[] };
+    type Node = {
+      kind: string;
+      id?: { kind: string; id: string } | null;
+      children?: Node[];
+    };
     const pages: { kind: string; id: string }[][] = [];
     const walk = (nodes: Node[]) => {
       for (const n of nodes) {
@@ -87,7 +91,10 @@ async function pageTexts(page: Page): Promise<string[][]> {
           pages.push(
             (n.children ?? [])
               .map((x) => x.id)
-              .filter((id): id is { kind: string; id: string } => !!id && id.kind === "textFrame"),
+              .filter(
+                (id): id is { kind: string; id: string } =>
+                  !!id && id.kind === "textFrame",
+              ),
           );
         } else if (n.children) walk(n.children);
       }
@@ -95,15 +102,30 @@ async function pageTexts(page: Page): Promise<string[][]> {
     walk(((tree.payload as { roots?: Node[] }).roots ?? []) as Node[]);
     const out: string[][] = [];
     for (const frames of pages) {
-      const g = await c.client.send({ kind: "requestElementGeometry", payload: { ids: frames } });
-      const items = ((g.payload as { items?: { storyId?: string }[] }).items ?? []);
+      const g = await c.client.send({
+        kind: "requestElementGeometry",
+        payload: { ids: frames },
+      });
+      const items =
+        (g.payload as { items?: { storyId?: string }[] }).items ?? [];
       const texts: string[] = [];
       for (const it of items) {
         if (!it.storyId) continue;
-        const r = await c.client.send({ kind: "requestStoryContent", payload: { storyId: it.storyId } });
-        const content = (r.payload as { content?: { paragraphs: { runs: { text: string }[] }[] } }).content;
+        const r = await c.client.send({
+          kind: "requestStoryContent",
+          payload: { storyId: it.storyId },
+        });
+        const content = (
+          r.payload as {
+            content?: { paragraphs: { runs: { text: string }[] }[] };
+          }
+        ).content;
         texts.push(
-          content ? content.paragraphs.map((p) => p.runs.map((x) => x.text).join("")).join("\n") : "",
+          content
+            ? content.paragraphs
+                .map((p) => p.runs.map((x) => x.text).join(""))
+                .join("\n")
+            : "",
         );
       }
       out.push(texts.sort());
@@ -133,13 +155,21 @@ async function importCsv(page: Page, designer: Designer): Promise<void> {
   const status = page.locator("[data-status]").last();
   try {
     await expect
-      .poll(async () => (await status.getAttribute("data-status").catch(() => null)) ?? "?", {
-        timeout: 45_000,
-      })
+      .poll(
+        async () =>
+          (await status.getAttribute("data-status").catch(() => null)) ?? "?",
+        {
+          timeout: 45_000,
+        },
+      )
       .toBe("ready");
   } catch {
-    const got = (await status.getAttribute("data-status").catch(() => null)) ?? "unknown";
-    skipWithoutDuckDB(got, `the data-merge journey needs DuckDB-WASM to boot (engine status "${got}")`);
+    const got =
+      (await status.getAttribute("data-status").catch(() => null)) ?? "unknown";
+    skipWithoutDuckDB(
+      got,
+      `the data-merge journey needs DuckDB-WASM to boot (engine status "${got}")`,
+    );
   }
 }
 
@@ -176,7 +206,10 @@ test.describe("journey · paged.data merge into a new document", () => {
     await openPanel(page, BINDINGS_PANEL);
     const newDoc = page.locator("[data-data-merge-new-doc]");
     await expect(newDoc).toBeVisible({ timeout: 10_000 });
-    test.skip(await newDoc.isDisabled(), "this editor's plugin contract has no documents door (D-26, plugin-api 0.2.41)");
+    test.skip(
+      await newDoc.isDisabled(),
+      "this editor's plugin contract has no documents door (D-26, plugin-api 0.2.41)",
+    );
 
     // ── MERGE INTO A NEW DOCUMENT ─────────────────────────────────────────
     const run = mergeToNewDocument(page);
@@ -194,9 +227,13 @@ test.describe("journey · paged.data merge into a new document", () => {
     const expected = RECORDED.merged.pages.map((p) =>
       p.text_frames.map((t) => normalise(t.text)).sort(),
     );
-    await expect.poll(async () => pageTexts(page), { timeout: 30_000 }).toEqual(expected);
+    await expect
+      .poll(async () => pageTexts(page), { timeout: 30_000 })
+      .toEqual(expected);
     // The editor shows the name the plugin asked for: "<template> (merged)".
-    await expect(page.getByText(/\(merged\)/).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/\(merged\)/).first()).toBeVisible({
+      timeout: 10_000,
+    });
 
     // ── UNDO — the copy starts with an empty history; the merge undoes back
     // to the template (one step on protocol 69, two before).

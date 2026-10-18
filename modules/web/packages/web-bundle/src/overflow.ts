@@ -36,7 +36,11 @@
 // it answers only "fits or not". The engine has no content-height export, so
 // shrink searches (about ten layouts) and grow and thread measure once.
 
-import { scaleSceneLayer, type OverflowPolicy, type SceneLayer } from "../../web-model/src";
+import {
+  scaleSceneLayer,
+  type OverflowPolicy,
+  type SceneLayer,
+} from "../../web-model/src";
 
 import type { WebEngine } from "./engine-loader";
 
@@ -70,7 +74,8 @@ function itemBounds(item: Record<string, unknown>): Bounds {
   const collect = (path: unknown) => {
     if (!Array.isArray(path)) return;
     for (const seg of path as Record<string, unknown>[]) {
-      for (const k of ["y", "cy1", "cy2"]) if (typeof seg[k] === "number") ys.push(seg[k] as number);
+      for (const k of ["y", "cy1", "cy2"])
+        if (typeof seg[k] === "number") ys.push(seg[k] as number);
     }
   };
   if (item.kind === "text") {
@@ -79,7 +84,10 @@ function itemBounds(item: Record<string, unknown>): Bounds {
     return { top: y - size, bottom: y + size * 0.3 };
   }
   if (item.kind === "image") {
-    return { top: item.y as number, bottom: (item.y as number) + (item.h as number) };
+    return {
+      top: item.y as number,
+      bottom: (item.y as number) + (item.h as number),
+    };
   }
   collect(item.path);
   if (ys.length === 0) return null;
@@ -90,7 +98,8 @@ function itemBounds(item: Record<string, unknown>): Bounds {
     top += Math.min(0, item.offset_y) - blur;
     bottom += Math.max(0, item.offset_y) + blur;
   }
-  if (typeof item.width === "number" && item.kind !== "image") bottom += item.width / 2;
+  if (typeof item.width === "number" && item.kind !== "image")
+    bottom += item.width / 2;
   return { top, bottom };
 }
 
@@ -112,14 +121,23 @@ export function contentBottomPt(layer: SceneLayer, viewportPt: number): number {
 
 /** The content's height in CSS px at `widthPx`, or `null` when the engine
  *  threw. */
-function measure(engine: WebEngine, html: string, widthPx: number): number | null {
+function measure(
+  engine: WebEngine,
+  html: string,
+  widthPx: number,
+): number | null {
   const layer = engine.render(html, widthPx, MEASURE_PX);
   if (layer === null) return null;
   return contentBottomPt(layer, MEASURE_PX * PT_PER_PX) / PT_PER_PX;
 }
 
 /** Whether the content fits a box, or `null` when the engine threw. */
-function fits(engine: WebEngine, html: string, widthPx: number, heightPx: number): boolean | null {
+function fits(
+  engine: WebEngine,
+  html: string,
+  widthPx: number,
+  heightPx: number,
+): boolean | null {
   const h = measure(engine, html, widthPx);
   return h === null ? null : h <= heightPx + 0.5;
 }
@@ -139,12 +157,22 @@ export function renderWithPolicy(
   if (layer === null) return null;
   if (policy === "thread") {
     const ok = fits(engine, html, widthPx, heightPx);
-    return { layer, scale: 1, contentHeightPx: null, overset: ok === null ? null : !ok };
+    return {
+      layer,
+      scale: 1,
+      contentHeightPx: null,
+      overset: ok === null ? null : !ok,
+    };
   }
   return { layer, scale: 1, contentHeightPx: null, overset: null };
 }
 
-function shrink(engine: WebEngine, html: string, w: number, h: number): FitRender | null {
+function shrink(
+  engine: WebEngine,
+  html: string,
+  w: number,
+  h: number,
+): FitRender | null {
   const atFull = fits(engine, html, w, h);
   if (atFull === null) return null;
   let scale = 1;
@@ -167,9 +195,18 @@ function shrink(engine: WebEngine, html: string, w: number, h: number): FitRende
     }
     scale = lo;
   }
-  const layer = engine.render(html, Math.round(w / scale), Math.round(h / scale));
+  const layer = engine.render(
+    html,
+    Math.round(w / scale),
+    Math.round(h / scale),
+  );
   if (layer === null) return null;
-  return { layer: scaleSceneLayer(layer, scale), scale, contentHeightPx: null, overset };
+  return {
+    layer: scaleSceneLayer(layer, scale),
+    scale,
+    contentHeightPx: null,
+    overset,
+  };
 }
 
 function grow(engine: WebEngine, html: string, w: number): FitRender | null {

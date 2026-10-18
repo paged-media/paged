@@ -17,7 +17,9 @@ patch here.
 Per CSS Flexbox 9.5 the auto margins absorb the free space, so `justify-content` has nothing left.
 
 ```html
-<div style="display:flex; flex-direction:column; height:200px; justify-content:flex-end">
+<div
+  style="display:flex; flex-direction:column; height:200px; justify-content:flex-end"
+>
   <div style="height:28px">a</div>
   <div style="height:28px">b</div>
   <div style="height:28px; margin-top:auto">c</div>
@@ -52,7 +54,9 @@ break" branch tests `whitespace.is_space_or_nbsp()`. U+00A0 is not a break oppor
 (UAX #14 class GL); only a breakable space should hang.
 
 ```html
-<p style="width:240px">Soft and non&nbsp;breaking&nbsp;space&nbsp;joined&nbsp;words&nbsp;here.</p>
+<p style="width:240px">
+  Soft and non&nbsp;breaking&nbsp;space&nbsp;joined&nbsp;words&nbsp;here.
+</p>
 ```
 
 Expected (Chrome): 2 lines, "non breaking space joined words here." kept together. Actual: 3
@@ -65,7 +69,10 @@ A soft hyphen (U+00AD) is always a line-break opportunity; there is no style to 
 break opportunity.
 
 ```html
-<p style="width:150px; hyphens:none">Extra&shy;ordinarily in&shy;compre&shy;hensible counter&shy;revolutionary inter&shy;nationalization.</p>
+<p style="width:150px; hyphens:none">
+  Extra&shy;ordinarily in&shy;compre&shy;hensible counter&shy;revolutionary
+  inter&shy;nationalization.
+</p>
 ```
 
 Expected (Chrome): 4 lines (80 px), no word split. Actual: 5 lines (100 px), split at the soft
@@ -77,7 +84,10 @@ Parley's alignment has no separate value for the last line, and `blitz-dom` does
 `text-align-last`.
 
 ```html
-<p style="text-align:justify; text-align-last:center">Justified with a centred last line. Alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima.</p>
+<p style="text-align:justify; text-align-last:center">
+  Justified with a centred last line. Alpha bravo charlie delta echo foxtrot
+  golf hotel india juliet kilo lima.
+</p>
 ```
 
 Expected (Chrome): last line "juliet kilo lima." centred, starting at x 66.9. Actual: at x 0.
@@ -88,7 +98,10 @@ There is no baseline shift for inline content, so `<sub>`/`<sup>` sit on the bas
 grow the line box.
 
 ```html
-<p><strong>Strong</strong> <em>emphasis</em> <u>underline</u> <s>strike</s> <code>code</code> <small>small</small> <sub>sub</sub> <sup>sup</sup> text.</p>
+<p>
+  <strong>Strong</strong> <em>emphasis</em> <u>underline</u> <s>strike</s>
+  <code>code</code> <small>small</small> <sub>sub</sub> <sup>sup</sup> text.
+</p>
 ```
 
 Expected (Chrome, 240 px): paragraph 47.17 px tall. Actual: 40 px.
@@ -112,7 +125,9 @@ Only `font-variation-settings` reach Parley; a font with an `opsz` axis keeps it
 of following the font size.
 
 ```html
-<p style="font:16px Inter; font-optical-sizing:auto">Optical size follows the font size …</p>
+<p style="font:16px Inter; font-optical-sizing:auto">
+  Optical size follows the font size …
+</p>
 ```
 
 Expected (Chrome, Inter variable): `opsz` 16, text ≈1 % narrower, 7 lines at 240 px. Actual:
@@ -124,7 +139,10 @@ Expected (Chrome, Inter variable): `opsz` 16, text ≈1 % narrower, 7 lines at 2
 shrink-to-fit box (flex item, absolutely positioned box, inline-block) grows to a whole pixel.
 
 ```html
-<div style="display:flex; gap:10px; padding:8px"><div style="padding:4px">One</div><div style="padding:4px">Two words</div></div>
+<div style="display:flex; gap:10px; padding:8px">
+  <div style="padding:4px">One</div>
+  <div style="padding:4px">Two words</div>
+</div>
 ```
 
 Expected (Chrome): first item 39.02 px wide. Actual: 40 px; the next item starts 0.98 px late.
@@ -134,7 +152,13 @@ Expected (Chrome): first item 39.02 px wide. Actual: 40 px; the next item starts
 `column-count` / `column-width` have no effect: content lays out in one full-width column.
 
 ```html
-<div style="column-count:2; column-gap:16px"><p style="margin:0 0 8px">Column text. Alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa quebec romeo sierra tango uniform victor whiskey xray yankee zulu.</p></div>
+<div style="column-count:2; column-gap:16px">
+  <p style="margin:0 0 8px">
+    Column text. Alpha bravo charlie delta echo foxtrot golf hotel india juliet
+    kilo lima mike november oscar papa quebec romeo sierra tango uniform victor
+    whiskey xray yankee zulu.
+  </p>
+</div>
 ```
 
 Expected (Chrome, 240 px): two 112 px columns, the paragraph in 14 lines. Actual: one 240 px
@@ -146,7 +170,12 @@ column, 7 lines.
 also puts the spacing between the outer cells and the table's border.
 
 ```html
-<table style="border-spacing:2px"><tr><td>Alpha</td><td>One</td></tr></table>
+<table style="border-spacing:2px">
+  <tr>
+    <td>Alpha</td>
+    <td>One</td>
+  </tr>
+</table>
 ```
 
 Expected (Chrome): first cell at x 2, y 2. Actual: x 0, y 0; the table is 4 px smaller in each
@@ -160,9 +189,19 @@ layout.
 
 ```html
 <table style="border-collapse:collapse; width:100%">
-  <tr><td style="border:2px solid; padding:6px" colspan="2">Spans two columns</td><td style="border:2px solid; padding:6px">C</td></tr>
-  <tr><td style="border:2px solid; padding:6px">One</td><td style="border:2px solid; padding:6px" rowspan="2">Spans two rows</td><td style="border:2px solid; padding:6px">Three</td></tr>
-  <tr><td style="border:2px solid; padding:6px">Four</td><td style="border:2px solid; padding:6px">Six</td></tr>
+  <tr>
+    <td style="border:2px solid; padding:6px" colspan="2">Spans two columns</td>
+    <td style="border:2px solid; padding:6px">C</td>
+  </tr>
+  <tr>
+    <td style="border:2px solid; padding:6px">One</td>
+    <td style="border:2px solid; padding:6px" rowspan="2">Spans two rows</td>
+    <td style="border:2px solid; padding:6px">Three</td>
+  </tr>
+  <tr>
+    <td style="border:2px solid; padding:6px">Four</td>
+    <td style="border:2px solid; padding:6px">Six</td>
+  </tr>
 </table>
 ```
 

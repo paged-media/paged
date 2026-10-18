@@ -51,7 +51,11 @@ export class GestureSpine {
    * tools without a handler leave the spine empty (the legacy pointer
    * path handles them).
    */
-  setEffectiveTool(id: ToolId, paged: PagedEditor, reason: DeactivateReason): void {
+  setEffectiveTool(
+    id: ToolId,
+    paged: PagedEditor,
+    reason: DeactivateReason,
+  ): void {
     if (this.current?.id === id) return;
     if (this.current) this.current.handler.onDeactivate(reason);
     const handler = paged.registries.tools.get(id)?.gesture?.();

@@ -51,9 +51,15 @@ describe("core seam — virtual paths over today's ops", () => {
       op: "batch",
       args: {
         ops: [
-          { op: "insertTextFrame", args: { pageId: pageId!, bounds: [10, 10, 100, 200] } },
+          {
+            op: "insertTextFrame",
+            args: { pageId: pageId!, bounds: [10, 10, 100, 200] },
+          },
           { op: "bindCreated", args: { handle: "t" } },
-          { op: "insertText", args: { storyId: "$h:t", offset: 0, text: "hello" } },
+          {
+            op: "insertText",
+            args: { storyId: "$h:t", offset: 0, text: "hello" },
+          },
         ],
       },
     });
@@ -64,12 +70,26 @@ describe("core seam — virtual paths over today's ops", () => {
     expect(await h.objects.get(story!, "content")).toEqual(value("hello"));
     expect(await h.objects.get(story!, "characterCount")).toEqual(value(5));
 
-    expect(await h.objects.set(story!, "content", "Price: 12 €")).toMatchObject({ applied: true, undoSteps: 1 });
-    expect(await h.objects.get(story!, "content")).toEqual(value("Price: 12 €"));
-    expect(await h.objects.get(`storyRange:${storyId!}@0..5`, "content")).toEqual(value("Price"));
+    expect(await h.objects.set(story!, "content", "Price: 12 €")).toMatchObject(
+      { applied: true, undoSteps: 1 },
+    );
+    expect(await h.objects.get(story!, "content")).toEqual(
+      value("Price: 12 €"),
+    );
+    expect(
+      await h.objects.get(`storyRange:${storyId!}@0..5`, "content"),
+    ).toEqual(value("Price"));
 
-    expect(await h.objects.set(`storyRange:${storyId!}@0..5`, "characterFontSize", 18)).toMatchObject({ applied: true });
-    expect(await h.objects.get(`storyRange:${storyId!}@0..5`, "characterFontSize")).toEqual(value(18));
+    expect(
+      await h.objects.set(
+        `storyRange:${storyId!}@0..5`,
+        "characterFontSize",
+        18,
+      ),
+    ).toMatchObject({ applied: true });
+    expect(
+      await h.objects.get(`storyRange:${storyId!}@0..5`, "characterFontSize"),
+    ).toEqual(value(18));
 
     await h.host.document.undo();
     await h.host.document.undo();
@@ -82,13 +102,24 @@ describe("core seam — virtual paths over today's ops", () => {
     expect(await h.objects.get("swatch:Black", "name")).toEqual(value("Black"));
     const before = await h.objects.get("swatch:Color/Black", "value");
     expect(before).toEqual(value([0, 0, 0, 100]));
-    expect(await h.objects.set("swatch:Color/Black", "value", [0, 0, 0, 90])).toMatchObject({ applied: true });
-    expect(await h.objects.get("swatch:Color/Black", "value")).toEqual(value([0, 0, 0, 90]));
-    expect(await h.objects.set("swatch:Color/Black", "space", "Pantone")).toMatchObject({ code: "invalidValue" });
+    expect(
+      await h.objects.set("swatch:Color/Black", "value", [0, 0, 0, 90]),
+    ).toMatchObject({ applied: true });
+    expect(await h.objects.get("swatch:Color/Black", "value")).toEqual(
+      value([0, 0, 0, 90]),
+    );
+    expect(
+      await h.objects.set("swatch:Color/Black", "space", "Pantone"),
+    ).toMatchObject({ code: "invalidValue" });
 
-    expect(await h.objects.get("page:#1", "pageBounds")).toEqual(value([0, 0, 792, 612]));
+    expect(await h.objects.get("page:#1", "pageBounds")).toEqual(
+      value([0, 0, 792, 612]),
+    );
     expect(await h.objects.get("page:#1", "index")).toEqual(value(1));
-    expect(await h.objects.get("page:#9", "index")).toMatchObject({ kind: "refused", code: "unknownAddress" });
+    expect(await h.objects.get("page:#9", "index")).toMatchObject({
+      kind: "refused",
+      code: "unknownAddress",
+    });
     // Protocol 71 addresses a cell without its story, and core answers; the
     // pre-71 seam cannot name one without the story.
     expect(await h.objects.get("cell:t1/0,0", "cellFillColor")).toMatchObject({
@@ -102,7 +133,9 @@ describe("core seam — virtual paths over today's ops", () => {
     await h.load(minimalIdml());
     const [style] = await h.objects.query("style:paragraph");
     expect(style).toMatch(/^style:paragraph\//);
-    expect(await h.objects.set(style!, "characterFontSize", 14)).toMatchObject({ applied: true });
+    expect(await h.objects.set(style!, "characterFontSize", 14)).toMatchObject({
+      applied: true,
+    });
     expect(await h.objects.get(style!, "characterFontSize")).toEqual(value(14));
   });
 });
@@ -110,10 +143,20 @@ describe("core seam — virtual paths over today's ops", () => {
 describe("the seam schema table is total", () => {
   it("every settable path the vendored catalog advertises is classified", () => {
     const catalog = JSON.parse(
-      readFileSync(fileURLToPath(new URL("../../plugin-api/src/catalog.json", import.meta.url)), "utf8"),
-    ) as { settablePaths: string[]; pathAliases: { name: string; wire: string }[] };
+      readFileSync(
+        fileURLToPath(
+          new URL("../../plugin-api/src/catalog.json", import.meta.url),
+        ),
+        "utf8",
+      ),
+    ) as {
+      settablePaths: string[];
+      pathAliases: { name: string; wire: string }[];
+    };
     const aliases = new Map(catalog.pathAliases.map((a) => [a.name, a.wire]));
-    const missing = catalog.settablePaths.filter((p) => !((aliases.get(p) ?? p) in CORE_PATHS));
+    const missing = catalog.settablePaths.filter(
+      (p) => !((aliases.get(p) ?? p) in CORE_PATHS),
+    );
     expect(Object.fromEntries(aliases)).toEqual(CORE_PATH_ALIASES);
     expect(missing).toEqual([]);
   });
@@ -123,8 +166,13 @@ describe("headless host — several bundles meet through the shared registries",
   it("a second bundle reads and writes the first bundle's objects via host.objects", async () => {
     const h = (live = await createHeadlessHost({ console: silent }));
     const [pageId] = await h.load(minimalIdml());
-    const made = await h.host.document.mutate({ op: "insertFrame", args: { pageId: pageId!, bounds: [0, 0, 50, 50] } });
-    const rect = made.applied ? `${made.createdId!.kind}:${made.createdId!.id}` : "";
+    const made = await h.host.document.mutate({
+      op: "insertFrame",
+      args: { pageId: pageId!, bounds: [0, 0, 50, 50] },
+    });
+    const rect = made.applied
+      ? `${made.createdId!.kind}:${made.createdId!.id}`
+      : "";
     h.loadBundle(makeNotesBundle());
     await h.objects.invoke("acme.notes.attach", { frame: rect, count: 1 });
 
@@ -135,7 +183,10 @@ describe("headless host — several bundles meet through the shared registries",
         name: "reader",
         version: "0.0.0",
         apiVersion: "^0.2.0",
-        capabilities: { document: { read: "broad", write: "broad" }, dataProviders: { publish: ["rows"] } },
+        capabilities: {
+          document: { read: "broad", write: "broad" },
+          dataProviders: { publish: ["rows"] },
+        },
       },
       activate(host) {
         reader = host;
@@ -144,7 +195,9 @@ describe("headless host — several bundles meet through the shared registries",
     });
     const note = `plugin:${NOTES_ID}/note/n1`;
     expect(await reader!.objects.get(note, "text")).toEqual(value("hello"));
-    expect(await reader!.objects.set(note, "text", "from reader")).toMatchObject({ applied: true });
+    expect(
+      await reader!.objects.set(note, "text", "from reader"),
+    ).toMatchObject({ applied: true });
     expect(await h.objects.get(note, "text")).toEqual(value("from reader"));
     expect(reader!.supports("objects.shared@1")).toBe(true);
     // D-09 — the harness now injects the shared data-provider registry.
@@ -154,8 +207,14 @@ describe("headless host — several bundles meet through the shared registries",
       category: "rows",
       schema: { fields: [{ name: "a", ty: "utf8" }] },
       revision: "1",
-      getSnapshot: () => ({ schema: { fields: [{ name: "a", ty: "utf8" }] }, columns: [["x"]], rowCount: 1 }),
+      getSnapshot: () => ({
+        schema: { fields: [{ name: "a", ty: "utf8" }] },
+        columns: [["x"]],
+        rowCount: 1,
+      }),
     });
-    expect(h.dataProviders.discover("rows").map((p) => p.id)).toEqual(["acme.reader.rows"]);
+    expect(h.dataProviders.discover("rows").map((p) => p.id)).toEqual([
+      "acme.reader.rows",
+    ]);
   });
 });

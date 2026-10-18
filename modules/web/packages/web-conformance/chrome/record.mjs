@@ -43,7 +43,13 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { chromium } from "playwright";
 
-import { HERE, assertInterLoaded, fontFaceStyle, injectHead, sha256 } from "./shared.mjs";
+import {
+  HERE,
+  assertInterLoaded,
+  fontFaceStyle,
+  injectHead,
+  sha256,
+} from "./shared.mjs";
 
 export const WIDTHS = [240, 400];
 export const HEIGHT = 1000;
@@ -83,7 +89,12 @@ function extract() {
       const ps = getComputedStyle(el, which);
       const c = ps.content;
       if (c && c !== "none" && c !== "normal" && /^".*"$/.test(c)) {
-        pseudo.push({ id: el.dataset.id, which: which.slice(2), display: ps.display, text: JSON.parse(c) });
+        pseudo.push({
+          id: el.dataset.id,
+          which: which.slice(2),
+          display: ps.display,
+          text: JSON.parse(c),
+        });
       }
     }
   }
@@ -115,7 +126,7 @@ function extract() {
       ownerLines = [];
       byOwner.set(owner, ownerLines);
     }
-    for (let i = 0; i < text.length; ) {
+    for (let i = 0; i < text.length;) {
       const cp = text.codePointAt(i);
       const len = cp > 0xffff ? 2 : 1;
       const ch = text.slice(i, i + len);
@@ -142,7 +153,15 @@ function extract() {
         // a jump BACK to the left on an overlapping band is a new column/line
         !(left + 0.5 < line.lastLeft && top > line.top + 0.5);
       if (!overlaps) {
-        line = { owner, text: "", top, bottom, left: Infinity, right: -Infinity, lastLeft: left };
+        line = {
+          owner,
+          text: "",
+          top,
+          bottom,
+          left: Infinity,
+          right: -Infinity,
+          lastLeft: left,
+        };
         ownerLines.push(line);
         lines.push(line);
       }
@@ -183,7 +202,10 @@ async function main() {
       const bytes = readFileSync(join(FIXTURES, `${name}.html`));
       const html = injectHead(bytes.toString("utf8"), face);
       for (const width of WIDTHS) {
-        const page = await browser.newPage({ viewport: { width, height: HEIGHT }, deviceScaleFactor: 1 });
+        const page = await browser.newPage({
+          viewport: { width, height: HEIGHT },
+          deviceScaleFactor: 1,
+        });
         await page.setContent(html, { waitUntil: "load" });
         await assertInterLoaded(page);
         const got = await page.evaluate(extract);
@@ -195,10 +217,18 @@ async function main() {
           chrome: version,
           ...got,
         };
-        writeFileSync(join(OUT, `${name}@${width}.json`), JSON.stringify(rec, null, 1) + "\n");
-        await page.screenshot({ path: join(OUT, `${name}@${width}.png`), fullPage: true });
+        writeFileSync(
+          join(OUT, `${name}@${width}.json`),
+          JSON.stringify(rec, null, 1) + "\n",
+        );
+        await page.screenshot({
+          path: join(OUT, `${name}@${width}.png`),
+          fullPage: true,
+        });
         await page.close();
-        console.log(`record: ${name}@${width}  ${got.elements.length} elements, ${got.lines.length} lines`);
+        console.log(
+          `record: ${name}@${width}  ${got.elements.length} elements, ${got.lines.length} lines`,
+        );
       }
     }
   } finally {

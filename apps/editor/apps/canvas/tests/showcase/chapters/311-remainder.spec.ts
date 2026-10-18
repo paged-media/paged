@@ -29,7 +29,5 @@ import { build as bench } from "../pages/311-remainder/01-bench";
 annualChapter({
   id: "311-remainder",
   title: "The remainder bench",
-  modules: [
-    { id: "rm-bench", pages: [p(134)], build: bench, selfGated: true },
-  ],
+  modules: [{ id: "rm-bench", pages: [p(134)], build: bench, selfGated: true }],
 });

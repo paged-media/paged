@@ -283,7 +283,8 @@ const PANEL_MARKER: Record<string, string> = {
   "media.paged.draw.panel.objectsOnPath": "[data-draw-onpath-panel]",
   "media.paged.draw.panel.pathOptions": "[data-draw-pathopts-panel]",
   // ADR 323 — object properties as host PropertyFields (a schema panel).
-  "media.paged.draw.panel.properties": '[data-schema-panel="media.paged.draw.panel.properties"]',
+  "media.paged.draw.panel.properties":
+    '[data-schema-panel="media.paged.draw.panel.properties"]',
 };
 
 // ── helpers ─────────────────────────────────────────────────────────
@@ -345,7 +346,11 @@ async function commandMeta(
       }
     ).__canvas.registries.commands
       .list()
-      .map((c) => ({ id: c.id, title: c.title, category: c.category ?? "Other" })),
+      .map((c) => ({
+        id: c.id,
+        title: c.title,
+        category: c.category ?? "Other",
+      })),
   );
 }
 
@@ -355,7 +360,9 @@ const openPanels = (page: Page) =>
     const p = (
       globalThis as unknown as {
         __canvas: {
-          debugContext: () => { panels: { open: string[]; active: string | null } };
+          debugContext: () => {
+            panels: { open: string[]; active: string | null };
+          };
         };
       }
     ).__canvas.debugContext().panels;
@@ -375,7 +382,9 @@ const effectiveTool = (page: Page) =>
     () =>
       (
         globalThis as unknown as {
-          __canvas: { debugContext: () => { tools: { effective: string | null } } };
+          __canvas: {
+            debugContext: () => { tools: { effective: string | null } };
+          };
         }
       ).__canvas.debugContext().tools.effective,
   );
@@ -390,7 +399,9 @@ const effectiveTool = (page: Page) =>
 const documentDigest = (page: Page) =>
   page.evaluate(async () => {
     const c = (
-      globalThis as unknown as { __canvas: { client: { exportIdml: () => Promise<Uint8Array> } } }
+      globalThis as unknown as {
+        __canvas: { client: { exportIdml: () => Promise<Uint8Array> } };
+      }
     ).__canvas;
     const bytes = await c.client.exportIdml();
     let h = 2166136261;
@@ -405,7 +416,9 @@ const documentDigest = (page: Page) =>
  *  somewhere else. Escape is NOT wired to the flyout. */
 async function dismissFlyout(page: Page): Promise<void> {
   await page.evaluate(() =>
-    document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })),
+    document.body.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true }),
+    ),
   );
   await page.waitForTimeout(30);
 }
@@ -430,12 +443,18 @@ async function dismissFlyout(page: Page): Promise<void> {
  * The specs below re-open rather than assert the stale value, so this
  * file does not pin the bug in place as though it were the contract.
  */
-async function reopenPanel(page: Page, designer: Designer, id: string): Promise<void> {
+async function reopenPanel(
+  page: Page,
+  designer: Designer,
+  id: string,
+): Promise<void> {
   await page.evaluate(
     (pid) =>
       (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (id: string) => Promise<void> } } };
+          __canvas: {
+            registries: { commands: { invoke: (id: string) => Promise<void> } };
+          };
         }
       ).__canvas.registries.commands.invoke(`paged.panel.hide.${pid}`),
     id,
@@ -451,7 +470,9 @@ async function activateToolCommand(page: Page, toolId: string): Promise<void> {
   await page.evaluate(async (id) => {
     const cmd = (
       globalThis as unknown as {
-        __canvas: { registries: { commands: { invoke: (id: string) => Promise<void> } } };
+        __canvas: {
+          registries: { commands: { invoke: (id: string) => Promise<void> } };
+        };
       }
     ).__canvas.registries.commands;
     await cmd.invoke(`paged.tool.activate.${id}`);
@@ -465,7 +486,9 @@ async function idsOfKind(page: Page, kind: string): Promise<string[]> {
       globalThis as unknown as {
         __canvas: {
           client: {
-            executeScript: (s: string) => Promise<{ output: string[]; error: string | null }>;
+            executeScript: (
+              s: string,
+            ) => Promise<{ output: string[]; error: string | null }>;
           };
         };
       }
@@ -476,7 +499,10 @@ async function idsOfKind(page: Page, kind: string): Promise<string[]> {
       children?: unknown[];
     }>;
     const out: string[] = [];
-    const visit = (n: { id?: { kind: string; id: string } | null; children?: unknown[] }) => {
+    const visit = (n: {
+      id?: { kind: string; id: string } | null;
+      children?: unknown[];
+    }) => {
       if (n.id && n.id.kind === k) out.push(n.id.id);
       for (const ch of (n.children ?? []) as typeof tree) visit(ch);
     };
@@ -508,28 +534,38 @@ test.describe("plugin surface · paged.draw", () => {
 
     // TOOLS — all 21 registered.
     const missingTools = TOOLS.filter((id) => !reg.tools.includes(id));
-    expect(missingTools, "every declared tool is in the tool registry").toEqual([]);
+    expect(missingTools, "every declared tool is in the tool registry").toEqual(
+      [],
+    );
 
     // PANELS — all 10 registered.
     const missingPanels = PANELS.filter((id) => !reg.panels.includes(id));
-    expect(missingPanels, "every declared panel is in the panel registry").toEqual([]);
+    expect(
+      missingPanels,
+      "every declared panel is in the panel registry",
+    ).toEqual([]);
     // …and the two merged into the host's panels are gone, so the user
     // never sees two Stroke panels for one stroke.
     const lingering = RETIRED_PANELS.filter((id) => reg.panels.includes(id));
-    expect(lingering, "Vector stroke / Vector fill are no longer registered").toEqual([]);
+    expect(
+      lingering,
+      "Vector stroke / Vector fill are no longer registered",
+    ).toEqual([]);
 
     // COMMANDS — all 107 registered.
     const missingCommands = COMMANDS.filter((id) => !reg.commands.includes(id));
-    expect(missingCommands, "every declared command is in the command registry").toEqual(
-      [],
-    );
+    expect(
+      missingCommands,
+      "every declared command is in the command registry",
+    ).toEqual([]);
 
     // IMPORTER / EXPORTER / EDIT CONTEXT.
     expect(reg.importers, "the SVG importer registered").toContain(IMPORTER);
     expect(reg.exporters, "the SVG exporter registered").toContain(EXPORTER);
-    expect(reg.editContexts, "the vectorGraphic edit context registered").toContain(
-      EDIT_CONTEXT,
-    );
+    expect(
+      reg.editContexts,
+      "the vectorGraphic edit context registered",
+    ).toContain(EDIT_CONTEXT);
 
     // PART TYPES — declared-only capability (no host registry mirrors
     // them). Pin the count so a manifest that grows a part type without
@@ -584,8 +620,11 @@ test.describe("plugin surface · paged.draw", () => {
       // Not the face — open the flyout (right-click, the rail's own
       // affordance) and look for it there.
       await slotButton.first().click({ button: "right" });
-      const member = page.locator(`[data-tool-flyout="${slot}"] [data-tool="${id}"]`);
-      if ((await member.count()) === 0) unreachable.push(`${id} (not in "${slot}" flyout)`);
+      const member = page.locator(
+        `[data-tool-flyout="${slot}"] [data-tool="${id}"]`,
+      );
+      if ((await member.count()) === 0)
+        unreachable.push(`${id} (not in "${slot}" flyout)`);
       await dismissFlyout(page);
     }
     expect(unreachable, "every declared tool has a rail entry").toEqual([]);
@@ -599,7 +638,9 @@ test.describe("plugin surface · paged.draw", () => {
       const got = await effectiveTool(page);
       if (got !== id) refused.push(`${id} → ${got}`);
     }
-    expect(refused, "every declared tool becomes the effective tool").toEqual([]);
+    expect(refused, "every declared tool becomes the effective tool").toEqual(
+      [],
+    );
   });
 
   // ── 3. the panels ─────────────────────────────────────────────────
@@ -613,7 +654,12 @@ test.describe("plugin surface · paged.draw", () => {
 
     // Give the selection-driven panels something to resolve against so
     // a panel that guards on "no selection" still renders its body.
-    const rectId = await designer.drawRectangle({ x0: 150, y0: 150, x1: 380, y1: 320 });
+    const rectId = await designer.drawRectangle({
+      x0: 150,
+      y0: 150,
+      x1: 380,
+      y1: 320,
+    });
     expect(rectId, "drew a rectangle to select").not.toBe("");
     await designer.applyFill("rectangle", rectId);
     await designer.selectElement("rectangle", rectId);
@@ -623,7 +669,9 @@ test.describe("plugin surface · paged.draw", () => {
       await designer.openPanel(id);
       try {
         await expect
-          .poll(async () => (await openPanels(page)).includes(id), { timeout: 8_000 })
+          .poll(async () => (await openPanels(page)).includes(id), {
+            timeout: 8_000,
+          })
           .toBe(true);
         await expect(page.locator(PANEL_MARKER[id]).first()).toBeVisible({
           timeout: 8_000,
@@ -660,7 +708,9 @@ test.describe("plugin surface · paged.draw", () => {
       const n0 = (await idsOfKind(page, "polygon")).length;
       await designer.runCommand(id);
       await expect
-        .poll(async () => (await idsOfKind(page, "polygon")).length, { timeout: 10_000 })
+        .poll(async () => (await idsOfKind(page, "polygon")).length, {
+          timeout: 10_000,
+        })
         .toBeGreaterThanOrEqual(n0 + minNew);
     }
     // 21 new paths carrying the document's default paint move real ink.
@@ -679,7 +729,12 @@ test.describe("plugin surface · paged.draw", () => {
 
     /** Two overlapping filled rectangles, back one first. */
     const pair = async (y: number) => {
-      const back = await designer.drawRectangle({ x0: 120, y0: y, x1: 300, y1: y + 120 });
+      const back = await designer.drawRectangle({
+        x0: 120,
+        y0: y,
+        x1: 300,
+        y1: y + 120,
+      });
       const front = await designer.drawRectangle({
         x0: 220,
         y0: y + 40,
@@ -735,7 +790,8 @@ test.describe("plugin surface · paged.draw", () => {
       await designer.runCommand(op);
       await page.waitForTimeout(500);
       const after = await documentDigest(page);
-      if (before === after) inert.push(`${op} (document byte-identical: ${before})`);
+      if (before === after)
+        inert.push(`${op} (document byte-identical: ${before})`);
     }
     expect(inert, "every pathfinder op changes the document").toEqual([]);
   });
@@ -749,7 +805,12 @@ test.describe("plugin surface · paged.draw", () => {
     await designer.open();
     await designer.newDocument();
 
-    const id = await designer.drawRectangle({ x0: 150, y0: 150, x1: 400, y1: 330 });
+    const id = await designer.drawRectangle({
+      x0: 150,
+      y0: 150,
+      x1: 400,
+      y1: 330,
+    });
     await designer.applyFill("rectangle", id);
     await designer.applyStroke("rectangle", id, "Color/Black", 4);
     await designer.selectElement("rectangle", id);
@@ -759,7 +820,9 @@ test.describe("plugin surface · paged.draw", () => {
 
     /** The panel's root marker IS the layer count. */
     const layers = async () =>
-      Number((await panel.first().getAttribute("data-draw-appearance-panel")) ?? "0");
+      Number(
+        (await panel.first().getAttribute("data-draw-appearance-panel")) ?? "0",
+      );
 
     // ADD two layers on top of the frame's own paint.
     await designer.runCommand("media.paged.draw.command.appearanceAddFill");
@@ -784,7 +847,8 @@ test.describe("plugin surface · paged.draw", () => {
     await expect
       .poll(
         async () =>
-          (await panel.first().getAttribute("data-draw-appearance-baked")) ?? "false",
+          (await panel.first().getAttribute("data-draw-appearance-baked")) ??
+          "false",
         { timeout: 10_000 },
       )
       .toBe("true");
@@ -796,7 +860,8 @@ test.describe("plugin surface · paged.draw", () => {
     await expect
       .poll(
         async () =>
-          (await panel.first().getAttribute("data-draw-appearance-baked")) ?? "false",
+          (await panel.first().getAttribute("data-draw-appearance-baked")) ??
+          "false",
         { timeout: 10_000 },
       )
       .toBe("false");
@@ -819,7 +884,12 @@ test.describe("plugin surface · paged.draw", () => {
     await designer.open();
     await designer.newDocument();
 
-    const source = await designer.drawRectangle({ x0: 130, y0: 130, x1: 330, y1: 270 });
+    const source = await designer.drawRectangle({
+      x0: 130,
+      y0: 130,
+      x1: 330,
+      y1: 270,
+    });
     await designer.applyFill("rectangle", source);
     await designer.applyStroke("rectangle", source, "Color/Black", 6);
     await designer.selectElement("rectangle", source);
@@ -829,7 +899,10 @@ test.describe("plugin surface · paged.draw", () => {
     const styles = page.locator("[data-draw-graphic-styles-panel]");
     await expect(styles).toBeVisible({ timeout: 8_000 });
     const styleCount = async () =>
-      Number((await styles.first().getAttribute("data-draw-graphic-styles-panel")) ?? "0");
+      Number(
+        (await styles.first().getAttribute("data-draw-graphic-styles-panel")) ??
+          "0",
+      );
 
     await designer.runCommand("media.paged.draw.command.saveGraphicStyle");
     await expect.poll(styleCount, { timeout: 10_000 }).toBeGreaterThan(0);
@@ -838,7 +911,9 @@ test.describe("plugin surface · paged.draw", () => {
     await expect
       .poll(
         async () =>
-          (await styles.first().getAttribute("data-draw-graphic-style-linked")) ?? "",
+          (await styles
+            .first()
+            .getAttribute("data-draw-graphic-style-linked")) ?? "",
         { timeout: 8_000 },
       )
       .not.toBe("");
@@ -846,7 +921,12 @@ test.describe("plugin surface · paged.draw", () => {
     // Apply it to a SECOND rectangle through the panel's own row button
     // (the payload-bearing path — the command needs a style id, which
     // only the panel supplies).
-    const target = await designer.drawRectangle({ x0: 360, y0: 130, x1: 540, y1: 270 });
+    const target = await designer.drawRectangle({
+      x0: 360,
+      y0: 130,
+      x1: 540,
+      y1: 270,
+    });
     await designer.selectElement("rectangle", target);
     const beforeApply = await designer.renderBytes();
     await styles.locator("[data-draw-graphic-style-apply]").first().click();
@@ -861,7 +941,9 @@ test.describe("plugin surface · paged.draw", () => {
     await expect
       .poll(
         async () =>
-          (await styles.first().getAttribute("data-draw-graphic-style-linked")) ?? "",
+          (await styles
+            .first()
+            .getAttribute("data-draw-graphic-style-linked")) ?? "",
         { timeout: 8_000 },
       )
       .toBe("");
@@ -872,7 +954,9 @@ test.describe("plugin surface · paged.draw", () => {
     const symbols = page.locator("[data-draw-symbols-panel]");
     await expect(symbols).toBeVisible({ timeout: 8_000 });
     const symbolCount = async () =>
-      Number((await symbols.first().getAttribute("data-draw-symbols-panel")) ?? "0");
+      Number(
+        (await symbols.first().getAttribute("data-draw-symbols-panel")) ?? "0",
+      );
 
     await designer.runCommand("media.paged.draw.command.defineSymbol");
     // See `reopenPanel` — the command writes the definition, the panel
@@ -898,11 +982,18 @@ test.describe("plugin surface · paged.draw", () => {
     await designer.newDocument();
 
     // ── RADIAL REPEAT — one source, many instances. ──
-    const seed = await designer.drawRectangle({ x0: 260, y0: 120, x1: 320, y1: 170 });
+    const seed = await designer.drawRectangle({
+      x0: 260,
+      y0: 120,
+      x1: 320,
+      y1: 170,
+    });
     await designer.applyFill("rectangle", seed);
     await designer.selectElement("rectangle", seed);
     await designer.openPanel("media.paged.draw.panel.repeat");
-    await expect(page.locator("[data-draw-repeat-panel]")).toBeVisible({ timeout: 8_000 });
+    await expect(page.locator("[data-draw-repeat-panel]")).toBeVisible({
+      timeout: 8_000,
+    });
 
     const beforeRepeat = await artworkCount(page);
     await designer.runCommand("media.paged.draw.command.makeRadialRepeat");
@@ -918,7 +1009,8 @@ test.describe("plugin surface · paged.draw", () => {
     await expect
       .poll(
         async () =>
-          (await repeatPanel.first().getAttribute("data-draw-repeat-active")) ?? "",
+          (await repeatPanel.first().getAttribute("data-draw-repeat-active")) ??
+          "",
         { timeout: 10_000 },
       )
       .not.toBe("");
@@ -926,14 +1018,20 @@ test.describe("plugin surface · paged.draw", () => {
     await expect
       .poll(
         async () =>
-          Number((await repeatPanel.first().getAttribute("data-draw-repeat-panel")) ?? "0"),
+          Number(
+            (await repeatPanel
+              .first()
+              .getAttribute("data-draw-repeat-panel")) ?? "0",
+          ),
         { timeout: 8_000 },
       )
       .toBeGreaterThan(0);
     await designer.runCommand("media.paged.draw.command.updateRepeat");
     await designer.runCommand("media.paged.draw.command.selectRepeatInstances");
     await expect
-      .poll(async () => (await designer.elementSelection()).length, { timeout: 8_000 })
+      .poll(async () => (await designer.elementSelection()).length, {
+        timeout: 8_000,
+      })
       .toBeGreaterThan(0);
     await designer.runCommand("media.paged.draw.command.expandRepeat");
     await designer.runCommand("media.paged.draw.command.releaseRepeat");
@@ -963,14 +1061,18 @@ test.describe("plugin surface · paged.draw", () => {
       { kind: "polygon", id: k2 },
     ]);
     await designer.openPanel("media.paged.draw.panel.blend");
-    await expect(page.locator("[data-draw-blend-panel]")).toBeVisible({ timeout: 8_000 });
+    await expect(page.locator("[data-draw-blend-panel]")).toBeVisible({
+      timeout: 8_000,
+    });
 
     const beforeBlend = await artworkCount(page);
     await designer.runCommand("media.paged.draw.command.blendSelected");
     await expect
       .poll(() => artworkCount(page), { timeout: 12_000 })
       .toBeGreaterThan(beforeBlend);
-    await designer.runCommand("media.paged.draw.command.reverseBlendFrontToBack");
+    await designer.runCommand(
+      "media.paged.draw.command.reverseBlendFrontToBack",
+    );
     await designer.runCommand("media.paged.draw.command.selectBlendObjects");
     await designer.runCommand("media.paged.draw.command.expandBlend");
     await designer.runCommand("media.paged.draw.command.releaseBlend");
@@ -998,7 +1100,11 @@ test.describe("plugin surface · paged.draw", () => {
     await expect
       .poll(
         async () =>
-          Number((await livePaint.first().getAttribute("data-draw-live-paint-panel")) ?? "0"),
+          Number(
+            (await livePaint
+              .first()
+              .getAttribute("data-draw-live-paint-panel")) ?? "0",
+          ),
         { timeout: 12_000 },
       )
       .toBeGreaterThan(0);
@@ -1018,7 +1124,12 @@ test.describe("plugin surface · paged.draw", () => {
 
     // ── PATTERN — bake a re-editable tile field (artwork, not a
     //    swatch), then re-plan / select / delete / release it. ──
-    const tile = await designer.drawRectangle({ x0: 140, y0: 140, x1: 200, y1: 200 });
+    const tile = await designer.drawRectangle({
+      x0: 140,
+      y0: 140,
+      x1: 200,
+      y1: 200,
+    });
     await designer.applyFill("rectangle", tile);
     await designer.selectElement("rectangle", tile);
     await designer.openPanel("media.paged.draw.panel.pattern");
@@ -1026,7 +1137,9 @@ test.describe("plugin surface · paged.draw", () => {
     await expect(pattern).toBeVisible({ timeout: 8_000 });
 
     const beforePattern = await artworkCount(page);
-    await designer.runCommand("media.paged.draw.command.makePatternFromSelection");
+    await designer.runCommand(
+      "media.paged.draw.command.makePatternFromSelection",
+    );
     await expect
       .poll(() => artworkCount(page), { timeout: 12_000 })
       .toBeGreaterThan(beforePattern);
@@ -1037,8 +1150,18 @@ test.describe("plugin surface · paged.draw", () => {
 
     // ── OBJECTS ON PATH — the LAST selected item is the path; the
     //    objects MOVE onto it. Ink moves, so the render moves. ──
-    const o1 = await designer.drawRectangle({ x0: 130, y0: 430, x1: 175, y1: 475 });
-    const o2 = await designer.drawRectangle({ x0: 200, y0: 430, x1: 245, y1: 475 });
+    const o1 = await designer.drawRectangle({
+      x0: 130,
+      y0: 430,
+      x1: 175,
+      y1: 475,
+    });
+    const o2 = await designer.drawRectangle({
+      x0: 200,
+      y0: 430,
+      x1: 245,
+      y1: 475,
+    });
     await designer.applyFill("rectangle", o1);
     await designer.applyFill("rectangle", o2);
     const spine = await designer.drawPath([
@@ -1060,7 +1183,11 @@ test.describe("plugin surface · paged.draw", () => {
     await designer.runCommand("media.paged.draw.command.makeObjectsOnPath");
     await expect
       .poll(
-        async () => Number((await onPath.first().getAttribute("data-draw-onpath-panel")) ?? "0"),
+        async () =>
+          Number(
+            (await onPath.first().getAttribute("data-draw-onpath-panel")) ??
+              "0",
+          ),
         { timeout: 12_000 },
       )
       .toBeGreaterThan(0);
@@ -1099,31 +1226,43 @@ test.describe("plugin surface · paged.draw", () => {
 
     // ── RADIAL GRADIENT — the sibling the journeys never ran (only the
     //    linear one). The fill becomes a Gradient/ reference. ──
-    const rid = await designer.drawRectangle({ x0: 150, y0: 400, x1: 420, y1: 560 });
+    const rid = await designer.drawRectangle({
+      x0: 150,
+      y0: 400,
+      x1: 420,
+      y1: 560,
+    });
     await designer.selectElement("rectangle", rid);
     await designer.runCommand("media.paged.draw.command.fillGradientRadial");
     await expect
       .poll(
         async () =>
-          (
-            await page.evaluate(async (ref) => {
+          await page.evaluate(
+            async (ref) => {
               const c = (
                 globalThis as unknown as {
                   __canvas: {
                     client: {
                       elementProperties: (id: unknown) => Promise<{
-                        entries?: Array<{ path: string; value?: { value?: unknown } | null }>;
+                        entries?: Array<{
+                          path: string;
+                          value?: { value?: unknown } | null;
+                        }>;
                       } | null>;
                     };
                   };
                 }
               ).__canvas;
-              const props = await c.client.elementProperties(ref).catch(() => null);
+              const props = await c.client
+                .elementProperties(ref)
+                .catch(() => null);
               for (const e of props?.entries ?? []) {
-                if (e.path === "frameFillColor") return String(e.value?.value ?? "");
+                if (e.path === "frameFillColor")
+                  return String(e.value?.value ?? "");
               }
               return "";
-            }, { kind: "rectangle", id: rid })
+            },
+            { kind: "rectangle", id: rid },
           ),
         { timeout: 10_000 },
       )
@@ -1131,9 +1270,19 @@ test.describe("plugin surface · paged.draw", () => {
 
     // ── OPACITY MASK — the TOPMOST of exactly two selected items
     //    becomes the mask; the one below is masked. Real ink change. ──
-    const masked = await designer.drawRectangle({ x0: 150, y0: 600, x1: 420, y1: 720 });
+    const masked = await designer.drawRectangle({
+      x0: 150,
+      y0: 600,
+      x1: 420,
+      y1: 720,
+    });
     await designer.applyFill("rectangle", masked);
-    const mask = await designer.drawRectangle({ x0: 220, y0: 630, x1: 350, y1: 700 });
+    const mask = await designer.drawRectangle({
+      x0: 220,
+      y0: 630,
+      x1: 350,
+      y1: 700,
+    });
     await designer.applyFill("rectangle", mask, "Color/Paper");
     await designer.selectElements([
       { kind: "rectangle", id: masked },
@@ -1215,8 +1364,18 @@ test.describe("plugin surface · paged.draw", () => {
 
     // A representative selection so the guards have something to read:
     // two overlapping filled rectangles and a real path.
-    const a = await designer.drawRectangle({ x0: 140, y0: 140, x1: 320, y1: 280 });
-    const b = await designer.drawRectangle({ x0: 240, y0: 200, x1: 420, y1: 340 });
+    const a = await designer.drawRectangle({
+      x0: 140,
+      y0: 140,
+      x1: 320,
+      y1: 280,
+    });
+    const b = await designer.drawRectangle({
+      x0: 240,
+      y0: 200,
+      x1: 420,
+      y1: 340,
+    });
     await designer.applyFill("rectangle", a);
     await designer.applyFill("rectangle", b);
     await designer.selectElements([
@@ -1228,24 +1387,33 @@ test.describe("plugin surface · paged.draw", () => {
     // The contract is "no-op honestly, never throw": a plugin command
     // that throws surfaces to the user as a dead row with a console
     // stack, and there is no second surface to reach it from.
-    const threw = await page.evaluate(async (ids) => {
-      const cmd = (
-        globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (id: string) => Promise<void> } } };
+    const threw = await page.evaluate(
+      async (ids) => {
+        const cmd = (
+          globalThis as unknown as {
+            __canvas: {
+              registries: {
+                commands: { invoke: (id: string) => Promise<void> };
+              };
+            };
+          }
+        ).__canvas.registries.commands;
+        const bad: string[] = [];
+        for (const id of ids) {
+          try {
+            await cmd.invoke(id);
+          } catch (err) {
+            bad.push(`${id}: ${String(err).split("\n")[0]}`);
+          }
         }
-      ).__canvas.registries.commands;
-      const bad: string[] = [];
-      for (const id of ids) {
-        try {
-          await cmd.invoke(id);
-        } catch (err) {
-          bad.push(`${id}: ${String(err).split("\n")[0]}`);
-        }
-      }
-      return bad;
-    }, COMMANDS as unknown as string[]);
+        return bad;
+      },
+      COMMANDS as unknown as string[],
+    );
 
-    expect(threw, "every draw command survives a payload-free invoke").toEqual([]);
+    expect(threw, "every draw command survives a payload-free invoke").toEqual(
+      [],
+    );
 
     // The ratchet. Anything that refused for want of a payload must be
     // on the known list; a NEW id here is a command with no working
@@ -1258,13 +1426,16 @@ test.describe("plugin surface · paged.draw", () => {
     // STATE-dependent: give them the right selection and they work from
     // the palette. Only a LIBRARY id (a style, a symbol, a Live Paint
     // face) is something the palette structurally cannot supply.
-    const LIBRARY_ID_REFUSAL = /no (styleId|symbolId) in the payload|no face named in the payload/;
+    const LIBRARY_ID_REFUSAL =
+      /no (styleId|symbolId) in the payload|no face named in the payload/;
     const inertNow = new Set(
       COMMANDS.filter((id) =>
         warnings.some((w) => w.includes(id) && LIBRARY_ID_REFUSAL.test(w)),
       ),
     );
-    const unexpected = [...inertNow].filter((id) => !KNOWN_PALETTE_INERT.has(id));
+    const unexpected = [...inertNow].filter(
+      (id) => !KNOWN_PALETTE_INERT.has(id),
+    );
     expect(
       unexpected,
       "a command that is inert from the palette and not on the known list",
@@ -1286,12 +1457,16 @@ test.describe("plugin surface · paged.draw", () => {
     // Every command carries a title + a category, because the palette
     // renders exactly those two and nothing else. A missing category
     // buckets the row under "Other" — findable only by exact text.
-    const untitled = COMMANDS.filter((id) => !(byId.get(id)?.title ?? "").trim());
+    const untitled = COMMANDS.filter(
+      (id) => !(byId.get(id)?.title ?? "").trim(),
+    );
     expect(untitled, "every draw command has a palette title").toEqual([]);
     const uncategorised = COMMANDS.filter(
       (id) => (byId.get(id)?.category ?? "Other") === "Other",
     );
-    expect(uncategorised, "every draw command has a palette category").toEqual([]);
+    expect(uncategorised, "every draw command has a palette category").toEqual(
+      [],
+    );
 
     // THE MENU BAR NOW CARRIES THEM — and this assertion is the INVERSE
     // of what it said until 2026-08-23, deliberately.
@@ -1310,7 +1485,9 @@ test.describe("plugin surface · paged.draw", () => {
       (
         globalThis as unknown as {
           __canvas: {
-            registries: { menus: { list: () => Array<{ path: string; command: string }> } };
+            registries: {
+              menus: { list: () => Array<{ path: string; command: string }> };
+            };
           };
         }
       ).__canvas.registries.menus
@@ -1326,7 +1503,9 @@ test.describe("plugin surface · paged.draw", () => {
     // host's own Object and Edit menus.
     expect(drawMenuItems.some((p) => p.startsWith("Draw/"))).toBe(true);
     expect(
-      drawMenuItems.some((p) => p.startsWith("Object/") || p.startsWith("Edit/")),
+      drawMenuItems.some(
+        (p) => p.startsWith("Object/") || p.startsWith("Edit/"),
+      ),
       "the insert and select-same verbs merge into host menus",
     ).toBe(true);
   });

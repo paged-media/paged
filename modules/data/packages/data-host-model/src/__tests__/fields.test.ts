@@ -45,17 +45,16 @@ import type { ImageReference } from "../lowered";
 describe("backToFront — field write order [data.lower.v43-consumers]", () => {
   it("orders each story's writes by descending offset, stories in first-seen order [data.lower.v43-consumers]", () => {
     const w = (storyId: string, offset: number) => ({ storyId, offset });
-    expect(backToFront([w("a", 0), w("b", 4), w("a", 9), w("a", 3), w("b", 1)])).toEqual([
-      w("a", 9),
-      w("a", 3),
-      w("a", 0),
-      w("b", 4),
-      w("b", 1),
-    ]);
+    expect(
+      backToFront([w("a", 0), w("b", 4), w("a", 9), w("a", 3), w("b", 1)]),
+    ).toEqual([w("a", 9), w("a", 3), w("a", 0), w("b", 4), w("b", 1)]);
   });
 
   it("does not reorder its input in place [data.lower.v43-consumers]", () => {
-    const input = [{ storyId: "a", offset: 0 }, { storyId: "a", offset: 5 }];
+    const input = [
+      { storyId: "a", offset: 0 },
+      { storyId: "a", offset: 5 },
+    ];
     backToFront(input);
     expect(input.map((x) => x.offset)).toEqual([0, 5]);
   });
@@ -65,7 +64,9 @@ describe("data_lower_variable_field (D-01 in-text variables)", () => {
   it("inserts a tagged placeholder field in this plugin's namespace", () => {
     const m = insertFieldMutation("story-1", 0, "v_price", null);
     expect(m.op).toBe("insertField");
-    const args = (m as { args: { storyId: string; offset: number; field: unknown } }).args;
+    const args = (
+      m as { args: { storyId: string; offset: number; field: unknown } }
+    ).args;
     expect(args.storyId).toBe("story-1");
     expect(args.offset).toBe(0);
     expect(args.field).toEqual({
@@ -75,28 +76,42 @@ describe("data_lower_variable_field (D-01 in-text variables)", () => {
 
   it("carries a resolved value when present (null → token via undefined)", () => {
     const m = insertFieldMutation("s", 3, "k", "€ 9,99");
-    const field = (m as { args: { field: { placeholder: { value?: string } } } }).args.field;
+    const field = (
+      m as { args: { field: { placeholder: { value?: string } } } }
+    ).args.field;
     expect(field.placeholder.value).toBe("€ 9,99");
   });
 
   it("re-resolves a field by its fresh-read offset (setFieldValue)", () => {
     const m = setFieldValueMutation("s", 12, "€ 19,99");
     expect(m.op).toBe("setFieldValue");
-    expect((m as { args: { offset: number; value: string | null } }).args).toEqual({
+    expect(
+      (m as { args: { offset: number; value: string | null } }).args,
+    ).toEqual({
       storyId: "s",
       offset: 12,
       value: "€ 19,99",
     });
     // A null clears the resolution (field falls back to its <key> token).
     expect(
-      (setFieldValueMutation("s", 12, null) as { args: { value: string | null } }).args.value,
+      (
+        setFieldValueMutation("s", 12, null) as {
+          args: { value: string | null };
+        }
+      ).args.value,
     ).toBeNull();
   });
 
   it("diffs enumerated fields against resolved values — only changed → write", () => {
     const fields: PlaceholderField[] = [
       { storyId: "s", offset: 0, plugin: FIELD_PLUGIN, key: "a", value: "old" },
-      { storyId: "s", offset: 8, plugin: FIELD_PLUGIN, key: "b", value: "same" },
+      {
+        storyId: "s",
+        offset: 8,
+        plugin: FIELD_PLUGIN,
+        key: "b",
+        value: "same",
+      },
       { storyId: "s", offset: 16, plugin: FIELD_PLUGIN, key: "c", value: null },
     ];
     const resolved = new Map<string, string | null>([
@@ -113,7 +128,13 @@ describe("data_lower_variable_field (D-01 in-text variables)", () => {
   it("filters to this plugin's own fields (defence in depth)", () => {
     const fields: PlaceholderField[] = [
       { storyId: "s", offset: 0, plugin: FIELD_PLUGIN, key: "a", value: null },
-      { storyId: "s", offset: 4, plugin: "media.paged.other", key: "x", value: null },
+      {
+        storyId: "s",
+        offset: 4,
+        plugin: "media.paged.other",
+        key: "x",
+        value: null,
+      },
     ];
     expect(ownFields(fields)).toHaveLength(1);
     expect(ownFields(fields)[0].plugin).toBe(FIELD_PLUGIN);
@@ -128,19 +149,31 @@ describe("data_lower_image_place (D-14 image placement)", () => {
   });
 
   it("resolves a placeable URI from uri/path; null for bytes/assetId/none", () => {
-    expect(placeableUri({ ref: "uri", uri: "https://x/y.png" } as ImageReference)).toBe(
-      "https://x/y.png",
-    );
-    expect(placeableUri({ ref: "path", path: "img/a.jpg" } as ImageReference)).toBe("img/a.jpg");
-    expect(placeableUri({ ref: "assetId", id: "u1" } as ImageReference)).toBeNull();
-    expect(placeableUri({ ref: "bytes", bytes: [1, 2] } as ImageReference)).toBeNull();
+    expect(
+      placeableUri({ ref: "uri", uri: "https://x/y.png" } as ImageReference),
+    ).toBe("https://x/y.png");
+    expect(
+      placeableUri({ ref: "path", path: "img/a.jpg" } as ImageReference),
+    ).toBe("img/a.jpg");
+    expect(
+      placeableUri({ ref: "assetId", id: "u1" } as ImageReference),
+    ).toBeNull();
+    expect(
+      placeableUri({ ref: "bytes", bytes: [1, 2] } as ImageReference),
+    ).toBeNull();
     expect(placeableUri({ ref: "none" } as ImageReference)).toBeNull();
   });
 
   it("emits a placeImage mutation on the bound rectangle", () => {
-    const m = placeImageMutation("urect", "https://x/y.png", "FillProportionally");
+    const m = placeImageMutation(
+      "urect",
+      "https://x/y.png",
+      "FillProportionally",
+    );
     expect(m.op).toBe("placeImage");
-    expect((m as { args: { elementId: string; uri: string; fit: string } }).args).toEqual({
+    expect(
+      (m as { args: { elementId: string; uri: string; fit: string } }).args,
+    ).toEqual({
       elementId: "urect",
       uri: "https://x/y.png",
       fit: "FillProportionally",
@@ -179,7 +212,10 @@ describe("data_lower_rule (D-13 rule application)", () => {
     expect(muts).toHaveLength(2);
     const first = muts[0] as {
       op: string;
-      args: { elementId: { kind: string; id: { row: number; col: number } }; path: string };
+      args: {
+        elementId: { kind: string; id: { row: number; col: number } };
+        path: string;
+      };
     };
     expect(first.op).toBe("setElementProperty");
     expect(first.args.path).toBe("appliedCellStyle");
@@ -251,7 +287,12 @@ describe("rule targets in a story [data.rule.authoring]", () => {
 
   it("a story-range rule applies nothing when no record fires", () => {
     expect(
-      ruleMutations(app([]), { kind: "storyRange", storyId: "s", start: 0, end: 9 }),
+      ruleMutations(app([]), {
+        kind: "storyRange",
+        storyId: "s",
+        start: 0,
+        end: 9,
+      }),
     ).toEqual([]);
   });
 
@@ -266,13 +307,18 @@ describe("rule targets in a story [data.rule.authoring]", () => {
       app([0, 2, 7]),
       { kind: "storyParagraphs", storyId: "s", firstParagraph: 1 },
       paragraphs,
-    ) as { op: string; args: { start: number; end: number; style: string; scope: string } }[];
+    ) as {
+      op: string;
+      args: { start: number; end: number; style: string; scope: string };
+    }[];
     // record 0 → paragraph 1, record 2 → paragraph 3, record 7 → none (skipped).
     expect(muts.map((m) => [m.args.start, m.args.end])).toEqual([
       [6, 11],
       [18, 23],
     ]);
-    expect(muts.every((m) => m.op === "applyStyle" && m.args.scope === "paragraph")).toBe(true);
+    expect(
+      muts.every((m) => m.op === "applyStyle" && m.args.scope === "paragraph"),
+    ).toBe(true);
     expect(muts[0].args.style).toBe("ParagraphStyle/Low");
   });
 });

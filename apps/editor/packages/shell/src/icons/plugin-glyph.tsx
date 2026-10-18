@@ -45,7 +45,13 @@ export function sanitizeSvgGlyph(svg: string): string {
 
 /** Render a sanitized plugin glyph in the host icon box (currentColor,
  *  same sizing contract as `Icon`). */
-export function PluginGlyph({ svg, size = 17 }: { svg: string; size?: number }) {
+export function PluginGlyph({
+  svg,
+  size = 17,
+}: {
+  svg: string;
+  size?: number;
+}) {
   return (
     <svg
       width={size}

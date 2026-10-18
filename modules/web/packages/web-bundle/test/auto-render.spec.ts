@@ -32,7 +32,8 @@ import { framesWithLayers } from "../src/bake";
 import type { WebEngine } from "../src/engine-loader";
 
 const KEY = "x-paged:media.paged.web";
-const label = (html: string) => JSON.stringify(envelopeFor({ ...DEFAULT_SOURCE, html }));
+const label = (html: string) =>
+  JSON.stringify(envelopeFor({ ...DEFAULT_SOURCE, html }));
 
 function modelHost(rows: { id: string; label?: string }[]) {
   // The host announces an opened document through `document.onDidOpen`.
@@ -43,10 +44,13 @@ function modelHost(rows: { id: string; label?: string }[]) {
   const count = (k: string) => (calls[k] = (calls[k] ?? 0) + 1);
   const submits: string[] = [];
   const clears: string[] = [];
-  const labels = new Map(rows.filter((r) => r.label).map((r) => [r.id, r.label!]));
+  const labels = new Map(
+    rows.filter((r) => r.label).map((r) => [r.id, r.label!]),
+  );
   const geometry = { bounds: [0, 0, 100, 200] };
   const host = {
-    supports: (f: string) => f === "rendering.sceneLayer@1" || f === "document.onDidOpen@1",
+    supports: (f: string) =>
+      f === "rendering.sceneLayer@1" || f === "document.onDidOpen@1",
     contribute: {
       sceneLayer: () => ({
         submit: async (id: string) => void submits.push(id),
@@ -67,7 +71,9 @@ function modelHost(rows: { id: string; label?: string }[]) {
               kind: "Rectangle",
               label: r.id,
               children: [],
-              pluginMetadata: labels.has(r.id) ? [{ key: KEY, value: labels.get(r.id)! }] : [],
+              pluginMetadata: labels.has(r.id)
+                ? [{ key: KEY, value: labels.get(r.id)! }]
+                : [],
             })),
           },
         ];
@@ -92,15 +98,35 @@ function modelHost(rows: { id: string; label?: string }[]) {
       },
     },
     parts: { read: async () => null },
-    editor: { client: { subscribe: (l: (m: { kind: string }) => void) => (raw.push(l), () => void raw.splice(raw.indexOf(l), 1)) } },
+    editor: {
+      client: {
+        subscribe: (l: (m: { kind: string }) => void) => (
+          raw.push(l),
+          () => void raw.splice(raw.indexOf(l), 1)
+        ),
+      },
+    },
     log: { debug() {}, info() {}, warn() {}, error() {} },
   } as unknown as BundleHost;
   const open = () => opened.forEach((l) => l());
   /** A raw editor-client message, as the editor broadcasts every reply. */
-  const broadcast = (m: { kind: string; payload?: unknown }) => raw.forEach((l) => l(m));
+  const broadcast = (m: { kind: string; payload?: unknown }) =>
+    raw.forEach((l) => l(m));
   /** A committed change, as `document.onDidChange` reports it. */
-  const change = (e: { kind: string; pageIds: string[] }) => changes.forEach((l) => l(e));
-  return { host, calls, submits, clears, labels, geometry, open, broadcast, change, rawSubscribers: () => raw.length };
+  const change = (e: { kind: string; pageIds: string[] }) =>
+    changes.forEach((l) => l(e));
+  return {
+    host,
+    calls,
+    submits,
+    clears,
+    labels,
+    geometry,
+    open,
+    broadcast,
+    change,
+    rawSubscribers: () => raw.length,
+  };
 }
 
 const engine: WebEngine = {
@@ -110,8 +136,15 @@ const engine: WebEngine = {
 
 describe("auto render — discovery and bounds", () => {
   it("one tree read per pass and no discovery reads when the tree carries labels", async () => {
-    const m = modelHost([{ id: "a", label: label("<p>A</p>") }, { id: "b" }, { id: "c", label: '{"v":1,"data":{}}' }]);
-    const auto = startAutoRender(m.host, { engine: async () => engine, debounceMs: 1 });
+    const m = modelHost([
+      { id: "a", label: label("<p>A</p>") },
+      { id: "b" },
+      { id: "c", label: '{"v":1,"data":{}}' },
+    ]);
+    const auto = startAutoRender(m.host, {
+      engine: async () => engine,
+      debounceMs: 1,
+    });
     await auto.idle();
     expect(m.calls.tree).toBe(1);
     // One for the pass, one inside the render of "a".
@@ -126,7 +159,10 @@ describe("auto render — discovery and bounds", () => {
 
   it("an unchanged document renders nothing on the next pass", async () => {
     const m = modelHost([{ id: "a", label: label("<p>A</p>") }]);
-    const auto = startAutoRender(m.host, { engine: async () => engine, debounceMs: 1 });
+    const auto = startAutoRender(m.host, {
+      engine: async () => engine,
+      debounceMs: 1,
+    });
     await auto.idle();
     await auto.reconcile("change");
     expect(m.submits).toEqual(["a"]);
@@ -137,7 +173,10 @@ describe("auto render — discovery and bounds", () => {
 
   it("a frame holding a layer nobody keeps is cleared", async () => {
     const m = modelHost([{ id: "a", label: label("<p>A</p>") }]);
-    const auto = startAutoRender(m.host, { engine: async () => engine, debounceMs: 1 });
+    const auto = startAutoRender(m.host, {
+      engine: async () => engine,
+      debounceMs: 1,
+    });
     await auto.idle();
     framesWithLayers(m.host).add("stale");
     await auto.reconcile("change");
@@ -147,7 +186,10 @@ describe("auto render — discovery and bounds", () => {
 
   it("without an engine nothing is rendered or cleared", async () => {
     const m = modelHost([{ id: "a", label: label("<p>A</p>") }]);
-    const auto = startAutoRender(m.host, { engine: async () => null, debounceMs: 1 });
+    const auto = startAutoRender(m.host, {
+      engine: async () => null,
+      debounceMs: 1,
+    });
     await auto.idle();
     framesWithLayers(m.host).add("stale");
     await auto.reconcile("change");
@@ -160,8 +202,15 @@ describe("auto render — discovery and bounds", () => {
     const m = modelHost([{ id: "a", label: label("<p>A</p>") }, { id: "b" }]);
     const tree = m.host.document.tree;
     (m.host.document as { tree: unknown }).tree = async () =>
-      JSON.parse(JSON.stringify(await tree(), (k, v) => (k === "pluginMetadata" ? undefined : v)));
-    const auto = startAutoRender(m.host, { engine: async () => engine, debounceMs: 1 });
+      JSON.parse(
+        JSON.stringify(await tree(), (k, v) =>
+          k === "pluginMetadata" ? undefined : v,
+        ),
+      );
+    const auto = startAutoRender(m.host, {
+      engine: async () => engine,
+      debounceMs: 1,
+    });
     await auto.idle();
     expect(m.submits).toEqual(["a"]);
     expect(m.calls.getMetadata).toBe(4); // a, b (discovery) + a (source) + a (render)
@@ -172,7 +221,10 @@ describe("auto render — discovery and bounds", () => {
   // plugin SDK), and nothing else is listened to.
   it("a gesture's commit that resized a frame re-renders it; one that did not renders nothing", async () => {
     const m = modelHost([{ id: "a", label: label("<p>A</p>") }]);
-    const auto = startAutoRender(m.host, { engine: async () => engine, debounceMs: 1 });
+    const auto = startAutoRender(m.host, {
+      engine: async () => engine,
+      debounceMs: 1,
+    });
     await auto.idle();
     expect(m.submits).toEqual(["a"]);
     m.geometry.bounds = [0, 0, 160, 200];
@@ -189,7 +241,10 @@ describe("auto render — discovery and bounds", () => {
     expect(m.submits).toEqual(["a", "a", "a"]);
     // The raw client broadcast is not listened to.
     m.geometry.bounds = [0, 0, 140, 200];
-    m.broadcast({ kind: "gestureCommitted", payload: { handle: 3, appliedSeq: 5, pageIds: [] } });
+    m.broadcast({
+      kind: "gestureCommitted",
+      payload: { handle: 3, appliedSeq: 5, pageIds: [] },
+    });
     await auto.idle();
     expect(m.submits).toEqual(["a", "a", "a"]);
     auto.dispose();
@@ -197,7 +252,10 @@ describe("auto render — discovery and bounds", () => {
 
   it("an opened document is rendered afresh (document.onDidOpen)", async () => {
     const m = modelHost([{ id: "a", label: label("<p>A</p>") }]);
-    const auto = startAutoRender(m.host, { engine: async () => engine, debounceMs: 1 });
+    const auto = startAutoRender(m.host, {
+      engine: async () => engine,
+      debounceMs: 1,
+    });
     await auto.idle();
     expect(m.submits).toEqual(["a"]);
     // The same frame id in the newly opened document is a new frame: the

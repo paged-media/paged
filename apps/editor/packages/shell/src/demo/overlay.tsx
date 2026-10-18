@@ -127,7 +127,15 @@ export function DemoSpotlight(): React.ReactElement | null {
   const r = el.getBoundingClientRect();
   const pad = 6;
   return (
-    <div data-demo-spotlight style={{ position: "fixed", inset: 0, zIndex: 8500, pointerEvents: "none" }}>
+    <div
+      data-demo-spotlight
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 8500,
+        pointerEvents: "none",
+      }}
+    >
       <div
         style={{
           position: "absolute",
@@ -166,7 +174,10 @@ export function DemoOverlay(): React.ReactElement | null {
 
   if (!req) return null;
   const cta = req.cta ?? "Next";
-  const step = req.index != null && req.total != null ? `${req.index} / ${req.total}` : null;
+  const step =
+    req.index != null && req.total != null
+      ? `${req.index} / ${req.total}`
+      : null;
 
   return (
     <div
@@ -187,12 +198,39 @@ export function DemoOverlay(): React.ReactElement | null {
       }}
     >
       {step ? (
-        <div style={{ fontSize: 10.5, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--pg-muted-fg, #999)", marginBottom: 6 }}>
+        <div
+          style={{
+            fontSize: 10.5,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: "var(--pg-muted-fg, #999)",
+            marginBottom: 6,
+          }}
+        >
           {step}
         </div>
       ) : null}
-      <div style={{ fontSize: 14, fontWeight: 640, marginBottom: req.body ? 4 : 10 }}>{req.title}</div>
-      {req.body ? <div style={{ fontSize: 13, lineHeight: 1.45, color: "var(--pg-muted-fg, #bbb)", marginBottom: 12 }}>{req.body}</div> : null}
+      <div
+        style={{
+          fontSize: 14,
+          fontWeight: 640,
+          marginBottom: req.body ? 4 : 10,
+        }}
+      >
+        {req.title}
+      </div>
+      {req.body ? (
+        <div
+          style={{
+            fontSize: 13,
+            lineHeight: 1.45,
+            color: "var(--pg-muted-fg, #bbb)",
+            marginBottom: 12,
+          }}
+        >
+          {req.body}
+        </div>
+      ) : null}
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <button
           type="button"

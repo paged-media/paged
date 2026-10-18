@@ -26,7 +26,10 @@ import * as React from "react";
 
 import { setStateMutation, type SlidesStore } from "../slides-model.js";
 
-export function makeNotesPanel(host: BundleHost, store: SlidesStore): React.ComponentType<PanelProps> {
+export function makeNotesPanel(
+  host: BundleHost,
+  store: SlidesStore,
+): React.ComponentType<PanelProps> {
   const Component: React.FC<PanelProps> = () => {
     const [, force] = React.useReducer((n: number) => n + 1, 0);
     React.useEffect(() => store.subscribe(force), []);
@@ -38,7 +41,10 @@ export function makeNotesPanel(host: BundleHost, store: SlidesStore): React.Comp
 
     if (!slide) {
       return (
-        <div style={{ padding: 12, fontSize: 13, opacity: 0.7 }} data-notes-panel="empty">
+        <div
+          style={{ padding: 12, fontSize: 13, opacity: 0.7 }}
+          data-notes-panel="empty"
+        >
           No slide selected.
         </div>
       );
@@ -46,19 +52,38 @@ export function makeNotesPanel(host: BundleHost, store: SlidesStore): React.Comp
     const commit = () => {
       if (draft === saved) return;
       void host.document
-        .mutate(setStateMutation(slide.pageId, { ...slide.state, notes: draft }))
+        .mutate(
+          setStateMutation(slide.pageId, { ...slide.state, notes: draft }),
+        )
         .catch((e) => host.log.warn(`paged.slide: ${String(e)}`));
     };
     return (
-      <div style={{ padding: 10, display: "flex", flexDirection: "column", gap: 6, height: "100%" }} data-notes-panel="ready">
-        <div style={{ fontSize: 11, opacity: 0.7 }}>Slide {slide.number} · speaker notes</div>
+      <div
+        style={{
+          padding: 10,
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          height: "100%",
+        }}
+        data-notes-panel="ready"
+      >
+        <div style={{ fontSize: 11, opacity: 0.7 }}>
+          Slide {slide.number} · speaker notes
+        </div>
         <textarea
           data-notes-text
           value={draft}
           placeholder="Click to add notes"
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
-          style={{ flex: 1, minHeight: 80, resize: "vertical", font: "inherit", fontSize: 13 }}
+          style={{
+            flex: 1,
+            minHeight: 80,
+            resize: "vertical",
+            font: "inherit",
+            fontSize: 13,
+          }}
         />
       </div>
     );

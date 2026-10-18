@@ -111,7 +111,8 @@ export function PropertiesPanel() {
   const steer = cockpit?.inspectorContext ?? null;
   const selectionKey = JSON.stringify(elementSelection);
   const steerAt = useRef({ steer, key: selectionKey });
-  if (steerAt.current.steer !== steer) steerAt.current = { steer, key: selectionKey };
+  if (steerAt.current.steer !== steer)
+    steerAt.current = { steer, key: selectionKey };
   const imageSteer = steer === "image" && steerAt.current.key === selectionKey;
   const kind: InspectorKind = hasContent
     ? "text"
@@ -162,7 +163,9 @@ export function PropertiesPanel() {
     kind === "text"
       ? "Text selection"
       : hasElement
-        ? [kind === "image" ? "Image" : noun, counted].filter(Boolean).join(" · ")
+        ? [kind === "image" ? "Image" : noun, counted]
+            .filter(Boolean)
+            .join(" · ")
         : null;
 
   return (
@@ -219,7 +222,9 @@ export function PropertiesPanel() {
                     : undefined,
                 }}
               >
-                {threading?.isOverset(oversetFrameId) ? "overset" : "overset · no"}
+                {threading?.isOverset(oversetFrameId)
+                  ? "overset"
+                  : "overset · no"}
               </span>
             )}
           </div>
@@ -282,8 +287,8 @@ export function PropertiesPanel() {
               data-properties-no-image
               style={{ padding: "4px 2px", lineHeight: 1.5 }}
             >
-              The selection holds no placed image. File ▸ Place… puts one in
-              the selected frame.
+              The selection holds no placed image. File ▸ Place… puts one in the
+              selected frame.
             </div>
           ) : null}
           {hasElement ? (
@@ -304,8 +309,21 @@ export function PropertiesPanel() {
         </div>
 
         {kind !== "none" && (
-          <div data-ai-assistant-link style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 14px 16px" }}>
-            <CockpitBtn sm tone="soft" onClick={() => openAssistant({ view: "ask" })} testId="open-ai-assistant">
+          <div
+            data-ai-assistant-link
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "4px 14px 16px",
+            }}
+          >
+            <CockpitBtn
+              sm
+              tone="soft"
+              onClick={() => openAssistant({ view: "ask" })}
+              testId="open-ai-assistant"
+            >
               Ask the AI Assistant…
             </CockpitBtn>
           </div>
@@ -327,16 +345,23 @@ function groupIdOf(id: ElementId | undefined): string | null {
  *  read off the scene tree; null until it has answered. `refresh` is the
  *  geometry mirror, which every change to the selection's content
  *  replaces. */
-function useGroupMemberCount(groupId: string | null, refresh: unknown): number | null {
+function useGroupMemberCount(
+  groupId: string | null,
+  refresh: unknown,
+): number | null {
   const client = useOptionalCanvasClient();
-  const [answer, setAnswer] = useState<{ groupId: string; count: number } | null>(null);
+  const [answer, setAnswer] = useState<{
+    groupId: string;
+    count: number;
+  } | null>(null);
   useEffect(() => {
     if (!client || !groupId) return;
     let live = true;
     client
       .sceneTree()
       .then((roots) => {
-        if (live) setAnswer({ groupId, count: groupMembersOf(roots, groupId).length });
+        if (live)
+          setAnswer({ groupId, count: groupMembersOf(roots, groupId).length });
       })
       .catch(() => {});
     return () => {

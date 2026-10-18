@@ -24,7 +24,14 @@
 // shape, on a file small enough to run in a test and regular enough to
 // do the arithmetic by eye.
 
-import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  setDefaultTimeout,
+} from "bun:test";
 
 import type { ElementId } from "@paged-media/plugin-api";
 
@@ -62,7 +69,9 @@ function syntheticSvg(shapes: number): string {
     const y = 300 + Math.floor(i / 5) * 40;
     switch (i % 5) {
       case 3:
-        out.push(`<circle cx="${x + 15}" cy="${y + 15}" r="12" fill="${hex(i * 2)}"/>`);
+        out.push(
+          `<circle cx="${x + 15}" cy="${y + 15}" r="12" fill="${hex(i * 2)}"/>`,
+        );
         break;
       case 4:
         out.push(
@@ -121,15 +130,27 @@ const creationDefaults = async (w: Workload): Promise<unknown[]> => {
 async function landed(
   w: Workload,
   ids: readonly ElementId[],
-): Promise<{ at: [number, number]; fill: string | null; stroke: string | null; weight: unknown }[]> {
-  const names = new Map((await swatchRows(w)).map((sw) => [sw.selfId, sw.name]));
+): Promise<
+  {
+    at: [number, number];
+    fill: string | null;
+    stroke: string | null;
+    weight: unknown;
+  }[]
+> {
+  const names = new Map(
+    (await swatchRows(w)).map((sw) => [sw.selfId, sw.name]),
+  );
   const out = [];
   for (const id of ids) {
     const table = await w.h.host.document.pathAnchors(id);
     const props = await w.h.host.document.elementProperties(id);
     const read = (path: string): unknown =>
-      (props?.entries.find((e) => e.path === path)?.value as { value?: unknown })
-        ?.value ?? null;
+      (
+        props?.entries.find((e) => e.path === path)?.value as {
+          value?: unknown;
+        }
+      )?.value ?? null;
     const name = (ref: unknown): string | null =>
       typeof ref === "string" ? (names.get(ref) ?? ref) : null;
     const a = table!.anchors[0].anchor;
@@ -147,7 +168,12 @@ async function landed(
  *  from the importer: one row per CONTOUR, in document order. A shape
  *  with no stroke gets the engine's creation fallback, a 1 pt
  *  `Color/Black` (`SVG_IMPORT_UNSTROKED`; the swatch is named "Black"). */
-function expected50(): { at: [number, number]; fill: string; stroke: string; weight: number }[] {
+function expected50(): {
+  at: [number, number];
+  fill: string;
+  stroke: string;
+  weight: number;
+}[] {
   const rows = [];
   for (let i = 0; i < 50; i++) {
     const x = 20 + (i % 5) * 50;
@@ -164,7 +190,12 @@ function expected50(): { at: [number, number]; fill: string; stroke: string; wei
       rows.push({ at: [x, y], fill, stroke: hex(i * 2 + 1), weight: 1 });
     }
   }
-  return rows as { at: [number, number]; fill: string; stroke: string; weight: number }[];
+  return rows as {
+    at: [number, number];
+    fill: string;
+    stroke: string;
+    weight: number;
+  }[];
 }
 
 setDefaultTimeout(BUDGET_TIMEOUT_MS);
@@ -209,7 +240,9 @@ describe("perf budgets — interchange", () => {
       // three-contour paths.
       const parsed = shapesFromSvgBytes(file.bytes);
       expect(parsed).toHaveLength(SHAPES);
-      expect(parsed.filter((s) => s.anchors.subpathStarts.length === 3)).toHaveLength(10);
+      expect(
+        parsed.filter((s) => s.anchors.subpathStarts.length === 3),
+      ).toHaveLength(10);
 
       const mark = await undoMark(w);
       const { host, work } = countingHost(w.h.host);
@@ -225,7 +258,13 @@ describe("perf budgets — interchange", () => {
       // …appended, so the file paints on top, in document order.
       expect(after.slice(-70)).toEqual(made);
       expect(await landed(w, made)).toEqual(expected50());
-      expect(done).toEqual({ shapes: 50, elements: 70, swatches: 80, batches: 1, refused: 0 });
+      expect(done).toEqual({
+        shapes: 50,
+        elements: 70,
+        swatches: 80,
+        batches: 1,
+        refused: 0,
+      });
       // One swatch per DISTINCT colour: 2 × 30 + 10 + 10. (Here that is
       // also one per colour per shape — every colour in this file is
       // different. `svg-io.spec.ts` pins the sharing.)
@@ -264,7 +303,10 @@ describe("perf budgets — interchange", () => {
       const before = await leafIds(w.h);
       const mark = await undoMark(w);
       const { host, work } = countingHost(w.h.host);
-      const inserted = await importSvg(host, svgFile("perf.svg", syntheticSvg(SHAPES)));
+      const inserted = await importSvg(
+        host,
+        svgFile("perf.svg", syntheticSvg(SHAPES)),
+      );
       const counted = work.snapshot();
 
       // Exactly the new leaves, in insertion (= paint) order.
@@ -309,7 +351,10 @@ describe("perf budgets — interchange", () => {
       const swatchesBefore = (await swatchRows(w)).length;
       const mark = await undoMark(w);
       const { host, work } = countingHost(w.h.host);
-      const done = await commitSvgImport(host, svgFile("big.svg", denseSvg(BIG)));
+      const done = await commitSvgImport(
+        host,
+        svgFile("big.svg", denseSvg(BIG)),
+      );
       const counted = work.snapshot();
 
       expect(done).toEqual({
@@ -323,10 +368,15 @@ describe("perf budgets — interchange", () => {
       expect(after).toHaveLength(before.length + BIG);
       expect((await swatchRows(w)).length).toBe(swatchesBefore + 2 * BIG);
       // First and last made it, in order, with their own paint.
-      expect(await landed(w, [after[before.length], after[after.length - 1]])).toEqual([
+      expect(
+        await landed(w, [after[before.length], after[after.length - 1]]),
+      ).toEqual([
         { at: [6, 280], fill: hex(0), stroke: hex(1), weight: 0.5 },
         {
-          at: [6 + ((BIG - 1) % 60) * 10, 280 + Math.floor((BIG - 1) / 60) * 10],
+          at: [
+            6 + ((BIG - 1) % 60) * 10,
+            280 + Math.floor((BIG - 1) / 60) * 10,
+          ],
           fill: hex((BIG - 1) * 2),
           stroke: hex((BIG - 1) * 2 + 1),
           weight: 0.5,

@@ -23,7 +23,15 @@
 // everything here is authored.
 
 import { plate, proseFrame, assignLayer } from "../../annual-support";
-import { GRADIENT_RAMP, LAYER, STYLE, SWATCH, TRIM_H_PT, TRIM_W_PT, p } from "../../names-annual";
+import {
+  GRADIENT_RAMP,
+  LAYER,
+  STYLE,
+  SWATCH,
+  TRIM_H_PT,
+  TRIM_W_PT,
+  p,
+} from "../../names-annual";
 import type { PageContext, PageReport } from "../../types";
 
 export async function build(ctx: PageContext): Promise<PageReport> {
@@ -48,16 +56,26 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     LAYER.content,
   );
 
-  const lockup = await proseFrame(ctx, p(1), [54, 330, 486, 486], [
-    { text: "THE PAGED", style: STYLE.chapterNumber },
-    { text: "ANNUAL", style: STYLE.chapterNumber },
-  ]);
-  const deck = await proseFrame(ctx, p(1), [54, 518, 486, 590], [
-    {
-      text: "Volume One — a specimen of the composing engine, set entirely by the engine it describes.",
-      style: STYLE.deck,
-    },
-  ]);
+  const lockup = await proseFrame(
+    ctx,
+    p(1),
+    [54, 330, 486, 486],
+    [
+      { text: "THE PAGED", style: STYLE.chapterNumber },
+      { text: "ANNUAL", style: STYLE.chapterNumber },
+    ],
+  );
+  const deck = await proseFrame(
+    ctx,
+    p(1),
+    [54, 518, 486, 590],
+    [
+      {
+        text: "Volume One — a specimen of the composing engine, set entirely by the engine it describes.",
+        style: STYLE.deck,
+      },
+    ],
+  );
 
   return {
     title: "Cover",

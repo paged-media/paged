@@ -41,19 +41,19 @@ TypeScript + React 18 + Vite, Tailwind for styling.
 
 ### Apps
 
-| App | Package name | Role |
-|---|---|---|
-| `apps/canvas` | `paged-canvas` | The editor application. React shell driving a Web Worker that runs the engine wasm (Vello/WebGPU, tiny-skia CPU fallback) on an `OffscreenCanvas`. Owns the panel catalog wiring, REPL, script editor, and the Playwright fidelity suite. |
-| `apps/devtools` | `paged-devtools` | A Chrome-DevTools-style scene-graph inspector (Tree / Properties / Render panes) over `paged-introspect-wasm`. Standalone dev tool, separate wasm bundle. |
+| App             | Package name     | Role                                                                                                                                                                                                                                      |
+| --------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/canvas`   | `paged-canvas`   | The editor application. React shell driving a Web Worker that runs the engine wasm (Vello/WebGPU, tiny-skia CPU fallback) on an `OffscreenCanvas`. Owns the panel catalog wiring, REPL, script editor, and the Playwright fidelity suite. |
+| `apps/devtools` | `paged-devtools` | A Chrome-DevTools-style scene-graph inspector (Tree / Properties / Render panes) over `paged-introspect-wasm`. Standalone dev tool, separate wasm bundle.                                                                                 |
 
 ### Packages (`@paged-media/*`)
 
-| Package | Role | Depends on |
-|---|---|---|
-| `packages/client` (`@paged-media/client`) | Framework-agnostic SDK client. Owns the wasm protocol boundary: `CanvasClient` (main-thread worker handle), the tsify-generated wire types (`protocol.ts`), and the `SharedArrayBuffer` primitives (`sab/camera`, `sab/gesture`). **No React, no DOM beyond Worker + SAB.** | — (vendors engine wasm) |
-| `packages/catalog` (`@paged-media/catalog`) | Declarative command/panel catalog: the curated registry of bindings + composition nodes that panels are described against. | `@paged-media/client` |
-| `packages/shell` (`@paged-media/shell`) | The editor shell: React state contexts, registries (command/menu/panel/tool/overlay/keybinding), the dockview docking substrate, overlays (selection chrome, handles, snap lines, path edit), command palette, and the `PagedShell` root. | `@paged-media/client`, `@paged-media/catalog`, `@paged-media/ui` |
-| `packages/ui` (`@paged-media/ui`) | UI kit — input primitives (`BoundsInput`, `ColorPicker`, `LengthInput`, `NumberInput`, `ScrubField`, units). | `@paged-media/shell` |
+| Package                                     | Role                                                                                                                                                                                                                                                                        | Depends on                                                       |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `packages/client` (`@paged-media/client`)   | Framework-agnostic SDK client. Owns the wasm protocol boundary: `CanvasClient` (main-thread worker handle), the tsify-generated wire types (`protocol.ts`), and the `SharedArrayBuffer` primitives (`sab/camera`, `sab/gesture`). **No React, no DOM beyond Worker + SAB.** | — (vendors engine wasm)                                          |
+| `packages/catalog` (`@paged-media/catalog`) | Declarative command/panel catalog: the curated registry of bindings + composition nodes that panels are described against.                                                                                                                                                  | `@paged-media/client`                                            |
+| `packages/shell` (`@paged-media/shell`)     | The editor shell: React state contexts, registries (command/menu/panel/tool/overlay/keybinding), the dockview docking substrate, overlays (selection chrome, handles, snap lines, path edit), command palette, and the `PagedShell` root.                                   | `@paged-media/client`, `@paged-media/catalog`, `@paged-media/ui` |
+| `packages/ui` (`@paged-media/ui`)           | UI kit — input primitives (`BoundsInput`, `ColorPicker`, `LengthInput`, `NumberInput`, `ScrubField`, units).                                                                                                                                                                | `@paged-media/shell`                                             |
 
 Dependency picture (consumer → producer):
 

@@ -149,7 +149,11 @@ function arrange(
 
 test.describe("paged.object — the arrange ordering algebra", () => {
   test("AC-OBJ-PURE-1 — zSlots reads the engine's stacking model off the tree @feat:layers.z-ordering @level:happy", () => {
-    const roots = spreadOf([leaf("a"), group("g", [leaf("x"), leaf("y")]), leaf("b")]);
+    const roots = spreadOf([
+      leaf("a"),
+      group("g", [leaf("x"), leaf("y")]),
+      leaf("b"),
+    ]);
     const slots = zSlots(roots);
 
     // Index 0 is BACKMOST, matching `ZOrderTarget::Back => 0`.
@@ -349,7 +353,6 @@ test.describe("paged.object — the parentage + membership reads", () => {
   });
 });
 
-
 // ── ADR 024 — the verbs must not reach the document from inside a
 //    plugin edit context ────────────────────────────────────────────
 //
@@ -494,7 +497,6 @@ test.describe("paged.object — the edit-context guard", () => {
   });
 });
 
-
 // ── Delete ───────────────────────────────────────────────────────────
 //
 // The plan is where two things are kept off the wire: a group id handed
@@ -509,7 +511,10 @@ const g = (id: string): ElementId => ({ kind: "group", id });
 test.describe("paged.object — the delete plan", () => {
   const roots = spreadOf([
     leaf("free"),
-    group("gOuter", [group("gInner", [leaf("deep1"), leaf("deep2")]), leaf("shallow")]),
+    group("gOuter", [
+      group("gInner", [leaf("deep1"), leaf("deep2")]),
+      leaf("shallow"),
+    ]),
     group("gOther", [leaf("o1"), leaf("o2")]),
     leaf("top"),
   ]);
@@ -595,7 +600,10 @@ test.describe("paged.object — the delete plan", () => {
 
     // Emptying cascades: the inner group's leaves and `shallow` leave
     // gInner AND gOuter empty — both dissolved, outermost first.
-    const cascade = deletePlan([rect("deep1"), rect("shallow"), rect("deep2")], roots);
+    const cascade = deletePlan(
+      [rect("deep1"), rect("shallow"), rect("deep2")],
+      roots,
+    );
     expect(cascade.ok).toBe(true);
     if (!cascade.ok) return;
     expect(cascade.ops).toEqual([
@@ -827,7 +835,14 @@ test.describe("paged.object — nudge", () => {
     };
     expect(
       nudgeTargets(
-        [rect("deep"), g("gOuter"), rect("free"), g("gInner"), cell, rect("free")],
+        [
+          rect("deep"),
+          g("gOuter"),
+          rect("free"),
+          g("gInner"),
+          cell,
+          rect("free"),
+        ],
         roots,
       ).map(elementKey),
     ).toEqual(["group:gOuter", "rectangle:free"]);
@@ -1040,7 +1055,11 @@ test.describe("paged.object — the keyboard guards", () => {
   };
 
   test("AC-OBJ-KEY-1 — the verbs go quiet where the same key means something else @feat:editor-shell.keyboard-shortcuts @feat:editor-tools.text.caret-typing @feat:editor-tools.path.direct-edit @level:edge", () => {
-    for (const applies of [objectVerbApplies, deleteKeyApplies, nudgeKeyApplies]) {
+    for (const applies of [
+      objectVerbApplies,
+      deleteKeyApplies,
+      nudgeKeyApplies,
+    ]) {
       expect(applies(root)).toBe(true);
       // A partial handle (standalone mount) must not disable them.
       expect(applies(null)).toBe(true);
@@ -1057,7 +1076,9 @@ test.describe("paged.object — the keyboard guards", () => {
         }),
       ).toBe(false);
       // Path-edit mode: Backspace is an anchor.
-      expect(applies({ ...root, selection: { pathEditMode: true } })).toBe(false);
+      expect(applies({ ...root, selection: { pathEditMode: true } })).toBe(
+        false,
+      );
     }
   });
 
@@ -1128,11 +1149,17 @@ test.describe("paged.object — the keyboard guards", () => {
         "Home",
         "End",
       ]) {
-        expect(targetOwnsKey(key(k, field)), `${field.tagName} ${k}`).toBe(true);
+        expect(targetOwnsKey(key(k, field)), `${field.tagName} ${k}`).toBe(
+          true,
+        );
       }
       // Cmd+Left is "line start" in a field; Alt+Backspace is "delete word".
-      expect(targetOwnsKey(key("ArrowLeft", field, { metaKey: true }))).toBe(true);
-      expect(targetOwnsKey(key("Backspace", field, { altKey: true }))).toBe(true);
+      expect(targetOwnsKey(key("ArrowLeft", field, { metaKey: true }))).toBe(
+        true,
+      );
+      expect(targetOwnsKey(key("Backspace", field, { altKey: true }))).toBe(
+        true,
+      );
       // The rule this replaced, unchanged: a typed letter is text, a
       // Cmd chord still opens the palette, and Tab/Escape still fire.
       expect(targetOwnsKey(key("v", field))).toBe(true);
@@ -1143,7 +1170,15 @@ test.describe("paged.object — the keyboard guards", () => {
   });
 
   test("AC-OBJ-KEY-4 — a menu, a slider, a tree and a dialog own the arrows; the canvas and a toolbar do not @feat:editor-shell.keyboard-shortcuts @feat:editor-shell.menus @level:edge", () => {
-    for (const role of ["menu", "menubar", "listbox", "tree", "tablist", "slider", "dialog"]) {
+    for (const role of [
+      "menu",
+      "menubar",
+      "listbox",
+      "tree",
+      "tablist",
+      "slider",
+      "dialog",
+    ]) {
       const inside = el("DIV", { inside: role });
       expect(targetOwnsKey(key("ArrowDown", inside)), role).toBe(true);
       expect(targetOwnsKey(key("Backspace", inside)), role).toBe(true);
@@ -1174,7 +1209,9 @@ test.describe("paged.object — the keyboard guards", () => {
       targetOwnsKey(key("Backspace", null, { defaultPrevented: true })),
     ).toBe(true);
     expect(
-      targetOwnsKey(key("g", button, { metaKey: true, defaultPrevented: true })),
+      targetOwnsKey(
+        key("g", button, { metaKey: true, defaultPrevented: true }),
+      ),
     ).toBe(false);
   });
 });
@@ -1219,7 +1256,10 @@ const indexOf = (m: unknown): string[] => {
  *  release batch over one spread's top-level list. */
 function replay(list: string[], ops: unknown[]): string[] {
   const out = [...list];
-  for (const op of ops as Array<{ op: string; args: Record<string, unknown> }>) {
+  for (const op of ops as Array<{
+    op: string;
+    args: Record<string, unknown>;
+  }>) {
     if (op.op === "releaseFrom") {
       out.push(elementKey(op.args.childId as ElementId));
     } else if (op.op === "reorderElement") {
@@ -1234,7 +1274,12 @@ function replay(list: string[], ops: unknown[]): string[] {
 
 test.describe("paged.object — the clipping-mask plan", () => {
   test("AC-OBJ-PURE-30 — the TOPMOST clips; the rest are pasted back to front, and indexed, in one batch @feat:frames-paths.nested-content @feat:frames-paths.path-clipping @level:happy", () => {
-    const roots = spreadOf([node(r("a")), node(ov("o")), node(r("b")), node(poly("p"))]);
+    const roots = spreadOf([
+      node(r("a")),
+      node(ov("o")),
+      node(r("b")),
+      node(poly("p")),
+    ]);
     // Selection order is NOT paint order — the plan must not care.
     const plan = clipPlan([r("b"), poly("p"), r("a")], roots);
     expect(plan.ok).toBe(true);
@@ -1275,16 +1320,17 @@ test.describe("paged.object — the clipping-mask plan", () => {
         "clipping path and the rest are clipped by it.",
     );
     for (const top of [ln("l"), tf("t")]) {
-      expect(
-        refusal([r("a"), top], spreadOf([node(r("a")), node(top)])),
-      ).toBe(
+      expect(refusal([r("a"), top], spreadOf([node(r("a")), node(top)]))).toBe(
         `the topmost object, ${top.kind === "graphicLine" ? "line" : "text frame"} ` +
           `${top.id}, cannot be a clipping path — the engine clips only by a ` +
           "rectangle, an ellipse or a path. Bring one of those to the front " +
           "of the selection.",
       );
     }
-    const grouped = spreadOf([group("g", [leaf("x"), leaf("y")]), node(r("a"))]);
+    const grouped = spreadOf([
+      group("g", [leaf("x"), leaf("y")]),
+      node(r("a")),
+    ]);
     expect(refusal([g("g"), r("a")], grouped)).toBe(
       "group g cannot be clipped: the engine pastes single objects into a " +
         "frame, never a group. Ungroup it first.",
@@ -1294,9 +1340,12 @@ test.describe("paged.object — the clipping-mask plan", () => {
         "object into a frame. Ungroup first.",
     );
     // A group on TOP is the clip-kind refusal, not the content one.
-    expect(refusal([r("a"), g("g")], spreadOf([node(r("a")), group("g", [leaf("x")])]))).toContain(
-      "the topmost object, group g, cannot be a clipping path",
-    );
+    expect(
+      refusal(
+        [r("a"), g("g")],
+        spreadOf([node(r("a")), group("g", [leaf("x")])]),
+      ),
+    ).toContain("the topmost object, group g, cannot be a clipping path");
     // An id the tree does not list — already nested, or gone.
     expect(refusal([r("a"), r("n")], spreadOf([node(r("a"))]))).toBe(
       "rectangle n is not a free object on the page (it may already be " +
@@ -1304,7 +1353,10 @@ test.describe("paged.object — the clipping-mask plan", () => {
     );
     // A clipping path INSIDE a group is the engine's to accept (measured).
     expect(
-      refusal([r("a"), ov("o")], spreadOf([node(r("a")), group("g", [node(ov("o"))])])),
+      refusal(
+        [r("a"), ov("o")],
+        spreadOf([node(r("a")), group("g", [node(ov("o"))])]),
+      ),
     ).toBeNull();
   });
 
@@ -1322,7 +1374,10 @@ test.describe("paged.object — the clipping-mask plan", () => {
   test("AC-OBJ-PURE-34 — Release puts the content back BENEATH its clipping path, in order, then clears the index @feat:frames-paths.nested-content @feat:layers.z-ordering @level:happy", () => {
     // One clipping path between two bystanders.
     const roots = spreadOf([node(r("x")), node(ov("k")), node(r("y"))]);
-    const ops = releasePlan([{ container: ov("k"), content: [r("a"), r("b")] }], roots);
+    const ops = releasePlan(
+      [{ container: ov("k"), content: [r("a"), r("b")] }],
+      roots,
+    );
     expect(ops).toEqual([
       { op: "releaseFrom", args: { childId: r("a") } },
       { op: "releaseFrom", args: { childId: r("b") } },
@@ -1330,13 +1385,21 @@ test.describe("paged.object — the clipping-mask plan", () => {
       { op: "reorderElement", args: { elementId: r("b"), to: { index: 2 } } },
       clipIndexMutation(ov("k"), []),
     ]);
-    expect(
-      replay(["rectangle:x", "oval:k", "rectangle:y"], ops),
-    ).toEqual(["rectangle:x", "rectangle:a", "rectangle:b", "oval:k", "rectangle:y"]);
+    expect(replay(["rectangle:x", "oval:k", "rectangle:y"], ops)).toEqual([
+      "rectangle:x",
+      "rectangle:a",
+      "rectangle:b",
+      "oval:k",
+      "rectangle:y",
+    ]);
 
     // A clipping path inside a group: a reorder cannot reparent, so the
     // content lands beneath the GROUP.
-    const inGroup = spreadOf([node(r("x")), group("g", [node(ov("k")), leaf("z")]), node(r("y"))]);
+    const inGroup = spreadOf([
+      node(r("x")),
+      group("g", [node(ov("k")), leaf("z")]),
+      node(r("y")),
+    ]);
     expect(
       replay(
         ["rectangle:x", "group:g", "rectangle:y"],
@@ -1358,7 +1421,13 @@ test.describe("paged.object — the clipping-mask plan", () => {
           two,
         ),
       ),
-    ).toEqual(["rectangle:a", "oval:k1", "rectangle:x", "rectangle:b", "oval:k2"]);
+    ).toEqual([
+      "rectangle:a",
+      "oval:k1",
+      "rectangle:x",
+      "rectangle:b",
+      "oval:k2",
+    ]);
   });
 
   test("AC-OBJ-PURE-35 — the index reads back what it wrote, and nothing it did not @feat:frames-paths.nested-content @level:edge", () => {
@@ -1374,21 +1443,37 @@ test.describe("paged.object — the clipping-mask plan", () => {
         entries: [
           {
             path: "pluginMetadata",
-            value: { type: "pluginMetadata", value: { key, value, caller: null, prev: null } },
+            value: {
+              type: "pluginMetadata",
+              value: { key, value, caller: null, prev: null },
+            },
           },
         ],
       }) as unknown as ElementProperties;
     expect(clipContentOf(entry(OBJECT_METADATA_KEY, "{not json"))).toEqual([]);
     expect(
-      clipContentOf(entry("x-paged:media.paged.draw", JSON.stringify({ v: 1, data: { clipContent: [r("a")] } }))),
+      clipContentOf(
+        entry(
+          "x-paged:media.paged.draw",
+          JSON.stringify({ v: 1, data: { clipContent: [r("a")] } }),
+        ),
+      ),
     ).toEqual([]);
     expect(
-      clipContentOf(entry(OBJECT_METADATA_KEY, JSON.stringify({ v: 1, data: { clipContent: [g("g"), r("a"), { kind: "storyRange" }] } }))),
+      clipContentOf(
+        entry(
+          OBJECT_METADATA_KEY,
+          JSON.stringify({
+            v: 1,
+            data: { clipContent: [g("g"), r("a"), { kind: "storyRange" }] },
+          }),
+        ),
+      ),
     ).toEqual([r("a")]);
     expect(clipContentOf(null)).toEqual([]);
-    expect([r("a"), ov("o"), poly("p"), ln("l"), tf("t"), g("g")].map(canClipBy)).toEqual([
-      true, true, true, false, false, false,
-    ]);
+    expect(
+      [r("a"), ov("o"), poly("p"), ln("l"), tf("t"), g("g")].map(canClipBy),
+    ).toEqual([true, true, true, false, false, false]);
   });
 
   test("AC-OBJ-PURE-36 — a deleted clipping path takes its content, deepest first @feat:frames-paths.frame.delete @feat:frames-paths.nested-content @level:happy", () => {
@@ -1419,7 +1504,9 @@ test.describe("paged.object — the clipping-mask plan", () => {
     // Without an index the container's own delete is the whole plan
     // (since engine 0.65 it takes its content along; engine-findings §12).
     const bare = deletePlan([ov("k")], roots);
-    expect(bare.ok && bare.ops).toEqual([{ op: "deleteFrame", args: { frameId: "k" } }]);
+    expect(bare.ok && bare.ops).toEqual([
+      { op: "deleteFrame", args: { frameId: "k" } },
+    ]);
     // Flattening visits every level once.
     expect(clippedContent(index, [ov("k")]).map(elementKey)).toEqual([
       "rectangle:a",
@@ -1451,17 +1538,25 @@ test.describe("paged.object — clipping masks, against a recorded client", () =
               ? {
                   kind: "mutationFailed",
                   payload: {
-                    error: { kind: "notImplemented", details: { what: options.refuse } },
+                    error: {
+                      kind: "notImplemented",
+                      details: { what: options.refuse },
+                    },
                   },
                 }
-              : { kind: "mutationApplied", payload: { createdId: null, pageIds: [] } }
+              : {
+                  kind: "mutationApplied",
+                  payload: { createdId: null, pageIds: [] },
+                }
           ) as never;
         },
         sceneTree: async () => options.tree,
         setElementSelection: async (ids: unknown[]) => ids,
         elementGeometry: async (ids: ElementId[]) =>
           ids
-            .filter((id) => !options.exists || options.exists.has(elementKey(id)))
+            .filter(
+              (id) => !options.exists || options.exists.has(elementKey(id)),
+            )
             .map((id) => ({
               id,
               bounds: [0, 0, 10, 10],
@@ -1485,14 +1580,19 @@ test.describe("paged.object — clipping masks, against a recorded client", () =
   }
 
   const opsOf = (m: { op: string; args: Record<string, unknown> }) =>
-    m.op === "batch" ? (m.args.ops as Array<{ op: string; args: Record<string, unknown> }>) : [m];
+    m.op === "batch"
+      ? (m.args.ops as Array<{ op: string; args: Record<string, unknown> }>)
+      : [m];
 
   test("AC-OBJ-PURE-37 — Make is ONE batch and selects the clipping path; an engine refusal is reported verbatim @feat:frames-paths.nested-content @feat:round-tripping.undo-redo @feat:editor-shell.panels.problems @level:happy", async () => {
     const tree = spreadOf([node(r("a")), node(ov("k"))]);
     const ok = clipDeps({ selection: [r("a"), ov("k")], tree });
     await makeClippingMask(ok.deps);
     expect(ok.sent).toHaveLength(1);
-    expect(opsOf(ok.sent[0]).map((o) => o.op)).toEqual(["pasteInto", "setPluginMetadata"]);
+    expect(opsOf(ok.sent[0]).map((o) => o.op)).toEqual([
+      "pasteInto",
+      "setPluginMetadata",
+    ]);
     expect(ok.selections).toEqual([[ov("k")]]);
     expect(ok.reports).toEqual([]);
 
@@ -1515,7 +1615,9 @@ test.describe("paged.object — clipping masks, against a recorded client", () =
     const one = clipDeps({ selection: [r("a")], tree });
     await makeClippingMask(one.deps);
     expect(one.sent).toEqual([]);
-    expect(one.reports[0].message).toMatch(/^Make clipping mask refused: a clipping mask needs two/);
+    expect(one.reports[0].message).toMatch(
+      /^Make clipping mask refused: a clipping mask needs two/,
+    );
   });
 
   test("AC-OBJ-PURE-38 — Release finds content through the index, keeps only what is still nested, and selects it @feat:frames-paths.nested-content @level:happy", async () => {
@@ -1526,13 +1628,17 @@ test.describe("paged.object — clipping masks, against a recorded client", () =
     const h = clipDeps({
       selection: [ov("k")],
       tree,
-      props: new Map([["oval:k", clipIndexed(ov("k"), [r("a"), r("x"), r("gone")])]]),
+      props: new Map([
+        ["oval:k", clipIndexed(ov("k"), [r("a"), r("x"), r("gone")])],
+      ]),
       exists: new Set(["rectangle:a", "rectangle:x", "oval:k"]),
     });
     await releaseClippingMask(h.deps);
     expect(h.sent).toHaveLength(1);
     const ops = opsOf(h.sent[0]);
-    expect(ops.filter((o) => o.op === "releaseFrom").map((o) => o.args.childId)).toEqual([r("a")]);
+    expect(
+      ops.filter((o) => o.op === "releaseFrom").map((o) => o.args.childId),
+    ).toEqual([r("a")]);
     expect(h.selections).toEqual([[r("a"), ov("k")]]);
     expect(h.reports).toEqual([]);
   });
@@ -1552,7 +1658,10 @@ test.describe("paged.object — clipping masks, against a recorded client", () =
           "what is inside a frame.",
       },
     ]);
-    const wrongKind = clipDeps({ selection: [tf("t")], tree: spreadOf([node(tf("t"))]) });
+    const wrongKind = clipDeps({
+      selection: [tf("t")],
+      tree: spreadOf([node(tf("t"))]),
+    });
     await releaseClippingMask(wrongKind.deps);
     expect(wrongKind.reports[0].message).toBe(
       "Release clipping mask refused: select a clipping path — a rectangle, " +
@@ -1567,8 +1676,14 @@ test.describe("paged.object — clipping masks, against a recorded client", () =
     await nudgeSelection(nudge.deps, "right", true);
     expect(nudge.sent).toHaveLength(1);
     expect(opsOf(nudge.sent[0])).toEqual([
-      { op: "moveFrame", args: { frameId: "k", transform: [1, 0, 0, 1, 15, 5] } },
-      { op: "moveFrame", args: { frameId: "a", transform: [1, 0, 0, 1, 15, 5] } },
+      {
+        op: "moveFrame",
+        args: { frameId: "k", transform: [1, 0, 0, 1, 15, 5] },
+      },
+      {
+        op: "moveFrame",
+        args: { frameId: "a", transform: [1, 0, 0, 1, 15, 5] },
+      },
     ]);
 
     const del = clipDeps({ selection: [ov("k")], tree, props });
@@ -1582,9 +1697,14 @@ test.describe("paged.object — clipping masks, against a recorded client", () =
 
   test("AC-OBJ-PURE-41 — two Object-menu rows and two commands; deliberately no keys @feat:editor-shell.menus @feat:frames-paths.nested-content @level:smoke", () => {
     const noop = () => {};
-    const handlers = new Proxy({} as ObjectCommandHandlers, { get: () => noop });
+    const handlers = new Proxy({} as ObjectCommandHandlers, {
+      get: () => noop,
+    });
     const commands = buildObjectCommands(handlers);
-    for (const id of [PAGED_OBJECT_MAKE_CLIPPING_MASK, PAGED_OBJECT_RELEASE_CLIPPING_MASK]) {
+    for (const id of [
+      PAGED_OBJECT_MAKE_CLIPPING_MASK,
+      PAGED_OBJECT_RELEASE_CLIPPING_MASK,
+    ]) {
       const command = commands.find((c) => c.id === id);
       expect(command?.category).toBe("Object");
       // Greyed inside a plugin edit context, like Group.
@@ -1595,7 +1715,10 @@ test.describe("paged.object — clipping masks, against a recorded client", () =
       expect(OBJECT_KEYBINDINGS.some((k) => k.command === id)).toBe(false);
     }
     expect(
-      OBJECT_MENU_ITEMS.filter((m) => m.group === "clip").map((m) => [m.path, m.order]),
+      OBJECT_MENU_ITEMS.filter((m) => m.group === "clip").map((m) => [
+        m.path,
+        m.order,
+      ]),
     ).toEqual([
       ["Object/Make clipping mask", 28],
       ["Object/Release clipping mask", 29],

@@ -13,7 +13,11 @@
         },
         {
           "type": "numeric",
-          "bind": { "kind": "selectionProperty", "path": "frameFillTint", "coerce": "%" },
+          "bind": {
+            "kind": "selectionProperty",
+            "path": "frameFillTint",
+            "coerce": "%"
+          },
           "min": 0,
           "max": 100,
           "label": { "key": "fill.tint" }
@@ -26,12 +30,19 @@
       "rows": [
         {
           "type": "numeric",
-          "bind": { "kind": "selectionProperty", "path": "frameGradientFillAngle" },
+          "bind": {
+            "kind": "selectionProperty",
+            "path": "frameGradientFillAngle"
+          },
           "label": { "key": "gradient.angle" }
         },
         {
           "type": "numeric",
-          "bind": { "kind": "selectionProperty", "path": "frameGradientFillLength", "coerce": "pt" },
+          "bind": {
+            "kind": "selectionProperty",
+            "path": "frameGradientFillLength",
+            "coerce": "pt"
+          },
           "label": { "key": "gradient.length" }
         }
       ]

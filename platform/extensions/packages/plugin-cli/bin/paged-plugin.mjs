@@ -33,7 +33,14 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync, existsSync, statSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import {
+  readFileSync,
+  existsSync,
+  statSync,
+  writeFileSync,
+  mkdtempSync,
+  rmSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -124,32 +131,55 @@ function isStringArray(v) {
   return Array.isArray(v) && v.every((x) => typeof x === "string");
 }
 
-
 // ── object model (ADR 323) ───────────────────────────────────────
 // Hand-mirrors ADR 132's ValueType (plugin-api object-model.ts) and the
 // SDK's checkValueType — plugin-sdk/test/object-model-cli.spec.ts gates
 // this list against VALUE_TYPE_KINDS.
 const VALUE_TYPE_KINDS = new Set([
-  "bool", "number", "length", "color", "enum", "text", "ref", "bounds",
-  "transform", "point", "bytes", "asset", "list", "map", "struct",
+  "bool",
+  "number",
+  "length",
+  "color",
+  "enum",
+  "text",
+  "ref",
+  "bounds",
+  "transform",
+  "point",
+  "bytes",
+  "asset",
+  "list",
+  "map",
+  "struct",
 ]);
 const KIND_NAME = /^[A-Za-z][A-Za-z0-9_-]*$/;
 // Mirrors the SDK's ROW_PATH (object-schema.ts): dotted names, each with
 // optional bracket segments; `[]` marks an indexed row (`points[]`).
-const ROW_PATH = /^[A-Za-z_][A-Za-z0-9_-]*(\[[^\][]*\])*(\.[A-Za-z_][A-Za-z0-9_-]*(\[[^\][]*\])*)*$/;
+const ROW_PATH =
+  /^[A-Za-z_][A-Za-z0-9_-]*(\[[^\][]*\])*(\.[A-Za-z_][A-Za-z0-9_-]*(\[[^\][]*\])*)*$/;
 
 function checkValueType(t, at) {
-  if (typeof t !== "object" || t === null || Array.isArray(t)) return `${at} must be a ValueType object`;
-  if (!VALUE_TYPE_KINDS.has(t.kind)) return `${at}.kind "${t.kind}" is not a ValueType`;
-  if (t.kind === "enum" && (!isStringArray(t.members) || t.members.length === 0)) return `${at}: an enum needs a non-empty members[]`;
-  if (t.kind === "ref" && (typeof t.to !== "string" || t.to.length === 0)) return `${at}: a ref needs "to"`;
-  if (t.kind === "list" || t.kind === "map") return checkValueType(t.of, `${at}.of`);
+  if (typeof t !== "object" || t === null || Array.isArray(t))
+    return `${at} must be a ValueType object`;
+  if (!VALUE_TYPE_KINDS.has(t.kind))
+    return `${at}.kind "${t.kind}" is not a ValueType`;
+  if (
+    t.kind === "enum" &&
+    (!isStringArray(t.members) || t.members.length === 0)
+  )
+    return `${at}: an enum needs a non-empty members[]`;
+  if (t.kind === "ref" && (typeof t.to !== "string" || t.to.length === 0))
+    return `${at}: a ref needs "to"`;
+  if (t.kind === "list" || t.kind === "map")
+    return checkValueType(t.of, `${at}.of`);
   if (t.kind === "struct") {
-    if (typeof t.fields !== "object" || t.fields === null) return `${at}: a struct needs fields`;
+    if (typeof t.fields !== "object" || t.fields === null)
+      return `${at}: a struct needs fields`;
     for (const [name, ft] of Object.entries(t.fields)) {
       const e = checkValueType(ft, `${at}.fields.${name}`);
       if (e) return e;
-      if (ft.optional !== undefined && ft.optional !== true) return `${at}.fields.${name}: optional must be true when present`;
+      if (ft.optional !== undefined && ft.optional !== true)
+        return `${at}.fields.${name}: optional must be true when present`;
     }
   }
   return null;
@@ -179,14 +209,20 @@ function validateObjectModel(manifest, manifestDir, err) {
     return;
   }
   for (const key of Object.keys(om)) {
-    if (!["kinds", "commands"].includes(key)) err(`unknown objectModel key "${key}"`);
+    if (!["kinds", "commands"].includes(key))
+      err(`unknown objectModel key "${key}"`);
   }
   if (!Array.isArray(om.kinds)) {
     err(`"contributes.objectModel.kinds" must be an array`);
   } else {
     const seenKinds = new Set();
     for (const k of om.kinds) {
-      if (typeof k !== "object" || k === null || typeof k.kind !== "string" || !KIND_NAME.test(k.kind)) {
+      if (
+        typeof k !== "object" ||
+        k === null ||
+        typeof k.kind !== "string" ||
+        !KIND_NAME.test(k.kind)
+      ) {
         err(`each objectModel kind needs { kind: <name>, title, schema }`);
         continue;
       }
@@ -206,17 +242,31 @@ function validateObjectModel(manifest, manifestDir, err) {
       }
       const paths = new Set();
       for (const [i, row] of rows.entries()) {
-        if (typeof row !== "object" || row === null || typeof row.path !== "string" || row.path.length === 0) {
+        if (
+          typeof row !== "object" ||
+          row === null ||
+          typeof row.path !== "string" ||
+          row.path.length === 0
+        ) {
           err(`${at} schema[${i}] needs a path`);
           continue;
         }
-        if (paths.has(row.path)) err(`${at} schema path "${row.path}" is repeated`);
-        if (!ROW_PATH.test(row.path)) err(`${at} schema path "${row.path}" is not a row path (dotted names; an indexed segment is written name[])`);
+        if (paths.has(row.path))
+          err(`${at} schema path "${row.path}" is repeated`);
+        if (!ROW_PATH.test(row.path))
+          err(
+            `${at} schema path "${row.path}" is not a row path (dotted names; an indexed segment is written name[])`,
+          );
         paths.add(row.path);
         const e = checkValueType(row.type, `${at} schema[${row.path}].type`);
         if (e) err(e);
-        if (row.access !== undefined && !["readWrite", "readOnly", "derived"].includes(row.access)) {
-          err(`${at} schema[${row.path}].access must be readWrite|readOnly|derived`);
+        if (
+          row.access !== undefined &&
+          !["readWrite", "readOnly", "derived"].includes(row.access)
+        ) {
+          err(
+            `${at} schema[${row.path}].access must be readWrite|readOnly|derived`,
+          );
         }
       }
     }
@@ -233,7 +283,8 @@ function validateObjectModel(manifest, manifestDir, err) {
         continue;
       }
       const at = `typed command "${c.id}"`;
-      if (ns && !c.id.startsWith(ns)) err(`${at} must be namespaced under "${ns}"`);
+      if (ns && !c.id.startsWith(ns))
+        err(`${at} must be namespaced under "${ns}"`);
       if (typeof c.title !== "string") err(`${at} needs a title`);
       if (c.args === undefined) {
         err(`${at} has no args schema`);
@@ -257,15 +308,22 @@ function validateObjectModel(manifest, manifestDir, err) {
 
 /** `contributes.commands` ids with no typed twin in objectModel.commands. */
 function untypedCommands(manifest) {
-  const all = isStringArray(manifest.contributes?.commands) ? manifest.contributes.commands : [];
+  const all = isStringArray(manifest.contributes?.commands)
+    ? manifest.contributes.commands
+    : [];
   const typed = new Set(
-    (Array.isArray(manifest.contributes?.objectModel?.commands) ? manifest.contributes.objectModel.commands : [])
-      .map((c) => c?.id),
+    (Array.isArray(manifest.contributes?.objectModel?.commands)
+      ? manifest.contributes.objectModel.commands
+      : []
+    ).map((c) => c?.id),
   );
   return all.filter((id) => !typed.has(id)).sort();
 }
 
-const DEFAULT_BASELINE = resolve(dirname(fileURLToPath(import.meta.url)), "../untyped-commands.baseline.json");
+const DEFAULT_BASELINE = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../untyped-commands.baseline.json",
+);
 
 function loadBaseline(path) {
   if (!existsSync(path)) return null;
@@ -282,17 +340,25 @@ function checkUntyped(manifest, baseline, err, warn) {
   const listed = baseline?.plugins?.[manifest.id];
   if (!Array.isArray(listed)) {
     if (untyped.length > 0) {
-      warn(`${untyped.length} untyped command(s) with no typed twin (ADR 323): ${untyped.join(", ")}`);
+      warn(
+        `${untyped.length} untyped command(s) with no typed twin (ADR 323): ${untyped.join(", ")}`,
+      );
     }
     return;
   }
   const allowed = new Set(listed);
   for (const id of untyped) {
-    if (!allowed.has(id)) err(`command "${id}" is untyped and not in the baseline — contribute it typed (contributes.objectModel.commands, ADR 323)`);
+    if (!allowed.has(id))
+      err(
+        `command "${id}" is untyped and not in the baseline — contribute it typed (contributes.objectModel.commands, ADR 323)`,
+      );
   }
   const still = new Set(untyped);
   for (const id of listed) {
-    if (!still.has(id)) warn(`baseline lists "${id}" as untyped, but it is typed or gone — shrink untyped-commands.baseline.json`);
+    if (!still.has(id))
+      warn(
+        `baseline lists "${id}" as untyped, but it is typed or gone — shrink untyped-commands.baseline.json`,
+      );
   }
 }
 
@@ -301,13 +367,22 @@ function validateManifest(manifest, manifestDir) {
   const errors = [];
   const err = (m) => errors.push(m);
 
-  if (typeof manifest !== "object" || manifest === null || Array.isArray(manifest)) {
+  if (
+    typeof manifest !== "object" ||
+    manifest === null ||
+    Array.isArray(manifest)
+  ) {
     return ["manifest must be a JSON object"];
   }
 
   const known = new Set([
-    "id", "name", "version", "apiVersion", "publisher",
-    "capabilities", "contributes",
+    "id",
+    "name",
+    "version",
+    "apiVersion",
+    "publisher",
+    "capabilities",
+    "contributes",
   ]);
   for (const key of Object.keys(manifest)) {
     if (!known.has(key)) err(`unknown top-level key "${key}"`);
@@ -320,10 +395,16 @@ function validateManifest(manifest, manifestDir) {
   if (typeof manifest.name !== "string" || manifest.name.length === 0) {
     err(`"name" must be a non-empty string`);
   }
-  if (typeof manifest.version !== "string" || !SEMVER_PATTERN.test(manifest.version)) {
+  if (
+    typeof manifest.version !== "string" ||
+    !SEMVER_PATTERN.test(manifest.version)
+  ) {
     err(`"version" must be semver (got ${JSON.stringify(manifest.version)})`);
   }
-  if (typeof manifest.apiVersion !== "string" || manifest.apiVersion.length === 0) {
+  if (
+    typeof manifest.apiVersion !== "string" ||
+    manifest.apiVersion.length === 0
+  ) {
     err(`"apiVersion" must be a non-empty semver range`);
   }
   if ("publisher" in manifest && typeof manifest.publisher !== "string") {
@@ -337,7 +418,24 @@ function validateManifest(manifest, manifestDir) {
       err(`"capabilities" must be an object`);
     } else {
       for (const key of Object.keys(caps)) {
-        if (!["document", "rendering", "keybindings", "editContext", "assets", "storage", "network", "dataProviders", "clipboard", "wasm", "workers", "secrets", "documents", "gpu"].includes(key)) {
+        if (
+          ![
+            "document",
+            "rendering",
+            "keybindings",
+            "editContext",
+            "assets",
+            "storage",
+            "network",
+            "dataProviders",
+            "clipboard",
+            "wasm",
+            "workers",
+            "secrets",
+            "documents",
+            "gpu",
+          ].includes(key)
+        ) {
           err(`unknown capability "${key}"`);
         }
       }
@@ -348,26 +446,48 @@ function validateManifest(manifest, manifestDir) {
           err(`"capabilities.dataProviders" must be an object`);
         } else {
           for (const role of ["publish", "consume"]) {
-            if (dp[role] !== undefined && (!Array.isArray(dp[role]) || !dp[role].every((c) => typeof c === "string"))) {
-              err(`"capabilities.dataProviders.${role}" must be an array of category strings`);
+            if (
+              dp[role] !== undefined &&
+              (!Array.isArray(dp[role]) ||
+                !dp[role].every((c) => typeof c === "string"))
+            ) {
+              err(
+                `"capabilities.dataProviders.${role}" must be an array of category strings`,
+              );
             }
           }
         }
       }
       const doc = caps.document;
       if (doc !== undefined) {
-        if (typeof doc !== "object" || doc === null) err(`"capabilities.document" must be an object`);
+        if (typeof doc !== "object" || doc === null)
+          err(`"capabilities.document" must be an object`);
         else {
-          if (doc.read !== undefined && !SCOPES.has(doc.read)) err(`"capabilities.document.read" must be broad|scoped`);
-          if (doc.write !== undefined && !SCOPES.has(doc.write)) err(`"capabilities.document.write" must be broad|scoped`);
+          if (doc.read !== undefined && !SCOPES.has(doc.read))
+            err(`"capabilities.document.read" must be broad|scoped`);
+          if (doc.write !== undefined && !SCOPES.has(doc.write))
+            err(`"capabilities.document.write" must be broad|scoped`);
           // ADR-021: host.nativeDocument gates — readNative (privileged native reads) / openNative (load a package).
-          if (doc.readNative !== undefined && typeof doc.readNative !== "boolean") err(`"capabilities.document.readNative" must be a boolean`);
-          if (doc.openNative !== undefined && typeof doc.openNative !== "boolean") err(`"capabilities.document.openNative" must be a boolean`);
+          if (
+            doc.readNative !== undefined &&
+            typeof doc.readNative !== "boolean"
+          )
+            err(`"capabilities.document.readNative" must be a boolean`);
+          if (
+            doc.openNative !== undefined &&
+            typeof doc.openNative !== "boolean"
+          )
+            err(`"capabilities.document.openNative" must be a boolean`);
         }
       }
       if (caps.rendering !== undefined) {
-        if (!Array.isArray(caps.rendering) || !caps.rendering.every((r) => RENDERING.has(r))) {
-          err(`"capabilities.rendering" entries must be sceneLayer|overlay|hitTest|resourceProvider`);
+        if (
+          !Array.isArray(caps.rendering) ||
+          !caps.rendering.every((r) => RENDERING.has(r))
+        ) {
+          err(
+            `"capabilities.rendering" entries must be sceneLayer|overlay|hitTest|resourceProvider`,
+          );
         }
       }
       // Asset-store kinds: "fonts" (W-06) | "images" (C-5, core v42).
@@ -390,7 +510,10 @@ function validateManifest(manifest, manifestDir) {
       }
       // W3.10: the keybindings capability is the declaration for the
       // `contribute.keybinding` door (keybindings carry no id to list).
-      if (caps.keybindings !== undefined && typeof caps.keybindings !== "boolean") {
+      if (
+        caps.keybindings !== undefined &&
+        typeof caps.keybindings !== "boolean"
+      ) {
         err(`"capabilities.keybindings" must be a boolean`);
       }
       if (caps.editContext !== undefined && !isStringArray(caps.editContext)) {
@@ -402,8 +525,11 @@ function validateManifest(manifest, manifestDir) {
         if (typeof s !== "object" || s === null || Array.isArray(s)) {
           err(`"capabilities.storage" must be an object`);
         } else {
-          const extra = Object.keys(s).filter((k) => !["blob", "quotaBytes"].includes(k));
-          if (extra.length) err(`"capabilities.storage" unknown key(s): ${extra.join(", ")}`);
+          const extra = Object.keys(s).filter(
+            (k) => !["blob", "quotaBytes"].includes(k),
+          );
+          if (extra.length)
+            err(`"capabilities.storage" unknown key(s): ${extra.join(", ")}`);
           if (s.blob !== undefined && typeof s.blob !== "boolean") {
             err(`"capabilities.storage.blob" must be a boolean`);
           }
@@ -420,24 +546,33 @@ function validateManifest(manifest, manifestDir) {
         if (typeof n === "boolean") {
           // ok — legacy shorthand
         } else if (typeof n === "object" && n !== null && !Array.isArray(n)) {
-          const extra = Object.keys(n).filter((k) => !["origins", "purpose"].includes(k));
-          if (extra.length) err(`"capabilities.network" unknown key(s): ${extra.join(", ")}`);
+          const extra = Object.keys(n).filter(
+            (k) => !["origins", "purpose"].includes(k),
+          );
+          if (extra.length)
+            err(`"capabilities.network" unknown key(s): ${extra.join(", ")}`);
           if (n.origins === "consent") {
             // ok — no fixed allow-list; every reach runtime-consented
           } else if (Array.isArray(n.origins)) {
             for (const o of n.origins) {
               if (typeof o !== "string" || !/^https?:\/\/[^/]+$/.test(o)) {
-                err(`"capabilities.network.origins" entry "${o}" must be scheme://host[:port]`);
+                err(
+                  `"capabilities.network.origins" entry "${o}" must be scheme://host[:port]`,
+                );
               }
             }
           } else {
-            err(`"capabilities.network.origins" must be a string[] or "consent"`);
+            err(
+              `"capabilities.network.origins" must be a string[] or "consent"`,
+            );
           }
           if (n.purpose !== undefined && typeof n.purpose !== "string") {
             err(`"capabilities.network.purpose" must be a string`);
           }
         } else {
-          err(`"capabilities.network" must be a boolean or { origins, purpose }`);
+          err(
+            `"capabilities.network" must be a boolean or { origins, purpose }`,
+          );
         }
       }
       if (caps.clipboard !== undefined && !CLIPBOARD.has(caps.clipboard)) {
@@ -453,11 +588,17 @@ function validateManifest(manifest, manifestDir) {
           const extra = Object.keys(w).filter(
             (k) => !["max", "sharedMemory", "maxSharedBytes"].includes(k),
           );
-          if (extra.length) err(`"capabilities.workers" unknown key(s): ${extra.join(", ")}`);
+          if (extra.length)
+            err(`"capabilities.workers" unknown key(s): ${extra.join(", ")}`);
           if (!Number.isInteger(w.max) || w.max < 1 || w.max > WORKERS_MAX) {
-            err(`"capabilities.workers.max" must be an integer 1..${WORKERS_MAX}`);
+            err(
+              `"capabilities.workers.max" must be an integer 1..${WORKERS_MAX}`,
+            );
           }
-          if (w.sharedMemory !== undefined && typeof w.sharedMemory !== "boolean") {
+          if (
+            w.sharedMemory !== undefined &&
+            typeof w.sharedMemory !== "boolean"
+          ) {
             err(`"capabilities.workers.sharedMemory" must be a boolean`);
           }
           if (
@@ -482,7 +623,8 @@ function validateManifest(manifest, manifestDir) {
           err(`"capabilities.secrets" must be an object`);
         } else {
           const extra = Object.keys(s).filter((k) => !["sources"].includes(k));
-          if (extra.length) err(`"capabilities.secrets" unknown key(s): ${extra.join(", ")}`);
+          if (extra.length)
+            err(`"capabilities.secrets" unknown key(s): ${extra.join(", ")}`);
           if (typeof s.sources !== "boolean") {
             err(`"capabilities.secrets.sources" must be a boolean`);
           }
@@ -496,8 +638,11 @@ function validateManifest(manifest, manifestDir) {
         if (typeof d !== "object" || d === null || Array.isArray(d)) {
           err(`"capabilities.documents" must be an object`);
         } else {
-          const extra = Object.keys(d).filter((k) => !["export", "open"].includes(k));
-          if (extra.length) err(`"capabilities.documents" unknown key(s): ${extra.join(", ")}`);
+          const extra = Object.keys(d).filter(
+            (k) => !["export", "open"].includes(k),
+          );
+          if (extra.length)
+            err(`"capabilities.documents" unknown key(s): ${extra.join(", ")}`);
           for (const k of ["export", "open"]) {
             if (d[k] !== undefined && typeof d[k] !== "boolean") {
               err(`"capabilities.documents.${k}" must be a boolean`);
@@ -516,7 +661,8 @@ function validateManifest(manifest, manifestDir) {
           err(`"capabilities.gpu" must be an object`);
         } else {
           const extra = Object.keys(g).filter((k) => !["realm"].includes(k));
-          if (extra.length) err(`"capabilities.gpu" unknown key(s): ${extra.join(", ")}`);
+          if (extra.length)
+            err(`"capabilities.gpu" unknown key(s): ${extra.join(", ")}`);
           if (g.realm === undefined) {
             err(`"capabilities.gpu.realm" is required (must be "bundle")`);
           } else if (!GPU_REALMS.has(g.realm)) {
@@ -549,7 +695,11 @@ function validateManifest(manifest, manifestDir) {
               continue;
             }
             for (const k of Object.keys(a)) {
-              if (!["name", "path", "purpose", "maxBytes", "integrity"].includes(k)) {
+              if (
+                !["name", "path", "purpose", "maxBytes", "integrity"].includes(
+                  k,
+                )
+              ) {
                 err(`${at} has unknown key "${k}"`);
               }
             }
@@ -584,7 +734,10 @@ function validateManifest(manifest, manifestDir) {
                   );
                 }
                 declaredTotal += size;
-                if (typeof a.integrity === "string" && SRI_OK.test(a.integrity)) {
+                if (
+                  typeof a.integrity === "string" &&
+                  SRI_OK.test(a.integrity)
+                ) {
                   const alg = a.integrity.split("-", 1)[0];
                   const actual = sri(alg, readFileSync(resolved));
                   if (actual !== a.integrity) {
@@ -602,7 +755,10 @@ function validateManifest(manifest, manifestDir) {
                   typeof a.maxBytes === "number" ? a.maxBytes : 0;
               }
             }
-            if (a.integrity !== undefined && (typeof a.integrity !== "string" || !SRI_OK.test(a.integrity))) {
+            if (
+              a.integrity !== undefined &&
+              (typeof a.integrity !== "string" || !SRI_OK.test(a.integrity))
+            ) {
               err(
                 `${at}.integrity must be a Subresource Integrity token ` +
                   `("sha384-<base64>"; sha256/sha512 accepted)`,
@@ -646,7 +802,19 @@ function validateManifest(manifest, manifestDir) {
       err(`"contributes" must be an object`);
     } else {
       for (const key of Object.keys(contributes)) {
-        if (!["tools", "panels", "commands", "editContexts", "objectTypes", "importers", "exporters", "partTypes", "objectModel"].includes(key)) {
+        if (
+          ![
+            "tools",
+            "panels",
+            "commands",
+            "editContexts",
+            "objectTypes",
+            "importers",
+            "exporters",
+            "partTypes",
+            "objectModel",
+          ].includes(key)
+        ) {
           err(`unknown contribution kind "${key}"`);
         }
       }
@@ -661,7 +829,9 @@ function validateManifest(manifest, manifestDir) {
         if (ns) {
           for (const id of ids) {
             if (!id.startsWith(ns)) {
-              err(`contributed ${kind.slice(0, -1)} "${id}" must be namespaced under "${ns}"`);
+              err(
+                `contributed ${kind.slice(0, -1)} "${id}" must be namespaced under "${ns}"`,
+              );
             }
           }
         }
@@ -671,13 +841,17 @@ function validateManifest(manifest, manifestDir) {
         if (!isStringArray(panels)) {
           err(`"contributes.panels" must be a string array`);
         } else {
-          const ns2 = typeof manifest.id === "string" ? `${manifest.id}.` : null;
+          const ns2 =
+            typeof manifest.id === "string" ? `${manifest.id}.` : null;
           for (const p of panels) {
             if (p.endsWith(".panel.json")) {
               const path = resolve(manifestDir, p);
-              if (!existsSync(path)) err(`panel file not found: ${p} (resolved ${path})`);
+              if (!existsSync(path))
+                err(`panel file not found: ${p} (resolved ${path})`);
             } else if (ns2 && !p.startsWith(ns2)) {
-              err(`contributed panel "${p}" must be namespaced under "${ns2}" (or be a *.panel.json path)`);
+              err(
+                `contributed panel "${p}" must be namespaced under "${ns2}" (or be a *.panel.json path)`,
+              );
             }
           }
         }
@@ -688,10 +862,16 @@ function validateManifest(manifest, manifestDir) {
           err(`"contributes.editContexts" must be an array`);
         } else {
           for (const ec of ecs) {
-            if (typeof ec !== "object" || ec === null ||
-                typeof ec.type !== "string" || !ENTRIES.has(ec.entry) ||
-                (ec.priority !== undefined && !Number.isInteger(ec.priority))) {
-              err(`each editContext needs { type: string, entry: "doubleClick" }`);
+            if (
+              typeof ec !== "object" ||
+              ec === null ||
+              typeof ec.type !== "string" ||
+              !ENTRIES.has(ec.entry) ||
+              (ec.priority !== undefined && !Number.isInteger(ec.priority))
+            ) {
+              err(
+                `each editContext needs { type: string, entry: "doubleClick" }`,
+              );
             }
           }
         }
@@ -702,9 +882,15 @@ function validateManifest(manifest, manifestDir) {
           err(`"contributes.objectTypes" must be an array`);
         } else {
           for (const ot of ots) {
-            if (typeof ot !== "object" || ot === null ||
-                typeof ot.type !== "string" || !BAKED_FALLBACKS.has(ot.bakedFallback)) {
-              err(`each objectType needs { type: string, bakedFallback: group|rectangle|raster }`);
+            if (
+              typeof ot !== "object" ||
+              ot === null ||
+              typeof ot.type !== "string" ||
+              !BAKED_FALLBACKS.has(ot.bakedFallback)
+            ) {
+              err(
+                `each objectType needs { type: string, bakedFallback: group|rectangle|raster }`,
+              );
             }
           }
         }
@@ -716,12 +902,17 @@ function validateManifest(manifest, manifestDir) {
           err(`"contributes.partTypes" must be an array`);
         } else {
           for (const pt of pts) {
-            if (typeof pt !== "object" || pt === null ||
-                typeof pt.type !== "string" ||
-                !["spec", "source", "derived"].includes(pt.role) ||
-                typeof pt.format !== "string" ||
-                (pt.linkable !== undefined && typeof pt.linkable !== "boolean")) {
-              err(`each partType needs { type: string, role: spec|source|derived, format: string, linkable?: boolean }`);
+            if (
+              typeof pt !== "object" ||
+              pt === null ||
+              typeof pt.type !== "string" ||
+              !["spec", "source", "derived"].includes(pt.role) ||
+              typeof pt.format !== "string" ||
+              (pt.linkable !== undefined && typeof pt.linkable !== "boolean")
+            ) {
+              err(
+                `each partType needs { type: string, role: spec|source|derived, format: string, linkable?: boolean }`,
+              );
             }
           }
         }
@@ -741,7 +932,10 @@ function readManifest(target) {
   const manifestPath = resolve(process.cwd(), target);
   if (!existsSync(manifestPath)) fail(`no such file: ${manifestPath}`);
   try {
-    return { manifestPath, manifest: JSON.parse(readFileSync(manifestPath, "utf8")) };
+    return {
+      manifestPath,
+      manifest: JSON.parse(readFileSync(manifestPath, "utf8")),
+    };
   } catch (e) {
     fail(`invalid JSON in ${manifestPath}: ${e.message}`);
   }
@@ -750,7 +944,8 @@ function readManifest(target) {
 /** `<bundle-dir>` or a manifest path → the manifest path. */
 function manifestPathOf(target) {
   const p = resolve(process.cwd(), target);
-  if (existsSync(p) && statSync(p).isDirectory()) return join(p, "manifest.json");
+  if (existsSync(p) && statSync(p).isDirectory())
+    return join(p, "manifest.json");
   return p;
 }
 
@@ -777,12 +972,15 @@ if (command === "integrity") {
   let changed = 0;
   for (const { artifact, file } of items) {
     if (!existsSync(file)) {
-      problems.push(`${artifact.name}: "${artifact.path}" is not built — nothing to stamp`);
+      problems.push(
+        `${artifact.name}: "${artifact.path}" is not built — nothing to stamp`,
+      );
       continue;
     }
-    const alg = typeof artifact.integrity === "string" && SRI_OK.test(artifact.integrity)
-      ? artifact.integrity.split("-", 1)[0]
-      : "sha384";
+    const alg =
+      typeof artifact.integrity === "string" && SRI_OK.test(artifact.integrity)
+        ? artifact.integrity.split("-", 1)[0]
+        : "sha384";
     const actual = sri(check ? alg : "sha384", readFileSync(file));
     if (artifact.integrity === actual) continue;
     if (check) {
@@ -800,14 +998,21 @@ if (command === "integrity") {
     process.exit(1);
   }
   if (check) {
-    console.log(`✓ ${manifest.id}: ${items.length} wasm artifact(s), integrity matches`);
+    console.log(
+      `✓ ${manifest.id}: ${items.length} wasm artifact(s), integrity matches`,
+    );
     process.exit(0);
   }
   if (changed > 0) {
     const indent = /^\{\n(\s+)"/.exec(raw)?.[1] ?? "  ";
-    writeFileSync(manifestPath, JSON.stringify(manifest, null, indent) + (raw.endsWith("\n") ? "\n" : ""));
+    writeFileSync(
+      manifestPath,
+      JSON.stringify(manifest, null, indent) + (raw.endsWith("\n") ? "\n" : ""),
+    );
   }
-  console.log(`✓ ${manifest.id}: stamped ${changed} of ${items.length} wasm artifact(s)`);
+  console.log(
+    `✓ ${manifest.id}: stamped ${changed} of ${items.length} wasm artifact(s)`,
+  );
   process.exit(0);
 }
 
@@ -821,7 +1026,9 @@ if (command === "modules-upload") {
   const dry = argv.includes("--dry-run");
   const target = argv.slice(1).find((a) => !a.startsWith("--"));
   if (!target) usage();
-  const host = (process.env.PAGED_MODULE_HOST ?? "https://modules.paged.media").replace(/\/+$/, "");
+  const host = (
+    process.env.PAGED_MODULE_HOST ?? "https://modules.paged.media"
+  ).replace(/\/+$/, "");
   const bucket = process.env.PAGED_MODULE_BUCKET ?? "paged-modules";
   const manifestPath = manifestPathOf(target);
   const { manifest } = readManifest(manifestPath);
@@ -843,7 +1050,9 @@ if (command === "modules-upload") {
   let failed = false;
   for (const { artifact, file } of items) {
     if (!existsSync(file)) {
-      console.error(`::error::${artifact.name}: "${artifact.path}" is not built`);
+      console.error(
+        `::error::${artifact.name}: "${artifact.path}" is not built`,
+      );
       failed = true;
       continue;
     }
@@ -866,7 +1075,9 @@ if (command === "modules-upload") {
       continue;
     }
     if (!token) {
-      console.log(`${url} · not hosted (skipped: CLOUDFLARE_API_TOKEN is not set)`);
+      console.log(
+        `${url} · not hosted (skipped: CLOUDFLARE_API_TOKEN is not set)`,
+      );
       missing++;
       continue;
     }
@@ -884,16 +1095,27 @@ if (command === "modules-upload") {
       execFileSync(
         "npx",
         [
-          "-y", "wrangler@3", "r2", "object", "put", `${bucket}/${key}`,
-          "--file", tmp,
-          "--content-type", "application/wasm",
-          "--content-encoding", "br",
-          "--cache-control", "public, max-age=31536000, immutable",
+          "-y",
+          "wrangler@3",
+          "r2",
+          "object",
+          "put",
+          `${bucket}/${key}`,
+          "--file",
+          tmp,
+          "--content-type",
+          "application/wasm",
+          "--content-encoding",
+          "br",
+          "--cache-control",
+          "public, max-age=31536000, immutable",
         ],
         { stdio: ["ignore", "inherit", "inherit"] },
       );
     } catch (e) {
-      console.error(`::error::${artifact.name}: upload to ${bucket}/${key} failed: ${e.message}`);
+      console.error(
+        `::error::${artifact.name}: upload to ${bucket}/${key} failed: ${e.message}`,
+      );
       failed = true;
       continue;
     } finally {
@@ -907,7 +1129,9 @@ if (command === "modules-upload") {
   if (failed) process.exit(1);
   console.log(
     `modules: ${items.length} declared` +
-      (missing > 0 ? `, ${missing} not hosted${dry ? "" : " (no token)"}` : ", all hosted"),
+      (missing > 0
+        ? `, ${missing} not hosted${dry ? "" : " (no token)"}`
+        : ", all hosted"),
   );
   process.exit(0);
 }
@@ -922,7 +1146,9 @@ if (command === "untyped") {
     const list = untypedCommands(manifest);
     if (list.length > 0) plugins[manifest.id] = list;
   }
-  const sorted = Object.fromEntries(Object.entries(plugins).sort(([a], [b]) => a.localeCompare(b)));
+  const sorted = Object.fromEntries(
+    Object.entries(plugins).sort(([a], [b]) => a.localeCompare(b)),
+  );
   console.log(JSON.stringify({ adr: "323", plugins: sorted }, null, 2));
   process.exit(0);
 }
@@ -930,7 +1156,8 @@ if (command === "untyped") {
 let baselinePath = DEFAULT_BASELINE;
 const rest = [];
 for (let i = 1; i < argv.length; i++) {
-  if (argv[i] === "--untyped-baseline") baselinePath = resolve(process.cwd(), argv[++i] ?? "");
+  if (argv[i] === "--untyped-baseline")
+    baselinePath = resolve(process.cwd(), argv[++i] ?? "");
   else rest.push(argv[i]);
 }
 const target = rest[0];
@@ -939,11 +1166,18 @@ if (command !== "validate" || !target) usage();
 const { manifestPath, manifest } = readManifest(target);
 const errors = validateManifest(manifest, dirname(manifestPath));
 const warnings = [];
-checkUntyped(manifest, loadBaseline(baselinePath), (m) => errors.push(m), (m) => warnings.push(m));
+checkUntyped(
+  manifest,
+  loadBaseline(baselinePath),
+  (m) => errors.push(m),
+  (m) => warnings.push(m),
+);
 for (const w of warnings) console.error(`warning: ${w}`);
 if (errors.length > 0) {
   console.error(`✗ ${manifestPath}`);
   for (const e of errors) console.error(`  - ${e}`);
   process.exit(1);
 }
-console.log(`✓ ${manifest.id}@${manifest.version} valid (apiVersion ${manifest.apiVersion})`);
+console.log(
+  `✓ ${manifest.id}@${manifest.version} valid (apiVersion ${manifest.apiVersion})`,
+);

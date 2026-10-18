@@ -179,15 +179,20 @@ test.describe("E2E web-plugin (paged.web source lane)", () => {
     await page.evaluate((id) => {
       (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (i: string) => Promise<unknown> } } };
+          __canvas: {
+            registries: {
+              commands: { invoke: (i: string) => Promise<unknown> };
+            };
+          };
         }
       ).__canvas.registries.commands.invoke(`paged.panel.hide.${id}`);
     }, PANEL_ID);
     await expect(html).toBeHidden({ timeout: 5_000 });
     await openPanel(page, PANEL_ID);
-    await expect(
-      page.locator("[data-web-html] [data-code-input]"),
-    ).toHaveValue("<h1>Price list</h1>", { timeout: 5_000 });
+    await expect(page.locator("[data-web-html] [data-code-input]")).toHaveValue(
+      "<h1>Price list</h1>",
+      { timeout: 5_000 },
+    );
   });
 
   test("AC-WEB-3 — <script> surfaces the policy error; removing it clears diagnostics @feat:plugin-web.insert-command @feat:plugin-web.metadata-persistence @feat:plugin-web.source-panel @level:edge", async ({
@@ -276,7 +281,9 @@ test.describe("E2E web-plugin (paged.web source lane)", () => {
       (
         globalThis as unknown as {
           __canvas: {
-            registries: { commands: { invoke: (i: string) => Promise<unknown> } };
+            registries: {
+              commands: { invoke: (i: string) => Promise<unknown> };
+            };
           };
         }
       ).__canvas.registries.commands.invoke(`paged.panel.hide.${id}`);

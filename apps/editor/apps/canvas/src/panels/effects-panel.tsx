@@ -104,13 +104,41 @@ const EFFECT_FAMILIES: {
   enable: { enabled: { path: string; scope: "element" } };
   fields: CompositionNode;
 }[] = [
-  { name: "Drop shadow", enable: { enabled: elementProp("frameDropShadow") }, fields: dropShadowComposition },
-  { name: "Inner shadow", enable: { enabled: elementProp("frameInnerShadowEnabled") }, fields: innerShadowComposition },
-  { name: "Outer glow", enable: { enabled: elementProp("frameOuterGlowEnabled") }, fields: outerGlowComposition },
-  { name: "Inner glow", enable: { enabled: elementProp("frameInnerGlowEnabled") }, fields: innerGlowComposition },
-  { name: "Bevel and emboss", enable: { enabled: elementProp("frameBevelEnabled") }, fields: bevelComposition },
-  { name: "Satin", enable: { enabled: elementProp("frameSatinEnabled") }, fields: satinComposition },
-  { name: "Feather", enable: { enabled: elementProp("frameFeatherEnabled") }, fields: featherComposition },
+  {
+    name: "Drop shadow",
+    enable: { enabled: elementProp("frameDropShadow") },
+    fields: dropShadowComposition,
+  },
+  {
+    name: "Inner shadow",
+    enable: { enabled: elementProp("frameInnerShadowEnabled") },
+    fields: innerShadowComposition,
+  },
+  {
+    name: "Outer glow",
+    enable: { enabled: elementProp("frameOuterGlowEnabled") },
+    fields: outerGlowComposition,
+  },
+  {
+    name: "Inner glow",
+    enable: { enabled: elementProp("frameInnerGlowEnabled") },
+    fields: innerGlowComposition,
+  },
+  {
+    name: "Bevel and emboss",
+    enable: { enabled: elementProp("frameBevelEnabled") },
+    fields: bevelComposition,
+  },
+  {
+    name: "Satin",
+    enable: { enabled: elementProp("frameSatinEnabled") },
+    fields: satinComposition,
+  },
+  {
+    name: "Feather",
+    enable: { enabled: elementProp("frameFeatherEnabled") },
+    fields: featherComposition,
+  },
   {
     name: "Directional feather",
     enable: { enabled: elementProp("frameDirectionalFeatherEnabled") },
@@ -147,7 +175,10 @@ const GROUP_BINDINGS = {
   isolate: elementProp("groupIsolateBlending"),
   knockout: elementProp("groupKnockout"),
 };
-const GROUP_OPTIONS: readonly { key: keyof typeof GROUP_BINDINGS; label: string }[] = [
+const GROUP_OPTIONS: readonly {
+  key: keyof typeof GROUP_BINDINGS;
+  label: string;
+}[] = [
   { key: "isolate", label: "Isolate blending" },
   { key: "knockout", label: "Knockout group" },
 ];
@@ -185,7 +216,10 @@ function EffectDisclosure({
   const on = checked === true;
   return (
     <div data-effect-row={name}>
-      <ObjectFieldFrame field={resolved.enabled} className="relative flex items-center gap-[9px] py-[5px]">
+      <ObjectFieldFrame
+        field={resolved.enabled}
+        className="relative flex items-center gap-[9px] py-[5px]"
+      >
         <TogglePill
           checked={on}
           mixed={checked === null}
@@ -225,8 +259,11 @@ function EffectDisclosure({
 /** A target's current setting as InDesign lists it ("Multiply 60%"):
  *  an unset blend reads Normal, an unset opacity 100 %; mixed reads —. */
 function targetSummary(blend: ObjectField, opacity: ObjectField): string {
-  if (blend.state.state !== "value" || opacity.state.state !== "value") return "—";
-  const mode = BLEND_MODES.find((m) => m.value === unwrapText(blend.value))?.label ?? "Normal";
+  if (blend.state.state !== "value" || opacity.state.state !== "value")
+    return "—";
+  const mode =
+    BLEND_MODES.find((m) => m.value === unwrapText(blend.value))?.label ??
+    "Normal";
   const pct = unwrapLength(opacity.value);
   return `${mode} ${Math.round(pct ?? 100)}%`;
 }
@@ -236,12 +273,17 @@ function GroupOption({ field, label }: { field: ObjectField; label: string }) {
   const on = unwrapBool(field.value);
   const live = field.state.state === "value" && field.onCommit != null;
   return (
-    <ObjectFieldFrame field={field} className="relative flex items-center gap-[9px] py-[4px]">
+    <ObjectFieldFrame
+      field={field}
+      className="relative flex items-center gap-[9px] py-[4px]"
+    >
       <TogglePill
         checked={on === true}
         mixed={on === null}
         disabled={!live}
-        onToggle={(next) => field.onCommit?.({ type: "bool", value: next } as Value)}
+        onToggle={(next) =>
+          field.onCommit?.({ type: "bool", value: next } as Value)
+        }
         testId={label}
       />
       <span
@@ -264,13 +306,15 @@ export function EffectsPanel() {
   // or content target) is not listed; the Object target always is.
   const opacityOf = (id: TargetId) => fields[`${id}Opacity` as const];
   const blendOf = (id: TargetId) => fields[`${id}Blend` as const];
-  const carried = (id: TargetId) => id === "object" || opacityOf(id).state.state !== "absent";
+  const carried = (id: TargetId) =>
+    id === "object" || opacityOf(id).state.state !== "absent";
   const target: TargetId = carried(picked) ? picked : "object";
   const opacityField = opacityOf(target);
   const blendField = blendOf(target);
   // InDesign names the content target by what the frame holds.
   const contentLabel =
-    elementSelection.length > 0 && elementSelection.every((id) => id.kind !== "textFrame")
+    elementSelection.length > 0 &&
+    elementSelection.every((id) => id.kind !== "textFrame")
       ? "Graphic"
       : "Text";
 
@@ -281,8 +325,15 @@ export function EffectsPanel() {
 
   return (
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
-      <div className="p-3 flex flex-col gap-[9px]" data-effects-panel="ready" data-effects-target-active={target}>
-        <ObjectFieldFrame field={opacityField} className="relative grid grid-cols-[84px_1fr] items-center gap-2">
+      <div
+        className="p-3 flex flex-col gap-[9px]"
+        data-effects-panel="ready"
+        data-effects-target-active={target}
+      >
+        <ObjectFieldFrame
+          field={opacityField}
+          className="relative grid grid-cols-[84px_1fr] items-center gap-2"
+        >
           <span className="text-xs" style={{ color: "var(--pg-muted-fg)" }}>
             Opacity
           </span>
@@ -290,7 +341,9 @@ export function EffectsPanel() {
             icon="ui-size"
             suffix="%"
             // Unset reads as the schema default, 100 %.
-            value={opacityField.state.state === "value" ? (opacity ?? 100) : null}
+            value={
+              opacityField.state.state === "value" ? (opacity ?? 100) : null
+            }
             min={0}
             max={100}
             precision={0}
@@ -305,7 +358,10 @@ export function EffectsPanel() {
             aria-label="opacity"
           />
         </ObjectFieldFrame>
-        <ObjectFieldFrame field={blendField} className="relative grid grid-cols-[84px_1fr] items-center gap-2">
+        <ObjectFieldFrame
+          field={blendField}
+          className="relative grid grid-cols-[84px_1fr] items-center gap-2"
+        >
           <span className="text-xs" style={{ color: "var(--pg-muted-fg)" }}>
             Blend
           </span>
@@ -335,7 +391,12 @@ export function EffectsPanel() {
             ))}
           </KitSelect>
         </ObjectFieldFrame>
-        <div className="flex flex-col" role="radiogroup" aria-label="Transparency target" data-effects-targets="">
+        <div
+          className="flex flex-col"
+          role="radiogroup"
+          aria-label="Transparency target"
+          data-effects-targets=""
+        >
           {TARGETS.filter((t) => carried(t.id)).map((t) => {
             const active = t.id === target;
             return (
@@ -353,7 +414,10 @@ export function EffectsPanel() {
                 }}
               >
                 <span>{t.id === "content" ? contentLabel : t.label}</span>
-                <span className="pg-mono-meta" data-effects-target-summary={t.id}>
+                <span
+                  className="pg-mono-meta"
+                  data-effects-target-summary={t.id}
+                >
                   {targetSummary(blendOf(t.id), opacityOf(t.id))}
                 </span>
               </button>
@@ -364,7 +428,10 @@ export function EffectsPanel() {
           <div className="pg-label mb-1">
             Effects
             {target !== "object" && (
-              <span className="ml-1 normal-case" style={{ color: "var(--pg-muted-fg)" }}>
+              <span
+                className="ml-1 normal-case"
+                style={{ color: "var(--pg-muted-fg)" }}
+              >
                 · on the object
               </span>
             )}
@@ -380,7 +447,10 @@ export function EffectsPanel() {
             ))}
           </div>
         </div>
-        <div className="-mx-3 border-t border-input px-3 pt-2" data-effects-group-options="">
+        <div
+          className="-mx-3 border-t border-input px-3 pt-2"
+          data-effects-group-options=""
+        >
           {GROUP_OPTIONS.map((o) => (
             <GroupOption key={o.key} field={group[o.key]} label={o.label} />
           ))}

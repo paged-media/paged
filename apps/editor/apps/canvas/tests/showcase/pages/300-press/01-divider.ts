@@ -56,19 +56,26 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
   elements.push(rule);
 
-  const title = await proseFrame(ctx, p(119), [60, 300, 480, 430], [
-    { text: "Part III — The Press", style: STYLE.partTitle },
-  ]);
+  const title = await proseFrame(
+    ctx,
+    p(119),
+    [60, 300, 480, 430],
+    [{ text: "Part III — The Press", style: STYLE.partTitle }],
+  );
   elements.push(title.frameId);
 
   // Verso p120 — the epigraph, in the annual's own voice.
-  const epigraph = await proseFrame(ctx, p(120), [60, 280, 480, 470], [
-    {
-      text:
-        "Part I set the type and Part II ran the studios; Part III sends the book away. What follows is the press pass: the sheet's own anatomy drawn in the page's own geometry, a preflight the engine runs on itself, the container opened part by part, and the loss ledger — the exact list of what each exit can carry and what it must leave behind. Then the appendix, where every limit this book has recorded in its margins finally lands.",
-      style: STYLE.deck,
-    },
-  ]);
+  const epigraph = await proseFrame(
+    ctx,
+    p(120),
+    [60, 280, 480, 470],
+    [
+      {
+        text: "Part I set the type and Part II ran the studios; Part III sends the book away. What follows is the press pass: the sheet's own anatomy drawn in the page's own geometry, a preflight the engine runs on itself, the container opened part by part, and the loss ledger — the exact list of what each exit can carry and what it must leave behind. Then the appendix, where every limit this book has recorded in its margins finally lands.",
+        style: STYLE.deck,
+      },
+    ],
+  );
   elements.push(epigraph.frameId);
 
   elements.push(

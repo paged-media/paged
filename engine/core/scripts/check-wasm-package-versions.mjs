@@ -26,19 +26,25 @@ const m = readFileSync(CHANNEL, "utf8").match(
   /pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion\((\d+)\)/,
 );
 if (!m) {
-  console.error(`check-wasm-package-versions: cannot read PROTOCOL_VERSION from ${CHANNEL}`);
+  console.error(
+    `check-wasm-package-versions: cannot read PROTOCOL_VERSION from ${CHANNEL}`,
+  );
   process.exit(1);
 }
 const expected = `0.${m[1]}.0-dev`;
 
 const present = readdirSync(SHELLS, { withFileTypes: true })
-  .filter((e) => e.isDirectory() && existsSync(join(SHELLS, e.name, "package.json")))
+  .filter(
+    (e) => e.isDirectory() && existsSync(join(SHELLS, e.name, "package.json")),
+  )
   .map((e) => e.name)
   .sort();
 const problems = [];
 let stale = false;
 if (present.join(",") !== [...PACKAGES].sort().join(",")) {
-  problems.push(`packages/ holds [${present.join(", ")}], expected [${PACKAGES.join(", ")}]`);
+  problems.push(
+    `packages/ holds [${present.join(", ")}], expected [${PACKAGES.join(", ")}]`,
+  );
 }
 
 for (const pkg of PACKAGES) {
@@ -47,15 +53,22 @@ for (const pkg of PACKAGES) {
   const text = readFileSync(file, "utf8");
   const manifest = JSON.parse(text);
   if (manifest.name !== `@paged-media/${pkg}`) {
-    problems.push(`packages/${pkg}: name is ${manifest.name}, expected @paged-media/${pkg}`);
+    problems.push(
+      `packages/${pkg}: name is ${manifest.name}, expected @paged-media/${pkg}`,
+    );
   }
   if (manifest.version === expected) continue;
   if (write) {
     // Replace the one field in place so the rest of the file stays as written.
-    writeFileSync(file, text.replace(/("version":\s*)"[^"]*"/, `$1"${expected}"`));
+    writeFileSync(
+      file,
+      text.replace(/("version":\s*)"[^"]*"/, `$1"${expected}"`),
+    );
     console.log(`packages/${pkg}: ${manifest.version} -> ${expected}`);
   } else {
-    problems.push(`packages/${pkg}: version is ${manifest.version}, expected ${expected}`);
+    problems.push(
+      `packages/${pkg}: version is ${manifest.version}, expected ${expected}`,
+    );
     stale = true;
   }
 }
@@ -70,4 +83,6 @@ if (problems.length) {
   }
   process.exit(1);
 }
-console.log(`check-wasm-package-versions: ${PACKAGES.length} packages at ${expected}`);
+console.log(
+  `check-wasm-package-versions: ${PACKAGES.length} packages at ${expected}`,
+);

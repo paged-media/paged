@@ -30,20 +30,20 @@ Everything about how the plugin is designed and built is in [`docs/`](./docs/REA
 
 ## Packages
 
-| Path | What |
-|---|---|
-| `manifest/` | plugin manifest `media.paged.image` + panel prototypes |
-| `glue/` | the bundle: `defineBundle` + `activate(host)` + panel |
-| `image-core/` | frozen types: `PixelFormat`, `Tile`/`TileMap`, `Region` |
-| `image-kernels/` | `KernelDef` + frozen WGSL ABI + `kernel_family!` codegen |
-| `image-gpu/` | wgpu device mgmt, tile pool, residency tiers, dispatch |
-| `image-pipeline/` | Engine A — demand-driven streaming evaluation |
-| `image-graph/` | Engine B — buffer graph, eval, tile cache, bounded COW undo journal |
-| `image-cms/` | color management behind a swappable `CmsEngine` (D-11: hybrid) |
-| `image-codecs/` | `ImageSource`/`ImageTarget` adapters (sans-IO) |
-| `image-psd/` | PSD/PSB structural parse + preservation-invariant writer |
-| `image-js/` | wasm-bindgen surface (the bundle's compute artifact) |
-| `image-conformance/` | test-only: scalar references, parity harness, PSD fixture corpus |
+| Path                 | What                                                                |
+| -------------------- | ------------------------------------------------------------------- |
+| `manifest/`          | plugin manifest `media.paged.image` + panel prototypes              |
+| `glue/`              | the bundle: `defineBundle` + `activate(host)` + panel               |
+| `image-core/`        | frozen types: `PixelFormat`, `Tile`/`TileMap`, `Region`             |
+| `image-kernels/`     | `KernelDef` + frozen WGSL ABI + `kernel_family!` codegen            |
+| `image-gpu/`         | wgpu device mgmt, tile pool, residency tiers, dispatch              |
+| `image-pipeline/`    | Engine A — demand-driven streaming evaluation                       |
+| `image-graph/`       | Engine B — buffer graph, eval, tile cache, bounded COW undo journal |
+| `image-cms/`         | color management behind a swappable `CmsEngine` (D-11: hybrid)      |
+| `image-codecs/`      | `ImageSource`/`ImageTarget` adapters (sans-IO)                      |
+| `image-psd/`         | PSD/PSB structural parse + preservation-invariant writer            |
+| `image-js/`          | wasm-bindgen surface (the bundle's compute artifact)                |
+| `image-conformance/` | test-only: scalar references, parity harness, PSD fixture corpus    |
 
 ## Clean-room
 

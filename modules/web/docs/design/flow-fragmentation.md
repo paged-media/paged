@@ -1,7 +1,7 @@
 # paged.web flow fragmentation — implementation status (as-built)
 
 **2026-07-18 · canonical status of the ADR-020 "scoped extension" (web-frame flow across
-frames).** This is the forward reference for what the flow lane *is now*; the pass-by-pass
+frames).** This is the forward reference for what the flow lane _is now_; the pass-by-pass
 history lives in the internal spike log. Decision:
 [ADR-020](../adr/020-paged-web-native-engine-defer-frame-threading.md). Spec: an internal
 proposal for a native HTML/CSS engine in the core (unpublished; "the spec" below). Eval:
@@ -11,21 +11,21 @@ proposal for a native HTML/CSS engine in the core (unpublished; "the spec" below
 
 One HTML/CSS **web source** (authored on a frame) threaded across an **ordered chain of
 publication frames**, re-line-broken at each frame's width, with overset reporting — the
-CSS-Regions/IDML-story *behavior*, bound by a **host chain**, NOT by CSS
+CSS-Regions/IDML-story _behavior_, bound by a **host chain**, NOT by CSS
 `flow-into`/`flow-from`. Built as the ADR-020 scoped extension on the
 shipped Blitz-in-plugin → C-1 `SceneLayer` lane
 ([ADR-011](../adr/011-web-rendering-fork-defer-to-scenelayer.md) Option B); **no engine fork**.
 
 ## Ladder position (from the evaluation memo / the internal spike log)
 
-| Rung | What | Status |
-|---|---|---|
-| 1 — equal-width slice | layout once, slice the display list per frame | **built + verified** |
-| 2 — variable-width re-resolve | delete consumed prefix (`DocumentMutator`), re-resolve remainder at next width | **built + verified** |
-| 3 — mid-block line split | split a straddling paragraph at a line boundary | **built + verified** (plain text AND inline elements) |
-| 3b — nested block fragmentation | descend a straddling CONTAINER (`<div>`/`<ul>`/…) and cut between its children, recursively | **built + verified**; replaced/atomic elements (`<img>`/`<svg>`/…) move whole |
-| 3c — table row fragmentation | split a `<table>` between body rows, repeating the `<thead>` | **built + verified**; cell-derived row bands (Taffy lays out no `<tr>` box); rows atomic, columns re-resolve per frame |
-| 4 — full three-tree engine (the spec) | native forked engine | **not built** (last resort per ADR-020) |
+| Rung                                  | What                                                                                        | Status                                                                                                                 |
+| ------------------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 1 — equal-width slice                 | layout once, slice the display list per frame                                               | **built + verified**                                                                                                   |
+| 2 — variable-width re-resolve         | delete consumed prefix (`DocumentMutator`), re-resolve remainder at next width              | **built + verified**                                                                                                   |
+| 3 — mid-block line split              | split a straddling paragraph at a line boundary                                             | **built + verified** (plain text AND inline elements)                                                                  |
+| 3b — nested block fragmentation       | descend a straddling CONTAINER (`<div>`/`<ul>`/…) and cut between its children, recursively | **built + verified**; replaced/atomic elements (`<img>`/`<svg>`/…) move whole                                          |
+| 3c — table row fragmentation          | split a `<table>` between body rows, repeating the `<thead>`                                | **built + verified**; cell-derived row bands (Taffy lays out no `<tr>` box); rows atomic, columns re-resolve per frame |
+| 4 — full three-tree engine (the spec) | native forked engine                                                                        | **not built** (last resort per ADR-020)                                                                                |
 
 ## What's built, per package
 
@@ -96,8 +96,8 @@ shipped Blitz-in-plugin → C-1 `SceneLayer` lane
   `bakeWebFrameToDocument` (one frame) + `bakeWebFlowToDocument` (each recipient frame, reusing
   `bakeWebFlow` with the ephemeral submit OFF).
 
-**Author flow:** insert a web frame → author HTML/CSS → *thread* it into target frames (persisted)
-→ *render* the flow (one layer per frame, overset warned) → *unthread* to unbind → *bake* to native
+**Author flow:** insert a web frame → author HTML/CSS → _thread_ it into target frames (persisted)
+→ _render_ the flow (one layer per frame, overset warned) → _unthread_ to unbind → _bake_ to native
 content for IDML/PDF export.
 
 ## Verification
@@ -149,18 +149,18 @@ Counts are as recorded on the dates given (2026-07-18/19); the suites have grown
     `node_modules/@paged-media/canvas-wasm`, or add it as a `web-bundle` devDependency (the
     plugin-sdk message says so).
 - **Browser flow AUTHORING round-trip — VERIFIED (2026-07-18).** A LOCAL flow build (dist + `bin/`
-  + the 6-command manifest) was substituted for the published `@paged-media/web@0.1.0-canary.1` in
-  an editor checkout and driven through the editor's real Playwright journey harness
-  (Chromium + WebGPU + vite). A flow journey inserts a source web frame, draws a
-  recipient frame, runs **Thread web flow into frames**, **Render web flow across frames**, then
-  **Unthread** — and asserts the OBSERVABLE: the source frame's PERSISTED plugin metadata (read
-  back the exact way the SDK host reads it — `requestElementProperties` → the `pluginMetadata`
-  entry keyed `x-paged:media.paged.web` → the parsed envelope's `data.flow.recipients`). The chain
-  **lands in the source envelope on thread, survives the render pass, and clears on unthread** —
-  all in the real browser editor against the real host. (The source-lane journey spec,
-  `editor: apps/canvas/tests/journey/plugins/web.journey.spec.ts`, also passes with the local
-  build: insert, edit, sandboxed preview, persist-across-reopen.) The flow journey was a one-off
-  local verification and is not committed to either repository.
+  - the 6-command manifest) was substituted for the published `@paged-media/web@0.1.0-canary.1` in
+    an editor checkout and driven through the editor's real Playwright journey harness
+    (Chromium + WebGPU + vite). A flow journey inserts a source web frame, draws a
+    recipient frame, runs **Thread web flow into frames**, **Render web flow across frames**, then
+    **Unthread** — and asserts the OBSERVABLE: the source frame's PERSISTED plugin metadata (read
+    back the exact way the SDK host reads it — `requestElementProperties` → the `pluginMetadata`
+    entry keyed `x-paged:media.paged.web` → the parsed envelope's `data.flow.recipients`). The chain
+    **lands in the source envelope on thread, survives the render pass, and clears on unthread** —
+    all in the real browser editor against the real host. (The source-lane journey spec,
+    `editor: apps/canvas/tests/journey/plugins/web.journey.spec.ts`, also passes with the local
+    build: insert, edit, sandboxed preview, persist-across-reopen.) The flow journey was a one-off
+    local verification and is not committed to either repository.
 - **On-canvas Blitz render in the browser — NOW LOADS (2026-07-18).** The engine
   previously fell back to `renderWebFlow: engine not loaded` because the glue was imported as
   `new URL("../bin/blitz_web.js", import.meta.url)` + `@vite-ignore` — a computed URL that 404s
@@ -189,7 +189,7 @@ Counts are as recorded on the dates given (2026-07-18/19); the suites have grown
 - **Mid-block split — plain text AND inline elements (2026-07-18).** A straddling paragraph
   splits at a line boundary, including paragraphs with inline elements (`text <b>bold</b> more`).
   The key: blitz collapses whitespace at inline boundaries (`</b> w` → `w`), so an offset↔DOM
-  mapping by *byte* fails — but whitespace collapsing never touches non-whitespace chars, so
+  mapping by _byte_ fails — but whitespace collapsing never touches non-whitespace chars, so
   `try_split` maps the split by **non-whitespace character count** (invariant across the collapse)
   to a `(text node, local offset)`, emits per-node `set_node_text` edits that empty the consumed
   prefix + truncate the straddling node, and leaves later nodes (and their `<b>`/`<span>`
@@ -236,7 +236,7 @@ Counts are as recorded on the dates given (2026-07-18/19); the suites have grown
   now recursive** (`collect_non_flow` + `node_contains`): a `flow-into` root nested at any depth is
   kept along with its ancestor path, and everything outside that subtree is removed — no longer
   limited to a direct-`<body>`-child root.
-- **CSS Regions *syntax* — `flow-into`, including MULTIPLE named flows.**
+- **CSS Regions _syntax_ — `flow-into`, including MULTIPLE named flows.**
   `packages/web-model/src/css-flow.ts` parses `flow-into`/`flow-from` (Stylo ignores them); `flowSelectorFor`
   maps a flow NAME → its selector; the engine flows a named root across its frames
   (`render_web_flow_rooted` + a body prune). Recipients carry an optional `flow` name

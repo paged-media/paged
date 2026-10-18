@@ -99,9 +99,9 @@ describe("host.document.snapPoint — v67 point snapping", () => {
 
   it("is a document READ, and says so", async () => {
     const { host } = makeHost({});
-    await expect(host.document.snapPoint(query as never)).rejects.toBeInstanceOf(
-      PluginCapabilityError,
-    );
+    await expect(
+      host.document.snapPoint(query as never),
+    ).rejects.toBeInstanceOf(PluginCapabilityError);
     expect(makeHost().host.supports("document.snapPoint@1")).toBe(true);
   });
 });

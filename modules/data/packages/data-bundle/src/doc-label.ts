@@ -15,7 +15,11 @@
 // it is what a host without document labels (and this plugin before them)
 // reads.
 
-import type { BundleHost, Mutation, MutationOutcome } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  Mutation,
+  MutationOutcome,
+} from "@paged-media/plugin-api";
 
 import { BINDING_KEY, asciiJson } from "../../data-host-model/src";
 
@@ -31,8 +35,14 @@ export function sessionVersionPath(hash: string): string {
 }
 
 /** The label that names session version `hash`. */
-export function labelEnvelope(hash: string, recipe?: unknown): { v: number; data: { session: string; recipe?: unknown } } {
-  return { v: LABEL_VERSION, data: { session: hash, ...(recipe ? { recipe } : {}) } };
+export function labelEnvelope(
+  hash: string,
+  recipe?: unknown,
+): { v: number; data: { session: string; recipe?: unknown } } {
+  return {
+    v: LABEL_VERSION,
+    data: { session: hash, ...(recipe ? { recipe } : {}) },
+  };
 }
 
 /** The document label's room for the recipe (ADR 559 point 4): the engine
@@ -45,14 +55,20 @@ export function fitRecipe(payload: unknown): unknown | null {
   if (!payload || typeof payload !== "object") return null;
   if (asciiJson(payload).length <= RECIPE_BUDGET) return payload;
   const p = payload as { variables?: { dataSets?: unknown[] } };
-  const lean = p.variables ? { ...p, variables: { ...p.variables, dataSets: [] } } : p;
+  const lean = p.variables
+    ? { ...p, variables: { ...p.variables, dataSets: [] } }
+    : p;
   return asciiJson(lean).length <= RECIPE_BUDGET ? lean : null;
 }
 
 /** The raw op that writes the label. The key is the calling plugin's own
  *  (`x-paged:<manifest id>`, the key `getDocumentMetadata` reads); the SDK
  *  refuses any other. */
-export function labelMutation(hash: string, key: string = BINDING_KEY, recipe?: unknown): Mutation {
+export function labelMutation(
+  hash: string,
+  key: string = BINDING_KEY,
+  recipe?: unknown,
+): Mutation {
   return {
     op: "setDocumentMetadata",
     args: { key, value: asciiJson(labelEnvelope(hash, recipe)) },
@@ -68,7 +84,10 @@ export function labelKey(host: BundleHost): string {
 /** The session version a label envelope names, or null. */
 export function labelledVersion(envelope: unknown): string | null {
   const data = (envelope as { data?: { session?: unknown } } | null)?.data;
-  return typeof data?.session === "string" && /^[0-9a-f]{8,64}$/.test(data.session) ? data.session : null;
+  return typeof data?.session === "string" &&
+    /^[0-9a-f]{8,64}$/.test(data.session)
+    ? data.session
+    : null;
 }
 
 /** The session part with the label it extends: `session.json` records the
@@ -78,14 +97,23 @@ export function labelledVersion(envelope: unknown): string | null {
  *  redo moved it) reads that version. So a change no document write carried
  *  needs no label step of its own. */
 export function withBase(versionJson: string, base: string | null): string {
-  return base === null ? versionJson : `${versionJson.slice(0, -1)},"base":${JSON.stringify(base)}}`;
+  return base === null
+    ? versionJson
+    : `${versionJson.slice(0, -1)},"base":${JSON.stringify(base)}}`;
 }
 
 /** The `base` a session part records, and the version bytes without it. */
-export function splitBase(bytes: Uint8Array): { base: string | null; version: Uint8Array } {
+export function splitBase(bytes: Uint8Array): {
+  base: string | null;
+  version: Uint8Array;
+} {
   try {
-    const parsed = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
-    if (!parsed || typeof parsed !== "object" || !("base" in parsed)) return { base: null, version: bytes };
+    const parsed = JSON.parse(new TextDecoder().decode(bytes)) as Record<
+      string,
+      unknown
+    >;
+    if (!parsed || typeof parsed !== "object" || !("base" in parsed))
+      return { base: null, version: bytes };
     const base = typeof parsed.base === "string" ? parsed.base : null;
     delete parsed.base;
     return { base, version: new TextEncoder().encode(JSON.stringify(parsed)) };
@@ -121,7 +149,10 @@ const WRAPPABLE = new Set(["setFieldValue", "insertField", "set"]);
  * if it then applies, the label was what was refused and the rider stops;
  * if not, the caller gets the write's own error and the label stays pending.
  */
-export function labelRider(host: BundleHost, state: LabelRiderState): BundleHost {
+export function labelRider(
+  host: BundleHost,
+  state: LabelRiderState,
+): BundleHost {
   const doc = host.document;
   const key = labelKey(host);
   const mutate = async (m: Mutation): Promise<MutationOutcome> => {
@@ -129,7 +160,12 @@ export function labelRider(host: BundleHost, state: LabelRiderState): BundleHost
     const single = m.op !== "batch";
     if (!hash || (single && !WRAPPABLE.has(m.op))) return doc.mutate(m);
     const ops = single ? [m] : (m.args as { ops: Mutation[] }).ops;
-    const outcome = await doc.mutate({ op: "batch", args: { ops: [...ops, labelMutation(hash, key, state.recipe?.() ?? undefined)] } } as Mutation);
+    const outcome = await doc.mutate({
+      op: "batch",
+      args: {
+        ops: [...ops, labelMutation(hash, key, state.recipe?.() ?? undefined)],
+      },
+    } as Mutation);
     if (outcome.applied) {
       state.written(hash);
       return outcome;

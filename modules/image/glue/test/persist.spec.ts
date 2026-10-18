@@ -29,14 +29,25 @@ import manifestJson from "@paged-media/image-manifest/manifest.json";
 
 import { createImageSession } from "../src/session";
 import { collectGarbage, recordPath, sha256Hex } from "../src/session-store";
-import { layeredPsdBytes, makeFakeEditor, mapBacking, psdBytes, shellStub, silentConsole } from "./helpers";
+import {
+  layeredPsdBytes,
+  makeFakeEditor,
+  mapBacking,
+  psdBytes,
+  shellStub,
+  silentConsole,
+} from "./helpers";
 
 function open(fake: ReturnType<typeof makeFakeEditor>) {
-  const handle = createBundleHost(() => fake.editor, manifestJson as PluginManifest, {
-    console: silentConsole,
-    storage: mapBacking(),
-    shell: shellStub(),
-  });
+  const handle = createBundleHost(
+    () => fake.editor,
+    manifestJson as PluginManifest,
+    {
+      console: silentConsole,
+      storage: mapBacking(),
+      shell: shellStub(),
+    },
+  );
   return { handle, session: createImageSession(handle.host) };
 }
 
@@ -62,29 +73,47 @@ describe("commit to the document, and reopen", () => {
     expect(a.session.state().uncommitted).toBe(true);
 
     expect(await a.session.commitToDocument()).toBe(true);
-    expect(a.session.state()).toMatchObject({ committedRev: 1, uncommitted: false });
+    expect(a.session.state()).toMatchObject({
+      committedRev: 1,
+      uncommitted: false,
+    });
 
     // ONE batch: the frame's image and its marker change together.
-    const last = fake.mutations.at(-1) as { op: string; args: { ops: Array<{ op: string }> } };
+    const last = fake.mutations.at(-1) as {
+      op: string;
+      args: { ops: Array<{ op: string }> };
+    };
     expect(last.op).toBe("batch");
-    expect(last.args.ops.map((o) => o.op)).toEqual(["replaceImageBytes", "setPluginMetadata"]);
+    expect(last.args.ops.map((o) => o.op)).toEqual([
+      "replaceImageBytes",
+      "setPluginMetadata",
+    ]);
 
     // The frame now holds a PNG of the composite, and the marker points
     // at a stored revision whose baked hash is exactly those bytes.
     const placed = fake.placed.get("u1")!;
     expect(Array.from(placed.slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
-    const marker = JSON.parse(fake.metadata.get("u1")!.get("x-paged:media.paged.image")!);
+    const marker = JSON.parse(
+      fake.metadata.get("u1")!.get("x-paged:media.paged.image")!,
+    );
     expect(marker).toMatchObject({ v: 2, data: { owns: "pixels", rev: 1 } });
     expect(marker.data.baked).toBe(await sha256Hex(placed));
-    expect([...fake.parts.keys()].some((k) => k.endsWith("/r1.json"))).toBe(true);
+    expect([...fake.parts.keys()].some((k) => k.endsWith("/r1.json"))).toBe(
+      true,
+    );
     a.session.dispose();
     a.handle.dispose();
 
     // A later session on the same frame gets the layers back.
     const b = open(fake);
     expect(await b.session.ingestSelection()).toBe(true);
-    expect(b.session.state().layers.layers.map((l) => l.name)).toEqual(["Background", "Highlights"]);
-    expect(b.session.state().layersNote).toMatch(/Reopened 2 stored layers \(revision 1\)/);
+    expect(b.session.state().layers.layers.map((l) => l.name)).toEqual([
+      "Background",
+      "Highlights",
+    ]);
+    expect(b.session.state().layersNote).toMatch(
+      /Reopened 2 stored layers \(revision 1\)/,
+    );
     expect(b.session.state().committedRev).toBe(1);
     b.session.dispose();
     b.handle.dispose();
@@ -122,7 +151,9 @@ describe("commit to the document, and reopen", () => {
     const b = open(fake);
     expect(await b.session.ingestSelection()).toBe(true);
     expect(b.session.state().layers.layers).toHaveLength(1);
-    expect(b.session.state().layersNote).toMatch(/changed outside paged\.image/);
+    expect(b.session.state().layersNote).toMatch(
+      /changed outside paged\.image/,
+    );
     b.session.dispose();
     b.handle.dispose();
   });
@@ -143,13 +174,19 @@ describe("commit to the document, and reopen", () => {
     fake.placed.set("u1", psdBytes()); // someone relinked the original
     const b = open(fake);
     expect(await b.session.ingestSelection()).toBe(true);
-    expect(b.session.state().layersNote).toMatch(/changed outside paged\.image/);
+    expect(b.session.state().layersNote).toMatch(
+      /changed outside paged\.image/,
+    );
     await b.session.addLayer("Again");
     expect(await b.session.commitToDocument()).toBe(true);
     expect(b.session.state().committedRev).toBe(2);
     expect(fake.parts.get(r1[0])).toEqual(r1[1]);
-    expect([...fake.parts.keys()].some((k) => k.endsWith("/r2.json"))).toBe(true);
-    const marker = JSON.parse(fake.metadata.get("u1")!.get("x-paged:media.paged.image")!);
+    expect([...fake.parts.keys()].some((k) => k.endsWith("/r2.json"))).toBe(
+      true,
+    );
+    const marker = JSON.parse(
+      fake.metadata.get("u1")!.get("x-paged:media.paged.image")!,
+    );
     expect(marker.data.rev).toBe(2);
     b.session.dispose();
     b.handle.dispose();
@@ -166,8 +203,12 @@ describe("commit to the document, and reopen", () => {
     a.handle.dispose();
 
     // A buffer the record names is gone: the reopen cannot restore it.
-    const record = JSON.parse(new TextDecoder().decode(r1[1])) as { manifest: string };
-    const manifestPart = [...fake.parts.keys()].find((k) => k.endsWith(`px/${record.manifest}.bin`))!;
+    const record = JSON.parse(new TextDecoder().decode(r1[1])) as {
+      manifest: string;
+    };
+    const manifestPart = [...fake.parts.keys()].find((k) =>
+      k.endsWith(`px/${record.manifest}.bin`),
+    )!;
     fake.parts.delete(manifestPart);
     const b = open(fake);
     expect(await b.session.ingestSelection()).toBe(true);
@@ -197,20 +238,37 @@ describe("commit to the document, and reopen", () => {
     const layered = await layeredPsdBytes(["Plate", "Signal"]);
 
     const a = open(fake);
-    expect(await a.session.importBytes("annual-layers.psd", layered)).toBe(true);
-    expect(a.session.state()).toMatchObject({ committedRev: 1, uncommitted: false });
+    expect(await a.session.importBytes("annual-layers.psd", layered)).toBe(
+      true,
+    );
+    expect(a.session.state()).toMatchObject({
+      committedRev: 1,
+      uncommitted: false,
+    });
     expect(a.session.state().status).toMatch(/2×1 decoded/);
     expect(a.session.state().status).toMatch(/placed in the selected frame/);
-    const last = fake.mutations.at(-1) as { op: string; args: { ops: Array<{ op: string }> } };
+    const last = fake.mutations.at(-1) as {
+      op: string;
+      args: { ops: Array<{ op: string }> };
+    };
     expect(last.op).toBe("batch");
-    expect(last.args.ops.map((o) => o.op)).toEqual(["replaceImageBytes", "setPluginMetadata"]);
+    expect(last.args.ops.map((o) => o.op)).toEqual([
+      "replaceImageBytes",
+      "setPluginMetadata",
+    ]);
     const placed = fake.placed.get("u2")!;
     expect(Array.from(placed.slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
-    const marker = JSON.parse(fake.metadata.get("u2")!.get("x-paged:media.paged.image")!);
+    const marker = JSON.parse(
+      fake.metadata.get("u2")!.get("x-paged:media.paged.image")!,
+    );
     expect(marker).toMatchObject({ v: 2, data: { owns: "pixels", rev: 1 } });
     expect(marker.data.baked).toBe(await sha256Hex(placed));
     // The PSD's own structure stays editable for the PSD exporter.
-    expect(a.session.state().psd?.layers.map((l) => l.name)).toEqual(["Background", "Plate", "Signal"]);
+    expect(a.session.state().psd?.layers.map((l) => l.name)).toEqual([
+      "Background",
+      "Plate",
+      "Signal",
+    ]);
     const stack = a.session.state().layers.layers.map((l) => l.name);
     a.session.dispose();
     a.handle.dispose();
@@ -253,7 +311,9 @@ describe("commit to the document, and reopen", () => {
     expect(await b.session.importBytes("next.psd", psdBytes())).toBe(true);
     expect(b.session.state().committedRev).toBe(2);
     expect(fake.parts.get(r1[0])).toEqual(r1[1]);
-    const marker = JSON.parse(fake.metadata.get("u1")!.get("x-paged:media.paged.image")!);
+    const marker = JSON.parse(
+      fake.metadata.get("u1")!.get("x-paged:media.paged.image")!,
+    );
     expect(marker.data.rev).toBe(2);
     b.session.dispose();
     b.handle.dispose();
@@ -276,12 +336,23 @@ describe("old revisions are collected", () => {
     const parts = {
       write: async (p: string, b: Uint8Array) => void store.set(p, b),
       read: async (p: string) => store.get(p) ?? null,
-      list: async (prefix = "") => [...store.keys()].filter((k) => k.startsWith(prefix)),
+      list: async (prefix = "") =>
+        [...store.keys()].filter((k) => k.startsWith(prefix)),
     };
     const del = async (p: string) => store.delete(p);
     const rec = (manifest: string, buffers: string[]) =>
-      new TextEncoder().encode(JSON.stringify({ v: 1, width: 1, height: 1, manifest, buffers, baked: "x" }));
-    for (const sha of ["m1", "m2", "m3", "shared", "old"]) store.set(`px/${sha}.bin`, new Uint8Array([1]));
+      new TextEncoder().encode(
+        JSON.stringify({
+          v: 1,
+          width: 1,
+          height: 1,
+          manifest,
+          buffers,
+          baked: "x",
+        }),
+      );
+    for (const sha of ["m1", "m2", "m3", "shared", "old"])
+      store.set(`px/${sha}.bin`, new Uint8Array([1]));
     store.set(recordPath("u1", 1), rec("m1", ["old", "shared"]));
     store.set(recordPath("u1", 2), rec("m2", ["shared"]));
     store.set(recordPath("u1", 3), rec("m3", ["shared"]));
@@ -291,10 +362,8 @@ describe("old revisions are collected", () => {
     expect(out).toEqual({ records: 1, buffers: 2 });
     expect(store.has(recordPath("u1", 1))).toBe(false);
     expect(store.has(recordPath("u1", 2))).toBe(true);
-    expect([...store.keys()].filter((k) => k.startsWith("px/")).sort()).toEqual([
-      "px/m2.bin",
-      "px/m3.bin",
-      "px/shared.bin",
-    ]);
+    expect([...store.keys()].filter((k) => k.startsWith("px/")).sort()).toEqual(
+      ["px/m2.bin", "px/m3.bin", "px/shared.bin"],
+    );
   });
 });

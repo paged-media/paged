@@ -27,10 +27,7 @@ import type {
   PagedEditor,
 } from "@paged-media/plugin-api";
 
-import {
-  createBundleHost,
-  type CreateBundleHostOptions,
-} from "./host-impl.js";
+import { createBundleHost, type CreateBundleHostOptions } from "./host-impl.js";
 import { API_VERSION, satisfiesApiVersion } from "./version.js";
 
 const ID_PATTERN = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9-]*)+$/;

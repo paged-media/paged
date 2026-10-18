@@ -40,7 +40,11 @@ const withVars: WebFrameSource = {
 
 const fresh = (s: WebFrameSource) => {
   const r = renderWebFrameSource(s);
-  return { html: composeSrcdoc({ ...s, html: r.html, css: r.css }), css: r.css, diagnostics: r.diagnostics };
+  return {
+    html: composeSrcdoc({ ...s, html: r.html, css: r.css }),
+    css: r.css,
+    diagnostics: r.diagnostics,
+  };
 };
 
 describe("engineDocument [plugin-web.engine-rendering]", () => {

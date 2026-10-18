@@ -58,7 +58,9 @@ async function foregroundHex(page: Page): Promise<string> {
     const sw = document.querySelector("[data-image-fg-swatch]");
     const row = sw?.parentElement;
     const spans = row ? Array.from(row.querySelectorAll("span")) : [];
-    const hex = spans.map((s) => s.textContent ?? "").find((t) => /^#[0-9a-f]{6}$/i.test(t));
+    const hex = spans
+      .map((s) => s.textContent ?? "")
+      .find((t) => /^#[0-9a-f]{6}$/i.test(t));
     return (hex ?? "").toLowerCase();
   });
 }
@@ -66,7 +68,9 @@ async function foregroundHex(page: Page): Promise<string> {
 /** Pixels in the page render that read as the picked magenta. */
 async function magentaPixels(page: Page, png: Uint8Array): Promise<number> {
   return page.evaluate(async (bytes) => {
-    const bmp = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: "image/png" }));
+    const bmp = await createImageBitmap(
+      new Blob([new Uint8Array(bytes)], { type: "image/png" }),
+    );
     const cv = new OffscreenCanvas(bmp.width, bmp.height);
     const ctx = cv.getContext("2d");
     if (!ctx) throw new Error("no 2d context");
@@ -87,7 +91,12 @@ test.describe("journey · paged.image colour", () => {
     const designer = new Designer(page);
     await designer.open();
     await designer.newDocument();
-    const frame = await designer.drawRectangle({ x0: 90, y0: 120, x1: 360, y1: 320 });
+    const frame = await designer.drawRectangle({
+      x0: 90,
+      y0: 120,
+      x1: 360,
+      y1: 320,
+    });
     expect(frame, "drew a target frame").not.toBe("");
     await designer.selectElement("rectangle", frame);
     // The importer binds the selected frame, so the brush has a frame fit.
@@ -100,7 +109,9 @@ test.describe("journey · paged.image colour", () => {
 
     // ── 1. THE HOST PICKER IS MOUNTED — and the browser input is not. ──
     const fgPicker = page.locator('[data-image-host-picker="fg"]');
-    await expect(fgPicker, "the foreground uses the host picker").toHaveCount(1);
+    await expect(fgPicker, "the foreground uses the host picker").toHaveCount(
+      1,
+    );
     await expect(fgPicker.locator("[data-host-color-picker]")).toHaveCount(1);
     await expect(page.locator('[data-image-host-picker="bg"]')).toHaveCount(1);
     await expect(
@@ -114,7 +125,9 @@ test.describe("journey · paged.image colour", () => {
     await expect(hex).toBeVisible();
     await hex.fill(PICK);
     await hex.press("Enter");
-    await expect.poll(() => foregroundHex(page), { timeout: 10_000 }).toBe(`#${PICK}`);
+    await expect
+      .poll(() => foregroundHex(page), { timeout: 10_000 })
+      .toBe(`#${PICK}`);
     await expect(page.locator("[data-image-fg-swatch]").first()).toHaveCSS(
       "background-color",
       "rgb(224, 16, 224)",
@@ -131,7 +144,10 @@ test.describe("journey · paged.image colour", () => {
     //    rules as image-paint (document pt through `screenPoint`; hover
     //    first so the async frame fit lands). ──
     const before = await designer.renderBytes();
-    expect(await magentaPixels(page, before), "no magenta before the stroke").toBeLessThan(16);
+    expect(
+      await magentaPixels(page, before),
+      "no magenta before the stroke",
+    ).toBeLessThan(16);
     await designer.runCommand(`paged.tool.activate.${BRUSH}`).catch(() => {});
     const path = await Promise.all(
       [

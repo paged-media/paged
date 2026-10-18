@@ -30,24 +30,42 @@ import { Designer } from "../journey/driver/designer";
 import { activateTool, screenPoint } from "./harness/viewport";
 
 type Ref = { kind: string; id: string };
-type Geometry = { id: Ref; pageId?: string | null; bounds: number[]; itemTransform: number[] | null };
+type Geometry = {
+  id: Ref;
+  pageId?: string | null;
+  bounds: number[];
+  itemTransform: number[] | null;
+};
 
 interface CanvasGlobal {
   __canvas: {
     elementSelection: Ref[];
     client: {
       elementGeometry: (ids: Ref[]) => Promise<Geometry[]>;
-      executeScript: (s: string) => Promise<{ output: string[]; error: string | null }>;
-      mutate: (m: unknown) => Promise<{ kind: string; payload?: { createdId?: Ref | null } }>;
+      executeScript: (
+        s: string,
+      ) => Promise<{ output: string[]; error: string | null }>;
+      mutate: (
+        m: unknown,
+      ) => Promise<{ kind: string; payload?: { createdId?: Ref | null } }>;
       camera: { read: () => { scale: number } };
     };
   };
 }
 
 const geometry = async (page: Page, ref: Ref): Promise<Geometry> =>
-  (await page.evaluate((ids) => (globalThis as unknown as CanvasGlobal).__canvas.client.elementGeometry(ids), [ref]))[0];
+  (
+    await page.evaluate(
+      (ids) =>
+        (globalThis as unknown as CanvasGlobal).__canvas.client.elementGeometry(
+          ids,
+        ),
+      [ref],
+    )
+  )[0];
 
-const drawnBoxes = (page: Page) => page.locator('polygon[stroke="var(--overlay-selection)"]');
+const drawnBoxes = (page: Page) =>
+  page.locator('polygon[stroke="var(--overlay-selection)"]');
 
 /** The composed box, `[left, top, right, bottom]`. */
 function box(g: Geometry): [number, number, number, number] {
@@ -59,7 +77,10 @@ function box(g: Geometry): [number, number, number, number] {
 }
 
 const mutate = (page: Page, m: unknown) =>
-  page.evaluate((m) => (globalThis as unknown as CanvasGlobal).__canvas.client.mutate(m), m);
+  page.evaluate(
+    (m) => (globalThis as unknown as CanvasGlobal).__canvas.client.mutate(m),
+    m,
+  );
 
 /** A rectangle at [100, 760]–[200, 860] on a 792 pt page: its top edge is
  *  on the page, its centre is not. Selected by a script, the view panned
@@ -69,13 +90,21 @@ const mutate = (page: Page, m: unknown) =>
  *  first) and then moved. Otherwise it and a second rectangle on the page
  *  are made over the wire, so nothing the selection ever held says where
  *  the page sits in its spread and the canvas must ask. */
-async function hangingRectangle(page: Page, how: "drawn" | "wire"): Promise<Ref> {
+async function hangingRectangle(
+  page: Page,
+  how: "drawn" | "wire",
+): Promise<Ref> {
   const designer = new Designer(page);
   await designer.open();
   await designer.newDocument();
   let rect: Ref;
   if (how === "drawn") {
-    const id = await designer.drawRectangle({ x0: 100, y0: 600, x1: 200, y1: 700 });
+    const id = await designer.drawRectangle({
+      x0: 100,
+      y0: 600,
+      x1: 200,
+      y1: 700,
+    });
     const moved = await mutate(page, {
       op: "moveFrame",
       args: { frameId: id, transform: [1, 0, 0, 1, 0, 160] },
@@ -84,8 +113,14 @@ async function hangingRectangle(page: Page, how: "drawn" | "wire"): Promise<Ref>
     rect = { kind: "rectangle", id };
   } else {
     const { pageIds } = await designer.handle();
-    await mutate(page, { op: "insertFrame", args: { pageId: pageIds[0], bounds: [100, 300, 200, 400] } });
-    const made = await mutate(page, { op: "insertFrame", args: { pageId: pageIds[0], bounds: [760, 100, 860, 200] } });
+    await mutate(page, {
+      op: "insertFrame",
+      args: { pageId: pageIds[0], bounds: [100, 300, 200, 400] },
+    });
+    const made = await mutate(page, {
+      op: "insertFrame",
+      args: { pageId: pageIds[0], bounds: [760, 100, 860, 200] },
+    });
     expect(made.payload?.createdId).toBeTruthy();
     rect = made.payload!.createdId!;
   }
@@ -111,7 +146,13 @@ async function hangingRectangle(page: Page, how: "drawn" | "wire"): Promise<Ref>
     [`${rect.kind}:${id}`],
   );
   await expect
-    .poll(() => page.evaluate(() => (globalThis as unknown as CanvasGlobal).__canvas.elementSelection.map((r) => r.id)))
+    .poll(() =>
+      page.evaluate(() =>
+        (globalThis as unknown as CanvasGlobal).__canvas.elementSelection.map(
+          (r) => r.id,
+        ),
+      ),
+    )
     .toEqual([id]);
   // The pan reaches the overlay a render after the camera: wait until the
   // south-east handle sits on the item's corner in the current view, or a
@@ -119,8 +160,14 @@ async function hangingRectangle(page: Page, how: "drawn" | "wire"): Promise<Ref>
   await expect
     .poll(async () => {
       const at = await screenPoint(page, 200, 860);
-      const b = await page.locator('[data-handle="southEast"]').first().boundingBox();
-      return b !== null && Math.hypot(b.x + b.width / 2 - at.x, b.y + b.height / 2 - at.y) < 1;
+      const b = await page
+        .locator('[data-handle="southEast"]')
+        .first()
+        .boundingBox();
+      return (
+        b !== null &&
+        Math.hypot(b.x + b.width / 2 - at.x, b.y + b.height / 2 - at.y) < 1
+      );
     })
     .toBe(true);
   return rect;
@@ -160,7 +207,10 @@ test.describe("chrome on the pasteboard", () => {
     const rect = await hangingRectangle(page, "drawn");
     const k = (await screenPoint(page, 0, 0)).scale;
 
-    const handle = (await page.locator('[data-handle="southEast"]').first().boundingBox())!;
+    const handle = (await page
+      .locator('[data-handle="southEast"]')
+      .first()
+      .boundingBox())!;
     const hx = handle.x + handle.width / 2;
     const hy = handle.y + handle.height / 2;
     await page.mouse.move(hx, hy);

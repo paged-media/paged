@@ -433,7 +433,12 @@ export function arrangePlan(
 
   const ascending = target === "front" || target === "backward";
   return selection
-    .map((id, i) => ({ id, i, key: elementKey(id), slot: slots.get(elementKey(id)) }))
+    .map((id, i) => ({
+      id,
+      i,
+      key: elementKey(id),
+      slot: slots.get(elementKey(id)),
+    }))
     .filter((e) => !blocked.has(e.key))
     .sort((a, b) => {
       // Unknown ids sort last whichever way we walk.
@@ -560,7 +565,10 @@ export function treePlaces(
       const id = node.id ?? null;
       if (id) out.set(elementKey(id), { node, groups });
       if (node.children) {
-        walk(node.children, id && id.kind === "group" ? [...groups, id] : groups);
+        walk(
+          node.children,
+          id && id.kind === "group" ? [...groups, id] : groups,
+        );
       }
     }
   };
@@ -880,7 +888,10 @@ export function clipIndexMutation(
           : JSON.stringify({
               v: 1,
               data: {
-                clipContent: content.map((id) => ({ kind: id.kind, id: id.id })),
+                clipContent: content.map((id) => ({
+                  kind: id.kind,
+                  id: id.id,
+                })),
               },
             }),
     },
@@ -955,8 +966,7 @@ export function clipPlan(
       };
     }
   }
-  const layerOf = (id: PageItemId) =>
-    options.layerZ?.get(elementKey(id)) ?? 0;
+  const layerOf = (id: PageItemId) => options.layerZ?.get(elementKey(id)) ?? 0;
   const ordered = [...targets].sort((a, b) => {
     const byLayer = layerOf(a) - layerOf(b);
     if (byLayer !== 0) return byLayer;
@@ -1105,7 +1115,11 @@ export async function arrangeSelection(
 
   let plan = selection;
   try {
-    plan = arrangePlan(selection, zSlots(await deps.client.sceneTree()), target);
+    plan = arrangePlan(
+      selection,
+      zSlots(await deps.client.sceneTree()),
+      target,
+    );
   } catch {
     // An unreadable tree leaves selection order in place rather than
     // aborting: the single-selection case (the common one) is correct
@@ -1387,11 +1401,7 @@ async function drainNudges(queue: NudgeQueue): Promise<void> {
   // there, and no later press would ever start a drain.
   await Promise.resolve();
   try {
-    for (
-      let next = queue.pending.shift();
-      next;
-      next = queue.pending.shift()
-    ) {
+    for (let next = queue.pending.shift(); next; next = queue.pending.shift()) {
       // Opposite presses can cancel out while they wait.
       if (next.dx === 0 && next.dy === 0) continue;
       await applyNudge(next);
@@ -1417,8 +1427,7 @@ export type TranslationClient = Pick<
 
 /** What `translationPlan` hands its caller: the ops, or why not. */
 export type TranslationPlan =
-  | { ok: true; ops: Mutation[] }
-  | { ok: false; reason: string };
+  { ok: true; ops: Mutation[] } | { ok: false; reason: string };
 
 /**
  * The ops that move `selection` by `(dx, dy)` in spread space, rigidly,
@@ -1632,7 +1641,9 @@ async function clipContentIndex(
   roots: readonly SceneTreeNode[] | null,
 ): Promise<Map<string, PageItemId[]>> {
   const out = new Map<string, PageItemId[]>();
-  let inTree: Set<string> | null = roots ? new Set(treePlaces(roots).keys()) : null;
+  let inTree: Set<string> | null = roots
+    ? new Set(treePlaces(roots).keys())
+    : null;
   const queue = candidates.filter(canClipBy);
   const visited = new Set<string>();
   for (let container = queue.shift(); container; container = queue.shift()) {
@@ -1674,7 +1685,10 @@ async function layerPositions(
         (e) => e.path === "itemLayer",
       );
       const layer = entry?.value?.type === "text" ? entry.value.value : null;
-      out.set(elementKey(id), (layer != null ? zOf.get(layer) : undefined) ?? 0);
+      out.set(
+        elementKey(id),
+        (layer != null ? zOf.get(layer) : undefined) ?? 0,
+      );
     }
     return out;
   } catch {
@@ -1721,8 +1735,9 @@ export async function makeClippingMask(deps: ObjectCommandDeps): Promise<void> {
   let existing: PageItemId[];
   try {
     existing =
-      (await clipContentIndex(deps.client, [clip], roots)).get(elementKey(clip)) ??
-      [];
+      (await clipContentIndex(deps.client, [clip], roots)).get(
+        elementKey(clip),
+      ) ?? [];
   } catch {
     deps.report(
       "error",
@@ -1926,14 +1941,54 @@ const NUDGE_COMMANDS: ReadonlyArray<{
   direction: NudgeDirection;
   large: boolean;
 }> = [
-  { id: PAGED_OBJECT_NUDGE_LEFT, title: "Nudge left", direction: "left", large: false },
-  { id: PAGED_OBJECT_NUDGE_RIGHT, title: "Nudge right", direction: "right", large: false },
-  { id: PAGED_OBJECT_NUDGE_UP, title: "Nudge up", direction: "up", large: false },
-  { id: PAGED_OBJECT_NUDGE_DOWN, title: "Nudge down", direction: "down", large: false },
-  { id: PAGED_OBJECT_NUDGE_LEFT_LARGE, title: "Nudge left ×10", direction: "left", large: true },
-  { id: PAGED_OBJECT_NUDGE_RIGHT_LARGE, title: "Nudge right ×10", direction: "right", large: true },
-  { id: PAGED_OBJECT_NUDGE_UP_LARGE, title: "Nudge up ×10", direction: "up", large: true },
-  { id: PAGED_OBJECT_NUDGE_DOWN_LARGE, title: "Nudge down ×10", direction: "down", large: true },
+  {
+    id: PAGED_OBJECT_NUDGE_LEFT,
+    title: "Nudge left",
+    direction: "left",
+    large: false,
+  },
+  {
+    id: PAGED_OBJECT_NUDGE_RIGHT,
+    title: "Nudge right",
+    direction: "right",
+    large: false,
+  },
+  {
+    id: PAGED_OBJECT_NUDGE_UP,
+    title: "Nudge up",
+    direction: "up",
+    large: false,
+  },
+  {
+    id: PAGED_OBJECT_NUDGE_DOWN,
+    title: "Nudge down",
+    direction: "down",
+    large: false,
+  },
+  {
+    id: PAGED_OBJECT_NUDGE_LEFT_LARGE,
+    title: "Nudge left ×10",
+    direction: "left",
+    large: true,
+  },
+  {
+    id: PAGED_OBJECT_NUDGE_RIGHT_LARGE,
+    title: "Nudge right ×10",
+    direction: "right",
+    large: true,
+  },
+  {
+    id: PAGED_OBJECT_NUDGE_UP_LARGE,
+    title: "Nudge up ×10",
+    direction: "up",
+    large: true,
+  },
+  {
+    id: PAGED_OBJECT_NUDGE_DOWN_LARGE,
+    title: "Nudge down ×10",
+    direction: "down",
+    large: true,
+  },
 ];
 
 export function buildObjectCommands(
@@ -2200,7 +2255,11 @@ export const OBJECT_KEYBINDINGS: KeybindingContribution[] = [
   { key: "backspace", command: PAGED_OBJECT_DELETE, when: deleteKeyApplies },
   { key: "delete", command: PAGED_OBJECT_DELETE, when: deleteKeyApplies },
   { key: "arrowleft", command: PAGED_OBJECT_NUDGE_LEFT, when: nudgeKeyApplies },
-  { key: "arrowright", command: PAGED_OBJECT_NUDGE_RIGHT, when: nudgeKeyApplies },
+  {
+    key: "arrowright",
+    command: PAGED_OBJECT_NUDGE_RIGHT,
+    when: nudgeKeyApplies,
+  },
   { key: "arrowup", command: PAGED_OBJECT_NUDGE_UP, when: nudgeKeyApplies },
   { key: "arrowdown", command: PAGED_OBJECT_NUDGE_DOWN, when: nudgeKeyApplies },
   {

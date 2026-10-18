@@ -33,7 +33,10 @@ import { StyleApplyPanel } from "./style-apply";
 
 export function ObjectStylesPanel() {
   // ADR 323 — the applied style is an object-model field on the selection.
-  const applied = useObjectField({ path: "appliedObjectStyle", scope: "element" });
+  const applied = useObjectField({
+    path: "appliedObjectStyle",
+    scope: "element",
+  });
   return (
     <div className="p-0" data-object-styles-panel="ready">
       <StyleApplyPanel

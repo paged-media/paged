@@ -52,7 +52,11 @@ export interface ObjectAutomationApi {
    *  `{ kind: "absent" }`; a refusal throws with its code. */
   get(address: string, path: string): Promise<ShellObjectValue>;
   /** One write = one undo step; a refusal throws with its code. */
-  set(address: string, path: string, value: unknown): Promise<ShellObjectWriteResult>;
+  set(
+    address: string,
+    path: string,
+    value: unknown,
+  ): Promise<ShellObjectWriteResult>;
   /** All-or-nothing, one undo step; returns the result (never throws a
    *  refusal — read `applied`, `code`, `index`). */
   batch(ops: readonly ShellObjectOp[]): Promise<ShellObjectWriteResult>;
@@ -60,14 +64,21 @@ export interface ObjectAutomationApi {
   schema(addressOrKind: string): Promise<readonly ShellPropertySchema[]>;
 }
 
-type ObjectsLike = Pick<ShellObjectsSurface, "query" | "get" | "set" | "batch" | "schema">;
+type ObjectsLike = Pick<
+  ShellObjectsSurface,
+  "query" | "get" | "set" | "batch" | "schema"
+>;
 
 export function buildObjectAutomation(
   getObjects: () => ObjectsLike | null | undefined,
 ): ObjectAutomationApi {
   const objects = (): ObjectsLike => {
     const o = getObjects();
-    if (!o) throw new ObjectModelError("unavailable", "no object registry is wired in this editor");
+    if (!o)
+      throw new ObjectModelError(
+        "unavailable",
+        "no object registry is wired in this editor",
+      );
     return o;
   };
   return {
@@ -81,7 +92,8 @@ export function buildObjectAutomation(
     },
     async set(address, path, value) {
       const r = await objects().set(address, path, value);
-      if (!r.applied) throw new ObjectModelError(r.code ?? "failed", r.reason ?? "refused");
+      if (!r.applied)
+        throw new ObjectModelError(r.code ?? "failed", r.reason ?? "refused");
       return r;
     },
     async batch(ops) {

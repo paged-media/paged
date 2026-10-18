@@ -42,8 +42,7 @@ import type { ComponentType } from "react";
  * binding language.
  */
 export type Binding =
-  | { kind: "literal"; value: unknown }
-  | SelectionPropertyBinding;
+  { kind: "literal"; value: unknown } | SelectionPropertyBinding;
 
 export interface SelectionPropertyBinding {
   kind: "selectionProperty";
@@ -204,7 +203,10 @@ export type CatalogEntryKind = "composition" | "leaf";
  * ceiling: bindings stay simple; complex props live on expert
  * leaves).
  */
-export type PropSchema = Record<string, "string" | "number" | "boolean" | "JsonValue">;
+export type PropSchema = Record<
+  string,
+  "string" | "number" | "boolean" | "JsonValue"
+>;
 
 /**
  * Catalog entry. Compositions are pure data; leaves provide the

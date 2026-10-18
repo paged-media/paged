@@ -32,7 +32,14 @@
 // Real engine: skipped without the wasm artifact, FAILS under
 // REQUIRE_REAL_ENGINE=1 (the engine-real.spec.ts dual gate).
 
-import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  setDefaultTimeout,
+} from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -68,80 +75,102 @@ const PRICE_LIST: (string | null)[][] = [
   ["Total", null, null, "=SUM(D2:D6)"],
 ];
 
-describe.skipIf(!ENGINE_BUILT)("a placed table range is sized to its rows", () => {
-  setDefaultTimeout(60_000);
-  let h: HeadlessHost;
-  let host: BundleHost;
-  let s: WorkbookSession | null = null;
+describe.skipIf(!ENGINE_BUILT)(
+  "a placed table range is sized to its rows",
+  () => {
+    setDefaultTimeout(60_000);
+    let h: HeadlessHost;
+    let host: BundleHost;
+    let s: WorkbookSession | null = null;
 
-  beforeEach(async () => {
-    h = await openHost();
-    await h.load(blankPageIdml());
-    host = withSceneChannel(sheetHost(h)).host;
-  });
-  afterEach(() => {
-    s?.dispose();
-    s = null;
-    h?.dispose();
-  });
-
-  /** The placed frame's box and whether its story is overset. */
-  async function placed(frame: string) {
-    const [g] = await host.document.elementGeometry([{ kind: "textFrame", id: frame }]);
-    const storyId = (g as { storyId?: string | null }).storyId;
-    expect(storyId, "the frame's story").toBeTruthy();
-    const chain = await host.document.frameChain(storyId!);
-    return { bounds: g.bounds, overset: chain.some((l) => l.overflow), storyId: storyId! };
-  }
-
-  /** Whether the frame's story is overset at `height` (pt). */
-  async function oversetAt(frame: string, top: number, left: number, right: number, height: number) {
-    const r = await host.document.mutate({
-      op: "setElementProperty",
-      args: {
-        elementId: { kind: "textFrame", id: frame },
-        path: "frameBounds",
-        value: { type: "bounds", value: [top, left, top + height, right] },
-      },
+    beforeEach(async () => {
+      h = await openHost();
+      await h.load(blankPageIdml());
+      host = withSceneChannel(sheetHost(h)).host;
     });
-    expect(r.applied).toBe(true);
-    const { overset } = await placed(frame);
-    await host.document.undo();
-    return overset;
-  }
+    afterEach(() => {
+      s?.dispose();
+      s = null;
+      h?.dispose();
+    });
 
-  it("A1:D7 of the price list shows every row, in a frame no taller than its rows [sheet.lower.page]", async () => {
-    const session = createWorkbookSession(host);
-    s = session;
-    await session.import(
-      await authorWorkbook(7, 4, (r, c) => PRICE_LIST[r][c]),
-      "price-list.xlsx",
-    );
-    session.setRange("A1:D7");
-    const frame = await session.lowerSelection();
-    expect(frame).not.toBeNull();
-    await settle();
+    /** The placed frame's box and whether its story is overset. */
+    async function placed(frame: string) {
+      const [g] = await host.document.elementGeometry([
+        { kind: "textFrame", id: frame },
+      ]);
+      const storyId = (g as { storyId?: string | null }).storyId;
+      expect(storyId, "the frame's story").toBeTruthy();
+      const chain = await host.document.frameChain(storyId!);
+      return {
+        bounds: g.bounds,
+        overset: chain.some((l) => l.overflow),
+        storyId: storyId!,
+      };
+    }
 
-    const { bounds, overset } = await placed(frame!);
-    // Every row shows: nothing is overset (the film's "1 overset story").
-    expect(overset, "the placed table is overset").toBe(false);
-    // ...and the frame is sized TO the rows, not merely large: one point
-    // shorter and the last row no longer fits.
-    const [top, left, bottom, right] = bounds;
-    expect(await oversetAt(frame!, top, left, right, bottom - top - 1)).toBe(true);
-  });
+    /** Whether the frame's story is overset at `height` (pt). */
+    async function oversetAt(
+      frame: string,
+      top: number,
+      left: number,
+      right: number,
+      height: number,
+    ) {
+      const r = await host.document.mutate({
+        op: "setElementProperty",
+        args: {
+          elementId: { kind: "textFrame", id: frame },
+          path: "frameBounds",
+          value: { type: "bounds", value: [top, left, top + height, right] },
+        },
+      });
+      expect(r.applied).toBe(true);
+      const { overset } = await placed(frame);
+      await host.document.undo();
+      return overset;
+    }
 
-  it("a single-row range fits too — the lead-in is per frame, not per row [sheet.lower.page]", async () => {
-    const session = createWorkbookSession(host);
-    s = session;
-    await session.import(await authorWorkbook(1, 2, (_r, c) => `cell ${c}`), "one.xlsx");
-    session.setRange("A1:B1");
-    const frame = await session.lowerSelection();
-    expect(frame).not.toBeNull();
-    await settle();
-    const { bounds, overset } = await placed(frame!);
-    expect(overset).toBe(false);
-    const [top, left, bottom, right] = bounds;
-    expect(await oversetAt(frame!, top, left, right, bottom - top - 1)).toBe(true);
-  });
-});
+    it("A1:D7 of the price list shows every row, in a frame no taller than its rows [sheet.lower.page]", async () => {
+      const session = createWorkbookSession(host);
+      s = session;
+      await session.import(
+        await authorWorkbook(7, 4, (r, c) => PRICE_LIST[r][c]),
+        "price-list.xlsx",
+      );
+      session.setRange("A1:D7");
+      const frame = await session.lowerSelection();
+      expect(frame).not.toBeNull();
+      await settle();
+
+      const { bounds, overset } = await placed(frame!);
+      // Every row shows: nothing is overset (the film's "1 overset story").
+      expect(overset, "the placed table is overset").toBe(false);
+      // ...and the frame is sized TO the rows, not merely large: one point
+      // shorter and the last row no longer fits.
+      const [top, left, bottom, right] = bounds;
+      expect(await oversetAt(frame!, top, left, right, bottom - top - 1)).toBe(
+        true,
+      );
+    });
+
+    it("a single-row range fits too — the lead-in is per frame, not per row [sheet.lower.page]", async () => {
+      const session = createWorkbookSession(host);
+      s = session;
+      await session.import(
+        await authorWorkbook(1, 2, (_r, c) => `cell ${c}`),
+        "one.xlsx",
+      );
+      session.setRange("A1:B1");
+      const frame = await session.lowerSelection();
+      expect(frame).not.toBeNull();
+      await settle();
+      const { bounds, overset } = await placed(frame!);
+      expect(overset).toBe(false);
+      const [top, left, bottom, right] = bounds;
+      expect(await oversetAt(frame!, top, left, right, bottom - top - 1)).toBe(
+        true,
+      );
+    });
+  },
+);

@@ -37,7 +37,12 @@ export function DiagnosticsList(props: {
     <div data-data-diagnostics>
       <ul style={list}>
         {shown.map((d, i) => (
-          <li key={i} data-level={d.level} data-source={d.source} style={{ color: COLOR[d.level] }}>
+          <li
+            key={i}
+            data-level={d.level}
+            data-source={d.source}
+            style={{ color: COLOR[d.level] }}
+          >
             {d.source}
             {d.binding ? ` · ${d.binding}` : ""}: {d.message}
           </li>

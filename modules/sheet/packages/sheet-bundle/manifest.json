@@ -9,18 +9,11 @@
       "read": "broad",
       "write": "scoped"
     },
-    "rendering": [
-      "hitTest",
-      "sceneLayer"
-    ],
+    "rendering": ["hitTest", "sceneLayer"],
     "network": false,
     "dataProviders": {
-      "consume": [
-        "dataset"
-      ],
-      "publish": [
-        "dataset"
-      ]
+      "consume": ["dataset"],
+      "publish": ["dataset"]
     },
     "clipboard": "full",
     "keybindings": true,
@@ -74,9 +67,7 @@
       "media.paged.sheet.importer.xlsx",
       "media.paged.sheet.importer.csv"
     ],
-    "exporters": [
-      "media.paged.sheet.exporter.xlsx"
-    ],
+    "exporters": ["media.paged.sheet.exporter.xlsx"],
     "editContexts": [
       {
         "type": "sheet",

@@ -273,9 +273,12 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // Native `detail` on pointerup is unreliable across browsers for the
   // 3rd click, so we track the click run ourselves: same screen point
   // (within slop) within the multi-click window bumps the count.
-  const clickRunRef = useRef<{ t: number; x: number; y: number; count: number }>(
-    { t: 0, x: 0, y: 0, count: 0 },
-  );
+  const clickRunRef = useRef<{
+    t: number;
+    x: number;
+    y: number;
+    count: number;
+  }>({ t: 0, x: 0, y: 0, count: 0 });
 
   // Document-space layout — only used to compute initial fit-to-document.
   const rects = useMemo(
@@ -443,7 +446,11 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       const scale = props.camera.scale;
       return {
         point: [docX - pageRect.x, docY - pageRect.y],
-        modifiers: { shift: e.shiftKey, alt: e.altKey, cmd: e.metaKey || e.ctrlKey },
+        modifiers: {
+          shift: e.shiftKey,
+          alt: e.altKey,
+          cmd: e.metaKey || e.ctrlKey,
+        },
         ptPerPx: 1 / (scale > 0 ? scale : 1),
         timeStamp: e.timeStamp,
       };
@@ -475,7 +482,10 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       const containing = findContainingPage(rects, props.pageIds, docX, docY);
       if (!containing) return null;
       const [pageId, pageRect] = containing;
-      const pageLocal: [number, number] = [docX - pageRect.x, docY - pageRect.y];
+      const pageLocal: [number, number] = [
+        docX - pageRect.x,
+        docY - pageRect.y,
+      ];
       // The active frame's geometry (bounds + itemTransform) carries the
       // page→content transform — same geometry the selection chrome reads.
       const rootKey = `${active.scopeRoot.kind}:${active.scopeRoot.id}`;
@@ -489,14 +499,24 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         content,
         // Frame-like ElementIds carry a string `id` (the union also covers
         // story-range / table-cell addresses, which never enter a context).
-        elementId: typeof active.scopeRoot.id === "string" ? active.scopeRoot.id : "",
+        elementId:
+          typeof active.scopeRoot.id === "string" ? active.scopeRoot.id : "",
       };
     },
-    [editContextStack, props.camera, props.pageIds, props.elementGeometry, rects],
+    [
+      editContextStack,
+      props.camera,
+      props.pageIds,
+      props.elementGeometry,
+      rects,
+    ],
   );
 
   const dispatchContentPointer = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>, phase: "down" | "move" | "up"): boolean => {
+    (
+      e: React.PointerEvent<HTMLDivElement>,
+      phase: "down" | "move" | "up",
+    ): boolean => {
       const contribution = editContextStack?.activeContribution;
       if (!contribution) return false;
       const at = activeContentPointAt(e.currentTarget, e.clientX, e.clientY);
@@ -639,8 +659,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       // pan so the existing typing UX is undisturbed.
       let mode: "pan" | "marquee" | "gesture" = "pan";
       let gestureState:
-        | NonNullable<typeof dragStateRef.current>["gestureState"]
-        | undefined;
+        NonNullable<typeof dragStateRef.current>["gestureState"] | undefined;
       // Path-edit mode — a primary press is the path's. The session
       // takes it whatever it landed on (an empty press starts its
       // anchor marquee), so none of the element gestures below is even
@@ -735,7 +754,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
                 ? { kind: "scale" }
                 : { kind: "resize", handle: handleAttr };
             targets = [selectedGeom.id];
-            if (gestureSpec.kind === "scale") scaleBox = itemHandleBox(selectedGeom);
+            if (gestureSpec.kind === "scale")
+              scaleBox = itemHandleBox(selectedGeom);
           }
         } else if (bodyHitElement) {
           // Body drag. For multi-select, move ALL selected items
@@ -786,7 +806,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
             ? rects[props.pageIds.indexOf(gesturePage)]
             : undefined;
           const anchorAt: [PageId, PageRect] | null =
-            gesturePage && gestureRect ? [gesturePage, gestureRect] : containing;
+            gesturePage && gestureRect
+              ? [gesturePage, gestureRect]
+              : containing;
           const anchor: GestureAnchor | null = anchorAt
             ? {
                 pageId: anchorAt[0],
@@ -795,7 +817,11 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
             : null;
           // The box was measured on `gesturePage`; the pivot is named there.
           const scale: HandleScale | null =
-            gesturePage && gestureRect && scaleBox && handleAttr && handleAttr !== "rotate"
+            gesturePage &&
+            gestureRect &&
+            scaleBox &&
+            handleAttr &&
+            handleAttr !== "rotate"
               ? {
                   pageId: gesturePage,
                   grabbed: scaleBox.at(handleAttr),
@@ -934,7 +960,11 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         // independently of `metaKey`; on macOS the Ctrl key is its own
         // thing (not Cmd), matching InDesign's "hold Ctrl to ignore
         // snap targets" convention.
-        gs.modifiers = { shift: e.shiftKey, alt: e.altKey, disableSnap: e.ctrlKey };
+        gs.modifiers = {
+          shift: e.shiftKey,
+          alt: e.altKey,
+          disableSnap: e.ctrlKey,
+        };
         if (gs.scale && gs.handle !== null && e.altKey !== gs.scale.alt) {
           // Alt/Option moves the pivot between the opposite handle and
           // the centre. The engine fixes the pivot when the gesture
@@ -1092,7 +1122,12 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
         // run so the 2nd consecutive click on the same point selects a
         // word and the 3rd selects the line. Native `detail` is
         // unreliable for the 3rd click, so we count ourselves.
-        const clickCount = bumpClickRun(clickRunRef.current, cx, cy, e.timeStamp);
+        const clickCount = bumpClickRun(
+          clickRunRef.current,
+          cx,
+          cy,
+          e.timeStamp,
+        );
         const isText = (props.activeTool ?? "select") === "text";
         const [docX, docY] = viewportToDoc(props.camera, cx, cy);
         const containing = findContainingPage(rects, props.pageIds, docX, docY);
@@ -1376,7 +1411,10 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
    * handle's group). */
   function readHandlePage(target: EventTarget | null): PageId | null {
     if (!(target instanceof Element)) return null;
-    return target.closest("[data-handle-page]")?.getAttribute("data-handle-page") ?? null;
+    return (
+      target.closest("[data-handle-page]")?.getAttribute("data-handle-page") ??
+      null
+    );
   }
 
   function findContainingPage(
@@ -1407,12 +1445,17 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       // An active edit context that scrolls its own content (a sheet's
       // in-frame grid window) takes a plain wheel over its frame; the
       // canvas pans only when it declines. Cmd/Ctrl wheel stays zoom.
-      const onContentWheel = editContextStack?.activeContribution?.onContentWheel;
+      const onContentWheel =
+        editContextStack?.activeContribution?.onContentWheel;
       if (onContentWheel && !e.ctrlKey && !e.metaKey) {
         const at = activeContentPointAt(e.currentTarget, e.clientX, e.clientY);
         if (at) {
           const toPx =
-            e.deltaMode === 1 ? WHEEL_LINE_PX : e.deltaMode === 2 ? rect.height : 1;
+            e.deltaMode === 1
+              ? WHEEL_LINE_PX
+              : e.deltaMode === 2
+                ? rect.height
+                : 1;
           const scale = props.camera.scale > 0 ? props.camera.scale : 1;
           const taken = onContentWheel({
             contentPoint: at.content,
@@ -1462,7 +1505,10 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       const containing = findContainingPage(rects, props.pageIds, docX, docY);
       if (!containing) return;
       const [pageId, pageRect] = containing;
-      const pagePoint: [number, number] = [docX - pageRect.x, docY - pageRect.y];
+      const pagePoint: [number, number] = [
+        docX - pageRect.x,
+        docY - pageRect.y,
+      ];
       void (async () => {
         try {
           const reply = await props.client.send({
@@ -1487,7 +1533,8 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
           // A grouped frame descends into its group first (Track L); the
           // next double-click, inside the group, reaches the text.
           const inGroupScope =
-            chain.length === 0 || (activeGroup !== null && chain.includes(activeGroup));
+            chain.length === 0 ||
+            (activeGroup !== null && chain.includes(activeGroup));
           if (
             element?.kind === "textFrame" &&
             inGroupScope &&
@@ -1508,7 +1555,9 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
               start: hit.offsetWithinStory,
               end: hit.offsetWithinStory,
               affinity: false,
-              cell: tc ? { tableId: tc.tableId, row: tc.row, col: tc.col } : undefined,
+              cell: tc
+                ? { tableId: tc.tableId, row: tc.row, col: tc.col }
+                : undefined,
             });
             return;
           }
@@ -1653,7 +1702,10 @@ interface HandleBox {
   centre: Pt;
 }
 
-function handleBox(bounds: readonly number[], m: Affine | null | undefined): HandleBox {
+function handleBox(
+  bounds: readonly number[],
+  m: Affine | null | undefined,
+): HandleBox {
   const [top, left, bottom, right] = bounds;
   const cx = (left + right) / 2;
   const cy = (top + bottom) / 2;
@@ -1678,14 +1730,21 @@ function itemHandleBox(g: ElementGeometryItem): HandleBox {
 }
 
 /** The union box of a multi-selection's items on one page. */
-function unionHandleBox(items: readonly ElementGeometryItem[]): HandleBox | null {
+function unionHandleBox(
+  items: readonly ElementGeometryItem[],
+): HandleBox | null {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
   for (const g of items) {
     const box = itemHandleBox(g);
-    for (const name of ["northWest", "northEast", "southEast", "southWest"] as const) {
+    for (const name of [
+      "northWest",
+      "northEast",
+      "southEast",
+      "southWest",
+    ] as const) {
       const [x, y] = box.at(name);
       minX = Math.min(minX, x);
       minY = Math.min(minY, y);
@@ -1747,13 +1806,15 @@ async function applyTextGranularity(
   storyId: string,
   offset: number,
   clickCount: number,
-  setContentSelection: (s: {
-    storyId: string;
-    start: number;
-    end: number;
-    cell?: TextCellAddr | null;
-    affinity?: boolean;
-  } | null) => void,
+  setContentSelection: (
+    s: {
+      storyId: string;
+      start: number;
+      end: number;
+      cell?: TextCellAddr | null;
+      affinity?: boolean;
+    } | null,
+  ) => void,
   cell: TextCellAddr | null = null,
 ): Promise<void> {
   try {

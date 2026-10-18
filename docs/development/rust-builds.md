@@ -14,22 +14,22 @@ tooling/dev/check-tools.sh
 It prints the install command for anything missing and exits 1 when a required
 tool is absent.
 
-| Tool | Needed for | macOS | Linux |
-|---|---|---|---|
-| rustup | every build; each workspace's `rust-toolchain.toml` picks the toolchain | <https://rustup.rs> | <https://rustup.rs> |
-| proto | Node, Bun and moon, pinned in `.prototools` | `curl -fsSL https://moonrepo.dev/install/proto.sh \| bash` | same |
-| cargo-nextest | running tests | `brew install cargo-nextest` | `cargo install --locked cargo-nextest` |
-| Command Line Tools | clang, the link driver | `xcode-select --install` | your distribution's clang |
-| sccache (recommended) | reusing compiled dependencies across workspaces, worktrees and clean builds | `brew install sccache` | `cargo install --locked sccache` |
+| Tool                  | Needed for                                                                  | macOS                                                      | Linux                                  |
+| --------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------- |
+| rustup                | every build; each workspace's `rust-toolchain.toml` picks the toolchain     | <https://rustup.rs>                                        | <https://rustup.rs>                    |
+| proto                 | Node, Bun and moon, pinned in `.prototools`                                 | `curl -fsSL https://moonrepo.dev/install/proto.sh \| bash` | same                                   |
+| cargo-nextest         | running tests                                                               | `brew install cargo-nextest`                               | `cargo install --locked cargo-nextest` |
+| Command Line Tools    | clang, the link driver                                                      | `xcode-select --install`                                   | your distribution's clang              |
+| sccache (recommended) | reusing compiled dependencies across workspaces, worktrees and clean builds | `brew install sccache`                                     | `cargo install --locked sccache`       |
 
 ## What the repository configures
 
-| Setting | Effect | Opt out |
-|---|---|---|
-| `[profile.dev]` `debug = 1` | Line tables and function names, no variable info: smaller binaries, faster links. Backtraces keep file and line. | `CARGO_PROFILE_DEV_DEBUG=2` |
-| `[profile.dev.package."*"]` `opt-level = 2` | Dependencies are optimised once and then reused; tests that spend their time in dependencies (decoding, shaping, rasterising) run faster. The workspace's own crates stay at opt-level 0. | — |
-| `rustc-wrapper = "tooling/rust/rustc-wrapper"` | Compiles through sccache when it is installed, plain rustc otherwise. | `PAGED_SCCACHE=0` |
-| macOS `linker = "tooling/rust/cc-lld"` | Links with the active toolchain's own lld (`lib/rustlib/<host>/bin/gcc-ld/ld64.lld`, shipped with every rustup toolchain and matched to its LLVM); falls back to Apple's ld. | `PAGED_LINKER=ld` |
+| Setting                                        | Effect                                                                                                                                                                                    | Opt out                     |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `[profile.dev]` `debug = 1`                    | Line tables and function names, no variable info: smaller binaries, faster links. Backtraces keep file and line.                                                                          | `CARGO_PROFILE_DEV_DEBUG=2` |
+| `[profile.dev.package."*"]` `opt-level = 2`    | Dependencies are optimised once and then reused; tests that spend their time in dependencies (decoding, shaping, rasterising) run faster. The workspace's own crates stay at opt-level 0. | —                           |
+| `rustc-wrapper = "tooling/rust/rustc-wrapper"` | Compiles through sccache when it is installed, plain rustc otherwise.                                                                                                                     | `PAGED_SCCACHE=0`           |
+| macOS `linker = "tooling/rust/cc-lld"`         | Links with the active toolchain's own lld (`lib/rustlib/<host>/bin/gcc-ld/ld64.lld`, shipped with every rustup toolchain and matched to its LLVM); falls back to Apple's ld.              | `PAGED_LINKER=ld`           |
 
 Linkers and wrappers are set with `linker` and `rustc-wrapper`, never through
 `rustflags`: a `RUSTFLAGS` environment variable (CI sets `-Dwarnings`) replaces
@@ -112,11 +112,11 @@ of every test binary, a rebuild after touching one crate, and a nextest run
 Measured on a 16-core Apple M3 Max (128 GB) with the checkout and `target/` on a USB SSD,
 `engine/core`, 3,031 tests:
 
-| Configuration | Clean build | Touch rebuild | Test run |
-|---|---|---|---|
-| Before (Apple ld, Cargo's default dev profile) | 400 s | 400 s | 139 s |
-| This config, Apple ld (`PAGED_LINKER=ld`) | 408 s | 343 s | — |
-| This config, toolchain lld | n/a¹ | n/a¹ | 88 s |
+| Configuration                                  | Clean build | Touch rebuild | Test run |
+| ---------------------------------------------- | ----------- | ------------- | -------- |
+| Before (Apple ld, Cargo's default dev profile) | 400 s       | 400 s         | 139 s    |
+| This config, Apple ld (`PAGED_LINKER=ld`)      | 408 s       | 343 s         | —        |
+| This config, toolchain lld                     | n/a¹        | n/a¹          | 88 s     |
 
 ¹ Repeated: that run shared the machine with other heavy work.
 

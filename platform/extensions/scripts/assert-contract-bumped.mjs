@@ -148,7 +148,9 @@ if (violations.length > 0) {
       `(a -canary.N rev), or publish.yml will no-op and npm will go stale (03 P2).\n`,
   );
   for (const v of violations) {
-    console.error(`  ${v.pkg} @ ${v.version} — unchanged across ${base}..HEAD, but:`);
+    console.error(
+      `  ${v.pkg} @ ${v.version} — unchanged across ${base}..HEAD, but:`,
+    );
     for (const f of v.files) console.error(`      ${f}`);
   }
   console.error("");

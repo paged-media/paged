@@ -25,17 +25,29 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PKG = resolve(ROOT, "packages/data-bundle");
-const manifest = JSON.parse(readFileSync(resolve(PKG, "manifest.json"), "utf8"));
-const wasmDecl = Object.fromEntries(manifest.capabilities.wasm.map((w) => [w.path, w]));
+const manifest = JSON.parse(
+  readFileSync(resolve(PKG, "manifest.json"), "utf8"),
+);
+const wasmDecl = Object.fromEntries(
+  manifest.capabilities.wasm.map((w) => [w.path, w]),
+);
 
-const out = execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
-  cwd: PKG,
-  encoding: "utf8",
-  stdio: ["ignore", "pipe", "inherit"],
-});
+const out = execFileSync(
+  "npm",
+  ["pack", "--dry-run", "--json", "--ignore-scripts"],
+  {
+    cwd: PKG,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "inherit"],
+  },
+);
 // npm ≤ 11 answers an array of packs; npm 12 an object keyed by package name.
 const parsed = JSON.parse(out);
-const pack = Array.isArray(parsed) ? parsed[0] : (parsed.files ? parsed : Object.values(parsed)[0]);
+const pack = Array.isArray(parsed)
+  ? parsed[0]
+  : parsed.files
+    ? parsed
+    : Object.values(parsed)[0];
 const files = new Map(pack.files.map((f) => [f.path, f.size]));
 
 const errors = [];
@@ -45,38 +57,77 @@ const need = (path, why) => {
 need("dist/index.js", "the bundle — run `bun run build`");
 need("manifest.json", "the plugin manifest");
 need("bin/data_js.js", "data-js glue — run `bash scripts/build-wasm.sh`");
-need("bin/data_js_bg.wasm", "data-js engine — run `bash scripts/build-wasm.sh`");
-need("bin/duckdb-engine.wasm", "DuckDB engine — run `bash scripts/vendor-duckdb.sh`");
-need("bin/duckdb-browser-eh.worker.js", "DuckDB worker — run `bash scripts/vendor-duckdb.sh`");
-need("bin/duckdb-browser.mjs", "DuckDB JS API — run `bash scripts/vendor-duckdb.sh`");
+need(
+  "bin/data_js_bg.wasm",
+  "data-js engine — run `bash scripts/build-wasm.sh`",
+);
+need(
+  "bin/duckdb-engine.wasm",
+  "DuckDB engine — run `bash scripts/vendor-duckdb.sh`",
+);
+need(
+  "bin/duckdb-browser-eh.worker.js",
+  "DuckDB worker — run `bash scripts/vendor-duckdb.sh`",
+);
+need(
+  "bin/duckdb-browser.mjs",
+  "DuckDB JS API — run `bash scripts/vendor-duckdb.sh`",
+);
 for (const name of ["json", "parquet"]) {
-  const w = manifest.capabilities.wasm.find((a) => a.name === `duckdb-ext-${name}`);
+  const w = manifest.capabilities.wasm.find(
+    (a) => a.name === `duckdb-ext-${name}`,
+  );
   if (!w) errors.push(`the manifest declares no duckdb-ext-${name} artifact`);
-  else need(w.path, `DuckDB ${name} extension — run \`bash scripts/vendor-duckdb.sh\``);
+  else
+    need(
+      w.path,
+      `DuckDB ${name} extension — run \`bash scripts/vendor-duckdb.sh\``,
+    );
 }
-need("bin/SOURCE_HASH", "wasm freshness stamp — run `bash scripts/build-wasm.sh`");
-if (process.argv.includes("--release")) need("bin/PACKAGE_HASH", "bump-check stamp — run `node scripts/package-hash.mjs --stamp`");
+need(
+  "bin/SOURCE_HASH",
+  "wasm freshness stamp — run `bash scripts/build-wasm.sh`",
+);
+if (process.argv.includes("--release"))
+  need(
+    "bin/PACKAGE_HASH",
+    "bump-check stamp — run `node scripts/package-hash.mjs --stamp`",
+  );
 
-const duckWasm = [...files.keys()].filter((p) => /^bin\/duckdb[^/]*\.wasm$/.test(p));
-if (duckWasm.length !== 1) errors.push(`expected exactly one DuckDB engine wasm, found ${duckWasm.length}: ${duckWasm.join(", ")}`);
+const duckWasm = [...files.keys()].filter((p) =>
+  /^bin\/duckdb[^/]*\.wasm$/.test(p),
+);
+if (duckWasm.length !== 1)
+  errors.push(
+    `expected exactly one DuckDB engine wasm, found ${duckWasm.length}: ${duckWasm.join(", ")}`,
+  );
 for (const p of files.keys())
-  if (p.endsWith(".wasm") && !wasmDecl[p]) errors.push(`undeclared wasm in tarball: ${p}`);
+  if (p.endsWith(".wasm") && !wasmDecl[p])
+    errors.push(`undeclared wasm in tarball: ${p}`);
 for (const p of files.keys()) {
-  if (p.startsWith("vendor/") || p.includes("/vendor/")) errors.push(`vendor file in tarball: ${p}`);
-  if (/duckdb-(mvp|coi)|duckdb-node/.test(p)) errors.push(`unshipped DuckDB variant in tarball: ${p}`);
+  if (p.startsWith("vendor/") || p.includes("/vendor/"))
+    errors.push(`vendor file in tarball: ${p}`);
+  if (/duckdb-(mvp|coi)|duckdb-node/.test(p))
+    errors.push(`unshipped DuckDB variant in tarball: ${p}`);
 }
 for (const [path, decl] of Object.entries(wasmDecl)) {
   const size = files.get(path);
   if (size === undefined) continue; // reported above when required
   if (typeof decl.maxBytes === "number" && size > decl.maxBytes)
-    errors.push(`${path} is ${size} bytes, over its manifest maxBytes ${decl.maxBytes}`);
+    errors.push(
+      `${path} is ${size} bytes, over its manifest maxBytes ${decl.maxBytes}`,
+    );
 }
 
 const mb = (n) => `${(n / 1048576).toFixed(2)} MiB`;
-console.log(`pubcheck: ${pack.name}@${pack.version} — ${pack.entryCount} files, packed ${mb(pack.size)}, unpacked ${mb(pack.unpackedSize)}`);
+console.log(
+  `pubcheck: ${pack.name}@${pack.version} — ${pack.entryCount} files, packed ${mb(pack.size)}, unpacked ${mb(pack.unpackedSize)}`,
+);
 for (const p of [...files.keys()].filter((p) => p.startsWith("bin/")).sort()) {
   const cap = wasmDecl[p]?.maxBytes;
-  console.log(`  ${String(files.get(p)).padStart(10)}  ${p}${cap ? `  (cap ${cap})` : ""}`);
+  console.log(
+    `  ${String(files.get(p)).padStart(10)}  ${p}${cap ? `  (cap ${cap})` : ""}`,
+  );
 }
 if (errors.length) {
   for (const e of errors) console.error(`pubcheck: FAIL — ${e}`);

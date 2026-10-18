@@ -205,7 +205,9 @@ export function parseGoogleFontsCss(css: string): ParsedSrc[] {
     const body = faceMatch[1];
     const weight = /font-weight:\s*([0-9]+)/.exec(body)?.[1] ?? "400";
     const style = /font-style:\s*(\w+)/.exec(body)?.[1] ?? "normal";
-    const url = /src:\s*url\(([^)]+)\)/.exec(body)?.[1]?.replace(/^['"]|['"]$/g, "");
+    const url = /src:\s*url\(([^)]+)\)/
+      .exec(body)?.[1]
+      ?.replace(/^['"]|['"]$/g, "");
     if (!url) continue;
     // Skip non-TTF/non-WOFF2 (e.g. local() fallbacks).
     if (!/\.(ttf|woff2)(\?|$)/i.test(url)) continue;

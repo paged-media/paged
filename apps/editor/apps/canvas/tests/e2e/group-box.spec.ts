@@ -37,27 +37,50 @@ interface CanvasGlobal {
     elementSelection: Ref[];
     client: {
       elementGeometry: (ids: Ref[]) => Promise<Geometry[]>;
-      executeScript: (s: string) => Promise<{ output: string[]; error: string | null }>;
+      executeScript: (
+        s: string,
+      ) => Promise<{ output: string[]; error: string | null }>;
       undo: () => Promise<unknown>;
     };
   };
 }
 
 const geometry = (page: Page, ids: Ref[]) =>
-  page.evaluate((ids) => (globalThis as unknown as CanvasGlobal).__canvas.client.elementGeometry(ids), ids);
+  page.evaluate(
+    (ids) =>
+      (globalThis as unknown as CanvasGlobal).__canvas.client.elementGeometry(
+        ids,
+      ),
+    ids,
+  );
 
 const selection = (page: Page) =>
-  page.evaluate(() => (globalThis as unknown as CanvasGlobal).__canvas.elementSelection);
+  page.evaluate(
+    () => (globalThis as unknown as CanvasGlobal).__canvas.elementSelection,
+  );
 
-const drawnBoxes = (page: Page) => page.locator('polygon[stroke="var(--overlay-selection)"]');
+const drawnBoxes = (page: Page) =>
+  page.locator('polygon[stroke="var(--overlay-selection)"]');
 
 /** Two rectangles grouped through Object ▸ Group, then selected by a click. */
-async function clickedGroup(page: Page): Promise<{ group: Ref; leaves: Ref[] }> {
+async function clickedGroup(
+  page: Page,
+): Promise<{ group: Ref; leaves: Ref[] }> {
   const designer = new Designer(page);
   await designer.open();
   await designer.newDocument();
-  const a = await designer.drawRectangle({ x0: 100, y0: 100, x1: 200, y1: 180 });
-  const b = await designer.drawRectangle({ x0: 240, y0: 100, x1: 340, y1: 180 });
+  const a = await designer.drawRectangle({
+    x0: 100,
+    y0: 100,
+    x1: 200,
+    y1: 180,
+  });
+  const b = await designer.drawRectangle({
+    x0: 240,
+    y0: 100,
+    x1: 340,
+    y1: 180,
+  });
   const leaves = [
     { kind: "rectangle", id: a },
     { kind: "rectangle", id: b },
@@ -74,7 +97,9 @@ async function clickedGroup(page: Page): Promise<{ group: Ref; leaves: Ref[] }> 
   await activateTool(page, "select");
   const p = await screenPoint(page, 150, 140);
   await page.mouse.click(p.x, p.y);
-  await expect.poll(async () => (await selection(page)).map((r) => r.kind)).toEqual(["group"]);
+  await expect
+    .poll(async () => (await selection(page)).map((r) => r.kind))
+    .toEqual(["group"]);
   return { group: (await selection(page))[0], leaves };
 }
 
@@ -91,7 +116,9 @@ test.describe("a selected group", () => {
       expect.closeTo(340, 1),
     ]);
     await expect(drawnBoxes(page)).toHaveCount(1);
-    await expect(page.locator('[data-handle="southEast"]').first()).toBeVisible();
+    await expect(
+      page.locator('[data-handle="southEast"]').first(),
+    ).toBeVisible();
   });
 
   test("AC-GROUP-BOX-2 — a body drag moves the group, a corner drag scales both members, one undo each @feat:editor-tools.move.translate @feat:frames-paths.groups @level:happy", async ({
@@ -106,10 +133,11 @@ test.describe("a selected group", () => {
     await page.mouse.down();
     await page.mouse.move(to.x, to.y, { steps: 8 });
     await page.mouse.up();
-    await expect.poll(async () => (await geometry(page, [group]))[0].itemTransform?.slice(4)).toEqual([
-      expect.closeTo(40, 0),
-      expect.closeTo(60, 0),
-    ]);
+    await expect
+      .poll(async () =>
+        (await geometry(page, [group]))[0].itemTransform?.slice(4),
+      )
+      .toEqual([expect.closeTo(40, 0), expect.closeTo(60, 0)]);
     const moved = await geometry(page, leaves);
     expect(moved[0].itemTransform).toEqual(moved[1].itemTransform);
 
@@ -121,19 +149,31 @@ test.describe("a selected group", () => {
     await page.mouse.up();
     await expect
       .poll(async () => {
-        const t = (await geometry(page, [group]))[0].itemTransform ?? [1, 0, 0, 1, 0, 0];
+        const t = (await geometry(page, [group]))[0].itemTransform ?? [
+          1, 0, 0, 1, 0, 0,
+        ];
         return t[0] > 1.05 && t[3] > 1.05;
       })
       .toBe(true);
     const scaled = await geometry(page, leaves);
-    expect(scaled[0].itemTransform, "both members scale together").toEqual(scaled[1].itemTransform);
+    expect(scaled[0].itemTransform, "both members scale together").toEqual(
+      scaled[1].itemTransform,
+    );
 
     // One undo per gesture: the scale, then the move.
-    await page.evaluate(() => (globalThis as unknown as CanvasGlobal).__canvas.client.undo());
-    await expect.poll(async () => (await geometry(page, leaves))[0].itemTransform).toEqual(moved[0].itemTransform);
-    await page.evaluate(() => (globalThis as unknown as CanvasGlobal).__canvas.client.undo());
-    await expect.poll(async () => (await geometry(page, leaves)).map((g) => g.itemTransform)).toEqual(
-      before.map((g) => g.itemTransform),
+    await page.evaluate(() =>
+      (globalThis as unknown as CanvasGlobal).__canvas.client.undo(),
     );
+    await expect
+      .poll(async () => (await geometry(page, leaves))[0].itemTransform)
+      .toEqual(moved[0].itemTransform);
+    await page.evaluate(() =>
+      (globalThis as unknown as CanvasGlobal).__canvas.client.undo(),
+    );
+    await expect
+      .poll(async () =>
+        (await geometry(page, leaves)).map((g) => g.itemTransform),
+      )
+      .toEqual(before.map((g) => g.itemTransform));
   });
 });

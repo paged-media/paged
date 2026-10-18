@@ -63,9 +63,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const marigold = await doc.swatch(SWATCH.labMarigold);
   const paperWarm = await doc.swatch(SWATCH.paperWarm);
 
-  const head = await proseFrame(ctx, page, [left, 54, right, 82], [
-    { text: "Stroke anatomy", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [left, 54, right, 82],
+    [{ text: "Stroke anatomy", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   const bandCaption = async (
@@ -73,9 +76,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     text: string,
     tall = false,
   ): Promise<void> => {
-    const cap = await proseFrame(ctx, page, [left, y, right, y + (tall ? 28 : 15)], [
-      { text, style: STYLE.caption },
-    ]);
+    const cap = await proseFrame(
+      ctx,
+      page,
+      [left, y, right, y + (tall ? 28 : 15)],
+      [{ text, style: STYLE.caption }],
+    );
     elements.push(cap.frameId);
   };
 

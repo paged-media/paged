@@ -23,14 +23,34 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { createHeadlessHost, type HeadlessHost } from "../../plugin-sdk/src/harness";
+import {
+  createHeadlessHost,
+  type HeadlessHost,
+} from "../../plugin-sdk/src/harness";
 import { minimalIdml } from "../../plugin-sdk/test/fixtures/minimal-idml";
 import type { ScriptEngine } from "../src";
 
-const FONT = new Uint8Array(readFileSync(fileURLToPath(new URL("../../plugin-sdk/test/fixtures/fonts/SpaceGrotesk-VF.ttf", import.meta.url))));
-const silent = { debug() {}, info() {}, warn() {}, error() {} } as unknown as Console;
+const FONT = new Uint8Array(
+  readFileSync(
+    fileURLToPath(
+      new URL(
+        "../../plugin-sdk/test/fixtures/fonts/SpaceGrotesk-VF.ttf",
+        import.meta.url,
+      ),
+    ),
+  ),
+);
+const silent = {
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
+} as unknown as Console;
 
-export async function headlessEngine(): Promise<{ engine: ScriptEngine; host: HeadlessHost }> {
+export async function headlessEngine(): Promise<{
+  engine: ScriptEngine;
+  host: HeadlessHost;
+}> {
   const host = await createHeadlessHost({ console: silent, defaultFont: FONT });
   await host.load(minimalIdml());
   return { host, engine: { runScript: (source) => host.runScript(source) } };

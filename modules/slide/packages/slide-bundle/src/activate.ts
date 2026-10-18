@@ -36,12 +36,19 @@
 // deck's document once it is open, within their licences (ADR 707); a
 // document reopened later gets them again from the source deck it keeps.
 
-import type { BundleHandle, BundleHost, Diagnostic } from "@paged-media/plugin-api";
+import type {
+  BundleHandle,
+  BundleHost,
+  Diagnostic,
+} from "@paged-media/plugin-api";
 
 import { exportPlan, pageFingerprints } from "./deck-export.js";
 import { slideEngine, type ImportReport } from "./engine.js";
 import { giveDocumentEmbeddedFonts } from "./fonts.js";
-import { contributeSlideObjectModel, importLabelMutations } from "./object-model.js";
+import {
+  contributeSlideObjectModel,
+  importLabelMutations,
+} from "./object-model.js";
 import { SLIDE_PANELS } from "./panels.js";
 import { makeNotesPanel } from "./panels/notes-panel.js";
 import { makeSlidesPanel } from "./panels/slides-panel.js";
@@ -96,17 +103,27 @@ export function reportDiagnostics(report: ImportReport): Diagnostic[] {
  * replaced the previous one): the source deck, the import report and each
  * slide's content fingerprint, which export compares pages against.
  */
-export async function keepSource(host: BundleHost, bytes: Uint8Array, report: ImportReport): Promise<void> {
+export async function keepSource(
+  host: BundleHost,
+  bytes: Uint8Array,
+  report: ImportReport,
+): Promise<void> {
   if (!host.supports("storage.parts@1")) return;
   await host.parts.write(SOURCE_PART, bytes);
-  await host.parts.write(REPORT_PART, new TextEncoder().encode(JSON.stringify(report)));
+  await host.parts.write(
+    REPORT_PART,
+    new TextEncoder().encode(JSON.stringify(report)),
+  );
   // Page i is slide i of the deck right after the open.
   const prints = await pageFingerprints(host);
   const byPart: Record<string, string> = {};
   report.slides.forEach((s, i) => {
     if (prints[i]) byPart[s.part] = prints[i];
   });
-  await host.parts.write(FINGERPRINTS_PART, new TextEncoder().encode(JSON.stringify(byPart)));
+  await host.parts.write(
+    FINGERPRINTS_PART,
+    new TextEncoder().encode(JSON.stringify(byPart)),
+  );
 }
 
 /**
@@ -129,7 +146,11 @@ export async function reloadEmbeddedFonts(host: BundleHost): Promise<void> {
   if (faces.length === 0) return;
   const refused = await giveDocumentEmbeddedFonts(host, faces, data);
   host.diagnostics.set(FONT_DIAGNOSTICS, [
-    ...diagnostics.map((message) => ({ severity: "warning" as const, message, source: "pptx" })),
+    ...diagnostics.map((message) => ({
+      severity: "warning" as const,
+      message,
+      source: "pptx",
+    })),
     ...refused,
   ]);
 }
@@ -141,8 +162,10 @@ export function activate(host: BundleHost): BundleHandle {
 
   /** The door that replaces the active document: the native-document door
    *  (the editor), else the documents door (headless hosts, the Node CLI). */
-  function openDoor(): ((idml: Uint8Array, name: string) => Promise<void>) | null {
-    if (host.supports("document.openNative@1")) return (idml) => host.nativeDocument.open(idml);
+  function openDoor():
+    ((idml: Uint8Array, name: string) => Promise<void>) | null {
+    if (host.supports("document.openNative@1"))
+      return (idml) => host.nativeDocument.open(idml);
     if (host.supports("documents.open@1")) {
       return async (idml, name) => {
         const r = await host.documents.open(idml, { name });
@@ -152,19 +175,26 @@ export function activate(host: BundleHost): BundleHandle {
     return null;
   }
 
-  async function openDeck(name: string, bytes: Uint8Array): Promise<ImportReport | null> {
+  async function openDeck(
+    name: string,
+    bytes: Uint8Array,
+  ): Promise<ImportReport | null> {
     const open = openDoor();
     if (!open) {
       host.diagnostics.set(IMPORT_DIAGNOSTICS, [
         {
           severity: "error",
-          message: "This host cannot open a native document, so a PowerPoint deck cannot be opened.",
+          message:
+            "This host cannot open a native document, so a PowerPoint deck cannot be opened.",
         },
       ]);
       return null;
     }
     const engine = await slideEngine();
-    const { idml, report, fonts } = engine.importPptx(bytes, documentName(name));
+    const { idml, report, fonts } = engine.importPptx(
+      bytes,
+      documentName(name),
+    );
     importing = true;
     let fontDiagnostics: Diagnostic[] = [];
     try {
@@ -174,7 +204,11 @@ export function activate(host: BundleHost): BundleHandle {
       // closes (plugin-sdk ADR 330), so one given before the open would go
       // with the document the deck replaces. Before the source is kept, so
       // the fingerprints are read from the deck as it is drawn.
-      fontDiagnostics = await giveDocumentEmbeddedFonts(host, report.embeddedFonts, fonts);
+      fontDiagnostics = await giveDocumentEmbeddedFonts(
+        host,
+        report.embeddedFonts,
+        fonts,
+      );
       await keepSource(host, bytes, report);
     } finally {
       importing = false;
@@ -183,10 +217,18 @@ export function activate(host: BundleHost): BundleHandle {
     // placeholder's label into the package; the deck label goes on the
     // document the object model reads (ADR 703).
     const labels = importLabelMutations(report, documentName(name));
-    const written = await host.document.mutate({ op: "batch", args: { ops: labels.mutations as never } });
+    const written = await host.document.mutate({
+      op: "batch",
+      args: { ops: labels.mutations as never },
+    });
     const diagnostics = [...reportDiagnostics(report), ...fontDiagnostics];
     if (!written.applied) {
-      diagnostics.push({ severity: "warning", message: "The deck label could not be written; deck data is read from the import cache.", source: "pptx" });
+      diagnostics.push({
+        severity: "warning",
+        message:
+          "The deck label could not be written; deck data is read from the import cache.",
+        source: "pptx",
+      });
     }
     host.diagnostics.set(IMPORT_DIAGNOSTICS, diagnostics);
     host.log.info(
@@ -205,7 +247,9 @@ export function activate(host: BundleHost): BundleHandle {
   const reload = () => {
     if (importing) return;
     reloadEmbeddedFonts(host).catch((err: unknown) =>
-      host.log.warn(`paged.slide: embedded fonts of the open deck: ${String(err)}`),
+      host.log.warn(
+        `paged.slide: embedded fonts of the open deck: ${String(err)}`,
+      ),
     );
   };
   if (host.supports("document.onDidOpen@1")) {
@@ -235,28 +279,41 @@ export function activate(host: BundleHost): BundleHandle {
       host.diagnostics.set(EXPORT_DIAGNOSTICS, [
         {
           severity: "error",
-          message: "This document was not opened from a PowerPoint deck, so it cannot be exported as one yet.",
+          message:
+            "This document was not opened from a PowerPoint deck, so it cannot be exported as one yet.",
         },
       ]);
       return null;
     }
     const printsBytes = await host.parts.read(FINGERPRINTS_PART);
     const prints = printsBytes
-      ? (JSON.parse(new TextDecoder().decode(printsBytes)) as Record<string, string>)
+      ? (JSON.parse(new TextDecoder().decode(printsBytes)) as Record<
+          string,
+          string
+        >)
       : {};
     const plan = await exportPlan(host, prints);
     const engine = await slideEngine();
     const out = engine.exportPptx(original, plan);
     host.diagnostics.set(
       EXPORT_DIAGNOSTICS,
-      out.diagnostics.map((message) => ({ severity: "warning" as const, message, source: "pptx" })),
+      out.diagnostics.map((message) => ({
+        severity: "warning" as const,
+        message,
+        source: "pptx",
+      })),
     );
     const meta = await host.document.meta();
-    const name = (meta as { documentName?: string }).documentName?.trim() || "presentation";
+    const name =
+      (meta as { documentName?: string }).documentName?.trim() ||
+      "presentation";
     return { bytes: out.bytes, fileName: `${name}.pptx` };
   }
 
-  if (host.supports("contribute.exporter@1") && host.supports("storage.parts@1")) {
+  if (
+    host.supports("contribute.exporter@1") &&
+    host.supports("storage.parts@1")
+  ) {
     disposers.push(
       host.contribute.exporter({
         id: EXPORTER_ID,

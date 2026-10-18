@@ -37,7 +37,10 @@ import type {
   ContentWheelEvent,
 } from "@paged-media/plugin-api";
 import { contributeMenu } from "./menu";
-import { contributePanel, contributeSchemaPanel } from "@paged-media/plugin-sdk";
+import {
+  contributePanel,
+  contributeSchemaPanel,
+} from "@paged-media/plugin-sdk";
 import { parseBinding } from "../../sheet-host-model/src";
 
 import manifest from "../manifest.json";
@@ -71,9 +74,14 @@ const DATASETS_PANEL_ID = "media.paged.sheet.panel.datasets";
 /** Whether keyboard focus is in a text field (keybindings stand down). */
 function editableFocus(): boolean {
   const el = (globalThis as { document?: { activeElement?: unknown } }).document
-    ?.activeElement as { tagName?: string; isContentEditable?: boolean } | null | undefined;
+    ?.activeElement as
+    { tagName?: string; isContentEditable?: boolean } | null | undefined;
   if (!el) return false;
-  return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || !!el.isContentEditable;
+  return (
+    el.tagName === "INPUT" ||
+    el.tagName === "TEXTAREA" ||
+    !!el.isContentEditable
+  );
 }
 
 function frameIdOf(id: unknown): string | null {
@@ -425,7 +433,8 @@ export function activate(host: BundleHost): BundleHandle {
     category: "Sheet",
     when: workbookIsOpen,
     handler: () => {
-      if (!session.findAgain()) host.log.info("findNext: no match (or no search yet)");
+      if (!session.findAgain())
+        host.log.info("findNext: no match (or no search yet)");
     },
   });
   // Keys while a sheet frame is entered and focus is not in a text field.
@@ -567,7 +576,10 @@ export function activate(host: BundleHost): BundleHandle {
     // registry (`bindings.provider@1` false) nothing would consult it.
     const providersConsulted = host.supports("bindings.provider@1");
     swatchesProviderHandle = providersConsulted
-      ? host.contribute.bindingProvider("sheet", makeSwatchesBindingProvider(host, session).provider)
+      ? host.contribute.bindingProvider(
+          "sheet",
+          makeSwatchesBindingProvider(host, session).provider,
+        )
       : null;
 
     // ADR 023 phase D — the CHARACTER/PARAGRAPH provider (the VALUE

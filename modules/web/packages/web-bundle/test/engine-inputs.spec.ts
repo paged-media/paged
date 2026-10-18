@@ -73,13 +73,19 @@ function fakeHost(
       getFontFace: async (family: string, style?: string) => {
         calls.push(`face:${family}/${style ?? ""}`);
         const n = faces[`${family}/${style ?? ""}`];
-        return n ? { bytes: new Uint8Array(n), format: "truetype", family } : null;
+        return n
+          ? { bytes: new Uint8Array(n), format: "truetype", family }
+          : null;
       },
       getPlacedImage: async (id: string) => {
         calls.push(`image:${id}`);
         return { bytes: new Uint8Array([9]), uri: "x", width: 1, height: 1 };
       },
-      registerFont: async (bytes: Uint8Array, family: string, style?: string) => {
+      registerFont: async (
+        bytes: Uint8Array,
+        family: string,
+        style?: string,
+      ) => {
         const entry = `${family}/${style ?? ""}:${bytes.byteLength}`;
         scene.push(entry);
         return { dispose: () => void scene.splice(scene.indexOf(entry), 1) };
@@ -103,7 +109,12 @@ describe("resource URLs @feat:plugin-web.resources", () => {
       '<link rel="stylesheet" href="css/a.css"><link rel="icon" href="fav.ico">' +
       "<img src='img/1.png'><img src=img/1.png>" +
       '<style>@import "css/b.css"; .x{background:url( "img/2.png" )}</style>';
-    expect(resourceUrls(doc)).toEqual(["img/1.png", "css/a.css", "img/2.png", "css/b.css"]);
+    expect(resourceUrls(doc)).toEqual([
+      "img/1.png",
+      "css/a.css",
+      "img/2.png",
+      "css/b.css",
+    ]);
   });
 
   it("resolves relative paths against a stylesheet's directory; refuses schemes", () => {
@@ -124,9 +135,14 @@ describe("handing the engine its inputs @feat:plugin-web.resources", () => {
       "resources/img/bg.png": "png",
       "resources/img/a.png": "png",
     });
-    const doc = '<link rel="stylesheet" href="css/site.css"><img src="img/a.png"><img src="img/none.png">';
+    const doc =
+      '<link rel="stylesheet" href="css/site.css"><img src="img/a.png"><img src="img/none.png">';
     await prepareEngineInputs(host, engine, doc);
-    expect([...resources.keys()].sort()).toEqual(["css/site.css", "img/a.png", "img/bg.png"]);
+    expect([...resources.keys()].sort()).toEqual([
+      "css/site.css",
+      "img/a.png",
+      "img/bg.png",
+    ]);
     const reads = calls.length;
     await prepareEngineInputs(host, engine, doc);
     // Registered ones are not read again; only the missing one is retried.
@@ -206,8 +222,13 @@ describe("faces @feat:plugin-web.web-fonts", () => {
     await prepareEngineInputs(host, fakeEngine().engine, "<p>x</p>");
     expect(scene).toEqual([]);
     expect(
-      faceDiagnostics({ fontFallbacks: ["Inter", "Inter Bold", "Lora Italic"] }, host).map((d) => d.message),
-    ).toEqual(["font “Lora Italic” is not in the document — the canvas draws it in the default font"]);
+      faceDiagnostics(
+        { fontFallbacks: ["Inter", "Inter Bold", "Lora Italic"] },
+        host,
+      ).map((d) => d.message),
+    ).toEqual([
+      "font “Lora Italic” is not in the document — the canvas draws it in the default font",
+    ]);
   });
 });
 
@@ -224,11 +245,24 @@ describe("@font-face faces reach the canvas @feat:plugin-web.web-fonts", () => {
       "p{color:red} @font-face { font-family: \"Brand Sans\"; src: local(Brand), url(f/a.woff2) format('woff2'), url('f/a.ttf'); font-weight: bold; font-style: italic }" +
       "@font-face{font-family:Plain;src:url(p.otf)}@font-face{src:url(x.ttf)}";
     expect(fontFaceRules(css, "css/")).toEqual([
-      { family: "Brand Sans", srcs: ["f/a.woff2", "f/a.ttf"], style: "Bold Italic", base: "css/" },
+      {
+        family: "Brand Sans",
+        srcs: ["f/a.woff2", "f/a.ttf"],
+        style: "Bold Italic",
+        base: "css/",
+      },
       { family: "Plain", srcs: ["p.otf"], style: undefined, base: "css/" },
     ]);
-    expect(fontFaceRules("@font-face{font-family:L;src:url(l.ttf);font-weight:300}")[0].style).toBe("Light");
-    expect(fontFaceRules("@font-face{font-family:V;src:url(v.ttf);font-weight:100 900}")[0].style).toBeUndefined();
+    expect(
+      fontFaceRules(
+        "@font-face{font-family:L;src:url(l.ttf);font-weight:300}",
+      )[0].style,
+    ).toBe("Light");
+    expect(
+      fontFaceRules(
+        "@font-face{font-family:V;src:url(v.ttf);font-weight:100 900}",
+      )[0].style,
+    ).toBeUndefined();
   });
 
   it("reads a face's own family from its name table", () => {
@@ -238,8 +272,11 @@ describe("@font-face faces reach the canvas @feat:plugin-web.web-fonts", () => {
 
   it("hands a container face to the canvas under the CSS family, once per host and bytes", async () => {
     const { host, scene } = fakeHost({ "resources/fonts/brand.ttf": brand });
-    const doc = "<style>@font-face{font-family:'Brand';src:url(fonts/brand.ttf)}p{font-family:Brand}</style><p>x</p>";
-    expect(await prepareEngineInputs(host, fakeEngine().engine, doc, "uA")).toEqual([]);
+    const doc =
+      "<style>@font-face{font-family:'Brand';src:url(fonts/brand.ttf)}p{font-family:Brand}</style><p>x</p>";
+    expect(
+      await prepareEngineInputs(host, fakeEngine().engine, doc, "uA"),
+    ).toEqual([]);
     expect(scene).toEqual(["Inter/:7", `Brand/:${brand.byteLength}`]);
     await prepareEngineInputs(host, fakeEngine().engine, doc, "uB");
     expect(scene).toHaveLength(2);
@@ -247,24 +284,33 @@ describe("@font-face faces reach the canvas @feat:plugin-web.web-fonts", () => {
 
   it("registers under the face's own family too when the CSS names it differently (the run names that one)", async () => {
     const { host, scene } = fakeHost();
-    const doc =
-      `<style>@font-face{font-family:Display;font-weight:700;src:url(data:font/ttf;base64,${b64(brand)})}</style><p>x</p>`;
+    const doc = `<style>@font-face{font-family:Display;font-weight:700;src:url(data:font/ttf;base64,${b64(brand)})}</style><p>x</p>`;
     await prepareEngineInputs(host, fakeEngine().engine, doc, "uA");
-    expect(scene.slice(1).sort()).toEqual([`Brand/Bold:${brand.byteLength}`, `Display/Bold:${brand.byteLength}`]);
+    expect(scene.slice(1).sort()).toEqual([
+      `Brand/Bold:${brand.byteLength}`,
+      `Display/Bold:${brand.byteLength}`,
+    ]);
   });
 
   it("follows a linked stylesheet's @font-face, relative to the stylesheet", async () => {
     const { host, scene } = fakeHost({
-      "resources/css/site.css": "@font-face{font-family:Brand;src:url(../fonts/b.ttf)}",
+      "resources/css/site.css":
+        "@font-face{font-family:Brand;src:url(../fonts/b.ttf)}",
       "resources/fonts/b.ttf": brand,
     });
-    await prepareEngineInputs(host, fakeEngine().engine, '<link rel="stylesheet" href="css/site.css"><p>x</p>', "uA");
+    await prepareEngineInputs(
+      host,
+      fakeEngine().engine,
+      '<link rel="stylesheet" href="css/site.css"><p>x</p>',
+      "uA",
+    );
     expect(scene).toContain(`Brand/:${brand.byteLength}`);
   });
 
   it("gives a face back once no source uses it, and on deactivation", async () => {
     const { host, scene } = fakeHost({ "resources/fonts/brand.ttf": brand });
-    const doc = "<style>@font-face{font-family:Brand;src:url(fonts/brand.ttf)}</style><p>x</p>";
+    const doc =
+      "<style>@font-face{font-family:Brand;src:url(fonts/brand.ttf)}</style><p>x</p>";
     await prepareEngineInputs(host, fakeEngine().engine, doc, "uA");
     await prepareEngineInputs(host, fakeEngine().engine, "<p>plain</p>", "uB");
     await retainSceneFaces(host, ["uA", "uB"]);
@@ -287,24 +333,41 @@ describe("@font-face faces reach the canvas @feat:plugin-web.web-fonts", () => {
     const big = new Uint8Array(ASSET_BUDGETS.maxFontFaceBytes + 1);
     big.set(brand.subarray(0, 64));
     const { host, scene } = fakeHost({ "resources/fonts/big.ttf": big });
-    const doc = "<style>@font-face{font-family:Huge;src:url(fonts/big.ttf)}</style><p>x</p>";
-    const diagnostics = await prepareEngineInputs(host, fakeEngine().engine, doc, "uA");
+    const doc =
+      "<style>@font-face{font-family:Huge;src:url(fonts/big.ttf)}</style><p>x</p>";
+    const diagnostics = await prepareEngineInputs(
+      host,
+      fakeEngine().engine,
+      doc,
+      "uA",
+    );
     expect(scene).toEqual(["Inter/:7"]);
     expect(diagnostics.map((d) => d.message)).toEqual([
       expect.stringMatching(/font face “Huge” .* over the canvas's .* limit/),
     ]);
     // Said on every render that uses it, read once.
-    expect(await prepareEngineInputs(host, fakeEngine().engine, doc, "uA")).toHaveLength(1);
+    expect(
+      await prepareEngineInputs(host, fakeEngine().engine, doc, "uA"),
+    ).toHaveLength(1);
   });
 
   it("a WOFF face the canvas cannot take says so; a TrueType source beside it is preferred", async () => {
     const woff2 = new Uint8Array([0x77, 0x4f, 0x46, 0x32, 0, 0, 0, 0]);
-    const { host, scene } = fakeHost({ "resources/f/a.woff2": woff2, "resources/f/a.ttf": brand });
-    const only = "<style>@font-face{font-family:W;src:url(f/a.woff2) format('woff2')}</style><p>x</p>";
+    const { host, scene } = fakeHost({
+      "resources/f/a.woff2": woff2,
+      "resources/f/a.ttf": brand,
+    });
+    const only =
+      "<style>@font-face{font-family:W;src:url(f/a.woff2) format('woff2')}</style><p>x</p>";
     const d = await prepareEngineInputs(host, fakeEngine().engine, only, "uA");
-    expect(d.map((x) => x.message)).toEqual([expect.stringMatching(/font face “W” is a WOFF2 file/)]);
-    const both = "<style>@font-face{font-family:T;src:url(f/a.woff2) format('woff2'),url(f/a.ttf)}</style><p>x</p>";
-    expect(await prepareEngineInputs(host, fakeEngine().engine, both, "uA")).toEqual([]);
+    expect(d.map((x) => x.message)).toEqual([
+      expect.stringMatching(/font face “W” is a WOFF2 file/),
+    ]);
+    const both =
+      "<style>@font-face{font-family:T;src:url(f/a.woff2) format('woff2'),url(f/a.ttf)}</style><p>x</p>";
+    expect(
+      await prepareEngineInputs(host, fakeEngine().engine, both, "uA"),
+    ).toEqual([]);
     expect(scene).toContain(`T/:${brand.byteLength}`);
   });
 });

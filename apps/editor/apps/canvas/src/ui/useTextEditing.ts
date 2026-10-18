@@ -220,7 +220,12 @@ export function useTextEditing(ctx: TextEditingContext) {
 
       // Copy / cut a range. Pastes arrive as the `paste` event below.
       const letter = key.toLowerCase();
-      if (cmd && !e.altKey && !e.shiftKey && (letter === "c" || letter === "x")) {
+      if (
+        cmd &&
+        !e.altKey &&
+        !e.shiftKey &&
+        (letter === "c" || letter === "x")
+      ) {
         const sel = selRef.current;
         if (sel.start === sel.end) return;
         e.preventDefault();
@@ -239,7 +244,12 @@ export function useTextEditing(ctx: TextEditingContext) {
           if (!cut) return;
           void c.mutate({
             op: "deleteRange",
-            args: { storyId: s.storyId, start: s.start, end: s.end, cell: s.cell ?? undefined },
+            args: {
+              storyId: s.storyId,
+              start: s.start,
+              end: s.end,
+              cell: s.cell ?? undefined,
+            },
           });
           setSel({ ...s, end: s.start, affinity: false });
         });
@@ -263,7 +273,12 @@ export function useTextEditing(ctx: TextEditingContext) {
           } else {
             void c.mutate({
               op: "deleteRange",
-              args: { storyId: sel.storyId, start: sel.start, end: sel.end, cell },
+              args: {
+                storyId: sel.storyId,
+                start: sel.start,
+                end: sel.end,
+                cell,
+              },
             });
             setSel({ ...sel, end: sel.start, affinity: false });
           }
@@ -281,12 +296,22 @@ export function useTextEditing(ctx: TextEditingContext) {
             // (worker will reject if out of range).
             void c.mutate({
               op: "deleteRange",
-              args: { storyId: sel.storyId, start: sel.start, end: sel.start + 1, cell },
+              args: {
+                storyId: sel.storyId,
+                start: sel.start,
+                end: sel.start + 1,
+                cell,
+              },
             });
           } else {
             void c.mutate({
               op: "deleteRange",
-              args: { storyId: sel.storyId, start: sel.start, end: sel.end, cell },
+              args: {
+                storyId: sel.storyId,
+                start: sel.start,
+                end: sel.end,
+                cell,
+              },
             });
             setSel({ ...sel, end: sel.start, affinity: false });
           }
@@ -320,7 +345,16 @@ export function useTextEditing(ctx: TextEditingContext) {
         enqueue(async (sel, c) => {
           const caretFocus = focusOffset(sel, anchorRef.current);
           if (toLineEdge) {
-            await applyLineEdge(c, sel, key === "ArrowLeft" ? "start" : "end", shift, anchorRef, caretFocus, setSel, stillAt);
+            await applyLineEdge(
+              c,
+              sel,
+              key === "ArrowLeft" ? "start" : "end",
+              shift,
+              anchorRef,
+              caretFocus,
+              setSel,
+              stillAt,
+            );
             return;
           }
           const delta = key === "ArrowLeft" ? -1 : 1;
@@ -338,7 +372,12 @@ export function useTextEditing(ctx: TextEditingContext) {
         const direction: CaretDirection = key === "ArrowUp" ? "up" : "down";
         enqueue(async (sel, c) => {
           const caretFocus = focusOffset(sel, anchorRef.current);
-          const offset = await c.caretNav(sel.storyId, caretFocus, direction, sel.cell ?? null);
+          const offset = await c.caretNav(
+            sel.storyId,
+            caretFocus,
+            direction,
+            sel.cell ?? null,
+          );
           // null = no-op (already at first/last line): keep the caret.
           if (offset === null || !stillAt(sel)) return;
           applyMove(sel, offset, shift, anchorRef, caretFocus, setSel);
@@ -373,7 +412,8 @@ export function useTextEditing(ctx: TextEditingContext) {
     // is replaced in ONE batch, so one undo takes the whole paste back.
     const onPaste = (e: ClipboardEvent) => {
       if (isEditableTarget(e.target)) return;
-      if (!selRef.current || leavingRef.current || !ctxRef.current.client) return;
+      if (!selRef.current || leavingRef.current || !ctxRef.current.client)
+        return;
       const raw = e.clipboardData?.getData("text/plain") ?? "";
       if (!raw) return;
       e.preventDefault();
@@ -415,7 +455,12 @@ function insertAt(
         ops: [
           {
             op: "deleteRange",
-            args: { storyId: sel.storyId, start: sel.start, end: sel.end, cell },
+            args: {
+              storyId: sel.storyId,
+              start: sel.start,
+              end: sel.end,
+              cell,
+            },
           },
           insert,
         ],
@@ -431,7 +476,11 @@ export async function wholeStorySelection(
   client: CanvasClient,
   sel: ContentSelection,
 ): Promise<ContentSelection | null> {
-  const last = await client.paragraphBounds(sel.storyId, PAST_THE_END, sel.cell ?? null);
+  const last = await client.paragraphBounds(
+    sel.storyId,
+    PAST_THE_END,
+    sel.cell ?? null,
+  );
   if (!last) return null;
   return { ...sel, start: 0, end: last.end, affinity: false };
 }
@@ -450,7 +499,8 @@ async function rangeText(
     kind: "requestStoryContent",
     payload: { storyId: sel.storyId },
   });
-  if (reply.kind !== "storyContentResult" || !reply.payload.content) return null;
+  if (reply.kind !== "storyContentResult" || !reply.payload.content)
+    return null;
   const text = reply.payload.content.paragraphs
     .map((p) => p.runs.map((r) => r.text).join(""))
     .join("\n");
@@ -532,7 +582,11 @@ async function applyLineEdge(
   setSelection: (s: ContentSelection | null) => void,
   stillAt: (sel: ContentSelection) => boolean,
 ): Promise<void> {
-  const bounds = await client.lineBounds(sel.storyId, caretFocus, sel.cell ?? null);
+  const bounds = await client.lineBounds(
+    sel.storyId,
+    caretFocus,
+    sel.cell ?? null,
+  );
   if (!bounds || !stillAt(sel)) return;
   const target = edge === "start" ? bounds.lineStart : bounds.lineEnd;
   applyMove(sel, target, shift, anchorRef, caretFocus, setSelection);

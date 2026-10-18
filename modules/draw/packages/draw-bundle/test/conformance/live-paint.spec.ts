@@ -46,7 +46,14 @@
 //       shapes, the bucket/selection GESTURES driven with synthetic
 //       pointer events, and the z-order fact a fill inherits.
 
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "bun:test";
+import {
+  describe,
+  expect,
+  it,
+  beforeAll,
+  afterAll,
+  beforeEach,
+} from "bun:test";
 
 import type {
   BundleHost,
@@ -140,12 +147,7 @@ const anchorAt = (p: [number, number]) => ({
 });
 
 /** An axis-aligned rectangle as an anchor table. */
-const rect = (
-  x0: number,
-  y0: number,
-  x1: number,
-  y1: number,
-): AnchorTable => ({
+const rect = (x0: number, y0: number, x1: number, y1: number): AnchorTable => ({
   anchors: [
     anchorAt([x0, y0]),
     anchorAt([x1, y0]),
@@ -250,9 +252,9 @@ describe("draw conformance — LIVE PAINT v0 (the recipe, pure)", () => {
     const empty = { v: 1, groups: [] };
     expect(parseLivePaintLibrary(null)).toEqual(empty);
     expect(parseLivePaintLibrary(new Uint8Array())).toEqual(empty);
-    expect(parseLivePaintLibrary(new TextEncoder().encode("not json{"))).toEqual(
-      empty,
-    );
+    expect(
+      parseLivePaintLibrary(new TextEncoder().encode("not json{")),
+    ).toEqual(empty);
     // A FUTURE recipe version is not guessed at.
     expect(
       parseLivePaintLibrary(
@@ -285,17 +287,23 @@ describe("draw conformance — LIVE PAINT v0 (the recipe, pure)", () => {
   it("mints deterministic ids and upserts/removes by id", () => {
     expect(mintLivePaintId({ v: 1, groups: [] })).toBe("lp-1");
     expect(mintLivePaintId({ v: 1, groups: [GROUP] })).toBe("lp-2");
-    const two = upsertLivePaintGroup({ v: 1, groups: [GROUP] }, {
-      ...GROUP,
-      id: "lp-2",
-    });
+    const two = upsertLivePaintGroup(
+      { v: 1, groups: [GROUP] },
+      {
+        ...GROUP,
+        id: "lp-2",
+      },
+    );
     expect(two.groups.map((g) => g.id)).toEqual(["lp-1", "lp-2"]);
     // An upsert of an existing id REPLACES in place (order preserved).
     const renamed = upsertLivePaintGroup(two, { ...GROUP, name: "Renamed" });
-    expect(renamed.groups.map((g) => g.name)).toEqual(["Renamed", "Live Paint 1"]);
-    expect(removeLivePaintGroupFrom(two, "lp-1").groups.map((g) => g.id)).toEqual(
-      ["lp-2"],
-    );
+    expect(renamed.groups.map((g) => g.name)).toEqual([
+      "Renamed",
+      "Live Paint 1",
+    ]);
+    expect(
+      removeLivePaintGroupFrom(two, "lp-1").groups.map((g) => g.id),
+    ).toEqual(["lp-2"]);
     expect(findLivePaintGroup(two, "nope")).toBeNull();
   });
 
@@ -321,8 +329,9 @@ describe("draw conformance — LIVE PAINT v0 (the recipe, pure)", () => {
   it("the element links read tolerantly and PRESERVE every other draw key", () => {
     expect(livePaintMemberOf(null)).toBeNull();
     expect(livePaintMemberOf({ v: 1, data: {} })).toBeNull();
-    expect(livePaintMemberOf({ v: 1, data: { livePaintMember: { group: "" } } }))
-      .toBeNull();
+    expect(
+      livePaintMemberOf({ v: 1, data: { livePaintMember: { group: "" } } }),
+    ).toBeNull();
     expect(
       livePaintMemberOf({ v: 1, data: { livePaintMember: { group: "lp-1" } } }),
     ).toEqual({ group: "lp-1", index: 0 });
@@ -407,7 +416,11 @@ describe("draw conformance — LIVE PAINT v0 (the recipe, pure)", () => {
         op: "batch",
         args: {
           ops: [
-            insertPathMutationFor("usp", rect(200, 200, 300, 300).anchors, false),
+            insertPathMutationFor(
+              "usp",
+              rect(200, 200, 300, 300).anchors,
+              false,
+            ),
           ],
         },
       });
@@ -432,7 +445,8 @@ describe("draw conformance — LIVE PAINT v0 (the recipe, pure)", () => {
       };
       expect(livePaintContourCounts(holed)).toEqual([2]);
       expect(
-        (livePaintInsertBatchFor(holed) as { args: { ops: unknown[] } }).args.ops,
+        (livePaintInsertBatchFor(holed) as { args: { ops: unknown[] } }).args
+          .ops,
       ).toHaveLength(2);
     });
 
@@ -553,7 +567,9 @@ describe("draw conformance — LIVE PAINT v0 (the recipe, pure)", () => {
   describe("the honest wording is pinned (it cannot be edited away silently)", () => {
     it("the panel note states regenerable-not-live, the missing gaps and edges, the caps and the z-order", () => {
       // Plain words for each fact (the panel's About text).
-      expect(LIVE_PAINT_NOTE).toContain("does not repaint anything until you choose Regenerate");
+      expect(LIVE_PAINT_NOTE).toContain(
+        "does not repaint anything until you choose Regenerate",
+      );
       expect(LIVE_PAINT_NOTE).toContain("gaps are not closed for you");
       expect(LIVE_PAINT_NOTE).toContain("edges cannot be painted");
       expect(LIVE_PAINT_NOTE).toContain("at most 12 paths and 256 areas");
@@ -621,7 +637,9 @@ describe("draw conformance — LIVE PAINT v0 (against the real engine, F4)", () 
     expect(commandFor(h, REGENERATE_LIVE_PAINT_COMMAND_ID).title).toContain(
       "ids may not survive",
     );
-    const panel = h.panelsContributed().find((p) => p.id === LIVE_PAINT_PANEL_ID);
+    const panel = h
+      .panelsContributed()
+      .find((p) => p.id === LIVE_PAINT_PANEL_ID);
     expect(panel).toBeDefined();
     expect(panel!.title).toBe("Live paint");
     expect(panel!.defaultDock).toBe("right");
@@ -759,7 +777,10 @@ describe("draw conformance — LIVE PAINT v0 (against the real engine, F4)", () 
   it("repainting the SAME face replaces its artwork instead of stacking a second copy", async () => {
     await h.host.selection.set([A, B]);
     await applyMakeLivePaintGroup(h.host);
-    await applyFillLivePaintFace(h.host, { face: OVERLAP, fill: "Color/Black" });
+    await applyFillLivePaintFace(h.host, {
+      face: OVERLAP,
+      fill: "Color/Black",
+    });
     const once = await leaves(h);
 
     await applyFillLivePaintFace(h.host, { face: OVERLAP, fill: "Color/Cyan" });
@@ -843,7 +864,10 @@ describe("draw conformance — LIVE PAINT v0 (against the real engine, F4)", () 
           await applyMakeLivePaintGroup(h.host);
         },
         run: (host) =>
-          applyFillLivePaintFace(host, { faces: [OVERLAP, "0#0"], fill: "Color/Black" }),
+          applyFillLivePaintFace(host, {
+            faces: [OVERLAP, "0#0"],
+            fill: "Color/Black",
+          }),
         result: [OVERLAP, "0#0"],
       },
       {
@@ -852,7 +876,9 @@ describe("draw conformance — LIVE PAINT v0 (against the real engine, F4)", () 
           await h.host.selection.set([A, B]);
           await applyMakeLivePaintGroup(h.host);
           await applyFillLivePaintFace(h.host, { faces: [OVERLAP, "0#0"] });
-          await h.host.document.mutate(framePathMutationFor(B, rect(250, 250, 450, 450)));
+          await h.host.document.mutate(
+            framePathMutationFor(B, rect(250, 250, 450, 450)),
+          );
           await h.host.selection.set([]);
         },
         run: (host) => applyRegenerateLivePaint(host, { groupId: "lp-1" }),
@@ -964,7 +990,10 @@ describe("draw conformance — LIVE PAINT v0 (against the real engine, F4)", () 
     const withFill = await leaves(h);
 
     expect(
-      await applyDeleteLivePaintFace(h.host, { groupId: "lp-1", face: OVERLAP }),
+      await applyDeleteLivePaintFace(h.host, {
+        groupId: "lp-1",
+        face: OVERLAP,
+      }),
     ).toEqual([OVERLAP]);
     expect(await leaves(h)).toHaveLength(withFill.length - 1);
     expect(
@@ -997,7 +1026,9 @@ describe("draw conformance — LIVE PAINT v0 (against the real engine, F4)", () 
     // ONE undo restores every link together — one batch, one step. (The
     // RECIPE does not come back: a container write is not a mutation.)
     await h.host.document.undo();
-    expect(livePaintMemberOf(await h.host.document.getMetadata(A))).not.toBeNull();
+    expect(
+      livePaintMemberOf(await h.host.document.getMetadata(A)),
+    ).not.toBeNull();
   });
 
   it("the recipe part is NOT on the undo stack (a container write is no mutation)", async () => {
@@ -1014,9 +1045,9 @@ describe("draw conformance — LIVE PAINT v0 (against the real engine, F4)", () 
   describe("the live gesture tools (synthetic pointer events, real engine)", () => {
     /** Arm a handler over a document that already carries a group. */
     const armed = async (
-      make: (host: HeadlessHost["host"]) => ReturnType<
-        typeof createLivePaintBucketHandler
-      >,
+      make: (
+        host: HeadlessHost["host"],
+      ) => ReturnType<typeof createLivePaintBucketHandler>,
     ) => {
       await h.host.selection.set([A, B]);
       await applyMakeLivePaintGroup(h.host);
@@ -1163,7 +1194,9 @@ describe("draw conformance — LIVE PAINT v0 (the 12-input cap, F5)", () => {
     await h.host.selection.set(ids);
     expect(await applyMakeLivePaintGroup(h.host)).toBeNull();
     // The user sees the engine's words, not "no regions".
-    const status = String(h.host.bindings.get("media.paged.draw.pathfinderStatus"));
+    const status = String(
+      h.host.bindings.get("media.paged.draw.pathfinderStatus"),
+    );
     expect(status).toContain("planar arrangement takes at most 12");
     expect(status).toContain("13");
     // And no half-made group is left behind to paint with.
@@ -1261,14 +1294,19 @@ describe("draw conformance — LIVE PAINT v0 (gaps and edges are NOT built)", ()
 
   it("GAPS: an OPEN member contributes its implicit closure, with real area", async () => {
     await h.load(F6_RING_PAIR.bytes());
-    const outer = { kind: "polygon", id: F6_RING_PAIR.ids.polygon! } as ElementId;
+    const outer = {
+      kind: "polygon",
+      id: F6_RING_PAIR.ids.polygon!,
+    } as ElementId;
     const open = { kind: "polygon", id: F6_RING_PAIR.openId } as ElementId;
     const result = await readPlanarRegions(h.host, [outer, open]);
     expect(result!.found).toBe(true);
     // The open 3-anchor path is DISJOINT from the outer quad, so it can
     // only contribute a face by being closed — which it is. Its face is
     // the triangle (500,100)-(600,200)-(500,300): 10,000 pt².
-    const areas = result!.faces.map((f) => Math.round(f.area)).sort((a, b) => a - b);
+    const areas = result!.faces
+      .map((f) => Math.round(f.area))
+      .sort((a, b) => a - b);
     expect(areas).toContain(10000);
   });
 

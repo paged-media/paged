@@ -40,10 +40,7 @@ interface CanvasGlobal {
     executeScript: (
       source: string,
     ) => Promise<{ output: string[]; error: string | null }>;
-    elementProperties: (id: {
-      kind: string;
-      id: string;
-    }) => Promise<{
+    elementProperties: (id: { kind: string; id: string }) => Promise<{
       entries: { path: string; value: { type: string; value: unknown } }[];
     } | null>;
     undo: () => Promise<unknown>;
@@ -186,7 +183,10 @@ test.describe("Scripting Stage 2 — embedded Boa", () => {
             };
           }
         ).__canvas;
-        await c.client.setElementSelection([{ kind: "textFrame", id }], "replace");
+        await c.client.setElementSelection(
+          [{ kind: "textFrame", id }],
+          "replace",
+        );
       },
       { id: TEXT_FRAME_ID },
     );

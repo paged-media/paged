@@ -273,27 +273,27 @@ export function PagedShell({
                                       overlay. */}
                                   <TableSelectionProvider>
                                     <InstrumentationProvider>
-                                    {/* W3.2 — the edit-context stack
+                                      {/* W3.2 — the edit-context stack
                                         (B-02/W-03): the active scoped-
                                         editing-mode stack + breadcrumb +
                                         write-scope. Above PagedEditor so
                                         chrome + canvas integration can
                                         read it. */}
-                                    <EditContextStackProvider>
-                                    {/* ADR 023 phase C — the binding-
+                                      <EditContextStackProvider>
+                                        {/* ADR 023 phase C — the binding-
                                         provider seam. Deliberately
                                         INSIDE the edit-context stack:
                                         a provider's lifetime is that
                                         stack's, and reading them in
                                         that order is the point. */}
-                                    <BindingProviderProvider
-                                      host={bindingProviders ?? null}
-                                    >
-                                    <ObjectModelProvider
-                                      host={objectModel ?? null}
-                                    >
-                                    <PagedEditorProvider>
-                                    {/* Actions — the command recorder.
+                                        <BindingProviderProvider
+                                          host={bindingProviders ?? null}
+                                        >
+                                          <ObjectModelProvider
+                                            host={objectModel ?? null}
+                                          >
+                                            <PagedEditorProvider>
+                                              {/* Actions — the command recorder.
                                         INSIDE PagedEditorProvider (it
                                         needs the registries) and OUTSIDE
                                         ShellChrome, because the right
@@ -302,24 +302,28 @@ export function PagedShell({
                                         would stop recording the moment
                                         the user switched tabs to do the
                                         thing they were recording. */}
-                                    <ActionsProvider>
-                                      <ShellChrome
-                                        panels={panels}
-                                        overlays={overlays}
-                                        tools={tools}
-                                        headerExtras={headerExtras}
-                                        modes={modes}
-                                        panelRail={panelRail}
-                                        canvasComponent={canvasComponent}
-                                        initialDocumentSizePt={initialDocumentSizePt}
-                                      >
-                                        {children}
-                                      </ShellChrome>
-                                    </ActionsProvider>
-                                    </PagedEditorProvider>
-                                    </ObjectModelProvider>
-                                    </BindingProviderProvider>
-                                    </EditContextStackProvider>
+                                              <ActionsProvider>
+                                                <ShellChrome
+                                                  panels={panels}
+                                                  overlays={overlays}
+                                                  tools={tools}
+                                                  headerExtras={headerExtras}
+                                                  modes={modes}
+                                                  panelRail={panelRail}
+                                                  canvasComponent={
+                                                    canvasComponent
+                                                  }
+                                                  initialDocumentSizePt={
+                                                    initialDocumentSizePt
+                                                  }
+                                                >
+                                                  {children}
+                                                </ShellChrome>
+                                              </ActionsProvider>
+                                            </PagedEditorProvider>
+                                          </ObjectModelProvider>
+                                        </BindingProviderProvider>
+                                      </EditContextStackProvider>
                                     </InstrumentationProvider>
                                   </TableSelectionProvider>
                                 </ThreadingProvider>
@@ -497,7 +501,10 @@ function ShellChrome({
       // leaves an app whose every plugin menu entry is greyed for a
       // reason the user cannot see.
       bootDocRef.current = false;
-      setWarnings((prev) => [...prev, `Could not create the initial document: ${String(err)}`]);
+      setWarnings((prev) => [
+        ...prev,
+        `Could not create the initial document: ${String(err)}`,
+      ]);
     });
   }, [initialDocumentSizePt, paged, handle, setStatus]);
   const sabSupported = useMemo(() => supportsSharedArrayBuffer(), []);
@@ -621,7 +628,11 @@ function ShellChrome({
       // was taller than the screen.
       const source = (p as { source?: string }).source;
       const plugin = typeof source === "string" && source.trim() !== "";
-      const section = plugin ? "panels" : label === "Workspace" ? "Workspace" : "Panels";
+      const section = plugin
+        ? "panels"
+        : label === "Workspace"
+          ? "Workspace"
+          : "Panels";
       const path = plugin
         ? `Plugins/${pluginDisplayName(label)}/${p.title}`
         : label === "Workspace"
@@ -765,133 +776,137 @@ function ShellChrome({
         pickFile: async () =>
           new Promise<File | null>((resolve) => {
             void (async () => {
-            // A5 — prefer the File System Access picker, which hands
-            // back a HANDLE, so Save can write to the file the user
-            // opened instead of minting "document (1).paged" every
-            // time. Falls back to `<input type=file>` when the platform
-            // has no such picker, and when the user cancels — the API
-            // throws on cancel rather than resolving empty.
-            let handled = false;
-            // WHEN THE NATIVE PICKER CANNOT BE USED AT ALL.
-            //
-            // `showOpenFilePicker` opens an OS dialog, and under
-            // WebDriver there is nothing to drive it with: the promise
-            // does not reject, it never settles, so `await` hangs
-            // forever and the catch below is never reached. A try/catch
-            // cannot rescue a promise that does not settle — the only
-            // fix is not to call it.
-            //
-            // That is how File > Open died in CI. It timed out after
-            // 300s waiting for a filechooser event that was never coming,
-            // because the `<input type=file>` fallback — the only thing
-            // that emits one — was never reached.
-            //
-            // Two things had to be measured rather than assumed. It is
-            // NOT about user activation: `navigator.userActivation`
-            // reads `isActive: true` in the test browser, because
-            // opening the app involves real clicks. And it is not about
-            // the API's absence: `typeof showOpenFilePicker` is
-            // "function" there. The discriminator is `navigator.webdriver`
-            // — automation, where a native dialog is unusable by
-            // construction. Skipping it there is a capability check, not
-            // a test accommodation.
-            const underAutomation =
-              (navigator as unknown as { webdriver?: boolean }).webdriver ===
-              true;
-            const fsPicker = (
-              globalThis as {
-                showOpenFilePicker?: (o: unknown) => Promise<WritableFileHandle[]>;
-              }
-            ).showOpenFilePicker;
-            if (typeof fsPicker === "function" && !underAutomation) {
-              try {
-                const [picked] = await fsPicker({
-                  multiple: false,
-                  types: [
-                    {
-                      description: "Paged and IDML documents",
-                      accept: {
-                        "application/x-paged+zip": [".paged"],
-                        "application/vnd.adobe.indesign-idml-package": [".idml"],
-                      },
-                    },
-                  ],
-                });
-                if (picked) {
-                  setOpenFileHandle(picked);
-                  const file = await (
-                    picked as unknown as { getFile(): Promise<File> }
-                  ).getFile();
-                  handled = true;
-                  resolve(file);
-                  return;
+              // A5 — prefer the File System Access picker, which hands
+              // back a HANDLE, so Save can write to the file the user
+              // opened instead of minting "document (1).paged" every
+              // time. Falls back to `<input type=file>` when the platform
+              // has no such picker, and when the user cancels — the API
+              // throws on cancel rather than resolving empty.
+              let handled = false;
+              // WHEN THE NATIVE PICKER CANNOT BE USED AT ALL.
+              //
+              // `showOpenFilePicker` opens an OS dialog, and under
+              // WebDriver there is nothing to drive it with: the promise
+              // does not reject, it never settles, so `await` hangs
+              // forever and the catch below is never reached. A try/catch
+              // cannot rescue a promise that does not settle — the only
+              // fix is not to call it.
+              //
+              // That is how File > Open died in CI. It timed out after
+              // 300s waiting for a filechooser event that was never coming,
+              // because the `<input type=file>` fallback — the only thing
+              // that emits one — was never reached.
+              //
+              // Two things had to be measured rather than assumed. It is
+              // NOT about user activation: `navigator.userActivation`
+              // reads `isActive: true` in the test browser, because
+              // opening the app involves real clicks. And it is not about
+              // the API's absence: `typeof showOpenFilePicker` is
+              // "function" there. The discriminator is `navigator.webdriver`
+              // — automation, where a native dialog is unusable by
+              // construction. Skipping it there is a capability check, not
+              // a test accommodation.
+              const underAutomation =
+                (navigator as unknown as { webdriver?: boolean }).webdriver ===
+                true;
+              const fsPicker = (
+                globalThis as {
+                  showOpenFilePicker?: (
+                    o: unknown,
+                  ) => Promise<WritableFileHandle[]>;
                 }
-                // No handle and no throw: the platform answered with
-                // nothing. Treat it as a cancel rather than falling
-                // through to a second dialog.
-                setOpenFileHandle(null);
-                handled = true;
-                resolve(null);
-                return;
-              } catch (err) {
-                // TWO DIFFERENT FAILURES, and conflating them broke
-                // File > Open outright.
-                //
-                // `AbortError` is the user cancelling the dialog. That
-                // is an answer, not a fault: resolve null and stop.
-                //
-                // ANYTHING ELSE means the picker exists and could not
-                // run — a sandboxed frame, a context without transient
-                // activation, headless automation. Falling through to
-                // the `<input type=file>` path is the whole point of
-                // keeping it. The first version of this treated every
-                // rejection as a cancel, so in exactly those contexts
-                // Open silently did nothing: no dialog, no error, no
-                // fallback. CI caught it as a 300s timeout waiting for
-                // a filechooser that was never going to arrive.
-                const aborted =
-                  err instanceof Error && err.name === "AbortError";
-                setOpenFileHandle(null);
-                if (aborted) {
+              ).showOpenFilePicker;
+              if (typeof fsPicker === "function" && !underAutomation) {
+                try {
+                  const [picked] = await fsPicker({
+                    multiple: false,
+                    types: [
+                      {
+                        description: "Paged and IDML documents",
+                        accept: {
+                          "application/x-paged+zip": [".paged"],
+                          "application/vnd.adobe.indesign-idml-package": [
+                            ".idml",
+                          ],
+                        },
+                      },
+                    ],
+                  });
+                  if (picked) {
+                    setOpenFileHandle(picked);
+                    const file = await (
+                      picked as unknown as { getFile(): Promise<File> }
+                    ).getFile();
+                    handled = true;
+                    resolve(file);
+                    return;
+                  }
+                  // No handle and no throw: the platform answered with
+                  // nothing. Treat it as a cancel rather than falling
+                  // through to a second dialog.
+                  setOpenFileHandle(null);
+                  handled = true;
                   resolve(null);
                   return;
+                } catch (err) {
+                  // TWO DIFFERENT FAILURES, and conflating them broke
+                  // File > Open outright.
+                  //
+                  // `AbortError` is the user cancelling the dialog. That
+                  // is an answer, not a fault: resolve null and stop.
+                  //
+                  // ANYTHING ELSE means the picker exists and could not
+                  // run — a sandboxed frame, a context without transient
+                  // activation, headless automation. Falling through to
+                  // the `<input type=file>` path is the whole point of
+                  // keeping it. The first version of this treated every
+                  // rejection as a cancel, so in exactly those contexts
+                  // Open silently did nothing: no dialog, no error, no
+                  // fallback. CI caught it as a 300s timeout waiting for
+                  // a filechooser that was never going to arrive.
+                  const aborted =
+                    err instanceof Error && err.name === "AbortError";
+                  setOpenFileHandle(null);
+                  if (aborted) {
+                    resolve(null);
+                    return;
+                  }
+                  // fall through to the input below
                 }
-                // fall through to the input below
+                if (handled) return;
               }
-              if (handled) return;
-            }
 
-            const input = document.createElement("input");
-            input.type = "file";
-            // K-2 / S-06 — also offer the file types registered plugin
-            // importers claim (e.g. paged.sheet's .xlsx), resolved at
-            // click time so late-registered importers are included.
-            //
-            // `.paged` needs no importer and no separate load path: a
-            // container IS a valid IDML package, so the same bytes go
-            // through the same door, and the engine decides on the way
-            // in — it sniffs `paged/core/model/document.pgm` and
-            // reconstructs the native model, falling back to parsing
-            // the IDML projection when that part is absent or was
-            // written by an incompatible version. Listing it here is
-            // the whole change; leaving it out only meant the picker
-            // hid files it could already open.
-            input.accept = [
-              ".idml",
-              ".paged",
-              "application/vnd.adobe.indesign-idml-package",
-              "application/x-paged+zip",
-              ...registries.importers.acceptExtensions(),
-            ].join(",");
-            input.onchange = () => {
-              // The input fallback yields no handle. CLEAR any previous
-              // one: keeping it would make the next Save write this new
-              // document over the file the LAST one came from, silently
-              // and with no undo.
-              setOpenFileHandle(null);
-              resolve(input.files?.[0] ?? null);
-            };
-            input.click();
+              const input = document.createElement("input");
+              input.type = "file";
+              // K-2 / S-06 — also offer the file types registered plugin
+              // importers claim (e.g. paged.sheet's .xlsx), resolved at
+              // click time so late-registered importers are included.
+              //
+              // `.paged` needs no importer and no separate load path: a
+              // container IS a valid IDML package, so the same bytes go
+              // through the same door, and the engine decides on the way
+              // in — it sniffs `paged/core/model/document.pgm` and
+              // reconstructs the native model, falling back to parsing
+              // the IDML projection when that part is absent or was
+              // written by an incompatible version. Listing it here is
+              // the whole change; leaving it out only meant the picker
+              // hid files it could already open.
+              input.accept = [
+                ".idml",
+                ".paged",
+                "application/vnd.adobe.indesign-idml-package",
+                "application/x-paged+zip",
+                ...registries.importers.acceptExtensions(),
+              ].join(",");
+              input.onchange = () => {
+                // The input fallback yields no handle. CLEAR any previous
+                // one: keeping it would make the next Save write this new
+                // document over the file the LAST one came from, silently
+                // and with no undo.
+                setOpenFileHandle(null);
+                resolve(input.files?.[0] ?? null);
+              };
+              input.click();
             })();
           }),
         setStatus,
@@ -998,7 +1013,9 @@ function ShellChrome({
   // Vite's `import.meta.env.PROD` constant — typed loosely here so
   // shell's tsconfig (which doesn't include Vite's ambient types)
   // still passes.
-  const viteEnv = (import.meta as unknown as { env?: { PROD?: boolean; MODE?: string } }).env;
+  const viteEnv = (
+    import.meta as unknown as { env?: { PROD?: boolean; MODE?: string } }
+  ).env;
   const isProd = viteEnv?.PROD === true;
   // The `demo` playground build (vite build --mode demo) is a production bundle
   // that DELIBERATELY retains the automation handle so a script can drive the
@@ -1072,7 +1089,11 @@ function ShellChrome({
       run: (source: string) =>
         runDemoScriptWithHandle(
           source,
-          (globalThis as unknown as { __canvas: Parameters<typeof runDemoScriptWithHandle>[1] }).__canvas,
+          (
+            globalThis as unknown as {
+              __canvas: Parameters<typeof runDemoScriptWithHandle>[1];
+            }
+          ).__canvas,
         ),
     };
   }
@@ -1103,7 +1124,12 @@ function ShellChrome({
           if (!now) return;
           const same =
             pages.length === now.pageIds.length &&
-            pages.every((p, i) => p.selfId === now.pageIds[i] && p.sizePt[0] === now.pageSizesPt?.[i]?.[0] && p.sizePt[1] === now.pageSizesPt?.[i]?.[1]);
+            pages.every(
+              (p, i) =>
+                p.selfId === now.pageIds[i] &&
+                p.sizePt[0] === now.pageSizesPt?.[i]?.[0] &&
+                p.sizePt[1] === now.pageSizesPt?.[i]?.[1],
+            );
           if (same) return;
           setHandle({
             ...now,
@@ -1132,7 +1158,8 @@ function ShellChrome({
         // `details` deliberately does NOT cross: it is free text and carries
         // font names, ids and message fragments. The `kind` is the signal.
         journal.record({
-          code: WORKER_WARNING_CODES[msg.payload.kind] ?? "worker.dispatch.error",
+          code:
+            WORKER_WARNING_CODES[msg.payload.kind] ?? "worker.dispatch.error",
           severity: "error",
           data: { kind: identOf(msg.payload.kind) ?? "unknown" },
         });
@@ -1294,7 +1321,10 @@ function ShellChrome({
 
       {!sabSupported && (
         <div style={warningStyle}>
-          Some features are running in a reduced mode. Reload the page; if it persists, the page is not being served with the headers the editor needs (cross-origin isolation).</div>
+          Some features are running in a reduced mode. Reload the page; if it
+          persists, the page is not being served with the headers the editor
+          needs (cross-origin isolation).
+        </div>
       )}
 
       {warnings.length > 0 && (
@@ -1390,7 +1420,11 @@ interface DebugContextSnapshot {
    *  tool, which is the value the canvas actually dispatches on — a spec
    *  asserting `base` would miss exactly the class of defect that put
    *  AC-K1-2/3 red (a bare Meta keydown flipping the effective tool). */
-  tools: { base: string | null; effective: string | null; registered: string[] };
+  tools: {
+    base: string | null;
+    effective: string | null;
+    registered: string[];
+  };
   /** Registered command ids. The palette is the only place most of these
    *  are visible to a user, so this is the only way a spec can assert a
    *  command EXISTS separately from asserting the palette renders it. */
@@ -1518,7 +1552,10 @@ class DebugErrorBoundary extends React.Component<
     journal.record({
       code: "shell.panel.crash",
       severity: "error",
-      data: { label: identOf(this.props.label) ?? "unknown", error: errorIdent(error) },
+      data: {
+        label: identOf(this.props.label) ?? "unknown",
+        error: errorIdent(error),
+      },
     });
   }
   render() {

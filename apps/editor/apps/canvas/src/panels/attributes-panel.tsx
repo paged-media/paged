@@ -87,21 +87,21 @@ function CheckRow({
 }) {
   return (
     <ObjectFieldFrame field={field}>
-    <label
-      className="flex items-center justify-between py-[6px]"
-      data-check-row={label}
-      data-seam={seam ? "true" : undefined}
-    >
-      <span className="text-xs" style={{ color: "var(--pg-fg)" }}>
-        {label}
-      </span>
-      <TogglePill
-        checked={on}
-        mixed={mixed}
-        disabled={seam || disabled}
-        onToggle={onToggle}
-      />
-    </label>
+      <label
+        className="flex items-center justify-between py-[6px]"
+        data-check-row={label}
+        data-seam={seam ? "true" : undefined}
+      >
+        <span className="text-xs" style={{ color: "var(--pg-fg)" }}>
+          {label}
+        </span>
+        <TogglePill
+          checked={on}
+          mixed={mixed}
+          disabled={seam || disabled}
+          onToggle={onToggle}
+        />
+      </label>
     </ObjectFieldFrame>
   );
 }
@@ -222,28 +222,52 @@ function LabelsSection() {
   const { elementSelection } = useSelection();
   const model = useObjectModel();
   const first = elementSelection.length === 1 ? elementSelection[0] : null;
-  const address = useMemo(() => (first ? addressOfElement(first) : null), [first]);
+  const address = useMemo(
+    () => (first ? addressOfElement(first) : null),
+    [first],
+  );
   const targets = useMemo(() => (address ? [address] : []), [address]);
-  const map = useObjectField({ path: "labels", targets, schemaKind: address ?? "frame" });
+  const map = useObjectField({
+    path: "labels",
+    targets,
+    schemaKind: address ?? "frame",
+  });
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   if (!address) return null;
   const labels =
-    map.state.state === "value" && map.state.value && typeof map.state.value === "object"
+    map.state.state === "value" &&
+    map.state.value &&
+    typeof map.state.value === "object"
       ? Object.keys(map.state.value as Record<string, unknown>).sort()
       : [];
   const add = async () => {
     const key = draft.startsWith(LABEL_NS) ? draft : `${LABEL_NS}${draft}`;
     if (!model || draft.trim() === "") return;
-    const r = await model.objects.set(address, `labels[${key}]`, EMPTY_ENVELOPE, { label: "labels" });
-    setError(r.applied ? null : `${r.code ?? "failed"}: ${r.reason ?? "refused"}`);
+    const r = await model.objects.set(
+      address,
+      `labels[${key}]`,
+      EMPTY_ENVELOPE,
+      { label: "labels" },
+    );
+    setError(
+      r.applied ? null : `${r.code ?? "failed"}: ${r.reason ?? "refused"}`,
+    );
     if (r.applied) setDraft("");
   };
   return (
-    <div className="-mx-3 mt-2 border-t border-input px-3 pt-2" data-section="Labels" data-labels-target={address}>
+    <div
+      className="-mx-3 mt-2 border-t border-input px-3 pt-2"
+      data-section="Labels"
+      data-labels-target={address}
+    >
       <div className="pg-label mb-1">Labels</div>
       {labels.length === 0 ? (
-        <div className="pb-1 text-xs" style={{ color: "var(--pg-muted-fg)" }} data-labels-empty="">
+        <div
+          className="pb-1 text-xs"
+          style={{ color: "var(--pg-muted-fg)" }}
+          data-labels-empty=""
+        >
           No labels on this object.
         </div>
       ) : (
@@ -259,7 +283,12 @@ function LabelsSection() {
                 schemaKind={address}
               />
             ) : (
-              <div key={key} className="text-xs" data-label-readonly={key} title="Only x-paged: labels are written here">
+              <div
+                key={key}
+                className="text-xs"
+                data-label-readonly={key}
+                title="Only x-paged: labels are written here"
+              >
                 <span className="font-mono">{key}</span>
               </div>
             ),
@@ -285,7 +314,11 @@ function LabelsSection() {
         </button>
       </div>
       {error && (
-        <div data-label-error="" className="text-[10.5px]" style={{ color: "var(--status-error, var(--pg-destructive))" }}>
+        <div
+          data-label-error=""
+          className="text-[10.5px]"
+          style={{ color: "var(--status-error, var(--pg-destructive))" }}
+        >
           {error}
         </div>
       )}

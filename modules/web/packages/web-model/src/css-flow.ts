@@ -39,7 +39,10 @@ export interface NamedFlowRule {
 function scanFlowProp(css: string, prop: string): NamedFlowRule[] {
   const out: NamedFlowRule[] = [];
   const rule = /([^{}]+)\{([^{}]*)\}/g;
-  const decl = new RegExp(`(?:^|[;{\\s])${prop}\\s*:\\s*([A-Za-z_][\\w-]*)`, "i");
+  const decl = new RegExp(
+    `(?:^|[;{\\s])${prop}\\s*:\\s*([A-Za-z_][\\w-]*)`,
+    "i",
+  );
   let m: RegExpExecArray | null;
   while ((m = rule.exec(css)) !== null) {
     const d = decl.exec(m[2]);

@@ -74,11 +74,12 @@ export const PSD_RGBA = [10, 30, 50, 255, 20, 40, 60, 255];
  *  throwaway session — exactly the file a user's export of that stack
  *  is. Imported lazily so this module stays free of the bundle. */
 export async function layeredPsdBytes(names: string[]): Promise<Uint8Array> {
-  const [{ createBundleHost }, { createImageSession }, manifest] = await Promise.all([
-    import("@paged-media/plugin-sdk"),
-    import("../src/session"),
-    import("@paged-media/image-manifest/manifest.json"),
-  ]);
+  const [{ createBundleHost }, { createImageSession }, manifest] =
+    await Promise.all([
+      import("@paged-media/plugin-sdk"),
+      import("../src/session"),
+      import("@paged-media/image-manifest/manifest.json"),
+    ]);
   const fake = makeFakeEditor();
   const handle = createBundleHost(
     () => fake.editor,
@@ -88,15 +89,22 @@ export async function layeredPsdBytes(names: string[]): Promise<Uint8Array> {
   const session = createImageSession(handle.host);
   try {
     if (!(await session.importBytes("layers.psd", psdBytes()))) {
-      throw new Error(`layeredPsdBytes: import failed (${session.state().status})`);
+      throw new Error(
+        `layeredPsdBytes: import failed (${session.state().status})`,
+      );
     }
     for (const name of names) {
       if (!(await session.addLayer(name))) {
-        throw new Error(`layeredPsdBytes: addLayer failed (${session.state().status})`);
+        throw new Error(
+          `layeredPsdBytes: addLayer failed (${session.state().status})`,
+        );
       }
     }
     const out = await session.psdExportBytes();
-    if (!out) throw new Error(`layeredPsdBytes: export failed (${session.state().status})`);
+    if (!out)
+      throw new Error(
+        `layeredPsdBytes: export failed (${session.state().status})`,
+      );
     return out.bytes;
   } finally {
     session.dispose();
@@ -200,11 +208,18 @@ export function makeFakeEditor() {
   const metadata = new Map<string, Map<string, string>>();
   /** Apply the mutations this fake models: a frame's image bytes and
    *  plugin metadata (a batch applies its children in order). */
-  const applyMutation = (m: { op?: string; args?: Record<string, unknown> }) => {
+  const applyMutation = (m: {
+    op?: string;
+    args?: Record<string, unknown>;
+  }) => {
     if (m.op === "batch") {
-      for (const c of (m.args?.ops as unknown[]) ?? []) applyMutation(c as typeof m);
+      for (const c of (m.args?.ops as unknown[]) ?? [])
+        applyMutation(c as typeof m);
     } else if (m.op === "replaceImageBytes") {
-      placed.set(m.args!.elementId as string, Uint8Array.from(m.args!.bytes as number[]));
+      placed.set(
+        m.args!.elementId as string,
+        Uint8Array.from(m.args!.bytes as number[]),
+      );
     } else if (m.op === "setPluginMetadata") {
       const id = (m.args!.elementId as { id: string }).id;
       const k = m.args!.key as string;
@@ -286,13 +301,21 @@ export function makeFakeEditor() {
           const b = parts.get(p.path!);
           return {
             kind: "pagedPartRead",
-            payload: { path: p.path, found: !!b, bytes: b ? Array.from(b) : [] },
+            payload: {
+              path: p.path,
+              found: !!b,
+              bytes: b ? Array.from(b) : [],
+            },
           };
         }
         if (msg.kind === "listPagedParts") {
           return {
             kind: "pagedPartList",
-            payload: { paths: [...parts.keys()].filter((k) => k.startsWith(p.prefix ?? "")) },
+            payload: {
+              paths: [...parts.keys()].filter((k) =>
+                k.startsWith(p.prefix ?? ""),
+              ),
+            },
           };
         }
         if (msg.kind === "requestElementProperties") {

@@ -59,7 +59,9 @@ describe("spline — smoothAnchorsThrough (properties)", () => {
       fc.property(points, fc.boolean(), (pts, closed) => {
         const anchors = smoothAnchorsThrough(pts, undefined, closed);
         expect(anchors).toHaveLength(pts.length);
-        anchors.forEach((a, i) => assertVecClose(a.anchor, pts[i], 0, `anchor ${i}`));
+        anchors.forEach((a, i) =>
+          assertVecClose(a.anchor, pts[i], 0, `anchor ${i}`),
+        );
       }),
     );
   });
@@ -90,7 +92,10 @@ describe("spline — smoothAnchorsThrough (properties)", () => {
           const next = closed ? pts[(i + 1) % n] : pts[Math.min(n - 1, i + 1)];
           assertVecClose(
             a.right,
-            [pts[i][0] + (next[0] - prev[0]) / 6, pts[i][1] + (next[1] - prev[1]) / 6],
+            [
+              pts[i][0] + (next[0] - prev[0]) / 6,
+              pts[i][1] + (next[1] - prev[1]) / 6,
+            ],
             tol,
             `anchor ${i} right handle`,
           );
@@ -167,25 +172,31 @@ describe("spline — smoothAnchorsThrough (properties)", () => {
 
   it("commutes with a translation and with a uniform scale of the points", () => {
     fc.assert(
-      fc.property(points, fc.boolean(), vec2, real(-4, 4), (pts, closed, d, k) => {
-        const base = smoothAnchorsThrough(pts, undefined, closed);
-        const mapped = smoothAnchorsThrough(
-          pts.map((p): Vec2 => [k * p[0] + d[0], k * p[1] + d[1]]),
-          undefined,
-          closed,
-        );
-        const tol = 1e-9 * magnitude(...pts, d) * Math.max(1, Math.abs(k));
-        base.forEach((a, i) => {
-          for (const key of ["anchor", "left", "right"] as const) {
-            assertVecClose(
-              mapped[i][key],
-              [k * a[key][0] + d[0], k * a[key][1] + d[1]],
-              tol,
-              `anchors[${i}].${key}`,
-            );
-          }
-        });
-      }),
+      fc.property(
+        points,
+        fc.boolean(),
+        vec2,
+        real(-4, 4),
+        (pts, closed, d, k) => {
+          const base = smoothAnchorsThrough(pts, undefined, closed);
+          const mapped = smoothAnchorsThrough(
+            pts.map((p): Vec2 => [k * p[0] + d[0], k * p[1] + d[1]]),
+            undefined,
+            closed,
+          );
+          const tol = 1e-9 * magnitude(...pts, d) * Math.max(1, Math.abs(k));
+          base.forEach((a, i) => {
+            for (const key of ["anchor", "left", "right"] as const) {
+              assertVecClose(
+                mapped[i][key],
+                [k * a[key][0] + d[0], k * a[key][1] + d[1]],
+                tol,
+                `anchors[${i}].${key}`,
+              );
+            }
+          });
+        },
+      ),
     );
   });
 
@@ -193,7 +204,11 @@ describe("spline — smoothAnchorsThrough (properties)", () => {
     fc.assert(
       fc.property(points, fc.boolean(), (pts, closed) => {
         const forward = smoothAnchorsThrough(pts, undefined, closed);
-        const backward = smoothAnchorsThrough([...pts].reverse(), undefined, closed);
+        const backward = smoothAnchorsThrough(
+          [...pts].reverse(),
+          undefined,
+          closed,
+        );
         const n = pts.length;
         const tol = tolOf(pts);
         forward.forEach((a, i) => {
@@ -234,7 +249,12 @@ describe("handles — cornerAnchor / mirrorHandle / smoothAnchorFromDrag (proper
           "midpoint",
         );
         assertVecClose(mirrorHandle(anchor, mirrored), handle, tol, "twice");
-        assertClose(dist(anchor, mirrored), dist(anchor, handle), tol, "length");
+        assertClose(
+          dist(anchor, mirrored),
+          dist(anchor, handle),
+          tol,
+          "length",
+        );
       }),
     );
   });
@@ -260,7 +280,11 @@ describe("handles — cornerAnchor / mirrorHandle / smoothAnchorFromDrag (proper
         const a = smoothAnchorFromDrag(anchor, drag);
         assertVecClose(a.anchor, anchor, 0);
         assertVecClose(a.right, drag, 0);
-        assertVecClose(a.left, [2 * anchor[0] - drag[0], 2 * anchor[1] - drag[1]], 0);
+        assertVecClose(
+          a.left,
+          [2 * anchor[0] - drag[0], 2 * anchor[1] - drag[1]],
+          0,
+        );
         // A real drag makes a smooth anchor; no drag makes a corner.
         expect(isCornerAnchor(a)).toBe(dist(anchor, drag) < 1e-3);
       }),
@@ -295,8 +319,16 @@ describe("classify — isCornerAnchor (properties)", () => {
     fc.assert(
       fc.property(vec2, real(0.01, 100), (p, reach) => {
         const out: [number, number] = [p[0] + reach, p[1]];
-        const leftOut: AnchorTriple = { anchor: p, left: out, right: [p[0], p[1]] };
-        const rightOut: AnchorTriple = { anchor: p, left: [p[0], p[1]], right: out };
+        const leftOut: AnchorTriple = {
+          anchor: p,
+          left: out,
+          right: [p[0], p[1]],
+        };
+        const rightOut: AnchorTriple = {
+          anchor: p,
+          left: [p[0], p[1]],
+          right: out,
+        };
         // Skip the case where the reach is lost to rounding at this
         // magnitude (p + reach === p).
         fc.pre(dist(out, p) >= 1e-3);

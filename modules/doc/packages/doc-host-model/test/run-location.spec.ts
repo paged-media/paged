@@ -49,7 +49,12 @@ describe("bodyRunLocation @feat:plugin-doc.object-model", () => {
     story: {
       blocks: [
         para("Dear ", "«Name»", ","),
-        { kind: "paragraph", runs: [{ text: "split" }, { text: "here" }], sourceIndex: 1, segments: [{ at: 5 }] },
+        {
+          kind: "paragraph",
+          runs: [{ text: "split" }, { text: "here" }],
+          sourceIndex: 1,
+          segments: [{ at: 5 }],
+        },
         { kind: "table", rows: 1, cols: 1, columnWidthsPt: [], cells: [] },
         para("Grüße ", "x"),
         para("second section"),
@@ -68,11 +73,20 @@ describe("bodyRunLocation @feat:plugin-doc.object-model", () => {
       text: "«Name»",
     });
     // block 0 (1) + block 1 split once (2) + the table (1) = paragraph 4.
-    expect(bodyRunLocation(ir, 3, 1)).toMatchObject({ story: 0, paragraph: 4, prefix: "Grüße ", text: "x" });
+    expect(bodyRunLocation(ir, 3, 1)).toMatchObject({
+      story: 0,
+      paragraph: 4,
+      prefix: "Grüße ",
+      text: "x",
+    });
   });
 
   it("restarts in each section's own story", () => {
-    expect(bodyRunLocation(ir, 4, 0)).toMatchObject({ story: 1, paragraph: 0, text: "second section" });
+    expect(bodyRunLocation(ir, 4, 0)).toMatchObject({
+      story: 1,
+      paragraph: 0,
+      text: "second section",
+    });
   });
 
   it("answers null for a table, a split paragraph, a missing block or run", () => {

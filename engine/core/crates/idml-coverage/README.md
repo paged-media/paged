@@ -120,16 +120,16 @@ This file holds what the walk cannot see. Every entry is checked against the
 code: each literal it names must still appear in the item it names, and each
 fn must still exist. Otherwise the tool fails and names the stale entry.
 
-| Table | Use |
-|---|---|
-| `[[fn]]` | A function's elements, replacing call-site inference. |
-| `[[properties_kind]]` | The element behind `properties_kind = N` in `(N, b"Child")` arms, with optional child renames. |
-| `[[properties_child]]` | Properties children read as text by a pending-property arm. |
-| `[[read]]` | Reads through a computed key: arrays of names, keys assembled from a prefix. `verify` lists the literals to check when they are only parts of the names. `elements` defaults to the item's inferred elements. |
-| `[[export]]` | Writes the tuple walk cannot see: struct-literal key tables, typed Properties children. `prefix` is prepended to each attribute. |
-| `[[ignore]]` | Literals whose walk attribution is dropped, because they are values rather than names, or because a `[[read]]` or `[[export]]` attributes them more precisely. |
-| `[[part_entry]]` | The package part(s) a function is handed (`parse_graphic` → `Resources/Graphic`). Callees inherit them. |
-| `[[unseen]]` | Why the importer reads an (element, attribute) no census document carries: `keys` (`Element@Attribute`) or whole `elements`, and a `reason`. A name that is no longer an unseen read fails the tool. |
+| Table                  | Use                                                                                                                                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `[[fn]]`               | A function's elements, replacing call-site inference.                                                                                                                                                         |
+| `[[properties_kind]]`  | The element behind `properties_kind = N` in `(N, b"Child")` arms, with optional child renames.                                                                                                                |
+| `[[properties_child]]` | Properties children read as text by a pending-property arm.                                                                                                                                                   |
+| `[[read]]`             | Reads through a computed key: arrays of names, keys assembled from a prefix. `verify` lists the literals to check when they are only parts of the names. `elements` defaults to the item's inferred elements. |
+| `[[export]]`           | Writes the tuple walk cannot see: struct-literal key tables, typed Properties children. `prefix` is prepended to each attribute.                                                                              |
+| `[[ignore]]`           | Literals whose walk attribution is dropped, because they are values rather than names, or because a `[[read]]` or `[[export]]` attributes them more precisely.                                                |
+| `[[part_entry]]`       | The package part(s) a function is handed (`parse_graphic` → `Resources/Graphic`). Callees inherit them.                                                                                                       |
+| `[[unseen]]`           | Why the importer reads an (element, attribute) no census document carries: `keys` (`Element@Attribute`) or whole `elements`, and a `reason`. A name that is no longer an unseen read fails the tool.          |
 
 ## Parts, census and ratchet
 
@@ -161,13 +161,13 @@ there (`exported`), and `readElsewhere` when it is read only from other parts.
 
 **Metrics**, over all census rows:
 
-| Metric | Meaning |
-|---|---|
-| `weightedImport` | Σ `docCount` over rows read in their part / Σ `docCount` over all rows. |
-| `impactImport` | The same, weighted by `nonModalDocs`: the documents whose rendering depends on the read rather than on a default that happens to match. |
-| `weightedExport` | As `weightedImport`, for the exporter's writes. |
-| `misplacedReads` | (element, attribute, kind) read, but from none of the parts the census finds it in (listed in `misplaced`). |
-| `unseenReads` | (element, attribute, kind) read that no census document carries (listed in `unseen`, each with its `[[unseen]]` reason). `unjustifiedUnseenReads` counts those without one. |
+| Metric           | Meaning                                                                                                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `weightedImport` | Σ `docCount` over rows read in their part / Σ `docCount` over all rows.                                                                                                     |
+| `impactImport`   | The same, weighted by `nonModalDocs`: the documents whose rendering depends on the read rather than on a default that happens to match.                                     |
+| `weightedExport` | As `weightedImport`, for the exporter's writes.                                                                                                                             |
+| `misplacedReads` | (element, attribute, kind) read, but from none of the parts the census finds it in (listed in `misplaced`).                                                                 |
+| `unseenReads`    | (element, attribute, kind) read that no census document carries (listed in `unseen`, each with its `[[unseen]]` reason). `unjustifiedUnseenReads` counts those without one. |
 
 **Ratchet.** `docs/reference/idml-coverage-ratchet.json` holds the census
 identity, the metrics, the unresolved count and every covered

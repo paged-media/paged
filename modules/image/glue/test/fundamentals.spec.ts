@@ -27,15 +27,25 @@ import type { PluginManifest } from "@paged-media/plugin-api";
 import manifestJson from "@paged-media/image-manifest/manifest.json";
 
 import { createImageSession } from "../src/session";
-import { makeFakeEditor, mapBacking, psdBytes, shellStub, silentConsole } from "./helpers";
+import {
+  makeFakeEditor,
+  mapBacking,
+  psdBytes,
+  shellStub,
+  silentConsole,
+} from "./helpers";
 
 function open() {
   const fake = makeFakeEditor();
-  const handle = createBundleHost(() => fake.editor, manifestJson as PluginManifest, {
-    console: silentConsole,
-    storage: mapBacking(),
-    shell: shellStub(),
-  });
+  const handle = createBundleHost(
+    () => fake.editor,
+    manifestJson as PluginManifest,
+    {
+      console: silentConsole,
+      storage: mapBacking(),
+      shell: shellStub(),
+    },
+  );
   return { handle, session: createImageSession(handle.host) };
 }
 
@@ -47,8 +57,12 @@ describe("Image ▸ Rotate / Flip / Canvas Size", () => {
     expect(session.state().source).toMatchObject({ width: 1, height: 2 });
     expect(session.state().status).toMatch(/One undo step/);
     // psdBytes(): left (10,30,50), right (20,40,60); clockwise puts left on top.
-    expect(session.sampleColor([0, 0])!.map((v) => Math.round(v * 255))).toEqual([10, 30, 50, 255]);
-    expect(session.sampleColor([0, 1])!.map((v) => Math.round(v * 255))).toEqual([20, 40, 60, 255]);
+    expect(
+      session.sampleColor([0, 0])!.map((v) => Math.round(v * 255)),
+    ).toEqual([10, 30, 50, 255]);
+    expect(
+      session.sampleColor([0, 1])!.map((v) => Math.round(v * 255)),
+    ).toEqual([20, 40, 60, 255]);
     session.dispose();
     handle.dispose();
   });
@@ -57,13 +71,22 @@ describe("Image ▸ Rotate / Flip / Canvas Size", () => {
     const { handle, session } = open();
     expect(await session.importBytes("f.psd", psdBytes())).toBe(true);
     expect(await session.canvasOp("flip-h")).toBe(true);
-    expect(session.sampleColor([0, 0])!.map((v) => Math.round(v * 255))).toEqual([20, 40, 60, 255]);
     expect(
-      await session.canvasOp("canvas", { width: 4, height: 1, anchorX: 2, anchorY: 1 }),
+      session.sampleColor([0, 0])!.map((v) => Math.round(v * 255)),
+    ).toEqual([20, 40, 60, 255]);
+    expect(
+      await session.canvasOp("canvas", {
+        width: 4,
+        height: 1,
+        anchorX: 2,
+        anchorY: 1,
+      }),
     ).toBe(true);
     expect(session.state().source).toMatchObject({ width: 4, height: 1 });
     expect(session.sampleColor([0, 0])![3]).toBe(0); // added area: transparent
-    expect(session.sampleColor([2, 0])!.map((v) => Math.round(v * 255))).toEqual([20, 40, 60, 255]);
+    expect(
+      session.sampleColor([2, 0])!.map((v) => Math.round(v * 255)),
+    ).toEqual([20, 40, 60, 255]);
     session.dispose();
     handle.dispose();
   });

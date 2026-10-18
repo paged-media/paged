@@ -72,7 +72,9 @@ export function createPageHandler(): GestureHandler {
     }
   };
 
-  const boundsFor = (end: [number, number]): [number, number, number, number] => [
+  const boundsFor = (
+    end: [number, number],
+  ): [number, number, number, number] => [
     0,
     0,
     Math.max(MIN_PAGE_PT, end[1]),
@@ -110,7 +112,10 @@ export function createPageHandler(): GestureHandler {
       armedPageId = pageId;
       if (wasDrag) {
         void paged.client
-          .mutate({ op: "resizePage", args: { pageId, bounds: boundsFor(end) } })
+          .mutate({
+            op: "resizePage",
+            args: { pageId, bounds: boundsFor(end) },
+          })
           .then(warnIfFailed("resizePage"))
           .catch((err) => {
             // eslint-disable-next-line no-console
@@ -136,7 +141,11 @@ export function createPageHandler(): GestureHandler {
         cancel();
         return;
       }
-      if ((e.key === "Delete" || e.key === "Backspace") && paged && armedPageId) {
+      if (
+        (e.key === "Delete" || e.key === "Backspace") &&
+        paged &&
+        armedPageId
+      ) {
         const pageId = armedPageId;
         armedPageId = null;
         void paged.client

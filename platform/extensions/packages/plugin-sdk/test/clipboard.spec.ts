@@ -202,9 +202,7 @@ describe("host.clipboard — the no-backend door (K-6)", () => {
       ...silent,
       warn: () => void (warned += 1),
     });
-    await expect(
-      host.clipboard.write(grid([["a"]])),
-    ).resolves.toBeUndefined();
+    await expect(host.clipboard.write(grid([["a"]]))).resolves.toBeUndefined();
     expect(warned).toBeGreaterThan(0);
   });
 });

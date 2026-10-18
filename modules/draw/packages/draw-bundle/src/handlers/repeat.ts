@@ -212,8 +212,8 @@ export function createRepeatHandler(host: BundleHost): GestureHandler {
       }
       const { repeat, steer } = drag;
       reset();
-      void applyUpdateRepeat(host, { repeatId: repeat, ...steer }).catch((err) =>
-        host.log.warn(`repeat tool: update failed: ${String(err)}`),
+      void applyUpdateRepeat(host, { repeatId: repeat, ...steer }).catch(
+        (err) => host.log.warn(`repeat tool: update failed: ${String(err)}`),
       );
     },
     onKey(e: KeyboardEvent) {

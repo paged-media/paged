@@ -40,7 +40,10 @@ describe("constrainAngle — the Shift constraint", () => {
     // (7, 8) is 48.8° — nearest multiple of 45° is 45°.
     const r = Math.hypot(7, 8);
     close(constrainAngle([0, 0], [7, 8]), [r * Math.SQRT1_2, r * Math.SQRT1_2]);
-    close(constrainAngle([0, 0], [-7, 8]), [-r * Math.SQRT1_2, r * Math.SQRT1_2]);
+    close(constrainAngle([0, 0], [-7, 8]), [
+      -r * Math.SQRT1_2,
+      r * Math.SQRT1_2,
+    ]);
   });
 
   it("measures the angle around the ORIGIN it is given, not the page origin", () => {
@@ -60,7 +63,10 @@ describe("constrainAngle — the Shift constraint", () => {
     // 15° steps: (10, 3) is 16.7° → 15°.
     const r = Math.hypot(10, 3);
     const a = (15 * Math.PI) / 180;
-    close(constrainAngle([0, 0], [10, 3], 15), [r * Math.cos(a), r * Math.sin(a)]);
+    close(constrainAngle([0, 0], [10, 3], 15), [
+      r * Math.cos(a),
+      r * Math.sin(a),
+    ]);
   });
 
   it("returns the point itself (a fresh tuple) when it sits on the origin", () => {

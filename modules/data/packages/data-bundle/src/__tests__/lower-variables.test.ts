@@ -11,9 +11,19 @@ import { commitLoweredVariables } from "../lower";
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
-const variable = (text: string) => ({ kind: "variable" as const, target: "anchor", text, hidden: false });
+const variable = (text: string) => ({
+  kind: "variable" as const,
+  target: "anchor",
+  text,
+  hidden: false,
+});
 
-function fakeHost(opts: { refuseBatchOf?: number; caret?: { storyId: string; offset: number } } = {}) {
+function fakeHost(
+  opts: {
+    refuseBatchOf?: number;
+    caret?: { storyId: string; offset: number };
+  } = {},
+) {
   const sent: Mutation[] = [];
   let frames = 0;
   const host = {
@@ -25,16 +35,29 @@ function fakeHost(opts: { refuseBatchOf?: number; caret?: { storyId: string; off
     document: {
       mutate: async (m: Mutation) => {
         sent.push(m);
-        const ops = m.op === "batch" ? (m.args as { ops: Mutation[] }).ops : [m];
-        if (opts.refuseBatchOf !== undefined && ops.filter((o) => o.op === "insertField").length === opts.refuseBatchOf) {
-          return { applied: false, error: "Mutation::Batch child 5 (insertField): refused — batch rolled back" };
+        const ops =
+          m.op === "batch" ? (m.args as { ops: Mutation[] }).ops : [m];
+        if (
+          opts.refuseBatchOf !== undefined &&
+          ops.filter((o) => o.op === "insertField").length ===
+            opts.refuseBatchOf
+        ) {
+          return {
+            applied: false,
+            error:
+              "Mutation::Batch child 5 (insertField): refused — batch rolled back",
+          };
         }
         const minted = ops
           .filter((o) => o.op === "insertTextFrame")
           .map(() => {
             frames += 1;
             // Core may report handle: null for a named element.
-            return { handle: null, element: { kind: "textFrame", id: `u${frames}` }, storyId: `Story/s${frames}` };
+            return {
+              handle: null,
+              element: { kind: "textFrame", id: `u${frames}` },
+              storyId: `Story/s${frames}`,
+            };
           });
         return { applied: true, pageIds: [], minted };
       },
@@ -56,9 +79,15 @@ describe("lowerAll places variables in one batch [data.lower.content]", () => {
     expect(fake.sent.length).toBe(1);
     const ops = (fake.sent[0]!.args as { ops: Mutation[] }).ops;
     expect(ops.map((o) => o.op)).toEqual([
-      "insertTextFrame", "bindCreated", "insertField",
-      "insertTextFrame", "bindCreated", "insertField",
-      "insertTextFrame", "bindCreated", "insertField",
+      "insertTextFrame",
+      "bindCreated",
+      "insertField",
+      "insertTextFrame",
+      "bindCreated",
+      "insertField",
+      "insertTextFrame",
+      "bindCreated",
+      "insertField",
     ]);
     expect((ops[1]!.args as { handle: string }).handle).toBe("v0");
     expect((ops[8]!.args as { storyId: string }).storyId).toBe("$h:v2");
@@ -78,7 +107,9 @@ describe("lowerAll places variables in one batch [data.lower.content]", () => {
     ]);
     expect(fake.sent.length).toBe(1);
     const ops = (fake.sent[0]!.args as { ops: Mutation[] }).ops;
-    expect(ops.map((o) => [o.op, (o.args as { storyId: string }).storyId])).toEqual([
+    expect(
+      ops.map((o) => [o.op, (o.args as { storyId: string }).storyId]),
+    ).toEqual([
       ["insertField", "Story/x"],
       ["insertField", "Story/x"],
     ]);

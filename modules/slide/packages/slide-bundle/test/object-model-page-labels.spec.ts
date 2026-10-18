@@ -35,7 +35,14 @@ import type { MutationInput, ObjectValue } from "@paged-media/plugin-api";
 import slideBundle from "../src/index";
 import { parseState } from "../src/slides-model";
 import { slideEngine, type ImportReport } from "../src/engine";
-import { DECK_ADDRESS, IMPORT_PPTX_COMMAND, LABEL_KEY, NEW_SLIDE_COMMAND, PLUGIN_ID, transitionRecord } from "../src/object-model";
+import {
+  DECK_ADDRESS,
+  IMPORT_PPTX_COMMAND,
+  LABEL_KEY,
+  NEW_SLIDE_COMMAND,
+  PLUGIN_ID,
+  transitionRecord,
+} from "../src/object-model";
 import { fileURLToPath } from "node:url";
 
 // The engine is this package's own @paged-media/canvas-wasm devDependency.
@@ -45,7 +52,10 @@ import { fileURLToPath } from "node:url";
 const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
 const P = "plugin:media.paged.slide";
-const FIXTURE = new URL("../../../slide-conformance/fixtures/placeholders.pptx", import.meta.url);
+const FIXTURE = new URL(
+  "../../../slide-conformance/fixtures/placeholders.pptx",
+  import.meta.url,
+);
 
 const v = (x: ObjectValue): unknown => (x.kind === "value" ? x.value : x);
 
@@ -61,9 +71,16 @@ beforeEach(async () => {
   h.loadBundle(slideBundle);
   const bytes = new Uint8Array(readFileSync(FIXTURE));
   report = (await slideEngine()).importPptx(bytes, "placeholders").report;
-  slides = ((await h.objects.invoke(IMPORT_PPTX_COMMAND, { bytes, name: "placeholders.pptx" })) as { slides: string[] }).slides;
+  slides = (
+    (await h.objects.invoke(IMPORT_PPTX_COMMAND, {
+      bytes,
+      name: "placeholders.pptx",
+    })) as { slides: string[] }
+  ).slides;
   mutateCalls = 0;
-  const client = h.host.editor.client as { mutate: (m: unknown) => Promise<unknown> };
+  const client = h.host.editor.client as {
+    mutate: (m: unknown) => Promise<unknown>;
+  };
   const mutate = client.mutate.bind(client);
   client.mutate = (m) => {
     mutateCalls++;
@@ -73,8 +90,13 @@ beforeEach(async () => {
 
 afterEach(() => h.dispose());
 
-async function labelOf(address: string): Promise<{ v: number; data: Record<string, unknown> } | null> {
-  const out = v(await h.objects.get(address, "labels")) as Record<string, string>;
+async function labelOf(
+  address: string,
+): Promise<{ v: number; data: Record<string, unknown> } | null> {
+  const out = v(await h.objects.get(address, "labels")) as Record<
+    string,
+    string
+  >;
   const raw = out?.[LABEL_KEY];
   return raw ? JSON.parse(raw) : null;
 }
@@ -89,15 +111,24 @@ describe("[plugin-slide.object-model] slide data on page labels (protocol 70)", 
       // The importer's flat shape, the one the Slides and Notes panels read.
       expect(label?.data["slide"]).toBeUndefined();
       expect(label?.data["part"]).toBe(s.part);
-      expect(label?.data["notes"]).toBe(s.notes && s.notes.trim() !== "" ? s.notes : undefined);
+      expect(label?.data["notes"]).toBe(
+        s.notes && s.notes.trim() !== "" ? s.notes : undefined,
+      );
       expect(label?.data["hidden"]).toBe(s.hidden ? true : undefined);
-      expect(v(await h.objects.get(slides[report.slides.indexOf(s)]!, "notes"))).toBe(s.notes && s.notes.trim() !== "" ? s.notes : null);
+      expect(
+        v(await h.objects.get(slides[report.slides.indexOf(s)]!, "notes")),
+      ).toBe(s.notes && s.notes.trim() !== "" ? s.notes : null);
     }
     const doc = await labelOf("doc");
-    expect(doc?.data["deck"]).toMatchObject({ name: "placeholders", width: report.width });
+    expect(doc?.data["deck"]).toMatchObject({
+      name: "placeholders",
+      width: report.width,
+    });
     expect(doc?.data["slides"]).toBeUndefined();
     // The page label selects its pages.
-    expect((await h.objects.query(`page[label.${LABEL_KEY}^={]`)).length).toBe(report.slides.length);
+    expect((await h.objects.query(`page[label.${LABEL_KEY}^={]`)).length).toBe(
+      report.slides.length,
+    );
   });
 
   it("a slide is hosted by its page: a page scope selects it", async () => {
@@ -111,35 +142,68 @@ describe("[plugin-slide.object-model] slide data on page labels (protocol 70)", 
     expect(out).toMatchObject({ applied: true, undoSteps: 1 });
     expect(mutateCalls).toBe(1);
     const own = await labelOf(pageOf(report.slides[0]!.pageId));
-    expect(own?.data).toMatchObject({ notes: "Page-hosted — ü", part: report.slides[0]!.part });
-    expect(parseState([{ key: LABEL_KEY, value: JSON.stringify(own) }]).notes).toBe("Page-hosted — ü");
+    expect(own?.data).toMatchObject({
+      notes: "Page-hosted — ü",
+      part: report.slides[0]!.part,
+    });
+    expect(
+      parseState([{ key: LABEL_KEY, value: JSON.stringify(own) }]).notes,
+    ).toBe("Page-hosted — ü");
     expect(await labelOf("doc")).toEqual(docBefore);
-    expect(await labelOf(pageOf(report.slides[1]!.pageId))).toEqual(otherBefore);
+    expect(await labelOf(pageOf(report.slides[1]!.pageId))).toEqual(
+      otherBefore,
+    );
     await h.host.document.undo();
-    expect(v(await h.objects.get(slides[0]!, "notes"))).toBe(report.slides[0]!.notes);
+    expect(v(await h.objects.get(slides[0]!, "notes"))).toBe(
+      report.slides[0]!.notes,
+    );
   });
 
   it("a model write keeps what it does not own: the source part, and the deck's transition element while it still describes it", async () => {
     const m = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
     try {
       m.loadBundle(slideBundle);
-      const bytes = new Uint8Array(readFileSync(new URL("../../../slide-conformance/fixtures/motion.pptx", import.meta.url)));
+      const bytes = new Uint8Array(
+        readFileSync(
+          new URL(
+            "../../../slide-conformance/fixtures/motion.pptx",
+            import.meta.url,
+          ),
+        ),
+      );
       const motion = (await slideEngine()).importPptx(bytes, "motion").report;
-      const ms = ((await m.objects.invoke(IMPORT_PPTX_COMMAND, { bytes, name: "motion.pptx" })) as { slides: string[] }).slides;
+      const ms = (
+        (await m.objects.invoke(IMPORT_PPTX_COMMAND, {
+          bytes,
+          name: "motion.pptx",
+        })) as { slides: string[] }
+      ).slides;
       const i = motion.slides.findIndex((s) => s.transition);
       expect(i).toBeGreaterThanOrEqual(0);
       const label = async () => {
-        const raw = (v(await m.objects.get(pageOf(motion.slides[i]!.pageId), "labels")) as Record<string, string>)[LABEL_KEY];
+        const raw = (
+          v(
+            await m.objects.get(pageOf(motion.slides[i]!.pageId), "labels"),
+          ) as Record<string, string>
+        )[LABEL_KEY];
         return JSON.parse(raw!) as { data: Record<string, unknown> };
       };
       const xml = ((await label()).data["transition"] as { xml?: string }).xml;
       expect(xml).toBeTruthy();
-      expect(await m.objects.set(ms[i]!, "hidden", true)).toMatchObject({ applied: true });
+      expect(await m.objects.set(ms[i]!, "hidden", true)).toMatchObject({
+        applied: true,
+      });
       let now = await label();
-      expect(now.data).toMatchObject({ part: motion.slides[i]!.part, hidden: true });
+      expect(now.data).toMatchObject({
+        part: motion.slides[i]!.part,
+        hidden: true,
+      });
       expect((now.data["transition"] as { xml?: string }).xml).toBe(xml);
-      const other = motion.slides[i]!.transition!.kind === "push" ? "wipe" : "push";
-      expect(await m.objects.set(ms[i]!, "transitionKind", other)).toMatchObject({ applied: true });
+      const other =
+        motion.slides[i]!.transition!.kind === "push" ? "wipe" : "push";
+      expect(
+        await m.objects.set(ms[i]!, "transitionKind", other),
+      ).toMatchObject({ applied: true });
       now = await label();
       expect(now.data["transition"]).toMatchObject({ kind: other });
       expect((now.data["transition"] as { xml?: string }).xml).toBeUndefined();
@@ -159,16 +223,22 @@ describe("[plugin-slide.object-model] slide data on page labels (protocol 70)", 
     expect(mutateCalls).toBe(1);
     expect(v(await h.objects.get(slides[1]!, "notes"))).toBe(long);
     // One slide's own label is still capped.
-    expect(await h.objects.set(slides[0]!, "notes", "y".repeat(70_000))).toMatchObject({ applied: false });
+    expect(
+      await h.objects.set(slides[0]!, "notes", "y".repeat(70_000)),
+    ).toMatchObject({ applied: false });
   });
 
   it("newSlide takes partial args: {} appends after the last slide", async () => {
     const n = slides.length;
-    const out = (await h.objects.invoke(NEW_SLIDE_COMMAND, {})) as { slide: string };
+    const out = (await h.objects.invoke(NEW_SLIDE_COMMAND, {})) as {
+      slide: string;
+    };
     const now = await h.objects.query(`${P}/slide`);
     expect(now.length).toBe(n + 1);
     expect(now.at(-1)).toBe(out.slide);
-    const second = (await h.objects.invoke(NEW_SLIDE_COMMAND, { after: slides[0]! })) as { slide: string };
+    const second = (await h.objects.invoke(NEW_SLIDE_COMMAND, {
+      after: slides[0]!,
+    })) as { slide: string };
     expect((await h.objects.query(`${P}/slide`))[1]).toBe(second.slide);
   });
 });
@@ -193,17 +263,41 @@ describe("[plugin-slide.object-model] the earlier document-label layout still re
         op: "setDocumentMetadata",
         args: {
           key: LABEL_KEY,
-          value: JSON.stringify({ v: 1, data: { deck: { name: "legacy", width: report.width, height: report.height, fonts: report.fonts }, slides: slidesRec } }),
+          value: JSON.stringify({
+            v: 1,
+            data: {
+              deck: {
+                name: "legacy",
+                width: report.width,
+                height: report.height,
+                fonts: report.fonts,
+              },
+              slides: slidesRec,
+            },
+          }),
           caller: PLUGIN_ID,
         },
       } as MutationInput,
       ...report.slides.map(
-        (s) => ({ op: "setPageMetadata", args: { page: s.pageId, key: LABEL_KEY, value: null, caller: PLUGIN_ID } }) as MutationInput,
+        (s) =>
+          ({
+            op: "setPageMetadata",
+            args: {
+              page: s.pageId,
+              key: LABEL_KEY,
+              value: null,
+              caller: PLUGIN_ID,
+            },
+          }) as MutationInput,
       ),
     ];
-    const r = await h.host.document.mutate({ op: "batch", args: { ops } } as MutationInput);
+    const r = await h.host.document.mutate({
+      op: "batch",
+      args: { ops },
+    } as MutationInput);
     expect(r.applied).toBe(true);
-    for (const s of report.slides) expect(await labelOf(pageOf(s.pageId))).toBeNull();
+    for (const s of report.slides)
+      expect(await labelOf(pageOf(s.pageId))).toBeNull();
   }
 
   it("reads the legacy layout (by page id, and by ordinal for a renumbered page)", async () => {
@@ -222,16 +316,28 @@ describe("[plugin-slide.object-model] the earlier document-label layout still re
     const doc = await labelOf("doc");
     expect(doc?.data["slides"]).toBeUndefined();
     expect(doc?.data["deck"]).toMatchObject({ name: "legacy" });
-    expect((await labelOf(pageOf(report.slides[0]!.pageId)))?.data).toMatchObject({ notes: "legacy notes" });
-    expect((await labelOf(pageOf(report.slides[1]!.pageId)))?.data).toMatchObject({ hidden: true });
-    expect((await labelOf(pageOf(report.slides[2]!.pageId)))?.data).toMatchObject({ notes: "after migration" });
+    expect(
+      (await labelOf(pageOf(report.slides[0]!.pageId)))?.data,
+    ).toMatchObject({ notes: "legacy notes" });
+    expect(
+      (await labelOf(pageOf(report.slides[1]!.pageId)))?.data,
+    ).toMatchObject({ hidden: true });
+    expect(
+      (await labelOf(pageOf(report.slides[2]!.pageId)))?.data,
+    ).toMatchObject({ notes: "after migration" });
     // Reads are unchanged by the move.
     expect(v(await h.objects.get(slides[0]!, "notes"))).toBe("legacy notes");
     expect(v(await h.objects.get(slides[1]!, "hidden"))).toBe(true);
     // Undo restores the legacy layout whole.
     await h.host.document.undo();
-    expect(Object.keys(((await labelOf("doc"))?.data["slides"] ?? {}) as object).length).toBe(report.slides.length);
-    for (const s of report.slides) expect(await labelOf(pageOf(s.pageId))).toBeNull();
-    expect(v(await h.objects.get(slides[2]!, "notes"))).toBe(report.slides[2]!.notes);
+    expect(
+      Object.keys(((await labelOf("doc"))?.data["slides"] ?? {}) as object)
+        .length,
+    ).toBe(report.slides.length);
+    for (const s of report.slides)
+      expect(await labelOf(pageOf(s.pageId))).toBeNull();
+    expect(v(await h.objects.get(slides[2]!, "notes"))).toBe(
+      report.slides[2]!.notes,
+    );
   });
 });

@@ -37,7 +37,12 @@ const MANIFEST: PluginManifest = {
   capabilities: { document: { write: "broad" } },
 };
 
-const silent = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+const silent = {
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+};
 
 function setup() {
   const fake = makeFakeEditor();

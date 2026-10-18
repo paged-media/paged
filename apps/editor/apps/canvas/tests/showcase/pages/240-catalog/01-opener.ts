@@ -35,9 +35,9 @@ import { CSV_FIXTURE } from "./00-support";
  *  measure (a wrapped CSV reads as soup; an elided one reads as data). */
 function csvExcerpt(maxLines: number, maxChars: number): string[] {
   const lines = readFileSync(CSV_FIXTURE, "utf8").trimEnd().split("\n");
-  const shown = lines.slice(0, maxLines).map((l) =>
-    l.length > maxChars ? `${l.slice(0, maxChars - 1)}…` : l,
-  );
+  const shown = lines
+    .slice(0, maxLines)
+    .map((l) => (l.length > maxChars ? `${l.slice(0, maxChars - 1)}…` : l));
   shown.push(`… ${lines.length - maxLines} more rows`);
   return shown;
 }
@@ -45,34 +45,50 @@ function csvExcerpt(maxLines: number, maxChars: number): string[] {
 export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(109);
 
-  const number = await proseFrame(ctx, page, [48, 100, 220, 196], [
-    { text: "18", style: STYLE.chapterNumber },
-  ]);
-  const title = await proseFrame(ctx, page, [48, 200, 480, 252], [
-    { text: "The Catalog", style: STYLE.chapterTitle },
-  ]);
-  const deck = await proseFrame(ctx, page, [48, 264, 456, 406], [
-    {
-      text:
-        "A catalog is not a page decorated with numbers; it is a database " +
-        "wearing typography. This chapter publishes FROM data rather than " +
-        "decorating WITH it: a forty-eight-row order book registers with a " +
-        "real query engine, its columns become bindings whose expressions " +
-        "the engine writes, and what lands on these pages — live fields, a " +
-        "native table, four barcode symbologies drawn as page geometry — is " +
-        "resolved content, not pasted text. Where the shipped surfaces stop " +
-        "short of the engine underneath, the margin says so.",
-      style: STYLE.deck,
-    },
-  ]);
+  const number = await proseFrame(
+    ctx,
+    page,
+    [48, 100, 220, 196],
+    [{ text: "18", style: STYLE.chapterNumber }],
+  );
+  const title = await proseFrame(
+    ctx,
+    page,
+    [48, 200, 480, 252],
+    [{ text: "The Catalog", style: STYLE.chapterTitle }],
+  );
+  const deck = await proseFrame(
+    ctx,
+    page,
+    [48, 264, 456, 406],
+    [
+      {
+        text:
+          "A catalog is not a page decorated with numbers; it is a database " +
+          "wearing typography. This chapter publishes FROM data rather than " +
+          "decorating WITH it: a forty-eight-row order book registers with a " +
+          "real query engine, its columns become bindings whose expressions " +
+          "the engine writes, and what lands on these pages — live fields, a " +
+          "native table, four barcode symbologies drawn as page geometry — is " +
+          "resolved content, not pasted text. Where the shipped surfaces stop " +
+          "short of the engine underneath, the margin says so.",
+        style: STYLE.deck,
+      },
+    ],
+  );
   const rule = await plate(ctx, page, [48, 416, 300, 418], SWATCH.vermilion);
 
-  const sourceHead = await proseFrame(ctx, page, [48, 434, 480, 448], [
-    {
-      text: "The source, before any engine touches it — annual-orders.csv:",
-      style: STYLE.caption,
-    },
-  ]);
+  const sourceHead = await proseFrame(
+    ctx,
+    page,
+    [48, 434, 480, 448],
+    [
+      {
+        text: "The source, before any engine touches it — annual-orders.csv:",
+        style: STYLE.caption,
+      },
+    ],
+  );
   const excerpt = await proseFrame(
     ctx,
     page,

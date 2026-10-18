@@ -68,10 +68,7 @@ export function InfoPanel() {
     <div className="p-3 flex flex-col" data-info-panel="ready">
       <Row label="Document" value={meta.documentName || "—"} />
       <Row label="Pages" value={String(meta.pageCount)} />
-      <Row
-        label="Active page"
-        value={pageLabel(meta.activePage, pages)}
-      />
+      <Row label="Active page" value={pageLabel(meta.activePage, pages)} />
       <Row label="Units" value={meta.units || "—"} />
       <Row label="Color mode" value={meta.colorMode || "—"} />
       <Row label="Dirty" value={meta.dirty ? "yes" : "no"} />

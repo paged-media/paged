@@ -17,7 +17,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // E2E op suite — protocol 64's paragraph flow controls, driven through
 // the PANELS (2026-10-01). Core v0.64.0 made the keep options, the
 // break-before rule, span/split columns and the list-marker overrides
@@ -123,10 +122,16 @@ async function threadedChain(page: Page, fx: LoadedFixture): Promise<Chain> {
   return { ...found!, pageId: pageInfo.pageId, pageWidthPt: pageInfo.widthPt };
 }
 
-async function caretAt(page: Page, storyId: string, offset: number): Promise<Caret> {
+async function caretAt(
+  page: Page,
+  storyId: string,
+  offset: number,
+): Promise<Caret> {
   const cg = await page.evaluate(
     async ({ storyId, offset }) =>
-      (globalThis as unknown as CanvasClientGlobal).__canvas.client.caretGeometry({
+      (
+        globalThis as unknown as CanvasClientGlobal
+      ).__canvas.client.caretGeometry({
         storyId,
         start: offset,
         end: offset,
@@ -137,7 +142,11 @@ async function caretAt(page: Page, storyId: string, offset: number): Promise<Car
   return cg!;
 }
 
-async function readProp(page: Page, ref: StoryRangeRef, path: string): Promise<unknown> {
+async function readProp(
+  page: Page,
+  ref: StoryRangeRef,
+  path: string,
+): Promise<unknown> {
   return page.evaluate(
     async ({ id, p }) => {
       const c = (globalThis as unknown as CanvasClientGlobal).__canvas.client;
@@ -148,7 +157,12 @@ async function readProp(page: Page, ref: StoryRangeRef, path: string): Promise<u
   );
 }
 
-async function setProp(page: Page, ref: StoryRangeRef, path: string, value: unknown) {
+async function setProp(
+  page: Page,
+  ref: StoryRangeRef,
+  path: string,
+  value: unknown,
+) {
   const reply = (await mutate(page, {
     op: "setElementProperty",
     args: { elementId: ref, path, value },
@@ -161,7 +175,8 @@ async function openSection(page: Page, root: string, title: string) {
     `${root} [data-section="${title}"] > [data-section-toggle]`,
   );
   await expect(toggle).toBeVisible();
-  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+  if ((await toggle.getAttribute("aria-expanded")) !== "true")
+    await toggle.click();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
 }
 
@@ -175,7 +190,12 @@ function rowSelect(page: Page, root: string, label: string) {
 }
 
 /** The metric above a cluster sub-label ("Start lines", "Space after"…). */
-async function fillClusterMetric(page: Page, root: string, sublabel: string, value: number) {
+async function fillClusterMetric(
+  page: Page,
+  root: string,
+  sublabel: string,
+  value: number,
+) {
   const input = page
     .locator(`${root} div.flex-col:has(> span:text-is("${sublabel}")) input`)
     .first();
@@ -227,22 +247,45 @@ test.describe("E2E paragraph flow (protocol 64) — Paragraph panel", () => {
     await sandwich(page, {
       at: P1,
       apply: async () => {
-        await rowSelect(page, PARA, "Start paragraph").selectOption("NextFrame");
+        await rowSelect(page, PARA, "Start paragraph").selectOption(
+          "NextFrame",
+        );
       },
       expectModel: async () => {
-        expect(await readProp(page, range(chain.storyId, P1), "paragraphStartParagraph")).toEqual({
+        expect(
+          await readProp(
+            page,
+            range(chain.storyId, P1),
+            "paragraphStartParagraph",
+          ),
+        ).toEqual({
           type: "text",
           value: "NextFrame",
         });
         const after = await caretAt(page, chain.storyId, P1);
-        expect(after.frameId, "paragraph 2 now starts in the second frame").toBe(chain.frames[1]);
+        expect(
+          after.frameId,
+          "paragraph 2 now starts in the second frame",
+        ).toBe(chain.frames[1]);
         // The paragraph before it stays put.
-        expect((await caretAt(page, chain.storyId, P0)).frameId).toBe(chain.frames[0]);
-        await expect(rowSelect(page, PARA, "Start paragraph")).toHaveValue("NextFrame");
+        expect((await caretAt(page, chain.storyId, P0)).frameId).toBe(
+          chain.frames[0],
+        );
+        await expect(rowSelect(page, PARA, "Start paragraph")).toHaveValue(
+          "NextFrame",
+        );
       },
       expectRestored: async () => {
-        expect((await caretAt(page, chain.storyId, P1)).frameId).toBe(chain.frames[0]);
-        expect(await readProp(page, range(chain.storyId, P1), "paragraphStartParagraph")).toEqual({
+        expect((await caretAt(page, chain.storyId, P1)).frameId).toBe(
+          chain.frames[0],
+        );
+        expect(
+          await readProp(
+            page,
+            range(chain.storyId, P1),
+            "paragraphStartParagraph",
+          ),
+        ).toEqual({
           type: "text",
           value: "",
         });
@@ -254,7 +297,9 @@ test.describe("E2E paragraph flow (protocol 64) — Paragraph panel", () => {
     page,
   }) => {
     // Paragraph 2 is the last line of frame 1; paragraph 3 opens frame 2.
-    expect((await caretAt(page, chain.storyId, KEPT)).frameId).toBe(chain.frames[0]);
+    expect((await caretAt(page, chain.storyId, KEPT)).frameId).toBe(
+      chain.frames[0],
+    );
     await setCaret(page, chain.storyId, KEPT, KEPT + 1);
     await openSection(page, PARA, "Keep options");
     await sandwich(page, {
@@ -264,14 +309,24 @@ test.describe("E2E paragraph flow (protocol 64) — Paragraph panel", () => {
       },
       expectModel: async () => {
         // A line COUNT on the wire (Value::Length), not a boolean.
-        expect(await readProp(page, range(chain.storyId, KEPT), "paragraphKeepWithNext")).toEqual({
+        expect(
+          await readProp(
+            page,
+            range(chain.storyId, KEPT),
+            "paragraphKeepWithNext",
+          ),
+        ).toEqual({
           type: "length",
           value: 2,
         });
-        expect((await caretAt(page, chain.storyId, KEPT)).frameId).toBe(chain.frames[1]);
+        expect((await caretAt(page, chain.storyId, KEPT)).frameId).toBe(
+          chain.frames[1],
+        );
       },
       expectRestored: async () => {
-        expect((await caretAt(page, chain.storyId, KEPT)).frameId).toBe(chain.frames[0]);
+        expect((await caretAt(page, chain.storyId, KEPT)).frameId).toBe(
+          chain.frames[0],
+        );
       },
     });
   });
@@ -291,12 +346,14 @@ test.describe("E2E paragraph flow (protocol 64) — Paragraph panel", () => {
     })) as { kind: string };
     expect(reply.kind).toBe("mutationApplied");
     const lastChar = KEPT_END + EXTRA.length;
-    expect((await caretAt(page, chain.storyId, KEPT)).frameId, "setup: first line in frame 1").toBe(
-      chain.frames[0],
-    );
-    expect((await caretAt(page, chain.storyId, lastChar)).frameId, "setup: last line in frame 2").toBe(
-      chain.frames[1],
-    );
+    expect(
+      (await caretAt(page, chain.storyId, KEPT)).frameId,
+      "setup: first line in frame 1",
+    ).toBe(chain.frames[0]);
+    expect(
+      (await caretAt(page, chain.storyId, lastChar)).frameId,
+      "setup: last line in frame 2",
+    ).toBe(chain.frames[1]);
     return lastChar;
   }
 
@@ -312,15 +369,25 @@ test.describe("E2E paragraph flow (protocol 64) — Paragraph panel", () => {
         await togglePill(page, PARA, "Keep lines together");
       },
       expectModel: async () => {
-        expect(await readProp(page, range(chain.storyId, KEPT), "paragraphKeepLinesTogether")).toEqual({
+        expect(
+          await readProp(
+            page,
+            range(chain.storyId, KEPT),
+            "paragraphKeepLinesTogether",
+          ),
+        ).toEqual({
           type: "bool",
           value: true,
         });
         // Two lines, start count 2 (the default): the orphan line moves.
-        expect((await caretAt(page, chain.storyId, KEPT)).frameId).toBe(chain.frames[1]);
+        expect((await caretAt(page, chain.storyId, KEPT)).frameId).toBe(
+          chain.frames[1],
+        );
       },
       expectRestored: async () => {
-        expect((await caretAt(page, chain.storyId, KEPT)).frameId).toBe(chain.frames[0]);
+        expect((await caretAt(page, chain.storyId, KEPT)).frameId).toBe(
+          chain.frames[0],
+        );
       },
     });
   });
@@ -330,9 +397,18 @@ test.describe("E2E paragraph flow (protocol 64) — Paragraph panel", () => {
   }) => {
     await splitParagraphAcrossFrames(page);
     const r = range(chain.storyId, KEPT);
-    await setProp(page, r, "paragraphKeepLinesTogether", { type: "bool", value: true });
-    await setProp(page, r, "paragraphKeepLastLines", { type: "length", value: 1 });
-    expect((await caretAt(page, chain.storyId, KEPT)).frameId, "setup: kept whole").toBe(chain.frames[1]);
+    await setProp(page, r, "paragraphKeepLinesTogether", {
+      type: "bool",
+      value: true,
+    });
+    await setProp(page, r, "paragraphKeepLastLines", {
+      type: "length",
+      value: 1,
+    });
+    expect(
+      (await caretAt(page, chain.storyId, KEPT)).frameId,
+      "setup: kept whole",
+    ).toBe(chain.frames[1]);
     await setCaret(page, chain.storyId, KEPT, KEPT + 1);
     await openSection(page, PARA, "Keep options");
     await sandwich(page, {
@@ -341,11 +417,18 @@ test.describe("E2E paragraph flow (protocol 64) — Paragraph panel", () => {
         await fillClusterMetric(page, PARA, "Start lines", 1);
       },
       expectModel: async () => {
-        expect(await readProp(page, r, "paragraphKeepFirstLines")).toEqual({ type: "length", value: 1 });
-        expect((await caretAt(page, chain.storyId, KEPT)).frameId).toBe(chain.frames[0]);
+        expect(await readProp(page, r, "paragraphKeepFirstLines")).toEqual({
+          type: "length",
+          value: 1,
+        });
+        expect((await caretAt(page, chain.storyId, KEPT)).frameId).toBe(
+          chain.frames[0],
+        );
       },
       expectRestored: async () => {
-        expect((await caretAt(page, chain.storyId, KEPT)).frameId).toBe(chain.frames[1]);
+        expect((await caretAt(page, chain.storyId, KEPT)).frameId).toBe(
+          chain.frames[1],
+        );
       },
     });
     // And the End-lines field writes its own path.
@@ -360,10 +443,22 @@ test.describe("E2E paragraph flow (protocol 64) — Paragraph panel", () => {
   }) => {
     await splitParagraphAcrossFrames(page);
     const r = range(chain.storyId, KEPT);
-    await setProp(page, r, "paragraphKeepLinesTogether", { type: "bool", value: true });
-    await setProp(page, r, "paragraphKeepFirstLines", { type: "length", value: 1 });
-    await setProp(page, r, "paragraphKeepLastLines", { type: "length", value: 1 });
-    expect((await caretAt(page, chain.storyId, KEPT)).frameId, "setup: split allowed").toBe(chain.frames[0]);
+    await setProp(page, r, "paragraphKeepLinesTogether", {
+      type: "bool",
+      value: true,
+    });
+    await setProp(page, r, "paragraphKeepFirstLines", {
+      type: "length",
+      value: 1,
+    });
+    await setProp(page, r, "paragraphKeepLastLines", {
+      type: "length",
+      value: 1,
+    });
+    expect(
+      (await caretAt(page, chain.storyId, KEPT)).frameId,
+      "setup: split allowed",
+    ).toBe(chain.frames[0]);
     await setCaret(page, chain.storyId, KEPT, KEPT + 1);
     await openSection(page, PARA, "Keep options");
     await sandwich(page, {
@@ -372,11 +467,17 @@ test.describe("E2E paragraph flow (protocol 64) — Paragraph panel", () => {
         await togglePill(page, PARA, "All lines in paragraph");
       },
       expectModel: async () => {
-        expect(await readProp(page, r, "paragraphKeepAllLinesTogether")).toEqual({ type: "bool", value: true });
-        expect((await caretAt(page, chain.storyId, KEPT)).frameId).toBe(chain.frames[1]);
+        expect(
+          await readProp(page, r, "paragraphKeepAllLinesTogether"),
+        ).toEqual({ type: "bool", value: true });
+        expect((await caretAt(page, chain.storyId, KEPT)).frameId).toBe(
+          chain.frames[1],
+        );
       },
       expectRestored: async () => {
-        expect((await caretAt(page, chain.storyId, KEPT)).frameId).toBe(chain.frames[0]);
+        expect((await caretAt(page, chain.storyId, KEPT)).frameId).toBe(
+          chain.frames[0],
+        );
       },
     });
   });
@@ -406,10 +507,18 @@ test.describe("E2E paragraph flow (protocol 64) — Paragraph panel", () => {
     await sandwich(page, {
       at: P0,
       apply: async () => {
-        await rowSelect(page, PARA, "Paragraph layout").selectOption("SpanColumns");
+        await rowSelect(page, PARA, "Paragraph layout").selectOption(
+          "SpanColumns",
+        );
       },
       expectModel: async () => {
-        expect(await readProp(page, range(chain.storyId, P0), "paragraphSpanColumnType")).toEqual({
+        expect(
+          await readProp(
+            page,
+            range(chain.storyId, P0),
+            "paragraphSpanColumnType",
+          ),
+        ).toEqual({
           type: "text",
           value: "SpanColumns",
         });
@@ -432,7 +541,10 @@ test.describe("E2E paragraph flow (protocol 64) — Paragraph panel", () => {
   }) => {
     await twoColumns(page);
     const r = range(chain.storyId, P0);
-    await setProp(page, r, "paragraphSpanColumnType", { type: "text", value: "SpanColumns" });
+    await setProp(page, r, "paragraphSpanColumnType", {
+      type: "text",
+      value: "SpanColumns",
+    });
     await setCaret(page, chain.storyId, P0, P0 + 1);
     await openSection(page, PARA, "Span columns");
     // Columns = All — a model write (the frame has only two columns, so
@@ -451,17 +563,23 @@ test.describe("E2E paragraph flow (protocol 64) — Paragraph panel", () => {
         await fillClusterMetric(page, PARA, "Space after", 12);
       },
       expectModel: async () => {
-        expect(await readProp(page, r, "paragraphSpanColumnMinSpaceAfter")).toEqual({
+        expect(
+          await readProp(page, r, "paragraphSpanColumnMinSpaceAfter"),
+        ).toEqual({
           type: "length",
           value: 12,
         });
         const after = await caretAt(page, chain.storyId, P1);
-        expect(after.topPt, "the span's space after pushes paragraph 2 down").toBeGreaterThan(
-          before.topPt + 6,
-        );
+        expect(
+          after.topPt,
+          "the span's space after pushes paragraph 2 down",
+        ).toBeGreaterThan(before.topPt + 6);
       },
       expectRestored: async () => {
-        expect((await caretAt(page, chain.storyId, P1)).topPt).toBeCloseTo(before.topPt, 3);
+        expect((await caretAt(page, chain.storyId, P1)).topPt).toBeCloseTo(
+          before.topPt,
+          3,
+        );
       },
     });
   });
@@ -473,7 +591,10 @@ test.describe("E2E paragraph flow (protocol 64) — Paragraph panel", () => {
     // Span paragraph 2 (not the frame's first, where space before is
     // suppressed at the top of a frame).
     const r = range(chain.storyId, P1);
-    await setProp(page, r, "paragraphSpanColumnType", { type: "text", value: "SpanColumns" });
+    await setProp(page, r, "paragraphSpanColumnType", {
+      type: "text",
+      value: "SpanColumns",
+    });
     const before = await caretAt(page, chain.storyId, P1);
     await setCaret(page, chain.storyId, P1, P1 + 1);
     await openSection(page, PARA, "Span columns");
@@ -483,7 +604,9 @@ test.describe("E2E paragraph flow (protocol 64) — Paragraph panel", () => {
         await fillClusterMetric(page, PARA, "Space before", 18);
       },
       expectModel: async () => {
-        expect(await readProp(page, r, "paragraphSpanColumnMinSpaceBefore")).toEqual({
+        expect(
+          await readProp(page, r, "paragraphSpanColumnMinSpaceBefore"),
+        ).toEqual({
           type: "length",
           value: 18,
         });
@@ -509,12 +632,17 @@ test.describe("E2E paragraph flow (protocol 64) — Paragraph panel", () => {
     const before = await caretAt(page, chain.storyId, 30);
     await setCaret(page, chain.storyId, P0, P0 + 1);
     await openSection(page, PARA, "Span columns");
-    await setProp(page, r, "paragraphSpanSplitColumnCount", { type: "text", value: "2" });
+    await setProp(page, r, "paragraphSpanSplitColumnCount", {
+      type: "text",
+      value: "2",
+    });
     await expect(rowSelect(page, PARA, "Columns")).toHaveValue("2");
     await sandwich(page, {
       at: P0,
       apply: async () => {
-        await rowSelect(page, PARA, "Paragraph layout").selectOption("SplitColumns");
+        await rowSelect(page, PARA, "Paragraph layout").selectOption(
+          "SplitColumns",
+        );
       },
       expectModel: async () => {
         expect(await readProp(page, r, "paragraphSpanColumnType")).toEqual({
@@ -526,12 +654,18 @@ test.describe("E2E paragraph flow (protocol 64) — Paragraph panel", () => {
         expect(after.xPt).not.toBeCloseTo(before.xPt, 1);
       },
       expectRestored: async () => {
-        expect((await caretAt(page, chain.storyId, 30)).xPt).toBeCloseTo(before.xPt, 3);
+        expect((await caretAt(page, chain.storyId, 30)).xPt).toBeCloseTo(
+          before.xPt,
+          3,
+        );
       },
     });
 
     // Inside gutter: the second sub-column moves right.
-    await setProp(page, r, "paragraphSpanColumnType", { type: "text", value: "SplitColumns" });
+    await setProp(page, r, "paragraphSpanColumnType", {
+      type: "text",
+      value: "SplitColumns",
+    });
     const split = await caretAt(page, chain.storyId, 30);
     await sandwich(page, {
       at: P0,
@@ -539,14 +673,21 @@ test.describe("E2E paragraph flow (protocol 64) — Paragraph panel", () => {
         await fillClusterMetric(page, PARA, "Inside gutter", 40);
       },
       expectModel: async () => {
-        expect(await readProp(page, r, "paragraphSplitColumnInsideGutter")).toEqual({
+        expect(
+          await readProp(page, r, "paragraphSplitColumnInsideGutter"),
+        ).toEqual({
           type: "length",
           value: 40,
         });
-        expect((await caretAt(page, chain.storyId, 30)).xPt).toBeGreaterThan(split.xPt);
+        expect((await caretAt(page, chain.storyId, 30)).xPt).toBeGreaterThan(
+          split.xPt,
+        );
       },
       expectRestored: async () => {
-        expect((await caretAt(page, chain.storyId, 30)).xPt).toBeCloseTo(split.xPt, 3);
+        expect((await caretAt(page, chain.storyId, 30)).xPt).toBeCloseTo(
+          split.xPt,
+          3,
+        );
       },
     });
 
@@ -558,14 +699,21 @@ test.describe("E2E paragraph flow (protocol 64) — Paragraph panel", () => {
         await fillClusterMetric(page, PARA, "Outside gutter", 30);
       },
       expectModel: async () => {
-        expect(await readProp(page, r, "paragraphSplitColumnOutsideGutter")).toEqual({
+        expect(
+          await readProp(page, r, "paragraphSplitColumnOutsideGutter"),
+        ).toEqual({
           type: "length",
           value: 30,
         });
-        expect((await caretAt(page, chain.storyId, P0)).xPt).toBeGreaterThan(head.xPt + 20);
+        expect((await caretAt(page, chain.storyId, P0)).xPt).toBeGreaterThan(
+          head.xPt + 20,
+        );
       },
       expectRestored: async () => {
-        expect((await caretAt(page, chain.storyId, P0)).xPt).toBeCloseTo(head.xPt, 3);
+        expect((await caretAt(page, chain.storyId, P0)).xPt).toBeCloseTo(
+          head.xPt,
+          3,
+        );
       },
     });
   });
@@ -582,7 +730,10 @@ test.describe("E2E paragraph flow (protocol 64) — Bullets & Numbering list fie
     await expect(page.locator(BULLETS)).toBeVisible();
   });
 
-  async function listOnFirstParagraph(page: Page, type: "NumberedList" | "BulletList") {
+  async function listOnFirstParagraph(
+    page: Page,
+    type: "NumberedList" | "BulletList",
+  ) {
     await setProp(page, range(chain.storyId, P0, P1 - 1), "paragraphListType", {
       type: "text",
       value: type,
@@ -592,7 +743,12 @@ test.describe("E2E paragraph flow (protocol 64) — Bullets & Numbering list fie
 
   async function listSandwich(
     page: Page,
-    o: { apply: () => Promise<unknown>; path: string; expected: unknown; restored: unknown },
+    o: {
+      apply: () => Promise<unknown>;
+      path: string;
+      expected: unknown;
+      restored: unknown;
+    },
   ) {
     const r = range(chain.storyId, P0);
     await opSandwich(page, {
@@ -636,8 +792,16 @@ test.describe("E2E paragraph flow (protocol 64) — Bullets & Numbering list fie
   }) => {
     await listOnFirstParagraph(page, "NumberedList");
     // A start of 4 makes the counter style visible: "4" vs "iv".
-    await setProp(page, range(chain.storyId, P0), "paragraphNumberingContinue", { type: "bool", value: false });
-    await setProp(page, range(chain.storyId, P0), "paragraphNumberingStartAt", { type: "length", value: 4 });
+    await setProp(
+      page,
+      range(chain.storyId, P0),
+      "paragraphNumberingContinue",
+      { type: "bool", value: false },
+    );
+    await setProp(page, range(chain.storyId, P0), "paragraphNumberingStartAt", {
+      type: "length",
+      value: 4,
+    });
     await listSandwich(page, {
       apply: () =>
         page
@@ -663,7 +827,9 @@ test.describe("E2E paragraph flow (protocol 64) — Bullets & Numbering list fie
       .toEqual({ type: "bool", value: false });
     await listSandwich(page, {
       apply: async () => {
-        const f = page.locator(`${BULLETS} input[aria-label="numbering-start-at"]`);
+        const f = page.locator(
+          `${BULLETS} input[aria-label="numbering-start-at"]`,
+        );
         await expect(f).toBeEnabled();
         await f.fill("5");
         await f.press("Enter");
@@ -703,7 +869,9 @@ test.describe("E2E paragraph flow (protocol 64) — Bullets & Numbering list fie
     const id = await page.evaluate(async () => {
       const c = (globalThis as unknown as CanvasClientGlobal).__canvas.client;
       const rows = await c.collection("characterStyles");
-      return (rows.find((r) => r.name === "Marker big")?.selfId as string) ?? null;
+      return (
+        (rows.find((r) => r.name === "Marker big")?.selfId as string) ?? null
+      );
     });
     expect(id).toBeTruthy();
     const sized = (await mutate(page, {
@@ -724,7 +892,9 @@ test.describe("E2E paragraph flow (protocol 64) — Bullets & Numbering list fie
   }) => {
     await listOnFirstParagraph(page, "BulletList");
     const style = await markerStyle(page);
-    const select = page.locator(`${BULLETS} [data-bullets-field="bullets-char-style"] select`);
+    const select = page.locator(
+      `${BULLETS} [data-bullets-field="bullets-char-style"] select`,
+    );
     await expect(select.locator(`option[value="${style}"]`)).toHaveCount(1);
     await listSandwich(page, {
       apply: () => select.selectOption(style),
@@ -739,7 +909,9 @@ test.describe("E2E paragraph flow (protocol 64) — Bullets & Numbering list fie
   }) => {
     await listOnFirstParagraph(page, "NumberedList");
     const style = await markerStyle(page);
-    const select = page.locator(`${BULLETS} [data-bullets-field="numbering-char-style"] select`);
+    const select = page.locator(
+      `${BULLETS} [data-bullets-field="numbering-char-style"] select`,
+    );
     await expect(select.locator(`option[value="${style}"]`)).toHaveCount(1);
     await listSandwich(page, {
       apply: () => select.selectOption(style),
@@ -758,7 +930,10 @@ test.describe("E2E paragraph flow (protocol 64) — Smart text reflow", () => {
     const fx = await loadFixture(page, "text-overset");
     const chain = await threadedChain(page, fx);
     // Enough overset to need several generated pages.
-    const filler = Array.from({ length: 400 }, (_, i) => `Overset line ${i} keeps the story running.`).join(" ");
+    const filler = Array.from(
+      { length: 400 },
+      (_, i) => `Overset line ${i} keeps the story running.`,
+    ).join(" ");
     const ins = (await mutate(page, {
       op: "insertText",
       args: { storyId: chain.storyId, offset: 0, text: filler + " " },
@@ -767,7 +942,9 @@ test.describe("E2E paragraph flow (protocol 64) — Smart text reflow", () => {
 
     const meta = () =>
       page.evaluate(async () =>
-        (globalThis as unknown as CanvasClientGlobal).__canvas.client.documentMeta(),
+        (
+          globalThis as unknown as CanvasClientGlobal
+        ).__canvas.client.documentMeta(),
       );
     const overset = () =>
       page.evaluate(async (sid) => {
@@ -799,7 +976,9 @@ test.describe("E2E paragraph flow (protocol 64) — Smart text reflow", () => {
     // Undo the capped rule: the generated page is gone, and the panel
     // admits it no longer knows the rule.
     await page.evaluate(async () => {
-      await (globalThis as unknown as CanvasClientGlobal).__canvas.client.undo();
+      await (
+        globalThis as unknown as CanvasClientGlobal
+      ).__canvas.client.undo();
     });
     await expect.poll(async () => (await meta()).pageCount).toBe(basePages);
     await expect(pill).toHaveAttribute("data-mixed", "");
@@ -807,12 +986,16 @@ test.describe("E2E paragraph flow (protocol 64) — Smart text reflow", () => {
     // The pill alone: uncapped, the chain grows until the story fits.
     await pill.click();
     await expect(pill).toHaveAttribute("data-on", "true");
-    await expect.poll(async () => (await meta()).pageCount).toBeGreaterThan(basePages + 1);
+    await expect
+      .poll(async () => (await meta()).pageCount)
+      .toBeGreaterThan(basePages + 1);
     await expect.poll(overset).toBe(false);
 
     // Undo the rule: the generated pages are gone and the story oversets.
     await page.evaluate(async () => {
-      await (globalThis as unknown as CanvasClientGlobal).__canvas.client.undo();
+      await (
+        globalThis as unknown as CanvasClientGlobal
+      ).__canvas.client.undo();
     });
     await expect.poll(async () => (await meta()).pageCount).toBe(basePages);
     await expect.poll(overset).toBe(true);

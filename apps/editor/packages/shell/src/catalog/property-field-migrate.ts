@@ -48,8 +48,7 @@ const COLLECTION_SELECT = "paged.input.collection-select";
 export function asPropertyFields(node: CompositionNode): CompositionNode {
   const children = node.children?.map(asPropertyFields);
   const value = node.bindings?.value as
-    | { kind?: string; path?: string; scope?: "element" | "content" }
-    | undefined;
+    { kind?: string; path?: string; scope?: "element" | "content" } | undefined;
   const props = (node.props ?? {}) as Record<string, unknown>;
   if (
     value?.kind !== "selectionProperty" ||

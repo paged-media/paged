@@ -110,9 +110,7 @@ function OpenTypeChips() {
     else next.add(tag);
     // Stable order: emit in the chip-row order so round-trips read
     // deterministically.
-    const ordered = OPENTYPE_CHIPS.map((c) => c.tag).filter((t) =>
-      next.has(t),
-    );
+    const ordered = OPENTYPE_CHIPS.map((c) => c.tag).filter((t) => next.has(t));
     // Preserve any tags the chip row doesn't surface (forward-compat).
     for (const t of next) if (!ordered.includes(t)) ordered.push(t);
     otf.onCommit?.({ type: "text", value: ordered.join(" ") } as Value);
@@ -125,35 +123,35 @@ function OpenTypeChips() {
       data-seam={absent ? "true" : undefined}
     >
       <div style={{ opacity: absent ? 0.55 : 1 }}>
-      <div className="pg-label mb-2">Opentype</div>
-      <div className="flex gap-[6px]">
-        {OPENTYPE_CHIPS.map(({ label, tag }) => {
-          const on = active.has(tag);
-          return (
-            <button
-              key={tag}
-              type="button"
-              disabled={disabled}
-              aria-pressed={on}
-              data-opentype-chip={label}
-              data-otf-tag={tag}
-              data-active={on ? "" : undefined}
-              title={`OpenType feature ${tag}`}
-              className="h-[26px] rounded-[6px] border px-[9px] text-[11px]"
-              style={{
-                fontFamily: "var(--font-mono)",
-                borderColor: on ? "var(--pg-accent)" : "var(--input)",
-                background: on ? "var(--pg-accent)" : "var(--background)",
-                color: on ? "var(--pg-accent-fg)" : "var(--pg-muted-fg)",
-                opacity: disabled ? 0.55 : 1,
-              }}
-              onClick={() => commit(tag)}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
+        <div className="pg-label mb-2">Opentype</div>
+        <div className="flex gap-[6px]">
+          {OPENTYPE_CHIPS.map(({ label, tag }) => {
+            const on = active.has(tag);
+            return (
+              <button
+                key={tag}
+                type="button"
+                disabled={disabled}
+                aria-pressed={on}
+                data-opentype-chip={label}
+                data-otf-tag={tag}
+                data-active={on ? "" : undefined}
+                title={`OpenType feature ${tag}`}
+                className="h-[26px] rounded-[6px] border px-[9px] text-[11px]"
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  borderColor: on ? "var(--pg-accent)" : "var(--input)",
+                  background: on ? "var(--pg-accent)" : "var(--background)",
+                  color: on ? "var(--pg-accent-fg)" : "var(--pg-muted-fg)",
+                  opacity: disabled ? 0.55 : 1,
+                }}
+                onClick={() => commit(tag)}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </ObjectFieldFrame>
   );
@@ -183,7 +181,11 @@ function FamilySelect() {
   // `data-mixed` claim does not.
   const absent = family.bindingState === "absent";
   return (
-    <ObjectFieldFrame field={family} className="relative mb-px" data-character-family="">
+    <ObjectFieldFrame
+      field={family}
+      className="relative mb-px"
+      data-character-family=""
+    >
       <div
         className="text-[11.5px] mb-[5px]"
         style={{ color: "var(--pg-muted-fg)" }}

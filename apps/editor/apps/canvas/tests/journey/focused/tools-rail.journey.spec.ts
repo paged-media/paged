@@ -26,7 +26,11 @@
 
 import { expect, test } from "@playwright/test";
 
-import { activateTool, screenPoint, treeCount } from "../../e2e/harness/viewport";
+import {
+  activateTool,
+  screenPoint,
+  treeCount,
+} from "../../e2e/harness/viewport";
 import { Designer } from "../driver/designer";
 
 type Page = import("@playwright/test").Page;
@@ -39,9 +43,9 @@ const readProp = (page: Page, ref: Ref, path: string) =>
         globalThis as unknown as {
           __canvas: {
             client: {
-              elementProperties: (
-                id: unknown,
-              ) => Promise<{ entries: Array<{ path: string; value: unknown }> } | null>;
+              elementProperties: (id: unknown) => Promise<{
+                entries: Array<{ path: string; value: unknown }>;
+              } | null>;
             };
           };
         }
@@ -74,10 +78,13 @@ test.describe("journey · pencil/gradient/page tools", () => {
         [260, 175],
         [300, 215],
       ];
-      const pts = await Promise.all(path.map(([x, y]) => screenPoint(page, x, y)));
+      const pts = await Promise.all(
+        path.map(([x, y]) => screenPoint(page, x, y)),
+      );
       await page.mouse.move(pts[0].x, pts[0].y);
       await page.mouse.down();
-      for (const p of pts.slice(1)) await page.mouse.move(p.x, p.y, { steps: 3 });
+      for (const p of pts.slice(1))
+        await page.mouse.move(p.x, p.y, { steps: 3 });
       await page.waitForTimeout(40);
       await page.mouse.up();
       await expect
@@ -90,9 +97,17 @@ test.describe("journey · pencil/gradient/page tools", () => {
     // GRADIENT — give a frame a gradient fill, select it, then drag the
     // Gradient Swatch tool across it; the axis length picks up the drag.
     try {
-      const rectId = await designer.drawRectangle({ x0: 90, y0: 300, x1: 320, y1: 440 });
+      const rectId = await designer.drawRectangle({
+        x0: 90,
+        y0: 300,
+        x1: 320,
+        y1: 440,
+      });
       const ref = { kind: "rectangle", id: rectId };
-      const gradId = await designer.createGradient("journey-grad", ["Color/Black", "Color/Paper"]);
+      const gradId = await designer.createGradient("journey-grad", [
+        "Color/Black",
+        "Color/Paper",
+      ]);
       await designer.applyFill("rectangle", rectId, `Gradient/${gradId}`);
       await designer.selectElement("rectangle", rectId);
       await activateTool(page, "gradientSwatch");
@@ -106,9 +121,11 @@ test.describe("journey · pencil/gradient/page tools", () => {
       await expect
         .poll(
           async () => {
-            const v = (await readProp(page, ref, "frameGradientFillLength")) as
-              | { value?: number }
-              | null;
+            const v = (await readProp(
+              page,
+              ref,
+              "frameGradientFillLength",
+            )) as { value?: number } | null;
             return v?.value ?? 0;
           },
           { timeout: 5000 },
@@ -128,12 +145,16 @@ test.describe("journey · pencil/gradient/page tools", () => {
       await page.mouse.click(p.x, p.y);
       await page.keyboard.up("Alt");
       await expect
-        .poll(async () => (await designer.handle()).pageIds.length, { timeout: 5000 })
+        .poll(async () => (await designer.handle()).pageIds.length, {
+          timeout: 5000,
+        })
         .toBeGreaterThan(before);
     } catch (e) {
       fail.push(`page-tool (${String(e).slice(0, 55)})`);
     }
 
-    expect(fail, `rail tools that did not drive: ${fail.join(" | ")}`).toEqual([]);
+    expect(fail, `rail tools that did not drive: ${fail.join(" | ")}`).toEqual(
+      [],
+    );
   });
 });

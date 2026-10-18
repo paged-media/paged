@@ -92,8 +92,7 @@ async function elementScreenCenter(
               Array<{
                 bounds: [number, number, number, number];
                 itemTransform?:
-                  | [number, number, number, number, number, number]
-                  | null;
+                  [number, number, number, number, number, number] | null;
               }>
             >;
           };
@@ -187,10 +186,13 @@ test.describe("journey · paged.sheet plugin", () => {
     //    resolve an EMPTY frame's story). HARD — gates the test. ──
     const emptyPours: string[] = [];
     page.on("console", (msg) => {
-      if (msg.text().includes("frame placed empty")) emptyPours.push(msg.text());
+      if (msg.text().includes("frame placed empty"))
+        emptyPours.push(msg.text());
     });
     const frame = await importAndLower(page, "A1:B3");
-    expect(emptyPours, "the lowered frame poured a non-empty table").toEqual([]);
+    expect(emptyPours, "the lowered frame poured a non-empty table").toEqual(
+      [],
+    );
 
     const breadcrumb = page.locator("[data-edit-context-breadcrumb]");
     await expect(breadcrumb).toHaveCount(0);

@@ -88,17 +88,15 @@ export function watchDocumentFonts(
   };
 
   const refresh = (): Promise<void> => {
-    inFlight = host.document
-      .collection<FontSummaryLike>("fonts")
-      .then(
-        (rows) =>
-          deliver(
-            rows
-              .map((r) => (typeof r.family === "string" ? r.family : ""))
-              .filter((f) => f.length > 0),
-          ),
-        () => deliver([]),
-      );
+    inFlight = host.document.collection<FontSummaryLike>("fonts").then(
+      (rows) =>
+        deliver(
+          rows
+            .map((r) => (typeof r.family === "string" ? r.family : ""))
+            .filter((f) => f.length > 0),
+        ),
+      () => deliver([]),
+    );
     return inFlight;
   };
 
