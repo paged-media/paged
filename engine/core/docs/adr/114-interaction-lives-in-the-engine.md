@@ -53,7 +53,7 @@ pointer facts and receives answers.
 - `crates/paged-canvas/src/snap.rs:74-119` — tolerance constant, translate-only and un-rotated-only guards, tolerance divided by `camera_scale`
 - `crates/paged-canvas/src/selection.rs:21-52`, `crates/paged-canvas/src/geometry.rs:19-31`, `crates/paged-canvas/src/model.rs:1227-1242` — content-addressed selection, the geometry derived from it, and the model fields that hold selection and the active gesture
 - `crates/paged-canvas/src/channel.rs:811-816`, `:833-934`, `:1261-1301` — the message kinds: `HitTest`, selection and caret queries, marquee, element geometry, the four gesture messages
-- `crates/paged-cli/tests/cli_surface.rs:66-95` — 15 of the 30 message kinds the CLI does not send carry the reason "interaction: a command line has no pointer and no caret"
+- `crates/paged-cli/tests/it/cli_surface.rs:66-95` — 15 of the 30 message kinds the CLI does not send carry the reason "interaction: a command line has no pointer and no caret"
 - `editor: apps/canvas/src/ui/ViewportCanvas.tsx:596-650`, `:676-700`, `:953-957` — the editor picks a gesture kind and targets, then calls `beginGesture`; a click is a `hitTest` round trip
 - `editor: apps/canvas/src/ui/useTextEditing.ts:26-31` — up, down, Home and End go to the engine because they "need line metrics the main thread doesn't have"
 
@@ -66,7 +66,7 @@ perf hits a wall" (`crates/paged-canvas/src/gesture.rs:32-38`).
 ## Consequences
 
 Hit results, selection geometry and what is painted come from one model, and interaction
-is tested natively without a browser (`crates/paged-canvas/tests/translate_gesture.rs` and
+is tested natively without a browser (`crates/paged-canvas/tests/it/translate_gesture.rs` and
 its neighbours). A gesture commit is one entry in the undo log
 ([ADR 110](110-one-undo-timeline.md)).
 

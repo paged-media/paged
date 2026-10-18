@@ -10,7 +10,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (VLOOKUP)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lookup.rs::sheet_fn_lookup_vlookup"]
+    rust: ["sheet-conformance/tests/it/fn_lookup.rs::sheet_fn_lookup_vlookup"]
     corpus: ["corpus/fn-corpus/lookup/vlookup.golden.tsv"]
 
 - id: sheet.fn.lookup.hlookup
@@ -23,7 +23,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (HLOOKUP)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lookup.rs::sheet_fn_lookup_hlookup"]
+    rust: ["sheet-conformance/tests/it/fn_lookup.rs::sheet_fn_lookup_hlookup"]
     corpus: ["corpus/fn-corpus/lookup/hlookup.golden.tsv"]
 
 - id: sheet.fn.lookup.index
@@ -36,7 +36,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (INDEX)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lookup.rs::sheet_fn_lookup_index"]
+    rust: ["sheet-conformance/tests/it/fn_lookup.rs::sheet_fn_lookup_index"]
     corpus: ["corpus/fn-corpus/lookup/index.golden.tsv"]
 
 - id: sheet.fn.lookup.match
@@ -49,7 +49,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (MATCH)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lookup.rs::sheet_fn_lookup_match"]
+    rust: ["sheet-conformance/tests/it/fn_lookup.rs::sheet_fn_lookup_match"]
     corpus: ["corpus/fn-corpus/lookup/match.golden.tsv"]
 
 - id: sheet.fn.lookup.choose
@@ -62,7 +62,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (CHOOSE)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lookup.rs::sheet_fn_lookup_choose"]
+    rust: ["sheet-conformance/tests/it/fn_lookup.rs::sheet_fn_lookup_choose"]
     corpus: ["corpus/fn-corpus/lookup/choose.golden.tsv"]
 
 - id: sheet.fn.lookup.row
@@ -76,7 +76,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ROW) — reference arg; current cell when absent"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lookup.rs::sheet_fn_lookup_row"]
+    rust: ["sheet-conformance/tests/it/fn_lookup.rs::sheet_fn_lookup_row"]
     corpus: ["corpus/fn-corpus/lookup/row.golden.tsv"]
 
 - id: sheet.fn.lookup.column
@@ -90,7 +90,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (COLUMN) — reference arg; current cell when absent"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lookup.rs::sheet_fn_lookup_column"]
+    rust: ["sheet-conformance/tests/it/fn_lookup.rs::sheet_fn_lookup_column"]
     corpus: ["corpus/fn-corpus/lookup/column.golden.tsv"]
 
 # ---- Wave 7 (data & functions) additions ----
@@ -105,5 +105,5 @@
   status: implemented
   provenance: ["Microsoft LOOKUP (public docs) — vector form (lookup_vector, result_vector) and array form; approximate match, largest value <= key"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_lookup_lookup"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_lookup_lookup"]
     corpus: ["corpus/fn-corpus/lookup/lookup.golden.tsv"]

@@ -180,7 +180,7 @@ No selection, no text extraction, no search, no hit-testing, no annotations, no 
 
 ## 7. Fidelity & Testing
 
-*Status note (2026-10-02): this section predates the implementation. Item 1 exists in its native form: `crates/paged-sdk/tests/digest_equivalence.rs` compares the viewer's build path with the stock build, page digest by page digest; its header names the comparison across the two wasm artifacts as a follow-up. Item 2 is the dependency check named under §4. The camera invariants of item 4 are unit tests (`web/idml-viewer/test/camera.test.ts`), not a Playwright lane. No viewer test in this repository covers item 5.*
+*Status note (2026-10-02): this section predates the implementation. Item 1 exists in its native form: `crates/paged-sdk/tests/it/digest_equivalence.rs` compares the viewer's build path with the stock build, page digest by page digest; its header names the comparison across the two wasm artifacts as a follow-up. Item 2 is the dependency check named under §4. The camera invariants of item 4 are unit tests (`web/idml-viewer/test/camera.test.ts`), not a Playwright lane. No viewer test in this repository covers item 5.*
 
 1. **Scene-digest equivalence (the keystone test):** for every corpus document, the viewer build and the editor build must produce identical scene digests at identical camera states. Runs in CI on both artifacts per merge. This is the executable form of the "same pixels" promise.
 2. **Subset gate:** viewer WASM build (`read` only) compiles green per merge; symbol-level check asserts no mutation/Boa/plugin symbols leak into the artifact.
@@ -207,7 +207,7 @@ No selection, no text extraction, no search, no hit-testing, no annotations, no 
 
 ## 9. Delivery Plan
 
-*Status note (2026-10-02): this section predates the implementation. The session, the wrapper API, thumbnails and the native digest test are built and published, and docs.paged.media embeds the published package ([ADR 803](https://github.com/paged-media/docs/blob/main/docs/adr/803-live-preview-uses-viewer-package.md)). The chrome of V2 and everything in V3 are not built. Source comments cite these phase names (`crates/paged-sdk/tests/digest_equivalence.rs:26`).*
+*Status note (2026-10-02): this section predates the implementation. The session, the wrapper API, thumbnails and the native digest test are built and published, and docs.paged.media embeds the published package ([ADR 803](https://github.com/paged-media/docs/blob/main/docs/adr/803-live-preview-uses-viewer-package.md)). The chrome of V2 and everything in V3 are not built. Source comments cite these phase names (`crates/paged-sdk/tests/it/digest_equivalence.rs:26`).*
 
 | Phase | Milestone | Exit criterion |
 |---|---|---|

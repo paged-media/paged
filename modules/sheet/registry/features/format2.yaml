@@ -1,7 +1,7 @@
 # sheet.format.* (M1 additions) — advanced number-format engine features
 # (M1 format track, spec §9). The FORMAT2 track implements all six rows in
 # sheet-format (additive over the frozen M0 public fns) with golden corpora
-# and the sheet-conformance/tests/format2.rs registry-pointer tests. Schema:
+# and the sheet-conformance/tests/it/format2.rs registry-pointer tests. Schema:
 # id/title/status/provenance/tests.
 
 - id: sheet.format.elapsed-brackets
@@ -10,7 +10,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.8.31 (elapsed-time codes)"]
   tests:
-    rust: ["sheet-conformance/tests/format2.rs::sheet_format_elapsed_brackets"]
+    rust: ["sheet-conformance/tests/it/format2.rs::sheet_format_elapsed_brackets"]
     corpus: ["corpus/format-corpus/elapsed.golden.tsv"]
 
 - id: sheet.format.fractions
@@ -19,7 +19,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.8.31 (fraction codes)"]
   tests:
-    rust: ["sheet-conformance/tests/format2.rs::sheet_format_fractions"]
+    rust: ["sheet-conformance/tests/it/format2.rs::sheet_format_fractions"]
     corpus: ["corpus/format-corpus/fractions.golden.tsv"]
 
 - id: sheet.format.conditional-sections
@@ -28,7 +28,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.8.31 (conditional format brackets)", "Excel #,##0;#,##0 minus-suppression (public docs)"]
   tests:
-    rust: ["sheet-conformance/tests/format2.rs::sheet_format_conditional_sections"]
+    rust: ["sheet-conformance/tests/it/format2.rs::sheet_format_conditional_sections"]
     corpus: ["corpus/format-corpus/conditional.golden.tsv"]
 
 - id: sheet.format.color-brackets
@@ -37,7 +37,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.8.31 (color codes)"]
   tests:
-    rust: ["sheet-conformance/tests/format2.rs::sheet_format_color_brackets"]
+    rust: ["sheet-conformance/tests/it/format2.rs::sheet_format_color_brackets"]
     corpus: ["corpus/format-corpus/color.golden.tsv"]
 
 - id: sheet.format.padding
@@ -46,7 +46,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.8.31 (* and _ tokens)"]
   tests:
-    rust: ["sheet-conformance/tests/format2.rs::sheet_format_padding"]
+    rust: ["sheet-conformance/tests/it/format2.rs::sheet_format_padding"]
     corpus: ["corpus/format-corpus/padding.golden.tsv"]
 
 - id: sheet.format.locale-currency-token
@@ -55,5 +55,5 @@
   status: implemented
   provenance: ["ECMA-376 §18.8.31 (currency/locale tokens)"]
   tests:
-    rust: ["sheet-conformance/tests/format2.rs::sheet_format_locale_currency_token"]
+    rust: ["sheet-conformance/tests/it/format2.rs::sheet_format_locale_currency_token"]
     corpus: ["corpus/format-corpus/currency.golden.tsv"]

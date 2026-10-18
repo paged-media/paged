@@ -74,7 +74,7 @@ identifier cannot be referenced; the field-mapping suggestions mark such a colum
 `is_field_ident` rejects only the upper-case spellings `TRUE`, `FALSE` and `NULL`
 (`data-expr/src/lib.rs:75`), while the parser treats those words as literals in any letter
 case (`data-expr/src/parser.rs:139`). The test covers the upper-case spellings only
-(`data-conformance/tests/mapping.rs:98-100`).
+(`data-conformance/tests/it/mapping.rs:98-100`).
 
 Two comments say `data-bind` caches the parsed form (`data-core/src/expr.rs:21`,
 `data-core/src/binding.rs:22`). It does not: every call site in `data-bind/src/lib.rs` goes

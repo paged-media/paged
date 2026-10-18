@@ -78,7 +78,7 @@ bash tools/indesign-export/lane.sh              # every scenario
 bash tools/indesign-export/lane.sh bleed        # one
 ```
 
-Each scenario (`crates/paged-canvas/tests/indesign_lane.rs`) is a gen sample,
+Each scenario (`crates/paged-canvas/tests/it/indesign_lane.rs`) is a gen sample,
 edited through the canvas model and exported by the writer. `lane.jsx` opens
 the export in InDesign, records InDesign's view of it (`lib/oracle.jsx`,
 schema `paged.indesign-view/1`), saves and reopens it, records again, and

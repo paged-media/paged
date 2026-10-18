@@ -8,7 +8,7 @@
   status: implemented
   provenance: ["pure model->IR; anchor survives, content updates"]
   tests:
-    rust: ["data-conformance/tests/lower.rs::data_lower_variable"]
+    rust: ["data-conformance/tests/it/lower.rs::data_lower_variable"]
 
 - id: data.lower.table
   title: Single-region dynamic table (degraded to tab-text + drawn rules, D-02)
@@ -16,7 +16,7 @@
   status: implemented
   provenance: ["no insertTable op yet -> §2.2 degradation, like sheet S-03"]
   tests:
-    rust: ["data-conformance/tests/lower.rs::data_lower_table"]
+    rust: ["data-conformance/tests/it/lower.rs::data_lower_table"]
 
 - id: data.lower.image
   title: Image placeholder (field -> classified reference + placement IR, §9.2)
@@ -24,7 +24,7 @@
   status: implemented
   provenance: ["lower_image packages the reference + fit + status; placed via the core asset mechanism, never plugin-image (§2.1); host placement op is the D-14 gap"]
   tests:
-    rust: ["data-conformance/tests/image.rs::data_lower_image"]
+    rust: ["data-conformance/tests/it/image.rs::data_lower_image"]
 
 - id: data.lower.recordflow
   title: Record flow — template instancing + grouping over a frame chain (§9.4)
@@ -32,7 +32,7 @@
   status: implemented
   provenance: ["grouped template instances; atomic records; stable order; paginator built ahead of the SDK frame-chain door (D-12), like sheet S-05"]
   tests:
-    rust: ["data-conformance/tests/recordflow.rs::data_lower_paginate"]
+    rust: ["data-conformance/tests/it/recordflow.rs::data_lower_paginate"]
 
 - id: data.lower.merge-plan
   title: Data Merge planner — InDesign's Single / Multiple Record layout over a template (Wave 5)
@@ -43,7 +43,7 @@
     rust:
       [
         "data-lower/src/merge.rs::data_lower_merge",
-        "data-conformance/tests/oracle.rs::data_oracle_indesign",
+        "data-conformance/tests/it/oracle.rs::data_oracle_indesign",
       ]
 
 - id: data.lower.merge-writer
@@ -86,7 +86,7 @@
   status: implemented
   provenance: ["greedy atomic packing; single bounded pass converges even for a record taller than a frame; order-preserving (property tested)"]
   tests:
-    rust: ["data-conformance/tests/recordflow.rs::data_recordflow_pagination"]
+    rust: ["data-conformance/tests/it/recordflow.rs::data_recordflow_pagination"]
 
 - id: data.lower.table-native
   title: Native table lowering (insertTable + per-cell insertText; D-02 retired)
@@ -105,7 +105,7 @@
       "the engine's evaluate_rule decides WHICH stabilized records fire WHICH document style (data-driven half, bit-stable); the host-model ruleMutations turns a fired RuleResult into real mutations — applyStyle for paragraph/character scopes, per-cell appliedCellStyle (setElementProperty NodeId::TableCell) over the fired rows for a table style; always a document-style reference, never a literal (§9.5); composes from create*Style + setElementProperty (S-04 verdict, no new wire)",
     ]
   tests:
-    rust: ["data-conformance/tests/rule.rs::data_bind_rule"]
+    rust: ["data-conformance/tests/it/rule.rs::data_bind_rule"]
     vitest:
       [
         "packages/data-host-model/src/__tests__/fields.test.ts",
@@ -151,5 +151,5 @@
       "the paginator (data-lower paginate_flow) now runs over the LIVE host frame chain: readLiveChain reads host.document.frameChain(storyId) + each frame's content-box height (elementGeometry bottom-top) into the FrameCapacity shape the engine paginates over; subscribeChainReflow re-paginates on DocumentChangeEvent.reflow (resize-only, §8.5) and ignores transform-only changes — the C-2/S-05 reflow contract, replacing the caller-supplied chain (like sheet S-05 lowerPaginatedToChain)",
     ]
   tests:
-    rust: ["data-conformance/tests/recordflow.rs::data_lower_paginate"]
+    rust: ["data-conformance/tests/it/recordflow.rs::data_lower_paginate"]
     vitest: ["packages/data-bundle/src/__tests__/lanes-v43.test.ts"]

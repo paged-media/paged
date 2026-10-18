@@ -111,7 +111,7 @@ and each pad remainder. See spec §14.3.1 Lane A for the seven checks.
 **Lane B — analyst-owned, opt-in, needs the mount.**
 
 ```bash
-PAGED_ABR_CORPUS=1 cargo test -p image-conformance --test abr_corpus -- --ignored
+PAGED_ABR_CORPUS=1 cargo test -p image-conformance --test it -- --ignored abr_corpus::
 ```
 
 Parses the real fixtures and compares them to these files row by row. It is
@@ -141,7 +141,7 @@ folder: a bare basename joined onto the directory opens nothing.
 ```bash
 PAGED_ABR_CORPUS=1 \
 PAGED_ABR_PNG_DIR="$PWD/references/abr-fixtures/mercator-png-oracle" \
-  cargo test -p image-conformance --test abr_corpus -- --ignored --nocapture
+  cargo test -p image-conformance --test it -- --ignored --nocapture abr_corpus::
 ```
 
 **Why this section exists.** The ledger named the 238 files; nothing
@@ -153,7 +153,7 @@ that had never run. On 2026-08-05 it ran for the first time and passed:
 inverted reading.** The mapping is bijective — every ledger name resolves,
 no pack file is unused, no basename collides.
 
-The remaining nicety is one line of `tests/abr_corpus.rs`: reading
+The remaining nicety is one line of `tests/it/abr_corpus.rs`: reading
 `png_oracle.dir` from the profile instead of hard-coding `png-oracle` would
 make B3 run with no environment variable at all. Reported rather than made,
 so the artifact change and the code change stay separately reviewable.

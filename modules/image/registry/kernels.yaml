@@ -34,7 +34,7 @@
   provenance:
     - "elementary pointwise algebra (a*x + b); no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_linear.rs"]
+    rust: ["image-conformance/tests/it/family_linear.rs"]
 
 - id: math.invert
   rust_path: families::linear::MATH_INVERT
@@ -47,7 +47,7 @@
   provenance:
     - "photometric negate in linear working space (1 - x); no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_linear.rs"]
+    rust: ["image-conformance/tests/it/family_linear.rs"]
 
 # ── arithmetic family ────────────────────────────────────────
 
@@ -62,7 +62,7 @@
   provenance:
     - "elementary pointwise algebra / no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_arithmetic.rs"]
+    rust: ["image-conformance/tests/it/family_arithmetic.rs"]
 
 - id: math.sub
   rust_path: families::arithmetic::MATH_SUB
@@ -75,7 +75,7 @@
   provenance:
     - "elementary pointwise algebra / no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_arithmetic.rs"]
+    rust: ["image-conformance/tests/it/family_arithmetic.rs"]
 
 - id: math.mul
   rust_path: families::arithmetic::MATH_MUL
@@ -88,7 +88,7 @@
   provenance:
     - "elementary pointwise algebra / no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_arithmetic.rs"]
+    rust: ["image-conformance/tests/it/family_arithmetic.rs"]
 
 - id: math.div
   rust_path: families::arithmetic::MATH_DIV
@@ -101,7 +101,7 @@
   provenance:
     - "elementary pointwise algebra / no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_arithmetic.rs"]
+    rust: ["image-conformance/tests/it/family_arithmetic.rs"]
 
 - id: math.add_const
   rust_path: families::arithmetic::MATH_ADD_CONST
@@ -114,7 +114,7 @@
   provenance:
     - "elementary pointwise algebra / no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_arithmetic.rs"]
+    rust: ["image-conformance/tests/it/family_arithmetic.rs"]
 
 - id: math.mul_const
   rust_path: families::arithmetic::MATH_MUL_CONST
@@ -127,7 +127,7 @@
   provenance:
     - "elementary pointwise algebra / no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_arithmetic.rs"]
+    rust: ["image-conformance/tests/it/family_arithmetic.rs"]
 
 - id: math.abs
   rust_path: families::arithmetic::MATH_ABS
@@ -140,7 +140,7 @@
   provenance:
     - "elementary pointwise algebra / no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_arithmetic.rs"]
+    rust: ["image-conformance/tests/it/family_arithmetic.rs"]
 
 - id: math.sign
   rust_path: families::arithmetic::MATH_SIGN
@@ -153,7 +153,7 @@
   provenance:
     - "elementary pointwise algebra / no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_arithmetic.rs"]
+    rust: ["image-conformance/tests/it/family_arithmetic.rs"]
 
 - id: math.neg
   rust_path: families::arithmetic::MATH_NEG
@@ -166,7 +166,7 @@
   provenance:
     - "elementary pointwise algebra / no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_arithmetic.rs"]
+    rust: ["image-conformance/tests/it/family_arithmetic.rs"]
 
 # ── relational family ────────────────────────────────────────
 
@@ -182,7 +182,7 @@
     - "elementary pointwise algebra / no reference reading"
     - "differential oracle harness (vips)"
   tests:
-    rust: ["image-conformance/tests/family_relational.rs"]
+    rust: ["image-conformance/tests/it/family_relational.rs"]
 
 - id: rel.ne
   rust_path: families::relational::REL_NE
@@ -196,7 +196,7 @@
     - "elementary pointwise algebra / no reference reading"
     - "differential oracle harness (vips)"
   tests:
-    rust: ["image-conformance/tests/family_relational.rs"]
+    rust: ["image-conformance/tests/it/family_relational.rs"]
 
 - id: rel.lt
   rust_path: families::relational::REL_LT
@@ -210,7 +210,7 @@
     - "elementary pointwise algebra / no reference reading"
     - "differential oracle harness (vips)"
   tests:
-    rust: ["image-conformance/tests/family_relational.rs"]
+    rust: ["image-conformance/tests/it/family_relational.rs"]
 
 - id: rel.le
   rust_path: families::relational::REL_LE
@@ -224,7 +224,7 @@
     - "elementary pointwise algebra / no reference reading"
     - "differential oracle harness (vips)"
   tests:
-    rust: ["image-conformance/tests/family_relational.rs"]
+    rust: ["image-conformance/tests/it/family_relational.rs"]
 
 - id: rel.gt
   rust_path: families::relational::REL_GT
@@ -238,7 +238,7 @@
     - "elementary pointwise algebra / no reference reading"
     - "differential oracle harness (vips)"
   tests:
-    rust: ["image-conformance/tests/family_relational.rs"]
+    rust: ["image-conformance/tests/it/family_relational.rs"]
 
 - id: rel.ge
   rust_path: families::relational::REL_GE
@@ -252,7 +252,7 @@
     - "elementary pointwise algebra / no reference reading"
     - "differential oracle harness (vips)"
   tests:
-    rust: ["image-conformance/tests/family_relational.rs"]
+    rust: ["image-conformance/tests/it/family_relational.rs"]
 
 # ── boolean family ───────────────────────────────────────────
 
@@ -268,7 +268,7 @@
     - "elementary pointwise algebra / no reference reading"
     - "libvips boolean-equivalent behavior verified via the differential oracle harness (M0 fan-out), not reference reading"
   tests:
-    rust: ["image-conformance/tests/family_boolean.rs"]
+    rust: ["image-conformance/tests/it/family_boolean.rs"]
 
 - id: bool.or
   rust_path: families::boolean::BOOL_OR
@@ -282,7 +282,7 @@
     - "elementary pointwise algebra / no reference reading"
     - "libvips boolean-equivalent behavior verified via the differential oracle harness (M0 fan-out), not reference reading"
   tests:
-    rust: ["image-conformance/tests/family_boolean.rs"]
+    rust: ["image-conformance/tests/it/family_boolean.rs"]
 
 - id: bool.xor
   rust_path: families::boolean::BOOL_XOR
@@ -296,7 +296,7 @@
     - "elementary pointwise algebra / no reference reading"
     - "libvips boolean-equivalent behavior verified via the differential oracle harness (M0 fan-out), not reference reading"
   tests:
-    rust: ["image-conformance/tests/family_boolean.rs"]
+    rust: ["image-conformance/tests/it/family_boolean.rs"]
 
 - id: bool.not
   rust_path: families::boolean::BOOL_NOT
@@ -310,7 +310,7 @@
     - "elementary pointwise algebra / no reference reading"
     - "libvips boolean-equivalent behavior verified via the differential oracle harness (M0 fan-out), not reference reading"
   tests:
-    rust: ["image-conformance/tests/family_boolean.rs"]
+    rust: ["image-conformance/tests/it/family_boolean.rs"]
 
 # ── cast family ──────────────────────────────────────────────
 
@@ -326,7 +326,7 @@
     - "elementary pointwise algebra (rgb*alpha, alpha through)"
     - "GEGL-equivalent behavior via differential oracle harness (M0 fan-out); no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_cast.rs"]
+    rust: ["image-conformance/tests/it/family_cast.rs"]
 
 - id: cast.unpremultiply
   rust_path: families::cast::CAST_UNPREMULTIPLY
@@ -340,7 +340,7 @@
     - "elementary pointwise algebra (rgb/alpha with zero-alpha->all-zero guard)"
     - "GEGL-equivalent behavior via differential oracle harness (M0 fan-out); no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_cast.rs"]
+    rust: ["image-conformance/tests/it/family_cast.rs"]
 
 # ── band family ──────────────────────────────────────────────
 
@@ -356,7 +356,7 @@
     - "elementary pointwise algebra / no reference reading"
     - "cache-identity op: materialize a node's pixels (spec §11)"
   tests:
-    rust: ["image-conformance/tests/family_band.rs"]
+    rust: ["image-conformance/tests/it/family_band.rs"]
 
 - id: band.extract
   rust_path: families::band::BAND_EXTRACT
@@ -371,7 +371,7 @@
     - "single-channel extraction -> gray, opaque alpha; spec §11"
     - "oracle: libvips per-channel band extraction (channels 0..3)"
   tests:
-    rust: ["image-conformance/tests/family_band.rs"]
+    rust: ["image-conformance/tests/it/family_band.rs"]
 
 - id: band.set_alpha
   rust_path: families::band::BAND_SET_ALPHA
@@ -386,7 +386,7 @@
     - "rgb passthrough with alpha override; spec §11"
     - "oracle: libvips alpha set/replace"
   tests:
-    rust: ["image-conformance/tests/family_band.rs"]
+    rust: ["image-conformance/tests/it/family_band.rs"]
 
 - id: band.broadcast_alpha
   rust_path: families::band::BAND_BROADCAST_ALPHA
@@ -400,7 +400,7 @@
     - "elementary pointwise algebra / no reference reading"
     - "alpha broadcast to all four channels (coverage map); spec §11"
   tests:
-    rust: ["image-conformance/tests/family_band.rs"]
+    rust: ["image-conformance/tests/it/family_band.rs"]
 
 # ── minmax family ────────────────────────────────────────────
 
@@ -416,7 +416,7 @@
     - "elementary pointwise algebra / no reference reading"
     - "libvips-equivalent behavior verified via differential oracle harness (M0 fan-out)"
   tests:
-    rust: ["image-conformance/tests/family_minmax.rs"]
+    rust: ["image-conformance/tests/it/family_minmax.rs"]
 
 - id: math.max
   rust_path: families::minmax::MATH_MAX
@@ -430,7 +430,7 @@
     - "elementary pointwise algebra / no reference reading"
     - "libvips-equivalent behavior verified via differential oracle harness (M0 fan-out)"
   tests:
-    rust: ["image-conformance/tests/family_minmax.rs"]
+    rust: ["image-conformance/tests/it/family_minmax.rs"]
 
 - id: math.clamp
   rust_path: families::minmax::MATH_CLAMP
@@ -444,7 +444,7 @@
     - "elementary pointwise algebra / no reference reading"
     - "libvips-equivalent behavior verified via differential oracle harness (M0 fan-out)"
   tests:
-    rust: ["image-conformance/tests/family_minmax.rs"]
+    rust: ["image-conformance/tests/it/family_minmax.rs"]
 
 - id: math.min_const
   rust_path: families::minmax::MATH_MIN_CONST
@@ -458,7 +458,7 @@
     - "elementary pointwise algebra / no reference reading"
     - "libvips-equivalent behavior verified via differential oracle harness (M0 fan-out)"
   tests:
-    rust: ["image-conformance/tests/family_minmax.rs"]
+    rust: ["image-conformance/tests/it/family_minmax.rs"]
 
 - id: math.max_const
   rust_path: families::minmax::MATH_MAX_CONST
@@ -472,7 +472,7 @@
     - "elementary pointwise algebra / no reference reading"
     - "libvips-equivalent behavior verified via differential oracle harness (M0 fan-out)"
   tests:
-    rust: ["image-conformance/tests/family_minmax.rs"]
+    rust: ["image-conformance/tests/it/family_minmax.rs"]
 
 # ── conv family (T1; ABI v1.1 module lane) ───────────────────
 
@@ -488,7 +488,7 @@
     - "box filtering: standard literature; no reference reading"
     - "ABI v1.1 amendment proof — first handwritten windowed module"
   tests:
-    rust: ["image-conformance/tests/family_conv.rs"]
+    rust: ["image-conformance/tests/it/family_conv.rs"]
 
 # ── conv family T1: gaussian (separable) + unsharp ───────────
 
@@ -506,7 +506,7 @@
     - "σ-halving per mip level (§8.3)"
     - "no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_conv.rs"]
+    rust: ["image-conformance/tests/it/family_conv.rs"]
 
 - id: conv.gaussian_v
   rust_path: families::conv::CONV_GAUSSIAN_V
@@ -522,7 +522,7 @@
     - "σ-halving per mip level (§8.3)"
     - "no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_conv.rs"]
+    rust: ["image-conformance/tests/it/family_conv.rs"]
 
 - id: conv.unsharp
   rust_path: families::conv::CONV_UNSHARP
@@ -537,7 +537,7 @@
     - "binary point over (original, blurred Gaussian pair)"
     - "no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_conv.rs"]
+    rust: ["image-conformance/tests/it/family_conv.rs"]
 
 # ── resample family (T1) ─────────────────────────────────────
 
@@ -552,7 +552,7 @@
   provenance:
     - "nearest-neighbour: standard literature; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_resample.rs"]
+    rust: ["image-conformance/tests/it/family_resample.rs"]
 
 - id: resample.mitchell
   rust_path: families::resample::RESAMPLE_MITCHELL
@@ -565,7 +565,7 @@
   provenance:
     - "Mitchell–Netravali 1988 (B=C=1/3); clamp-to-edge, sum-normalized; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_resample.rs"]
+    rust: ["image-conformance/tests/it/family_resample.rs"]
 
 - id: resample.lanczos3
   rust_path: families::resample::RESAMPLE_LANCZOS3
@@ -578,7 +578,7 @@
   provenance:
     - "Lanczos resampling (a=3): standard literature; sinc via sin(); clamp-to-edge, sum-normalized; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_resample.rs"]
+    rust: ["image-conformance/tests/it/family_resample.rs"]
 
 # ── compose family (T1; W3C blend set + non-separable four) ──
 
@@ -595,7 +595,7 @@
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'norm'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.normal_gamma
   rust_path: families::compose::COMPOSE_NORMAL_GAMMA
@@ -609,7 +609,7 @@
     - "Porter & Duff, Compositing Digital Images (SIGGRAPH 1984) — source-over, here on colours raised to a gamma and taken back by its inverse"
     - "Photoshop composites TEXT layers in a gamma space (Color Settings: Blend Text Colors Using Gamma). Measured on text layers Photoshop 27.10 wrote over white, dark and coloured backdrops: a plain normal blend is 19-40 levels off on anti-aliased edges, this kernel at gamma 1.55 within 2-7 (the best gamma per case is 1.52-1.6, so it is a stated approximation) [OBS]"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs (compose_normal_gamma_parity)"]
+    rust: ["image-conformance/tests/it/family_compose.rs (compose_normal_gamma_parity)"]
 
 - id: compose.multiply
   rust_path: families::compose::COMPOSE_MULTIPLY
@@ -624,7 +624,7 @@
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'mul '"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.screen
   rust_path: families::compose::COMPOSE_SCREEN
@@ -639,7 +639,7 @@
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'scrn'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.overlay
   rust_path: families::compose::COMPOSE_OVERLAY
@@ -654,7 +654,7 @@
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'over'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.darken
   rust_path: families::compose::COMPOSE_DARKEN
@@ -669,7 +669,7 @@
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'dark'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.lighten
   rust_path: families::compose::COMPOSE_LIGHTEN
@@ -684,7 +684,7 @@
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'lite'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.color_dodge
   rust_path: families::compose::COMPOSE_COLOR_DODGE
@@ -699,7 +699,7 @@
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'div '"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.color_burn
   rust_path: families::compose::COMPOSE_COLOR_BURN
@@ -714,7 +714,7 @@
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'idiv'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.hard_light
   rust_path: families::compose::COMPOSE_HARD_LIGHT
@@ -729,7 +729,7 @@
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'hLit'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.soft_light
   rust_path: families::compose::COMPOSE_SOFT_LIGHT
@@ -744,7 +744,7 @@
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'sLit'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.difference
   rust_path: families::compose::COMPOSE_DIFFERENCE
@@ -759,7 +759,7 @@
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'diff'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.exclusion
   rust_path: families::compose::COMPOSE_EXCLUSION
@@ -774,7 +774,7 @@
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'smud'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.hue
   rust_path: families::compose::COMPOSE_HUE
@@ -789,7 +789,7 @@
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'hue '"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.saturation
   rust_path: families::compose::COMPOSE_SATURATION
@@ -804,7 +804,7 @@
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'sat '"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.color
   rust_path: families::compose::COMPOSE_COLOR
@@ -819,7 +819,7 @@
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'colr'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.luminosity
   rust_path: families::compose::COMPOSE_LUMINOSITY
@@ -834,7 +834,7 @@
     - "oracle: gegl; required by the PSD merged-composite (psd_composite) oracle"
     - "PSD blend key 'lum '"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 # ── compose family, extended set (Photoshop modes beyond W3C L1;
 #    kernel-breadth batch) ──────────────────────────────────────
@@ -851,7 +851,7 @@
     - "Photoshop/PDF-extended blend mode — linear burn: max(Cb+Cs-1, 0); public formula, no reference reading"
     - "PSD blend key 'lbrn'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.linear_dodge
   rust_path: families::compose::COMPOSE_LINEAR_DODGE
@@ -865,7 +865,7 @@
     - "Photoshop/PDF-extended blend mode — linear dodge (add): min(Cb+Cs, 1); public formula, no reference reading"
     - "PSD blend key 'lddg'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.darker_color
   rust_path: families::compose::COMPOSE_DARKER_COLOR
@@ -879,7 +879,7 @@
     - "Photoshop blend mode — darker color (non-separable, whole-triple select by Lum); public formula, no reference reading"
     - "PSD blend key 'dkCl'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.lighter_color
   rust_path: families::compose::COMPOSE_LIGHTER_COLOR
@@ -893,7 +893,7 @@
     - "Photoshop blend mode — lighter color (non-separable, whole-triple select by Lum); public formula, no reference reading"
     - "PSD blend key 'lgCl'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.vivid_light
   rust_path: families::compose::COMPOSE_VIVID_LIGHT
@@ -907,7 +907,7 @@
     - "Photoshop blend mode — vivid light: burn below Cs=0.5, dodge above; public formula, no reference reading"
     - "PSD blend key 'vLit'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.linear_light
   rust_path: families::compose::COMPOSE_LINEAR_LIGHT
@@ -921,7 +921,7 @@
     - "Photoshop blend mode — linear light: clamp(Cb+2Cs-1, 0, 1); public formula, no reference reading"
     - "PSD blend key 'lLit'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.pin_light
   rust_path: families::compose::COMPOSE_PIN_LIGHT
@@ -935,7 +935,7 @@
     - "Photoshop blend mode — pin light: min(Cb,2Cs) below Cs=0.5, max(Cb,2Cs-1) above; public formula, no reference reading"
     - "PSD blend key 'pLit'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.hard_mix
   rust_path: families::compose::COMPOSE_HARD_MIX
@@ -949,7 +949,7 @@
     - "Photoshop blend mode — hard mix: channel snaps to (Cb+Cs<1 ? 0 : 1); public formula, no reference reading"
     - "PSD blend key 'hMix'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.subtract
   rust_path: families::compose::COMPOSE_SUBTRACT
@@ -963,7 +963,7 @@
     - "Photoshop blend mode — subtract: max(Cb-Cs, 0); public formula, no reference reading"
     - "PSD blend key 'fsub'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 - id: compose.divide
   rust_path: families::compose::COMPOSE_DIVIDE
@@ -977,7 +977,7 @@
     - "Photoshop blend mode — divide: min(Cb/Cs, 1), Cs=0 -> 1; public formula, no reference reading"
     - "PSD blend key 'fdiv'"
   tests:
-    rust: ["image-conformance/tests/family_compose.rs"]
+    rust: ["image-conformance/tests/it/family_compose.rs"]
 
 # ── adjust family (T2; tone/color point ops) ─────────────────
 
@@ -993,7 +993,7 @@
     - "exposure: rgb·exp2(ev); standard tone op; no reference reading"
     - "encoding = 1: the gain on light decoded with a 2.2 power; oracle: Photoshop 2026 Exposure (image-conformance/fixtures/photoshop/adjustments)"
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]
 
 - id: adjust.brightness_contrast
   rust_path: families::adjust::ADJUST_BRIGHTNESS_CONTRAST
@@ -1006,7 +1006,7 @@
   provenance:
     - "brightness/contrast about mid-gray; standard; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]
 
 - id: adjust.levels
   rust_path: families::adjust::ADJUST_LEVELS
@@ -1019,7 +1019,7 @@
   provenance:
     - "levels: in/out black-white + gamma (pow); standard; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]
 
 - id: adjust.saturation
   rust_path: families::adjust::ADJUST_SATURATION
@@ -1032,7 +1032,7 @@
   provenance:
     - "saturation: mix toward luma (0.3/0.59/0.11); standard; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]
 
 - id: adjust.hue_rotate
   rust_path: families::adjust::ADJUST_HUE_ROTATE
@@ -1045,7 +1045,7 @@
   provenance:
     - "luminance-preserving hue-rotation matrix; standard; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]
 
 - id: adjust.invert_rgb
   rust_path: families::adjust::ADJUST_INVERT_RGB
@@ -1058,7 +1058,7 @@
   provenance:
     - "per-color invert 1-c, alpha kept; trivial; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]
 
 - id: adjust.white_balance
   rust_path: families::adjust::ADJUST_WHITE_BALANCE
@@ -1071,7 +1071,7 @@
   provenance:
     - "temp/tint per-channel von-Kries gains (1+temp,1+tint,1-temp); standard; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]
 
 # ── adjust family, breadth batch (Photoshop-class adjustments;
 #    semantics DEFINED in families/adjust.rs comments) ─────────
@@ -1087,7 +1087,7 @@
   provenance:
     - "vibrance: saturation-protected mix toward luma, factor 1+sat+vib*(1-satlevel); semantics defined in-file; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]
 
 - id: adjust.hue_saturation
   rust_path: families::adjust::ADJUST_HUE_SATURATION
@@ -1101,7 +1101,7 @@
     - "Hue/Saturation dialog: master + six hue ranges (±15° full, fading to 0 at ±45°) + colorize, in HSL; semantics from the published description of the dialog; HSL conversions are textbook (Smith 1978); no reference reading"
     - "Saturation and lightness measured against Photoshop 27.10 on a 64×64 HSL grid (2026-10-05): raising saturation is s / (1 − ds) (a grey stays grey; +100 saturates every chromatic pixel), lowering it s·(1 + ds); lightness blends the RGB result toward white or black (HSL-lightness was 77 levels off). Photoshop ledger hue-saturation / hue-only: agreement, 0.21 levels"
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs", "image-conformance/tests/gpu_module_kernels.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs", "image-conformance/tests/it/gpu_module_kernels.rs"]
 
 - id: adjust.dodge_burn
   rust_path: families::adjust::ADJUST_DODGE_BURN
@@ -1118,7 +1118,7 @@
     - "sponge: linear saturation about the luma, y + (c-y)(1 +/- amount) (Haeberli, Matrix Operations for Image Processing, 1993)"
     - "semantics from the published descriptions of the tools; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs", "image-conformance/tests/gpu_module_kernels.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs", "image-conformance/tests/it/gpu_module_kernels.rs"]
 
 - id: adjust.color_balance
   rust_path: families::adjust::ADJUST_COLOR_BALANCE
@@ -1131,7 +1131,7 @@
   provenance:
     - "color balance: smoothstep shadows/midtones/highlights partition x 3 opponent axes + luminosity restore; semantics defined in-file; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]
 
 - id: adjust.black_white
   rust_path: families::adjust::ADJUST_BLACK_WHITE
@@ -1144,7 +1144,7 @@
   provenance:
     - "black & white: exact min/mid/max hue-sector decomposition, gray = mn + (mid-mn)*w_sec + (mx-mid)*w_pri (continuous across sectors); semantics defined in-file; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]
 
 - id: adjust.posterize
   rust_path: families::adjust::ADJUST_POSTERIZE
@@ -1157,7 +1157,7 @@
   provenance:
     - "posterize: min(floor(clamp(c,0,1)*n)/(n-1), 1), n = max(levels,2); standard quantization; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]
 
 - id: adjust.threshold
   rust_path: families::adjust::ADJUST_THRESHOLD
@@ -1170,7 +1170,7 @@
   provenance:
     - "threshold: luma >= threshold -> white else black, compared in premultiplied space (lum(premul) >= threshold*alpha) to avoid division noise; standard; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]
 
 - id: adjust.photo_filter
   rust_path: families::adjust::ADJUST_PHOTO_FILTER
@@ -1183,7 +1183,7 @@
   provenance:
     - "photo filter: gel-absorption mix(c, c*filter, density) + optional luminosity restore; semantics defined in-file; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]
 
 - id: adjust.lut1d
   rust_path: families::adjust::ADJUST_LUT1D
@@ -1198,7 +1198,7 @@
     - "LINEARLY INTERPOLATED between entries, decided by measurement: nearest indexing (which would match ingest::apply_curve_lut bit for bit) makes the kernel a step function, and a step function cannot hold an f16-ULP tolerance — f16 storage flips the chosen entry at index boundaries and one whole LUT step separates the answers. Measured 61 ULP on the identity table and 135 on an inverted one against a declared 4. Interpolation also avoids quantizing output to 1/255 steps."
     - "Table travels in PARAMS (64 x vec4<f32> = 1 KiB uniform), not as a second input texture: the ABI is frozen at M0 and every kernel input uploads at the tile's w x h, so a 256x1 LUT texture would require a versioned ABI amendment. No reference reading."
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]
 
 - id: adjust.lut3d
   rust_path: families::adjust::ADJUST_LUT3D
@@ -1213,7 +1213,7 @@
     - "EDGE 9 (729 entries, 11.4 KiB as one vec4<f32> per entry), not the .CUBE convention's 17. Same params-only constraint as adjust.lut1d — the ABI is frozen and inputs upload at tile size — and 17^3 packed the same way is 78 KiB, over the 64 KiB uniform floor. A coarse cube that binds beats a fine one that cannot."
     - "Trilinear rather than nearest for the reason lut1d documents: nearest is a step function and cannot hold an f16-ULP tolerance. No reference reading."
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]
 
 - id: adjust.gradient_map
   rust_path: families::adjust::ADJUST_GRADIENT_MAP
@@ -1228,7 +1228,7 @@
     - "Luma is Rec.709 (0.2126/0.7152/0.0722) on unpremultiplied rgb — the same coefficients adjust.black_white defaults to, so desaturate-then-map and gradient-map agree about what brightness means."
     - "Ramp in params and linearly interpolated, for the reasons adjust.lut1d records. No reference reading."
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]
 
 - id: adjust.channel_mixer
   rust_path: families::adjust::ADJUST_CHANNEL_MIXER
@@ -1241,7 +1241,7 @@
   provenance:
     - "channel mixer: 3x4 matrix (3 outputs x rgb+constant), fixed left-to-right sums; standard; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]
 
 - id: adjust.levels_rgb
   rust_path: families::adjust::ADJUST_LEVELS_RGB
@@ -1254,7 +1254,7 @@
   provenance:
     - "per-channel levels: in_black/in_white/gamma per r,g,b (pow; same tolerance rationale as adjust.levels); standard; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]
 
 # ── geom family (T2; coordinate remaps) ──────────────────────
 
@@ -1269,7 +1269,7 @@
   provenance:
     - "horizontal flip coordinate remap; trivial; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_geom.rs"]
+    rust: ["image-conformance/tests/it/family_geom.rs"]
 
 - id: geom.flip_v
   rust_path: families::geom::GEOM_FLIP_V
@@ -1282,7 +1282,7 @@
   provenance:
     - "vertical flip coordinate remap; trivial; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_geom.rs"]
+    rust: ["image-conformance/tests/it/family_geom.rs"]
 
 - id: geom.rotate90_cw
   rust_path: families::geom::GEOM_ROTATE90_CW
@@ -1295,7 +1295,7 @@
   provenance:
     - "90° CW coordinate remap; trivial; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_geom.rs"]
+    rust: ["image-conformance/tests/it/family_geom.rs"]
 
 - id: geom.rotate90_ccw
   rust_path: families::geom::GEOM_ROTATE90_CCW
@@ -1308,7 +1308,7 @@
   provenance:
     - "90° CCW coordinate remap; trivial; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_geom.rs"]
+    rust: ["image-conformance/tests/it/family_geom.rs"]
 
 - id: geom.crop
   rust_path: families::geom::GEOM_CROP
@@ -1321,7 +1321,7 @@
   provenance:
     - "crop = clamped offset remap; trivial; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_geom.rs"]
+    rust: ["image-conformance/tests/it/family_geom.rs"]
 
 - id: geom.warp_backward
   rust_path: families::geom::GEOM_WARP_BACKWARD
@@ -1336,7 +1336,7 @@
     - "One kernel for the Distort family rather than nine: Pinch/Spherize/Twirl/Wave are not independent effects, they are source-coordinate functions over the same map. Sharing one sampler keeps the reconstruction filter, the edge rule and the parity tolerance identical across all of them, which is what makes them comparable."
     - "amount == 0 is the IDENTITY for every kind, so one slider per distortion needs no special cases and the identity parity test covers all kinds at once. Standard radial/sinusoidal displacement forms; no reference reading."
   tests:
-    rust: ["image-conformance/tests/family_geom.rs"]
+    rust: ["image-conformance/tests/it/family_geom.rs"]
 
 - id: geom.rotate_bilinear
   rust_path: families::geom::GEOM_ROTATE_BILINEAR
@@ -1350,7 +1350,7 @@
     - "backward-mapped affine warp with bilinear reconstruction: Wolberg, Digital Image Warping (IEEE CS Press, 1990), inverse mapping + bilinear interpolation; no reference reading"
     - "differential oracle: vips similarity/rotate at interpolate=bilinear"
   tests:
-    rust: ["image-conformance/tests/family_geom.rs"]
+    rust: ["image-conformance/tests/it/family_geom.rs"]
 
 # ── gen family (T2; procedural generators, unary-dummy lane) ─
 
@@ -1365,7 +1365,7 @@
   provenance:
     - "procedural solid color; trivial; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_gen.rs"]
+    rust: ["image-conformance/tests/it/family_gen.rs"]
 
 - id: gen.checker
   rust_path: families::gen::GEN_CHECKER
@@ -1378,7 +1378,7 @@
   provenance:
     - "procedural checkerboard (origin-continuous); trivial; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_gen.rs"]
+    rust: ["image-conformance/tests/it/family_gen.rs"]
 
 - id: gen.linear_gradient
   rust_path: families::gen::GEN_LINEAR_GRADIENT
@@ -1391,7 +1391,7 @@
   provenance:
     - "procedural linear gradient (projection parameter); standard; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_gen.rs"]
+    rust: ["image-conformance/tests/it/family_gen.rs"]
 
 - id: gen.radial_gradient
   rust_path: families::gen::GEN_RADIAL_GRADIENT
@@ -1404,7 +1404,7 @@
   provenance:
     - "procedural radial gradient (euclidean distance / radius); standard; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_gen.rs"]
+    rust: ["image-conformance/tests/it/family_gen.rs"]
 
 - id: gallery.kuwahara
   rust_path: families::gallery::GALLERY_KUWAHARA
@@ -1592,7 +1592,7 @@
     - "tile_w/tile_h travel in the PARAMS because execute_tile_once_async sizes every input texture at the OUTPUT dims - the tile is uploaded zero-padded and names its real extent, and the shader clamps that extent to the bound texture so it can never read outside"
     - "identity: opacity 0, and the degenerate scale <= 0 guard, both written as negated positive tests so NaN lands on identity deterministically rather than implementation-defined - a clamp(opacity, 0, 1) draft was caught by the predicate-agreement test"
   tests:
-    rust: ["image-kernels/tests/gen_pattern.rs"]
+    rust: ["image-kernels/tests/it/gen_pattern.rs"]
 - id: gen.angular_gradient
   rust_path: families::gen::GEN_ANGULAR_GRADIENT
   state_row: image.kernel.family-t2
@@ -1604,7 +1604,7 @@
   provenance:
     - "procedural angular (conic) gradient; own deterministic atan2 (octant fold + odd polynomial, Abramowitz & Stegun 4.4-class) mirrored in both lanes; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_gen.rs"]
+    rust: ["image-conformance/tests/it/family_gen.rs"]
 
 - id: gen.reflected_gradient
   rust_path: families::gen::GEN_REFLECTED_GRADIENT
@@ -1617,7 +1617,7 @@
   provenance:
     - "procedural reflected gradient (|signed projection| about p0); standard; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_gen.rs"]
+    rust: ["image-conformance/tests/it/family_gen.rs"]
 
 - id: gen.diamond_gradient
   rust_path: families::gen::GEN_DIAMOND_GRADIENT
@@ -1630,7 +1630,7 @@
   provenance:
     - "procedural diamond gradient (rotated L1-distance contours / scale); standard; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_gen.rs"]
+    rust: ["image-conformance/tests/it/family_gen.rs"]
 
 - id: gen.noise
   rust_path: families::gen::GEN_NOISE
@@ -1643,7 +1643,7 @@
   provenance:
     - "deterministic uniform noise via PCG integer hash of (x, y, seed) — Jarzynski & Olano, 'Hash Functions for GPU Rendering', JCGT 2020 (public literature); bit-identical u32 lanes; no Math.random / platform PRNG"
   tests:
-    rust: ["image-conformance/tests/family_gen.rs"]
+    rust: ["image-conformance/tests/it/family_gen.rs"]
 
 # ── morph family (T3; morphology + rank, 3×3 windowed modules) ───
 
@@ -1658,7 +1658,7 @@
   provenance:
     - "mathematical morphology (grey dilation = windowed max): standard literature; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_morph.rs"]
+    rust: ["image-conformance/tests/it/family_morph.rs"]
 
 - id: morph.erode
   rust_path: families::morph::MORPH_ERODE
@@ -1671,7 +1671,7 @@
   provenance:
     - "mathematical morphology (grey erosion = windowed min): standard literature; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_morph.rs"]
+    rust: ["image-conformance/tests/it/family_morph.rs"]
 
 - id: rank.median3
   rust_path: families::morph::RANK_MEDIAN3
@@ -1684,7 +1684,7 @@
   provenance:
     - "rank filtering (3x3 median via a fixed compare-exchange selection network): standard literature; no reference reading"
   tests:
-    rust: ["image-conformance/tests/family_morph.rs"]
+    rust: ["image-conformance/tests/it/family_morph.rs"]
 
 - id: conv.emboss
   rust_path: families::conv::CONV_EMBOSS
@@ -1698,7 +1698,7 @@
     - "3x3 directional derivative plus a 0.5 mid-grey bias, so a FLAT region stays mid-grey rather than black — that bias is what makes emboss read as relief instead of as an edge map. Standard form; no reference reading."
     - "ships with conv.find_edges: same neighbourhood read, different taps, so writing one without the other would mean two window loops to keep in step"
   tests:
-    rust: ["image-conformance/tests/family_conv.rs"]
+    rust: ["image-conformance/tests/it/family_conv.rs"]
 
 - id: conv.find_edges
   rust_path: families::conv::CONV_FIND_EDGES
@@ -1712,7 +1712,7 @@
     - "Sobel magnitude, INVERTED — Photoshop's Find Edges draws dark lines on white, not white on black; getting that backwards yields a plausible-looking wrong effect"
     - "run per CHANNEL rather than on luminance, so a red-on-green edge at equal luma still registers — a luma-only gradient misses exactly the edges a designer drew deliberately"
   tests:
-    rust: ["image-conformance/tests/family_conv.rs"]
+    rust: ["image-conformance/tests/it/family_conv.rs"]
 
 - id: conv.motion
   rust_path: families::conv::CONV_MOTION
@@ -1726,7 +1726,7 @@
     - "line-integral blur: average N taps along a direction, centred on the pixel so the subject smears symmetrically rather than sliding off its own position"
     - "TAP COUNT IS FIXED (17), not derived from length: a length-derived count makes cost depend on a slider and a designer dragging one falls off a performance cliff mid-gesture. Fixed count + varying step keeps cost flat and degrades by undersampling, which is visible as banding at extreme lengths — the honest failure."
   tests:
-    rust: ["image-conformance/tests/family_conv.rs"]
+    rust: ["image-conformance/tests/it/family_conv.rs"]
 
 - id: rank.despeckle
   rust_path: families::morph::RANK_DESPECKLE
@@ -1743,7 +1743,7 @@
     - "full 9-tap sorting network (36 compare-exchanges, not the optimal 25) because ranks 1, 4 AND 7 are needed, not just the median"
     - "identity: amount 0 — mix(centre, .., 0) is the centre bit-for-bit under either lerp formulation, for any mask value"
   tests:
-    rust: ["image-kernels/tests/rank_noise.rs"]
+    rust: ["image-kernels/tests/it/rank_noise.rs"]
 - id: rank.dust_scratches
   rust_path: families::morph::RANK_DUST_SCRATCHES
   state_row: image.kernel.family-t3
@@ -1759,7 +1759,7 @@
     - "identity: threshold 1.0 with a strict > comparison, since values live in 0..1 — with the caveat recorded that scene-referred data above 1 makes 1.0 a real threshold, so radius 0 is the unconditional second identity"
     - "tolerance is Exact because both branches write an existing f16 sample; the only arithmetic is the decision"
   tests:
-    rust: ["image-kernels/tests/rank_noise.rs"]
+    rust: ["image-kernels/tests/it/rank_noise.rs"]
 - id: geom.move_selection
   rust_path: families::geom::GEOM_MOVE_SELECTION
   state_row: image.kernel.family-t2
@@ -1776,7 +1776,7 @@
     - "vacated pixels go to premultiplied zero (colour to zero with the alpha) so a later composite cannot resurrect a fringe of the old colour"
     - "identity dx=dy=0 falls out of the algebra rather than a special case: m_src equals m_dst, so mix(mix(a,v,m),a,m) is a for every mask value including soft ones, under either vacate mode"
   tests:
-    rust: ["image-kernels/tests/geom_move_selection.rs"]
+    rust: ["image-kernels/tests/it/geom_move_selection.rs"]
 - id: geom.offset
   rust_path: families::geom::GEOM_OFFSET
   state_row: image.kernel.family-t2
@@ -1791,7 +1791,7 @@
     - "sub-pixel offsets are bilinear rather than rounded so a drag tracks the pointer instead of stuttering; an integer offset gives fx==0 exactly, so whole-pixel moves stay bit-exact and lossless however many are made"
     - "identity dx=dy=0 is structural, not special-cased: the two half-pixel conversions cancel, so mix(p00, p10, 0.0) is bit-exactly p00 for every edge policy and every mask value"
   tests:
-    rust: ["image-kernels/tests/geom_offset.rs"]
+    rust: ["image-kernels/tests/it/geom_offset.rs"]
 - id: conv.lens
   rust_path: families::conv::CONV_LENS
   state_row: image.kernel.family-t2
@@ -1836,7 +1836,7 @@
     - "radius 24 because it is exactly what conv.lens already pays (49x49 = 2401 taps); 32 would be 4225 taps, 1.76x the work for a blur 33% wider - a bad trade on a slider a designer drags. A test asserts the declared radius equals the module's R_MAX so they cannot drift"
     - "identity: amount 0, radius_px < 0.5, and a degenerate all-zero shape (wsum 0 returns the input rather than dividing) - all three as negated positive tests so NaN lands on identity deterministically"
   tests:
-    rust: ["image-kernels/tests/conv_shape.rs"]
+    rust: ["image-kernels/tests/it/conv_shape.rs"]
 - id: conv.smart_sharpen
   rust_path: families::conv::CONV_SMART_SHARPEN
   state_row: image.kernel.family-t2
@@ -1861,7 +1861,7 @@
     - "Photoshop's two Radial Blur modes are ONE kernel: both walk an arc about a centre, and zoom is the degenerate arc that holds the angle and varies the radius"
     - "spin's arc length scales with radius, so the smear grows outward — that is what makes it read as rotation rather than as noise"
   tests:
-    rust: ["image-conformance/tests/family_conv.rs"]
+    rust: ["image-conformance/tests/it/family_conv.rs"]
 
 - id: geom.mosaic
   rust_path: families::geom::GEOM_MOSAIC
@@ -1876,7 +1876,7 @@
     - "samples the CELL CENTRE rather than averaging the cell: it is what Photoshop does, it is O(1) instead of O(cell^2), and on a gradient an average gives smooth steps where a centre sample gives the hard posterized blocks people expect"
     - "cell <= 1 is the IDENTITY via max(1), so a slider at its minimum cannot divide by zero before the user has touched it"
   tests:
-    rust: ["image-conformance/tests/family_geom.rs"]
+    rust: ["image-conformance/tests/it/family_geom.rs"]
 
 - id: adjust.selective_color
   rust_path: families::adjust::ADJUST_SELECTIVE_COLOR
@@ -1891,4 +1891,4 @@
     - "RELATIVE and ABSOLUTE both ship: relative scales the shift by ink already present so a pale area barely moves (Photoshop's default, and what preserves tonality), absolute adds flat"
     - "all-zero deltas are the IDENTITY for every range, so one parity test covers all nine"
   tests:
-    rust: ["image-conformance/tests/family_adjust.rs"]
+    rust: ["image-conformance/tests/it/family_adjust.rs"]

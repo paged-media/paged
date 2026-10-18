@@ -29,7 +29,7 @@
 //!
 //! The message dispatch itself (parse → per-kind arms → serialise) is
 //! cfg-independent and lives in [`dispatch`], compiled on every target
-//! and unit-tested natively (`tests/dispatch.rs`). This module is the
+//! and unit-tested natively (`tests/it/dispatch.rs`). This module is the
 //! `#[cfg(wasm32)]` shell: it owns the `js_sys::Date` clock, console
 //! logging, and the GPU presenter / Vello scene cache, and forwards
 //! parsed messages into [`dispatch::WorkerCore`].
@@ -124,7 +124,7 @@ mod wasm {
     /// `js_sys::Promise` whose future owns this `Rc` (or a
     /// [`paged_gpu::PendingReadback`]) and no borrow of the worker, and the
     /// `RefCell` is only ever borrowed synchronously.
-    /// (`tests/no_async_exports.rs` keeps it that way.)
+    /// (`tests/it/no_async_exports.rs` keeps it that way.)
     #[cfg(feature = "gpu")]
     type GpuSlot = std::rc::Rc<std::cell::RefCell<Option<paged_gpu::SurfacePresenter>>>;
 

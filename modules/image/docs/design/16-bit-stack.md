@@ -1,6 +1,6 @@
 # The 16-bit stack — why it is not built, and the shape that makes it safe
 
-*Status note (2026-10-02): the status line describes the engine's Rust API, which `image-js/tests/ingest_16bit.rs` exercises. Through the shipped wasm surface 16 bits are held only after a main-thread decode and kept only by the one-shot filter door; `layers_open`, the panel's adjustment chain, the in-frame image, tiles and save-back are 8-bit, and a 16-bit greyscale PNG is refused. See `status.md`.*
+*Status note (2026-10-02): the status line describes the engine's Rust API, which `image-js/tests/it/ingest_16bit.rs` exercises. Through the shipped wasm surface 16 bits are held only after a main-thread decode and kept only by the one-shot filter door; `layers_open`, the panel's adjustment chain, the in-frame image, tiles and save-back are 8-bit, and a 16-bit greyscale PNG is refused. See `status.md`.*
 
 **Status:** **DONE 2026-08-09 — all five steps.** A 16-bit PNG opens at full depth and keeps every bit through an adjustment, a layer edit, and an undo. The only remaining narrowing is 16-bit Gray/GrayA, which has no widening arm and still says so via `depth_reduced`.
 **Size:** smaller than this document first claimed — see the correction below.
@@ -19,7 +19,7 @@ wall. It is four things, and three are done:
 |---|---|
 | The kernel/tile ABI | **Done, always was.** f16 storage, f32 compute. The *engine* was never 8-bit-bound. |
 | 16-bit PSD ingest | **Done.** Opens, narrowed by the high byte, reduction reported. |
-| 16-bit PNG ingest | **Done 2026-08-09.** Used to error `Unsupported` — the file would not load. The blocker ("byte order unverified, no fixture") was false: PNG endianness is normative (§7.1) and `zune` returns assembled `u16`s anyway. `image-conformance/tests/codec_png_16bit.rs` now *measures* the order. |
+| 16-bit PNG ingest | **Done 2026-08-09.** Used to error `Unsupported` — the file would not load. The blocker ("byte order unverified, no fixture") was false: PNG endianness is normative (§7.1) and `zune` returns assembled `u16`s anyway. `image-conformance/tests/it/codec_png_16bit.rs` now *measures* the order. |
 | The adjustment-layer fold | **Done.** Stays in f16 rather than round-tripping through 8 per layer. Measured: >120 of 256 distinct levels survive a compress/expand pair, versus 26 before. |
 | **The layer STORE** | **Unbuilt. This document.** |
 
@@ -128,7 +128,7 @@ separate decision.
 - **A round-trip at 16-bit**: a 16-bit PSD in, no edit, 16-bit out,
   byte-identical. The preservation invariant already demands this at
   8-bit; it must not weaken.
-- **The GPU behavioural lane** (`image-conformance/tests/gpu_module_kernels.rs`) re-run — its
+- **The GPU behavioural lane** (`image-conformance/tests/it/gpu_module_kernels.rs`) re-run — its
   stimulus is dyadic and lossless in f16, so it should be indifferent to
   the store's depth. If it is not, something is wrong.
 

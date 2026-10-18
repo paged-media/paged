@@ -19,7 +19,7 @@
 // §10 — the session's batch-plan surface. The engine partitions a query's
 // resolved result into generation units (per-record / per-group / one-catalog);
 // executing the plan reuses the normal resolve/lower/paginate pipeline. The
-// plan semantics are proven in Rust (data-conformance/tests/automation.rs +
+// plan semantics are proven in Rust (data-conformance/tests/it/automation.rs +
 // data-automation unit tests); here we prove the bundle reaches the engine and
 // passes the mode through.
 

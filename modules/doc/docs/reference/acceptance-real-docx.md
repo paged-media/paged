@@ -86,7 +86,7 @@ brought out an engine keep anomaly (P0-4) and took it to 64.
 
 Each against Word's answer: `docx-conformance/fixtures/real-docx.word.json`
 (`real_docx_docx()`, `scripts/word-real-docx-probe.sh`, tests
-`docx-conformance/tests/real_docx.rs`) and `fixtures/keeps.word.json`
+`docx-conformance/tests/it/real_docx.rs`) and `fixtures/keeps.word.json`
 (`keeps_docx()`, `scripts/word-keeps-probe.sh`, `tests/keeps.rs`).
 
 1. **Tab alignments are IDML's names.** The lowering emitted Word's names

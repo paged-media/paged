@@ -23,8 +23,8 @@
 //! | site | looked in | outcome |
 //! |---|---|---|
 //! | `paged-color/tests/parity.rs` | env → `corpus/profiles` → Adobe's install path | passed on a Mac with Adobe, skipped in CI |
-//! | `paged-canvas/tests/color_settings.rs` | `corpus/profiles` only | skipped everywhere |
-//! | `paged-canvas/tests/ink_coverage.rs` | `corpus/calibration` | skipped everywhere — that directory holds six JSON files and never held an `.icc` |
+//! | `paged-canvas/tests/it/color_settings.rs` | `corpus/profiles` only | skipped everywhere |
+//! | `paged-canvas/tests/it/ink_coverage.rs` | `corpus/calibration` | skipped everywhere — that directory holds six JSON files and never held an `.icc` |
 //!
 //! The result (found by the 2026-08-19 corpus audit): **zero `.icc`
 //! files exist anywhere in the workspace**, and roughly eight tests

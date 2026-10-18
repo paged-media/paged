@@ -51,7 +51,7 @@ the native container and dropped, with a report, on IDML export.
 - `crates/paged-canvas/src/channel.rs:1794-1806`, `crates/paged-canvas-wasm/src/dispatch.rs:1067-1072`,
   `crates/paged-cli/src/export.rs:101-109` — the `lost` field, filled on export, printed by the CLI
 - `crates/paged-canvas/src/model.rs:4666-4679`,
-  `crates/paged-canvas/tests/opacity_mask_and_text_path_wire.rs:201-258` — the model part written
+  `crates/paged-canvas/tests/it/opacity_mask_and_text_path_wire.rs:201-258` — the model part written
   on save; a test that the mask survives `.paged` and is reported lost for IDML
 
 ## Alternatives considered

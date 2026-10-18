@@ -244,7 +244,7 @@ the addendum's composition part.
 - `crates/paged-canvas/src/model.rs:4688-4707` — the composition part is "a persisted *derived*
   projection, not yet authoritative". `refresh_composition_part`, which writes it, is called
   only from tests, so an ordinary export does not contain it.
-- `crates/paged-renderer/tests/c1_no_idml.rs:19-29` — the test this ADR asks for under "The C1
+- `crates/paged-renderer/tests/it/c1_no_idml.rs:19-29` — the test this ADR asks for under "The C1
   seam gets enforced in code + CI": a hand-built region chain and a non-IDML content engine
   rendered to pixels with no `Document` involved. `crates/paged-composition-render/src/lib.rs:25-28`
   is its reusable form for a composition.

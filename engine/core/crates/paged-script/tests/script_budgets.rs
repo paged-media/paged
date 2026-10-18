@@ -36,7 +36,7 @@ use paged_script::{execute_script, execute_script_with, ScriptBudget, ScriptBudg
 /// A minimal one-page, one-frame IDML package — enough for
 /// `CanvasModel::load` to build a document the script bridge can read
 /// and mutate. Mirrors the corpus-free helper in
-/// `paged-canvas/tests/page_ops.rs`.
+/// `paged-canvas/tests/it/page_ops.rs`.
 fn minimal_idml() -> Vec<u8> {
     let spread = r#"<?xml version="1.0" encoding="UTF-8"?>
 <idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">

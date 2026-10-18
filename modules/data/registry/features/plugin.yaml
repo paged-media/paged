@@ -8,7 +8,7 @@
   status: implemented
   provenance: ["serialize -> deserialize -> rebuild identical; credentials absent"]
   tests:
-    rust: ["data-conformance/tests/roundtrip.rs::data_plugin_payload_roundtrip"]
+    rust: ["data-conformance/tests/it/roundtrip.rs::data_plugin_payload_roundtrip"]
 
 - id: data.plugin.persistence
   title: The data session survives save and reopen (the paged.data/session container part)
@@ -17,8 +17,8 @@
   provenance: ["load_payload replaces the recipe in place; re-definitions upsert by id; the session part round-trips through a real .paged save + reopen (real core, data-js, DuckDB)"]
   tests:
     rust:
-      - "data-conformance/tests/roundtrip.rs::data_plugin_load_payload_in_place__feat__data_plugin_persistence"
-      - "data-conformance/tests/roundtrip.rs::data_plugin_redefine_replaces_in_the_payload__feat__data_plugin_persistence"
+      - "data-conformance/tests/it/roundtrip.rs::data_plugin_load_payload_in_place__feat__data_plugin_persistence"
+      - "data-conformance/tests/it/roundtrip.rs::data_plugin_redefine_replaces_in_the_payload__feat__data_plugin_persistence"
     vitest: ["packages/data-bundle/test/persist-real-core.spec.ts"]
 
 - id: data.plugin.bundle

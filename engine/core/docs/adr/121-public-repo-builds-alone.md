@@ -82,7 +82,7 @@ not part of building or testing.
 - Also outside the repository: an `#[ignore]` test reads a private corpus checkout beside this one
   when `PAGED_GRID_CORPUS` is set (`crates/paged-scene/tests/grid_matrix_corpus.rs:34-54`, `:116`);
   colour profiles are probed at absolute Adobe paths (`crates/paged-color/src/profiles.rs:158-162`,
-  `crates/paged-export-pdf/tests/export_x4.rs:69`, `crates/paged-canvas/tests/export_pdf.rs:114`,
+  `crates/paged-export-pdf/tests/it/export_x4.rs:69`, `crates/paged-canvas/tests/it/export_pdf.rs:114`,
   `corpus/generated/render-diff.sh:186`, `corpus/generated/export-diff.sh:99`); secrets are used by
   the docs dispatch, `.github/workflows/notify-docs.yml` (`DOCS_DISPATCH_TOKEN`), and the release,
   `.github/workflows/publish-wasm.yml` (`NPM_TOKEN`).

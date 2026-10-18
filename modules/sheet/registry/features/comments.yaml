@@ -15,8 +15,8 @@
   provenance: ["ECMA-376 §18.7 (comments)", "spec §10.2 (preservation invariant)"]
   tests:
     rust:
-      - "sheet-conformance/tests/comments.rs::sheet_xlsx_comments_parse"
-      - "sheet-conformance/tests/js_surface.rs::sheet_xlsx_comments_via_js_surface"
+      - "sheet-conformance/tests/it/comments.rs::sheet_xlsx_comments_parse"
+      - "sheet-conformance/tests/it/js_surface.rs::sheet_xlsx_comments_via_js_surface"
       - "sheet-xlsx/src/parts/comments.rs::parse_two_comments"
 
 - id: sheet.grid.comments.indicator
@@ -27,5 +27,5 @@
   provenance: ["spec §8.1 (grid rendering surface), §10.2 (comments preserved + displayed)"]
   tests:
     rust:
-      - "sheet-conformance/tests/comments.rs::sheet_grid_comments_indicator"
+      - "sheet-conformance/tests/it/comments.rs::sheet_grid_comments_indicator"
       - "sheet-grid/src/lib.rs::sheet_grid_scene_comment_markers"

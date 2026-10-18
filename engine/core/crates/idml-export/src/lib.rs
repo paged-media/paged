@@ -232,7 +232,7 @@ pub fn cut_page_number_runs(doc: &mut Document) {
 /// Serialise one minted story part — the exact bytes [`write_idml`]
 /// would add for a story the model minted. Exposed so the paragraph-mark
 /// contract can be pinned directly (see
-/// `tests/paragraph_terminator.rs`) instead of only through a full
+/// `tests/it/paragraph_terminator.rs`) instead of only through a full
 /// package write.
 pub fn emit_story_part_for_test(
     self_id: &str,

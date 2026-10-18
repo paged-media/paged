@@ -57,7 +57,7 @@ into the model as cells, and the pass repeats until nothing is dirty, at most 64
 - `sheet-calc/src/lib.rs:649-715`, `sheet-calc/src/spill.rs:29-53` — `materialize_spill`;
   the rules of the ledger
 - `sheet-calc/src/lib.rs:522-568`, `sheet-core/src/calc_settings.rs:80-89` — iteration
-- `sheet-calc/src/volatile.rs:40-45`, `sheet-conformance/tests/calc_order.rs:147-176` —
+- `sheet-calc/src/volatile.rs:40-45`, `sheet-conformance/tests/it/calc_order.rs:147-176` —
   the seed; the order-independence property test
 
 ## Alternatives considered
@@ -103,5 +103,5 @@ The decision stands. Two spill rules changed to what Excel 16 answers (recorded 
   size, so `H1:H6*2` from a workbook spills. A formula typed in Paged still spills only when its
   root is a `returns_array` call, an array literal, a call or a spill reference.
 
-Tests: `sheet-conformance/tests/spill_ref.rs`, `sheet-conformance/tests/spill.rs`.
+Tests: `sheet-conformance/tests/it/spill_ref.rs`, `sheet-conformance/tests/it/spill.rs`.
 

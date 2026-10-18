@@ -9,7 +9,7 @@
   status: implemented
   provenance: ["text concatenation; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_concat"]
+    rust: ["data-conformance/tests/it/expr_text.rs::data_expr_text_concat"]
 
 - id: data.expr.text.upper
   name: UPPER
@@ -19,7 +19,7 @@
   status: implemented
   provenance: ["uppercase; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_upper"]
+    rust: ["data-conformance/tests/it/expr_text.rs::data_expr_text_upper"]
 
 - id: data.expr.text.lower
   name: LOWER
@@ -29,7 +29,7 @@
   status: implemented
   provenance: ["lowercase; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_lower"]
+    rust: ["data-conformance/tests/it/expr_text.rs::data_expr_text_lower"]
 
 - id: data.expr.text.trim
   name: TRIM
@@ -39,7 +39,7 @@
   status: implemented
   provenance: ["whitespace trim; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_trim"]
+    rust: ["data-conformance/tests/it/expr_text.rs::data_expr_text_trim"]
 
 - id: data.expr.text.len
   name: LEN
@@ -49,7 +49,7 @@
   status: implemented
   provenance: ["character length; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_len"]
+    rust: ["data-conformance/tests/it/expr_text.rs::data_expr_text_len"]
 
 - id: data.expr.text.left
   name: LEFT
@@ -59,7 +59,7 @@
   status: implemented
   provenance: ["prefix substring; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_left"]
+    rust: ["data-conformance/tests/it/expr_text.rs::data_expr_text_left"]
 
 - id: data.expr.text.right
   name: RIGHT
@@ -69,7 +69,7 @@
   status: implemented
   provenance: ["suffix substring; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_right"]
+    rust: ["data-conformance/tests/it/expr_text.rs::data_expr_text_right"]
 
 - id: data.expr.text.substitute
   name: SUBSTITUTE
@@ -79,7 +79,7 @@
   status: implemented
   provenance: ["find/replace; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_substitute"]
+    rust: ["data-conformance/tests/it/expr_text.rs::data_expr_text_substitute"]
 
 - id: data.expr.text.mid
   name: MID
@@ -89,7 +89,7 @@
   status: implemented
   provenance: ["1-based char substring; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_mid"]
+    rust: ["data-conformance/tests/it/expr_text.rs::data_expr_text_mid"]
 
 - id: data.expr.text.proper
   name: PROPER
@@ -99,7 +99,7 @@
   status: implemented
   provenance: ["title-case; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_proper"]
+    rust: ["data-conformance/tests/it/expr_text.rs::data_expr_text_proper"]
 
 - id: data.expr.text.find
   name: FIND
@@ -109,7 +109,7 @@
   status: implemented
   provenance: ["1-based char position; #VALUE if not found; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_find"]
+    rust: ["data-conformance/tests/it/expr_text.rs::data_expr_text_find"]
 
 - id: data.expr.text.textjoin
   name: TEXTJOIN
@@ -119,7 +119,7 @@
   status: implemented
   provenance: ["join values with a delimiter, skipping null/empty; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_textjoin"]
+    rust: ["data-conformance/tests/it/expr_text.rs::data_expr_text_textjoin"]
 
 - id: data.expr.text.rept
   name: REPT
@@ -129,4 +129,4 @@
   status: implemented
   provenance: ["repeat text N times; #VALUE on negative; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_rept"]
+    rust: ["data-conformance/tests/it/expr_text.rs::data_expr_text_rept"]

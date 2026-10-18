@@ -63,7 +63,7 @@ template that InDesign wrote, the data-publishing plugin found four gaps:
 
 ## Evidence
 
-`crates/paged-canvas/tests/data_merge_pages.rs` runs against an InDesign Data Merge template
+`crates/paged-canvas/tests/it/data_merge_pages.rs` runs against an InDesign Data Merge template
 (`tests/fixtures/data-merge-empty-field-lines.idml`):
 
 - pages and their content in one batch and one undo step, for an inserted and a duplicated page;

@@ -23,7 +23,7 @@
 // points with the ruler at the page origin; then every text frame holding
 // no table, with its first line's baseline. The answers for
 // `table-cell-baseline` are pinned in
-// crates/paged-renderer/tests/cell_first_baseline.rs.
+// crates/paged-renderer/tests/it/cell_first_baseline.rs.
 (function () {
     var IDML = $.global.PROBE_IDML, OUT = $.global.PROBE_OUT;
     function q(s) {

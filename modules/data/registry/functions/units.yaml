@@ -11,7 +11,7 @@
   status: implemented
   provenance: ["ADR 558 §3; 72 pt per inch, 25.4 mm per inch; own code"]
   tests:
-    rust: ["data-conformance/tests/property.rs::units_convert_to_points__feat__data_bind_property"]
+    rust: ["data-conformance/tests/it/property.rs::units_convert_to_points__feat__data_bind_property"]
 
 - id: data.expr.units.cm
   name: CM
@@ -21,7 +21,7 @@
   status: implemented
   provenance: ["ADR 558 §3; own code"]
   tests:
-    rust: ["data-conformance/tests/property.rs::units_convert_to_points__feat__data_bind_property"]
+    rust: ["data-conformance/tests/it/property.rs::units_convert_to_points__feat__data_bind_property"]
 
 - id: data.expr.units.in
   name: IN
@@ -31,7 +31,7 @@
   status: implemented
   provenance: ["ADR 558 §3; own code"]
   tests:
-    rust: ["data-conformance/tests/property.rs::units_convert_to_points__feat__data_bind_property"]
+    rust: ["data-conformance/tests/it/property.rs::units_convert_to_points__feat__data_bind_property"]
 
 - id: data.expr.units.pt
   name: PT
@@ -41,7 +41,7 @@
   status: implemented
   provenance: ["ADR 558 §3; a text with its own unit converts (PT(\"3mm\")); own code"]
   tests:
-    rust: ["data-conformance/tests/property.rs::units_convert_to_points__feat__data_bind_property"]
+    rust: ["data-conformance/tests/it/property.rs::units_convert_to_points__feat__data_bind_property"]
 
 - id: data.expr.units.px
   name: PX
@@ -51,7 +51,7 @@
   status: implemented
   provenance: ["ADR 558 §3; CSS pixel = 1/96 in unless a dpi is given; own code"]
   tests:
-    rust: ["data-conformance/tests/property.rs::units_convert_to_points__feat__data_bind_property"]
+    rust: ["data-conformance/tests/it/property.rs::units_convert_to_points__feat__data_bind_property"]
 
 - id: data.expr.units.as
   name: AS
@@ -61,4 +61,4 @@
   status: implemented
   provenance: ["ADR 558 §3 explicit coercion: number, length, bool, text, color; own code"]
   tests:
-    rust: ["data-conformance/tests/property.rs::as_coerces_explicitly__feat__data_bind_property"]
+    rust: ["data-conformance/tests/it/property.rs::as_coerces_explicitly__feat__data_bind_property"]

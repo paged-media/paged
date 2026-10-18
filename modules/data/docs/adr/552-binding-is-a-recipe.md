@@ -39,7 +39,7 @@ Persistence is split in two.
 
 - `data-js/src/core.rs:182-207` — `DocumentPayload` and its fields
 - `data-js/src/core.rs:763-803` — `payload()` with redaction, and `from_payload()`
-- `data-conformance/tests/roundtrip.rs:82-108` — save, load, save again: lossless, no secrets
+- `data-conformance/tests/it/roundtrip.rs:82-108` — save, load, save again: lossless, no secrets
 - `packages/data-host-model/src/binding.ts:25-43` — the key and the `{v, data}` envelope
 - `packages/data-host-model/src/fields.ts:41`, `:53-67` — the tagged placeholder field
 - `packages/data-bundle/src/session.ts:1376-1426` — the refresh loop over `placeholders()`

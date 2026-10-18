@@ -32,7 +32,7 @@
 //! against those renders — edges at every 1/16 pixel, diagonals, a
 //! self-intersecting star, curves — and then checked against the
 //! renders of the private
-//! corpus (`image-conformance/tests/psd_vector_mask_corpus.rs`,
+//! corpus (`image-conformance/tests/it/psd_vector_mask_corpus.rs`,
 //! aggregates only):
 //!
 //! * a pixel is a grid of **17 × 15 point samples** (17 across, 15

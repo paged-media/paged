@@ -20,7 +20,7 @@
 #   - two footnotes (word/footnotes.xml, separator pseudo-notes included)
 #   - tab stops (a dot-leader ledger line) and keepNext on the headings
 #
-# Conformance: plugin-doc docx-conformance/tests/annual_report.rs lowers a
+# Conformance: plugin-doc docx-conformance/tests/it/annual_report.rs lowers a
 # verbatim copy of the output and asserts every tier above lands with zero
 # error-severity diagnostics.
 #

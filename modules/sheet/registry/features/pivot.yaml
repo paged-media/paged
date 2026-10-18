@@ -39,5 +39,5 @@
     - "spec §1.1.1 (pivot explicit non-goal), §1.1/§11 (publishing-first exclusion), §10.2 (preservation invariant)"
     - "ECMA-376 §18.10 (pivotTable), §18.10.1 (pivotCacheDefinition)"
   tests:
-    rust: ["sheet-conformance/tests/xlsx_roundtrip.rs::sheet_xlsx_preserve_unknown_parts"]
+    rust: ["sheet-conformance/tests/it/xlsx_roundtrip.rs::sheet_xlsx_preserve_unknown_parts"]
     corpus: ["corpus/xlsx-corpus/04-unknown-parts.xlsx"]

@@ -25,9 +25,9 @@
   "ledger_column_relative_to": "this directory (`dir`) \u2014 NOT the corpus directory, and not a bare basename",
   "basenames_unique": true,
   "mapping": "Bijective onto the 238 ledger rows carrying a png_oracle: all 238 names resolve, no pack file is unused, no basename collides. Verified 2026-08-05.",
-  "run": "PAGED_ABR_CORPUS=1 PAGED_ABR_PNG_DIR=references/abr-fixtures/mercator-png-oracle cargo test -p image-conformance --test abr_corpus -- --ignored --nocapture",
+  "run": "PAGED_ABR_CORPUS=1 PAGED_ABR_PNG_DIR=references/abr-fixtures/mercator-png-oracle cargo test -p image-conformance --test it -- --ignored --nocapture abr_corpus::",
   "verified": "2026-08-05: B3 ran for the first time and passed \u2014 238 of 238 tips byte-identical to the published alpha, 0 matching the inverted reading.",
-  "note_for_the_implementer": "B3's built-in default is <corpus>/png-oracle, which is not this directory's name, so without the environment variable the gate still skips. Reading `dir` from this block would make B3 run with no environment variable at all. That is a one-line change in tests/abr_corpus.rs, reported rather than made in this pass so the artifact change and the code change stay separately reviewable."
+  "note_for_the_implementer": "B3's built-in default is <corpus>/png-oracle, which is not this directory's name, so without the environment variable the gate still skips. Reading `dir` from this block would make B3 run with no environment variable at all. That is a one-line change in tests/it/abr_corpus.rs, reported rather than made in this pass so the artifact change and the code change stay separately reviewable."
  },
  "totals": {
   "files": 9,

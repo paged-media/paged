@@ -64,13 +64,13 @@
 //!
 //! Diagnostic tooling, in the tradition of idml-import's `dump_markers`
 //! / `dump_anchored`. The regression GUARDS live in
-//! `tests/nested_group_roundtrip.rs`, `tests/path_contour_roundtrip.rs`,
-//! `tests/story_precision.rs`, `tests/run_alignment_roundtrip.rs`,
-//! `tests/styles_group_duplication.rs`,
-//! `tests/master_spread_roundtrip.rs`,
-//! `tests/unmodelled_item_roundtrip.rs`,
-//! `tests/tint_sentinel_roundtrip.rs`,
-//! `tests/graphic_line_fill_roundtrip.rs` and `tests/label_roundtrip.rs`
+//! `tests/it/nested_group_roundtrip.rs`, `tests/it/path_contour_roundtrip.rs`,
+//! `tests/it/story_precision.rs`, `tests/it/run_alignment_roundtrip.rs`,
+//! `tests/it/styles_group_duplication.rs`,
+//! `tests/it/master_spread_roundtrip.rs`,
+//! `tests/it/unmodelled_item_roundtrip.rs`,
+//! `tests/it/tint_sentinel_roundtrip.rs`,
+//! `tests/it/graphic_line_fill_roundtrip.rs` and `tests/it/label_roundtrip.rs`
 //! (opt-in `PAGED_IDML_CORPUS` lanes); this is what you run to find the
 //! next one.
 //!

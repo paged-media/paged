@@ -30,7 +30,7 @@
 #   bash tools/indesign-export/spelling-and-spacing-probe.sh [OUT_DIR]
 #
 # The answers of InDesign 20.0.1 are pinned in
-# crates/paged-renderer/tests/text_glyph_level.rs (letter spacing,
+# crates/paged-renderer/tests/it/text_glyph_level.rs (letter spacing,
 # tracking at a line's end), pipeline/text_path.rs (type on a path) and
 # plugin-publish's importer tests (the spellings).
 set -euo pipefail

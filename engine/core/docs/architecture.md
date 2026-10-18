@@ -199,8 +199,8 @@ test fails when either differs from the code. `web/idml-viewer/api-catalog.json`
 by hand, and a test fails when an export is missing from it
 ([ADR 019](adr/019-capability-catalog-one-contract.md)). Two more tests pin what a surface
 cannot reach: the command line sends 32 of the 62 message kinds
-(`crates/paged-cli/tests/cli_surface.rs`), and one operation has no `paged.*` function
-(`crates/paged-script/tests/script_surface.rs`).
+(`crates/paged-cli/tests/it/cli_surface.rs`), and one operation has no `paged.*` function
+(`crates/paged-script/tests/it/script_surface.rs`).
 
 **Doors for plugin hosts.** A host can submit vector, text and image content to be drawn
 inside a frame (`SubmitSceneLayer`, [ADR 013](adr/013-in-frame-scenelayer.md)), stream

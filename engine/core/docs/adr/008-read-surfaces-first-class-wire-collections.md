@@ -8,7 +8,7 @@ design).**
 `:790`), `PreflightFinding` (`:247`), the `CollectionName` enum (`:1241`) and its
 `as_str`/`from_str` matching the TS `CollectionName` union in
 `editor: packages/catalog/src/types.ts` (`:1228`, `:1283`), the `RequestCollection { name }` request
-(`:496`); `crates/paged-canvas/tests/w3a0_read_surface.rs` (collections
+(`:496`); `crates/paged-canvas/tests/it/w3a0_read_surface.rs` (collections
 return live summaries over the wire); the panel-catalog design note
 (`documentCollection` / `documentMeta` read kinds;
 `editor: packages/shell/src/catalog/use-collection.ts`).

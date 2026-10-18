@@ -18,7 +18,7 @@
 
 // §9.1 — the session formatting locale. setLocale stores the choice and applies
 // it to the engine (immediately if up, else on boot). The locale-aware formatting
-// itself is proven in Rust (data-conformance/tests/locale.rs); here we prove the
+// itself is proven in Rust (data-conformance/tests/it/locale.rs); here we prove the
 // bundle threads the choice through to engine.set_locale.
 
 import { describe, expect, it, vi } from "vitest";

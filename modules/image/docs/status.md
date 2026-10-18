@@ -63,7 +63,7 @@ landed. How the parts fit is in
   anchor over all layers; a Move tool and nudges for the selected pixels or the layer.
 - **PSD.** A PSD whose layers the model reproduces opens as layers. Layers of the retained
   file can be renamed, removed and given another opacity before export. With no edit the
-  writer reproduces the input bytes (`image-psd/tests/roundtrip.rs`). A session with more
+  writer reproduces the input bytes (`image-psd/tests/it/roundtrip.rs`). A session with more
   than one layer exports as a layered PSD (pixel layers, masks, groups, opacity, blend,
   visibility, clipping); with adjustment layers it is flattened, and says so.
 - **Save-back and tiles.** "Apply to file" encodes the adjusted result as PSD, PNG or JPEG
@@ -90,7 +90,7 @@ landed. How the parts fit is in
   perceptual table, which is how the lane approximates Photoshop's default view of a CMYK
   document (relative colorimetric with black-point compensation, which moxcms lacks): within
   4 levels, mean 0.44, on Coated FOGRA39 ink patches, up to 23 levels on saturated greens
-  outside sRGB (`image-conformance/tests/psd_cmyk_photoshop.rs`). Without a profile, CMYK is
+  outside sRGB (`image-conformance/tests/it/psd_cmyk_photoshop.rs`). Without a profile, CMYK is
   converted by the plain ink formula, and the panel says so ("CMYK, converted to sRGB without a
   profile"); a converted CMYK source is stated as converted, not as managed RGB. The profile of
   an RGB PSD and of a PNG kept at 16 bits is not applied ("sRGB assumed"). There is no
@@ -149,7 +149,7 @@ landed. How the parts fit is in
   tier (scratch storage), which returns an error.
 - **Oracles.** Photoshop 2026's answers for 80 blend, adjustment and filter cases, seven
   layered RGB PSDs and six CMYK PSDs with Photoshop's own sRGB conversions are replayed in CI
-  (`image-conformance/tests/oracle_photoshop.rs`, `psd_composite_photoshop.rs`,
+  (`image-conformance/tests/it/oracle_photoshop.rs`, `psd_composite_photoshop.rs`,
   `psd_cmyk_photoshop.rs`): every case agrees, differs by a stated convention, or is declined
   on a measured disagreement; none is a defect. libvips's answers for the rows that name it are replayed by
   `oracle_vips.rs`; the GEGL-only rows have no runner.

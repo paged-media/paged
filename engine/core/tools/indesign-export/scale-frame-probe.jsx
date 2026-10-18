@@ -18,7 +18,7 @@
 
 // Ask InDesign which frame a handle scale works in (scale-frame-probe.sh
 // drives it). The engine's Scale gesture follows the answers; its tests
-// are crates/paged-canvas/tests/rotated_scale_gesture.rs.
+// are crates/paged-canvas/tests/it/rotated_scale_gesture.rs.
 //
 // 1. The orientation of a SELECTION's transformation bounding box. The
 //    box is not readable through the DOM, but its reference point is:

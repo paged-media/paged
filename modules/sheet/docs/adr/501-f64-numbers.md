@@ -49,7 +49,7 @@ an explicit opt-in flag" (`DECIMAL-SPIKE.md:19`).
 - `sheet-fn/src/families/agg.rs:100-104`, `sheet-calc/src/eval.rs:412-435` — a kernel
   calling the trait's methods on `F64`; the formula operators on plain `f64`
 - `sheet-format/src/general.rs:71-72` — `round_sig(x, 15)`
-- `sheet-conformance/tests/decimal_spike.rs:134`, `:187-201`, `:208-241` — the generic
+- `sheet-conformance/tests/it/decimal_spike.rs:134`, `:187-201`, `:208-241` — the generic
   `replay`, the f64 half that always runs, and the decimal half behind the feature
 
 ## Alternatives considered

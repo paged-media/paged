@@ -9,7 +9,7 @@
 #   bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/blend-modes.jsx
 #
 # Maintainer-only (macOS + Photoshop). CI never runs this: it replays the
-# committed fixtures through image-conformance/tests/oracle_photoshop.rs
+# committed fixtures through image-conformance/tests/it/oracle_photoshop.rs
 # and psd_composite_photoshop.rs.
 #
 # In order -- each step exists because of a trap (see README.md):

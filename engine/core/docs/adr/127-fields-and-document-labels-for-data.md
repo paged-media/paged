@@ -62,7 +62,7 @@ records into frames and tables. Running it against the engine at protocol 67 fou
 
 ## Evidence
 
-- `crates/paged-canvas/tests/field_boundary_typing.rs`:
+- `crates/paged-canvas/tests/it/field_boundary_typing.rs`:
   - typing at a field's start, at its end, and after a field that ends the story survives a
     refresh;
   - a field is placed at the caret, including inside a batch, with non-ASCII text and across
@@ -70,9 +70,9 @@ records into frames and tables. Running it against the engine at protocol 67 fou
   - undo of a delete restores a field and each run's size.
 
   The edge-typing and delete-undo cases fail with their fix reverted.
-- `crates/paged-canvas/tests/document_metadata.rs`: write, replace, delete, undo and redo; the
+- `crates/paged-canvas/tests/it/document_metadata.rs`: write, replace, delete, undo and redo; the
   gates; one undo step inside a batch; survival through a `.paged` save and reload.
-- `crates/paged-canvas/tests/data_relower_one_batch.rs`: a first lower is one batch and one undo
+- `crates/paged-canvas/tests/it/data_relower_one_batch.rs`: a first lower is one batch and one undo
   step. It contains a frame, text, a field, a table with cell content, the frame's label and the
   document label. An in-place re-lower keeps the frame and story, creates no second frame, and
   undoes to the previous content with its field intact. Both use only existing handles (C-15)

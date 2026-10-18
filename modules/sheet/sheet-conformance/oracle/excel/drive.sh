@@ -5,7 +5,7 @@
 #   then: python3 sheet-conformance/oracle/excel/read.py
 #
 # MAINTAINER tool (macOS + Microsoft Excel 16). CI never runs it; CI consumes
-# the committed recorded/*.tsv through tests/excel_oracle.rs.
+# the committed recorded/*.tsv through tests/it/excel_oracle.rs.
 #
 # For each build/<family>.xlsx (from generate.py): stage a COPY inside Excel's
 # own sandbox container, open it, `calculate full`, save as .xlsx, close, move

@@ -207,7 +207,7 @@ range ops, so it sits entirely on the contiguous side.
   ids are positional and renumber between two lowerings); it inverts a synth style's
   props back to `RunProps` and recovers a real `<w:rStyle>` via an import-built
   `token → styleId` map. Structure-preserving edits only (count mismatch → skipped).
-- **Verified end-to-end** (`docx-conformance/tests/save_back.rs`): import the memo
+- **Verified end-to-end** (`docx-conformance/tests/it/save_back.rs`): import the memo
   fixture, change one run's text + toggle bold off another, save, and assert the
   targets changed, every other part + untouched subtree byte-identical, and the
   edits survive a re-import round-trip. Plus `splice`/`rpr` unit tests (exact

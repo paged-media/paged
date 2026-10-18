@@ -4,7 +4,7 @@
 object-model contract (ADR 323, `contribute.objectModel` /
 `host.objects`). Code: `glue/src/object-model/`. Tests:
 `glue/test/object-model.spec.ts`, `glue/test/object-model-manifest.spec.ts`,
-`image-js/tests/object_schema.rs`.
+`image-js/tests/it/object_schema.rs`.
 
 **Problem.** An image frame's layer stack lived in the engine's single
 layer slot and the image panel. A data binding, a script, the Node CLI or
@@ -31,7 +31,7 @@ selects by name, for example
 
 ### The generated adjustment schema
 
-`image-js/tests/object_schema.rs` writes
+`image-js/tests/it/object_schema.rs` writes
 `glue/src/object-model/generated/image-schema.json` from two sources:
 
 - the kernels' `ParamsLayout`, through `image_kernels::lookup`;

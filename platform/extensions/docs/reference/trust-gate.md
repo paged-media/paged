@@ -63,7 +63,7 @@ Same-realm makes these benign-in-process and load-bearing-at-the-boundary:
   `apply_plugin_metadata` enforces key == `x-paged:<caller>` server-side when
   `caller` is set (test
   `evid_plugin_metadata_caller_gate_blocks_foreign_namespace` in
-  `core: crates/paged-mutate/tests/evidence_mutation_frame_props.rs`),
+  `core: crates/paged-mutate/tests/it/evidence_mutation_frame_props.rs`),
   and the SDK door names the caller (`setMetadata` →
   `caller: manifest.id`). `caller:None` keeps the prefix-only back-compat for
   the editor / `paged.script`. Published

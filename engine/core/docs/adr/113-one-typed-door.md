@@ -53,15 +53,15 @@ run inside it and write with the same operation vocabulary.
 - `crates/paged-canvas-wasm/src/lib.rs:29-35`, `:640-657` — the shell's remit; `handleMessage` forwards to the core and applies the effect
 - `crates/paged-canvas/src/lib.rs:21-23`, `crates/paged-canvas/src/channel.rs:53`, `crates/paged-canvas/src/resolve.rs:56` — "Pure Rust. No wasm-bindgen"; the two `typescript_custom_section` attributes
 - `crates/paged-cli/src/engine.rs:19-37`, `:76-92` — the rule, and `Session::send`
-- `crates/paged-cli/tests/cli_surface.rs:45-52`, `:63-65`, `:129`, `:263-266` — no `paged wire <json>`; the shrink-only list; the counts
-- `crates/paged-script/tests/script_surface.rs:54-63`, `crates/paged-script/src/lib.rs:1043-1390` — the script gate; the bridge's writes
+- `crates/paged-cli/tests/it/cli_surface.rs:45-52`, `:63-65`, `:129`, `:263-266` — no `paged wire <json>`; the shrink-only list; the counts
+- `crates/paged-script/tests/it/script_surface.rs:54-63`, `crates/paged-script/src/lib.rs:1043-1390` — the script gate; the bridge's writes
 - `crates/paged-run/src/main.rs:19-40`, `crates/paged-run/Cargo.toml:14-22` — the shim and why it stays
 - `crates/paged-cli/src/cli.rs:19-30`, `:317-327`, `crates/paged-introspect/src/catalog.rs:1344-1356` — the committed artifacts and their is-current tests
 
 ## Alternatives considered
 
 - A raw `paged wire <json>` subcommand: refused, because "a raw-JSON escape hatch beside a
-  raw-JSON session is duplication" (`crates/paged-cli/tests/cli_surface.rs:49-50`).
+  raw-JSON session is duplication" (`crates/paged-cli/tests/it/cli_surface.rs:49-50`).
 - Renaming `paged-run` or giving it arguments: three consumers start it by name, and
   "anything it accepted would be a second, divergent surface for the same protocol"
   (`crates/paged-run/src/main.rs:24-36`).
@@ -82,7 +82,7 @@ on the core, beside the dispatcher's `LoadDocument` arm
 
 The headless session does not accept wire messages. Its requests are twelve `cmd` forms
 (`crates/paged-cli/src/session.rs:101-179`) served through the same `Session`; the sentence at
-`crates/paged-cli/tests/cli_surface.rs:47-48` that it "already speaks the whole protocol" is
+`crates/paged-cli/tests/it/cli_surface.rs:47-48` that it "already speaks the whole protocol" is
 wider than that.
 
 ## Related

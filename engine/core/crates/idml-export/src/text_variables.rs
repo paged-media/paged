@@ -28,7 +28,7 @@
 //!   (a typed `…VariablePreference` child; a custom variable's value as
 //!   `<Properties><Contents type="string">`, measured on InDesign 20.0.1
 //!   packages and verified by InDesign 2025 reading it back — see
-//!   `tests/indesign_object_model.rs`), after the source's last `<TextVariable>` — or, with none,
+//!   `tests/it/indesign_object_model.rs`), after the source's last `<TextVariable>` — or, with none,
 //!   where InDesign puts them: after the preferences, before the tags,
 //!   layers and spread references;
 //! * a definition the model changed is rewritten whole;

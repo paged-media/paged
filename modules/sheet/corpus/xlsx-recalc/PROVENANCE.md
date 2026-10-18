@@ -1,7 +1,7 @@
 # `corpus/xlsx-recalc/` — recalc fixtures written by Excel
 
 28 workbooks, ~0.6 MB, read by
-`sheet-conformance/tests/xlsx_recalc_corpus.rs` (the CI half of the
+`sheet-conformance/tests/it/xlsx_recalc_corpus.rs` (the CI half of the
 recalc lane): every formula is recomputed by the engine and compared with
 the value Excel cached in the file.
 

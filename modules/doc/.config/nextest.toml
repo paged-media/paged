@@ -3,6 +3,6 @@
 # action — WITHOUT this profile that step produces no file and the plugin's
 # capability evidence never reaches the registry. Feature attribution rides the
 # `__feat__<feature id>` suffix on the test names in
-# docx-conformance/tests/feature_evidence.rs (extracted at join time).
+# docx-conformance/tests/it/feature_evidence.rs (extracted at join time).
 [profile.ci.junit]
 path = "junit.xml"

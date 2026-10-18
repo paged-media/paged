@@ -9,7 +9,7 @@ working implementation, a divergence corpus, and measured size/perf costs.
 - **Code:** `sheet-fn/src/num.rs` (the `Numeric` trait + the v1 `F64` impl),
   `sheet-fn/src/num_decimal.rs` (the spike's `Decimal` impl, behind the
   `exact-decimal` cargo feature).
-- **Evidence:** `sheet-conformance/tests/decimal_spike.rs` +
+- **Evidence:** `sheet-conformance/tests/it/decimal_spike.rs` +
   `corpus/decimal-corpus/divergence.golden.tsv`.
 - **Registry ruling:** `registry/features/decimal.yaml`
   (`sheet.calc.decimal.*`).

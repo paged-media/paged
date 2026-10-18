@@ -49,10 +49,10 @@ tolerance the kernel declares. GPU output is never compared with stored bytes.
 - `image-conformance/src/quantize.rs:33-55` — the f16 step distance and the NaN rule
 - `image-conformance/src/harness.rs:193-211` — `assert_within`; the ΔE arm is
   `unimplemented!`
-- `image-conformance/tests/gpu_module_kernels.rs:19-53` — the property checks for module
+- `image-conformance/tests/it/gpu_module_kernels.rs:19-53` — the property checks for module
   kernels
 - `image-gpu/src/test_support.rs:48-72` (at `f7d21e5`: `image-conformance/src/device.rs`),
-  `image-conformance/tests/gpu_module_kernels.rs:984-999` — no adapter means the test
+  `image-conformance/tests/it/gpu_module_kernels.rs:984-999` — no adapter means the test
   skips, with a printed notice
 - `.github/workflows/ci.yml:55-61` — the CI runner has no adapter
 

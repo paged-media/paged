@@ -12,7 +12,7 @@ Discovered 2026-06-05.
 
 > **STATUS 2026-06-06 — all four resolved; markers flipped.** Core
 > (protocol v27) fixes #1/#3/#4 and adds engine-side regression guards
-> (`paged-canvas/tests/emit_cache_undo.rs`, `paged-mutate`
+> (`paged-canvas/tests/it/emit_cache_undo.rs`, `paged-mutate`
 > `remove_node_undo_restores_item_transform`). #2 was diagnosed as a
 > FIXTURE issue, not an engine bug — see its section. The anchor specs
 > now assert the correct behaviour directly (no `test.fail` /
@@ -63,7 +63,7 @@ two forward text sandwiches waive only the undo-pixel check via
 **RESOLVED (core, 2026-06-06).** Exactly the likely fix: `undo()` /
 `redo()` clear both emit caches before the rebuild — for both log arms
 (frame inverses replay structural ops under the same caches). Engine
-guard: `paged-canvas/tests/emit_cache_undo.rs`
+guard: `paged-canvas/tests/it/emit_cache_undo.rs`
 `text_undo_restores_the_display_list`. Marker + waivers removed;
 AC-E2E-TEXT-5 asserts strictly.
 

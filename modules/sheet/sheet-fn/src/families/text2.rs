@@ -754,7 +754,7 @@ mod tests {
     use super::*;
 
     // FIXED/DOLLAR/NUMBERVALUE rounding & format-code construction are exercised
-    // end-to-end in sheet-conformance/tests/fn_text2.rs; these unit tests pin
+    // end-to-end in sheet-conformance/tests/it/fn_text2.rs; these unit tests pin
     // the private helpers' rulings directly.
 
     #[test]

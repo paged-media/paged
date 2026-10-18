@@ -26,7 +26,7 @@ Read first: [docs/concept.md](docs/concept.md), [docs/architecture.md](docs/arch
 moon run slide:test     # Rust (nextest + doctests), then wasm + vitest, from anywhere
 cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace  # the Rust tests without Moon
-PAGED_REQUIRE_CORPUS=1 cargo test -p pptx-import --test corpus -- --nocapture
+PAGED_REQUIRE_CORPUS=1 cargo test -p pptx-import --test it -- --nocapture corpus::
 scripts/sync-ooxml.sh --check
 ```
 

@@ -1,0 +1,65 @@
+//! The integration tests of `sheet-conformance`, built as one test binary: one link,
+//! and on macOS one first-run malware scan, instead of one per file.
+//! Each file in this directory is a module; nextest still runs every test in
+//! its own process. A new test file goes here and gets a `mod` line below.
+
+mod calc_graph;
+mod calc_order;
+mod calc_rewrite;
+mod chart;
+mod coerce;
+mod comments;
+mod condfmt;
+mod corpus_runner;
+mod data_validation;
+mod decimal_spike;
+mod defects;
+mod edit_fill;
+mod edit_ops;
+mod excel_oracle;
+mod extlink;
+mod fn_agg;
+mod fn_array;
+mod fn_database;
+mod fn_date;
+mod fn_date2;
+mod fn_fin;
+mod fn_info;
+mod fn_info2;
+mod fn_lambda;
+mod fn_logical;
+mod fn_logical2;
+mod fn_lookup;
+mod fn_lookup2;
+mod fn_math;
+mod fn_math2;
+mod fn_oracle_added;
+mod fn_stat;
+mod fn_t2misc;
+mod fn_text;
+mod fn_text2;
+mod fn_wave7;
+mod format;
+mod format2;
+mod format_prop;
+mod freeze;
+mod itercalc;
+mod js_surface;
+mod locale;
+mod lower;
+mod oracle_fixes;
+mod paginate;
+mod parser_roundtrip;
+mod real_xlsx_corpus;
+mod serial_date;
+mod special_forms;
+mod spill;
+mod spill_ref;
+mod spill_roundtrip;
+mod stylemap;
+mod tables;
+mod whole_refs;
+mod xlsx_recalc_corpus;
+mod xlsx_roundtrip;
+mod xlsx_roundtrip_prop;
+mod zip_container_bytes;

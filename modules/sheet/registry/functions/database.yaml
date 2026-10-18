@@ -7,7 +7,7 @@
 #
 # STATUS: implemented — the M2 database track wired the kernels (rust:
 # database::* under sheet-fn/src/families/database.rs) + tests
-# (sheet-conformance/tests/fn_database.rs::sheet_fn_database_*) and flipped these
+# (sheet-conformance/tests/it/fn_database.rs::sheet_fn_database_*) and flipped these
 # rows to implemented. Family token: `database`. Provenance: ECMA-376 §18.17.7
 # (database functions) + public Microsoft function docs.
 #
@@ -26,7 +26,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DSUM) — sum of the field over rows matching criteria"]
   tests:
-    rust: ["sheet-conformance/tests/fn_database.rs::sheet_fn_database_dsum"]
+    rust: ["sheet-conformance/tests/it/fn_database.rs::sheet_fn_database_dsum"]
     corpus: ["corpus/fn-corpus/database/dsum.golden.tsv"]
 
 - id: sheet.fn.database.dcount
@@ -39,7 +39,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DCOUNT) — count of NUMERIC field cells over matching rows"]
   tests:
-    rust: ["sheet-conformance/tests/fn_database.rs::sheet_fn_database_dcount"]
+    rust: ["sheet-conformance/tests/it/fn_database.rs::sheet_fn_database_dcount"]
     corpus: ["corpus/fn-corpus/database/dcount.golden.tsv"]
 
 - id: sheet.fn.database.dcounta
@@ -52,7 +52,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DCOUNTA) — count of NON-BLANK field cells over matching rows"]
   tests:
-    rust: ["sheet-conformance/tests/fn_database.rs::sheet_fn_database_dcounta"]
+    rust: ["sheet-conformance/tests/it/fn_database.rs::sheet_fn_database_dcounta"]
     corpus: ["corpus/fn-corpus/database/dcounta.golden.tsv"]
 
 - id: sheet.fn.database.dget
@@ -65,7 +65,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DGET) — the single field value of the one matching row; no match -> #VALUE!, multiple -> #NUM!"]
   tests:
-    rust: ["sheet-conformance/tests/fn_database.rs::sheet_fn_database_dget"]
+    rust: ["sheet-conformance/tests/it/fn_database.rs::sheet_fn_database_dget"]
     corpus: ["corpus/fn-corpus/database/dget.golden.tsv"]
 
 - id: sheet.fn.database.dmax
@@ -78,7 +78,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DMAX) — max of the field over matching rows"]
   tests:
-    rust: ["sheet-conformance/tests/fn_database.rs::sheet_fn_database_dmax"]
+    rust: ["sheet-conformance/tests/it/fn_database.rs::sheet_fn_database_dmax"]
     corpus: ["corpus/fn-corpus/database/dmax.golden.tsv"]
 
 - id: sheet.fn.database.dmin
@@ -91,7 +91,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DMIN) — min of the field over matching rows"]
   tests:
-    rust: ["sheet-conformance/tests/fn_database.rs::sheet_fn_database_dmin"]
+    rust: ["sheet-conformance/tests/it/fn_database.rs::sheet_fn_database_dmin"]
     corpus: ["corpus/fn-corpus/database/dmin.golden.tsv"]
 
 - id: sheet.fn.database.daverage
@@ -104,7 +104,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DAVERAGE) — arithmetic mean of the field over matching rows"]
   tests:
-    rust: ["sheet-conformance/tests/fn_database.rs::sheet_fn_database_daverage"]
+    rust: ["sheet-conformance/tests/it/fn_database.rs::sheet_fn_database_daverage"]
     corpus: ["corpus/fn-corpus/database/daverage.golden.tsv"]
 
 - id: sheet.fn.database.dproduct
@@ -117,7 +117,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DPRODUCT) — product of the field over matching rows"]
   tests:
-    rust: ["sheet-conformance/tests/fn_database.rs::sheet_fn_database_dproduct"]
+    rust: ["sheet-conformance/tests/it/fn_database.rs::sheet_fn_database_dproduct"]
     corpus: ["corpus/fn-corpus/database/dproduct.golden.tsv"]
 
 - id: sheet.fn.database.dstdev
@@ -130,7 +130,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DSTDEV) — SAMPLE standard deviation of the field over matching rows"]
   tests:
-    rust: ["sheet-conformance/tests/fn_database.rs::sheet_fn_database_dstdev"]
+    rust: ["sheet-conformance/tests/it/fn_database.rs::sheet_fn_database_dstdev"]
     corpus: ["corpus/fn-corpus/database/dstdev.golden.tsv"]
 
 - id: sheet.fn.database.dstdevp
@@ -143,7 +143,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DSTDEVP) — POPULATION standard deviation of the field over matching rows"]
   tests:
-    rust: ["sheet-conformance/tests/fn_database.rs::sheet_fn_database_dstdevp"]
+    rust: ["sheet-conformance/tests/it/fn_database.rs::sheet_fn_database_dstdevp"]
     corpus: ["corpus/fn-corpus/database/dstdevp.golden.tsv"]
 
 - id: sheet.fn.database.dvar
@@ -156,7 +156,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DVAR) — SAMPLE variance of the field over matching rows"]
   tests:
-    rust: ["sheet-conformance/tests/fn_database.rs::sheet_fn_database_dvar"]
+    rust: ["sheet-conformance/tests/it/fn_database.rs::sheet_fn_database_dvar"]
     corpus: ["corpus/fn-corpus/database/dvar.golden.tsv"]
 
 - id: sheet.fn.database.dvarp
@@ -169,5 +169,5 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DVARP) — POPULATION variance of the field over matching rows"]
   tests:
-    rust: ["sheet-conformance/tests/fn_database.rs::sheet_fn_database_dvarp"]
+    rust: ["sheet-conformance/tests/it/fn_database.rs::sheet_fn_database_dvarp"]
     corpus: ["corpus/fn-corpus/database/dvarp.golden.tsv"]

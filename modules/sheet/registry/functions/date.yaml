@@ -10,7 +10,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (NOW) — serial; display via number format"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date.rs::sheet_fn_date_now"]
+    rust: ["sheet-conformance/tests/it/fn_date.rs::sheet_fn_date_now"]
     corpus: []
 
 - id: sheet.fn.date.today
@@ -23,7 +23,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (TODAY)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date.rs::sheet_fn_date_today"]
+    rust: ["sheet-conformance/tests/it/fn_date.rs::sheet_fn_date_today"]
     corpus: []
 
 - id: sheet.fn.date.date
@@ -36,7 +36,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DATE) — y/m/d normalization per Excel"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date.rs::sheet_fn_date_date"]
+    rust: ["sheet-conformance/tests/it/fn_date.rs::sheet_fn_date_date"]
     corpus: ["corpus/fn-corpus/date/date.golden.tsv"]
 
 - id: sheet.fn.date.year
@@ -49,7 +49,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (YEAR)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date.rs::sheet_fn_date_year"]
+    rust: ["sheet-conformance/tests/it/fn_date.rs::sheet_fn_date_year"]
     corpus: ["corpus/fn-corpus/date/year.golden.tsv"]
 
 - id: sheet.fn.date.month
@@ -62,7 +62,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (MONTH)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date.rs::sheet_fn_date_month"]
+    rust: ["sheet-conformance/tests/it/fn_date.rs::sheet_fn_date_month"]
     corpus: ["corpus/fn-corpus/date/month.golden.tsv"]
 
 - id: sheet.fn.date.day
@@ -75,7 +75,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DAY)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date.rs::sheet_fn_date_day"]
+    rust: ["sheet-conformance/tests/it/fn_date.rs::sheet_fn_date_day"]
     corpus: ["corpus/fn-corpus/date/day.golden.tsv"]
 
 - id: sheet.fn.date.time
@@ -88,7 +88,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (TIME)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date.rs::sheet_fn_date_time"]
+    rust: ["sheet-conformance/tests/it/fn_date.rs::sheet_fn_date_time"]
     corpus: ["corpus/fn-corpus/date/time.golden.tsv"]
 
 - id: sheet.fn.date.hour
@@ -101,7 +101,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (HOUR)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date.rs::sheet_fn_date_hour"]
+    rust: ["sheet-conformance/tests/it/fn_date.rs::sheet_fn_date_hour"]
     corpus: ["corpus/fn-corpus/date/hour.golden.tsv"]
 
 - id: sheet.fn.date.minute
@@ -114,7 +114,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (MINUTE)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date.rs::sheet_fn_date_minute"]
+    rust: ["sheet-conformance/tests/it/fn_date.rs::sheet_fn_date_minute"]
     corpus: ["corpus/fn-corpus/date/minute.golden.tsv"]
 
 - id: sheet.fn.date.second
@@ -127,7 +127,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (SECOND)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date.rs::sheet_fn_date_second"]
+    rust: ["sheet-conformance/tests/it/fn_date.rs::sheet_fn_date_second"]
     corpus: ["corpus/fn-corpus/date/second.golden.tsv"]
 
 - id: sheet.fn.date.weekday
@@ -140,5 +140,5 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (WEEKDAY) — return-type modes 1/2/3 (T0)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date.rs::sheet_fn_date_weekday"]
+    rust: ["sheet-conformance/tests/it/fn_date.rs::sheet_fn_date_weekday"]
     corpus: ["corpus/fn-corpus/date/weekday.golden.tsv"]

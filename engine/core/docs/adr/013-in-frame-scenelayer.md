@@ -6,8 +6,8 @@ ACCEPTED (records the shipped C-1 contract, v0.39.0 vector / v0.40.0 text).**
 **Sources:** the internal gap register, entry C-1 (the gap, the shipped
 shape, the rejected alternatives); `crates/paged-compose/src/scene_layer.rs`
 (the IR + `emit_scene_layer` converter +
-font-aware text callback); `crates/paged-renderer/tests/scene_layer.rs` and
-`crates/paged-canvas/tests/scene_layer.rs` (the splice + protocol tests);
+font-aware text callback); `crates/paged-renderer/tests/it/scene_layer.rs` and
+`crates/paged-canvas/tests/it/scene_layer.rs` (the splice + protocol tests);
 the v39 `SubmitSceneLayer`/`ClearSceneLayer` channel + v40 `SceneItem::Text`
 variant (`crates/paged-canvas/src/channel.rs`); SDK `capabilities.rendering:
 ["sceneLayer"]` + `ContributionSurface.sceneLayer()`; editor

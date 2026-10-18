@@ -22,7 +22,7 @@
 // Drives gestures against an `ElementId::Group(_)` and asserts both
 // the group AND every member transform end up in the expected state.
 // Mirrors the Rust gesture-spine tests in
-// `crates/paged-canvas/tests/group_gesture.rs` but exercises the full
+// `crates/paged-canvas/tests/it/group_gesture.rs` but exercises the full
 // stack (worker channel + apply layer + scene mutation).
 //
 // AC-L-1: hit-test exposes the containing group chain so the panel

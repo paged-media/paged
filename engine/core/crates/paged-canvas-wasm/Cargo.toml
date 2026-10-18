@@ -31,7 +31,7 @@ paged-compose = { path = "../paged-compose" }
 # refcounted buffer the scene layer holds, without a copy.
 bytes = { workspace = true }
 
-# Native dispatch tests (tests/dispatch.rs) and the wasm lane
+# Native dispatch tests (tests/it/dispatch.rs) and the wasm lane
 # (tests/wasm.rs) drive the dispatch through the JSON envelope and build
 # their own one-page IDML fixture with `zip` so they don't depend on the
 # corpus being present.

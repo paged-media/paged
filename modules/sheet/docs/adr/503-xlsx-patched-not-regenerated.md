@@ -49,7 +49,7 @@ that holds an edited cell is encoded again from the model, and the calc chain is
   every other child is captured with a before/after anchor
 - `sheet-js/src/core.rs:482-513` — edited cells printed back, their sheets marked dirty
 - `sheet-xlsx/src/lib.rs:104-162` — the read-only models and why they are never re-emitted
-- `sheet-conformance/tests/xlsx_roundtrip.rs:222-239`, `:247-290`, `:337-381` — unknown
+- `sheet-conformance/tests/it/xlsx_roundtrip.rs:222-239`, `:247-290`, `:337-381` — unknown
   parts, a pivot cache, and zero-edit identity over six fixtures (`:34-41`)
 
 ## Alternatives considered
@@ -66,7 +66,7 @@ and a row that has a custom height and no cell is not written back (`sheet-xlsx/
 is not kept as read: the writer emits the model's `StyleId` (`sheet-xlsx/src/write.rs:305-309`), the id of an interned
 `CellStyle` (`sheet-xlsx/src/parts/styles.rs:285-304`, `sheet-core/src/intern.rs:43-51`), while `styles.xml` is written back
 unchanged. The two numbers agree only when entry 0 of `cellXfs` equals the default style and no two entries intern to the same
-`CellStyle`. The round-trip test compares cells by value only (`sheet-conformance/tests/xlsx_roundtrip.rs:472-478`).
+`CellStyle`. The round-trip test compares cells by value only (`sheet-conformance/tests/it/xlsx_roundtrip.rs:472-478`).
 
 Never written from the model, so they leave the file as they came in: styles, the workbook part and shared strings
 (`sheet-xlsx/src/write.rs:120-122`), conditional formats, data validations and comments. Every literal text cell of an edited sheet, loaded or new,
@@ -111,5 +111,5 @@ The decision stands. Three things a re-encoded worksheet writes changed.
 Consequences are still dropped. Evidence: `sheet-xlsx/src/parts/metadata.rs`,
 `sheet-xlsx/src/write.rs` (`ArrayForm`, `root_attrs`, `stored_error`),
 `sheet-js/src/core.rs` (`spill_areas`, `live_dynamic_arrays`, `read_unmarked_spill_caches`),
-`sheet-conformance/tests/spill_roundtrip.rs` and the Excel-saved
+`sheet-conformance/tests/it/spill_roundtrip.rs` and the Excel-saved
 `corpus/xlsx-dynamic/dynamic-arrays.excel.xlsx`.

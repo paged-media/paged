@@ -29,7 +29,7 @@
     parser's argument separator stays the locale-NEUTRAL ",").
   provenance: ["ECMA-376 §18.8.31 (number format codes)", "CLDR decimal/group separators", "spec §9, D-8"]
   tests:
-    rust: ["sheet-conformance/tests/locale.rs::sheet_format_locale_separators"]
+    rust: ["sheet-conformance/tests/it/locale.rs::sheet_format_locale_separators"]
     corpus: ["corpus/format-corpus/locale-de.golden.tsv"]
 
 - id: sheet.format.locale.month-day-names
@@ -42,7 +42,7 @@
     de calendar names are driven by the locale-de.golden.tsv corpus.
   provenance: ["ECMA-376 §18.8.31 (date-time codes)", "CLDR month/day names", "spec §9, D-8"]
   tests:
-    rust: ["sheet-conformance/tests/locale.rs::sheet_format_locale_month_day_names"]
+    rust: ["sheet-conformance/tests/it/locale.rs::sheet_format_locale_month_day_names"]
     corpus: ["corpus/format-corpus/locale-de.golden.tsv"]
 
 - id: sheet.format.locale.ampm
@@ -57,7 +57,7 @@
     German strings. datetime.rs reads loc.am/pm + loc.am_short/pm_short.
   provenance: ["ECMA-376 §18.8.31", "Excel de-DE AM/PM token behavior (public docs)", "spec §9, D-8"]
   tests:
-    rust: ["sheet-conformance/tests/locale.rs::sheet_format_locale_ampm"]
+    rust: ["sheet-conformance/tests/it/locale.rs::sheet_format_locale_ampm"]
 
 - id: sheet.format.locale.locale-from-workbook
   title: "Parse the workbook locale/codepage hint (xlsx) into CalcSettings.locale"
@@ -76,7 +76,7 @@
     previously-dropped LCID now selects the separators.
   provenance: ["ECMA-376 §18.8.30 ([$-locale] currency/locale modifier)", "OOXML has no <calcPr> locale (honest fallback)", "spec §9, §10, D-8"]
   tests:
-    rust: ["sheet-conformance/tests/locale.rs::sheet_format_locale_from_workbook"]
+    rust: ["sheet-conformance/tests/it/locale.rs::sheet_format_locale_from_workbook"]
 
 - id: sheet.format.locale.de-de-rendering
   title: "de-DE rendering pass — number + date output through the de locale (separators + names) end-to-end"
@@ -90,7 +90,7 @@
     locale-de.golden.tsv corpus covers separators + names + ampm.
   provenance: ["ECMA-376 §18.8.31", "spec §9, D-8"]
   tests:
-    rust: ["sheet-conformance/tests/locale.rs::sheet_format_locale_de_de_rendering"]
+    rust: ["sheet-conformance/tests/it/locale.rs::sheet_format_locale_de_de_rendering"]
     corpus: ["corpus/format-corpus/locale-de.golden.tsv"]
 
 - id: sheet.format.locale.number-parse-locale
@@ -108,7 +108,7 @@
     never the parser/lexer.
   provenance: ["ECMA-376 (NUMBERVALUE)", "OpenFormula coercion", "spec §9, D-8"]
   tests:
-    rust: ["sheet-conformance/tests/locale.rs::sheet_format_locale_number_parse"]
+    rust: ["sheet-conformance/tests/it/locale.rs::sheet_format_locale_number_parse"]
 
 - id: sheet.format.locale.latin-tier
   title: "Western-European Latin locales (fr-FR / es-ES / it-IT) — additive LocaleData table rows + LCID mapping"
@@ -128,7 +128,7 @@
     additive mirror with per-locale en/de regression guards in the test.
   provenance: ["ECMA-376 §18.8.31 (number/date codes)", "ECMA-376 §18.8.30 ([$-LCID])", "CLDR fr/es/it separators + month/day names", "spec §9, D-8 (extended)"]
   tests:
-    rust: ["sheet-conformance/tests/locale.rs::sheet_format_locale_latin_tier"]
+    rust: ["sheet-conformance/tests/it/locale.rs::sheet_format_locale_latin_tier"]
     corpus: ["corpus/format-corpus/locale-latin.golden.tsv"]
 
 - id: sheet.format.locale.cjk-followup

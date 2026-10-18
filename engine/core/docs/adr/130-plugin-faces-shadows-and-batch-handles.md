@@ -57,7 +57,7 @@ into native page items met five gaps in the engine's doors:
   and inserted ovals, polygons and lines.
 - **Script values.** The bridge reads a path as an anchor array or `{ anchors, subpathStarts? }`,
   an anchor as `[x, y]` or `{ anchor, left?, right? }`, and a dash array as its numbers. A gate
-  (`paged-script/tests/advertised_values_construct.rs`) requires, for every advertised path, a
+  (`paged-script/tests/it/advertised_values_construct.rs`) requires, for every advertised path, a
   script literal that the bridge converts and the apply layer accepts by type.
 - **Document labels in IDML.** The adapter reads and writes them as
   `<Document><Properties><Label><KeyValuePair/>`, the place an item's labels use. A designmap that
@@ -71,7 +71,7 @@ into native page items met five gaps in the engine's doors:
 - Shadows made on a pen path, an ellipse or a rule survive an IDML save and reopen.
 - The rule was compared with InDesign 20.0.1 on 2026-10-06 (the `line-shadows` fixture, gated in
   `corpus/generated/fidelity-thresholds.json` and pinned by
-  `crates/paged-renderer/tests/line_shadows_pipeline.rs`). InDesign casts a line's shadow from the
+  `crates/paged-renderer/tests/it/line_shadows_pipeline.rs`). InDesign casts a line's shadow from the
   stroke band, caps included, with the same offset, softness and opacity as the engine: shadow
   profiles across a 6 pt and a 1 pt line agree within 0.05 coverage. The same comparison showed
   that InDesign casts an unfilled polygon's shadow from its stroke, where the engine cast none,
@@ -80,7 +80,7 @@ into native page items met five gaps in the engine's doors:
   0.9864 to 0.051 / 1.88 / 0.9991.
 - The rectangular kinds were compared with InDesign 20.0.1 on 2026-10-07 (the `rect-shadows`
   fixture, gated the same way and pinned by
-  `crates/paged-renderer/tests/rect_shadows_pipeline.rs`). InDesign follows the same rule. A
+  `crates/paged-renderer/tests/it/rect_shadows_pipeline.rs`). InDesign follows the same rule. A
   stroke-only rectangle casts the shadow of its stroke band: across a 6 pt centred stroke the
   shadow peaks at the stroke's offset position (0.58 darkness, as for a 6 pt line), a 1 pt
   stroke casts a faint one (0.13), and an Outside stroke's band sits outside the frame edge.

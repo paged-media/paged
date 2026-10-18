@@ -14,7 +14,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (N) — number id, TRUE->1, FALSE->0, blank->0, text->0 (does NOT parse numeric text), error propagates"]
   tests:
-    rust: ["sheet-conformance/tests/fn_info2.rs::sheet_fn_info_n"]
+    rust: ["sheet-conformance/tests/it/fn_info2.rs::sheet_fn_info_n"]
     corpus: ["corpus/fn-corpus/info2/n.golden.tsv"]
 
 - id: sheet.fn.info.type
@@ -27,7 +27,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (TYPE) — 1 number, 2 text, 4 logical, 16 error, 64 array; inspects (error subject -> 16); blank -> 1"]
   tests:
-    rust: ["sheet-conformance/tests/fn_info2.rs::sheet_fn_info_type"]
+    rust: ["sheet-conformance/tests/it/fn_info2.rs::sheet_fn_info_type"]
     corpus: ["corpus/fn-corpus/info2/type.golden.tsv"]
 
 - id: sheet.fn.info.error-type
@@ -40,7 +40,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ERROR.TYPE) — 1..7 index (#NULL!..#N/A); non-error -> #N/A; #SPILL! ruled -> #N/A (no classic index)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_info2.rs::sheet_fn_info_error_type"]
+    rust: ["sheet-conformance/tests/it/fn_info2.rs::sheet_fn_info_error_type"]
     corpus: ["corpus/fn-corpus/info2/error_type.golden.tsv"]
 
 - id: sheet.fn.info.sheet
@@ -54,7 +54,7 @@
   status: implemented
   provenance: ["Microsoft SHEET (public docs) — 1-based sheet of a reference; current cell's sheet when absent. a non-reference non-text value is #N/A (Excel 16, recorded). T1 LIMITATION: sheet-name text arg unsupported (falls back to the current sheet)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_info2.rs::sheet_fn_info_sheet"]
+    rust: ["sheet-conformance/tests/it/fn_info2.rs::sheet_fn_info_sheet"]
     corpus: ["corpus/fn-corpus/info2/sheet.golden.tsv"]
 
 - id: sheet.fn.info.sheets
@@ -68,7 +68,7 @@
   status: implemented
   provenance: ["Microsoft SHEETS (public docs) — sheets a reference spans. T1 LIMITATION: always 1 (no 3-D range Arg shape; EvalCtx lacks a workbook sheet count)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_info2.rs::sheet_fn_info_sheets"]
+    rust: ["sheet-conformance/tests/it/fn_info2.rs::sheet_fn_info_sheets"]
     corpus: ["corpus/fn-corpus/info2/sheets.golden.tsv"]
 
 - id: sheet.fn.info.iseven
@@ -81,7 +81,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ISEVEN) — coerce to number, truncate toward zero, even parity; non-numeric text -> #VALUE!; error propagates"]
   tests:
-    rust: ["sheet-conformance/tests/fn_info2.rs::sheet_fn_info_iseven"]
+    rust: ["sheet-conformance/tests/it/fn_info2.rs::sheet_fn_info_iseven"]
     corpus: ["corpus/fn-corpus/info2/iseven.golden.tsv"]
 
 - id: sheet.fn.info.isodd
@@ -94,7 +94,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ISODD) — coerce to number, truncate toward zero, odd parity; non-numeric text -> #VALUE!; error propagates"]
   tests:
-    rust: ["sheet-conformance/tests/fn_info2.rs::sheet_fn_info_isodd"]
+    rust: ["sheet-conformance/tests/it/fn_info2.rs::sheet_fn_info_isodd"]
     corpus: ["corpus/fn-corpus/info2/isodd.golden.tsv"]
 
 # ISFORMULA — EVALUATOR SPECIAL FORM (M2 Phase A, `special_form: true`). It
@@ -115,7 +115,7 @@
   status: implemented
   provenance: ["Microsoft ISFORMULA (public docs) — true if the reference is a formula cell. EVALUATOR SPECIAL FORM (M2 Phase A): resolved to a CellRef in sheet-calc/eval.rs; returns Bool(cell.formula.is_some())."]
   tests:
-    rust: ["sheet-conformance/tests/special_forms.rs::sheet_fn_info_isformula"]
+    rust: ["sheet-conformance/tests/it/special_forms.rs::sheet_fn_info_isformula"]
     corpus: []
 
 # ISREF — EVALUATOR SPECIAL FORM (Wave 7). Whether the argument IS a reference
@@ -133,5 +133,5 @@
   status: implemented
   provenance: ["Microsoft ISREF (public docs) — TRUE if value refers to a reference (cell, range, range name, OFFSET/INDIRECT result); FALSE for a value, an array or an unresolvable INDIRECT"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lambda.rs::sheet_fn_info_isref"]
+    rust: ["sheet-conformance/tests/it/fn_lambda.rs::sheet_fn_info_isref"]
     corpus: ["corpus/fn-corpus/info2/isref.golden.tsv"]

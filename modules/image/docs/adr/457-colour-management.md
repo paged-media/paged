@@ -46,7 +46,7 @@ the display path and `MoxcmsEngine` for the print lane. lcms2 is a test oracle o
 - `image-js/src/ingest.rs:685-710` — the decode bridge: the CMYK cast, then the display
   transform for the other layouts
 - `image-js/src/display.rs:97-118`, `image-js/src/cmyk.rs:73-88` — the two calls, with fallbacks
-- `image-cms/tests/parity.rs:54`, `image-cms/tests/cmyk_lane.rs:70-76` — the bounds against
+- `image-cms/tests/it/parity.rs:54`, `image-cms/tests/it/cmyk_lane.rs:70-76` — the bounds against
   lcms2: 3/255 per channel for RGB; 20/255, and 8/255 away from paper white, for CMYK
 
 ## Alternatives considered
@@ -62,7 +62,7 @@ plugin takes no dependency on core, so the two lines are maintained separately.
 "Apply on GPU" is not built. `image-cms/src/lib.rs:25-29` and `:86-88` describe a baked
 3D LUT sampled by a `cms.apply` kernel as the production path. `bake_lut` and `GpuLut`
 exist, but `registry/kernels.yaml` has no `cms.apply` row and `bake_lut` is called only
-from `image-cms/tests/parity.rs`.
+from `image-cms/tests/it/parity.rs`.
 
 Not every source is managed. The PSD composite decode does not surface the file's profile
 and reports "sRGB assumed" (`image-js/src/ingest.rs:562-565`). A 16-bit RGBA PNG returns
@@ -97,7 +97,7 @@ The decision stands (one seam, moxcms for the print lane, CPU at decode). What c
   black-point compensation (read from the app by `scripts/photoshop/probes/cmyk-stacks.jsx`).
   moxcms has no BPC; relative colorimetric without it is 28 levels off on Coated FOGRA39 ink
   patches, perceptual is within 4 (mean 0.44) — as close as lcms2's own relcol + BPC. The
-  replay `image-conformance/tests/psd_cmyk_photoshop.rs` holds those numbers. A profile whose
+  replay `image-conformance/tests/it/psd_cmyk_photoshop.rs` holds those numbers. A profile whose
   perceptual table does not map black to the PCS black would break the approximation; real
   BPC is the fix when moxcms offers it.
 - **The treatment is reported as what it was.** `DisplayTreatment` gained `CmykConverted` and

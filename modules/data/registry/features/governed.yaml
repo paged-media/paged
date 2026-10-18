@@ -15,4 +15,4 @@
       "engine-neutral: tables + sidecar are DATA, no third-party engine linked (§3); data is authoritative (actual type wins); drift surfaced (undocumented/stale/type-mismatch), never papered over",
     ]
   tests:
-    rust: ["data-conformance/tests/governed.rs::data_governed_catalog"]
+    rust: ["data-conformance/tests/it/governed.rs::data_governed_catalog"]

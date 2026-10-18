@@ -1,5 +1,5 @@
 // The InDesign Data Merge oracle over the SHIPPED query path
-// (docs/design/oracles.md). data-conformance/tests/oracle.rs replays the
+// (docs/design/oracles.md). data-conformance/tests/it/oracle.rs replays the
 // recordings with every CSV field ingested as TEXT, the way Data Merge reads
 // it. Here the same CSVs go the way a user's file goes: registerCsv into the
 // shipped duckdb-wasm (type sniffing and all) → recordset.ts → the data-js

@@ -17,7 +17,7 @@
  */
 
 //! `wasm_bindgen_test` lane (audit B11). Covers what ONLY the wasm
-//! environment exercises and the native `tests/dispatch.rs` cannot:
+//! environment exercises and the native `tests/it/dispatch.rs` cannot:
 //!
 //! - `CanvasWorker` construction across the wasm-bindgen boundary.
 //! - `handleMessage` round-tripping a JSON envelope inside the wasm VM
@@ -45,7 +45,7 @@ use wasm_bindgen_test::*;
 
 /// One-page, one-story IDML built in-test (no corpus dependency), so the
 /// mutate / timing case has real content. Mirrors the native fixture in
-/// `tests/dispatch.rs`.
+/// `tests/it/dispatch.rs`.
 fn small_idml() -> Vec<u8> {
     let mut buf = Vec::new();
     {

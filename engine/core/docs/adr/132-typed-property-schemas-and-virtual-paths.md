@@ -112,7 +112,7 @@ in the `address` position as a deprecated alias (`VirtualTarget → Address` is 
   becomes its own undo step: the script then undoes in two steps around the UI edit. This is
   deliberate; merging across the foreign record would put the UI edit inside the script's
   step (`a_foreign_edit_before_the_hosts_commit_splits_the_script_around_it` in
-  `crates/paged-script/tests/host_bridge.rs` pins it).
+  `crates/paged-script/tests/it/host_bridge.rs` pins it).
 - **`null` clears a nullable row.** The wire's `text`, `enum` and `ref` payloads take `null`
   as the empty string, the engine's "no override", so `{ type, value: null }` clears exactly as
   `""` does, on `Set`, in Boa and on the command line. A required row still refuses it;
@@ -157,7 +157,7 @@ in the `address` position as a deprecated alias (`VirtualTarget → Address` is 
 
 - `catalog_json_artifact_is_current`, and the schema table is total over every `PropertyPath`
   and every virtual row.
-- `catalog_apply_parity` and `crates/paged-canvas/tests/virtual_paths.rs`: every schema row is
+- `catalog_apply_parity` and `crates/paged-canvas/tests/it/virtual_paths.rs`: every schema row is
   set through `Set`, read back through the read twin, and undone.
-- `crates/paged-script/tests/object_model_surface.rs` and `script_surface.rs` (Boa);
-  `crates/paged-cli/tests/object_surface.rs` and `cli_surface.rs` (command line).
+- `crates/paged-script/tests/it/object_model_surface.rs` and `script_surface.rs` (Boa);
+  `crates/paged-cli/tests/it/object_surface.rs` and `cli_surface.rs` (command line).

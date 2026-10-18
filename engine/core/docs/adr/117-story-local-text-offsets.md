@@ -45,12 +45,12 @@ characters over run text only, with no break character between paragraphs. For
 
 - `crates/paged-canvas/src/selection.rs:31-38` — the story-offset contract; `:40-52` affinity
 - `crates/paged-wire/src/lib.rs:540-558` — the two paragraph streams and the cell qualifier; `:561-573` why not one flat offset
-- `crates/paged-canvas/src/mutate.rs:749-764` — `locate` walks byte lengths; `:106-119`, `:212-225` the two refusals; `crates/paged-canvas/tests/utf8_offsets.rs:19-23` the test's statement of the rule
+- `crates/paged-canvas/src/mutate.rs:749-764` — `locate` walks byte lengths; `:106-119`, `:212-225` the two refusals; `crates/paged-canvas/tests/it/utf8_offsets.rs:19-23` the test's statement of the rule
 - `crates/paged-canvas/src/channel.rs:877-879`, `:895-899` — the queries share one byte address space with `HitResult.offset_within_story`
 - `crates/paged-mutate/src/operation.rs:92-101` — `StoryRange`: "Offsets are character indices in the story"; `crates/paged-mutate/src/apply/paragraph.rs:87-88` "the paragraph break is not a character here"
 - `crates/paged-wire/src/lib.rs:692-694` — `InsertHyperlink`: "contiguous char offsets, the `ApplyStyle` address space"; `crates/paged-mutate/src/apply/anchored_frame.rs:41-46` "deliberately NOT" the byte space
 - `crates/paged-canvas/src/model.rs:476-494`, `:3694-3712` — `StoryRange` and `ApplyStyle` offsets pass to the operation unconverted
-- `crates/paged-canvas/tests/apply_style_caret.rs:25-27` — a test written in the character space
+- `crates/paged-canvas/tests/it/apply_style_caret.rs:25-27` — a test written in the character space
 
 ## Alternatives considered
 

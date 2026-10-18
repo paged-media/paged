@@ -218,7 +218,7 @@ pnpm install && pnpm test && pnpm typecheck
 pnpm validate:manifest
 
 # Excel differential oracle — CI compares against the committed recordings:
-cargo test -p sheet-conformance --test excel_oracle
+cargo test -p sheet-conformance --test it excel_oracle::
 # re-record (maintainer, macOS + Excel): sheet-conformance/oracle/excel/
 #   python3 generate.py && ./drive.sh && python3 read.py
 ```

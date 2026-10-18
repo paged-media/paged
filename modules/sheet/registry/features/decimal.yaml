@@ -43,7 +43,7 @@
     and rust_decimal is absent from the default dependency tree.
   provenance: ["spec §3 (Excel-compat as ruling)", "spec §5.1 D-6", "spec §13 M3 (exact-decimal spike)"]
   tests:
-    rust: ["sheet-conformance/tests/decimal_spike.rs::sheet_calc_decimal_impl"]
+    rust: ["sheet-conformance/tests/it/decimal_spike.rs::sheet_calc_decimal_impl"]
 
 - id: sheet.calc.decimal.divergence-corpus
   title: "Divergence corpus — cases where f64 and decimal differ (e.g. 0.1+0.2) (SPIKE)"
@@ -62,7 +62,7 @@
     corpus. Divergence is also accumulation-ORDER dependent (left-fold from 0.0).
   provenance: ["spec §5.1 D-6", "IEEE-754 vs decimal arithmetic (public)"]
   tests:
-    rust: ["sheet-conformance/tests/decimal_spike.rs::sheet_calc_decimal_divergence"]
+    rust: ["sheet-conformance/tests/it/decimal_spike.rs::sheet_calc_decimal_divergence"]
     corpus: ["corpus/decimal-corpus/divergence.golden.tsv"]
 
 - id: sheet.calc.decimal.spike-report
@@ -84,5 +84,5 @@
     f64 remains v1 either way.
   provenance: ["spec §3 (Excel-compat is a ruling)", "spec §5.1 D-6", "spec §13 M3"]
   tests:
-    rust: ["sheet-conformance/tests/decimal_spike.rs::sheet_calc_decimal_spike_report"]
+    rust: ["sheet-conformance/tests/it/decimal_spike.rs::sheet_calc_decimal_spike_report"]
     corpus: ["DECIMAL-SPIKE.md"]

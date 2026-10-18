@@ -17,7 +17,7 @@ and `DESIGN.md` §4.6c; D-03 is the network consent door
 ([network-consent.md](network-consent.md)).
 **Consumes / proves:** the engine side is **already built + tested** —
 `DataSession::publish_provider(query, id, category) -> ProviderPublication`
-(`plugin-data: data-js/src/core.rs`; `plugin-data: data-conformance/tests/provider.rs`, 3 tests;
+(`plugin-data: data-js/src/core.rs`; `plugin-data: data-conformance/tests/it/provider.rs`, 3 tests;
 registry `data.provider.publish`, coverage-gated). What is missing is the *core SDK door*
 to register/discover it.
 

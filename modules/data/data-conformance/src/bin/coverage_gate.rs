@@ -312,16 +312,26 @@ fn attr(tag: &str, key: &str) -> Option<String> {
     )
 }
 
-/// The nextest binary id (JUnit `classname`) a pointer's file belongs to:
-/// `<crate>/tests/<stem>.rs` → `<crate>::<stem>`; anything under
-/// `<crate>/src/` → the crate's lib unit tests, `<crate>`.
-fn binary_for(rel_path: &str) -> Option<String> {
+/// The nextest binary id (JUnit `classname`) a pointer's file belongs to, and
+/// the module path its tests carry inside that binary:
+/// `<crate>/tests/<stem>.rs` → `<crate>::<stem>`; a module of a merged binary,
+/// `<crate>/tests/<bin>/<stem>.rs` → `<crate>::<bin>` with names `<stem>::…`
+/// (`<bin>/main.rs` is the binary's root); anything under `<crate>/src/` → the
+/// crate's lib unit tests, `<crate>`.
+fn binary_for(rel_path: &str) -> Option<(String, String)> {
     let (krate, rest) = rel_path.split_once('/')?;
     if let Some(file) = rest.strip_prefix("tests/") {
-        let stem = file.strip_suffix(".rs")?;
-        Some(format!("{krate}::{stem}"))
+        let file = file.strip_suffix(".rs")?;
+        match file.split_once('/') {
+            None => Some((format!("{krate}::{file}"), String::new())),
+            Some((bin, "main")) => Some((format!("{krate}::{bin}"), String::new())),
+            Some((bin, module)) => Some((
+                format!("{krate}::{bin}"),
+                format!("{}::", module.replace('/', "::")),
+            )),
+        }
     } else if rest.starts_with("src/") {
-        Some(krate.to_string())
+        Some((krate.to_string(), String::new()))
     } else {
         None
     }
@@ -331,7 +341,7 @@ fn check_rust_pointer_ran(report: &JunitReport, ptr: &str, push: &mut impl FnMut
     let Some((rel_path, prefix)) = ptr.split_once("::") else {
         return; // malformed pointers are reported by check_rust_pointer
     };
-    let Some(binary) = binary_for(rel_path) else {
+    let Some((binary, module)) = binary_for(rel_path) else {
         push(format!(
             "rust pointer `{ptr}` — `{rel_path}` is neither under src/ nor tests/ (cannot match it to a test run)"
         ));
@@ -341,7 +351,9 @@ fn check_rust_pointer_ran(report: &JunitReport, ptr: &str, push: &mut impl FnMut
         .cases
         .iter()
         .filter(|c| {
-            c.classname == binary && c.name.rsplit("::").next().unwrap_or("").starts_with(prefix)
+            c.classname == binary
+                && c.name.starts_with(&module)
+                && c.name.rsplit("::").next().unwrap_or("").starts_with(prefix)
         })
         .collect();
     if matching.is_empty() {
@@ -467,4 +479,31 @@ fn repo_root() -> PathBuf {
         .parent()
         .expect("CARGO_MANIFEST_DIR has a parent (the repo root)")
         .to_path_buf()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::binary_for;
+
+    #[test]
+    fn pointers_map_to_their_nextest_binary_and_module() {
+        let at = binary_for;
+        assert_eq!(
+            at("data-conformance/tests/perf.rs"),
+            Some(("data-conformance::perf".into(), String::new()))
+        );
+        assert_eq!(
+            at("data-conformance/tests/it/property.rs"),
+            Some(("data-conformance::it".into(), "property::".into()))
+        );
+        assert_eq!(
+            at("data-conformance/tests/it/main.rs"),
+            Some(("data-conformance::it".into(), String::new()))
+        );
+        assert_eq!(
+            at("data-expr/src/eval.rs"),
+            Some(("data-expr".into(), String::new()))
+        );
+        assert_eq!(at("data-expr/benches/eval.rs"), None);
+    }
 }

@@ -52,7 +52,7 @@ Layout is one function over the whole document, and the batch is the unit that p
 - `crates/paged-canvas/src/model.rs:2310-2368` — `apply_mixed_batch`: atomicity, one rebuild, a nested batch leaves the debt to the outer one
 - `crates/paged-canvas/src/model.rs:3222-3240` — a batch that translates whole collapses to one `Operation::Batch`
 - `crates/paged-mutate/src/apply/mod.rs:79-101`, `crates/paged-mutate/src/apply/layer.rs:2278-2318` — derived indices rebuilt once per top-level `apply`, with the measurement; `apply_batch` reverts applied children when one fails
-- `crates/paged-canvas/tests/batch_composition.rs:888-904` — the test that a four-child mixed batch builds once
+- `crates/paged-canvas/tests/it/batch_composition.rs:888-904` — the test that a four-child mixed batch builds once
 
 ## Alternatives considered
 
