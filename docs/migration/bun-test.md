@@ -51,3 +51,4 @@ package. It is gated on
 | slide-bundle | 59 | 59 | yes | `vi.waitFor` → test kit (2 files) |
 | doc-bundle | 41 | 41 | yes | codemod only (`it.fails` → `it.failing`) |
 | doc-host-model | 44 | 44 | yes | codemod only |
+| image glue | 343 | 343 | yes | 3 `vi.mock` factories with `importOriginal` → `importActual` + `mock.module`; `waitFor` (+ `clock: vi` under fake timers) and `advanceTimersByTimeAsync` → test kit |

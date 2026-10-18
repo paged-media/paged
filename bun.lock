@@ -374,11 +374,12 @@
         "@paged-media/image-manifest": "workspace:*",
         "@paged-media/plugin-api": "workspace:*",
         "@paged-media/plugin-sdk": "workspace:*",
+        "@paged-media/test-kit": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@types/react": "catalog:",
         "react": "catalog:",
         "typescript": "catalog:",
-        "vitest": "catalog:",
       },
       "peerDependencies": {
         "@paged-media/plugin-api": "workspace:*",

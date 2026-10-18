@@ -15,7 +15,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import { createHeadlessHost, defineBundle, type HeadlessHost } from "@paged-media/plugin-sdk";
 import type { BundleHost, PluginManifest } from "@paged-media/plugin-api";
 

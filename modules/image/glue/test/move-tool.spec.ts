@@ -19,7 +19,7 @@
 // The raster Move tool's decisions: what moves (the selection or the
 // layer), whether Alt copies, and the arrow-key steps.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { movePixels, nudgeFor } from "../src/move-tool";
 import type { ImageSession } from "../src/session";

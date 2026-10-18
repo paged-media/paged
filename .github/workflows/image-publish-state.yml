@@ -13,9 +13,9 @@
 #
 # MONOREPO (step A3): ported from paged-media/plugin-image
 # .github/workflows/publish-state.yml. It publishes evidence ARTIFACTS only
-# (nothing to npm), so it stays enabled. The vitest job's sibling
+# (nothing to npm), so it stays enabled. The unit-test job's sibling
 # paged-media/plugin-sdk checkout is gone: only the manifest package's
-# scripts read the plugin-cli, and this job runs `vitest` directly.
+# scripts read the plugin-cli, and this job runs `bun test` directly.
 name: image / publish-state
 
 on:
@@ -40,11 +40,12 @@ defaults:
     working-directory: modules/image
 
 jobs:
-  # TS unit evidence: vitest with the JUnit reporter, per workspace package,
+  # TS unit evidence: bun test with the JUnit reporter, per workspace package,
+  # rewritten into the vitest shape (tooling/js/bun-junit.mjs) and
   # concatenated into one report. (Pre-monorepo: nested plugin-image/ +
   # plugin-sdk/ checkouts; now one checkout, run in modules/image.)
   vitest:
-    name: vitest evidence
+    name: bun test evidence
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,17 +58,16 @@ jobs:
         working-directory: .
         run: bun install --frozen-lockfile
 
-      - name: vitest (junit per package; red results still publish)
+      - name: bun test (junit per package; red results still publish)
         # The state matrix wants every red row, so don't let a failing
-        # test abort before the junit emits (|| true). --no-bail keeps a
-        # failing package from stopping the rest. Only the glue package
-        # runs vitest (manifest's "test" is a manifest validate), so only
-        # glue's test script gets the reporter flags.
+        # test abort before the junit emits (|| true). Only the glue
+        # package runs bun test (manifest's "test" is a manifest validate),
+        # so only glue's test script gets the reporter flags.
         run: |
           set -uo pipefail
           bun run --filter './glue' test \
-            --reporter=junit --outputFile=junit.xml || true
-          cat ./*/junit.xml > junit-all.xml 2>/dev/null || true
+            --reporter=junit --reporter-outfile=junit.bun.xml || true
+          bun ../../tooling/js/bun-junit.mjs --out junit-all.xml ./*/junit.bun.xml || true
           [ -s junit-all.xml ] # at least one package must have produced results
         env:
           # wasm-exec.spec.ts must run against the committed artifact
@@ -85,7 +85,7 @@ jobs:
       # and let state PULL it (private state can read a public repo's artifacts).
       # Consumer: state/.github/workflows/siblings-pull.yml (source=plugin-image,
       # suite=vitest, format=nextest-junit).
-      - name: upload vitest results artifact
+      - name: upload JUnit results artifact
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:

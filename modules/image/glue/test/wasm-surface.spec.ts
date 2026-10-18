@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -77,7 +77,7 @@ function exportedByWasm(): string[] {
 
 // The artifact is gitignored and built by scripts/build-wasm.sh, so it
 // is present locally and in the publish lane but not in the plain
-// vitest lane. Skip LOUDLY rather than fail: a red that only means
+// unit-test lane. Skip LOUDLY rather than fail: a red that only means
 // "you did not build the wasm" trains people to ignore this file.
 const built = existsSync(WASM_DTS);
 const gate = built ? describe : describe.skip;
