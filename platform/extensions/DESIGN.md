@@ -2474,17 +2474,21 @@ pathfinder, styles, swatches, sections, guides …) were reachable from
 They are now TYPED COMMANDS beside the plugins' own:
 
 - **Generated, not hand-listed.** `scripts/gen-core-commands.mjs` reads the
-  vendored `wire.d.ts` with the TypeScript compiler API and writes
-  `core-commands.generated.ts`: one row per `Mutation` arm, its args as a
-  `ValueType` struct (`string` → `text`, `number`, `boolean` → `bool`,
-  `[n,n]` / 4-tuple / 6-tuple → `point` / `bounds` / `transform`, `T[]` →
-  `list`, a string-literal union → `enum`, an interface → an open struct
-  with `shape`, `ElementId` → `ref` to `item`, any other union
-  (`FieldKind`, `ZOrderTarget`, `Value`) → an OPAQUE struct core
-  validates; `?` → optional; a required `X | null` → optional, sent as
-  null). Id positions (`storyId`, `tableId`, `page`, `frameId`, …) are
-  `ref`s whose `to` names the ADR 131 kind. `--check` and a spec fail when
-  the file drifts from the wire.
+  engine's JSON Schema of the wire
+  (`engine/core/crates/paged-wire/schema/mutation.schema.json`, engine
+  ADR 187; until 2026-10-18 it parsed the vendored `wire.d.ts` with the
+  TypeScript compiler API) and writes `core-commands.generated.ts`: one row
+  per `Mutation` arm, its args as a `ValueType` struct (`string` → `text`,
+  integer / number → `number`, `boolean` → `bool`, a numeric tuple of 2 / 4
+  / 6 → `point` / `bounds` / `transform`, any other array → `list`, a string
+  enum → `enum`, a named struct → an open struct with `shape`, `ElementId` →
+  `ref` to `item`, any other union (`FieldKind`, `ZOrderTarget`, `Value`) →
+  an OPAQUE struct core validates; not required → optional; an `Option` the
+  TypeScript declares `X | null` without `?` → optional, sent as null). Id
+  positions (`storyId`, `tableId`, `page`, `frameId`, …) are `ref`s whose
+  `to` names the ADR 131 kind. `--check` and a spec fail when the file
+  drifts from the schema; the engine's tests fail when the schema drifts
+  from the Rust types or from what tsify declares in `wire.d.ts`.
 - **The guard.** `object-model-commands.spec.ts` fails a catalog
   `operations` entry that is neither a command nor in
   `CORE_COMMAND_EXCLUSIONS` with a reason. Excluded (8): `batch` (that is
