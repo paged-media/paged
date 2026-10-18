@@ -113,14 +113,16 @@ impl DoStore {
         k
     }
 
-    /// The R2 bytes for a blob, sealed.
+    /// The R2 bytes for a blob: deflated when that is smaller, then sealed.
     pub fn seal(&self, hash: &Hash, bytes: &[u8]) -> Vec<u8> {
-        crate::crypto::seal(&self.key(), &hash.0, bytes)
+        crate::crypto::seal(&self.key(), &hash.0, &paged_repo::keep_bytes(bytes))
     }
 
-    /// Sealed bytes from R2, opened; None without the key (after erasure).
+    /// Sealed bytes from R2, opened and inflated; None without the key (after
+    /// erasure) or when they do not open.
     pub fn unseal(&self, hash: &Hash, stored: &[u8]) -> Option<Vec<u8>> {
-        crate::crypto::open(&self.meta("key")?, &hash.0, stored)
+        let kept = crate::crypto::open(&self.meta("key")?, &hash.0, stored)?;
+        paged_repo::kept_bytes(&kept, hash).ok()
     }
 
     /// The kind and size of an object whose bytes are in R2, if `hash` is one.

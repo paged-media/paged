@@ -111,7 +111,16 @@ fn a_repository_is_sealed_collected_snapshotted_and_erased() {
     let plain = repo.store.get(&hash).unwrap();
     let raw = r2_raw(&url, &keys[0]);
     assert_ne!(raw, plain);
-    assert_eq!(raw.len(), plain.len() + 16, "AES-GCM: the bytes and a tag");
+    assert!(
+        raw.windows(64).all(|w| !plain.starts_with(w)),
+        "no plaintext run survives"
+    );
+    assert!(
+        raw.len() < plain.len(),
+        "deflated before it was sealed ({} < {})",
+        raw.len(),
+        plain.len()
+    );
     let served = remote.file("main", false).unwrap();
     assert_eq!(
         served,
