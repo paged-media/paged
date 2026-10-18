@@ -21,7 +21,7 @@
 // image has nothing to undo, the hooks must DECLINE so the keystroke
 // falls through to the document — an image frame must never swallow it.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { loadBundle } from "@paged-media/plugin-sdk";
 

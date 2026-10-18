@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import type { PluginManifest, ToolContribution } from "@paged-media/plugin-api";
 import type { ElementGeometryItem, Mutation } from "@paged-media/plugin-api";

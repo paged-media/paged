@@ -29,7 +29,7 @@
 //     name→false, {bind,negate}→inverse — and reacts to bindings;
 //   · the seam fallback when no host renderer is injected.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import type {
   PluginManifest,

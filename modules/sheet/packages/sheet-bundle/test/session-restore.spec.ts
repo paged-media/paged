@@ -22,7 +22,7 @@
 // startup cost zero when there's nothing to restore). The full persist →
 // reload round-trip rides the engine-real wasm lane (needs the artifact).
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
@@ -39,6 +39,8 @@ function fakeHost(opts: {
   const partWrite = vi.fn(async () => {});
   const host = {
     log: { debug() {}, info() {}, warn() {}, error() {} },
+    // The document doors every host has; nothing here fires them.
+    document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
     supports: (f: string) =>
       (f === "storage.blob@1" && opts.blobSupported) ||
       (f === "storage.parts@1" && (opts.partsSupported ?? false)),

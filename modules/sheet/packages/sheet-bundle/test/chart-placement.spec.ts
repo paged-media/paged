@@ -23,7 +23,7 @@
 // selection sat near the foot (the real-engine case is in
 // lower-chart-fit.spec.ts).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { chartBoxOnPage, type ChartPage } from "../src/lower-chart";
 import { selectionIsInView } from "../src/lower";

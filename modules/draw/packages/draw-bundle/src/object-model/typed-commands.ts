@@ -60,7 +60,7 @@ import type {
   SpiralParams,
 } from "../commands/insert-shapes";
 import { SYMBOL_REGISTRATIONS } from "../commands/symbols";
-import { FLIP_PATH_EFFECTS, PATH_TYPE_ALIGNMENTS } from "../commands/v58-wire";
+import { FLIP_PATH_EFFECTS, PATH_TYPE_ALIGNMENTS } from "../commands/text-on-path";
 import type { TraceOptions } from "../trace-engine";
 import { BOOL, COLOR, DEG, INT, LEN, NUM, REFS, TEXT, addressOf, bareIdOf, enumOf } from "./shared";
 

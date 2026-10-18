@@ -25,7 +25,7 @@
 // unsaved. Rendered with react-test-renderer against a minimal host.
 
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import { DEFAULT_SOURCE, envelopeFor } from "@paged-media/web-model";
@@ -57,6 +57,9 @@ function panelHost() {
       getMetadata: async (id: ElementId) => labels.get(String((id as { id: unknown }).id)) ?? null,
       setMetadata: async () => ({ applied: true, createdId: null, pageIds: [] }),
       collection: async () => [],
+      // The panel sizes its preview from the frame's geometry; no geometry
+      // here, so it keeps its default size.
+      elementGeometry: async () => [],
       onDidChange: (l: (e: { kind: string }) => void) => {
         docListeners.add(l);
         return { dispose: () => docListeners.delete(l) };

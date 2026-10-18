@@ -37,7 +37,7 @@
 //     (ingestColumnBatch), then the same result delivered AGAIN (a refresh
 //     whose data did not change: recognised, nothing decoded).
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { ingestColumnBatch } from "../../src/engine";
 import { bootCountedDuck, bootCountedEngine, HAVE_DUCK, HAVE_ENGINE } from "./harness";
@@ -45,7 +45,7 @@ import { bootCountedDuck, bootCountedEngine, HAVE_DUCK, HAVE_ENGINE } from "./ha
 const RUN = process.env.PERF_DUCKDB_1M === "1";
 const ROWS = Number(process.env.PERF_DUCKDB_ROWS ?? 1_000_000);
 
-vi.setConfig({ testTimeout: 600_000 });
+setDefaultTimeout(600_000);
 
 function csv(n: number): string {
   const parts: string[] = ["sku,name,price,cat\n"];

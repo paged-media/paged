@@ -864,7 +864,7 @@ test.describe("plugin surface · paged.sheet", () => {
     ).toBeGreaterThanOrEqual(10);
     expect(
       reach.menuItems.filter((p) => p === "Object/Insert spreadsheet…"),
-      "the insert verb appears exactly once — the host's courtesy stood down",
+      "the insert verb appears exactly once",
     ).toEqual(["Object/Insert spreadsheet…"]);
     expect(
       reach.menuItems.some((p) => p === "Sheet/Place selection on page"),

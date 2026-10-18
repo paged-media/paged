@@ -28,7 +28,7 @@
 // default fill, else Color/Black — `handlers/brush.ts`). The last case
 // pins that it is visible in a File ▸ New document as it is.
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import type {
   BundleHost,

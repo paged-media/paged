@@ -27,7 +27,7 @@
 // command's engine behaviour here is the REAL weld, because the booted
 // engine has the ops.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type {
   CommandContribution,

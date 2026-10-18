@@ -46,10 +46,10 @@ import type {
   ValueType,
 } from "@paged-media/plugin-api";
 
-import type { CoreObjects } from "./core-objects";
-import { CORE_WIRE_OPS, type CoreWireOpRow } from "./core-commands.generated";
-import { fromElementId, parseAddress, parseSelector } from "./object-address";
-import { validateValue } from "./object-schema";
+import type { CoreObjects } from "./core-objects.js";
+import { CORE_WIRE_OPS, type CoreWireOpRow } from "./core-commands.generated.js";
+import { formatAddress, fromElementId, parseAddress, parseSelector } from "./object-address.js";
+import { validateValue } from "./object-schema.js";
 
 /** The command id prefix: `core.insertTable`. */
 export const CORE_COMMAND_PREFIX = "core.";
@@ -168,7 +168,7 @@ export interface CoreCommandPlan {
 export interface ResolveContext {
   /** Positions of every minted entry, by its handle. */
   minted: NonNullable<Extract<MutationOutcome, { applied: true }>["minted"]>;
-  /** Pages / layers that are new after the commit, shared out in op order. */
+  /** Pages / layers the commit created, shared out in op order. */
   take(list: "page" | "layer"): Promise<string | null>;
 }
 
@@ -206,9 +206,11 @@ export interface CoreCommands {
   list(): ObjectCommandInfo[];
   /** Plan one command. `handles` are the batch's live `$h:` names. */
   plan(id: string, args: unknown, handles: ReadonlySet<string>, autoHandle: () => string): Promise<CoreCommandPlan>;
-  /** Snapshot taken before the commit (pages / layers), when a planned
-   *  command needs to diff them. */
-  snapshot(plans: readonly CoreCommandPlan[]): Promise<() => Promise<ResolveContext["take"]>>;
+  /** Taken before the commit. Its answer, given the commit's outcome,
+   *  shares out what the commands created that `minted` does not name:
+   *  the outcome's `createdPages`, and the layers that are new since the
+   *  snapshot. */
+  snapshot(plans: readonly CoreCommandPlan[]): Promise<(outcome: MutationOutcome) => Promise<ResolveContext["take"]>>;
 }
 
 export function createCoreCommands(core: CoreObjects): CoreCommands {
@@ -346,16 +348,16 @@ export function createCoreCommands(core: CoreObjects): CoreCommands {
     },
 
     async snapshot(plans) {
-      const need = new Set<"page" | "layer">();
-      for (const p of plans) {
-        const c = CORE_COMMAND_CREATES[p.op];
-        if (c?.by === "page" || c?.by === "layer") need.add(c.by);
-      }
-      const before = new Map<"page" | "layer", Set<string>>();
-      for (const k of need) before.set(k, new Set(await list(k)));
-      return async () => {
+      // Pages come off the outcome (`createdPages`, in creation order, so
+      // each command takes the page it made). Layers are still diffed: the
+      // engine does not report the layers a mutation created.
+      const layers = plans.some((p) => CORE_COMMAND_CREATES[p.op]?.by === "layer");
+      const before = layers ? new Set(await list("layer")) : null;
+      return async (outcome) => {
         const fresh = new Map<"page" | "layer", string[]>();
-        for (const k of need) fresh.set(k, (await list(k)).filter((a) => !before.get(k)!.has(a)));
+        const pages = outcome.applied ? (outcome.createdPages ?? []) : [];
+        fresh.set("page", pages.map((id) => formatAddress({ kind: "page", id })));
+        if (before) fresh.set("layer", (await list("layer")).filter((a) => !before.has(a)));
         return async (k) => fresh.get(k)?.shift() ?? null;
       };
     },

@@ -36,7 +36,7 @@
 //   5. the mutations: the seven v57 ops ride `document.mutate` at their
 //      exact wire shapes (type-level assignability + recorded payload).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type {
   ElementId,

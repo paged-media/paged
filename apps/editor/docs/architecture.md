@@ -32,10 +32,12 @@ manifests and imports: `canvas → tools → shell → catalog → client →
   `apps/canvas` does. `packages/tools` imports path geometry from `@paged-media/draw`.
 - `client` is not the only importer of the engine package: the worker loads the wasm.
 
-Four import boundaries are ESLint errors with their own self-test: worker code may import
+Four import boundaries are lint errors with their own self-test: worker code may import
 neither React nor the shell; `packages/client` may not import React; nothing outside the
 shell deep-imports its internals; the gesture-spine deep paths are reserved for `tools` and
-`client` ([ADR 206](adr/206-package-layering-lint-zones.md)). So code that both the worker
+`client` ([ADR 206](adr/206-package-layering-lint-zones.md)). They are overrides in the
+repository's one lint config (`/bunfig.toml`, run by `bun lint`) and cases in
+`/tooling/js/lint-selftest.mjs` (PM-0003). So code that both the worker
 and the React side need, such as the journal, lives in `client`.
 
 ## The engine boundary
@@ -176,10 +178,11 @@ application on the main thread; no bundle is discovered or loaded from a URL at 
   during activation is reported to the journal and the Problems panel, and the rest load.
 - The worker backend resolves a bundle's declared module path only from a table the editor
   ships; the table has one entry, the image plugin's decode worker.
-- One bundle is not consumed as a pinned package: the root `package.json` overrides
-  `@paged-media/doc` with a `link:` to a sibling checkout of plugin-doc, which `tests.yml` and
-  `showcase-nightly.yml` check out and build first (`.github/actions/plugin-doc-from-source/action.yml`);
-  `playground.yml` does not.
+- Every bundle, the contract and the engine's wasm packages are workspace packages
+  (`workspace:*`), consumed from source in the same checkout. Where a bundle's engine wasm
+  is a build output (doc, slide, sheet, data, web), CI builds it first
+  (`.github/actions/module-wasm`), and the engine's packages likewise
+  (`.github/actions/engine-wasm`).
 - `scripts/wasm-budget.mjs` fails when the distinct `.wasm` files the application can
   resolve sum to more than 100 MB
   ([plugin-sdk ADR 308](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/308-plugin-wasm.md)).

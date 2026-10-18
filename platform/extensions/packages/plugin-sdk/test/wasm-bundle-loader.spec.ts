@@ -21,7 +21,7 @@
 // source, no browser, no editor. Pins declared-only access, the host
 // grant, the budgets, and the no-ambient-authority instantiation.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PagedBundle, PluginManifest } from "@paged-media/plugin-api";
 

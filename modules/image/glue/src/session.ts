@@ -30,19 +30,12 @@
 
 import type {
   BundleHost,
+  ColorPickerProps,
   Disposable,
   ElementId,
 } from "@paged-media/plugin-api";
 
 import { latestWins } from "./coalesce";
-import {
-  binaryMutations,
-  hostColorPicker,
-  imageScene,
-  mutateWithBytes,
-  partsDelete,
-  type ColorPickerProps,
-} from "./host66";
 import { parseCube, toKernelCube } from "./cube";
 import {
   readSession,
@@ -147,6 +140,7 @@ export const VacateMode = {
   /** Alt-drag: the pixels are copied and the source keeps what it had. */
   Copy: 1,
 } as const;
+// eslint-disable-next-line no-redeclare -- the value and its type share a name on purpose
 export type VacateMode = (typeof VacateMode)[keyof typeof VacateMode];
 
 export const EdgePolicy = {
@@ -157,6 +151,7 @@ export const EdgePolicy = {
   /** Photoshop "Wrap Around" — the period is the image; makes tiles seamless. */
   Wrap: 2,
 } as const;
+// eslint-disable-next-line no-redeclare -- the value and its type share a name on purpose
 export type EdgePolicy = (typeof EdgePolicy)[keyof typeof EdgePolicy];
 
 /** What to paint into the selection (the `gen.*` family's editor
@@ -1658,14 +1653,13 @@ export function createImageSession(host: BundleHost): ImageSession {
   let submitted: { target: string; width: number; height: number } | null = null;
 
   /** Patch the rectangle a brush sample changed instead of resending the
-   *  image. False when the host or the last submission does not allow it
-   *  (the caller then resends the whole image). */
+   *  image. False when the last submission does not allow it (the caller
+   *  then resends the whole image). */
   const submitDirty = async (target: string, rgba: Uint8Array, width: number, height: number) => {
     const surface = scene();
-    const images = surface && imageScene(surface);
     const rect = engine?.brushDirtyRect();
     if (
-      !images ||
+      !surface ||
       !rect ||
       !submitted ||
       submitted.target !== target ||
@@ -1679,7 +1673,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       const from = ((rect.y + row) * width + rect.x) * 4;
       tile.set(rgba.subarray(from, from + rect.w * 4), row * rect.w * 4);
     }
-    await images.submitImageTiles(
+    await surface.submitImageTiles(
       target,
       [{ x: rect.x, y: rect.y, width: rect.w, height: rect.h, rgba: tile }],
       { transfer: true },
@@ -1709,35 +1703,15 @@ export function createImageSession(host: BundleHost): ImageSession {
     state.ptPerPx = scale;
     const w = layoutWidth * scale;
     const h = layoutHeight * scale;
-    // Protocol 66: the image crosses as bytes, and the frame's pages
-    // alone repaint. The `number[]` item below is the older host's lane.
-    const images = imageScene(surface);
-    if (images) {
-      await images.submitImage(target, {
-        rgba,
-        width,
-        height,
-        dest: [(box.w - w) / 2, (box.h - h) / 2, w, h],
-      });
-      submitted = { target, width, height };
-      state.compositedFrame = target;
-      return true;
-    }
-    submitted = null;
-    await surface.submit(target, {
-      items: [
-        {
-          kind: "image",
-          rgba: Array.from(rgba),
-          width,
-          height,
-          x: (box.w - w) / 2,
-          y: (box.h - h) / 2,
-          w,
-          h,
-        },
-      ],
+    // The image crosses as bytes, and the frame's pages alone repaint
+    // (the SDK takes the JSON lane itself where a host has no binary one).
+    await surface.submitImage(target, {
+      rgba,
+      width,
+      height,
+      dest: [(box.w - w) / 2, (box.h - h) / 2, w, h],
     });
+    submitted = { target, width, height };
     state.compositedFrame = target;
     return true;
   };
@@ -2597,7 +2571,7 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
 
     sourceElement: () => sourceRef,
-    colorPicker: () => hostColorPicker(host),
+    colorPicker: () => (host.supports("widgets.colorPicker@1") ? host.widgets.ColorPicker : null),
 
     async commitToDocument() {
       const src = state.source;
@@ -2622,7 +2596,7 @@ export function createImageSession(host: BundleHost): ImageSession {
         // adjustments that were never applied are not part of it.
         const rgba = engine.tile(src.handle, 0, 0, src.width, src.height);
         const png = engine.encode(rgba, src.width, src.height, "png");
-        if (png.length > MAX_BAKED_BYTES && !binaryMutations(host)) {
+        if (png.length > MAX_BAKED_BYTES && !host.supports("document.mutateBinary@1")) {
           setStatus(
             `The baked image is ${(png.length / 1048576).toFixed(1)} MB; the ` +
               "host takes at most 8 MB per image until it accepts binary " +
@@ -2642,8 +2616,8 @@ export function createImageSession(host: BundleHost): ImageSession {
         );
         const marker: CommittedMarker = { owns: "pixels", rev, record: path, baked };
         // The PNG crosses as bytes where the host takes them, else as the
-        // JSON lane's number[] (`mutateWithBytes` splices it in).
-        await mutateWithBytes(host, {
+        // JSON lane's number[] (the SDK's `mutateWithBytes` splices it in).
+        await host.document.mutateWithBytes({
           op: "batch",
           args: {
             ops: [
@@ -2662,17 +2636,18 @@ export function createImageSession(host: BundleHost): ImageSession {
         }, png);
         state.committedRev = rev;
         state.uncommitted = false;
-        // Old revisions and the layer data only they used go, where the
-        // host can delete parts (the document's undo can reach the last
-        // KEEP_REVISIONS commits; older ones are unreachable anyway).
-        const del = partsDelete(host);
-        // Awaited, not fired off: a collection overlapping the next
-        // commit could delete buffers written before their record.
-        if (del) {
-          await collectGarbage(host.parts, del, src.elementId, rev, KEEP_REVISIONS).catch((err) =>
-            host.log.warn(`image: clearing old revisions failed: ${err}`),
-          );
-        }
+        // Old revisions and the layer data only they used go (the
+        // document's undo can reach the last KEEP_REVISIONS commits; older
+        // ones are unreachable anyway). Awaited, not fired off: a collection
+        // overlapping the next commit could delete buffers written before
+        // their record.
+        await collectGarbage(
+          host.parts,
+          (path) => host.parts.delete(path),
+          src.elementId,
+          rev,
+          KEEP_REVISIONS,
+        ).catch((err) => host.log.warn(`image: clearing old revisions failed: ${err}`));
         setStatus(
           `Committed revision ${rev}: ${state.layers.layers.length} layer` +
             `${state.layers.layers.length === 1 ? "" : "s"} stored in the document ` +

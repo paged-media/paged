@@ -18,7 +18,7 @@
 
 // CSS Regions syntax parser (flow-into / flow-from) — a scanner, never throws.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   flowRootSelector,

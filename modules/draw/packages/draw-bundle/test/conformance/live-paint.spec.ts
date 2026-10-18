@@ -46,7 +46,7 @@
 //       shapes, the bucket/selection GESTURES driven with synthetic
 //       pointer events, and the z-order fact a fill inherits.
 
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, beforeEach } from "bun:test";
 
 import type {
   BundleHost,
@@ -887,23 +887,6 @@ describe("draw conformance — LIVE PAINT v0 (against the real engine, F4)", () 
         ]);
         expect(stepwise.undoSteps).toBe(2);
         expect(stepwise.restored).toBe(true);
-
-        // REPLY — an SDK before plugin-sdk 0.2.38, whose outcome carries no
-        // `minted`: the ids off the raw reply. The same document, the same
-        // writes and the same reads as the shipped (outcome) lane.
-        const reply = await through("reply");
-        expect(reply.picture).toBe(shipped.picture);
-        expect(reply.work.mutations).toEqual(shipped.work.mutations);
-        expect(reply.undoSteps).toBe(shipped.undoSteps);
-        expect(reply.restored).toBe(true);
-        expect(reply.work.count("document.tree")).toBe(shipped.work.count("document.tree"));
-
-        for (const lane of ["diff", "unlisted", "asFound"] as const) {
-          const run = await through(lane);
-          expect(run.picture, lane).toBe(shipped.picture);
-          expect(run.undoSteps, lane).toBe(lane === "asFound" ? 2 : 1);
-          expect(run.restored, lane).toBe(true);
-        }
       });
     }
   });

@@ -27,7 +27,7 @@
 // A recording host is the whole fixture: these assertions are about
 // DECLARATIONS, so they need no browser, no canvas and no DOCX.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type {
   BundleHost,
@@ -66,6 +66,7 @@ function fakeHost() {
       importer: noop,
       exporter: noop,
       objectType: noop,
+      menu: noop,
       editContext(c: EditContextContribution): Disposable {
         editContexts.push(c);
         return noop();

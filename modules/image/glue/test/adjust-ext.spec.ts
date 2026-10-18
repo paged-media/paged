@@ -23,7 +23,7 @@
 // natively in image-js/tests/it/ingest.rs — here we pin the wire, the
 // gating, and the file lanes.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type { PluginManifest } from "@paged-media/plugin-api";

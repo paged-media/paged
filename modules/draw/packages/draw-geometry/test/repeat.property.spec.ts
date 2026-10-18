@@ -19,7 +19,7 @@
 // Property tests for repeat.ts — the placement algebra of radial / grid /
 // mirror repeats.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   affineReflect,

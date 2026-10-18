@@ -27,7 +27,7 @@
 // `requestGpuDevice` member). The zero-copy host composite + shared device
 // stay deferred record-only (ADR-018); building them would be a fake.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type {
   GpuCapability,

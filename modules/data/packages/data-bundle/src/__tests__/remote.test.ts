@@ -25,7 +25,8 @@
 // Engine + DuckDB are mocked (the real-engine join is covered by the Rust
 // conformance suite + the e2e harness).
 
-import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
 
 import type { BundleHost, ConsentResult } from "@paged-media/plugin-api";
 
@@ -81,6 +82,8 @@ function fakeHost(grant: string[]): BundleHost {
   return {
     manifest: { id: "media.paged.data", name: "d", version: "0.0.1", apiVersion: "^0.2" },
     log: { debug() {}, info() {}, warn() {}, error() {} },
+    // The document doors every host has; nothing here fires them.
+    document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
     supports: (f: string) => f === "network.consent@1",
     network: {
       async requestConsent(origins: readonly string[]): Promise<ConsentResult> {
@@ -109,11 +112,11 @@ beforeEach(() => {
   registerBufferCalls.length = 0;
   execCalls.length = 0;
   fetchSpy.mockClear();
-  vi.stubGlobal("fetch", fetchSpy);
+  stubGlobal("fetch", fetchSpy);
 });
 
 afterEach(() => {
-  vi.unstubAllGlobals();
+  unstubAllGlobals();
 });
 
 describe("remote sources — inert until consent (data.source.remote / data.security.no-network-pre-consent)", () => {

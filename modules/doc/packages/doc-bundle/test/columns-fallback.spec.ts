@@ -20,7 +20,7 @@
 // span/split columns (protocol 64). The plugin API cannot say whether the
 // engine has them, so the style batch is the probe: on a refusal the
 // document is lowered with page breaks instead and reopened.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { LoweredDoc } from "@paged-media/doc-host-model";
 

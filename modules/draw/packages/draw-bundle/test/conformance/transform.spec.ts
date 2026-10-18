@@ -32,7 +32,7 @@
 //       0.64 the op did not exist and COPY was refused by name; the
 //       refusal path is pinned against a host whose vocabulary lacks it.)
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 
 import type { CommandContribution, ElementId, PathAnchorsResult } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -231,11 +231,15 @@ describe("draw conformance — Reflect and Transform again", () => {
         return Reflect.get(target, prop, receiver) as unknown;
       },
     });
-    // This engine answers NO geometry for a group, so there is no parent
-    // frame to read and the write is R ∘ G — what it was before frames
-    // were read at all (a newer engine answers the composed transform;
-    // for a top-level group like this one the write is the same).
-    expect(await h.host.document.elementGeometry([group])).toEqual([]);
+    // Older engines (the 0.71 this suite was pinned to) answer NO geometry
+    // for a group, so there is no parent frame to read and the write is
+    // R ∘ G. Newer ones (protocol 74 does) answer the group's composed
+    // transform, whose parent frame is the identity for a top-level group
+    // like this one, so the write is R ∘ G as well: the assertions below
+    // hold on both.
+    const geometry = await h.host.document.elementGeometry([group]);
+    expect(geometry.length).toBeLessThanOrEqual(1);
+    for (const g of geometry) expect(g.id).toEqual(group);
     const stored = (await h.host.document.elementProperties(group))?.entries.find(
       (e) => e.path === "frameTransform",
     )?.value;

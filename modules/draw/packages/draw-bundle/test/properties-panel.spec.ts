@@ -22,7 +22,7 @@
 // property rows; DRAW_PANEL_FIELDS is every writable scalar row of each
 // kind it lists.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PanelSchema, PropertySchema } from "@paged-media/plugin-api";
 import { propertyRowsOf, validatePanelSchema } from "@paged-media/plugin-sdk";

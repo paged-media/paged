@@ -15,7 +15,7 @@
 /tooling/                           @drietsch
 /docs/adr/                          @drietsch
 **/Cargo.lock                       @drietsch
-**/pnpm-lock.yaml                   @drietsch
+/bunfig.toml                        @drietsch
 /bun.lock                           @drietsch
 /LICENSE                            @drietsch
 /LICENSE.md                         @drietsch
@@ -24,4 +24,5 @@
 # Wire protocol, WASM ABI and the public extension contract.
 /engine/core/crates/paged-canvas/src/channel.rs   @drietsch
 /engine/core/crates/paged-canvas-wasm/            @drietsch
+/engine/core/packages/                            @drietsch
 /platform/extensions/packages/plugin-api/         @drietsch

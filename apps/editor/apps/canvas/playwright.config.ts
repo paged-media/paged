@@ -97,7 +97,8 @@ export default defineConfig({
     viewport: { width: 1600, height: 1000 },
   },
   webServer: {
-    command: `npx vite --port ${PORT} --strictPort`,
+    // Vite under Bun (`--bun`), as `bun run dev` starts it.
+    command: `bunx --bun vite --port ${PORT} --strictPort`,
     cwd: __dirname,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
@@ -154,7 +155,7 @@ export default defineConfig({
       // that skips with "verified on journeys-gpu" is therefore verified
       // only when a human runs it on a Mac:
       //
-      //     pnpm --filter paged-canvas test:journeys:gpu
+      //     bun run --filter paged-canvas test:journeys:gpu
       //
       // Keep it — it works, and it is the only place paged.image's GPU-only
       // kernels are render-verified end-to-end — but do not treat a green

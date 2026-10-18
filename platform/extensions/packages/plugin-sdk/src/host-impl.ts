@@ -28,10 +28,10 @@
 // via `getEditor()`, resolved at call time (the command registry's
 // thunk idiom, avoids stale-closure drift).
 
-import { createCoreObjects } from "./core-objects";
-import { createObjectRegistry, type ObjectRegistry } from "./object-registry";
-import { isCoreCommand } from "./core-commands";
-import { checkSchemaRows } from "./object-schema";
+import { createCoreObjects } from "./core-objects.js";
+import { createObjectRegistry, type ObjectRegistry } from "./object-registry.js";
+import { isCoreCommand } from "./core-commands.js";
+import { checkSchemaRows } from "./object-schema.js";
 import type {
   ObjectModelContribution,
   ObjectModelHandle,
@@ -130,10 +130,10 @@ import type {
   SnapPointResult,
 } from "@paged-media/plugin-api";
 
-import { DisposableStore, toDisposable } from "./disposables";
-import { documentChangeOf } from "./document-change";
-import { FALLBACK_WIDGETS } from "./widgets-fallback";
-import { makeSchemaPanelComponent } from "./schema-panel";
+import { DisposableStore, toDisposable } from "./disposables.js";
+import { documentChangeOf } from "./document-change.js";
+import { FALLBACK_WIDGETS } from "./widgets-fallback.js";
+import { makeSchemaPanelComponent } from "./schema-panel.js";
 
 /** The reply envelope `client.mutate` resolves with. */
 type MutateReply = Awaited<ReturnType<PagedEditor["client"]["mutate"]>>;
@@ -2271,12 +2271,16 @@ export function createBundleHost(
       // `minted` is copied through when the engine sent it (additive on
       // the wire): a batch's `createdId` is only its LAST creation, so
       // without the list a bundle could not learn what its batch made.
+      // `createdPages` likewise: pages are not elements, so `minted`
+      // never names one.
       const minted = reply.payload.minted;
+      const createdPages = reply.payload.createdPages;
       return {
         applied: true,
         createdId: reply.payload.createdId ?? null,
         pageIds: reply.payload.pageIds,
         ...(minted !== undefined ? { minted } : {}),
+        ...(createdPages !== undefined ? { createdPages } : {}),
         ...(typeof reply.payload.appliedSeq === "number" ? { appliedSeq: reply.payload.appliedSeq } : {}),
       };
     }

@@ -6,7 +6,7 @@ like the rest of the repository (ADR PM-0001; it was MPL-2.0 OR PMEL before).
 
 ## What this is
 
-pnpm workspace with five packages (see README for the tier table):
+Five packages of the repository's root Bun workspace (see README for the tier table):
 `packages/plugin-api` (the contract, **type-only**), `packages/plugin-sdk`
 (the runtime: in-process `BundleHost` adapter, loader, gesture kit,
 object registry, headless host), `packages/plugin-cli` (zero-dep ESM CLI,
@@ -62,12 +62,14 @@ cites its proposal number, "ADR 323".
   feeding a sync cache the render paths read. A static react import
   makes the barrel unloadable without React; a top-level `await` makes
   the published bundle un-pre-bundleable by Vite (its dep-optimizer
-  floor is ES2020). Both have shipped and broken consumers. The build
-  pins `--target es2020` as the gate — do not raise it. DESIGN.md §5.1.
+  floor is ES2020). Both have shipped and broken consumers. The
+  declaration build compiles at `"module": "ES2020"` as the gate
+  (TypeScript rejects a top-level await there) — do not raise it.
+  DESIGN.md §5.1.
 
 ## Commands
 
 ```bash
-pnpm install && pnpm -r typecheck
+bun install && bun run typecheck
 node packages/plugin-cli/bin/paged-plugin.mjs validate <manifest.json>
 ```

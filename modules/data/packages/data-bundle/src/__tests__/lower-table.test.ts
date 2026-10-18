@@ -3,7 +3,7 @@
 // (`$h:frame`, `$h:table`). When core refuses the `insertTable` child, the
 // §2.2 degradation (tab text + drawn rules) is one batch too.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, Mutation } from "@paged-media/plugin-api";
 

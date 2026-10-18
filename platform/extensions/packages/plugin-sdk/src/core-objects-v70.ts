@@ -62,11 +62,11 @@ import type {
   ValueType,
 } from "@paged-media/plugin-api";
 
-import type { CoreObjects, CorePlan } from "./core-objects";
-import { planCoreDelete } from "./core-ops";
-import { documentChangeOf } from "./document-change";
-import { CORE_PATHS, corePathRange, coreSchema71, type CorePathRow, type CorePathScope } from "./core-schema";
-import { formatAddress, fromElementId, type SelectorStep } from "./object-address";
+import type { CoreObjects, CorePlan } from "./core-objects.js";
+import { planCoreDelete } from "./core-ops.js";
+import { documentChangeOf } from "./document-change.js";
+import { CORE_PATHS, corePathRange, coreSchema71, type CorePathRow, type CorePathScope } from "./core-schema.js";
+import { formatAddress, fromElementId, type SelectorStep } from "./object-address.js";
 
 /** One core object as the selector engine sees it. */
 interface CoreNode {
@@ -770,6 +770,7 @@ export function createCoreObjectsV70(getEditor: () => PagedEditor): CoreObjects 
             createdId: p.createdId ?? null,
             pageIds: p.pageIds,
             ...(p.minted ? { minted: p.minted } : {}),
+            ...(p.createdPages ? { createdPages: p.createdPages } : {}),
             ...(typeof p.appliedSeq === "number" ? { appliedSeq: p.appliedSeq } : {}),
           };
         }

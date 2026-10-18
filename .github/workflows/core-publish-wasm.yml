@@ -92,11 +92,13 @@ jobs:
 
       # Node 24, not 20: Node 20/22 bundle npm 10.x, and Node 20 is deprecated
       # on GitHub runners. npm 11.x is also what trusted publishing needs, so
-      # the switch below costs no further change.
-      - uses: actions/setup-node@v4
+      # the switch below costs no further change. Node (24.22.0) and Bun come
+      # from /.prototools, installed by proto; Bun installs the root workspace
+      # the idml-viewer wrapper is built in.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          node-version: 24
-          registry-url: https://registry.npmjs.org
+          auto-install: true
+          proto-version: "0.63.1"
 
       # ADVISORY, never fatal: is trusted publishing ready to replace the
       # token yet? The four Trusted Publisher entries are not in place, so
@@ -229,83 +231,33 @@ jobs:
           echo "/tmp/binaryen-version_${BINARYEN}/bin" >> "$GITHUB_PATH"
           "/tmp/binaryen-version_${BINARYEN}/bin/wasm-opt" --version
 
-      # The three wasm builds use the `wasm-release` profile (Cargo.toml:
-      # release + fat LTO + one codegen unit), so they land in
-      # target/wasm32-unknown-unknown/wasm-release/, not .../release/.
+      # The packages are the workspace packages in engine/core/packages/<pkg>/
+      # (ADR 185): their package.json, README and licence files are committed,
+      # and scripts/build-wasm-packages.sh --workspace builds the generated
+      # files beside them, as `moon run core:wasm-pkg` does locally. Each build
+      # is the `wasm-release` profile (Cargo.toml: release + fat LTO + one
+      # codegen unit, so target/wasm32-unknown-unknown/wasm-release/), then
+      # `wasm-bindgen --target web` and `wasm-opt -Oz`; the script checks the
+      # CLI against Cargo.lock and, under CI, refuses to run without wasm-opt.
+      # The committed versions are 0.<protocol>.0-dev; the release version is
+      # set in the staged copies below, never in the tree.
+      - name: the workspace wasm packages carry PROTOCOL_VERSION
+        run: bun scripts/check-wasm-package-versions.mjs
+
       - name: Build @paged-media/canvas-wasm
-        run: |
-          set -euo pipefail
-          cargo build --profile wasm-release --target wasm32-unknown-unknown -p paged-canvas-wasm --features gpu
-          OUT=dist/canvas-wasm
-          mkdir -p "$OUT"
-          wasm-bindgen target/wasm32-unknown-unknown/wasm-release/paged_canvas_wasm.wasm \
-            --target web --out-dir "$OUT"
-          wasm-opt -Oz "$OUT/paged_canvas_wasm_bg.wasm" -o "$OUT/paged_canvas_wasm_bg.wasm.opt" \
-            && mv "$OUT/paged_canvas_wasm_bg.wasm.opt" "$OUT/paged_canvas_wasm_bg.wasm"
-          node -e "require('fs').writeFileSync('$OUT/package.json', JSON.stringify({
-            name: '@paged-media/canvas-wasm',
-            version: '${{ steps.ver.outputs.version }}',
-            type: 'module',
-            main: 'paged_canvas_wasm.js',
-            types: 'paged_canvas_wasm.d.ts',
-            files: ['paged_canvas_wasm.js','paged_canvas_wasm_bg.wasm','paged_canvas_wasm.d.ts'],
-            license: 'AGPL-3.0-only OR LicenseRef-PMEL'
-          }, null, 2))"
-          # The licence ships with the package: the AGPL-3.0 text and the
-          # dual-licence notice (npm packs LICENSE* whatever `files` says).
-          cp ../../LICENSE web/idml-viewer/LICENSE.md "$OUT/"
+        run: bash scripts/build-wasm-packages.sh --workspace canvas-wasm
 
+      # The static capability catalog (ADR 019) ships alongside the wasm so
+      # build-time consumers (plugin SDK sync, state ingest) read it without
+      # booting wasm; describeCatalog() returns the same data at runtime. The
+      # script copies it in from crates/paged-introspect/catalog.json.
       - name: Build @paged-media/introspect-wasm
-        run: |
-          set -euo pipefail
-          cargo build --profile wasm-release --target wasm32-unknown-unknown -p paged-introspect-wasm
-          OUT=dist/introspect-wasm
-          mkdir -p "$OUT"
-          wasm-bindgen target/wasm32-unknown-unknown/wasm-release/paged_introspect_wasm.wasm \
-            --target web --out-dir "$OUT"
-          wasm-opt -Oz "$OUT/paged_introspect_wasm_bg.wasm" -o "$OUT/paged_introspect_wasm_bg.wasm.opt" \
-            && mv "$OUT/paged_introspect_wasm_bg.wasm.opt" "$OUT/paged_introspect_wasm_bg.wasm"
-          # The static capability catalog (ADR 019) ships alongside the wasm so
-          # build-time consumers (plugin SDK sync, state ingest) read it without
-          # booting wasm; describeCatalog() returns the same data at runtime.
-          cp crates/paged-introspect/catalog.json "$OUT/catalog.json"
-          node -e "require('fs').writeFileSync('$OUT/package.json', JSON.stringify({
-            name: '@paged-media/introspect-wasm',
-            version: '${{ steps.ver.outputs.version }}',
-            type: 'module',
-            main: 'paged_introspect_wasm.js',
-            types: 'paged_introspect_wasm.d.ts',
-            files: ['paged_introspect_wasm.js','paged_introspect_wasm_bg.wasm','paged_introspect_wasm.d.ts','catalog.json'],
-            license: 'AGPL-3.0-only OR LicenseRef-PMEL'
-          }, null, 2))"
-          # The licence ships with the package: the AGPL-3.0 text and the
-          # dual-licence notice (npm packs LICENSE* whatever `files` says).
-          cp ../../LICENSE web/idml-viewer/LICENSE.md "$OUT/"
+        run: bash scripts/build-wasm-packages.sh --workspace introspect-wasm
 
+      # The document repository (ADR 180): no engine, no wire, so it rides
+      # the engine's version for traceability but not its protocol.
       - name: Build @paged-media/repo-wasm
-        run: |
-          set -euo pipefail
-          # The document repository (ADR 180): no engine, no wire, so it rides
-          # the engine's version for traceability but not its protocol.
-          cargo build --profile wasm-release --target wasm32-unknown-unknown -p paged-repo-wasm
-          OUT=dist/repo-wasm
-          mkdir -p "$OUT"
-          wasm-bindgen target/wasm32-unknown-unknown/wasm-release/paged_repo_wasm.wasm \
-            --target web --out-dir "$OUT"
-          wasm-opt -Oz "$OUT/paged_repo_wasm_bg.wasm" -o "$OUT/paged_repo_wasm_bg.wasm.opt" \
-            && mv "$OUT/paged_repo_wasm_bg.wasm.opt" "$OUT/paged_repo_wasm_bg.wasm"
-          node -e "require('fs').writeFileSync('$OUT/package.json', JSON.stringify({
-            name: '@paged-media/repo-wasm',
-            version: '${{ steps.ver.outputs.version }}',
-            type: 'module',
-            main: 'paged_repo_wasm.js',
-            types: 'paged_repo_wasm.d.ts',
-            files: ['paged_repo_wasm.js','paged_repo_wasm_bg.wasm','paged_repo_wasm.d.ts'],
-            license: 'AGPL-3.0-only OR LicenseRef-PMEL'
-          }, null, 2))"
-          # The licence ships with the package: the AGPL-3.0 text and the
-          # dual-licence notice (npm packs LICENSE* whatever `files` says).
-          cp ../../LICENSE web/idml-viewer/LICENSE.md "$OUT/"
+        run: bash scripts/build-wasm-packages.sh --workspace repo-wasm
 
       - name: Subset audit — paged-sdk must not link editor crates
         run: |
@@ -322,40 +274,51 @@ jobs:
       - name: Build @paged-media/sdk (paged-sdk WebGPU ViewerSession)
         run: |
           set -euo pipefail
-          cargo build --profile wasm-release --target wasm32-unknown-unknown -p paged-sdk --features gpu
-          OUT=dist/sdk
-          mkdir -p "$OUT"
-          wasm-bindgen target/wasm32-unknown-unknown/wasm-release/paged_sdk.wasm \
-            --target web --out-dir "$OUT"
-          wasm-opt -Oz "$OUT/paged_sdk_bg.wasm" -o "$OUT/paged_sdk_bg.wasm.opt" \
-            && mv "$OUT/paged_sdk_bg.wasm.opt" "$OUT/paged_sdk_bg.wasm"
+          bash scripts/build-wasm-packages.sh --workspace sdk
           # Size ratchet (§4.2): print opt + brotli sizes next to the
           # recorded baseline (2026-06-06: opt 7.20 MB, brotli 2.21 MB).
+          OUT=packages/sdk
           brotli -k -q 11 "$OUT/paged_sdk_bg.wasm"
           ls -la "$OUT"/paged_sdk_bg.wasm*
-          node -e "require('fs').writeFileSync('$OUT/package.json', JSON.stringify({
-            name: '@paged-media/sdk',
-            version: '${{ steps.ver.outputs.version }}',
-            type: 'module',
-            main: 'paged_sdk.js',
-            types: 'paged_sdk.d.ts',
-            files: ['paged_sdk.js','paged_sdk_bg.wasm','paged_sdk.d.ts'],
-            license: 'AGPL-3.0-only OR LicenseRef-PMEL'
-          }, null, 2))"
-          # The licence ships with the package: the AGPL-3.0 text and the
-          # dual-licence notice (npm packs LICENSE* whatever `files` says).
-          cp ../../LICENSE web/idml-viewer/LICENSE.md "$OUT/"
           rm -f "$OUT/paged_sdk_bg.wasm.br"
+
+      # What npm receives: a copy of each built package in $RUNNER_TEMP/npm/,
+      # at the release version, so the committed 0.<protocol>.0-dev manifest is
+      # never rewritten. The tag must carry the protocol the packages were
+      # built for: the editor reads it from the version's minor.
+      - name: Stage the wasm packages at the release version
+        run: |
+          set -euo pipefail
+          V="${{ steps.ver.outputs.version }}"
+          for PKG in canvas-wasm introspect-wasm repo-wasm sdk; do
+            DEV=$(node -p "require('./packages/$PKG/package.json').version")
+            # 0.<protocol> of the tag against 0.<protocol> of the package.
+            if [ "$(echo "$V" | cut -d. -f1-2)" != "$(echo "$DEV" | cut -d. -f1-2)" ]; then
+              echo "::error::tag version $V does not carry the protocol of packages/$PKG ($DEV): tag v0.<PROTOCOL_VERSION>.<patch>."
+              exit 1
+            fi
+            STAGE="$RUNNER_TEMP/npm/$PKG"
+            mkdir -p "$STAGE"
+            cp -R "packages/$PKG/." "$STAGE/"
+            node -e '
+              const fs = require("fs");
+              const file = process.argv[1];
+              const pkg = JSON.parse(fs.readFileSync(file, "utf8"));
+              pkg.version = process.argv[2];
+              fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + "\n");
+            ' "$STAGE/package.json" "$V"
+            echo "staged @paged-media/$PKG@$V"
+          done
 
       - name: Build @paged-media/idml-viewer (TS wrapper + bundled wasm)
         run: |
           set -euo pipefail
+          (cd "$GITHUB_WORKSPACE" && bun install --frozen-lockfile)
           cd web/idml-viewer
-          npm install --no-fund --no-audit
-          npm test
-          npm run build
+          bun run test
+          bun run build
           mkdir -p wasm
-          cp ../../dist/sdk/paged_sdk.js ../../dist/sdk/paged_sdk_bg.wasm ../../dist/sdk/paged_sdk.d.ts wasm/
+          cp ../../packages/sdk/paged_sdk.js ../../packages/sdk/paged_sdk_bg.wasm ../../packages/sdk/paged_sdk.d.ts wasm/
           npm pkg set version="${{ steps.ver.outputs.version }}"
 
       # NODE_AUTH_TOKEN is what authorizes this today. npm still ATTEMPTS the
@@ -368,9 +331,10 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
-          # Leading ./ is load-bearing: a bare `dist/canvas-wasm` is
-          # parsed by npm as a GitHub owner/repo shorthand, not a path
-          # (it tried git ls-remote github.com/dist/canvas-wasm.git).
+          # The staged directories are absolute paths. A relative one needs
+          # its leading ./: a bare `dist/canvas-wasm` is parsed by npm as a
+          # GitHub owner/repo shorthand, not a path (it tried git ls-remote
+          # github.com/dist/canvas-wasm.git).
           #
           # --tag from the dist-tag rider (W0.9): prereleases land on
           # `next`, releases on `latest`. Passing `--tag latest`
@@ -388,8 +352,15 @@ jobs:
           # publisher is indistinguishable from a missing package.
           TAG="${{ steps.disttag.outputs.tag }}"
           echo "publishing under npm dist-tag: $TAG"
-          npm publish --loglevel verbose --access public --tag "$TAG" ./dist/canvas-wasm
-          npm publish --loglevel verbose --access public --tag "$TAG" ./dist/introspect-wasm
-          npm publish --loglevel verbose --access public --tag "$TAG" ./dist/sdk
-          npm publish --loglevel verbose --access public --tag "$TAG" ./dist/repo-wasm
-          npm publish --loglevel verbose --access public --tag "$TAG" ./web/idml-viewer
+          # The token userconfig setup-node's `registry-url` used to write
+          # (npm expands ${NODE_AUTH_TOKEN} itself).
+          export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/.npmrc-publish"
+          printf '%s\n' "//registry.npmjs.org/:_authToken=\${NODE_AUTH_TOKEN}" "registry=https://registry.npmjs.org/" > "$NPM_CONFIG_USERCONFIG"
+          # The viewer is a workspace package: publish its packed tarball, in
+          # which `bun pm pack` has resolved its catalog: devDependencies.
+          VIEWER_TGZ=$(bun "$GITHUB_WORKSPACE/tooling/js/pack.mjs" ./web/idml-viewer "$RUNNER_TEMP")
+          npm publish --loglevel verbose --access public --tag "$TAG" "$RUNNER_TEMP/npm/canvas-wasm"
+          npm publish --loglevel verbose --access public --tag "$TAG" "$RUNNER_TEMP/npm/introspect-wasm"
+          npm publish --loglevel verbose --access public --tag "$TAG" "$RUNNER_TEMP/npm/sdk"
+          npm publish --loglevel verbose --access public --tag "$TAG" "$RUNNER_TEMP/npm/repo-wasm"
+          npm publish --loglevel verbose --access public --tag "$TAG" "$VIEWER_TGZ"

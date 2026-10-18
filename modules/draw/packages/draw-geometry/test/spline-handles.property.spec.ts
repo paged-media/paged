@@ -21,7 +21,7 @@
 // pass), handles.ts (corner / smooth anchors from a click or a drag),
 // classify.ts (the corner test) and the three helpers in types.ts.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   clone,

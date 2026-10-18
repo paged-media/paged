@@ -3,7 +3,7 @@
 // mutations the host is asked to apply) — the two things a pure layer can pin
 // without a host.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   dataSetBatch,

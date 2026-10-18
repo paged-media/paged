@@ -3,18 +3,14 @@
  *
  * A top-level `Sheet` menu, plus the one verb that belongs in the host's `Object` menu: importing a workbook MINTS a page item, which is what Object ▸ Insert already means.
  *
- * Registered through `contribute.menu()` (plugin-api 0.2.33). Before it
- * there was no menu door at all, so every verb here lived behind Cmd+K
- * and nowhere else.
+ * Registered through `contribute.menu()`.
  *
  * The verb that puts a range or a chart on the page reads "Place … on
  * page" here, in the command titles and in the panels alike. The command
  * ids keep their older `lower…ToFrame` names, which are API.
  *
- * `Object ▸ Insert spreadsheet…` is the SAME path the host curates as a
- * courtesy. That is intentional and is what `fallbackFor` exists for:
- * the plugin's own entry supersedes the host's, so the item stays put
- * for the user and the host stops speaking on this bundle's behalf.
+ * `Object ▸ Insert spreadsheet…` is the path the host once curated for
+ * this bundle, so the item stays put for the user.
  * */
 
 import type { BundleHost, Disposable } from "@paged-media/plugin-api";
@@ -44,36 +40,15 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
   ["Sheet/New sheet from dataset", "sheetFromDataset", "dataset"],
 ];
 
-/**
- * Register every entry; one Disposable drops them all. Degrades on a
- * host older than plugin-api 0.2.33 by contributing nothing and saying
- * so, rather than throwing and taking the bundle down over a menu.
- */
+/** Register every entry; one Disposable drops them all. */
 export function contributeMenu(host: BundleHost): Disposable {
-  const contribute = host.contribute as BundleHost["contribute"] & {
-    menu?: (c: {
-      path: string;
-      command: string;
-      order?: number;
-      group?: string;
-    }) => Disposable;
-  };
-  if (typeof contribute.menu !== "function") {
-    host.log.info(
-      "host predates contribute.menu (plugin-api 0.2.33) — " +
-        `${ENTRIES.length} menu entries not contributed; every command ` +
-        "remains reachable through the command palette",
-    );
-    return { dispose() {} };
-  }
-
   const handles: Disposable[] = [];
   const perGroup = new Map<string, number>();
   for (const [path, suffix, group] of ENTRIES) {
     const n = (perGroup.get(group) ?? 0) + 1;
     perGroup.set(group, n);
     handles.push(
-      contribute.menu({ path, command: `${C}.${suffix}`, group, order: n * 10 }),
+      host.contribute.menu({ path, command: `${C}.${suffix}`, group, order: n * 10 }),
     );
   }
   host.log.info(`contributed ${handles.length} menu entries`);

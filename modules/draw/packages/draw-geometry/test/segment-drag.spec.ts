@@ -19,7 +19,7 @@
 // The two kernels Direct Selection added: the segment-drag solve and
 // the smooth-anchor test.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   evalCubic,

@@ -25,7 +25,7 @@
 // (3) the recorded command handlers commit against the live selection
 // incl. payload parameter overrides.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type {
   CommandContribution,

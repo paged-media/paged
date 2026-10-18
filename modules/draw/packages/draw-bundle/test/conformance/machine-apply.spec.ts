@@ -33,7 +33,7 @@
 // protocol 71), and
 // these cases include the edge it falls back on.
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import type { ElementId, PathAnchorsResult } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

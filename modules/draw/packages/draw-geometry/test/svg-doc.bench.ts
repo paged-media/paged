@@ -29,7 +29,8 @@
 // linear in the file; ten times the shapes for much more than ten times
 // the time would mean it is not.
 
-import { bench, describe } from "vitest";
+// mitata (not a test runner): `bun <this file>` runs the benches.
+import { bench, group as describe, run } from "mitata";
 
 import { parseSvgDocument } from "../src/svg-doc";
 import { syntheticSvg } from "./bench-data";
@@ -46,3 +47,5 @@ describe("parseSvgDocument — the SVG tokenizer and reader", () => {
     parseSvgDocument(large);
   });
 });
+
+await run();

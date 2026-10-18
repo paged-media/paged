@@ -32,7 +32,7 @@
 //      read — they never nest in groups;
 //   6. the gate: `capabilities.document.read`, like every read door.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { ElementId, PluginManifest } from "@paged-media/plugin-api";
 

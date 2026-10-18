@@ -538,21 +538,17 @@ export {
   REPEAT_PANEL_NOTE,
 } from "./panels/repeat-panel";
 export { createRepeatHandler } from "./handlers/repeat";
-// The C-15 + B-18 protocol-ahead wire seam — `bindCreated` (what
-// collapses a two-batch flow into one undo step) and the `pasteInto` /
-// `releaseFrom` nesting pair, with their capability probes and the
-// engine's own refusal sentences. One place, so the canary repin is a
-// pure deletion (the v58-wire.ts precedent).
+// C-15 batch handles — `bindCreated` (what collapses a two-batch flow
+// into one undo step) — and the B-18 `pasteInto` / `releaseFrom` nesting
+// pair addressed through them.
 export {
+  batchMutationFor,
   bindCreatedMutationFor,
   handleElementId,
   pasteIntoMutationFor,
   releaseFromMutationFor,
-  b18RefusalReason,
-  supportsBindCreated,
-  supportsPasteInto,
   HANDLE_PREFIX,
-} from "./commands/v59-wire";
+} from "./commands/batch-handles";
 // Phase 9 (Tier B) → B-22 — Shape Builder gesture tool, now REGION
 // level: the gesture→pathfinderFaces builder, the element-lane fallback
 // builder, the raw→page face mapping and the host handler factory,
@@ -668,26 +664,23 @@ export {
   LIVE_PAINT_PANEL_ID,
   LIVE_PAINT_NOTE,
 } from "./panels/live-paint-panel";
-// PROTOCOL 58 — the ONE place the v58 wire skew lives (the four C-28 /
-// C-29 ops, their capability probes and their refusal reader). The
-// typed contract for all four is committed in plugin-sdk `f00d6dd`;
-// this repo installs the published 0.2.25-canary.0, so the cast stays
-// until the canary bumps — and then deleting it is the whole change.
+// The C-28 opacity-mask and C-29 type-on-a-path ops: their builders
+// (exported for the conformance specs) and the engine's refusal reader.
+export {
+  applyOpacityMaskMutationFor,
+  releaseOpacityMaskMutationFor,
+  type OpacityMaskMode,
+} from "./commands/opacity-mask";
 export {
   PATH_TYPE_ALIGNMENTS,
   FLIP_PATH_EFFECTS,
-  applyOpacityMaskMutationFor,
-  releaseOpacityMaskMutationFor,
   attachTextToPathMutationFor,
   detachTextFromPathMutationFor,
-  v58RefusalReason,
-  supportsOpacityMask,
-  supportsTextOnPath,
-  type OpacityMaskMode,
   type PathTypeAlignment,
   type FlipPathEffect,
   type TextPathSpec,
-} from "./commands/v58-wire";
+} from "./commands/text-on-path";
+export { maskOrPathRefusalReason } from "./commands/refusal";
 // Illustrator Phase 2 (the Transparency panel row) — OPACITY MASKS
 // (C-28). EXPORT-ONLY today: honoured by the CPU rasterizer and by PDF
 // export, NOT by the Vello/WebGPU backend the canvas draws through.

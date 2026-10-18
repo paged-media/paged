@@ -38,8 +38,10 @@ and an `.idml` exporter and forwards both to the engine.
 (`dist`, `bin` and `manifest.json`). It holds the PDF reader (`src/pdfium.ts`), the text
 reconstruction heuristics (`src/extract.ts`), the TypeScript copy of the intermediate
 representation (`src/ir.ts`), the wasm loader (`src/engine-loader.ts`), the image fallback
-(`src/idml-fallback.ts`) and the importer (`src/io/pdf.ts`). `bin/` holds two committed wasm
-modules with their JavaScript glue: the built `pdf-import` mapper and a prebuilt PDFium. The
+(`src/idml-fallback.ts`) and the importer (`src/io/pdf.ts`). `bin/` holds two wasm modules
+with their JavaScript glue: the `pdf-import` mapper, build output of `scripts/build-wasm.sh`
+(gitignored; `moon run publish:wasm`, and in CI `.github/actions/module-wasm`), and a
+committed prebuilt PDFium. The
 two bundles do not import each other and the editor loads them as two plugins
 ([ADR 657](adr/657-one-bundle-per-format.md)).
 
@@ -200,12 +202,13 @@ engine uses for the plugin namespace of container parts (`core: crates/paged-can
   `scripts/build-wasm.sh` builds `pdf-import` for `wasm32`, runs `wasm-bindgen --target web`
   and, if installed, `wasm-opt -Oz`, and writes `packages/pdf-bundle/bin/`. That output is
   committed; no workflow runs the script.
-- `pnpm -r build` runs tsup in both packages (ESM plus type declarations). The PDF bundle
-  keeps `?url` imports external, so the consuming bundler serves the two wasm files.
+- Neither bundle builds on its own (private workspace packages, PM-0008): the editor builds
+  them from source, and its bundler serves the two wasm files the PDF bundle imports with
+  `?url`.
 - `.github/workflows/ci.yml` has three jobs: format check, clippy, a native build and a
-  `wasm32` build of all three crates; typecheck and build of both bundles plus manifest
+  `wasm32` build of all three crates; typecheck of both bundles plus manifest
   validation with `@paged-media/plugin-cli`; and `cargo nextest` over the workspace plus
-  vitest in each package that declares a test script, which fails if any test failed.
+  `bun test` in each package that declares a test script, which fails if any test failed.
   `.github/workflows/publish.yml` runs on every push to `main` and publishes each package
   whose version is not yet on npm under the dist-tag `canary`. No crate is published.
 - Rust tests: unit tests inside `idml-import` and `idml-export`; three integration files in
@@ -214,5 +217,5 @@ engine uses for the plugin namespace of container parts (`core: crates/paged-can
   `crates/idml-export/tests/fixtures/indesign-20.0.1-navigation.idml`. Ten tests in
   `idml-export` are `#[ignore]`d: they read a private document corpus when
   `PAGED_IDML_CORPUS` is set and do not run in CI.
-- TypeScript tests: two vitest files in `packages/pdf-bundle/test/` cover the text heuristics
+- TypeScript tests (`bun test`): two files in `packages/pdf-bundle/test/` cover the text heuristics
   and the fallback builder. The PDFium path is browser-only and untested; the IDML bundle has no tests.

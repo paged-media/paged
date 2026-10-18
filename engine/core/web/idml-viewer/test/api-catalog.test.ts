@@ -25,7 +25,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..");
@@ -33,10 +33,10 @@ const root = join(here, "..");
 function exportedNames(indexTs: string): string[] {
   const names = new Set<string>();
   // Match each `export { ... }` / `export type { ... }` block and pull identifiers.
-  for (const m of indexTs.matchAll(/export\s+(?:type\s+)?\{([^}]*)\}/g)) {
-    for (const raw of m[1].split(",")) {
-      const id = raw.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0].trim();
-      if (id) names.add(id);
+  for (const [, list = ""] of indexTs.matchAll(/export\s+(?:type\s+)?\{([^}]*)\}/g)) {
+    for (const raw of list.split(",")) {
+      const [id = ""] = raw.trim().replace(/^type\s+/, "").split(/\s+as\s+/);
+      if (id.trim()) names.add(id.trim());
     }
   }
   return [...names];

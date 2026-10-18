@@ -79,28 +79,18 @@ export interface FrameBakeToDocOutcome {
   diagnostics: WebDiagnostic[];
 }
 
-/** Measure a run for exact frame bounds, or estimate when the host wires no
- *  text surface (advance ≈ 0.5em/char; ascender 0.8em; descender −0.2em). */
+/** Measure a run for exact frame bounds through the host's text door (which
+ *  estimates by itself where no shaper is wired), or estimate here when the
+ *  measurement is refused (advance ≈ 0.5em/char; ascender 0.8em;
+ *  descender −0.2em). */
 async function measureRun(
   host: BundleHost,
   t: BakeText,
 ): Promise<RunMetrics> {
-  const text = (host as { text?: { measureString?: unknown } }).text;
-  if (text && typeof (text as { measureString?: unknown }).measureString === "function") {
-    try {
-      return await (
-        text as {
-          measureString: (
-            family: string,
-            style: string | null,
-            text: string,
-            sizePt: number,
-          ) => Promise<RunMetrics>;
-        }
-      ).measureString(t.family ?? "", t.fontStyle ?? null, t.text, t.sizePt);
-    } catch {
-      // fall through to the estimate
-    }
+  try {
+    return await host.text.measureString(t.family ?? "", t.fontStyle ?? null, t.text, t.sizePt);
+  } catch {
+    // fall through to the estimate
   }
   return {
     advance: t.text.length * t.sizePt * 0.5,

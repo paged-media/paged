@@ -23,7 +23,7 @@
 // boot the REAL image-js wasm in Node (decode lanes are CPU; GPU init
 // degrades honestly — no navigator.gpu in Node).
 
-import { vi } from "vitest";
+import { vi } from "bun:test";
 
 import type { ElementGeometryItem, PagedEditor } from "@paged-media/plugin-api";
 

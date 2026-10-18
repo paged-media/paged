@@ -22,7 +22,7 @@
 // runs the real engine's resolver once, so the wire shape is the one the
 // engine speaks.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import type { PluginManifest, SnapPointResult } from "@paged-media/plugin-api";
 

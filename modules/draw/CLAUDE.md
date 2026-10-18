@@ -11,7 +11,8 @@ incubate-then-extract window (strategy:
 `thoughts/docs/paged/plugin-draw/reality-check.md`). Three packages:
 `draw-geometry` (pure math), `draw-tools` (host-agnostic state machines),
 `draw-bundle` (manifest + `activate(host)`). The editor consumes
-geometry/tools via pnpm `link:` and wraps the machines in thin
+geometry/tools through the published `@paged-media/draw` (its `./geometry` and
+`./machines` exports) and wraps the machines in thin
 `GestureHandler` shims.
 
 Since Image Trace (2026-08-04) there is ALSO a Rust half, in `crates/`:
@@ -156,7 +157,7 @@ the draw-plugin e2e (`editor` `apps/canvas/tests/e2e/draw-plugin.spec.ts`)
 and a DTP journey (`tests/journey/plugins/draw.journey.spec.ts`) author a
 path with the built-in Pen, then refine its anchors (add/delete/convert)
 and stroke through the bundle. The three TS packages carry 2 652 passing
-vitest against engine 0.71.8 (geometry 681, tools 337, bundle 1 634; 34
+tests (vitest then, bun test since B7) against engine 0.71.8 (geometry 681, tools 337, bundle 1 634; 34
 skipped — 27 of them the InDesign round-trip generator, which runs only
 with `PAGED_ROUNDTRIP_WRITE`, 3 the opt-in real SVG corpus, 3 the
 page-only cases of the spread-space fake engine, 1 the older-engine
@@ -214,45 +215,26 @@ did not answer", which conflated an old engine with a dead send; the
 facade answers an unservable door as a REFUSAL carrying the engine's
 reason, so `null` now means only that the capability gate threw.
 
-**THE FOUR WIRE SEAMS ARE NOW FOUR MODULES, NOT FOUR CASTS.** The
-`0.2.28-canary.0` repin (2026-08-05) deleted all thirteen of them:
-`handlers/planar-regions.ts` calls the published facade,
-`commands/v58-wire.ts` and `commands/v59-wire.ts` return
-`PendingMutation` directly, and `binding-provider/adr023-seam.ts`
-re-exports the contract's seven ADR-023 types instead of mirroring them.
-The modules stay, because each still owns real logic (caching, refusal
-reading, capability probes, optional-field omission) and because one
-builder per op is still the rule.
-
-**ONE cast survives, and it is a CONTRACT GAP, not laziness.**
-`batchMutationFor` in `commands/v59-wire.ts`. The generated `Mutation`
-types batch as `{ ops: Mutation[] }` — settled ops only — and
-`PendingMutation` carries no batch variant, so the union cannot express
-"a batch containing a protocol-ahead op". That is exactly what every
-one-undo-step flow here builds, and what `bindCreated` was DESIGNED for
-(it is meaningless outside a batch). The gap is in the hand-maintained
-delta, not in core, which accepts these batches. Filed for the SDK: add
-a `BatchMutation` to `PendingMutation` whose `ops` are `MutationInput[]`.
-Until then there is ONE cast, in ONE function, and every flow routes
-through it.
+**NO WIRE SEAMS ARE LEFT.** The bundle builds against the in-tree
+contract at the revision it is tested with, so it calls every door
+directly and builds every op as a plain `Mutation` (since B3b; the list of
+what was deleted and why is `docs/migration/seams.md` at the repository
+root). The op builders live with their commands: the C-15 batch handles
+and the B-18 nesting pair in `commands/batch-handles.ts`, the C-28 opacity
+mask in `commands/opacity-mask.ts`, the C-29 type on a path in
+`commands/text-on-path.ts`, the engine's refusal sentence for both in
+`commands/refusal.ts`, and the Layers provider's two in
+`binding-provider/layers-provider.ts`. `handlers/planar-regions.ts` reads
+the arrangement through `host.document.planarRegions`.
 
 **A LOCAL MIRROR CAN HIDE A REAL INCOMPATIBILITY — measured, not
-theoretical.** The retired `adr023-seam.ts` mirror declared
+theoretical.** A retired mirror of the ADR-023 provider types declared
 `applyMutation(mutation: Mutation)` where the contract takes a
 `MutationInput`. Under `strictFunctionTypes` a handler accepting only the
 NARROWER union cannot satisfy the wider parameter, so that provider could
 never actually have registered once the cast came off. The mirror was not
 a cosmetically-drifted copy; it was a type this bundle could not have
 used. That is the argument against writing the next one.
-
-**PROTOCOL 58 has ONE seam too**, and its skew is CLOSED.
-`draw-bundle/src/commands/v58-wire.ts` owns the four C-28/C-29 ops
-(`applyOpacityMask` / `releaseOpacityMask` / `attachTextToPath` /
-`detachTextFromPath`), their capability probes and their refusal reader.
-All four are typed in the published delta (plugin-sdk `f00d6dd`), the
-builders return `PendingMutation`, and `OpacityMaskMode` is an alias of
-the contract's `OpacityMaskType` rather than a second declaration of the
-same two strings.
 
 Two honesty facts these rows carry, and neither may be softened:
 - **An opacity mask does NOT render on canvas.** Core honours it in the
@@ -330,8 +312,8 @@ earlier note claimed while correcting a staler 58) and pinned in
 - 200 inserts + binds + property writes apply in one batch in ~12 ms and
   ONE undo removes all of them.
 
-ONE MEASURED EDGE, recorded in `v59-wire.ts` — now DIAGNOSED AND FIXED
-IN CORE, and still worked around here until that engine ships. With an
+ONE MEASURED EDGE — now DIAGNOSED AND FIXED IN CORE, and still worked
+around here (`commands/repeat.ts` reads the previous group from the tree). With an
 EARLIER `bindCreated` in the same batch, a `bindCreated` placed after a
 `createGroup` bound the PREVIOUS creation, so `dissolveGroup { groupId:
 "$h:g" }` refused with "node not found: Group(<the earlier insert's
@@ -416,14 +398,10 @@ the two — 2–3 whole-document reads per command. The engine's raw
 `mutationApplied` already lists every element a batch minted, in mint
 order (`minted`); plugin-sdk's `host.document.mutate` dropped it before
 0.2.38 (RFI K-15) and carries it on the outcome since.
-`mutateMinting(host, mutation)` answers it through three lanes and a flow
-never knows which it got: `outcome.minted` (plugin-sdk ≥ 0.2.38 — the
-headless host and the editor both take this one, 0 tree reads), the raw
-reply HEARD on `host.editor.client.subscribe` while the facade writes (an
-older SDK with the hatch — 0 tree reads), and the tree diff (a host with
-neither). The conformance `LANES` reach the two older lanes through
-`withoutMintedOutcome` (`test/conformance/one-batch.ts`). The write
-itself always goes through `host.document.mutate`: `client.send({ kind: "mutate" })` would skip the
+`mutateMinting(host, mutation)` answers it off `outcome.minted` (the
+headless host and the editor both carry it, 0 tree reads); the raw-reply
+and tree-diff lanes it kept for older SDKs went in B3b. The write itself
+always goes through `host.document.mutate`: `client.send({ kind: "mutate" })` would skip the
 facade's gates, and the headless host does not fan a `send` reply out, so
 no `onDidChange` listener would hear the write. What `minted` contains is
 measured and pinned in `minted.spec.ts`: one entry per CREATING child in
@@ -431,7 +409,7 @@ batch order, a `createGroup` listed as a group, an element the same batch
 deletes again STILL listed, `createSwatch` not listed, and `handle` named
 on some batches and `null` on others — ORDER is the contract. A flow
 never indexes the list by hand: `bindMinted(minting, batch)` reads the
-batch it sent and answers handle → id, the same in every lane.
+batch it sent and answers handle → id, and refuses when the two disagree.
 
 **THE `frameTransform` DOOR, and three things measured about it** (the
 §16.3 lane rides it; protocol 60):
@@ -553,11 +531,12 @@ over a set of items. The `GroupSpec` has no clip flag and core's parsed
   with a pointer when host/core work lands.
 - **Machines stay pure + unit-tested.** Page-local pt in, snapshots/plans
   out; tolerances are passed in (the host converts px→pt at zoom). Every
-  behavior change lands with a vitest case (`packages/*/test/`).
-- **Wire compatibility is asserted, not assumed.**
-  `draw-tools/src/wire-compat.ts` type-asserts machine output against the
-  engine wire types; a protocol break fails `pnpm typecheck` here. Don't
-  delete those assertions to make a build green — they're the §12.3 alarm.
+  behavior change lands with a unit test (`packages/*/test/`).
+- **Wire compatibility is the contract's type.** The machines' `*Wire`
+  shapes (`draw-tools/src/path-edit-ops.ts`, `scissors.ts`) are the
+  contract's `Mutation` variants, so a protocol break fails
+  `bun run typecheck` at the lowering. Don't cast around it to make a
+  build green.
 - **`panels/*.panel.json` are design prototypes.** Not interpreted by any
   host; keep them honest against the catalog's binding ceiling (no
   invented conditionals).
@@ -588,7 +567,7 @@ over a set of items. The `GroupSpec` has no clip flag and core's parsed
 ## Commands
 
 ```bash
-pnpm install && pnpm test && pnpm -r typecheck
+bun install && bun run test && bun run typecheck
 node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
 
 # The Rust half (only needed when crates/ changes — the artifact is committed)

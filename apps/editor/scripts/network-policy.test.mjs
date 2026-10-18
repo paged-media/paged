@@ -6,8 +6,8 @@
 // loaded with `--experimental-strip-types` like the cross-origin-isolation
 // check.
 //
-// Run: `node --experimental-strip-types scripts/network-policy.test.mjs`
-//   (root script `pnpm test:network-policy`).
+// Run: `bun test ./scripts/network-policy.test.mjs`
+//   (root script `bun run test:network-policy`).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

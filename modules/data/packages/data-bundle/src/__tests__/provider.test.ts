@@ -24,7 +24,7 @@
 // engine-side semantics are proven in Rust (data-conformance/tests/it/provider.rs);
 // here we prove the bundle reaches the engine and does not fake a registration.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
@@ -56,6 +56,8 @@ function fakeHost(
   return {
     manifest: { id: "media.paged.data", name: "d", version: "0.0.1", apiVersion: "^0.2" },
     log: { debug() {}, info: (m: string) => logs.push(m), warn() {}, error() {} },
+    // The document doors every host has; nothing here fires them.
+    document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
     supports: (f: string) => supportsRegistry && f === "dataProviders@1",
     dataProviders: {
       register: (reg: { id: string; category: string }) => {

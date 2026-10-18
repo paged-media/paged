@@ -29,7 +29,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
@@ -53,11 +53,11 @@ import {
   type Measured,
 } from "./harness";
 
-vi.setConfig({ testTimeout: BUDGET_TIMEOUT_MS });
+setDefaultTimeout(BUDGET_TIMEOUT_MS);
 
 const LANE = fileURLToPath(new URL("../../../../conformance/indesign-merge/", import.meta.url));
 const ID = "long-record-set";
-const normalise = (s: string) => s.replace(/\r/g, "\n").replace(/﻿/g, "");
+const normalise = (s: string) => s.replace(/\r/g, "\n").replace(/\uFEFF/g, "");
 
 // W8 as measured at introduction (Wave 5):
 //  · two mutates = two undo steps: the page batch (3 ops: remove the

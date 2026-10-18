@@ -21,7 +21,8 @@
 // family list that actually changed. (The real-host count is in
 // perf/perf-budgets.spec.ts.)
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { advanceTimersByTimeAsync } from "@paged-media/test-kit";
 
 import type { BundleHost, DocumentChangeEvent } from "@paged-media/plugin-api";
 
@@ -58,14 +59,14 @@ describe("watchDocumentFonts [plugin-web.source-panel]", () => {
     const doc = fakeDocument([["A"], ["A"]]);
     const got: string[][] = [];
     const w = watchDocumentFonts(doc.host, (f) => got.push(f));
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(vi, 0);
     expect(doc.reads()).toBe(1);
     expect(got).toEqual([["A"]]);
 
     for (let i = 0; i < 500; i++) doc.change();
-    await vi.advanceTimersByTimeAsync(FONT_WATCH_DELAY_MS - 1);
+    await advanceTimersByTimeAsync(vi, FONT_WATCH_DELAY_MS - 1);
     expect(doc.reads()).toBe(1);
-    await vi.advanceTimersByTimeAsync(1);
+    await advanceTimersByTimeAsync(vi, 1);
     expect(doc.reads()).toBe(2);
     // The list did not change: nothing is delivered.
     expect(got).toEqual([["A"]]);
@@ -76,9 +77,9 @@ describe("watchDocumentFonts [plugin-web.source-panel]", () => {
     const doc = fakeDocument([["A", "B"], ["B", "A"], ["B", "A", "C"]]);
     const got: string[][] = [];
     const w = watchDocumentFonts(doc.host, (f) => got.push(f), { delayMs: 10 });
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(vi, 0);
     doc.change();
-    await vi.advanceTimersByTimeAsync(10);
+    await advanceTimersByTimeAsync(vi, 10);
     expect(got).toHaveLength(1);
     doc.change();
     await w.flush();
@@ -90,10 +91,10 @@ describe("watchDocumentFonts [plugin-web.source-panel]", () => {
     const doc = fakeDocument([["A"], ["Z"]]);
     const got: string[][] = [];
     const w = watchDocumentFonts(doc.host, (f) => got.push(f));
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(vi, 0);
     doc.change();
     w.dispose();
-    await vi.advanceTimersByTimeAsync(FONT_WATCH_DELAY_MS * 2);
+    await advanceTimersByTimeAsync(vi, FONT_WATCH_DELAY_MS * 2);
     expect(doc.reads()).toBe(1);
     expect(doc.disposed()).toBe(true);
     expect(got).toEqual([["A"]]);

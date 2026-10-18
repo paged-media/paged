@@ -28,7 +28,7 @@
 // `apps/canvas/tests/e2e/object-commands.spec.ts`. The pure walk stays
 // here because paged.draw still walks it.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { ElementId, SceneTreeNode } from "@paged-media/plugin-api";
 

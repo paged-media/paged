@@ -1,6 +1,6 @@
 $schema: '../../.moon/cache/schemas/project.json'
 
-# paged.web: the pnpm workspace (web-model, web-bundle, web-conformance).
+# paged.web: the JS packages (web-model, web-bundle, web-conformance).
 # packages/web-render is a separate Cargo workspace and its own project
 # (web-render); the engine wasm this workspace ships is built from it.
 language: 'typescript'
@@ -15,13 +15,16 @@ project:
 dependsOn:
   - id: 'web-render'
     scope: 'build'
+  - id: 'test-kit'
+    scope: 'development'
 
 fileGroups:
   js-sources:
     - '**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}'
     - '**/*.{json,css,html,svg}'
-    - '**/pnpm-workspace.yaml'
-    - '**/pnpm-lock.yaml'
+    - '/package.json'
+    - '/bunfig.toml'
+    - '/bun.lock'
     - '!docs/**'
     - '!packages/web-render/**'
   js-tests:
@@ -37,14 +40,8 @@ fileGroups:
     - '/.cargo/*.toml'
 
 tasks:
-  js-lint:
-    description: 'The contract-import guard (scripts/check-contract-imports.mjs).'
-    command: 'pnpm run lint:contract'
-    inputs:
-      - '@group(js-sources)'
-
   js-test:
-    # web-vitest builds the engine wasm before vitest.
+    # web-vitest.yml builds the engine wasm before bun test.
     deps: ['~:wasm']
 
   wasm:

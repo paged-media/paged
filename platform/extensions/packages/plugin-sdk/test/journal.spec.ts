@@ -31,7 +31,7 @@
 //   5. THE ACTIVATION GUARD: a throwing bundle no longer takes the loader
 //      down, is attributed in three places, and never leaks its message.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import type { PagedBundle, PluginManifest } from "@paged-media/plugin-api";
 

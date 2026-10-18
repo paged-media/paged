@@ -21,7 +21,7 @@
 // document, vs the per-browser `host.blob`). Pure module test: no engine, no
 // session — an in-memory parts store stands in for the container writer.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 

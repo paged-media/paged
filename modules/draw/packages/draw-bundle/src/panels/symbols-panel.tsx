@@ -145,7 +145,7 @@ export function makeSymbolsPanel(host: BundleHost): {
     const [hasSelection, setHasSelection] = React.useState(false);
     const [portable, setPortable] = React.useState(true);
 
-    // WHAT A RELOAD COSTS (`test/panels/symbols-panel.spec.tsx`, and it
+    // WHAT A RELOAD COSTS (`test/panels/symbols-panel.dom.test.tsx`, and it
     // may only go down): the library part once, and the document's links
     // once per document REVISION, out of the walk every panel shares.
     // Which instances the selection touches is a lookup in that same

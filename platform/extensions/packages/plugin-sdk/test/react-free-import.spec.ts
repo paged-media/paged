@@ -25,25 +25,25 @@
 // plugin-draw's test files against the published canary, and nobody saw it
 // because that repo's CI was failing at set-up for an unrelated reason.
 //
-// A unit test importing the SOURCE cannot catch this (vitest resolves React
+// A unit test importing the SOURCE cannot catch this (the test runner resolves React
 // from the workspace root), so this asserts on the shipped artifact: no
 // top-level react import may survive the bundle.
 //
 // The FIRST fix for that used a top-level `await import("react")`, which
-// broke the artifact a second way: tsup emits top-level await verbatim, and
-// Vite's dep-optimizer compiles pre-bundled deps down to its ES2020 floor,
-// where top-level await does not exist — so pre-bundling the published
-// package failed the editor's dev server outright. The build now pins
-// `--target es2020` (that same floor), which makes esbuild REFUSE to emit
-// top-level await: the build fails here instead of in a consumer. These
-// tests pin the gate and the resulting shape; `src/react-optional.ts` holds
-// the full record.
+// broke the artifact a second way: the bundler emits top-level await
+// verbatim, and Vite's dep-optimizer compiles pre-bundled deps down to its
+// ES2020 floor, where top-level await does not exist — so pre-bundling the
+// published package failed the editor's dev server outright. The declaration
+// build now compiles at `"module": "ES2020"` (that same floor), where
+// TypeScript REFUSES top-level await (TS1378): the build fails here instead of
+// in a consumer. These tests pin the gate and the resulting shape;
+// `src/react-optional.ts` holds the full record.
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST = resolve(HERE, "../dist/index.js");
@@ -60,16 +60,23 @@ function readPkg(): {
   };
 }
 
-/** esbuild targets that can REPRESENT top-level await. Building at
- *  anything below these is what makes the emit impossible. */
-const TLA_CAPABLE = /^(esnext|es2022|es2023|es2024|es2025)$/;
+/** TypeScript `module` settings that ALLOW top-level await (TS1378 names
+ *  them). Compiling at anything else is what makes it a build error. */
+const TLA_CAPABLE = /^(es2022|esnext|system|node16|node18|node20|nodenext|preserve)$/i;
+
+function readBuildModule(): string | undefined {
+  const config = JSON.parse(readFileSync(resolve(HERE, "../tsconfig.build.json"), "utf8")) as {
+    compilerOptions?: { module?: string };
+  };
+  return config.compilerOptions?.module;
+}
 
 describe("the published bundle keeps React optional", () => {
   it("has no top-level react import", () => {
     if (!existsSync(DIST)) {
-      // `pnpm build` has not run in this checkout — nothing to assert
+      // `bun run build` has not run in this checkout — nothing to assert
       // against. BOTH workflows now build before the suite (they did not,
-      // which left this guard inert in CI); locally, run `pnpm build` first.
+      // which left this guard inert in CI); locally, run `bun run build` first.
       return;
     }
     const bundle = readFileSync(DIST, "utf8");
@@ -95,16 +102,18 @@ describe("the published bundle keeps React optional", () => {
     ).not.toMatch(/await import\("react"\)/);
   });
 
-  it("builds at a target that CANNOT emit top-level await", () => {
-    // The real gate: esbuild errors on top-level await below es2022, so a
-    // future one fails `pnpm build` rather than a consumer's dev server.
-    // This asserts the gate is still configured — the build asserts the rest.
+  it("builds at a module setting that CANNOT hold top-level await", () => {
+    // The real gate: TypeScript reports a top-level await as an error
+    // (TS1378) below `module: es2022`, so a future one fails `bun run build`
+    // rather than a consumer's dev server. This asserts the gate is still
+    // configured and on the build's path — the build asserts the rest.
     const build = readPkg().scripts?.build ?? "";
-    const target = /--target\s+(\S+)/.exec(build)?.[1];
-    expect(target, "the build must pin an explicit esbuild target").toBeDefined();
+    expect(build, "the build must run the declaration compile").toContain("tsc -p tsconfig.build.json");
+    const moduleSetting = readBuildModule();
+    expect(moduleSetting, "tsconfig.build.json must pin an explicit module").toBeDefined();
     expect(
-      TLA_CAPABLE.test(target ?? ""),
-      `build target "${target}" can emit top-level await; Vite's dep-optimizer ` +
+      TLA_CAPABLE.test(moduleSetting ?? ""),
+      `module "${moduleSetting}" allows top-level await; Vite's dep-optimizer ` +
         "floor (es2020) cannot consume it",
     ).toBe(false);
   });

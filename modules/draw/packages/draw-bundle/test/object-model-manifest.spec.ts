@@ -20,14 +20,14 @@
 // rule 4): plugin-cli validates the manifest, the editor and cockpit's
 // object matrix read it, and the runtime refuses a registration whose
 // paths disagree with it. So it is GENERATED from src/object-model and
-// this spec fails when the two drift. `UPDATE_OBJECT_MODEL=1 pnpm vitest
+// this spec fails when the two drift. `UPDATE_OBJECT_MODEL=1 bun test
 // run test/object-model-manifest.spec.ts` rewrites it.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { validateValue } from "@paged-media/plugin-sdk";
 

@@ -167,15 +167,24 @@ function firstSentence(doc) {
   return (m ? m[1] : doc).trim();
 }
 
-/** Collapse a possibly multi-line declaration into one signature. */
+/**
+ * Collapse a possibly multi-line declaration into one signature. The result
+ * does not depend on how the declaration is laid out over lines (the
+ * formatter wraps long ones): a `{` ends it only once the parentheses and
+ * angle brackets are balanced (`Promise<{` opens a type, not the body), and
+ * the padding inside brackets and the trailing separators a wrapped list
+ * carries are dropped.
+ */
 function signatureAt(lines, i) {
   let sig = "";
   for (let j = i; j < lines.length && j < i + 40; j++) {
     sig += (sig ? " " : "") + lines[j].trim();
     const opens = (sig.match(/\(/g) ?? []).length;
     const closes = (sig.match(/\)/g) ?? []).length;
-    if (opens === closes && /[{;]\s*$/.test(sig)) break;
-    if (opens === 0 && closes === 0 && /[;=]\s*$/.test(sig)) break;
+    // `>` of an arrow (`=>`) closes nothing.
+    const angles = (sig.match(/</g) ?? []).length - (sig.match(/(?<!=)>/g) ?? []).length;
+    if (opens === closes && angles === 0 && /[{;]\s*$/.test(sig)) break;
+    if (opens === 0 && closes === 0 && angles === 0 && /[;=]\s*$/.test(sig)) break;
   }
   return sig
     .replace(/\s*\{\s*$/, "")
@@ -183,6 +192,10 @@ function signatureAt(lines, i) {
     .replace(/\s*=\s*.*$/, "")
     .replace(/^(public|readonly)\s+/, "")
     .replace(/\s+/g, " ")
+    .replace(/([(<[])\s+/g, "$1")
+    .replace(/,?\s+([)>\]])/g, "$1")
+    .replace(/,([)>\]])/g, "$1")
+    .replace(/[;,]\s*\}/g, " }")
     .trim();
 }
 
@@ -349,7 +362,8 @@ if (origins.has("*./protocol")) {
 // Fails closed (0 -> "no protocol" problem) if the package or the
 // convention is missing.
 function engineProtocol() {
-  if (!/PROTOCOL_VERSION[^=]*=\s*protocolFromVersion\(canvasWasmPackage\.version\)/.test(protocolSrc)) {
+  // Whitespace-tolerant: the formatter may wrap the call over lines.
+  if (!/PROTOCOL_VERSION[^=]*=\s*protocolFromVersion\(\s*canvasWasmPackage\.version\s*,?\s*\)/.test(protocolSrc)) {
     return Number(protocolSrc.match(/PROTOCOL_VERSION\s*=\s*(\d+)/)?.[1] ?? 0);
   }
   try {

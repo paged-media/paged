@@ -1098,7 +1098,6 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
   /** The hash the document's version label names (null = no label;
    *  undefined = the host cannot say). */
   async function labelHash(): Promise<string | null | undefined> {
-    if (typeof host.document?.getDocumentMetadata !== "function") return undefined;
     try {
       const env = await host.document.getDocumentMetadata();
       const wb = (env?.data as { wb?: unknown } | undefined)?.wb;
@@ -1126,12 +1125,9 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
     return reconciling;
   }
 
-  const historySub =
-    typeof host.document?.onDidChange === "function"
-      ? host.document.onDidChange((e) => {
-          if (e.kind === "undoApplied" || e.kind === "redoApplied") void reconcile();
-        })
-      : null;
+  const historySub = host.document.onDidChange((e) => {
+    if (e.kind === "undoApplied" || e.kind === "redoApplied") void reconcile();
+  });
 
   // ── datasets: publish a range ────────────────────────────────────────
 
@@ -1425,23 +1421,16 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
     },
   ];
 
-  // A host that predates the object model (plugin-api < 0.2.42) has no
-  // door: the bundle still works, its objects are just not addressable. A
-  // 0.2.42 registry ignores the plugin-level `batch` and finds no per-kind
-  // one: writes then refuse (reads still work) — peers require 0.2.43.
-  const handle: ObjectModelHandle | null =
-    typeof host.contribute?.objectModel === "function"
-      ? host.contribute.objectModel({ kinds, commands, batch: batchWrite })
-      : null;
+  const handle: ObjectModelHandle = host.contribute.objectModel({ kinds, commands, batch: batchWrite });
 
   return {
     reconcile,
     dispose() {
-      historySub?.dispose();
+      historySub.dispose();
       changeSub.dispose();
       for (const p of published.values()) p.handle.dispose();
       published.clear();
-      handle?.dispose();
+      handle.dispose();
     },
   };
 }

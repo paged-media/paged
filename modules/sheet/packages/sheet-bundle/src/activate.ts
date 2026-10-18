@@ -30,8 +30,12 @@
 // the one thing allocated OUTSIDE a facade-tracked registration, so
 // dispose tears it down.
 
-import type { BundleHandle, BundleHost, EditContextContribution } from "@paged-media/plugin-api";
-import type { ContentWheelEvent, ContentWheelHook } from "./protocol66";
+import type {
+  BindingProviderHandle,
+  BundleHandle,
+  BundleHost,
+  ContentWheelEvent,
+} from "@paged-media/plugin-api";
 import { contributeMenu } from "./menu";
 import { contributePanel, contributeSchemaPanel } from "@paged-media/plugin-sdk";
 import { parseBinding } from "../../sheet-host-model/src";
@@ -44,10 +48,6 @@ import {
   pickAndImport,
   XLSX_MIME,
 } from "./import-xlsx";
-import {
-  registerBindingProvider,
-  type BindingProviderHandle,
-} from "./binding-provider/adr023-seam";
 import { makeSwatchesBindingProvider } from "./binding-provider/swatches-provider";
 import { subscribeProviderInvalidation } from "./binding-provider/invalidation";
 import { makeTextBindingProvider } from "./binding-provider/text-provider";
@@ -133,27 +133,11 @@ export function activate(host: BundleHost): BundleHandle {
   // The workbook belongs to the DOCUMENT, and activation runs at app boot —
   // before any document is open. Every later open (File ▸ Open, File ▸ New,
   // a reopened .paged) restores that document's own workbook from its
-  // container part. A host with `document.onDidOpen@1` reports each open
-  // there; an older one only through the client's raw `documentLoaded`
-  // broadcast; a host with neither falls back to the lazy restore on frame
-  // entry.
-  let unsubscribeDocs: (() => void) | null = null;
-  if (typeof host.document?.onDidOpen === "function" && host.supports("document.onDidOpen@1")) {
-    const sub = host.document.onDidOpen(
-      () => void session.documentOpened().then(() => objectModel.reconcile()),
-    );
-    unsubscribeDocs = () => sub.dispose();
-  } else {
-    try {
-      unsubscribeDocs = host.editor.client.subscribe((msg) => {
-        if (msg.kind === "documentLoaded") {
-          void session.documentOpened().then(() => objectModel.reconcile());
-        }
-      });
-    } catch {
-      /* no raw client: onEnter's ensureRestored covers it */
-    }
-  }
+  // container part. Every host reports each open through
+  // `document.onDidOpen`.
+  const documentOpenedSub = host.document.onDidOpen(
+    () => void session.documentOpened().then(() => objectModel.reconcile()),
+  );
 
   contributePanel(host, {
     id: PANEL_ID,
@@ -459,7 +443,6 @@ export function activate(host: BundleHost): BundleHandle {
     ["cmd+f", "media.paged.sheet.command.findInSheet"],
     ["ctrl+f", "media.paged.sheet.command.findInSheet"],
   ] as const) {
-    if (typeof host.contribute.keybinding !== "function") break;
     host.contribute.keybinding({ key, command, when: inGrid });
   }
 
@@ -531,8 +514,7 @@ export function activate(host: BundleHost): BundleHandle {
       },
       // A plain wheel over the entered frame scrolls the grid window (by
       // whole rows / columns); declining at an edge lets the canvas pan.
-      // Shift turns a vertical wheel horizontal. Typed locally until the
-      // contract names the hook (see protocol66.ts).
+      // Shift turns a vertical wheel horizontal.
       onContentWheel: (e: ContentWheelEvent) => {
         const [dx, dy] = e.delta;
         return e.modifiers.shift && dx === 0
@@ -570,7 +552,7 @@ export function activate(host: BundleHost): BundleHandle {
       onExit: () => {
         session.hideGridInFrame();
       },
-    } as EditContextContribution & ContentWheelHook);
+    });
 
     // ADR 023 phase D — paged.sheet answers the HOST's Swatches panel
     // while the `sheet` context is active: the WORKBOOK PALETTE (the
@@ -581,35 +563,35 @@ export function activate(host: BundleHost): BundleHandle {
     // Registered INSIDE the editContext branch on purpose — the
     // provider's lifetime is BORROWED from that context's
     // onEnter/onExit, so a host that cannot host the context cannot host
-    // the provider either. The door itself probes separately and
-    // degrades to "no provider" on a pre-ADR host.
-    swatchesProviderHandle = registerBindingProvider(
-      host,
-      "sheet",
-      makeSwatchesBindingProvider(host, session).provider,
-    );
+    // the provider either. Where the host wires no binding-provider
+    // registry (`bindings.provider@1` false) nothing would consult it.
+    const providersConsulted = host.supports("bindings.provider@1");
+    swatchesProviderHandle = providersConsulted
+      ? host.contribute.bindingProvider("sheet", makeSwatchesBindingProvider(host, session).provider)
+      : null;
 
     // ADR 023 phase D — the CHARACTER/PARAGRAPH provider (the VALUE
     // axis). Registered on the SAME context and therefore with the same
     // borrowed lifetime; a separate registration only because the two
     // answer different lanes about the same selection.
-    textProviderHandle = registerBindingProvider(
-      host,
-      "sheet",
-      makeTextBindingProvider(host, {
-        textSelectionRange: () => session.textSelectionRange(),
-        lowerRange: (sheet, range) => {
-          const engine = session.state().engine;
-          if (!engine) return null;
-          // The STYLED door, not the frozen page-lowering one: the
-          // Character panel is about the workbook's real cell fonts, and
-          // `getRangeLowered` emits a key-0-only table by contract.
-          return engine.getRangeStyled(sheet, range, {
-            includeGridRules: false,
-          });
-        },
-      }).provider,
-    );
+    textProviderHandle = providersConsulted
+      ? host.contribute.bindingProvider(
+          "sheet",
+          makeTextBindingProvider(host, {
+            textSelectionRange: () => session.textSelectionRange(),
+            lowerRange: (sheet, range) => {
+              const engine = session.state().engine;
+              if (!engine) return null;
+              // The STYLED door, not the frozen page-lowering one: the
+              // Character panel is about the workbook's real cell fonts, and
+              // `getRangeLowered` emits a key-0-only table by contract.
+              return engine.getRangeStyled(sheet, range, {
+                includeGridRules: false,
+              });
+            },
+          }).provider,
+        )
+      : null;
 
     if (swatchesProviderHandle || textProviderHandle) {
       // Each provider re-reads only on changes that can move its answer
@@ -678,7 +660,7 @@ export function activate(host: BundleHost): BundleHandle {
       textProviderHandle?.dispose();
       menuSub.dispose();
       textProviderHandle = null;
-      unsubscribeDocs?.();
+      documentOpenedSub.dispose();
       propertyBindings?.dispose();
       objectModel.dispose();
       session.dispose();

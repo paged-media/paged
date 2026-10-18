@@ -31,7 +31,7 @@
 // is GPU-only, so the proof that coverage actually gates a write lives
 // in the Rust device tests and the editor's GPU journey lane.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type {

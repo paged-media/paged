@@ -5,7 +5,7 @@
 // not hand over the caller's buffer: a detached buffer saves as an empty file
 // and a reopened Parquet/JSON/XLSX source no longer loads.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { duckdbHandle } from "../query/duckdb";
 

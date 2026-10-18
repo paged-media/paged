@@ -15,6 +15,13 @@ default = ["mutations", "query"]
 mutations = ["dep:paged-mutate"]
 # Selector evaluation (`query::query`) needs the scene model.
 query = ["dep:paged-scene", "dep:paged-model"]
+# ADR 187 — the wire as JSON Schema (`schema::mutation_schema`, the committed
+# `schema/mutation.schema.json` and its checks). Nothing in the workspace
+# turns it on and no wasm build does. `paged-mutate?/schema` never turns
+# `mutations` on, so the read-only viewer cannot reach the mutation crates
+# through it. `preserve_order` keeps properties in declaration order, and it
+# does so by turning on `serde_json/preserve_order` for the whole build.
+schema = ["dep:schemars", "dep:serde_json", "paged-mutate?/schema"]
 
 [dependencies]
 paged-mutate = { path = "../paged-mutate", optional = true }
@@ -23,7 +30,14 @@ paged-model = { path = "../paged-model", optional = true }
 serde = { workspace = true }
 tsify-next = { workspace = true }
 wasm-bindgen = { workspace = true }
+schemars = { workspace = true, optional = true, features = ["preserve_order"] }
+serde_json = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json = "1"
 proptest = { version = "1", default-features = false, features = ["std"] }
+
+# Writes `schema/mutation.schema.json` (see `src/schema.rs`).
+[[example]]
+name = "emit-schema"
+required-features = ["schema", "mutations"]

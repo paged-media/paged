@@ -1,4 +1,11 @@
 name: data / rust
+concurrency:
+  # A newer push to a pull request cancels the older run. Main pushes share
+  # one group per event type: a running main run always finishes, and a newer
+  # push replaces the one still waiting, so direct pushes queue at most one.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # MONOREPO (step A3): ported from paged-media/plugin-data
 # .github/workflows/rust.yml; runs in modules/data.
 on:
@@ -7,20 +14,26 @@ on:
     paths:
       - "modules/data/**"
       - ".github/workflows/data-rust.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/data/docs/**/*.md"
   # Pre-merge gate: a PR that breaks the engine goes red BEFORE it lands
   # (this lane used to run on push to main only).
   pull_request:
     paths:
       - "modules/data/**"
       - ".github/workflows/data-rust.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/data/docs/**/*.md"
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: data-rust-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:
@@ -43,6 +56,8 @@ jobs:
         with:
           workspaces: modules/data -> target
           prefix-key: v0-rust-data
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       # Each guard fails explicitly. They used to be two `! (… | grep …)`
@@ -75,6 +90,8 @@ jobs:
         with:
           workspaces: modules/data -> target
           prefix-key: v0-rust-data
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@nextest
       # A red test FAILS this job. The step used to end in `|| true` (so red
       # results would still ship as evidence), which also meant the Rust lane
@@ -132,6 +149,8 @@ jobs:
         with:
           workspaces: modules/data -> target
           prefix-key: v0-rust-data
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: install pinned wasm-bindgen-cli (Cargo.lock version)
         run: |
           V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
@@ -140,5 +159,10 @@ jobs:
         run: |
           curl -sL https://github.com/WebAssembly/binaryen/releases/download/version_126/binaryen-version_126-x86_64-linux.tar.gz | tar xz
           echo "$PWD/binaryen-version_126/bin" >> "$GITHUB_PATH"
+      # Bun at the version in /.prototools (build-wasm.sh runs source-hash.mjs on it).
+      - uses: moonrepo/setup-toolchain@v0.6.4
+        with:
+          auto-install: true
+          proto-version: "0.63.1"
       - name: build + budget gate (100 MB app-wide)
         run: bash scripts/build-wasm.sh

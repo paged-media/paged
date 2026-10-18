@@ -25,7 +25,7 @@
 // Node has no navigator.gpu, so GPU adjustments degrade honestly — these
 // exercise the pure (CPU/geometry) lanes that DON'T need WebGPU.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type {

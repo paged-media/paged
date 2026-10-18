@@ -70,8 +70,8 @@ trying, and both rest on the write door returning a non-applied outcome
 
 - plugin-draw sends one deliberately unknown mutation and reads the engine's operation list
   out of the error (`plugin-draw: packages/draw-bundle/src/commands/join-average.ts:236-297`).
-  Its stated rule: "Version sniffing is not available to a bundle and would be wrong"
-  (`plugin-draw: packages/draw-bundle/src/commands/v58-wire.ts:52`).
+  Its stated rule: "Which lane runs is decided by `engineOpVocabulary()` below (a probe, not a
+  version guess)" (`plugin-draw: packages/draw-bundle/src/commands/join-average.ts:39-41`).
 - plugin-doc sends a batch and, when it is refused, replays it operation by operation; the
   refused style paths decide whether the document is lowered again, because the plugin API
   "has no flag that says so up front" (`plugin-doc: packages/doc-bundle/src/pour.ts:58-96`,

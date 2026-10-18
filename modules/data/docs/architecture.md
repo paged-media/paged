@@ -69,12 +69,13 @@ TypeScript copy of the lowered types (`lowered.ts`), and the metadata envelope
 (`src/query/duckdb.ts`), the Arrow converter (`src/query/recordset.ts`) and the functions
 that write to the document (`src/lower.ts`).
 
-- The bundle imports the host model by relative path (`../../data-host-model/src`), and
-  tsup inlines it, so the published package does not depend on the private one.
+- The bundle imports the host model by relative path (`../../data-host-model/src`). Both
+  are private workspace packages (PM-0008); the editor builds them from source.
 - `@paged-media/plugin-api`, `@paged-media/plugin-sdk` and `react` are peer dependencies.
-  `scripts/check-contract-imports.mjs` fails on a package import outside its allow-list:
-  those three, this repo's own `@paged-media/data-` packages, `@duckdb/duckdb-wasm` and
-  `apache-arrow`.
+  The contract-import lint rule (`/bunfig.toml`, PM-0003) fails on a package import outside its
+  allow-list:
+  those three, the internal shared packages (`platform/shared/*`), this repo's own
+  `@paged-media/data-` packages, `@duckdb/duckdb-wasm` and `apache-arrow`.
 - The TypeScript interface `DataEngineLike` (`src/engine.ts`) repeats the methods of the
   Rust class by hand, except `define_template` and `lower_barcode_at`. Nothing generates it.
 
@@ -246,8 +247,8 @@ panels, seven commands and one edit context, `dataBinding`.
 | `host.supports`, `host.log` | probe optional doors; logging |
 
 Neither wasm file goes through a host loader, but both are first asked of the host's module
-door (plugin-sdk ADR 326; `packages/data-bundle/src/module-door.ts`, a feature-detected probe
-of `host.modules` that works on SDKs without it). The engine is imported from
+door (plugin-sdk ADR 326; `hostWasm` in `packages/data-bundle/src/bin-url.ts`, which asks
+`host.modules` where the host wires a module backend, `modules@1`). The engine is imported from
 `../bin/data_js.js`, the `wasm-bindgen --target web` glue; its `.wasm` is the host's copy,
 fetched with its Subresource Integrity, when the host serves one, else the file next to the
 glue. DuckDB is loaded from the package's own `bin/` (`packages/data-bundle/src/bin-url.ts`):
@@ -272,7 +273,7 @@ exports of `@paged-media/data`, among them `createSession`, `bootEngine` and `bo
   above 100 MB, and when the installed `wasm-bindgen` differs from the one in `Cargo.lock`.
 - Rust: `cargo test --workspace`; `cargo run -p data-conformance --bin coverage-gate`.
   `deny.toml` allows crates.io as the only source and a fixed list of licences.
-- TypeScript: `pnpm test` runs the import lint, then vitest in both packages. The bundle's
+- TypeScript: `pnpm test` runs the import lint, then `bun test` in both packages. The bundle's
   unit tests use hand-written fake hosts and fake engines. `test/engine-real.spec.ts` loads
   the built wasm; when the file is absent it is skipped, or fails if `REQUIRE_REAL_ENGINE=1`.
   `test/pipeline-real.spec.ts` and `test/duckdb-real.spec.ts` (`pnpm --filter @paged-media/data

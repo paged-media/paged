@@ -4,9 +4,9 @@
 // own handle code (duckdbHandle). The same lane duckdb-real.spec.ts proves;
 // this file only makes it reusable. Never throws — returns why not.
 
-import Module, { createRequire } from "node:module";
+import { createRequire } from "node:module";
 import { existsSync, readFileSync } from "node:fs";
-import { delimiter, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { DUCKDB_ARTIFACTS, duckdbHandle, type DuckDBHandle } from "../src/query/duckdb";
@@ -20,17 +20,11 @@ const NODE_API = join(PKG, "..", "..", "vendor", "duckdb-wasm", "dist", "duckdb-
 export const DATA_JS_WASM = join(BIN, "data_js_bg.wasm");
 export const REQUIRE_REAL_DUCKDB = process.env.REQUIRE_REAL_DUCKDB === "1";
 
+// The vendored CJS requires apache-arrow, which resolves from modules/data's own
+// node_modules (a devDependency there for this). It used to come from this
+// package's node_modules through a NODE_PATH rewrite, which only Node honours.
 function requireNodeDuckDB(): any {
-  const prev = process.env.NODE_PATH;
-  process.env.NODE_PATH = [join(PKG, "node_modules"), prev].filter(Boolean).join(delimiter);
-  (Module as unknown as { _initPaths(): void })._initPaths();
-  try {
-    return createRequire(import.meta.url)(NODE_API);
-  } finally {
-    if (prev === undefined) delete process.env.NODE_PATH;
-    else process.env.NODE_PATH = prev;
-    (Module as unknown as { _initPaths(): void })._initPaths();
-  }
+  return createRequire(import.meta.url)(NODE_API);
 }
 
 /** Boot one real DuckDB over the shipped EH engine. */

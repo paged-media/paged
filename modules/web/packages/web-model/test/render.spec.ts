@@ -24,7 +24,7 @@
 // dishonesty the seam exists to avoid). Also covers the engine-pin
 // envelope round-trip (the determinism record ADR-011 requires).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   ENGINE_NOT_LOADED_MESSAGE,

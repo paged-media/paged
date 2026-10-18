@@ -10,11 +10,18 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, mock } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 
 import type { DataSourceSession } from "../src/session";
 import { bootRealDuckDB, bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_DUCKDB } from "./real-duckdb";
 import { NODE_EXTENSION_REPO, refusedExtensionUrls, servedExtensionUrls } from "./duckdb-node-ext";
+
+// bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
+// real exports are taken once, before anything is mocked, and mock.module
+// patches the loaded module in place (every importer sees the change).
+const actualEngine = await importActual(() => import("../src/engine"));
+const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(HERE, "..", "..", "..", "conformance", "sources");
@@ -25,13 +32,12 @@ const probe = await bootRealDuckDB();
 const ready = probe.handle !== undefined && existsSync(DATA_JS_WASM);
 
 async function loadSessionModule() {
-  vi.resetModules();
-  vi.doMock("../src/engine", async (orig) => ({
-    ...(await orig<typeof import("../src/engine")>()),
+  mock.module("../src/engine", () => ({
+    ...actualEngine,
     bootEngine: (today: number) => bootRealEngine(today),
   }));
-  vi.doMock("../src/query/duckdb", async (orig) => ({
-    ...(await orig<typeof import("../src/query/duckdb")>()),
+  mock.module("../src/query/duckdb", () => ({
+    ...actualDuckdb,
     bootDuckDB: async () => {
       const b = await bootRealDuckDB();
       if (!b.handle) throw new Error(b.error);
@@ -47,7 +53,8 @@ const stubHost = {
   supports: () => false,
   parts: { write: async () => {}, read: async () => null, list: async () => [] },
   network: { consentedOrigins: () => [], requestConsent: async () => ({ granted: [], denied: [], remembered: false }) },
-  document: {},
+  // The document doors every host has; nothing here fires them.
+  document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }) },
 } as never;
 
 describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(

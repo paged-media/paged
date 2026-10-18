@@ -27,7 +27,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { parseArgs } from "../src/args";
 import { openSession, type CliSession } from "../src/session";

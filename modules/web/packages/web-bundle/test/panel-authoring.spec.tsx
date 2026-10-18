@@ -21,7 +21,7 @@
 // outline following a press on the canvas.
 
 import { act, type ReactTestRenderer } from "react-test-renderer";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import { DEFAULT_SOURCE, envelopeFor } from "@paged-media/web-model";
