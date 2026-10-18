@@ -46,7 +46,9 @@ tools and asks before anything that writes.
 ## Invariants
 - The public repository builds and passes its gates without private resources
   (corpus, licensed profiles/fonts). Optional resources are reached through env
-  vars and report `unavailable`, never a silent pass.
+  vars and report `unavailable`, never a silent pass: in Rust through
+  `platform/shared/test-resources` (`skip!`, `PAGED_REQUIRE_<X>=1`,
+  `PAGED_CORPUS_DIR`; `docs/development/testing.md`).
 - Built-in modules depend on each other through the workspace, never on
   published canaries of each other.
 - Commit as `Dietmar Rietsch <dietmar.rietsch@andthenext.at>`.
