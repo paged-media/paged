@@ -111,8 +111,8 @@ jobs:
       # without a resync fails here.
       - name: vendored wire and catalog match the engine
         run: |
-          node scripts/sync-wire.mjs --check
-          node scripts/sync-catalog.mjs --check
+          bun scripts/sync-wire.mjs --check
+          bun scripts/sync-catalog.mjs --check
 
       # Build BEFORE the suite: react-free-import.spec.ts asserts on the
       # SHIPPED artifact (no static react import, no AWAITED react import),

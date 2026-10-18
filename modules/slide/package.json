@@ -8,7 +8,7 @@
     "typecheck": "bun run --filter './packages/*' typecheck",
     "test": "bun run --filter './packages/*' test",
     "build:wasm": "bash scripts/build-wasm.sh",
-    "validate:manifest": "node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/slide-bundle/manifest.json"
+    "validate:manifest": "bun ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/slide-bundle/manifest.json"
   },
   "devDependencies": {
     "typescript": "catalog:"
