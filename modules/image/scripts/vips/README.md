@@ -10,7 +10,7 @@ commands, the stimulus formula, our parameters). It also regenerates
 ```bash
 node scripts/vips/record.mjs                    # every row (needs the vips CLI)
 node scripts/vips/record.mjs math.add geom.crop # just these
-PAGED_VIPS_TOLERANCE=write cargo test --release -p image-conformance --test oracle_vips
+PAGED_VIPS_TOLERANCE=write cargo test --release -p image-conformance --test it oracle_vips::
 ```
 
 The replay, `image-conformance/tests/oracle_vips.rs`, needs no libvips:

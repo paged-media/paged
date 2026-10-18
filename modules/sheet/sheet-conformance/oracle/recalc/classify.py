@@ -3,7 +3,7 @@
 #
 # Usage:
 #   PAGED_XLSX_CORPUS=1 PAGED_RECALC_REPORT=/tmp/r.tsv \
-#     cargo test -p sheet-conformance --test xlsx_recalc_corpus -- --ignored --nocapture
+#     cargo test -p sheet-conformance --test it -- --ignored --nocapture xlsx_recalc_corpus::
 #   python3 classify.py /tmp/r.tsv [<corpus root>/xlsx]
 #
 # The corpus root defaults to <repo root>/corpus (gitignored; a local symlink

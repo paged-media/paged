@@ -15,7 +15,7 @@ OUT="$(mkdir -p "$1" && cd "$1" && pwd)"
 cd "$ROOT"
 cargo run -q -p docx-conformance --bin dump-fixture -- "$OUT/symbols.docx" symbols
 SYMBOLS_EDITED_OUT="$OUT/symbols-edited.docx" \
-  cargo test -q -p docx-conformance --test symbols an_edited_save >&2
+  cargo test -q -p docx-conformance --test it symbols::an_edited_save >&2
 for f in symbols symbols-edited; do
   bash scripts/word-pagination-probe.sh "$OUT/$f.docx" "$OUT/$f.pdf" >&2
   pdftotext -bbox "$OUT/$f.pdf" "$OUT/$f.bbox.html"

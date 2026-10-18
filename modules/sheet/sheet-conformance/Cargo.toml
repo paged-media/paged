@@ -15,7 +15,7 @@ workspace = true
 # the decimal half of tests/decimal_spike.rs compiles + runs. OFF by default:
 # the f64 half of the spike test always runs; the decimal divergence
 # assertions are cfg-gated on this feature. Run with:
-#   cargo test -p sheet-conformance --features exact-decimal --test decimal_spike
+#   cargo test -p sheet-conformance --features exact-decimal --test it decimal_spike::
 exact-decimal = ["sheet-fn/exact-decimal"]
 
 [[bin]]

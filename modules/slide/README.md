@@ -11,7 +11,7 @@ See [docs/](docs/README.md).
 ```bash
 moon run slide:test                          # Rust and bundle tests (or, without Moon:)
 cargo test --workspace                       # unit tests + corpus (skips without the corpus)
-PAGED_REQUIRE_CORPUS=1 cargo test -p pptx-import --test corpus -- --nocapture
+PAGED_REQUIRE_CORPUS=1 cargo test -p pptx-import --test it -- --nocapture corpus::
 cargo run -p pptx-import --example pptx-dump -- deck.pptx
 scripts/sync-ooxml.sh --check                # vendored paged-ooxml has not drifted
 ```

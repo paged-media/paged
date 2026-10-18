@@ -13,7 +13,7 @@ bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/layer-stacks.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/cmyk-stacks.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/vector-masks.jsx
 # then re-measure and review the ledger diff:
-PAGED_PHOTOSHOP_LEDGER=write cargo test -p image-conformance --test oracle_photoshop
+PAGED_PHOTOSHOP_LEDGER=write cargo test -p image-conformance --test it oracle_photoshop::
 ```
 
 | file | role |

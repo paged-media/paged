@@ -15,7 +15,7 @@ OUT="$(mkdir -p "$1" && cd "$1" && pwd)"
 cd "$ROOT"
 cargo run -q -p docx-conformance --bin dump-fixture -- "$OUT/run-specials.docx" run-specials
 RUN_SPECIALS_EDITED_OUT="$OUT/run-specials-edited.docx" \
-  cargo test -q -p docx-conformance --test run_specials an_edited_save >&2
+  cargo test -q -p docx-conformance --test it run_specials::an_edited_save >&2
 for f in run-specials run-specials-edited; do
   bash scripts/word-pagination-probe.sh "$OUT/$f.docx" "$OUT/$f.pdf" >&2
   pdftotext -bbox "$OUT/$f.pdf" "$OUT/$f.bbox.html"
