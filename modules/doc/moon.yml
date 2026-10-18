@@ -35,5 +35,5 @@ tasks:
       - 'packages/doc-bundle/bin/docx_js*'
     options:
       # Needs wasm-bindgen-cli at the Cargo.lock version; doc-rust and the
-      # editor's from-source action build it in CI.
+      # editor's module-wasm action (.github/actions/module-wasm) build it in CI.
       runInCI: 'skip'

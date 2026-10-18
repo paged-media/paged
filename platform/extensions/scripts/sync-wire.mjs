@@ -120,6 +120,37 @@ export function buildHeader(version) {
   );
 }
 
+// wasm-bindgen names the closure trampolines it exports in `InitOutput` after
+// their rustc symbols (`wasm_bindgen__convert__closures_____invoke__h<16 hex>`),
+// whose hashes depend on the host the engine was built on: a macOS and a Linux
+// build of the same revision differ in exactly these names, and in their
+// order. They are the wasm module's internal ABI, not wire types, so the check
+// compares them by signature: each run of trampoline lines has its hashes
+// blanked and is sorted. Any other difference, a trampoline signature
+// included, is still drift.
+const TRAMPOLINE = /(wasm_bindgen__convert__closures_____invoke__h)[0-9a-f]{16}/;
+
+/** `content` with the host-dependent trampoline names blanked and their runs
+ *  sorted (see TRAMPOLINE). */
+export function normalizeWire(content) {
+  const out = [];
+  let run = [];
+  const flush = () => {
+    out.push(...run.sort());
+    run = [];
+  };
+  for (const line of content.split("\n")) {
+    if (TRAMPOLINE.test(line)) {
+      run.push(line.replace(TRAMPOLINE, "$1…"));
+    } else {
+      flush();
+      out.push(line);
+    }
+  }
+  flush();
+  return out.join("\n");
+}
+
 /** The full freshly-vendored content for a given source. */
 export function buildVendored({ path, version }) {
   return buildHeader(version) + readFileSync(path, "utf8");
@@ -153,7 +184,7 @@ export function checkVendored(opts = {}) {
   const fresh = buildVendored(src);
   const target = opts.target ?? TARGET;
   const current = existsSync(target) ? readFileSync(target, "utf8") : "";
-  if (current !== fresh) {
+  if (normalizeWire(current) !== normalizeWire(fresh)) {
     const actualVersion = readStampedVersion(current);
     const versionDrift = actualVersion !== src.version;
     return {

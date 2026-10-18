@@ -5,10 +5,11 @@ name: moon / ci
 #
 # NON-BLOCKING for now: it runs beside the per-component workflows, which
 # stay the required checks, so its result and timings can be compared with
-# theirs before CI switches over. What it does not run yet: the wasm builds
-# (`runInCI: skip`; they need the Cargo.lock version of wasm-bindgen-cli per
-# workspace), so JS suites that use a built engine skip their real-engine
-# specs here; Playwright; the GPU, fidelity and corpus lanes. No remote
+# theirs before CI switches over. The engine's wasm packages come from
+# .github/actions/engine-wasm (a cache restore, or a build on a miss). What it
+# does not run yet: the modules' wasm builds (`runInCI: skip`), so JS suites
+# that use a module's built engine skip those specs here; Playwright; the GPU,
+# fidelity and corpus lanes. No remote
 # cache and no Rust cache: every run builds from scratch.
 on:
   pull_request:
@@ -51,6 +52,13 @@ jobs:
         with:
           auto-install: true
           proto-version: "0.63.1"
+
+      # The engine's wasm packages (workspace:*): the JS projects' typechecks
+      # and tests build against canvas-wasm and introspect-wasm. The module
+      # wasm builds stay out (`runInCI: skip`).
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
+        with: { artifact: "false" }
 
       - name: install cargo-nextest
         uses: taiki-e/install-action@nextest
