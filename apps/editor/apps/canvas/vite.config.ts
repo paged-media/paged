@@ -574,7 +574,7 @@ function dataBundleBin(): import("vite").Plugin {
       if (missing.length)
         this.warn(
           `@paged-media/data ships no ${missing.join(", ")} — DuckDB will report duckdb-missing in this build ` +
-            "(publish the package with scripts/vendor-duckdb.sh, or install a local tarball)",
+            "(build it: modules/data/scripts/build-wasm.sh, then scripts/vendor-duckdb.sh)",
         );
     },
   };
@@ -644,9 +644,9 @@ export default defineConfig({
         // under corpus/idml/generated/* and corpus/idml/samples/*, not just the
         // envato packs the /corpus/idml/ route serves.
         resolve(CORPUS_ENVATO, ".."),
-        // The in-repo modules (the pnpm `link:` chain, under
-        // `<repo root>/modules`): their bundles ship wasm artifacts
-        // (sheet-js, image-js, DuckDB) the dev server must serve via
+        // The workspace packages outside apps/editor (`<repo root>/modules`,
+        // `platform/extensions`, `engine/core/packages`): their wasm
+        // artifacts (canvas-wasm, sheet-js, image-js, DuckDB) are served via
         // /@fs/ — without this the engine boot 403s (the K-1
         // live-validation e2e surfaced it).
         MONOREPO_ROOT,
@@ -667,45 +667,22 @@ export default defineConfig({
       // reports duckdb-missing and data binding can't drive.
       "apache-arrow": resolve(__dirname, "node_modules/apache-arrow"),
     },
-    // One React only: a plugin bundle consumed through a local link:
-    // override resolves imports from ITS realpath (its own node_modules),
-    // which would mount panel components against a second React instance
-    // and break hooks. Harmless for registry installs (already deduped).
+    // One React only: a plugin bundle is a workspace package, linked to
+    // its source directory, so its imports resolve from ITS realpath (its
+    // own node_modules). Should that ever resolve another React than the
+    // app's, panel components would mount against a second instance and
+    // break hooks.
     dedupe: ["react", "react-dom"],
   },
   optimizeDeps: {
-    // Decision-B: the wasm loader ships in @paged-media/canvas-wasm.
-    // Keep it out of the dep pre-bundle so the worker's dynamic import
-    // + `?url` wasm asset resolve through Vite's module graph intact.
-    // @paged-media/pdf ships the same shape (the pdf-import wasm mapper +
-    // pdf.js worker, both loaded via `?url`); esbuild's dep-optimizer can't
-    // read a `?url` import, so exclude it too and let Vite resolve the assets.
-    // @paged-media/doc likewise (bin/docx_js_bg.wasm via `?url`), and
-    // @paged-media/slide (bin/slide_js_bg.wasm via `?url`).
-    //
-    // @paged-media/plugin-sdk for a different reason, and it is worth
-    // stating because it will bite the next canary bump: the SDK's
-    // React-optional fallbacks (`schema-panel.tsx`, `widgets-fallback.tsx`)
-    // do a TOP-LEVEL `await import("react")`, which its own tsup build
-    // emits verbatim at target es2022. Vite's dep-optimizer compiles
-    // pre-bundled deps down to the browserslist floor (chrome87 …), where
-    // top-level await does not exist, so pre-bundling it fails the dev
-    // server outright. Excluding it lets Vite serve the module through
-    // the normal graph, where the app's own es2022 target applies.
-    // @paged-media/data ships the same wasm shape as pdf/doc, but loads
-    // its glue via a RUNTIME-relative dynamic import ("../bin/data_js.js",
-    // @vite-ignore). Pre-bundled, the importer lives in .vite/deps and the
-    // relative path 404s ("data-js wasm not built" — how the six data
-    // journeys went dark when the link: override left, 2026-08-18); the
-    // link era masked it because linked packages skip pre-bundling.
-    exclude: [
-      "@paged-media/canvas-wasm",
-      "@paged-media/pdf",
-      "@paged-media/doc",
-      "@paged-media/slide",
-      "@paged-media/data",
-      "@paged-media/plugin-sdk",
-    ],
+    // No `exclude`: every @paged-media package is a workspace package,
+    // linked to its source directory outside node_modules, and Vite never
+    // pre-bundles a linked dependency (it serves it through the module
+    // graph, as source). The list here kept the PUBLISHED copies out of the
+    // pre-bundle (canvas-wasm, pdf, doc, slide: `?url` wasm imports esbuild
+    // cannot read; plugin-sdk: a top-level await below the optimizer's
+    // target; data: a runtime-relative `../bin/` import that 404s from
+    // .vite/deps). The linked packages have none of those problems.
     // Pre-bundle apache-arrow at server startup. The DuckDB-WASM API entry's
     // bare `apache-arrow` import is rewritten to a virtual module (see
     // duckdbDistRoute) that pulls in apache-arrow; if Vite first discovers it
