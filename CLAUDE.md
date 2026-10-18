@@ -30,6 +30,20 @@ from anywhere in the repository. One project per Cargo workspace and JS componen
 - Moon must not modify tracked files (package.json, lockfiles, tsconfig.json,
   rust-toolchain.toml). A change in `git status` after a Moon run is a bug in `.moon/`.
 
+## Lint
+- `bun run lint` (root): `bun lint` over the whole repository with the one config,
+  `bunfig.toml` `[lint]` (docs/adr/PM-0003). It runs an exact canary build through
+  `tooling/js/bun-canary.sh`; plain `bun` stays at the `.prototools` version. Never add
+  ESLint, a per-package lint config or an `eslint.config.*`.
+- It holds correctness rules, the import boundaries (the editor's zones; the module and
+  extension contracts of PM-0002) and the Rules of React. Formatting is not lint.
+- `bun run lint:selftest` proves every boundary fires. A new boundary, module or
+  `platform/shared/*` package needs its cases (it fails until the config names a new
+  shared package).
+- `eslint-suppressions.json` records the Rules-of-React findings that predate the rules.
+  Never add to it; fix a finding and run `--prune-suppressions` in the same commit.
+  A one-line exception says why: `// eslint-disable-next-line <rule> -- <reason>`.
+
 ## Agent tools (MCP)
 `.mcp.json` registers two servers; `.claude/settings.json` allows their read
 tools and asks before anything that writes.
