@@ -226,7 +226,8 @@ there); only these counts are recorded here.
 ## Bun runs the scripts
 
 - **Repository scripts.** Every invocation of a repository `.mjs` script moves from `node` to
-  `bun`, in package scripts, Moon tasks and CI: the modules' contract-import lints, source- and
+  `bun`, in package scripts, Moon tasks and CI: the modules' contract-import lints (until B8 made
+  them `bun lint` rules), source- and
   package-hash scripts and pubcheck, the in-tree plugin-cli, extensions' sync-wire / sync-catalog
   and contract-guard scripts, core's check-wasm-package-versions and build-wasm-packages checks,
   the editor's guards, the module-index, `tooling/js/check-workspace-deps.mjs` and
