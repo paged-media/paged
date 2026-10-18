@@ -35,6 +35,13 @@ taskOptions:
   # instead of appending to it.
   mergeArgs: 'replace'
 
+# `moon ci` runs none of the Rust tasks (runInCI: false, step A10): every
+# Rust workspace's own workflow already runs its fmt, clippy and tests, with
+# a Rust cache, while `moon ci` ran them again from scratch in one job, and
+# several workspaces installing their pinned toolchains at once raced rustup
+# ("component download failed", or a task that hung until the job's timeout).
+# docs/migration/ci-speed.md has the numbers. `moon run` still runs them.
+
 tasks:
   rust-fmt:
     description: 'rustfmt check over the whole workspace.'
@@ -43,6 +50,8 @@ tasks:
     inputs:
       - '@group(rust-sources)'
       - '@group(rust-fmt-config)'
+    options:
+      runInCI: false
 
   rust-check:
     description: 'cargo check of every target. Local only: rust-lint type-checks the same targets in CI.'
@@ -60,6 +69,8 @@ tasks:
     inputs:
       - '@group(rust-sources)'
       - '*clippy.toml'
+    options:
+      runInCI: false
 
   rust-test:
     description: >-
@@ -76,6 +87,7 @@ tasks:
       - '@group(rust-tests)'
     options:
       cache: false
+      runInCI: false
 
   rust-build:
     description: 'Native debug build of the workspace. Local only.'
