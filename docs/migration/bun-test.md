@@ -76,7 +76,7 @@ of plugin-sdk (2) and slide (1); every base id is still there.
 | web-bundle | 330 | 330 | yes | `waitFor`, `advanceTimersByTimeAsync` → test kit; `vi.setConfig` → `setDefaultTimeout`; bake.spec refuses `fetch` in one test (below) |
 | data-host-model | 53 | 53 | yes | codemod only |
 | data-bundle | 383 + 2 skipped | 383 + 2 skipped | yes | 23 files of `vi.resetModules` + `vi.doMock`, 3 of `vi.mock` with `importOriginal` → `mock.module` re-patching (below); duckdb-browser `ctx.skip()` → `it.skipIf`; real DuckDB resolves `apache-arrow` without NODE_PATH; `--timeout 30000` |
-| plugin-sdk | 713 | 715 | yes, + 2 | codemod; `modules.spec` stubs `fetch` by hand (a public package does not import the internal kit, PM-0002). The 2 new ids are B6's tests (efa3d9597), merged from main between the base and the flip |
+| plugin-sdk | 713 | 715 | yes, + 2 | codemod; `modules.spec` stubs `fetch` by hand (a public package does not import the internal kit, PM-0002). The 2 new ids are B6's tests (efa3d9597), merged from main between the base and the flip; main's sync-wire fix (746bd02be) then added a 716th |
 | ai | 31 | 31 | yes | codemod; tsconfig `types` gains `bun` |
 | cli | 54 + 1 skipped | 54 + 1 skipped | yes | `vitest.config.ts` deleted: one file at a time and 120 s timeouts become `bun test --timeout 120000` (no `--parallel`); its `server.deps.inline` was a Vite transform bun does not need. `.runIf` → `.if` (with a boolean). The shipped `node-shims.ts` routes DuckDB's worker in-process under Bun too (below) |
 | draw-geometry | 681 | 681 | yes | codemod; one `.each` title: vitest's `$name` quoted strings, bun's does not, so the quotes are in the title; 5 bench files → mitata |
