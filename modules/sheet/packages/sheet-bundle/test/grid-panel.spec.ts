@@ -35,11 +35,7 @@ import { describe, expect, it } from "bun:test";
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { GridScene } from "@paged-media/sheet-host-model";
 
-import {
-  createWorkbookSession,
-  makeGridPanel,
-  type SheetEngine,
-} from "../src";
+import { createWorkbookSession, makeGridPanel, type SheetEngine } from "../src";
 
 // A 2×2 viewport scene (cols 40pt, rows 20pt) with two populated cells —
 // the same shape the host-model grid.spec uses, here returned by the engine.
@@ -146,7 +142,10 @@ function fakeHost(): BundleHost {
     log: { debug() {}, info() {}, warn() {}, error() {} },
     supports: () => false,
     // The document doors every host has; nothing here fires them.
-    document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+    document: {
+      onDidChange: () => ({ dispose() {} }),
+      onDidOpen: () => ({ dispose() {} }),
+    },
   } as unknown as BundleHost;
 }
 
@@ -347,7 +346,9 @@ describe("sheet_grid_panel_edit_contract: panel UX", () => {
     const g = globalThis as { ResizeObserver?: unknown };
     const prev = g.ResizeObserver;
     g.ResizeObserver = class {
-      constructor(private cb: (e: { contentRect: { width: number } }[]) => void) {
+      constructor(
+        private cb: (e: { contentRect: { width: number } }[]) => void,
+      ) {
         fire = (width) => this.cb([{ contentRect: { width } }]);
       }
       observe() {}
@@ -388,22 +389,26 @@ describe("sheet_grid_panel_edit_contract: panel UX", () => {
     await act(async () => {
       await session.pasteAtSelection();
     });
-    expect(JSON.stringify(byData(tree, "data-grid-notice")[0].props.children)).toContain(
-      "Can't paste",
-    );
+    expect(
+      JSON.stringify(byData(tree, "data-grid-notice")[0].props.children),
+    ).toContain("Can't paste");
   });
 
   it("find all, replace and the match toggles live in the grid (the one home for find)", () => {
     const { tree } = mountPanel();
     act(() => {
-      byData(tree, "data-sheet-find-needle")[0].props.onChange({ target: { value: "Name" } });
+      byData(tree, "data-sheet-find-needle")[0].props.onChange({
+        target: { value: "Name" },
+      });
     });
-    const findAll = byData(tree, "data-sheet-find").filter((n) => n.type === "button");
+    const findAll = byData(tree, "data-sheet-find").filter(
+      (n) => n.type === "button",
+    );
     expect(findAll).toHaveLength(1);
     act(() => findAll[0].props.onClick());
-    expect(JSON.stringify(byData(tree, "data-sheet-find-msg")[0].props.children)).toContain(
-      "0 matches",
-    );
+    expect(
+      JSON.stringify(byData(tree, "data-sheet-find-msg")[0].props.children),
+    ).toContain("0 matches");
     expect(byData(tree, "data-sheet-find-replacement")).toHaveLength(1);
     expect(byData(tree, "data-sheet-replace-all")).toHaveLength(1);
     expect(byData(tree, "data-sheet-find-case")).toHaveLength(1);

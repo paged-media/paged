@@ -26,7 +26,14 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -60,7 +67,9 @@ export function packageInputs() {
   const files = [
     ...filesUnder(join(root, BUNDLE, "src")),
     ...filesUnder(join(root, HOST_MODEL, "src")),
-    ...["manifest.json", "tsup.config.ts", "tsconfig.json"].map((f) => join(root, BUNDLE, f)),
+    ...["manifest.json", "tsup.config.ts", "tsconfig.json"].map((f) =>
+      join(root, BUNDLE, f),
+    ),
     join(root, "tsconfig.base.json"),
   ].filter((f) => existsSync(f));
   return files.map((f) => relative(root, f).split("\\").join("/")).sort();
@@ -112,7 +121,9 @@ async function publishedTarball(name, version) {
 }
 
 async function check(against) {
-  const pkg = JSON.parse(readFileSync(join(root, BUNDLE, "package.json"), "utf8"));
+  const pkg = JSON.parse(
+    readFileSync(join(root, BUNDLE, "package.json"), "utf8"),
+  );
   const id = `${pkg.name}@${pkg.version}`;
   const tgz = against ?? (await publishedTarball(pkg.name, pkg.version));
   if (!tgz) {
@@ -122,7 +133,9 @@ async function check(against) {
   const published = hashInTarball(tgz);
   const local = packageHash();
   if (published === local) {
-    console.log(`ok: ${id} is published from these exact sources (PACKAGE_HASH ${local.slice(0, 12)})`);
+    console.log(
+      `ok: ${id} is published from these exact sources (PACKAGE_HASH ${local.slice(0, 12)})`,
+    );
     return 0;
   }
   console.error(

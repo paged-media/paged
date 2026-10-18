@@ -99,7 +99,9 @@ export function makeBinding(
 ): Binding {
   return {
     v: BINDING_VERSION,
-    data: table ? { sheet, range, contentVersion, table } : { sheet, range, contentVersion },
+    data: table
+      ? { sheet, range, contentVersion, table }
+      : { sheet, range, contentVersion },
   };
 }
 
@@ -122,14 +124,23 @@ function parseTableRecord(input: unknown): TableRecord | null {
   if (typeof input !== "object" || input === null) return null;
   const t = input as Record<string, unknown>;
   const ids = t.storyId !== undefined || t.tableId !== undefined;
-  if (ids && (typeof t.storyId !== "string" || typeof t.tableId !== "string")) return null;
+  if (ids && (typeof t.storyId !== "string" || typeof t.tableId !== "string"))
+    return null;
   if (typeof t.hash !== "string") return null;
-  if (!Array.isArray(t.widths) || !t.widths.every((w) => typeof w === "number" && Number.isFinite(w))) {
+  if (
+    !Array.isArray(t.widths) ||
+    !t.widths.every((w) => typeof w === "number" && Number.isFinite(w))
+  ) {
     return null;
   }
   const widths = [...(t.widths as number[])];
   return ids
-    ? { storyId: t.storyId as string, tableId: t.tableId as string, hash: t.hash, widths }
+    ? {
+        storyId: t.storyId as string,
+        tableId: t.tableId as string,
+        hash: t.hash,
+        widths,
+      }
     : { hash: t.hash, widths };
 }
 
@@ -150,7 +161,10 @@ export function parseBinding(input: unknown): Binding | null {
   };
   if (typeof d.sheet !== "string") return null;
   if (typeof d.range !== "string") return null;
-  if (typeof d.contentVersion !== "number" || !Number.isFinite(d.contentVersion))
+  if (
+    typeof d.contentVersion !== "number" ||
+    !Number.isFinite(d.contentVersion)
+  )
     return null;
   const table = d.table === undefined ? null : parseTableRecord(d.table);
   return {

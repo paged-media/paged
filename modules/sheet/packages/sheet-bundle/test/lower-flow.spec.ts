@@ -85,7 +85,14 @@ function fakeEngine(): SheetEngine {
     getRangeValues: () => [],
     paginate: () => [],
     getGridScene: () => ({
-      viewport: { firstRow: 0, firstCol: 0, rows: 0, cols: 0, xOffsets: [0], yOffsets: [0] },
+      viewport: {
+        firstRow: 0,
+        firstCol: 0,
+        rows: 0,
+        cols: 0,
+        xOffsets: [0],
+        yOffsets: [0],
+      },
       cells: [],
       styles: [],
       gridlines: { h: [], v: [] },
@@ -131,24 +138,38 @@ function fakeHost(createdId: ElementId, storyId: string | null) {
         // insertTable mints the table id; everything else (the cell
         // batch, the text pour) creates nothing.
         if (m.op === "batch") {
-          const ops = (m as { args: { ops: Array<{ op: string; args?: { handle?: string } }> } }).args.ops;
+          const ops = (
+            m as {
+              args: { ops: Array<{ op: string; args?: { handle?: string } }> };
+            }
+          ).args.ops;
           if (ops.some((o) => o.op === "insertTextFrame")) {
             frameInserted = true;
             // What the batch made, in mint order, with the handles that
             // named them (`minted`).
-            const bound = (h: string) => (ops.some((o) => o.op === "bindCreated" && o.args?.handle === h) ? h : null);
+            const bound = (h: string) =>
+              ops.some((o) => o.op === "bindCreated" && o.args?.handle === h)
+                ? h
+                : null;
             const table = {
               kind: "table",
               id: { story_id: storyId ?? "Story/u9", table_id: "table1" },
             } as ElementId;
             const minted = [
               { handle: bound("f"), element: createdId, storyId },
-              ...(ops.some((o) => o.op === "insertTable") ? [{ handle: bound("t"), element: table, storyId }] : []),
+              ...(ops.some((o) => o.op === "insertTable")
+                ? [{ handle: bound("t"), element: table, storyId }]
+                : []),
             ];
             // The one-batch placement (frame + table, C-15 handles) reports
             // the LAST id it minted — the table, carrying the frame's story.
             if (ops.some((o) => o.op === "insertTable")) {
-              return { applied: true, createdId: table, pageIds: ["Page/u1"], minted };
+              return {
+                applied: true,
+                createdId: table,
+                pageIds: ["Page/u1"],
+                minted,
+              };
             }
             return { applied: true, createdId, pageIds: ["Page/u1"], minted };
           }
@@ -170,9 +191,7 @@ function fakeHost(createdId: ElementId, storyId: string | null) {
         return { applied: true, createdId: null, pageIds: ["Page/u1"] };
       },
       async hitTest() {
-        return storyId
-          ? ({ storyId, frameId: "frame1" } as never)
-          : null;
+        return storyId ? ({ storyId, frameId: "frame1" } as never) : null;
       },
       async frameChain() {
         return [{ frameId: "frame1", next: null, overflow: false }] as never;
@@ -202,7 +221,10 @@ function refuseOneCall(host: BundleHost, mutations: Mutation[]): void {
   host.document.mutate = async (m: Mutation) => {
     if (JSON.stringify(m).includes('"$h:t"')) {
       mutations.push(m);
-      return { applied: false, error: "unresolved handle $h:t" } as MutationOutcome;
+      return {
+        applied: false,
+        error: "unresolved handle $h:t",
+      } as MutationOutcome;
     }
     return realMutate(m);
   };
@@ -213,10 +235,16 @@ function refuseOneCall(host: BundleHost, mutations: Mutation[]): void {
 function refuseHandles(host: BundleHost, mutations: Mutation[]): void {
   const realMutate = host.document.mutate.bind(host.document);
   host.document.mutate = async (m: Mutation) => {
-    const ops = m.op === "batch" ? (m as { args: { ops: Array<{ op: string }> } }).args.ops : [];
+    const ops =
+      m.op === "batch"
+        ? (m as { args: { ops: Array<{ op: string }> } }).args.ops
+        : [];
     if (ops.some((o) => o.op === "bindCreated")) {
       mutations.push(m);
-      return { applied: false, error: "unknown op bindCreated" } as MutationOutcome;
+      return {
+        applied: false,
+        error: "unknown op bindCreated",
+      } as MutationOutcome;
     }
     return realMutate(m);
   };
@@ -235,9 +263,11 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
     // Batch 1 — frame + binding + native table (NO drawn rules: the table
     // draws borders). The table addresses the frame's story by handle.
     expect(mutations[1].op).toBe("batch");
-    const ops = (mutations[1] as {
-      args: { ops: Array<{ op: string; args: Record<string, any> }> };
-    }).args.ops;
+    const ops = (
+      mutations[1] as {
+        args: { ops: Array<{ op: string; args: Record<string, any> }> };
+      }
+    ).args.ops;
     expect(ops.map((o) => o.op)).toEqual([
       "insertTextFrame",
       "bindCreated",
@@ -246,7 +276,12 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
     ]);
     expect(ops[1].args.handle).toBe("f");
     expect(ops[2].args.elementId).toEqual({ kind: "textFrame", id: "$h:f" });
-    const tbl = ops[3].args as { storyId: string; rows: number; cols: number; columnWidths: number[] };
+    const tbl = ops[3].args as {
+      storyId: string;
+      rows: number;
+      cols: number;
+      columnWidths: number[];
+    };
     expect(tbl.storyId).toBe("$h:f");
     expect(tbl.rows).toBe(1);
     expect(tbl.cols).toBe(2);
@@ -275,9 +310,9 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
     expect(textPours.every((o) => o.args.storyId === "Story/u9")).toBe(true);
     const edges = content.args.ops.filter((o) => o.op === "setElementProperty");
     expect(edges).toHaveLength(2); // one per column under the h-rule at 18
-    expect(edges.every((o) => o.args.path === "cellBottomEdgeStrokeWeight")).toBe(
-      true,
-    );
+    expect(
+      edges.every((o) => o.args.path === "cellBottomEdgeStrokeWeight"),
+    ).toBe(true);
     expect(edges[0].args.elementId).toEqual({
       kind: "tableCell",
       id: { story_id: "Story/u9", table_id: "table1", row: 0, col: 0 },
@@ -298,7 +333,9 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
       "insertTable", // phase 2 — into the story the stories diff resolved
       "batch", // phase 3 — the content
     ]);
-    expect((mutations[3] as { args: { storyId: string } }).args.storyId).toBe("Story/u9");
+    expect((mutations[3] as { args: { storyId: string } }).args.storyId).toBe(
+      "Story/u9",
+    );
     expect(selections).toEqual([[CREATED]]);
   });
 
@@ -333,7 +370,10 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
     // Wrap mutate: reject insertTable (an older wire), apply the rest.
     const realMutate = host.document.mutate.bind(host.document);
     host.document.mutate = async (m: Mutation) => {
-      const ops = m.op === "batch" ? (m as { args: { ops: Array<{ op: string }> } }).args.ops : [m];
+      const ops =
+        m.op === "batch"
+          ? (m as { args: { ops: Array<{ op: string }> } }).args.ops
+          : [m];
       if (ops.some((o) => o.op === "insertTable")) {
         mutations.push(m);
         return { applied: false, error: "unknown op" } as MutationOutcome;
@@ -358,8 +398,9 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
   it("phase 1 carries the binding for this plugin's namespace", async () => {
     const { host, mutations } = fakeHost(CREATED, "Story/u9");
     await lowerSelectionToFrame(host, fakeEngine(), 0, "A1:B1");
-    const ops = (mutations[0] as { args: { ops: Array<{ op: string; args: unknown }> } })
-      .args.ops;
+    const ops = (
+      mutations[0] as { args: { ops: Array<{ op: string; args: unknown }> } }
+    ).args.ops;
     const meta = ops.find((o) => o.op === "setPluginMetadata") as {
       args: { key: string; value: string };
     };
@@ -397,7 +438,11 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
           return null;
         },
       },
-      selection: { async set(ids: ElementId[]) { return ids; } },
+      selection: {
+        async set(ids: ElementId[]) {
+          return ids;
+        },
+      },
       text: {
         async measureString() {
           return { advance: 30, ascender: 9, descender: -2 };
@@ -477,9 +522,11 @@ function fakeHostWithSwatches(
 ) {
   const built = fakeHost(createdId, storyId);
   const inner = built.host.document.collection.bind(built.host.document);
-  (built.host.document as unknown as {
-    collection: (name: string) => Promise<unknown>;
-  }).collection = async (name: string) => {
+  (
+    built.host.document as unknown as {
+      collection: (name: string) => Promise<unknown>;
+    }
+  ).collection = async (name: string) => {
     if (name === "swatches") {
       if (rows === null) throw new Error("swatch read failed");
       return rows.map((selfId) => ({ selfId }));
@@ -494,10 +541,14 @@ const FILL_SWATCH = "Color/uPagedSheetCellFillFFFF00";
 describe("sheet_lower_native_table: the driver mints the fills it references", () => {
   // The content of the one-call placement: what follows the table's bind.
   const decorOf = (mutations: Mutation[]) => {
-    const ops = (mutations[mutations.length - 1] as {
-      args: { ops: Array<{ op: string; args: Record<string, any> }> };
-    }).args.ops;
-    const at = ops.findIndex((o) => o.op === "bindCreated" && o.args.handle === "t");
+    const ops = (
+      mutations[mutations.length - 1] as {
+        args: { ops: Array<{ op: string; args: Record<string, any> }> };
+      }
+    ).args.ops;
+    const at = ops.findIndex(
+      (o) => o.op === "bindCreated" && o.args.handle === "t",
+    );
     return at >= 0 ? ops.slice(at + 1) : ops;
   };
 
@@ -557,7 +608,16 @@ function fakeChartEngine(): SheetEngine {
       widthPt: 200,
       heightPt: 150,
       prims: [
-        { kind: "rect", x: 10, y: 20, w: 30, h: 80, fill: "#4E79A7", stroke: null, strokeW: 0 },
+        {
+          kind: "rect",
+          x: 10,
+          y: 20,
+          w: 30,
+          h: 80,
+          fill: "#4E79A7",
+          stroke: null,
+          strokeW: 0,
+        },
         { kind: "text", x: 100, y: 10, s: "Q1", sizePt: 10, anchor: "middle" },
       ],
     }),
@@ -574,9 +634,11 @@ describe("sheet_chart_lower_paged_draw: bundle one-batch flow", () => {
     // insertPath (the rect) + its frameFillColor + insertTextFrame (the label)
     // + the binding metadata.
     expect(mutations[0].op).toBe("batch");
-    const ops = (mutations[0] as {
-      args: { ops: Array<{ op: string; args?: unknown }> };
-    }).args.ops;
+    const ops = (
+      mutations[0] as {
+        args: { ops: Array<{ op: string; args?: unknown }> };
+      }
+    ).args.ops;
     expect(ops.some((o) => o.op === "insertPath")).toBe(true);
     expect(ops.some((o) => o.op === "insertTextFrame")).toBe(true);
     // The chart palette is now lowered: a createSwatch + a frameFillColor ref
@@ -596,7 +658,9 @@ describe("sheet_chart_lower_paged_draw: bundle one-batch flow", () => {
     // label frame's C-15 handle: one mutate, no story resolution.
     expect(mutations).toHaveLength(1);
     const bind = ops.findIndex(
-      (o) => o.op === "bindCreated" && (o.args as { handle: string }).handle === "l0",
+      (o) =>
+        o.op === "bindCreated" &&
+        (o.args as { handle: string }).handle === "l0",
     );
     expect(ops[bind - 1].op).toBe("insertTextFrame");
     const pour = ops.find((o) => o.op === "insertText") as {
@@ -608,13 +672,16 @@ describe("sheet_chart_lower_paged_draw: bundle one-batch flow", () => {
     const styled = ops.filter(
       (o) =>
         o.op === "setElementProperty" &&
-        (o.args as { elementId: { kind: string } }).elementId.kind === "storyRange",
+        (o.args as { elementId: { kind: string } }).elementId.kind ===
+          "storyRange",
     ) as { args: { path: string; elementId: { id: { story_id: string } } } }[];
     expect(styled.map((o) => o.args.path).sort()).toEqual([
       "characterFontSize",
       "paragraphJustification",
     ]);
-    expect(styled.every((o) => o.args.elementId.id.story_id === "$h:l0")).toBe(true);
+    expect(styled.every((o) => o.args.elementId.id.story_id === "$h:l0")).toBe(
+      true,
+    );
     // Every element the chart made is in ONE group: the rect (bound as p0)
     // and the label (l0) — one object to select, move and delete.
     const group = ops.find((o) => o.op === "createGroup") as {
@@ -793,9 +860,11 @@ describe("sheet_lower_swatch_mint_dedupe: the tab-text lane reads before it mint
     const reads: string[] = [];
     const { host } = fakeHostWithSwatches(CREATED, "Story/u9", []);
     const inner = host.document.collection.bind(host.document);
-    (host.document as unknown as {
-      collection: (name: string) => Promise<unknown>;
-    }).collection = async (name: string) => {
+    (
+      host.document as unknown as {
+        collection: (name: string) => Promise<unknown>;
+      }
+    ).collection = async (name: string) => {
       reads.push(name);
       return inner(name as never);
     };
@@ -846,7 +915,10 @@ function fakeChainEngine() {
 /** A fake host with a real frame chain (2 links), per-frame geometry boxes,
  *  per-frame story resolution (hitTest), table minting (mutate), and an
  *  onDidChange channel the test fires reflow / non-reflow events on. */
-function fakeChainHost(links: FrameChainLink[], opts: { deleteTable?: boolean } = {}) {
+function fakeChainHost(
+  links: FrameChainLink[],
+  opts: { deleteTable?: boolean } = {},
+) {
   const mutations: Mutation[] = [];
   const listeners: Array<(e: DocumentChangeEvent) => void> = [];
   let tableSeq = 0;
@@ -902,10 +974,20 @@ function fakeChainHost(links: FrameChainLink[], opts: { deleteTable?: boolean } 
         // A pre-66 wire refuses the `deleteTable` variant outright (the
         // real 0.64 engine's reply, verbatim in shape).
         const kids = m.op === "batch" ? m.args.ops : [m];
-        if (!opts.deleteTable && kids.some((k) => (k.op as string) === "deleteTable")) {
+        if (
+          !opts.deleteTable &&
+          kids.some((k) => (k.op as string) === "deleteTable")
+        ) {
           return {
             applied: false,
-            error: { error: { kind: "notImplemented", details: { what: "malformed message: unknown variant `deleteTable`, expected one of `insertText`" } } },
+            error: {
+              error: {
+                kind: "notImplemented",
+                details: {
+                  what: "malformed message: unknown variant `deleteTable`, expected one of `insertText`",
+                },
+              },
+            },
           };
         }
         if (m.op === "insertTable") {
@@ -915,7 +997,10 @@ function fakeChainHost(links: FrameChainLink[], opts: { deleteTable?: boolean } 
             applied: true,
             createdId: {
               kind: "table",
-              id: { story_id: `Story/f${tableSeq - 1}`, table_id: `tbl${tableSeq}` },
+              id: {
+                story_id: `Story/f${tableSeq - 1}`,
+                table_id: `tbl${tableSeq}`,
+              },
             } as ElementId,
             pageIds: ["Page/u1"],
           };
@@ -1003,8 +1088,12 @@ describe("sheet_plugin_lower_chain: live multi-frame pagination", () => {
       .filter((m) => m.op === "insertText") as Array<{
       args: { text?: string; cell?: { tableId?: string } };
     }>;
-    expect(pours.find((o) => o.args.text === "r0")?.args.cell?.tableId).toBe("tbl1");
-    expect(pours.find((o) => o.args.text === "r1")?.args.cell?.tableId).toBe("tbl2");
+    expect(pours.find((o) => o.args.text === "r0")?.args.cell?.tableId).toBe(
+      "tbl1",
+    );
+    expect(pours.find((o) => o.args.text === "r1")?.args.cell?.tableId).toBe(
+      "tbl2",
+    );
 
     expect(result!.tableIds).toEqual(["tbl1", "tbl2"]);
   });
@@ -1015,15 +1104,24 @@ describe("sheet_plugin_lower_chain: live multi-frame pagination", () => {
       const { host, mutations, fire } = fakeChainHost(CHAIN);
       const { engine, paginateCalls } = fakeChainEngine();
 
-      const first = await lowerPaginatedToChain(host, engine, 0, "A1:A6", "Story/f0", {
-        continuedMarker: true,
-      });
+      const first = await lowerPaginatedToChain(
+        host,
+        engine,
+        0,
+        "A1:A6",
+        "Story/f0",
+        {
+          continuedMarker: true,
+        },
+      );
       const sub = subscribeChainReflow(host, engine, 0, "A1:A6", "Story/f0", {
         continuedMarker: true,
         from: first,
         debounceMs: 100,
       });
-      const tablesBefore = mutations.filter((m) => m.op === "insertTable").length;
+      const tablesBefore = mutations.filter(
+        (m) => m.op === "insertTable",
+      ).length;
       expect(tablesBefore).toBe(2);
       paginateCalls.length = 0;
 
@@ -1052,7 +1150,9 @@ describe("sheet_plugin_lower_chain: live multi-frame pagination", () => {
       await advanceTimersByTimeAsync(vi, 200);
       await sub.refresh(); // serialised behind the debounced pass
       expect(paginateCalls.length).toBeGreaterThanOrEqual(1);
-      expect(mutations.filter((m) => m.op === "insertTable")).toHaveLength(tablesBefore);
+      expect(mutations.filter((m) => m.op === "insertTable")).toHaveLength(
+        tablesBefore,
+      );
       // tbl1 re-poured in place (old text out, new text in) …
       // Refresh text rides batches: flatten.
       const after = mutations
@@ -1092,10 +1192,18 @@ describe("sheet_plugin_lower_chain: live multi-frame pagination", () => {
   it("a host with deleteTable (protocol 66) DELETES the tables a shrink no longer needs [sheet.lower.paginate]", async () => {
     const { host, mutations } = fakeChainHost(CHAIN, { deleteTable: true });
     const { engine } = fakeChainEngine();
-    const first = await lowerPaginatedToChain(host, engine, 0, "A1:A6", "Story/f0");
+    const first = await lowerPaginatedToChain(
+      host,
+      engine,
+      0,
+      "A1:A6",
+      "Story/f0",
+    );
     expect(first?.tables).toHaveLength(2);
     engine.paginate = () => [pageFor(0, "r0b", false)];
-    const sub = subscribeChainReflow(host, engine, 0, "A1:A6", "Story/f0", { from: first });
+    const sub = subscribeChainReflow(host, engine, 0, "A1:A6", "Story/f0", {
+      from: first,
+    });
     const mark = mutations.length;
     const pass = await sub.refresh();
     sub.dispose();
@@ -1103,10 +1211,15 @@ describe("sheet_plugin_lower_chain: live multi-frame pagination", () => {
       .slice(mark)
       .flatMap((m) => (m.op === "batch" ? m.args.ops : [m]));
     const deletes = after.filter((m) => (m.op as string) === "deleteTable");
-    expect(deletes.map((m) => (m.args as { tableId: string }).tableId)).toEqual(["tbl2"]);
+    expect(deletes.map((m) => (m.args as { tableId: string }).tableId)).toEqual(
+      ["tbl2"],
+    );
     // Not emptied: no text op reaches the deleted table.
     expect(
-      after.some((m) => (m.args as { cell?: { tableId: string } }).cell?.tableId === "tbl2"),
+      after.some(
+        (m) =>
+          (m.args as { cell?: { tableId: string } }).cell?.tableId === "tbl2",
+      ),
     ).toBe(false);
     expect(pass?.tables.map((t) => t.tableId)).toEqual(["tbl1"]);
   });
@@ -1114,8 +1227,16 @@ describe("sheet_plugin_lower_chain: live multi-frame pagination", () => {
   it("an engine that refuses deleteTable: the spare tables are emptied [sheet.lower.paginate]", async () => {
     const { host, mutations } = fakeChainHost(CHAIN);
     const { engine } = fakeChainEngine();
-    const first = await lowerPaginatedToChain(host, engine, 0, "A1:A6", "Story/f0");
-    const sub = subscribeChainReflow(host, engine, 0, "A1:A6", "Story/f0", { from: first });
+    const first = await lowerPaginatedToChain(
+      host,
+      engine,
+      0,
+      "A1:A6",
+      "Story/f0",
+    );
+    const sub = subscribeChainReflow(host, engine, 0, "A1:A6", "Story/f0", {
+      from: first,
+    });
     engine.paginate = () => [pageFor(0, "r0b", false)];
     await sub.refresh();
     // Grow back to two pages, then shrink again.

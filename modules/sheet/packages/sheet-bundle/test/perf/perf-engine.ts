@@ -29,7 +29,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const BIN_PERF = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "bin-perf");
+const BIN_PERF = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "bin-perf",
+);
 const WASM = join(BIN_PERF, "sheet_js_bg.wasm");
 
 interface PerfGlue {
@@ -49,7 +54,9 @@ export const PERF_ENGINE = process.env.PERF_ENGINE === "1" && existsSync(WASM);
 export async function perfBoot<T>(wrap: (wasm: never) => T): Promise<T | null> {
   if (!PERF_ENGINE) return null;
   if (!glue) {
-    glue = (await import(/* @vite-ignore */ join(BIN_PERF, "sheet_js.js"))) as PerfGlue;
+    glue = (await import(
+      /* @vite-ignore */ join(BIN_PERF, "sheet_js.js")
+    )) as PerfGlue;
     glue.initSync({ module: readFileSync(WASM) });
   }
   return wrap(new glue.SheetEngine() as never);

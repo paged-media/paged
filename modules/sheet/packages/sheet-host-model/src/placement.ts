@@ -135,14 +135,20 @@ export interface TableFit {
  *  frame (see the section note): `ascender + 0.4 × 12 pt` — or nothing, on
  *  an engine that places the table in the story's first paragraph
  *  ({@link TABLE_LEAD_IN_LINE}; `leadInLine` overrides it for tests). */
-export function tableLeadInPt(fit: TableFit, leadInLine: boolean = TABLE_LEAD_IN_LINE): number {
+export function tableLeadInPt(
+  fit: TableFit,
+  leadInLine: boolean = TABLE_LEAD_IN_LINE,
+): number {
   return leadInLine ? fit.defaultAscenderPt + 0.4 * ENGINE_DEFAULT_SIZE_PT : 0;
 }
 
 /** The height of each lowered row as the engine lays it out: never less
  *  than the IR's (workbook) height, never less than its tallest cell's
  *  first baseline. */
-export function tableRowHeightsPt(content: LoweredContent, fit: TableFit): number[] {
+export function tableRowHeightsPt(
+  content: LoweredContent,
+  fit: TableFit,
+): number[] {
   return content.rows.map((row, r) => {
     let h = row.heightPt;
     if (fit.cellAscenderPt) {
@@ -158,7 +164,10 @@ export function tableRowHeightsPt(content: LoweredContent, fit: TableFit): numbe
 /** The frame height (pt) that holds a lowered region's native table: the
  *  engine's lead-in line, every row at the height the engine gives it, and
  *  the rounding allowance. An empty region needs no frame. PURE. */
-export function tableFrameHeightPt(content: LoweredContent, fit: TableFit): number {
+export function tableFrameHeightPt(
+  content: LoweredContent,
+  fit: TableFit,
+): number {
   if (content.rows.length === 0) return 0;
   const rows = tableRowHeightsPt(content, fit).reduce((sum, h) => sum + h, 0);
   return tableLeadInPt(fit) + rows + FIT_ALLOWANCE_PT;
