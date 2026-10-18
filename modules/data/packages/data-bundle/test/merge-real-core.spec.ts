@@ -23,7 +23,7 @@
 // Gate: skips without canvas-wasm or the data-js wasm, EXCEPT under
 // REQUIRE_REAL_CORE=1, where a missing piece is a failure.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";

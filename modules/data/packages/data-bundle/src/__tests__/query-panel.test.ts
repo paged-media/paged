@@ -3,17 +3,23 @@
 // hook-store harness as panels.test.ts: `useState` is a re-renderable store,
 // the component is called as a function, the element tree is walked.
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
 import type { DataSourceSession, QueryPreview, SessionState } from "../session";
 
+// bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
+// real exports are taken once, before anything is mocked, and mock.module
+// patches the loaded module in place (every importer sees the change).
+const actualReact = await importActual(() => import("react"));
+
 // ── the hook store ───────────────────────────────────────────────────────────
 const slots: unknown[] = [];
 let cursor = 0;
-vi.mock("react", async (orig) => ({
-  ...(await orig<typeof import("react")>()),
+mock.module("react", () => ({
+    ...actualReact,
   useState: (init: unknown) => {
     const i = cursor++;
     if (!(i in slots)) slots[i] = typeof init === "function" ? (init as () => unknown)() : init;

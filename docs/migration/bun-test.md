@@ -57,3 +57,62 @@ package. It is gated on
 | web-model | 290 + 9 skipped | 290 + 9 skipped | yes | codemod only; its garbage-input titles carry NUL and U+FFFF, which bun writes raw into its XML — `bun-junit.mjs` drops them as vitest did |
 | web-conformance | 103 | 103 | yes | codemod; tsconfig `types` gains `bun` |
 | web-bundle | 330 | 330 | yes | `waitFor`, `advanceTimersByTimeAsync` → test kit; `vi.setConfig` → `setDefaultTimeout`; bake.spec refuses `fetch` in one test (below) |
+| data-host-model | 53 | 53 | yes | codemod only |
+| data-bundle | 383 + 2 skipped | 383 + 2 skipped | yes | 23 files of `vi.resetModules` + `vi.doMock`, 3 of `vi.mock` with `importOriginal` → `mock.module` re-patching (below); duckdb-browser `ctx.skip()` → `it.skipIf`; real DuckDB resolves `apache-arrow` without NODE_PATH; `--timeout 30000` |
+
+## Refactors beyond the codemod
+
+### `vi.mock` is not hoisted; `vi.doMock` and `vi.resetModules` do not exist
+
+vitest hoists `vi.mock` above the imports, and `vi.resetModules` + `vi.doMock` + a dynamic
+`import()` give a test a fresh copy of the module graph with a mock inside. bun:test has
+`mock.module`, which patches a module **in place**, even one that is already loaded: every
+importer's live bindings change, and calling it again re-patches. So:
+
+- a top-level `vi.mock(P, async (importOriginal) => ({ ...(await importOriginal()), … }))`
+  becomes `const actualX = await importActual(() => import(P))` (the test kit's plain copy of
+  the real exports, taken before anything mocks P) and `mock.module(P, () => ({ ...actualX, … }))`;
+- each `vi.resetModules(); vi.doMock(P, …)` in a helper becomes `mock.module(P, …)` in the
+  same helper, re-patching the one loaded instance. The helper's `await import(…)` of the module
+  under test now loads it once and returns that instance afterwards.
+
+`tooling/migration/vitest-domock-to-bun.py` does this mechanically. It changes one thing: the
+module graph under test is no longer fresh per test. That is safe only where those modules keep
+no state a test relies on being fresh. data-bundle's `src` keeps three module-level values:
+`activate.ts`'s sessions and `text-variables.ts`'s detection cache are WeakMaps keyed by the host
+(every test makes its own host), and `datamerge-export.ts`'s CRC table is a pure cache. The
+mocked modules (`engine`, `query/duckdb`, `merge`) are replaced wholesale per helper call.
+
+### A test that relied on Node not fetching `file:` URLs
+
+web-bundle `bake.spec.ts` › "publishes the render diagnostic and does not throw" tests the
+engine-not-loaded path. Under Node the wasm-bindgen glue's bare-relative `fetch` of its wasm
+failed, so the engine never loaded in a unit test. Bun's `fetch` reads `file:` URLs, and the
+engine loaded. The test now refuses `fetch` (test kit `stubGlobal`) for its own duration, as a
+realm without the sibling asset does: same test, same assertion.
+
+### Runtime skips
+
+vitest's test context (`it("…", (ctx) => { if (…) ctx.skip(); })`) has no bun:test
+equivalent; a test function's first parameter is a `done` callback there. data-bundle
+`duckdb-browser.spec.ts` started its Chromium lane in a `beforeAll` and skipped each test at run
+time when it had not started. The lane now starts while the file loads (top-level `await`), and
+the same eight tests are `it.skipIf(NO_LANE)`: they skip exactly when they skipped before.
+
+### Real DuckDB without `NODE_PATH`
+
+The Node build of DuckDB-WASM (`modules/data/vendor/duckdb-wasm/dist/duckdb-node-blocking.cjs`,
+never shipped) requires `apache-arrow`. Four helpers rewrote `NODE_PATH` and called Node's
+private `Module._initPaths()` so that require resolved from data-bundle's `node_modules`; Bun
+ignores both, and 106 real-DuckDB tests skipped. `modules/data` now declares `apache-arrow` as a
+devDependency, so the require resolves from the vendored file's own location under either
+runtime, and the four helpers are a plain `createRequire`.
+
+### Timeouts
+
+bun's describe takes no options object: data-bundle `protocol71-real-core.spec.ts`'s
+`describe(…, { timeout: 30_000 }, …)` became `setDefaultTimeout(30_000)` for its file (one
+block). data-bundle's whole suite runs with `--timeout 30000`: its real-engine specs boot the
+35 MB DuckDB engine, the data engine and the core per test, and JavaScriptCore compiles and runs
+that wasm slower than V8 did (the summed test time is about 3× vitest's), so under a full
+parallel run several first-in-file tests passed the 5 s default.

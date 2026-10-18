@@ -7,11 +7,18 @@
 //   2. switching a data set costs the user ONE undo step, MEASURED as the count
 //      of `host.document.mutate` calls the session makes.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, mock } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 
 import type { BundleHost, Mutation } from "@paged-media/plugin-api";
 
 import type { DataEngineLike } from "../engine";
+
+// bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
+// real exports are taken once, before anything is mocked, and mock.module
+// patches the loaded module in place (every importer sees the change).
+const actualEngine = await importActual(() => import("../engine"));
+const actualDuckdb = await importActual(() => import("../query/duckdb"));
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
@@ -111,13 +118,12 @@ function fakeEngine(over?: Partial<DataEngineLike>): DataEngineLike {
 }
 
 async function sessionWith(host: BundleHost, engine: DataEngineLike) {
-  vi.resetModules();
-  vi.doMock("../engine", async (orig) => ({
-    ...(await orig<typeof import("../engine")>()),
+  mock.module("../engine", () => ({
+    ...actualEngine,
     bootEngine: async () => engine,
   }));
-  vi.doMock("../query/duckdb", async (orig) => ({
-    ...(await orig<typeof import("../query/duckdb")>()),
+  mock.module("../query/duckdb", () => ({
+    ...actualDuckdb,
     bootDuckDB: async () => ({
       registerCsv: async () => {},
       query: async () => ({}),

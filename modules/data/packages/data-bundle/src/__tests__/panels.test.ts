@@ -4,17 +4,23 @@
 // list are expanded; they hold no hooks). Enough to press a button, type into
 // an input, and read what the panel shows.
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
 import type { DataProviderPublication, DataSourceSession, SessionState } from "../session";
 
+// bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
+// real exports are taken once, before anything is mocked, and mock.module
+// patches the loaded module in place (every importer sees the change).
+const actualReact = await importActual(() => import("react"));
+
 // ── the hook store ───────────────────────────────────────────────────────────
 const slots: unknown[] = [];
 let cursor = 0;
-vi.mock("react", async (orig) => ({
-  ...(await orig<typeof import("react")>()),
+mock.module("react", () => ({
+    ...actualReact,
   useState: (init: unknown) => {
     const i = cursor++;
     if (!(i in slots)) slots[i] = typeof init === "function" ? (init as () => unknown)() : init;

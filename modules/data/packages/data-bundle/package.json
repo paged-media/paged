@@ -12,9 +12,9 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
-    "test:e2e": "vitest run test/pipeline-real.spec.ts test/duckdb-real.spec.ts",
-    "test:duckdb": "REQUIRE_REAL_DUCKDB=1 vitest run test/duckdb-real.spec.ts",
+    "test": "bun test --parallel --timeout 30000",
+    "test:e2e": "bun test --timeout 30000 ./test/pipeline-real.spec.ts ./test/duckdb-real.spec.ts",
+    "test:duckdb": "REQUIRE_REAL_DUCKDB=1 bun test --timeout 30000 ./test/duckdb-real.spec.ts",
     "pubcheck": "bun run build && node ../../scripts/pubcheck.mjs",
     "build": "tsup",
     "prepublishOnly": "bun run build"
@@ -35,7 +35,8 @@
     "playwright-core": "1.63.0",
     "react": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "@paged-media/test-kit": "workspace:*",
+    "@types/bun": "catalog:"
   },
   "files": [
     "dist",

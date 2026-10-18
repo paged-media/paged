@@ -35,11 +35,12 @@
 // The session under test is the bundle's own createSession, with bootEngine /
 // bootDuckDB pointed at the counted real instances — nothing in src/ changes.
 
-import Module, { createRequire } from "node:module";
+import { createRequire } from "node:module";
 import { existsSync, readFileSync } from "node:fs";
-import { delimiter, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { vi } from "vitest";
+import { mock } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import { HOST_FEATURES, type HeadlessHost } from "@paged-media/plugin-sdk";
@@ -50,6 +51,12 @@ import type { DataSourceSession } from "../../src/session";
 import manifest from "../../manifest.json";
 import { ENGINE_ANCHOR, ENGINE_PROTOCOL, openRealHost, REQUIRE_REAL_CORE } from "../real-core";
 import { type WorkLog } from "./counting-host";
+
+// bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
+// real exports are taken once, before anything is mocked, and mock.module
+// patches the loaded module in place (every importer sees the change).
+const actualEngine = await importActual(() => import("../../src/engine"));
+const actualDuckdb = await importActual(() => import("../../src/query/duckdb"));
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG = join(HERE, "..", "..");
@@ -189,18 +196,12 @@ export interface CountedDuck {
   reset(): void;
 }
 
-/** Load DuckDB's Node build; apache-arrow resolves from this package. */
+/** Load DuckDB's Node build. The vendored CJS requires apache-arrow, which
+ *  resolves from modules/data's own node_modules (a devDependency there for
+ *  this). It used to come from this package's node_modules through a
+ *  NODE_PATH rewrite, which only Node honours. */
 function requireNodeDuckDB(): any {
-  const prev = process.env.NODE_PATH;
-  process.env.NODE_PATH = [join(PKG, "node_modules"), prev].filter(Boolean).join(delimiter);
-  (Module as unknown as { _initPaths(): void })._initPaths();
-  try {
-    return createRequire(import.meta.url)(DUCK_NODE_API);
-  } finally {
-    if (prev === undefined) delete process.env.NODE_PATH;
-    else process.env.NODE_PATH = prev;
-    (Module as unknown as { _initPaths(): void })._initPaths();
-  }
+  return createRequire(import.meta.url)(DUCK_NODE_API);
 }
 
 /** Boot real DuckDB over the shipped EH engine through the bundle's own
@@ -295,13 +296,12 @@ export async function sessionOver(
   engine: CountedEngine,
   duck: CountedDuck | null,
 ): Promise<DataSourceSession> {
-  vi.resetModules();
-  vi.doMock("../../src/engine", async (orig) => ({
-    ...(await orig<typeof import("../../src/engine")>()),
+  mock.module("../../src/engine", () => ({
+    ...actualEngine,
     bootEngine: async () => engine.engine,
   }));
-  vi.doMock("../../src/query/duckdb", async (orig) => ({
-    ...(await orig<typeof import("../../src/query/duckdb")>()),
+  mock.module("../../src/query/duckdb", () => ({
+    ...actualDuckdb,
     bootDuckDB: async () => {
       if (!duck) throw new Error("this scenario boots no DuckDB");
       return duck.handle;
@@ -420,7 +420,7 @@ export function measure(
 
 const rows: { scenario: string; m: Measured; t: Trended }[] = [];
 
-/** HOW TO RE-MEASURE: `PERF_SHOW=1 pnpm vitest run test/perf` prints one
+/** HOW TO RE-MEASURE: `PERF_SHOW=1 bun test test/perf` prints one
  *  `PERF` line per scenario (the full door log) and, at the end of each file,
  *  the counts as a table — the numbers the budgets are pinned from. */
 export function report(

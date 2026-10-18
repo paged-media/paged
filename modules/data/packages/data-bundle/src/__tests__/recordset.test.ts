@@ -21,7 +21,7 @@
 // `data-core::RecordSet` serde shape the engine ingests (tagged values, field
 // types, row_count).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { arrowToRecordSet, cellToValue, classifyType, type ArrowLikeTable } from "../query/recordset";
 

@@ -13,11 +13,11 @@
 // (CI runs scripts/vendor-duckdb.sh first and sets it), where "cannot boot"
 // is a FAILURE that names the reason. The same flag also requires the data-js
 // engine, since the lane feeds it.
-import Module, { createRequire } from "node:module";
+import { createRequire } from "node:module";
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { delimiter, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { binUrl } from "../src/bin-url";
 import { DUCKDB_ARTIFACTS, duckdbHandle, type DuckDBHandle } from "../src/query/duckdb";
 import { nodeBootSql } from "./duckdb-node-ext";
@@ -36,17 +36,11 @@ const CSV = "sku,price\nB-2,19.99\nA-1,9.99\n";
 /** Load the Node build. Its one external import, apache-arrow, must resolve
  *  from this package's node_modules (vendor/ has none), so NODE_PATH is
  *  widened for the duration of the synchronous require. */
+// The vendored CJS requires apache-arrow, which resolves from modules/data's own
+// node_modules (a devDependency there for this). It used to come from this
+// package's node_modules through a NODE_PATH rewrite, which only Node honours.
 function requireNodeDuckDB(): any {
-  const prev = process.env.NODE_PATH;
-  process.env.NODE_PATH = [join(PKG, "node_modules"), prev].filter(Boolean).join(delimiter);
-  (Module as unknown as { _initPaths(): void })._initPaths();
-  try {
-    return createRequire(import.meta.url)(NODE_API);
-  } finally {
-    if (prev === undefined) delete process.env.NODE_PATH;
-    else process.env.NODE_PATH = prev;
-    (Module as unknown as { _initPaths(): void })._initPaths();
-  }
+  return createRequire(import.meta.url)(NODE_API);
 }
 
 /** Boot real DuckDB over the shipped EH engine; never throws — returns why not. */
