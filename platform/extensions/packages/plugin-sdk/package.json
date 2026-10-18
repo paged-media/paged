@@ -40,8 +40,8 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/paged-media/plugin-sdk.git",
-    "directory": "packages/plugin-sdk"
+    "url": "git+https://github.com/paged-media/paged.git",
+    "directory": "platform/extensions/packages/plugin-sdk"
   },
   "publishConfig": {
     "access": "public",
