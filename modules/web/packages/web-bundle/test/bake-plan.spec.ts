@@ -20,7 +20,7 @@
 // engine: plain data in, plain data out. Pins the flatten semantics (text +
 // solid rects become native; everything else is counted honestly).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { SceneLayer } from "@paged-media/web-model";
 

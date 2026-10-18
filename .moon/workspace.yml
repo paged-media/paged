@@ -23,6 +23,8 @@ projects:
   slide: 'modules/slide'
   web: 'modules/web'
   web-render: 'modules/web/packages/web-render'
+  # Internal shared code of the built-ins (docs/adr/PM-0002)
+  test-kit: 'platform/shared/test-kit'
   # Extension contract and SDK
   extensions: 'platform/extensions'
   # Applications

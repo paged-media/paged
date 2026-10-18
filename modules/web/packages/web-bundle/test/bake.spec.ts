@@ -26,7 +26,8 @@
 //   · a non-web-frame / no source: a guiding diagnostic, never a throw;
 //   · the render command publishes the diagnostic + never crashes.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import {
@@ -402,15 +403,23 @@ describe("bakeWebFrame — the engine-LOADED submit path", () => {
 
 describe("renderSelectedWebFrame — the command handler", () => {
   it("publishes the render diagnostic and does not throw", async () => {
-    const { host, diags } = makeHost({
-      metadata: envelopeFor(DEFAULT_SOURCE),
-    });
-    await expect(renderSelectedWebFrame(host)).resolves.toBeUndefined();
-    expect(diags).toHaveLength(1);
-    expect(diags[0].key).toContain("#render");
-    expect(diags[0].items).toEqual([
-      expect.objectContaining({ message: ENGINE_NOT_LOADED_MESSAGE }),
-    ]);
+    // The engine must not load here. Under Node it could not: the glue's
+    // bare-relative fetch of its wasm failed. Bun's fetch reads file: URLs,
+    // so the fetch is refused, as a realm without the sibling asset would.
+    stubGlobal("fetch", () => Promise.reject(new TypeError("engine asset not fetchable (test)")));
+    try {
+      const { host, diags } = makeHost({
+        metadata: envelopeFor(DEFAULT_SOURCE),
+      });
+      await expect(renderSelectedWebFrame(host)).resolves.toBeUndefined();
+      expect(diags).toHaveLength(1);
+      expect(diags[0].key).toContain("#render");
+      expect(diags[0].items).toEqual([
+        expect.objectContaining({ message: ENGINE_NOT_LOADED_MESSAGE }),
+      ]);
+    } finally {
+      unstubAllGlobals();
+    }
   });
 
   it("no-ops with a guidance log when the selection isn't a single element", async () => {

@@ -285,7 +285,7 @@ jobs:
         run: cargo test --workspace --no-fail-fast
 
   # The TS bundle: the contract-import lint (isolation §2.1), typecheck,
-  # vitest, and manifest validation. Pre-monorepo this nested two checkouts
+  # bun test, and manifest validation. Pre-monorepo this nested two checkouts
   # (plugin-image/ + a plugin-sdk/ sibling) because the manifest package's
   # scripts reach the plugin-cli by a relative path; the plugin-cli is now
   # in-tree at platform/extensions/packages/plugin-cli, so one checkout.

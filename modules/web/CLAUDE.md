@@ -17,7 +17,7 @@ fragmentation → the bundle's engine wasm).
 
 - **`web-model` stays pure** — zero deps, no DOM APIs (the linter is a
   scanner, not a parser; it must never crash on bad input). Every
-  behavior change lands with a vitest case.
+  behavior change lands with a unit test.
 - **The bundle touches host surfaces + React only.** No
   `@paged-media/shell`/`client` imports — selection reactivity comes
   from `host.selection.onDidChange`, persistence from `host.storage`,
@@ -91,6 +91,6 @@ fragmentation → the bundle's engine wasm).
 bun install && bash scripts/build-wasm.sh --engine
 bun run typecheck && REQUIRE_REAL_ENGINE=1 bun run test
 (cd packages/web-render && cargo fmt --check && cargo clippy --all-targets --features blitz -- -D warnings && cargo test --features blitz)
-# The same through Moon, from anywhere: engine wasm + vitest, and web-render's lanes
+# The same through Moon, from anywhere: engine wasm + bun test, and web-render's lanes
 moon run web:test web-render:test
 ```

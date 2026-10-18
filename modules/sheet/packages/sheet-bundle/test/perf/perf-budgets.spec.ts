@@ -37,13 +37,14 @@
 // stand-in is the scene channel the headless host does not wire
 // (`withSceneChannel`): it records what the in-frame grid submits.
 //
-// `PERF_SHOW=1 pnpm vitest run test/perf` prints every scenario's full
+// `PERF_SHOW=1 bun test test/perf` prints every scenario's full
 // work log — how a budget is found, and how a failing one is read.
 //
 // Real engine: skipped without the wasm artifact, FAILS under
 // REQUIRE_REAL_ENGINE=1 (the engine-real.spec.ts dual gate).
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout, mock } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 
 import { createElement } from "react";
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
@@ -88,10 +89,11 @@ import {
 // as `engine.<method>`. With PERF_ENGINE=1 (and scripts/build-wasm-perf.sh
 // run) it is the COUNTING engine, and PERF_SHOW lines carry its own work
 // counts under "engine" — trended, not budgeted.
-vi.mock("../../src/engine", async (importOriginal) => {
-  const orig = await importOriginal<typeof import("../../src/engine")>();
-  const { countingEngine, SHARED: tally } = await import("./counting-host");
-  const { perfBoot } = await import("./perf-engine");
+const actualEngine = await importActual(() => import("../../src/engine"));
+const { countingEngine, SHARED: tally } = await import("./counting-host");
+const { perfBoot } = await import("./perf-engine");
+mock.module("../../src/engine", () => {
+  const orig = actualEngine;
   const boot = async (fallback: () => Promise<SheetEngine>) =>
     countingEngine((await perfBoot(orig.wrapEngine)) ?? (await fallback()), tally);
   return {
@@ -152,7 +154,7 @@ function expectBudget(scenario: string, work: WorkLog, budget: Budget): void {
 }
 
 describe.skipIf(!ENGINE_BUILT)("perf budgets — work counted at the doors", () => {
-  vi.setConfig({ testTimeout: BUDGET_TIMEOUT_MS });
+  setDefaultTimeout(BUDGET_TIMEOUT_MS);
 
   let h: HeadlessHost;
   let raw: BundleHost;

@@ -15,6 +15,8 @@ project:
 dependsOn:
   - id: 'extensions'
     scope: 'development'
+  - id: 'test-kit'
+    scope: 'development'
 
 tasks:
   js-check:

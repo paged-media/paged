@@ -234,7 +234,7 @@ of at most 8 MiB. No code in `glue/src` calls a hit-test door or uses shared mem
   found (`image-conformance/src/device.rs`). CI runs on `ubuntu-latest`, which per the
   comment in `ci.yml` has none, so GPU output is compared with the scalar reference only
   on a machine with an adapter ([ADR 453](adr/453-tolerance-not-golden-bytes.md)).
-- TypeScript: `pnpm test` runs the import lint, then vitest in `glue/` against the SDK's
+- TypeScript: `pnpm test` runs the import lint, then `bun test` in `glue/` against the SDK's
   `createBundleHost` and a fake editor. `glue/test/wasm-exec.spec.ts` loads the committed
   module in Node and drives the CPU lanes; CI sets `REQUIRE_REAL_WASM=1`, which turns a
   missing module from a skip into a failure. The manifest validator is the `plugin-cli` of

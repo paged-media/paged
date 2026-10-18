@@ -26,7 +26,7 @@
 // backend, with a counting host, so the bundle's own background work (the
 // auto-renderer) is not counted.
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import type { BundleHost, ElementId, MutationInput } from "@paged-media/plugin-api";
 import { createObjectRegistry, type CoreObjects, type HeadlessHost } from "@paged-media/plugin-sdk";

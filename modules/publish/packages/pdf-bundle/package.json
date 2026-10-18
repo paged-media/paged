@@ -13,7 +13,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "tsup",
-    "test": "vitest run"
+    "test": "bun test --parallel"
   },
   "dependencies": {
     "jszip": "^3.10.1"
@@ -26,7 +26,7 @@
     "@types/node": "catalog:",
     "tsup": "^8.3.5",
     "typescript": "catalog:",
-    "vitest": "catalog:vitest3",
+    "@types/bun": "catalog:",
     "@paged-media/plugin-api": "workspace:*",
     "@paged-media/plugin-sdk": "workspace:*",
     "@paged-media/canvas-wasm": "workspace:*"

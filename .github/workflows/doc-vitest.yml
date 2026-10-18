@@ -1,4 +1,4 @@
-name: doc / vitest
+name: doc / bun test
 # MONOREPO (step A3): ported from paged-media/plugin-doc
 # .github/workflows/vitest.yml; runs in modules/doc. Push-only, as before.
 on:
@@ -39,6 +39,7 @@ defaults:
 
 jobs:
   vitest:
+    name: bun test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -67,13 +68,16 @@ jobs:
       # Red results must still upload (the state matrix wants the ✗), so the
       # run does not abort here — the gate at the end fails the job once the
       # artifact is safely uploaded.
-      - name: vitest (junit per package; red results still upload)
+      - name: bun test (junit per package; red results still upload)
         run: |
           set -uo pipefail
           bun run --filter './packages/*' test \
-            --reporter=junit --outputFile=junit.xml \
+            --reporter=junit --reporter-outfile=junit.bun.xml \
             || echo "TS_FAILED=1" >> "$GITHUB_ENV"
-          cat packages/*/junit.xml > junit-all.xml 2>/dev/null || true
+          # bun's reports, rewritten into the vitest shape the evidence has always
+          # had (tooling/js/bun-junit.mjs): the artifact keeps its name and test ids.
+          bun ../../tooling/js/bun-junit.mjs --out junit-all.xml packages/*/junit.bun.xml \
+            || echo "TS_FAILED=1" >> "$GITHUB_ENV"
           [ -s junit-all.xml ]
       # plugin-doc is a PUBLIC repo and the publish-results action lives in the
       # PRIVATE paged-media/state repo. GitHub refuses to resolve a private
@@ -82,7 +86,7 @@ jobs:
       # any step ran — on all 18 runs since the workflow was added. So we follow
       # core/ci.yml's inverted pattern: upload the JUnit as an artifact, and let
       # state pull it (private state CAN read a public repo's artifacts).
-      - name: upload vitest JUnit artifact
+      - name: upload JUnit artifact
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:

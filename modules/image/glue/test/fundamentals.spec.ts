@@ -20,7 +20,7 @@
 // engine wasm (both are CPU work for a one-layer stack), and the GPU-only
 // verbs' honest decline in Node.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type { PluginManifest } from "@paged-media/plugin-api";

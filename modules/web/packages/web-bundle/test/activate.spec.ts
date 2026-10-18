@@ -21,7 +21,7 @@
 // Engine behavior is not faked; this proves the contract wiring and
 // the honesty smoke test.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import type { PagedEditor } from "@paged-media/plugin-api";
 import { loadBundle } from "@paged-media/plugin-sdk";

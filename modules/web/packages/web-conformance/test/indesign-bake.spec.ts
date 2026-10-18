@@ -31,7 +31,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { engineExtras } from "../../web-bundle/src/engine-loader";
 import { expectedFrom, frameOf, loadInter, recordBake, toPagedScript, type Expected } from "../indesign/bake-lane";
@@ -148,7 +148,7 @@ describe("InDesign lane: InDesign's answer matches the bake", () => {
     const ans = JSON.parse(readFileSync(join(HERE, "answers", `${name}.json`), "utf8")) as Answer;
     const check = (what: string, fn: () => void) => {
       const defect = DEFECTS[`${name}/${what}`];
-      if (defect) it.fails(`DEFECT ${defect} — ${name}: ${what} @feat:plugin-web.bake-to-native`, fn);
+      if (defect) it.failing(`DEFECT ${defect} — ${name}: ${what} @feat:plugin-web.bake-to-native`, fn);
       else it(`${name}: ${what} @feat:plugin-web.bake-to-native`, fn);
     };
 

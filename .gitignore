@@ -26,3 +26,6 @@ node_modules/
 # Serena: its cache, memories and project.local.yml stay local (project.yml is shared).
 /.serena/*
 !/.serena/project.yml
+
+# bun test JUnit reports before tooling/js/bun-junit.mjs rewrites them (B7).
+*.bun.xml

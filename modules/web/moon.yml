@@ -15,6 +15,8 @@ project:
 dependsOn:
   - id: 'web-render'
     scope: 'build'
+  - id: 'test-kit'
+    scope: 'development'
 
 fileGroups:
   js-sources:
@@ -45,7 +47,7 @@ tasks:
       - '@group(js-sources)'
 
   js-test:
-    # web-vitest builds the engine wasm before vitest.
+    # web-vitest.yml builds the engine wasm before bun test.
     deps: ['~:wasm']
 
   wasm:

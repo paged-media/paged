@@ -23,7 +23,7 @@
 // spreadsheet semantics (the engine windows the scene in Rust; this is
 // rendering geometry only).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   DEFAULT_GRID_SVG_OPTIONS,

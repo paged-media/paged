@@ -20,7 +20,7 @@
 // no `zip` CLI, no external file dependency, deterministic bytes. Same
 // package convention the fidelity corpus uses (mimetype STORED first,
 // the rest DEFLATEd). Node-only (`node:zlib`), which is where these
-// vitest suites run (the headless host boots the wasm in Node).
+// unit suites run (the headless host boots the wasm in Node).
 
 import { deflateRawSync } from "node:zlib";
 

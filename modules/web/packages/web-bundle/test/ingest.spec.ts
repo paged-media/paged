@@ -21,7 +21,7 @@
 // the sanitizing wrapper, the removal summary, the clipboard-gating, and
 // the K-6 clipboard read path against a fake host.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, ClipboardPayload } from "@paged-media/plugin-api";
 

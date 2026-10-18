@@ -22,7 +22,7 @@
 // startup cost zero when there's nothing to restore). The full persist →
 // reload round-trip rides the engine-real wasm lane (needs the artifact).
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 

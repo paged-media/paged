@@ -20,7 +20,7 @@
 // envelope, an unknown value reads as clip, and a scene layer scales by a
 // factor (the shrink-to-fit policy).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   DEFAULT_SOURCE,

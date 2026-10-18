@@ -23,7 +23,7 @@
 //! origin (y-down), and style-resolved. This crate is deliberately
 //! **PDF-blind**: all pdf.js knowledge and every reconstruction heuristic
 //! (glyph clustering, space recovery, paragraph/column detection, confidence
-//! gating) live in TypeScript next to pdf.js and vitest. The IR is the clean
+//! gating) live in TypeScript next to pdf.js and its unit tests. The IR is the clean
 //! seam between "understand the PDF" (TS) and "build the native model"
 //! (Rust) — so a model-shape change is a Rust compile error, never silent
 //! data loss.

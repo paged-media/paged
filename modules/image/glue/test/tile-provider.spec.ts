@@ -28,7 +28,7 @@
 // eval are NOT wired across the wasm boundary yet — asserted here as the
 // level>0 → no-submit behavior, never faked.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type { PluginManifest } from "@paged-media/plugin-api";

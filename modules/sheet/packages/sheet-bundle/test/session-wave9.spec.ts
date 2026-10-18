@@ -6,7 +6,7 @@
 // Real engine: skipped without the wasm artifact, FAILS under
 // REQUIRE_REAL_ENGINE=1 (the engine-real.spec.ts dual gate).
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -61,7 +61,7 @@ if (process.env.REQUIRE_REAL_ENGINE === "1" && !ENGINE_BUILT) {
 }
 
 describe.skipIf(!ENGINE_BUILT)("wave 9 — placed-table refresh", () => {
-  vi.setConfig({ testTimeout: 60_000 });
+  setDefaultTimeout(60_000);
   let h: HeadlessHost;
   let host: BundleHost;
   let s: WorkbookSession | null = null;
@@ -110,7 +110,7 @@ describe.skipIf(!ENGINE_BUILT)("wave 9 — placed-table refresh", () => {
 });
 
 describe.skipIf(!ENGINE_BUILT)("wave 9 — placed charts and frame stories", () => {
-  vi.setConfig({ testTimeout: 60_000 });
+  setDefaultTimeout(60_000);
   let h: HeadlessHost;
   let raw: BundleHost;
   let s: WorkbookSession | null = null;
@@ -217,7 +217,7 @@ describe.skipIf(!ENGINE_BUILT)("wave 9 — placed charts and frame stories", () 
 });
 
 describe.skipIf(!ENGINE_BUILT)("wave 9 — placements from an earlier session", () => {
-  vi.setConfig({ testTimeout: 60_000 });
+  setDefaultTimeout(60_000);
   let h: HeadlessHost;
   let host: BundleHost;
   const sessions: WorkbookSession[] = [];
@@ -507,7 +507,7 @@ async function cellParagraphStyles(h: HeadlessHost): Promise<Map<string, string>
 }
 
 describe.skipIf(!ENGINE_BUILT)("wave 9 — alignment reaches the placed table", () => {
-  vi.setConfig({ testTimeout: 60_000 });
+  setDefaultTimeout(60_000);
   let h: HeadlessHost;
   let host: BundleHost;
   let s: WorkbookSession | null = null;
@@ -551,7 +551,7 @@ describe.skipIf(!ENGINE_BUILT)("wave 9 — alignment reaches the placed table", 
 });
 
 describe.skipIf(!ENGINE_BUILT)("wave 9 — format changes are undo steps [sheet.edit.undo]", () => {
-  vi.setConfig({ testTimeout: 60_000 });
+  setDefaultTimeout(60_000);
   let h: HeadlessHost;
   let s: WorkbookSession | null = null;
 
@@ -658,7 +658,7 @@ describe.skipIf(!ENGINE_BUILT)("wave 9 — format changes are undo steps [sheet.
 });
 
 describe.skipIf(!ENGINE_BUILT)("wave 9 — data bars on the native table [sheet.xlsx.condfmt]", () => {
-  vi.setConfig({ testTimeout: 60_000 });
+  setDefaultTimeout(60_000);
   let h: HeadlessHost;
   let raw: BundleHost;
   let s: WorkbookSession | null = null;

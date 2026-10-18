@@ -21,7 +21,7 @@
 // touch. Wiring + refusal semantics against a hand-rolled fake host; no
 // editor, no engine.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import type { BundleHost, Mutation, SwatchSummary } from "@paged-media/plugin-api";
 import { paletteEntry } from "../../sheet-host-model/src";

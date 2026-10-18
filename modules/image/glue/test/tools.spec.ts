@@ -19,7 +19,7 @@
 // The gradient and red-eye tools: the geometry they hand the engine, and
 // their honest decline in Node (both are GPU kernels).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type { PluginManifest } from "@paged-media/plugin-api";
