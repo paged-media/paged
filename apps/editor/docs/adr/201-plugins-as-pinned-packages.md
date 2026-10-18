@@ -1,6 +1,9 @@
 # ADR 201 — First-party plugins are compiled in as pinned published packages
 
 - **Status:** Accepted. Recorded retroactively on 2026-10-02 from the code at `28dc764`.
+  Superseded 2026-10-18 by [PM-0008](../../../../docs/adr/PM-0008-npm-packages-and-release.md):
+  the bundles are private workspace packages the editor takes through `workspace:*`, and none
+  is published.
 - **Scope:** `apps/canvas/package.json`, `packages/tools/package.json`, the root `package.json` overrides, `apps/canvas/src/main.tsx` (`PluginBundles`), `apps/canvas/src/plugin-load-guard.ts`, `scripts/check-plugin-pins.mjs`
 
 ## Context
