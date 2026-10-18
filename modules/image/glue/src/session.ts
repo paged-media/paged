@@ -140,6 +140,7 @@ export const VacateMode = {
   /** Alt-drag: the pixels are copied and the source keeps what it had. */
   Copy: 1,
 } as const;
+// eslint-disable-next-line no-redeclare -- the value and its type share a name on purpose
 export type VacateMode = (typeof VacateMode)[keyof typeof VacateMode];
 
 export const EdgePolicy = {
@@ -150,6 +151,7 @@ export const EdgePolicy = {
   /** Photoshop "Wrap Around" — the period is the image; makes tiles seamless. */
   Wrap: 2,
 } as const;
+// eslint-disable-next-line no-redeclare -- the value and its type share a name on purpose
 export type EdgePolicy = (typeof EdgePolicy)[keyof typeof EdgePolicy];
 
 /** What to paint into the selection (the `gen.*` family's editor

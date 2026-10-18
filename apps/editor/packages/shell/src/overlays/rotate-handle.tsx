@@ -17,7 +17,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { ElementGeometryItem } from "@paged-media/client";
 
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";

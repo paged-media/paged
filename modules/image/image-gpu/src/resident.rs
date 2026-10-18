@@ -636,7 +636,7 @@ impl<'c> GpuBatch<'c> {
         rx.recv()
             .map_err(|_| GpuError::Readback("map callback dropped".into()))?
             .map_err(|e| GpuError::Readback(format!("map_async: {e:?}")))?;
-        Ok(pending.collect())
+        pending.collect()
     }
 
     /// Submit and read back ASYNCHRONOUSLY — the wasm32/WebGPU lane,
@@ -665,7 +665,7 @@ impl<'c> GpuBatch<'c> {
         MapFuture(shared)
             .await
             .map_err(|e| GpuError::Readback(format!("map_async: {e:?}")))?;
-        Ok(pending.collect())
+        pending.collect()
     }
 }
 
@@ -679,9 +679,9 @@ struct PendingReads {
 }
 
 impl PendingReads {
-    fn collect(&self) -> Vec<Vec<u8>> {
+    fn collect(&self) -> Result<Vec<Vec<u8>>, GpuError> {
         let Some(buffer) = self.buffer.as_ref() else {
-            return Vec::new();
+            return Ok(Vec::new());
         };
         crate::counters::bump(|c| {
             c.readbacks += 1;
@@ -689,7 +689,10 @@ impl PendingReads {
         });
         let mut out = Vec::with_capacity(self.layout.len());
         {
-            let data = buffer.slice(..).get_mapped_range();
+            let data = buffer
+                .slice(..)
+                .get_mapped_range()
+                .map_err(|e| GpuError::Readback(format!("mapped range: {e}")))?;
             for &(offset, row_bytes, padded_row, h) in &self.layout {
                 let mut bytes = Vec::with_capacity(row_bytes as usize * h as usize);
                 for row in 0..h as u64 {
@@ -700,7 +703,7 @@ impl PendingReads {
             }
         }
         buffer.unmap();
-        out
+        Ok(out)
     }
 }
 

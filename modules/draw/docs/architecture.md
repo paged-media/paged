@@ -57,9 +57,10 @@ out, over the `visioncortex` crate. No wasm-bindgen dependency.
   and the geometry in its built-in Pen and Pencil (`editor: packages/tools/src/handlers/`).
   `draw-tools` has no entry point of its own.
 - `@paged-media/plugin-api`, `@paged-media/plugin-sdk` and `react` are peer dependencies of the
-  published package. `scripts/check-contract-imports.mjs` runs before the tests and fails on any
-  static `import … from` or `export … from` that is not one of those three, a package of this repo,
-  or relative. It does not check dynamic `import()` (three `node:` modules in `trace-engine.ts`).
+  published package. The contract-import lint rule (`/bunfig.toml`, PM-0003) fails on any import
+  or `export … from` that is not one of those three, a package of this repo, a shared package
+  (`platform/shared/*`), or relative. It does not check dynamic `import()` (three `node:` modules
+  in `trace-engine.ts`).
 - The wasm is build output in `packages/draw-bundle/wasm/` (gitignored; `scripts/build-wasm.sh`,
   `moon run draw:wasm`, and in CI `.github/actions/module-wasm`). That directory is both the
   path the manifest declares (`wasm/trace_js_bg.wasm`) and the path `trace-engine.ts`

@@ -166,6 +166,8 @@ impl SurfacePresenter {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
+                // The adapter's own limits, as before wgpu 30 added bucketing.
+                apply_limit_buckets: false,
             })
             .await
             .map_err(|_| SurfaceError::NoAdapter)?;
@@ -279,6 +281,9 @@ impl SurfacePresenter {
                 alpha_mode: wgpu::CompositeAlphaMode::Auto,
                 view_formats: vec![],
                 desired_maximum_frame_latency: 2,
+                // `Auto` keeps the colour space wgpu chose before 30 (sRGB for
+                // the 8-bit canvas formats).
+                color_space: wgpu::SurfaceColorSpace::Auto,
             },
         );
     }
@@ -378,7 +383,7 @@ impl SurfacePresenter {
         self.blitter
             .copy(&self.device, &mut encoder, &self.target_view, &surface_view);
         self.queue.submit([encoder.finish()]);
-        frame.present();
+        self.queue.present(frame);
         Ok(())
     }
 
@@ -448,7 +453,7 @@ impl SurfacePresenter {
         self.blitter
             .copy(&self.device, &mut encoder, &self.target_view, &surface_view);
         self.queue.submit([encoder.finish()]);
-        frame.present();
+        self.queue.present(frame);
         Ok(())
     }
 
@@ -504,7 +509,7 @@ impl SurfacePresenter {
             .copy(&self.device, &mut encoder, &self.target_view, &surface_view);
         self.queue.submit([encoder.finish()]);
 
-        frame.present();
+        self.queue.present(frame);
         Ok(())
     }
 
@@ -687,7 +692,11 @@ impl PendingReadback {
 
         let mut rgba = Vec::with_capacity((self.row_bytes as usize) * (self.height_px as usize));
         {
-            let data = self.buffer.slice(..).get_mapped_range();
+            let data = self
+                .buffer
+                .slice(..)
+                .get_mapped_range()
+                .map_err(|e| SurfaceError::Readback(format!("mapped range: {e}")))?;
             for row in 0..self.height_px {
                 let start = (row as usize) * (self.padded_row_bytes as usize);
                 let end = start + (self.row_bytes as usize);
