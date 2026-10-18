@@ -29,16 +29,16 @@
 // through `h.loadBundle` holds the UNWRAPPED host, so the contributed
 // component's reads are invisible to `countingHost`).
 //
-// THE ENVIRONMENT. Every `.spec.tsx` in this folder carries the docblock
-// `@vitest-environment jsdom` right under its license header — per file,
-// no vitest config. The engine wasm boots inside that environment
-// unchanged (measured, protocol 64): the test still runs in Node, with
-// Node's own `fs`, `WebAssembly` and typed arrays beside the DOM globals
-// jsdom installs, and the headless harness reads the wasm off disk
-// rather than fetching it. No workaround was needed, so there is none
-// here — `openHost()` is called in a plain `beforeAll`. The two
-// binding-driver specs (`*.spec.ts`) render nothing and stay in the
-// default Node environment.
+// THE ENVIRONMENT. Every `*.dom.test.tsx` in this folder runs in the
+// separate DOM task (`bun run test:dom`), which preloads happy-dom
+// (test/happydom.ts) before the file loads; the main `bun test` run skips
+// them, so no other suite sees DOM globals. The engine wasm boots inside
+// that environment unchanged: the test still runs in Bun, with its own
+// `fs`, `WebAssembly` and typed arrays beside the DOM globals happy-dom
+// installs, and the headless harness reads the wasm off disk rather than
+// fetching it. No workaround was needed, so there is none here —
+// `openHost()` is called in a plain `beforeAll`. The binding-driver specs
+// (`*.spec.ts`) render nothing and run in the main task.
 //
 // THE CLOCK. The headless engine answers synchronously, so a reload is a
 // chain of MICROTASKS: one macrotask turn drains every reload in flight,
@@ -221,7 +221,7 @@ export interface MountedPanel {
   /** Every element matching `selector`. */
   all(selector: string): HTMLElement[];
   /** How many elements match `selector` (a number fails cheaply; a list
-   *  of elements makes vitest pretty-print the DOM). */
+   *  of elements makes the runner pretty-print the DOM). */
   count(selector: string): number;
   /** One attribute of the first element matching `selector`. */
   attr(selector: string, name: string): string | null;
@@ -341,7 +341,7 @@ export async function mountContributed(
   return panel;
 }
 
-/** Unmount whatever is mounted. The suite runs without vitest globals,
+/** Unmount whatever is mounted. The suite runs without test-runner globals,
  *  so Testing Library's automatic cleanup never registers itself. */
 export function unmountAll(): void {
   cleanup();

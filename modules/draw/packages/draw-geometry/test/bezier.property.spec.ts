@@ -19,7 +19,7 @@
 // Property tests for bezier.ts — the cubic kernel the pen, the anchor
 // editors and every flattening consumer stand on.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   closestTOnCubic,

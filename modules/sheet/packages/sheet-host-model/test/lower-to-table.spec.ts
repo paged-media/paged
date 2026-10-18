@@ -24,7 +24,7 @@
 // no spreadsheet semantics — just the wire vocabulary over
 // already-decided geometry/text.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { Mutation } from "@paged-media/plugin-api";
 

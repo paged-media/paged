@@ -29,7 +29,7 @@
 //      `supports("text.caret@1")` is false (a read door, no capability
 //      gate — like text.measureString / viewport).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PluginManifest, TextCaret } from "@paged-media/plugin-api";
 

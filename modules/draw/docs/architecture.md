@@ -23,9 +23,8 @@ and an SVG reader and writer with its own XML scanner (`svg-doc.ts`, `svg-path.t
 **`packages/draw-tools`** — private. Eleven tool modules that take page-local points and
 return snapshots, plans or commits: anchor editing, pen, pencil, curvature, brush, width,
 measure, shape builder, live paint, corner radius, repeat. It imports `draw-geometry` and,
-as types only, `@paged-media/plugin-api`. `wire-compat.ts` holds compile-time assertions
-that the machines' output is assignable to the engine's wire types, so a protocol change
-that breaks them fails `pnpm typecheck` here.
+as types only, `@paged-media/plugin-api`. The machines' wire shapes are the contract's own
+`Mutation` variants, so a protocol change that breaks them fails the typecheck here.
 
 **`packages/draw-bundle`** — published to npm as `@paged-media/draw` (`dist`, `wasm`,
 `manifest.json`). The only package that touches a host. It holds `activate(host)`
@@ -58,10 +57,12 @@ out, over the `visioncortex` crate. No wasm-bindgen dependency.
   and the geometry in its built-in Pen and Pencil (`editor: packages/tools/src/handlers/`).
   `draw-tools` has no entry point of its own.
 - `@paged-media/plugin-api`, `@paged-media/plugin-sdk` and `react` are peer dependencies of the
-  published package. `scripts/check-contract-imports.mjs` runs before the tests and fails on any
-  static `import … from` or `export … from` that is not one of those three, a package of this repo,
-  or relative. It does not check dynamic `import()` (three `node:` modules in `trace-engine.ts`).
-- The built wasm is committed in `packages/draw-bundle/wasm/`. That directory is both the
+  published package. The contract-import lint rule (`/bunfig.toml`, PM-0003) fails on any import
+  or `export … from` that is not one of those three, a package of this repo, a shared package
+  (`platform/shared/*`), or relative. It does not check dynamic `import()` (three `node:` modules
+  in `trace-engine.ts`).
+- The wasm is build output in `packages/draw-bundle/wasm/` (gitignored; `scripts/build-wasm.sh`,
+  `moon run draw:wasm`, and in CI `.github/actions/module-wasm`). That directory is both the
   path the manifest declares (`wasm/trace_js_bg.wasm`) and the path `trace-engine.ts`
   imports, so there is one copy.
 
@@ -222,10 +223,10 @@ The bundle does not read a protocol number. Optional doors are probed with `host
 `contribute.exporter@1`, `overlay.text@1`). Engine operations are detected by sending one
 deliberately unknown operation and reading the list of known operations from the error
 (`engineOpVocabulary` in `commands/join-average.ts`); Join and Shape Builder fall back to
-older operations when the newer ones are missing. Operations that the contract types as
-`PendingMutation` are built in three modules: `commands/v58-wire.ts`,
-`commands/v59-wire.ts` and `binding-provider/adr023-seam.ts`. `commands/pathfinder-region.ts`
-and `commands/join-average.ts` still cast their operations to `Mutation`.
+older operations when the newer ones are missing. Every other door is called directly: the
+in-tree contract and engine have it (B3b; `docs/migration/seams.md` at the repository root).
+Operations are plain `Mutation`s, built beside their commands (`commands/batch-handles.ts`
+for the C-15 handles and the B-18 nesting pair).
 
 ## Build and test
 
@@ -238,7 +239,7 @@ and `commands/join-average.ts` still cast their operations to `Mutation`.
   present, `wasm-opt -Oz`, and writes `packages/draw-bundle/wasm/`. It is needed only when
   `crates/` changes. The manifest caps the module at 2,097,152 bytes; the script's own size
   check is set to 100,000,000 bytes. The committed module is 173,402 bytes.
-- `pnpm test` runs the import lint, then vitest in the three packages. `draw-geometry` and
+- `pnpm test` runs the import lint, then `bun test` in the three packages (draw-bundle's rendered panel specs, `*.dom.test.tsx`, in a separate task with happy-dom). `draw-geometry` and
   `draw-tools` are unit tests. In `draw-bundle`, `test/conformance/` holds 42 spec files; 40 of them
   boot the published engine wasm in Node with `createHeadlessHost` from `@paged-media/plugin-sdk`
   and drive the bundle through its real document door; `@paged-media/canvas-wasm` is a devDependency

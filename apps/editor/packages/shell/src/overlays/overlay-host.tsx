@@ -19,11 +19,9 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type {
   Camera,
 } from "@paged-media/client";
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { PageId } from "@paged-media/client";
 
 import type {

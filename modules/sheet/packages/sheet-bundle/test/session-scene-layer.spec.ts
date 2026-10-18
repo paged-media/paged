@@ -23,7 +23,7 @@
 // fixed GridScene and a fake host captures every scene-layer submit so we
 // can assert what core would compose.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, SceneLayer } from "@paged-media/plugin-api";
 import type { GridScene } from "@paged-media/sheet-host-model";
@@ -136,6 +136,8 @@ function fakeHost() {
       }),
     },
     document: {
+      onDidChange: () => ({ dispose() {} }),
+      onDidOpen: () => ({ dispose() {} }),
       // bounds = [top, left, bottom, right] → an 80×40 content box.
       elementGeometry: async () => [{ bounds: [0, 0, 40, 80] }],
     },

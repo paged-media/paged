@@ -23,7 +23,7 @@
 
 import { readFileSync } from "node:fs";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import { createHeadlessHost } from "@paged-media/plugin-sdk";
@@ -39,6 +39,13 @@ import {
   setStateMutation,
   SlidesStore,
 } from "../src/slides-model";
+import { fileURLToPath } from "node:url";
+
+// The engine is this package's own @paged-media/canvas-wasm devDependency.
+// Without an anchor the headless harness resolves it from plugin-sdk's
+// install location, which in the root Bun workspace is whichever version the
+// store hoists, not the one this package pins.
+const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
 const until = async (ok: () => boolean, ms = 5000) => {
   const end = Date.now() + ms;
@@ -72,7 +79,7 @@ describe("the slides store on the engine", () => {
       readFileSync(new URL(`../../../slide-conformance/fixtures/${name}.pptx`, import.meta.url)),
     );
     const { idml } = (await slideEngine()).importPptx(bytes, name);
-    const h = await createHeadlessHost();
+    const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
     await h.load(idml);
     // The slide plugin's own host: a page label is written under the
     // writer's own id, so the store runs as media.paged.slide.
@@ -167,7 +174,7 @@ describe("a new slide from a layout", () => {
       readFileSync(new URL(`../../../slide-conformance/fixtures/${name}.pptx`, import.meta.url)),
     );
     const { idml } = (await slideEngine()).importPptx(bytes, name);
-    const h = await createHeadlessHost();
+    const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
     await h.load(idml);
     let host!: BundleHost;
     h.loadBundle({
@@ -236,6 +243,43 @@ describe("a new slide from a layout", () => {
         const own = chain.find(([, links]) => links.some((l) => l.frameId === n.id?.id));
         if (own) expect(own[0].characterCount, "an emptied placeholder").toBe(0);
       }
+    } finally {
+      store.dispose();
+      h.dispose();
+    }
+  }, 60_000);
+
+  it("takes the new slide's page from the engine's outcome, reading the page list once", async () => {
+    const { h, host, store } = await open("geometry");
+    try {
+      const before = store.list();
+      const [layout] = await layouts(host, before);
+      // Count what newSlide asks of the page list, and keep what the
+      // duplicate answered.
+      let pageReads = 0;
+      let reported: string[] | undefined;
+      const doc = host.document;
+      const counted: BundleHost = {
+        ...host,
+        document: {
+          ...doc,
+          collection: ((name: string) => {
+            if (name === "pages") pageReads += 1;
+            return doc.collection(name as never);
+          }) as typeof doc.collection,
+          mutate: async (m) => {
+            const outcome = await doc.mutate(m);
+            if (outcome.applied && m.op === "duplicatePage") reported = outcome.createdPages;
+            return outcome;
+          },
+        },
+      };
+      const id = await newSlide(counted, layout, before[0].pageId);
+      expect(reported, "the engine named the copy").toHaveLength(1);
+      expect(id).toBe(reported![0]);
+      expect(pageReads, "one read, for where the copy landed; no before/after diff").toBe(1);
+      await store.refresh();
+      expect(store.list()[1].pageId).toBe(id);
     } finally {
       store.dispose();
       h.dispose();

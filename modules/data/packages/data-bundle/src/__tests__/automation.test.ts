@@ -23,7 +23,7 @@
 // data-automation unit tests); here we prove the bundle reaches the engine and
 // passes the mode through.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
@@ -51,6 +51,8 @@ function fakeHost(): BundleHost {
   return {
     manifest: { id: "media.paged.data", name: "d", version: "0.0.1", apiVersion: "^0.2" },
     log: { debug() {}, info() {}, warn() {}, error() {} },
+    // The document doors every host has; nothing here fires them.
+    document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
     supports: () => false,
   } as unknown as BundleHost;
 }

@@ -21,7 +21,7 @@
 // of every malformed shape (a foreign/corrupt metadata blob degrades to
 // "not a sheet frame", never a crash).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   BINDING_KEY,

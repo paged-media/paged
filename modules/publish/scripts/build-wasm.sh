@@ -9,7 +9,8 @@
 # `engine-loader.ts` imports.
 #
 # Output: packages/pdf-bundle/bin/pdf_import.js + pdf_import_bg.wasm
-# (manifest `capabilities.wasm`, gitignored generated output).
+# (manifest `capabilities.wasm`; gitignored build output, built by
+# `moon run publish:wasm` and in CI by .github/actions/module-wasm).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -27,6 +28,18 @@ fi
 # Build from the workspace root so the shared git-dep lock is reused; -p
 # selects just the mapper (idml-import/-export are not needed for the bundle).
 ( cd "$HERE" && cargo build --release --target "$TARGET" -p pdf-import )
+
+# Pin check: wasm-bindgen-cli must match the Cargo.lock wasm-bindgen, or the
+# generated glue does not match the module.
+if command -v wasm-bindgen >/dev/null 2>&1; then
+  LOCKED=$(grep -A1 '^name = "wasm-bindgen"$' "$HERE/Cargo.lock" | grep version | head -1 | cut -d'"' -f2)
+  CLI=$(wasm-bindgen --version | awk '{print $2}')
+  if [[ "$LOCKED" != "$CLI" ]]; then
+    echo "build-wasm: wasm-bindgen-cli $CLI != Cargo.lock wasm-bindgen $LOCKED" >&2
+    echo "            cargo install wasm-bindgen-cli --version $LOCKED" >&2
+    exit 1
+  fi
+fi
 
 WASM_IN="$HERE/target/$TARGET/release/pdf_import.wasm"
 if [[ ! -f "$WASM_IN" ]]; then

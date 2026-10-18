@@ -24,7 +24,7 @@
 // the pull→batch→submit plumbing (generation echoed, only this image's
 // events routed, nulls skipped), and the release on dispose.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type {
   PagedEditor,

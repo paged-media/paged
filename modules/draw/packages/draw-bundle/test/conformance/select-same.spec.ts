@@ -36,7 +36,7 @@
 // (Illustrator's Select Same Fill likewise ignores unfilled lines); the
 // spec pins it so a future engine change to fill-on-lines fails loudly.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { ElementId, SceneTreeNode } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

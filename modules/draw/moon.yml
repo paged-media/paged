@@ -1,6 +1,6 @@
 $schema: '../../.moon/cache/schemas/project.json'
 
-# paged.draw: a Cargo workspace (image trace) and a pnpm workspace
+# paged.draw: a Cargo workspace (image trace) and JS packages
 # (draw-geometry, draw-tools, draw-bundle).
 language: 'rust'
 layer: 'library'
@@ -15,6 +15,8 @@ project:
 dependsOn:
   - id: 'extensions'
     scope: 'development'
+  - id: 'test-kit'
+    scope: 'development'
 
 tasks:
   rust-lint:
@@ -23,15 +25,14 @@ tasks:
       cargo clippy --workspace --all-targets -- -D warnings
       && cargo clippy --workspace --all-targets --target wasm32-unknown-unknown -- -D warnings
 
-  js-lint:
-    description: 'The contract-import guard (scripts/check-contract-imports.mjs).'
-    command: 'pnpm run lint:contract'
-    inputs:
-      - '@group(js-sources)'
+  js-test:
+    # The image-trace specs boot the wasm; draw-vitest.yml builds it first.
+    deps: ['~:wasm']
 
   manifest:
-    description: 'plugin-cli validate of the bundle manifest (measures the committed wasm).'
+    description: 'plugin-cli validate of the bundle manifest (measures the built wasm).'
     toolchains: ['system']
+    deps: ['~:wasm']
     command: 'node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json'
     inputs:
       - 'packages/draw-bundle/manifest.json'
@@ -47,7 +48,9 @@ tasks:
       - '@group(rust-sources)'
       - 'scripts/build-wasm.sh'
       - 'packages/draw-bundle/manifest.json'
+    outputs:
+      - 'packages/draw-bundle/wasm/trace_js*'
     options:
-      # The artifact is committed, so it is not a cached output.
-      cache: false
+      # Needs wasm-bindgen-cli at the Cargo.lock version; draw-rust and
+      # draw-vitest build it in CI (.github/actions/module-wasm).
       runInCI: 'skip'

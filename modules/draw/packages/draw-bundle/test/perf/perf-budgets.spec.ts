@@ -34,7 +34,7 @@
 // REAL headless host, so the engine still answers and a budget can sit
 // beside a behaviour assertion on the same gesture.
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import type { ElementId, ToolPreviewShape } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

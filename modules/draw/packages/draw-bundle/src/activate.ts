@@ -169,7 +169,6 @@ import {
 } from "./commands/pathfinder-region";
 import { vectorGraphicEditContext } from "./edit-context";
 import { makeLayersBindingProvider } from "./binding-provider/layers-provider";
-import { registerBindingProvider } from "./binding-provider/adr023-seam";
 import {
   makeAppearancePanel,
   APPEARANCE_PANEL_ID,
@@ -513,8 +512,8 @@ export function activate(host: BundleHost): BundleHandle {
   // row the catalog names is the three SPACING MODES, a SPINE, easing
   // with independent colour acceleration, and the two verbs that take a
   // blend apart. It is the SECOND consumer of C-15's `bindCreated` (after
-  // repeats), so it builds in ONE undo step and rides the same
-  // `v59-wire.ts` seam rather than a second copy of the cast.
+  // repeats), so it builds in ONE undo step through the same batch-handle
+  // helpers (`commands/batch-handles.ts`).
   // commands/blend.ts states every measured count and the two places
   // this deliberately differs from Illustrator's spine.
   const blendCommandsSub = contributeBlendCommands(host);
@@ -562,21 +561,18 @@ export function activate(host: BundleHost): BundleHandle {
   });
   // …and only NOW the provider: phase A refuses a provider whose edit
   // context this bundle has not registered yet, because it could never
-  // activate. `null` back means the host predates phase A — draw then
-  // contributes no provider and the host Layers panel keeps reading
-  // core, which is exactly the pre-ADR behaviour.
-  const layersProviderHandle = registerBindingProvider(
-    host,
-    vectorGraphicEditContext.type,
-    layersProvider.provider,
-  );
+  // activate. Where the host wires no binding-provider registry
+  // (`bindings.provider@1` false) nothing would consult it: draw then
+  // contributes none and the host Layers panel keeps reading core.
+  const layersProviderHandle = host.supports("bindings.provider@1")
+    ? host.contribute.bindingProvider(vectorGraphicEditContext.type, layersProvider.provider)
+    : null;
   // Phase 8 — SVG interchange (K-2): an `.svg` importer (parse → insert
   // the shapes through the existing insertPath lane) + an `.svg` exporter
   // (selection → SVG bytes). Capability-gated; degrades honestly when the
   // host predates the importer/exporter doors.
   const svgIoSub = contributeSvgIo(host);
-  // F1 — the menu bar. 92 commands and, until plugin-api 0.2.33, no
-  // route to a menu: every verb was Cmd+K only, shown as a raw id.
+  // F1 — the menu bar.
   const menuSub = contributeMenu(host);
   // ADR 323 — the OBJECT MODEL: ten kinds (path geometry, appearance
   // stacks, graphic styles, symbols + instances, the five generator

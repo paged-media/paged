@@ -35,7 +35,7 @@
 // Engine artifact: skipped with a reason when `bin/blitz_web*` is absent,
 // FAILED when REQUIRE_REAL_ENGINE=1 (CI builds it first).
 
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -61,7 +61,7 @@ import {
   type EngineLane,
 } from "./workload";
 
-vi.setConfig({ testTimeout: BUDGET_TIMEOUT_MS, hookTimeout: BUDGET_TIMEOUT_MS });
+setDefaultTimeout(BUDGET_TIMEOUT_MS);
 
 if (process.env.REQUIRE_REAL_ENGINE === "1" && !bundledPresent) {
   describe("web perf budgets — REQUIRED", () => {

@@ -29,9 +29,10 @@ after the table gives the dependency direction.
   the only crates that name an `ooxmlsdk` type.
 - No crate depends on an engine crate or on another plugin, and `Cargo.toml` has no git
   dependency. `deny.toml` denies unknown registries and git sources;
-  `scripts/check-contract-imports.mjs` rejects any static import in the packages' non-test
+  the contract-import lint rule (`/bunfig.toml`, PM-0003) rejects any import in the packages' non-test
   source files that is outside the contract packages `@paged-media/plugin-api` and
-  `@paged-media/plugin-sdk`, this repo's packages and `react`
+  `@paged-media/plugin-sdk`, the internal shared packages (`platform/shared/*`), this repo's
+  packages and `react`
   ([ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md)).
 - `doc-bundle` takes the two contract packages and `react` as peer dependencies; tsup
   inlines `doc-host-model` into the built bundle. The split into Rust semantics, a
@@ -217,7 +218,7 @@ code uses `readNative` or the declared part type `docLowered`.
   engine ([ADR 604](adr/604-word-is-the-oracle.md)). Two lanes over real Word files are
   ignored by default and need a corpus outside this repo: `real_word_corpus.rs`
   (`PAGED_DOC_CORPUS`) and `poi_corpus.rs` (`PAGED_DOCX_CORPUS`).
-- TypeScript lane: `pnpm test` runs the import lint, then vitest in both packages;
+- TypeScript lane: `pnpm test` runs the import lint, then `bun test` in both packages;
   `.github/workflows/vitest.yml` adds a typecheck and a manifest check with the published
   `@paged-media/plugin-cli`. The tests use recording hosts and stub engines, not the wasm.
 - The `scripts/word-*-probe.sh` scripts put the questions to desktop Microsoft Word on

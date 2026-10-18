@@ -19,5 +19,6 @@ the top of any existing source file in this repo.
 
 See `CLAUDE.md` for the specifics. In general: Rust crates build/test with
 `cargo build` / `cargo test` / `cargo clippy`; TypeScript packages with
-`pnpm install` / `pnpm -r test` / `pnpm -r typecheck`. Format only the files you
-touched.
+`bun install` / `bun run test` / `bun run typecheck`. `tooling/js/fmt.sh` formats
+the TypeScript, JSON, Markdown and YAML (`bun fmt`; CI checks it), `cargo fmt`
+the Rust.

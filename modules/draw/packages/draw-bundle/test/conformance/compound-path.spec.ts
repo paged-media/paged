@@ -46,7 +46,7 @@
 //       its direction, every other one is wound against it.
 
 import { inflateSync } from "node:zlib";
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, beforeEach } from "bun:test";
 
 import type {
   CommandContribution,
@@ -702,31 +702,6 @@ describe("draw conformance — COMPOUND PATHS (make / release)", () => {
           ]);
           expect(stepwise.undoSteps).toBe(scenario.stepwiseSteps);
           expect(stepwise.restored).toBe(true);
-
-          // REPLY — an SDK before plugin-sdk 0.2.38, whose outcome carries no
-          // `minted`: the ids off the raw reply. The same document, the same
-          // writes and the same reads as the shipped (outcome) lane.
-          const reply = await through("reply");
-          expect(reply.picture).toBe(shipped.picture);
-          expect(reply.work.mutations).toEqual(shipped.work.mutations);
-          expect(reply.undoSteps).toBe(shipped.undoSteps);
-          expect(reply.restored).toBe(true);
-          expect(reply.work.count("document.tree")).toBe(shipped.work.count("document.tree"));
-
-          for (const lane of ["diff", "unlisted"] as const) {
-            const run = await through(lane);
-            expect(run.picture, lane).toBe(shipped.picture);
-            expect(run.undoSteps, lane).toBe(1);
-            expect(run.restored, lane).toBe(true);
-            expect(run.work.count("document.tree"), lane).toBe(2);
-          }
-
-          // AS FOUND — no bind, no raw client: the numbers this flow
-          // started from, plus the refused attempt's "before" read.
-          const asFound = await through("asFound");
-          expect(asFound.picture).toBe(shipped.picture);
-          expect(asFound.undoSteps).toBe(scenario.stepwiseSteps);
-          expect(asFound.work.count("document.tree")).toBe(scenario.asFound + 1);
 
           expect(await leafIds(h)).toEqual(["uinner", "uopen", "uouter"]);
         });

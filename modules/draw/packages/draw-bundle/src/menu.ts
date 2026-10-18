@@ -192,38 +192,15 @@ const ENTRIES: [path: string, suffix: string, group: string][] = [
 /**
  * Register every menu entry. Returns one Disposable that drops them all,
  * so deactivate stays a single call.
- *
- * DEGRADES ON AN OLDER HOST. `contribute.menu` is absent before
- * plugin-api 0.2.33; the optional call below simply contributes nothing
- * there, which is the same shape `contributeSvgIo` uses for the
- * importer/exporter doors. A bundle that threw on an older host would
- * take the whole plugin down over a menu.
  */
 export function contributeMenu(host: BundleHost): Disposable {
-  const contribute = host.contribute as BundleHost["contribute"] & {
-    menu?: (c: {
-      path: string;
-      command: string;
-      order?: number;
-      group?: string;
-    }) => Disposable;
-  };
-  if (typeof contribute.menu !== "function") {
-    host.log.info(
-      "host predates contribute.menu (plugin-api 0.2.33) — " +
-        `${ENTRIES.length} menu entries not contributed; every command ` +
-        "remains reachable through the command palette",
-    );
-    return { dispose() {} };
-  }
-
   const handles: Disposable[] = [];
   const perGroup = new Map<string, number>();
   for (const [path, suffix, group] of ENTRIES) {
     const n = (perGroup.get(group) ?? 0) + 1;
     perGroup.set(group, n);
     handles.push(
-      contribute.menu({
+      host.contribute.menu({
         path,
         command: `${C}.${suffix}`,
         group,

@@ -40,7 +40,7 @@
 //   insertPath          the contour;
 //   bindCreated         names what that insert minted — its OWN op, and
 //                       AFTER its creating child (the C-15 rules,
-//                       `commands/v59-wire.ts`);
+//                       `commands/batch-handles.ts`);
 //   setElementProperty  ×3 on `"$h:<handle>"` — fill, stroke, weight.
 //
 // WHY THE PAINT IS WRITTEN ON THE HANDLE and not, as before, inherited
@@ -138,7 +138,7 @@ import {
   batchMutationFor,
   bindCreatedMutationFor,
   handleElementId,
-} from "../commands/v59-wire";
+} from "../commands/batch-handles";
 
 export const SVG_IMPORTER_ID = "media.paged.draw.importer.svg";
 export const SVG_EXPORTER_ID = "media.paged.draw.exporter.svg";

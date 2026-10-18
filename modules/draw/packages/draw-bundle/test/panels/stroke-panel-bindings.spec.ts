@@ -28,7 +28,7 @@
 // so the bundle's own copy of this driver is not running beside it and
 // every publish that lands is the one under test.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 
 import type { BundleHost, Disposable, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

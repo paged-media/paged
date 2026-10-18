@@ -827,9 +827,9 @@ export function contributeSlideObjectModel(host: BundleHost, options: SlideObjec
       }
       const outcome = await host.document.mutate({ op: "insertPage", args: { afterPageId: afterId, masterId: master } });
       if (!outcome.applied) throw new Error(`failed: insertPage was refused (${JSON.stringify(outcome.error)})`);
-      const created = (await pages()).find((p) => !before.has(p.id));
+      const created = outcome.createdPages?.[0];
       if (!created) throw new Error("failed: the engine reported no new page");
-      return { slide: slideAddress(created.id) };
+      return { slide: slideAddress(created) };
     },
   };
 

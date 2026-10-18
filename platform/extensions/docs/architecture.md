@@ -229,9 +229,9 @@ bundle contributes for a test to assert on. A loaded bundle is held to its manif
 - `pnpm install && pnpm -r typecheck` checks all packages. `pnpm -r build` emits
   declarations for `plugin-api` (`tsc`) and an ES2020 ESM bundle for `plugin-sdk` (`tsup`).
   In development the packages resolve to `src`; `publishConfig` switches them to `dist`.
-- Tests are vitest, all in `packages/plugin-sdk/test` (35 spec files): the adapter against
+- Tests run under `bun test`, all in `packages/plugin-sdk/test` (35 spec files): the adapter against
   a fake editor, the harness against the real engine, the CLI as a subprocess, the two sync
-  scripts, and the built `dist`. `.github/workflows/vitest.yml` runs them.
+  scripts, and the built `dist`. `.github/workflows/extensions-vitest.yml` runs them.
 - `.github/workflows/contract-guard.yml` requires that a change under
   `packages/plugin-api/src` or `packages/plugin-sdk/src` comes with a version change.
 - `.github/workflows/publish.yml` runs on every push to `main`: typecheck, build, test, the

@@ -454,7 +454,7 @@ test.describe("plugin surface · paged.data", () => {
     ).toBeGreaterThanOrEqual(6);
     expect(
       dataMenuCmds.filter((m) => m.endsWith(".defineBinding")).length,
-      "the binding verb appears once — the host's courtesy stood down",
+      "the binding verb appears once",
     ).toBe(1);
   });
 

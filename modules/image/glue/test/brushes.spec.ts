@@ -16,7 +16,7 @@
 // that Rust test asserts — deliberately, so the two halves cannot drift
 // in silence.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type { PluginManifest } from "@paged-media/plugin-api";

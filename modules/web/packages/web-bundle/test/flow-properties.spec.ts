@@ -30,7 +30,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 const binDir = fileURLToPath(new URL("../bin/", import.meta.url));
 const wasmPath = binDir + "blitz_web_bg.wasm";

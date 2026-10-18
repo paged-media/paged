@@ -58,6 +58,8 @@ import {
   type PanelContribution,
   type ShellSchemaPanelRendererProps,
   writeToOpenFile,
+  commitSave,
+  setLibrary,
   setChromeStorageScope,
   ALWAYS_IN_PALETTE,
   AI_ASK_COMMAND,
@@ -75,6 +77,8 @@ import { CanvasClient, type DocumentHandle } from "@paged-media/client";
 // prod dist shipped a raw un-transpiled `worker.ts` and no wasm (audit D6/E8).
 // See CanvasClientOptions for the full rationale.
 import CanvasRenderWorker from "./worker/worker.ts?worker";
+import LibraryWorker from "./library-worker.ts?worker";
+import { connectLibrary } from "@paged-media/repository";
 import { BUILT_IN_TOOLS } from "@paged-media/tools";
 import {
   loadBundle,
@@ -295,6 +299,7 @@ import { ScriptEditorPanel } from "./panels/script-editor";
 import { KeyboardShortcutsPanel } from "./panels/keyboard-shortcuts-panel";
 import { ProblemsPanel } from "./panels/problems-panel";
 import { JournalPanel } from "./panels/journal-panel";
+import { LibraryPanel } from "./panels/library-panel";
 import { problemsSink } from "./panels/problems-store";
 import { TreePanel } from "./panels/tree-panel";
 import { ExportCenterPanel } from "./panels/cockpit/export-center-panel";
@@ -1102,6 +1107,15 @@ const BUILT_IN_PANELS: PanelContribution[] = [
     defaultDock: "bottom",
     defaultGroup: "console",
   },
+  {
+    // ADR 180 — the local library: this document's versions (save = a
+    // version; restore commits an old one again on top) and every document
+    // kept in the browser's private file system.
+    id: "paged.library",
+    title: "Library",
+    component: LibraryPanel,
+    defaultDock: "right",
+  },
   // ── Panel-gallery pass — CONCEPT panels (INDESIGN_PARITY.md).
   //    The four ●●● parity surfaces + the two in-scope output/a11y
   //    surfaces, shipped as kit-shaped honest seams with Concept
@@ -1217,8 +1231,8 @@ if (!import.meta.env.PROD) {
 const editorDocuments = createEditorDocuments();
 if (!import.meta.env.PROD) {
   // Test affordance (the `__consent` pattern): drive the door without a
-  // bundle that declares `capabilities.documents` (the pinned plugin-sdk may
-  // predate it). The requester is a fixed test identity.
+  // bundle that declares `capabilities.documents`. The requester is a fixed
+  // test identity.
   (globalThis as unknown as { __documents?: unknown }).__documents = {
     exportPaged: () => editorDocuments.backend.exportPaged(),
     open: (bytes: Uint8Array, name?: string) =>
@@ -1348,10 +1362,7 @@ function PluginBundles() {
       // anchor-download the Export Center uses for plugin exporters
       // (shell-file-saver.ts owns that mechanism now). Answers false
       // rather than throwing when delivery fails. Flips
-      // supports("shell.saveFile@1") true once the pinned plugin-sdk
-      // knows the member; until that canary bump it rides along inert
-      // (the SDK's shell wrapper simply never calls it), exactly like
-      // `textCaret` did.
+      // supports("shell.saveFile@1") true.
       saveFile: (options: {
         suggestedName: string;
         bytes: Uint8Array;
@@ -1421,9 +1432,7 @@ function PluginBundles() {
     // Collapsed caret → its offset; RANGE → its start (where a replace
     // inserts); cell-qualified (table cell) → null — cell-local offsets
     // must not leak as story-local (the documented v1 gap). Flips
-    // supports("text.caret@1") true once the pinned plugin-sdk knows the
-    // `textCaret` option; until that canary bump the option rides along
-    // inert (loadBundle ignores unknown options).
+    // supports("text.caret@1") true.
     const textCaret = {
       read: (): { storyId: string; offset: number } | null => {
         const sel =
@@ -1458,9 +1467,7 @@ function PluginBundles() {
     // bundle resolves one of its DECLARED wasm artifacts through the editor,
     // which answers from the build's module manifest (the module host in a
     // deployed build, /@fs/ in dev, with sha384 for Subresource Integrity).
-    // Flips supports("modules@1") once the pinned plugin-sdk knows the
-    // option (0.2.51); until then it rides inert (loadBundle ignores
-    // unknown options) and bundles keep their bundle-relative URLs.
+    // Flips supports("modules@1").
     const modules = createEditorModulesBackend(moduleManifest, window.location.origin);
     if (!import.meta.env.PROD) {
       // Test affordance (like `__textCaret`): e2e reads the answers directly.
@@ -1609,21 +1616,19 @@ function PluginBundles() {
       consent,
       secrets,
       nativeDocument,
-      // D-26 — rides inert until the pinned plugin-sdk knows the option
-      // (0.2.41); it then flips supports("documents.open@1") true.
+      // D-26 — flips supports("documents.open@1") true.
       documents,
       // v70 — page navigation and the active page (`viewport.pages@1`).
       pages: pagesBackend,
       // Taking the user to a range of text — an outline entry, a find hit
-      // (`viewport.revealText@1`). Inert under an SDK that predates it.
+      // (`viewport.revealText@1`).
       text: textRevealBackend,
       diagnosticsSink: problemsSink,
       schemaPanelRenderer: HostSchemaPanelRenderer as SchemaPanelRendererType,
       // W-19 — the shell's pointer entries (double-click, the Type-tool
       // click on owned content) hand the entering point to `onEnter`
       // (use-edit-context-entry.tsx), so this host vouches for
-      // supports("editContext.enterPoint@1"). Inert under an SDK that
-      // predates the option.
+      // supports("editContext.enterPoint@1").
       editContextEnterPoint: true,
     };
     // ADR 025 §4a — identical doors for every bundle, but a PER-PLUGIN
@@ -1651,8 +1656,7 @@ function PluginBundles() {
     });
     // Test affordance (the `__overlaySignals` pattern): the shell doors the
     // host app injects, reachable so an E2E spec can drive them as a bundle
-    // would. K-10's saveFile is only reachable this way until the pinned
-    // plugin-sdk canary knows the member. Dev-only — stripped in PROD.
+    // would. Dev-only — stripped in PROD.
     const isProd =
       (import.meta as unknown as { env?: { PROD?: boolean } }).env?.PROD ===
       true;
@@ -1709,7 +1713,6 @@ function PluginBundles() {
         .__loadTestBundle;
     };
     // Mount-once by design; the ref keeps the handle live.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return null;
 }
@@ -2094,6 +2097,14 @@ function CanvasAppIntegration() {
             if (meta.documentName) baseName = meta.documentName;
           } catch {
             /* meta unavailable — keep the fallback name */
+          }
+          // ADR 180 — the save is a commit in the local library, alongside
+          // (never instead of) the file write below. A library failure is
+          // reported and the file still gets written.
+          try {
+            await commitSave(bytes.slice(), baseName);
+          } catch (err) {
+            console.warn("Save (.paged): the library did not take this save:", err);
           }
           // A5 — write BACK to the file the document was opened from,
           // when there is one. Until now every save minted a download,
@@ -2544,6 +2555,23 @@ const SOLO_SURFACES = SOLO
       };
     })()
   : null;
+
+// ADR 180 — the local library (every document a repository in the
+// origin-private file system). Optional: without OPFS, or with
+// `localStorage["paged.library"] = "off"`, the editor runs exactly as before.
+function startLibrary(): void {
+  try {
+    if (globalThis.localStorage?.getItem("paged.library") === "off") return;
+  } catch {
+    /* storage blocked — the library needs it no more than the check does */
+  }
+  const storage = navigator.storage as StorageManager & { getDirectory?: unknown };
+  if (typeof storage?.getDirectory !== "function") return;
+  setLibrary(connectLibrary(new LibraryWorker()));
+  // Ask the browser not to evict the library under storage pressure.
+  void storage.persist?.().catch(() => false);
+}
+startLibrary();
 
 const root = document.getElementById("root");
 if (!root) {

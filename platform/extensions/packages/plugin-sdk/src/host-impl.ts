@@ -2271,12 +2271,16 @@ export function createBundleHost(
       // `minted` is copied through when the engine sent it (additive on
       // the wire): a batch's `createdId` is only its LAST creation, so
       // without the list a bundle could not learn what its batch made.
+      // `createdPages` likewise: pages are not elements, so `minted`
+      // never names one.
       const minted = reply.payload.minted;
+      const createdPages = reply.payload.createdPages;
       return {
         applied: true,
         createdId: reply.payload.createdId ?? null,
         pageIds: reply.payload.pageIds,
         ...(minted !== undefined ? { minted } : {}),
+        ...(createdPages !== undefined ? { createdPages } : {}),
         ...(typeof reply.payload.appliedSeq === "number" ? { appliedSeq: reply.payload.appliedSeq } : {}),
       };
     }

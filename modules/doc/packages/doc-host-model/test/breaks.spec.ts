@@ -2,7 +2,7 @@
 // native paragraph at the break, styled with the segment's style (which
 // carries the break-before rule), while the contiguous style offsets ignore
 // the separator like every paragraph separator.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { buildTextPour, pouredParagraphCount } from "../src/index.js";
 import type { LoweredBlock, LoweredParagraph } from "../src/index.js";

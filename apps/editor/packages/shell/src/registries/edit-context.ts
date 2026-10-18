@@ -38,7 +38,6 @@
 // contract-typed registration is assignable here (asserted through the
 // editor's plugin-api-compat.ts dev link).
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { ElementId, PageId } from "@paged-media/client";
 
 import type { Disposable } from "./types";

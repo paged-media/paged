@@ -28,7 +28,7 @@
 // The batch: 6 core paths on 3 elements, 1 appearance stack, 2 path
 // writes, 1 graphic-style create (the label-hash lane).
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import type { ObjectOp } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

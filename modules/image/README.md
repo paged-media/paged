@@ -55,13 +55,13 @@ implementers never read `references/`. See `CLAUDE.md` and spec §3.1.
 ## Setup
 
 In the monorepo the editor is `apps/editor`, the extension SDK
-`platform/extensions` and this module `modules/image`; install order
-matters for the `link:` chain (from the repository root):
+`platform/extensions` and this module `modules/image`; all three are
+packages of the one root Bun workspace, installed together (from the
+repository root):
 
 ```bash
-(cd apps/editor && pnpm install)
-(cd platform/extensions && pnpm install)
-cd modules/image && pnpm install
+bun install
+cd modules/image
 
 # Engine and bundle tests, from anywhere in the repository
 moon run image:test
@@ -70,7 +70,7 @@ moon run image:test
 cargo build --workspace && cargo test --workspace
 
 # Bundle
-pnpm test && pnpm validate:manifest
+bun run test && bun run validate:manifest
 ```
 
 ## Milestones (spec §15)

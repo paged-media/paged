@@ -21,7 +21,7 @@
 // (resolveFlowChain). These pin the PERSISTENCE behavior (the fix for the
 // earlier ephemeral, selection-only chain) with a mock host — no editor.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import {

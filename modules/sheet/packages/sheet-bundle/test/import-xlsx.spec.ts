@@ -21,7 +21,7 @@
 // it falls back to opening the panel when no picker is wired. Pure host +
 // session mocks (no engine, no wasm).
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 

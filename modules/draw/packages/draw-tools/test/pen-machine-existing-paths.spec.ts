@@ -22,7 +22,7 @@
 // path. v1 (authoring a new path) keeps its own spec, untouched.
 
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type {
   Affine,

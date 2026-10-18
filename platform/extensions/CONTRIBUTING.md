@@ -16,9 +16,10 @@ verbatim from the top of any existing source file in this repo.
 ## Building & testing
 
 ```bash
-pnpm install
-pnpm -r typecheck
-pnpm -r test
+bun install
+bun run typecheck
+bun run test
 ```
 
-Format only the files you touched.
+`tooling/js/fmt.sh` formats the sources (`bun fmt`; CI checks it, and the
+pre-commit hook formats what you stage).

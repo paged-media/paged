@@ -7,7 +7,7 @@
 // session's refresh path is switched to this door by the TS optimisation
 // round; this spec pins what the door itself costs.
 
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { ingestColumnBatch } from "../../src/engine";
 import {
@@ -19,7 +19,7 @@ import {
   type CountedDuck,
 } from "./harness";
 
-vi.setConfig({ testTimeout: BUDGET_TIMEOUT_MS });
+setDefaultTimeout(BUDGET_TIMEOUT_MS);
 
 describe.skipIf(!RUN_BUDGETS)("perf budgets — the column door [data.perf.gates]", () => {
   let duck: CountedDuck | null = null;

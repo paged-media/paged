@@ -6,11 +6,18 @@
 // read and consume them again, not reuse the stored template as if they were
 // gone (which left the <<field>> frame on every output page).
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, mock } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
 import type { DataEngineLike } from "../engine";
+
+// bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
+// real exports are taken once, before anything is mocked, and mock.module
+// patches the loaded module in place (every importer sees the change).
+const actualEngine = await importActual(() => import("../engine"));
+const actualMerge = await importActual(() => import("../merge"));
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
@@ -45,6 +52,8 @@ const host = {
   supports: () => false,
   selection: { get: () => [], set: async () => [] },
   document: {
+    onWillSave: () => ({ dispose() {} }),
+    onDidChange: () => ({ dispose() {} }),
     mutate: async () => ({ applied: true, pageIds: [] }),
     meta: async () => ({ activePage: "p1", documentName: "Catalog" }),
     collection: async () => [{ selfId: "p1" }],
@@ -58,13 +67,12 @@ const template = { pageId: "p1", frames: [{ element: { id: "f1" } }], spec: { ma
  *  writer records what it was asked to do. */
 async function session(onPage: (() => typeof template | null)[]) {
   const writes: { template: unknown; templatePresent?: boolean }[] = [];
-  vi.resetModules();
-  vi.doMock("../engine", async (orig) => ({
-    ...(await orig<typeof import("../engine")>()),
+  mock.module("../engine", () => ({
+    ...actualEngine,
     bootEngine: async () => fakeEngine(),
   }));
-  vi.doMock("../merge", async (orig) => ({
-    ...(await orig<typeof import("../merge")>()),
+  mock.module("../merge", () => ({
+    ...actualMerge,
     readMergeTemplate: async () => {
       const t = onPage.shift()?.() ?? null;
       return { template: t, diagnostics: t ? [] : ["merge: no text frame with a <<field>> on the template page"] };

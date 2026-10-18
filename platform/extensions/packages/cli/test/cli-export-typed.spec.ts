@@ -29,7 +29,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { cli, FIXTURES, tempDir, writeFixture } from "./helpers";
 
@@ -88,7 +88,7 @@ if (process.env["REQUIRE_REAL_PUBLISH"] === "1" && !(PUBLISH && existsSync(PUBLI
   throw new Error("REQUIRE_REAL_PUBLISH=1 but PAGED_PUBLISH_BUNDLE does not name a built @paged-media/publish module");
 }
 
-describe.runIf(PUBLISH && existsSync(PUBLISH))("export pdf through paged.publish's exportPdf (real bundle)", () => {
+describe.if(!!PUBLISH && existsSync(PUBLISH))("export pdf through paged.publish's exportPdf (real bundle)", () => {
   it("a partial option set renders a real PDF", async () => {
     const out = join(tmp.dir, "publish.pdf");
     const r = await cli(["export", fx.paged, "--format", "pdf", "--pages", "1", "--option", "title=Partial", "-o", out, `--plugins=${PUBLISH}`]);

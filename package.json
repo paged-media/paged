@@ -1,0 +1,48 @@
+{
+  "name": "paged",
+  "private": true,
+  "version": "0.0.0",
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
+  "packageManager": "bun@1.4.3",
+  "scripts": {
+    "lint": "tooling/js/bun-canary.sh lint --no-script",
+    "lint:fix": "tooling/js/bun-canary.sh lint --no-script --fix",
+    "lint:selftest": "bun tooling/js/lint-selftest.mjs"
+  },
+  "workspaces": {
+    "packages": [
+      "apps/editor",
+      "apps/editor/apps/*",
+      "apps/editor/packages/*",
+      "platform/extensions",
+      "platform/extensions/packages/*",
+      "modules/*",
+      "modules/*/packages/*",
+      "modules/image/glue",
+      "modules/image/manifest",
+      "engine/core/web/idml-viewer",
+      "engine/core/packages/*",
+      "platform/shared/*"
+    ],
+    "catalog": {
+      "@types/bun": "1.4.3",
+      "@types/node": "20.19.39",
+      "@types/react": "^18.3.31",
+      "@types/react-dom": "^18.3.7",
+      "react": "^18.3.1",
+      "react-dom": "^18.3.1",
+      "typescript": "^5.9.3",
+      "vite": "^6.4.3"
+    },
+    "catalogs": {
+      "node25": {
+        "@types/node": "^25.9.6"
+      }
+    }
+  },
+  "overrides": {
+    "tsx": {
+      "esbuild": "^0.28.1"
+    }
+  }
+}

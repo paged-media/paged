@@ -36,8 +36,8 @@
 //       scoped setElementProperty) and the cell text styles.
 //     A host that refuses the first batch gets the PHASED placement (frame
 //     batch, insertTable, content batch).
-//     On a protocol-66 host (core resolves a table handle in a `tableId`
-//     position) both batches are ONE: see `placeInOneCall`.
+//     Tried first, both batches as ONE (core resolves a table handle in a
+//     `tableId` position): see `placeInOneCall`.
 //
 //   tab-text (EXPLICIT FALLBACK, spec §2.2 degradation) — the retained
 //     two-phase lane (lower-to-mutations.ts): frame + drawn rules +
@@ -97,16 +97,6 @@ import {
 } from "../../sheet-host-model/src";
 
 import type { FrameBox, SheetEngine } from "./engine";
-import {
-  beforeMint,
-  deleteTableOp,
-  doors66,
-  geometryStoryId,
-  isUnknownVariant,
-  mintedElements,
-  noteMinted,
-  tableHandlesLikely,
-} from "./protocol66";
 import { readKnownSwatchIds } from "./swatch-mints";
 
 /**
@@ -500,9 +490,15 @@ async function barOps(
 
 const isPolygon = (id: ElementId) => id.kind === "polygon";
 
+/** The elements an applied batch minted (`MutationOutcome.minted`, in mint
+ *  order), filtered by `keep`. Empty when the batch was refused. */
+function mintedElements(outcome: MutationOutcome, keep: (id: ElementId) => boolean): ElementId[] {
+  return outcome.applied ? (outcome.minted ?? []).map((m) => m.element).filter(keep) : [];
+}
+
 /** Pour a native table's content (see {@link tableContentOps}) as ONE
  *  `mutate`, with its data bars (Wave 9: drawn under the frame, their ids
- *  read back from `minted` or a scene-tree diff) and the caller's `tail`.
+ *  read back from `minted`) and the caller's `tail`.
  *  Should core refuse the combined batch, the content is retried in its two
  *  lanes — text + decor + bars, then the cell text styles — so a style
  *  refusal never costs the cell text. */
@@ -516,13 +512,12 @@ async function pourCellContent(
 ): Promise<{ calls: number; barIds: ElementId[] }> {
   const { ops, styleOps } = await tableContentOps(host, content, storyId, tableId);
   const drawn = await barOps(host, content, bars);
-  const before = drawn.length > 0 ? await beforeMint(host) : null;
   const lane1 = [...ops, ...drawn, ...tail];
   const all = [...lane1, ...styleOps];
   if (all.length === 0) return { calls: 0, barIds: [] };
   const r = await host.document.mutate({ op: "batch", args: { ops: all } });
   if (r.applied) {
-    const barIds = drawn.length > 0 ? await mintedElements(host, r, before, isPolygon) : [];
+    const barIds = drawn.length > 0 ? mintedElements(r, isPolygon) : [];
     return { calls: 1, barIds };
   }
   host.log.warn("lower: table content batch rejected — retrying per lane", r);
@@ -537,7 +532,7 @@ async function pourCellContent(
     const t = await host.document.mutate({ op: "batch", args: { ops: [...lane] } });
     if (!t.applied) host.log.warn(`lower: ${what} rejected`, t);
     else if (lane === lane1 && drawn.length > 0) {
-      barIds = await mintedElements(host, t, before, isPolygon);
+      barIds = mintedElements(t, isPolygon);
     }
   }
   return { calls, barIds };
@@ -754,18 +749,18 @@ export async function lowerSelectionToFrame(
     placement = fittedPlacement(placement, content, fit);
   }
 
-  if (tableHandlesLikely(host)) {
-    const one = await placeInOneCall(host, content, pageId, placement, columnWidths, {
-      ...opts,
-      sheet,
-      range,
-      contentVersion,
-      sheetName,
-    });
-    if (one !== REFUSED) return one;
-  }
+  const one = await placeInOneCall(host, content, pageId, placement, columnWidths, {
+    ...opts,
+    sheet,
+    range,
+    contentVersion,
+    sheetName,
+  });
+  if (one !== REFUSED) return one;
 
-  // ONE batch: the frame, its binding and the native table (C-15 handles,
+  // Refused in one call (nothing landed): the two-batch placement, whose
+  // content pour retries per lane, so a refused cell style never costs the
+  // cell text. ONE batch: the frame, its binding and the native table (C-15 handles,
   // core v0.64: `$h:f` in the table's `storyId` position is the story the
   // frame insert minted). The batch reports the LAST id minted — the
   // table, whose structured id carries its story; the frame is that
@@ -809,22 +804,14 @@ export async function lowerSelectionToFrame(
   }
   const storyId = placed.createdId.id.story_id;
   const tableId = placed.createdId.id.table_id;
-  // The frame: named in the 66 `minted` list — by its handle, or by mint
+  // The frame: named in the `minted` list — by its handle, or by mint
   // order (a batch with no text child reports every handle null; this batch
-  // mints exactly one text frame) — else read back off the table's story
-  // chain (one read).
-  const minted = noteMinted(host, placed);
+  // mints exactly one text frame).
+  const minted = placed.minted ?? [];
   const mintedFrame =
-    minted?.find((m) => m.handle === FRAME_HANDLE) ??
-    minted?.find((m) => m.element.kind === "textFrame");
-  let frameId: string | null = mintedFrame ? frameIdOf(mintedFrame.element) : null;
-  if (!frameId) {
-    try {
-      frameId = (await host.document.frameChain(storyId))[0]?.frameId ?? null;
-    } catch (err) {
-      host.log.warn("lower: frame chain read failed", err);
-    }
-  }
+    minted.find((m) => m.handle === FRAME_HANDLE) ??
+    minted.find((m) => m.element.kind === "textFrame");
+  const frameId: string | null = mintedFrame ? frameIdOf(mintedFrame.element) : null;
 
   // The table's content — text, decor and text styles — as ONE more batch,
   // with the binding re-stamped to carry the table record. (Core 0eff96b
@@ -885,9 +872,8 @@ const REFUSED = Symbol("refused");
  * address. It carries the record without them ({@link TableRecord}); this
  * session knows them from `minted`, a later one reads them off the page.
  *
- * A refusal rolls the batch back whole; it is remembered for the host (the
- * next placement goes the two-batch way at once) and reported as
- * {@link REFUSED}.
+ * A refusal rolls the batch back whole and is reported as {@link REFUSED}
+ * (the caller then places the two-batch way).
  */
 async function placeInOneCall(
   host: BundleHost,
@@ -933,16 +919,13 @@ async function placeInOneCall(
       ],
     },
   });
-  const doors = doors66(host);
   if (!r.applied) {
-    doors.tableHandles = false;
     host.log.debug("lower: one-call placement refused — two-batch placement", r);
     return REFUSED;
   }
-  doors.tableHandles = true;
   // By handle, else by kind: the batch mints exactly one text frame and one
   // table (a batch's `minted` may carry every handle null).
-  const minted = noteMinted(host, r) ?? [];
+  const minted = r.minted ?? [];
   const frame = (
     minted.find((m) => m.handle === FRAME_HANDLE) ??
     minted.find((m) => m.element.kind === "textFrame")
@@ -1267,37 +1250,19 @@ function idOf(id: ElementId): string | null {
   return null;
 }
 
-/** The story a frame belongs to (Wave 4). The 66 geometry read carries a
- *  text frame's `storyId` — one read. A host without it (the field absent on
- *  a text frame's item, remembered per host) gets the walk: every story asked
- *  for its frame chain (the hitTest door answers `storyId: null` for an empty
- *  frame), the chain that contains `frameId` naming the story. Null when no
- *  story threads the frame. */
+/** The story a frame belongs to (Wave 4): the geometry read carries a text
+ *  frame's `storyId` — one read. Null when the read fails or names none. */
 export async function storyOfFrame(
   host: BundleHost,
   frameId: string,
 ): Promise<string | null> {
-  const doors = doors66(host);
-  if (doors.geometryStoryId !== false) {
-    try {
-      const [item] = await host.document.elementGeometry([{ kind: "textFrame", id: frameId }]);
-      const storyId = item ? geometryStoryId(item) : undefined;
-      if (storyId) {
-        doors.geometryStoryId = true;
-        return storyId;
-      }
-      // A text frame's item without a story: a pre-66 geometry read.
-      if (item) doors.geometryStoryId = false;
-    } catch (err) {
-      host.log.debug("storyOfFrame: geometry read failed — walking the stories", err);
-    }
+  try {
+    const [item] = await host.document.elementGeometry([{ kind: "textFrame", id: frameId }]);
+    return item?.storyId || null;
+  } catch (err) {
+    host.log.debug("storyOfFrame: geometry read failed", err);
+    return null;
   }
-  const stories = await host.document.collection<{ selfId: string }>("stories");
-  for (const s of stories) {
-    const links = await host.document.frameChain(s.selfId);
-    if (links.some((l) => l.frameId === frameId)) return s.selfId;
-  }
-  return null;
 }
 
 /** The ops of a placed table's in-place refresh (`tableRefreshOps`), by
@@ -1474,7 +1439,6 @@ export async function refreshLoweredTable(
     op: "deleteFrame",
     args: { frameId: id.id as string },
   }));
-  const before = drawn.length > 0 ? await beforeMint(host) : null;
   const { tailOutcome } = await applyTableRefresh(
     host,
     info.storyId,
@@ -1490,7 +1454,7 @@ export async function refreshLoweredTable(
   const barIds = !tailOutcome?.applied
     ? oldBars
     : drawn.length > 0
-      ? await mintedElements(host, tailOutcome, before, isPolygon)
+      ? mintedElements(tailOutcome, isPolygon)
       : [];
   return { ...info, content: next, columnWidths: nextWidths, contentVersion, barIds };
 }
@@ -1643,11 +1607,11 @@ export async function refreshBands(
  * it shows was kept — see `rememberShownContent`), or the host reshaped it
  * (`refreshBands`: rows or columns the host inserted cannot be located, or a
  * band on an engine that does not report bands). There is no read door for
- * a table's cells, so it cannot be diffed: with the 66 `deleteTable` door
- * the table is deleted and a fresh one inserted in the same story (the
- * frame stays; the table id, and anything the host added to the table, do
- * not); a pre-66 host gets the frame re-placed where it stands. Null when
- * nothing could be placed.
+ * a table's cells, so it cannot be diffed: the table is deleted
+ * (`deleteTable`) and a fresh one inserted in the same story (the frame
+ * stays; the table id, and anything the host added to the table, do not).
+ * Should the engine refuse that, the frame is re-placed where it stands.
+ * Null when nothing could be placed.
  */
 export async function replaceLoweredTable(
   host: BundleHost,
@@ -1658,24 +1622,22 @@ export async function replaceLoweredTable(
   sheetName: string,
 ): Promise<LoweredTableInfo | null> {
   const widths = await measureColumnWidths(host, next);
-  const doors = doors66(host);
   const oldBars = (info.barIds ?? []).map((id) => ({
     op: "deleteFrame" as const,
     args: { frameId: id.id as string },
   }));
-  if (doors.deleteTable !== false) {
+  {
     const r = await host.document.mutate({
       op: "batch",
       args: {
         ops: [
           ...oldBars,
-          deleteTableOp(info.storyId, info.tableId),
+          { op: "deleteTable", args: { storyId: info.storyId, tableId: info.tableId } },
           tableInsertOp(next, info.storyId, widths),
         ],
       },
     });
     if (r.applied && r.createdId?.kind === "table") {
-      doors.deleteTable = true;
       const tableId = tableIdOf(r.createdId);
       const at = await frameOrigin(host, info.frameId);
       const { barIds } = await pourCellContent(
@@ -1697,10 +1659,9 @@ export async function replaceLoweredTable(
         headerRows: undefined,
       };
     }
-    if (isUnknownVariant(r, "deleteTable")) doors.deleteTable = false;
-    else host.log.warn("replace: deleteTable + insertTable rejected", r);
+    host.log.warn("replace: deleteTable + insertTable rejected", r);
   }
-  // Pre-66: re-place the frame where it stands (its page-space box).
+  // Refused: re-place the frame where it stands (its page-space box).
   let geom: Awaited<ReturnType<BundleHost["document"]["elementGeometry"]>>;
   try {
     geom = await host.document.elementGeometry([{ kind: "textFrame", id: info.frameId }]);
@@ -1738,9 +1699,9 @@ export async function replaceLoweredTable(
 }
 
 /** One table a chain placement owns: the table id and what it shows. A
- *  `blank` table belongs to a frame the last pagination did not need, on a
- *  host without the 66 `deleteTable` door: it is emptied, kept, and reused
- *  when the range needs more frames again. */
+ *  `blank` table belongs to a frame the last pagination did not need, where
+ *  the engine refused to delete it: it is emptied, kept, and reused when the
+ *  range needs more frames again. */
 export interface ChainTable {
   tableId: string;
   content: LoweredContent;
@@ -1782,30 +1743,20 @@ function blankContent(like: LoweredContent): LoweredContent {
   };
 }
 
-/** Delete `tables` from `storyId` in one batch through the 66
- *  `deleteTable` door. False when the host lacks the door (remembered, so
- *  it is asked once per host) or refused the batch — the caller then empties
- *  the tables instead. */
+/** Delete `tables` from `storyId` in one batch (`deleteTable`). False when
+ *  the engine refused the batch — the caller then empties the tables
+ *  instead. */
 async function deleteTables(
   host: BundleHost,
   storyId: string,
   tables: readonly ChainTable[],
 ): Promise<boolean> {
-  const doors = doors66(host);
-  if (doors.deleteTable === false) return false;
   const r = await host.document.mutate({
     op: "batch",
-    args: { ops: tables.map((t) => deleteTableOp(storyId, t.tableId)) },
+    args: { ops: tables.map((t) => ({ op: "deleteTable", args: { storyId, tableId: t.tableId } })) },
   });
-  if (r.applied) {
-    doors.deleteTable = true;
-    return true;
-  }
-  if (isUnknownVariant(r, "deleteTable")) {
-    doors.deleteTable = false;
-  } else {
-    host.log.warn("chain-lower: deleteTable rejected", r);
-  }
+  if (r.applied) return true;
+  host.log.warn("chain-lower: deleteTable rejected", r);
   return false;
 }
 
@@ -1815,7 +1766,7 @@ async function deleteTables(
  * threading math in Rust), then for page i: REFRESHES the placement's i-th
  * table in place when it has one, else appends a new table (insertTable
  * appends to the story, so story order = page order). Tables the pass no
- * longer needs are deleted (66 `deleteTable`), else emptied. All pages go into the
+ * longer needs are deleted (`deleteTable`), else emptied. All pages go into the
  * CHAIN'S story — threaded frames share one story.
  */
 async function paginatePass(
@@ -1869,9 +1820,8 @@ async function paginatePass(
     tables.push({ tableId, content: page.content, widths, blank: false });
     tableIds.push(tableId);
   }
-  // Tables the range no longer needs: DELETED where the host has the 66
-  // `deleteTable` door, else emptied and kept for reuse (a pre-66 wire has
-  // no table-delete op).
+  // Tables the range no longer needs: DELETED (`deleteTable`); should the
+  // engine refuse, emptied and kept for reuse.
   const spare = owned.slice(pages.length);
   if (spare.length > 0 && (await deleteTables(host, storyId, spare))) {
     return { storyId, chain, pages, tableIds, tables };

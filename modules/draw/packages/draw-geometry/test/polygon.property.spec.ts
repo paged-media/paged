@@ -27,7 +27,7 @@
 // contour — the pentagram test pins that difference so nobody reads these
 // functions as "what the engine paints".
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   ellipseToPath,
@@ -231,7 +231,7 @@ describe("polygon — pointInAnchorPath (properties)", () => {
   // ------------------------------------------------------------------
   // DEFECT, FIXED (polygon.ts, pointInAnchorPath) — a closed contour of
   // ONE or TWO anchors could never contain a point. The two cases below
-  // were pinned with `it.fails` and are plain tests now: both anchor-count
+  // were pinned with `it.failing` and are plain tests now: both anchor-count
   // guards are gone and the flattened ring is what gets tested. What
   // follows is the record of what was wrong.
   //

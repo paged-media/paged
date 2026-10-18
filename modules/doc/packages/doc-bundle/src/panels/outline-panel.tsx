@@ -213,7 +213,6 @@ function readinessLine(live: boolean, readStory: boolean): string {
 export function makeOutlinePanel(store: DocStore, actions: OutlinePanelActions): PanelDescriptor {
   const Component: React.FC<PanelProps> = () => {
     const [, force] = React.useReducer((n: number) => n + 1, 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     React.useEffect(() => store.subscribe(force), []);
     const doc = store.get();
     const notice = store.notice();

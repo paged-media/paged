@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/plugin-sdk",
-  "version": "0.2.65-canary.0",
+  "version": "0.2.69-canary.0",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -8,10 +8,10 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
+    "typecheck": "bun check -p tsconfig.json",
+    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts",
     "build": "tsup src/index.ts --format esm --target es2020 --dts --out-dir dist --clean",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@paged-media/plugin-api": "workspace:*"
@@ -25,13 +25,13 @@
     }
   },
   "devDependencies": {
-    "@paged-media/canvas-wasm": "0.73.4",
-    "@types/node": "20.19.39",
-    "@types/react": "^18.3.31",
+    "@paged-media/canvas-wasm": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
     "fast-check": "^4.10.2",
-    "react": "^18.3.1",
-    "typescript": "^5.9.3",
-    "vitest": "^2.1.9"
+    "react": "catalog:",
+    "typescript": "catalog:",
+    "@types/bun": "catalog:"
   },
   "description": "The Paged plugin runtime: loadBundle, the in-process BundleHost adapter, the gesture kit, and version negotiation.",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",

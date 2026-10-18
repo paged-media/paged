@@ -31,7 +31,7 @@
 //   5. graceful absence: no shared registry wired → discover empty, register a
 //      no-op, supports("dataProviders@1") false.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PluginManifest, ProviderRecordSet } from "@paged-media/plugin-api";
 

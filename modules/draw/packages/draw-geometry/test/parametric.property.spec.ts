@@ -18,7 +18,7 @@
 
 // Property tests for parametric.ts — the insert-shape generators.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   arcPath,

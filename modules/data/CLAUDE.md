@@ -24,7 +24,7 @@ types + Expr AST), `data-expr` (the binding DSL), `data-sources`, `data-query`,
 `data-bind` (resolution/sync engine), `data-lower`, `data-js` (wasm-bindgen
 surface), `data-conformance` (TEST-ONLY), plus the §10 automation lane —
 `data-automation` (batch plan/run), `data-cli` (headless native CLI), and
-`data-script` (sandboxed Boa surface). TS packages (pnpm `packages/*`):
+`data-script` (sandboxed Boa surface). TS packages (`packages/*`, in the root Bun workspace):
 `data-host-model` (pure LoweredContent→Mutation translation) + `data-bundle`
 (manifest + `activate(host)` + three panels [sources/bindings/dataset] + five
 commands + DuckDB-WASM query integration). Vendored MIT engine:
@@ -34,7 +34,7 @@ extensions into `bin/duckdb-ext/<engine>/wasm_eh/` — the eh build has neither,
 `bootDuckDB` points `custom_extension_repository` there so nothing loads from
 extensions.duckdb.org; the runtime loads only `bin/` — except that the two engine
 wasm files (`data-engine`, `duckdb-engine`) are first asked of the host's module
-door (plugin-sdk ADR 326, `src/module-door.ts`): an editor may serve them from the
+door (plugin-sdk ADR 326, `hostWasm` in `src/bin-url.ts`): an editor may serve them from the
 first-party module host, with integrity; no door or no answer → `bin/`. The DuckDB
 worker and JS API always load from `bin/`, same-origin (D-05). The Node test lanes
 load the same files with every other URL refused, `test/duckdb-node-ext.ts`).
@@ -118,8 +118,8 @@ Rules for every code change in this repo:
   (image placeholders → the core asset mechanism; dynamic tables → the core
   native table contract via OUR OWN lowering code; charts → `paged.draw`),
   never a sibling plugin. The §7.1 data-provider role is a CORE SDK contract —
-  `paged.data` registers a provider and never knows its consumers. TS guard:
-  `scripts/check-contract-imports.mjs`; Rust guard: `deny.toml` [sources] + the
+  `paged.data` registers a provider and never knows its consumers. TS guard: the
+  contract-import lint rule (`/bunfig.toml`, PM-0003); Rust guard: `deny.toml` [sources] + the
   cargo-tree CI guards. SDK gaps become RFI §6 entries /
   plugin-platform RFCs — NEVER core modifications from this project.
 - **LICENSE-BOUNDARY GATE (§3 — unique to this plugin, decisive).** NO
@@ -197,7 +197,7 @@ Rules for every code change in this repo:
 ## Commands
 
 ```bash
-# Everything (Rust nextest + doctests, then wasm + DuckDB + vitest), from anywhere:
+# Everything (Rust nextest + doctests, then wasm + DuckDB + bun test), from anywhere:
 moon run data:test
 # Rust (the engine) without Moon. CARGO_INCREMENTAL=0 keeps target/ small.
 cargo build --workspace
@@ -216,10 +216,11 @@ cargo deny check
 bash scripts/vendor-duckdb.sh   # the MIT DuckDB-WASM artifact; stages bin/duckdb-engine.wasm
 bash scripts/build-wasm.sh
 
-# TS (the bundle). The contract comes from npm at an exact pin
-# (test/sdk-pin.spec.ts); CI runs with REQUIRE_REAL_ENGINE=1 REQUIRE_REAL_DUCKDB=1.
-pnpm install && pnpm typecheck && pnpm test
-pnpm validate:manifest
+# TS (the bundle). The contract comes from the workspace (workspace:*, checked
+# repo-wide by tooling/js/check-workspace-deps.mjs); CI runs with
+# REQUIRE_REAL_ENGINE=1 REQUIRE_REAL_DUCKDB=1.
+bun install && bun run typecheck && bun run test
+bun run validate:manifest
 
 # Publishing (publish.yml, after green CI): a version already on npm must be
 # bumped when its inputs changed, and the tarball must carry DuckDB.

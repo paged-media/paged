@@ -24,7 +24,7 @@
 // decode → the v41 image scene-item submit sized to the frame, the
 // Stage-A commit semantics, clear-on-deselect, and reset.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type { PluginManifest } from "@paged-media/plugin-api";

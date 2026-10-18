@@ -19,7 +19,7 @@
 // ADR 029 — the skeleton is IDML, which cannot carry a grow rule, so standalone
 // open sets each section story's rule on the wire (protocol 64). An engine
 // without the op keeps the document open and the bundle reports it.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { growRuleOp, OPEN_DIAGNOSTICS_KEY, setGrowRules } from "../src/open.js";
 

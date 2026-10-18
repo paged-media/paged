@@ -20,7 +20,7 @@
 // emits, mapped to names and labels. A CMYK source is CONVERTED, and the
 // panel must say so rather than call it managed RGB.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { displayTreatmentLabel, displayTreatmentOf, isCmykConversion } from "../src/engine";
 

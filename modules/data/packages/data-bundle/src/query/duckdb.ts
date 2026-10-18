@@ -44,7 +44,7 @@
 //
 // WHERE THE ENGINE COMES FROM (plugin-sdk ADR 326, the module door): the
 // boot first asks the HOST where it serves the declared `duckdb-engine`
-// artifact (src/module-door.ts). A deployed editor answers with the
+// artifact (`hostWasm`, src/bin-url.ts). A deployed editor answers with the
 // first-party module host — https://modules.paged.media/@paged-media/data/
 // <version>/bin/duckdb-engine.wasm, immutable per published version, brotli,
 // CORS * — and the worker's `instantiate` fetches it from there. A host
@@ -72,8 +72,7 @@
 // Absent (not staged, or the host does not serve bin/) → DUCKDB_NOT_VENDORED,
 // which the sources panel shows as "duckdb-missing" — never faked.
 
-import { binUrl } from "../bin-url";
-import { WASM_ARTIFACTS, type WasmResolver } from "../module-door";
+import { binUrl, WASM_ARTIFACTS, type WasmResolver } from "../bin-url";
 import {
   arrowToColumns,
   arrowToRecordSet,
@@ -294,8 +293,8 @@ export async function preflightHostedWasm(
 
 /** Options for [`bootDuckDB`]. */
 export interface BootDuckDBOptions {
-  /** The module door (src/module-door.ts): where the HOST serves the
-   *  `duckdb-engine` artifact. Absent, or answering null: `bin/`. */
+  /** The module door (`hostWasm`, bin-url.ts): where the HOST serves the
+   *  `duckdb-engine` artifact. Absent, answering null or rejecting: `bin/`. */
   resolveWasm?: WasmResolver;
   /** Told when the host's engine failed and `bin/` was used. */
   onFallback?: (reason: string) => void;

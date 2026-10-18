@@ -89,7 +89,7 @@ import {
   batchMutationFor,
   bindCreatedMutationFor,
   handleElementId,
-} from "./v59-wire";
+} from "./batch-handles";
 
 /** The handle an inserted piece is named by. */
 export const shapeBuildPieceHandle = (k: number): string => `sb-piece-${k}`;

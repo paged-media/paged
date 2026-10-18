@@ -48,7 +48,7 @@ true standalone open are on the roadmap. See [`docs/status.md`](docs/status.md).
 moon run doc:test               # the engine and the bundle glue
 cargo test --workspace          # the engine, without Moon
 bash scripts/build-wasm.sh      # the wasm artifact (-> packages/doc-bundle/bin)
-pnpm install && pnpm test       # the bundle glue
+bun install && bun run test       # the bundle glue
 ```
 
 ## License

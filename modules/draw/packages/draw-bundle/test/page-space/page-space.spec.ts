@@ -28,7 +28,7 @@
 // UP (stored anchors through the stored transform), not which ops were
 // sent.
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "bun:test";
 
 import type { ElementId, PluginMetadataEnvelope } from "@paged-media/plugin-api";
 import { affineReflect, type Affine, type AnchorTable } from "@paged-media/draw-geometry";
@@ -295,7 +295,7 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
       nearPoint(centreOf(engine.pageOutline("o2", VERSO)), [100, 300]);
     });
 
-    it.runIf(shape === "page")(
+    it.if(shape === "page")(
       "the ARTBOARD fit measures against the path's page where it sits in the spread",
       async () => {
         // A path running past the verso's right edge (612 pt): the object
@@ -564,7 +564,7 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
       near(engine.spreadOutline(String(bindings[0]!.keep.id)), outlineOf(truth.regions[0]!.table));
     });
 
-    it.runIf(shape === "page")("Create Outlines: a glyph run with a hole lands where the text was", async () => {
+    it.if(shape === "page")("Create Outlines: a glyph run with a hole lands where the text was", async () => {
       // The text frame on the verso, and the outlines core answers for it:
       // PAGE space (its door's contract on either engine), one run, a ring.
       engine.addPath("tf", VERSO, square(200), T(250, 250));
@@ -591,7 +591,7 @@ describe.each(SHAPES)("page space on the %s-space engine", (shape) => {
       near(engine.pageOutline(made[0]!, VERSO), ring);
     });
 
-    it.runIf(shape === "page")("Symbols: a compound piece rebuilt on a verso keeps its hole and its place", () => {
+    it.if(shape === "page")("Symbols: a compound piece rebuilt on a verso keeps its hole and its place", () => {
       // A rebuild plans at the instance's LIVE origin, read in page space,
       // with that read's page origin.
       const symbol = {

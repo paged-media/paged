@@ -24,7 +24,7 @@
 // Negative lanes: no selection, an off-anchor press, and a CLOSED
 // path all no-op (the documented v0 gates).
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { CanvasPointerEvent, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

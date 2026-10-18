@@ -212,7 +212,7 @@ protocol therefore distinguishes two roles:
 
 ## 4. Crate architecture
 
-*Status note (2026-10-02): this section predates the implementation; see `architecture.md` for the crates as built, and [ADR 450](adr/450-gpu-only-kernels.md) and [ADR 451](adr/451-one-kernel-definition.md) for the scalar references (the generated ones live in `image-kernels` behind the test-only `reference` feature, which only `image-conformance` enables). The TypeScript import rule is checked by `scripts/check-contract-imports.mjs`.*
+*Status note (2026-10-02): this section predates the implementation; see `architecture.md` for the crates as built, and [ADR 450](adr/450-gpu-only-kernels.md) and [ADR 451](adr/451-one-kernel-definition.md) for the scalar references (the generated ones live in `image-kernels` behind the test-only `reference` feature, which only `image-conformance` enables). The TypeScript import rule is checked by a lint rule (`/bunfig.toml`, PM-0003).*
 
 Repository `paged-media/plugin-image` (isolation enforced by repo boundary +
 CI building against published SDK canaries):

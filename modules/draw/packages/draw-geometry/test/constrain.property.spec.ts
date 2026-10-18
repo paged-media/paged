@@ -19,7 +19,7 @@
 // Property tests for constrain.ts — the Shift angle constraint of the pen
 // and the measure tool.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { constrainAngle, dist, type Vec2 } from "../src";
 import {

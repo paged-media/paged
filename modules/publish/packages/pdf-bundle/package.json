@@ -11,25 +11,25 @@
     "./manifest.json": "./manifest.json"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "bun check -p tsconfig.json",
     "build": "tsup",
-    "test": "vitest run"
+    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts"
   },
   "dependencies": {
     "jszip": "^3.10.1"
   },
   "peerDependencies": {
-    "@paged-media/plugin-api": ">=0.2.44-canary.0",
-    "@paged-media/plugin-sdk": ">=0.2.44-canary.0"
+    "@paged-media/plugin-api": "workspace:*",
+    "@paged-media/plugin-sdk": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "20.19.39",
+    "@types/node": "catalog:",
     "tsup": "^8.3.5",
-    "typescript": "^5.6.3",
-    "vitest": "^3.2.7",
-    "@paged-media/plugin-api": "0.2.45-canary.0",
-    "@paged-media/plugin-sdk": "0.2.45-canary.0",
-    "@paged-media/canvas-wasm": "0.71.1"
+    "typescript": "catalog:",
+    "@types/bun": "catalog:",
+    "@paged-media/plugin-api": "workspace:*",
+    "@paged-media/plugin-sdk": "workspace:*",
+    "@paged-media/canvas-wasm": "workspace:*"
   },
   "files": [
     "bin",

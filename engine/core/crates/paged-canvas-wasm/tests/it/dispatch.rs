@@ -1110,6 +1110,64 @@ fn v38_resize_frame_reply_carries_reflow_but_move_does_not() {
     );
 }
 
+#[test]
+fn a_mutation_reply_names_the_pages_it_created() {
+    let mut core = loaded_core();
+    let mutate = |core: &mut WorkerCore, seq: u64, op: serde_json::Value| {
+        roundtrip(
+            core,
+            &serde_json::json!({
+                "seq": seq, "protocol": protocol(), "kind": "mutate", "payload": op
+            }),
+        )
+    };
+    // Two inserts in one batch: the first lands last, the second right
+    // after p1. The reply names them in the order they were made.
+    let reply = mutate(
+        &mut core,
+        95,
+        serde_json::json!({ "op": "batch", "args": { "ops": [
+            { "op": "insertPage", "args": { "afterPageId": "p1", "masterId": null } },
+            { "op": "insertPage", "args": { "afterPageId": "p1", "masterId": null } },
+        ] } }),
+    );
+    assert_eq!(reply["kind"], "mutationApplied", "{reply}");
+    let created: Vec<&str> = reply["payload"]["createdPages"]
+        .as_array()
+        .unwrap_or_else(|| panic!("createdPages on the reply: {reply}"))
+        .iter()
+        .map(|p| p.as_str().unwrap())
+        .collect();
+    assert_eq!(created.len(), 2, "{reply}");
+    let pages: Vec<&str> = reply["payload"]["pageIds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p.as_str().unwrap())
+        .collect();
+    assert_eq!(
+        pages,
+        ["p1", created[1], created[0]],
+        "each insert went right after p1, so the second comes first"
+    );
+    assert_eq!(reply["payload"]["pageStructureChanged"], true);
+
+    // A mutation that creates no page leaves the field off the wire.
+    let reply = mutate(
+        &mut core,
+        96,
+        serde_json::json!({
+            "op": "resizeFrame",
+            "args": { "frameId": "tf1", "bounds": [100.0, 100.0, 420.0, 420.0] }
+        }),
+    );
+    assert_eq!(reply["kind"], "mutationApplied", "{reply}");
+    assert!(
+        reply["payload"].get("createdPages").is_none(),
+        "absent when nothing was created: {reply}"
+    );
+}
+
 // ---------------------------------------------------------------------
 // C-1 Stage B — pixel layer (the streaming sibling of submitSceneLayer)
 // ---------------------------------------------------------------------
