@@ -6,7 +6,7 @@
 // rather than failing loudly. This cheap structural check asserts every entry
 // is well-formed BEFORE a run depends on it. Pairs with BAKE_GOVERNANCE.md.
 //
-// Run: `node scripts/fidelity-thresholds-schema.test.mjs`
+// Run: `bun test ./scripts/fidelity-thresholds-schema.test.mjs`
 //   (wired as the root `test:thresholds` npm script.)
 
 import { test } from "node:test";

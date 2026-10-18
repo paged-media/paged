@@ -29,6 +29,8 @@
 // The loader is a thunk so the specifier resolves against the caller's
 // file, not this one.
 
-export async function importActual<T extends object>(load: () => Promise<T>): Promise<T> {
+export async function importActual<T extends object>(
+  load: () => Promise<T>,
+): Promise<T> {
   return { ...(await load()) };
 }

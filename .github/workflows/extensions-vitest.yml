@@ -112,9 +112,9 @@ jobs:
       # from the engine's wire schema (crates/paged-wire/schema, ADR 187).
       - name: vendored wire, catalog and core commands match the engine
         run: |
-          node scripts/sync-wire.mjs --check
-          node scripts/sync-catalog.mjs --check
-          node scripts/gen-core-commands.mjs --check
+          bun scripts/sync-wire.mjs --check
+          bun scripts/sync-catalog.mjs --check
+          bun scripts/gen-core-commands.mjs --check
 
       # Build BEFORE the suite: react-free-import.spec.ts asserts on the
       # SHIPPED artifact (no static react import, no AWAITED react import),

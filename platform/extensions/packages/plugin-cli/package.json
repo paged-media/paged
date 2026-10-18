@@ -21,6 +21,6 @@
     "tag": "canary"
   },
   "scripts": {
-    "validate": "node ./bin/paged-plugin.mjs validate"
+    "validate": "bun ./bin/paged-plugin.mjs validate"
   }
 }

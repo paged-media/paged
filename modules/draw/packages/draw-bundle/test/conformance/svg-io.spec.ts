@@ -627,6 +627,12 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
   //
   // Nothing in the importer changes: the handle lane is still right, and
   // still right on the engines before the fix. `io/svg.ts`'s header says so.
+  //
+  // 30 s: 10 501 children, then an undo and a redo of all of them, each one
+  // synchronous engine call. That is 1.6 s on a developer machine and 6 s on
+  // a 4-core CI runner, past the 5 s default. vitest never failed it there
+  // (it took 9.6 s under V8 in CI): its timeout is a timer, which cannot fire
+  // while the call holds the thread; bun test measures the elapsed time.
   it("FIXED (C-79): a batch with a setDocumentDefaults child, over the undo-log cap, is ONE undo step", async () => {
     // Its own host: what this strands, undo can never reach again.
     const own = await openHost();
@@ -671,7 +677,7 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
     } finally {
       own.dispose();
     }
-  });
+  }, 30_000);
 
   it("exportSvg returns null for an empty selection", async () => {
     await h.host.selection.set([]);

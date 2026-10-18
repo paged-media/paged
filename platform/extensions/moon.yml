@@ -33,7 +33,7 @@ tasks:
   catalog-check:
     description: 'The vendored capability catalog matches engine/core (scripts/sync-catalog.mjs --check).'
     toolchains: ['system']
-    command: 'node scripts/sync-catalog.mjs --check'
+    command: 'bun scripts/sync-catalog.mjs --check'
     inputs:
       - 'scripts/sync-catalog.mjs'
       - 'packages/plugin-api/src/catalog.json'
@@ -44,7 +44,7 @@ tasks:
   core-commands-check:
     description: 'The typed core commands match the engine wire schema (scripts/gen-core-commands.mjs --check, engine ADR 187).'
     toolchains: ['system']
-    command: 'node scripts/gen-core-commands.mjs --check'
+    command: 'bun scripts/gen-core-commands.mjs --check'
     inputs:
       - 'scripts/gen-core-commands.mjs'
       - 'packages/plugin-sdk/src/core-commands.generated.ts'

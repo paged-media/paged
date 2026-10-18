@@ -8,7 +8,7 @@
 // TS-aware loader node 24 ships (`--experimental-strip-types`). The npm script
 // runs this with that flag.
 //
-// Run: `node --experimental-strip-types scripts/cross-origin-isolation-check.test.mjs`
+// Run: `bun test ./scripts/cross-origin-isolation-check.test.mjs`
 //   (wired as `pnpm --filter paged-canvas test:boot` below isn't added to avoid
 //    colliding with the sibling's Playwright ownership; invoke directly in CI.)
 

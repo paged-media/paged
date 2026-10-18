@@ -75,8 +75,8 @@ jobs:
       # "leads the publish" marker).
       - name: wire and catalog vendoring lockstep (hard gate)
         run: |
-          node scripts/sync-wire.mjs --check
-          node scripts/sync-catalog.mjs --check
+          bun scripts/sync-wire.mjs --check
+          bun scripts/sync-catalog.mjs --check
       - name: publish changed versions via OIDC (canary)
         run: |
           set -e
@@ -87,7 +87,7 @@ jobs:
               echo "skip $name@$version (already published)"; continue
             fi
             tgz="$RUNNER_TEMP/$(echo "$name" | sed 's#@##; s#/#-#')-${version}.tgz"
-            node "$GITHUB_WORKSPACE/tooling/js/pack.mjs" "$dir" "$RUNNER_TEMP" >/dev/null
+            bun "$GITHUB_WORKSPACE/tooling/js/pack.mjs" "$dir" "$RUNNER_TEMP" >/dev/null
             echo "publish $name@$version via OIDC ($tgz)"
             npm publish "$tgz" --tag canary --access public
           done
