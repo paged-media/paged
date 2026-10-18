@@ -583,10 +583,10 @@
       },
       "devDependencies": {
         "@paged-media/plugin-api": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "tsup": "^8.5.1",
         "typescript": "catalog:",
-        "vitest": "catalog:",
       },
       "peerDependencies": {
         "@paged-media/plugin-api": "workspace:*",
@@ -611,11 +611,11 @@
         "@paged-media/data": "workspace:*",
         "@paged-media/plugin-api": "workspace:*",
         "@paged-media/plugin-sdk": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "react": "catalog:",
         "tsup": "^8.5.1",
         "typescript": "catalog:",
-        "vitest": "catalog:",
       },
       "peerDependencies": {
         "@duckdb/duckdb-wasm": "1.29.0",
@@ -649,12 +649,12 @@
       },
       "devDependencies": {
         "@paged-media/canvas-wasm": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@types/react": "catalog:",
         "fast-check": "^4.10.2",
         "react": "catalog:",
         "typescript": "catalog:",
-        "vitest": "catalog:",
       },
       "peerDependencies": {
         "react": "^18.3.0",

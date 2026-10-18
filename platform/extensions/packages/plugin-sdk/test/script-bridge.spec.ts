@@ -25,7 +25,7 @@
 // Needs an engine with the bridge (core om/boa-bridge); skipped on one
 // without it unless REQUIRE_REAL_BRIDGE=1.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import { answerHostObjects } from "../src/script-bridge";
 import { createHeadlessHost, type HeadlessHost } from "../src/harness";

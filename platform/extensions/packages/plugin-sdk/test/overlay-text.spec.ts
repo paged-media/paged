@@ -27,7 +27,7 @@
 //   3. the gate: the same `capabilities.rendering ∋ "overlay"` gate as
 //      every other preview variant (one channel, one gate).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PluginManifest, ToolPreviewText } from "@paged-media/plugin-api";
 

@@ -59,6 +59,9 @@ package. It is gated on
 | web-bundle | 330 | 330 | yes | `waitFor`, `advanceTimersByTimeAsync` → test kit; `vi.setConfig` → `setDefaultTimeout`; bake.spec refuses `fetch` in one test (below) |
 | data-host-model | 53 | 53 | yes | codemod only |
 | data-bundle | 383 + 2 skipped | 383 + 2 skipped | yes | 23 files of `vi.resetModules` + `vi.doMock`, 3 of `vi.mock` with `importOriginal` → `mock.module` re-patching (below); duckdb-browser `ctx.skip()` → `it.skipIf`; real DuckDB resolves `apache-arrow` without NODE_PATH; `--timeout 30000` |
+| plugin-sdk | 713 | 715 | yes, + 2 | codemod; `modules.spec` stubs `fetch` by hand (a public package does not import the internal kit, PM-0002). The 2 new ids are B6's tests (efa3d9597), merged from main between the base and the flip |
+| ai | 31 | 31 | yes | codemod; tsconfig `types` gains `bun` |
+| cli | 54 + 1 skipped | 54 + 1 skipped | yes | `vitest.config.ts` deleted: one file at a time and 120 s timeouts become `bun test --timeout 120000` (no `--parallel`); its `server.deps.inline` was a Vite transform bun does not need. `.runIf` → `.if` (with a boolean). The shipped `node-shims.ts` routes DuckDB's worker in-process under Bun too (below) |
 
 ## Refactors beyond the codemod
 
@@ -116,3 +119,24 @@ block). data-bundle's whole suite runs with `--timeout 30000`: its real-engine s
 35 MB DuckDB engine, the data engine and the core per test, and JavaScriptCore compiles and runs
 that wasm slower than V8 did (the summed test time is about 3× vitest's), so under a full
 parallel run several first-in-file tests passed the 5 s default.
+
+### The CLI's DuckDB worker under Bun
+
+`@paged-media/cli` runs paged.data's DuckDB in-process: `node-shims.ts` installs a global
+`Worker` whose DuckDB URL becomes DuckDB's own dispatcher over its Node bindings. It did that
+only when there was no global `Worker`, which is true under Node and false under Bun, whose real
+`Worker` then failed to run DuckDB's browser worker script (every cli-data test timed out). The
+shim now always routes the DuckDB URL in-process and hands any other URL to the runtime's own
+`Worker` when there is one. Under Node nothing changes.
+
+### A bun:test defect: `toMatchObject` writes into the value under test
+
+In bun 1.4.3, `expect(x).toMatchObject({ k: expect.arrayContaining([…]) })` (any asymmetric
+matcher, at any depth) replaces `x.k` with the matcher object. plugin-sdk
+`object-model-v71.spec.ts` asserted on a schema row that way and the next call validated against
+the overwritten `members` (`type.members.includes is not a function`). bun's equality also treats
+a matcher on the *received* side as a matcher, so a later `toEqual` on the damaged value can still
+pass. `tooling/js/bun-test-setup.ts`, which every package's `bun test` preloads, wraps the
+matcher: it remembers each property of the received value that the expected object reaches, runs
+bun's matcher and puts each one back. The test kit's suite proves the wrapper (it fails without
+the preload).

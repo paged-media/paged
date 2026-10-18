@@ -29,7 +29,7 @@
 //      is false (the honest no-consent posture);
 //   5. remember: a remembered grant persists across hosts via storage.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { ConsentResult, PluginManifest } from "@paged-media/plugin-api";
 

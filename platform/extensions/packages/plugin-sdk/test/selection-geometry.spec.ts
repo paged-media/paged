@@ -22,7 +22,7 @@
 // its group, the control bar said "Group" while the box stayed on the
 // table that was selected before.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { ElementId, PluginManifest } from "@paged-media/plugin-api";
 
