@@ -215,7 +215,7 @@ jobs:
       - name: nextest → JUnit
         run: |
           set -uo pipefail
-          cargo nextest run --profile ci || echo "RUST_FAILED=1" >> "$GITHUB_ENV"
+          cargo nextest run --profile ci --no-tests=fail || echo "RUST_FAILED=1" >> "$GITHUB_ENV"
           test -s target/nextest/ci/junit.xml
 
       - name: upload nextest results artifact
