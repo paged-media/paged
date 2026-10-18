@@ -3677,7 +3677,12 @@ mod tests {
             .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect::<String>())
             .collect::<Vec<_>>()
             .join("\n");
-        assert_eq!(text, "KEEP one ADDED two OLDWORD three");
+        // Each deletion is its place, a marker that prints nothing (D-01).
+        let printed = text.replace(TRACKED_DELETION_MARKER, "");
+        assert_eq!(printed, "KEEP one ADDED two OLDWORD three");
+        let deletions: usize = s.paragraphs.iter().map(|p| p.tracked_deletions.len()).sum();
+        assert_eq!(text.matches(TRACKED_DELETION_MARKER).count(), deletions);
+        assert!(deletions > 0);
     }
 
     /// A deleted paragraph mark joins two paragraphs; an inserted one splits
@@ -3718,7 +3723,14 @@ mod tests {
             .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect::<String>())
             .collect::<Vec<_>>()
             .join("\n");
-        assert_eq!(text, "FIRST NEW one\nNEW two SECOND para");
+        assert_eq!(
+            text.replace(TRACKED_DELETION_MARKER, ""),
+            "FIRST NEW one\nNEW two SECOND para"
+        );
+        // The deleted paragraph mark is kept, inside its deletion.
+        let d = &s.paragraphs[0].tracked_deletions;
+        assert_eq!(d.len(), 1);
+        assert_eq!(d[0].deleted_text.as_deref(), Some("para\r"));
     }
 
     #[test]
