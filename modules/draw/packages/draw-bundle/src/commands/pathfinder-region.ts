@@ -46,13 +46,6 @@
 // so a caller can put it in front of the user instead of showing an
 // empty result. The command lane logs it at WARN and publishes it on
 // the `media.paged.draw.pathfinderStatus` binding.
-//
-// WIRE-TYPE NOTE (skew, named — the join-average.ts precedent): the six
-// ops are protocol v57 and the INSTALLED `@paged-media/plugin-api`
-// (0.2.25-canary.0) vendors protocol 51, so its curated `Mutation`
-// union does not carry them yet. The builder below emits the EXACT v57
-// wire shape and casts once, here, at the boundary; when the contract
-// catches up the cast is the only thing to delete.
 
 import type {
   BundleHost,
@@ -133,12 +126,12 @@ export function pathfinderRegionMutationFor(
   verb: PathfinderRegionVerb,
   elementIds: ElementId[],
 ): Mutation {
-  return { op: verb, args: { elementIds } } as unknown as Mutation;
+  return { op: verb, args: { elementIds } };
 }
 
 /** `pathfinderFaces { elementIds, faces, mode }` — Shape Builder's
  *  click/drag output. Here rather than in the handler because it is the
- *  same v57 wire family and the same one-cast boundary. */
+ *  same v57 wire family. */
 export function pathfinderFacesMutationFor(
   elementIds: ElementId[],
   faces: string[],
@@ -147,7 +140,7 @@ export function pathfinderFacesMutationFor(
   return {
     op: "pathfinderFaces",
     args: { elementIds, faces, mode },
-  } as unknown as Mutation;
+  };
 }
 
 /** Key an ElementId for order lookups (`kind` + `id`; the string-id

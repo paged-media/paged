@@ -216,10 +216,10 @@ The manifest declares the matching capabilities: `document` (read `broad`, write
   Without `--engine` the crate is built without the engine and has neither export.
   `pnpm -r build` then runs tsup; `.github/workflows/publish.yml` does both in that order
   and publishes `@paged-media/web` under the `canary` tag.
-- TypeScript lane: `pnpm test` runs the import lint, then vitest in both packages. The
+- TypeScript lane: `pnpm test` runs the import lint, then `bun test` in both packages. The
   engine tests in `web-bundle` replay a captured engine output through a stub loader and,
   when `bin/` is built, also load the real wasm in Node. With `REQUIRE_REAL_ENGINE=1`, set
-  by `.github/workflows/vitest.yml` after it builds the wasm, a missing artefact fails
+  by `.github/workflows/web-vitest.yml` after it builds the wasm, a missing artefact fails
   instead of skipping. `test/conformance/` runs the bundle against `createHeadlessHost`.
 - Rust lane: `cargo test` in `packages/web-render` covers `lower` and `wire` without the
   engine; `cargo test --features blitz` adds `capture`, `flow` and `fonts`. No workflow in

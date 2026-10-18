@@ -465,13 +465,9 @@ contributes its Stroke and Fill schema panels
 `LayersSection` inside its own panel (`plugin-image: glue/src/panels/image-panel.tsx:1111`,
 `:2712`).
 
-**5. plugin-sheets still carries local mirrors of the contract types.**
-`plugin-sheets: packages/sheet-bundle/src/binding-provider/adr023-seam.ts:24-33` says the repo
-installs `@paged-media/plugin-{api,sdk}@0.2.25-canary.0`, which lacks the door, and keeps
-hand-written mirrors (`:56-131`) and a cast of `host.contribute` (`:156`, `:182`) for that
-reason. Its `package.json` pins `0.2.33-canary.0`
-(`plugin-sheets: packages/sheet-bundle/package.json:25-26`). plugin-draw, on the same pin
-(`plugin-draw: packages/draw-bundle/package.json:24-25`), replaced its mirrors with re-exports
-and notes that `0.2.28-canary.0` publishes the types
-(`plugin-draw: packages/draw-bundle/src/binding-provider/adr023-seam.ts:62-69`). The header
-comment in the plugin-sheets file is stale.
+**5. The local mirrors of the contract types are gone.** plugin-sheets kept hand-written
+mirrors of the provider types and a cast of `host.contribute`, and plugin-draw re-exports, both
+because they installed published canaries that predated or lagged the door. In the monorepo
+both bundles take the contract's types and call `host.contribute.bindingProvider` directly
+behind the `bindings.provider@1` probe (B3b; `docs/migration/seams.md` at the repository
+root).

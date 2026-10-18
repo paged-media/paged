@@ -8,19 +8,70 @@
 # paged-media/plugin-sdk checkout is gone: the manifest validate runs the
 # in-tree platform/extensions plugin-cli, so its sources join the filters.
 name: image / ci
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
   push:
     branches: [main]
     paths:
       - "modules/image/**"
+      # The extension contract the bundle builds against (workspace:*).
+      - "platform/extensions/packages/plugin-api/**"
+      - "platform/extensions/packages/plugin-sdk/**"
+      # The engine wasm packages this workflow builds against (workspace:*),
+      # and what builds them, so an engine change re-tests its consumers.
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
+      - ".github/actions/module-wasm/**"
       - "platform/extensions/packages/plugin-cli/**"
       - ".github/workflows/image-ci.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/image/docs/**/*.md"
   pull_request:
     paths:
       - "modules/image/**"
+      # The extension contract the bundle builds against (workspace:*).
+      - "platform/extensions/packages/plugin-api/**"
+      - "platform/extensions/packages/plugin-sdk/**"
+      # The engine wasm packages this workflow builds against (workspace:*),
+      # and what builds them, so an engine change re-tests its consumers.
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
+      - ".github/actions/module-wasm/**"
       - "platform/extensions/packages/plugin-cli/**"
       - ".github/workflows/image-ci.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/image/docs/**/*.md"
   workflow_dispatch:
 
 env:
@@ -30,10 +81,6 @@ env:
 permissions:
   contents: read
 
-concurrency:
-  group: image-ci-${{ github.ref }}
-  cancel-in-progress: true
-
 defaults:
   run:
     working-directory: modules/image
@@ -41,9 +88,10 @@ defaults:
 jobs:
   # The Rust engine: fmt + clippy + test, the three isolation-contract
   # dependency guards (spec §2.1 / §4 dep rule 3), and the wasm size
-  # report against the 100 MB app wasm budget (BREAKAGE I-07). Every job
-  # names the channel rust-toolchain.toml pins (`channel = 1.99.1`); the
-  # first toolchain step says why it cannot be read from the file.
+  # report against the 100 MB app wasm budget (BREAKAGE I-07). dtolnay/rust-toolchain
+  # reads the channel straight from rust-toolchain.toml (`channel = 1.93.0`)
+  # — same single-source-of-truth posture as core's resolved `toolchain`
+  # job, without a separate channel-resolver script in this repo.
   rust:
     name: rust engine
     runs-on: ubuntu-latest
@@ -61,13 +109,15 @@ jobs:
       # job. Pin it here and MIRROR rust-toolchain.toml; bump both together.
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.99.1" # mirrors rust-toolchain.toml
+          toolchain: "1.93.0" # mirrors rust-toolchain.toml
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: modules/image -> target
           prefix-key: v0-rust-image
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: fmt
         run: cargo fmt --all --check
@@ -196,7 +246,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.99.1" # mirrors rust-toolchain.toml
+          toolchain: "1.93.0" # mirrors rust-toolchain.toml
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
         uses: rui314/setup-mold@v1
@@ -205,6 +255,8 @@ jobs:
           workspaces: modules/image -> target
           prefix-key: v0-rust-image
           key: gpu-sw
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: install lavapipe (Mesa software Vulkan)
         # Bounded, and off the Azure mirror first (the brotli step above
         # explains why both are needed).
@@ -236,19 +288,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.99.1" # mirrors rust-toolchain.toml
+          toolchain: "1.93.0" # mirrors rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: modules/image -> target
           prefix-key: v0-rust-image
           key: gpu-metal
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: adapter
         run: cargo test -p image-gpu --features test-support --lib test_support -- --nocapture
       - name: test (REQUIRE_GPU=1)
         run: cargo test --workspace --no-fail-fast
 
   # The TS bundle: the contract-import lint (isolation §2.1), typecheck,
-  # vitest, and manifest validation. Pre-monorepo this nested two checkouts
+  # bun test, and manifest validation. Pre-monorepo this nested two checkouts
   # (plugin-image/ + a plugin-sdk/ sibling) because the manifest package's
   # scripts reach the plugin-cli by a relative path; the plugin-cli is now
   # in-tree at platform/extensions/packages/plugin-cli, so one checkout.
@@ -257,43 +311,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+          auto-install: true
+          proto-version: "0.63.1"
 
-      - name: install (plugin-sdk sibling satisfies the link chain)
-        run: pnpm install --frozen-lockfile
+      # The engine's wasm packages (canvas-wasm and the rest, workspace:*),
+      # which the real-engine specs boot.
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
+      - name: install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
 
-      # Build the engine wasm from THIS commit before the specs boot it.
-      # The committed glue/wasm is whatever was last rebuilt by hand;
-      # testing it instead of the sources is how a 2026-08-09 build went
-      # on passing for two months of Rust changes. wasm-fresh.spec.ts
-      # checks the stamp, so a local run against a stale copy fails too.
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.99.1" # mirrors rust-toolchain.toml
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: modules/image -> target
-          prefix-key: v0-rust-image
-          key: wasm
-      - name: wasm-bindgen (prebuilt; version from Cargo.lock)
-        run: |
-          set -euo pipefail
-          WB=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
-          test -n "$WB" || { echo "could not read wasm-bindgen from Cargo.lock"; exit 1; }
-          curl -fsSL "https://github.com/rustwasm/wasm-bindgen/releases/download/$WB/wasm-bindgen-$WB-x86_64-unknown-linux-musl.tar.gz" | tar xz -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/wasm-bindgen-$WB-x86_64-unknown-linux-musl" >> "$GITHUB_PATH"
-      - name: binaryen (prebuilt wasm-opt; pinned)
-        run: |
-          curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_126/binaryen-version_126-x86_64-linux.tar.gz | tar xz -C "$RUNNER_TEMP"
-          echo "$RUNNER_TEMP/binaryen-version_126/bin" >> "$GITHUB_PATH"
-      - name: build wasm
-        run: bash scripts/build-wasm.sh
+      # Build the engine wasm from THIS commit before the specs boot it
+      # (glue/wasm/ and manifest/wasm/, build output since B3b), or restore
+      # it from the cache when the Rust sources are unchanged.
+      # wasm-fresh.spec.ts checks the stamp, so a stale build fails.
+      - name: module wasm (image)
+        uses: ./.github/actions/module-wasm
+        with: { module: image }
 
       # Isolation contract, TS half: every import must come through the
       # sanctioned contract surface (spec §2.1). An editor-internal import
@@ -302,14 +340,14 @@ jobs:
         run: node scripts/check-contract-imports.mjs
 
       - name: typecheck
-        run: pnpm -r typecheck
+        run: bun run --filter './glue' --filter './manifest' typecheck
 
-      # REQUIRE_REAL_WASM turns wasm-exec.spec.ts's "artifact missing"
-      # skip into a hard failure: the artifact was just built (and is
-      # committed too), so its absence is a regression, and the only
-      # real-execution lane must never silently drop back to skip.
+      # REQUIRE_REAL_WASM turns wasm-exec.spec.ts's and wasm-fresh.spec.ts's
+      # "artifact missing" skip into a hard failure: the artifact was just
+      # built, so its absence is a regression, and the only real-execution
+      # lane must never silently drop back to skip.
       - name: test
-        run: pnpm -r test
+        run: bun run --filter './glue' --filter './manifest' test
         env:
           REQUIRE_REAL_WASM: "1"
 

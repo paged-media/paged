@@ -22,7 +22,7 @@
 // undoable step with markup and entities intact, Esc restores, Cmd+Z steps
 // the keystrokes, and text a template produced is refused.
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import type { BundleHost, EditContextContribution, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

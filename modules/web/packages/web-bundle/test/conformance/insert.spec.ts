@@ -25,7 +25,7 @@
 //   · the new frame carries this plugin's source envelope as metadata;
 //   · undo restores the document to exactly the empty page.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import type { CommandContribution, ElementId } from "@paged-media/plugin-api";

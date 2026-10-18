@@ -1377,33 +1377,6 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
         expect(stepwise.work.mutations).toHaveLength(1 + scenario.stepwise);
         expect(stepwise.undoSteps).toBe(scenario.stepwise);
         expect(stepwise.restored).toBe(true);
-
-        // REPLY — an SDK before plugin-sdk 0.2.38, whose outcome carries no
-        // `minted`: the ids off the raw reply. The same document, the same
-        // writes and the same reads as the shipped (outcome) lane.
-        const reply = await through("reply");
-        expect(reply.picture).toBe(shipped.picture);
-        expect(reply.work.mutations).toEqual(shipped.work.mutations);
-        expect(reply.undoSteps).toBe(shipped.undoSteps);
-        expect(reply.restored).toBe(true);
-        expect(reply.work.count("document.tree")).toBe(shipped.work.count("document.tree"));
-
-        for (const lane of ["diff", "unlisted"] as const) {
-          const run = await through(lane);
-          expect(run.picture, lane).toBe(shipped.picture);
-          expect(run.undoSteps, lane).toBe(1);
-          expect(run.restored, lane).toBe(true);
-          expect(run.work.count("document.tree"), lane).toBe(scenario.trees + 2);
-        }
-
-        const asFound = await through("asFound");
-        expect(asFound.picture).toBe(shipped.picture);
-        expect(asFound.undoSteps).toBe(scenario.stepwise);
-        // The walk, the refused attempt's "before", then a diff per
-        // instance's insert batch.
-        expect(asFound.work.count("document.tree")).toBe(
-          scenario.trees + 1 + scenario.stepwise,
-        );
       });
     }
 
@@ -1446,19 +1419,6 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
         /#\d+\[#\d+ #\d+\]/g,
       );
       expect(groups).toHaveLength(3);
-      // REPLY — an SDK before plugin-sdk 0.2.38, whose outcome carries no
-      // `minted`: the ids off the raw reply. The same document, the same
-      // writes and the same reads as the shipped (outcome) lane.
-      const reply = await through("reply");
-      expect(reply.picture).toBe(shipped.picture);
-      expect(reply.work.mutations).toEqual(shipped.work.mutations);
-      expect(reply.undoSteps).toBe(shipped.undoSteps);
-      expect(reply.restored).toBe(true);
-      expect(reply.work.count("document.tree")).toBe(shipped.work.count("document.tree"));
-
-      for (const lane of ["diff", "unlisted"] as const) {
-        expect((await through(lane)).picture, lane).toBe(shipped.picture);
-      }
 
       // The stepwise lane too, since 0.65.0. On 0.64.0 two of its three
       // rebuilds were refused ("a member already belongs to another

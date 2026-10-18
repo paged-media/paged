@@ -55,9 +55,7 @@
 //     `createGroup.memberIds` entry and BOTH ends of `pasteInto`;
 //   · 200 instances in one batch apply in ~12 ms and ONE undo removes
 //     all of them.
-// The published contract this repo installs (`0.2.25-canary.0`) predates
-// the arm, so the ops are cast in ONE place — `v59-wire.ts`, the
-// `v58-wire.ts` precedent — and the repin is a pure deletion.
+// The builders are in `commands/batch-handles.ts`.
 //
 // A MEASURED C-15 EDGE, recorded because it is why this module never
 // addresses a group it minted: with an EARLIER `bindCreated` in the same
@@ -215,7 +213,7 @@ import {
   handleElementId,
   pasteIntoMutationFor,
   releaseFromMutationFor,
-} from "./v59-wire";
+} from "./batch-handles";
 
 import { registerCommand } from "../command-registry";
 import {

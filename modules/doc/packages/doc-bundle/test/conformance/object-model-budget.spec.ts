@@ -23,7 +23,7 @@
 // op. Measured 2026-10-06; a pin is lowered by the commit that earns it,
 // never raised.
 
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "bun:test";
 
 import type { BundleHost, MutationInput } from "@paged-media/plugin-api";
 import { createObjectRegistry, type CoreObjects, type HeadlessHost } from "@paged-media/plugin-sdk";

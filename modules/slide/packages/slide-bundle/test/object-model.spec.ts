@@ -27,7 +27,7 @@
 
 import { readFileSync } from "node:fs";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { createHeadlessHost, validateValue, type HeadlessHost } from "@paged-media/plugin-sdk";
 import type { ObjectValue, ValueType } from "@paged-media/plugin-api";
@@ -45,6 +45,13 @@ import {
   slideAddress,
 } from "../src/object-model";
 import { SLIDE_PANEL_FIELDS } from "../src/panel-fields";
+import { fileURLToPath } from "node:url";
+
+// The engine is this package's own @paged-media/canvas-wasm devDependency.
+// Without an anchor the headless harness resolves it from plugin-sdk's
+// install location, which in the root Bun workspace is whichever version the
+// store hoists, not the one this package pins.
+const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
 const P = "plugin:media.paged.slide";
 const FIXTURE = new URL("../../../slide-conformance/fixtures/placeholders.pptx", import.meta.url);
@@ -65,7 +72,7 @@ async function open(): Promise<void> {
 }
 
 beforeEach(async () => {
-  h = await createHeadlessHost();
+  h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
   h.loadBundle(slideBundle);
   await open();
 }, 60_000);

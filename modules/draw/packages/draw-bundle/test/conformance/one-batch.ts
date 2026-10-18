@@ -18,34 +18,19 @@
 
 // THE HOSTS A ONE-BATCH FLOW IS RUN AGAINST, besides the real one.
 //
-// A flow that became one batch has two things that can be missing under
-// it, and each is a view of the REAL headless host with exactly one
-// thing taken away — the engine still answers everything else, so what a
-// flow leaves in the document can be compared element by element with
-// what the real host leaves:
+// A view of the REAL headless host with one thing taken away — the
+// engine still answers everything else, so what a flow leaves in the
+// document can be compared element by element with what the real host
+// leaves:
 //
-//  · `refusingBindCreated` — an engine that predates C-15. It refuses any
-//    batch carrying a `bindCreated` child, which is what sends a flow
-//    down its STEPWISE lane (the two batches it was before).
-//  · `withoutMintedOutcome` — an SDK older than plugin-sdk 0.2.38, whose
-//    `MutationOutcome` does not carry `minted` (RFI K-15). Since 0.2.38
-//    the real outcome DOES, so `mutateMinting` (`src/commands/minted.ts`)
-//    answers through its "outcome" lane on the real host; this view is
-//    what keeps the two lanes below it reachable. Every view that stands
-//    for an older host sits on top of it.
-//  · `withoutMintedReplies` — an engine that speaks C-15 but whose
-//    `mutationApplied` does not list what a batch minted, behind a host
-//    that does have the raw client (and an SDK without the outcome list).
-//    `mutateMinting` finds out on its first write and takes its diff lane
-//    from then on.
-//  · `withoutHatch` — a host with no raw client at all. On its own it is
-//    the "outcome" lane since 0.2.38 (the first write reads the tree
-//    once, in case the outcome says nothing); over `withoutMintedOutcome`
-//    it is the diff lane from the first write.
-//  · `withMintedOutcome` — the outcome carries `minted` and there is no
-//    raw client beside it, built from the raw reply so it does not depend
-//    on which SDK is installed. What RFI K-15 asked for, and what
-//    plugin-sdk 0.2.38 ships.
+//  · `refusingBindCreated` — an engine that refuses `bindCreated` (as one
+//    before C-15 did). It refuses any batch carrying a `bindCreated`
+//    child, which is what sends a flow down its STEPWISE lane (the two
+//    batches it was before).
+//
+// (Until B3b this file also held views of an SDK whose outcome carried no
+// `minted`, and of a host without the raw client, for the reply and diff
+// lanes `src/commands/minted.ts` no longer has.)
 //
 // AND HOW TWO RUNS ARE COMPARED. A batch can apply and still be the wrong
 // edit, so "one batch" is never asserted alone: `runThrough` runs a flow
@@ -109,79 +94,6 @@ export function refusingBindCreated(host: BundleHost): BundleHost {
     carriesBind(mutation)
       ? Promise.resolve({ applied: false, error: NO_BIND_CREATED })
       : real(mutation),
-  );
-}
-
-/** A host with the raw client, over an engine whose `mutationApplied`
- *  says nothing about what it minted. */
-export function withoutMintedReplies(host: BundleHost): BundleHost {
-  return new Proxy(host, {
-    get(target, prop, receiver) {
-      if (prop !== "editor") return Reflect.get(target, prop, receiver) as unknown;
-      const editor = target.editor;
-      const client = editor.client;
-      const subscribe: typeof client.subscribe = (listener) =>
-        client.subscribe((message) => {
-          if (message.kind !== "mutationApplied") return listener(message);
-          const { minted: _dropped, ...payload } = message.payload;
-          listener({ ...message, payload });
-        });
-      return {
-        ...editor,
-        client: new Proxy(client, {
-          get(inner, key, innerReceiver) {
-            return key === "subscribe"
-              ? subscribe
-              : (Reflect.get(inner, key, innerReceiver) as unknown);
-          },
-        }),
-      };
-    },
-  });
-}
-
-/** An SDK before plugin-sdk 0.2.38: the outcome of an applied mutation
- *  does not carry `minted` (the raw reply still does). */
-export function withoutMintedOutcome(host: BundleHost): BundleHost {
-  return withMutate(host, async (mutation, real) => {
-    const outcome = await real(mutation);
-    if (!outcome.applied) return outcome;
-    const { minted: _dropped, ...rest } = outcome as MutationOutcome & {
-      minted?: unknown;
-    };
-    return rest as MutationOutcome;
-  });
-}
-
-/** A host with no raw client: `host.editor` is not there to reach. */
-export function withoutHatch(host: BundleHost): BundleHost {
-  return new Proxy(host, {
-    get(target, prop, receiver) {
-      if (prop === "editor") {
-        throw new Error("this host exposes no raw editor client");
-      }
-      return Reflect.get(target, prop, receiver) as unknown;
-    },
-  });
-}
-
-/** The SDK K-15 asks for: `MutationOutcome` carries what the reply
- *  listed. Built from the real reply, and with NO raw client beside it —
- *  so an answer here can only have come through the outcome. */
-export function withMintedOutcome(host: BundleHost): BundleHost {
-  const client = host.editor.client;
-  return withoutHatch(
-    withMutate(host, async (mutation, real) => {
-      let minted: unknown;
-      const off = client.subscribe((message) => {
-        if (message.kind === "mutationApplied") minted = message.payload.minted;
-      });
-      const outcome = await real(mutation);
-      off();
-      return outcome.applied
-        ? ({ ...outcome, minted } as MutationOutcome)
-        : outcome;
-    }),
   );
 }
 
@@ -411,23 +323,11 @@ export async function restoreRecipes(
 // ------------------------------------------------------------- the lanes
 
 /** The hosts a flow is run through. `oneBatch` is the flow as shipped
- *  (since plugin-sdk 0.2.38 its created ids come off the OUTCOME); the
- *  rest take one thing away each (the file header says which). `reply`,
- *  `diff` and `unlisted` are hosts whose SDK predates the outcome list —
- *  without that, the real SDK would answer them all through the outcome
- *  and the two older lanes would go untested. `asFound` takes everything
- *  away — the engine and SDK every one of these flows was written
- *  against, and where the numbers they started from are still MEASURED
- *  rather than remembered. */
+ *  (its created ids come off the OUTCOME); `stepwise` refuses the bind
+ *  (the file header). */
 export const LANES = {
   oneBatch: (host: BundleHost): BundleHost => host,
   stepwise: refusingBindCreated,
-  reply: withoutMintedOutcome,
-  diff: (host: BundleHost): BundleHost => withoutHatch(withoutMintedOutcome(host)),
-  unlisted: (host: BundleHost): BundleHost =>
-    withoutMintedReplies(withoutMintedOutcome(host)),
-  asFound: (host: BundleHost): BundleHost =>
-    refusingBindCreated(withoutHatch(withoutMintedOutcome(host))),
 } as const;
 
 export type LaneName = keyof typeof LANES;

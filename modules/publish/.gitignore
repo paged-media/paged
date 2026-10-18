@@ -1,6 +1,11 @@
 /target
 **/*.rs.bk
 
+# The pdf-import mapper wasm (wasm-bindgen output of scripts/build-wasm.sh,
+# run by `moon run publish:wasm` and in CI by .github/actions/module-wasm).
+# pdfium.esm.* beside it is a third-party prebuilt and stays committed.
+packages/pdf-bundle/bin/pdf_import*
+
 # TS bundle (packages/*) build + deps
 node_modules
 dist

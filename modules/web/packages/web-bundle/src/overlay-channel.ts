@@ -42,9 +42,9 @@ const layersByHost = new WeakMap<BundleHost, Map<string, OverlayLayer>>();
 function layersOf(host: BundleHost): Map<string, OverlayLayer> | null {
   const existing = layersByHost.get(host);
   if (existing) return existing;
-  // An older host has no `layer` door at all; a newer one without a layer
-  // sink answers false.
-  if (typeof host.overlay?.layer !== "function" || !host.supports("overlay.layers@1")) return null;
+  // The `layer` door is always there; a host with no layer sink answers
+  // false (the layer would drop its shapes).
+  if (!host.supports("overlay.layers@1")) return null;
   const made = new Map<string, OverlayLayer>();
   for (const id of CHANNELS) made.set(id, host.overlay.layer(id));
   layersByHost.set(host, made);

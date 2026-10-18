@@ -29,10 +29,8 @@
 //
 // Everything runs against the REAL engine (the `appearance-panel.spec.ts`
 // doctrine: the provider is the whole surface, so testing it needs no
-// DOM). The provider is driven directly because THIS repo installs
-// plugin-api/plugin-sdk 0.2.25-canary.0, which predates phase A — so
-// `registerBindingProvider` correctly returns `null` here, and that
-// honest degradation is itself asserted below.
+// DOM). The provider is driven directly; its registration through the
+// headless host's door is asserted first.
 
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 
@@ -49,10 +47,6 @@ import {
   siblingsOf,
   type DrawObjectRow,
 } from "../../src/binding-provider/layers-provider";
-import {
-  registerBindingProvider,
-  supportsBindingProviders,
-} from "../../src/binding-provider/adr023-seam";
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { openHost } from "./host";
 
@@ -123,40 +117,16 @@ describe("draw conformance — the Layers binding provider (ADR 023)", () => {
     );
   });
 
-  it("the INSTALLED host serves the ADR-023 door — the provider REGISTERS", () => {
-    // THIS ASSERTION USED TO BE `.toBe(false)`: `0.2.25-canary.0`
-    // predated ADR 023 phase A, so the door was absent and the only
-    // honest thing this seam could do was answer `null`.
-    //
-    // The `0.2.28-canary.0` repin closed that. `contribute.bindingProvider`
-    // is on the published `BundleHost` AND the SDK harness injects a
-    // registry, so paged.draw's Layers provider now actually registers —
-    // which is the whole point of ADR 023, and was untestable here until
-    // the bump.
-    expect(supportsBindingProviders(h.host)).toBe(true);
+  it("the headless host serves the ADR-023 door — the provider REGISTERS", () => {
+    // `contribute.bindingProvider` is on the contract AND the SDK harness
+    // injects a registry, so paged.draw's Layers provider actually
+    // registers — which is the whole point of ADR 023.
+    expect(h.host.supports("bindings.provider@1")).toBe(true);
     const { provider } = makeLayersBindingProvider(h.host);
-    const handle = registerBindingProvider(h.host, "vectorGraphic", provider);
-    expect(handle).not.toBeNull();
+    const handle = h.host.contribute.bindingProvider("vectorGraphic", provider);
     // The handle is the rollback lever ADR-023 phase D depends on.
-    expect(typeof handle!.invalidate).toBe("function");
-    handle!.dispose();
-  });
-
-  it("degrades honestly on a host with no binding-provider registry", () => {
-    // Still a REAL case — an editor older than this SDK — and still the
-    // required behaviour: answer `null`, do not throw, and do not
-    // register something nothing will consult. It just needs a synthetic
-    // host to reach now that the installed one has the door.
-    const oldHost = {
-      ...h.host,
-      supports: (feature: string) =>
-        feature === "bindings.provider@1" ? false : h.host.supports(feature),
-    } as unknown as typeof h.host;
-    expect(supportsBindingProviders(oldHost)).toBe(false);
-    const { provider } = makeLayersBindingProvider(oldHost);
-    expect(registerBindingProvider(oldHost, "vectorGraphic", provider)).toBe(
-      null,
-    );
+    expect(typeof handle.invalidate).toBe("function");
+    handle.dispose();
   });
 
   // ------------------------------------------------------- collection

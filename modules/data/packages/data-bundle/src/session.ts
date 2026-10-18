@@ -50,6 +50,7 @@ import {
 } from "../../data-host-model/src";
 
 import { bootEngine, ENGINE_NOT_BUILT, ingestColumnBatch, type DataEngineLike } from "./engine";
+import { hostWasm } from "./bin-url";
 import { reviewMethods, type ReviewSession } from "./review";
 import {
   DATA_PART_DIR,
@@ -75,7 +76,6 @@ import { propertyMethods, type PropertyMethods } from "./property-session";
 import { objectsOf } from "./property-lane";
 import { readTextVariableFields, textVariablesOn } from "./text-variables";
 import { contentPatch, type PayloadJson } from "./labels";
-import { documentLabelDoors, documentsDoors, engineHasDocumentLabels } from "./doors";
 import {
   mergeRecords as writeMerge,
   readMergeTemplate,
@@ -86,7 +86,6 @@ import {
 } from "./merge";
 import { documentElements, planRelower, type RelowerTarget } from "./relower";
 import { bootDuckDB, DUCKDB_NOT_VENDORED, type DuckDBHandle } from "./query/duckdb";
-import { wasmResolver } from "./module-door";
 import {
   formatOfFile,
   loadIntoDuckDB,
@@ -491,6 +490,12 @@ export interface DataMergeExport {
 export const NO_NEW_DOCUMENT_DOOR =
   "this editor version cannot open a second document — merge into the current document instead";
 
+/** Whether the host wired a documents backend (D-26: `exportPaged` and
+ *  `open`); without one both doors reject. */
+export function hasDocumentsDoors(host: BundleHost): boolean {
+  return host.supports("documents.open@1") && host.supports("documents.exportPaged@1");
+}
+
 /** The session API the panels + commands drive. */
 export interface DataSourceSession extends ReviewSession, PropertyMethods {
   getState(): SessionState;
@@ -859,10 +864,11 @@ interface QueryDef {
  *  free (the engines boot lazily on first use) so `activate` stays light. */
 export function createSession(rawHost: BundleHost, today: number): DataSourceSession {
   // The document label naming the live session version (engine protocol 69,
-  // doc-label.ts). `labelActive` is probed once per document; `labelHash` is
-  // the version the document's label names as far as this session knows;
-  // `pendingLabel` is the version the next document write carries.
-  let labelActive: boolean | null = null;
+  // doc-label.ts). `labelActive` is true until a write refuses the label (it
+  // is reset when another document opens); `labelHash` is the version the
+  // document's label names as far as this session knows; `pendingLabel` is
+  // the version the next document write carries.
+  let labelActive = true;
   let labelHash: string | null = null;
   let pendingLabel: string | null = null;
   /** The session version that was live while the document's label named
@@ -887,18 +893,9 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
   /** ADR 559: the document-scope recipe the document label carries (set
    *  when the session part is written; fitted to the label budget). */
   let labelRecipe: unknown = null;
-  /** Whether this document's session is labelled (the SDK forwards the label
-   *  doors and the engine has them). Probed once per document, as the
-   *  session starts and when another document opens, so no command pays for
-   *  it; no host call at all when the SDK lacks the doors. */
-  let labelProbe: Promise<boolean> = engineHasDocumentLabels(rawHost);
   // ADR 559: whether variables are placed as text variables (protocol 71),
   // asked now so no command pays for the first answer.
   void textVariablesOn(rawHost);
-  async function labelOn(): Promise<boolean> {
-    if (labelActive === null) labelActive = await labelProbe;
-    return labelActive;
-  }
   const sourceNames: string[] = [];
   const queries = new Map<string, QueryDef>();
   const bindingIds: string[] = [];
@@ -1226,7 +1223,7 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         if (!built || epoch !== docEpoch) return;
         labelRecipe = fitRecipe(built.engine);
         const version = encodeSession(built);
-        const labels = (await labelOn()) && epoch === docEpoch;
+        const labels = labelActive && epoch === docEpoch;
         // Protocol 69: the part records the version the label names (`base`).
         const text = labels ? withBase(new TextDecoder().decode(version), labelHash) : new TextDecoder().decode(version);
         if (text !== lastWritten) {
@@ -1299,8 +1296,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     options: SessionMergeOptions,
     fail: (message: string) => MergeResult,
   ): Promise<MergeResult> {
-    const docs = documentsDoors(rawHost);
-    if (!docs) return fail(NO_NEW_DOCUMENT_DOOR);
+    if (!hasDocumentsDoors(rawHost)) return fail(NO_NEW_DOCUMENT_DOOR);
+    const docs = rawHost.documents;
     const pageId = options.pageId ?? (await startPage());
     if (!pageId) return fail("no template page");
     // The template must be readable here before the copy is made.
@@ -1353,17 +1350,15 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
   /** Before a document write: write a pending session change now, so the
    *  write carries the label naming it. Nothing to do without labels. */
   async function settleLabel(): Promise<void> {
-    if (persistTimer && (await labelOn())) await flushPersistInternal();
+    if (persistTimer && labelActive) await flushPersistInternal();
   }
 
   /** After an undo or redo: if the document's label now names another
    *  session version, reload that version (the session follows undo). */
   async function followLabel(): Promise<void> {
-    const doors = documentLabelDoors(rawHost);
-    if (!doors) return;
     let named: string | null;
     try {
-      named = labelledVersion(await doors.getDocumentMetadata());
+      named = labelledVersion(await rawHost.document.getDocumentMetadata());
     } catch {
       return;
     }
@@ -1658,7 +1653,7 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     if (engine) return engine;
     try {
       const e = await bootEngine(today, {
-        resolveWasm: wasmResolver(rawHost),
+        resolveWasm: hostWasm(rawHost),
         onFallback: (reason) => rawHost.log.warn(reason),
       });
       try {
@@ -1699,7 +1694,7 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     if (duck) return duck;
     try {
       const d = await bootDuckDB({
-        resolveWasm: wasmResolver(rawHost),
+        resolveWasm: hostWasm(rawHost),
         onFallback: (reason) => rawHost.log.warn(reason),
       });
       duck = d;
@@ -1942,9 +1937,12 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
    *  rebuilds a session whose part is gone) — read once per open. */
   let openedDocLabel: unknown = undefined;
   async function labelledSession(latest: Uint8Array | null): Promise<Uint8Array | null> {
-    const doors = documentLabelDoors(rawHost);
-    if (!doors) return latest;
-    const envelope = await doors.getDocumentMetadata().catch(() => null);
+    let envelope: unknown = null;
+    try {
+      envelope = await rawHost.document.getDocumentMetadata();
+    } catch {
+      envelope = null;
+    }
     openedDocLabel = envelope;
     const named = labelledVersion(envelope);
     labelHash = named;
@@ -2161,32 +2159,25 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
   }
 
   // Save hook + undo/redo follow-up, held for dispose.
-  const hostSubs: Disposable[] = [];
-  if (typeof host.document?.onWillSave === "function") {
-    hostSubs.push(
-      host.document.onWillSave(async () => {
-        await flushPersistInternal();
-        await collectDataParts();
-        // ADR 559: the recipe also lives in the elements' labels (the first
-        // save of a session written before them adds them).
-        await props.syncLabels().catch(() => ({ written: 0 }));
-      }),
-    );
-  }
-  if (typeof host.document?.onDidChange === "function") {
-    hostSubs.push(
-      host.document.onDidChange((ev) => {
-        docChanges += 1;
-        // Undo/redo can take a placed field away or bring it back; a stale
-        // "placed" would make Lower skip placing it again. It can also take
-        // the session label back: the session follows it.
-        if (ev.kind === "undoApplied" || ev.kind === "redoApplied") {
-          void reconcilePlaced();
-          if (labelActive) void followLabel();
-        }
-      }),
-    );
-  }
+  const hostSubs: Disposable[] = [
+    host.document.onWillSave(async () => {
+      await flushPersistInternal();
+      await collectDataParts();
+      // ADR 559: the recipe also lives in the elements' labels (the first
+      // save of a session written before them adds them).
+      await props.syncLabels().catch(() => ({ written: 0 }));
+    }),
+    host.document.onDidChange((ev) => {
+      docChanges += 1;
+      // Undo/redo can take a placed field away or bring it back; a stale
+      // "placed" would make Lower skip placing it again. It can also take
+      // the session label back: the session follows it.
+      if (ev.kind === "undoApplied" || ev.kind === "redoApplied") {
+        void reconcilePlaced();
+        if (labelActive) void followLabel();
+      }
+    }),
+  ];
 
   /** Re-resolve one variable binding and write its placed field(s) — the
    *  single-binding half of `refreshFields`, for accept-source, a changed
@@ -2244,7 +2235,7 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
     ...props,
     async beforeObjectWrite() {
       preObjectWrite = null;
-      if (labelHash !== null || !(await labelOn())) return;
+      if (labelHash !== null || !labelActive) return;
       await flushPersistInternal();
       preObjectWrite = persistence.hash;
     },
@@ -2253,7 +2244,7 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
       preObjectWrite = null;
       const ops = await props.planLabelOps();
       if (ops.length === 0) return [];
-      if (!(await labelOn())) return ops;
+      if (!labelActive) return ops;
       await flushPersistInternal();
       const hash = pendingLabel;
       if (!hash) return ops;
@@ -3649,8 +3640,8 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
 
     async exportDataMergeTemplate(opts = {}) {
       const fail = (reason: string): DataMergeExport => ({ ok: false, reason, fields: [], skipped: [] });
-      const docs = documentsDoors(rawHost);
-      if (!docs) return fail("this host cannot export the document (documents.exportPaged)");
+      if (!hasDocumentsDoors(rawHost)) return fail("this host cannot export the document (documents.exportPaged)");
+      const docs = rawHost.documents;
       let e: DataEngineLike;
       try {
         e = await ensureEngine();
@@ -3843,7 +3834,7 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
         mergeId,
         clear: plan.remove,
         templatePresent,
-        pageHandles: await labelOn(),
+        pageHandles: labelActive,
       });
       if (result.ok) mergeTemplates.set(mergeId, template);
       for (const d of result.diagnostics) {
@@ -3933,8 +3924,7 @@ export function createSession(rawHost: BundleHost, today: number): DataSourceSes
 
     async documentOpened() {
       await resetState();
-      labelActive = null;
-      labelProbe = engineHasDocumentLabels(rawHost);
+      labelActive = true;
       labelHash = null;
       unlabelledBase = null;
       knownVersions.clear();

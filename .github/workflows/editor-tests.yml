@@ -1,22 +1,25 @@
 name: editor / tests
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Editor Playwright surface → state-matrix evidence (W0.5).
 #
-# Decision-B model: the engine wasm ships in the published
-# `@paged-media/canvas-wasm` package, so `pnpm install` is the whole
-# engine setup — no `core` checkout, no build-from-source bridge. The
-# vite dev server (spawned by playwright.config's `webServer`) sets the
-# COOP/COEP headers SharedArrayBuffer needs; that middleware runs in the
-# server process and works headless, so the chromium runner gets a
+# Workspace model: the editor depends on the engine's wasm packages
+# (engine/core/packages/*), every module bundle, the extension contract and
+# ai through `workspace:*`, and consumes them from this checkout. Their build
+# outputs are gitignored, so the jobs build them first:
+# .github/actions/engine-wasm fills the engine's packages and
+# .github/actions/module-wasm the bundles' engine wasm (doc, slide, sheet,
+# data, web, draw, image and publish's pdf mapper; pdf's pdfium is a
+# committed third-party prebuilt). Both
+# restore from actions/cache when their sources are unchanged. The vite dev
+# server (spawned by playwright.config's `webServer`) sets the COOP/COEP
+# headers SharedArrayBuffer needs; that middleware runs in the server
+# process and works headless, so the chromium runner gets a
 # cross-origin-isolated context with no extra flags.
-#
-# Plugin bundles: `apps/canvas/package.json` consumes every plugin package
-# (@paged-media/plugin-api, plugin-sdk, draw, web, data, sheet, image,
-# publish, pdf) as PUBLISHED npm versions — the historical pnpm `link:`
-# sibling chain is gone, so `pnpm install` alone resolves all plugins with
-# no sibling checkouts. (The link:-era sibling checkout/install lattice —
-# and the build-image-wasm artifact lane — are gone: every published
-# bundle is self-contained, @paged-media/image ships its own wasm.)
 #
 # Scope: the behaviour surface (panels + gesture + e2e op-sandwiches),
 # NOT the Envato fidelity gate. That gate needs the 4.4 GB
@@ -65,34 +68,65 @@ on:
     branches: [main]
     paths:
       - "apps/editor/**"
-      - "modules/doc/**"
-      - "modules/slide/**"
-      - "engine/core/crates/paged-gen/**"
-      - ".github/actions/plugin-doc-from-source/**"
-      - ".github/actions/plugin-slide-from-source/**"
+      # Everything the editor consumes through the workspace: every module
+      # bundle (and the Rust it builds its wasm from), the extension
+      # contract and ai, and the engine's wasm packages with what builds
+      # them (paged-gen, the fixture generator, is under crates/ too).
+      - "modules/**"
+      - "platform/extensions/packages/**"
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - "tooling/js/check-workspace-deps.mjs"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/module-wasm/**"
+      - ".github/actions/wasm-tools/**"
       - ".github/workflows/editor-tests.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!apps/editor/docs/**/*.md"
+      # Module prose (B3a made every module an editor input).
+      - "!modules/*/docs/**/*.md"
   pull_request:
     paths:
       - "apps/editor/apps/canvas/**"
       - "apps/editor/packages/**"
-      - "apps/editor/pnpm-lock.yaml"
       - "apps/editor/package.json"
       - "apps/editor/eslint.config.mjs"
       - "apps/editor/scripts/**"
-      - "modules/doc/**"
-      - "modules/slide/**"
-      - "engine/core/crates/paged-gen/**"
-      - ".github/actions/plugin-doc-from-source/**"
-      - ".github/actions/plugin-slide-from-source/**"
+      # Everything the editor consumes through the workspace: every module
+      # bundle (and the Rust it builds its wasm from), the extension
+      # contract and ai, and the engine's wasm packages with what builds
+      # them (paged-gen, the fixture generator, is under crates/ too).
+      - "modules/**"
+      - "platform/extensions/packages/**"
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - "tooling/js/check-workspace-deps.mjs"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/module-wasm/**"
+      - ".github/actions/wasm-tools/**"
       - ".github/workflows/editor-tests.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
+      # Module prose (B3a made every module an editor input).
+      - "!modules/*/docs/**/*.md"
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: editor-tests-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:
@@ -115,62 +149,122 @@ jobs:
   checks:
     name: checks (lint + boundaries + boot-coi + thresholds)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Seconds of checks; a cold engine or module wasm build (a cache miss)
+    # takes the rest.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
 
-      # action-setup reads the editor's `packageManager: pnpm@9.0.0` from
-      # apps/editor/package.json (the monorepo root has no package.json, and
-      # `uses:` steps ignore the working-directory default). Do NOT also pass
-      # a `version:` input — pnpm/action-setup@v4 errors ("Multiple versions
-      # of pnpm specified: ERR_PNPM_BAD_PM_VERSION") when both a `version`
-      # input and a readable `packageManager` field are present. The
-      # playwright/publish jobs below pass `version: 9` instead, as before.
-      - uses: pnpm/action-setup@v4
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          package_json_file: apps/editor/package.json
-
-      - uses: actions/setup-node@v4
+          auto-install: true
+          proto-version: "0.63.1"
+      - name: cache Bun's package cache
+        uses: actions/cache@v4
         with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: apps/editor/pnpm-lock.yaml
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
-      - name: install (editor root)
-        run: pnpm install --frozen-lockfile
+      # One install for the whole root workspace (bun.lock).
+      - name: bun install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
+
+      # Nothing first-party resolves from npm: every manifest names the
+      # workspace packages with `workspace:`, and bun.lock resolves them to
+      # the workspace.
+      - name: first-party packages come from the workspace
+        working-directory: .
+        run: node tooling/js/check-workspace-deps.mjs
+
+      # The engine's wasm packages and the bundles' engine wasm: the
+      # typecheck reads canvas-wasm's .d.ts, and the wasm budget and the
+      # module door measure the wasm the app ships.
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
+      - name: module wasm (doc)
+        uses: ./.github/actions/module-wasm
+        with: { module: doc }
+      - name: module wasm (slide)
+        uses: ./.github/actions/module-wasm
+        with: { module: slide }
+      - name: module wasm (sheet)
+        uses: ./.github/actions/module-wasm
+        with: { module: sheet }
+      - name: module wasm (data)
+        uses: ./.github/actions/module-wasm
+        with: { module: data }
+      - name: module wasm (web)
+        uses: ./.github/actions/module-wasm
+        with: { module: web }
+      - name: module wasm (draw)
+        uses: ./.github/actions/module-wasm
+        with: { module: draw }
+      - name: module wasm (image)
+        uses: ./.github/actions/module-wasm
+        with: { module: image }
+      - name: module wasm (publish)
+        uses: ./.github/actions/module-wasm
+        with: { module: publish }
+
+      # The editor's typecheck. It ran only in the Playwright job, after the
+      # private corpus checkout, which a missing repository secret stops;
+      # here it gates every run. The packages/* have no build step (they
+      # are consumed as workspace TS source).
+      - name: typecheck canvas app
+        run: bun run --filter ./apps/canvas typecheck
+
+      # The TEST TREE, which was outside every static gate until
+      # 2026-08-24. `apps/canvas/tsconfig.json` includes only `src` and
+      # `vite.config.ts`, so several hundred Playwright specs compiled
+      # nowhere and the first thing able to notice a broken one was the
+      # runner. That cost a red main: a CLEAN auto-merge (no conflict on
+      # either side) deleted a `const after = …` in one commit while
+      # another added a line that read it, and typecheck + build both
+      # passed on code that could not run.
+      - name: typecheck canvas tests
+        run: bun run --filter ./apps/canvas typecheck:tests
 
       # ESLint architecture boundaries (eslint.config.mjs is boundaries-only,
       # not style) + the fixtures proving each zone actually fires.
       - name: lint (architecture boundaries)
-        run: pnpm lint
+        run: bun run lint
 
       - name: lint boundaries self-test
-        run: pnpm lint:boundaries-selftest
+        run: bun run lint:boundaries-selftest
 
       # The COOP/COEP boot contract SharedArrayBuffer needs (pairs with
       # apps/canvas/public/_headers).
       - name: boot cross-origin-isolation check
-        run: pnpm test:boot-coi
+        run: bun run test:boot-coi
 
       # The D-03 network wall (ADR 218): exact build-time data origins only,
       # and the committed _headers floor in lock-step with the module.
       - name: network policy (connect-src)
-        run: pnpm test:network-policy
+        run: bun run test:network-policy
 
       # The module door (ADR 223): what the editor answers host.modules, and
       # the build-time module manifest it answers from.
       - name: module door (module manifest)
-        run: pnpm test:modules
+        run: bun run test:modules
 
       # Selection chrome on the pasteboard: where a page sits in its spread,
       # from the page summaries (engine 0.71.13) or the older fallback.
       - name: pasteboard placement (spread pages)
-        run: pnpm test:spread-pages
+        run: bun run test:spread-pages
+
+      # The local library (ADR 225) against the repository wasm of this
+      # revision: import, versions, restore, history in and out. Its
+      # server tests (remote.test.ts) skip without PAGED_SERVER_URL.
+      - name: local library (packages/repository)
+        run: bun run test:repository
 
       # Every gated fidelity pack must carry a threshold entry, or the
       # fidelity gate silently skips it.
       - name: fidelity thresholds schema
-        run: pnpm test:thresholds
+        run: bun run test:thresholds
 
       # The app-wide wasm budget: 100 MB for the editor AND every plugin
       # together (2026-08-19). Every other wasm ceiling in the platform is
@@ -183,7 +277,7 @@ jobs:
         # still exits on the budget. Deliberately not `--json | tee`: a pipe
         # replaces this step's exit code with tee's, which would turn the
         # budget gate into a gate that always passes.
-        run: pnpm test:wasm-budget --json-out "$RUNNER_TEMP/paged-measurements-wasm.json"
+        run: bun run test:wasm-budget --json-out "$RUNNER_TEMP/paged-measurements-wasm.json"
 
       # The number, kept. The gate above answers "are we under 100 MB today";
       # only a series answers "which way is it moving, and how fast". Uploaded
@@ -201,17 +295,17 @@ jobs:
       # every contribution the loaded plugin bundles inject, must be named
       # by some spec or sit under a per-kind ceiling that only ever falls.
       - name: editor surface coverage
-        run: pnpm test:surface-coverage
+        run: bun run test:surface-coverage
       # A seam may not outlive the gap it names: a capability lands and
       # the UI still says it is missing, which is the same lie as
       # claiming an unbuilt feature works, only harder to notice.
       - name: seam guard
-        run: pnpm test:seam-guard
+        run: bun run test:seam-guard
       # One vocabulary for "this doesn't apply here". The four rules that
       # existed were four independent reasonable decisions, which is why
       # no review caught them — there was nothing for them to disagree with.
       - name: applicability vocabulary
-        run: pnpm test:applicability
+        run: bun run test:applicability
       # Solo profiles are ALLOW-lists, which is the right direction (a
       # deny-list leaks every new host panel into every profile) and buys
       # the opposite failure: a panel renamed host-side silently DROPS
@@ -219,7 +313,7 @@ jobs:
       # id against the code that registers it. Written after a first
       # draft named a draw "layers" panel that has never existed.
       - name: solo profiles resolve
-        run: pnpm test:solo-profiles
+        run: bun run test:solo-profiles
       # A `@feat:` tag that matches no registry row covers NOTHING, and
       # says so nowhere: the join files it as drift in another repo and
       # the spec still passes. Twenty ids in this tree were in that state
@@ -230,14 +324,14 @@ jobs:
       # a token-gated read degrades to a skip. state's
       # `sync-feat-vocabulary.mjs --check` keeps the copy current.
       - name: feature-id vocabulary (@feat tags resolve)
-        run: pnpm test:feat-vocabulary
+        run: bun run test:feat-vocabulary
       # `packages/client` is the programmable SDK — the write surface the
       # read-only viewer SDK deliberately is not. Its api-catalog.json is
       # GENERATED from the source, so this step is two assertions at once:
       # the artifact is current, and no public member ships without a doc
       # comment to generate a summary from.
       - name: client SDK catalog is current
-        run: pnpm test:client-catalog
+        run: bun run test:client-catalog
 
   playwright:
     name: playwright (shard ${{ matrix.shard }}/3)
@@ -337,9 +431,8 @@ jobs:
       #
       # Provision them by building the `paged-gen` fixture generator from
       # the in-tree engine (engine/core) and emitting every sample into
-      # corpus/idml/generated. It does NOT touch the Decision-B *wasm*
-      # boundary (the engine still arrives as the published npm package —
-      # this only generates test fixtures).
+      # corpus/idml/generated. It only generates test fixtures; the engine's
+      # wasm comes from the engine-wasm step below.
       #
       # Pre-monorepo this was an UNPINNED checkout of paged-media/core's
       # default branch, with an ordering coupling (a core change had to be
@@ -353,10 +446,8 @@ jobs:
         if: runner.os == 'Linux'
         uses: rui314/setup-mold@v1
 
-      # Covers BOTH rust builds this job does: paged-gen (fixtures) and the
-      # paged.doc engine wasm. Without plugin-doc/target in here the doc
-      # wasm is a cold release build of a vendored-ooxmlsdk workspace on
-      # every single run — the thing this cache exists to prevent.
+      # paged-gen's build. The engine and module wasm builds have caches of
+      # their own (the engine-wasm and module-wasm actions).
       - name: cache cargo + paged-gen build
         uses: actions/cache@v4
         with:
@@ -365,7 +456,6 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin
             engine/core/target
-            modules/doc/target
           key: paged-rust-${{ runner.os }}-${{ hashFiles('engine/core/Cargo.lock') }}
           restore-keys: paged-rust-${{ runner.os }}-
 
@@ -412,52 +502,56 @@ jobs:
           done
           echo "corpus fixtures materialized OK"
 
-      # Pin pnpm: the monorepo root has no package.json for action-setup to
-      # read `packageManager` from — match the editor's pnpm@9.0.0
-      # explicitly. v9 reads every component's lockfile-v9 natively.
-      - uses: pnpm/action-setup@v4
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          version: 9
-
-      - uses: actions/setup-node@v4
+          auto-install: true
+          proto-version: "0.63.1"
+      - name: cache Bun's package cache
+        uses: actions/cache@v4
         with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: apps/editor/pnpm-lock.yaml
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
-      # @paged-media/doc and @paged-media/slide are consumed via pnpm
-      # `link:` overrides to the in-tree modules/doc and modules/slide
-      # bundles. The shared stopgap actions install those modules and build
-      # their wasm (no checkout: they are part of this repository). DROP
-      # them when the editor no longer links a build output.
-      - name: plugin-doc from source (in-tree modules/doc)
-        uses: ./.github/actions/plugin-doc-from-source
-      - name: plugin-slide from source (in-tree modules/slide)
-        uses: ./.github/actions/plugin-slide-from-source
+      # One install for the whole root workspace (bun.lock).
+      - name: install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
 
-      - name: install editor (engine wasm + all plugin bundles resolve from npm)
-        run: pnpm install --frozen-lockfile
-
-      # The Playwright surface runs against the vite DEV server
-      # (playwright.config `webServer: npx vite`), so no production build
-      # is needed — but typecheck the canvas app so a wire/type break
-      # fails fast here rather than as an opaque runtime error mid-suite.
-      # (`pnpm -r build` is avoided: the `packages/*` have no build step
-      # — they're consumed as workspace TS source — and `apps/devtools`
-      # would pull in the unrelated introspect-wasm build.)
-      - name: typecheck canvas app
-        run: pnpm --filter ./apps/canvas run typecheck
-
-      # The TEST TREE, which was outside every static gate until
-      # 2026-08-24. `apps/canvas/tsconfig.json` includes only `src` and
-      # `vite.config.ts`, so several hundred Playwright specs compiled
-      # nowhere and the first thing able to notice a broken one was the
-      # runner. That cost a red main: a CLEAN auto-merge (no conflict on
-      # either side) deleted a `const after = …` in one commit while
-      # another added a line that read it, and typecheck + build both
-      # passed on code that could not run.
-      - name: typecheck canvas tests
-        run: pnpm --filter ./apps/canvas run typecheck:tests
+      # The engine and the bundles' engine wasm, as in `checks` (restored
+      # from the cache that job, or an earlier run, saved). The Playwright
+      # surface runs against the vite DEV server (playwright.config
+      # `webServer: npx vite`), whose import analysis resolves the bundles'
+      # relative wasm glue (sheet, web, doc, draw, image, pdf) at transform
+      # time. The typecheck runs in `checks`.
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
+        with: { artifact: "false" }
+      - name: module wasm (doc)
+        uses: ./.github/actions/module-wasm
+        with: { module: doc }
+      - name: module wasm (slide)
+        uses: ./.github/actions/module-wasm
+        with: { module: slide }
+      - name: module wasm (sheet)
+        uses: ./.github/actions/module-wasm
+        with: { module: sheet }
+      - name: module wasm (data)
+        uses: ./.github/actions/module-wasm
+        with: { module: data }
+      - name: module wasm (web)
+        uses: ./.github/actions/module-wasm
+        with: { module: web }
+      - name: module wasm (draw)
+        uses: ./.github/actions/module-wasm
+        with: { module: draw }
+      - name: module wasm (image)
+        uses: ./.github/actions/module-wasm
+        with: { module: image }
+      - name: module wasm (publish)
+        uses: ./.github/actions/module-wasm
+        with: { module: publish }
 
       # NO `--with-deps`. That flag shells out to `apt-get update` as root,
       # and on the ubuntu-24.04 runner that hangs: azure.archive.ubuntu.com
@@ -485,7 +579,8 @@ jobs:
         # "cancelled" — which is indistinguishable from a concurrency
         # cancel and is precisely why this went unnoticed.
         timeout-minutes: 10
-        run: pnpm --filter ./apps/canvas exec playwright install chromium
+        working-directory: apps/editor/apps/canvas
+        run: bunx --no-install playwright install chromium
 
       # --project is REQUIRED here, not tidiness. Without it Playwright
       # runs EVERY project in the config, which on a Linux runner means
@@ -588,19 +683,23 @@ jobs:
       - name: checkout repository
         uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          version: 9
-
-      - uses: actions/setup-node@v4
+          auto-install: true
+          proto-version: "0.63.1"
+      - name: cache Bun's package cache
+        uses: actions/cache@v4
         with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: apps/editor/pnpm-lock.yaml
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
-      # Only the canvas app's @playwright/test is needed for merge-reports.
-      - name: install (apps/canvas only)
-        run: pnpm install --frozen-lockfile --filter ./apps/canvas
+      # merge-reports needs only apps/canvas's @playwright/test; the root
+      # workspace installs as one.
+      - name: install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
 
       # all-blobs/ and playwright-results.json stay at the WORKSPACE root:
       # the merge step addresses both through ${{ github.workspace }}.
@@ -614,9 +713,9 @@ jobs:
       - name: merge shards → single Playwright JSON
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ github.workspace }}/playwright-results.json
+        working-directory: apps/editor/apps/canvas
         run: |
-          pnpm --filter ./apps/canvas exec \
-            playwright merge-reports --reporter=json ${{ github.workspace }}/all-blobs \
+          bunx --no-install playwright merge-reports --reporter=json ${{ github.workspace }}/all-blobs \
             > /dev/null
           test -s "${{ github.workspace }}/playwright-results.json"
 

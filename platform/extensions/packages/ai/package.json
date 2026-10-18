@@ -15,17 +15,17 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "build": "tsup src/index.ts src/proxy.ts src/engine-catalog.ts --format esm --target es2020 --dts --out-dir dist --clean",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.128.0"
   },
   "devDependencies": {
     "@paged-media/plugin-api": "workspace:*",
-    "@types/node": "20.19.39",
+    "@types/node": "catalog:",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
-    "vitest": "^2.1.9"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "files": [
     "dist",
@@ -57,7 +57,7 @@
     }
   },
   "peerDependencies": {
-    "@paged-media/plugin-api": ">=0.2.48-canary.0"
+    "@paged-media/plugin-api": "workspace:*"
   },
   "peerDependenciesMeta": {
     "@paged-media/plugin-api": {

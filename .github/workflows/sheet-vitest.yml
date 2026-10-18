@@ -1,4 +1,10 @@
-name: sheet / vitest
+name: sheet / bun test
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # MONOREPO (step A3): ported from paged-media/plugin-sheets
 # .github/workflows/vitest.yml. The old lane checked the repo out under
 # plugin-sheets/ beside a paged-media/sdk checkout and ran from their parent.
@@ -10,21 +16,55 @@ on:
     branches: [main]
     paths:
       - "modules/sheet/**"
+      # The extension contract the bundle builds against (workspace:*).
+      - "platform/extensions/packages/plugin-api/**"
+      - "platform/extensions/packages/plugin-sdk/**"
+      # The engine wasm packages this workflow builds against (workspace:*),
+      # and what builds them, so an engine change re-tests its consumers.
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
       - ".github/workflows/sheet-vitest.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/sheet/docs/**/*.md"
   # Pre-merge gate: a PR that breaks the bundle goes red BEFORE it lands
   # (this lane used to run on push to main only).
   pull_request:
     paths:
       - "modules/sheet/**"
+      # The extension contract the bundle builds against (workspace:*).
+      - "platform/extensions/packages/plugin-api/**"
+      - "platform/extensions/packages/plugin-sdk/**"
+      # The engine wasm packages this workflow builds against (workspace:*),
+      # and what builds them, so an engine change re-tests its consumers.
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
       - ".github/workflows/sheet-vitest.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/sheet/docs/**/*.md"
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: sheet-vitest-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:
@@ -32,20 +72,20 @@ defaults:
 
 jobs:
   vitest:
+    name: bun test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+          auto-install: true
+          proto-version: "0.63.1"
       # ------------------------------------------------------------------
-      # REAL-ENGINE artifact (audit P3). This lane used to run vitest with
+      # REAL-ENGINE artifact (audit P3). This lane used to run its unit tests with
       # no wasm artifact, so sheet-bundle's engine-real.spec.ts skipIf gate
       # skipped the real boot on EVERY CI — the rust lane builds the
-      # artifact but never runs vitest. Build it here (the exact recipe of
+      # artifact but never runs the unit tests. Build it here (the exact recipe of
       # rust.yml's `wasm` job: pinned toolchain, Cargo.lock-pinned
       # wasm-bindgen-cli, pinned binaryen) so the real boot actually runs;
       # REQUIRE_REAL_ENGINE=1 below makes a missing artifact FAIL, not skip.
@@ -60,6 +100,8 @@ jobs:
         with:
           workspaces: modules/sheet -> target
           prefix-key: v0-rust-sheet
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: install pinned wasm-bindgen-cli (Cargo.lock version)
         run: |
           V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
@@ -75,15 +117,21 @@ jobs:
       - name: real-engine artifact guard (fail, never skip)
         run: test -f packages/sheet-bundle/bin/sheet_js_bg.wasm
       # ------------------------------------------------------------------
-      - name: install (published contract; no sibling checkout needed)
-        run: pnpm install --frozen-lockfile
+      # The engine's wasm packages (canvas-wasm and the rest, workspace:*),
+      # which the real-engine specs boot.
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
+      # One install for the whole root workspace (bun.lock).
+      - name: bun install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
       - name: contract-import lint (fail fast)
         run: node scripts/check-contract-imports.mjs
       # A red spec FAILS this job. It used to end in `|| true` (so red
       # results would still be published as evidence), which also meant the
       # TS lane could never go red: a failing spec merged green. Evidence
       # still ships — the JUnit steps below run under `!cancelled()`.
-      - name: vitest (junit per package)
+      - name: bun test (junit per package)
         env:
           # The spec-level half of the dual gate (engine-real.spec.ts,
           # wasm-fresh.spec.ts, session-persist.spec.ts): under this env a
@@ -91,12 +139,14 @@ jobs:
           # gate silently pass a vacuous run.
           REQUIRE_REAL_ENGINE: "1"
         run: |
-          pnpm -r --no-bail exec \
-            vitest run --reporter=default --reporter=junit --outputFile.junit=junit.xml
+          bun run --filter './packages/*' test \
+            --reporter=junit --reporter-outfile=junit.bun.xml
+      # bun's reports, rewritten into the vitest shape the evidence has always
+      # had (tooling/js/bun-junit.mjs): the artifact keeps its name and test ids.
       - name: collect junit
         if: ${{ !cancelled() }}
         run: |
-          cat packages/*/junit.xml > junit-all.xml
+          bun ../../tooling/js/bun-junit.mjs --out junit-all.xml packages/*/junit.bun.xml
           [ -s junit-all.xml ]
       # Evidence hand-off, INVERTED (2026-07-25). This step used to call
       # paged-media/state/actions/publish-results@main, but that action lives in the
@@ -108,7 +158,7 @@ jobs:
       # and let state PULL it (private state can read a public repo's artifacts).
       # Consumer: state/.github/workflows/siblings-pull.yml (source=plugin-sheets,
       # suite=vitest, format=nextest-junit).
-      - name: upload vitest results artifact
+      - name: upload JUnit results artifact
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:

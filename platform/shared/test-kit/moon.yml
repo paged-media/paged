@@ -1,0 +1,14 @@
+$schema: '../../../.moon/cache/schemas/project.json'
+
+# @paged-media/test-kit: the internal, runner-agnostic test helpers of the
+# built-in modules (docs/adr/PM-0002), a private package of the root Bun
+# workspace. js-check and js-test are the inherited `bun run typecheck` and
+# `bun run test`.
+language: 'typescript'
+layer: 'library'
+stack: 'frontend'
+tags: ['node', 'shared']
+
+project:
+  title: 'platform/shared/test-kit'
+  description: 'Internal test helpers (waitFor, stubGlobal, importActual, async fake-timer steps); never published.'

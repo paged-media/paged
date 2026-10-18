@@ -22,7 +22,7 @@
 // rule-offset math, op ordering, the $created sentinel, and the
 // tab/newline join (incl. empty cells). Pure data in, mutations out.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   joinText,

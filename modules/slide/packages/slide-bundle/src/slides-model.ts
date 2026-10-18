@@ -340,14 +340,14 @@ export async function newSlide(
   const storiesBefore = new Set(
     (await doc.collection<{ selfId: string }>("stories")).map((s) => s.selfId),
   );
-  const pagesBefore = new Set((await doc.collection<{ selfId: string }>("pages")).map((p) => p.selfId));
   const dup = await doc.mutate(duplicateMutation(layout.templatePageId));
   if (!dup.applied) return null;
-
+  // The engine names the copy; the page list says where it landed.
+  const pageId = dup.createdPages?.[0];
+  if (!pageId) return null;
   const pages = await doc.collection<{ selfId: string }>("pages");
-  const index = pages.findIndex((p) => !pagesBefore.has(p.selfId));
+  const index = pages.findIndex((p) => p.selfId === pageId);
   if (index < 0) return null;
-  const pageId = pages[index].selfId;
 
   // The copy's items: the tree lists spreads in page order, one page each.
   const tree = (await doc.tree()) as TreeNode[];

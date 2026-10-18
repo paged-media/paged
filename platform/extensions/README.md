@@ -41,8 +41,8 @@ the published engine. What ships and what does not is in
 [`docs/status.md`](./docs/status.md).
 
 ```bash
-pnpm install
-pnpm -r typecheck
+bun install
+bun run typecheck
 node packages/plugin-cli/bin/paged-plugin.mjs validate <path/to/manifest.json>
 ```
 

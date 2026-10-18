@@ -22,7 +22,7 @@
 // undo step that changes the poured text AND the .docx the label names, and
 // one `document.undo()` takes both back.
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -178,9 +178,9 @@ describe.skipIf(!docxPresent)("doc conformance — object model (real host + rea
   // story read-back on the .docx, and the engine hands back runs it COALESCED
   // (same style), which the run diff turns into inserts and deletes; the
   // wrapped field runs cannot be deleted, so the paragraph's text comes out
-  // twice. It happens to an UNEDITED document with fields. `it.fails` keeps
+  // twice. It happens to an UNEDITED document with fields. `it.failing` keeps
   // the lane green and flips red the day save-back is fixed.
-  it.fails("export of an unedited letter keeps its text once (save-back overlay duplicates coalesced runs)", async () => {
+  it.failing("export of an unedited letter keeps its text once (save-back overlay duplicates coalesced runs)", async () => {
     const exported = (await h.objects.invoke("media.paged.doc.command.exportDocx", { document: doc })) as {
       bytes: Uint8Array;
     };

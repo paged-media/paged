@@ -19,7 +19,7 @@ scripts/indesign/
   lib/write-fixture.mjs     judges InDesign's reply, adds the stacking order, writes the recording
 packages/draw-bundle/test/roundtrip/
   author.ts                 one document per Tier-A row, built through draw's real surfaces
-  generate.spec.ts          writes <case>.idml (env-gated: never in `pnpm test`)
+  generate.spec.ts          writes <case>.idml (env-gated: never in `bun run test`)
   roundtrip.spec.ts         OUR model vs InDesign's reading, every difference classified
   reimport.spec.ts          InDesign's OWN export re-imported into the engine
   findings.ts               what every difference IS (defect / convention / expected loss)
@@ -86,8 +86,8 @@ Every finding is written up, with both values and a sentence, in
 
 ```bash
 # 1. the IDML (only when the authoring or the engine changed)
-PAGED_ROUNDTRIP_WRITE=pen-closed pnpm --filter @paged-media/draw exec \
-  vitest run test/roundtrip/generate.spec.ts
+(cd packages/draw-bundle && PAGED_ROUNDTRIP_WRITE=pen-closed bunx vitest \
+  run test/roundtrip/generate.spec.ts)
 
 # 2. ask InDesign (takes the app for a few seconds)
 F=packages/draw-bundle/test/fixtures/roundtrip
@@ -98,7 +98,7 @@ PAGED_RT_REEXPORT=$F/pen-closed.indesign.idml \
   bash scripts/indesign/run-roundtrip.sh $F/pen-closed.idml $F/pen-closed.indesign.json
 
 # 3. replay
-pnpm --filter @paged-media/draw exec vitest run test/roundtrip
+(cd packages/draw-bundle && bunx vitest run test/roundtrip)
 ```
 
 The runner prints where it left the PDF InDesign exported of the page —

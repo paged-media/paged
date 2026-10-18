@@ -24,7 +24,7 @@
 // coverage plane reaching the selection through the channel door, under
 // every combine mode) is proven over the REAL wasm in selection.spec.ts.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   coverageToRgba8,

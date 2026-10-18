@@ -1,7 +1,7 @@
 $schema: '../../.moon/cache/schemas/project.json'
 
-# paged.doc: a Cargo workspace (docx-*, paged-ooxml) and a pnpm workspace
-# (doc-bundle, doc-host-model). apps/editor links doc-bundle from source.
+# paged.doc: a Cargo workspace (docx-*, paged-ooxml) and JS packages
+# (doc-bundle, doc-host-model). apps/editor builds doc-bundle from source.
 language: 'rust'
 layer: 'library'
 stack: 'systems'
@@ -19,7 +19,7 @@ dependsOn:
 tasks:
   js-lint:
     description: 'The contract-import guard (scripts/check-contract-imports.mjs).'
-    command: 'pnpm run lint:contract'
+    command: 'bun run lint:contract'
     inputs:
       - '@group(js-sources)'
 
@@ -35,5 +35,5 @@ tasks:
       - 'packages/doc-bundle/bin/docx_js*'
     options:
       # Needs wasm-bindgen-cli at the Cargo.lock version; doc-rust and the
-      # editor's from-source action build it in CI.
+      # editor's module-wasm action (.github/actions/module-wasm) build it in CI.
       runInCI: 'skip'

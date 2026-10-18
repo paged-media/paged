@@ -28,7 +28,7 @@ Everything about how the plugin is designed and built is in [`docs/`](./docs/REA
 | `@paged-media/draw-geometry` | pure path math, zero deps: Bézier split / closest-t / flatten, RDP, compound winding, arc-length placement, affine, SVG path / arc / document parsing |
 | `@paged-media/draw-tools` | host-agnostic state machines (pen, anchor edit, pencil, curvature, brush, width, shape builder, live paint, measure, corner radius, repeat) — points in, snapshots and plans out |
 | `@paged-media/draw` (`packages/draw-bundle`) | the published bundle: `manifest.json` (id `media.paged.draw` — 19 tools, 11 panels, 101 commands, SVG import/export, 7 `.paged` part types) + `activate(host)`, gesture handlers, commands, panels |
-| `crates/draw-trace`, `crates/trace-js` | the Image Trace kernel (Rust → wasm, over `visioncortex`); the built artifact is committed in `packages/draw-bundle/wasm/` |
+| `crates/draw-trace`, `crates/trace-js` | the Image Trace kernel (Rust → wasm, over `visioncortex`); `scripts/build-wasm.sh` (`moon run draw:wasm`) builds it into `packages/draw-bundle/wasm/` (gitignored) |
 
 `panels/*.panel.json` are **design prototypes** (not interpreted by any
 host).
@@ -41,10 +41,10 @@ No sibling checkout is needed: the plugin contract
 `packages/draw-bundle/package.json`.
 
 ```bash
-pnpm install
-pnpm test           # contract-import lint + vitest in every package
-pnpm typecheck      # includes the wire-compat assertions against plugin-api
-pnpm bench          # geometry benches (trended, never gated)
+bun install
+bun run test           # contract-import lint + vitest in every package
+bun run typecheck      # the machines' wire shapes are the contract's Mutation variants
+bun run bench          # geometry benches (trended, never gated)
 node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
 ```
 
@@ -59,7 +59,7 @@ node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate
 - **Perf budgets** (`packages/draw-bundle/test/perf/`) — work COUNTED at
   the host doors (engine round trips, mutations, preview publishes), not
   timed. A budget is the measured value and only ever goes down.
-- **Real artwork** — `PAGED_SVG_CORPUS=1 pnpm --filter @paged-media/draw test`
+- **Real artwork** — `PAGED_SVG_CORPUS=1 bun run --filter @paged-media/draw test`
   parses the private corpus's SVGs and checks `.ai` / `.eps` are refused
   rather than half-read.
 

@@ -27,7 +27,7 @@
 // assertions here are arithmetic against a fit this file can compute by
 // hand, not "something happened".
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type {

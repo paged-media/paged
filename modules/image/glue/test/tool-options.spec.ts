@@ -19,7 +19,7 @@
 // The host's tool-options values reach the session in the session's own
 // units (percent → 0..1), and a value of the wrong type is ignored.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import { applyToolSettings, toolOptionFields } from "../src/tool-options";
 import type { ImageSession } from "../src/session";

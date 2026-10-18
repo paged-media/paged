@@ -22,7 +22,7 @@
 // pinned to their honest decline, and the CPU half (the pattern
 // capture) is checked for real.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type { PluginManifest } from "@paged-media/plugin-api";

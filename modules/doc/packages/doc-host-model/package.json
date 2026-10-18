@@ -10,15 +10,15 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "bun test --parallel",
     "build": "tsup src/index.ts --format esm --dts"
   },
   "dependencies": {
-    "@paged-media/plugin-api": "0.2.45-canary.0"
+    "@paged-media/plugin-api": "workspace:*"
   },
   "devDependencies": {
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
-    "vitest": "^2.1.9"
+    "typescript": "catalog:",
+    "@types/bun": "catalog:"
   }
 }

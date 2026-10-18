@@ -2,11 +2,14 @@ node_modules/
 dist/
 *.tsbuildinfo
 
-# Rust build output. The wasm ARTIFACT itself is COMMITTED (see
-# scripts/build-wasm.sh): `pnpm test` / `pnpm -r typecheck` and the
-# plugin-cli size gate all have to work on a fresh checkout with no Rust
-# toolchain installed.
+# Rust build output.
 /target
+
+# The image-trace wasm (wasm-bindgen output of scripts/build-wasm.sh, run by
+# `moon run draw:wasm` and in CI by .github/actions/module-wasm). Build
+# output, not committed: the typecheck, the specs and the plugin-cli size
+# gate read the one built from this checkout.
+packages/draw-bundle/wasm/trace_js*
 
 # Per-package vitest JUnit output (CI artifact, never a tracked file).
 junit.xml

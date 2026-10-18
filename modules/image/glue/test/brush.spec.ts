@@ -27,7 +27,7 @@
 // brush_stroke suite). What IS here over the real wasm: the honest
 // GPU-less decline, and the blend list coming from the kernel registry.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type {

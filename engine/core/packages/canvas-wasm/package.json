@@ -1,0 +1,19 @@
+{
+  "name": "@paged-media/canvas-wasm",
+  "version": "0.74.0-dev",
+  "description": "The paged engine for the editor's render worker: the wasm-bindgen surface of the Paged Web Canvas (wire types, document model, WebGPU rendering).",
+  "type": "module",
+  "main": "paged_canvas_wasm.js",
+  "types": "paged_canvas_wasm.d.ts",
+  "files": [
+    "paged_canvas_wasm.js",
+    "paged_canvas_wasm_bg.wasm",
+    "paged_canvas_wasm.d.ts"
+  ],
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paged-media/paged.git",
+    "directory": "engine/core/packages/canvas-wasm"
+  }
+}

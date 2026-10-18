@@ -74,8 +74,7 @@ export {
 } from "./apply-path-ops";
 
 // The op vocabulary both path-editing machines plan in, the wire shapes
-// it lowers to (asserted against the engine's `Mutation` union in
-// wire-compat.ts), and the lowering itself.
+// it lowers to (the engine's `Mutation` variants), and the lowering itself.
 export {
   lowerPathOp,
   pathEditBatch,
@@ -257,17 +256,3 @@ export {
   type RepeatGuideSpec,
 } from "./repeat-machine";
 
-export type {
-  AnchorTripleFeedsWire,
-  PathPointSetFeedsWire,
-  PathPointInsertFeedsWire,
-  PathPointRemoveFeedsWire,
-  PathPointCurveTypeFeedsWire,
-  ClosePathFeedsWire,
-  JoinPathsFeedsWire,
-  InsertPathFeedsWire,
-  PathEditBatchFeedsWire,
-  PathPointRoleIsWire,
-  PathOpenAtFeedsWire,
-  ScissorsBatchFeedsWire,
-} from "./wire-compat";

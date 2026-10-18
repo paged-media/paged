@@ -27,7 +27,7 @@
 // here. No DOM, no wasm: a stateful fake engine applies the edits it reports
 // so the journal inverses are real.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
@@ -151,6 +151,8 @@ function statefulEngine() {
 
 const silentHost = {
   log: { debug() {}, info() {}, warn() {}, error() {} },
+  // The document doors every host has; nothing here fires them.
+  document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
   supports: () => false,
 } as unknown as BundleHost;
 

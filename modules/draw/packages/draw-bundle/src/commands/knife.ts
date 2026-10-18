@@ -122,7 +122,7 @@ import {
   batchMutationFor,
   bindCreatedMutationFor,
   handleElementId,
-} from "./v59-wire";
+} from "./batch-handles";
 
 /** The strip's width in pt — the narrowest the arrangement's 1/64 pt
  *  grid reliably resolves as a region (module header). */

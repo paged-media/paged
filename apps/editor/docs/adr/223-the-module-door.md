@@ -43,3 +43,13 @@ The editor's `ModulesBackend` answers from a module manifest the build generates
   module host directly, with integrity, instead of through a 302.
 - The 302s stay for bundles that do not use the door.
 - `pnpm test:modules` covers the backend and the manifest.
+
+## Amendment, 2026-10-18 (monorepo)
+
+Every `@paged-media` package is now a workspace package, built in the repository, so the
+manifest looks packages up from the app's and the root `node_modules` and resolves each to its
+directory in the tree. A declared wasm that a workspace package lacks was not built: the
+manifest throws, listing each file and the Moon task that builds it (`moon run doc:wasm`,
+`data:duckdb`, …), and the dev server and the build stop instead of shipping a door that
+answers null. A broken `manifest.json` in a workspace package throws too. A published package
+that does not ship a declared file is still left out. `bun run test:modules` covers it.

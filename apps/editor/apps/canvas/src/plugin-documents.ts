@@ -28,31 +28,18 @@
 // same loss File > New and File > Open guard against with `confirmDiscard`.
 // Those run on a user's own menu choice; here a plugin asks, so the prompt
 // names the plugin and the document, and dismissing it KEEPS the document.
-//
-// Types are structural on purpose: this build may pin a plugin-sdk that
-// predates the door, and the backend must still compile (it is then simply
-// not reached).
 
+import type { OpenDocumentResult } from "@paged-media/plugin-api";
+import type { DocumentsBackend } from "@paged-media/plugin-sdk";
 import type { CanvasClient, DocumentHandle } from "@paged-media/client";
 
-/** What `host.documents.open` answers (mirrors plugin-api `OpenDocumentResult`). */
-export type OpenDocumentResult =
-  | { opened: true; pageIds: string[] }
-  | { opened: false; reason: "declined" };
+export type { OpenDocumentResult };
 
-export interface OpenDocumentRequest {
-  /** The display name the plugin asked for, or null. */
-  name: string | null;
-  /** Filled by the SDK from the calling bundle's manifest. */
-  requester: { id: string; name: string };
-}
+/** What the SDK hands the backend with an open request. */
+export type OpenDocumentRequest = Parameters<DocumentsBackend["open"]>[1];
 
-/** The backend the SDK's `host.documents` door forwards to
- *  (plugin-sdk `DocumentsBackend`). */
-export interface EditorDocumentsBackend {
-  exportPaged(): Promise<Uint8Array>;
-  open(bytes: Uint8Array, request: OpenDocumentRequest): Promise<OpenDocumentResult>;
-}
+/** The backend the SDK's `host.documents` door forwards to. */
+export type EditorDocumentsBackend = DocumentsBackend;
 
 /** A replace request awaiting the user's keep/discard answer. */
 export interface PendingReplace {

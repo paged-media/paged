@@ -1,0 +1,77 @@
+name: ci / sccache trial
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Lever 3 of docs/migration/ci-speed.md, measured on ONE job: would sccache
+# with the GitHub Actions cache backend beat Swatinem/rust-cache for the
+# largest Rust build, core's test binaries (the build in core-ci's Linux
+# `check + test` job)? This job builds them twice through sccache: cold, in a
+# cache namespace of its own, then warm after deleting target/. The step
+# times and `sccache --show-stats` are the result; rust-cache's side comes
+# from the core-ci jobs. tooling/migration/ci_speed.py reads both.
+#
+# Runs when this file changes and on dispatch, never on ordinary pushes, so
+# its cache entries only exist while someone measures.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ci-sccache-trial.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: engine/core
+
+env:
+  CARGO_TERM_COLOR: always
+  # The same build settings as core-ci.
+  RUSTFLAGS: -Dwarnings
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  # sccache cannot cache incremental compilation (rust-cache turns it off too).
+  CARGO_INCREMENTAL: "0"
+  SCCACHE_GHA_ENABLED: "true"
+  # A fresh namespace per run and attempt, so build 1 is really cold.
+  SCCACHE_GHA_VERSION: a10-trial-${{ github.run_id }}-${{ github.run_attempt }}
+
+jobs:
+  trial:
+    name: sccache trial (core test binaries)
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - name: free runner disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - id: pin
+        run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.pin.outputs.channel }}
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        uses: rui314/setup-mold@v1
+      # Puts sccache on PATH; tooling/rust/rustc-wrapper (.cargo/config.toml)
+      # then compiles through it.
+      - uses: mozilla-actions/sccache-action@v0.0.11
+      - name: fetch the dependency graph
+        run: cargo fetch --locked
+      - name: build 1 (cold sccache)
+        run: cargo test --workspace --no-run --locked
+      - name: sccache stats after build 1
+        run: sccache --show-stats
+      - name: delete target and zero the stats
+        run: rm -rf target && sccache --zero-stats
+      - name: build 2 (warm sccache)
+        run: cargo test --workspace --no-run --locked
+      - name: sccache stats after build 2
+        run: sccache --show-stats
+      - name: disk at end of job
+        if: ${{ !cancelled() }}
+        run: df -h /

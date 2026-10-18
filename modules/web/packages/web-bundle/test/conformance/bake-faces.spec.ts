@@ -28,10 +28,11 @@
 // The asset source here is the editor's (`plugin-asset-source.ts`): a face's
 // bytes come from the engine's DOCUMENT registry (`requestFontFaceBytes`),
 // scene faces go to its scene-layer registry. Document faces go through the
-// plugin API's `assets.registerDocumentFont`, which sends the engine's
-// `registerFont` with `scope: "document"`.
+// plugin API's `assets.registerDocumentFont`, which registers them with the
+// engine at `scope: "document"`: through the client's `registerDocumentFont`
+// where it has one (plugin SDK ADR 330), else a `registerFont` message.
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
@@ -46,11 +47,19 @@ import { W1_EMPTY_PAGE } from "../fixtures/corpus";
 import { renamedFace } from "../fixtures/fonts";
 import { blitzPresent, primeBlitz, requireBlitz } from "./blitz";
 import { mapBacking, silent } from "./host";
+import { fileURLToPath } from "node:url";
+
+// The engine is this package's own @paged-media/canvas-wasm devDependency.
+// Without an anchor the headless harness resolves it from plugin-sdk's
+// install location, which in the root Bun workspace is whichever version the
+// store hoists, not the one this package pins.
+const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
 requireBlitz("web conformance — baked faces");
 
 type Reply = { kind: string; payload?: any };
 type Send = (m: { kind: string; payload?: unknown }) => Promise<Reply>;
+type RegisterDocumentFont = (family: string, bytes: Uint8Array, style: string | null) => Promise<Reply>;
 type FontRow = { family: string; isMissing: boolean };
 
 /** The film's mailer, as its frame holds it: every rule names IBM Plex Sans. */
@@ -77,6 +86,7 @@ describe.skipIf(!blitzPresent)("web conformance — baked text names a face the 
   beforeEach(async () => {
     sent.length = 0;
     h = await createHeadlessHost({
+      resolveFrom: ENGINE_ANCHOR,
       console: silent,
       storage: mapBacking(),
       // The editor's asset source: document face bytes from the engine's
@@ -100,12 +110,22 @@ describe.skipIf(!blitzPresent)("web conformance — baked text names a face the 
     });
     await h.load(W1_EMPTY_PAGE.bytes());
     // Every document-font registration, as the bundle sends it.
-    const client = (h.host.editor as unknown as { client: { send: Send } }).client;
+    const client = (h.host.editor as unknown as { client: { send: Send; registerDocumentFont?: RegisterDocumentFont } })
+      .client;
     const raw = client.send.bind(client);
     client.send = (m) => {
       if (m.kind === "registerFont") sent.push(m);
       return raw(m);
     };
+    // A client that scopes faces to the open document (plugin SDK ADR 330)
+    // registers them through its own method, not `send`: record those too.
+    const scoped = client.registerDocumentFont?.bind(client);
+    if (scoped) {
+      client.registerDocumentFont = (family, bytes, style) => {
+        sent.push({ kind: "registerFont", payload: { family, style, scope: "document" } });
+        return scoped(family, bytes, style);
+      };
+    }
     engine = await primeBlitz(h.host as unknown as BundleHost);
     h.loadBundle(webBundle);
     host = h.host as unknown as BundleHost;

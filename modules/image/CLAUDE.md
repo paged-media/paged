@@ -138,8 +138,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 # select a backend explicitly with WGPU_BACKEND=metal|vulkan|gl.
 
 # TS (the bundle) — install order: editor → plugin-sdk → plugin-image
-pnpm install && pnpm test && pnpm typecheck
-pnpm validate:manifest
+bun install && bun run test && bun run typecheck
+bun run validate:manifest
 
 # Dependency guards (CI runs these; run before claiming green)
 cargo tree -p image-kernels --edges normal | grep -E 'image-(pipeline|graph|gpu|cms|js)' && echo LEAK

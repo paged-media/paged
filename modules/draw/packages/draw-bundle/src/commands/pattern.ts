@@ -82,13 +82,9 @@
 // insert-lane wall RFI C-30 records). So `overlap` is implemented as the
 // EMISSION ORDER of the tiles, and two facts follow that cannot be
 // softened:
-//   (CORRECTION, 2026-08-05: an earlier version of this note said the
-//   wire "carries no reorder op at all". That is no longer true —
-//   protocol 59 has `reorderElement`, and this repo already casts it in
-//   `binding-provider/adr023-seam.ts`. The VENDORED contract still does
-//   not carry it, and pattern v1 does not use it, so the shipped
-//   behaviour below stands exactly as described — but the reason is
-//   "not used" now, not "does not exist".)
+//   (Protocol 59 added `reorderElement`, which the Layers provider
+//   uses; pattern v1 does not, so the shipped behaviour below stands —
+//   the reason is "not used", not "does not exist".)
 //   · the VERTICAL choice is the OUTER sort and therefore WINS wherever
 //     the two disagree (rows are the outer loop);
 //   · the SOURCE always sits BELOW every copy. It was there first and
@@ -223,7 +219,7 @@ import {
   batchMutationFor,
   bindCreatedMutationFor,
   handleElementId,
-} from "./v59-wire";
+} from "./batch-handles";
 import { announceRecipeChange, groupHolding, linkIndex } from "../link-index";
 import { insertPathMutationFor } from "../handlers/insert-path";
 import { SPREAD_ORIGIN, spreadTableOf, type PageOrigin } from "../page-origin";

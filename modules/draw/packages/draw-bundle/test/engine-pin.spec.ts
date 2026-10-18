@@ -22,9 +22,11 @@
 // and on a developer machine all three usually exist, at different
 // versions. This pins the answer: the engine every spec here ran against
 // is the one `package.json` names, so a bumped pin that silently resolves
-// to an older sibling build cannot report green.
+// to an older sibling build cannot report green. The devDependency is the
+// workspace package (`workspace:*`), so "the one package.json names" is the
+// canvas-wasm it resolves to: engine/core/packages/canvas-wasm.
 
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -39,7 +41,9 @@ describe("the headless harness boots the pinned engine", () => {
     const pkg = JSON.parse(
       readFileSync(resolve(HERE, "../package.json"), "utf8"),
     ) as { devDependencies: Record<string, string> };
-    const pinned = pkg.devDependencies["@paged-media/canvas-wasm"];
+    expect(pkg.devDependencies["@paged-media/canvas-wasm"]).toBe("workspace:*");
+    const resolved = realpathSync(resolve(HERE, "../node_modules/@paged-media/canvas-wasm"));
+    const pinned = (JSON.parse(readFileSync(resolve(resolved, "package.json"), "utf8")) as { version: string }).version;
     const h = await openHost();
     try {
       expect(h.engineVersion).toBe(pinned);

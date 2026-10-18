@@ -683,9 +683,7 @@ function useFrameSizePx(host: BundleHost, id: ElementId): { width: number; heigh
   useEffect(() => {
     let stale = false;
     const read = (): void => {
-      const doc = host.document as Partial<BundleHost["document"]>;
-      if (typeof doc.elementGeometry !== "function") return;
-      void doc
+      void host.document
         .elementGeometry([id])
         .then(([g]) => {
           if (stale || !g?.bounds) return;

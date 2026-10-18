@@ -16,9 +16,9 @@ verbatim from the top of any existing source file in this repo.
 ## Building & testing
 
 ```bash
-pnpm install
-pnpm -r typecheck
-pnpm -r test
+bun install
+bun run typecheck
+bun run test
 ```
 
 Format only the files you touched.

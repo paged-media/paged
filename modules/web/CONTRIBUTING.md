@@ -19,5 +19,5 @@ the top of any existing source file in this repo.
 
 See `CLAUDE.md` for the specifics. In general: Rust crates build/test with
 `cargo build` / `cargo test` / `cargo clippy`; TypeScript packages with
-`pnpm install` / `pnpm -r test` / `pnpm -r typecheck`. Format only the files you
+`bun install` / `bun run test` / `bun run typecheck`. Format only the files you
 touched.

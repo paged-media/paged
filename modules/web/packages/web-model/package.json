@@ -10,14 +10,14 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
+    "test": "bun test --parallel",
     "build": "tsup src/index.ts --format esm --dts --out-dir dist --clean",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "bun run build"
   },
   "devDependencies": {
     "fast-check": "4.10.2",
-    "typescript": "^5.9.3",
-    "vitest": "^2.1.9"
+    "typescript": "catalog:",
+    "@types/bun": "catalog:"
   },
   "files": [
     "dist"

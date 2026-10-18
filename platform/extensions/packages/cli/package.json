@@ -23,11 +23,11 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "tsup",
     "test": "vitest run",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.128.0",
-    "@paged-media/canvas-wasm": "0.73.4"
+    "@paged-media/canvas-wasm": "workspace:*"
   },
   "peerDependencies": {
     "@duckdb/duckdb-wasm": "1.29.0"
@@ -40,14 +40,14 @@
   "devDependencies": {
     "@duckdb/duckdb-wasm": "1.29.0",
     "@paged-media/ai": "workspace:*",
-    "@paged-media/data": "0.1.0-canary.10",
+    "@paged-media/data": "workspace:*",
     "@paged-media/plugin-api": "workspace:*",
     "@paged-media/plugin-sdk": "workspace:*",
-    "@types/node": "20.19.39",
-    "react": "^18.3.1",
+    "@types/node": "catalog:",
+    "react": "catalog:",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
-    "vitest": "^2.1.9"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "repository": {
     "type": "git",

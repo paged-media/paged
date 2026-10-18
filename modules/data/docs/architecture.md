@@ -246,8 +246,8 @@ panels, seven commands and one edit context, `dataBinding`.
 | `host.supports`, `host.log` | probe optional doors; logging |
 
 Neither wasm file goes through a host loader, but both are first asked of the host's module
-door (plugin-sdk ADR 326; `packages/data-bundle/src/module-door.ts`, a feature-detected probe
-of `host.modules` that works on SDKs without it). The engine is imported from
+door (plugin-sdk ADR 326; `hostWasm` in `packages/data-bundle/src/bin-url.ts`, which asks
+`host.modules` where the host wires a module backend, `modules@1`). The engine is imported from
 `../bin/data_js.js`, the `wasm-bindgen --target web` glue; its `.wasm` is the host's copy,
 fetched with its Subresource Integrity, when the host serves one, else the file next to the
 glue. DuckDB is loaded from the package's own `bin/` (`packages/data-bundle/src/bin-url.ts`):
