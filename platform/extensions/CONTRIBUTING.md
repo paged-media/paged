@@ -21,4 +21,5 @@ bun run typecheck
 bun run test
 ```
 
-Format only the files you touched.
+`tooling/js/fmt.sh` formats the sources (`bun fmt`; CI checks it, and the
+pre-commit hook formats what you stage).

@@ -58,6 +58,25 @@ rust-toolchain.toml. Each component also documents its own build and test
 commands (cargo, `bun run`) in its README and `CLAUDE.md`; start there for the
 directory you are changing.
 
+## Formatting
+
+Rust is formatted by `cargo fmt` (each Cargo workspace's own config). The
+JavaScript, TypeScript, JSON, CSS, HTML, Markdown and YAML are formatted by
+`bun fmt` with Prettier 3's defaults (`bunfig.toml` `[fmt]`), and CI checks
+the whole repository:
+
+```bash
+tooling/js/fmt.sh               # format (the whole repository, or the paths you name)
+tooling/js/fmt.sh --check       # what CI runs
+git config core.hooksPath tooling/git/hooks   # once: format what you commit
+```
+
+`bun fmt` is not in a stable Bun release yet: the script runs the canary
+pinned in `tooling/js/bun-canary-version`, while the runtime stays on the
+Bun in `.prototools`. [`.prettierignore`](./.prettierignore) lists what is
+not formatted (generated files that checks compare byte for byte, test
+data, third-party code, history records, Rust's TOML) and why.
+
 ## Rules that apply everywhere
 
 - Rendering changes are gated on fidelity. Never loosen a fidelity threshold
