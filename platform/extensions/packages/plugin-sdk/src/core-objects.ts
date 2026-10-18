@@ -47,9 +47,9 @@ import type {
   PropertySchema,
 } from "@paged-media/plugin-api";
 
-import { createCoreObjectsV70 } from "./core-objects-v70";
-import { createCoreObjectsV71 } from "./core-objects-v71";
-import { PAGE_ITEM_KINDS, type SelectorStep } from "./object-address";
+import { createCoreObjectsV70 } from "./core-objects-v70.js";
+import { createCoreObjectsV71 } from "./core-objects-v71.js";
+import { PAGE_ITEM_KINDS, type SelectorStep } from "./object-address.js";
 
 /** A core write plan: the ops, or a typed refusal. */
 export type CorePlan =

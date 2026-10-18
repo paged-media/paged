@@ -57,10 +57,3 @@ tasks:
     options:
       cache: false
 
-  js-build:
-    description: 'Every package `build` script (tsup/tsc to dist/). Local only unless the project says otherwise.'
-    command: "bun run --filter './packages/*' build"
-    inputs:
-      - '@group(js-sources)'
-    options:
-      runInCI: false
