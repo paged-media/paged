@@ -38,6 +38,13 @@ import {
   setStateMutation,
   type PluginMetadataEntry,
 } from "../src/slides-model";
+import { fileURLToPath } from "node:url";
+
+// The engine is this package's own @paged-media/canvas-wasm devDependency.
+// Without an anchor the headless harness resolves it from plugin-sdk's
+// install location, which in the root Bun workspace is whichever version the
+// store hoists, not the one this package pins.
+const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
 const manifest = JSON.parse(
   readFileSync(new URL("../manifest.json", import.meta.url), "utf8"),
@@ -47,7 +54,7 @@ async function withDeck(name: string) {
   const bytes = new Uint8Array(
     readFileSync(new URL(`../../../slide-conformance/fixtures/${name}.pptx`, import.meta.url)),
   );
-  const h = await createHeadlessHost();
+  const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
   let host!: BundleHost;
   h.loadBundle({
     manifest,
