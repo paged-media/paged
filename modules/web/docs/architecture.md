@@ -47,9 +47,9 @@ Dependency direction (`web-model` and `web-render` import nothing from this repo
   peer dependencies. The contract-import lint rule (`/bunfig.toml`, PM-0003) fails on any other
   package import.
 
-The layout engine is the Blitz stack, pinned to `=0.3.0-alpha.4` in
-`packages/web-render/Cargo.toml` (the lockfile resolves Stylo 0.17.0, Taffy
-0.11.0-experimental-cache-fix.3, Parley 0.9.0 and anyrender 0.10.0). It parses, styles, lays
+The layout engine is the Blitz stack, pinned to `=0.3.0-alpha.6` in
+`packages/web-render/Cargo.toml` (the lockfile resolves Stylo 0.18.0, Taffy
+0.11.0-experimental-cache-fix.3, Parley 0.10.0 and anyrender 0.11.1). It parses, styles, lays
 out and emits paint commands. No GPU renderer is linked: the lockfile has no `vello` and no
 `wgpu` entry. See [ADR 401](adr/401-layout-engine-pinned.md).
 

@@ -38,9 +38,9 @@ export interface EnginePin {
 
 /** The current pin. Frozen so it can't be mutated by a stamp round-trip. */
 export const ENGINE_PIN: Readonly<EnginePin> = Object.freeze({
-  blitz: "0.3.0-alpha.4",
-  stylo: "0.17.0",
-  anyrender: "0.10.0",
+  blitz: "0.3.0-alpha.6",
+  stylo: "0.18.0",
+  anyrender: "0.11.1",
 });
 
 /** Flatten an {@link EnginePin} to the envelope's `engine` record
