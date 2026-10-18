@@ -36,6 +36,7 @@ pub mod story;
 pub mod style_lists;
 pub mod styles;
 mod util;
+pub mod xml_structure;
 
 pub use designmap::{
     parse_designmap, Bookmark, ColorSettings, DesignMap, DocumentPreference, Hyperlink,
@@ -202,6 +203,13 @@ pub fn import_idml_archive(archive: &SourceArchive) -> Result<paged_scene::Docum
     if let Some(raw) = archive.entry("Resources/Preferences.xml") {
         designmap.chapter_number = designmap::parse_chapter_number_preference(raw)?;
         designmap::parse_preferences_part(raw, &mut designmap)?;
+    }
+    // D-02 — the document's XML structure.
+    if let Some(raw) = archive.entry("XML/Tags.xml") {
+        designmap.xml_tags = xml_structure::parse_tags(raw)?;
+    }
+    if let Some(raw) = archive.entry("XML/BackingStory.xml") {
+        designmap.xml_root = xml_structure::parse_elements(raw)?.into_iter().next();
     }
     let mut palette = match archive.entry("Resources/Graphic.xml") {
         Some(raw) => parse_graphic(raw)?,

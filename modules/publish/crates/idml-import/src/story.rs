@@ -2130,6 +2130,9 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
         }
         buf.clear();
     }
+    // D-02 — the element that tags the story, with those tagging its
+    // ranges.
+    out.xml_elements = crate::xml_structure::parse_elements(xml)?;
     Ok((out, provenance))
 }
 
