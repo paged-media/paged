@@ -86,10 +86,11 @@ function fakeEditorWithFonts(
 describe("fonts collection door (W1)", () => {
   it("crosses document font FAMILY names into the bundle (names only — no bytes)", async () => {
     const { host } = createBundleHost(
-      () => fakeEditorWithFonts([
-        { family: "IBM Plex Sans", referenceCount: 12 },
-        { family: "Source Serif", referenceCount: 3 },
-      ]),
+      () =>
+        fakeEditorWithFonts([
+          { family: "IBM Plex Sans", referenceCount: 12 },
+          { family: "Source Serif", referenceCount: 3 },
+        ]),
       manifest,
       { console: silent, storage: mapBacking() },
     );
@@ -105,8 +106,11 @@ describe("fonts collection door (W1)", () => {
 
 describe("font diagnostics → host.diagnostics fan-out (W1)", () => {
   it("publishes parity diagnostics to the problems sink keyed by source", () => {
-    const published: Array<{ bundleId: string; key: string; diags: Diagnostic[] }> =
-      [];
+    const published: Array<{
+      bundleId: string;
+      key: string;
+      diags: Diagnostic[];
+    }> = [];
     const { host } = createBundleHost(() => fakeEditorWithFonts([]), manifest, {
       console: silent,
       storage: mapBacking(),
@@ -161,7 +165,7 @@ describe("previewFontBadge — badge state logic (W1)", () => {
   });
 
   it("shows with INFO severity when every used family is in the document", () => {
-    const b = previewFontBadge('p { font-family: Inter; }', ["Inter"]);
+    const b = previewFontBadge("p { font-family: Inter; }", ["Inter"]);
     expect(b.show).toBe(true);
     expect(b.severity).toBe("info");
     expect(b.matched).toEqual(["Inter"]);
@@ -172,10 +176,9 @@ describe("previewFontBadge — badge state logic (W1)", () => {
   });
 
   it("escalates to REVIEW severity when a used family is missing from the document", () => {
-    const b = previewFontBadge(
-      'p { font-family: "Ghost Sans", Inter; }',
-      ["Inter"],
-    );
+    const b = previewFontBadge('p { font-family: "Ghost Sans", Inter; }', [
+      "Inter",
+    ]);
     expect(b.show).toBe(true);
     expect(b.severity).toBe("review");
     expect(b.unregistered).toEqual(["Ghost Sans"]);
@@ -193,7 +196,7 @@ describe("previewFontBadge — badge state logic (W1)", () => {
 describe("previewFontBadge — the W-06 flip (document fonts shown)", () => {
   it("FLIPS to 'shown' when every used+registered family was served bytes", () => {
     const b = previewFontBadge(
-      'p { font-family: Inter; }',
+      "p { font-family: Inter; }",
       ["Inter"],
       ["Inter"],
     );
@@ -205,7 +208,7 @@ describe("previewFontBadge — the W-06 flip (document fonts shown)", () => {
 
   it("stays 'substituting' when a matched family had NO bytes served", () => {
     const b = previewFontBadge(
-      'p { font-family: Inter, Lora; }',
+      "p { font-family: Inter, Lora; }",
       ["Inter", "Lora"],
       ["Inter"], // Lora not served
     );
@@ -268,7 +271,7 @@ describe("asset resolution → data-url @font-face in the srcdoc + badge flip (W
     );
     expect(host.supports("assets.fonts@1")).toBe(true);
 
-    const css = 'p { font-family: Inter, sans-serif; }';
+    const css = "p { font-family: Inter, sans-serif; }";
     const { faces, shown } = await resolvePreviewFontFaces(host, css, [
       "Inter",
     ]);
@@ -373,7 +376,7 @@ describe("asset resolution → data-url @font-face in the srcdoc + badge flip (W
       { console: silent, storage: mapBacking() }, // no assetSource
     );
     expect(host.supports("assets.fonts@1")).toBe(false);
-    const css = 'p { font-family: Inter; }';
+    const css = "p { font-family: Inter; }";
     // The door still exists + the gate passes (manifest declares it),
     // but every read is null → nothing shown.
     expect(await host.assets.getFontFace("Inter")).toBeNull();

@@ -26,7 +26,10 @@ import { advanceTimersByTimeAsync } from "@paged-media/test-kit";
 
 import type { BundleHost, DocumentChangeEvent } from "@paged-media/plugin-api";
 
-import { FONT_WATCH_DELAY_MS, watchDocumentFonts } from "../src/panels/font-watch";
+import {
+  FONT_WATCH_DELAY_MS,
+  watchDocumentFonts,
+} from "../src/panels/font-watch";
 
 function fakeDocument(families: string[][]) {
   let fire: ((e: DocumentChangeEvent) => void) | null = null;
@@ -74,7 +77,11 @@ describe("watchDocumentFonts [plugin-web.source-panel]", () => {
   });
 
   it("delivers a changed family list (order does not count as a change)", async () => {
-    const doc = fakeDocument([["A", "B"], ["B", "A"], ["B", "A", "C"]]);
+    const doc = fakeDocument([
+      ["A", "B"],
+      ["B", "A"],
+      ["B", "A", "C"],
+    ]);
     const got: string[][] = [];
     const w = watchDocumentFonts(doc.host, (f) => got.push(f), { delayMs: 10 });
     await advanceTimersByTimeAsync(vi, 0);
@@ -83,7 +90,10 @@ describe("watchDocumentFonts [plugin-web.source-panel]", () => {
     expect(got).toHaveLength(1);
     doc.change();
     await w.flush();
-    expect(got).toEqual([["A", "B"], ["B", "A", "C"]]);
+    expect(got).toEqual([
+      ["A", "B"],
+      ["B", "A", "C"],
+    ]);
     w.dispose();
   });
 

@@ -44,7 +44,10 @@ const DIRS = ["chrome/fixtures", "chrome/flow-fixtures", "indesign/fixtures"];
 const files = DIRS.flatMap((d) =>
   readdirSync(join(ROOT, d))
     .filter((f) => f.endsWith(".html"))
-    .map((f) => ({ name: `${d}/${f}`, text: readFileSync(join(ROOT, d, f), "utf8") })),
+    .map((f) => ({
+      name: `${d}/${f}`,
+      text: readFileSync(join(ROOT, d, f), "utf8"),
+    })),
 );
 
 describe("hand-authored corpus (license-clear, runs in CI)", () => {
@@ -52,15 +55,20 @@ describe("hand-authored corpus (license-clear, runs in CI)", () => {
     expect(files.length).toBeGreaterThanOrEqual(40);
   });
 
-  it.each(files.map((f) => [f.name, f.text]))("%s: every reader accepts it @feat:plugin-web.html-importer", (_name, text) => {
-    const { source } = sourceFromHtmlFile(text);
-    expect(source.html.length).toBeGreaterThan(0);
-    expect(source.css).toContain("font-family: Inter");
-    expect(familiesUsed(source.css)).toContain("Inter");
-    expect(tagOutline(text).length).toBeGreaterThan(0);
-    expect(parseFlowInto(source.css)).toEqual([]);
-    expect(parseFlowFrom(source.css)).toEqual([]);
-    expect(diagnoseHtml(source.html).filter((d) => d.severity === "error")).toEqual([]);
-    expect(sanitizeHtml(text)).toEqual({ html: text, removed: [] });
-  });
+  it.each(files.map((f) => [f.name, f.text]))(
+    "%s: every reader accepts it @feat:plugin-web.html-importer",
+    (_name, text) => {
+      const { source } = sourceFromHtmlFile(text);
+      expect(source.html.length).toBeGreaterThan(0);
+      expect(source.css).toContain("font-family: Inter");
+      expect(familiesUsed(source.css)).toContain("Inter");
+      expect(tagOutline(text).length).toBeGreaterThan(0);
+      expect(parseFlowInto(source.css)).toEqual([]);
+      expect(parseFlowFrom(source.css)).toEqual([]);
+      expect(
+        diagnoseHtml(source.html).filter((d) => d.severity === "error"),
+      ).toEqual([]);
+      expect(sanitizeHtml(text)).toEqual({ html: text, removed: [] });
+    },
+  );
 });

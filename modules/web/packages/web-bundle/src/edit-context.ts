@@ -140,12 +140,26 @@ export function makeWebFrameEditContext(
         onCancel: () => {
           void inFrame.cancel();
         },
-        onUndo: () => (inFrame.isEditing() ? inFrame.undo() : (undoHooks.onUndo?.() ?? false)),
-        onRedo: () => (inFrame.isEditing() ? inFrame.redo() : (undoHooks.onRedo?.() ?? false)),
-        onCanUndo: () => (inFrame.isEditing() ? inFrame.canUndo() : (undoHooks.onCanUndo?.() ?? false)),
-        onCanRedo: () => (inFrame.isEditing() ? inFrame.canRedo() : (undoHooks.onCanRedo?.() ?? false)),
-        undoLabel: () => (inFrame.isEditing() ? "Undo typing" : "Undo source edit"),
-        redoLabel: () => (inFrame.isEditing() ? "Redo typing" : "Redo source edit"),
+        onUndo: () =>
+          inFrame.isEditing()
+            ? inFrame.undo()
+            : (undoHooks.onUndo?.() ?? false),
+        onRedo: () =>
+          inFrame.isEditing()
+            ? inFrame.redo()
+            : (undoHooks.onRedo?.() ?? false),
+        onCanUndo: () =>
+          inFrame.isEditing()
+            ? inFrame.canUndo()
+            : (undoHooks.onCanUndo?.() ?? false),
+        onCanRedo: () =>
+          inFrame.isEditing()
+            ? inFrame.canRedo()
+            : (undoHooks.onCanRedo?.() ?? false),
+        undoLabel: () =>
+          inFrame.isEditing() ? "Undo typing" : "Undo source edit",
+        redoLabel: () =>
+          inFrame.isEditing() ? "Redo typing" : "Redo source edit",
       }
     : {};
   return {

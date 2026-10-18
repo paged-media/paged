@@ -35,7 +35,14 @@
 // Engine artifact: skipped with a reason when `bin/blitz_web*` is absent,
 // FAILED when REQUIRE_REAL_ENGINE=1 (CI builds it first).
 
-import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  setDefaultTimeout,
+} from "bun:test";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -47,7 +54,12 @@ import { renderSelectedWebFlow } from "../../src/render-flow-command";
 import { watchDocumentFonts } from "../../src/panels/font-watch";
 import { openHost } from "../conformance/host";
 import { W1_EMPTY_PAGE } from "../fixtures/corpus";
-import { BUDGET_TIMEOUT_MS, countingHost, report, settle } from "./counting-host";
+import {
+  BUDGET_TIMEOUT_MS,
+  countingHost,
+  report,
+  settle,
+} from "./counting-host";
 import {
   ARTICLE_WORDS_PER_PARA,
   article,
@@ -91,230 +103,299 @@ const CHANGES = 1000;
 const FLOW_FRAME_W_PT = 300;
 const FLOW_FRAME_H_PT = 375;
 
-
 const eachOnce = (ws: string[], markers: string[]): void => {
   for (const m of markers) {
     expect(ws.filter((w) => w === m).length, `marker ${m}`).toBe(1);
   }
 };
 
-describe.skipIf(!bundledPresent)("web perf budgets (real host + real Blitz)", () => {
-  let h: HeadlessHost;
-  let lane: EngineLane;
+describe.skipIf(!bundledPresent)(
+  "web perf budgets (real host + real Blitz)",
+  () => {
+    let h: HeadlessHost;
+    let lane: EngineLane;
 
-  const timed = async <T>(f: () => Promise<T>): Promise<[T, number]> => {
-    const t0 = performance.now();
-    const out = await f();
-    return [out, Math.round(performance.now() - t0)];
-  };
+    const timed = async <T>(f: () => Promise<T>): Promise<[T, number]> => {
+      const t0 = performance.now();
+      const out = await f();
+      return [out, Math.round(performance.now() - t0)];
+    };
 
-  const boundary = (): Record<string, unknown> => ({
-    wasm: {
-      frameCalls: lane.stats.frameCalls,
-      flowCalls: lane.stats.flowCalls,
-      bytesIn: lane.stats.bytesIn,
-      bytesOut: lane.stats.bytesOut,
-    },
-    engine: lane.engineCounters(),
-    artifact: lane.artifact,
-  });
+    const boundary = (): Record<string, unknown> => ({
+      wasm: {
+        frameCalls: lane.stats.frameCalls,
+        flowCalls: lane.stats.flowCalls,
+        bytesIn: lane.stats.bytesIn,
+        bytesOut: lane.stats.bytesOut,
+      },
+      engine: lane.engineCounters(),
+      artifact: lane.artifact,
+    });
 
-  const select = async (host: BundleHost, ids: ElementId[]): Promise<void> => {
-    await host.selection.set(ids);
-  };
+    const select = async (
+      host: BundleHost,
+      ids: ElementId[],
+    ): Promise<void> => {
+      await host.selection.set(ids);
+    };
 
-  beforeAll(async () => {
-    h = await openHost();
-    await h.load(W1_EMPTY_PAGE.bytes());
-    h.loadBundle(webBundle);
-    lane = await bootEngine(h.host);
-  });
-  afterAll(() => h?.dispose());
+    beforeAll(async () => {
+      h = await openHost();
+      await h.load(W1_EMPTY_PAGE.bytes());
+      h.loadBundle(webBundle);
+      lane = await bootEngine(h.host);
+    });
+    afterAll(() => h?.dispose());
 
-  it(`render one frame (${ARTICLE_PARAS}-paragraph article) [plugin-web.perf-budgets]`, async () => {
-    const frame = await insertWebFrameAt(h.host, PAGE, [36, 36, 756, 336], article(ARTICLE_PARAS));
-    await select(h.host, [frame]);
-    lane.resetCalls();
-    const { host, work } = countingHost(h.host);
-
-    const [, ms] = await timed(() => renderSelectedWebFrame(host));
-    await settle();
-    report("render-frame", work, { ...boundary(), ms });
-
-    // Behaviour: the frame rendered to a layer carrying the article's top.
-    // (The headless host wires no scene channel, so `submit` is not reached:
-    // in the editor it adds ONE door call here.)
-    expect(layerWords(JSON.parse(lane.stats.lastOutput))).toContain(articleMarker(0));
-
-    expect(work.total()).toBe(BUDGET.renderFrame.doorCalls);
-    expect(work.reads()).toBe(BUDGET.renderFrame.reads);
-    expect(work.mutations.length).toBe(0);
-    expect(lane.stats.frameCalls).toBe(1);
-    expect(lane.stats.bytesIn).toBeLessThanOrEqual(BUDGET.renderFrame.bytesIn);
-    expect(lane.stats.bytesOut).toBeLessThanOrEqual(BUDGET.renderFrame.bytesOut);
-  });
-
-  it(`render one flow into ${FLOW_FRAMES} frames [plugin-web.perf-budgets]`, async () => {
-    const ids: ElementId[] = [];
-    for (let i = 0; i < FLOW_FRAMES; i++) {
-      const left = 36 + (i % 2) * 280;
-      ids.push(
-        await insertWebFrameAt(
-          h.host,
-          PAGE,
-          [36, left, 36 + FLOW_FRAME_H_PT, left + FLOW_FRAME_W_PT],
-          i === 0 ? article(ARTICLE_PARAS) : { html: "", css: "", options: { media: "print", overflow: "clip" } },
-        ),
+    it(`render one frame (${ARTICLE_PARAS}-paragraph article) [plugin-web.perf-budgets]`, async () => {
+      const frame = await insertWebFrameAt(
+        h.host,
+        PAGE,
+        [36, 36, 756, 336],
+        article(ARTICLE_PARAS),
       );
-    }
-    // Thread the chain through the bundle's own command (setup, uncounted).
-    await select(h.host, ids);
-    const thread = h.contributions.find(
-      (c) => c.kind === "command" && c.id === "media.paged.web.command.threadWebFlow",
-    )!.value as { handler: (a: unknown) => unknown };
-    await thread.handler(undefined);
+      await select(h.host, [frame]);
+      lane.resetCalls();
+      const { host, work } = countingHost(h.host);
 
-    await select(h.host, [ids[0]]);
-    lane.resetCalls();
-    const { host, work } = countingHost(h.host);
-    const [, ms] = await timed(() => renderSelectedWebFlow(host));
-    await settle();
-    report("render-flow-12", work, { ...boundary(), ms });
-
-    // Behaviour: one layer per frame; every paragraph's words land exactly
-    // once across the chain (text conserved, nothing duplicated or lost).
-    // (No scene channel headlessly: in the editor each frame's layer adds
-    // one `submit` door call, i.e. +12 here.)
-    const flow = JSON.parse(lane.stats.lastOutput) as { frames: { layer: unknown }[] };
-    expect(flow.frames.length).toBe(FLOW_FRAMES);
-    const ws = flow.frames.flatMap((f) => layerWords(f.layer));
-    expect(ws.length).toBe(ARTICLE_PARAS * ARTICLE_WORDS_PER_PARA);
-    eachOnce(ws, Array.from({ length: ARTICLE_PARAS }, (_v, i) => articleMarker(i)));
-
-    expect(work.total()).toBe(BUDGET.renderFlow.doorCalls);
-    expect(work.reads()).toBe(BUDGET.renderFlow.reads);
-    expect(work.mutations.length).toBe(0);
-    expect(lane.stats.flowCalls).toBe(1);
-    expect(lane.stats.bytesIn).toBeLessThanOrEqual(BUDGET.renderFlow.bytesIn);
-    expect(lane.stats.bytesOut).toBeLessThanOrEqual(BUDGET.renderFlow.bytesOut);
-  });
-
-  it(`bake a frame of ${RUNS} text runs to native content [plugin-web.perf-budgets]`, async () => {
-    const frame = await insertWebFrameAt(h.host, PAGE, [36, 36, 756, 576], runGrid(RUNS));
-    await select(h.host, [frame]);
-    const storiesBefore = (await h.host.document.collection("stories")).length;
-    lane.resetCalls();
-    const { host, work } = countingHost(h.host);
-
-    const [, ms] = await timed(() => bakeSelectedWebFrame(host));
-    await settle();
-    report("bake-200-runs", work, { ...boundary(), ms });
-
-    // Behaviour: one native story per run, carrying the run's text …
-    const after = await h.host.document.collection<{ characterCount: number }>("stories");
-    expect(after.length - storiesBefore).toBe(RUNS);
-    expect(after.slice(-RUNS).every((s) => s.characterCount > 0)).toBe(true);
-
-    const b = BUDGET.bake;
-    expect(work.total()).toBe(b.doorCalls);
-    expect(work.count("document.mutate")).toBe(b.mutates);
-    expect(work.count("document.collection")).toBe(b.collections);
-    expect(work.count("document.collection:stories")).toBe(b.storiesReads);
-    expect(work.rowsRead.stories ?? 0).toBe(b.storyRowsRead);
-    // The linear shape, stated: one measurement per run, everything else
-    // a constant — the whole bake is ONE batch.
-    expect(work.count("text.measureString")).toBe(RUNS);
-    expect(work.mutations).toEqual([{ op: "batch", ops: b.batchOps + b.faceOps }]);
-    expect(lane.stats.frameCalls).toBe(1);
-
-    // … and the whole bake is ONE undo step: one undo removes every story.
-    await h.host.document.undo();
-    expect((await h.host.document.collection("stories")).length).toBe(storiesBefore);
-    await h.host.document.redo();
-    expect((await h.host.document.collection("stories")).length).toBe(storiesBefore + RUNS);
-  });
-
-  it(`${CHANGES} document changes with the panel's font watch live [plugin-web.perf-budgets]`, async () => {
-    const target = await insertWebFrameAt(h.host, PAGE, [700, 500, 740, 560], runGrid(1));
-    const { host, work } = countingHost(h.host);
-    const delivered: string[][] = [];
-    // A quiet time no edit loop reaches, so the count does not depend on
-    // how fast this machine applies an edit: the burst's one trailing read
-    // is taken by `flush()`.
-    const sub = watchDocumentFonts(host, (fs) => delivered.push(fs), { delayMs: 600_000 });
-    let changes = 0;
-    const seen = h.host.document.onDidChange(() => {
-      changes += 1;
-    });
-
-    const [, ms] = await timed(async () => {
-      for (let i = 0; i < CHANGES; i++) {
-        // Ordinary editing elsewhere in the document — through the
-        // UNCOUNTED host: only the watch's own reads are the workload.
-        await h.host.document.mutate({
-          op: "setElementProperty",
-          args: {
-            elementId: target,
-            path: "frameFillColor",
-            value: { type: "colorRef", value: "Color/Black" },
-          },
-        } as never);
-      }
-      await sub.flush();
+      const [, ms] = await timed(() => renderSelectedWebFrame(host));
       await settle();
+      report("render-frame", work, { ...boundary(), ms });
+
+      // Behaviour: the frame rendered to a layer carrying the article's top.
+      // (The headless host wires no scene channel, so `submit` is not reached:
+      // in the editor it adds ONE door call here.)
+      expect(layerWords(JSON.parse(lane.stats.lastOutput))).toContain(
+        articleMarker(0),
+      );
+
+      expect(work.total()).toBe(BUDGET.renderFrame.doorCalls);
+      expect(work.reads()).toBe(BUDGET.renderFrame.reads);
+      expect(work.mutations.length).toBe(0);
+      expect(lane.stats.frameCalls).toBe(1);
+      expect(lane.stats.bytesIn).toBeLessThanOrEqual(
+        BUDGET.renderFrame.bytesIn,
+      );
+      expect(lane.stats.bytesOut).toBeLessThanOrEqual(
+        BUDGET.renderFrame.bytesOut,
+      );
     });
-    const burst = work.snapshot();
-    report(`font-watch-${CHANGES}-changes`, burst, { changes, updates: delivered.length, ms });
 
-    // Behaviour: the families were delivered on mount, and the edits —
-    // none of which touches a font — delivered nothing new.
-    expect(changes).toBe(CHANGES);
-    expect(delivered.length).toBe(1);
+    it(`render one flow into ${FLOW_FRAMES} frames [plugin-web.perf-budgets]`, async () => {
+      const ids: ElementId[] = [];
+      for (let i = 0; i < FLOW_FRAMES; i++) {
+        const left = 36 + (i % 2) * 280;
+        ids.push(
+          await insertWebFrameAt(
+            h.host,
+            PAGE,
+            [36, left, 36 + FLOW_FRAME_H_PT, left + FLOW_FRAME_W_PT],
+            i === 0
+              ? article(ARTICLE_PARAS)
+              : {
+                  html: "",
+                  css: "",
+                  options: { media: "print", overflow: "clip" },
+                },
+          ),
+        );
+      }
+      // Thread the chain through the bundle's own command (setup, uncounted).
+      await select(h.host, ids);
+      const thread = h.contributions.find(
+        (c) =>
+          c.kind === "command" &&
+          c.id === "media.paged.web.command.threadWebFlow",
+      )!.value as { handler: (a: unknown) => unknown };
+      await thread.handler(undefined);
 
-    expect(burst.count("document.collection:fonts")).toBe(BUDGET.fontWatch.fontsReads);
-    expect(burst.total()).toBe(BUDGET.fontWatch.doorCalls);
+      await select(h.host, [ids[0]]);
+      lane.resetCalls();
+      const { host, work } = countingHost(h.host);
+      const [, ms] = await timed(() => renderSelectedWebFlow(host));
+      await settle();
+      report("render-flow-12", work, { ...boundary(), ms });
 
-    // Behaviour: a change that DOES bring a new family is delivered.
-    // A family no earlier step of this suite used (the bake sets Inter).
-    const family = "Lora";
-    const out = await h.host.document.mutate({
-      op: "batch",
-      args: {
-        ops: [
-          { op: "insertTextFrame", args: { pageId: PAGE, bounds: [600, 36, 640, 300] } },
-          { op: "bindCreated", args: { handle: "f" } },
-          { op: "insertText", args: { storyId: "$h:f", offset: 0, text: "Face" } },
-          {
+      // Behaviour: one layer per frame; every paragraph's words land exactly
+      // once across the chain (text conserved, nothing duplicated or lost).
+      // (No scene channel headlessly: in the editor each frame's layer adds
+      // one `submit` door call, i.e. +12 here.)
+      const flow = JSON.parse(lane.stats.lastOutput) as {
+        frames: { layer: unknown }[];
+      };
+      expect(flow.frames.length).toBe(FLOW_FRAMES);
+      const ws = flow.frames.flatMap((f) => layerWords(f.layer));
+      expect(ws.length).toBe(ARTICLE_PARAS * ARTICLE_WORDS_PER_PARA);
+      eachOnce(
+        ws,
+        Array.from({ length: ARTICLE_PARAS }, (_v, i) => articleMarker(i)),
+      );
+
+      expect(work.total()).toBe(BUDGET.renderFlow.doorCalls);
+      expect(work.reads()).toBe(BUDGET.renderFlow.reads);
+      expect(work.mutations.length).toBe(0);
+      expect(lane.stats.flowCalls).toBe(1);
+      expect(lane.stats.bytesIn).toBeLessThanOrEqual(BUDGET.renderFlow.bytesIn);
+      expect(lane.stats.bytesOut).toBeLessThanOrEqual(
+        BUDGET.renderFlow.bytesOut,
+      );
+    });
+
+    it(`bake a frame of ${RUNS} text runs to native content [plugin-web.perf-budgets]`, async () => {
+      const frame = await insertWebFrameAt(
+        h.host,
+        PAGE,
+        [36, 36, 756, 576],
+        runGrid(RUNS),
+      );
+      await select(h.host, [frame]);
+      const storiesBefore = (await h.host.document.collection("stories"))
+        .length;
+      lane.resetCalls();
+      const { host, work } = countingHost(h.host);
+
+      const [, ms] = await timed(() => bakeSelectedWebFrame(host));
+      await settle();
+      report("bake-200-runs", work, { ...boundary(), ms });
+
+      // Behaviour: one native story per run, carrying the run's text …
+      const after = await h.host.document.collection<{
+        characterCount: number;
+      }>("stories");
+      expect(after.length - storiesBefore).toBe(RUNS);
+      expect(after.slice(-RUNS).every((s) => s.characterCount > 0)).toBe(true);
+
+      const b = BUDGET.bake;
+      expect(work.total()).toBe(b.doorCalls);
+      expect(work.count("document.mutate")).toBe(b.mutates);
+      expect(work.count("document.collection")).toBe(b.collections);
+      expect(work.count("document.collection:stories")).toBe(b.storiesReads);
+      expect(work.rowsRead.stories ?? 0).toBe(b.storyRowsRead);
+      // The linear shape, stated: one measurement per run, everything else
+      // a constant — the whole bake is ONE batch.
+      expect(work.count("text.measureString")).toBe(RUNS);
+      expect(work.mutations).toEqual([
+        { op: "batch", ops: b.batchOps + b.faceOps },
+      ]);
+      expect(lane.stats.frameCalls).toBe(1);
+
+      // … and the whole bake is ONE undo step: one undo removes every story.
+      await h.host.document.undo();
+      expect((await h.host.document.collection("stories")).length).toBe(
+        storiesBefore,
+      );
+      await h.host.document.redo();
+      expect((await h.host.document.collection("stories")).length).toBe(
+        storiesBefore + RUNS,
+      );
+    });
+
+    it(`${CHANGES} document changes with the panel's font watch live [plugin-web.perf-budgets]`, async () => {
+      const target = await insertWebFrameAt(
+        h.host,
+        PAGE,
+        [700, 500, 740, 560],
+        runGrid(1),
+      );
+      const { host, work } = countingHost(h.host);
+      const delivered: string[][] = [];
+      // A quiet time no edit loop reaches, so the count does not depend on
+      // how fast this machine applies an edit: the burst's one trailing read
+      // is taken by `flush()`.
+      const sub = watchDocumentFonts(host, (fs) => delivered.push(fs), {
+        delayMs: 600_000,
+      });
+      let changes = 0;
+      const seen = h.host.document.onDidChange(() => {
+        changes += 1;
+      });
+
+      const [, ms] = await timed(async () => {
+        for (let i = 0; i < CHANGES; i++) {
+          // Ordinary editing elsewhere in the document — through the
+          // UNCOUNTED host: only the watch's own reads are the workload.
+          await h.host.document.mutate({
             op: "setElementProperty",
             args: {
-              elementId: { kind: "storyRange", id: { story_id: "$h:f", start: 0, end: 4 } },
-              path: "characterFontFamily",
-              value: { type: "text", value: family },
+              elementId: target,
+              path: "frameFillColor",
+              value: { type: "colorRef", value: "Color/Black" },
             },
-          },
-        ],
-      },
-    } as never);
-    expect(out.applied).toBe(true);
-    await sub.flush();
-    expect(delivered.length).toBe(2);
-    expect(delivered[1]).toContain(family);
-    expect(work.count("document.collection:fonts")).toBe(BUDGET.fontWatch.fontsReads + 1);
+          } as never);
+        }
+        await sub.flush();
+        await settle();
+      });
+      const burst = work.snapshot();
+      report(`font-watch-${CHANGES}-changes`, burst, {
+        changes,
+        updates: delivered.length,
+        ms,
+      });
 
-    seen.dispose();
-    sub.dispose();
-  });
+      // Behaviour: the families were delivered on mount, and the edits —
+      // none of which touches a font — delivered nothing new.
+      expect(changes).toBe(CHANGES);
+      expect(delivered.length).toBe(1);
 
-  it("cold boot: the engine instantiates once across every command [plugin-web.perf-budgets]", () => {
-    report("cold-boot", countingHost(h.host).work, {
-      boots: lane.stats.boots,
-      loaderImports: lane.stats.loaderImports,
-      bootMs: Math.round(lane.stats.bootMs),
+      expect(burst.count("document.collection:fonts")).toBe(
+        BUDGET.fontWatch.fontsReads,
+      );
+      expect(burst.total()).toBe(BUDGET.fontWatch.doorCalls);
+
+      // Behaviour: a change that DOES bring a new family is delivered.
+      // A family no earlier step of this suite used (the bake sets Inter).
+      const family = "Lora";
+      const out = await h.host.document.mutate({
+        op: "batch",
+        args: {
+          ops: [
+            {
+              op: "insertTextFrame",
+              args: { pageId: PAGE, bounds: [600, 36, 640, 300] },
+            },
+            { op: "bindCreated", args: { handle: "f" } },
+            {
+              op: "insertText",
+              args: { storyId: "$h:f", offset: 0, text: "Face" },
+            },
+            {
+              op: "setElementProperty",
+              args: {
+                elementId: {
+                  kind: "storyRange",
+                  id: { story_id: "$h:f", start: 0, end: 4 },
+                },
+                path: "characterFontFamily",
+                value: { type: "text", value: family },
+              },
+            },
+          ],
+        },
+      } as never);
+      expect(out.applied).toBe(true);
+      await sub.flush();
+      expect(delivered.length).toBe(2);
+      expect(delivered[1]).toContain(family);
+      expect(work.count("document.collection:fonts")).toBe(
+        BUDGET.fontWatch.fontsReads + 1,
+      );
+
+      seen.dispose();
+      sub.dispose();
     });
-    expect(lane.stats.boots).toBe(BUDGET.coldBoot.boots);
-    expect(lane.stats.loaderImports).toBe(BUDGET.coldBoot.loaderImports);
-  });
-});
+
+    it("cold boot: the engine instantiates once across every command [plugin-web.perf-budgets]", () => {
+      report("cold-boot", countingHost(h.host).work, {
+        boots: lane.stats.boots,
+        loaderImports: lane.stats.loaderImports,
+        bootMs: Math.round(lane.stats.bootMs),
+      });
+      expect(lane.stats.boots).toBe(BUDGET.coldBoot.boots);
+      expect(lane.stats.loaderImports).toBe(BUDGET.coldBoot.loaderImports);
+    });
+  },
+);
 
 // --- the pins (measured 2026-10-05) ----------------------------------------
 
@@ -358,4 +439,3 @@ const BUDGET = {
   fontWatch: { fontsReads: 2, doorCalls: 3 },
   coldBoot: { boots: 1, loaderImports: 1 },
 } as const;
-

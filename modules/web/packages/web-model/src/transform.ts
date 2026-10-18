@@ -146,81 +146,84 @@ export function applyTemplate(
   const map = vars && typeof vars === "object" ? vars : {};
   const diagnostics: WebDiagnostic[] = [];
   PLACEHOLDER.lastIndex = 0;
-  const output = text.replace(PLACEHOLDER, (whole, inner: string, index: number) => {
-    const line = lineOf(text, index);
-    const parsed = parsePlaceholder(inner);
-    if (!parsed) {
-      diagnostics.push({
-        severity: "warning",
-        message: `malformed template placeholder ${whole} — expected {{name}} or {{name | filter}}`,
-        source: "template",
-        line,
-      });
-      return whole;
-    }
-    if (!Object.prototype.hasOwnProperty.call(map, parsed.name)) {
-      diagnostics.push({
-        severity: "warning",
-        message: `unknown template variable “${parsed.name}” — add it in the Variables section`,
-        source: "template",
-        line,
-      });
-      return whole;
-    }
-    let value = String(map[parsed.name]);
-    for (const f of parsed.filters) {
-      if (!FILTER_SET.has(f.name)) {
+  const output = text.replace(
+    PLACEHOLDER,
+    (whole, inner: string, index: number) => {
+      const line = lineOf(text, index);
+      const parsed = parsePlaceholder(inner);
+      if (!parsed) {
         diagnostics.push({
           severity: "warning",
-          message:
-            `unknown template filter “${f.name}” — available: ${TEMPLATE_FILTERS.join(", ")}` +
-            ` (scripted transforms are not supported yet)`,
+          message: `malformed template placeholder ${whole} — expected {{name}} or {{name | filter}}`,
           source: "template",
           line,
         });
-        return whole; // unresolved: leave the placeholder verbatim
+        return whole;
       }
-      switch (f.name as TemplateFilter) {
-        case "upper":
-          value = value.toUpperCase();
-          break;
-        case "lower":
-          value = value.toLowerCase();
-          break;
-        case "trim":
-          value = value.trim();
-          break;
-        case "number-format": {
-          const n = Number(value.trim());
-          if (!Number.isFinite(n)) {
-            diagnostics.push({
-              severity: "warning",
-              message: `number-format: “${value}” is not a number — value passed through unformatted`,
-              source: "template",
-              line,
-            });
-            break; // keep the unformatted value, stay substituted
-          }
-          let decimals: number | undefined;
-          if (f.arg !== undefined && f.arg.length > 0) {
-            const d = Number(f.arg);
-            if (Number.isInteger(d) && d >= 0 && d <= 20) decimals = d;
-            else {
+      if (!Object.prototype.hasOwnProperty.call(map, parsed.name)) {
+        diagnostics.push({
+          severity: "warning",
+          message: `unknown template variable “${parsed.name}” — add it in the Variables section`,
+          source: "template",
+          line,
+        });
+        return whole;
+      }
+      let value = String(map[parsed.name]);
+      for (const f of parsed.filters) {
+        if (!FILTER_SET.has(f.name)) {
+          diagnostics.push({
+            severity: "warning",
+            message:
+              `unknown template filter “${f.name}” — available: ${TEMPLATE_FILTERS.join(", ")}` +
+              ` (scripted transforms are not supported yet)`,
+            source: "template",
+            line,
+          });
+          return whole; // unresolved: leave the placeholder verbatim
+        }
+        switch (f.name as TemplateFilter) {
+          case "upper":
+            value = value.toUpperCase();
+            break;
+          case "lower":
+            value = value.toLowerCase();
+            break;
+          case "trim":
+            value = value.trim();
+            break;
+          case "number-format": {
+            const n = Number(value.trim());
+            if (!Number.isFinite(n)) {
               diagnostics.push({
                 severity: "warning",
-                message: `number-format: invalid decimals “${f.arg}” (0–20) — ignored`,
+                message: `number-format: “${value}” is not a number — value passed through unformatted`,
                 source: "template",
                 line,
               });
+              break; // keep the unformatted value, stay substituted
             }
+            let decimals: number | undefined;
+            if (f.arg !== undefined && f.arg.length > 0) {
+              const d = Number(f.arg);
+              if (Number.isInteger(d) && d >= 0 && d <= 20) decimals = d;
+              else {
+                diagnostics.push({
+                  severity: "warning",
+                  message: `number-format: invalid decimals “${f.arg}” (0–20) — ignored`,
+                  source: "template",
+                  line,
+                });
+              }
+            }
+            value = formatNumber(n, decimals);
+            break;
           }
-          value = formatNumber(n, decimals);
-          break;
         }
       }
-    }
-    return value;
-  });
+      return value;
+    },
+  );
   return { output, diagnostics };
 }
 
@@ -250,7 +253,8 @@ export function renderWebFrameSource(
   source: WebFrameSource,
   bound?: TemplateVars,
 ): RenderedWebFrame {
-  const hasBound = !!bound && Object.keys(bound).length > 0 && referencesBoundData(source);
+  const hasBound =
+    !!bound && Object.keys(bound).length > 0 && referencesBoundData(source);
   if (source.vars === undefined && !hasBound) {
     return {
       html: source.html,
@@ -267,7 +271,8 @@ export function renderWebFrameSource(
   const escaped: TemplateVars = { ...raw };
   if (hasBound && bound) {
     for (const k of Object.keys(bound)) {
-      if (!Object.prototype.hasOwnProperty.call(authored, k)) escaped[k] = escapeHtmlText(bound[k]);
+      if (!Object.prototype.hasOwnProperty.call(authored, k))
+        escaped[k] = escapeHtmlText(bound[k]);
     }
   }
   const html = applyTemplate(source.html, escaped);
@@ -294,26 +299,36 @@ export function renderWebFrameSource(
  *  `{{data.<provider>.<field>}}`. */
 export const BOUND_NAMESPACES = ["doc", "frame", "data"] as const;
 
-const BOUND_REF = /\{\{\s*(?:doc|frame|data)\.[A-Za-z0-9_.-]+\s*(?:\|[^{}]*)?\}\}/;
+const BOUND_REF =
+  /\{\{\s*(?:doc|frame|data)\.[A-Za-z0-9_.-]+\s*(?:\|[^{}]*)?\}\}/;
 
 /** Whether a source names any bound value — only then does a render need to
  *  resolve them (a source without such placeholders costs nothing extra). */
-export function referencesBoundData(source: Pick<WebFrameSource, "html" | "css">): boolean {
+export function referencesBoundData(
+  source: Pick<WebFrameSource, "html" | "css">,
+): boolean {
   return BOUND_REF.test(source.html) || BOUND_REF.test(source.css);
 }
 
 /** The bound names a source uses, in first-use order (the panel lists them). */
-export function boundNamesIn(source: Pick<WebFrameSource, "html" | "css">): string[] {
+export function boundNamesIn(
+  source: Pick<WebFrameSource, "html" | "css">,
+): string[] {
   const out: string[] = [];
-  const re = /\{\{\s*((?:doc|frame|data)\.[A-Za-z0-9_.-]+)\s*(?:\|[^{}]*)?\}\}/g;
+  const re =
+    /\{\{\s*((?:doc|frame|data)\.[A-Za-z0-9_.-]+)\s*(?:\|[^{}]*)?\}\}/g;
   for (const text of [source.html, source.css]) {
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
-    while ((m = re.exec(text)) !== null) if (!out.includes(m[1])) out.push(m[1]);
+    while ((m = re.exec(text)) !== null)
+      if (!out.includes(m[1])) out.push(m[1]);
   }
   return out;
 }
 
 function escapeHtmlText(v: unknown): string {
-  return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return String(v)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }

@@ -3,7 +3,7 @@
 **paged.web** — HTML/CSS as a first-class content type for the Paged editor.
 Concept: [`docs/concept.md`](./docs/concept.md) ("InDesign can't speak
 web. Webflow can't speak print."). Where paged.draw proves the platform hosts
-a *tool*, paged.web proves it hosts a *foreign document model* — the second
+a _tool_, paged.web proves it hosts a _foreign document model_ — the second
 half of the plugin platform's existential test.
 
 ## Documentation
@@ -43,11 +43,11 @@ Everything about how the plugin is designed and built is in [`docs/`](./docs/REA
 
 ## Packages
 
-| Package | Contents |
-|---|---|
-| `@paged-media/web-model` | pure TS, zero deps: the `WebFrameSource` model and its storage envelope, the HTML linter, font parity, the sanitiser, the template pass, CSS `flow-into` parsing |
+| Package                                    | Contents                                                                                                                                                                |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@paged-media/web-model`                   | pure TS, zero deps: the `WebFrameSource` model and its storage envelope, the HTML linter, font parity, the sanitiser, the template pass, CSS `flow-into` parsing        |
 | `@paged-media/web` (`packages/web-bundle`) | manifest (id `media.paged.web`) + `activate(host)`: commands, the panel, the importer, the engine loader, render, flow and bake — built from host surfaces + React only |
-| `packages/web-render` | Rust: the Blitz capture, the lowering to scene layers and the flow fragmentation, compiled to the bundle's `bin/blitz_web*.wasm` |
+| `packages/web-render`                      | Rust: the Blitz capture, the lowering to scene layers and the flow fragmentation, compiled to the bundle's `bin/blitz_web*.wasm`                                        |
 
 ## Setup
 

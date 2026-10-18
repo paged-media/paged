@@ -70,11 +70,20 @@ function compose(source: WebFrameSource, bound?: TemplateVars): EngineDocument {
 
 /** The engine document for `source` (see the module note); `bound` are the
  *  values of its bound names (bindings.ts), when it uses any. */
-export function engineDocument(source: WebFrameSource, bound?: TemplateVars): EngineDocument {
+export function engineDocument(
+  source: WebFrameSource,
+  bound?: TemplateVars,
+): EngineDocument {
   const hasBound = !!bound && Object.keys(bound).length > 0;
   if (source.vars === undefined && !hasBound) return compose(source);
   const key = contentHash(
-    JSON.stringify([source.html, source.css, source.vars, source.options, hasBound ? bound : null]),
+    JSON.stringify([
+      source.html,
+      source.css,
+      source.vars,
+      source.options,
+      hasBound ? bound : null,
+    ]),
   );
   const hit = cache.get(key);
   if (hit) {
@@ -86,6 +95,7 @@ export function engineDocument(source: WebFrameSource, bound?: TemplateVars): En
   engineDocumentStats.templatePasses += 1;
   const doc = compose(source, bound);
   cache.set(key, doc);
-  if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value as string);
+  if (cache.size > CACHE_SIZE)
+    cache.delete(cache.keys().next().value as string);
   return copy(doc);
 }
