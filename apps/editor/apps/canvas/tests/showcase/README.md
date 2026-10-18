@@ -113,8 +113,8 @@ absent, and `REQUIRE_REAL_INDESIGN=1` turns that skip into a failure.
   `compare.json`, `report.json`.
 
   Prerequisite: `paged-diff` must be built —
-  `cargo build --release -p paged-fidelity --bin paged-diff` from the
-  core checkout (this repo has no Cargo workspace of its own).
+  `cargo build --release -p paged-fidelity --bin paged-diff` in
+  `engine/core` (the editor has no Cargo workspace of its own).
 
 ## What is not in it, and why
 
