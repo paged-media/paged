@@ -51,9 +51,9 @@ is written by hand in `image-conformance`.
   feature-gated function that evaluates the same `$body`
 - `image-kernels/src/abi.rs:43-79`, `image-kernels/src/reference_prelude.rs:19-24` — the two
   halves of the helper set and the statement that they are kept in step
-- `image-conformance/tests/golden_expansion.rs:29-32`, `:78-83` — a test pins both
+- `image-conformance/tests/it/golden_expansion.rs:29-32`, `:78-83` — a test pins both
   emissions of `math.linear`
-- `image-conformance/tests/gpu_module_kernels.rs:22-29` — a handwritten module gets no
+- `image-conformance/tests/it/gpu_module_kernels.rs:22-29` — a handwritten module gets no
   generated twin
 - `image-kernels/src/families/gen.rs:45-48` — a module family whose scalar reference is
   written by hand in its test file
@@ -80,7 +80,7 @@ The by-construction guarantee does not reach the 95 module kernels, which are th
 majority. Their reference, when present, is a second implementation that can disagree
 with the shader in the ordinary way. The `gallery.*` family has no scalar reference in the
 test tree; its GPU output is covered by property checks only
-(`image-conformance/tests/gpu_module_kernels.rs`).
+(`image-conformance/tests/it/gpu_module_kernels.rs`).
 
 ## Related
 

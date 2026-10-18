@@ -1,6 +1,6 @@
 # sheet.format.locale.* — de-DE rendering goldens (spec §9; ECMA-376 §18.8.31;
 # decision D-8 "minimum en/de"). Driven through FormatCtx::new(Date1900,
-# Locale::DeDe) by sheet-conformance/tests/locale.rs. The format CODE is
+# Locale::DeDe) by sheet-conformance/tests/it/locale.rs. The format CODE is
 # locale-NEUTRAL (same `#,##0.00` / `mmmm` / `AM/PM` tokens as the en goldens);
 # only the RENDERED separators, month/day names, and AM/PM strings differ. The
 # matching en-US goldens (number/datetime.golden.tsv) MUST stay byte-identical —

@@ -279,7 +279,7 @@ use idml_import::{
 /// away, not precision the `f32` never had: above 1677.7216 pt the
 /// input's own ULP is already coarser than the 1e-4 being printed, and
 /// below it 4 decimals still discards most of what an `f32` holds. See
-/// `tests/format_f32_precision.rs`.
+/// `tests/it/format_f32_precision.rs`.
 pub(crate) fn format_f32(v: f32) -> String {
     let rounded = (f64::from(v) * 10_000.0).round() / 10_000.0;
     if rounded == 0.0 {

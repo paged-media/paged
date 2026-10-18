@@ -18,7 +18,7 @@
 
 //! C-64 on the WIRE — `duplicateElements { elementIds, offset }`.
 //!
-//! `paged-mutate/tests/duplicate_nodes.rs` proves the clone itself. This
+//! `paged-mutate/tests/it/duplicate_nodes.rs` proves the clone itself. This
 //! file proves what a host sees: the wire spelling, the reply (the new
 //! ids in `minted`, the last of them as `createdId`), that the page
 //! repaints, that it is ONE undo step through the model's own history

@@ -69,7 +69,7 @@ the forward operation and the inverse that was captured when it was applied.
 A batch has to be applied across both lanes, which is why the mixed-batch executor exists
 ([ADR 107](107-whole-document-build.md)). Scripts call the model's undo directly
 (`paged.undo`, `crates/paged-script/src/lib.rs:3691-3695`); the CLI has no undo verb
-(`crates/paged-cli/tests/cli_surface.rs:102-105`). Undo past 10,000 steps is not possible;
+(`crates/paged-cli/tests/it/cli_surface.rs:102-105`). Undo past 10,000 steps is not possible;
 the comment calls this "a deliberate, documented trade most editors make".
 
 There is a second undo implementation in the repository. `paged_mutate::Project` owns a

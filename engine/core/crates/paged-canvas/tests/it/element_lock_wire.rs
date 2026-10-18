@@ -21,7 +21,7 @@
 //! frame whose `elementLocked` is true. The rule (InDesign's, asked of it
 //! by script: `tools/indesign-export/object-integrity-probe.json`) is the
 //! engine's now, so a script or a plugin meets it as the editor does; the
-//! kernel half is `paged-mutate/tests/element_lock.rs`.
+//! kernel half is `paged-mutate/tests/it/element_lock.rs`.
 
 use paged_canvas::{
     channel::Mutation, element_selection::ElementId, CanvasModel, CanvasOptions, GestureError,

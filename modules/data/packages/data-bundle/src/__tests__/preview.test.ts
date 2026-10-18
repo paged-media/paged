@@ -18,7 +18,7 @@
 
 // The §9 record-preview stepper wired through the SESSION against a capturing
 // fake host + a fake engine (the per-record resolve is proven in Rust:
-// data-conformance/tests/bind.rs::data_bind_preview_step_record). This pins the
+// data-conformance/tests/it/bind.rs::data_bind_preview_step_record). This pins the
 // bundle ORCHESTRATION: recordCount reads the engine's "of N" bound, and
 // previewRecord resolves a binding against the chosen record index and commits
 // it through the SAME lower lanes a normal lower uses (so preview == output).

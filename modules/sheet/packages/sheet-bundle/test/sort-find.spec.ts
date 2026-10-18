@@ -23,7 +23,7 @@
 // replace-all undoes with a single Cmd-Z), and surfaces the engine's honest
 // boundary messages ("sort over a spilled region not supported"). All sort /
 // find / replace SEMANTICS are pinned engine-side in
-// sheet-conformance/tests/edit_ops.rs — none are re-tested (or re-implemented)
+// sheet-conformance/tests/it/edit_ops.rs — none are re-tested (or re-implemented)
 // here. No DOM, no wasm: a stateful fake engine applies the edits it reports
 // so the journal inverses are real.
 

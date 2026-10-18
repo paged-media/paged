@@ -1,7 +1,7 @@
 # sheet.fn.math.* (M1 additions) — math/trig family. Schema: see
 # math.yaml. Rust kernels under sheet-fn/src/families/math2.rs (the M1
 # math track). Provenance: ECMA-376 §18.17.7 + public Microsoft function
-# docs. Tests: sheet-conformance/tests/fn_math2.rs (the M1 file; the
+# docs. Tests: sheet-conformance/tests/it/fn_math2.rs (the M1 file; the
 # `sheet_fn_math_*` prefix the T0 math track also uses, kept by the
 # coverage-gate convention) + corpus/fn-corpus/math2/*.golden.tsv.
 
@@ -15,7 +15,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (MROUND) — round to nearest multiple, half away from zero; sign mismatch -> #NUM!"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_mround"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_mround"]
     corpus: ["corpus/fn-corpus/math2/mround.golden.tsv"]
 
 - id: sheet.fn.math.even
@@ -28,7 +28,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (EVEN) — round away from zero to nearest even integer"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_even"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_even"]
     corpus: ["corpus/fn-corpus/math2/even.golden.tsv"]
 
 - id: sheet.fn.math.odd
@@ -41,7 +41,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ODD) — round away from zero to nearest odd integer"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_odd"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_odd"]
     corpus: ["corpus/fn-corpus/math2/odd.golden.tsv"]
 
 - id: sheet.fn.math.fact
@@ -54,7 +54,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (FACT) — factorial; truncate non-integer, #NUM! on negative"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_fact"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_fact"]
     corpus: ["corpus/fn-corpus/math2/fact.golden.tsv"]
 
 - id: sheet.fn.math.factdouble
@@ -67,7 +67,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (FACTDOUBLE) — double factorial; truncate non-integer, #NUM! on negative"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_factdouble"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_factdouble"]
     corpus: ["corpus/fn-corpus/math2/factdouble.golden.tsv"]
 
 - id: sheet.fn.math.combin
@@ -80,7 +80,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (COMBIN) — combinations n choose k; #NUM! on negative or k>n"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_combin"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_combin"]
     corpus: ["corpus/fn-corpus/math2/combin.golden.tsv"]
 
 - id: sheet.fn.math.permut
@@ -93,7 +93,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (PERMUT) — permutations; #NUM! on negative or k>n"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_permut"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_permut"]
     corpus: ["corpus/fn-corpus/math2/permut.golden.tsv"]
 
 - id: sheet.fn.math.gcd
@@ -106,7 +106,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (GCD) — greatest common divisor (variadic, range_aware); #NUM! on negative"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_gcd"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_gcd"]
     corpus: ["corpus/fn-corpus/math2/gcd.golden.tsv"]
 
 - id: sheet.fn.math.lcm
@@ -119,7 +119,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (LCM) — least common multiple (variadic, range_aware); zero operand -> 0"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_lcm"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_lcm"]
     corpus: ["corpus/fn-corpus/math2/lcm.golden.tsv"]
 
 - id: sheet.fn.math.sumsq
@@ -132,7 +132,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (SUMSQ) — sum of squares (variadic, range_aware)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_sumsq"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_sumsq"]
     corpus: ["corpus/fn-corpus/math2/sumsq.golden.tsv"]
 
 - id: sheet.fn.math.sqrtpi
@@ -145,7 +145,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (SQRTPI) — sqrt(n * pi); #NUM! on negative"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_sqrtpi"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_sqrtpi"]
     corpus: ["corpus/fn-corpus/math2/sqrtpi.golden.tsv"]
 
 - id: sheet.fn.math.sinh
@@ -158,7 +158,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (SINH) — hyperbolic sine"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_sinh"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_sinh"]
     corpus: ["corpus/fn-corpus/math2/sinh.golden.tsv"]
 
 - id: sheet.fn.math.cosh
@@ -171,7 +171,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (COSH) — hyperbolic cosine"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_cosh"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_cosh"]
     corpus: ["corpus/fn-corpus/math2/cosh.golden.tsv"]
 
 - id: sheet.fn.math.tanh
@@ -184,7 +184,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (TANH) — hyperbolic tangent"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_tanh"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_tanh"]
     corpus: ["corpus/fn-corpus/math2/tanh.golden.tsv"]
 
 - id: sheet.fn.math.asinh
@@ -197,7 +197,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ASINH) — inverse hyperbolic sine (total)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_asinh"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_asinh"]
     corpus: ["corpus/fn-corpus/math2/asinh.golden.tsv"]
 
 - id: sheet.fn.math.acosh
@@ -210,7 +210,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ACOSH) — inverse hyperbolic cosine; domain x>=1 else #NUM!"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_acosh"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_acosh"]
     corpus: ["corpus/fn-corpus/math2/acosh.golden.tsv"]
 
 - id: sheet.fn.math.atanh
@@ -223,7 +223,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ATANH) — inverse hyperbolic tangent; domain |x|<1 else #NUM!"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_atanh"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_atanh"]
     corpus: ["corpus/fn-corpus/math2/atanh.golden.tsv"]
 
 - id: sheet.fn.math.base
@@ -236,7 +236,7 @@
   status: implemented
   provenance: ["Microsoft BASE (public docs) — number, radix (2..=36), [min_length]; to text"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_base"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_base"]
     corpus: ["corpus/fn-corpus/math2/base.golden.tsv"]
 
 - id: sheet.fn.math.decimal
@@ -249,5 +249,5 @@
   status: implemented
   provenance: ["Microsoft DECIMAL (public docs) — text, radix (2..=36); to number"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math2.rs::sheet_fn_math_decimal"]
+    rust: ["sheet-conformance/tests/it/fn_math2.rs::sheet_fn_math_decimal"]
     corpus: ["corpus/fn-corpus/math2/decimal.golden.tsv"]

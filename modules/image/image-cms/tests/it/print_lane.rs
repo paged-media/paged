@@ -21,7 +21,7 @@
 //! moxcms is the print lane: real intent handling (all four), CMYK
 //! ingest, ICC v4 — the capabilities core's qcms build lacks (audit §A).
 //! lcms2 is the **CI-only** differential oracle (never shipped), the
-//! same dev-dep reversal as `tests/parity.rs`.
+//! same dev-dep reversal as `tests/it/parity.rs`.
 //!
 //! Everything is hermetic: every ICC profile is synthesised in-test via
 //! lcms2 and serialised to bytes — no network, no system / corpus
@@ -48,7 +48,7 @@ use lcms2::{
 };
 
 /// Per-channel acceptance bound for the differential oracle, in 8-bit
-/// codes (matching `tests/parity.rs`). Both CMMs share the same 8-bit
+/// codes (matching `tests/it/parity.rs`). Both CMMs share the same 8-bit
 /// endpoints and the same (Perceptual / RelativeColorimetric, no-BPC)
 /// configuration; the residual is matrix / shaper rounding inside each
 /// engine's RGB→RGB pipeline. 3/255 ≈ 1.2% is well below a JND yet tight
@@ -58,7 +58,7 @@ const MAX_CHANNEL_DEVIATION: u8 = 3;
 
 /// Build an interned-style [`Profile`] from raw ICC bytes, hashing them
 /// the way [`image_cms::ProfileInterner`] does so the handle identity
-/// matches the production path (same helper as `tests/parity.rs`).
+/// matches the production path (same helper as `tests/it/parity.rs`).
 fn profile_from_bytes(bytes: Vec<u8>) -> Profile {
     let bytes: std::sync::Arc<[u8]> = bytes.into();
     Profile {
@@ -77,7 +77,7 @@ fn srgb_icc() -> Vec<u8> {
 /// A hermetic "swapped-primaries" RGB profile: D65 white, 2.2 gamma on
 /// all three channels, red and blue primaries exchanged. A deliberately
 /// non-identity source so the oracle exercises a real matrix pipeline
-/// (identical to `tests/parity.rs` so the two backends are bounded over
+/// (identical to `tests/it/parity.rs` so the two backends are bounded over
 /// the same input).
 fn swapped_primaries_icc() -> Vec<u8> {
     let d65 = CIExyY {
@@ -114,7 +114,7 @@ fn swapped_primaries_icc() -> Vec<u8> {
 /// A patch ramp covering the neutral axis, primaries / secondaries, and
 /// a few mixes — interleaved RGBA8 with varying alpha so the
 /// alpha-passthrough contract is exercised (same ramp as
-/// `tests/parity.rs`).
+/// `tests/it/parity.rs`).
 fn patch_ramp() -> Vec<u8> {
     let rgb: &[[u8; 3]] = &[
         [0, 0, 0],

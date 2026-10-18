@@ -394,7 +394,7 @@ fn sheet_fn_logical_ifna_arity_violation() {
 // scalar literals, A1-style cell refs resolved from `setup`, or an `A1:A3`
 // range). General-formatted output reuses `coerce::to_text`, the same contract
 // the display path realizes. Same TSV, two consumers (here + Phase 2). The
-// decoder mirrors `tests/fn_logical.rs::corpus`.
+// decoder mirrors `tests/it/fn_logical.rs::corpus`.
 
 mod corpus {
     use super::*;

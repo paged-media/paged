@@ -10,7 +10,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (IF)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_logical.rs::sheet_fn_logical_if"]
+    rust: ["sheet-conformance/tests/it/fn_logical.rs::sheet_fn_logical_if"]
     corpus: ["corpus/fn-corpus/logical/if.golden.tsv"]
 
 - id: sheet.fn.logical.and
@@ -23,7 +23,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (AND)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_logical.rs::sheet_fn_logical_and"]
+    rust: ["sheet-conformance/tests/it/fn_logical.rs::sheet_fn_logical_and"]
     corpus: ["corpus/fn-corpus/logical/and.golden.tsv"]
 
 - id: sheet.fn.logical.or
@@ -36,7 +36,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (OR)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_logical.rs::sheet_fn_logical_or"]
+    rust: ["sheet-conformance/tests/it/fn_logical.rs::sheet_fn_logical_or"]
     corpus: ["corpus/fn-corpus/logical/or.golden.tsv"]
 
 - id: sheet.fn.logical.not
@@ -49,7 +49,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (NOT)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_logical.rs::sheet_fn_logical_not"]
+    rust: ["sheet-conformance/tests/it/fn_logical.rs::sheet_fn_logical_not"]
     corpus: ["corpus/fn-corpus/logical/not.golden.tsv"]
 
 - id: sheet.fn.logical.true
@@ -62,7 +62,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (TRUE)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_logical.rs::sheet_fn_logical_true"]
+    rust: ["sheet-conformance/tests/it/fn_logical.rs::sheet_fn_logical_true"]
     corpus: ["corpus/fn-corpus/logical/true.golden.tsv"]
 
 - id: sheet.fn.logical.false
@@ -75,7 +75,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (FALSE)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_logical.rs::sheet_fn_logical_false"]
+    rust: ["sheet-conformance/tests/it/fn_logical.rs::sheet_fn_logical_false"]
     corpus: ["corpus/fn-corpus/logical/false.golden.tsv"]
 
 - id: sheet.fn.logical.iferror
@@ -88,5 +88,5 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (IFERROR)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_logical.rs::sheet_fn_logical_iferror"]
+    rust: ["sheet-conformance/tests/it/fn_logical.rs::sheet_fn_logical_iferror"]
     corpus: ["corpus/fn-corpus/logical/iferror.golden.tsv"]

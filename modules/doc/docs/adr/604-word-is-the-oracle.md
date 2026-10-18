@@ -22,8 +22,8 @@ repository builds, Word's answer is committed as a JSON file, and the tests read
 Four later mappings (line height by the sizes on a line, a line holding a picture, a table
 row taller than its page, kerning and ligatures off) rest instead on measurements of real
 documents recorded in `docs/reference/acceptance-real-docx.md`
-(`docx-conformance/tests/mixed_sizes.rs:19-22`, `docx-conformance/tests/pictures.rs:19-24`,
-`docx-conformance/tests/tall_rows.rs:19-24`, `docx-lower/src/lib.rs:1066-1073`).
+(`docx-conformance/tests/it/mixed_sizes.rs:19-22`, `docx-conformance/tests/it/pictures.rs:19-24`,
+`docx-conformance/tests/it/tall_rows.rs:19-24`, `docx-lower/src/lib.rs:1066-1073`).
 
 - Builders in `docx-conformance/src/lib.rs` (30 of them) assemble each small `.docx` in
   memory, "so the conformance suite carries no binary blobs"
@@ -45,7 +45,7 @@ documents recorded in `docs/reference/acceptance-real-docx.md`
 Real documents are checked separately and outside CI. Two ignored test lanes
 (`PAGED_DOC_CORPUS`, `PAGED_DOCX_CORPUS`) run the importer over real Word files that are not
 in this repository; "What it asserts is deliberately structural, not fidelity"
-(`docx-conformance/tests/real_word_corpus.rs:39`). `scripts/real-docx-acceptance.sh`
+(`docx-conformance/tests/it/real_word_corpus.rs:39`). `scripts/real-docx-acceptance.sh`
 compares the editor's pagination of real documents with Word's PDF.
 
 ## Evidence
@@ -54,14 +54,14 @@ compares the editor's pagination of real documents with Word's PDF.
 - `scripts/word-breaks-probe.sh:2-20` — one probe: build, ask Word, read the PDF
 - `docx-conformance/fixtures/pagination.word.json:1-12`,
   `docx-conformance/fixtures/breaks.word.json:1-5` — an answer file and its provenance
-- `docx-conformance/tests/breaks.rs:19-45` — a test that reads its answer file
-- `docx-conformance/tests/support/layout.rs:19-48`, `docx-conformance/tests/columns.rs:49`,
-  `docx-conformance/tests/continuous.rs:40` — the layout model and the tests that include it
+- `docx-conformance/tests/it/breaks.rs:19-45` — a test that reads its answer file
+- `docx-conformance/tests/support/layout.rs:19-48`, `docx-conformance/tests/it/columns.rs:49`,
+  `docx-conformance/tests/it/continuous.rs:40` — the layout model and the tests that include it
 - `docx-lower/src/line_height.rs:19-56` — the measured line heights and why they are a table
 - `docx-conformance/fixtures/run-specials.word.json:2`,
   `docx-conformance/fixtures/symbols.word.json:2` — Word reopening an edited save
-- `docx-conformance/tests/real_word_corpus.rs:31-43`, `:133`,
-  `docx-conformance/tests/poi_corpus.rs:184`, `scripts/real-docx-acceptance.sh:1-14` — the
+- `docx-conformance/tests/it/real_word_corpus.rs:31-43`, `:133`,
+  `docx-conformance/tests/it/poi_corpus.rs:184`, `scripts/real-docx-acceptance.sh:1-14` — the
   lanes outside CI
 
 ## Alternatives considered
@@ -82,10 +82,10 @@ change in the engine's layout does not turn these tests red.
 
 A typeface that is not in the measured table falls back to the default theme faces' line
 height and is named in a diagnostic (`docx-lower/src/line_height.rs:48-53`).
-`pagination.word.json` is read by no test here; `docx-conformance/tests/sections.rs:5-6` and
+`pagination.word.json` is read by no test here; `docx-conformance/tests/it/sections.rs:5-6` and
 `docx-skeleton/tests/skeleton.rs:19-21` cite it in comments. The claim of no binary blobs
 has one exception, `docx-conformance/fixtures/annual-report.docx`
-(`docx-conformance/tests/annual_report.rs:19-30`).
+(`docx-conformance/tests/it/annual_report.rs:19-30`).
 
 The acceptance run is a script because it needs documents and fonts that are not in the
 repository (`docs/reference/acceptance-real-docx.md:55-56`). Its record says the target is

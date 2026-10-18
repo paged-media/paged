@@ -25,7 +25,7 @@
 //! `registry/functions/info2.yaml` rows point at, so the §12.2 coverage gate
 //! finds them.
 //!
-//! The M1 additions split from the classic `IS*` predicates (`tests/fn_info.rs`)
+//! The M1 additions split from the classic `IS*` predicates (`tests/it/fn_info.rs`)
 //! in their error behavior (ECMA-376 §18.17.7):
 //! - `N`/`ISEVEN`/`ISODD` are *coercions* — they route through
 //!   `coerce::to_number` and therefore PROPAGATE an error argument.
@@ -37,7 +37,7 @@
 //! - `ISFORMULA` is now an EVALUATOR SPECIAL FORM (M2 Phase A,
 //!   `special_form: true`): it reads `cell.formula.is_some()` from the model in
 //!   `sheet-calc/eval.rs`, so its real behavior is tested through the evaluator
-//!   in `tests/special_forms.rs`, not as a pure kernel here.
+//!   in `tests/it/special_forms.rs`, not as a pure kernel here.
 
 use sheet_core::{CellError, CellRef, CellValue, DateSystem};
 use sheet_fn::{dispatch, Arg, EvalCtx, RangeView};
@@ -308,7 +308,7 @@ fn sheet_fn_info_isodd_arity_violation() {
 // them honest against THIS implementation now, these tests drive each fixture
 // through the FROZEN `sheet_fn::dispatch` with a tiny self-contained decoder for
 // the simple `=FUNC(arg;arg;…)` shape the goldens use. General-formatted output
-// reuses `coerce::to_text`. The decoder mirrors `tests/fn_logical.rs::corpus`.
+// reuses `coerce::to_text`. The decoder mirrors `tests/it/fn_logical.rs::corpus`.
 // SHEET/SHEETS goldens are anchored at the decoder's sheet-0 context (current
 // cell and every range origin on sheet 0), so they resolve to 1 — the honest T1
 // projection.

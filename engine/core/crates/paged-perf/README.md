@@ -59,6 +59,6 @@ Two lessons:
 
 ## Fixed, with the measurement that found it
 
-- **A frame write re-laid out every story** (52 emits, against 2 for a keystroke), because any non-text operation cleared the body-story emit cache. A write that only repaints a plain page item now keeps it (`Invalidation::PageItemPaint`, `crates/paged-canvas/tests/paint_invalidation.rs`): 0 emits, and the write costs about what a keystroke does.
+- **A frame write re-laid out every story** (52 emits, against 2 for a keystroke), because any non-text operation cleared the body-story emit cache. A write that only repaints a plain page item now keeps it (`Invalidation::PageItemPaint`, `crates/paged-canvas/tests/it/paint_invalidation.rs`): 0 emits, and the write costs about what a keystroke does.
 
 - **`document.pgm` stored image bytes as JSON integer arrays**, one number per byte: the workload's 29 photos made a 211 MB part (67 MB zipped). Saving took 11.3 s and loading 1.9 s. Now 3.1 MB, 1.24 s (355 ms on a re-save) and 0.9 s.

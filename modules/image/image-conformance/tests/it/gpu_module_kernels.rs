@@ -1068,7 +1068,7 @@ fn table_covers_every_handwritten_module_kernel() {
         missing.is_empty(),
         "\n{} handwritten module kernel(s) have NO row in the GPU behavioural \
          lane's TABLE:\n  {}\n\nAdd a row (identity params + stress params + a \
-         note) in tests/gpu_module_kernels.rs. A `module: true` kernel has no \
+         note) in tests/it/gpu_module_kernels.rs. A `module: true` kernel has no \
          macro-generated scalar twin, so without a row the ONLY thing gating it \
          is that naga parses its WGSL.\n",
         missing.len(),

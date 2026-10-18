@@ -17,13 +17,13 @@
  */
 
 //! The ONE replay path for a golden formula case, shared by the hand-golden
-//! gate (`tests/corpus_runner.rs`) and the Excel oracle lane
-//! (`tests/excel_oracle.rs`). Both lanes must seed the same inputs and host
+//! gate (`tests/it/corpus_runner.rs`) and the Excel oracle lane
+//! (`tests/it/excel_oracle.rs`). Both lanes must seed the same inputs and host
 //! the formula in the same cell, or a disagreement between them would say
 //! something about the harness rather than about the engine.
 //!
 //! The setup grammar (`text:` / `bool:` / `empty` / `@Addr` / `-`) is
-//! documented on `tests/corpus_runner.rs`; the Excel generator
+//! documented on `tests/it/corpus_runner.rs`; the Excel generator
 //! (`oracle/excel/oracle_cases.py`) mirrors it.
 
 use crate::CorpusCase;

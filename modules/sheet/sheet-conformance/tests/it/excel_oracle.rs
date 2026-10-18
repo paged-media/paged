@@ -448,7 +448,7 @@ fn excel_oracle_fn_corpus__feat__sheet_fn_library() {
 // non-locale row was recorded as Excel's `=TEXT(A1,"<code>")` over the seeded
 // value (generate.py builds the identical formula). The engine side is the
 // formatter itself (`sheet_format::format_value`, en-US, 1900 system) — the
-// same call `tests/format.rs` gates — so a disagreement is about the format
+// same call `tests/it/format.rs` gates — so a disagreement is about the format
 // engine. TEXT() is not the cell display in every respect (it has no colour
 // and no column width for `*` fill); those rows are listed as divergences.
 

@@ -20,6 +20,13 @@ report, with each file kept separate and why, is in [`test-binaries.json`](test-
 Commands that named a binary (`cargo test -p <crate> --test <file> …`) now say `--test it` and
 filter with `<file>::`.
 
+Paths that named a moved file (`<crate>/tests/<file>.rs`) now name `<crate>/tests/it/<file>.rs`:
+registry `tests:` pointers, docs, comments, and the fixtures that record which test or probe
+generated them. `tooling/migration/rewrite-test-paths.py` made that change (254 files). Golden
+files and this record were left as they were. data's coverage gate maps a `tests/it/<file>.rs`
+pointer to the binary `<crate>::it` and to tests named `<file>::…`. sheet's gate checks only
+that the file exists.
+
 ## Gate
 
 `tooling/migration/test-ids.py`:

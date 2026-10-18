@@ -131,8 +131,8 @@ interface ObjectTypeBaker {
 ## 5. Acceptance fixtures (the facility's definition of done)
 
 *Status note (2026-10-02): the metadata half of F1 is fixtured in
-`crates/paged-canvas/tests/idml_export_saveback.rs:744` and in
-`crates/idml-export/tests/label_roundtrip.rs`. The "derived
+`crates/paged-canvas/tests/it/idml_export_saveback.rs:744` and in
+`crates/idml-export/tests/it/label_roundtrip.rs`. The "derived
 children regenerated" half depends on the bake loop of §4, which is not built.*
 
 - **F1 round-trip live:** create live construct → save → reopen in

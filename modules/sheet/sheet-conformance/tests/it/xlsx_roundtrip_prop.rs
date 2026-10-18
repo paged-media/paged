@@ -78,7 +78,7 @@ fn input() -> impl Strategy<Value = String> {
 /// Cells over a 6x4 window. Formulas are moved to columns C:D and every
 /// generated formula reads only A:B, so the population can never contain a
 /// reference cycle: how an engine settles a cycle is a CALC question (and the
-/// one it raised is pinned in `tests/defects.rs`), not a round-trip one.
+/// one it raised is pinned in `tests/it/defects.rs`), not a round-trip one.
 fn grid() -> impl Strategy<Value = Vec<(u32, u32, String)>> {
     prop::collection::vec((0u32..6, 0u32..4, input()), 1..20).prop_map(|cells| {
         cells

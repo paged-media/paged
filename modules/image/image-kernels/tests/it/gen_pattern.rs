@@ -35,7 +35,7 @@
 //! a core change, which is why it can exist at all.
 //!
 //! WHY A SCALAR MODEL LIVES IN THIS FILE. The gpu↔ref parity for this
-//! family runs in `image-conformance/tests/family_gen.rs`, which this
+//! family runs in `image-conformance/tests/it/family_gen.rs`, which this
 //! agent does not own. The model below mirrors the WGSL term-for-term —
 //! same centre convention, same inverse phase/rotate/scale order, same
 //! float fold, same INDEPENDENT integer wrap of the two tap indices,

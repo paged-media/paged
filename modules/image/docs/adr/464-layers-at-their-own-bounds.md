@@ -40,7 +40,7 @@ the canvas.
 ## Evidence
 
 - Every Photoshop-written layered fixture (58 files, 31 bounded plates) folds to the same bytes
-  bounded and canvas-sized (`image-conformance/tests/bounded_layers.rs`).
+  bounded and canvas-sized (`image-conformance/tests/it/bounded_layers.rs`).
 - The resident-fold property test generates bounded layers and stores layers at their content
   (`LayerStack::shrink_to_content`) at random; it agrees with the uncached reference fold within
   one level. One level, not zero: outside a bounded layer's rectangle the fold leaves the

@@ -19,7 +19,7 @@
 // §7 — the session's governed-catalog surface. The bundle reads a column-metadata
 // sidecar (JSON) and the engine enriches the query's resolved schema with it →
 // documented columns + governance-drift diagnostics. The enrichment semantics are
-// proven in Rust (data-conformance/tests/governed.rs + data-sources unit tests);
+// proven in Rust (data-conformance/tests/it/governed.rs + data-sources unit tests);
 // here we prove the bundle reaches the engine and passes the sidecar through.
 
 import { describe, expect, it, vi } from "vitest";

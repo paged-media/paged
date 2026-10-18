@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Ask Word what an EDITED save-back of tabs, non-breaking hyphens and line
 # breaks looks like. Writes the original run_specials_docx() and the edited
-# save the conformance test makes (docx-conformance/tests/run_specials.rs,
+# save the conformance test makes (docx-conformance/tests/it/run_specials.rs,
 # EDITS), has Word save BOTH as PDF (through word-pagination-probe.sh, which
 # owns the Office automation traps — a repair prompt shows up as a hang and
 # no PDF), and prints, per line, every word and where it starts (pt from the

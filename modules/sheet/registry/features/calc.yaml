@@ -8,7 +8,7 @@
   status: implemented
   provenance: ["spec §6.2"]
   tests:
-    rust: ["sheet-conformance/tests/calc_graph.rs::sheet_calc_graph_cell_edges"]
+    rust: ["sheet-conformance/tests/it/calc_graph.rs::sheet_calc_graph_cell_edges"]
 
 - id: sheet.calc.graph.range-invalidation
   title: Range deps as single nodes with bounding-box invalidation (T0; interval index is the M1 upgrade)
@@ -20,14 +20,14 @@
     it via a LINEAR SCAN over the range keys — the documented M1 interval-index
     upgrade seam (sheet-calc/src/graph.rs::DepGraph::dependents_of).
   tests:
-    rust: ["sheet-conformance/tests/calc_graph.rs::sheet_calc_graph_range_invalidation"]
+    rust: ["sheet-conformance/tests/it/calc_graph.rs::sheet_calc_graph_range_invalidation"]
 
 - id: sheet.calc.dirty.transitive
   title: Dirty propagation — committed edit marks dependents dirty transitively
   status: implemented
   provenance: ["spec §6.2"]
   tests:
-    rust: ["sheet-conformance/tests/calc_graph.rs::sheet_calc_dirty_transitive"]
+    rust: ["sheet-conformance/tests/it/calc_graph.rs::sheet_calc_dirty_transitive"]
 
 - id: sheet.calc.recalc.topo
   title: Topological recalc of the dirty cut (Kahn, stable frontier ordering)
@@ -39,14 +39,14 @@
     never depends on hash order — determinism (sheet.calc.recalc.order-independence)
     falls out by construction (sheet-calc/src/topo.rs).
   tests:
-    rust: ["sheet-conformance/tests/calc_order.rs::sheet_calc_recalc_topo"]
+    rust: ["sheet-conformance/tests/it/calc_order.rs::sheet_calc_recalc_topo"]
 
 - id: sheet.calc.recalc.order-independence
   title: Determinism — recalculation order must not affect results (property)
   status: implemented
   provenance: ["spec §6.2 / §12.4"]
   tests:
-    rust: ["sheet-conformance/tests/calc_order.rs::sheet_calc_recalc_order_independence"]
+    rust: ["sheet-conformance/tests/it/calc_order.rs::sheet_calc_recalc_order_independence"]
 
 - id: sheet.calc.circular
   title: Circular references with iteration off — cycle members get the internal Circular diagnostic (displays #REF!-class, reported on RecalcResult.circular); iterative calc is D-7/T2
@@ -64,7 +64,7 @@
   status: implemented
   provenance: ["spec §6.2, D-7"]
   tests:
-    rust: ["sheet-conformance/tests/calc_graph.rs::sheet_calc_circular"]
+    rust: ["sheet-conformance/tests/it/calc_graph.rs::sheet_calc_circular"]
 
 - id: sheet.calc.volatile
   title: Volatile functions reseeded dirty every recalc pass (NOW/TODAY/RAND/RANDBETWEEN per registry volatility flag)
@@ -77,7 +77,7 @@
     pass counter and the cell address (sheet-calc/src/volatile.rs::cell_seed) —
     so RAND varies across recalcs yet is reproducible under a fixed seed.
   tests:
-    rust: ["sheet-conformance/tests/calc_graph.rs::sheet_calc_volatile"]
+    rust: ["sheet-conformance/tests/it/calc_graph.rs::sheet_calc_volatile"]
 
 - id: sheet.calc.rewrite.structural
   title: Row/col insert/delete rewrite formulas (shift refs; deleted-span refs become #REF!)
@@ -89,4 +89,4 @@
     collapse to #REF!), rebuilds the dependency graph, and recalcs
     (sheet-calc/src/lib.rs).
   tests:
-    rust: ["sheet-conformance/tests/calc_rewrite.rs::sheet_calc_rewrite_structural"]
+    rust: ["sheet-conformance/tests/it/calc_rewrite.rs::sheet_calc_rewrite_structural"]

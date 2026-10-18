@@ -256,7 +256,7 @@ fn image_psd_global_merged_composite_sixteen_bit_rle_is_still_refused() {
 // CMS, which this crate does not have). The polarity and the matte were
 // measured on Photoshop-written files
 // (`image-conformance/fixtures/photoshop/cmyk-stacks`, replayed in
-// `image-conformance/tests/psd_cmyk_photoshop.rs`); these pin the decode
+// `image-conformance/tests/it/psd_cmyk_photoshop.rs`); these pin the decode
 // on hand-built bytes.
 
 /// The planes are stored INVERTED (255 = no ink); the decode flips them

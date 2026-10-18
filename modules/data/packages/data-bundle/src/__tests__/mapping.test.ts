@@ -18,7 +18,7 @@
 
 // The §9 field-mapping wizard wired through the SESSION against a fake engine
 // (the schema → ColumnMapping[] kernel is proven in Rust:
-// data-conformance/tests/mapping.rs). This pins the bundle ORCHESTRATION:
+// data-conformance/tests/it/mapping.rs). This pins the bundle ORCHESTRATION:
 // queryMappings surfaces the engine's column suggestions, and applyMappings
 // generates a variable binding per MAPPABLE column from the engine-computed
 // expr (non-mappable columns are skipped — the bundle never invents an expr).

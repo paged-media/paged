@@ -30,7 +30,7 @@
 # kind comes from the plot-area child element, bar-vs-column from c:barDir,
 # the stacked variants from c:grouping val="stacked" (honoured only inside
 # c:barChart), and donut is its own element (c:doughnutChart), not a pie
-# attribute. Conformance: sheet-conformance/tests/chart.rs::
+# attribute. Conformance: sheet-conformance/tests/it/chart.rs::
 # sheet_chart_xlsx_part_kind_battery.
 #
 # Content is self-authored for the Paged Annual (print-shop circulation

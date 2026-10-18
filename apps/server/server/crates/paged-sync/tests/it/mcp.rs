@@ -16,7 +16,7 @@
 //! paged.server's `/mcp` end to end (`PAGED_SERVER_URL`): a model client reads
 //! a document, writes on its own branch, is refused on main, proposes; a person
 //! approves and merges. The service token `dev-token` stands in for a signed-in
-//! person (tests/oauth.rs covers signing in).
+//! person (tests/it/oauth.rs covers signing in).
 
 use std::io::{Cursor, Write};
 use std::time::{SystemTime, UNIX_EPOCH};

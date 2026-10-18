@@ -177,7 +177,7 @@ proptest! {
 
     // Over values whose binary form IS their decimal form (k/8) — so the
     // property is independent of the 15-digit pre-rounding Excel applies and
-    // the engine does not yet (`tests/defects.rs::defect_fixed_decimals_round_the_binary_value`).
+    // the engine does not yet (`tests/it/defects.rs::defect_fixed_decimals_round_the_binary_value`).
     #[test]
     fn fixed_decimal_codes_round_half_away_from_zero__feat__sheet_format_engine(
         v in (-8_000_000_000i64..8_000_000_000).prop_map(|n| n as f64 / 8.0)

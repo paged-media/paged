@@ -28,7 +28,7 @@
 //! and compares them, row by row, against the artifacts an ANALYST
 //! published from that same corpus — `fixtures/abr/corpus-profile.json`
 //! and `corpus-record-ledger.tsv`. Mirrors the existing opt-in
-//! `PAGED_PSD_ORACLE` lane (`tests/psd_ecosystem.rs`) in shape and in
+//! `PAGED_PSD_ORACLE` lane (`tests/it/psd_ecosystem.rs`) in shape and in
 //! posture: `#[ignore]` keeps it out of the ordinary run, and each test
 //! additionally no-ops with a clean `eprintln!` skip when the switch is
 //! off or the mount is absent.
@@ -38,7 +38,7 @@
 //! copy, and the IMPLEMENTER role may not read it at all (repo
 //! `CLAUDE.md` §3.1). The always-on half of the gate — which needs no
 //! corpus because it drives synthesised fixtures from the published
-//! tables — is `tests/abr_lane_a.rs`.
+//! tables — is `tests/it/abr_lane_a.rs`.
 //!
 //! # The four gates
 //!
@@ -130,7 +130,7 @@ fn corpus(gate: &str) -> Option<Vec<(String, Vec<u8>)>> {
     if std::env::var_os(SWITCH).as_deref() != Some(std::ffi::OsStr::new("1")) {
         eprintln!(
             "SKIP {gate}: {SWITCH} != 1. This lane is ANALYST-owned and needs the \
-             clean-room mount; the always-on half of the gate is tests/abr_lane_a.rs. \
+             clean-room mount; the always-on half of the gate is tests/it/abr_lane_a.rs. \
              Enable with: {SWITCH}=1 cargo test -p image-conformance --test abr_corpus \
              -- --ignored --nocapture"
         );

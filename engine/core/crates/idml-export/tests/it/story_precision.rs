@@ -350,7 +350,7 @@ fn an_anchored_object_after_content_stays_well_formed() {
 ///
 /// The parser now publishes where each source element landed
 /// (`idml_import::StoryProvenance`) and the rewrite looks it up instead
-/// of counting; see `tests/run_alignment_roundtrip.rs`. The exemption
+/// of counting; see `tests/it/run_alignment_roundtrip.rs`. The exemption
 /// list is empty and must stay empty.
 const KNOWN_RUN_MISALIGNMENT: [&str; 0] = [];
 

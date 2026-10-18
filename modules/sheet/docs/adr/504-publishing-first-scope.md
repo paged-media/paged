@@ -49,7 +49,7 @@ repository records this as permanent scope, not as a backlog.
 - `packages/sheet-bundle/src/panels/workbook-panel.tsx:596-625` — the inventory in the panel
 - `sheet-calc/src/external.rs:22-43`, `:95-97` — links never followed, no AST variant,
   `#REF!` when the cache has no entry
-- `sheet-xlsx/src/opc.rs:45-47`, `sheet-conformance/tests/xlsx_roundtrip.rs:222-239`,
+- `sheet-xlsx/src/opc.rs:45-47`, `sheet-conformance/tests/it/xlsx_roundtrip.rs:222-239`,
   `:247-290` — pivot caches and VBA are opaque parts; both survive a save unchanged
 - `packages/sheet-bundle/manifest.json:13` — `network`
 
@@ -69,7 +69,7 @@ line to `paged.data` is drawn in a comment; no code here depends on that plugin.
 the code today:
 
 - `resolve_cached` and the `ExternalCache` trait have no caller outside
-  `sheet-conformance/tests/extlink.rs`; the engine never resolves an external reference
+  `sheet-conformance/tests/it/extlink.rs`; the engine never resolves an external reference
   through the parsed cache. What a user sees is the value cached in the cell. A formula
   that fails to parse on load is counted in `unparsed_formulas` and keeps its raw text and
   cached value (`sheet-js/src/core.rs:440-455`); no test runs an external-reference

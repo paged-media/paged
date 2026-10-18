@@ -3,7 +3,7 @@
 // existed then, plus a captured data set). Re-record (local only):
 //   mkdir c10 && cd c10 && curl -fsSL $(npm view @paged-media/data@0.1.0-canary.10 dist.tarball) | tar xz
 //   cp <this file> gen.mjs && node gen.mjs > canary10-payload.json
-// The migration test (data-conformance/tests/property.rs) loads it into
+// The migration test (data-conformance/tests/it/property.rs) loads it into
 // today's engine: ADR 558's additive rule.
 import { readFileSync } from "node:fs";
 import init, { DataEngine } from "./package/bin/data_js.js";

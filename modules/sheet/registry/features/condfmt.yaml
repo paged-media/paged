@@ -23,7 +23,7 @@
   ruling: "ADDITIVE parse: the worksheet still captures the conditionalFormatting subtree verbatim (preserve.rs) — it round-trips byte-identical — AND the cf model is parsed alongside for lowering (read-only derived state, never written back), exactly the VisualStyles discipline. The dxf table parses from styles.xml `<dxfs>` (bgColor fill convention)."
   provenance: ["ECMA-376 §18.3.1.18 (conditionalFormatting), §18.3.1.10 (cfRule)", "ECMA-376 §18.8.14-15 (dxf/dxfs)", "spec §10.4 (targets rendered in T2)"]
   tests:
-    rust: ["sheet-conformance/tests/condfmt.rs::sheet_xlsx_conditional_formatting"]
+    rust: ["sheet-conformance/tests/it/condfmt.rs::sheet_xlsx_conditional_formatting"]
 
 - id: sheet.lower.condfmt.cfrule-parse
   title: cfRule model — parse the rule type, priority, dxf style, and formula/operator operands
@@ -32,7 +32,7 @@
   ruling: "cellIs operands parse as numeric literals (a non-numeric operand makes the rule inert in T2, preserve-only); `expression` reduces to `cell <op> literal` when possible, else ExpressionUnsupported (DEFERRED — no formula evaluator in pure lowering); priority absent sorts last."
   provenance: ["ECMA-376 §18.3.1.10 (cfRule)", "spec §10.4"]
   tests:
-    rust: ["sheet-conformance/tests/condfmt.rs::sheet_lower_condfmt_cfrule_parse"]
+    rust: ["sheet-conformance/tests/it/condfmt.rs::sheet_lower_condfmt_cfrule_parse"]
 
 - id: sheet.lower.condfmt.cellis
   title: "cellIs rules (cell-value comparison: between/equal/greaterThan/...) -> per-cell style override"
@@ -41,7 +41,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.3.1.10 (cfRule type=cellIs)", "spec §8.3 style-override lowering"]
   tests:
-    rust: ["sheet-conformance/tests/condfmt.rs::sheet_lower_condfmt_cellis"]
+    rust: ["sheet-conformance/tests/it/condfmt.rs::sheet_lower_condfmt_cellis"]
 
 - id: sheet.lower.condfmt.colorscale
   title: "colorScale (2/3-color) -> per-cell fill override (T2: the interpolated color becomes a local fill override)"
@@ -51,7 +51,7 @@
   provenance: ["ECMA-376 §18.3.1.16 (colorScale)", "ECMA-376 §18.8.27 (indexed palette)", "spec §8.3, §10.4"]
   tests:
     rust:
-      - "sheet-conformance/tests/condfmt.rs::sheet_lower_condfmt_colorscale"
+      - "sheet-conformance/tests/it/condfmt.rs::sheet_lower_condfmt_colorscale"
       - "sheet-xlsx/src/parts/conditional_format.rs::sheet_lower_condfmt_colorscale_theme_indexed_stops_align"
       - "sheet-xlsx/src/parts/conditional_format.rs::sheet_lower_condfmt_colorscale_unresolved_stop_holds_alignment"
 
@@ -63,7 +63,7 @@
   provenance: ["ECMA-376 §18.3.1.28 (dataBar)", "spec §8.2 (page-draw native geometry lane), §8.1 (grid surface), §10.4 (rendered tier)"]
   tests:
     rust:
-      - "sheet-conformance/tests/condfmt.rs::sheet_lower_condfmt_databar"
+      - "sheet-conformance/tests/it/condfmt.rs::sheet_lower_condfmt_databar"
       - "sheet-lower/src/condfmt.rs::sheet_lower_condfmt_databar_geometry"
       - "sheet-grid/src/lib.rs::sheet_grid_scene_databars"
     vitest: ["packages/sheet-host-model/test/lower-to-mutations.spec.ts"]
@@ -75,7 +75,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.3.1.49 (iconSet)", "spec §10.4 (preserved floor)"]
   tests:
-    rust: ["sheet-conformance/tests/condfmt.rs::sheet_lower_condfmt_iconset"]
+    rust: ["sheet-conformance/tests/it/condfmt.rs::sheet_lower_condfmt_iconset"]
 
 - id: sheet.lower.condfmt.lower-to-style-override
   title: The shared lowering seam — a matched CF rule resolves to a constrained local style override (spec §8.3), visually flagged off-style in the grid
@@ -84,4 +84,4 @@
   status: implemented
   provenance: ["spec §8.3 (direct formatting lowers as constrained local overrides)"]
   tests:
-    rust: ["sheet-conformance/tests/condfmt.rs::sheet_lower_condfmt_lower_to_style_override"]
+    rust: ["sheet-conformance/tests/it/condfmt.rs::sheet_lower_condfmt_lower_to_style_override"]

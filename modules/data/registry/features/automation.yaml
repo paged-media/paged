@@ -12,7 +12,7 @@
       "plans WHICH records feed WHICH document over the stabilized result (deterministic/permutation-invariant); the executor lowers each unit through the normal pipeline — nothing renders here (§10)",
     ]
   tests:
-    rust: ["data-conformance/tests/automation.rs::data_automation_batch"]
+    rust: ["data-conformance/tests/it/automation.rs::data_automation_batch"]
 
 - id: data.automation.run
   title: Batch run — execute a plan per-document (resolve + paginate each unit, §10)
@@ -23,7 +23,7 @@
       "partitions the RESOLVED flow by mode (per-record/per-group/one-catalog) + paginates each unit through the same data-lower path the live doc uses; nothing renders here (executor, not renderer)",
     ]
   tests:
-    rust: ["data-conformance/tests/batch_run.rs::data_automation_run"]
+    rust: ["data-conformance/tests/it/batch_run.rs::data_automation_run"]
 
 - id: data.automation.cli
   title: Headless batch CLI — drive a batch run server/CI from a JSON job (§10)

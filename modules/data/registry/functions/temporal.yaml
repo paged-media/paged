@@ -11,7 +11,7 @@
   status: implemented
   provenance: ["civil year; own code (data-core::temporal)"]
   tests:
-    rust: ["data-conformance/tests/expr_temporal.rs::data_expr_temporal_year"]
+    rust: ["data-conformance/tests/it/expr_temporal.rs::data_expr_temporal_year"]
 
 - id: data.expr.temporal.month
   name: MONTH
@@ -21,7 +21,7 @@
   status: implemented
   provenance: ["civil month; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_temporal.rs::data_expr_temporal_month"]
+    rust: ["data-conformance/tests/it/expr_temporal.rs::data_expr_temporal_month"]
 
 - id: data.expr.temporal.day
   name: DAY
@@ -31,7 +31,7 @@
   status: implemented
   provenance: ["civil day; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_temporal.rs::data_expr_temporal_day"]
+    rust: ["data-conformance/tests/it/expr_temporal.rs::data_expr_temporal_day"]
 
 - id: data.expr.temporal.today
   name: TODAY
@@ -41,7 +41,7 @@
   status: implemented
   provenance: ["injected eval clock; deterministic"]
   tests:
-    rust: ["data-conformance/tests/expr_temporal.rs::data_expr_temporal_today"]
+    rust: ["data-conformance/tests/it/expr_temporal.rs::data_expr_temporal_today"]
 
 - id: data.expr.temporal.weekday
   name: WEEKDAY
@@ -51,4 +51,4 @@
   status: implemented
   provenance: ["1=Sun..7=Sat (Excel default); own code"]
   tests:
-    rust: ["data-conformance/tests/expr_temporal.rs::data_expr_temporal_weekday"]
+    rust: ["data-conformance/tests/it/expr_temporal.rs::data_expr_temporal_weekday"]

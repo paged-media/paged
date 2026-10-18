@@ -46,7 +46,7 @@ the binding kind; a data set is a captured snapshot of resolved values.
 - `data-js/src/core.rs:859-880`, `:969-1010` — capture and apply; apply marks `Overridden`
 - `packages/data-host-model/src/variables.ts:117-183` — the plan and the single batch
 - `packages/data-bundle/src/activate.ts:129-150` — capture and apply as payload commands
-- `data-conformance/tests/variables.rs:610-793` — the XML tests
+- `data-conformance/tests/it/variables.rs:610-793` — the XML tests
 
 ## Alternatives considered
 

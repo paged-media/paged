@@ -48,7 +48,7 @@ capacities that the caller provides.
 - `data-core/src/binding.rs:364-375` — `Template` and its height model
 - `packages/data-bundle/src/session.ts:80-110`, `:1439-1465` — `readLiveChain`,
   `paginateChain`, `subscribeChainReflow`
-- `data-conformance/tests/recordflow.rs:123-182`, `data-conformance/tests/properties.rs:85-120`
+- `data-conformance/tests/it/recordflow.rs:123-182`, `data-conformance/tests/it/properties.rs:85-120`
   — packing, the tall record, and the order-preserving property test
 
 ## Alternatives considered

@@ -9,4 +9,4 @@
   status: implemented
   provenance: ["IR offsets from the region origin; never display geometry"]
   tests:
-    rust: ["data-conformance/tests/frame_transform.rs::data_frame_transform_content_space"]
+    rust: ["data-conformance/tests/it/frame_transform.rs::data_frame_transform_content_space"]

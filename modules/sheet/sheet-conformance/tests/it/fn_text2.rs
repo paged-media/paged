@@ -545,7 +545,7 @@ fn sheet_fn_text2_textsplit_not_found_and_errors() {
 
 // ============================ corpus replay (end-to-end) ============================
 //
-// The shared `tests/corpus_runner.rs` has a fixed list of `sheet_calc_corpus_<family>`
+// The shared `tests/it/corpus_runner.rs` has a fixed list of `sheet_calc_corpus_<family>`
 // tests (the seven T0 families) and no `text2` arm — so the text2 goldens under
 // `corpus/fn-corpus/text2/` would otherwise never be replayed through the real
 // engine. This test owns that gate: it loads every text2 golden and drives it

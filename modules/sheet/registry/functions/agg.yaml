@@ -10,7 +10,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (AVERAGE)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_agg.rs::sheet_fn_agg_average"]
+    rust: ["sheet-conformance/tests/it/fn_agg.rs::sheet_fn_agg_average"]
     corpus: ["corpus/fn-corpus/agg/average.golden.tsv"]
 
 - id: sheet.fn.agg.min
@@ -23,7 +23,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (MIN)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_agg.rs::sheet_fn_agg_min"]
+    rust: ["sheet-conformance/tests/it/fn_agg.rs::sheet_fn_agg_min"]
     corpus: ["corpus/fn-corpus/agg/min.golden.tsv"]
 
 - id: sheet.fn.agg.max
@@ -36,7 +36,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (MAX)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_agg.rs::sheet_fn_agg_max"]
+    rust: ["sheet-conformance/tests/it/fn_agg.rs::sheet_fn_agg_max"]
     corpus: ["corpus/fn-corpus/agg/max.golden.tsv"]
 
 - id: sheet.fn.agg.count
@@ -49,7 +49,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (COUNT)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_agg.rs::sheet_fn_agg_count"]
+    rust: ["sheet-conformance/tests/it/fn_agg.rs::sheet_fn_agg_count"]
     corpus: ["corpus/fn-corpus/agg/count.golden.tsv"]
 
 - id: sheet.fn.agg.counta
@@ -62,7 +62,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (COUNTA)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_agg.rs::sheet_fn_agg_counta"]
+    rust: ["sheet-conformance/tests/it/fn_agg.rs::sheet_fn_agg_counta"]
     corpus: ["corpus/fn-corpus/agg/counta.golden.tsv"]
 
 - id: sheet.fn.agg.countblank
@@ -75,7 +75,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (COUNTBLANK)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_agg.rs::sheet_fn_agg_countblank"]
+    rust: ["sheet-conformance/tests/it/fn_agg.rs::sheet_fn_agg_countblank"]
     corpus: ["corpus/fn-corpus/agg/countblank.golden.tsv"]
 
 - id: sheet.fn.agg.sumif
@@ -88,7 +88,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (SUMIF) — criteria grammar shared with COUNTIF"]
   tests:
-    rust: ["sheet-conformance/tests/fn_agg.rs::sheet_fn_agg_sumif"]
+    rust: ["sheet-conformance/tests/it/fn_agg.rs::sheet_fn_agg_sumif"]
     corpus: ["corpus/fn-corpus/agg/sumif.golden.tsv"]
 
 - id: sheet.fn.agg.countif
@@ -101,7 +101,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (COUNTIF)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_agg.rs::sheet_fn_agg_countif"]
+    rust: ["sheet-conformance/tests/it/fn_agg.rs::sheet_fn_agg_countif"]
     corpus: ["corpus/fn-corpus/agg/countif.golden.tsv"]
 
 # ---- Wave 7 (data & functions) additions ----
@@ -116,5 +116,5 @@
   status: implemented
   provenance: ["Microsoft AVERAGEIF (public docs) — range, criteria, [average_range]; numeric targets only; no match -> #DIV/0!"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_agg_averageif"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_agg_averageif"]
     corpus: ["corpus/fn-corpus/agg/averageif.golden.tsv"]

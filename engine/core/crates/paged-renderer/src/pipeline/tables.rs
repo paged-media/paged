@@ -2155,7 +2155,7 @@ const CELL_FIT_EPSILON_PT: f32 = 0.01;
 
 /// One item of a cell's content, placed by InDesign's rules (measured
 /// 2026-10-02 on `tables-rows`; the rules are written out in
-/// `tests/tables_rows_pipeline.rs`). Positions are points below the
+/// `tests/it/tables_rows_pipeline.rs`). Positions are points below the
 /// cell's inner top — its top inset.
 enum CellItem<'t> {
     Text {

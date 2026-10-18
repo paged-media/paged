@@ -8,7 +8,7 @@
   status: implemented
   provenance: ["own code over the RecordSet interchange"]
   tests:
-    rust: ["data-conformance/tests/query.rs::data_query_shape"]
+    rust: ["data-conformance/tests/it/query.rs::data_query_shape"]
 
 - id: data.query.order
   title: Injected deterministic ordering (permutation-invariant; stable identity)
@@ -16,7 +16,7 @@
   status: implemented
   provenance: ["stabilises unordered DuckDB iteration before binding"]
   tests:
-    rust: ["data-conformance/tests/query.rs::data_query_order"]
+    rust: ["data-conformance/tests/it/query.rs::data_query_order"]
 
 - id: data.query.content-hash
   title: Content hashing for the ResolveStamp invalidation key
@@ -24,7 +24,7 @@
   status: implemented
   provenance: ["FNV-1a over schema + values; bit-stable"]
   tests:
-    rust: ["data-conformance/tests/query.rs::data_query_content_hash"]
+    rust: ["data-conformance/tests/it/query.rs::data_query_content_hash"]
 
 - id: data.query.arrow-ipc
   title: Raw Arrow-IPC decode in Rust (so the boundary takes IPC, not JSON)

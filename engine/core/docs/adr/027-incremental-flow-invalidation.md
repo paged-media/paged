@@ -124,7 +124,7 @@ away from other stories' cache entries by the commit path instead.
 - `crates/paged-canvas/src/model.rs:9691-9730` — `compare_builds` compares the page ids, each
   page's `DisplayList::digest()`, each page's `story_layout` and the diagnostics. The decision
   names only the digest.
-- `crates/paged-canvas/tests/digest_gate.rs:19-32` — the test that scripts edits and checks
+- `crates/paged-canvas/tests/it/digest_gate.rs:19-32` — the test that scripts edits and checks
   after every operation.
 
 In this repository the gate is that integration test; no file under `.github/workflows` names

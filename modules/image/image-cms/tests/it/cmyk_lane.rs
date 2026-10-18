@@ -26,7 +26,7 @@
 //! re-inversion). This is the capability the qcms display lane lacks
 //! (audit §A): qcms is RGB-display-centric and exposes no 4-ink ingest.
 //!
-//! Hermeticity, the same discipline as `tests/print_lane.rs`: every ICC
+//! Hermeticity, the same discipline as `tests/it/print_lane.rs`: every ICC
 //! profile is synthesised in-test via `lcms2-sys` raw FFI (the safe
 //! `lcms2` surface cannot author a CLUT-bearing CMYK device profile — no
 //! stage-insertion entry point) and serialised to bytes. moxcms and the
@@ -35,7 +35,7 @@
 //!
 //! ## Tolerance ruling (deltas vs the RGB display lane)
 //!
-//! `tests/parity.rs` and `tests/print_lane.rs` bound the RGB↔RGB lanes
+//! `tests/it/parity.rs` and `tests/it/print_lane.rs` bound the RGB↔RGB lanes
 //! at **3/255** per channel: those are matrix-shaper pipelines where the
 //! only residual is gamma/matrix rounding. The CMYK ingest path is a
 //! *CLUT* pipeline (4-in → 3-out A2B), so the residual is dominated by

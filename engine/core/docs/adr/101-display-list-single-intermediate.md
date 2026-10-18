@@ -52,9 +52,9 @@ It is a flat `Vec<DisplayCommand>` plus pools the commands index into: an intern
 - `crates/paged-compose/src/display_list.rs:1162-1189` — "Why three markers and not a `SoftMaskId` pool": the rejected pool, the passes that walk by flat range, the PDF mapping
 - `crates/paged-compose/src/display_list.rs:986-1002` — `bounds` "is a CLIP, not an allocation hint"; `crates/paged-compose/src/extent.rs:40-48` — the fitting pass; `crates/paged-renderer/src/pipeline/build_engine.rs:3631` — where it runs
 - `crates/paged-compose/src/display_list.rs:1590-1643` — `digest()`
-- `crates/paged-sdk/tests/digest_equivalence.rs:19-27` — viewer build against stock build
+- `crates/paged-sdk/tests/it/digest_equivalence.rs:19-27` — viewer build against stock build
 - `crates/paged-canvas/src/model.rs:8921-8936`, `:9693-9721` — the digest gate: incremental build against cold build
-- `crates/paged-store/tests/round_trip_render.rs:53-66` — native round trip against import
+- `crates/paged-store/tests/it/round_trip_render.rs:53-66` — native round trip against import
 - `crates/paged-export-pdf/src/lib.rs:21-24` — the exporter is "A SECOND backend over the same resolved per-page display list"
 
 ## Alternatives considered
@@ -82,7 +82,7 @@ The digest is not a stored format: "don't store digests across engine versions".
 not hash the side channels, and it does not cover caret and hit-test geometry; the digest
 gate compares `story_layout` and the diagnostics separately. A comparison of the browser
 wasm's digest with the native one is named as a follow-up and is not built
-(`crates/paged-sdk/tests/digest_equivalence.rs:25-27`).
+(`crates/paged-sdk/tests/it/digest_equivalence.rs:25-27`).
 
 `crates/paged-compose/src/lib.rs:22-25` and `README.md:5` call the display list
 "versioned". `paged-compose` contains no version constant or field.

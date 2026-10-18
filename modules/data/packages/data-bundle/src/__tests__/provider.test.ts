@@ -21,7 +21,7 @@
 // (the sheets plugin sourcing a sheet from a governed query) through the future
 // core data-provider registry. The engine produces the publication; registration
 // is gated (no host.dataProviders door) → honest defer, never faked. The
-// engine-side semantics are proven in Rust (data-conformance/tests/provider.rs);
+// engine-side semantics are proven in Rust (data-conformance/tests/it/provider.rs);
 // here we prove the bundle reaches the engine and does not fake a registration.
 
 import { describe, expect, it, vi } from "vitest";

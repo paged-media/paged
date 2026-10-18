@@ -107,7 +107,7 @@ hayro-interpret = { version = "0.8", default-features = false, features = ["embe
 [dev-dependencies]
 paged-fidelity = { path = "../paged-fidelity" }
 paged-flow = { path = "../paged-flow" }
-# C1-in-code test (tests/c1_no_idml.rs) drives the neutral render pipeline
+# C1-in-code test (tests/it/c1_no_idml.rs) drives the neutral render pipeline
 # (flow -> SceneLayer -> DisplayList -> raster) directly, with no IDML.
 paged-compose = { path = "../paged-compose" }
 paged-gpu = { path = "../paged-gpu", features = ["cpu"] }

@@ -1872,7 +1872,7 @@ fn character_style_entries(
 }
 
 /// Every path `set_paragraph_style_field` accepts, read off the definition.
-/// `style_properties_cover_every_settable_style_path` (tests/style_properties.rs)
+/// `style_properties_cover_every_settable_style_path` (tests/it/style_properties.rs)
 /// fails when the setter learns a path this list does not read.
 fn paragraph_style_entries(
     d: &paged_model::ParagraphStyleDef,

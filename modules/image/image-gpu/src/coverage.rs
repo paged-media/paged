@@ -31,7 +31,7 @@
 //! GPU-only: [`Self::mask_window_f16`] lowers a window of the coverage
 //! to the ABI's r16float `@group(2)` texture and every kernel dispatch
 //! applies `out = mix(a, result, mask)` on the GPU (`image_kernels::abi`,
-//! proven by `image-conformance/tests/selection_mask.rs`). The feather
+//! proven by `image-conformance/tests/it/selection_mask.rs`). The feather
 //! in particular is a Gaussian on the u8 MASK, not on the image — a
 //! GPU mask-blur lane can replace it later without changing this type's
 //! contract.

@@ -33,7 +33,7 @@
 //!
 //! This sample carries no paired InDesign-exported PDF and is therefore
 //! NOT in `fidelity-thresholds.json` — the hard fidelity gate skips it.
-//! Its correctness is pinned by `paged-renderer/tests/paste_into.rs`
+//! Its correctness is pinned by `paged-renderer/tests/it/paste_into.rs`
 //! (display-list + pixel probes) and by the writer round-trip suite.
 
 use crate::builders::{

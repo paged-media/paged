@@ -1,5 +1,5 @@
 # Engine-vs-Excel disagreements over the number-format corpus
-# (tests/excel_oracle.rs::excel_oracle_format_corpus). Same rules as divergences.tsv.
+# (tests/it/excel_oracle.rs::excel_oracle_format_corpus). Same rules as divergences.tsv.
 # file	id	kind (defect|diverges)	engine	excel	reason
 general.golden.tsv	gen-15sig	diverges	s:123456789012345	s:1.23457E+14	harness/ruling: TEXT(x,"General") renders General at the 11-character width of a standard column; the engine's General is the 15-significant-digit display (registry ruling), which is what an unconstrained cell shows
 general.golden.tsv	gen-1e15	diverges	s:1000000000000000	s:1E+15	harness/ruling: TEXT(x,"General") renders General at the 11-character width of a standard column; the engine's General is the 15-significant-digit display (registry ruling), which is what an unconstrained cell shows

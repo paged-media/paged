@@ -205,7 +205,7 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
   `paged-canvas`. Undo keeps the newest 10,000 steps; a batch is one step at any size and in
   either lane.
 - **The command line sends 39 of the 70 message kinds.** The rest are listed with a reason
-  each in `crates/paged-cli/tests/cli_surface.rs`; half of them (15 of 31) need a pointer or a caret.
+  each in `crates/paged-cli/tests/it/cli_surface.rs`; half of them (15 of 31) need a pointer or a caret.
 - **The Vello path is held to the CPU path, with known gaps.** `corpus/generated/parity-diff.sh`
   renders every generated fixture through both and budgets each in
   `corpus/generated/parity-thresholds.json` ([ADR 146](adr/146-the-gpu-lane-is-held-to-the-cpu-lane.md)).
@@ -313,5 +313,5 @@ The release order when core and the IDML adapter pin each other is in
 - A CPU or WebGL fallback in the viewer, and any editing in it.
 - A raw-JSON subcommand on the command line; `paged session` is the general door.
 - A digest comparison between the browser wasm and the native build; the equivalence test
-  runs natively (`crates/paged-sdk/tests/digest_equivalence.rs:24-26`).
+  runs natively (`crates/paged-sdk/tests/it/digest_equivalence.rs:24-26`).
 - A bundled typeface or ICC profile; crates on a Rust registry (`publish = false`).

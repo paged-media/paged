@@ -23,8 +23,8 @@
   tests:
     rust:
       [
-        "data-conformance/tests/variables.rs::data_dataset_trait_map_covers_the_three_bindable_illustrator_traits",
-        "data-conformance/tests/variables.rs::data_dataset_capture_snapshots_all_three_kinds_at_a_record",
+        "data-conformance/tests/it/variables.rs::data_dataset_trait_map_covers_the_three_bindable_illustrator_traits",
+        "data-conformance/tests/it/variables.rs::data_dataset_capture_snapshots_all_three_kinds_at_a_record",
       ]
 
 - id: data.variable.filereference
@@ -38,7 +38,7 @@
   tests:
     rust:
       [
-        "data-conformance/tests/variables.rs::data_dataset_capture_snapshots_all_three_kinds_at_a_record",
+        "data-conformance/tests/it/variables.rs::data_dataset_capture_snapshots_all_three_kinds_at_a_record",
       ]
     vitest: ["packages/data-host-model/src/__tests__/variables.test.ts"]
 
@@ -55,11 +55,11 @@
   tests:
     rust:
       [
-        "data-conformance/tests/variables.rs::data_bind_visibility_truthiness_decides_shown_or_hidden",
-        "data-conformance/tests/variables.rs::data_bind_visibility_invert_flips_the_data_decision",
-        "data-conformance/tests/variables.rs::data_bind_visibility_missing_policy_leave_writes_nothing",
-        "data-conformance/tests/variables.rs::data_bind_visibility_uncoercible_value_takes_the_missing_policy",
-        "data-conformance/tests/variables.rs::data_lower_visibility_is_a_pure_pass_through",
+        "data-conformance/tests/it/variables.rs::data_bind_visibility_truthiness_decides_shown_or_hidden",
+        "data-conformance/tests/it/variables.rs::data_bind_visibility_invert_flips_the_data_decision",
+        "data-conformance/tests/it/variables.rs::data_bind_visibility_missing_policy_leave_writes_nothing",
+        "data-conformance/tests/it/variables.rs::data_bind_visibility_uncoercible_value_takes_the_missing_policy",
+        "data-conformance/tests/it/variables.rs::data_lower_visibility_is_a_pure_pass_through",
       ]
     vitest:
       [
@@ -89,9 +89,9 @@
   tests:
     rust:
       [
-        "data-conformance/tests/variables.rs::data_dataset_capture_snapshots_all_three_kinds_at_a_record",
-        "data-conformance/tests/variables.rs::data_dataset_capture_every_record_builds_the_whole_palette",
-        "data-conformance/tests/variables.rs::data_dataset_capture_skips_the_leave_policy_rather_than_inventing_a_value",
+        "data-conformance/tests/it/variables.rs::data_dataset_capture_snapshots_all_three_kinds_at_a_record",
+        "data-conformance/tests/it/variables.rs::data_dataset_capture_every_record_builds_the_whole_palette",
+        "data-conformance/tests/it/variables.rs::data_dataset_capture_skips_the_leave_policy_rather_than_inventing_a_value",
       ]
 
 - id: data.dataset.apply
@@ -109,10 +109,10 @@
   tests:
     rust:
       [
-        "data-conformance/tests/variables.rs::data_dataset_apply_plans_one_typed_write_per_variable",
-        "data-conformance/tests/variables.rs::data_dataset_apply_marks_the_applied_bindings_overridden",
-        "data-conformance/tests/variables.rs::data_dataset_apply_protects_a_never_resolved_binding_too",
-        "data-conformance/tests/variables.rs::data_dataset_apply_reports_unapplicable_rows_instead_of_faking_them",
+        "data-conformance/tests/it/variables.rs::data_dataset_apply_plans_one_typed_write_per_variable",
+        "data-conformance/tests/it/variables.rs::data_dataset_apply_marks_the_applied_bindings_overridden",
+        "data-conformance/tests/it/variables.rs::data_dataset_apply_protects_a_never_resolved_binding_too",
+        "data-conformance/tests/it/variables.rs::data_dataset_apply_reports_unapplicable_rows_instead_of_faking_them",
       ]
     vitest:
       [
@@ -134,10 +134,10 @@
   tests:
     rust:
       [
-        "data-conformance/tests/variables.rs::data_dataset_xml_round_trips_all_four_traits",
-        "data-conformance/tests/variables.rs::data_dataset_xml_reads_the_illustrator_entity_reference_form",
-        "data-conformance/tests/variables.rs::data_dataset_xml_rejects_what_it_cannot_honestly_import",
-        "data-conformance/tests/variables.rs::data_dataset_xml_preserves_graph_data_across_a_full_import_export",
+        "data-conformance/tests/it/variables.rs::data_dataset_xml_round_trips_all_four_traits",
+        "data-conformance/tests/it/variables.rs::data_dataset_xml_reads_the_illustrator_entity_reference_form",
+        "data-conformance/tests/it/variables.rs::data_dataset_xml_rejects_what_it_cannot_honestly_import",
+        "data-conformance/tests/it/variables.rs::data_dataset_xml_preserves_graph_data_across_a_full_import_export",
       ]
 
 - id: data.dataset.persistence
@@ -152,9 +152,9 @@
   tests:
     rust:
       [
-        "data-conformance/tests/variables.rs::data_dataset_payload_round_trips_through_the_document",
-        "data-conformance/tests/variables.rs::data_dataset_payload_predates_the_amendment_and_still_loads",
-        "data-conformance/tests/variables.rs::data_dataset_payload_budget_is_measured_not_guessed",
+        "data-conformance/tests/it/variables.rs::data_dataset_payload_round_trips_through_the_document",
+        "data-conformance/tests/it/variables.rs::data_dataset_payload_predates_the_amendment_and_still_loads",
+        "data-conformance/tests/it/variables.rs::data_dataset_payload_budget_is_measured_not_guessed",
       ]
     vitest: ["packages/data-bundle/src/__tests__/variables.test.ts"]
 
@@ -167,7 +167,7 @@
       "REGRESSION FIX found by the real-wasm e2e (Part E). The two 64-bit fingerprints serialized as JS NUMBERS; above Number.MAX_SAFE_INTEGER the wasm serializer errors, and data-js's sync_state shim swallowed that as null — so the bundle saw NO sync state for any binding that had ever resolved, and could not tell Linked from Overridden from Stale. Neither the Rust tests nor the TS fakes caught it because both bypass the boundary. They now serialize as decimal strings (the correct JS form for an opaque 64-bit id; nothing computes with them) and still accept a number on read",
     ]
   tests:
-    rust: ["data-conformance/tests/variables.rs::data_bind_sync_state_survives_the_wasm_boundary"]
+    rust: ["data-conformance/tests/it/variables.rs::data_bind_sync_state_survives_the_wasm_boundary"]
 
 - id: data.variable.caret-placement
   title: A new variable field lands at the user's CARET when the host has C-9

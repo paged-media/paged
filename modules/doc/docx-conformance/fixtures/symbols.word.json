@@ -1,5 +1,5 @@
 {
- "source": "scripts/word-symbols-probe.sh: Microsoft Word saved symbols_docx() and the edited save-back of docx-conformance/tests/symbols.rs (EDITS) as PDF (the edited one opened without a repair prompt: a prompt hangs the probe and leaves no PDF); pdftotext -bbox, per line its baseline y (yMax, pt from the page top) and each word as [text, xMin, xMax] in pt from the page's left edge. Text area x = 36..324. A word's text is what Word's PDF ToUnicode names its glyphs: a private-use code (U+F0xx) where Word gives none.",
+ "source": "scripts/word-symbols-probe.sh: Microsoft Word saved symbols_docx() and the edited save-back of docx-conformance/tests/it/symbols.rs (EDITS) as PDF (the edited one opened without a repair prompt: a prompt hangs the probe and leaves no PDF); pdftotext -bbox, per line its baseline y (yMax, pt from the page top) and each word as [text, xMin, xMax] in pt from the page's left edge. Text area x = 36..324. A word's text is what Word's PDF ToUnicode names its glyphs: a private-use code (U+F0xx) where Word gives none.",
  "date": "2026-10-01",
  "word": "Microsoft Word for Mac 16.113.3",
  "original": [

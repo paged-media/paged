@@ -44,7 +44,7 @@
 //!
 //! These are HANDWRITTEN modules (DSL can't express gid-derived coords),
 //! so each carries a HANDWRITTEN scalar reference twin in the test file
-//! (`image-conformance/tests/family_gen.rs`) that mirrors the same
+//! (`image-conformance/tests/it/family_gen.rs`) that mirrors the same
 //! coordinate math.
 //!
 //! KERNEL-BREADTH BATCH (2026-08): the remaining gradient shapes

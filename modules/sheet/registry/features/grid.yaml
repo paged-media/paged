@@ -53,7 +53,7 @@
   status: implemented
   provenance: ["ADR-012 (K-1 §8.0 undo coalescing, Tier 0/1)", "sheet-js/src/core.rs::get_cell_input"]
   tests:
-    rust: ["sheet-conformance/tests/js_surface.rs::sheet_grid_cell_input_reprint_round_trips"]
+    rust: ["sheet-conformance/tests/it/js_surface.rs::sheet_grid_cell_input_reprint_round_trips"]
 
 - id: sheet.grid.session-undo-journal
   title: In-session undo/redo over committed cell edits (ADR-012 Tier 1) — bundle journal of setCell inverses behind editContext onUndo/onRedo; document stack suspended until modal exit
@@ -69,7 +69,7 @@
     - "RFI §6 K-6 / S-14 — host.clipboard with a { text, tabular } payload"
     - "sheet-js/src/core.rs::get_range_values (the engine-owned range read)"
   tests:
-    rust: ["sheet-conformance/tests/js_surface.rs::sheet_grid_clipboard_copy_range_values"]
+    rust: ["sheet-conformance/tests/it/js_surface.rs::sheet_grid_clipboard_copy_range_values"]
     vitest: ["packages/sheet-bundle/test/clipboard.spec.ts"]
 
 - id: sheet.grid.clipboard.copy-cell-cap
@@ -77,7 +77,7 @@
   status: implemented
   provenance: ["RFI §6 K-6", "the get_range_lowered T0 cap discipline"]
   tests:
-    rust: ["sheet-conformance/tests/js_surface.rs::sheet_grid_clipboard_copy_caps_full_sheet"]
+    rust: ["sheet-conformance/tests/it/js_surface.rs::sheet_grid_clipboard_copy_caps_full_sheet"]
 
 - id: sheet.grid.clipboard.paste-range
   title: Paste host.clipboard (tabular or TSV) into the grid at the selection anchor — each cell re-typed through the journaled editCell lane (one grouped undo step)

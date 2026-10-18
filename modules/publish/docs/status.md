@@ -74,7 +74,7 @@ The two repositories pin each other by git revision, so the steps run in this or
 3. **core:** move the eight `idml-import` / `idml-export` git pins
    (`paged-canvas` ×2, `paged-cli`, `paged-export-pdf`, `paged-gen`, `paged-introspect`,
    `paged-introspect-wasm`, `paged-mutate`) to `rev = "P"`. The pinned-defect assertions
-   in `crates/paged-canvas/tests/idml_export_object_model_state.rs` then fail. Change them
+   in `crates/paged-canvas/tests/it/idml_export_object_model_state.rs` then fail. Change them
    to assert the fix:
    - `a_hidden_item_is_visible_false_in_the_exported_spread` should assert
      `Visible="false"`;

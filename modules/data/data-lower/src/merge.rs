@@ -27,7 +27,7 @@
 //! mutations; nothing here knows the host.
 //!
 //! The layout is the closed-form rule that reproduces all eight InDesign
-//! recordings within ±0.5 pt (`data-conformance/tests/oracle.rs`):
+//! recordings within ±0.5 pt (`data-conformance/tests/it/oracle.rs`):
 //!
 //! - **Single Record** (DM-1): every record gets its own page, its frames at
 //!   the template's own position.

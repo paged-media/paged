@@ -14,7 +14,7 @@
  */
 
 //! Sign-in end to end against a running paged.server (`PAGED_SERVER_URL`; see
-//! tests/sync.rs), with this test standing in for the identity provider on
+//! tests/it/sync.rs), with this test standing in for the identity provider on
 //! 127.0.0.1:8792 — the issuer the server's local `.dev.vars` names. It walks
 //! the flow an MCP client walks: discover, register, authorize (PKCE), follow
 //! the provider round trip, exchange the code, call the API, refresh.

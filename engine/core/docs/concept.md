@@ -68,7 +68,7 @@ types.
   <!-- source: crates/paged-sdk/src/lib.rs:21-31; crates/paged-sdk/WEBGPU.md:50-53 -->
 - **Open a second, untyped door on the command line.** There is no raw-JSON subcommand;
   nothing in the CLI loads a document or applies a mutation except through the dispatcher.
-  <!-- source: crates/paged-cli/tests/cli_surface.rs:45-52; crates/paged-cli/src/engine.rs:29-33 -->
+  <!-- source: crates/paged-cli/tests/it/cli_surface.rs:45-52; crates/paged-cli/src/engine.rs:29-33 -->
 - **Let a script reach the document any other way than through the host functions.**
   <!-- source: crates/paged-script/src/lib.rs:21-25 -->
 - **Let a plugin's container part replace document content.** A part must live under the

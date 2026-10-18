@@ -64,7 +64,7 @@ with `Ready {protocol}` and exposes a `protocolVersion` getter.
 ## Consequences
 
 The text path is handled by a function that compiles on every target, so it is tested
-natively with JSON strings (`crates/paged-canvas-wasm/tests/dispatch.rs:47`). Native callers
+natively with JSON strings (`crates/paged-canvas-wasm/tests/it/dispatch.rs:47`). Native callers
 skip the text: the CLI passes typed `MainToWorker` values to the same dispatch
 (`crates/paged-cli/src/engine.rs:90`, [ADR 113](113-one-typed-door.md)).
 

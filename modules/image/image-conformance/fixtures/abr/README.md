@@ -153,7 +153,7 @@ that had never run. On 2026-08-05 it ran for the first time and passed:
 inverted reading.** The mapping is bijective — every ledger name resolves,
 no pack file is unused, no basename collides.
 
-The remaining nicety is one line of `tests/abr_corpus.rs`: reading
+The remaining nicety is one line of `tests/it/abr_corpus.rs`: reading
 `png_oracle.dir` from the profile instead of hard-coding `png-oracle` would
 make B3 run with no environment variable at all. Reported rather than made,
 so the artifact change and the code change stay separately reviewable.

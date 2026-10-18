@@ -51,7 +51,7 @@ wasm, and the publish workflow fails when an editor crate appears in that graph.
 - `crates/paged-sdk/Cargo.toml:16-32` — the `gpu` feature and the dependency list
 - `.github/workflows/publish-wasm.yml:261-271` — "Subset audit — paged-sdk must not link editor crates"
 - `crates/paged-renderer/Cargo.toml:13-19`, `:45-48` — `mutate-roundtrip` is optional, and `paged-wire` is taken without default features, both for this boundary
-- `crates/paged-sdk/src/build.rs:19-42`, `crates/paged-sdk/tests/digest_equivalence.rs:19-27` — the single load path and its equivalence test
+- `crates/paged-sdk/src/build.rs:19-42`, `crates/paged-sdk/tests/it/digest_equivalence.rs:19-27` — the single load path and its equivalence test
 - `web/idml-viewer/src/session.ts:19-26`, `:63-87` — `ViewerSessionLike` and why it exists
 - `web/idml-viewer/src/bootstrap.ts:21-44` — `createSessionFromBundledWasm` loads `../wasm/paged_sdk.js`, placed by the publish workflow
 - `web/idml-viewer/src/viewer.ts:213-226`, `web/idml-viewer/src/camera.ts:19-25` — the frame loop and the camera as pure functions

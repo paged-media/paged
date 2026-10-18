@@ -21,7 +21,7 @@
   provenance: ["ECMA-376 §18.3.1.85 (sheetView), §18.3.1.66 (pane)", "spec §8.1 (sheets-mode grid view), §10.2 (preservation invariant)"]
   tests:
     rust:
-      - "sheet-conformance/tests/freeze.rs::sheet_grid_freeze_parse"
+      - "sheet-conformance/tests/it/freeze.rs::sheet_grid_freeze_parse"
       - "sheet-xlsx/src/parts/freeze.rs::parse_frozen"
 
 - id: sheet.grid.freeze.render
@@ -32,5 +32,5 @@
   provenance: ["spec §8.1 (grid rendering surface)", "ECMA-376 §18.3.1.66 (pane)"]
   tests:
     rust:
-      - "sheet-conformance/tests/freeze.rs::sheet_grid_freeze_render"
+      - "sheet-conformance/tests/it/freeze.rs::sheet_grid_freeze_render"
       - "sheet-grid/src/lib.rs::sheet_grid_scene_freeze"

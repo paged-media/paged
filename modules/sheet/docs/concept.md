@@ -811,13 +811,13 @@ provenance:
   - "Microsoft function documentation (public)"
   - "LibreOffice oracle corpus: corpus/fn/xlookup/*"
 tests:
-  rust: ["sheet-conformance/tests/fn_lookup.rs::xlookup"]
+  rust: ["sheet-conformance/tests/it/fn_lookup.rs::xlookup"]
   corpus: ["fn-corpus/xlookup.golden.csv"]
 ```
 
 ### 12.4 Oracles and harnesses (`sheet-conformance`, test-only)
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 507](adr/507-golden-corpora-coverage-gate.md) (the LibreOffice oracle skeleton was replaced by the Excel oracle in `sheet-conformance/tests/excel_oracle.rs`; IronCalc is not used).*
+*Status note (2026-10-02): this section predates the implementation; see [ADR 507](adr/507-golden-corpora-coverage-gate.md) (the LibreOffice oracle skeleton was replaced by the Excel oracle in `sheet-conformance/tests/it/excel_oracle.rs`; IronCalc is not used).*
 
 - **LibreOffice Calc headless** (CI container): primary differential
   oracle — workbooks generated per function/feature, evaluated, values

@@ -70,7 +70,7 @@ One routine builds the pipeline for all 128 kernels, and a kernel can be handed 
 engine or to the harness without adaptation. The version number does not distinguish v1 from v1.1. A module kernel carries obligations
 the pipeline layout cannot check: whether it applies the mask, and whether its WGSL
 `Params` matches the Rust block. Tests cover both
-(`image-conformance/tests/gpu_module_kernels.rs:19-53`); the mask checks need a GPU adapter.
+(`image-conformance/tests/it/gpu_module_kernels.rs:19-53`); the mask checks need a GPU adapter.
 
 Comments contradict the code in three places. `image-kernels/src/abi.rs:122-124` still says that giving windowed kernels a halo on
 the one-shot path needs an amendment to the frozen interface; since commit `78278e5` the whole-image door sends `Windowed` kernels to

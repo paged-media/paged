@@ -102,7 +102,7 @@ although real documents set keeps on paragraph styles.
 - plugin-publish `1aad636`: imports the attributes on ranges and on styles,
   and exports the new range attributes.
 - core (after moving its plugin-publish pin `412b884` → `1aad636`):
-  `crates/paged-renderer/tests/keeps_pipeline.rs` pins all 8 InDesign splits, and `keeps` joins the
+  `crates/paged-renderer/tests/it/keeps_pipeline.rs` pins all 8 InDesign splits, and `keeps` joins the
   fidelity gate with InDesign's PDF as reference (8/8 pages; worst page mean ΔE
   0.453).
 
@@ -133,7 +133,7 @@ checked even at the top. With no unit left the rest of the story oversets, which
 chain ([026](026-auto-growing-region-chains.md)) answers with pages. Unlike the keeps this
 needs no fixpoint: it is decided at the paragraph's first line (`keeps::start_target`).
 Shipped: core `1a64483` (model), plugin-publish `912d2d0` (import/export), core `6b85b5d`
-(pipeline, `crates/paged-renderer/tests/start_paragraph_pipeline.rs`, fidelity gate 40/40 pages, worst mean ΔE
+(pipeline, `crates/paged-renderer/tests/it/start_paragraph_pipeline.rs`, fidelity gate 40/40 pages, worst mean ΔE
 0.130). The wire setter rides protocol 64 with the three keep paths.
 
 **Found on the way: styles refused most paragraph paths.** `SetStyleProperty` accepted
@@ -234,7 +234,7 @@ column is reported, not split (`crates/paged-renderer/src/pipeline/deltas.rs:47-
 **8. Gates.** The fixtures `keeps`, `keeps-reflow`, `start-paragraph`, `span-columns` and
 `list-markers` are in the fidelity gate (`corpus/generated/fidelity-thresholds.json:152`,
 `:172`, `:388`, `:436`, `:412`), and the pipeline tests are
-`crates/paged-renderer/tests/keeps_pipeline.rs`, `keeps_reflow_pipeline.rs`,
+`crates/paged-renderer/tests/it/keeps_pipeline.rs`, `keeps_reflow_pipeline.rs`,
 `start_paragraph_pipeline.rs` and `span_columns_pipeline.rs`. `keeps-reflow` was added on
 2026-10-02 for keeps on a growing chain (core `dd3bfe7`).
 

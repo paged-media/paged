@@ -10,7 +10,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ISBLANK)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_info.rs::sheet_fn_info_isblank"]
+    rust: ["sheet-conformance/tests/it/fn_info.rs::sheet_fn_info_isblank"]
     corpus: ["corpus/fn-corpus/info/isblank.golden.tsv"]
 
 - id: sheet.fn.info.isnumber
@@ -23,7 +23,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ISNUMBER)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_info.rs::sheet_fn_info_isnumber"]
+    rust: ["sheet-conformance/tests/it/fn_info.rs::sheet_fn_info_isnumber"]
     corpus: ["corpus/fn-corpus/info/isnumber.golden.tsv"]
 
 - id: sheet.fn.info.istext
@@ -36,7 +36,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ISTEXT)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_info.rs::sheet_fn_info_istext"]
+    rust: ["sheet-conformance/tests/it/fn_info.rs::sheet_fn_info_istext"]
     corpus: ["corpus/fn-corpus/info/istext.golden.tsv"]
 
 - id: sheet.fn.info.islogical
@@ -49,7 +49,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ISLOGICAL)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_info.rs::sheet_fn_info_islogical"]
+    rust: ["sheet-conformance/tests/it/fn_info.rs::sheet_fn_info_islogical"]
     corpus: ["corpus/fn-corpus/info/islogical.golden.tsv"]
 
 - id: sheet.fn.info.iserror
@@ -62,7 +62,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ISERROR)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_info.rs::sheet_fn_info_iserror"]
+    rust: ["sheet-conformance/tests/it/fn_info.rs::sheet_fn_info_iserror"]
     corpus: ["corpus/fn-corpus/info/iserror.golden.tsv"]
 
 - id: sheet.fn.info.iserr
@@ -75,7 +75,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ISERR) — all errors except #N/A"]
   tests:
-    rust: ["sheet-conformance/tests/fn_info.rs::sheet_fn_info_iserr"]
+    rust: ["sheet-conformance/tests/it/fn_info.rs::sheet_fn_info_iserr"]
     corpus: ["corpus/fn-corpus/info/iserr.golden.tsv"]
 
 - id: sheet.fn.info.isna
@@ -88,7 +88,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ISNA)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_info.rs::sheet_fn_info_isna"]
+    rust: ["sheet-conformance/tests/it/fn_info.rs::sheet_fn_info_isna"]
     corpus: ["corpus/fn-corpus/info/isna.golden.tsv"]
 
 - id: sheet.fn.info.na
@@ -101,5 +101,5 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (NA) — returns #N/A"]
   tests:
-    rust: ["sheet-conformance/tests/fn_info.rs::sheet_fn_info_na"]
+    rust: ["sheet-conformance/tests/it/fn_info.rs::sheet_fn_info_na"]
     corpus: ["corpus/fn-corpus/info/na.golden.tsv"]

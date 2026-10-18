@@ -20,7 +20,7 @@
 // wasm where the lane is CPU (encode / PSD write) and over pure TS where
 // it is packing. Node has no navigator.gpu, so anything needing a GPU
 // dispatch (the extended chain itself, the generator fills) is covered
-// natively in image-js/tests/ingest.rs — here we pin the wire, the
+// natively in image-js/tests/it/ingest.rs — here we pin the wire, the
 // gating, and the file lanes.
 
 import { describe, expect, it } from "vitest";

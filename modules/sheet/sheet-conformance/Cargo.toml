@@ -5,14 +5,14 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "paged.sheet TEST-ONLY conformance: golden corpora, property tests, the Excel differential oracle (recorded values, tests/excel_oracle.rs), the coverage gate. Never a dependency of any shipping crate."
+description = "paged.sheet TEST-ONLY conformance: golden corpora, property tests, the Excel differential oracle (recorded values, tests/it/excel_oracle.rs), the coverage gate. Never a dependency of any shipping crate."
 
 [lints]
 workspace = true
 
 [features]
 # exact-decimal — forwards sheet-fn's D-6 exact-decimal SPIKE feature (M3) so
-# the decimal half of tests/decimal_spike.rs compiles + runs. OFF by default:
+# the decimal half of tests/it/decimal_spike.rs compiles + runs. OFF by default:
 # the f64 half of the spike test always runs; the decimal divergence
 # assertions are cfg-gated on this feature. Run with:
 #   cargo test -p sheet-conformance --features exact-decimal --test it decimal_spike::

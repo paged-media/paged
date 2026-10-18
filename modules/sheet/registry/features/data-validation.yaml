@@ -23,7 +23,7 @@
   provenance: ["ECMA-376 §18.3.1.32 (dataValidations), §18.3.1.33 (dataValidation)", "spec §1.1/§11 (publishing-first exclusion), §10.2 (preservation invariant)"]
   tests:
     rust:
-      - "sheet-conformance/tests/data_validation.rs::sheet_xlsx_data_validation"
+      - "sheet-conformance/tests/it/data_validation.rs::sheet_xlsx_data_validation"
       - "sheet-xlsx/src/parts/data_validation.rs::parse_list_validation"
 
 - id: sheet.xlsx.data-validation.inventory
@@ -34,5 +34,5 @@
   provenance: ["ECMA-376 §18.3.1.33 (dataValidation)", "spec §1.1 (preserve-not-render), §10.2"]
   tests:
     rust:
-      - "sheet-conformance/tests/data_validation.rs::sheet_xlsx_data_validation_inventory"
-      - "sheet-conformance/tests/js_surface.rs::sheet_xlsx_data_validation_inventory_via_js_surface"
+      - "sheet-conformance/tests/it/data_validation.rs::sheet_xlsx_data_validation_inventory"
+      - "sheet-conformance/tests/it/js_surface.rs::sheet_xlsx_data_validation_inventory_via_js_surface"

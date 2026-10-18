@@ -25,7 +25,7 @@
 //! parse → dispatch → serialise envelope handling, the per-kind arms,
 //! `story_id_for_mutation`, the page-table diff, and the export-session
 //! bookkeeping — lives here so it compiles on every target and is
-//! exercised by `cargo test` (see `tests/dispatch.rs`).
+//! exercised by `cargo test` (see `tests/it/dispatch.rs`).
 //!
 //! Behaviour is byte-identical to the pre-extraction wasm shell: the
 //! wire replies these functions produce are the exact `WorkerToMain`

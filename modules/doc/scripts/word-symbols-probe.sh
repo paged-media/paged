@@ -2,7 +2,7 @@
 # Ask Word what symbols (<w:sym>), optional hyphens (<w:softHyphen/>),
 # absolute-position tabs (<w:ptab>) and empty table cells look like.
 # Writes symbols_docx() and the edited save the conformance test makes
-# (docx-conformance/tests/symbols.rs, EDITS), has Word save BOTH as PDF
+# (docx-conformance/tests/it/symbols.rs, EDITS), has Word save BOTH as PDF
 # (through word-pagination-probe.sh, which owns the Office automation traps
 # -- a repair prompt shows up as a hang and no PDF), and prints, per line,
 # its baseline y and every word with where it starts and ends (pt from the

@@ -19,7 +19,7 @@
 //! C-63 on the WIRE — what the element descriptor reports is what the
 //! kernel will take.
 //!
-//! `paged-mutate/tests/effects_fanout.rs` proves the apply arms. This
+//! `paged-mutate/tests/it/effects_fanout.rs` proves the apply arms. This
 //! file proves the two halves a panel actually touches agree: the READ
 //! descriptor (`element_properties`) and the `setElementProperty` write,
 //! with undo through the model's own history.

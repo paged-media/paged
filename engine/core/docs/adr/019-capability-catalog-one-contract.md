@@ -248,5 +248,5 @@ committed `catalog.json` is held current by `catalog_json_artifact_is_current`
 
 The completeness check that this ADR names as the cross-surface guard lives outside this
 repository. Inside it, two tests gate what each surface can reach:
-`crates/paged-script/tests/script_surface.rs` (which wire operations a `paged.*` script can
-name) and `crates/paged-cli/tests/cli_surface.rs` (which message kinds the CLI sends).
+`crates/paged-script/tests/it/script_surface.rs` (which wire operations a `paged.*` script can
+name) and `crates/paged-cli/tests/it/cli_surface.rs` (which message kinds the CLI sends).

@@ -3,7 +3,7 @@
 #
 # These fixtures are deterministic outputs of `paged-gen` (gitignored by
 # corpus/generated/.gitignore because they reproduce from source). A
-# handful of tests read them at runtime — paged-canvas/tests/inspector_wire.rs,
+# handful of tests read them at runtime — paged-canvas/tests/it/inspector_wire.rs,
 # the round-trip + conformance lanes — and panic with "read fixture:
 # NotFound" if they're absent. Local dev regenerates ad hoc; CI must run
 # this before `cargo test` / `cargo nextest`, or those tests fail spuriously.

@@ -32,7 +32,7 @@
 //! reports it as a code-defined kernel with no row).
 //!
 //! WHY A SCALAR MODEL LIVES IN THIS FILE. The gpu↔ref parity for this
-//! family runs in `image-conformance/tests/family_conv.rs`, which this
+//! family runs in `image-conformance/tests/it/family_conv.rs`, which this
 //! agent does not own. The model below mirrors the WGSL term-for-term —
 //! same derived halo, same guard order, same box support `[-r, +r]`,
 //! same hoisted `f32(sw)/(2r)` tap→texel scale, same truncating nearest

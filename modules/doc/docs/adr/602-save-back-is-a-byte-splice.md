@@ -53,7 +53,7 @@ lowering of the kept source.
   overlay, comparison by resolved formatting, alignment by identity
 - `docx-js/src/core.rs:125-161` — `save_verbatim`, `save_edited`, `save_edited_from_content`
 - `packages/doc-bundle/src/activate.ts:142-189` — the exporter and its fallbacks
-- `docx-conformance/tests/save_back.rs:19-24`, `:120-131` — what the tests of the patcher
+- `docx-conformance/tests/it/save_back.rs:19-24`, `:120-131` — what the tests of the patcher
   assert: the targets changed, every other part and untouched subtree byte-identical
 
 ## Alternatives considered
@@ -83,7 +83,7 @@ reports nothing. The edited lowering therefore always has the baseline's blocks,
 styles and tables. No test of this path adds or removes a paragraph in the read-back.
 Paragraph insert and delete, paragraph formatting, and table cell, row and column edits are
 tested only through an `EditSet` or an edited lowering built by hand
-(`docx-conformance/tests/save_back.rs`).
+(`docx-conformance/tests/it/save_back.rs`).
 
 Save-back works only in the session that imported the file: the exporter uses the bytes held
 in memory for the last import and returns `null` without one

@@ -31,12 +31,12 @@
 //! (repo CLAUDE.md §3.1) forbids an implementer from reading, so the
 //! instruction had no owner; §14.3.1 resolves it by splitting the gate.
 //!
-//! * `tests/abr_lane_a.rs` — LANE A: the same checks, driven from the
+//! * `tests/it/abr_lane_a.rs` — LANE A: the same checks, driven from the
 //!   ANALYST-published `fixtures/abr/corpus-profile.json` and
 //!   `corpus-record-ledger.tsv` against synthesised fixtures. Always on,
 //!   no corpus needed. Where THIS file is one fixture per named trap,
 //!   Lane A is exhaustive over the published vocabulary.
-//! * `tests/abr_corpus.rs` — LANE B: the real files, `#[ignore]`d and
+//! * `tests/it/abr_corpus.rs` — LANE B: the real files, `#[ignore]`d and
 //!   opt-in behind `PAGED_ABR_CORPUS=1`, and the analyst's to run.
 
 use image_conformance::abr_builder::*;

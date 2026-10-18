@@ -27,7 +27,7 @@
 //! One `#[test]` per family directory (`sheet_calc_corpus_<family>`) so a
 //! failure localizes to one family. Only the seven FORMULA families are
 //! replayed; the `coerce/` directory holds 3-column coercion unit fixtures (a
-//! different schema) consumed by `tests/coerce.rs`, not formula cases.
+//! different schema) consumed by `tests/it/coerce.rs`, not formula cases.
 //!
 //! ## Two authoring-dialect accommodations (engine is right; goldens vary)
 //!
@@ -35,7 +35,7 @@
 //!    separates function arguments; `;` is ONLY an array-row separator (a
 //!    documented `sheet-parser` ruling). Some logical-family goldens were
 //!    authored with `;` as the argument separator (against a Python mirror).
-//!    Rather than rewrite those goldens (the per-family `tests/fn_logical.rs`
+//!    Rather than rewrite those goldens (the per-family `tests/it/fn_logical.rs`
 //!    decoder reads them with its own `;`-split), this gate NORMALIZES a
 //!    top-level `;` to `,` before entering — so the canonical engine evaluates
 //!    them under its real dialect. `;` inside a quoted string is left intact.

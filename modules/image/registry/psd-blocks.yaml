@@ -15,7 +15,7 @@
   provenance:
     - "Adobe Photoshop File Format specification — File Header Section"
   tests:
-    rust: ["image-psd/tests/roundtrip.rs", "image-conformance/tests/psd_fixtures.rs"]
+    rust: ["image-psd/tests/it/roundtrip.rs", "image-conformance/tests/it/psd_fixtures.rs"]
 
 - id: image.psd.color-mode-data
   state_row: image.psd.roundtrip
@@ -24,7 +24,7 @@
   provenance:
     - "Adobe Photoshop File Format specification — Color Mode Data Section"
   tests:
-    rust: ["image-psd/tests/roundtrip.rs"]
+    rust: ["image-psd/tests/it/roundtrip.rs"]
 
 - id: image.psd.resource.icc
   state_row: image.psd.roundtrip
@@ -38,7 +38,7 @@
   # profile is not applied yet (it would have to transform the layer
   # plates too, or the layered and flattened opens would disagree).
   tests:
-    rust: ["image-conformance/tests/psd_fixtures.rs", "image-conformance/tests/psd_cmyk_photoshop.rs"]
+    rust: ["image-conformance/tests/it/psd_fixtures.rs", "image-conformance/tests/it/psd_cmyk_photoshop.rs"]
 
 - id: image.psd.resource.resolution
   state_row: image.psd.roundtrip
@@ -47,7 +47,7 @@
   provenance:
     - "Adobe Photoshop File Format specification — Image Resources Section, id 1005 (ResolutionInfo)"
   tests:
-    rust: ["image-conformance/tests/psd_fixtures.rs"]
+    rust: ["image-conformance/tests/it/psd_fixtures.rs"]
 
 - id: image.psd.resource.opaque
   state_row: image.psd.roundtrip
@@ -56,7 +56,7 @@
   provenance:
     - "preservation invariant (spec §10.4) — black-box: synthesized unknown-id fixture"
   tests:
-    rust: ["image-conformance/tests/psd_fixtures.rs"]
+    rust: ["image-conformance/tests/it/psd_fixtures.rs"]
 
 - id: image.psd.layer.records
   state_row: image.psd.roundtrip
@@ -65,7 +65,7 @@
   provenance:
     - "Adobe Photoshop File Format specification — Layer Records"
   tests:
-    rust: ["image-psd/tests/roundtrip.rs", "image-conformance/tests/psd_fixtures.rs"]
+    rust: ["image-psd/tests/it/roundtrip.rs", "image-conformance/tests/it/psd_fixtures.rs"]
 
 - id: image.psd.layer.channel-data.raw-rle
   state_row: image.psd.roundtrip
@@ -75,7 +75,7 @@
     - "Adobe Photoshop File Format specification — Channel Image Data"
     - "TIFF 6.0 specification — PackBits appendix"
   tests:
-    rust: ["image-psd/src/compression/packbits.rs (unit matrix)", "image-conformance/tests/psd_fixtures.rs"]
+    rust: ["image-psd/src/compression/packbits.rs (unit matrix)", "image-conformance/tests/it/psd_fixtures.rs"]
 
 - id: image.psd.layer.channel-data.zip
   state_row: image.psd.roundtrip
@@ -84,7 +84,7 @@
   provenance:
     - "Adobe Photoshop File Format specification — Channel Image Data, compression 2/3"
   tests:
-    rust: ["image-psd/tests/roundtrip.rs", "image-psd/tests/channel_decode.rs"]
+    rust: ["image-psd/tests/it/roundtrip.rs", "image-psd/tests/it/channel_decode.rs"]
 
 - id: image.psd.addl.lsct
   state_row: image.psd.roundtrip
@@ -93,7 +93,7 @@
   provenance:
     - "Adobe Photoshop File Format specification — Additional Layer Information, lsct"
   tests:
-    rust: ["image-conformance/tests/psd_fixtures.rs (multilayer_groups)"]
+    rust: ["image-conformance/tests/it/psd_fixtures.rs (multilayer_groups)"]
 
 - id: image.psd.addl.luni
   state_row: image.psd.roundtrip
@@ -103,7 +103,7 @@
     - "Adobe Photoshop File Format specification — Additional Layer Information, luni"
     - "black-box: trailing-null-in-count producer variance, synthesized both ways"
   tests:
-    rust: ["image-conformance/tests/psd_fixtures.rs (unicode_names)"]
+    rust: ["image-conformance/tests/it/psd_fixtures.rs (unicode_names)"]
 
 - id: image.psd.addl.lyid
   state_row: image.psd.roundtrip
@@ -112,7 +112,7 @@
   provenance:
     - "Adobe Photoshop File Format specification — Additional Layer Information, lyid"
   tests:
-    rust: ["image-conformance/tests/psd_fixtures.rs (layer_ids)"]
+    rust: ["image-conformance/tests/it/psd_fixtures.rs (layer_ids)"]
 
 - id: image.psd.addl.opaque
   state_row: image.psd.roundtrip
@@ -121,7 +121,7 @@
   provenance:
     - "preservation invariant (spec §10.4) — synthesized unknown-key fixture"
   tests:
-    rust: ["image-conformance/tests/psd_fixtures.rs (unknown_addl)"]
+    rust: ["image-conformance/tests/it/psd_fixtures.rs (unknown_addl)"]
 
 - id: image.psd.layer.mask.raster
   state_row: image.psd.roundtrip
@@ -130,7 +130,7 @@
   provenance:
     - "Adobe Photoshop File Format specification — Layer Mask / Adjustment Layer Data"
   tests:
-    rust: ["image-conformance/tests/psd_fixtures.rs (raster_masks)"]
+    rust: ["image-conformance/tests/it/psd_fixtures.rs (raster_masks)"]
 
 - id: image.psd.global.merged-composite
   state_row: image.psd.roundtrip
@@ -141,7 +141,7 @@
     - "Adobe Photoshop File Format specification — Layer Info (negative layer count = first alpha is merged transparency)"
     - "black-box observation, Photoshop 27.10 (scripts/photoshop/probes/cmyk-stacks.jsx): CMYK planes are stored INVERTED (255 = no ink; known-ink patches read back within 1 level); a saved alpha channel beyond the inks is not transparency; a transparent CMYK composite is matted against the paper (stored 255), the same formula as RGB; a 16-bit document's composite is written RAW [OBS]"
   tests:
-    rust: ["image-psd/tests/roundtrip.rs", "image-psd/tests/composite.rs", "image-js/tests/ingest.rs", "image-psd/tests/annual_fixture.rs", "image-conformance/tests/psd_cmyk_photoshop.rs"]
+    rust: ["image-psd/tests/it/roundtrip.rs", "image-psd/tests/it/composite.rs", "image-js/tests/it/ingest.rs", "image-psd/tests/it/annual_fixture.rs", "image-conformance/tests/it/psd_cmyk_photoshop.rs"]
 
 - id: image.psd.container.psb
   state_row: image.psd.roundtrip
@@ -150,7 +150,7 @@
   provenance:
     - "Adobe Photoshop File Format specification — PSB notes (widened length fields)"
   tests:
-    rust: ["image-psd/tests/psb.rs", "image-conformance/tests/psd_fixtures.rs (psb_wide)"]
+    rust: ["image-psd/tests/it/psb.rs", "image-conformance/tests/it/psd_fixtures.rs (psb_wide)"]
 
 - id: image.psd.mutatable
   state_row: image.psd.roundtrip
@@ -160,7 +160,7 @@
     - "spec §10.4 — write semantics under editing (the lazy-verbatim guard nulls only the edited subtree)"
     - "Adobe Photoshop File Format specification — Layer Records (opacity), Additional Layer Information (luni name, lsct divider), Channel Image Data (RAW/RLE re-encode)"
   tests:
-    rust: ["image-psd/tests/mutatable.rs"]
+    rust: ["image-psd/tests/it/mutatable.rs"]
 
 - id: image.psd.render.flatten
   state_row: image.psd.roundtrip
@@ -170,7 +170,7 @@
     - "W3C Compositing and Blending Level 1 — https://www.w3.org/TR/compositing-1/ (the blend/source-over math, shared with compose_ref)"
     - "Adobe Photoshop File Format specification — Layer Records (blend-mode key) + Channel Image Data (decode) + lsct group markers (skipped: no pixels)"
   tests:
-    rust: ["image-conformance/tests/psd_render.rs", "image-conformance/src/psd_render.rs"]
+    rust: ["image-conformance/tests/it/psd_render.rs", "image-conformance/src/psd_render.rs"]
 
 - id: image.psd.layer.pixel-import
   state_row: image.psd.roundtrip
@@ -201,7 +201,7 @@
   # (`cmyk-composite`, the smart-object bar: >1 % of pixels more than 8
   # levels off).
   tests:
-    rust: ["image-conformance/tests/psd_layer_import.rs", "image-conformance/tests/psd_adjustment_layers.rs", "image-conformance/tests/psd_group_masks.rs", "image-psd/src/layer_pixels.rs", "image-psd/tests/annual_fixture.rs", "image-psd/tests/composite.rs", "image-conformance/tests/psd_cmyk_photoshop.rs"]
+    rust: ["image-conformance/tests/it/psd_layer_import.rs", "image-conformance/tests/it/psd_adjustment_layers.rs", "image-conformance/tests/it/psd_group_masks.rs", "image-psd/src/layer_pixels.rs", "image-psd/tests/it/annual_fixture.rs", "image-psd/tests/it/composite.rs", "image-conformance/tests/it/psd_cmyk_photoshop.rs"]
 
 - id: image.psd.addl.effects
   state_row: image.psd.layer-import
@@ -215,7 +215,7 @@
   # on a group / clipped layer / adjustment layer / under fill opacity /
   # with knockout or blend-interior-effects, a non-RGB overlay colour.
   tests:
-    rust: ["image-conformance/tests/psd_layer_effects.rs"]
+    rust: ["image-conformance/tests/it/psd_layer_effects.rs"]
 
 - id: image.psd.addl.adjustment
   state_row: image.psd.layer-import
@@ -228,7 +228,7 @@
   # DECLINED: Levels records past R/G/B, Hue/Saturation ranges moved off
   # their default bounds, a non-normal blend mode on an adjustment layer.
   tests:
-    rust: ["image-psd/src/adjustment.rs (unit)", "image-conformance/tests/psd_adjustment_layers.rs"]
+    rust: ["image-psd/src/adjustment.rs (unit)", "image-conformance/tests/it/psd_adjustment_layers.rs"]
 
 - id: image.psd.addl.vmsk
   state_row: image.psd.roundtrip
@@ -255,8 +255,8 @@
     rust:
       - "image-psd/src/vector_mask.rs (unit: vector_mask_records_parse_to_canvas_pixels, _flags_and_operations_decode, _continuation_subpaths_join_their_component, _refuses_what_it_cannot_frame)"
       - "image-js/src/psd_vector_mask.rs (unit: edges_count_samples_on_photoshops_17_by_15_grid, fill_rule_decides_a_self_intersecting_star, components_fold_per_sample_in_order, invert_open_subpaths_and_the_user_mask_product)"
-      - "image-conformance/tests/psd_vector_masks_photoshop.rs (photoshop_vector_masks_import_as_recorded)"
-      - "image-conformance/tests/psd_vector_mask_corpus.rs (opt-in corpus lane: vector_masks_draw_as_photoshops_cached_renders)"
+      - "image-conformance/tests/it/psd_vector_masks_photoshop.rs (photoshop_vector_masks_import_as_recorded)"
+      - "image-conformance/tests/it/psd_vector_mask_corpus.rs (opt-in corpus lane: vector_masks_draw_as_photoshops_cached_renders)"
 
 # ── PSD descriptor-family primitives ─────────────────────────────────
 # Neither of these is a top-level PSD *block*; they are the two
@@ -285,7 +285,7 @@
   tests:
     rust:
       - "image-psd/src/descriptor.rs (unit: image_psd_descriptor_key_accepts_both_dialects, _key_equality_ignores_dialect, _trailing_spaces_are_significant, _key_length_guard, _item_count_is_bounded, _localized_display_strips_the_token, _unsupported_ostype_is_named_not_skipped, _object_array_of_unit_floats, _reference_items)"
-      - "image-conformance/tests/abr_reader.rs (image_psd_descriptor_reads_every_framable_ostype, image_psd_descriptor_accepts_both_key_dialects_in_one_descriptor, image_psd_descriptor_trailing_spaces_in_keys_are_significant, image_psd_descriptor_localisation_token_is_unwrapped_but_the_raw_survives, image_psd_descriptor_unknown_ostype_is_refused_by_name_not_skipped)"
+      - "image-conformance/tests/it/abr_reader.rs (image_psd_descriptor_reads_every_framable_ostype, image_psd_descriptor_accepts_both_key_dialects_in_one_descriptor, image_psd_descriptor_trailing_spaces_in_keys_are_significant, image_psd_descriptor_localisation_token_is_unwrapped_but_the_raw_survives, image_psd_descriptor_unknown_ostype_is_refused_by_name_not_skipped)"
 
 - id: image.psd.vm-array-list
   state_row: image.psd.roundtrip
@@ -312,4 +312,4 @@
   tests:
     rust:
       - "image-psd/src/vm_array.rs (unit: image_psd_vm_array_list_the_264_constant_is_arithmetic_not_a_format_fact, _a_different_slot_would_break_the_constant, _a_different_array_count_would_break_the_constant, _bounds_are_y_first, _non_positive_bounds_are_refused, _rle_row_table_is_up_front_not_per_row, _rle_expansion_bound_rejects_absurd_dimensions, _sixteen_bit_rle_is_refused_by_name, _sixteen_bit_raw_keeps_full_precision)"
-      - "image-conformance/tests/abr_reader.rs (image_abr_samp_record_is_a_vm_array_list_not_a_264_byte_skip)"
+      - "image-conformance/tests/it/abr_reader.rs (image_abr_samp_record_is_a_vm_array_list_not_a_264_byte_skip)"

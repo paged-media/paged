@@ -30,7 +30,7 @@
 //!    RGB destination is the canonical sRGB profile moxcms synthesises
 //!    (`ColorProfile::new_srgb`). This is the same
 //!    [`image_cms::CmsEngine::compile_cmyk_to_rgba8`] print lane the
-//!    conformance suite (`image-cms/tests/cmyk_lane.rs`) gates against
+//!    conformance suite (`image-cms/tests/it/cmyk_lane.rs`) gates against
 //!    lcms2. Intent is Perceptual (the ingest default; the panel does not
 //!    yet surface an intent control — a follow-up, not a wrong result).
 //!
@@ -89,7 +89,7 @@ fn profile_from_bytes(bytes: Vec<u8>) -> Profile {
 /// the same patches, the same as lcms2's own relcol+BPC does. So the
 /// lane uses Perceptual, and the convention is stated: "Photoshop's
 /// default view, approximated by the profile's perceptual table" — the
-/// replay (`image-conformance/tests/psd_cmyk_photoshop.rs`) holds it to
+/// replay (`image-conformance/tests/it/psd_cmyk_photoshop.rs`) holds it to
 /// those numbers. Saturated greens outside sRGB are where ACE and the
 /// ICC-standard CMMs clip differently (up to ~23 levels on one channel,
 /// identical for moxcms and lcms2).
@@ -218,7 +218,7 @@ mod tests {
     /// With a real sRGB-as-source ICC (the wrong colour class) the cast
     /// rejects internally and falls back to the device formula — a broken
     /// profile must NEVER fail the decode. (A genuine CMYK device profile
-    /// taking the managed path is gated by `image-cms/tests/cmyk_lane.rs`,
+    /// taking the managed path is gated by `image-cms/tests/it/cmyk_lane.rs`,
     /// which has the lcms2 oracle to author one.)
     #[test]
     fn image_editor_ingest_cmyk_bad_profile_falls_back_not_errors() {

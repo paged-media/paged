@@ -18,28 +18,28 @@
   status: implemented
   provenance: ["spec §6.2, §14 D-7", "ECMA-376 §18.2.2 (calcPr iterate/iterateCount/iterateDelta)"]
   tests:
-    rust: ["sheet-conformance/tests/itercalc.rs::sheet_calc_iterative_enable_flag"]
+    rust: ["sheet-conformance/tests/it/itercalc.rs::sheet_calc_iterative_enable_flag"]
 
 - id: sheet.calc.iterative.max-iter
   title: Max-iterations bound (the iteration cap; Excel default 100)
   status: implemented
   provenance: ["spec §6.2, §14 D-7", "ECMA-376 §18.2.2 (iterateCount)"]
   tests:
-    rust: ["sheet-conformance/tests/itercalc.rs::sheet_calc_iterative_max_iter"]
+    rust: ["sheet-conformance/tests/it/itercalc.rs::sheet_calc_iterative_max_iter"]
 
 - id: sheet.calc.iterative.max-change
   title: Max-change (convergence delta; Excel default 0.001) — stop early when the largest cell delta falls below it
   status: implemented
   provenance: ["spec §6.2, §14 D-7", "ECMA-376 §18.2.2 (iterateDelta)"]
   tests:
-    rust: ["sheet-conformance/tests/itercalc.rs::sheet_calc_iterative_max_change"]
+    rust: ["sheet-conformance/tests/it/itercalc.rs::sheet_calc_iterative_max_change"]
 
 - id: sheet.calc.iterative.convergence
   title: Convergence loop — iterate the cycle's cells until max-iter or max-change, deterministically (fixed evaluation order)
   status: implemented
   provenance: ["spec §6.2 determinism", "spec §14 D-7"]
   tests:
-    rust: ["sheet-conformance/tests/itercalc.rs::sheet_calc_iterative_convergence"]
+    rust: ["sheet-conformance/tests/it/itercalc.rs::sheet_calc_iterative_convergence"]
 
 - id: sheet.calc.iterative.circular-with-iteration
   title: Cells in a cycle iterate to a fixed point (instead of #REF!) when iteration is enabled
@@ -47,4 +47,4 @@
   status: implemented
   provenance: ["spec §6.2, §14 D-7"]
   tests:
-    rust: ["sheet-conformance/tests/itercalc.rs::sheet_calc_iterative_circular_with_iteration"]
+    rust: ["sheet-conformance/tests/it/itercalc.rs::sheet_calc_iterative_circular_with_iteration"]

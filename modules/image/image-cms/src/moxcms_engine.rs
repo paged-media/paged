@@ -35,7 +35,7 @@
 //! §A). Matrix-shaper profiles (e.g. plain sRGB) carry no per-intent
 //! tables, so for those the result is intent-independent by
 //! construction — that is correct CMS behaviour, not a degradation:
-//! there is nothing intent-specific to select. `tests/print_lane.rs`
+//! there is nothing intent-specific to select. `tests/it/print_lane.rs`
 //! proves the difference on a LUT profile that does carry distinct
 //! A2B0/A2B1 tables.
 //!
@@ -48,7 +48,7 @@
 //! the handle for provenance, but the produced transform is identical
 //! to `bpc: false`. The BPC-fidelity conformance row stays pinned to a
 //! future moxcms release (or the lcms2-shaped oracle) that exposes the
-//! knob; `tests/print_lane.rs` documents the degradation and the
+//! knob; `tests/it/print_lane.rs` documents the degradation and the
 //! registry note rather than asserting an effect that does not exist
 //! yet.
 //!

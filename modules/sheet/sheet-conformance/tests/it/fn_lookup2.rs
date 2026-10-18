@@ -29,7 +29,7 @@
 //! `COLUMNS`. `OFFSET`, `INDIRECT`, `FORMULATEXT` are now EVALUATOR SPECIAL
 //! FORMS (M2 Phase A, `special_form: true`): they read the model and are handled
 //! in `sheet-calc/eval.rs`, so their REAL behavior is tested through the
-//! evaluator in `tests/special_forms.rs`. Here we only pin the PURE-DOOR
+//! evaluator in `tests/it/special_forms.rs`. Here we only pin the PURE-DOOR
 //! contract — routed through `sheet_fn::dispatch` (which eval intercepts first),
 //! a special-form row returns `#NAME?` (it has no pure kernel).
 
@@ -628,7 +628,7 @@ fn sheet_fn_lookup_columns_basic() {
 // OFFSET / INDIRECT / FORMULATEXT are now EVALUATOR SPECIAL FORMS
 // (`special_form: true`, status `implemented`): they READ THE MODEL and are
 // handled in `sheet-calc/eval.rs` BEFORE dispatch. Their REAL behavior is tested
-// through the evaluator in `tests/special_forms.rs` (the registry `tests.rust`
+// through the evaluator in `tests/it/special_forms.rs` (the registry `tests.rust`
 // pointers target that file). Here we pin only the PURE-DOOR contract: a
 // special-form row routed through the pure `sheet_fn::dispatch` (which the
 // evaluator intercepts first, so this path is never taken in practice) returns

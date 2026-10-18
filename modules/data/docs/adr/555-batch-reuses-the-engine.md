@@ -44,7 +44,7 @@ drives through wasm. No second engine exists.
 - `data-script/src/lib.rs:28-33`, `:90-100` — return a value, no host access, native only
 - `data-js/Cargo.toml:16-27` — `data-js` depends on neither `data-cli` nor `data-script`
 - `data-core/src/model.rs:175-189` — `honored_interactively`: a document runs no scheduler
-- `data-conformance/tests/batch_run.rs:94-145`, `data-cli/src/lib.rs:184-279` — the tests
+- `data-conformance/tests/it/batch_run.rs:94-145`, `data-cli/src/lib.rs:184-279` — the tests
 
 ## Alternatives considered
 

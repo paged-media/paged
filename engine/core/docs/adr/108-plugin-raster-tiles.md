@@ -73,7 +73,7 @@ Three parts of the pull lane are less complete than the comments say:
 - The mip level is chosen from `PipelineOptions::render_scale`. The model's value starts at
   1.0 and changes only through `CanvasModel::set_resource_render_scale`, whose comment says
   the dispatcher pushes the camera scale. No caller exists outside
-  `crates/paged-canvas/tests/resource_provider.rs`.
+  `crates/paged-canvas/tests/it/resource_provider.rs`.
 - The module doc says a miss "assembles whatever coarser level IS cached", and the wire
   note says "the best cached level". `emit_frame_resource_tiles` assembles the chosen level
   only; where a tile is missing, what the frame drew before the tiles stays visible

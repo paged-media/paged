@@ -37,7 +37,7 @@
 //! wrapper) are evidenced by the `web/idml-viewer` vitest (25 cases over
 //! a fake session) — see this task's evidence-source routing. Digest
 //! stability / viewer-vs-stock equivalence lives in
-//! `tests/digest_equivalence.rs`.
+//! `tests/it/digest_equivalence.rs`.
 
 use std::path::PathBuf;
 

@@ -34,7 +34,7 @@
 //! 3,202 real tip records, while every byte fed to the reader comes from
 //! [`image_conformance::abr_builder`], the INDEPENDENT emitter that
 //! shares no code with the reader. Lane B — the one that opens the real
-//! files — is `tests/abr_corpus.rs`, is `#[ignore]`d, and is the
+//! files — is `tests/it/abr_corpus.rs`, is `#[ignore]`d, and is the
 //! analyst's.
 //!
 //! The seven gates, and what each actually asserts:

@@ -50,7 +50,7 @@ hold `credentialRef` strings, never secret material.** Three layers:
 ## What stays true (hard gates, already tested)
 
 *Status note (2026-10-02): the first two gates are tested in
-`plugin-data: data-conformance/tests/security.rs`; the batch binary (`plugin-data: data-cli`)
+`plugin-data: data-conformance/tests/it/security.rs`; the batch binary (`plugin-data: data-cli`)
 does not resolve credential references.*
 
 - `credentials-absent` round-trip: save → inspect → assert no secret bytes

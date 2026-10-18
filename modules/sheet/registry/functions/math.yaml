@@ -26,7 +26,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (SUM)", "OpenFormula §6.16.61"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_sum"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_sum"]
     corpus: ["corpus/fn-corpus/math/sum.golden.tsv"]
 
 - id: sheet.fn.math.product
@@ -39,7 +39,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (PRODUCT)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_product"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_product"]
     corpus: ["corpus/fn-corpus/math/product.golden.tsv"]
 
 - id: sheet.fn.math.abs
@@ -52,7 +52,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ABS)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_abs"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_abs"]
     corpus: ["corpus/fn-corpus/math/abs.golden.tsv"]
 
 - id: sheet.fn.math.sign
@@ -65,7 +65,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (SIGN)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_sign"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_sign"]
     corpus: ["corpus/fn-corpus/math/sign.golden.tsv"]
 
 - id: sheet.fn.math.sqrt
@@ -78,7 +78,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (SQRT)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_sqrt"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_sqrt"]
     corpus: ["corpus/fn-corpus/math/sqrt.golden.tsv"]
 
 - id: sheet.fn.math.exp
@@ -91,7 +91,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (EXP)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_exp"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_exp"]
     corpus: ["corpus/fn-corpus/math/exp.golden.tsv"]
 
 - id: sheet.fn.math.ln
@@ -104,7 +104,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (LN)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_ln"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_ln"]
     corpus: ["corpus/fn-corpus/math/ln.golden.tsv"]
 
 - id: sheet.fn.math.log10
@@ -117,7 +117,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (LOG10)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_log10"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_log10"]
     corpus: ["corpus/fn-corpus/math/log10.golden.tsv"]
 
 - id: sheet.fn.math.log
@@ -130,7 +130,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (LOG)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_log"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_log"]
     corpus: ["corpus/fn-corpus/math/log.golden.tsv"]
 
 - id: sheet.fn.math.power
@@ -143,7 +143,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (POWER)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_power"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_power"]
     corpus: ["corpus/fn-corpus/math/power.golden.tsv"]
 
 - id: sheet.fn.math.mod
@@ -156,7 +156,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (MOD) — sign follows divisor (Excel ruling)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_mod"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_mod"]
     corpus: ["corpus/fn-corpus/math/mod.golden.tsv"]
 
 - id: sheet.fn.math.round
@@ -169,7 +169,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ROUND) — half away from zero (Excel ruling)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_round"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_round"]
     corpus: ["corpus/fn-corpus/math/round.golden.tsv"]
 
 - id: sheet.fn.math.roundup
@@ -182,7 +182,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ROUNDUP)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_roundup"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_roundup"]
     corpus: ["corpus/fn-corpus/math/roundup.golden.tsv"]
 
 - id: sheet.fn.math.rounddown
@@ -195,7 +195,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ROUNDDOWN)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_rounddown"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_rounddown"]
     corpus: ["corpus/fn-corpus/math/rounddown.golden.tsv"]
 
 - id: sheet.fn.math.trunc
@@ -208,7 +208,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (TRUNC)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_trunc"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_trunc"]
     corpus: ["corpus/fn-corpus/math/trunc.golden.tsv"]
 
 - id: sheet.fn.math.int
@@ -221,7 +221,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (INT) — floor toward negative infinity"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_int"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_int"]
     corpus: ["corpus/fn-corpus/math/int.golden.tsv"]
 
 - id: sheet.fn.math.ceiling
@@ -234,7 +234,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (CEILING) — classic 2-arg form (T0)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_ceiling"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_ceiling"]
     corpus: ["corpus/fn-corpus/math/ceiling.golden.tsv"]
 
 - id: sheet.fn.math.floor
@@ -247,7 +247,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (FLOOR) — classic 2-arg form (T0)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_floor"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_floor"]
     corpus: ["corpus/fn-corpus/math/floor.golden.tsv"]
 
 - id: sheet.fn.math.pi
@@ -260,7 +260,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (PI)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_pi"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_pi"]
     corpus: ["corpus/fn-corpus/math/pi.golden.tsv"]
 
 - id: sheet.fn.math.sin
@@ -273,7 +273,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (SIN)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_sin"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_sin"]
     corpus: ["corpus/fn-corpus/math/sin.golden.tsv"]
 
 - id: sheet.fn.math.cos
@@ -286,7 +286,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (COS)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_cos"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_cos"]
     corpus: ["corpus/fn-corpus/math/cos.golden.tsv"]
 
 - id: sheet.fn.math.tan
@@ -299,7 +299,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (TAN)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_tan"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_tan"]
     corpus: ["corpus/fn-corpus/math/tan.golden.tsv"]
 
 - id: sheet.fn.math.asin
@@ -312,7 +312,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ASIN)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_asin"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_asin"]
     corpus: ["corpus/fn-corpus/math/asin.golden.tsv"]
 
 - id: sheet.fn.math.acos
@@ -325,7 +325,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ACOS)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_acos"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_acos"]
     corpus: ["corpus/fn-corpus/math/acos.golden.tsv"]
 
 - id: sheet.fn.math.atan
@@ -338,7 +338,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ATAN)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_atan"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_atan"]
     corpus: ["corpus/fn-corpus/math/atan.golden.tsv"]
 
 - id: sheet.fn.math.atan2
@@ -351,7 +351,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ATAN2) — (x, y) argument order per Excel"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_atan2"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_atan2"]
     corpus: ["corpus/fn-corpus/math/atan2.golden.tsv"]
 
 - id: sheet.fn.math.degrees
@@ -364,7 +364,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DEGREES)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_degrees"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_degrees"]
     corpus: ["corpus/fn-corpus/math/degrees.golden.tsv"]
 
 - id: sheet.fn.math.radians
@@ -377,7 +377,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (RADIANS)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_radians"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_radians"]
     corpus: ["corpus/fn-corpus/math/radians.golden.tsv"]
 
 - id: sheet.fn.math.rand
@@ -390,7 +390,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (RAND) — deterministic seeded RNG in tests"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_rand"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_rand"]
     corpus: []
 
 - id: sheet.fn.math.randbetween
@@ -403,5 +403,5 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (RANDBETWEEN)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_math.rs::sheet_fn_math_randbetween"]
+    rust: ["sheet-conformance/tests/it/fn_math.rs::sheet_fn_math_randbetween"]
     corpus: []

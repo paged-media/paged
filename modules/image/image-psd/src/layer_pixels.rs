@@ -450,7 +450,7 @@ const UNMODELLED: &[(&[u8; 4], &str)] = &[
 /// exactly where a layer is opaque, and NOT where colours mix.
 ///
 /// Measured against our transform of Photoshop's own CMYK composite
-/// (`image-conformance/tests/psd_cmyk_photoshop.rs`, the `blend-modes`
+/// (`image-conformance/tests/it/psd_cmyk_photoshop.rs`, the `blend-modes`
 /// tiles: one feathered layer per mode over a three-ink background):
 /// every non-normal mode is far off across its whole footprint (ΔE00 p95
 /// 9.9–50, mean 4.9–43 levels), so it is declined here, before decoding.

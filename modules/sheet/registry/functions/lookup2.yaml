@@ -29,7 +29,7 @@
   status: implemented
   provenance: ["Microsoft XLOOKUP (public docs) — lookup, lookup_array, return_array, [if_not_found], [match_mode], [search_mode]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lookup2.rs::sheet_fn_lookup_xlookup"]
+    rust: ["sheet-conformance/tests/it/fn_lookup2.rs::sheet_fn_lookup_xlookup"]
     corpus: ["corpus/fn-corpus/lookup2/xlookup.golden.tsv"]
 
 - id: sheet.fn.lookup.xmatch
@@ -42,7 +42,7 @@
   status: implemented
   provenance: ["Microsoft XMATCH (public docs) — lookup, lookup_array, [match_mode], [search_mode]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lookup2.rs::sheet_fn_lookup_xmatch"]
+    rust: ["sheet-conformance/tests/it/fn_lookup2.rs::sheet_fn_lookup_xmatch"]
     corpus: ["corpus/fn-corpus/lookup2/xmatch.golden.tsv"]
 
 - id: sheet.fn.lookup.offset
@@ -56,7 +56,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (OFFSET) — reference, rows, cols, [height], [width]. EVALUATOR SPECIAL FORM (M2 Phase A): the base reference arg is resolved AS a reference in sheet-calc/eval.rs (eval_as_ref), the offset top-left + optional height/width compute a RangeRef, #REF! when the target leaves the sheet bounds. VOLATILE."]
   tests:
-    rust: ["sheet-conformance/tests/special_forms.rs::sheet_fn_lookup_offset"]
+    rust: ["sheet-conformance/tests/it/special_forms.rs::sheet_fn_lookup_offset"]
     corpus: []
 
 - id: sheet.fn.lookup.indirect
@@ -70,7 +70,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (INDIRECT) — ref_text, [a1]. EVALUATOR SPECIAL FORM (M2 Phase A): arg0 evaluates to text, parsed as an A1 ref/range in sheet-calc/eval.rs (sheet_core::parse_a1), the value is read from the model; #REF! on unparseable; a1=FALSE (R1C1) -> #REF! (documented T2 limitation). VOLATILE."]
   tests:
-    rust: ["sheet-conformance/tests/special_forms.rs::sheet_fn_lookup_indirect"]
+    rust: ["sheet-conformance/tests/it/special_forms.rs::sheet_fn_lookup_indirect"]
     corpus: []
 
 - id: sheet.fn.lookup.address
@@ -83,7 +83,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ADDRESS) — row_num, col_num, [abs_num], [a1], [sheet_text]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lookup2.rs::sheet_fn_lookup_address"]
+    rust: ["sheet-conformance/tests/it/fn_lookup2.rs::sheet_fn_lookup_address"]
     corpus: ["corpus/fn-corpus/lookup2/address.golden.tsv"]
 
 - id: sheet.fn.lookup.rows
@@ -97,7 +97,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (ROWS) — row count of a reference/array"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lookup2.rs::sheet_fn_lookup_rows"]
+    rust: ["sheet-conformance/tests/it/fn_lookup2.rs::sheet_fn_lookup_rows"]
     corpus: ["corpus/fn-corpus/lookup2/rows.golden.tsv"]
 
 - id: sheet.fn.lookup.columns
@@ -111,7 +111,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (COLUMNS) — column count of a reference/array"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lookup2.rs::sheet_fn_lookup_columns"]
+    rust: ["sheet-conformance/tests/it/fn_lookup2.rs::sheet_fn_lookup_columns"]
     corpus: ["corpus/fn-corpus/lookup2/columns.golden.tsv"]
 
 - id: sheet.fn.lookup.formulatext
@@ -125,5 +125,5 @@
   status: implemented
   provenance: ["Microsoft FORMULATEXT (public docs) — the formula text of a reference. EVALUATOR SPECIAL FORM (M2 Phase A): the arg is resolved to a CellRef in sheet-calc/eval.rs, the cell's formula is PRINTED (sheet_parser::print with the cell's home sheet, WITH a leading '='); #N/A if the cell has no formula."]
   tests:
-    rust: ["sheet-conformance/tests/special_forms.rs::sheet_fn_lookup_formulatext"]
+    rust: ["sheet-conformance/tests/it/special_forms.rs::sheet_fn_lookup_formulatext"]
     corpus: []

@@ -16,8 +16,8 @@ behaviour changes, so the fix and the pin change land in the same commit.
 | Lane | Reference | Recorded in | Replayed by |
 |---|---|---|---|
 | DuckDB SQL | `duckdb` CLI v1.1.1 | `conformance/duckdb-sql/recorded/results.json` | `packages/data-bundle/test/duckdb-sql-oracle.spec.ts` |
-| Data Merge | InDesign 2025 (20.0.1) | `conformance/indesign-merge/recorded/*.json` | `data-conformance/tests/oracle.rs`, `packages/data-bundle/test/indesign-merge-duckdb.spec.ts` |
-| Properties | generated inputs, `rqrr`, GS1 tables | (nothing to record) | `data-conformance/tests/oracle_props.rs` |
+| Data Merge | InDesign 2025 (20.0.1) | `conformance/indesign-merge/recorded/*.json` | `data-conformance/tests/it/oracle.rs`, `packages/data-bundle/test/indesign-merge-duckdb.spec.ts` |
+| Properties | generated inputs, `rqrr`, GS1 tables | (nothing to record) | `data-conformance/tests/it/oracle_props.rs` |
 
 ## 1. DuckDB SQL lane
 

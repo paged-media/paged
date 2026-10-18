@@ -735,7 +735,7 @@ fn emit() -> String {
     let kernels: BTreeSet<&str> = binds().iter().filter_map(|b| b.kernel).collect();
     let kernels: Vec<String> = kernels.iter().map(|k| format!("\"{k}\"")).collect();
     format!(
-        "{{\n  \"generatedBy\": \"image-js/tests/object_schema.rs\",\n  \"wireLength\": {},\n  \"kernels\": [{}],\n  \"blendModes\": [{}],\n  \"adjust\": [\n{}\n  ]\n}}\n",
+        "{{\n  \"generatedBy\": \"image-js/tests/it/object_schema.rs\",\n  \"wireLength\": {},\n  \"kernels\": [{}],\n  \"blendModes\": [{}],\n  \"adjust\": [\n{}\n  ]\n}}\n",
         wire_len(),
         kernels.join(","),
         blends.join(","),
