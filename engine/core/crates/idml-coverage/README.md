@@ -1,6 +1,6 @@
 # idml-coverage
 
-A static inventory of the IDML that this repository's codecs understand. The
+A static inventory of the IDML that the engine's codecs understand. The
 tool walks `crates/idml-import/src` and `crates/idml-export/src` with `syn`
 and writes `docs/reference/idml-coverage.json`: one row per element, attribute
 and kind, saying whether the importer reads it, whether the exporter writes it,
@@ -15,6 +15,8 @@ where InDesign writes it. A committed baseline keeps those shares from
 falling (see [Parts, census and ratchet](#parts-census-and-ratchet)).
 
 ## Regenerate
+
+From `engine/core` (the paths in this file are relative to it):
 
 ```sh
 cargo run -p idml-coverage > docs/reference/idml-coverage.json
@@ -31,10 +33,10 @@ cargo run -p idml-coverage -- --ratchet       # record a gain
 cargo run -p idml-coverage -- --queue 25      # the uncovered rows that matter most
 ```
 
-The tool reads the `paged-model` sources (a pinned git dependency) through
-`cargo metadata --offline`, so dependencies must already be fetched
-(`cargo fetch`). It uses them to type untyped `.parse()` reads from the struct
-field they fill.
+The tool finds the `paged-model` sources (the workspace member
+`crates/paged-model`) through `cargo metadata --offline`, which needs every
+dependency of the workspace on disk, so fetch them first (`cargo fetch`). It
+uses them to type untyped `.parse()` reads from the struct field they fill.
 
 ## Output
 
@@ -42,7 +44,7 @@ field they fill.
 {
   "generatedFrom": { "importer": "...", "exporter": "...", "manual": "...", ... },
   "counts": { "rows": 0, "elements": 0, "unresolved": 0, ... },
-  "census": { "file": "tools/idml-coverage/census.json", "sha256": "...", ... },
+  "census": { "file": "crates/idml-coverage/census.json", "sha256": "...", ... },
   "counts": { "rows": 0, "elements": 0, "unresolved": 0, ... },
   "metrics": { "weightedImport": { "covered": 0, "total": 0, "value": 0.0 }, ... },
   "rows": [

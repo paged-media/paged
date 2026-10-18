@@ -556,7 +556,17 @@ fn list(keys: &[String]) -> String {
 
 pub fn compare(base: &Ratchet, now: &Ratchet) -> Diff {
     let mut d = Diff::default();
-    if base.census != now.census {
+    // The census is the same census wherever it is vendored: its path is not
+    // part of what the shares are measured against.
+    let id = |c: &CensusId| {
+        (
+            c.schema.clone(),
+            c.generated_at.clone(),
+            c.sha256.clone(),
+            c.documents,
+        )
+    };
+    if id(&base.census) != id(&now.census) {
         d.regressions.push(format!(
             "the census changed ({} {} → {} {}); every share is measured against it",
             base.census.generated_at,
@@ -683,6 +693,22 @@ mod tests {
 
         let misplaced = compare(&base, &ratchet(&["a", "b"], 10, 4));
         assert_eq!(misplaced.regressions.len(), 1);
+    }
+
+    #[test]
+    fn ratchet_compare_ignores_where_the_census_is_vendored() {
+        let base = ratchet(&["a", "b"], 10, 3);
+        let mut moved = base.clone();
+        moved.census.file = "crates/idml-coverage/census.json".into();
+        assert!(compare(&base, &moved).is_empty(), "same census, new path");
+
+        let mut refreshed = base.clone();
+        refreshed.census.sha256 = "01".into();
+        assert_eq!(
+            compare(&base, &refreshed).regressions.len(),
+            1,
+            "a different census"
+        );
     }
 
     #[test]

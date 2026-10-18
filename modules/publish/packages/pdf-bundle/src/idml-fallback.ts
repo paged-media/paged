@@ -28,7 +28,7 @@
 //
 // The `<Rectangle>` + `<Image>` shape mirrors the generator's inline-image
 // path (`core/crates/paged-gen/src/builders/page_item.rs`) and is validated
-// against the parser (`plugin-publish/crates/idml-import/src/spread.rs`,
+// against the parser (`engine/core/crates/idml-import/src/spread.rs`,
 // Q-03): `<Contents>` is base64 of the raw PNG bytes, decoded onto
 // `Rectangle.image_bytes`; the `<Image>` element flips `has_image_element`.
 

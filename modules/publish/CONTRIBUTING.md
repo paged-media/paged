@@ -1,8 +1,10 @@
 # Contributing to plugin-publish
 
-Thanks for your interest. This repository is the **IDML adapter** for
-[paged](https://paged.media) — the `idml-import` / `idml-export` crates
-extracted out of the core engine (ADR-022, Option A). It is **open**
+Thanks for your interest. This module holds the **foreign-format publishing
+bundles** for [paged](https://paged.media) and the `pdf-import` mapper. The
+IDML adapter it used to hold (`idml-import` / `idml-export`, ADR-022, and the
+`idml-coverage` tool) is now part of the engine workspace,
+`engine/core/crates/`. It is **open**
 (MPL-2.0 OR PMEL); the engine (`paged-media/core`) is also MPL-2.0 OR PMEL,
 and the editor (`paged-media/editor`) is AGPL-3.0 OR PMEL.
 
@@ -22,18 +24,22 @@ from the top of any existing `crates/**/*.rs`.
 
 ## Building & testing
 
-The toolchain is pinned in `rust-toolchain.toml`. The adapter crates
-git-depend the Paged model crates (`paged-model`, `paged-scene`) from the
-public `paged-media/core` engine repo, so a build fetches core over https
-(no auth — both repos are public).
+The toolchain is pinned in `rust-toolchain.toml`. `pdf-import` depends on the
+Paged model crates (`paged-model`, `paged-scene`, `paged-store`) and, for its
+round-trip test, on `idml-import`, all by path into `engine/core/crates/`:
+it always builds against the engine at the same commit, and there is no pin
+to move.
 
 ```bash
 cargo build --workspace --all-targets
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all --check
-# the save-back path runs in the editor/SDK wasm, so keep it wasm32-clean:
-cargo build -p idml-import -p idml-export --target wasm32-unknown-unknown
+# the pdf-import mapper ships as wasm in the pdf bundle:
+cargo build -p pdf-import --target wasm32-unknown-unknown
 ```
+
+The IDML adapter's own build, tests and wasm32 lint run from `engine/core`
+(`cargo nextest run -p idml-import -p idml-export -p idml-coverage`).
 
 Do **not** run `cargo fmt --all` to *rewrite* the tree if it drifts
 unrelated files — format only the files you touched.
@@ -42,7 +48,7 @@ CI runs the same fmt + clippy + native/wasm32 build on every push and PR.
 
 ## Scope
 
-This repo is import/export **only** — it maps IDML packages to and from the
-Paged native `Document`. The model itself, rendering, and mutation live in
-`paged-media/core`; changes there ride the core→plugin-publish rev pin (bump
-`core`, then re-pin the `git` rev in this repo's `Cargo.toml`).
+This module is import/export **only** — it maps foreign formats to and from
+the Paged native `Document`. The model itself, rendering, and mutation live in
+the engine (`engine/core`); a change there that this module needs lands in the
+same commit as the change here.

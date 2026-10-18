@@ -1,4 +1,4 @@
-# Hand-kept facts the syn walk in tools/idml-coverage cannot see.
+# Hand-kept facts the syn walk in crates/idml-coverage cannot see.
 #
 # Every entry is checked against the code: a literal named here must still
 # appear in the item named here, and a fn must still exist, or the tool fails.

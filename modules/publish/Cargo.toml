@@ -1,11 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["crates/idml-import", "crates/idml-export", "crates/pdf-import", "tools/idml-coverage"]
+# The IDML adapter (idml-import, idml-export) and its coverage tool moved into
+# the engine workspace (engine/core/crates/); pdf-import is what stays here.
+members = ["crates/pdf-import"]
 
 [workspace.package]
 version = "0.0.0"
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.92"
 license = "MPL-2.0 OR LicenseRef-PMEL"
 publish = false
 
@@ -17,19 +19,19 @@ needless_pass_by_value = "allow"
 too_many_arguments = "allow"
 
 [workspace.dependencies]
-# The shared Paged model crates, git-depped from the PUBLIC core engine repo.
-# Pinned to a rev; when core builds the adapter back (Phase 2) a core-side
-# [patch] redirects these to core's local copies so crate identity unifies.
-# Bump the rev as the model evolves (the two-repo rev-pin dance).
-paged-model = { git = "https://github.com/paged-media/core", rev = "a47339cb09eb7bbd7bc19e9bd14a3f6db9774295" }
-paged-scene = { git = "https://github.com/paged-media/core", rev = "a47339cb09eb7bbd7bc19e9bd14a3f6db9774295" }
-# The native `.paged` model codec (pgm to_bytes/from_bytes) — the PDF import
-# builds a Document and persists it natively (no IDML round-trip), same rev so
-# crate identity unifies with paged-model/paged-scene.
-paged-store = { git = "https://github.com/paged-media/core", rev = "a47339cb09eb7bbd7bc19e9bd14a3f6db9774295" }
+# The shared Paged model crates, path-depended from the engine workspace in
+# this repository (paths relative to this file). They inherit their own
+# settings from engine/core's workspace, and pdf-import builds against the
+# engine at the same commit.
+paged-model = { path = "../../engine/core/crates/paged-model" }
+paged-scene = { path = "../../engine/core/crates/paged-scene" }
+# The native `.paged` model codec (pgm to_bytes/from_bytes): the PDF import
+# builds a Document and persists it natively (no IDML round-trip).
+paged-store = { path = "../../engine/core/crates/paged-store" }
+# The IDML reader, for pdf-import's round-trip test (a dev-dependency).
+idml-import = { path = "../../engine/core/crates/idml-import" }
 
 thiserror = "2"
-bytes = "1"
 # zip 9's `deflate` feature selects flate2's zlib-rs backend (plus zopfli),
 # and zlib-rs takes precedence over miniz_oxide for EVERY flate2 user in the
 # graph. Re-deflated parts must come out byte-for-byte as they did with zip 2,
@@ -37,12 +39,6 @@ bytes = "1"
 # Every crate that depends on `zip` also lists `flate2`, so it builds alone.
 zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2"] }
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
-quick-xml = { version = "0.41", features = ["serialize"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tracing = "0.1"
 base64 = "0.22"
-
-# LOCAL ONLY — never commit. Redirects the core model crates to the sibling
-# checkout so plugin-publish builds against core's working tree (the reverse of
-# core's own [patch] onto this repo).

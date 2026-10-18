@@ -16,13 +16,13 @@ in `rust-toolchain.toml`, `Cargo.lock` is tracked, and the workspace sets `publi
 Besides Rust there is one TypeScript package (`web/idml-viewer`), bash for the gates
 (`scripts/`, `corpus/generated/*.sh`), and ExtendScript in `tools/indesign-export`.
 
-The IDML import/export adapter is not in this repository. `idml-import` and `idml-export`
-live in the plugin-publish repository and are taken as git dependencies pinned to a commit
-(for example `crates/paged-canvas/Cargo.toml`). They in turn depend on this repository's
-model crates, so the root manifest carries a `[patch]` that points those back at the local
-sources and Cargo resolves one copy of each. See
-[ADR 022](https://github.com/paged-media/plugin-publish/blob/main/docs/adr/022-idml-relocates-to-plugin-publish.md)
-and [ADR 650](https://github.com/paged-media/plugin-publish/blob/main/docs/adr/650-mutual-git-revision-pins.md).
+The IDML import/export adapter is part of this workspace: `crates/idml-import`,
+`crates/idml-export` and the coverage tool `crates/idml-coverage`. They fill and read this
+workspace's model crates, and the engine crates depend on them by path. `modules/publish`
+and `apps/server` depend on the engine crates by path from their own workspaces. See
+[PM-0005](../../../docs/adr/PM-0005-workspace-policy.md), which supersedes the earlier
+mutual git-revision pins
+([ADR 650](../../../modules/publish/docs/adr/650-mutual-git-revision-pins.md)).
 
 ## Crates by role
 
@@ -223,7 +223,7 @@ message names a caller; without a caller only the prefix is checked, and the cod
 calls the check an aid for correct callers, not a security boundary
 (`crates/paged-canvas/src/model.rs:4578-4593`). `ExportPaged` embeds a fresh model part,
 `paged/core/model/document.pgm` (JSON, `PGM_FORMAT_VERSION` 3), and hands the IDML parts
-and the overlay to `idml_export::write_paged` in the plugin-publish repository.
+and the overlay to `idml_export::write_paged` (`crates/idml-export`).
 `paged_store::package::wrap_document` writes documents that never were IDML: the model part
 plus a one-page IDML skeleton, parsed only if the model part cannot be decoded.
 `ExportIdml` writes plain IDML through the same external writer and lists what the format

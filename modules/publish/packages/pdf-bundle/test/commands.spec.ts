@@ -30,7 +30,7 @@ import { IMPORT_PDF_ARGS_TYPE, IMPORT_PDF_COMMAND, IMPORT_PDF_RESULT_TYPE } from
 import { _resetPdfMapperCache } from "../src/engine-loader";
 import { PDF_IMPORT_DEFAULTS } from "../src/io/pdf";
 
-const IDML = new URL("../../../crates/idml-export/tests/fixtures/indesign-20.0.1-navigation.idml", import.meta.url);
+const IDML = new URL("../../../../../engine/core/crates/idml-export/tests/fixtures/indesign-20.0.1-navigation.idml", import.meta.url);
 
 let h: HeadlessHost;
 let pdf: Uint8Array;

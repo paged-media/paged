@@ -45,7 +45,7 @@ import exportPdfArgsFile from "../schema/export-pdf.args.json";
 import exportIdmlArgsFile from "../schema/export-idml.args.json";
 import importIdmlArgsFile from "../schema/import-idml.args.json";
 
-const IDML = new URL("../../../crates/idml-export/tests/fixtures/indesign-20.0.1-navigation.idml", import.meta.url);
+const IDML = new URL("../../../../../engine/core/crates/idml-export/tests/fixtures/indesign-20.0.1-navigation.idml", import.meta.url);
 
 let h: HeadlessHost;
 let pageCount: number;

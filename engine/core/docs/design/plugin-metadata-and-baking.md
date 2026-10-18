@@ -82,8 +82,8 @@ value, `Value::PluginMetadata { key, value, caller, prev }`
 (`crates/paged-mutate/src/operation.rs:1251`, `:2093`); the wire op is
 `SetPluginMetadata` (`crates/paged-wire/src/lib.rs:1160`); the gate is
 `apply_plugin_metadata` (`crates/paged-mutate/src/apply/layer.rs:531`); labels
-are read by `plugin-publish: crates/idml-import/src/spread.rs:1861` and written
-by `plugin-publish: crates/idml-export/src/rewrite.rs:1229`. The SDK doors are
+are read by `crates/idml-import/src/spread.rs:1861` and written
+by `crates/idml-export/src/rewrite.rs:1229`. The SDK doors are
 `getMetadata(id)` and `setMetadata(id, envelope)`, with the key implicit
 (`plugin-sdk: packages/plugin-api/src/host.ts:972`, `:980`).*
 
@@ -132,7 +132,7 @@ interface ObjectTypeBaker {
 
 *Status note (2026-10-02): the metadata half of F1 is fixtured in
 `crates/paged-canvas/tests/idml_export_saveback.rs:740` and in
-`plugin-publish: crates/idml-export/tests/label_roundtrip.rs`. The "derived
+`crates/idml-export/tests/label_roundtrip.rs`. The "derived
 children regenerated" half depends on the bake loop of §4, which is not built.*
 
 - **F1 round-trip live:** create live construct → save → reopen in
