@@ -30,6 +30,11 @@ on:
     paths:
       - "engine/core/**"
       - ".github/workflows/core-gpu.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!engine/core/docs/**/*.md"
   pull_request:
     paths:
       - "engine/core/crates/paged-gpu/**"
@@ -39,6 +44,13 @@ on:
       - "engine/core/crates/paged-renderer/**"
       - "engine/core/corpus/generated/**"
       - ".github/workflows/core-gpu.yml"
+      # Dependency and toolchain updates (wgpu, vello) change what this lane renders.
+      - "engine/core/Cargo.toml"
+      - "engine/core/Cargo.lock"
+      - "engine/core/rust-toolchain.toml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
   workflow_dispatch:
 
 defaults:

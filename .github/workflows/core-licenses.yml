@@ -14,10 +14,14 @@ on:
     paths:
       - "engine/core/**"
       - ".github/workflows/core-licenses.yml"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!engine/core/docs/**/*.md"
   pull_request:
     paths:
       - "engine/core/**"
       - ".github/workflows/core-licenses.yml"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!engine/core/docs/**/*.md"
 
 jobs:
   cargo-deny:

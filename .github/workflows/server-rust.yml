@@ -13,12 +13,18 @@ on:
       - "engine/core/Cargo.toml"
       - "engine/core/crates/**"
       - ".github/workflows/server-rust.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
   pull_request:
     paths:
       - "apps/server/server/**"
       - "engine/core/Cargo.toml"
       - "engine/core/crates/**"
       - ".github/workflows/server-rust.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
 
 permissions:
   contents: read

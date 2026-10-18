@@ -10,6 +10,8 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/slide/docs/**/*.md"
   pull_request:
     paths:
       - "modules/slide/**"
@@ -17,6 +19,8 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/slide/docs/**/*.md"
   workflow_dispatch:
 
 permissions:

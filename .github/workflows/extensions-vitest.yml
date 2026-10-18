@@ -23,6 +23,8 @@ on:
     branches: [main]
     paths:
       - "platform/extensions/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!platform/extensions/docs/**/*.md"
       - ".github/workflows/extensions-vitest.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -30,6 +32,8 @@ on:
   pull_request:
     paths:
       - "platform/extensions/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!platform/extensions/docs/**/*.md"
       - ".github/workflows/extensions-vitest.yml"
       - "bun.lock"
       - "bunfig.toml"

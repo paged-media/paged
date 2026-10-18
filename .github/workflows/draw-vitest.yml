@@ -24,6 +24,8 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/draw/docs/**/*.md"
   pull_request:
     paths:
       - "modules/draw/**"
@@ -31,6 +33,8 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/draw/docs/**/*.md"
   workflow_dispatch:
 
 permissions:

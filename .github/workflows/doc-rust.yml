@@ -1,12 +1,27 @@
 name: doc / rust
 # MONOREPO (step A3): ported from paged-media/plugin-doc
-# .github/workflows/rust.yml; runs in modules/doc. Push-only, as before.
+# .github/workflows/rust.yml; runs in modules/doc. The old repository ran it
+# on push only; in the monorepo it also gates pull requests (step A10), like
+# every other module's Rust lane.
 on:
   push:
     branches: [main]
     paths:
       - "modules/doc/**"
       - ".github/workflows/doc-rust.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/doc/docs/**/*.md"
+  pull_request:
+    paths:
+      - "modules/doc/**"
+      - ".github/workflows/doc-rust.yml"
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/doc/docs/**/*.md"
   workflow_dispatch:
 
 permissions:

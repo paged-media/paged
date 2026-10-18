@@ -13,6 +13,8 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/data/docs/**/*.md"
   # Pre-merge gate: a PR that breaks the bundle goes red BEFORE it lands
   # (this lane used to run on push to main only).
   pull_request:
@@ -22,6 +24,8 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/data/docs/**/*.md"
   workflow_dispatch:
 
 permissions:

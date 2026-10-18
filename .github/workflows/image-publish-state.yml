@@ -27,6 +27,11 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/image/docs/**/*.md"
 
 permissions:
   contents: read
