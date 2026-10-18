@@ -11,17 +11,46 @@ project:
   title: 'apps/server/server'
   description: 'paged.server, the optional remote for repository-backed documents.'
 
-# Cargo git dependencies on paged-media/core (paged-repo, paged-mcp) at a
-# pinned rev today, path dependencies after the Cargo git-to-path step; the
+# Path dependencies on the engine's crates (paged-repo, paged-mcp); the
 # engine image (engine/Dockerfile) builds engine/core.
 dependsOn:
   - id: 'core'
     scope: 'production'
 
+# Path dependencies into the engine: its crates are inputs here too, so
+# `moon ci` re-runs this project when an engine crate it builds changes.
+# (Project file groups replace the workspace ones, so the defaults are
+# restated.)
+fileGroups:
+  rust-sources:
+    - '**/*.rs'
+    - '**/Cargo.toml'
+    - 'Cargo.lock'
+    - 'rust-toolchain*'
+    - '/.cargo/*.toml'
+    - '/engine/core/Cargo.toml'
+    - '/engine/core/crates/**/*.rs'
+    - '/engine/core/crates/**/Cargo.toml'
+  rust-tests:
+    - '**/*'
+    - '!docs/**'
+    - '!**/*.md'
+    - '/.cargo/*.toml'
+    - '/engine/core/Cargo.toml'
+    - '/engine/core/crates/**/*.rs'
+    - '/engine/core/crates/**/Cargo.toml'
+
+
 tasks:
+  rust-check:
+    options:
+      # server-rust.yml checks (native + wasm32) and runs the flo_curves
+      # guard; clippy has no baseline here yet, so check runs in CI instead.
+      runInCI: true
+
   rust-lint:
     options:
-      # No CI baseline yet: apps/server has no workflow.
+      # No clippy baseline for the server yet.
       runInCI: false
 
   rust-test:

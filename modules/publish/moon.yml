@@ -12,18 +12,43 @@ project:
   title: 'modules/publish'
   description: 'Foreign-format publishing: IDML import/export adapters and the PDF bundle.'
 
-# Cargo git dependency on paged-media/core today (pinned rev); a path
-# dependency on engine/core after the Cargo git-to-path step.
+# Path dependencies on the engine's crates (paged-model, paged-scene,
+# paged-store; idml-import for pdf-import's tests). The IDML adapter itself
+# lives in engine/core/crates since PM-0005.
 dependsOn:
   - id: 'core'
     scope: 'production'
+
+# Path dependencies into the engine: its crates are inputs here too, so
+# `moon ci` re-runs this project when an engine crate it builds changes.
+# (Project file groups replace the workspace ones, so the defaults are
+# restated.)
+fileGroups:
+  rust-sources:
+    - '**/*.rs'
+    - '**/Cargo.toml'
+    - 'Cargo.lock'
+    - 'rust-toolchain*'
+    - '/.cargo/*.toml'
+    - '/engine/core/Cargo.toml'
+    - '/engine/core/crates/**/*.rs'
+    - '/engine/core/crates/**/Cargo.toml'
+  rust-tests:
+    - '**/*'
+    - '!docs/**'
+    - '!**/*.md'
+    - '/.cargo/*.toml'
+    - '/engine/core/Cargo.toml'
+    - '/engine/core/crates/**/*.rs'
+    - '/engine/core/crates/**/Cargo.toml'
+
 
 tasks:
   rust-build:
     description: 'publish-ci build: every native target, then the wasm32 build of the bundle crates.'
     script: >-
       cargo build --workspace --all-targets
-      && cargo build -p idml-import -p idml-export -p pdf-import --target wasm32-unknown-unknown
+      && cargo build -p pdf-import --target wasm32-unknown-unknown
     options:
       runInCI: true
 
