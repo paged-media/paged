@@ -293,7 +293,6 @@ dependencies = [
 [[package]]
 name = "paged-model"
 version = "0.0.0"
-source = "git+https://github.com/paged-media/core?rev=b17870d2131a279264366cf6746d5373ad63059e#b17870d2131a279264366cf6746d5373ad63059e"
 dependencies = [
  "base64",
  "serde",

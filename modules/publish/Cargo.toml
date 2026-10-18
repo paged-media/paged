@@ -46,3 +46,7 @@ base64 = "0.22"
 # LOCAL ONLY — never commit. Redirects the core model crates to the sibling
 # checkout so plugin-publish builds against core's working tree (the reverse of
 # core's own [patch] onto this repo).
+
+# LOCAL ONLY — do not commit.
+[patch."https://github.com/paged-media/core"]
+paged-model = { path = "../core-v73/crates/paged-model" }
