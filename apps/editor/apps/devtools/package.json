@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "bun check && vite build",
-    "preview": "vite preview"
+    "dev": "bunx --bun vite",
+    "build": "bun check && bunx --bun vite build",
+    "preview": "bunx --bun vite preview"
   },
   "dependencies": {
     "@paged-media/introspect-wasm": "workspace:*",

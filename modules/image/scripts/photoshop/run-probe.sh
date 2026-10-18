@@ -52,7 +52,7 @@ die() {
 [ "$(uname -s)" = "Darwin" ] || die 2 "this drives Adobe Photoshop through osascript; macOS only"
 [ -f "$1" ] || die 2 "no such probe: $1"
 command -v osascript >/dev/null || die 2 "osascript not found"
-command -v node >/dev/null || die 2 "node not found"
+command -v bun >/dev/null || die 2 "bun not found"
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 PROBE="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
@@ -83,7 +83,7 @@ RAW="$STAGE/$NAME.raw.json"
 ERR="$STAGE/$NAME.osascript.err"
 
 # --- 1. stimuli + the script Photoshop will be handed -----------------------
-node "$STIM" "$STAGE/stimuli" >/dev/null
+bun "$STIM" "$STAGE/stimuli" >/dev/null
 {
   printf 'var PAGED_STAGE = "%s";\n' "$STAGE"
   cat "$LIB"
@@ -181,7 +181,7 @@ DOCS_AFTER="$(ping_app "String(app.documents.length)")" ||
 
 # --- 6. judge the artifact, then write the fixture ---------------------------
 SHA="$(shasum -a 256 <"$SRC" | cut -d' ' -f1)"
-node "$WRITER" "$RAW" "$STAGE" "$OUTDIR" "$NAME" "${PROBE#"$ROOT"/}" "$SHA" "$(sw_vers -productVersion)" ||
+bun "$WRITER" "$RAW" "$STAGE" "$OUTDIR" "$NAME" "${PROBE#"$ROOT"/}" "$SHA" "$(sw_vers -productVersion)" ||
   die 4 "Photoshop's reply was refused; nothing was written" "Staging kept: $STAGE"
 
 [ "$OWN_STAGE" -eq 1 ] && rm -rf "$STAGE"
