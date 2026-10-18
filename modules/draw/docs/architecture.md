@@ -23,9 +23,8 @@ and an SVG reader and writer with its own XML scanner (`svg-doc.ts`, `svg-path.t
 **`packages/draw-tools`** — private. Eleven tool modules that take page-local points and
 return snapshots, plans or commits: anchor editing, pen, pencil, curvature, brush, width,
 measure, shape builder, live paint, corner radius, repeat. It imports `draw-geometry` and,
-as types only, `@paged-media/plugin-api`. `wire-compat.ts` holds compile-time assertions
-that the machines' output is assignable to the engine's wire types, so a protocol change
-that breaks them fails `pnpm typecheck` here.
+as types only, `@paged-media/plugin-api`. The machines' wire shapes are the contract's own
+`Mutation` variants, so a protocol change that breaks them fails the typecheck here.
 
 **`packages/draw-bundle`** — published to npm as `@paged-media/draw` (`dist`, `wasm`,
 `manifest.json`). The only package that touches a host. It holds `activate(host)`
@@ -222,10 +221,10 @@ The bundle does not read a protocol number. Optional doors are probed with `host
 `contribute.exporter@1`, `overlay.text@1`). Engine operations are detected by sending one
 deliberately unknown operation and reading the list of known operations from the error
 (`engineOpVocabulary` in `commands/join-average.ts`); Join and Shape Builder fall back to
-older operations when the newer ones are missing. Operations that the contract types as
-`PendingMutation` are built in three modules: `commands/v58-wire.ts`,
-`commands/v59-wire.ts` and `binding-provider/adr023-seam.ts`. `commands/pathfinder-region.ts`
-and `commands/join-average.ts` still cast their operations to `Mutation`.
+older operations when the newer ones are missing. Every other door is called directly: the
+in-tree contract and engine have it (B3b; `docs/migration/seams.md` at the repository root).
+Operations are plain `Mutation`s, built beside their commands (`commands/batch-handles.ts`
+for the C-15 handles and the B-18 nesting pair).
 
 ## Build and test
 

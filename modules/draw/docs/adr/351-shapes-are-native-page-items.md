@@ -65,7 +65,7 @@ header rules out a DOM dependency; no XML or SVG library appears in any `package
 
 Drawn shapes are engine content: undo is the engine's history, and the plugin paints nothing on
 a page. The operations `host.document.mutate` accepts (the contract's `Mutation` union plus its
-protocol-ahead `PendingMutation` operations, `packages/draw-bundle/src/commands/v59-wire.ts:47-53`)
+protocol-ahead `PendingMutation` aliases, all of them members of `Mutation` today)
 are the plugin's whole vocabulary for page content, so a construct the engine cannot model is
 refused or lowered to items it can model ([ADR 354](354-multi-paint-bakes-to-a-group.md),
 [ADR 356](356-live-constructs-are-recipes.md)). Limits of the SVG lane, all named in the code:

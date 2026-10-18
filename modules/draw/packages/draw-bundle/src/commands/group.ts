@@ -51,8 +51,8 @@
 //    Oval / Polygon, where it renders CLIPPED by that container's
 //    outline, and `releaseFrom { childId }` pops it back. Both are in
 //    the booted engine's op vocabulary (measured), and
-//    `commands/repeat.ts` ships on them for §12.4's clipping. The wire
-//    seam is `commands/v59-wire.ts`; the four measured consequences of
+//    `commands/repeat.ts` ships on them for §12.4's clipping. The
+//    builders are in `commands/batch-handles.ts`; the four measured consequences of
 //    nesting (no group, invisible to `document.tree()`, `deleteFrame`
 //    refused, a deleted container ORPHANED its children before 0.65) are documented
 //    there and in `commands/repeat.ts`.

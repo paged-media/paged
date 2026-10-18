@@ -43,7 +43,7 @@ No sibling checkout is needed: the plugin contract
 ```bash
 bun install
 bun run test           # contract-import lint + vitest in every package
-bun run typecheck      # includes the wire-compat assertions against plugin-api
+bun run typecheck      # the machines' wire shapes are the contract's Mutation variants
 bun run bench          # geometry benches (trended, never gated)
 node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
 ```

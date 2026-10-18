@@ -38,7 +38,7 @@ import {
   batchMutationFor,
   bindCreatedMutationFor,
   handleElementId,
-} from "../src/commands/v59-wire";
+} from "../src/commands/batch-handles";
 
 type Defaults = {
   defaultFillColor?: string | null;
