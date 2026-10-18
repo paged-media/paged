@@ -193,6 +193,14 @@ jobs:
           readelf -p .comment "$bin" | grep -q mold || { echo "::error::$bin was not linked by mold"; exit 1; }
           echo "mold linked $bin"
 
+      # The free-disk margin the clean-up step above leaves once clippy and
+      # every test binary are built (docs/migration/ci-speed.md, lever 7).
+      - name: disk at end of job
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        run: |
+          df -h /
+          du -sh "${CARGO_TARGET_DIR:-target}" || true
+
   # Wasm-lane placeholder (W0.8 substance lands crate-side): invoke the
   # Makefile `test-wasm` target, which calls scripts/test-wasm.sh. That
   # script is a STUB exiting 0 (pending W0.8) until the sibling replaces

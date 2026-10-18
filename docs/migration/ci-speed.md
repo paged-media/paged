@@ -15,6 +15,20 @@ hours up to 2026-10-18 15:30 UTC: 942 runs, which is every run the monorepo
 had (the first started at 08:35 that day). The org is on the free plan: at
 most 20 jobs run at once, 5 of them on macOS, shared by every repository.
 
+## Summary
+
+| Lever | Before | After | How measured |
+|---|---|---|---|
+| 1. Run only what is affected | Root Cargo config (`.cargo/config.toml`, `tooling/rust/`) reached no Rust workflow; a dependency or toolchain update skipped the GPU lane; doc's Rust lane never ran on pull requests; a docs-only change ran its component's full CI (2–10 % of component commits) | All 13 Rust workflows watch the root Cargo config; core-gpu watches `Cargo.toml`/`Cargo.lock`/`rust-toolchain.toml`; doc/rust gates pull requests; `docs/**/*.md` under a component triggers nothing | Path filters read from the workflow files; docs-only share from 90 days of git history |
+| 2. `concurrency` | 297 superseded runs, 111 of them ran to the end (1,543 job-minutes after a newer run existed); 114 duplicate runs; 143 runs on main cancelled | All 22 pull-request workflows cancel a superseded run; no push to main is cancelled or queued; deploys never cancel | Runs API over the window; the configuration; one demonstration push |
+| 3. Rust caching | rust-cache hit rate 20 % (old: 97 %); 0 core caches on main, 12.4 GB of caches against the 10 GB limit, the oldest 30 min old | Pull requests restore main's caches and write none; sccache measured on one job before any switch | rust-cache log lines of 251 + 34 jobs; the Actions cache list; a trial job |
+| 4. Job shape | Linux ran core's 3,797 tests twice (`cargo test`, then nextest), 39.8 job-minutes a run; every core job waited for a 10 s toolchain job, median 12m57s | Linux runs them once (nextest + doctests, same counts), about 21 job-minutes; no toolchain hop; wasm-size no longer waits for the macOS leg | Step times and `Finished` lines of 4 paired runs; the jobs API |
+| 5. mold | Links core's Linux builds since A8b | No isolated CI number (linking is inside cargo's compile time) | — |
+| 6. Docker cache | No workflow builds an image | Not applicable | Workflow files |
+| 7. Runner disk | 104 GB free after the clean-up step (145 GB disk) | End-of-job margin recorded by a new step | `df` in the job logs |
+
+The PR's own CI run is in [This pull request's CI run](#this-pull-requests-ci-run).
+
 ## The five measurements (before)
 
 ### 1. Queue time
@@ -322,6 +336,51 @@ because U1 (#15) edits its comment; it can be deleted once U1 has merged.
 **Tiny jobs** (under 60 s) were not merged: 2.2 % of runner time (measurement
 4); merging the core guards would save under 1 min a run and touch jobs other
 open pull requests edit.
+
+## Levers 5–7
+
+**5. mold.** Core's Linux builds link with mold since A8b (`tooling/rust/cc-mold`;
+the `mold linked the test binaries` step fails if they don't). Linking is not
+separable in cargo's output, so CI has no before/after number for it; the
+compile times in measurement 4 include it. The lld-vs-mold link-only
+microbenchmark stays open. What CI does show is A8b's other change: test
+execution 20m06s → 8m56s (`cargo test`) and 14m24s → 4m17s (nextest), from
+dependencies at `opt-level = 2`.
+
+**6. Docker BuildKit cache.** Not applicable: no workflow builds the server
+image.
+
+**7. Runner disk.** `ubuntu-latest` has a 145 GB root disk; after the clean-up
+step core's Linux jobs have 104 GB free (29 % used), with
+`CARGO_PROFILE_DEV_DEBUG=line-tables-only`. The Linux `check + test` job now
+builds clippy's and the tests' artifacts in one target directory (as
+`check + test` did before), and a new last step records `df -h /` and the
+target size, so the margin at the end of the largest job is measured on every
+run.
+
+## Runners (user decision)
+
+Larger GitHub runners and third-party runners are billed, so they are not
+changed here. The compute-bound jobs that would gain from more cores:
+
+| Job | Run time | What bounds it |
+|---|---|---|
+| core ci / check + test (ubuntu, macOS) | 21 min / 24–30 min | compiling (8–10 min cold) and test execution, both parallel; one 280 s test is nextest's floor |
+| core ci / pdf export-diff gate | 15–18 min | release builds and the page diff loop |
+| core fidelity / corpus diff | 11–19 min | the corpus render and diff |
+| core gpu / vello on lavapipe | 16–21 min | software Vulkan (CPU rendering) |
+| editor tests / Playwright (3 shards) | ~50 min a shard | browser tests, plus the doc and slide wasm builds that B3a moves to a cached action |
+
+Today queueing costs more than compute: the median job waits 15m40s for one of
+the 20 slots. On the free plan the levers above (fewer superseded runs, fewer
+jobs, cache hits) are what shortens the queue; a paid plan raises the
+concurrent-job limit as well, which is the other way to shorten it.
+
+## This pull request's CI run
+
+Pending: filled from the PR's own run (wall time, job minutes, rust-cache
+results, the sccache trial, the end-of-job disk margin, and the
+demonstration push).
 
 ## Reproduce
 
