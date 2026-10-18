@@ -251,6 +251,14 @@ committed `package.json` at `0.<protocol>.0-dev`. `scripts/build-wasm-packages.s
 builds into them, and `.github/workflows/core-publish-wasm.yml` publishes copies at the tag's
 version ([ADR 185](adr/185-the-wasm-packages-are-workspace-packages.md))._
 
+_Amendment (2026-10-18, [PM-0008](../../../docs/adr/PM-0008-npm-packages-and-release.md)): two
+packages carry the four wasm builds. `packages/canvas-wasm/` holds the canvas at its root and
+the introspection (`introspect/`, with `catalog.json`) and repository (`repo/`) builds as the
+`./introspect` and `./repo` entries; the viewer session is the `./session` entry of
+`@paged-media/idml-viewer` (`web/idml-viewer/wasm/`). `@paged-media/introspect-wasm`,
+`@paged-media/repo-wasm` and `@paged-media/sdk` are no longer packages. `.github/workflows/release.yml`
+publishes both at the tag's version, with `@paged-media/plugin-api` and `@paged-media/plugin-sdk`._
+
 ## Build and test
 
 - Locally: `cargo build --workspace`, `cargo test --workspace`, clippy with `-D warnings`,

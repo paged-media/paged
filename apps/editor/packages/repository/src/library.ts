@@ -31,7 +31,7 @@
 
 import type { RepoFs } from "./fs.ts";
 
-/** The subset of `@paged-media/repo-wasm`'s `Repository` the library drives.
+/** The subset of `@paged-media/canvas-wasm/repo`'s `Repository` the library drives.
  *  Declared here so the library runs against the real wasm and in tests alike. */
 export interface WasmRepository {
   loadIndex(pack: number, index: Uint8Array): void;

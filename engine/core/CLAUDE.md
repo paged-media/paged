@@ -121,7 +121,8 @@ crates/paged-wire/schema/mutation.schema.json`; `cargo test -p paged-wire
 - `crates/paged-gen/` — IDML fixture generator (the `paged-gen` bin).
 - `crates/paged-sdk/` — published SDK wasm surface: a WebGPU
   `ViewerSession` (load IDML → present to OffscreenCanvas/Canvas via
-  Vello → headless RGBA readback); npm `@paged-media/sdk`. WebGPU-only
+  Vello → headless RGBA readback); npm `@paged-media/idml-viewer/session`
+  (the `./session` entry, PM-0008; built into `web/idml-viewer/wasm/`). WebGPU-only
   (no CPU page rasterizer); see `crates/paged-sdk/WEBGPU.md`.
 - `corpus/generated/` — license-clear generator fixtures (IDML + paired
   InDesign-exported PDF + meta JSON). Hard fidelity gate runs over these via
