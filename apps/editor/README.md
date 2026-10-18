@@ -37,7 +37,7 @@ How the editor is designed and built is in [`docs/`](./docs/README.md):
 ## Architecture
 
 Packages of the repository's root **Bun workspace** (`apps/*`, `packages/*`),
-TypeScript + React 18 + Vite, Tailwind for styling.
+TypeScript + React 19 + Vite, Tailwind for styling.
 
 ### Apps
 

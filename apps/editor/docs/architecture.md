@@ -7,7 +7,7 @@ Where the repository's `README.md` or `CLAUDE.md` differ, this page follows the 
 
 ## Workspace
 
-A pnpm workspace (`apps/*`, `packages/*`): TypeScript, React 18, Vite, Tailwind. There is
+A pnpm workspace (`apps/*`, `packages/*`): TypeScript, React 19, Vite, Tailwind. There is
 no Rust here. The engine and the plugins arrive as npm packages that carry their own wasm.
 
 | Path               | Package                | What it owns                                                                                                                                                                                                                                               |

@@ -1,7 +1,8 @@
 # PM-0008 — Four public npm packages, one release workflow
 
 - **Status:** Accepted 2026-10-18. Amended 2026-10-18 (amendment 1: one version for the four
-  packages, and how a release is cut).
+  packages, and how a release is cut) and 2026-10-19 (amendment 2: the contract moves to
+  React 19).
 - **Supersedes:** apps/editor ADR 201 (first-party plugins compiled in as pinned published
   packages).
 - **Amends:** apps/editor ADR 205 (the client packaged as the write SDK): the client is a
@@ -83,3 +84,21 @@ two contract packages, nor what happens to the canary lane. Carrying it out need
 
 The owner's steps (deprecations, dist-tags, trusted publishers, the first tag) are in
 [docs/migration/npm-release-runbook.md](../migration/npm-release-runbook.md).
+
+## Amendment 2 (2026-10-19): the contract moves to React 19
+
+The workspace moved from React 18.3 to React 19.3.1 (one instance, from the root `catalog:`;
+[the migration record](../migration/npm-latest.md#react-19)). React reaches the contract in two
+places, and both move with it:
+
+- **`@paged-media/plugin-api` depends on `@types/react` ^19.3** (it was ^18.3). The React types
+  in the contract, such as the component a panel contribution carries, are React 19's.
+- **React stays a peer of the extension, at `>=19.3`.** `plugin-sdk`'s optional React peer and
+  every built-in bundle's peer move from `^18.3` to `>=19.3`; the editor provides React 19.3.1.
+  A lower bound and no upper bound: a later React 19 or 20 is the host's to provide, as the
+  contract's own peer range is (ADR 307).
+- **The in-tree counters move together:** `plugin-api` and `plugin-sdk` 0.2.75-canary.0 →
+  0.2.76-canary.0. The next release publishes both at the tag's version (amendment 1).
+
+What an extension author changes is in
+[platform/extensions/README.md](../../platform/extensions/README.md#react-19).

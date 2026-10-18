@@ -28,7 +28,7 @@ WORK=$(cd "$WORK" && pwd)
 TS7=7.0.2
 TS5=5.9.3
 TYPES_NODE=24.19.2
-TYPES_REACT=18.3.31
+TYPES_REACT=19.3.0
 
 tgz() {
   local f

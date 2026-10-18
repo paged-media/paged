@@ -17,8 +17,8 @@
     "typecheck": "bun check -p tsconfig.json"
   },
   "peerDependencies": {
-    "react": "^18.3.0",
-    "react-dom": "^18.3.0"
+    "react": ">=19.3",
+    "react-dom": ">=19.3"
   },
   "dependencies": {
     "@fontsource/cormorant-garamond": "^5.3.0",
