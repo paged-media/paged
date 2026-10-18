@@ -695,6 +695,17 @@ handlers/shared.ts` so bundles can ship complete tools with zero
 - **`API_VERSION` + `satisfiesApiVersion`** — caret/exact/`*` ranges
   (deliberately minimal semver; full semver when publishing starts).
 - `defineBundle` (inference helper).
+- **The gesture test kit** (`fake-editor.ts`, `gesture-driver.ts`,
+  `pointer-tape.ts`, `gesture-invariants.ts`; entry point
+  `@paged-media/plugin-sdk/gesture-kit`). A recording fake of the
+  contract's `PagedEditor`, a gesture DSL in document points whose unit
+  backend mounts a tool's handler the way the editor's gesture spine does,
+  the pointer-tape format, and the gesture invariants as throwing checks.
+  Runner-agnostic and value-only over the contract types, so it costs a
+  bundle nothing at runtime; the separate entry point loads none of the
+  rest of the SDK (no JSON catalog), for a runner on plain Node ESM. The
+  editor's own half (its richer handle, the browser backend, fixtures,
+  fuzzer, matrix) stays in the private test kit.
 - **`createHeadlessHost`** (resolves [draw B-13]) — the conformance
   harness the paper (§12.4) puts in the SDK tier. NOT a mock: it boots
   the PUBLISHED `@paged-media/canvas-wasm` in Node (`initSync` over the

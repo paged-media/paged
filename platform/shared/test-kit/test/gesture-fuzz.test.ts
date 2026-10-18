@@ -36,7 +36,7 @@ import {
   runGestureFuzz,
   type FuzzReport,
   type GestureFixtureName,
-  type KnownFinding,
+  GESTURE_FUZZ_KNOWN,
 } from "../src/index.ts";
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
@@ -47,24 +47,9 @@ const ONE = env.PAGED_GESTURE_FUZZ_SEED
   : null;
 const FIXTURES: GestureFixtureName[] = ["targets", "paths", "dense"];
 
-/** The engine bugs this fuzzer found, each owned by an expected-failure
- *  regression test in engine-gestures.test.ts. Their instances are
- *  counted and printed, not failed: the fuzzer keeps hunting for new
- *  ones. Remove an entry when its regression test flips. */
-const KNOWN: KnownFinding[] = [
-  {
-    id: "GF-1",
-    invariant: "no-error",
-    match: /property FrameBounds is not supported on Group/,
-  },
-  { id: "GF-2", invariant: "no-error", match: /node not found: Group/ },
-  {
-    id: "GF-3",
-    invariant: "no-error",
-    match: /duplicate self_id \W*[A-Za-z0-9]+_dup_\d+_\d+/,
-  },
-  { id: "GF-4", invariant: "round-trip", match: /^precision:/ },
-];
+/** The findings on record (see GESTURE_FUZZ_KNOWN in the kit): counted
+ *  and printed, not failed, while a regression test owns each. */
+const KNOWN = GESTURE_FUZZ_KNOWN;
 
 type Send = (m: MainToWorkerKind) => Promise<WorkerToMain>;
 const sendOf = (h: HeadlessHost): Send => {

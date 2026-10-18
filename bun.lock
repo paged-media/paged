@@ -38,6 +38,7 @@
         "react-dom": "catalog:",
       },
       "devDependencies": {
+        "@paged-media/test-kit": "workspace:*",
         "@playwright/test": "^1.63.0",
         "@types/bun": "catalog:",
         "@types/node": "catalog:node25",
