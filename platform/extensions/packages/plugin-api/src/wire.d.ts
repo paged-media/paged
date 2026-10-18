@@ -1,6 +1,6 @@
 // GENERATED — do not edit. Vendored verbatim from the published
 // @paged-media/canvas-wasm .d.ts (tsify output from paged-media/core,
-// MPL-2.0 OR PMEL). Sync: node scripts/sync-wire.mjs · Check: --check.
+// AGPL-3.0-only OR PMEL). Sync: node scripts/sync-wire.mjs · Check: --check.
 // Synced from @paged-media/canvas-wasm@0.73.4
 /* tslint:disable */
 /* eslint-disable */
