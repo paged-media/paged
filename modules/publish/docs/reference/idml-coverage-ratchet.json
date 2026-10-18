@@ -8,9 +8,9 @@
   },
   "metrics": {
     "weightedImport": {
-      "covered": 131574,
+      "covered": 132374,
       "total": 633952,
-      "value": 0.207546
+      "value": 0.208808
     },
     "impactImport": {
       "covered": 26498,
@@ -546,6 +546,8 @@
     "Resources/Styles|Stripe@Width|attr",
     "Resources/Styles|StripedStrokeStyle@Name|attr",
     "Resources/Styles|StripedStrokeStyle@Self|attr",
+    "Resources/Styles|StyleExportTagMap@ExportTag|attr",
+    "Resources/Styles|StyleExportTagMap@ExportType|attr",
     "Resources/Styles|TOCStyle@CreateBookmarks|attr",
     "Resources/Styles|TOCStyle@IncludeBookDocuments|attr",
     "Resources/Styles|TOCStyle@IncludeHidden|attr",
@@ -1130,6 +1132,9 @@
     "designmap|BuildingBlock@BlockType|attr",
     "designmap|BuildingBlock@CustomText|attr",
     "designmap|BuildingBlock@IncludeDelimiter|attr",
+    "designmap|CaptionMetadataVariablePreference@MetadataProviderName|attr",
+    "designmap|CaptionMetadataVariablePreference@TextAfter|attr",
+    "designmap|CaptionMetadataVariablePreference@TextBefore|attr",
     "designmap|ChapterNumberVariablePreference@Format|attr",
     "designmap|ChapterNumberVariablePreference@TextAfter|attr",
     "designmap|ChapterNumberVariablePreference@TextBefore|attr",
