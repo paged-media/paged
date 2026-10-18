@@ -121,8 +121,6 @@ jobs:
       - name: bun install (root workspace)
         working-directory: .
         run: bun install --frozen-lockfile
-      - name: contract-import lint (fail fast)
-        run: bun scripts/check-contract-imports.mjs
       # A red spec FAILS this job. It used to end in `|| true` (so red
       # results would still be published as evidence), which also meant the
       # lane could never go red. Evidence still ships — the JUnit steps below

@@ -7,9 +7,6 @@
     "typecheck": "bun run --filter './apps/*' typecheck",
     "build": "bun run --filter './apps/*' build",
     "wasm": "bun run --filter './apps/*' wasm",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "lint:boundaries-selftest": "bun scripts/eslint-boundaries-selftest.mjs",
     "test:boot-coi": "bun test ./scripts/cross-origin-isolation-check.test.mjs",
     "test:network-policy": "bun test ./scripts/network-policy.test.mjs",
     "test:modules": "bun test ./scripts/modules.test.mjs",
@@ -25,11 +22,5 @@
     "test:feat-vocabulary": "bun scripts/feat-vocabulary-guard.mjs",
     "test:solo-profiles": "bun scripts/solo-profiles-guard.mjs",
     "test:client-catalog": "bun scripts/client-api-catalog.mjs --check"
-  },
-  "devDependencies": {
-    "@eslint/js": "9.39.4",
-    "eslint": "9.39.4",
-    "globals": "15.15.0",
-    "typescript-eslint": "8.60.1"
   }
 }

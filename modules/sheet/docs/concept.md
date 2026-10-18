@@ -203,7 +203,7 @@ discipline — the same posture as `plugin-image`, with one rule added.
 
 ### 2.1 Isolation contract (superset of the plugin-image contract)
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md) in plugin-sdk (the isolation contract). In this repository the import rule is checked by `scripts/check-contract-imports.mjs` and `deny.toml`; the plugin spawns no workers; and data from another plugin arrives only through the host's data-provider door ([design/data-provider-consumer.md](design/data-provider-consumer.md)).*
+*Status note (2026-10-02): this section predates the implementation; see [ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md) in plugin-sdk (the isolation contract). In this repository the import rule is checked by a lint rule (`/bunfig.toml`, PM-0003) and `deny.toml`; the plugin spawns no workers; and data from another plugin arrives only through the host's data-provider door ([design/data-provider-consumer.md](design/data-provider-consumer.md)).*
 
 1. **Zero core contact.** No imports from `core/` or `editor/` internals,
    no patched Paged builds, no core feature flags for this plugin. CI

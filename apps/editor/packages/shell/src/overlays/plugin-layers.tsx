@@ -39,7 +39,6 @@ function PluginLayersRender(props: OverlayProps) {
             {layer.shapes.map((shape, i) => (
               // Positional key: a layer is republished wholesale, so
               // there is no shape identity to preserve.
-              // eslint-disable-next-line react/no-array-index-key
               <g key={i}>{renderPreviewShape(shape, props)}</g>
             ))}
           </g>

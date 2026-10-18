@@ -6,8 +6,7 @@
   "scripts": {
     "dev": "bunx --bun vite",
     "build": "bun check && bunx --bun vite build",
-    "preview": "bunx --bun vite preview",
-    "lint": "eslint src vite.config.ts"
+    "preview": "bunx --bun vite preview"
   },
   "dependencies": {
     "@paged-media/introspect-wasm": "workspace:*",

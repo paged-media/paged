@@ -346,7 +346,7 @@ fn cached_image_data(img: &paged_compose::DecodedImage) -> Option<ImageData> {
 /// is what a picture-free page of outlined text and solid fills encodes
 /// to. That path reports an empty atlas, so the renderer frees the real
 /// one, while the residency bookkeeping still says every image is
-/// uploaded (vello 0.10, `Resolver::resolve`). The next frame showing
+/// uploaded (vello 0.10 and 0.11, `Resolver::resolve`). The next frame showing
 /// those images gets a new, blank atlas and uploads nothing: they paint
 /// transparent until evicted. In the editor that was every picture on a
 /// page reached by scrolling past an image-free one.
@@ -402,6 +402,8 @@ fn init_gpu() -> Result<GpuState, String> {
         power_preference: wgpu::PowerPreference::HighPerformance,
         compatible_surface: None,
         force_fallback_adapter: false,
+        // The adapter's own limits, as before wgpu 30 added bucketing.
+        apply_limit_buckets: false,
     }))
     .map_err(|e| format!("no wgpu adapter available: {e:?}"))?;
     let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
@@ -1794,7 +1796,9 @@ fn render_scene_to_buffer(
     rx.recv()
         .map_err(|e| format!("map_async recv: {e}"))?
         .map_err(|e| format!("buffer map: {e:?}"))?;
-    let mapped = slice.get_mapped_range();
+    let mapped = slice
+        .get_mapped_range()
+        .map_err(|e| format!("buffer mapped range: {e}"))?;
     let bpr_tight = (width * 4) as usize;
     let mut out = Vec::with_capacity(bpr_tight * height as usize);
     for row in 0..height as usize {
@@ -2343,7 +2347,10 @@ fn create_storage_buffer_with_data(
         mapped_at_creation: true,
     });
     {
-        let mut view = buf.slice(..).get_mapped_range_mut();
+        let mut view = buf
+            .slice(..)
+            .get_mapped_range_mut()
+            .expect("a buffer created with mapped_at_creation is mapped");
         // BufferViewMut doesn't deref to &mut [u8] (write-combining
         // memory safety); use `copy_from_slice` which is the supported
         // bulk-write API. Pad with a zero copy when `data.len() < size`.
@@ -2373,7 +2380,10 @@ fn create_uniform_buffer_with_data(
         mapped_at_creation: true,
     });
     {
-        let mut view = buf.slice(..).get_mapped_range_mut();
+        let mut view = buf
+            .slice(..)
+            .get_mapped_range_mut()
+            .expect("a buffer created with mapped_at_creation is mapped");
         view.copy_from_slice(data);
     }
     buf.unmap();
@@ -2430,7 +2440,9 @@ fn read_texture_to_rgba_vec(
     rx.recv()
         .map_err(|e| format!("map_async recv: {e}"))?
         .map_err(|e| format!("buffer map: {e:?}"))?;
-    let mapped = slice.get_mapped_range();
+    let mapped = slice
+        .get_mapped_range()
+        .map_err(|e| format!("buffer mapped range: {e}"))?;
     let bpr_tight = (width * 4) as usize;
     let mut out = Vec::with_capacity(bpr_tight * height as usize);
     for row in 0..height as usize {

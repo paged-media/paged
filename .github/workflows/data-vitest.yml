@@ -138,8 +138,6 @@ jobs:
       - name: real-DuckDB artifact guard (fail, never skip)
         run: test -f packages/data-bundle/bin/duckdb-engine.wasm
       # ------------------------------------------------------------------
-      - name: contract-import lint (fail fast)
-        run: bun scripts/check-contract-imports.mjs
       - name: typecheck
         run: bun run --filter './packages/*' typecheck
       # A red spec FAILS this job. It used to end in `|| true` (so red
