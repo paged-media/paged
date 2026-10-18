@@ -158,7 +158,8 @@ def cockpit(test_map: str, out: str, report: str, before: list[str], after: list
         want = {k for k, t, p in b_index if matches(fields, t, p)}
         if not want:
             continue  # matches nothing in these workspaces: not ours to judge
-        for cand in variants(fields, merged, pkg_dirs):
+        cands = list(variants(fields, merged, pkg_dirs))
+        for cand in cands:
             got = {k for k, t, p in a_index if matches(cand, t, p)}
             if got == want:
                 if cand is not fields:
@@ -166,8 +167,25 @@ def cockpit(test_map: str, out: str, report: str, before: list[str], after: list
                     changed += 1
                 break
         else:
-            failed += 1
-            print(f"line {i + 1}: no rewrite keeps {len(want)} matches: {line.strip()}")
+            # A key that matched unit tests (unchanged) and merged integration
+            # tests (renamed) needs both: keep the entry and add the rewritten
+            # one beside it (test-map matching is a union across entries).
+            for cand in cands[1:]:
+                got = {k for k, t, p in a_index if matches(fields, t, p) or matches(cand, t, p)}
+                if got == want:
+                    # Duplicate the whole entry (its features/stage lines too),
+                    # right after the original's last line.
+                    j = i + 1
+                    while j < len(lines) and lines[j].startswith((" ", "\t")) and not MATCH_LINE.match(lines[j].rstrip("\n")):
+                        j += 1
+                    body_lines = "".join(lines[i + 1:j])
+                    dup = m.group("pre") + render(cand, m.group("body")) + m.group("post") + "\n" + body_lines
+                    lines[j - 1] = lines[j - 1] + dup
+                    changed += 1
+                    break
+            else:
+                failed += 1
+                print(f"line {i + 1}: no rewrite keeps {len(want)} matches: {line.strip()}")
     Path(out).write_text("".join(lines))
     print(f"cockpit: {changed} entries rewritten, {failed} could not be kept equal")
     sys.exit(1 if failed else 0)
