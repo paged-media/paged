@@ -5,6 +5,7 @@ Performance workloads, work budgets and benches for the engine.
 ## Why it exists
 
 In October 2026 two performance bugs reached the editor:
+
 - **Font hashing:** a whole-file font hash ran per paragraph, about 17 s per rebuild on the 134-page annual.
 - **Image decoding:** every repaint decoded the visible photos again, about 310 ms after each write.
 
@@ -14,13 +15,13 @@ So everything here runs on a workload that carries what real documents carry.
 
 ## The workload (`paged_perf::build`)
 
-| What | Why |
-|---|---|
-| `annual-base`: 134 facing pages, 7 masters, the full style sheet | the real document's structure |
-| the whole `corpus/fonts` directory **registered**, variable faces included | the path where the font-hash bug hid |
-| one story threaded through 116 body frames, ~474k characters (partly overset) | a keystroke reflows across frames |
-| 29 generated JPEG / PNG / WebP photos placed through `ReplaceImageBytes` | the path where the decode bug hid |
-| 12 tables | table layout |
+| What                                                                          | Why                                  |
+| ----------------------------------------------------------------------------- | ------------------------------------ |
+| `annual-base`: 134 facing pages, 7 masters, the full style sheet              | the real document's structure        |
+| the whole `corpus/fonts` directory **registered**, variable faces included    | the path where the font-hash bug hid |
+| one story threaded through 116 body frames, ~474k characters (partly overset) | a keystroke reflows across frames    |
+| 29 generated JPEG / PNG / WebP photos placed through `ReplaceImageBytes`      | the path where the decode bug hid    |
+| 12 tables                                                                     | table layout                         |
 
 It's authored through the mutation wire in five batches and builds in ~1.8 s (release). It's deterministic, and no fixture bytes are committed.
 
@@ -49,6 +50,7 @@ It's authored through the mutation wire in five batches and builds in ~1.8 s (re
 - **Native:** `samply record target/release/deps/workload-* --bench` (install it with `cargo install samply`).
 
 Two lessons:
+
 - **Profile the real workload, with real fonts and images.** A faster, simpler baseline usually means it is running different code.
 - **Check that a baseline takes the same path as what it's compared with.** The "wasm is 900× slower than native" premise came from a native run that skipped font hashing entirely.
 

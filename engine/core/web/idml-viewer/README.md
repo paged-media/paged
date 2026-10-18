@@ -5,7 +5,10 @@ events over the `@paged-media/sdk` WebGPU `ViewerSession`. Rendering is
 WebGPU-only (the session rejects without `navigator.gpu`).
 
 ```ts
-import { createViewer, createSessionFromBundledWasm } from "@paged-media/idml-viewer";
+import {
+  createViewer,
+  createSessionFromBundledWasm,
+} from "@paged-media/idml-viewer";
 
 const viewer = await createViewer({
   canvas: document.querySelector("canvas")!,
@@ -29,7 +32,7 @@ await viewer.load("/files/brochure.idml"); // URL | ArrayBuffer | Uint8Array | B
   `layoutMode("single" | "continuous")`,
   `renderPageThumbnail(n, { width })` (RGBA8 readback).
 - **Events** — `on("loaded" | "pageChanged" | "zoomChanged" |
-  "scrollChanged" | "error", cb)` → unsubscribe function.
+"scrollChanged" | "error", cb)` → unsubscribe function.
 - **Input** — wheel/pinch zoom-to-cursor, drag-pan, double-click zoom,
   keyboard (`+`/`-`/`0`, arrows, PgUp/PgDn, Home/End); each lane
   disableable via `input: {...}`.
