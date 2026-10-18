@@ -25,7 +25,8 @@
 
 import { readFileSync } from "node:fs";
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "bun:test";
+import { waitFor } from "@paged-media/test-kit";
 
 import type { BundleHost, Diagnostic, Disposable, ImporterContribution } from "@paged-media/plugin-api";
 
@@ -176,11 +177,11 @@ describe("a deck's embedded fonts", () => {
     // A deck document already open when the bundle activates.
     const r = fontHost({ source: FONTS });
     activate(r.host);
-    await vi.waitFor(() => expect(r.calls).toHaveLength(STYLES.length));
+    await waitFor(() => expect(r.calls).toHaveLength(STYLES.length));
     expect(r.diagnostics.get(FONT_DIAGNOSTICS)).toEqual([]);
     // And one opened later.
     r.fireOpened();
-    await vi.waitFor(() => expect(r.calls).toHaveLength(2 * STYLES.length));
+    await waitFor(() => expect(r.calls).toHaveLength(2 * STYLES.length));
   });
 
   it("are left alone for a document that is not a deck", async () => {

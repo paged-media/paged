@@ -105,14 +105,17 @@ jobs:
         run: node "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs" validate packages/slide-bundle/manifest.json
       # Red results still upload (the cockpit wants the failures too); the
       # last step fails the job.
-      - name: vitest (importer + conformance against the real engine)
+      - name: bun test (importer + conformance against the real engine)
         run: |
           set -uo pipefail
-          bun run --filter './packages/*' test --reporter=default --reporter=junit --outputFile.junit=junit.xml \
+          bun run --filter './packages/*' test --reporter=junit --reporter-outfile=junit.bun.xml \
             || echo "TS_FAILED=1" >> "$GITHUB_ENV"
-          cat packages/*/junit.xml > junit-all.xml 2>/dev/null || true
+          # bun's reports, rewritten into the vitest shape the evidence has always
+          # had (tooling/js/bun-junit.mjs): the artifact keeps its name and test ids.
+          bun ../../tooling/js/bun-junit.mjs --out junit-all.xml packages/*/junit.bun.xml \
+            || echo "TS_FAILED=1" >> "$GITHUB_ENV"
           [ -s junit-all.xml ]
-      - name: upload vitest JUnit artifact
+      - name: upload JUnit artifact
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:

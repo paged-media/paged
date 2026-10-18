@@ -27,7 +27,7 @@
 
 import { readFileSync } from "node:fs";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import { createHeadlessHost, validateValue, type HeadlessHost } from "@paged-media/plugin-sdk";
 import type { ObjectValue, ValueType } from "@paged-media/plugin-api";
