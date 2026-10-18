@@ -1,8 +1,8 @@
 # Upstream reports (drafts)
 
 Draft issue texts for the layout defects in [`PARITY.md`](PARITY.md) whose cause is in the pinned
-layout stack: Blitz 0.3.0-alpha.4 (`blitz-dom`, `stylo_taffy`), Taffy
-0.11.0-experimental-cache-fix.3 and Parley 0.9. They are not filed from here. Each reproduction
+layout stack: Blitz 0.3.0-alpha.6 (`blitz-dom`, `stylo_taffy`), Taffy
+0.11.0-experimental-cache-fix.3 and Parley 0.10. They are not filed from here. Each reproduction
 assumes a single-face font (the measurements use Inter at 16 px, `line-height: 1.25` unless noted)
 and a viewport 240 px wide; "Chrome" is headless Chromium 153. Before filing, check the defect
 against the current upstream release: a fix there is picked up by moving the pin, not by a
