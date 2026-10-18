@@ -10,6 +10,15 @@ target/
 pkg/
 /dist/
 
+# The wasm packages of the Bun workspace (ADR 185): package.json, README and
+# licence files are committed; what build-wasm-packages.sh --workspace
+# generates beside them (the .js, .d.ts and _bg.wasm, catalog.json) is not.
+/packages/*/*
+!/packages/*/package.json
+!/packages/*/README.md
+!/packages/*/LICENSE
+!/packages/*/LICENSE.md
+
 # Fidelity artefacts (generated locally)
 corpus/**/out/
 corpus/**/diff/
