@@ -25,10 +25,10 @@
 //     declares in `capabilities.wasm`.
 //
 // A package installed from npm is immutable per version, so its host
-// version is its npm version. One linked from a source checkout (`link:`,
-// e.g. @paged-media/doc until its first publish) is not — its bytes change
-// under the same version — so its host version carries the file's content
-// hash: `<version>+<sha256 prefix>`.
+// version is its npm version. A workspace package of this repository
+// (`workspace:`, e.g. @paged-media/doc until its first publish) is not — its
+// bytes change under the same version — so its host version carries the
+// file's content hash: `<version>+<sha256 prefix>`.
 
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
@@ -55,7 +55,10 @@ export function walkWasm(dir, out = [], skipNodeModules = true) {
 }
 
 /** The installed @paged-media packages: `{ name, version, root, published }`,
- *  one per real directory (pnpm links one store entry from many places). */
+ *  one per real directory (Bun's isolated linker links one store entry from
+ *  many places). A package is published when its real directory is in the
+ *  store, `<repo root>/node_modules/.bun/`; a workspace package resolves to
+ *  its own directory in the repository. */
 export function pagedPackages(app = APP) {
   const roots = new Set();
   for (const base of [join(app, "node_modules", "@paged-media"), join(app, "..", "..", "node_modules", "@paged-media")]) {
@@ -73,7 +76,7 @@ export function pagedPackages(app = APP) {
     const pkgFile = join(root, "package.json");
     if (!existsSync(pkgFile)) continue;
     const { name, version } = JSON.parse(readFileSync(pkgFile, "utf8"));
-    out.push({ name, version, root, published: toPosix(root).includes("/node_modules/.pnpm/") });
+    out.push({ name, version, root, published: toPosix(root).includes("/node_modules/.bun/") });
   }
   return out;
 }
