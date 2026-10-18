@@ -35,15 +35,25 @@ import { SelectModifySection } from "../src/panels/sections/select-modify-sectio
 import { PatternSection } from "../src/panels/sections/pattern-section";
 import { SmartObjectSection } from "../src/panels/sections/smart-object-section";
 import { createImageSession, type ImageSession } from "../src/session";
-import { makeFakeEditor, mapBacking, psdBytes, shellStub, silentConsole } from "./helpers";
+import {
+  makeFakeEditor,
+  mapBacking,
+  psdBytes,
+  shellStub,
+  silentConsole,
+} from "./helpers";
 
 function open() {
   const fake = makeFakeEditor();
-  const handle = createBundleHost(() => fake.editor, manifestJson as PluginManifest, {
-    console: silentConsole,
-    storage: mapBacking(),
-    shell: shellStub(),
-  });
+  const handle = createBundleHost(
+    () => fake.editor,
+    manifestJson as PluginManifest,
+    {
+      console: silentConsole,
+      storage: mapBacking(),
+      shell: shellStub(),
+    },
+  );
   return { handle, session: createImageSession(handle.host) };
 }
 
@@ -105,13 +115,13 @@ describe("smart objects", () => {
 
 // ── the panel sections that make them reachable ──────────────────────
 
-
 type Props = Record<string, unknown>;
 
 /** Every host element's props in a pure component tree (no DOM, no
  *  hooks run), so a test can find a control by its data attribute. */
 function elements(node: unknown, out: Props[] = []): Props[] {
-  if (node === null || node === undefined || typeof node !== "object") return out;
+  if (node === null || node === undefined || typeof node !== "object")
+    return out;
   if (Array.isArray(node)) {
     for (const n of node) elements(n, out);
     return out;
@@ -139,10 +149,12 @@ function recorder() {
   const session = new Proxy(
     {},
     {
-      get: (_t, prop) => (...args: unknown[]) => {
-        calls.push(`${String(prop)}(${args.join(",")})`);
-        return Promise.resolve(true);
-      },
+      get:
+        (_t, prop) =>
+        (...args: unknown[]) => {
+          calls.push(`${String(prop)}(${args.join(",")})`);
+          return Promise.resolve(true);
+        },
     },
   ) as unknown as ImageSession;
   return { session, calls };
@@ -170,9 +182,17 @@ describe("panel sections", () => {
     (byData(tree, "data-image-define-pattern").onClick as () => void)();
     (byData(tree, "data-image-fill-pattern").onClick as () => void)();
     (byData(tree, "data-image-shape-blur").onClick as () => void)();
-    expect(calls).toEqual(["definePattern()", "fillWithPattern(2)", "shapeBlurWithPattern(12)"]);
+    expect(calls).toEqual([
+      "definePattern()",
+      "fillWithPattern(2)",
+      "shapeBlurWithPattern(12)",
+    ]);
 
-    tree = PatternSection({ ...props, pattern: { width: 4, height: 4 }, gpu: false });
+    tree = PatternSection({
+      ...props,
+      pattern: { width: 4, height: 4 },
+      gpu: false,
+    });
     expect(byData(tree, "data-image-fill-pattern").disabled).toBe(true);
   });
 
@@ -186,13 +206,18 @@ describe("panel sections", () => {
       disabled: false,
     };
     const right = (tree: unknown) =>
-      elements(tree).find((p) => p["data-image-nudge"] === "→")!.onClick as (e: {
-        shiftKey: boolean;
-      }) => void;
+      elements(tree).find((p) => p["data-image-nudge"] === "→")!
+        .onClick as (e: { shiftKey: boolean }) => void;
     right(MoveSection(props))({ shiftKey: false });
     right(MoveSection({ ...props, hasSelection: false }))({ shiftKey: true });
-    (byData(MoveSection(props), "data-image-offset-wrap").onClick as () => void)();
-    expect(calls).toEqual(["moveSelection(1,0,0)", "offsetLayer(10,0,0)", "offsetFilter(50,20)"]);
+    (
+      byData(MoveSection(props), "data-image-offset-wrap").onClick as () => void
+    )();
+    expect(calls).toEqual([
+      "moveSelection(1,0,0)",
+      "offsetLayer(10,0,0)",
+      "offsetFilter(50,20)",
+    ]);
   });
 
   it("Smart object: convert only a pixel layer; render only a smart one", () => {
@@ -218,8 +243,14 @@ describe("panel sections", () => {
   it("Canvas: each rotate/flip button calls its op; Apply size passes size and anchor", () => {
     const { session, calls } = recorder();
     const size = { width: 10, height: 20, anchorX: 0, anchorY: 2 };
-    const tree = CanvasSection({ session, size, onSize: () => {}, disabled: false });
-    for (const p of elements(tree).filter((p) => "data-image-canvas-op" in p)) (p.onClick as () => void)();
+    const tree = CanvasSection({
+      session,
+      size,
+      onSize: () => {},
+      disabled: false,
+    });
+    for (const p of elements(tree).filter((p) => "data-image-canvas-op" in p))
+      (p.onClick as () => void)();
     (byData(tree, "data-image-canvas-size").onClick as () => void)();
     expect(calls).toEqual([
       "canvasOp(rotate-ccw)",
@@ -233,9 +264,21 @@ describe("panel sections", () => {
 
   it("Median/Maximum/Minimum need a GPU; Modify needs a selection", () => {
     const { session, calls } = recorder();
-    let tree = RankLookupSection({ session, gpu: false, disabled: false, lookupName: null, onLookupFile: () => {} });
+    let tree = RankLookupSection({
+      session,
+      gpu: false,
+      disabled: false,
+      lookupName: null,
+      onLookupFile: () => {},
+    });
     expect(byData(tree, "data-image-median").disabled).toBe(true);
-    tree = RankLookupSection({ session, gpu: true, disabled: false, lookupName: null, onLookupFile: () => {} });
+    tree = RankLookupSection({
+      session,
+      gpu: true,
+      disabled: false,
+      lookupName: null,
+      onLookupFile: () => {},
+    });
     (byData(tree, "data-image-maximum").onClick as () => void)();
     const mod = SelectModifySection({
       session,
@@ -244,7 +287,11 @@ describe("panel sections", () => {
       onRadius: () => {},
       wand: { tolerance: 32, contiguous: true },
     });
-    expect(elements(mod).filter((p) => "data-image-modify" in p).every((p) => p.disabled)).toBe(true);
+    expect(
+      elements(mod)
+        .filter((p) => "data-image-modify" in p)
+        .every((p) => p.disabled),
+    ).toBe(true);
     const mod2 = SelectModifySection({
       session,
       hasSelection: true,
@@ -252,7 +299,10 @@ describe("panel sections", () => {
       onRadius: () => {},
       wand: { tolerance: 32, contiguous: true },
     });
-    (elements(mod2).find((p) => p["data-image-modify"] === "border")!.onClick as () => void)();
+    (
+      elements(mod2).find((p) => p["data-image-modify"] === "border")!
+        .onClick as () => void
+    )();
     expect(calls).toEqual(["applyMorph(max)", "modifySelection(border,3)"]);
   });
 });

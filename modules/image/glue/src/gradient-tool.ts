@@ -3,13 +3,25 @@
 // A drag shorter than a pixel is a click and fills nothing. Shift
 // constrains the line to 45° steps, as in Photoshop.
 
-import type { BundleHost, CanvasPointerEvent, GestureHandler } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  CanvasPointerEvent,
+  GestureHandler,
+} from "@paged-media/plugin-api";
 
-import { imageToPage, pageToImage, resolveFrameFit, type FitTransform } from "./frame-fit";
+import {
+  imageToPage,
+  pageToImage,
+  resolveFrameFit,
+  type FitTransform,
+} from "./frame-fit";
 import type { ImageSession } from "./session";
 
 /** Snap the end point to the nearest 45° direction from the start. */
-export function constrain45(from: [number, number], to: [number, number]): [number, number] {
+export function constrain45(
+  from: [number, number],
+  to: [number, number],
+): [number, number] {
   const dx = to[0] - from[0];
   const dy = to[1] - from[1];
   const len = Math.hypot(dx, dy);
@@ -18,7 +30,10 @@ export function constrain45(from: [number, number], to: [number, number]): [numb
   return [from[0] + Math.cos(a) * len, from[1] + Math.sin(a) * len];
 }
 
-export function makeGradientGesture(host: BundleHost, session: ImageSession): GestureHandler {
+export function makeGradientGesture(
+  host: BundleHost,
+  session: ImageSession,
+): GestureHandler {
   let fit: FitTransform | null = null;
   let from: [number, number] | null = null;
   let to: [number, number] | null = null;
@@ -37,9 +52,11 @@ export function makeGradientGesture(host: BundleHost, session: ImageSession): Ge
 
   return {
     onActivate() {
-      void resolveFrameFit(host, session.state().source, "gradient tool").then((f) => {
-        fit = f;
-      });
+      void resolveFrameFit(host, session.state().source, "gradient tool").then(
+        (f) => {
+          fit = f;
+        },
+      );
     },
     onDeactivate() {
       host.overlay.setToolPreview(null);

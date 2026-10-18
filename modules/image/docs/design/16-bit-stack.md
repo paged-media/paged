@@ -1,6 +1,6 @@
 # The 16-bit stack — why it is not built, and the shape that makes it safe
 
-*Status note (2026-10-02): the status line describes the engine's Rust API, which `image-js/tests/it/ingest_16bit.rs` exercises. Through the shipped wasm surface 16 bits are held only after a main-thread decode and kept only by the one-shot filter door; `layers_open`, the panel's adjustment chain, the in-frame image, tiles and save-back are 8-bit, and a 16-bit greyscale PNG is refused. See `status.md`.*
+_Status note (2026-10-02): the status line describes the engine's Rust API, which `image-js/tests/it/ingest_16bit.rs` exercises. Through the shipped wasm surface 16 bits are held only after a main-thread decode and kept only by the one-shot filter door; `layers_open`, the panel's adjustment chain, the in-frame image, tiles and save-back are 8-bit, and a 16-bit greyscale PNG is refused. See `status.md`._
 
 **Status:** **DONE 2026-08-09 — all five steps.** A 16-bit PNG opens at full depth and keeps every bit through an adjustment, a layer edit, and an undo. The only remaining narrowing is 16-bit Gray/GrayA, which has no widening arm and still says so via `depth_reduced`.
 **Size:** smaller than this document first claimed — see the correction below.
@@ -10,18 +10,18 @@ Sections not relevant outside the original planning context have been removed.
 
 ## What already ships, so the gap is smaller than the row implies
 
-*Status note (2026-10-02): this section and the next were written before the work was done; the layer store listed below as unbuilt is built, and `Layer.rgba` and `DecodedImage.rgba` are now the `Pixels` type in `image-js/src/pixels.rs` (the steps further down record it). See [ADR 455](../adr/455-pixel-model.md).*
+_Status note (2026-10-02): this section and the next were written before the work was done; the layer store listed below as unbuilt is built, and `Layer.rgba` and `DecodedImage.rgba` are now the `Pixels` type in `image-js/src/pixels.rs` (the steps further down record it). See [ADR 455](../adr/455-pixel-model.md)._
 
 The internal capability catalogue's row read as though 16-bit were one undifferentiated
 wall. It is four things, and three are done:
 
-| Rung | State |
-|---|---|
-| The kernel/tile ABI | **Done, always was.** f16 storage, f32 compute. The *engine* was never 8-bit-bound. |
-| 16-bit PSD ingest | **Done.** Opens, narrowed by the high byte, reduction reported. |
-| 16-bit PNG ingest | **Done 2026-08-09.** Used to error `Unsupported` — the file would not load. The blocker ("byte order unverified, no fixture") was false: PNG endianness is normative (§7.1) and `zune` returns assembled `u16`s anyway. `image-conformance/tests/it/codec_png_16bit.rs` now *measures* the order. |
-| The adjustment-layer fold | **Done.** Stays in f16 rather than round-tripping through 8 per layer. Measured: >120 of 256 distinct levels survive a compress/expand pair, versus 26 before. |
-| **The layer STORE** | **Unbuilt. This document.** |
+| Rung                      | State                                                                                                                                                                                                                                                                                             |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The kernel/tile ABI       | **Done, always was.** f16 storage, f32 compute. The _engine_ was never 8-bit-bound.                                                                                                                                                                                                               |
+| 16-bit PSD ingest         | **Done.** Opens, narrowed by the high byte, reduction reported.                                                                                                                                                                                                                                   |
+| 16-bit PNG ingest         | **Done 2026-08-09.** Used to error `Unsupported` — the file would not load. The blocker ("byte order unverified, no fixture") was false: PNG endianness is normative (§7.1) and `zune` returns assembled `u16`s anyway. `image-conformance/tests/it/codec_png_16bit.rs` now _measures_ the order. |
+| The adjustment-layer fold | **Done.** Stays in f16 rather than round-tripping through 8 per layer. Measured: >120 of 256 distinct levels survive a compress/expand pair, versus 26 before.                                                                                                                                    |
+| **The layer STORE**       | **Unbuilt. This document.**                                                                                                                                                                                                                                                                       |
 
 Two claims in the old row were also simply wrong and are corrected
 there: **JPEG was never a blocker** (the format is 8-bit — nothing to
@@ -38,13 +38,13 @@ Change the store to 16-bit and every one of the 161 sites that does
 and starts reading the wrong pixel. The failure is a silently corrupted
 image, not a red build.
 
-| File | Sites touching pixel bytes |
-|---|---|
-| `image-js/src/ingest.rs` | 63 |
-| `image-js/src/layers.rs` | 52 |
-| `image-js/src/saveback.rs` | 27 |
-| `image-js/src/fill.rs` | 15 |
-| `image-js/src/channels.rs` | 4 |
+| File                       | Sites touching pixel bytes |
+| -------------------------- | -------------------------- |
+| `image-js/src/ingest.rs`   | 63                         |
+| `image-js/src/layers.rs`   | 52                         |
+| `image-js/src/saveback.rs` | 27                         |
+| `image-js/src/fill.rs`     | 15                         |
+| `image-js/src/channels.rs` | 4                          |
 
 Plus the COW journal (tile-granular, sized in bytes), the brush/dab
 engine, the PSD save-back's `replace_channel_pixels`, and every
@@ -107,11 +107,11 @@ failure mode this step exists to convert.
 
 **Step 4 — the layered path. DONE.** `edit_active` takes `Pixels` and the undo restores through `from_raw(bytes, depth)`.
 
-**The journal needed NO change** — this document predicted `image-graph` work and there was none. It stores opaque tile byte handles, and `FlatImage::new(w, h, bpp, …)` always took bytes-per-pixel as a *parameter* rather than baking in `4`. The only real bug to avoid was narrowing on the way in or out. **Second time this plan over-estimated** (see the touch-point count above); both times the cheap check was to look rather than reason.
+**The journal needed NO change** — this document predicted `image-graph` work and there was none. It stores opaque tile byte handles, and `FlatImage::new(w, h, bpp, …)` always took bytes-per-pixel as a _parameter_ rather than baking in `4`. The only real bug to avoid was narrowing on the way in or out. **Second time this plan over-estimated** (see the touch-point count above); both times the cheap check was to look rather than reason.
 
 **Undo was the sharp edge.** Restoring through an 8-bit view yields `0x1200` where `0x1234` went in — high byte kept, low byte silently gone — and it surfaces only AFTER an undo, about the worst place to hide a precision bug. Mutation-checked: putting the narrowing back fails the test.
 
-**A depth mismatch is refused, not narrowed.** The journal snapshots tiles in one geometry and restores them in another, so a 16-bit edit onto an 8-bit layer corrupts an *undo* rather than merely degrading the edit.
+**A depth mismatch is refused, not narrowed.** The journal snapshots tiles in one geometry and restores them in another, so a 16-bit edit onto an 8-bit layer corrupts an _undo_ rather than merely degrading the edit.
 
 **Step 5 — ingest stops narrowing. DONE for PNG.** 16-bit RGBA rides through at full depth and `depth_reduced` now reads `false`, because nothing is reduced. Other 16-bit layouts (Gray/GrayA) still narrow — they would need their own widening arms — and still say so. PSD save-back is unchanged.
 
@@ -122,7 +122,7 @@ separate decision.
 
 ## Verification this needs, beyond the suite
 
-- **A level-count test**, not an eyeball: banding *is* loss of distinct
+- **A level-count test**, not an eyeball: banding _is_ loss of distinct
   levels. The adjustment fold's existing measurement (compress/expand,
   count survivors) is the template.
 - **A round-trip at 16-bit**: a 16-bit PSD in, no edit, 16-bit out,
@@ -138,7 +138,7 @@ Both of its size estimates were too high, and in the same way: asserted
 from reading rather than measured by trying. 161 touch points were
 actually 43. `image-graph` work turned out to be zero. The design
 argument (make the compiler find the sites) was right and earned itself
-several times over; the *cost* argument was not.
+several times over; the _cost_ argument was not.
 
 The counter-lesson is not "estimate less carefully" — it is that a
 newtype migration is cheap to ATTEMPT and expensive to guess about,

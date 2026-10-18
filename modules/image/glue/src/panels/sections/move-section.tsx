@@ -59,7 +59,10 @@ export function MoveSection({
           disabled={disabled || !gpu || !size}
           onClick={() =>
             size &&
-            void session.offsetFilter(Math.round(size.width / 2), Math.round(size.height / 2))
+            void session.offsetFilter(
+              Math.round(size.width / 2),
+              Math.round(size.height / 2),
+            )
           }
         >
           Half the image

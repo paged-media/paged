@@ -34,7 +34,11 @@ export function movePixels(
   const sel = session.state().selection;
   if (dx === 0 && dy === 0) return Promise.resolve(false);
   return sel && sel.w > 0
-    ? session.moveSelection(dx, dy, copy ? VacateMode.Copy : VacateMode.Transparent)
+    ? session.moveSelection(
+        dx,
+        dy,
+        copy ? VacateMode.Copy : VacateMode.Transparent,
+      )
     : session.offsetLayer(dx, dy, EdgePolicy.Transparent);
 }
 
@@ -55,7 +59,10 @@ export function nudgeFor(key: string, shift: boolean): [number, number] | null {
   }
 }
 
-export function makeMoveGesture(host: BundleHost, session: ImageSession): GestureHandler {
+export function makeMoveGesture(
+  host: BundleHost,
+  session: ImageSession,
+): GestureHandler {
   let fit: FitTransform | null = null;
   let start: [number, number] | null = null;
   let delta: [number, number] = [0, 0];
@@ -91,9 +98,11 @@ export function makeMoveGesture(host: BundleHost, session: ImageSession): Gestur
 
   return {
     onActivate() {
-      void resolveFrameFit(host, session.state().source, "move tool").then((f) => {
-        fit = f;
-      });
+      void resolveFrameFit(host, session.state().source, "move tool").then(
+        (f) => {
+          fit = f;
+        },
+      );
     },
     onDeactivate() {
       host.overlay.setToolPreview(null);

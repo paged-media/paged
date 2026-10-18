@@ -40,7 +40,9 @@ export function parseCube(text: string): Cube {
         size = Number(rest[0]);
         return;
       case "LUT_1D_SIZE":
-        throw new Error(`.cube line ${i + 1}: 1D lookup tables are not supported (a 3D table is)`);
+        throw new Error(
+          `.cube line ${i + 1}: 1D lookup tables are not supported (a 3D table is)`,
+        );
       case "DOMAIN_MIN":
         min = [Number(rest[0]), Number(rest[1]), Number(rest[2])];
         return;
@@ -50,7 +52,9 @@ export function parseCube(text: string): Cube {
       default: {
         const v = line.split(/\s+/).map(Number);
         if (v.length !== 3 || v.some((x) => !Number.isFinite(x))) {
-          throw new Error(`.cube line ${i + 1}: expected "r g b", got "${line}"`);
+          throw new Error(
+            `.cube line ${i + 1}: expected "r g b", got "${line}"`,
+          );
         }
         values.push(v[0], v[1], v[2]);
       }
@@ -60,16 +64,25 @@ export function parseCube(text: string): Cube {
     throw new Error(".cube: LUT_3D_SIZE missing or out of range (2–256)");
   }
   if (values.length !== size * size * size * 3) {
-    throw new Error(`.cube: ${values.length / 3} entries, LUT_3D_SIZE ${size} needs ${size ** 3}`);
+    throw new Error(
+      `.cube: ${values.length / 3} entries, LUT_3D_SIZE ${size} needs ${size ** 3}`,
+    );
   }
   if ([0, 1, 2].some((k) => !(max[k] > min[k]))) {
-    throw new Error(".cube: DOMAIN_MAX must exceed DOMAIN_MIN on every channel");
+    throw new Error(
+      ".cube: DOMAIN_MAX must exceed DOMAIN_MIN on every channel",
+    );
   }
   return { size, data: Float32Array.from(values), title, domain: { min, max } };
 }
 
 /** Trilinear sample of a cube at normalised (r, g, b) ∈ [0, 1]. */
-function sample(c: Cube, r: number, g: number, b: number): [number, number, number] {
+function sample(
+  c: Cube,
+  r: number,
+  g: number,
+  b: number,
+): [number, number, number] {
   const n = c.size - 1;
   const at = (v: number) => {
     const x = Math.min(Math.max(v, 0), 1) * n;
@@ -79,14 +92,16 @@ function sample(c: Cube, r: number, g: number, b: number): [number, number, numb
   const [r0, fr] = at(r);
   const [g0, fg] = at(g);
   const [b0, fb] = at(b);
-  const idx = (ri: number, gi: number, bi: number) => ((bi * c.size + gi) * c.size + ri) * 3;
+  const idx = (ri: number, gi: number, bi: number) =>
+    ((bi * c.size + gi) * c.size + ri) * 3;
   const out: [number, number, number] = [0, 0, 0];
   for (let k = 0; k < 3; k++) {
     let acc = 0;
     for (let db = 0; db < 2; db++)
       for (let dg = 0; dg < 2; dg++)
         for (let dr = 0; dr < 2; dr++) {
-          const w = (dr ? fr : 1 - fr) * (dg ? fg : 1 - fg) * (db ? fb : 1 - fb);
+          const w =
+            (dr ? fr : 1 - fr) * (dg ? fg : 1 - fg) * (db ? fb : 1 - fb);
           if (w) acc += w * c.data[idx(r0 + dr, g0 + dg, b0 + db) + k];
         }
     out[k] = acc;
@@ -106,7 +121,12 @@ export function toKernelCube(c: Cube): Float32Array {
   for (let b = 0; b < e; b++)
     for (let g = 0; g < e; g++)
       for (let r = 0; r < e; r++) {
-        const v = sample(c, toDomain(r / (e - 1), 0), toDomain(g / (e - 1), 1), toDomain(b / (e - 1), 2));
+        const v = sample(
+          c,
+          toDomain(r / (e - 1), 0),
+          toDomain(g / (e - 1), 1),
+          toDomain(b / (e - 1), 2),
+        );
         out[o++] = v[0];
         out[o++] = v[1];
         out[o++] = v[2];

@@ -126,11 +126,15 @@ describe.skipIf(!built)("real wasm execution (committed artifact)", () => {
     expect(hist.length).toBe(1024);
     expect(hist[0]).toBe(128); // red bin 0
     expect(hist[255]).toBe(128); // red bin 255
-    const lumaTotal = hist.slice(768).reduce((a: number, b: number) => a + b, 0);
+    const lumaTotal = hist
+      .slice(768)
+      .reduce((a: number, b: number) => a + b, 0);
     expect(lumaTotal).toBe(W * H);
 
     // Two-run equality: the reduction is deterministic.
-    expect(Array.from(glue.image_histogram(h.handle))).toEqual(Array.from(hist));
+    expect(Array.from(glue.image_histogram(h.handle))).toEqual(
+      Array.from(hist),
+    );
 
     // channel_stats agrees with the histogram by construction — and
     // with our arithmetic: mean of {0,255} at 50/50 is 127.5.
@@ -166,7 +170,8 @@ describe.skipIf(!built)("real wasm execution (committed artifact)", () => {
     const id = glue.curve_lut(new Float32Array([0, 0, 1, 1]));
     expect(id[0]).toBe(0);
     expect(id[255]).toBe(255);
-    for (let i = 1; i < 256; i++) expect(id[i]).toBeGreaterThanOrEqual(id[i - 1]);
+    for (let i = 1; i < 256; i++)
+      expect(id[i]).toBeGreaterThanOrEqual(id[i - 1]);
   });
 
   it("crops the exact pixel window and reads it back through the tile door", async () => {
@@ -193,7 +198,9 @@ describe.skipIf(!built)("real wasm execution (committed artifact)", () => {
     expect(glue.image_tile_rgba8(white.handle, 100, 100, 4, 4).length).toBe(0);
 
     // The source survives its crops (the caller frees it — doc contract).
-    expect(glue.image_tile_rgba8(src.handle, 0, 0, W, H).length).toBe(W * H * 4);
+    expect(glue.image_tile_rgba8(src.handle, 0, 0, W, H).length).toBe(
+      W * H * 4,
+    );
     glue.free_image(white.handle);
     glue.free_image(black.handle);
     glue.free_image(src.handle);
@@ -249,9 +256,9 @@ describe.skipIf(!built)("real wasm execution (committed artifact)", () => {
     // mask prep, not image processing). The hard edge must soften into
     // intermediate coverage values a binary mask cannot contain.
     const before = glue.selection_coverage_bytes();
-    expect(
-      Array.from(before).some((v: number) => v > 0 && v < 255),
-    ).toBe(false);
+    expect(Array.from(before).some((v: number) => v > 0 && v < 255)).toBe(
+      false,
+    );
     glue.selection_feather(2.0);
     const after = glue.selection_coverage_bytes();
     expect(after.length).toBe(W * H);
@@ -311,9 +318,9 @@ describe.skipIf(!built)("real wasm execution (committed artifact)", () => {
       await refusal(() => glue.resize_image(h.handle, 8, 8, "lanczos3")),
     ).toMatch(/GPU-only/);
     // Stylize — emboss, one of the ten that shipped declared-but-absent:
-    expect(
-      await refusal(() => glue.apply_emboss(h.handle, 45, 3)),
-    ).toMatch(/GPU-only/);
+    expect(await refusal(() => glue.apply_emboss(h.handle, 45, 3))).toMatch(
+      /GPU-only/,
+    );
 
     // The module survives its refusals — the realm is not poisoned.
     expect(glue.gpu_ready()).toBe(false);

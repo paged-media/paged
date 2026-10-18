@@ -118,18 +118,30 @@ export interface HueSatParams {
   colorize: { on: boolean; hue: number; saturation: number; lightness: number };
 }
 
-export const HUE_SAT_RANGES = ["Reds", "Yellows", "Greens", "Cyans", "Blues", "Magentas"] as const;
+export const HUE_SAT_RANGES = [
+  "Reds",
+  "Yellows",
+  "Greens",
+  "Cyans",
+  "Blues",
+  "Magentas",
+] as const;
 
 export function identityHueSat(): HueSatParams {
   return {
     master: [0, 0, 0],
-    ranges: Array.from({ length: 6 }, () => [0, 0, 0] as [number, number, number]),
+    ranges: Array.from(
+      { length: 6 },
+      () => [0, 0, 0] as [number, number, number],
+    ),
     colorize: { on: false, hue: 0, saturation: 0.25, lightness: 0 },
   };
 }
 
 function hueSatIdentity(h: HueSatParams): boolean {
-  return allZero(h.master) && h.ranges.every((r) => allZero(r)) && !h.colorize.on;
+  return (
+    allZero(h.master) && h.ranges.every((r) => allZero(r)) && !h.colorize.on
+  );
 }
 
 /** The committed adjustment parameters. Identity = every field neutral:
@@ -291,7 +303,8 @@ export function isIdentity(p: AdjustParams): boolean {
  *  composite table, or 1024 bytes — composite (identity when unset),
  *  then red, green and blue (identity where unset). */
 export function packCurves(p: AdjustParams): Uint8Array {
-  if (p.curveLutRgb.every((t) => t === null)) return p.curveLut ?? new Uint8Array(0);
+  if (p.curveLutRgb.every((t) => t === null))
+    return p.curveLut ?? new Uint8Array(0);
   const identity = Uint8Array.from({ length: 256 }, (_, i) => i);
   const out = new Uint8Array(1024);
   out.set(p.curveLut ?? identity, 0);
@@ -563,12 +576,7 @@ export type ResampleFilter = "nearest" | "mitchell" | "lanczos3";
 
 /** Whole-canvas operations (`layersCanvasOp`). */
 export type CanvasOpKind =
-  | "rotate-cw"
-  | "rotate-ccw"
-  | "rotate-180"
-  | "flip-h"
-  | "flip-v"
-  | "canvas";
+  "rotate-cw" | "rotate-ccw" | "rotate-180" | "flip-h" | "flip-v" | "canvas";
 
 /** Select ▸ Modify operations (`selectionModify`). */
 export type SelectionModifyOp = "expand" | "contract" | "border" | "smooth";
@@ -643,7 +651,11 @@ export const TONE_TOOLS: readonly StrokeTool[] = ["dodge", "burn", "sponge"];
 
 /** The tonal range dodge and burn act on. */
 export type ToneRange = "shadows" | "midtones" | "highlights";
-export const TONE_RANGES: readonly ToneRange[] = ["shadows", "midtones", "highlights"];
+export const TONE_RANGES: readonly ToneRange[] = [
+  "shadows",
+  "midtones",
+  "highlights",
+];
 
 /** The dodge / burn / sponge options, frozen into each stroke. */
 export interface ToneOptions {
@@ -1158,7 +1170,10 @@ export interface ImageEngine {
   /** The histogram and the channels readout from ONE pass over the
    *  pixels (`image_readout`) — what the panel refreshes after a
    *  recomposite. */
-  readout(handle: number): { histogram: ImageHistogram; channels: ChannelStatsInfo[] };
+  readout(handle: number): {
+    histogram: ImageHistogram;
+    channels: ChannelStatsInfo[];
+  };
   /** LOAD A CHANNEL AS THE SELECTION. The channel's bytes ARE the
    *  coverage representation, so this is a copy and not a threshold — a
    *  50% channel yields a 50%-selected region, which is what a
@@ -1431,18 +1446,90 @@ export interface ImageEngine {
   ): Promise<DecodedInfo>;
   // FILTER GALLERY — twelve primitives spanning the six families.
   // `amount` 0 is the identity on every one of them.
-  galleryKuwahara(handle: number, radiusPx: number, amount: number): Promise<DecodedInfo>;
-  galleryPosterizeEdges(handle: number, levels: number, edgeAmount: number, edgeThreshold: number, amount: number): Promise<DecodedInfo>;
-  galleryGlowingEdges(handle: number, intensity: number, smoothness: number, amount: number): Promise<DecodedInfo>;
-  galleryHalftone(handle: number, cellPx: number, angleDeg: number, contrast: number, amount: number): Promise<DecodedInfo>;
-  galleryGrain(handle: number, seed: number, sizePx: number, mono: boolean, amount: number): Promise<DecodedInfo>;
-  galleryDiffuse(handle: number, seed: number, radiusPx: number, angleDeg: number, anisotropy: number, amount: number): Promise<DecodedInfo>;
-  galleryCrosshatch(handle: number, angleDeg: number, spacingPx: number, strength: number, sets: number, amount: number): Promise<DecodedInfo>;
-  galleryBasRelief(handle: number, angleDeg: number, elevationDeg: number, height: number, amount: number): Promise<DecodedInfo>;
-  galleryThresholdInk(handle: number, threshold: number, softness: number, amount: number): Promise<DecodedInfo>;
-  galleryStainedGlass(handle: number, seed: number, cellPx: number, border: number, amount: number): Promise<DecodedInfo>;
-  galleryGlass(handle: number, seed: number, scalePx: number, distortion: number, amount: number): Promise<DecodedInfo>;
-  galleryTexturizer(handle: number, seed: number, kind: number, scalePx: number, relief: number, angleDeg: number, amount: number): Promise<DecodedInfo>;
+  galleryKuwahara(
+    handle: number,
+    radiusPx: number,
+    amount: number,
+  ): Promise<DecodedInfo>;
+  galleryPosterizeEdges(
+    handle: number,
+    levels: number,
+    edgeAmount: number,
+    edgeThreshold: number,
+    amount: number,
+  ): Promise<DecodedInfo>;
+  galleryGlowingEdges(
+    handle: number,
+    intensity: number,
+    smoothness: number,
+    amount: number,
+  ): Promise<DecodedInfo>;
+  galleryHalftone(
+    handle: number,
+    cellPx: number,
+    angleDeg: number,
+    contrast: number,
+    amount: number,
+  ): Promise<DecodedInfo>;
+  galleryGrain(
+    handle: number,
+    seed: number,
+    sizePx: number,
+    mono: boolean,
+    amount: number,
+  ): Promise<DecodedInfo>;
+  galleryDiffuse(
+    handle: number,
+    seed: number,
+    radiusPx: number,
+    angleDeg: number,
+    anisotropy: number,
+    amount: number,
+  ): Promise<DecodedInfo>;
+  galleryCrosshatch(
+    handle: number,
+    angleDeg: number,
+    spacingPx: number,
+    strength: number,
+    sets: number,
+    amount: number,
+  ): Promise<DecodedInfo>;
+  galleryBasRelief(
+    handle: number,
+    angleDeg: number,
+    elevationDeg: number,
+    height: number,
+    amount: number,
+  ): Promise<DecodedInfo>;
+  galleryThresholdInk(
+    handle: number,
+    threshold: number,
+    softness: number,
+    amount: number,
+  ): Promise<DecodedInfo>;
+  galleryStainedGlass(
+    handle: number,
+    seed: number,
+    cellPx: number,
+    border: number,
+    amount: number,
+  ): Promise<DecodedInfo>;
+  galleryGlass(
+    handle: number,
+    seed: number,
+    scalePx: number,
+    distortion: number,
+    amount: number,
+  ): Promise<DecodedInfo>;
+  galleryTexturizer(
+    handle: number,
+    seed: number,
+    kind: number,
+    scalePx: number,
+    relief: number,
+    angleDeg: number,
+    amount: number,
+  ): Promise<DecodedInfo>;
   /** NOISE — despeckle; `amount` 0 is the identity. */
   applyDespeckle(
     handle: number,
@@ -1800,7 +1887,11 @@ export interface ImageWasmModule {
     pressure: number,
   ): Promise<Uint8Array>;
   brush_stroke_set_source(x: number, y: number, aligned: boolean): void;
-  brush_stroke_set_tone(range: string, exposure: number, saturate: boolean): void;
+  brush_stroke_set_tone(
+    range: string,
+    exposure: number,
+    saturate: boolean,
+  ): void;
   brush_stroke_commit(): Promise<DecodedHandleWasm>;
   brush_stroke_cancel(): void;
   brush_stroke_active(): boolean;
@@ -1816,7 +1907,10 @@ export interface ImageWasmModule {
   psd_close(handle: number): void;
   abr_presets(bytes: Uint8Array): string;
   layers_open(handle: number): void;
-  layers_open_from_psd(image_handle: number, psd_handle: number): Promise<number>;
+  layers_open_from_psd(
+    image_handle: number,
+    psd_handle: number,
+  ): Promise<number>;
   layers_close(): void;
   layers_bound(): number;
   layers_list(): string;
@@ -1887,7 +1981,10 @@ export interface ImageWasmModule {
     angle_deg: number,
     height: number,
   ): Promise<DecodedHandleWasm>;
-  apply_find_edges(handle: number, strength: number): Promise<DecodedHandleWasm>;
+  apply_find_edges(
+    handle: number,
+    strength: number,
+  ): Promise<DecodedHandleWasm>;
   apply_motion_blur(
     handle: number,
     angle_deg: number,
@@ -1902,7 +1999,11 @@ export interface ImageWasmModule {
   ): Promise<DecodedHandleWasm>;
   apply_mosaic(handle: number, cell_px: number): Promise<DecodedHandleWasm>;
   apply_median(handle: number): Promise<DecodedHandleWasm>;
-  patch_selection(handle: number, dx: number, dy: number): Promise<DecodedHandleWasm>;
+  patch_selection(
+    handle: number,
+    dx: number,
+    dy: number,
+  ): Promise<DecodedHandleWasm>;
   apply_red_eye(
     handle: number,
     cx: number,
@@ -1961,18 +2062,90 @@ export interface ImageWasmModule {
     vacate: number,
   ): Promise<DecodedHandleWasm>;
   // Filter Gallery entry points (tile origin pinned to 0,0 in Rust).
-  apply_gallery_kuwahara(handle: number, radius_px: number, amount: number): Promise<DecodedHandleWasm>;
-  apply_gallery_posterize_edges(handle: number, levels: number, edge_amount: number, edge_threshold: number, amount: number): Promise<DecodedHandleWasm>;
-  apply_gallery_glowing_edges(handle: number, intensity: number, smoothness: number, amount: number): Promise<DecodedHandleWasm>;
-  apply_gallery_halftone(handle: number, cell_px: number, angle_deg: number, contrast: number, amount: number): Promise<DecodedHandleWasm>;
-  apply_gallery_grain(handle: number, seed: number, size_px: number, mono: boolean, amount: number): Promise<DecodedHandleWasm>;
-  apply_gallery_diffuse(handle: number, seed: number, radius_px: number, angle_deg: number, anisotropy: number, amount: number): Promise<DecodedHandleWasm>;
-  apply_gallery_crosshatch(handle: number, angle_deg: number, spacing_px: number, strength: number, sets: number, amount: number): Promise<DecodedHandleWasm>;
-  apply_gallery_bas_relief(handle: number, angle_deg: number, elevation_deg: number, height: number, amount: number): Promise<DecodedHandleWasm>;
-  apply_gallery_threshold_ink(handle: number, threshold: number, softness: number, amount: number): Promise<DecodedHandleWasm>;
-  apply_gallery_stained_glass(handle: number, seed: number, cell_px: number, border: number, amount: number): Promise<DecodedHandleWasm>;
-  apply_gallery_glass(handle: number, seed: number, scale_px: number, distortion: number, amount: number): Promise<DecodedHandleWasm>;
-  apply_gallery_texturizer(handle: number, seed: number, kind: number, scale_px: number, relief: number, angle_deg: number, amount: number): Promise<DecodedHandleWasm>;
+  apply_gallery_kuwahara(
+    handle: number,
+    radius_px: number,
+    amount: number,
+  ): Promise<DecodedHandleWasm>;
+  apply_gallery_posterize_edges(
+    handle: number,
+    levels: number,
+    edge_amount: number,
+    edge_threshold: number,
+    amount: number,
+  ): Promise<DecodedHandleWasm>;
+  apply_gallery_glowing_edges(
+    handle: number,
+    intensity: number,
+    smoothness: number,
+    amount: number,
+  ): Promise<DecodedHandleWasm>;
+  apply_gallery_halftone(
+    handle: number,
+    cell_px: number,
+    angle_deg: number,
+    contrast: number,
+    amount: number,
+  ): Promise<DecodedHandleWasm>;
+  apply_gallery_grain(
+    handle: number,
+    seed: number,
+    size_px: number,
+    mono: boolean,
+    amount: number,
+  ): Promise<DecodedHandleWasm>;
+  apply_gallery_diffuse(
+    handle: number,
+    seed: number,
+    radius_px: number,
+    angle_deg: number,
+    anisotropy: number,
+    amount: number,
+  ): Promise<DecodedHandleWasm>;
+  apply_gallery_crosshatch(
+    handle: number,
+    angle_deg: number,
+    spacing_px: number,
+    strength: number,
+    sets: number,
+    amount: number,
+  ): Promise<DecodedHandleWasm>;
+  apply_gallery_bas_relief(
+    handle: number,
+    angle_deg: number,
+    elevation_deg: number,
+    height: number,
+    amount: number,
+  ): Promise<DecodedHandleWasm>;
+  apply_gallery_threshold_ink(
+    handle: number,
+    threshold: number,
+    softness: number,
+    amount: number,
+  ): Promise<DecodedHandleWasm>;
+  apply_gallery_stained_glass(
+    handle: number,
+    seed: number,
+    cell_px: number,
+    border: number,
+    amount: number,
+  ): Promise<DecodedHandleWasm>;
+  apply_gallery_glass(
+    handle: number,
+    seed: number,
+    scale_px: number,
+    distortion: number,
+    amount: number,
+  ): Promise<DecodedHandleWasm>;
+  apply_gallery_texturizer(
+    handle: number,
+    seed: number,
+    kind: number,
+    scale_px: number,
+    relief: number,
+    angle_deg: number,
+    amount: number,
+  ): Promise<DecodedHandleWasm>;
   apply_despeckle(
     handle: number,
     edge_threshold: number,
@@ -2248,7 +2421,8 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     psdRemoveLayer: (handle, layer) => wasm.psd_remove_layer(handle, layer),
     psdSave: (handle) => wasm.psd_save(handle),
     psdClose: (handle) => wasm.psd_close(handle),
-    abrPresets: (bytes) => JSON.parse(wasm.abr_presets(bytes)) as BrushLibraryInfo,
+    abrPresets: (bytes) =>
+      JSON.parse(wasm.abr_presets(bytes)) as BrushLibraryInfo,
     histogram(handle) {
       const flat = wasm.image_histogram(handle);
       return {
@@ -2349,7 +2523,9 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     freeImage: (h) => wasm.free_image(h),
     selectionBind: (handle) => wasm.selection_bind(handle),
     selectionToPaths: (threshold, tolerance) =>
-      JSON.parse(wasm.selection_to_paths(threshold, tolerance)) as TracedContour[],
+      JSON.parse(
+        wasm.selection_to_paths(threshold, tolerance),
+      ) as TracedContour[],
     channelStats: (handle) =>
       JSON.parse(wasm.image_channel_stats(handle)) as ChannelStatsInfo[],
     readout(handle) {
@@ -2425,7 +2601,8 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
       ),
     brushSetSource: (x, y, aligned) =>
       wasm.brush_stroke_set_source(x, y, aligned),
-    brushSetTone: (t) => wasm.brush_stroke_set_tone(t.range, t.exposure, t.saturate),
+    brushSetTone: (t) =>
+      wasm.brush_stroke_set_tone(t.range, t.exposure, t.saturate),
     brushExtend: (x, y, pressure) => wasm.brush_stroke_extend(x, y, pressure),
     async brushCommit() {
       const h = await wasm.brush_stroke_commit();
@@ -2467,7 +2644,10 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
       const parsed = JSON.parse(wasm.layers_list()) as LayerStackInfo;
       if (parsed.layers.length === 0) return EMPTY_LAYER_STACK;
       // An engine older than the edit target has no field: pixels.
-      return { ...parsed, editTarget: parsed.editTarget === "mask" ? "mask" : "pixels" };
+      return {
+        ...parsed,
+        editTarget: parsed.editTarget === "mask" ? "mask" : "pixels",
+      };
     },
     layersHistory() {
       // The engine answers the JSON literal `null` when no stack is open.
@@ -2533,7 +2713,9 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
       );
     },
     async applyRedEye(handle, cx, cy, rx, ry, darken) {
-      return decodedInfoOf(await wasm.apply_red_eye(handle, cx, cy, rx, ry, darken));
+      return decodedInfoOf(
+        await wasm.apply_red_eye(handle, cx, cy, rx, ry, darken),
+      );
     },
     async patchSelection(handle, dx, dy) {
       return decodedInfoOf(await wasm.patch_selection(handle, dx, dy));
@@ -2562,15 +2744,30 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
       );
     },
     async fillSolid(handle, color) {
-      return decodedInfoOf(await wasm.fill_solid(handle, Float32Array.from(color)));
+      return decodedInfoOf(
+        await wasm.fill_solid(handle, Float32Array.from(color)),
+      );
     },
     async bucketFill(handle, x, y, tolerance, contiguous, color) {
       return decodedInfoOf(
-        await wasm.bucket_fill(handle, x, y, tolerance, contiguous, Float32Array.from(color)),
+        await wasm.bucket_fill(
+          handle,
+          x,
+          y,
+          tolerance,
+          contiguous,
+          Float32Array.from(color),
+        ),
       );
     },
     async layersCanvasOp(op, width = 0, height = 0, anchorX = 1, anchorY = 1) {
-      const wh = await wasm.layers_canvas_op(op, width, height, anchorX, anchorY);
+      const wh = await wasm.layers_canvas_op(
+        op,
+        width,
+        height,
+        anchorX,
+        anchorY,
+      );
       return { width: wh[0], height: wh[1] };
     },
     async applyMosaic(handle, cellPx) {
@@ -2581,7 +2778,15 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
         await wasm.apply_shape_blur(handle, shapeHandle, radiusPx, amount),
       );
     },
-    async fillPattern(handle, tileHandle, scale, angleDeg, offsetX, offsetY, opacity) {
+    async fillPattern(
+      handle,
+      tileHandle,
+      scale,
+      angleDeg,
+      offsetX,
+      offsetY,
+      opacity,
+    ) {
       return decodedInfoOf(
         await wasm.fill_pattern(
           handle,
@@ -2604,19 +2809,42 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
         await wasm.apply_gallery_kuwahara(handle, radiusPx, amount),
       );
     },
-    async galleryPosterizeEdges(handle, levels, edgeAmount, edgeThreshold, amount) {
+    async galleryPosterizeEdges(
+      handle,
+      levels,
+      edgeAmount,
+      edgeThreshold,
+      amount,
+    ) {
       return decodedInfoOf(
-        await wasm.apply_gallery_posterize_edges(handle, levels, edgeAmount, edgeThreshold, amount),
+        await wasm.apply_gallery_posterize_edges(
+          handle,
+          levels,
+          edgeAmount,
+          edgeThreshold,
+          amount,
+        ),
       );
     },
     async galleryGlowingEdges(handle, intensity, smoothness, amount) {
       return decodedInfoOf(
-        await wasm.apply_gallery_glowing_edges(handle, intensity, smoothness, amount),
+        await wasm.apply_gallery_glowing_edges(
+          handle,
+          intensity,
+          smoothness,
+          amount,
+        ),
       );
     },
     async galleryHalftone(handle, cellPx, angleDeg, contrast, amount) {
       return decodedInfoOf(
-        await wasm.apply_gallery_halftone(handle, cellPx, angleDeg, contrast, amount),
+        await wasm.apply_gallery_halftone(
+          handle,
+          cellPx,
+          angleDeg,
+          contrast,
+          amount,
+        ),
       );
     },
     async galleryGrain(handle, seed, sizePx, mono, amount) {
@@ -2626,37 +2854,97 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
     },
     async galleryDiffuse(handle, seed, radiusPx, angleDeg, anisotropy, amount) {
       return decodedInfoOf(
-        await wasm.apply_gallery_diffuse(handle, seed, radiusPx, angleDeg, anisotropy, amount),
+        await wasm.apply_gallery_diffuse(
+          handle,
+          seed,
+          radiusPx,
+          angleDeg,
+          anisotropy,
+          amount,
+        ),
       );
     },
-    async galleryCrosshatch(handle, angleDeg, spacingPx, strength, sets, amount) {
+    async galleryCrosshatch(
+      handle,
+      angleDeg,
+      spacingPx,
+      strength,
+      sets,
+      amount,
+    ) {
       return decodedInfoOf(
-        await wasm.apply_gallery_crosshatch(handle, angleDeg, spacingPx, strength, sets, amount),
+        await wasm.apply_gallery_crosshatch(
+          handle,
+          angleDeg,
+          spacingPx,
+          strength,
+          sets,
+          amount,
+        ),
       );
     },
     async galleryBasRelief(handle, angleDeg, elevationDeg, height, amount) {
       return decodedInfoOf(
-        await wasm.apply_gallery_bas_relief(handle, angleDeg, elevationDeg, height, amount),
+        await wasm.apply_gallery_bas_relief(
+          handle,
+          angleDeg,
+          elevationDeg,
+          height,
+          amount,
+        ),
       );
     },
     async galleryThresholdInk(handle, threshold, softness, amount) {
       return decodedInfoOf(
-        await wasm.apply_gallery_threshold_ink(handle, threshold, softness, amount),
+        await wasm.apply_gallery_threshold_ink(
+          handle,
+          threshold,
+          softness,
+          amount,
+        ),
       );
     },
     async galleryStainedGlass(handle, seed, cellPx, border, amount) {
       return decodedInfoOf(
-        await wasm.apply_gallery_stained_glass(handle, seed, cellPx, border, amount),
+        await wasm.apply_gallery_stained_glass(
+          handle,
+          seed,
+          cellPx,
+          border,
+          amount,
+        ),
       );
     },
     async galleryGlass(handle, seed, scalePx, distortion, amount) {
       return decodedInfoOf(
-        await wasm.apply_gallery_glass(handle, seed, scalePx, distortion, amount),
+        await wasm.apply_gallery_glass(
+          handle,
+          seed,
+          scalePx,
+          distortion,
+          amount,
+        ),
       );
     },
-    async galleryTexturizer(handle, seed, kind, scalePx, relief, angleDeg, amount) {
+    async galleryTexturizer(
+      handle,
+      seed,
+      kind,
+      scalePx,
+      relief,
+      angleDeg,
+      amount,
+    ) {
       return decodedInfoOf(
-        await wasm.apply_gallery_texturizer(handle, seed, kind, scalePx, relief, angleDeg, amount),
+        await wasm.apply_gallery_texturizer(
+          handle,
+          seed,
+          kind,
+          scalePx,
+          relief,
+          angleDeg,
+          amount,
+        ),
       );
     },
     async applyDespeckle(handle, edgeThreshold, amount) {
@@ -2715,7 +3003,8 @@ export function wrapEngine(wasm: ImageWasmModule): ImageEngine {
       wasm.layers_set_edit_target(index, target === "mask"),
     layerSetMaskEnabled: (index, enabled) =>
       wasm.layers_set_mask_enabled(index, enabled),
-    layerSetClipped: (index, clipped) => wasm.layers_set_clipped(index, clipped),
+    layerSetClipped: (index, clipped) =>
+      wasm.layers_set_clipped(index, clipped),
     layersGroup: (from, to, name) => wasm.layers_group(from, to, name),
     layersUngroup: (id) => wasm.layers_ungroup(id),
     layerSetGroupVisible: (id, v) => wasm.layers_set_group_visible(id, v),
