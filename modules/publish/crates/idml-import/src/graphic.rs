@@ -1,0 +1,590 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! `Resources/Graphic.xml` — the document's swatch palette.
+//!
+//! Extracts `<Color>` entries keyed by their `Self` attribute so
+//! `FillColor="Color/Red"` on a TextFrame resolves to an actual
+//! ColorValue. `<Swatch>` elements are also captured for the "None" /
+//! "Paper" / "Registration" special cases. `<Ink>` entries (the
+//! separations' inks) are kept in document order.
+//!
+//! Spot colours are captured with `Model="Spot"` plus optional
+//! `AlternateSpace` / `AlternateColorValue` (CMYK fallback used when
+//! the spot ink isn't physically applied). A per-swatch `TintValue`
+//! (0..=100) records "PANTONE 286 at 50% tint" stored on the swatch
+//! itself — distinct from the per-run `FillTint` cascade. We always
+//! render spot colours via the CMYK alternate (we don't know the
+//! spectral spot ink); the swatch's tint is multiplied into the
+//! alternate channels before ICC conversion to match InDesign's
+//! preview behaviour. Spot colours whose `AlternateSpace` isn't CMYK
+//! (rare in practice) fall back to the swatch's own `Space` /
+//! `ColorValue`.
+//!
+//! The swatch-palette value types (`ColorEntry`, `Gradient*`, `Color*`,
+//! `ReservedSwatch`, the colour math) live in `paged-model`; this module
+//! owns only the `Graphic` container + the XML parsing and re-exports the
+//! types so `idml_import::graphic::*` keeps resolving.
+
+use quick_xml::events::Event;
+
+use crate::util::attr;
+use crate::ParseError;
+
+pub use paged_model::{
+    to_linear_rgb, ColorEntry, ColorGroupEntry, ColorModel, ColorSpace, GradientEntry,
+    GradientKind, GradientStopRef, Graphic, InkDef, ReservedSwatch, SwatchEntry,
+};
+
+/// Parse `Resources/Graphic.xml` into a [`Graphic`] swatch palette.
+/// (De-inherented from `Graphic::parse` so the type lives in `paged-model`;
+/// the XML parsing stays in the parser — N6.)
+pub fn parse_graphic(xml: &[u8]) -> Result<Graphic, ParseError> {
+    let mut reader = quick_xml::Reader::from_reader(xml);
+    reader.config_mut().trim_text(true);
+
+    let mut out = Graphic::default();
+    let mut buf = Vec::new();
+    // State for the open <Gradient> element. Stops are children
+    // of the surrounding <Gradient>; we collect them here and
+    // commit once the close tag fires.
+    let mut current_gradient: Option<GradientEntry> = None;
+    // `(tint_self_id, base_color_ref)` — resolved after the pass, since
+    // a `<Tint>` may appear before the `<Color>` it is a tint of.
+    let mut pending_tints: Vec<(String, String)> = Vec::new();
+
+    loop {
+        match reader.read_event_into(&mut buf)? {
+            Event::Start(e) | Event::Empty(e) => match e.name().as_ref() {
+                b"Color" => {
+                    if let Some(entry) = parse_color(&e) {
+                        out.colors.insert(entry.self_id.clone(), entry);
+                    }
+                }
+                // `<Tint>` — a NAMED tint swatch ("Vermilion 20%"), the
+                // spelling InDesign writes and, until this arm existed,
+                // the one swatch kind we silently dropped: a file using
+                // named tints lost them entirely and every user of one
+                // fell back to black.
+                //
+                // The element carries `BaseColor` plus `TintValue` and
+                // usually repeats the base's channels. Parse it exactly
+                // like a `<Color>` (so written channels are honoured
+                // when present) and record the base so a second pass can
+                // fill the channels in from it when they are not.
+                b"Tint" => {
+                    if let Some(entry) = parse_color(&e) {
+                        if let Some(base) = attr(&e, b"BaseColor") {
+                            pending_tints.push((entry.self_id.clone(), base));
+                        }
+                        out.colors.insert(entry.self_id.clone(), entry);
+                    }
+                }
+                b"Swatch" => {
+                    if let Some(entry) = parse_swatch(&e) {
+                        out.swatches.insert(entry.self_id.clone(), entry);
+                    }
+                }
+                b"Gradient" => {
+                    if let Some(entry) = parse_gradient(&e) {
+                        current_gradient = Some(entry);
+                    }
+                }
+                b"GradientStop" => {
+                    if let (Some(g), Some(stop)) =
+                        (current_gradient.as_mut(), parse_gradient_stop(&e))
+                    {
+                        g.stops.push(stop);
+                    }
+                }
+                b"ColorGroup" => {
+                    if let Some(entry) = parse_color_group(&e) {
+                        out.color_groups.insert(entry.self_id.clone(), entry);
+                    }
+                }
+                b"Ink" => out.inks.extend(parse_ink(&e)),
+                _ => {}
+            },
+            Event::End(e) => {
+                if e.name().as_ref() == b"Gradient" {
+                    if let Some(g) = current_gradient.take() {
+                        out.gradients.insert(g.self_id.clone(), g);
+                    }
+                }
+            }
+            Event::Eof => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    // Second pass: a `<Tint>` whose own channels were absent or empty
+    // borrows them from its base, along with the base's model and spot
+    // alternate — so a 20% tint of a SPOT stays a spot tint and
+    // separates onto the spot plate instead of flattening to process.
+    for (tint_id, base_ref) in pending_tints {
+        let Some(base) = out.colors.get(&base_ref).cloned() else {
+            continue;
+        };
+        if let Some(entry) = out.colors.get_mut(&tint_id) {
+            if entry.value.is_empty() {
+                entry.value = base.value.clone();
+                entry.space = base.space;
+            }
+            if entry.alternate_value.is_empty() {
+                entry.alternate_space = base.alternate_space;
+                entry.alternate_value = base.alternate_value.clone();
+            }
+            if entry.model == ColorModel::Process && base.model == ColorModel::Spot {
+                entry.model = base.model;
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn parse_color(e: &quick_xml::events::BytesStart) -> Option<ColorEntry> {
+    let self_id = attr(e, b"Self")?;
+    let space = attr(e, b"Space")
+        .as_deref()
+        .map(ColorSpace::from_attr)
+        .unwrap_or(ColorSpace::Unknown);
+    let value = attr(e, b"ColorValue")
+        .map(parse_color_value)
+        .unwrap_or_default();
+    let model = attr(e, b"Model")
+        .as_deref()
+        .map(ColorModel::from_attr)
+        .unwrap_or(ColorModel::Process);
+    let alternate_space = attr(e, b"AlternateSpace")
+        .as_deref()
+        .map(ColorSpace::from_attr);
+    let alternate_value = attr(e, b"AlternateColorValue")
+        .map(parse_color_value)
+        .unwrap_or_default();
+    // `TintValue` is an IDML float 0..=100. Treat -1 (Adobe's "unset"
+    // sentinel) and out-of-range values as absent so a swatch with
+    // no swatch-level tint flows the alternate through unscaled.
+    let tint = attr(e, b"TintValue")
+        .and_then(|s| s.parse::<f32>().ok())
+        .filter(|v| (0.0..=100.0).contains(v));
+    // Alpha lives on `<Color>` in two competing serialisations.
+    // Adobe's reference uses `AlphaPercentage` (0..=100); some
+    // tooling emits a plain `Alpha` (0..=100 or 0..=1). Accept
+    // either; treat absent as `None`. Values > 1 are interpreted
+    // as the percentage form; values in `[0, 1]` are treated as a
+    // unit float.
+    let alpha = attr(e, b"AlphaPercentage")
+        .or_else(|| attr(e, b"Alpha"))
+        .and_then(|s| s.parse::<f32>().ok())
+        .map(|v| {
+            if v > 1.0 {
+                (v / 100.0).clamp(0.0, 1.0)
+            } else {
+                v.clamp(0.0, 1.0)
+            }
+        });
+    Some(ColorEntry {
+        self_id,
+        name: attr(e, b"Name"),
+        space,
+        value,
+        model,
+        alternate_space,
+        alternate_value,
+        tint,
+        alpha,
+    })
+}
+
+fn parse_color_value(s: String) -> Vec<f32> {
+    s.split_whitespace()
+        .filter_map(|t| t.parse::<f32>().ok())
+        .collect()
+}
+
+fn parse_gradient(e: &quick_xml::events::BytesStart) -> Option<GradientEntry> {
+    let self_id = attr(e, b"Self")?;
+    let kind = attr(e, b"Type")
+        .as_deref()
+        .map(|s| match s {
+            "Linear" => GradientKind::Linear,
+            "Radial" => GradientKind::Radial,
+            _ => GradientKind::Unknown,
+        })
+        .unwrap_or(GradientKind::Linear);
+    Some(GradientEntry {
+        self_id,
+        name: attr(e, b"Name"),
+        kind,
+        stops: Vec::new(),
+    })
+}
+
+fn parse_gradient_stop(e: &quick_xml::events::BytesStart) -> Option<GradientStopRef> {
+    let stop_color = attr(e, b"StopColor")?;
+    let location_pct = attr(e, b"Location")
+        .and_then(|s| s.parse::<f32>().ok())
+        .unwrap_or(0.0);
+    let midpoint_pct = attr(e, b"Midpoint").and_then(|s| s.parse::<f32>().ok());
+    Some(GradientStopRef {
+        stop_color,
+        location_pct,
+        midpoint_pct,
+    })
+}
+
+/// `<Ink Self="Ink/$ID/Process Cyan" Name="$ID/Process Cyan" Angle="75"
+/// ConvertToProcess="false" Frequency="70" NeutralDensity="0.61"
+/// PrintInk="true" TrapOrder="1" InkType="Normal"/>` — InDesign's own
+/// spelling, one per process ink and one per spot ink.
+fn parse_ink(e: &quick_xml::events::BytesStart) -> Option<InkDef> {
+    let f = |name: &[u8]| attr(e, name).and_then(|s| s.parse::<f32>().ok());
+    let b = |name: &[u8]| attr(e, name).and_then(|s| s.parse::<bool>().ok());
+    Some(InkDef {
+        self_id: attr(e, b"Self")?,
+        name: attr(e, b"Name"),
+        angle: f(b"Angle"),
+        frequency: f(b"Frequency"),
+        neutral_density: f(b"NeutralDensity"),
+        convert_to_process: b(b"ConvertToProcess"),
+        print_ink: b(b"PrintInk"),
+        trap_order: attr(e, b"TrapOrder").and_then(|s| s.trim().parse::<i32>().ok()),
+        ink_type: attr(e, b"InkType"),
+        alias_ink_name: attr(e, b"AliasInkName"),
+    })
+}
+
+fn parse_swatch(e: &quick_xml::events::BytesStart) -> Option<SwatchEntry> {
+    let self_id = attr(e, b"Self")?;
+    Some(SwatchEntry {
+        self_id,
+        name: attr(e, b"Name"),
+        color_ref: attr(e, b"ColorEditorHotGraphic").or_else(|| attr(e, b"Color")),
+    })
+}
+
+/// The colour groups of `designmap.xml`, where InDesign writes them (265
+/// of the 305 census documents): `<ColorGroup Self Name IsRootColorGroup>`
+/// with one `<ColorGroupSwatch SwatchItemRef="Color/…"/>` child per member.
+/// The root group (`IsRootColorGroup="true"`) is InDesign's container for
+/// every ungrouped swatch, not a group the user made, so it is skipped.
+pub fn parse_color_groups_in(xml: &[u8]) -> Result<Vec<ColorGroupEntry>, ParseError> {
+    let mut reader = quick_xml::Reader::from_reader(xml);
+    reader.config_mut().trim_text(false);
+    let mut buf = Vec::new();
+    let mut out = Vec::new();
+    let mut open: Option<ColorGroupEntry> = None;
+    loop {
+        match reader.read_event_into(&mut buf)? {
+            Event::Start(e) if e.name().as_ref() == b"ColorGroup" => {
+                let root = attr(&e, b"IsRootColorGroup").is_some_and(|v| v == "true");
+                open = if root { None } else { parse_color_group(&e) };
+            }
+            Event::Empty(e) if e.name().as_ref() == b"ColorGroup" => {
+                let root = attr(&e, b"IsRootColorGroup").is_some_and(|v| v == "true");
+                if !root {
+                    out.extend(parse_color_group(&e));
+                }
+            }
+            Event::Start(e) | Event::Empty(e) if e.name().as_ref() == b"ColorGroupSwatch" => {
+                if let (Some(g), Some(item)) = (open.as_mut(), attr(&e, b"SwatchItemRef")) {
+                    g.members.push(item);
+                }
+            }
+            Event::End(e) if e.name().as_ref() == b"ColorGroup" => {
+                out.extend(open.take());
+            }
+            Event::Eof => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    Ok(out)
+}
+
+fn parse_color_group(e: &quick_xml::events::BytesStart) -> Option<ColorGroupEntry> {
+    let self_id = attr(e, b"Self")?;
+    let members = attr(e, b"ColorGroupSwatches")
+        .map(|s| {
+            s.split_whitespace()
+                .map(|t| t.to_string())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    Some(ColorGroupEntry {
+        self_id,
+        name: attr(e, b"Name"),
+        members,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SAMPLE: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Graphic xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Graphic>
+    <Color Self="Color/Red" Name="Red" Model="Process" Space="CMYK" ColorValue="0 100 100 0"/>
+    <Color Self="Color/Paper" Name="Paper" Space="RGB" ColorValue="255 255 255"/>
+    <Color Self="Color/DarkGray" Name="DarkGray" Space="Gray" ColorValue="60"/>
+  </Graphic>
+</idPkg:Graphic>"#;
+
+    #[test]
+    fn parses_color_entries() {
+        let g = parse_graphic(SAMPLE).unwrap();
+        assert_eq!(g.colors.len(), 3);
+        let red = g.resolve("Color/Red").unwrap();
+        assert_eq!(red.name.as_deref(), Some("Red"));
+        assert_eq!(red.space, ColorSpace::Cmyk);
+        assert_eq!(red.value, vec![0.0, 100.0, 100.0, 0.0]);
+    }
+
+    #[test]
+    fn cmyk_pure_red_converts_to_red_rgb() {
+        let g = parse_graphic(SAMPLE).unwrap();
+        let red = g.resolve("Color/Red").unwrap();
+        let rgb = to_linear_rgb(red).unwrap();
+        // R ≈ 1, G ≈ 0, B ≈ 0 for C=0 M=100 Y=100 K=0. sRGB→linear
+        // of 1.0 stays at 1.0; of 0.0 stays at 0.0.
+        assert!((rgb[0] - 1.0).abs() < 1e-3, "rgb={:?}", rgb);
+        assert!(rgb[1] < 1e-3, "rgb={:?}", rgb);
+        assert!(rgb[2] < 1e-3, "rgb={:?}", rgb);
+    }
+
+    #[test]
+    fn gray_converts_to_achromatic_rgb() {
+        let g = parse_graphic(SAMPLE).unwrap();
+        let dg = g.resolve("Color/DarkGray").unwrap();
+        let rgb = to_linear_rgb(dg).unwrap();
+        assert!(rgb[0] > 0.0 && rgb[0] < 1.0);
+        assert_eq!(rgb[0], rgb[1]);
+        assert_eq!(rgb[1], rgb[2]);
+    }
+
+    #[test]
+    fn unknown_color_id_resolves_to_none() {
+        let g = parse_graphic(SAMPLE).unwrap();
+        assert!(g.resolve("Color/NotThere").is_none());
+    }
+
+    const GRADIENT_SAMPLE: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Graphic xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Graphic>
+    <Color Self="Color/Sky"   Name="Sky"   Space="RGB" ColorValue="120 180 255"/>
+    <Color Self="Color/Sun"   Name="Sun"   Space="RGB" ColorValue="255 220 100"/>
+    <Gradient Self="Gradient/Sky" Name="Sky" Type="Linear">
+      <GradientStop StopColor="Color/Sun" Location="0"/>
+      <GradientStop StopColor="Color/Sky" Location="100"/>
+    </Gradient>
+  </Graphic>
+</idPkg:Graphic>"#;
+
+    #[test]
+    fn parses_linear_gradient_with_two_stops() {
+        let g = parse_graphic(GRADIENT_SAMPLE).unwrap();
+        let grad = g.gradients.get("Gradient/Sky").expect("gradient parsed");
+        assert_eq!(grad.kind, GradientKind::Linear);
+        assert_eq!(grad.stops.len(), 2);
+        assert_eq!(grad.stops[0].stop_color, "Color/Sun");
+        assert_eq!(grad.stops[0].location_pct, 0.0);
+        assert_eq!(grad.stops[1].stop_color, "Color/Sky");
+        assert_eq!(grad.stops[1].location_pct, 100.0);
+    }
+
+    const ALPHA_SAMPLE: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Graphic xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Graphic>
+    <Color Self="Color/Translucent" Name="T" Space="RGB" ColorValue="120 180 255" AlphaPercentage="40"/>
+    <Color Self="Color/HalfAlpha" Name="H" Space="RGB" ColorValue="0 0 0" Alpha="0.5"/>
+    <Color Self="Color/Opaque" Name="O" Space="RGB" ColorValue="0 0 0"/>
+  </Graphic>
+</idPkg:Graphic>"#;
+
+    #[test]
+    fn resolve_alpha_reads_alpha_percentage() {
+        // AlphaPercentage="40" → 0.40.
+        let g = parse_graphic(ALPHA_SAMPLE).unwrap();
+        let alpha = g.resolve_alpha("Color/Translucent").expect("alpha set");
+        assert!((alpha - 0.40).abs() < 1e-4, "got {}", alpha);
+    }
+
+    #[test]
+    fn resolve_alpha_accepts_unit_float_form() {
+        // Some tooling serialises `Alpha="0.5"` as a unit float.
+        let g = parse_graphic(ALPHA_SAMPLE).unwrap();
+        let alpha = g.resolve_alpha("Color/HalfAlpha").expect("alpha set");
+        assert!((alpha - 0.5).abs() < 1e-4, "got {}", alpha);
+    }
+
+    #[test]
+    fn resolve_alpha_returns_none_for_swatch_without_alpha() {
+        // Color without an Alpha attribute → None (caller treats as
+        // opaque and falls back to inline stop attributes).
+        let g = parse_graphic(ALPHA_SAMPLE).unwrap();
+        assert!(g.resolve_alpha("Color/Opaque").is_none());
+    }
+
+    #[test]
+    fn resolve_alpha_unknown_id_returns_none() {
+        let g = parse_graphic(ALPHA_SAMPLE).unwrap();
+        assert!(g.resolve_alpha("Color/NotThere").is_none());
+    }
+
+    const SPOT_SAMPLE: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Graphic xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Graphic>
+    <Color Self="Color/Pantone286" Name="PANTONE 286 C" Model="Spot"
+           Space="LAB" ColorValue="20 25 -70"
+           AlternateSpace="CMYK" AlternateColorValue="100 75 0 0"/>
+    <Color Self="Color/Pantone286Half" Name="PANTONE 286 C 50%" Model="Spot"
+           Space="LAB" ColorValue="20 25 -70"
+           AlternateSpace="CMYK" AlternateColorValue="100 75 0 0"
+           TintValue="50"/>
+    <Color Self="Color/PantonePlain" Name="PANTONE plain" Model="Spot"
+           Space="LAB" ColorValue="20 25 -70"/>
+    <Color Self="Color/ProcessPureM" Name="Magenta" Model="Process"
+           Space="CMYK" ColorValue="0 100 0 0"/>
+  </Graphic>
+</idPkg:Graphic>"#;
+
+    #[test]
+    fn parses_spot_color_with_alternate_cmyk() {
+        let g = parse_graphic(SPOT_SAMPLE).unwrap();
+        let spot = g.resolve("Color/Pantone286").unwrap();
+        assert_eq!(spot.model, ColorModel::Spot);
+        assert_eq!(spot.alternate_space, Some(ColorSpace::Cmyk));
+        assert_eq!(spot.alternate_value, vec![100.0, 75.0, 0.0, 0.0]);
+        assert!(spot.tint.is_none(), "no swatch-level tint here");
+    }
+
+    #[test]
+    fn parses_swatch_level_tint_value() {
+        let g = parse_graphic(SPOT_SAMPLE).unwrap();
+        let spot = g.resolve("Color/Pantone286Half").unwrap();
+        assert_eq!(spot.tint, Some(50.0));
+    }
+
+    #[test]
+    fn effective_cmyk_for_process_returns_value_unchanged() {
+        // (M=100) → (M=100). No tint, no spot fallback.
+        let g = parse_graphic(SPOT_SAMPLE).unwrap();
+        let m = g.resolve("Color/ProcessPureM").unwrap();
+        assert_eq!(m.effective_cmyk(), Some([0.0, 100.0, 0.0, 0.0]));
+    }
+
+    #[test]
+    fn effective_cmyk_for_spot_uses_alternate() {
+        let g = parse_graphic(SPOT_SAMPLE).unwrap();
+        let spot = g.resolve("Color/Pantone286").unwrap();
+        assert_eq!(spot.effective_cmyk(), Some([100.0, 75.0, 0.0, 0.0]));
+    }
+
+    #[test]
+    fn effective_cmyk_for_spot_with_tint_scales_each_channel() {
+        // The pinned math: spot at 50% tint mixes 50% toward paper
+        // white in CMYK, i.e. multiplies each channel by 0.5.
+        let g = parse_graphic(SPOT_SAMPLE).unwrap();
+        let spot = g.resolve("Color/Pantone286Half").unwrap();
+        assert_eq!(spot.effective_cmyk(), Some([50.0, 37.5, 0.0, 0.0]));
+    }
+
+    #[test]
+    fn effective_cmyk_for_spot_without_cmyk_alternate_returns_none() {
+        // PantonePlain has no AlternateSpace — there's no CMYK to
+        // tint, so the renderer must fall back to the swatch's
+        // primary `Space` via to_linear_rgb (which will say None
+        // because we don't ship Lab→RGB).
+        let g = parse_graphic(SPOT_SAMPLE).unwrap();
+        let spot = g.resolve("Color/PantonePlain").unwrap();
+        assert!(spot.effective_cmyk().is_none());
+    }
+
+    #[test]
+    fn to_linear_rgb_routes_spot_tint_to_lighter_rgb() {
+        // 50% tinted PANTONE 286 (CMYK alt 100,75,0,0) should render
+        // visibly lighter / less saturated than the 100% version.
+        // Naive CMYK→linear-RGB suffices for the comparison.
+        let g = parse_graphic(SPOT_SAMPLE).unwrap();
+        let full = to_linear_rgb(g.resolve("Color/Pantone286").unwrap()).unwrap();
+        let half = to_linear_rgb(g.resolve("Color/Pantone286Half").unwrap()).unwrap();
+        // 100% tint: R = (1-1)(1-0)=0; G = (1-0.75)(1-0)=0.25; B=1.
+        // 50% tint: R = (1-0.5)(1-0)=0.5; G=(1-0.375)=0.625; B=1.
+        // Each channel of `half` is brighter than `full` in linear:
+        assert!(half[0] > full[0], "R lighter: {} > {}", half[0], full[0]);
+        assert!(half[1] > full[1], "G lighter: {} > {}", half[1], full[1]);
+        // Blue stays at 1.0 in both — no Y / K to scale it down.
+        assert!((half[2] - full[2]).abs() < 1e-4);
+    }
+
+    #[test]
+    fn tint_value_minus_one_is_treated_as_absent() {
+        const NEG: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Graphic xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Graphic>
+    <Color Self="Color/X" Name="X" Model="Spot" Space="LAB" ColorValue="20 25 -70"
+           AlternateSpace="CMYK" AlternateColorValue="100 0 0 0" TintValue="-1"/>
+  </Graphic>
+</idPkg:Graphic>"#;
+        let g = parse_graphic(NEG).unwrap();
+        let c = g.resolve("Color/X").unwrap();
+        assert!(c.tint.is_none());
+        // Effective CMYK is the unscaled alternate.
+        assert_eq!(c.effective_cmyk(), Some([100.0, 0.0, 0.0, 0.0]));
+    }
+
+    /// The inks, in document order: InDesign's process-ink spelling
+    /// (sample-3.idml), and a spot ink with an alias.
+    #[test]
+    fn reads_the_inks() {
+        const INKS: &[u8] = br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Graphic xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0">
+	<Color Self="Color/Black" Model="Process" Space="CMYK" ColorValue="0 0 0 100" Name="Black"/>
+	<Ink Self="Ink/$ID/Process Cyan" Name="$ID/Process Cyan" Angle="71.5651" ConvertToProcess="false" Frequency="63.2456" NeutralDensity="0.61" PrintInk="true" TrapOrder="1" InkType="Normal" />
+	<Ink Self="Ink/$ID/Process Black" Name="$ID/Process Black" Angle="45" ConvertToProcess="false" Frequency="70.7107" NeutralDensity="1.7" PrintInk="true" TrapOrder="4" InkType="Normal" />
+	<Ink Self="Ink/PANTONE 286 C" Name="PANTONE 286 C" Angle="45" ConvertToProcess="true" Frequency="70" NeutralDensity="1.0532" PrintInk="false" TrapOrder="5" InkType="Opaque" AliasInkName="$ID/Process Cyan" />
+	<Swatch Self="Swatch/None" Name="None"/>
+</idPkg:Graphic>"#;
+        let g = parse_graphic(INKS).unwrap();
+        assert_eq!(g.inks.len(), 3);
+        assert_eq!(
+            g.inks[0],
+            InkDef {
+                self_id: "Ink/$ID/Process Cyan".into(),
+                name: Some("$ID/Process Cyan".into()),
+                angle: Some(71.5651),
+                frequency: Some(63.2456),
+                neutral_density: Some(0.61),
+                convert_to_process: Some(false),
+                print_ink: Some(true),
+                trap_order: Some(1),
+                ink_type: Some("Normal".into()),
+                alias_ink_name: None,
+            }
+        );
+        assert_eq!(g.inks[1].self_id, "Ink/$ID/Process Black");
+        let spot = &g.inks[2];
+        assert_eq!(spot.name.as_deref(), Some("PANTONE 286 C"));
+        assert_eq!(spot.convert_to_process, Some(true));
+        assert_eq!(spot.print_ink, Some(false));
+        assert_eq!(spot.trap_order, Some(5));
+        assert_eq!(spot.ink_type.as_deref(), Some("Opaque"));
+        assert_eq!(spot.alias_ink_name.as_deref(), Some("$ID/Process Cyan"));
+        // An ink is not a colour.
+        assert_eq!(g.colors.len(), 1);
+        // A palette without inks reads none.
+        assert!(parse_graphic(SAMPLE).unwrap().inks.is_empty());
+    }
+}

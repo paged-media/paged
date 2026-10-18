@@ -1,0 +1,354 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! IDML parser.
+//!
+//! Consumes an IDML ZIP archive and produces a typed AST. Schema coverage
+//! is driven by the reference-reading week described in the development
+//! plan (Scribus `importidmlplugin.cpp`, SimpleIDML, Adobe's IDML spec).
+//!
+//! The current surface is intentionally thin: it opens the container,
+//! confirms the mimetype, locates the root `designmap.xml`, and exposes a
+//! streaming reader the higher layers can pull from. Typed scene
+//! extraction lives in `paged-scene`; this crate stays focused on ZIP+XML
+//! plumbing.
+
+use std::io::{self, Cursor, Read};
+
+use bytes::Bytes;
+use serde::{Deserialize, Serialize};
+
+pub mod designmap;
+pub mod graphic;
+pub mod spread;
+pub mod story;
+pub mod style_lists;
+pub mod styles;
+mod util;
+pub mod xml_structure;
+
+pub use designmap::{
+    parse_designmap, Bookmark, ColorSettings, DesignMap, DocumentPreference, Hyperlink,
+    HyperlinkDestination, HyperlinkDestinationKind, Layer, NumberingStyle, Section, SpreadRef,
+    StoryRef, TextVariable,
+};
+pub use graphic::{
+    parse_graphic, ColorEntry, ColorModel, ColorSpace, GradientEntry, GradientKind,
+    GradientStopRef, Graphic, SwatchEntry,
+};
+pub use spread::{
+    crop_from_idml, crop_scales, crop_to_idml, parse_spread, parse_spread_with_provenance,
+    ArrowheadType, AutoSizingReferencePoint, AutoSizingType, BevelEmbossParams, Bounds,
+    ClippingPathSettings, ClippingType, ContourOptionType, CornerOption, CornerSpec,
+    DirectionalFeatherParams, DropShadowSetting, FeatherParams, FirstBaselineOffset, FrameEffects,
+    FrameFittingOption, FrameRef, GradientFeatherParams, GradientFeatherStop, GraphicLine, Group,
+    GroupTransparency, GuideOrientation, ImageMetadata, InnerGlowParams, InnerShadowParams,
+    MarginPreference, OuterGlowParams, Oval, Page, PathAnchor, Polygon, Rectangle, RulerGuide,
+    SatinParams, Spread, SpreadProvenance, TargetTransparency, TextFrame, TextPath, TextWrap,
+    TextWrapMode, TransparencyPreference, VerticalJustification,
+};
+pub use story::{
+    parse_story, parse_story_with_provenance, story_text_anchors, AnchoredFrame, AnchoredFrameKind,
+    AnchoredObjectSetting, BalanceRaggedLines, CellDiagonal, CharacterRun, Composer, Justification,
+    LineSetting, ListLevel, OtfFeatures, Paragraph, PlaceholderField, RestartPolicy,
+    RestartPolicyKind, RunSlot, SingleWordJustification, SpanColumnType, SpanColumns,
+    SpanSplitColumnCount, StartParagraph, Story, StoryProvenance, TabStop, Table, TableBorder,
+    TableCell, TableColumn, TableLineStrokes, TableRow, AUTO_PAGE_NUMBER_MARKER,
+    NEXT_PAGE_NUMBER_MARKER, PREVIOUS_PAGE_NUMBER_MARKER, SECTION_MARKER,
+};
+pub use styles::{
+    parse_conditions, parse_stylesheet, CellStyleDef, CharacterStyleDef, ConditionDef,
+    ConditionSetDef, GrepStyle, LineStyle, NestedDelimiter, NestedStyle, ObjectStyleDef,
+    ParagraphBorder, ParagraphRule, ParagraphShading, ParagraphStyleDef, ResolvedCell,
+    ResolvedCharacter, ResolvedObject, ResolvedParagraph, ResolvedTable, StripeDef, StrokeStyleDef,
+    StrokeStyleKind, StyleSheet, TOCStyleDef, TOCStyleEntryDef, TableStyleDef,
+};
+pub use util::{decode_aid_escapes, parse_flag, parse_tint};
+
+#[derive(Debug, thiserror::Error)]
+pub enum ParseError {
+    #[error("not an IDML container: {0}")]
+    NotIdml(String),
+    #[error("missing required entry {0}")]
+    MissingEntry(&'static str),
+    #[error("i/o: {0}")]
+    Io(#[from] io::Error),
+    #[error("zip: {0}")]
+    Zip(#[from] zip::result::ZipError),
+    #[error("xml: {0}")]
+    Xml(#[from] quick_xml::Error),
+}
+
+/// The raw IDML source archive — decompressed entries held in memory (IDML
+/// carry-through only; no model data lives here — N7). Renamed from `Container`.
+///
+/// The raw-entry map keeps `Bytes` so downstream crates can slice sub-
+/// resources (individual `Stories/Story_*.xml` etc.) without copying.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceArchive {
+    pub mimetype: String,
+    /// Raw `designmap.xml` bytes. IDML carry-through only — never part of the
+    /// native model serialization (the structured `designmap` on `Document` is
+    /// the truth); defaults to empty on native deserialize (N1, Approach A).
+    #[serde(skip)]
+    pub designmap_raw: Bytes,
+    /// Full decompressed archive contents keyed by entry path. IDML
+    /// carry-through only (render-dead) — `#[serde(skip)]` so the native model
+    /// never stores the raw IDML package; empty after native deserialize.
+    #[serde(skip)]
+    pub entries: std::collections::BTreeMap<String, Bytes>,
+}
+
+/// Open an IDML source archive from raw bytes — unzips the archive and confirms
+/// the mimetype, retaining `designmap.xml` bytes for the scene layer to parse.
+/// (De-inherented from `Container::open` — N7.)
+pub fn open_source_archive(bytes: &[u8]) -> Result<SourceArchive, ParseError> {
+    let mut zip = zip::ZipArchive::new(Cursor::new(bytes))?;
+    let mut entries = std::collections::BTreeMap::<String, Bytes>::new();
+
+    for i in 0..zip.len() {
+        let mut entry = zip.by_index(i)?;
+        if entry.is_dir() {
+            continue;
+        }
+        let name = entry.name()?.into_owned();
+        let mut buf = Vec::with_capacity(entry.size() as usize);
+        entry.read_to_end(&mut buf)?;
+        entries.insert(name, Bytes::from(buf));
+    }
+
+    let mimetype = entries
+        .get("mimetype")
+        .ok_or(ParseError::MissingEntry("mimetype"))?;
+    let mimetype_str = std::str::from_utf8(mimetype)
+        .map_err(|e| ParseError::NotIdml(format!("mimetype not utf-8: {e}")))?
+        .trim()
+        .to_string();
+    // Adobe's IDML mimetype constant.
+    if mimetype_str != "application/vnd.adobe.indesign-idml-package" {
+        return Err(ParseError::NotIdml(format!(
+            "unexpected mimetype {mimetype_str:?}"
+        )));
+    }
+
+    let designmap_raw = entries
+        .get("designmap.xml")
+        .cloned()
+        .ok_or(ParseError::MissingEntry("designmap.xml"))?;
+
+    Ok(SourceArchive {
+        mimetype: mimetype_str,
+        designmap_raw,
+        entries,
+    })
+}
+
+impl SourceArchive {
+    /// Fetch a sub-resource by archive path (e.g. "Stories/Story_u123.xml").
+    pub fn entry(&self, path: &str) -> Option<&Bytes> {
+        self.entries.get(path)
+    }
+}
+
+/// Error assembling a [`paged_scene::Document`] from an IDML package via
+/// [`import_idml`]. (Moved here with the import orchestrator — N9.)
+#[derive(Debug, thiserror::Error)]
+pub enum OpenError {
+    #[error("manifest lists {0} but archive has no such entry")]
+    MissingEntry(String),
+    #[error("parse: {0}")]
+    Parse(#[from] ParseError),
+}
+
+/// Import an IDML package into a [`paged_scene::Document`] + its raw
+/// [`SourceArchive`]. The IDML *import orchestrator* — moved out of
+/// `paged-scene` (N9) so the model no longer parses IDML: it opens the archive,
+/// parses the `designmap.xml` manifest + every referenced Spread/Story/Resource
+/// part, assembles the `Document` (which carries NO raw archive — that rides
+/// separately), and returns both. The caller decides where the archive lives
+/// (the canvas holds it for the parts door + IDML re-export).
+pub fn import_idml(bytes: &[u8]) -> Result<(paged_scene::Document, SourceArchive), OpenError> {
+    let archive = open_source_archive(bytes)?;
+    let document = import_idml_archive(&archive)?;
+    Ok((document, archive))
+}
+
+/// Convenience over [`import_idml`] for callers that only want the model and
+/// don't need the raw source archive (most tests + tools). Drop-in for the old
+/// `Document::open`.
+pub fn import_idml_doc(bytes: &[u8]) -> Result<paged_scene::Document, OpenError> {
+    import_idml(bytes).map(|(doc, _archive)| doc)
+}
+
+/// Parse a [`paged_scene::Document`] from an already-opened [`SourceArchive`]
+/// (no re-unzip). The caller keeps the archive (e.g. the canvas load sniff,
+/// which opened it to check for the native `document.pgm` part first).
+pub fn import_idml_archive(archive: &SourceArchive) -> Result<paged_scene::Document, OpenError> {
+    use std::collections::HashMap;
+
+    // The structured manifest is parsed here (not in `open_source_archive`) so
+    // the raw source archive carries no model data (N7).
+    let mut designmap = parse_designmap(&archive.designmap_raw)?;
+    if let Some(raw) = archive.entry("Resources/Preferences.xml") {
+        designmap.chapter_number = designmap::parse_chapter_number_preference(raw)?;
+        designmap::parse_preferences_part(raw, &mut designmap)?;
+    }
+    // D-02 — the document's XML structure.
+    if let Some(raw) = archive.entry("XML/Tags.xml") {
+        designmap.xml_tags = xml_structure::parse_tags(raw)?;
+    }
+    if let Some(raw) = archive.entry("XML/BackingStory.xml") {
+        designmap.xml_root = xml_structure::parse_elements(raw)?.into_iter().next();
+    }
+    let mut palette = match archive.entry("Resources/Graphic.xml") {
+        Some(raw) => parse_graphic(raw)?,
+        None => Graphic::default(),
+    };
+    // Colour groups live in designmap.xml in InDesign's files (and in
+    // Graphic.xml in the engine's older fixtures); the designmap wins.
+    for g in graphic::parse_color_groups_in(&archive.designmap_raw)? {
+        palette.color_groups.insert(g.self_id.clone(), g);
+    }
+    let mut styles = match archive.entry("Resources/Styles.xml") {
+        Some(raw) => {
+            let mut s = parse_stylesheet(raw)?;
+            styles::read_object_style_text_frames(raw, &mut s.object_styles)?;
+            s
+        }
+        None => StyleSheet::default(),
+    };
+    // Custom stroke styles (dashed, dotted, striped, wavy) live in
+    // Graphic.xml in InDesign's files; the engine's fixtures put them in
+    // Styles.xml. The same reader serves both, and Graphic.xml wins.
+    if let Some(raw) = archive.entry("Resources/Graphic.xml") {
+        styles
+            .stroke_styles
+            .extend(parse_stylesheet(raw)?.stroke_styles);
+    }
+    // Conditions live in `designmap.xml` in InDesign's own exports
+    // (measured, InDesign 20.0.1) and in `Resources/Styles.xml` in every
+    // engine-built fixture before 2026-09. Read both; the designmap wins
+    // on an id clash, being the spelling InDesign writes.
+    // Numbering lists, likewise: InDesign writes them in designmap.xml.
+    for l in styles::parse_numbering_lists_in(&archive.designmap_raw)? {
+        styles.numbering_lists.insert(l.self_id.clone(), l);
+    }
+    let (dm_conditions, dm_sets) = parse_conditions(&archive.designmap_raw)?;
+    styles.conditions.extend(dm_conditions);
+    styles.condition_sets.extend(dm_sets);
+
+    // Master spreads parse first so the page → master link is available
+    // downstream. A `<MasterSpread>` has the same schema as a `<Spread>`.
+    let mut master_spreads: HashMap<String, paged_scene::ParsedMasterSpread> = HashMap::new();
+    for src in &designmap.master_spreads {
+        let raw = archive
+            .entry(src)
+            .ok_or_else(|| OpenError::MissingEntry(src.clone()))?;
+        let parsed = parse_spread(raw)?;
+        let self_id = paged_scene::derive_master_id(src);
+        master_spreads.insert(
+            self_id.clone(),
+            paged_scene::ParsedMasterSpread {
+                src: src.clone(),
+                self_id,
+                spread: parsed,
+                name: master_spread_name(raw),
+            },
+        );
+    }
+
+    let mut spreads = Vec::with_capacity(designmap.spreads.len());
+    for spread_ref in &designmap.spreads {
+        let raw = archive
+            .entry(&spread_ref.src)
+            .ok_or_else(|| OpenError::MissingEntry(spread_ref.src.clone()))?;
+        let parsed = parse_spread(raw)?;
+        spreads.push(paged_scene::ParsedSpread {
+            src: spread_ref.src.clone(),
+            spread: parsed,
+        });
+    }
+
+    let mut stories = Vec::with_capacity(designmap.stories.len());
+    for story_ref in &designmap.stories {
+        let raw = archive
+            .entry(&story_ref.src)
+            .ok_or_else(|| OpenError::MissingEntry(story_ref.src.clone()))?;
+        let mut parsed = parse_story(raw)?;
+        let self_id = paged_scene::derive_story_id(&story_ref.src);
+        // An editorial note's id is its story's ordinal; with the story's
+        // id it is the document's (core ADR 172).
+        for note in parsed
+            .paragraphs
+            .iter_mut()
+            .flat_map(|p| p.notes.iter_mut())
+        {
+            note.id = format!("{self_id}{}", note.id);
+        }
+        // Inline text-destination markers (InDesign's spelling) become
+        // text-anchor destinations naming this story — the designmap
+        // spelling the engine's older fixtures used maps to the same
+        // model, so either opens to the same links.
+        for (anchor_id, _name) in story_text_anchors(raw)? {
+            if !designmap
+                .hyperlink_destinations
+                .iter()
+                .any(|d| d.self_id == anchor_id)
+            {
+                designmap
+                    .hyperlink_destinations
+                    .push(paged_model::HyperlinkDestination {
+                        self_id: anchor_id,
+                        kind: paged_model::HyperlinkDestinationKind::TextAnchor(self_id.clone()),
+                    });
+            }
+        }
+        stories.push(paged_scene::ParsedStory {
+            src: story_ref.src.clone(),
+            self_id,
+            story: parsed,
+        });
+    }
+
+    let mut document = paged_scene::Document {
+        designmap,
+        palette,
+        spreads,
+        stories,
+        master_spreads,
+        frame_for_story: HashMap::new(),
+        text_frame_index: HashMap::new(),
+        styles,
+        anchors: Vec::new(),
+    };
+    document.rebuild_indexes();
+    Ok(document)
+}
+
+/// The `Name` attribute of a master spread part's `<MasterSpread>`.
+fn master_spread_name(xml: &[u8]) -> Option<String> {
+    use quick_xml::events::Event;
+    let mut reader = quick_xml::Reader::from_reader(xml);
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) | Ok(Event::Empty(e)) if e.name().as_ref() == b"MasterSpread" => {
+                return crate::util::attr_unescaped(&e, b"Name");
+            }
+            Ok(Event::Eof) | Err(_) => return None,
+            _ => {}
+        }
+        buf.clear();
+    }
+}

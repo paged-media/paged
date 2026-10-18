@@ -1,0 +1,33 @@
+{
+  "id": "media.paged.pdf",
+  "name": "paged.pdf",
+  "version": "0.2.3-canary.0",
+  "apiVersion": "^0.2",
+  "publisher": "paged.media",
+  "capabilities": {
+    "document": { "read": "broad", "openNative": true },
+    "documents": { "open": true },
+    "wasm": [
+      {
+        "name": "pdf-import",
+        "path": "bin/pdf_import_bg.wasm",
+        "purpose": "codec",
+        "maxBytes": 4194304
+      }
+    ]
+  },
+  "contributes": {
+    "importers": ["media.paged.pdf.importer.pdf"],
+    "objectModel": {
+      "kinds": [],
+      "commands": [
+        {
+          "id": "media.paged.pdf.importPdf",
+          "title": "Open PDF",
+          "args": "schema/import-pdf.args.json",
+          "result": "schema/import-pdf.result.json"
+        }
+      ]
+    }
+  }
+}

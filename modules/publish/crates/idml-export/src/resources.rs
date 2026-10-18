@@ -1,0 +1,1481 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! New-resource injection for save-back (W1.15 lane 2).
+//!
+//! Swatches / gradients created by ops since load live in the model's
+//! `palette` but have no `<Color>` / `<Gradient>` element in
+//! `Resources/Graphic.xml`; paragraph / character / OBJECT styles
+//! created by ops live in `styles` with no `<ParagraphStyle>` /
+//! `<CharacterStyle>` / `<ObjectStyle>` in `Resources/Styles.xml`. A
+//! round-trip that leaves them unserialised re-opens with a
+//! *referenced-but-undefined* resource — a frame whose
+//! `FillColor="Color/u3"` resolves to nothing. This module closes that
+//! gap by **injecting** the missing entries into the existing resource
+//! XML, just before the matching close tag, in the canonical `paged_gen`
+//! shape so a re-parse reproduces the resolved appearance.
+//!
+//! The object-style lane is the same defect one rung up: page items
+//! carry `AppliedObjectStyle`, `Operation::CreateObjectStyle` mints a
+//! definition into `styles.object_styles`, and until that definition is
+//! written the exported package has an applied style nothing defines.
+//! (The pointer itself is written by the page-item patch lane — see
+//! `rewrite::applied_object_style_patch`.)
+//!
+//! Both patchers are pure pass-throughs when the model carries nothing
+//! the source XML lacks — they re-emit the original token stream and
+//! splice nothing, so an unmutated document's resource entries stay
+//! byte-identical (the writer then takes the verbatim copy path).
+
+use std::collections::HashSet;
+use std::io::Cursor;
+
+use quick_xml::events::{BytesStart, Event};
+use quick_xml::{Reader, Writer};
+
+use idml_import::graphic::{ColorEntry, GradientEntry, GradientKind, Graphic, InkDef};
+use idml_import::styles::{CharacterStyleDef, ObjectStyleDef, ParagraphStyleDef, StyleSheet};
+
+use crate::rewrite::{escape_attr, format_f32};
+
+/// Read an attribute's decoded value off a start tag (local copy of the
+/// rewrite helper — kept private so the two modules stay independent).
+fn attr_value(e: &BytesStart, key: &[u8]) -> Option<String> {
+    e.attributes()
+        .flatten()
+        .find(|a| a.key.as_ref() == key)
+        .and_then(|a| std::str::from_utf8(&a.value).ok().map(|s| s.to_string()))
+}
+
+/// Emit a self-closing element from `(key, value)` pairs (values
+/// escaped). Element name taken verbatim.
+fn emit_empty(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    name: &str,
+    attrs: &[(&str, String)],
+) -> Result<(), quick_xml::Error> {
+    let mut e = BytesStart::new(name.to_string());
+    for (k, v) in attrs {
+        e.push_attribute((k.as_bytes(), escape_attr(v).as_bytes()));
+    }
+    writer.write_event(Event::Empty(e))?;
+    Ok(())
+}
+
+/// Whitespace-separated channel values the IDML way.
+fn format_color_value(value: &[f32]) -> String {
+    value
+        .iter()
+        .map(|v| format_f32(*v))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+// ---------------------------------------------------------------------
+// Graphic.xml — colours + gradients
+// ---------------------------------------------------------------------
+
+/// Serialise one model `<Color>` swatch in the canonical attribute order
+/// (`Self Model Space ColorValue Name [AlternateSpace AlternateColorValue
+/// TintValue]`). The parser keys on these attributes, so a re-parse
+/// reproduces the swatch and any frame referencing it resolves.
+fn write_color(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    c: &ColorEntry,
+) -> Result<(), quick_xml::Error> {
+    let mut attrs: Vec<(&str, String)> = vec![
+        ("Self", c.self_id.clone()),
+        ("Model", c.model.as_attr().to_string()),
+        ("Space", c.space.as_attr().to_string()),
+        ("ColorValue", format_color_value(&c.value)),
+    ];
+    if let Some(name) = &c.name {
+        attrs.push(("Name", name.clone()));
+    }
+    if let Some(alt) = c.alternate_space {
+        attrs.push(("AlternateSpace", alt.as_attr().to_string()));
+        attrs.push((
+            "AlternateColorValue",
+            format_color_value(&c.alternate_value),
+        ));
+    }
+    if let Some(t) = c.tint {
+        attrs.push(("TintValue", format_f32(t)));
+    }
+    emit_empty(writer, "Color", &attrs)
+}
+
+/// Serialise one model `<Ink>` in InDesign's attribute order (`Self Name
+/// Angle ConvertToProcess Frequency NeutralDensity PrintInk TrapOrder
+/// InkType`, then `AliasInkName`), each only when the model has it.
+fn write_ink(writer: &mut Writer<Cursor<Vec<u8>>>, ink: &InkDef) -> Result<(), quick_xml::Error> {
+    let flag = |b: bool| if b { "true" } else { "false" }.to_string();
+    let mut attrs: Vec<(&str, String)> = vec![("Self", ink.self_id.clone())];
+    if let Some(v) = &ink.name {
+        attrs.push(("Name", v.clone()));
+    }
+    if let Some(v) = ink.angle {
+        attrs.push(("Angle", format_f32(v)));
+    }
+    if let Some(v) = ink.convert_to_process {
+        attrs.push(("ConvertToProcess", flag(v)));
+    }
+    if let Some(v) = ink.frequency {
+        attrs.push(("Frequency", format_f32(v)));
+    }
+    if let Some(v) = ink.neutral_density {
+        attrs.push(("NeutralDensity", format_f32(v)));
+    }
+    if let Some(v) = ink.print_ink {
+        attrs.push(("PrintInk", flag(v)));
+    }
+    if let Some(v) = ink.trap_order {
+        attrs.push(("TrapOrder", v.to_string()));
+    }
+    if let Some(v) = &ink.ink_type {
+        attrs.push(("InkType", v.clone()));
+    }
+    if let Some(v) = &ink.alias_ink_name {
+        attrs.push(("AliasInkName", v.clone()));
+    }
+    emit_empty(writer, "Ink", &attrs)
+}
+
+/// Serialise one model `<Gradient>` swatch + its stops.
+fn write_gradient(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    g: &GradientEntry,
+) -> Result<(), quick_xml::Error> {
+    let kind = match g.kind {
+        GradientKind::Radial => "Radial",
+        // Linear is the IDML default for an unknown / linear type.
+        GradientKind::Linear | GradientKind::Unknown => "Linear",
+    };
+    let mut attrs: Vec<(&str, String)> = vec![("Self", g.self_id.clone())];
+    if let Some(name) = &g.name {
+        attrs.push(("Name", name.clone()));
+    }
+    attrs.push(("Type", kind.to_string()));
+    let mut start = BytesStart::new("Gradient");
+    for (k, v) in &attrs {
+        start.push_attribute((k.as_bytes(), escape_attr(v).as_bytes()));
+    }
+    writer.write_event(Event::Start(start))?;
+    for s in &g.stops {
+        let mut sattrs: Vec<(&str, String)> = vec![
+            ("StopColor", s.stop_color.clone()),
+            ("Location", format_f32(s.location_pct)),
+        ];
+        if let Some(m) = s.midpoint_pct {
+            sattrs.push(("Midpoint", format_f32(m)));
+        }
+        emit_empty(writer, "GradientStop", &sattrs)?;
+    }
+    writer.write_event(Event::End(quick_xml::events::BytesEnd::new("Gradient")))?;
+    Ok(())
+}
+
+/// Rewrite `Resources/Graphic.xml` so every model `<Color>` / `<Gradient>`
+/// / `<Ink>` is present. Existing entries pass through verbatim; entries the source
+/// lacks are appended just before `</idPkg:Graphic>`. Byte-identical to
+/// `original` when nothing new.
+pub fn patch_graphic(original: &[u8], palette: &Graphic) -> Result<Vec<u8>, quick_xml::Error> {
+    patch_graphic_with(original, palette, GraphicNeeds::default())
+}
+
+/// C-82 — built-in resources an exported spread REFERENCES that the
+/// source's `Graphic.xml` may not declare. InDesign resolves neither by
+/// name: a `Color/Paper` fill with no `<Color Self="Color/Paper">` reads
+/// as no fill (an appearance bake's white layer vanished), and a dash on
+/// `StrokeStyle/$ID/Dashed` with no `<StrokeStyle>` declaration draws
+/// solid. Each is appended only when used and absent, so an unmutated
+/// round trip stays byte-identical.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct GraphicNeeds {
+    pub paper: bool,
+    pub dashed_stroke_style: bool,
+}
+
+impl GraphicNeeds {
+    /// What the given spread XML references.
+    pub fn scan(spread_xml: &[u8]) -> Self {
+        let has = |needle: &[u8]| spread_xml.windows(needle.len()).any(|w| w == needle);
+        GraphicNeeds {
+            paper: has(b"\"Color/Paper\""),
+            dashed_stroke_style: has(b"\"StrokeStyle/$ID/Dashed\""),
+        }
+    }
+
+    pub fn or(self, other: Self) -> Self {
+        GraphicNeeds {
+            paper: self.paper || other.paper,
+            dashed_stroke_style: self.dashed_stroke_style || other.dashed_stroke_style,
+        }
+    }
+}
+
+/// [`patch_graphic`], also declaring the built-ins `needs` names.
+pub fn patch_graphic_with(
+    original: &[u8],
+    palette: &Graphic,
+    needs: GraphicNeeds,
+) -> Result<Vec<u8>, quick_xml::Error> {
+    let mut seen_paper = false;
+    let mut seen_dashed = false;
+    let mut reader = Reader::from_reader(original);
+    let config = reader.config_mut();
+    config.expand_empty_elements = false;
+    config.trim_text(false);
+
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    let mut buf = Vec::new();
+
+    let mut seen_colors: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut seen_gradients: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut seen_inks: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    loop {
+        let ev = reader.read_event_into(&mut buf)?;
+        match ev {
+            Event::Eof => break,
+            Event::Start(ref e) | Event::Empty(ref e) => {
+                match e.name().as_ref() {
+                    // `<Tint>` counts as a colour entry: it IS one, in
+                    // the spelling IDML uses for a named tint of another
+                    // swatch. Counting only `<Color>` left the model's
+                    // entry looking absent, so the injector appended a
+                    // SECOND element with the same `Self` — the annual
+                    // exported `Color/AnnualVermilion20` twice, once as
+                    // the `<Tint … BaseColor>` InDesign reads and once
+                    // as the `<Color … TintValue>` it discards, and
+                    // which of the two Adobe honours is not ours to say.
+                    b"Color" | b"Tint" => {
+                        if let Some(id) = attr_value(e, b"Self") {
+                            seen_paper |= id == "Color/Paper";
+                            seen_colors.insert(id);
+                        }
+                    }
+                    b"StrokeStyle" => {
+                        seen_dashed |=
+                            attr_value(e, b"Self").as_deref() == Some("StrokeStyle/$ID/Dashed");
+                    }
+                    b"Gradient" => {
+                        if let Some(id) = attr_value(e, b"Self") {
+                            seen_gradients.insert(id);
+                        }
+                    }
+                    b"Ink" => {
+                        if let Some(id) = attr_value(e, b"Self") {
+                            seen_inks.insert(id);
+                        }
+                    }
+                    _ => {}
+                }
+                writer.write_event(ev.borrow())?;
+            }
+            Event::End(ref e) if e.name().as_ref() == b"idPkg:Graphic" => {
+                // Inject the model entries the source never carried, in
+                // the palette's stable BTreeMap order.
+                for c in palette.colors.values() {
+                    if !seen_colors.contains(&c.self_id) {
+                        write_color(&mut writer, c)?;
+                    }
+                }
+                for g in palette.gradients.values() {
+                    if !seen_gradients.contains(&g.self_id) {
+                        write_gradient(&mut writer, g)?;
+                    }
+                }
+                // The model's inks the source does not declare (a source
+                // that has them passes each `<Ink>` through verbatim).
+                for ink in &palette.inks {
+                    if !seen_inks.contains(&ink.self_id) {
+                        write_ink(&mut writer, ink)?;
+                    }
+                }
+                if needs.paper && !seen_paper && !palette.colors.contains_key("Color/Paper") {
+                    // InDesign's own declaration of the built-in paper swatch.
+                    emit_empty(
+                        &mut writer,
+                        "Color",
+                        &[
+                            ("Self", "Color/Paper".to_string()),
+                            ("Model", "Process".to_string()),
+                            ("Space", "CMYK".to_string()),
+                            ("ColorValue", "0 0 0 0".to_string()),
+                            ("ColorOverride", "Specialpaper".to_string()),
+                            ("AlternateSpace", "NoAlternateColor".to_string()),
+                            ("AlternateColorValue", String::new()),
+                            ("Name", "Paper".to_string()),
+                            ("ColorEditable", "true".to_string()),
+                            ("ColorRemovable", "false".to_string()),
+                            ("Visible", "true".to_string()),
+                            ("SwatchCreatorID", "7937".to_string()),
+                        ],
+                    )?;
+                }
+                if needs.dashed_stroke_style && !seen_dashed {
+                    emit_empty(
+                        &mut writer,
+                        "StrokeStyle",
+                        &[
+                            ("Self", "StrokeStyle/$ID/Dashed".to_string()),
+                            ("Name", "$ID/Dashed".to_string()),
+                        ],
+                    )?;
+                }
+                writer.write_event(ev.borrow())?;
+            }
+            _ => writer.write_event(ev.borrow())?,
+        }
+        buf.clear();
+    }
+
+    Ok(writer.into_inner().into_inner())
+}
+
+// ---------------------------------------------------------------------
+// Styles.xml — paragraph + character styles
+// ---------------------------------------------------------------------
+
+fn write_paragraph_style(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    s: &ParagraphStyleDef,
+) -> Result<(), quick_xml::Error> {
+    let attrs = crate::style_attrs::paragraph_style_attrs(s);
+    emit_style_element(
+        writer,
+        "ParagraphStyle",
+        &attrs,
+        &s.based_on,
+        &s.font,
+        s.leading,
+        Some(&crate::paragraph_props::Owner::of_style(s)),
+        Some(s),
+    )
+}
+
+fn write_character_style(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    s: &CharacterStyleDef,
+) -> Result<(), quick_xml::Error> {
+    let attrs = crate::style_attrs::character_style_attrs(s);
+    emit_style_element(
+        writer,
+        "CharacterStyle",
+        &attrs,
+        &s.based_on,
+        &s.font,
+        s.leading,
+        None,
+        None,
+    )
+}
+
+/// A style element, self-closing when it neither pins a font nor is
+/// based on another style, and carrying a `<Properties>` block with
+/// `<BasedOn type="object">…` and / or `<AppliedFont type="string">…`
+/// children when it does.
+///
+/// The applied font and the parent style are the two high-frequency
+/// style fields IDML does NOT spell as attributes. Writing the font as
+/// one cost the annual every typeface it had: InDesign read the styles,
+/// found no applied font, and composed 134 pages in Minion Pro. Writing
+/// `BasedOn` as one cost it every cascade (measured 2026-09-05): InDesign
+/// reported every style based on `[No paragraph style]`, "Body First"
+/// (based on the 9.5 pt Source Serif body) composed at 12 pt in the root
+/// face, and 4,449 characters fell to Minion Pro; the typed child
+/// resolved all of it (133 overset stories, from 140). See
+/// [`crate::based_on`] for the pass that rewrites older packages.
+fn emit_style_element(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    name: &str,
+    attrs: &[(&str, String)],
+    based_on: &Option<String>,
+    font: &Option<String>,
+    leading: Option<f32>,
+    props: Option<&crate::paragraph_props::Owner<'_>>,
+    lists: Option<&ParagraphStyleDef>,
+) -> Result<(), quick_xml::Error> {
+    let owes_lists = lists.is_some_and(|s| {
+        !s.nested_styles.is_empty() || !s.line_styles.is_empty() || !s.grep_styles.is_empty()
+    });
+    let owes_props = props.is_some_and(|p| p.any()) || owes_lists;
+    if based_on.is_none() && font.is_none() && leading.is_none() && !owes_props {
+        return emit_empty(writer, name, attrs);
+    }
+    let mut start = BytesStart::new(name.to_string());
+    for (k, v) in attrs {
+        start.push_attribute((k.as_bytes(), escape_attr(v).as_bytes()));
+    }
+    writer.write_event(Event::Start(start))?;
+    writer.write_event(Event::Start(BytesStart::new("Properties")))?;
+    if let Some(parent) = based_on {
+        write_based_on_child(writer, parent)?;
+    }
+    if let Some(family) = font {
+        let mut af = BytesStart::new("AppliedFont");
+        af.push_attribute(("type", "string"));
+        writer.write_event(Event::Start(af))?;
+        writer.write_event(Event::Text(quick_xml::events::BytesText::new(family)))?;
+        writer.write_event(Event::End(quick_xml::events::BytesEnd::new("AppliedFont")))?;
+    }
+    // Leading is the third field IDML spells as a typed child, not an
+    // attribute (`<Leading type="unit">13</Leading>`); the engine
+    // cascades it like every other (measured 2026-09-05: a style's
+    // leading InDesign honoured and the engine did not was 94 of the
+    // annual's 134 overset stories).
+    // A leading of 0 (or less) is AUTO leading to the engine; InDesign
+    // spells that `Auto`, and would set 0 pt lines on top of each other.
+    if let Some(l) = leading {
+        let auto = l <= 0.0;
+        let mut le = BytesStart::new("Leading");
+        le.push_attribute(("type", if auto { "enumeration" } else { "unit" }));
+        writer.write_event(Event::Start(le))?;
+        let value = if auto {
+            "Auto".to_string()
+        } else {
+            format_f32(l)
+        };
+        writer.write_event(Event::Text(quick_xml::events::BytesText::new(&value)))?;
+        writer.write_event(Event::End(quick_xml::events::BytesEnd::new("Leading")))?;
+    }
+    // Nested, GREP and line styles: typed lists (see `nested_styles`).
+    if let Some(s) = lists {
+        crate::nested_styles::write_style_lists(
+            writer,
+            &s.nested_styles,
+            &s.line_styles,
+            &s.grep_styles,
+        )?;
+    }
+    if let Some(p) = props {
+        p.write_children(writer)?;
+    }
+    writer.write_event(Event::End(quick_xml::events::BytesEnd::new("Properties")))?;
+    writer.write_event(Event::End(quick_xml::events::BytesEnd::new(
+        name.to_string(),
+    )))?;
+    Ok(())
+}
+
+/// `<BasedOn type="object">PARENT</BasedOn>` — InDesign's spelling of a
+/// style's parent (the `object` type carries the parent's `Self`).
+pub(crate) fn write_based_on_child(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    parent: &str,
+) -> Result<(), quick_xml::Error> {
+    let mut bo = BytesStart::new("BasedOn");
+    bo.push_attribute(("type", "object"));
+    writer.write_event(Event::Start(bo))?;
+    writer.write_event(Event::Text(quick_xml::events::BytesText::new(parent)))?;
+    writer.write_event(Event::End(quick_xml::events::BytesEnd::new("BasedOn")))?;
+    Ok(())
+}
+
+/// True for an id in IDML's reserved `$ID/[…]` namespace
+/// (`ObjectStyle/$ID/[None]`). These are InDesign's own defaults: it
+/// materialises them itself, so the writer never SYNTHESISES one the
+/// source package didn't carry — emitting a user-shaped `<ObjectStyle>`
+/// for `[None]` would present an application default as an authored
+/// style (and re-open as a duplicate next to the real one).
+fn is_reserved_style_id(id: &str) -> bool {
+    id.contains("/$ID/")
+}
+
+/// Serialise one model `<ObjectStyle>`. Covers the whole field
+/// vocabulary [`ObjectStyleDef`] models — the fill / stroke / corner
+/// defaults a page item inherits when it carries no override — so a
+/// re-parse reproduces the resolved appearance.
+///
+/// `BasedOn` is written as InDesign's typed `<Properties>` child, the
+/// same as the paragraph / character lanes ([`emit_style_element`]):
+/// the parser accepts the attribute form too, but InDesign does NOT
+/// (measured 2026-09-05 — an attribute-form cascade opens flat).
+fn write_object_style(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    s: &ObjectStyleDef,
+) -> Result<(), quick_xml::Error> {
+    let mut attrs: Vec<(&str, String)> = vec![("Self", s.self_id.clone())];
+    attrs.extend(crate::style_attrs::object_style_attrs(s));
+    emit_style_element(
+        writer,
+        "ObjectStyle",
+        &attrs,
+        &s.based_on,
+        &None,
+        None,
+        None,
+        None,
+    )
+}
+
+/// The object styles `styles` carries that `seen` (the source part)
+/// doesn't define, minus the reserved `$ID/[…]` entries. Empty for an
+/// unmutated document, which is what keeps the part byte-identical.
+fn missing_object_styles<'a>(
+    styles: &'a StyleSheet,
+    seen: &'a std::collections::HashSet<String>,
+) -> impl Iterator<Item = &'a ObjectStyleDef> {
+    styles
+        .object_styles
+        .values()
+        .filter(move |s| !seen.contains(&s.self_id) && !is_reserved_style_id(&s.self_id))
+}
+
+/// What the WHOLE `Resources/Styles.xml` holds — the knowledge a single
+/// forward pass does not have when it reaches the first group.
+///
+/// # The defect this closes
+///
+/// `patch_styles` used to accumulate its "already defined" set as it
+/// read, and inject the model styles it had not seen yet at the FIRST
+/// `</RootParagraphStyleGroup>`. But a part can carry more than one root
+/// group of a kind — the corpus's generated packages open with a group
+/// holding only InDesign's reserved `$ID/[No paragraph style]` and put
+/// the document's real styles in a SECOND group further down. At the
+/// first close every real style was still "unseen", so all of them were
+/// injected there, and then the second group defined them again: two
+/// elements with the same `Self` in one part, the injected copy missing
+/// everything the writer does not model (`NextStyle`, `Justification`,
+/// `Hyphenation`, `AppliedNumberingList`, `StrokeColor`).
+///
+/// This is the same shape as the story rewrite's range misalignment (see
+/// [`crate::rewrite::rewrite_story`]) and as the nested-group
+/// duplication fixed before it: a streaming pass deciding "is this new?"
+/// from what it happens to have read so far. The fix is the same in
+/// kind — establish the whole-document fact FIRST — even though the fact
+/// itself is different, so the two are not shared code.
+#[derive(Default)]
+struct StylesLayout {
+    para: std::collections::HashSet<String>,
+    character: std::collections::HashSet<String>,
+    object: std::collections::HashSet<String>,
+    numbering_lists: std::collections::HashSet<String>,
+    /// How many `<Root*StyleGroup>` elements of each kind the part
+    /// carries. New definitions go into the LAST one, which is where a
+    /// document that has both keeps its own styles.
+    para_groups: usize,
+    char_groups: usize,
+    object_groups: usize,
+}
+
+/// Read `original` once for [`StylesLayout`]. Deliberately a separate
+/// pass over the same bytes rather than a lookahead: the emitting pass
+/// then has one rule and no state that means different things at
+/// different points in the stream.
+fn scan_styles(original: &[u8]) -> Result<StylesLayout, quick_xml::Error> {
+    let mut reader = Reader::from_reader(original);
+    let config = reader.config_mut();
+    config.expand_empty_elements = false;
+    config.trim_text(false);
+
+    let mut out = StylesLayout::default();
+    let mut buf = Vec::new();
+    loop {
+        match reader.read_event_into(&mut buf)? {
+            Event::Eof => break,
+            Event::Start(ref e) | Event::Empty(ref e) => match e.name().as_ref() {
+                b"ParagraphStyle" => {
+                    if let Some(id) = attr_value(e, b"Self") {
+                        out.para.insert(id);
+                    }
+                }
+                b"CharacterStyle" => {
+                    if let Some(id) = attr_value(e, b"Self") {
+                        out.character.insert(id);
+                    }
+                }
+                b"ObjectStyle" => {
+                    if let Some(id) = attr_value(e, b"Self") {
+                        out.object.insert(id);
+                    }
+                }
+                b"NumberingList" => {
+                    if let Some(id) = attr_value(e, b"Self") {
+                        out.numbering_lists.insert(id);
+                    }
+                }
+                b"RootParagraphStyleGroup" => out.para_groups += 1,
+                b"RootCharacterStyleGroup" => out.char_groups += 1,
+                b"RootObjectStyleGroup" => out.object_groups += 1,
+                _ => {}
+            },
+            _ => {}
+        }
+        buf.clear();
+    }
+    Ok(out)
+}
+
+/// Rewrite `Resources/Styles.xml` so every model paragraph / character
+/// / object style is present. New paragraph styles are injected before
+/// the LAST `</RootParagraphStyleGroup>`, character styles before the
+/// last `</RootCharacterStyleGroup>`, object styles before the last
+/// `</RootObjectStyleGroup>`. Byte-identical to `original` when
+/// nothing new (and when the source has no group, the new styles flush
+/// at `</idPkg:Styles>` so they aren't silently dropped).
+///
+/// "New" means absent from the WHOLE part, not merely unseen so far —
+/// see [`StylesLayout`].
+/// InDesign's `[Basic Paragraph]` — `ParagraphStyle/$ID/NormalParagraphStyle`
+/// — is what a range with no `AppliedParagraphStyle` composes in, and
+/// it is the app's own Minion Pro 12 pt unless the part defines it (the
+/// `<TextDefault>` face does not govern it; measured 2026-09-06 on
+/// InDesign 20.0.1). The engine composes such a range with the
+/// `[No paragraph style]` cascade, so when neither the part nor the
+/// model defines the basic style, one is written that says what
+/// `[No paragraph style]` says, based on it as InDesign's own is.
+const BASIC_PARAGRAPH: &str = "ParagraphStyle/$ID/NormalParagraphStyle";
+const NO_PARAGRAPH_STYLE: &str = "ParagraphStyle/$ID/[No paragraph style]";
+
+fn basic_paragraph_stand_in(
+    styles: &StyleSheet,
+    defined: &std::collections::HashSet<String>,
+) -> Option<ParagraphStyleDef> {
+    if defined.contains(BASIC_PARAGRAPH) || styles.paragraph_styles.contains_key(BASIC_PARAGRAPH) {
+        return None;
+    }
+    let root = styles.paragraph_styles.get(NO_PARAGRAPH_STYLE)?;
+    // Only a document that says what style-less text looks like (a root
+    // style naming a face) gets the stand-in; a part that leaves the
+    // root bare keeps its bytes.
+    root.font.as_ref()?;
+    Some(ParagraphStyleDef {
+        self_id: BASIC_PARAGRAPH.to_string(),
+        name: Some("$ID/NormalParagraphStyle".to_string()),
+        based_on: Some(NO_PARAGRAPH_STYLE.to_string()),
+        font: root.font.clone(),
+        font_style: root.font_style.clone(),
+        point_size: root.point_size,
+        leading: root.leading,
+        fill_color: root.fill_color.clone(),
+        ..Default::default()
+    })
+}
+
+pub fn patch_styles(original: &[u8], styles: &StyleSheet) -> Result<Vec<u8>, quick_xml::Error> {
+    patch_styles_with(original, styles, false)
+}
+
+/// [`patch_styles`], and — when `basic_paragraph` — the `[Basic Paragraph]`
+/// stand-in a document composed with a default face needs (see
+/// [`basic_paragraph_stand_in`]); an unmutated part stays byte-identical
+/// without it.
+pub fn patch_styles_with(
+    original: &[u8],
+    styles: &StyleSheet,
+    basic_paragraph: bool,
+) -> Result<Vec<u8>, quick_xml::Error> {
+    patch_styles_defined_elsewhere(original, styles, basic_paragraph, &HashSet::new())
+}
+
+/// The ids of the `<NumberingList>`s a part defines — `designmap.xml` is
+/// where InDesign writes them (its own `[Default]` included).
+pub fn numbering_list_ids(part: &[u8]) -> Result<HashSet<String>, quick_xml::Error> {
+    let mut reader = Reader::from_reader(part);
+    reader.config_mut().trim_text(false);
+    let mut buf = Vec::new();
+    let mut out = HashSet::new();
+    loop {
+        match reader.read_event_into(&mut buf)? {
+            Event::Eof => break,
+            Event::Start(ref e) | Event::Empty(ref e) if e.name().as_ref() == b"NumberingList" => {
+                if let Some(id) = attr_value(e, b"Self") {
+                    out.insert(id);
+                }
+            }
+            _ => {}
+        }
+        buf.clear();
+    }
+    Ok(out)
+}
+
+/// [`patch_styles_with`], where `lists_elsewhere` names the numbering lists
+/// another part already defines: the importer reads them from the design
+/// map, and writing them into Styles.xml as well would define each twice.
+pub fn patch_styles_defined_elsewhere(
+    original: &[u8],
+    styles: &StyleSheet,
+    basic_paragraph: bool,
+    lists_elsewhere: &HashSet<String>,
+) -> Result<Vec<u8>, quick_xml::Error> {
+    let layout = scan_styles(original)?;
+
+    let mut reader = Reader::from_reader(original);
+    let config = reader.config_mut();
+    config.expand_empty_elements = false;
+    config.trim_text(false);
+
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    let mut buf = Vec::new();
+
+    // Which occurrence of each root group the stream is on, so the
+    // injection lands in the last one.
+    let mut para_group_seen = 0usize;
+    let mut char_group_seen = 0usize;
+    let mut object_group_seen = 0usize;
+    let mut in_last_para_group = false;
+    let mut in_last_char_group = false;
+    let mut in_last_object_group = false;
+    let mut para_group_closed = false;
+    let mut char_group_closed = false;
+    let mut object_group_closed = false;
+
+    loop {
+        let ev = reader.read_event_into(&mut buf)?;
+        match ev {
+            Event::Eof => break,
+            // An EMPTY `<RootObjectStyleGroup/>` (a document with no
+            // object styles at all) has no close tag to inject before,
+            // so expand it into a real element around the new defs.
+            // Only fires on the LAST such element, and only when there
+            // is something to write — otherwise it falls through and
+            // passes the empty tag through verbatim.
+            Event::Empty(ref e)
+                if e.name().as_ref() == b"RootObjectStyleGroup"
+                    && object_group_seen + 1 == layout.object_groups
+                    && missing_object_styles(styles, &layout.object)
+                        .next()
+                        .is_some() =>
+            {
+                object_group_seen += 1;
+                writer.write_event(Event::Start(e.borrow()))?;
+                for s in missing_object_styles(styles, &layout.object) {
+                    write_object_style(&mut writer, s)?;
+                }
+                writer.write_event(Event::End(quick_xml::events::BytesEnd::new(
+                    "RootObjectStyleGroup",
+                )))?;
+                object_group_closed = true;
+            }
+            Event::Start(ref e) | Event::Empty(ref e) => {
+                // A style the model has is patched in place: every
+                // attribute InDesign reads, the way a range's are (a
+                // renamed or re-dressed style used to pass through with
+                // its source attributes — see `style_attrs`).
+                let patched: Option<BytesStart<'static>> = match e.name().as_ref() {
+                    b"ParagraphStyle" => attr_value(e, b"Self")
+                        .and_then(|id| styles.paragraph_styles.get(&id))
+                        .map(|def| {
+                            crate::rewrite::patch_start(
+                                e,
+                                |k, raw| {
+                                    crate::style_attrs::paragraph_style_attr_patch(k, raw, def)
+                                },
+                                &crate::style_attrs::paragraph_style_attrs(def),
+                            )
+                        })
+                        .transpose()?,
+                    b"CharacterStyle" => attr_value(e, b"Self")
+                        .and_then(|id| styles.character_styles.get(&id))
+                        .map(|def| {
+                            crate::rewrite::patch_start(
+                                e,
+                                |k, raw| {
+                                    crate::style_attrs::character_style_attr_patch(k, raw, def)
+                                },
+                                &crate::style_attrs::character_style_attrs(def),
+                            )
+                        })
+                        .transpose()?,
+                    b"ObjectStyle" => attr_value(e, b"Self")
+                        .and_then(|id| styles.object_styles.get(&id))
+                        .map(|def| {
+                            crate::rewrite::patch_start(
+                                e,
+                                |k, raw| crate::style_attrs::object_style_attr_patch(k, raw, def),
+                                &crate::style_attrs::object_style_attrs(def),
+                            )
+                        })
+                        .transpose()?,
+                    _ => None,
+                };
+                // An unchanged tag keeps its bytes — InDesign's own
+                // `<… />` spelling included, which a rebuilt tag loses.
+                if let Some(start) = patched.filter(|p| p.trim_ascii_end() != e.trim_ascii_end()) {
+                    match ev {
+                        Event::Start(_) => writer.write_event(Event::Start(start))?,
+                        _ => writer.write_event(Event::Empty(start))?,
+                    }
+                    buf.clear();
+                    continue;
+                }
+                // Only the group counters need tracking here now; which
+                // styles exist was settled by the pre-pass.
+                match e.name().as_ref() {
+                    b"RootParagraphStyleGroup" => {
+                        para_group_seen += 1;
+                        in_last_para_group = para_group_seen == layout.para_groups;
+                    }
+                    b"RootCharacterStyleGroup" => {
+                        char_group_seen += 1;
+                        in_last_char_group = char_group_seen == layout.char_groups;
+                    }
+                    b"RootObjectStyleGroup" => {
+                        object_group_seen += 1;
+                        in_last_object_group = object_group_seen == layout.object_groups;
+                    }
+                    _ => {}
+                }
+                writer.write_event(ev.borrow())?;
+            }
+            Event::End(ref e)
+                if e.name().as_ref() == b"RootParagraphStyleGroup" && in_last_para_group =>
+            {
+                for s in styles.paragraph_styles.values() {
+                    if !layout.para.contains(&s.self_id) {
+                        write_paragraph_style(&mut writer, s)?;
+                    }
+                }
+                if let Some(basic) =
+                    basic_paragraph_stand_in(styles, &layout.para).filter(|_| basic_paragraph)
+                {
+                    write_paragraph_style(&mut writer, &basic)?;
+                }
+                para_group_closed = true;
+                writer.write_event(ev.borrow())?;
+            }
+            Event::End(ref e)
+                if e.name().as_ref() == b"RootCharacterStyleGroup" && in_last_char_group =>
+            {
+                for s in styles.character_styles.values() {
+                    if !layout.character.contains(&s.self_id) {
+                        write_character_style(&mut writer, s)?;
+                    }
+                }
+                char_group_closed = true;
+                writer.write_event(ev.borrow())?;
+            }
+            Event::End(ref e)
+                if e.name().as_ref() == b"RootObjectStyleGroup" && in_last_object_group =>
+            {
+                for s in missing_object_styles(styles, &layout.object) {
+                    write_object_style(&mut writer, s)?;
+                }
+                object_group_closed = true;
+                writer.write_event(ev.borrow())?;
+            }
+            Event::End(ref e) if e.name().as_ref() == b"idPkg:Styles" => {
+                // Fallback: a source with no Root*StyleGroup (rare) still
+                // gets the new defs so a reference never dangles.
+                if !para_group_closed {
+                    for s in styles.paragraph_styles.values() {
+                        if !layout.para.contains(&s.self_id) {
+                            write_paragraph_style(&mut writer, s)?;
+                        }
+                    }
+                    if let Some(basic) =
+                        basic_paragraph_stand_in(styles, &layout.para).filter(|_| basic_paragraph)
+                    {
+                        write_paragraph_style(&mut writer, &basic)?;
+                    }
+                }
+                if !char_group_closed {
+                    for s in styles.character_styles.values() {
+                        if !layout.character.contains(&s.self_id) {
+                            write_character_style(&mut writer, s)?;
+                        }
+                    }
+                }
+                // Object styles need their group: a bare `<ObjectStyle>`
+                // loose in the part isn't the shape InDesign reads them
+                // from, so synthesise the wrapper rather than flush the
+                // defs on their own.
+                if !object_group_closed
+                    && missing_object_styles(styles, &layout.object)
+                        .next()
+                        .is_some()
+                {
+                    writer.write_event(Event::Start(BytesStart::new("RootObjectStyleGroup")))?;
+                    for s in missing_object_styles(styles, &layout.object) {
+                        write_object_style(&mut writer, s)?;
+                    }
+                    writer.write_event(Event::End(quick_xml::events::BytesEnd::new(
+                        "RootObjectStyleGroup",
+                    )))?;
+                }
+                // A numbering list the source never defined. InDesign
+                // reads `<NumberingList>` from designmap.xml (where it
+                // writes its own `[Default]`) or as a bare child of
+                // `<idPkg:Styles>` — never inside a wrapper group
+                // (`<RootNumberingListGroup>` hid it; measured
+                // 2026-09-06). Without the definition every
+                // `<AppliedNumberingList>` falls back to `[Default]`.
+                for l in styles.numbering_lists.values() {
+                    if !layout.numbering_lists.contains(&l.self_id)
+                        && !lists_elsewhere.contains(&l.self_id)
+                    {
+                        write_numbering_list(&mut writer, l)?;
+                    }
+                }
+                writer.write_event(ev.borrow())?;
+            }
+            _ => writer.write_event(ev.borrow())?,
+        }
+        buf.clear();
+    }
+
+    Ok(writer.into_inner().into_inner())
+}
+
+fn write_numbering_list(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    l: &idml_import::styles::NumberingListDef,
+) -> Result<(), quick_xml::Error> {
+    let name = l
+        .name
+        .clone()
+        .unwrap_or_else(|| l.self_id.trim_start_matches("NumberingList/").to_string());
+    let mut e = BytesStart::new("NumberingList");
+    e.push_attribute(("Self", l.self_id.as_str()));
+    e.push_attribute(("Name", name.as_str()));
+    e.push_attribute((
+        "ContinueNumbersAcrossStories",
+        l.continue_across_stories
+            .unwrap_or(false)
+            .to_string()
+            .as_str(),
+    ));
+    e.push_attribute((
+        "ContinueNumbersAcrossDocuments",
+        l.continue_across_documents
+            .unwrap_or(false)
+            .to_string()
+            .as_str(),
+    ));
+    writer.write_event(Event::Empty(e))?;
+    Ok(())
+}
+
+// ---- conditional text: `Resources/Styles.xml` is NOT where it lives ------
+
+/// The indicator colours of every `<Condition>` in `xml`, keyed by
+/// `Self`, read from either spelling (the engine's older
+/// `IndicatorColor="…"` attribute, or InDesign's
+/// `<Properties><IndicatorColor type="enumeration">` child). The model
+/// does not carry the colour, so the exporter scrapes it here to keep it
+/// when it re-spells a condition canonically.
+pub(crate) fn scan_condition_colors(
+    xml: &[u8],
+) -> Result<std::collections::HashMap<String, String>, quick_xml::Error> {
+    let mut reader = Reader::from_reader(xml);
+    reader.config_mut().trim_text(true);
+    let mut out = std::collections::HashMap::new();
+    let mut buf = Vec::new();
+    let mut current: Option<String> = None;
+    let mut pending = false;
+    loop {
+        match reader.read_event_into(&mut buf)? {
+            Event::Eof => break,
+            Event::Start(ref e) | Event::Empty(ref e) if e.name().as_ref() == b"Condition" => {
+                let id = attr_value(e, b"Self");
+                if let (Some(id), Some(c)) = (&id, attr_value(e, b"IndicatorColor")) {
+                    out.insert(id.clone(), c);
+                }
+                current = id;
+            }
+            Event::Start(ref e) if e.name().as_ref() == b"IndicatorColor" && current.is_some() => {
+                pending = true;
+            }
+            Event::Text(ref t) if pending => {
+                if let (Some(id), Ok(c)) = (
+                    current.as_ref(),
+                    t.xml_content(quick_xml::XmlVersion::Implicit1_0),
+                ) {
+                    let c = c.trim().to_string();
+                    if !c.is_empty() {
+                        out.insert(id.clone(), c);
+                    }
+                }
+                pending = false;
+            }
+            Event::End(ref e) if e.name().as_ref() == b"Condition" => current = None,
+            _ => {}
+        }
+        buf.clear();
+    }
+    Ok(out)
+}
+
+/// Remove every `<Condition>` / `<ConditionSet>` — and the engine's
+/// invented `<RootConditionalTextGroup>` wrapper around them — from a
+/// `Resources/Styles.xml` part. InDesign 20.0.1 keeps conditions in
+/// `designmap.xml` and ignores everything inside the wrapper (measured:
+/// 0 conditions read), so the exporter moves them to the designmap
+/// (`navigation::patch_designmap_navigation`) and this pass takes them
+/// out of here. Byte-identical when the part carries none.
+pub(crate) fn strip_conditions(original: &[u8]) -> Result<Vec<u8>, quick_xml::Error> {
+    let mut reader = Reader::from_reader(original);
+    let config = reader.config_mut();
+    config.expand_empty_elements = false;
+    config.trim_text(false);
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    let mut buf = Vec::new();
+    let mut depth = 0usize;
+    let mut skip_depth: Option<usize> = None;
+    let mut changed = false;
+    loop {
+        match reader.read_event_into(&mut buf)? {
+            Event::Eof => break,
+            Event::Start(e) => {
+                depth += 1;
+                if skip_depth.is_some() {
+                    buf.clear();
+                    continue;
+                }
+                if matches!(
+                    e.name().as_ref(),
+                    b"RootConditionalTextGroup" | b"Condition" | b"ConditionSet"
+                ) {
+                    skip_depth = Some(depth);
+                    changed = true;
+                } else {
+                    writer.write_event(Event::Start(e.into_owned()))?;
+                }
+            }
+            Event::Empty(e) => {
+                if skip_depth.is_some() {
+                    buf.clear();
+                    continue;
+                }
+                if matches!(
+                    e.name().as_ref(),
+                    b"RootConditionalTextGroup" | b"Condition" | b"ConditionSet"
+                ) {
+                    changed = true;
+                } else {
+                    writer.write_event(Event::Empty(e.into_owned()))?;
+                }
+            }
+            Event::End(e) => {
+                if let Some(d) = skip_depth {
+                    if d == depth {
+                        skip_depth = None;
+                    }
+                    depth = depth.saturating_sub(1);
+                    buf.clear();
+                    continue;
+                }
+                depth = depth.saturating_sub(1);
+                writer.write_event(Event::End(e))?;
+            }
+            other => {
+                if skip_depth.is_none() {
+                    writer.write_event(other)?;
+                }
+            }
+        }
+        buf.clear();
+    }
+    if !changed {
+        return Ok(original.to_vec());
+    }
+    Ok(writer.into_inner().into_inner())
+}
+
+#[cfg(test)]
+mod tests {
+
+    /// A leading of 0 is auto leading to the engine (a style that says so
+    /// over a parent with a fixed one: plugin-doc's picture paragraphs).
+    /// InDesign spells it `Auto`; `0` would stack the lines.
+    #[test]
+    fn a_zero_leading_is_written_as_auto() {
+        let style = |leading: f32| {
+            let mut w = Writer::new(Cursor::new(Vec::new()));
+            emit_style_element(
+                &mut w,
+                "ParagraphStyle",
+                &[("Self", "ParagraphStyle/p".to_string())],
+                &None,
+                &None,
+                Some(leading),
+                None,
+                None,
+            )
+            .expect("emit");
+            String::from_utf8(w.into_inner().into_inner()).expect("utf8")
+        };
+        assert!(
+            style(0.0).contains(r#"<Leading type="enumeration">Auto</Leading>"#),
+            "{}",
+            style(0.0)
+        );
+        assert!(
+            style(13.0).contains(r#"<Leading type="unit">13</Leading>"#),
+            "{}",
+            style(13.0)
+        );
+        // And the reader takes `Auto` back as that 0.
+        let xml = format!(
+            r#"<idPkg:Styles xmlns:idPkg="x"><RootParagraphStyleGroup Self="g">{}</RootParagraphStyleGroup></idPkg:Styles>"#,
+            style(0.0)
+        );
+        let sheet = idml_import::parse_stylesheet(xml.as_bytes()).expect("parse");
+        assert_eq!(
+            sheet.paragraph_styles["ParagraphStyle/p"].leading,
+            Some(0.0)
+        );
+    }
+
+    /// A `<Tint>` already in the source is not re-injected as a
+    /// `<Color>`. The annual's book carried `Color/AnnualVermilion20`
+    /// twice — the `<Tint … BaseColor>` its fixture wrote and a
+    /// `<Color … TintValue>` this injector appended — because only
+    /// `<Color>` counted as "already present". Two elements sharing a
+    /// `Self` is not something to leave to Adobe's tie-break.
+    #[test]
+    fn a_tint_already_in_the_source_is_not_injected_again() {
+        let original = br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Graphic xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1"><Color Self="Color/Base" Model="Spot" Space="CMYK" ColorValue="0 85 90 5" Name="Base" AlternateSpace="CMYK" AlternateColorValue="0 85 90 5"/><Tint Self="Color/Base20" Model="Process" Space="CMYK" ColorValue="0 85 90 5" Name="Base 20%" TintValue="20" BaseColor="Color/Base"/></idPkg:Graphic>"#;
+
+        let mut palette = Graphic::default();
+        for (self_id, name, tint) in [
+            ("Color/Base", "Base", None),
+            ("Color/Base20", "Base 20%", Some(20.0)),
+        ] {
+            palette.colors.insert(
+                self_id.to_string(),
+                ColorEntry {
+                    self_id: self_id.to_string(),
+                    name: Some(name.to_string()),
+                    space: ColorSpace::Cmyk,
+                    value: vec![0.0, 85.0, 90.0, 5.0],
+                    model: ColorModel::Spot,
+                    alternate_space: Some(ColorSpace::Cmyk),
+                    alternate_value: vec![0.0, 85.0, 90.0, 5.0],
+                    tint,
+                    alpha: None,
+                },
+            );
+        }
+
+        let out = patch_graphic(original, &palette).expect("patch");
+        let s = String::from_utf8(out).expect("utf8");
+        assert_eq!(
+            s.matches(r#"Self="Color/Base20""#).count(),
+            1,
+            "the tint must appear ONCE, not once per spelling: {s}",
+        );
+        assert!(
+            s.contains(r#"<Tint Self="Color/Base20""#),
+            "and it stays the <Tint> the source carried: {s}",
+        );
+        assert_eq!(
+            original,
+            s.as_bytes(),
+            "nothing was missing, so the file is byte-identical",
+        );
+    }
+    use super::*;
+
+    #[test]
+    fn the_basic_paragraph_style_is_defined_after_no_paragraph_style() {
+        let src = br#"<idPkg:Styles xmlns:idPkg="x"><RootParagraphStyleGroup Self="u9e"><ParagraphStyle Self="ParagraphStyle/$ID/[No paragraph style]" Name="$ID/[No paragraph style]" PointSize="12" FontStyle="Regular"><Properties><AppliedFont type="string">Open Sans</AppliedFont></Properties></ParagraphStyle></RootParagraphStyleGroup></idPkg:Styles>"#;
+        let styles = idml_import::parse_stylesheet(src).unwrap();
+        assert_eq!(
+            patch_styles(src, &styles).unwrap(),
+            src.to_vec(),
+            "not asked for: byte-identical"
+        );
+        let out = String::from_utf8(patch_styles_with(src, &styles, true).unwrap()).unwrap();
+        assert!(
+            out.contains(r#"<ParagraphStyle Self="ParagraphStyle/$ID/NormalParagraphStyle" Name="$ID/NormalParagraphStyle" FontStyle="Regular" PointSize="12"><Properties><BasedOn type="object">ParagraphStyle/$ID/[No paragraph style]</BasedOn><AppliedFont type="string">Open Sans</AppliedFont></Properties></ParagraphStyle></RootParagraphStyleGroup>"#),
+            "{out}"
+        );
+        // A part that defines it keeps its own.
+        let src2 = br#"<idPkg:Styles xmlns:idPkg="x"><RootParagraphStyleGroup Self="u9e"><ParagraphStyle Self="ParagraphStyle/$ID/[No paragraph style]" Name="$ID/[No paragraph style]"/><ParagraphStyle Self="ParagraphStyle/$ID/NormalParagraphStyle" Name="$ID/NormalParagraphStyle" PointSize="9"/></RootParagraphStyleGroup></idPkg:Styles>"#;
+        let styles2 = idml_import::parse_stylesheet(src2).unwrap();
+        assert_eq!(
+            patch_styles_with(src2, &styles2, true).unwrap(),
+            src2.to_vec()
+        );
+    }
+
+    #[test]
+    fn an_edited_style_is_re_dressed_in_place() {
+        let src = br#"<idPkg:Styles xmlns:idPkg="x"><RootCharacterStyleGroup Self="u9d"><CharacterStyle Self="CharacterStyle/Caps" Name="Caps" PointSize="8.5"/></RootCharacterStyleGroup><RootParagraphStyleGroup Self="u9e"><ParagraphStyle Self="ParagraphStyle/Note" Name="Note" PointSize="8.5" FillColor="Color/Slate" OTFFigureStyle="ProportionalOldStyle"><Properties><BasedOn type="object">ParagraphStyle/Body</BasedOn></Properties></ParagraphStyle></RootParagraphStyleGroup></idPkg:Styles>"#;
+        let mut styles = idml_import::parse_stylesheet(src).unwrap();
+        assert_eq!(
+            std::str::from_utf8(&patch_styles(src, &styles).unwrap()).unwrap(),
+            std::str::from_utf8(src).unwrap(),
+            "unchanged: byte-identical"
+        );
+        let p = styles
+            .paragraph_styles
+            .get_mut("ParagraphStyle/Note")
+            .unwrap();
+        p.name = Some("Field Note".into());
+        p.tracking = Some(8.0);
+        p.space_before = Some(6.5);
+        p.space_after = Some(6.5);
+        p.justification = Some(idml_import::Justification::LeftAlign);
+        p.next_style = Some("ParagraphStyle/Body".into());
+        p.fill_color = None;
+        let c = styles
+            .character_styles
+            .get_mut("CharacterStyle/Caps")
+            .unwrap();
+        c.tracking = Some(70.0);
+        c.point_size = Some(9.0);
+        let out = String::from_utf8(patch_styles(src, &styles).unwrap()).unwrap();
+        assert!(
+            out.contains(r#"<ParagraphStyle Self="ParagraphStyle/Note" Name="Field Note" PointSize="8.5" OTFFigureStyle="ProportionalOldStyle" Tracking="8" Justification="LeftAlign" SpaceBefore="6.5" SpaceAfter="6.5" NextStyle="ParagraphStyle/Body"><Properties>"#),
+            "{out}"
+        );
+        assert!(
+            out.contains(r#"<CharacterStyle Self="CharacterStyle/Caps" Name="Caps" PointSize="9" Tracking="70"/>"#),
+            "{out}"
+        );
+    }
+
+    /// A style the export mints carries its typography and its nested,
+    /// GREP and line styles in InDesign's spelling; an edited style's
+    /// `Ligatures` and `KerningMethod` follow the model.
+    #[test]
+    fn a_minted_style_carries_its_typography_and_style_lists() {
+        let src = br#"<idPkg:Styles xmlns:idPkg="x"><RootParagraphStyleGroup Self="u9e"><ParagraphStyle Self="ParagraphStyle/Kept" Name="Kept" Ligatures="false" KerningMethod="$ID/Optical"/></RootParagraphStyleGroup></idPkg:Styles>"#;
+        let mut styles = idml_import::parse_stylesheet(src).unwrap();
+        assert_eq!(
+            patch_styles(src, &styles).unwrap(),
+            src.to_vec(),
+            "unchanged: byte-identical"
+        );
+        let kept = styles
+            .paragraph_styles
+            .get_mut("ParagraphStyle/Kept")
+            .unwrap();
+        kept.ligatures_on = Some(true);
+        kept.kerning_method = Some("$ID/None".into());
+        let mut minted = ParagraphStyleDef {
+            self_id: "ParagraphStyle/Minted".into(),
+            name: Some("Minted".into()),
+            ligatures_on: Some(false),
+            empty_line_styles: Some(true),
+            nested_styles: vec![idml_import::NestedStyle {
+                applied_character_style: "CharacterStyle/Red".into(),
+                delimiter: idml_import::NestedDelimiter::Words,
+                repetition: 2,
+                inclusive: false,
+            }],
+            grep_styles: vec![idml_import::GrepStyle {
+                applied_character_style: "CharacterStyle/Green".into(),
+                grep_expression: r"\d+".into(),
+            }],
+            ..Default::default()
+        };
+        minted.otf.historical = Some(true);
+        styles
+            .paragraph_styles
+            .insert(minted.self_id.clone(), minted);
+        let out = String::from_utf8(patch_styles(src, &styles).unwrap()).unwrap();
+        assert!(
+            out.contains(r#"<ParagraphStyle Self="ParagraphStyle/Kept" Name="Kept" Ligatures="true" KerningMethod="$ID/None"/>"#),
+            "{out}"
+        );
+        assert!(
+            out.contains(r#"<ParagraphStyle Self="ParagraphStyle/Minted" Name="Minted" Ligatures="false" OTFHistorical="true" EmptyLineStyles="true"><Properties><AllNestedStyles type="list"><ListItem type="record"><AppliedCharacterStyle type="object">CharacterStyle/Red</AppliedCharacterStyle><Delimiter type="enumeration">AnyWord</Delimiter><Repetition type="long">2</Repetition><Inclusive type="boolean">false</Inclusive></ListItem></AllNestedStyles><AllGREPStyles type="list"><ListItem type="record"><AppliedCharacterStyle type="object">CharacterStyle/Green</AppliedCharacterStyle><GrepExpression type="string">\d+</GrepExpression></ListItem></AllGREPStyles></Properties></ParagraphStyle>"#),
+            "{out}"
+        );
+        // And reads back as it was minted.
+        let back = idml_import::parse_stylesheet(out.as_bytes()).unwrap();
+        let m = &back.paragraph_styles["ParagraphStyle/Minted"];
+        assert_eq!(
+            m.nested_styles,
+            styles.paragraph_styles["ParagraphStyle/Minted"].nested_styles
+        );
+        assert_eq!(m.grep_styles.len(), 1);
+        assert_eq!(m.otf.historical, Some(true));
+        assert_eq!(m.ligatures_on, Some(false));
+        assert_eq!(m.empty_line_styles, Some(true));
+    }
+
+    #[test]
+    fn a_numbering_list_the_source_lacks_is_defined_as_a_bare_child() {
+        let src = br#"<idPkg:Styles xmlns:idPkg="x"><RootParagraphStyleGroup Self="u9e"><ParagraphStyle Self="ParagraphStyle/$ID/[No paragraph style]" Name="$ID/[No paragraph style]"/></RootParagraphStyleGroup><NumberingList Self="NumberingList/Old" Name="Old" ContinueNumbersAcrossStories="false" ContinueNumbersAcrossDocuments="false"/></idPkg:Styles>"#;
+        let mut styles = idml_import::parse_stylesheet(src).unwrap();
+        assert_eq!(
+            patch_styles(src, &styles).unwrap(),
+            src.to_vec(),
+            "unchanged: byte-identical"
+        );
+        styles.numbering_lists.insert(
+            "NumberingList/Annual Steps".into(),
+            idml_import::styles::NumberingListDef {
+                self_id: "NumberingList/Annual Steps".into(),
+                name: Some("Annual Steps".into()),
+                continue_across_stories: Some(true),
+                continue_across_documents: None,
+            },
+        );
+        let out = String::from_utf8(patch_styles(src, &styles).unwrap()).unwrap();
+        assert!(
+            out.ends_with(r#"<NumberingList Self="NumberingList/Annual Steps" Name="Annual Steps" ContinueNumbersAcrossStories="true" ContinueNumbersAcrossDocuments="false"/></idPkg:Styles>"#),
+            "{out}"
+        );
+        assert_eq!(out.matches("NumberingList/Old").count(), 1, "{out}");
+        assert!(!out.contains("RootNumberingListGroup"), "{out}");
+    }
+    use idml_import::{ColorModel, ColorSpace, ObjectStyleDef};
+
+    /// A minimal but REAL-SHAPED `Resources/Styles.xml`: the three root
+    /// groups InDesign always writes, each carrying its reserved
+    /// `$ID/[…]` entry, plus one user-authored object style with the
+    /// full field vocabulary `ObjectStyleDef` models.
+    const STYLES_XML: &[u8] = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<idPkg:Styles xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0">
+<RootCharacterStyleGroup Self="u9d"><CharacterStyle Self="CharacterStyle/$ID/[No character style]" Name="$ID/[No character style]" Imported="false"/></RootCharacterStyleGroup>
+<RootParagraphStyleGroup Self="u9e"><ParagraphStyle Self="ParagraphStyle/$ID/[No paragraph style]" Name="$ID/[No paragraph style]" Imported="false"/></RootParagraphStyleGroup>
+<RootObjectStyleGroup Self="u9f"><ObjectStyle Self="ObjectStyle/$ID/[None]" Name="$ID/[None]" Imported="false"/><ObjectStyle Self="ObjectStyle/Callout" Name="Callout" FillColor="Color/Black" FillTint="20" StrokeColor="Color/Paper" StrokeTint="55" StrokeWeight="1.5" CornerOption="RoundedCorner" CornerRadius="6"/></RootObjectStyleGroup>
+</idPkg:Styles>"#;
+
+    fn sheet() -> StyleSheet {
+        idml_import::parse_stylesheet(STYLES_XML).expect("parse styles")
+    }
+
+    /// Build the def `Operation::CreateObjectStyle` produces: a
+    /// `default()` body carrying only `self_id` / `name` / `based_on`
+    /// (every other field cascades). `paged-mutate` can't be depended
+    /// on from here — core's `paged-scene` / `paged-mutate` dep on
+    /// `idml-import` would make the git dep circular (see the commit
+    /// that re-homed the integration tests) — so this mirrors the
+    /// `style_crud!` create arm exactly.
+    fn created_object_style(self_id: &str, name: &str, based_on: Option<&str>) -> ObjectStyleDef {
+        ObjectStyleDef {
+            self_id: self_id.to_string(),
+            name: Some(name.to_string()),
+            based_on: based_on.map(str::to_string),
+            ..Default::default()
+        }
+    }
+
+    /// THE PRIME INVARIANT (the lazy-verbatim posture): a document
+    /// nobody mutated re-emits its `Resources/Styles.xml` byte-for-byte,
+    /// so `write_idml` takes the raw-copy path for that entry.
+    #[test]
+    fn unmutated_styles_resource_round_trips_byte_identically() {
+        let out = patch_styles(STYLES_XML, &sheet()).expect("patch");
+        assert_eq!(
+            String::from_utf8_lossy(&out),
+            String::from_utf8_lossy(STYLES_XML),
+            "an unmutated style sheet must reproduce its on-disk bytes"
+        );
+    }
+
+    /// A paragraph style's `Composer` survives an unedited save byte for
+    /// byte and is rewritten when the model changes it.
+    #[test]
+    fn a_paragraph_styles_composer_round_trips() {
+        const SRC: &[u8] = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<idPkg:Styles xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0">
+<RootParagraphStyleGroup Self="u9e"><ParagraphStyle Self="ParagraphStyle/$ID/[No paragraph style]" Name="$ID/[No paragraph style]" Imported="false"/><ParagraphStyle Self="ParagraphStyle/Word" Name="Word" Composer="HL Single"/></RootParagraphStyleGroup>
+</idPkg:Styles>"#;
+        let mut styles = idml_import::parse_stylesheet(SRC).expect("parse");
+        assert_eq!(
+            String::from_utf8_lossy(&patch_styles(SRC, &styles).expect("patch")),
+            String::from_utf8_lossy(SRC)
+        );
+        styles
+            .paragraph_styles
+            .get_mut("ParagraphStyle/Word")
+            .unwrap()
+            .composer = Some(idml_import::Composer::Paragraph);
+        let out = String::from_utf8(patch_styles(SRC, &styles).expect("patch")).unwrap();
+        assert!(
+            out.contains(r#"Name="Word" Composer="HL Composer""#),
+            "{out}"
+        );
+    }
+
+    /// An object style created since load is written into
+    /// `<RootObjectStyleGroup>` — the resource part InDesign reads
+    /// object styles from. Without this the exported package carries an
+    /// `AppliedObjectStyle` pointing at a definition that doesn't
+    /// exist.
+    #[test]
+    fn scene_created_object_style_is_written_into_the_root_group() {
+        let mut styles = sheet();
+        let def = created_object_style("ObjectStyle/u0", "Sidebar", Some("ObjectStyle/Callout"));
+        styles.object_styles.insert(def.self_id.clone(), def);
+
+        let out = patch_styles(STYLES_XML, &styles).expect("patch");
+        let s = String::from_utf8(out).expect("utf8");
+        assert!(
+            s.contains(r#"<ObjectStyle Self="ObjectStyle/u0" Name="Sidebar"><Properties><BasedOn type="object">ObjectStyle/Callout</BasedOn></Properties></ObjectStyle>"#),
+            "the new object style must be defined, not just referenced: {s}"
+        );
+        // ...and INSIDE the root group, not loose in the part.
+        let group_close = s.find("</RootObjectStyleGroup>").expect("group close");
+        let def_at = s.find(r#"Self="ObjectStyle/u0""#).expect("emitted");
+        assert!(def_at < group_close, "must land inside the group: {s}");
+    }
+
+    fn four(option: idml_import::CornerOption, radius: f32) -> [idml_import::CornerSpec; 4] {
+        [idml_import::CornerSpec {
+            option: Some(option),
+            radius: Some(radius),
+        }; 4]
+    }
+
+    /// An edited source object style is written back. It used to pass
+    /// through with its source attributes, so the edit was lost on save.
+    /// Its corners go out as the four per-corner attributes, the ones
+    /// InDesign reads, beside the pair.
+    #[test]
+    fn an_edited_source_object_style_is_written_back() {
+        let mut styles = sheet();
+        let def = styles
+            .object_styles
+            .get_mut("ObjectStyle/Callout")
+            .expect("Callout");
+        def.fill_tint = Some(40.0);
+        def.corner_option = Some("BevelCorner".into());
+        def.corners = four(idml_import::CornerOption::Bevel, 6.0);
+
+        let out = patch_styles(STYLES_XML, &styles).expect("patch");
+        let s = String::from_utf8(out.clone()).expect("utf8");
+        assert!(s.contains(r#"FillTint="40""#), "{s}");
+        assert!(s.contains(r#"TopLeftCornerOption="BevelCorner""#), "{s}");
+        assert!(
+            s.contains(r#"StrokeColor="Color/Paper" StrokeTint="55" StrokeWeight="1.5""#),
+            "the untouched attributes keep their bytes: {s}"
+        );
+        let back = idml_import::parse_stylesheet(&out).expect("re-parse");
+        let def = &back.object_styles["ObjectStyle/Callout"];
+        assert_eq!(def.fill_tint, Some(40.0));
+        assert_eq!(def.corner_option.as_deref(), Some("BevelCorner"));
+        assert_eq!(def.corners, four(idml_import::CornerOption::Bevel, 6.0));
+    }
+
+    /// A new object style writes its four corners, or InDesign would open
+    /// it square whatever its `CornerOption` says.
+    #[test]
+    fn a_new_object_style_writes_its_four_corners() {
+        let mut styles = sheet();
+        let mut def = created_object_style("ObjectStyle/u0", "Rounded", None);
+        def.corner_option = Some("RoundedCorner".into());
+        def.corner_radius = Some(8.0);
+        def.corners = four(idml_import::CornerOption::Rounded, 8.0);
+        styles.object_styles.insert(def.self_id.clone(), def);
+
+        let out = patch_styles(STYLES_XML, &styles).expect("patch");
+        let back = idml_import::parse_stylesheet(&out).expect("re-parse");
+        assert_eq!(
+            back.object_styles["ObjectStyle/u0"].corners,
+            four(idml_import::CornerOption::Rounded, 8.0)
+        );
+    }
+}

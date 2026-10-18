@@ -1,0 +1,11 @@
+/target
+**/*.rs.bk
+
+# TS bundle (packages/*) build + deps
+node_modules
+dist
+
+# test evidence (emitted by CI for the state matrix, never committed)
+junit.xml
+junit-all.xml
+**/junit.xml

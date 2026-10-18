@@ -1,0 +1,1810 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! New-entry emission (C-8) — full Story / Spread parts for model
+//! objects MINTED after parse, which have no original ZIP entry the
+//! carry-through writer could patch:
+//!
+//! * a story minted by `InsertNode { NodeSpec::TextFrame { parent_story:
+//!   Some(_) } }` (the wire's InsertTextFrame) carries `src: ""` — text
+//!   poured into a fresh frame was silently dropped on export;
+//! * a spread minted by `InsertPage` carries a fresh
+//!   `Spreads/Spread_<id>.xml` src the source archive doesn't contain.
+//!
+//! Both are serialised here from the in-memory model, in the same
+//! vocabulary [`crate::rewrite`] writes when patching (its emit helpers
+//! are reused directly), wrapped in the standard `idPkg` part envelope
+//! our own parser reads back (`idml_import::Story::parse` /
+//! `Spread::parse`). The new entries are then REFERENCED by a minimal
+//! `designmap.xml` insertion ([`patch_designmap`]) — an unmutated
+//! document never reaches this module, so its designmap round-trips
+//! byte-identically.
+
+use std::io::Cursor;
+
+use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, Event};
+use quick_xml::{Reader, Writer};
+
+use idml_import::{CharacterRun, Paragraph, Spread, Story};
+
+use crate::rewrite;
+
+const PKG_NS: &str = "http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging";
+const IDENTITY: [f32; 6] = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+
+/// Sanitize a model `Self` id into an entry-name stem: `/` → `_`.
+/// Wire-minted stories are named `Story/u<n>`; an entry path can't
+/// carry the slash, and `paged_scene::derive_story_id` re-derives the
+/// story id from the entry stem on reopen — so the sanitized form is
+/// the id the document carries after a save→reopen round-trip (the
+/// frame's `ParentStory` is written sanitized too, see
+/// `rewrite::write_new_text_frame`).
+pub(crate) fn sanitize_id(id: &str) -> String {
+    id.replace('/', "_")
+}
+
+/// Entry path for a minted story: `Stories/Story_<sanitized-id>.xml`.
+/// `derive_story_id` strips exactly the `Story_` prefix added here, so
+/// the reopened story's `self_id` equals [`sanitize_id`] of the minted
+/// id.
+pub(crate) fn story_src_for(self_id: &str) -> String {
+    format!("Stories/Story_{}.xml", sanitize_id(self_id))
+}
+
+fn new_part_writer() -> Result<Writer<Cursor<Vec<u8>>>, quick_xml::Error> {
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    writer.write_event(Event::Decl(BytesDecl::new(
+        "1.0",
+        Some("UTF-8"),
+        Some("yes"),
+    )))?;
+    Ok(writer)
+}
+
+fn open_pkg_root(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    name: &str,
+    dom_version: &str,
+) -> Result<(), quick_xml::Error> {
+    let mut root = BytesStart::new(name);
+    root.push_attribute(("xmlns:idPkg", PKG_NS));
+    root.push_attribute(("DOMVersion", dom_version));
+    writer.write_event(Event::Start(root))?;
+    Ok(())
+}
+
+/// Serialise a full `Stories/Story_*.xml` part from the in-memory model.
+///
+/// The body vocabulary is exactly what `rewrite::rewrite_story` owns
+/// when patching: one `<ParagraphStyleRange>` per model paragraph
+/// (`AppliedParagraphStyle` when set), one `<CharacterStyleRange>` per
+/// run carrying the patchable character attributes, run text split
+/// across `<Content>` / `<Br/>` / `<Tab/>` via
+/// `rewrite::write_run_content`. Attributes the model doesn't set are
+/// omitted, so a save→reopen reproduces the model (`None` stays `None`).
+/// A table-of-contents story names its style on the `<Story>`
+/// (`AppliedTOCStyle`), where InDesign writes it.
+///
+/// On top of the text-pour lane this now serialises what InDesign 2025
+/// was measured to lose from a minted story:
+///
+/// * a run tagged `hyperlink_source` is written in InDesign's own
+///   nesting — the `<HyperlinkTextSource>` INSIDE the range, around its
+///   `<Content>` (a source wrapping the range is what the engine's
+///   fixtures wrote; both read back, this is what InDesign writes);
+/// * `anchors` — the text destinations (`HyperlinkDestinationKind::
+///   TextAnchor`) targeting this story — are written as inline
+///   `<HyperlinkTextDestination/>` markers in a range of their own at the
+///   head of the first paragraph (measured: the designmap spelling binds
+///   nothing, the inline marker binds);
+/// * a paragraph's `table` is written in full (`write_table`): rows,
+///   columns, cells with their paragraphs, header / footer counts,
+///   spans, applied styles, insets, edge strokes — the vocabulary
+///   `idml_import::parse_story` reads and `rewrite_story` patches.
+///
+/// Footnotes inside a minted story are still not serialised (no
+/// consumer mints them).
+pub(crate) fn story_part(
+    self_id: &str,
+    story: &Story,
+    dom_version: &str,
+    anchors: &[(String, Option<String>)],
+    host_width: Option<f32>,
+) -> Result<Vec<u8>, quick_xml::Error> {
+    let mut writer = new_part_writer()?;
+    open_pkg_root(&mut writer, "idPkg:Story", dom_version)?;
+    let mut s = BytesStart::new("Story");
+    s.push_attribute(("Self", self_id));
+    if let Some(toc) = story.applied_toc_style.as_deref() {
+        s.push_attribute(("AppliedTOCStyle", toc));
+    }
+    // The story InDesign collects the document's endnotes in (core ADRs
+    // 170, 174).
+    if story.is_endnote_story {
+        s.push_attribute(("IsEndnoteStory", "true"));
+    }
+    writer.write_event(Event::Start(s))?;
+    if story.paragraphs.is_empty() && !anchors.is_empty() {
+        // An anchor still needs a paragraph to sit in.
+        rewrite::emit_start_with_attrs(&mut writer, "ParagraphStyleRange", &[])?;
+        write_anchor_markers(&mut writer, anchors)?;
+        writer.write_event(Event::End(BytesEnd::new("ParagraphStyleRange")))?;
+    }
+    write_paragraphs(&mut writer, &story.paragraphs, anchors, host_width)?;
+    writer.write_event(Event::End(BytesEnd::new("Story")))?;
+    writer.write_event(Event::End(BytesEnd::new("idPkg:Story")))?;
+    Ok(assign_instance_ids(
+        writer.into_inner().into_inner(),
+        self_id,
+    ))
+}
+
+pub(crate) const NO_CHARACTER_STYLE: &str = "CharacterStyle/$ID/[No character style]";
+
+/// The inline text-destination markers, each in a range of its own.
+fn write_anchor_markers(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    anchors: &[(String, Option<String>)],
+) -> Result<(), quick_xml::Error> {
+    for (id, name) in anchors {
+        rewrite::emit_start_with_attrs(
+            writer,
+            "CharacterStyleRange",
+            &[("AppliedCharacterStyle", NO_CHARACTER_STYLE.to_string())],
+        )?;
+        rewrite::emit_empty_with_attrs(
+            writer,
+            "HyperlinkTextDestination",
+            &[
+                ("Self", id.clone()),
+                (
+                    "Name",
+                    name.clone()
+                        .unwrap_or_else(|| id.rsplit('/').next().unwrap_or(id).to_string()),
+                ),
+                ("Hidden", "false".to_string()),
+            ],
+        )?;
+        writer.write_event(Event::End(BytesEnd::new("CharacterStyleRange")))?;
+    }
+    Ok(())
+}
+
+/// One `<ParagraphStyleRange>` per paragraph — the story body and,
+/// recursively, every table cell's body. `anchors` go at the head of the
+/// FIRST paragraph only.
+pub(crate) fn write_paragraphs(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    paragraphs: &[idml_import::Paragraph],
+    anchors: &[(String, Option<String>)],
+    host_width: Option<f32>,
+) -> Result<(), quick_xml::Error> {
+    write_paragraphs_ending(writer, paragraphs, anchors, host_width, false)
+}
+
+/// [`write_paragraphs`] for paragraphs that more of the story follows:
+/// the last one ends with its mark too.
+pub(crate) fn write_paragraphs_before_more(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    paragraphs: &[idml_import::Paragraph],
+    host_width: Option<f32>,
+) -> Result<(), quick_xml::Error> {
+    write_paragraphs_ending(writer, paragraphs, &[], host_width, true)
+}
+
+fn write_paragraphs_ending(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    paragraphs: &[idml_import::Paragraph],
+    anchors: &[(String, Option<String>)],
+    host_width: Option<f32>,
+    last_marked: bool,
+) -> Result<(), quick_xml::Error> {
+    let last_para = if last_marked {
+        paragraphs.len()
+    } else {
+        paragraphs.len().saturating_sub(1)
+    };
+    for (pi, p) in paragraphs.iter().enumerate() {
+        rewrite::emit_start_with_attrs(writer, "ParagraphStyleRange", &paragraph_attrs(p))?;
+        // `<Properties>` is the range's first child in InDesign's own
+        // files; the anchor markers follow it.
+        emit_paragraph_properties(writer, p)?;
+        if pi == 0 {
+            write_anchor_markers(writer, anchors)?;
+        }
+        // The paragraph MARK. In IDML a `<ParagraphStyleRange>` is a
+        // style run over one or more paragraphs, and what separates
+        // paragraphs is the `<Br/>` character — an InDesign-authored
+        // file ends every paragraph's content with one and omits it only
+        // on the story's last. We wrote none, because in our model the
+        // break is structural rather than a character in any run, and
+        // our own reader rebuilds paragraphs from the range boundaries.
+        // That private convention agreed with itself and with nobody
+        // else: opened in InDesign, an eleven-entry table of contents
+        // came back as ONE paragraph with its style dropped.
+        let mark = pi < last_para;
+        if crate::inline_objects::needs(p) {
+            crate::inline_objects::write_body(writer, p, mark, host_width)?;
+            writer.write_event(Event::End(BytesEnd::new("ParagraphStyleRange")))?;
+            continue;
+        }
+        // A table takes the mark (it is the paragraph's last child);
+        // otherwise the last run does.
+        let mark_on_runs = mark && p.table.is_none();
+        let last_run = p.runs.len().saturating_sub(1);
+        for (ri, r) in p.runs.iter().enumerate() {
+            write_run_ranges(writer, r, Some(p), true, mark_on_runs && ri == last_run)?;
+        }
+        if let Some(table) = &p.table {
+            rewrite::emit_start_with_attrs(
+                writer,
+                "CharacterStyleRange",
+                &[("AppliedCharacterStyle", NO_CHARACTER_STYLE.to_string())],
+            )?;
+            write_table(writer, table, host_width)?;
+            if mark {
+                writer.write_event(Event::Empty(BytesStart::new("Br")))?;
+            }
+            writer.write_event(Event::End(BytesEnd::new("CharacterStyleRange")))?;
+        } else if mark && p.runs.is_empty() {
+            // An empty paragraph still ends somewhere: give the mark a
+            // character run to live in, or the break disappears and the
+            // paragraph with it.
+            rewrite::emit_start_with_attrs(writer, "CharacterStyleRange", &[])?;
+            writer.write_event(Event::Empty(BytesStart::new("Br")))?;
+            writer.write_event(Event::End(BytesEnd::new("CharacterStyleRange")))?;
+        } else if p.runs.is_empty() {
+            // The last paragraph, empty: InDesign needs a range to see
+            // a paragraph at all (the spelling its own empty cells use).
+            writer.write_event(Event::Empty(BytesStart::new("CharacterStyleRange")))?;
+        }
+        writer.write_event(Event::End(BytesEnd::new("ParagraphStyleRange")))?;
+    }
+    Ok(())
+}
+
+fn push_opt_f32(out: &mut Vec<(&'static str, String)>, k: &'static str, v: Option<f32>) {
+    if let Some(v) = v {
+        out.push((k, rewrite::format_f32(v)));
+    }
+}
+
+fn push_opt_str(out: &mut Vec<(&'static str, String)>, k: &'static str, v: &Option<String>) {
+    if let Some(v) = v {
+        out.push((k, v.clone()));
+    }
+}
+
+fn push_opt_u32(out: &mut Vec<(&'static str, String)>, k: &'static str, v: Option<u32>) {
+    if let Some(v) = v {
+        out.push((k, v.to_string()));
+    }
+}
+
+/// The table-level stroke bags (`TableBorder`, the row / column
+/// `TableLineStrokes`) as attributes, only what is set.
+fn table_stroke_attrs(t: &idml_import::Table) -> Vec<(&'static str, String)> {
+    let mut a: Vec<(&'static str, String)> = Vec::new();
+    let b = &t.border;
+    push_opt_str(&mut a, "TopBorderStrokeColor", &b.top_color);
+    push_opt_str(&mut a, "TopBorderStrokeType", &b.top_type);
+    push_opt_f32(&mut a, "TopBorderStrokeWeight", b.top_weight);
+    push_opt_f32(&mut a, "TopBorderStrokeTint", b.top_tint);
+    push_opt_str(&mut a, "BottomBorderStrokeColor", &b.bottom_color);
+    push_opt_str(&mut a, "BottomBorderStrokeType", &b.bottom_type);
+    push_opt_f32(&mut a, "BottomBorderStrokeWeight", b.bottom_weight);
+    push_opt_f32(&mut a, "BottomBorderStrokeTint", b.bottom_tint);
+    push_opt_str(&mut a, "LeftBorderStrokeColor", &b.left_color);
+    push_opt_str(&mut a, "LeftBorderStrokeType", &b.left_type);
+    push_opt_f32(&mut a, "LeftBorderStrokeWeight", b.left_weight);
+    push_opt_f32(&mut a, "LeftBorderStrokeTint", b.left_tint);
+    push_opt_str(&mut a, "RightBorderStrokeColor", &b.right_color);
+    push_opt_str(&mut a, "RightBorderStrokeType", &b.right_type);
+    push_opt_f32(&mut a, "RightBorderStrokeWeight", b.right_weight);
+    push_opt_f32(&mut a, "RightBorderStrokeTint", b.right_tint);
+    let r = &t.row_strokes;
+    push_opt_u32(&mut a, "StartRowStrokeCount", r.start_count);
+    push_opt_str(&mut a, "StartRowStrokeColor", &r.start_color);
+    push_opt_str(&mut a, "StartRowStrokeType", &r.start_type);
+    push_opt_f32(&mut a, "StartRowStrokeWeight", r.start_weight);
+    push_opt_f32(&mut a, "StartRowStrokeTint", r.start_tint);
+    push_opt_u32(&mut a, "EndRowStrokeCount", r.end_count);
+    push_opt_str(&mut a, "EndRowStrokeColor", &r.end_color);
+    push_opt_str(&mut a, "EndRowStrokeType", &r.end_type);
+    push_opt_f32(&mut a, "EndRowStrokeWeight", r.end_weight);
+    push_opt_f32(&mut a, "EndRowStrokeTint", r.end_tint);
+    let c = &t.column_strokes;
+    push_opt_u32(&mut a, "StartColumnStrokeCount", c.start_count);
+    push_opt_str(&mut a, "StartColumnStrokeColor", &c.start_color);
+    push_opt_str(&mut a, "StartColumnStrokeType", &c.start_type);
+    push_opt_f32(&mut a, "StartColumnStrokeWeight", c.start_weight);
+    push_opt_f32(&mut a, "StartColumnStrokeTint", c.start_tint);
+    push_opt_u32(&mut a, "EndColumnStrokeCount", c.end_count);
+    push_opt_str(&mut a, "EndColumnStrokeColor", &c.end_color);
+    push_opt_str(&mut a, "EndColumnStrokeType", &c.end_type);
+    push_opt_f32(&mut a, "EndColumnStrokeWeight", c.end_weight);
+    push_opt_f32(&mut a, "EndColumnStrokeTint", c.end_tint);
+    a
+}
+
+/// The row height / column width written when the model has none
+/// (a bare `insertTable` with no sizing op): InDesign 20.0.1 was
+/// measured to DROP a table whose `<Row>`s carry no `SingleRowHeight`
+/// or whose `<Column>`s no `SingleColumnWidth` — Adobe's own files
+/// always spell both. Rows fall back to 24 pt; columns share the host
+/// frame's inner (text-column) width when the caller knows it, else
+/// 72 pt each. Not a loss: the model had no size, this is a size.
+const FALLBACK_ROW_HEIGHT: f32 = 24.0;
+const FALLBACK_COLUMN_WIDTH: f32 = 72.0;
+
+/// Serialise one `<Table>` in InDesign's spelling (measured on a 2025
+/// export: `Table` > `Row`* > `Column`* > `Cell`*, cells column-major,
+/// `Self` ids derived from the table's — `<t>Row<r>`, `<t>Column<c>`,
+/// `<t>i<n>` — when the model minted none). `host_width` is the inner
+/// width of the text column the table sits in, when known (see
+/// [`FALLBACK_COLUMN_WIDTH`]).
+pub(crate) fn write_table(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    t: &idml_import::Table,
+    host_width: Option<f32>,
+) -> Result<(), quick_xml::Error> {
+    let table_id = t
+        .self_id
+        .clone()
+        .unwrap_or_else(|| "paged-table".to_string());
+    let rows = if t.rows.is_empty() {
+        (t.header_row_count + t.body_row_count + t.footer_row_count) as usize
+    } else {
+        t.rows.len()
+    };
+    let cols = if t.columns.is_empty() {
+        t.column_count as usize
+    } else {
+        t.columns.len()
+    };
+    let header = (t.header_row_count as usize).min(rows);
+    let footer = (t.footer_row_count as usize).min(rows - header);
+    let body = rows - header - footer;
+    let mut attrs: Vec<(&str, String)> = vec![
+        ("Self", table_id.clone()),
+        ("HeaderRowCount", header.to_string()),
+        ("FooterRowCount", footer.to_string()),
+        ("BodyRowCount", body.to_string()),
+        ("ColumnCount", cols.to_string()),
+    ];
+    attrs.push((
+        "AppliedTableStyle",
+        t.applied_table_style
+            .clone()
+            .unwrap_or_else(|| "TableStyle/$ID/[No table style]".to_string()),
+    ));
+    if let Some(v) = t.repeating_header {
+        attrs.push(("RepeatingHeader", v.to_string()));
+    }
+    if let Some(v) = t.repeating_footer {
+        attrs.push(("RepeatingFooter", v.to_string()));
+    }
+    attrs.extend(table_stroke_attrs(t));
+    attrs.push(("TableDirection", "LeftToRightDirection".to_string()));
+    rewrite::emit_start_with_attrs(writer, "Table", &attrs)?;
+    for r in 0..rows {
+        let row = t.rows.get(r);
+        let mut a: Vec<(&str, String)> = vec![
+            (
+                "Self",
+                row.and_then(|r| r.self_id.clone())
+                    .unwrap_or_else(|| format!("{table_id}Row{r}")),
+            ),
+            (
+                "Name",
+                row.and_then(|r| r.name.clone())
+                    .unwrap_or_else(|| r.to_string()),
+            ),
+        ];
+        let single = row.and_then(|r| r.single_row_height);
+        a.push((
+            "SingleRowHeight",
+            rewrite::format_f32(single.unwrap_or(FALLBACK_ROW_HEIGHT)),
+        ));
+        // To InDesign `SingleRowHeight` is only the row's CURRENT height;
+        // the floor a row keeps is `MinimumHeight`, and `AutoGrow` lets
+        // content raise it (its own export of an "at least 15 pt" row:
+        // `SingleRowHeight="16.72" MinimumHeight="15" AutoGrow="true"`).
+        // Without the floor a 15 pt chart row came back at 12.6 pt
+        // (measured 2026-09-06). The engine sizes a row at
+        // max(SingleRowHeight, MinimumHeight, content), so the floor is
+        // the larger of the two — and a row the model never sized keeps
+        // a zero floor, so InDesign sizes it to content as the engine
+        // does rather than to the stand-in height.
+        let floor = match (single, row.and_then(|r| r.minimum_height)) {
+            (Some(h), Some(m)) => h.max(m),
+            (Some(h), None) => h,
+            (None, m) => m.unwrap_or(0.0),
+        };
+        a.push(("MinimumHeight", rewrite::format_f32(floor)));
+        if let Some(row) = row {
+            push_opt_f32(&mut a, "MaximumHeight", row.maximum_height);
+        }
+        // A fixed row (`AutoGrow="false"`) keeps its `SingleRowHeight`
+        // and oversets what does not fit; absent in the model is
+        // InDesign's default, a row that grows.
+        let auto_grow = row.and_then(|r| r.auto_grow).unwrap_or(true);
+        a.push(("AutoGrow", auto_grow.to_string()));
+        if let Some(keep) = row.and_then(|r| r.keep_with_next_row) {
+            a.push(("KeepWithNextRow", keep.to_string()));
+        }
+        if let Some(start) = row.and_then(|r| r.start_row) {
+            a.push(("StartRow", start.as_idml().to_string()));
+        }
+        rewrite::emit_empty_with_attrs(writer, "Row", &a)?;
+    }
+    for c in 0..cols {
+        let col = t.columns.get(c);
+        let mut a: Vec<(&str, String)> = vec![
+            (
+                "Self",
+                col.and_then(|c| c.self_id.clone())
+                    .unwrap_or_else(|| format!("{table_id}Column{c}")),
+            ),
+            (
+                "Name",
+                col.and_then(|c| c.name.clone())
+                    .unwrap_or_else(|| c.to_string()),
+            ),
+        ];
+        let fallback_width = host_width
+            .filter(|w| *w > 0.0 && cols > 0)
+            .map(|w| w / cols as f32)
+            .unwrap_or(FALLBACK_COLUMN_WIDTH);
+        a.push((
+            "SingleColumnWidth",
+            rewrite::format_f32(
+                col.and_then(|c| c.single_column_width)
+                    .unwrap_or(fallback_width),
+            ),
+        ));
+        rewrite::emit_empty_with_attrs(writer, "Column", &a)?;
+    }
+    for (i, cell) in t.cells.iter().enumerate() {
+        let name = cell.name.clone().unwrap_or_else(|| {
+            // Column-major document order.
+            let (c, r) = if rows > 0 {
+                (i / rows, i % rows)
+            } else {
+                (0, i)
+            };
+            format!("{c}:{r}")
+        });
+        let mut a: Vec<(&str, String)> = vec![
+            (
+                "Self",
+                cell.self_id
+                    .clone()
+                    .unwrap_or_else(|| format!("{table_id}i{i}")),
+            ),
+            ("Name", name),
+            ("RowSpan", cell.row_span.max(1).to_string()),
+            ("ColumnSpan", cell.column_span.max(1).to_string()),
+            ("CellType", "TextTypeCell".to_string()),
+        ];
+        // Every inset is spelled, zero included: an absent inset is 4 pt
+        // to InDesign (its cell default) and the engine's 0 pt otherwise,
+        // and a row 8 pt taller in InDesign overflowed six of the
+        // annual's table frames (measured 2026-09-06).
+        a.push(("TextTopInset", rewrite::format_f32(cell.text_top_inset)));
+        a.push(("TextLeftInset", rewrite::format_f32(cell.text_left_inset)));
+        a.push((
+            "TextBottomInset",
+            rewrite::format_f32(cell.text_bottom_inset),
+        ));
+        a.push(("TextRightInset", rewrite::format_f32(cell.text_right_inset)));
+        push_opt_str(&mut a, "AppliedCellStyle", &cell.applied_cell_style);
+        push_opt_str(&mut a, "FillColor", &cell.fill_color);
+        push_opt_f32(&mut a, "FillTint", cell.fill_tint);
+        push_opt_str(&mut a, "TopEdgeStrokeType", &cell.top_edge_stroke_type);
+        push_opt_str(
+            &mut a,
+            "BottomEdgeStrokeType",
+            &cell.bottom_edge_stroke_type,
+        );
+        push_opt_str(&mut a, "LeftEdgeStrokeType", &cell.left_edge_stroke_type);
+        push_opt_str(&mut a, "RightEdgeStrokeType", &cell.right_edge_stroke_type);
+        push_opt_str(&mut a, "TopEdgeStrokeColor", &cell.top_edge_stroke_color);
+        push_opt_f32(&mut a, "TopEdgeStrokeWeight", cell.top_edge_stroke_weight);
+        push_opt_f32(&mut a, "TopEdgeStrokeTint", cell.top_edge_stroke_tint);
+        push_opt_str(
+            &mut a,
+            "BottomEdgeStrokeColor",
+            &cell.bottom_edge_stroke_color,
+        );
+        push_opt_f32(
+            &mut a,
+            "BottomEdgeStrokeWeight",
+            cell.bottom_edge_stroke_weight,
+        );
+        push_opt_f32(&mut a, "BottomEdgeStrokeTint", cell.bottom_edge_stroke_tint);
+        push_opt_str(&mut a, "LeftEdgeStrokeColor", &cell.left_edge_stroke_color);
+        push_opt_f32(&mut a, "LeftEdgeStrokeWeight", cell.left_edge_stroke_weight);
+        push_opt_f32(&mut a, "LeftEdgeStrokeTint", cell.left_edge_stroke_tint);
+        push_opt_str(
+            &mut a,
+            "RightEdgeStrokeColor",
+            &cell.right_edge_stroke_color,
+        );
+        push_opt_f32(
+            &mut a,
+            "RightEdgeStrokeWeight",
+            cell.right_edge_stroke_weight,
+        );
+        push_opt_f32(&mut a, "RightEdgeStrokeTint", cell.right_edge_stroke_tint);
+        push_opt_str(
+            &mut a,
+            "VerticalJustification",
+            &cell.vertical_justification,
+        );
+        push_opt_str(&mut a, "FirstBaselineOffset", &cell.first_baseline_offset);
+        push_opt_f32(&mut a, "RotationAngle", cell.rotation_angle);
+        rewrite::emit_start_with_attrs(writer, "Cell", &a)?;
+        if cell
+            .paragraphs
+            .iter()
+            .all(|p| p.runs.is_empty() && p.table.is_none())
+        {
+            // An empty cell still holds one (empty) paragraph — InDesign's
+            // own spelling (`<ParagraphStyleRange><CharacterStyleRange/>
+            // </ParagraphStyleRange>`), and the one InDesign 20.0.1 was
+            // measured to REQUIRE: a 2×2 whose four cells were bare
+            // `<Cell></Cell>` was the one table of sixteen it dropped.
+            rewrite::emit_start_with_attrs(writer, "ParagraphStyleRange", &[])?;
+            writer.write_event(Event::Empty(BytesStart::new("CharacterStyleRange")))?;
+            writer.write_event(Event::End(BytesEnd::new("ParagraphStyleRange")))?;
+        } else {
+            write_paragraphs(writer, &cell.paragraphs, &[], host_width)?;
+        }
+        writer.write_event(Event::End(BytesEnd::new("Cell")))?;
+    }
+    writer.write_event(Event::End(BytesEnd::new("Table")))?;
+    Ok(())
+}
+
+/// `<Properties><AppliedFont type="string">NAME</AppliedFont></Properties>`
+/// — the ONLY spelling InDesign reads for an applied font. Emitted
+/// straight after the range's start tag, where a `<Properties>` block
+/// belongs; nothing is written when the run pins no font.
+pub(crate) fn emit_applied_font(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    font: &Option<String>,
+) -> Result<(), quick_xml::Error> {
+    let Some(name) = font else { return Ok(()) };
+    writer.write_event(Event::Start(BytesStart::new("Properties")))?;
+    let mut e = BytesStart::new("AppliedFont");
+    e.push_attribute(("type", "string"));
+    writer.write_event(Event::Start(e))?;
+    writer.write_event(Event::Text(quick_xml::events::BytesText::new(name)))?;
+    writer.write_event(Event::End(BytesEnd::new("AppliedFont")))?;
+    writer.write_event(Event::End(BytesEnd::new("Properties")))?;
+    Ok(())
+}
+
+/// The `<CharacterStyleRange>` attributes for one run — the same key
+/// set `rewrite::character_attr_patch` owns, emitted only when set.
+/// The `RuleAbove*` / `RuleBelow*` attribute names, InDesign's
+/// spelling (`…LineWeight`, not `…Weight`; the importer reads both).
+pub(crate) struct RuleKeys {
+    pub on: &'static str,
+    pub color: &'static str,
+    pub tint: &'static str,
+    pub weight: &'static str,
+    pub offset: &'static str,
+    pub left_indent: &'static str,
+    pub right_indent: &'static str,
+    pub width: &'static str,
+}
+
+pub(crate) const RULE_ABOVE: RuleKeys = RuleKeys {
+    on: "RuleAbove",
+    color: "RuleAboveColor",
+    tint: "RuleAboveTint",
+    weight: "RuleAboveLineWeight",
+    offset: "RuleAboveOffset",
+    left_indent: "RuleAboveLeftIndent",
+    right_indent: "RuleAboveRightIndent",
+    width: "RuleAboveWidth",
+};
+
+pub(crate) const RULE_BELOW: RuleKeys = RuleKeys {
+    on: "RuleBelow",
+    color: "RuleBelowColor",
+    tint: "RuleBelowTint",
+    weight: "RuleBelowLineWeight",
+    offset: "RuleBelowOffset",
+    left_indent: "RuleBelowLeftIndent",
+    right_indent: "RuleBelowRightIndent",
+    width: "RuleBelowWidth",
+};
+
+pub(crate) fn paragraph_rule_attrs(
+    out: &mut Vec<(&'static str, String)>,
+    keys: &RuleKeys,
+    rule: &idml_import::ParagraphRule,
+) {
+    if let Some(on) = rule.on {
+        out.push((keys.on, on.to_string()));
+    }
+    if let Some(c) = &rule.color {
+        out.push((keys.color, c.clone()));
+    }
+    let f32_attrs: [(&'static str, Option<f32>); 5] = [
+        (keys.tint, rule.tint),
+        (keys.weight, rule.weight),
+        (keys.offset, rule.offset),
+        (keys.left_indent, rule.left_indent),
+        (keys.right_indent, rule.right_indent),
+    ];
+    for (k, v) in f32_attrs {
+        if let Some(v) = v {
+            out.push((k, rewrite::format_f32(v)));
+        }
+    }
+    if let Some(w) = &rule.width {
+        out.push((keys.width, w.clone()));
+    }
+}
+
+/// The `<ParagraphStyleRange>` attributes for one paragraph — the same
+/// key set `rewrite::paragraph_attr_patch` owns, emitted only when set.
+/// These ARE a paragraph's local overrides as far as InDesign is
+/// concerned: the annual's spacing battery (space before/after, indents,
+/// keeps, drop caps, rules, all authored by mutation) used to be saved
+/// with only its style reference, and InDesign 20.0.1 opened it with
+/// none of them (measured 2026-09-06). Tab stops and the bullet
+/// character are `<Properties>` children — [`emit_paragraph_properties`].
+pub(crate) fn paragraph_attrs(p: &idml_import::Paragraph) -> Vec<(&'static str, String)> {
+    let mut out: Vec<(&'static str, String)> = Vec::new();
+    if let Some(s) = &p.paragraph_style {
+        out.push(("AppliedParagraphStyle", s.clone()));
+    }
+    if let Some(j) = p.justification {
+        out.push(("Justification", j.as_idml().to_string()));
+    }
+    let f32_attrs: [(&'static str, Option<f32>); 14] = [
+        ("FirstLineIndent", p.first_line_indent),
+        ("LeftIndent", p.left_indent),
+        ("RightIndent", p.right_indent),
+        ("SpaceBefore", p.space_before),
+        ("SpaceAfter", p.space_after),
+        ("MinimumWordSpacing", p.minimum_word_spacing),
+        ("DesiredWordSpacing", p.desired_word_spacing),
+        ("MaximumWordSpacing", p.maximum_word_spacing),
+        ("MinimumLetterSpacing", p.minimum_letter_spacing),
+        ("DesiredLetterSpacing", p.desired_letter_spacing),
+        ("MaximumLetterSpacing", p.maximum_letter_spacing),
+        ("MinimumGlyphScaling", p.minimum_glyph_scaling),
+        ("DesiredGlyphScaling", p.desired_glyph_scaling),
+        ("MaximumGlyphScaling", p.maximum_glyph_scaling),
+    ];
+    for (k, v) in f32_attrs {
+        if let Some(v) = v {
+            out.push((k, rewrite::format_f32(v)));
+        }
+    }
+    if p.drop_cap_characters > 0 {
+        out.push(("DropCapCharacters", p.drop_cap_characters.to_string()));
+    }
+    if p.drop_cap_lines > 0 {
+        out.push(("DropCapLines", p.drop_cap_lines.to_string()));
+    }
+    if p.drop_cap_detail != 0 {
+        // InDesign's spelling, lowercase c.
+        out.push(("DropcapDetail", p.drop_cap_detail.to_string()));
+    }
+    let bool_attrs: [(&'static str, Option<bool>); 6] = [
+        ("Hyphenation", p.hyphenation),
+        ("KeepLinesTogether", p.keep_lines_together),
+        ("KeepAllLinesTogether", p.keep_all_lines_together),
+        // The paragraph-level half of InDesign's hyphenation panel.
+        ("HyphenateCapitalizedWords", p.hyphenate_capitalized_words),
+        ("HyphenateLastWord", p.hyphenate_last_word),
+        ("HyphenateAcrossColumns", p.hyphenate_across_columns),
+    ];
+    for (k, v) in bool_attrs {
+        if let Some(b) = v {
+            out.push((k, b.to_string()));
+        }
+    }
+    if let Some(z) = p.hyphenation_zone {
+        out.push(("HyphenationZone", rewrite::format_f32(z)));
+    }
+    let u32_attrs: [(&'static str, Option<u32>); 5] = [
+        ("HyphenateAfterFirst", p.hyphenate_after_first),
+        ("HyphenateBeforeLast", p.hyphenate_before_last),
+        ("HyphenateWordsLongerThan", p.hyphenate_words_longer_than),
+        ("HyphenateLadderLimit", p.hyphenate_ladder_limit),
+        ("HyphenWeight", p.hyphen_weight),
+    ];
+    for (k, v) in u32_attrs {
+        if let Some(n) = v {
+            out.push((k, n.to_string()));
+        }
+    }
+    if let Some(c) = &p.composer {
+        out.push(("Composer", c.as_idml().to_string()));
+    }
+    if let Some(n) = p.keep_with_next {
+        out.push(("KeepWithNext", n.to_string()));
+    }
+    if let Some(s) = p.start_paragraph {
+        out.push(("StartParagraph", s.as_idml().to_string()));
+    }
+    span_column_attrs(&mut out, &p.span_columns);
+    grid_alignment_attrs(&mut out, p.grid_alignment, p.grid_align_first_line_only);
+    if let Some(n) = p.keep_first_lines {
+        out.push(("KeepFirstLines", n.to_string()));
+    }
+    if let Some(n) = p.keep_last_lines {
+        out.push(("KeepLastLines", n.to_string()));
+    }
+    line_setting_attrs(&mut out, &p.line_setting);
+    list_level_attrs(&mut out, &p.list_level);
+    // NOT here: `NumberingFormat` and `AppliedNumberingList`. InDesign
+    // ignores both as attributes and reads them only as typed
+    // `<Properties>` children (measured 2026-09-06) —
+    // [`emit_paragraph_properties`].
+    // Nor the marker character styles, which InDesign reads only as
+    // children too (`list-overrides`, 2026-10-01). The four list
+    // attributes below it reads off the range exactly as off a style,
+    // and writes them this way in its own files.
+    // Nor `KinsokuSet`, a typed child in InDesign's files (kept as it
+    // stands by the story patch).
+    let string_attrs: [(&'static str, &Option<String>); 3] = [
+        ("BulletsAndNumberingListType", &p.bullets_list_type),
+        ("BulletsTextAfter", &p.bullets_text_after),
+        ("NumberingExpression", &p.numbering_expression),
+    ];
+    for (k, v) in string_attrs {
+        if let Some(s) = v {
+            out.push((k, s.clone()));
+        }
+    }
+    if let Some(n) = p.numbering_start_at {
+        out.push(("NumberingStartAt", n.to_string()));
+    }
+    if let Some(b) = p.numbering_continue {
+        out.push(("NumberingContinue", b.to_string()));
+    }
+    paragraph_rule_attrs(&mut out, &RULE_ABOVE, &p.rule_above);
+    paragraph_rule_attrs(&mut out, &RULE_BELOW, &p.rule_below);
+    out
+}
+
+/// Align to baseline grid, on a range or a paragraph style: InDesign
+/// writes both as attributes (`GridAlignment="AlignBaseline"`,
+/// `GridAlignFirstLineOnly="true"`).
+pub(crate) fn grid_alignment_attrs(
+    out: &mut Vec<(&'static str, String)>,
+    alignment: Option<paged_model::GridAlignment>,
+    first_line_only: Option<bool>,
+) {
+    if let Some(g) = alignment {
+        out.push(("GridAlignment", g.as_idml().to_string()));
+    }
+    if let Some(b) = first_line_only {
+        out.push(("GridAlignFirstLineOnly", b.to_string()));
+    }
+}
+
+/// A range's or a paragraph style's line setting, as attributes:
+/// `AutoLeading`, `SingleWordJustification`, `LastLineIndent` (core ADR
+/// 153). `<BalanceRaggedLines>` is a typed `<Properties>` child
+/// ([`write_balance_ragged_lines`]); InDesign ignores the attribute.
+pub(crate) fn line_setting_attrs(
+    out: &mut Vec<(&'static str, String)>,
+    ls: &idml_import::LineSetting,
+) {
+    if let Some(v) = ls.auto_leading {
+        out.push(("AutoLeading", rewrite::format_f32(v)));
+    }
+    if let Some(w) = ls.single_word {
+        out.push(("SingleWordJustification", w.as_idml().to_string()));
+    }
+    if let Some(v) = ls.last_line_indent {
+        out.push(("LastLineIndent", rewrite::format_f32(v)));
+    }
+}
+
+/// A range's or a paragraph style's place in a multi-level list, as
+/// attributes: `NumberingLevel`, `NumberingApplyRestartPolicy` (core ADR
+/// 158). `<NumberingRestartPolicies>` is a `<Properties>` child
+/// ([`write_restart_policy`]).
+pub(crate) fn list_level_attrs(out: &mut Vec<(&'static str, String)>, ll: &idml_import::ListLevel) {
+    if let Some(n) = ll.level {
+        out.push(("NumberingLevel", n.to_string()));
+    }
+    if let Some(b) = ll.apply_restart {
+        out.push(("NumberingApplyRestartPolicy", b.to_string()));
+    }
+}
+
+/// The span / split columns attributes of a range or a paragraph style.
+/// `SpanSplitColumnCount` is not among them: InDesign reads it only as a
+/// typed `<Properties>` child ([`write_span_split_column_count`]).
+pub(crate) fn span_column_attrs(
+    out: &mut Vec<(&'static str, String)>,
+    sc: &idml_import::SpanColumns,
+) {
+    if let Some(t) = sc.column_type {
+        out.push(("SpanColumnType", t.as_idml().to_string()));
+    }
+    let f32_attrs: [(&'static str, Option<f32>); 4] = [
+        ("SpanColumnMinSpaceBefore", sc.min_space_before),
+        ("SpanColumnMinSpaceAfter", sc.min_space_after),
+        ("SplitColumnInsideGutter", sc.inside_gutter),
+        ("SplitColumnOutsideGutter", sc.outside_gutter),
+    ];
+    for (k, v) in f32_attrs {
+        if let Some(v) = v {
+            out.push((k, rewrite::format_f32(v)));
+        }
+    }
+}
+
+/// Whether a paragraph carries any `<Properties>` child: tab stops, a
+/// bullet character, a numbering format, a numbering list, a marker
+/// character style, a span / split column count or balanced ragged lines.
+pub(crate) fn paragraph_has_properties(p: &idml_import::Paragraph) -> bool {
+    !p.tab_list.is_empty()
+        || p.bullet_character.is_some()
+        || p.numbering_format.is_some()
+        || p.applied_numbering_list.is_some()
+        || p.bullets_character_style.is_some()
+        || p.bullets_and_numbering_digits_character_style.is_some()
+        || p.span_columns.count.is_some()
+        || p.line_setting.balance.is_some()
+        || p.list_level.restart_policy.is_some()
+}
+
+/// The paragraph's `<Properties>` block — its tab stops, bullet
+/// character, numbering format and numbering list in InDesign's own
+/// spelling (see `paragraph_props`). Nothing is written when the
+/// paragraph carries none.
+pub(crate) fn emit_paragraph_properties(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    p: &idml_import::Paragraph,
+) -> Result<(), quick_xml::Error> {
+    let has_lists =
+        !p.nested_styles.is_empty() || !p.line_styles.is_empty() || !p.grep_styles.is_empty();
+    if !paragraph_has_properties(p) && !has_lists {
+        return Ok(());
+    }
+    writer.write_event(Event::Start(BytesStart::new("Properties")))?;
+    // The paragraph's own nested / GREP / line styles (see
+    // `nested_styles`).
+    crate::nested_styles::write_style_lists(
+        writer,
+        &p.nested_styles,
+        &p.line_styles,
+        &p.grep_styles,
+    )?;
+    if !p.tab_list.is_empty() {
+        write_tab_list(writer, &p.tab_list)?;
+    }
+    if let Some(cp) = p.bullet_character {
+        write_bullet_char(writer, cp)?;
+    }
+    if let Some(f) = &p.numbering_format {
+        write_numbering_format(writer, f)?;
+    }
+    if let Some(l) = &p.applied_numbering_list {
+        write_applied_numbering_list(writer, l)?;
+    }
+    if let Some(c) = &p.bullets_character_style {
+        write_bullets_character_style(writer, c)?;
+    }
+    if let Some(c) = &p.bullets_and_numbering_digits_character_style {
+        write_numbering_character_style(writer, c)?;
+    }
+    if let Some(c) = p.span_columns.count {
+        write_span_split_column_count(writer, c)?;
+    }
+    if let Some(b) = p.line_setting.balance {
+        write_balance_ragged_lines(writer, b)?;
+    }
+    if let Some(r) = p.list_level.restart_policy {
+        write_restart_policy(writer, r)?;
+    }
+    writer.write_event(Event::End(BytesEnd::new("Properties")))?;
+    Ok(())
+}
+
+/// `<SpanSplitColumnCount type="short">2</SpanSplitColumnCount>`, or
+/// `type="enumeration"` for `All` — InDesign's own spelling (its export,
+/// 2026-10-01); the attribute is ignored.
+pub(crate) fn write_span_split_column_count(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    count: idml_import::SpanSplitColumnCount,
+) -> Result<(), quick_xml::Error> {
+    let ty = match count {
+        idml_import::SpanSplitColumnCount::All => "enumeration",
+        idml_import::SpanSplitColumnCount::Count(_) => "short",
+    };
+    write_typed_text(writer, "SpanSplitColumnCount", ty, &count.as_idml())
+}
+
+/// `<BalanceRaggedLines type="enumeration">FullyBalanced</…>` —
+/// InDesign's own spelling (core ADR 153); the attribute is ignored.
+pub(crate) fn write_balance_ragged_lines(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    balance: idml_import::BalanceRaggedLines,
+) -> Result<(), quick_xml::Error> {
+    write_typed_text(
+        writer,
+        "BalanceRaggedLines",
+        "enumeration",
+        balance.as_idml(),
+    )
+}
+
+/// `<NumberingRestartPolicies RestartPolicy="AnyPreviousLevel"
+/// LowerLevel="0" UpperLevel="0"/>` — InDesign's own spelling (core ADR
+/// 158): an empty element whose attributes carry the policy.
+pub(crate) fn write_restart_policy(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    policy: idml_import::RestartPolicy,
+) -> Result<(), quick_xml::Error> {
+    let mut e = BytesStart::new("NumberingRestartPolicies");
+    e.push_attribute(("RestartPolicy", policy.kind.as_idml()));
+    e.push_attribute(("LowerLevel", policy.lower.to_string().as_str()));
+    e.push_attribute(("UpperLevel", policy.upper.to_string().as_str()));
+    writer.write_event(Event::Empty(e))?;
+    Ok(())
+}
+
+/// `<NumberingFormat type="string">1, 2, 3, 4...</NumberingFormat>` —
+/// the only spelling InDesign reads (the attribute is ignored; measured
+/// 2026-09-06).
+pub(crate) fn write_numbering_format(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    format: &str,
+) -> Result<(), quick_xml::Error> {
+    write_typed_text(writer, "NumberingFormat", "string", format)
+}
+
+/// `<BulletsCharacterStyle type="object">CharacterStyle/X</…>` — the
+/// only spelling InDesign reads (as an attribute it is ignored;
+/// `list-overrides` o14/o15, InDesign 20.0.1).
+pub(crate) fn write_bullets_character_style(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    style: &str,
+) -> Result<(), quick_xml::Error> {
+    write_typed_text(writer, "BulletsCharacterStyle", "object", style)
+}
+
+/// `<NumberingCharacterStyle type="object">CharacterStyle/X</…>` — the
+/// digits' style, InDesign's only spelling (o16/o17; the model calls it
+/// `bullets_and_numbering_digits_character_style`).
+pub(crate) fn write_numbering_character_style(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    style: &str,
+) -> Result<(), quick_xml::Error> {
+    write_typed_text(writer, "NumberingCharacterStyle", "object", style)
+}
+
+/// `<NumberingExpression type="string">^#.^t</NumberingExpression>` —
+/// a paragraph style's numbering expression, a typed child like the
+/// format.
+pub(crate) fn write_numbering_expression(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    expression: &str,
+) -> Result<(), quick_xml::Error> {
+    write_typed_text(writer, "NumberingExpression", "string", expression)
+}
+
+/// `<AppliedNumberingList type="object">NumberingList/X</AppliedNumberingList>`
+/// — the only spelling InDesign binds (the attribute is ignored;
+/// measured 2026-09-06). The list itself must be defined: see
+/// `resources::patch_styles`.
+pub(crate) fn write_applied_numbering_list(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    list: &str,
+) -> Result<(), quick_xml::Error> {
+    write_typed_text(writer, "AppliedNumberingList", "object", list)
+}
+
+pub(crate) fn write_typed_text(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    name: &str,
+    ty: &str,
+    text: &str,
+) -> Result<(), quick_xml::Error> {
+    let mut e = BytesStart::new(name);
+    e.push_attribute(("type", ty));
+    writer.write_event(Event::Start(e))?;
+    writer.write_event(Event::Text(quick_xml::events::BytesText::new(text)))?;
+    writer.write_event(Event::End(BytesEnd::new(name)))?;
+    Ok(())
+}
+
+/// `<TabList type="list">` of `<ListItem type="record">` records, each
+/// spelling all four fields the way InDesign 20.0.1 does — the
+/// alignment character defaults to `.` and an absent leader is an empty
+/// `<Leader>` (measured on the corpus's InDesign-authored packs,
+/// 2026-09-06).
+pub(crate) fn write_tab_list(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    stops: &[idml_import::TabStop],
+) -> Result<(), quick_xml::Error> {
+    let mut tl = BytesStart::new("TabList");
+    tl.push_attribute(("type", "list"));
+    writer.write_event(Event::Start(tl))?;
+    for s in stops {
+        let mut li = BytesStart::new("ListItem");
+        li.push_attribute(("type", "record"));
+        writer.write_event(Event::Start(li))?;
+        write_typed_text(
+            writer,
+            "Alignment",
+            "enumeration",
+            s.alignment.as_deref().unwrap_or("LeftAlign"),
+        )?;
+        write_typed_text(
+            writer,
+            "AlignmentCharacter",
+            "string",
+            s.alignment_character.as_deref().unwrap_or("."),
+        )?;
+        write_typed_text(
+            writer,
+            "Leader",
+            "string",
+            s.leader.as_deref().unwrap_or(""),
+        )?;
+        write_typed_text(writer, "Position", "unit", &rewrite::format_f32(s.position))?;
+        writer.write_event(Event::End(BytesEnd::new("ListItem")))?;
+    }
+    writer.write_event(Event::End(BytesEnd::new("TabList")))?;
+    Ok(())
+}
+
+/// `<BulletChar BulletCharacterType="UnicodeOnly" BulletCharacterValue="…"/>`.
+pub(crate) fn write_bullet_char(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    code_point: u32,
+) -> Result<(), quick_xml::Error> {
+    let mut e = BytesStart::new("BulletChar");
+    e.push_attribute(("BulletCharacterType", "UnicodeOnly"));
+    e.push_attribute(("BulletCharacterValue", code_point.to_string().as_str()));
+    writer.write_event(Event::Empty(e))?;
+    Ok(())
+}
+
+/// A run's conditions as InDesign spells them on its range: the
+/// `Condition/…` ids, space-separated (`AppliedConditions="Condition/A
+/// Condition/B"`). `None` for a run with none. No writer spelled them, so
+/// every run lost its conditions on export — text a hidden condition
+/// should hide came back showing.
+pub(crate) fn applied_conditions_attr(conditions: &[String]) -> Option<String> {
+    (!conditions.is_empty()).then(|| conditions.join(" "))
+}
+
+pub(crate) fn character_run_attrs(r: &CharacterRun) -> Vec<(&'static str, String)> {
+    let mut out: Vec<(&'static str, String)> = Vec::new();
+    // NOT here: `AppliedFont`. InDesign reads the applied font as a
+    // typed CHILD of `<Properties>`, never as an attribute — a real
+    // InDesign-authored file carries 54 `<AppliedFont type="string">`
+    // elements and not one attribute. We wrote the attribute, Adobe
+    // ignored it, and a 134-page specimen in twenty faces opened
+    // entirely in Minion Pro. `emit_applied_font` writes it now.
+    let string_attrs: [(&'static str, &Option<String>); 8] = [
+        ("AppliedCharacterStyle", &r.character_style),
+        ("FontStyle", &r.font_style),
+        ("FillColor", &r.fill_color),
+        ("StrokeColor", &r.stroke_color),
+        ("Capitalization", &r.capitalization),
+        ("Position", &r.position),
+        ("KerningMethod", &r.kerning_method),
+        ("AppliedLanguage", &r.applied_language),
+    ];
+    for (k, v) in string_attrs {
+        if let Some(v) = v {
+            out.push((k, v.clone()));
+        }
+    }
+    if let Some(v) = applied_conditions_attr(&r.applied_conditions) {
+        out.push(("AppliedConditions", v));
+    }
+    let f32_attrs: [(&'static str, Option<f32>); 9] = [
+        ("PointSize", r.point_size),
+        ("FillTint", r.fill_tint),
+        ("StrokeWeight", r.stroke_weight),
+        ("Leading", r.leading),
+        ("Tracking", r.tracking),
+        ("BaselineShift", r.baseline_shift),
+        ("HorizontalScale", r.horizontal_scale),
+        ("VerticalScale", r.vertical_scale),
+        ("Skew", r.skew),
+    ];
+    for (k, v) in f32_attrs {
+        if let Some(v) = v {
+            out.push((k, rewrite::format_f32(v)));
+        }
+    }
+    let bool_attrs: [(&'static str, Option<bool>); 4] = [
+        ("Underline", r.underline),
+        ("StrikeThru", r.strikethru),
+        ("Ligatures", r.ligatures_on),
+        ("NoBreak", r.no_break),
+    ];
+    for (k, v) in bool_attrs {
+        if let Some(v) = v {
+            out.push((k, v.to_string()));
+        }
+    }
+    // A text variable instance sits in a range of its own marked
+    // `PageNumberType="TextVariable"` — InDesign's own spelling.
+    if r.text_variable.is_some() {
+        out.push(("PageNumberType", "TextVariable".to_string()));
+    }
+    out
+}
+
+/// The `Self` a `<TextVariableInstance>` minted by this writer carries
+/// until [`assign_instance_ids`] gives it a real one (an instance needs
+/// a document-unique id, and the writers that emit one do not know the
+/// story they are writing).
+pub(crate) const NEW_INSTANCE_SELF: &str = "paged-new-text-variable-instance";
+
+/// The `PageNumberType` of the range InDesign keeps `ch` in. All three
+/// page numbers are the same `<?ACE 18?>`; the next and the previous one
+/// each sit in a range of their own that names the flavour (InDesign
+/// 20.0.1, `text_variable_roundtrip.rs`), the current page number and
+/// every other character in a range that names none.
+pub(crate) fn page_number_type(ch: char) -> Option<&'static str> {
+    match ch {
+        paged_model::NEXT_PAGE_NUMBER_MARKER => Some("NextPageNumber"),
+        paged_model::PREVIOUS_PAGE_NUMBER_MARKER => Some("PreviousPageNumber"),
+        _ => None,
+    }
+}
+
+/// `text` cut where InDesign cuts it into ranges: maximal pieces whose
+/// characters share a [`page_number_type`].
+pub(crate) fn page_number_pieces(text: &str) -> Vec<(Option<&'static str>, &str)> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    let mut kind = None;
+    for (i, ch) in text.char_indices() {
+        let k = page_number_type(ch);
+        if i == 0 {
+            kind = k;
+        } else if k != kind {
+            out.push((kind, &text[start..i]));
+            start = i;
+            kind = k;
+        }
+    }
+    if !text.is_empty() {
+        out.push((kind, &text[start..]));
+    }
+    out
+}
+
+/// The pieces a run is CUT into — [`page_number_pieces`] — when it holds
+/// a next or previous page number; `None` for a run written whole (a
+/// text variable instance never holds one).
+fn run_cut(r: &CharacterRun) -> Option<Vec<(Option<&'static str>, &str)>> {
+    if r.text_variable.is_some() {
+        return None;
+    }
+    let pieces = page_number_pieces(&r.text);
+    pieces
+        .iter()
+        .any(|(kind, _)| kind.is_some())
+        .then_some(pieces)
+}
+
+/// Cut every run of `paragraphs` (and of their tables' cells) the way
+/// [`write_run_ranges`] writes it: one run per piece, each with the run's
+/// attributes; the hyperlink source and a placeholder stay on the first.
+/// What a re-parse of the written ranges reads.
+pub(crate) fn cut_page_number_runs(paragraphs: &mut [idml_import::Paragraph]) {
+    for p in paragraphs {
+        if p.runs.iter().any(|r| run_cut(r).is_some()) {
+            let mut runs = Vec::with_capacity(p.runs.len() + 2);
+            for r in std::mem::take(&mut p.runs) {
+                let Some(pieces) = run_cut(&r) else {
+                    runs.push(r);
+                    continue;
+                };
+                for (i, (_, text)) in pieces.into_iter().enumerate() {
+                    let mut piece = r.clone();
+                    piece.text = text.to_string();
+                    if i > 0 {
+                        piece.hyperlink_source = None;
+                        piece.placeholder = None;
+                    }
+                    runs.push(piece);
+                }
+            }
+            p.runs = runs;
+        }
+        if let Some(t) = p.table.as_mut() {
+            for c in &mut t.cells {
+                cut_page_number_runs(&mut c.paragraphs);
+            }
+        }
+    }
+}
+
+/// One model run as `<CharacterStyleRange>`s, the paragraph mark after
+/// its text when `mark`. One range, unless the run holds a next or
+/// previous page number: then each [`page_number_pieces`] piece takes a
+/// range with the run's attributes, the flavour named on the marker's.
+/// A hyperlink source is one stretch of text inside one range in
+/// InDesign's spelling, so a source over a cut run covers its first
+/// piece.
+pub(crate) fn write_run_ranges(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    r: &CharacterRun,
+    para: Option<&Paragraph>,
+    wrap_source: bool,
+    mark: bool,
+) -> Result<(), quick_xml::Error> {
+    let Some(pieces) = run_cut(r) else {
+        rewrite::emit_start_with_attrs(writer, "CharacterStyleRange", &character_run_attrs(r))?;
+        emit_applied_font(writer, &r.font)?;
+        write_run_body(writer, r, para, wrap_source)?;
+        if mark {
+            writer.write_event(Event::Empty(BytesStart::new("Br")))?;
+        }
+        writer.write_event(Event::End(BytesEnd::new("CharacterStyleRange")))?;
+        return Ok(());
+    };
+    let last = pieces.len() - 1;
+    for (i, (kind, text)) in pieces.into_iter().enumerate() {
+        let mut attrs = character_run_attrs(r);
+        if let Some(kind) = kind {
+            attrs.push(("PageNumberType", kind.to_string()));
+        }
+        rewrite::emit_start_with_attrs(writer, "CharacterStyleRange", &attrs)?;
+        emit_applied_font(writer, &r.font)?;
+        let source = r.hyperlink_source.as_deref().filter(|_| i == 0);
+        write_text_body(writer, source, text, wrap_source)?;
+        if mark && i == last {
+            writer.write_event(Event::Empty(BytesStart::new("Br")))?;
+        }
+        writer.write_event(Event::End(BytesEnd::new("CharacterStyleRange")))?;
+    }
+    Ok(())
+}
+
+/// `text` as a range's inline body, inside an inner
+/// `<HyperlinkTextSource>` when `source` names one and `wrap_source`.
+pub(crate) fn write_text_body(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    source: Option<&str>,
+    text: &str,
+    wrap_source: bool,
+) -> Result<(), quick_xml::Error> {
+    match source {
+        Some(source) if wrap_source => {
+            rewrite::emit_start_with_attrs(
+                writer,
+                "HyperlinkTextSource",
+                &[
+                    ("Self", source.to_string()),
+                    (
+                        "Name",
+                        source.rsplit('/').next().unwrap_or(source).to_string(),
+                    ),
+                    ("Hidden", "false".to_string()),
+                ],
+            )?;
+            rewrite::write_run_content(writer, text)?;
+            writer.write_event(Event::End(BytesEnd::new("HyperlinkTextSource")))?;
+        }
+        _ => rewrite::write_run_content(writer, text)?,
+    }
+    Ok(())
+}
+
+/// A run's inline body: a text variable instance (a run tagged
+/// `text_variable`), a hyperlink source around the text (a run tagged
+/// `hyperlink_source`, when `wrap_source`), or the plain text.
+pub(crate) fn write_run_body(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    r: &CharacterRun,
+    para: Option<&Paragraph>,
+    wrap_source: bool,
+) -> Result<(), quick_xml::Error> {
+    if let Some(variable) = &r.text_variable {
+        // InDesign writes `Name` as the variable's name, which its own
+        // ids spell after the `dTextVariablen` prefix.
+        let name = variable
+            .strip_prefix("dTextVariablen")
+            .or_else(|| variable.rsplit('/').next())
+            .unwrap_or(variable);
+        return rewrite::emit_empty_with_attrs(
+            writer,
+            "TextVariableInstance",
+            &[
+                ("Self", NEW_INSTANCE_SELF.to_string()),
+                ("Name", name.to_string()),
+                ("ResultText", r.text.clone()),
+                ("AssociatedTextVariable", variable.clone()),
+            ],
+        );
+    }
+    // An editorial note, an endnote reference or an endnote's range in a
+    // story with no source part is written from the model (core ADRs 170,
+    // 172, 174).
+    if para.is_some()
+        && r.text.chars().any(|c| {
+            c == paged_model::NOTE_MARKER
+                || c == paged_model::ENDNOTE_REFERENCE_MARKER
+                || c == paged_model::ENDNOTE_NUMBER_MARKER
+        })
+    {
+        return rewrite::write_text_with_notes(
+            writer,
+            &r.text,
+            r,
+            para,
+            &rewrite::RunSources::default(),
+            rewrite::Before::default(),
+            wrap_source,
+        );
+    }
+    write_text_body(writer, r.hyperlink_source.as_deref(), &r.text, wrap_source)
+}
+
+/// Give every `<TextVariableInstance>` this writer minted (see
+/// [`NEW_INSTANCE_SELF`]) a `Self` unique in the document: the story's
+/// own id plus `tvi<n>`, skipping any id the part already uses.
+pub(crate) fn assign_instance_ids(part: Vec<u8>, story_id: &str) -> Vec<u8> {
+    let marker = format!("Self=\"{NEW_INSTANCE_SELF}\"");
+    let text = match String::from_utf8(part) {
+        Ok(t) => t,
+        Err(e) => return e.into_bytes(),
+    };
+    if !text.contains(&marker) {
+        return text.into_bytes();
+    }
+    let prefix = sanitize_id(story_id);
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text.as_str();
+    let mut n = 0usize;
+    while let Some(at) = rest.find(&marker) {
+        out.push_str(&rest[..at]);
+        let id = loop {
+            let candidate = format!("{prefix}tvi{n}");
+            n += 1;
+            if !text.contains(&format!("Self=\"{candidate}\"")) {
+                break candidate;
+            }
+        };
+        out.push_str(&format!("Self=\"{id}\""));
+        rest = &rest[at + marker.len()..];
+    }
+    out.push_str(rest);
+    out.into_bytes()
+}
+
+/// Serialise a full `Spreads/Spread_*.xml` part from the in-memory
+/// model: the `<Spread>` start tag, one `<Page>` per model page (with
+/// the page's ruler guides inside it — InDesign's placement, see
+/// `guides`), then every page item via `rewrite::write_inserted_items`
+/// (with an empty seen-set every item is "inserted" — a minted spread's
+/// items all arrived through ops). Groups on a minted spread are not
+/// serialised (the group-insert lane is a separate, documented defer).
+/// `layer` is the `ItemLayer` new guides bind to, when known.
+/// The `ShowMasterItems` a spread carries. InDesign reads it on
+/// `<Spread>` / `<MasterSpread>` only and ignores it on `<Page>` (core
+/// tools/indesign-export/master-items-probe); the model keeps it per page,
+/// so a spread hides its master items when any of its pages does.
+fn spread_show_master_items(spread: &Spread) -> bool {
+    !spread
+        .pages
+        .iter()
+        .any(|p| p.show_master_items == Some(false))
+}
+
+pub(crate) fn spread_part(
+    spread: &Spread,
+    dom_version: &str,
+    layer: Option<&str>,
+) -> Result<Vec<u8>, quick_xml::Error> {
+    let mut attrs: Vec<(&str, String)> = Vec::new();
+    if let Some(id) = &spread.self_id {
+        attrs.push(("Self", id.clone()));
+    }
+    // InDesign's own spreads always carry these. Without them it read a
+    // one-page spread as a facing pair and opened it with an extra EMPTY
+    // page (measured on InDesign 2025, 2026-10-01, opening a page-growth
+    // export: 3 pages written, 4 shown). `BindingLocation` is the spine
+    // index: 0 for a single page, 1 for a facing pair.
+    attrs.push(("PageCount", spread.pages.len().to_string()));
+    attrs.push(("BindingLocation", (spread.pages.len() / 2).to_string()));
+    // Always spelled, identity included: InDesign 20.0.1 does not read
+    // an absent `ItemTransform` as identity (see
+    // `rewrite::TransformPlan::extra`); its own packages carry one on
+    // every `<Spread>`, `<Page>` and page item.
+    attrs.push((
+        "ItemTransform",
+        rewrite::format_matrix(&spread.item_transform.unwrap_or(IDENTITY)),
+    ));
+    attrs.push((
+        "ShowMasterItems",
+        spread_show_master_items(spread).to_string(),
+    ));
+    spread_like_part(spread, dom_version, layer, "Spread", &attrs)
+}
+
+/// Serialise a full `MasterSpreads/MasterSpread_*.xml` part for a master
+/// the source archive never carried (`CreateMaster`). InDesign spells a
+/// master's name three ways — `NamePrefix`, `BaseName` and the `Name`
+/// they compose — and this reader takes `Name`; a minted master's
+/// `Name` is its whole name, with `prefix` as its `NamePrefix`.
+pub(crate) fn master_spread_part(
+    master: &paged_scene::ParsedMasterSpread,
+    prefix: &str,
+    dom_version: &str,
+    layer: Option<&str>,
+) -> Result<Vec<u8>, quick_xml::Error> {
+    let spread = &master.spread;
+    let name = master.name.clone().unwrap_or_else(|| prefix.to_string());
+    let attrs: Vec<(&str, String)> = vec![
+        ("Self", master.self_id.clone()),
+        ("Name", name.clone()),
+        ("NamePrefix", prefix.to_string()),
+        ("BaseName", name),
+        ("PageCount", spread.pages.len().to_string()),
+        (
+            "ShowMasterItems",
+            spread_show_master_items(spread).to_string(),
+        ),
+        (
+            "ItemTransform",
+            rewrite::format_matrix(&spread.item_transform.unwrap_or(IDENTITY)),
+        ),
+    ];
+    spread_like_part(spread, dom_version, layer, "MasterSpread", &attrs)
+}
+
+/// The shared body of [`spread_part`] and [`master_spread_part`]: the
+/// `<{element}>` with `attrs`, its pages (with their labels and guides)
+/// and every item.
+fn spread_like_part(
+    spread: &Spread,
+    dom_version: &str,
+    layer: Option<&str>,
+    element: &str,
+    attrs: &[(&str, String)],
+) -> Result<Vec<u8>, quick_xml::Error> {
+    let mut writer = new_part_writer()?;
+    let pkg = format!("idPkg:{element}");
+    open_pkg_root(&mut writer, &pkg, dom_version)?;
+    rewrite::emit_start_with_attrs(&mut writer, element, attrs)?;
+    let page_count = spread.pages.len();
+    // A guide lands in the page its index names, clamped to the last.
+    let page_of = |g: &idml_import::RulerGuide| -> usize {
+        (g.page_index as usize).min(page_count.saturating_sub(1))
+    };
+    for (pi, p) in spread.pages.iter().enumerate() {
+        let mut pa: Vec<(&str, String)> = Vec::new();
+        if let Some(id) = &p.self_id {
+            pa.push(("Self", id.clone()));
+        }
+        if let Some(n) = &p.name {
+            pa.push(("Name", n.clone()));
+        }
+        if let Some(m) = &p.applied_master {
+            pa.push(("AppliedMaster", m.clone()));
+        }
+        pa.push((
+            "ItemTransform",
+            rewrite::format_matrix(&p.item_transform.unwrap_or(IDENTITY)),
+        ));
+        // GeometricBounds is the one attribute the parser requires to
+        // accept a `<Page>` at all.
+        pa.push((
+            "GeometricBounds",
+            format!(
+                "{} {} {} {}",
+                rewrite::format_f32(p.bounds.top),
+                rewrite::format_f32(p.bounds.left),
+                rewrite::format_f32(p.bounds.bottom),
+                rewrite::format_f32(p.bounds.right),
+            ),
+        ));
+        if let Some(m) = &p.master_page_transform {
+            pa.push(("MasterPageTransform", rewrite::format_matrix(m)));
+        }
+        if !p.override_list.is_empty() {
+            pa.push(("OverrideList", p.override_list.join(" ")));
+        }
+        // No `ShowMasterItems` here: InDesign reads it on the spread only
+        // (`spread_show_master_items`).
+        let guides_here: Vec<(usize, &idml_import::RulerGuide)> = spread
+            .guides
+            .iter()
+            .enumerate()
+            .filter(|(_, g)| page_of(g) == pi)
+            .collect();
+        let labelled = p
+            .self_id
+            .as_deref()
+            .and_then(|id| spread.labels.get(id))
+            .is_some_and(|v| !v.is_empty());
+        if guides_here.is_empty() && !labelled {
+            rewrite::emit_empty_with_attrs(&mut writer, "Page", &pa)?;
+        } else {
+            rewrite::emit_start_with_attrs(&mut writer, "Page", &pa)?;
+            if let (true, Some(id)) = (labelled, p.self_id.as_deref()) {
+                writer.write_event(Event::Start(BytesStart::new("Properties")))?;
+                rewrite::write_item_label(&mut writer, spread, id)?;
+                writer.write_event(Event::End(BytesEnd::new("Properties")))?;
+            }
+            for (gi, g) in guides_here {
+                let mut g = *g;
+                g.page_index = pi as u32;
+                crate::guides::write_guide(
+                    &mut writer,
+                    &g,
+                    &crate::guides::guide_self_id(spread.self_id.as_deref(), gi),
+                    layer,
+                )?;
+            }
+            writer.write_event(Event::End(BytesEnd::new("Page")))?;
+        }
+    }
+    if page_count == 0 {
+        for (gi, g) in spread.guides.iter().enumerate() {
+            crate::guides::write_guide(
+                &mut writer,
+                g,
+                &crate::guides::guide_self_id(spread.self_id.as_deref(), gi),
+                layer,
+            )?;
+        }
+    }
+    rewrite::write_inserted_items(&mut writer, spread, &std::collections::HashSet::new())?;
+    writer.write_event(Event::End(BytesEnd::new(element)))?;
+    writer.write_event(Event::End(BytesEnd::new(pkg.as_str())))?;
+    Ok(writer.into_inner().into_inner())
+}
+
+/// Patch `designmap.xml` so the new entries are referenced. Every
+/// original event passes through verbatim; only the new `<idPkg:Spread
+/// src="..."/>` / `<idPkg:Story src="..."/>` elements are injected:
+///
+/// * a new spread ref goes immediately AFTER the existing spread ref
+///   named by its anchor (`None` ⇒ before the first existing one) —
+///   spread manifest order IS page order, so a minted spread must land
+///   next to its host;
+/// * new story refs are appended after the LAST existing `idPkg:Story`
+///   (story manifest order only drives `doc.stories` order, and minted
+///   stories were appended there too).
+///
+/// Anything left unplaced (no existing refs of that kind, an anchor
+/// that vanished) is flushed just before `</Document>` — a reference is
+/// never silently dropped. The references `dropped` names (an orphan
+/// story's part, a removed page's spread part) are left out.
+pub(crate) fn patch_designmap(
+    original: &[u8],
+    new_spreads: &[(Option<String>, String)],
+    new_stories: &[String],
+    dropped: &[String],
+) -> Result<Vec<u8>, quick_xml::Error> {
+    // Pass 1 — count the existing story refs so "after the last one" is
+    // recognisable in the single forward pass below.
+    let story_total = {
+        let mut reader = Reader::from_reader(original);
+        reader.config_mut().trim_text(false);
+        let mut buf = Vec::new();
+        let mut n = 0usize;
+        loop {
+            match reader.read_event_into(&mut buf)? {
+                Event::Eof => break,
+                Event::Empty(e) | Event::Start(e) if e.name().as_ref() == b"idPkg:Story" => {
+                    n += 1;
+                }
+                _ => {}
+            }
+            buf.clear();
+        }
+        n
+    };
+
+    let mut reader = Reader::from_reader(original);
+    let config = reader.config_mut();
+    config.expand_empty_elements = false;
+    config.trim_text(false);
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    let mut buf = Vec::new();
+
+    let mut spread_placed = vec![false; new_spreads.len()];
+    let mut stories_placed = false;
+    let mut first_spread_seen = false;
+    let mut story_seen = 0usize;
+
+    fn write_ref(
+        writer: &mut Writer<Cursor<Vec<u8>>>,
+        kind: &str,
+        src: &str,
+    ) -> Result<(), quick_xml::Error> {
+        rewrite::emit_empty_with_attrs(writer, kind, &[("src", src.to_string())])
+    }
+
+    loop {
+        match reader.read_event_into(&mut buf)? {
+            Event::Eof => break,
+            Event::Empty(e) if e.name().as_ref() == b"idPkg:Spread" => {
+                if !first_spread_seen {
+                    first_spread_seen = true;
+                    // Anchor-less spreads precede every existing one.
+                    for (i, (anchor, src)) in new_spreads.iter().enumerate() {
+                        if anchor.is_none() && !spread_placed[i] {
+                            write_ref(&mut writer, "idPkg:Spread", src)?;
+                            spread_placed[i] = true;
+                        }
+                    }
+                }
+                let this_src = attr_value(&e, b"src");
+                // A removed page's spread part is not written; its
+                // reference goes with it (new spreads anchored after it
+                // still land here).
+                if !this_src.as_ref().is_some_and(|s| dropped.contains(s)) {
+                    writer.write_event(Event::Empty(e.into_owned()))?;
+                }
+                if let Some(this_src) = this_src {
+                    for (i, (anchor, src)) in new_spreads.iter().enumerate() {
+                        if !spread_placed[i] && anchor.as_deref() == Some(this_src.as_str()) {
+                            write_ref(&mut writer, "idPkg:Spread", src)?;
+                            spread_placed[i] = true;
+                        }
+                    }
+                }
+            }
+            Event::Empty(e) if e.name().as_ref() == b"idPkg:Story" => {
+                story_seen += 1;
+                // An orphan story's part is not written (see
+                // `write_package`); its reference goes with it.
+                let dropped = attr_value(&e, b"src")
+                    .map(|src| dropped.contains(&src))
+                    .unwrap_or(false);
+                if !dropped {
+                    writer.write_event(Event::Empty(e.into_owned()))?;
+                }
+                if story_seen == story_total && !stories_placed {
+                    for src in new_stories {
+                        write_ref(&mut writer, "idPkg:Story", src)?;
+                    }
+                    stories_placed = true;
+                }
+            }
+            Event::End(e) if e.name().as_ref() == b"Document" => {
+                // Flush everything still unplaced before the root closes.
+                for (i, (_, src)) in new_spreads.iter().enumerate() {
+                    if !spread_placed[i] {
+                        write_ref(&mut writer, "idPkg:Spread", src)?;
+                        spread_placed[i] = true;
+                    }
+                }
+                if !stories_placed {
+                    for src in new_stories {
+                        write_ref(&mut writer, "idPkg:Story", src)?;
+                    }
+                    stories_placed = true;
+                }
+                writer.write_event(Event::End(e))?;
+            }
+            other => writer.write_event(other)?,
+        }
+        buf.clear();
+    }
+
+    Ok(writer.into_inner().into_inner())
+}
+
+/// Reference `Resources/Fonts.xml` from the designmap when it does not
+/// already: the `<idPkg:Fonts>` element goes where InDesign puts it —
+/// before `<idPkg:Styles>`, else before the first spread reference,
+/// else last. Byte-identical when the reference exists.
+pub(crate) fn ensure_fonts_ref(original: &[u8], src: &str) -> Result<Vec<u8>, quick_xml::Error> {
+    let has_ref = {
+        let mut reader = Reader::from_reader(original);
+        reader.config_mut().trim_text(false);
+        let mut buf = Vec::new();
+        let mut found = false;
+        loop {
+            match reader.read_event_into(&mut buf)? {
+                Event::Eof => break,
+                Event::Empty(e) | Event::Start(e) if e.name().as_ref() == b"idPkg:Fonts" => {
+                    found = true;
+                    break;
+                }
+                _ => {}
+            }
+            buf.clear();
+        }
+        found
+    };
+    if has_ref {
+        return Ok(original.to_vec());
+    }
+    let has_styles_ref = {
+        let mut reader = Reader::from_reader(original);
+        reader.config_mut().trim_text(false);
+        let mut buf = Vec::new();
+        let mut found = false;
+        loop {
+            match reader.read_event_into(&mut buf)? {
+                Event::Eof => break,
+                Event::Empty(e) | Event::Start(e) if e.name().as_ref() == b"idPkg:Styles" => {
+                    found = true;
+                    break;
+                }
+                _ => {}
+            }
+            buf.clear();
+        }
+        found
+    };
+    let mut reader = Reader::from_reader(original);
+    let config = reader.config_mut();
+    config.expand_empty_elements = false;
+    config.trim_text(false);
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    let mut buf = Vec::new();
+    let mut placed = false;
+    let place = |writer: &mut Writer<Cursor<Vec<u8>>>| -> Result<(), quick_xml::Error> {
+        rewrite::emit_empty_with_attrs(writer, "idPkg:Fonts", &[("src", src.to_string())])
+    };
+    loop {
+        let ev = reader.read_event_into(&mut buf)?;
+        match ev {
+            Event::Eof => break,
+            Event::Empty(ref e) | Event::Start(ref e)
+                if !placed
+                    && ((has_styles_ref && e.name().as_ref() == b"idPkg:Styles")
+                        || (!has_styles_ref
+                            && matches!(
+                                e.name().as_ref(),
+                                b"idPkg:MasterSpread" | b"idPkg:Spread"
+                            ))) =>
+            {
+                place(&mut writer)?;
+                placed = true;
+                writer.write_event(ev.borrow())?;
+            }
+            Event::End(ref e) if !placed && e.name().as_ref() == b"Document" => {
+                place(&mut writer)?;
+                placed = true;
+                writer.write_event(ev.borrow())?;
+            }
+            _ => writer.write_event(ev.borrow())?,
+        }
+        buf.clear();
+    }
+    Ok(writer.into_inner().into_inner())
+}
+
+/// Read an attribute's decoded value off a start tag (local copy of
+/// `rewrite::attr_value`, which is private to that module's hot path).
+fn attr_value(e: &BytesStart, key: &[u8]) -> Option<String> {
+    e.attributes()
+        .flatten()
+        .find(|a| a.key.as_ref() == key)
+        .and_then(|a| std::str::from_utf8(&a.value).ok().map(|s| s.to_string()))
+}

@@ -1,0 +1,1191 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! `<Image>` / `<Link>` save-back for LINKED images — a graphic frame the
+//! model links to an asset by URI (`PlaceImage`, `image_link`) whose
+//! element carries no placed-image child — and, given a link base, for
+//! images the model holds only as BYTES.
+//!
+//! IDML can express this: the frame holds an `<Image>` with the
+//! image's own `ItemTransform` (pixel space → frame space), a
+//! `<Properties><GraphicBounds/>` box, and a `<Link LinkResourceURI=…>`
+//! naming the asset. The attribute set mirrors an InDesign 2025 export
+//! (`corpus/idml/samples/sample-3.idml`). InDesign then shows a
+//! missing-link placeholder when the URI does not resolve on its host,
+//! but keeps the frame, its geometry and the crop — the honest
+//! interchange. A 134-page book had 31 such frames; its export had
+//! `<Image>` 0.
+//!
+//! # The URI, with and without a link base
+//!
+//! Without [`ExportOptions::link_base`](crate::ExportOptions::link_base)
+//! the URI is written as the model holds it. A relative `assets/…` path
+//! stays relative: the document carries no asset base to resolve it
+//! against (the renderer's `AssetResolver` is a runtime concern, not
+//! part of the model). Measured in InDesign 20.0.1: a relative URI
+//! resolves to NOTHING (`doc.links` = 0, every frame empty).
+//!
+//! With a base — an absolute directory the caller promises to populate
+//! — every link is REBASED to `file:<base>/<basename>` in the exact
+//! spelling InDesign writes (`file:/Users/…/Links/photo.psd`,
+//! `file:C:/…/Links/CODE%201.jpg`: a single slash after the scheme,
+//! spaces and other reserved bytes percent-encoded), and the writer
+//! hands back one [`ExportedLink`] per distinct file: the basename to
+//! write under the base, the bytes when the model holds them
+//! (`image_bytes` — a placed-from-bytes or pixel-edited asset), and the
+//! model's own URI so a link-only frame's file can be copied from
+//! wherever it lives. A frame that holds bytes and NO link is given a
+//! name from its id and the bytes' magic (`u123.png`), so a document
+//! authored entirely from bytes still opens in InDesign with every
+//! image bound. Two frames naming the same file share one entry; two
+//! different files with the same basename are told apart (`logo.png`,
+//! `logo-2.png`).
+//!
+//! Runs AFTER `rewrite_spread`, over its output, so a frame the model
+//! INSERTED and a source frame are treated alike. A frame whose element
+//! already carries a placed-image child keeps it, with the `<Link>`'s
+//! URI patched when the model's (rebased) URI differs.
+
+use std::collections::{HashMap, HashSet};
+use std::io::Cursor;
+
+use quick_xml::events::{BytesEnd, BytesStart, Event};
+use quick_xml::{Reader, Writer};
+
+use idml_import::{Bounds, Spread};
+
+use crate::rewrite::{
+    attr_value, emit_empty_with_attrs, emit_start_with_attrs, format_f32, patch_start, Patch,
+};
+use crate::ExportedLink;
+
+/// The files an export's links point at, accumulated across every
+/// spread and master the writer visits. Created with the export's link
+/// base (`None` ⇒ URIs are written as the model holds them and nothing
+/// is collected).
+#[derive(Debug, Default)]
+pub(crate) struct LinkCollector {
+    base: Option<String>,
+    /// Embed the bytes a frame holds as the `<Image>`'s
+    /// `<Properties><Contents>` (base64, InDesign's own embedded-link
+    /// spelling, `StoredState="Embedded"`) — the pure-`.idml` export with
+    /// no link base, where a relative URI would resolve to nothing. A
+    /// `.paged` write never embeds: its model part holds the bytes.
+    embed: bool,
+    links: Vec<ExportedLink>,
+    /// model uri → the file name it was given (so two frames naming the
+    /// same asset share one file).
+    by_source: HashMap<String, String>,
+    taken: HashSet<String>,
+}
+
+impl LinkCollector {
+    pub(crate) fn new(base: Option<&str>, embed: bool) -> Self {
+        Self {
+            base: base.map(|b| b.trim_end_matches('/').to_string()),
+            embed,
+            ..Self::default()
+        }
+    }
+
+    pub(crate) fn into_links(self) -> Vec<ExportedLink> {
+        self.links
+    }
+
+    fn rebased_uri(&self, file_name: &str) -> Option<String> {
+        let base = self.base.as_deref()?;
+        Some(format!(
+            "file:{}/{}",
+            percent_encode(base),
+            percent_encode(file_name)
+        ))
+    }
+
+    /// Claim a file name for `source_uri` (the model's URI, or a minted
+    /// name for a bytes-only frame): the basename, disambiguated when a
+    /// DIFFERENT source already took it.
+    fn claim(&mut self, source_uri: &str, wanted: &str) -> String {
+        if let Some(name) = self.by_source.get(source_uri) {
+            return name.clone();
+        }
+        let (stem, ext) = match wanted.rsplit_once('.') {
+            Some((s, e)) if !s.is_empty() => (s.to_string(), format!(".{e}")),
+            _ => (wanted.to_string(), String::new()),
+        };
+        let mut name = wanted.to_string();
+        let mut n = 2;
+        while self.taken.contains(&name) {
+            name = format!("{stem}-{n}{ext}");
+            n += 1;
+        }
+        self.taken.insert(name.clone());
+        self.by_source.insert(source_uri.to_string(), name.clone());
+        name
+    }
+
+    /// The URI to write for a frame linking `uri` (and holding `bytes`,
+    /// maybe). Records the file when a base is set.
+    fn uri_for_link(&mut self, uri: &str, bytes: Option<&[u8]>) -> String {
+        if self.base.is_none() {
+            return uri.to_string();
+        }
+        let file_name = self.claim(uri, &link_file_name(uri));
+        let rebased = self.rebased_uri(&file_name).expect("base checked");
+        match self.links.iter_mut().find(|l| l.file_name == file_name) {
+            // A second frame on the same asset: keep the bytes if either
+            // frame carries them.
+            Some(existing) => {
+                if existing.bytes.is_none() {
+                    existing.bytes = bytes.map(|b| b.to_vec());
+                }
+            }
+            None => self.links.push(ExportedLink {
+                file_name,
+                bytes: bytes.map(|b| b.to_vec()),
+                source_uri: uri.to_string(),
+            }),
+        }
+        rebased
+    }
+
+    /// The URI to write for a frame holding only bytes: a name minted
+    /// from the frame id + the bytes' magic. `None` without a base, or
+    /// when the bytes are in no format InDesign could open.
+    fn uri_for_bytes(&mut self, host_id: &str, bytes: &[u8]) -> Option<String> {
+        self.base.as_ref()?;
+        let ext = sniff_image_extension(bytes)?;
+        let wanted = format!("{}.{ext}", sanitize_file_stem(host_id));
+        // Keyed by the minted name itself: a frame's bytes are their own
+        // source.
+        let key = format!("bytes:{host_id}");
+        let file_name = self.claim(&key, &wanted);
+        let rebased = self.rebased_uri(&file_name)?;
+        self.links.push(ExportedLink {
+            file_name,
+            bytes: Some(bytes.to_vec()),
+            source_uri: String::new(),
+        });
+        Some(rebased)
+    }
+}
+
+/// The basename of a link URI as a file name on disk: the last path
+/// segment, percent-decoded (InDesign writes `CODE%201.jpg` for the file
+/// `CODE 1.jpg`). Shared with the loss ledger so both sides name the
+/// same file.
+pub fn link_file_name(uri: &str) -> String {
+    // A relative `file:` URI (`file:photo.png`) has no slash before
+    // its name; the scheme is not part of it.
+    let path = uri.strip_prefix("file:").unwrap_or(uri);
+    let tail = path.rsplit(['/', '\\']).next().unwrap_or(path);
+    percent_decode(tail)
+}
+
+/// Percent-encode a path for a `file:` URI the way InDesign spells it:
+/// unreserved bytes (`A-Z a-z 0-9 - . _ ~`) plus the separators `/` and
+/// `:` pass through; everything else (spaces, non-ASCII, `%` itself) is
+/// `%XX` upper-case.
+pub(crate) fn percent_encode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' | b':' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+/// Undo [`percent_encode`]; a malformed `%` sequence is kept literally,
+/// and a decoded byte string that is not UTF-8 falls back to the input.
+fn percent_decode(s: &str) -> String {
+    if !s.contains('%') {
+        return s.to_string();
+    }
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Some(v) = std::str::from_utf8(&bytes[i + 1..i + 3])
+                .ok()
+                .and_then(|hex| u8::from_str_radix(hex, 16).ok())
+            {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8(out).unwrap_or_else(|_| s.to_string())
+}
+
+/// A frame id as a file stem: `/` (a `Rectangle/u12`-style id) → `_`,
+/// like the story entry names.
+fn sanitize_file_stem(id: &str) -> String {
+    id.chars()
+        .map(|c| if c == '/' || c == '\\' { '_' } else { c })
+        .collect()
+}
+
+/// The file extension for an encoded image, from its magic bytes —
+/// the formats InDesign places. `None` for anything else.
+pub fn sniff_image_extension(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some("png")
+    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some("jpg")
+    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        Some("gif")
+    } else if bytes.starts_with(b"II*\0") || bytes.starts_with(b"MM\0*") {
+        Some("tif")
+    } else if bytes.starts_with(b"8BPS") {
+        Some("psd")
+    } else if bytes.starts_with(b"BM") && bytes.len() > 14 {
+        Some("bmp")
+    } else if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP") {
+        Some("webp")
+    } else if bytes.starts_with(b"%PDF") {
+        Some("pdf")
+    } else {
+        None
+    }
+}
+
+/// What the pass needs of a linked frame.
+struct LinkSpec {
+    /// The URI as it will be WRITTEN (rebased when a base is set).
+    uri: String,
+    transform: Option<[f32; 6]>,
+    bounds: Bounds,
+    /// `bounds` is the picture's PIXEL box, read off its header (see
+    /// [`placement`]), rather than the frame box a link with no bytes
+    /// keeps.
+    pixel_box: bool,
+    /// `transform` is the engine's placement of a picture the model
+    /// gives no transform of its own (its named fit, or the crop box),
+    /// not a value the model holds.
+    derived: bool,
+    space: Option<String>,
+    /// The bytes to embed as `<Contents>` (see `LinkCollector::embed`).
+    embed: Option<Vec<u8>>,
+}
+
+fn link_specs(spread: &Spread, links: &mut LinkCollector) -> HashMap<String, LinkSpec> {
+    let mut out: HashMap<String, LinkSpec> = HashMap::new();
+    let space_of = |id: &str| -> Option<String> {
+        spread.image_metadata.get(id).and_then(|m| m.space.clone())
+    };
+    let mut add = |id: Option<&str>,
+                   link: Option<&str>,
+                   bytes: Option<&[u8]>,
+                   own: Option<[f32; 6]>,
+                   transform: Option<[f32; 6]>,
+                   bounds: Bounds,
+                   crops: [f32; 4]| {
+        let Some(id) = id else { return };
+        // The picture's own box and its placement, in InDesign's
+        // spelling (see [`placement`]), whenever the bytes say how big
+        // the picture is; a link with no bytes keeps the frame box.
+        let dims = bytes.and_then(image_dimensions);
+        let (bounds, transform) = match dims {
+            Some((w, h)) => placement(bounds, crops, transform, w, h),
+            None => (bounds, transform),
+        };
+        let embed = if links.embed {
+            bytes.map(|b| b.to_vec())
+        } else {
+            None
+        };
+        let uri = match (link, bytes) {
+            (Some(uri), bytes) => links.uri_for_link(uri, bytes),
+            (None, Some(bytes)) => match links.uri_for_bytes(id, bytes) {
+                Some(uri) => uri,
+                // No base to write the file under: an embedded picture
+                // still names itself (InDesign shows the name in Links).
+                None if embed.is_some() => match sniff_image_extension(bytes) {
+                    Some(ext) => format!("{id}.{ext}"),
+                    None => return,
+                },
+                None => return,
+            },
+            (None, None) => return,
+        };
+        out.insert(
+            id.to_string(),
+            LinkSpec {
+                uri,
+                transform,
+                bounds,
+                pixel_box: dims.is_some(),
+                derived: own.is_none() && transform.is_some(),
+                space: space_of(id),
+                embed,
+            },
+        );
+    };
+    for r in &spread.rectangles {
+        let crops = r
+            .frame_fitting
+            .as_ref()
+            .map(|f| {
+                [
+                    f.left_crop.unwrap_or(0.0),
+                    f.top_crop.unwrap_or(0.0),
+                    f.right_crop.unwrap_or(0.0),
+                    f.bottom_crop.unwrap_or(0.0),
+                ]
+            })
+            .unwrap_or([0.0; 4]);
+        // A frame with no transform of its own that NAMES a fit is placed
+        // with that fit — the engine's rule (paged_model::fitting), so the
+        // export and the render agree: FillProportionally covers the frame
+        // at a uniform scale instead of stretching into it.
+        let transform = r.image_item_transform.or_else(|| {
+            let (w, h) = r.image_bytes.as_deref().and_then(image_dimensions)?;
+            named_fit(r.frame_fitting.as_ref(), crops, r.bounds, w, h)
+        });
+        add(
+            r.self_id.as_deref(),
+            r.image_link.as_deref(),
+            r.image_bytes.as_deref(),
+            r.image_item_transform,
+            transform,
+            r.bounds,
+            crops,
+        );
+    }
+    for o in &spread.ovals {
+        add(
+            o.self_id.as_deref(),
+            o.image_link.as_deref(),
+            o.image_bytes.as_deref(),
+            o.image_item_transform,
+            o.image_item_transform,
+            o.bounds,
+            [0.0; 4],
+        );
+    }
+    for p in &spread.polygons {
+        add(
+            p.self_id.as_deref(),
+            p.image_link.as_deref(),
+            p.image_bytes.as_deref(),
+            p.image_item_transform,
+            p.image_item_transform,
+            p.bounds,
+            [0.0; 4],
+        );
+    }
+    out
+}
+
+/// The transform a frame's NAMED fit resolves to when it stores none:
+/// only without crops — crops are the resolved placement InDesign bakes
+/// out, and they keep the crop-box placement below. A fit the engine does
+/// not model as a content fit (`None`, `FrameToContent`) also keeps it.
+fn named_fit(
+    fitting: Option<&paged_model::FrameFittingOption>,
+    crops: [f32; 4],
+    frame: Bounds,
+    w: u32,
+    h: u32,
+) -> Option<[f32; 6]> {
+    let ff = fitting?;
+    let mode = paged_model::fitting::FitMode::from_idml(ff.fitting_on_empty_frame.as_deref()?)?;
+    if crops.iter().any(|c| *c != 0.0) {
+        return None;
+    }
+    paged_model::fitting::fit_transform(
+        mode,
+        ff.reference_point.as_deref(),
+        frame,
+        w as f32,
+        h as f32,
+    )
+}
+
+/// The `<Image>`'s own box and its `ItemTransform`, in InDesign's
+/// spelling: `GraphicBounds` is the picture's PIXEL box (`0 0 w h`, a
+/// pixel a point — the space the engine's `image_item_transform` maps
+/// from) and the transform places it in the frame's space.
+///
+/// Measured 2026-09-06 in InDesign 20.0.1: a frame-box `GraphicBounds`
+/// with the identity transform scales the picture into the frame (what
+/// the engine draws for a frame with no transform: the picture
+/// stretched into the frame box, crops included), but the same box
+/// under an explicit transform lands a tiny picture far off the page —
+/// the annual's 2× cover exhibit opened blank. And the importer reads
+/// no `GraphicBounds` at all: it places the pixels through the
+/// transform alone, so a frame with no transform showed nothing in the
+/// export's twin. One spelling both read the same way: the pixel box
+/// and, for a frame with no transform of its own, the fit the engine
+/// composes — `[left + left_crop, top + top_crop]`, scaled so the
+/// picture fills the crop-adjusted box.
+fn placement(
+    frame: Bounds,
+    crops: [f32; 4],
+    transform: Option<[f32; 6]>,
+    w: u32,
+    h: u32,
+) -> (Bounds, Option<[f32; 6]>) {
+    let pixel_box = Bounds {
+        top: 0.0,
+        left: 0.0,
+        bottom: h as f32,
+        right: w as f32,
+    };
+    let transform = transform.or_else(|| {
+        let [left_crop, top_crop, right_crop, bottom_crop] = crops;
+        let box_w = (frame.right - frame.left - left_crop - right_crop).max(0.0);
+        let box_h = (frame.bottom - frame.top - top_crop - bottom_crop).max(0.0);
+        (w > 0 && h > 0).then_some([
+            box_w / w as f32,
+            0.0,
+            0.0,
+            box_h / h as f32,
+            frame.left + left_crop,
+            frame.top + top_crop,
+        ])
+    });
+    (pixel_box, transform)
+}
+
+/// The pixel size a picture's header declares — PNG, JPEG, GIF, BMP and
+/// WebP (VP8 / VP8L / VP8X). `None` for anything else (TIFF, PSD, EPS,
+/// PDF: no cheap header, the frame box stays).
+pub(crate) fn image_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    let be32 = |i: usize| -> Option<u32> {
+        bytes
+            .get(i..i + 4)
+            .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+    };
+    let le32 = |i: usize| -> Option<u32> {
+        bytes
+            .get(i..i + 4)
+            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+    };
+    let le16 = |i: usize| -> Option<u32> {
+        bytes
+            .get(i..i + 2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]]) as u32)
+    };
+    let be16 = |i: usize| -> Option<u32> {
+        bytes
+            .get(i..i + 2)
+            .map(|b| u16::from_be_bytes([b[0], b[1]]) as u32)
+    };
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Some((be32(16)?, be32(20)?));
+    }
+    if bytes.starts_with(&[0xFF, 0xD8]) {
+        // Walk the markers to the first start-of-frame.
+        let mut i = 2;
+        while i + 9 < bytes.len() {
+            if bytes[i] != 0xFF {
+                i += 1;
+                continue;
+            }
+            let marker = bytes[i + 1];
+            if marker == 0xFF {
+                i += 1;
+                continue;
+            }
+            if (0xC0..=0xCF).contains(&marker) && !matches!(marker, 0xC4 | 0xC8 | 0xCC) {
+                return Some((be16(i + 7)?, be16(i + 5)?));
+            }
+            let len = be16(i + 2)? as usize;
+            i += 2 + len.max(2);
+        }
+        return None;
+    }
+    if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        return Some((le16(6)?, le16(8)?));
+    }
+    if bytes.starts_with(b"BM") && bytes.len() > 26 {
+        return Some((le32(18)?, le32(22)?));
+    }
+    if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP") {
+        match bytes.get(12..16)? {
+            b"VP8X" => {
+                let w = 1 + (le32(24)? & 0x00FF_FFFF);
+                let h = 1 + ((le32(26)? >> 8) & 0x00FF_FFFF);
+                return Some((w, h));
+            }
+            b"VP8L" => {
+                let bits = le32(21)?;
+                return Some((1 + (bits & 0x3FFF), 1 + ((bits >> 14) & 0x3FFF)));
+            }
+            b"VP8 " => {
+                return Some((le16(26)? & 0x3FFF, le16(28)? & 0x3FFF));
+            }
+            _ => return None,
+        }
+    }
+    if bytes.starts_with(b"II*\0") || bytes.starts_with(b"MM\0*") {
+        return tiff_dimensions(bytes);
+    }
+    if bytes.starts_with(b"8BPS") {
+        // The Photoshop file header: rows then columns, big-endian, after
+        // the signature, the version and six reserved bytes.
+        return Some((be32(18)?, be32(14)?));
+    }
+    None
+}
+
+/// `ImageWidth` (256) / `ImageLength` (257) off a classic TIFF's first
+/// image file directory, in the byte order its header names. A TIFF the
+/// export could not measure kept the frame box and the IDENTITY
+/// transform, which the importer reads as one point per pixel: the
+/// export's twin drew the picture's top-left corner at full size inside
+/// the frame, a blank-looking tile.
+fn tiff_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
+    let le = bytes.starts_with(b"II");
+    let u16_at = |i: usize| -> Option<u32> {
+        let b = bytes.get(i..i + 2)?;
+        Some(if le {
+            u16::from_le_bytes([b[0], b[1]])
+        } else {
+            u16::from_be_bytes([b[0], b[1]])
+        } as u32)
+    };
+    let u32_at = |i: usize| -> Option<u32> {
+        let b = bytes.get(i..i + 4)?;
+        Some(if le {
+            u32::from_le_bytes([b[0], b[1], b[2], b[3]])
+        } else {
+            u32::from_be_bytes([b[0], b[1], b[2], b[3]])
+        })
+    };
+    let ifd = u32_at(4)? as usize;
+    let count = u16_at(ifd)? as usize;
+    let (mut w, mut h) = (None, None);
+    for k in 0..count {
+        let entry = ifd + 2 + 12 * k;
+        let value = match u16_at(entry + 2)? {
+            3 => u16_at(entry + 8)?,
+            4 => u32_at(entry + 8)?,
+            _ => continue,
+        };
+        match u16_at(entry)? {
+            256 => w = Some(value),
+            257 => h = Some(value),
+            _ => {}
+        }
+    }
+    Some((w?, h?))
+}
+
+/// InDesign's `LinkResourceFormat` name for an asset, by extension.
+/// Every spelling here was read off an InDesign export in the corpus
+/// (`$ID/Photoshop` for PSD, `$ID/WEBP ` WITH its trailing space, the
+/// long PDF form) except `TIFF`, `GIF`, `Windows Bitmap`, `EPS` and
+/// `SVG`, for which the corpus holds no placed file.
+fn link_resource_format(uri: &str) -> &'static str {
+    let ext = uri
+        .rsplit('.')
+        .next()
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    match ext.as_str() {
+        "jpg" | "jpeg" => "$ID/JPEG",
+        "png" => "$ID/Portable Network Graphics (PNG)",
+        "tif" | "tiff" => "$ID/TIFF",
+        "gif" => "$ID/GIF",
+        "bmp" => "$ID/Windows Bitmap",
+        "psd" => "$ID/Photoshop",
+        "eps" => "$ID/EPS",
+        "pdf" => "$ID/Adobe Portable Document Format (PDF)",
+        "webp" => "$ID/WEBP ",
+        "svg" => "$ID/SVG",
+        _ => "$ID/",
+    }
+}
+
+/// `<Contents>BASE64</Contents>` — InDesign's spelling of an embedded
+/// picture's bytes, a typed child of the `<Image>`'s `<Properties>`
+/// (the importer's Q-03 lane reads it back).
+fn write_contents(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    bytes: &[u8],
+) -> Result<(), quick_xml::Error> {
+    use base64::Engine;
+    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+    writer.write_event(Event::Start(BytesStart::new("Contents")))?;
+    writer.write_event(Event::Text(quick_xml::events::BytesText::new(&encoded)))?;
+    writer.write_event(Event::End(BytesEnd::new("Contents")))?;
+    Ok(())
+}
+
+/// The frame's own `<Image>` block, in InDesign's spelling.
+fn write_image(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    host_id: &str,
+    spec: &LinkSpec,
+) -> Result<(), quick_xml::Error> {
+    let mut attrs: Vec<(&str, String)> = vec![("Self", format!("{host_id}Image"))];
+    if let Some(space) = &spec.space {
+        attrs.push(("Space", space.clone()));
+    }
+    attrs.push((
+        "ItemTransform",
+        spec.transform
+            .map(|m| format_image_transform(&m))
+            .unwrap_or_else(|| "1 0 0 1 0 0".to_string()),
+    ));
+    emit_start_with_attrs(writer, "Image", &attrs)?;
+    writer.write_event(Event::Start(BytesStart::new("Properties")))?;
+    // Without the pixel size (a link, not bytes) the picture box is the
+    // frame's own box: with an identity transform the placeholder fills
+    // the frame, which is what the model renders for an unresolved link.
+    emit_empty_with_attrs(
+        writer,
+        "GraphicBounds",
+        &[
+            ("Left", format_f32(spec.bounds.left)),
+            ("Top", format_f32(spec.bounds.top)),
+            ("Right", format_f32(spec.bounds.right)),
+            ("Bottom", format_f32(spec.bounds.bottom)),
+        ],
+    )?;
+    if let Some(bytes) = &spec.embed {
+        write_contents(writer, bytes)?;
+    }
+    writer.write_event(Event::End(BytesEnd::new("Properties")))?;
+    emit_empty_with_attrs(
+        writer,
+        "Link",
+        &[
+            ("Self", format!("{host_id}Link")),
+            ("LinkResourceURI", spec.uri.clone()),
+            (
+                "LinkResourceFormat",
+                link_resource_format(&spec.uri).to_string(),
+            ),
+            (
+                "StoredState",
+                if spec.embed.is_some() {
+                    "Embedded"
+                } else {
+                    "Normal"
+                }
+                .to_string(),
+            ),
+            ("LinkClassID", "35906".to_string()),
+            ("LinkClientID", "257".to_string()),
+            ("LinkResourceModified", "false".to_string()),
+            ("LinkObjectModified", "false".to_string()),
+            ("ShowInUI", "true".to_string()),
+            ("CanEmbed", "true".to_string()),
+            ("CanUnembed", "true".to_string()),
+            ("CanPackage", "true".to_string()),
+            ("ImportPolicy", "NoAutoImport".to_string()),
+            ("ExportPolicy", "NoAutoExport".to_string()),
+            ("LinkResourceSize", "0~0".to_string()),
+        ],
+    )?;
+    writer.write_event(Event::End(BytesEnd::new("Image")))?;
+    Ok(())
+}
+
+/// A picture's `ItemTransform` at the precision the engine places it
+/// with: each value the shortest decimal that reads back as the same
+/// `f32`. InDesign writes full doubles here
+/// (`0.13835145741383767 0 0 0.13835145741383767 …`), and the four
+/// decimals [`crate::rewrite::format_matrix`] keeps for page geometry are not enough for
+/// a scale: a 2200 px picture at `0.19636364` written as `0.1964` lands
+/// 0.08 pt wider, and every resampled row and column of it shifts — the
+/// export's twin drew a grid of differences across each photograph.
+pub(crate) fn format_image_transform(m: &[f32; 6]) -> String {
+    m.iter()
+        .map(|v| {
+            if *v == 0.0 {
+                "0".to_string()
+            } else {
+                format!("{v}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// A `"a b c d tx ty"` matrix attribute, parsed.
+fn parse_matrix(raw: &[u8]) -> Option<[f32; 6]> {
+    let s = std::str::from_utf8(raw).ok()?;
+    let mut it = s.split_whitespace();
+    let mut m = [0.0f32; 6];
+    for slot in &mut m {
+        *slot = it.next()?.parse().ok()?;
+    }
+    it.next().is_none().then_some(m)
+}
+
+/// A placed element the SOURCE already carries, brought in line with
+/// the placement the export writes for it: its `ItemTransform` when the
+/// spec has one and the source spells a different matrix. Verbatim when
+/// they agree (an InDesign-authored picture the model never moved).
+///
+/// The source of an engine-made document is the engine's own earlier
+/// export, so a picture the model places by a fit (no transform of its
+/// own) kept whatever that export wrote — rounded to four decimals, or
+/// the identity when the picture's size was not known then — on every
+/// later save.
+fn patch_placed_transform(
+    e: &BytesStart,
+    spec: &LinkSpec,
+) -> Result<BytesStart<'static>, quick_xml::Error> {
+    let Some(t) = spec.transform else {
+        return Ok(e.clone().into_owned());
+    };
+    let on_disk = e
+        .try_get_attribute("ItemTransform")
+        .ok()
+        .flatten()
+        .and_then(|a| parse_matrix(a.value.as_ref()));
+    if on_disk == Some(t) {
+        return Ok(e.clone().into_owned());
+    }
+    patch_start(
+        e,
+        |k, _| (k == b"ItemTransform").then(|| Patch::Set(format_image_transform(&t))),
+        &[("ItemTransform", format_image_transform(&t))],
+    )
+}
+
+/// The `<GraphicBounds>` of a placed element the source carries, set to
+/// the picture's pixel box when the export derived the placement from
+/// the picture's size (see [`placement`]) and the source spells another
+/// box — an older export wrote the FRAME box for a picture whose size it
+/// could not read. Only for a derived placement: a transform the model
+/// holds was read against the box the source already spells.
+fn patch_graphic_bounds(
+    e: &BytesStart,
+    spec: &LinkSpec,
+) -> Result<BytesStart<'static>, quick_xml::Error> {
+    if !(spec.derived && spec.pixel_box) {
+        return Ok(e.clone().into_owned());
+    }
+    let b = spec.bounds;
+    let want = [
+        ("Left", b.left),
+        ("Top", b.top),
+        ("Right", b.right),
+        ("Bottom", b.bottom),
+    ];
+    let agrees = want.iter().all(|(k, v)| {
+        attr_value(e, k.as_bytes())
+            .and_then(|s| s.trim().parse::<f32>().ok())
+            .is_some_and(|x| x == *v)
+    });
+    if agrees {
+        return Ok(e.clone().into_owned());
+    }
+    patch_start(
+        e,
+        |k, _| {
+            want.iter()
+                .find(|(name, _)| name.as_bytes() == k)
+                .map(|(_, v)| Patch::Set(format_f32(*v)))
+        },
+        &want
+            .iter()
+            .map(|(k, v)| (*k, format_f32(*v)))
+            .collect::<Vec<_>>(),
+    )
+}
+
+fn is_host_name(name: &[u8]) -> bool {
+    matches!(name, b"Rectangle" | b"Oval" | b"Polygon")
+}
+
+fn is_placed_name(name: &[u8]) -> bool {
+    matches!(name, b"Image" | b"EPS" | b"PDF" | b"ImportedPage")
+}
+
+/// Patch a `<Link>` (or a placed-image element carrying the URI itself)
+/// so `LinkResourceURI` names the model's asset; verbatim when it does.
+fn patch_uri(
+    e: &BytesStart,
+    uri: &str,
+    embedded: bool,
+) -> Result<BytesStart<'static>, quick_xml::Error> {
+    if attr_value(e, b"LinkResourceURI").is_none() {
+        return Ok(e.clone().into_owned());
+    }
+    let rebuilt = patch_start(
+        e,
+        |k, raw| match k {
+            b"LinkResourceURI" => Some(if raw == uri.as_bytes() {
+                Patch::Keep
+            } else {
+                Patch::Set(uri.to_string())
+            }),
+            b"StoredState" if embedded => Some(if raw == b"Embedded" {
+                Patch::Keep
+            } else {
+                Patch::Set("Embedded".to_string())
+            }),
+            _ => None,
+        },
+        &[],
+    )?;
+    Ok(if e.trim_ascii_end() == rebuilt.trim_ascii_end() {
+        e.clone().into_owned()
+    } else {
+        rebuilt
+    })
+}
+
+/// Bring every linked frame's placed-image child in line with the model,
+/// then every frame's fitting options ([`crate::frame_fitting`], whose
+/// crops convert by the picture transform written here). `links`
+/// accumulates the files the export's URIs point at (see
+/// [`LinkCollector`]).
+pub(crate) fn rewrite_images(
+    original: &[u8],
+    spread: &Spread,
+    links: &mut LinkCollector,
+) -> Result<Vec<u8>, quick_xml::Error> {
+    let placed = rewrite_placed_children(original, spread, links)?;
+    crate::frame_fitting::rewrite_frame_fitting(&placed, spread)
+}
+
+fn rewrite_placed_children(
+    original: &[u8],
+    spread: &Spread,
+    links: &mut LinkCollector,
+) -> Result<Vec<u8>, quick_xml::Error> {
+    let specs = link_specs(spread, links);
+    if specs.is_empty() {
+        return Ok(original.to_vec());
+    }
+    let mut reader = Reader::from_reader(original);
+    let config = reader.config_mut();
+    config.expand_empty_elements = false;
+    config.trim_text(false);
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    let mut buf = Vec::new();
+    let mut depth = 0usize;
+    // The open linked host: (depth, id, spec, placed child seen).
+    let mut open: Option<(usize, String, &LinkSpec, bool)> = None;
+    // Whether the placed element's own `<Properties>` block already
+    // carries a `<Contents>` child (an embedded picture in the source).
+    let mut contents_seen = false;
+    loop {
+        match reader.read_event_into(&mut buf)? {
+            Event::Eof => break,
+            Event::Start(e) => {
+                depth += 1;
+                let name = e.name().as_ref().to_vec();
+                if open.is_none() && is_host_name(&name) {
+                    if let Some(id) = attr_value(&e, b"Self") {
+                        if let Some(spec) = specs.get(id.as_str()) {
+                            open = Some((depth, id, spec, false));
+                            contents_seen = false;
+                        }
+                    }
+                    writer.write_event(Event::Start(e.into_owned()))?;
+                } else if let Some((d, _, spec, _)) = open.as_ref() {
+                    if is_placed_name(&name) && depth == d + 1 {
+                        let (d, id, spec, _) = open.take().expect("checked");
+                        open = Some((d, id, spec, true));
+                        let start = patch_uri(&e, &spec.uri, spec.embed.is_some())?;
+                        writer.write_event(Event::Start(patch_placed_transform(&start, spec)?))?;
+                    } else if name == b"Link" && depth == d + 2 {
+                        writer.write_event(Event::Start(patch_uri(
+                            &e,
+                            &spec.uri,
+                            spec.embed.is_some(),
+                        )?))?;
+                    } else {
+                        if name == b"Contents" && depth == d + 3 {
+                            contents_seen = true;
+                        }
+                        writer.write_event(Event::Start(e.into_owned()))?;
+                    }
+                } else {
+                    writer.write_event(Event::Start(e.into_owned()))?;
+                }
+            }
+            Event::Empty(e) => {
+                let name = e.name().as_ref().to_vec();
+                if open.is_none() && is_host_name(&name) {
+                    let spec = attr_value(&e, b"Self")
+                        .and_then(|id| specs.get(id.as_str()).map(|s| (id, s)));
+                    match spec {
+                        Some((id, spec)) => {
+                            // A self-closing frame: expand it around its image.
+                            writer.write_event(Event::Start(e.borrow()))?;
+                            write_image(&mut writer, &id, spec)?;
+                            writer.write_event(Event::End(BytesEnd::new(
+                                String::from_utf8_lossy(&name).into_owned(),
+                            )))?;
+                        }
+                        None => writer.write_event(Event::Empty(e.into_owned()))?,
+                    }
+                } else if let Some((d, _, spec, _)) = open.as_ref() {
+                    if is_placed_name(&name) && depth + 1 == d + 1 {
+                        let (d, id, spec, _) = open.take().expect("checked");
+                        open = Some((d, id, spec, true));
+                        let start = patch_uri(&e, &spec.uri, spec.embed.is_some())?;
+                        writer.write_event(Event::Empty(patch_placed_transform(&start, spec)?))?;
+                    } else if name == b"GraphicBounds" && depth + 1 == d + 3 {
+                        writer.write_event(Event::Empty(patch_graphic_bounds(&e, spec)?))?;
+                    } else if name == b"Link" && depth + 1 == d + 2 {
+                        writer.write_event(Event::Empty(patch_uri(
+                            &e,
+                            &spec.uri,
+                            spec.embed.is_some(),
+                        )?))?;
+                    } else {
+                        if name == b"Contents" && depth + 1 == d + 3 {
+                            contents_seen = true;
+                        }
+                        writer.write_event(Event::Empty(e.into_owned()))?;
+                    }
+                } else {
+                    writer.write_event(Event::Empty(e.into_owned()))?;
+                }
+            }
+            Event::End(e) => {
+                if let Some((d, id, spec, seen)) = open.as_ref() {
+                    // The placed element's `<Properties>` closes without
+                    // a `<Contents>`: the bytes to embed go in first.
+                    if *seen
+                        && depth == d + 2
+                        && e.name().as_ref() == b"Properties"
+                        && !contents_seen
+                    {
+                        if let Some(bytes) = &spec.embed {
+                            write_contents(&mut writer, bytes)?;
+                            contents_seen = true;
+                        }
+                    }
+                    if *d == depth && is_host_name(e.name().as_ref()) {
+                        if !seen {
+                            write_image(&mut writer, id, spec)?;
+                        }
+                        open = None;
+                    }
+                }
+                depth = depth.saturating_sub(1);
+                writer.write_event(Event::End(e))?;
+            }
+            other => writer.write_event(other)?,
+        }
+        buf.clear();
+    }
+    Ok(writer.into_inner().into_inner())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn header_dimensions_are_read_for_the_common_formats() {
+        let png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR\0\0\0\x10\0\0\0\x08";
+        assert_eq!(image_dimensions(png), Some((16, 8)));
+        let gif = b"GIF89a\x20\0\x10\0";
+        assert_eq!(image_dimensions(gif), Some((32, 16)));
+        // A JPEG: SOI, an APP0 of length 16, then SOF0 with height 8 × width 24.
+        let mut jpg = vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10];
+        jpg.extend_from_slice(&[0u8; 14]);
+        jpg.extend_from_slice(&[0xFF, 0xC0, 0x00, 0x11, 0x08, 0x00, 0x08, 0x00, 0x18, 0x03]);
+        jpg.extend_from_slice(&[0u8; 12]);
+        assert_eq!(image_dimensions(&jpg), Some((24, 8)));
+        assert_eq!(image_dimensions(b"not a picture"), None);
+    }
+
+    /// A TIFF in either byte order, its size a SHORT or a LONG, and a
+    /// Photoshop file.
+    #[test]
+    fn tiff_and_photoshop_dimensions_are_read() {
+        fn tiff(le: bool, width_type: u16) -> Vec<u8> {
+            let u16b = |v: u16| if le { v.to_le_bytes() } else { v.to_be_bytes() };
+            let u32b = |v: u32| if le { v.to_le_bytes() } else { v.to_be_bytes() };
+            let mut t = Vec::new();
+            t.extend_from_slice(if le { b"II*\0" } else { b"MM\0*" });
+            t.extend_from_slice(&u32b(8));
+            t.extend_from_slice(&u16b(3));
+            let mut entry = |tag: u16, typ: u16, v: u32| {
+                t.extend_from_slice(&u16b(tag));
+                t.extend_from_slice(&u16b(typ));
+                t.extend_from_slice(&u32b(1));
+                if typ == 3 {
+                    t.extend_from_slice(&u16b(v as u16));
+                    t.extend_from_slice(&[0, 0]);
+                } else {
+                    t.extend_from_slice(&u32b(v));
+                }
+            };
+            entry(254, 4, 0);
+            entry(256, width_type, 800);
+            entry(257, 3, 534);
+            t.extend_from_slice(&[0; 4]);
+            t
+        }
+        assert_eq!(image_dimensions(&tiff(true, 3)), Some((800, 534)));
+        assert_eq!(image_dimensions(&tiff(false, 4)), Some((800, 534)));
+        let mut psd = b"8BPS\0\x01\0\0\0\0\0\0\0\x03".to_vec();
+        psd.extend_from_slice(&534u32.to_be_bytes());
+        psd.extend_from_slice(&800u32.to_be_bytes());
+        assert_eq!(image_dimensions(&psd), Some((800, 534)));
+    }
+
+    #[test]
+    fn a_named_fill_covers_the_frame_at_one_scale() {
+        // The reported case: a portrait 918×1224 picture in a landscape
+        // ~249×187 pt frame that names FillProportionally and stores no
+        // transform. It must scale uniformly (cover), never stretch.
+        let frame = Bounds {
+            top: 134.0,
+            left: 108.0,
+            bottom: 321.0,
+            right: 357.0,
+        };
+        let ff = paged_model::FrameFittingOption {
+            fitting_on_empty_frame: Some("FillProportionally".into()),
+            ..Default::default()
+        };
+        let t = named_fit(Some(&ff), [0.0; 4], frame, 918, 1224).expect("a fill resolves");
+        assert!((t[0] - t[3]).abs() < 1e-6, "uniform scale, got {t:?}");
+        assert!(
+            (t[0] - 249.0 / 918.0).abs() < 1e-4,
+            "covers the width, got {t:?}"
+        );
+        // Crops are a resolved placement: they keep the crop-box rule.
+        assert!(named_fit(Some(&ff), [1.0, 0.0, 0.0, 0.0], frame, 918, 1224).is_none());
+        // No fit named: nothing to apply.
+        assert!(named_fit(None, [0.0; 4], frame, 918, 1224).is_none());
+    }
+
+    #[test]
+    fn a_frame_with_no_transform_is_placed_the_way_the_engine_draws_it() {
+        let frame = Bounds {
+            top: 100.0,
+            left: 50.0,
+            bottom: 150.0,
+            right: 250.0,
+        };
+        // No crops: the picture fills the frame box.
+        let (b, t) = placement(frame, [0.0; 4], None, 20, 10);
+        assert_eq!((b.left, b.top, b.right, b.bottom), (0.0, 0.0, 20.0, 10.0));
+        assert_eq!(t, Some([10.0, 0.0, 0.0, 5.0, 50.0, 100.0]));
+        // Crops move the box (a negative crop overhangs the frame).
+        let (_, t) = placement(frame, [-10.0, 0.0, -10.0, 0.0], None, 20, 10);
+        assert_eq!(t, Some([11.0, 0.0, 0.0, 5.0, 40.0, 100.0]));
+        // An explicit transform is kept; only the box becomes the pixel box.
+        let own = Some([0.5, 0.0, 0.0, 0.5, 1.0, 2.0]);
+        let (b, t) = placement(frame, [0.0; 4], own, 20, 10);
+        assert_eq!((b.right, b.bottom), (20.0, 10.0));
+        assert_eq!(t, own);
+    }
+
+    #[test]
+    fn percent_encoding_matches_indesigns_spelling() {
+        assert_eq!(
+            percent_encode("/Users/x/Line Sheet Template/Links"),
+            "/Users/x/Line%20Sheet%20Template/Links"
+        );
+        assert_eq!(
+            percent_encode("C:/Dropbox/a-b_c.d~e"),
+            "C:/Dropbox/a-b_c.d~e"
+        );
+        assert_eq!(
+            percent_encode("Grüße 100%.png"),
+            "Gr%C3%BC%C3%9Fe%20100%25.png"
+        );
+        assert_eq!(percent_decode("CODE%201A.jpg"), "CODE 1A.jpg");
+        assert_eq!(percent_decode("100%.png"), "100%.png");
+        assert_eq!(percent_decode("Gr%C3%BC%C3%9Fe.png"), "Grüße.png");
+    }
+
+    #[test]
+    fn link_file_name_is_the_decoded_basename() {
+        assert_eq!(
+            link_file_name("file:C:/Users/SDR1/Desktop/Links/CODE%201.jpg"),
+            "CODE 1.jpg"
+        );
+        assert_eq!(link_file_name("assets/photos/apples.jpg"), "apples.jpg");
+        assert_eq!(link_file_name("apples.jpg"), "apples.jpg");
+        assert_eq!(link_file_name("file:checker-128.png"), "checker-128.png");
+    }
+
+    #[test]
+    fn the_collector_dedupes_and_disambiguates() {
+        let mut c = LinkCollector::new(Some("/tmp/Links/"), false);
+        let a = c.uri_for_link("assets/x/logo.png", None);
+        let a2 = c.uri_for_link("assets/x/logo.png", Some(&[1, 2]));
+        let b = c.uri_for_link("assets/y/logo.png", None);
+        assert_eq!(a, "file:/tmp/Links/logo.png");
+        assert_eq!(a2, a, "the same asset keeps its file");
+        assert_eq!(b, "file:/tmp/Links/logo-2.png");
+        let links = c.into_links();
+        assert_eq!(links.len(), 2);
+        assert_eq!(links[0].file_name, "logo.png");
+        assert_eq!(
+            links[0].bytes.as_deref(),
+            Some(&[1u8, 2][..]),
+            "bytes from the second frame on the same asset are kept"
+        );
+        assert_eq!(links[0].source_uri, "assets/x/logo.png");
+        assert_eq!(links[1].file_name, "logo-2.png");
+        assert_eq!(links[1].source_uri, "assets/y/logo.png");
+    }
+
+    #[test]
+    fn bytes_only_frames_get_a_name_from_their_magic() {
+        let mut c = LinkCollector::new(Some("/tmp/Links"), false);
+        let png = b"\x89PNG\r\n\x1a\n....".to_vec();
+        assert_eq!(
+            c.uri_for_bytes("Rectangle/u12", &png).as_deref(),
+            Some("file:/tmp/Links/Rectangle_u12.png")
+        );
+        assert_eq!(c.uri_for_bytes("u13", b"not an image"), None);
+        let links = c.into_links();
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].file_name, "Rectangle_u12.png");
+        assert_eq!(links[0].bytes.as_deref(), Some(&png[..]));
+        assert_eq!(links[0].source_uri, "");
+    }
+
+    #[test]
+    fn without_a_base_nothing_is_rebased_or_collected() {
+        let mut c = LinkCollector::new(None, false);
+        assert_eq!(c.uri_for_link("assets/a.png", Some(&[1])), "assets/a.png");
+        assert_eq!(c.uri_for_bytes("u1", b"\x89PNG\r\n\x1a\n"), None);
+        assert!(c.into_links().is_empty());
+    }
+
+    #[test]
+    fn sniffing_covers_the_formats_indesign_places() {
+        assert_eq!(sniff_image_extension(b"\x89PNG\r\n\x1a\n"), Some("png"));
+        assert_eq!(
+            sniff_image_extension(&[0xFF, 0xD8, 0xFF, 0xE0]),
+            Some("jpg")
+        );
+        assert_eq!(sniff_image_extension(b"8BPS\0\x01"), Some("psd"));
+        assert_eq!(sniff_image_extension(b"II*\0"), Some("tif"));
+        assert_eq!(sniff_image_extension(b"MM\0*"), Some("tif"));
+        assert_eq!(sniff_image_extension(b"RIFF\0\0\0\0WEBPVP8 "), Some("webp"));
+        assert_eq!(sniff_image_extension(b"GIF89a"), Some("gif"));
+        assert_eq!(sniff_image_extension(b"%PDF-1.7"), Some("pdf"));
+        assert_eq!(sniff_image_extension(b"hello"), None);
+    }
+}
