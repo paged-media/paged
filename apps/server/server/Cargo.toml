@@ -9,11 +9,11 @@ license = "AGPL-3.0-only OR LicenseRef-PMEL"
 publish = false
 
 [workspace.dependencies]
-# The repository format and its governance, and the MCP tool catalog: core's
-# crates, the same code the browser and the CLI run. Pinned to a core rev; move
-# both together.
-paged-repo = { git = "https://github.com/paged-media/core", rev = "b612da5d" }
-paged-mcp = { git = "https://github.com/paged-media/core", rev = "b612da5d" }
+# The repository format and its governance, and the MCP tool catalog: the
+# engine's crates, the same code the browser and the CLI run, path-depended
+# from engine/core in this repository (paths relative to this file).
+paged-repo = { path = "../../../engine/core/crates/paged-repo" }
+paged-mcp = { path = "../../../engine/core/crates/paged-mcp" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"

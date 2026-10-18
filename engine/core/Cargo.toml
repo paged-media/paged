@@ -29,6 +29,13 @@ members = [
     "crates/paged-run",
     "crates/paged-cli",
     "crates/paged-perf",
+    # The IDML adapter: reader, writer and the static coverage inventory of
+    # both. They lived in paged-media/plugin-publish and were git-depended
+    # back here by revision (publish ADR 650); in the monorepo they are
+    # ordinary members (PM-0005).
+    "crates/idml-import",
+    "crates/idml-export",
+    "crates/idml-coverage",
     "spikes/vello-eval",
     "spikes/composer-calibration",
     "spikes/wasm-size",
@@ -78,19 +85,14 @@ wasm-bindgen = "0.2"
 # in `make bench`. Declared at the workspace level so any crate that
 # grows a bench picks the same pin.
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+serde_json = "1"
 
-# N10.2 — the IDML adapter (idml-import/idml-export) now lives in the public
-# paged-media/plugin-publish repo and is git-depended back into the engine.
-# The adapter git-deps the shared model crates from THIS repo; Cargo would
-# otherwise treat those git copies as distinct from core's local crates
-# (path source != git source), so `import_idml`'s Document wouldn't be core's
-# Document. This [patch] redirects the adapter's git deps on core's own model
-# crates back to the local sources, unifying crate identity.
-[patch."https://github.com/paged-media/core"]
+# The model crates as workspace dependencies, for the IDML adapter crates,
+# which name them with `workspace = true`. Paths are relative to this file.
+# The other crates spell the same path directly (`path = "../paged-model"`);
+# both resolve to the one package.
 paged-model = { path = "crates/paged-model" }
 paged-scene = { path = "crates/paged-scene" }
-paged-flow = { path = "crates/paged-flow" }
-paged-composition = { path = "crates/paged-composition" }
 
 # C-21 — flo_curves upstream fix, pinned until it is released.
 #

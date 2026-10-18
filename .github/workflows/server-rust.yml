@@ -1,0 +1,81 @@
+name: server / rust
+
+# paged.server's Rust workspace (apps/server/server: the Worker crate and the
+# sync client). It path-depends on the engine's paged-repo and paged-mcp
+# (engine/core/crates/), so an engine change can break it as well as a
+# server one. A minimal lane: the workspace must resolve from the committed
+# Cargo.lock and check, and must not reach flo_curves (see the guard).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/server/server/**"
+      - "engine/core/Cargo.toml"
+      - "engine/core/crates/**"
+      - ".github/workflows/server-rust.yml"
+  pull_request:
+    paths:
+      - "apps/server/server/**"
+      - "engine/core/Cargo.toml"
+      - "engine/core/crates/**"
+      - ".github/workflows/server-rust.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-rust-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: apps/server/server
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: check + flo_curves guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The server has no rust-toolchain.toml of its own; the engine crates
+      # it builds pin theirs (engine/core/rust-toolchain.toml), so read that.
+      - id: pin
+        run: echo "channel=$(bash ../../../engine/core/scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.pin.outputs.channel }}
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/server/server -> target
+          prefix-key: v0-rust-server
+
+      # The engine patches flo_curves (engine/core/Cargo.toml, C-21), and a
+      # [patch] applies only in the workspace that declares it. Depending on
+      # an engine crate that reaches flo_curves (paged-mutate and everything
+      # above it) would build the UNPATCHED crates.io release here, whose
+      # boolean ops can panic. So flo_curves must not be in this graph.
+      - name: guard (no flo_curves in the graph)
+        run: |
+          set -euo pipefail
+          # Any resolution error fails here, so the check below can only
+          # fail for the one reason it is about.
+          cargo tree --locked --target all > /dev/null
+          # `cargo tree -i` exits non-zero when the package is not in the
+          # graph at all, which is the passing case.
+          if out=$(cargo tree --locked --target all -i flo_curves 2>/dev/null) && [ -n "$out" ]; then
+            echo "::error title=flo_curves in the server graph::the engine's flo_curves [patch] does not apply here; drop the dependency path below"
+            echo "$out"
+            exit 1
+          fi
+          echo "ok: flo_curves is not in the graph"
+
+      - name: check (native)
+        run: cargo check --workspace --all-targets --locked
+
+      # paged-server ships as a Worker (wasm32).
+      - name: check (wasm32)
+        run: cargo check -p paged-server --target wasm32-unknown-unknown --locked

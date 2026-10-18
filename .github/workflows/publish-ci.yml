@@ -7,10 +7,20 @@ on:
     branches: [main]
     paths:
       - "modules/publish/**"
+      # pdf-import path-depends on the engine's model crates and idml-import
+      # (and through them on more engine crates and on engine/core's
+      # workspace settings), so an engine change can break it.
+      - "engine/core/Cargo.toml"
+      - "engine/core/crates/**"
       - ".github/workflows/publish-ci.yml"
   pull_request:
     paths:
       - "modules/publish/**"
+      # pdf-import path-depends on the engine's model crates and idml-import
+      # (and through them on more engine crates and on engine/core's
+      # workspace settings), so an engine change can break it.
+      - "engine/core/Cargo.toml"
+      - "engine/core/crates/**"
       - ".github/workflows/publish-ci.yml"
 
 defaults:
@@ -21,9 +31,10 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -Dwarnings
 
-# The IDML adapter git-deps the Paged model crates from the public
-# paged-media/core engine repo, so CI fetches core over https (no auth
-# needed — both repos are public).
+# pdf-import builds on the engine's crates by path (engine/core/crates/), at
+# the same commit. Path dependencies are not lint-capped the way registry and
+# git dependencies are, so RUSTFLAGS=-Dwarnings above also fails this
+# workflow on a warning in any engine crate it compiles.
 jobs:
   check:
     name: fmt + clippy + build
@@ -49,10 +60,31 @@ jobs:
       - name: build (native)
         run: cargo build --workspace --all-targets
 
-      # The save-back path runs in the editor/SDK wasm, so keep the adapter
-      # wasm32-clean; the pdf-import mapper SHIPS as wasm in the pdf bundle.
+      # The pdf-import mapper SHIPS as wasm in the pdf bundle. (The IDML
+      # adapter's own wasm32 lint is core-ci.yml's `clippy (wasm32)` now that
+      # it lives in engine/core.)
       - name: build (wasm32)
-        run: cargo build -p idml-import -p idml-export -p pdf-import --target wasm32-unknown-unknown
+        run: cargo build -p pdf-import --target wasm32-unknown-unknown
+
+      # The engine patches flo_curves (engine/core/Cargo.toml, C-21), and a
+      # [patch] applies only in the workspace that declares it. Depending on
+      # an engine crate that reaches flo_curves (paged-mutate and everything
+      # above it) would build the UNPATCHED crates.io release here, whose
+      # boolean ops can panic. So flo_curves must not be in this graph.
+      - name: guard (no flo_curves in the graph)
+        run: |
+          set -euo pipefail
+          # Any resolution error fails here, so the check below can only
+          # fail for the one reason it is about.
+          cargo tree --locked --target all > /dev/null
+          # `cargo tree -i` exits non-zero when the package is not in the
+          # graph at all, which is the passing case.
+          if out=$(cargo tree --locked --target all -i flo_curves 2>/dev/null) && [ -n "$out" ]; then
+            echo "::error title=flo_curves in the publish graph::the engine's flo_curves [patch] does not apply here; drop the dependency path below"
+            echo "$out"
+            exit 1
+          fi
+          echo "ok: flo_curves is not in the graph"
 
   # The TS side — the paged.publish plugin bundle (packages/publish-bundle),
   # which consumes the published @paged-media/plugin-api + plugin-sdk canaries.
@@ -82,8 +114,9 @@ jobs:
 
   # Test evidence — the suites this repo has always had and CI never ran.
   # `check` covers fmt/clippy/build and `bundle` covers typecheck/build, so a
-  # green run said nothing about whether the 170 Rust tests (pdf-import,
-  # idml-import) or the pdf-bundle vitest specs still passed. The state matrix
+  # green run said nothing about whether the Rust tests (pdf-import; the
+  # idml-import ones run in core-ci.yml since the adapter moved to
+  # engine/core) or the pdf-bundle vitest specs still passed. The state matrix
   # read plugin.publish "never published" for the same reason.
   #
   # Evidence hand-off is INVERTED (2026-07-26): this repo is PUBLIC and the
@@ -105,12 +138,6 @@ jobs:
           workspaces: modules/publish -> target
           prefix-key: v0-rust-publish
       - uses: taiki-e/install-action@nextest
-
-      # idml-coverage reads `cargo metadata --offline`, which needs every crate
-      # of the graph on disk; rust-cache prunes the ones the build never
-      # compiles (zip's optional `arbitrary`), so fetch the whole graph first.
-      - name: fetch the dependency graph
-        run: cargo fetch
 
       # Red results must still publish (the matrix wants the ✗), so the run
       # does not abort here — the gate at the end fails the build once the

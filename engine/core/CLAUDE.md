@@ -71,10 +71,14 @@ formatted in one mechanical pass; the workaround is retired.
 
 ## Layout
 
-- `idml-import` / `idml-export` — the IDML reader and writer live in the
-  `paged-media/plugin-publish` repository (ADR 022) and are git-depended
-  here by rev (13 `Cargo.toml` pins plus `Cargo.lock`; move them together).
-  An IDML spelling fix lands there first, then the pins move here.
+- `crates/idml-import/` / `crates/idml-export/` — the IDML reader and
+  writer (ADR 022's adapter). Ordinary workspace members: every crate here
+  that uses them names them by path, and `modules/publish` (pdf-import)
+  path-depends on `idml-import` and the model crates, so an IDML change and
+  its callers land in one commit. `crates/idml-coverage/` is the static
+  inventory of both (`cargo run -p idml-coverage >
+  docs/reference/idml-coverage.json`; its tests fail when the committed file
+  or the ratchet `docs/reference/idml-coverage-ratchet.json` is stale).
 - `crates/paged-scene/` — `Document::open`. Resolves cascade,
   `frame_for_story`, `text_frame_index`, `frame_chain` (threading).
 - `crates/paged-text/` — `shape_run`, `compose_paragraph`,
