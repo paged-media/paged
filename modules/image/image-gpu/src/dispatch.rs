@@ -387,7 +387,9 @@ impl<'p> DispatchBatch<'p> {
             let slice = res.readback.slice(..);
             let mut out = Vec::with_capacity(row_bytes * res.h as usize);
             {
-                let data = slice.get_mapped_range();
+                let data = slice
+                    .get_mapped_range()
+                    .map_err(|e| GpuError::Readback(format!("mapped range: {e}")))?;
                 for row in 0..res.h {
                     let start = (row * res.padded_row) as usize;
                     out.extend_from_slice(&data[start..start + row_bytes]);
