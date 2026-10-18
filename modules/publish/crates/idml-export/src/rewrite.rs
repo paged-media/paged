@@ -5973,6 +5973,7 @@ fn rewrite_story_part(
                         body.open_opaque(&e);
                         body.push_in_opaque(Event::Empty(e.into_owned()));
                         body.in_note = false;
+                        body.in_deletion = false;
                     } else {
                         writer.write_event(Event::Empty(e.into_owned()))?;
                     }
@@ -6227,6 +6228,7 @@ fn rewrite_story_part(
                     )?;
                     if opaque_depth == 0 {
                         body.in_note = false;
+                        body.in_deletion = false;
                     }
                     buf.clear();
                     continue;
@@ -6680,6 +6682,11 @@ struct RunBody {
     /// The open opaque subtree is a `<Note>`: its events are an
     /// [`Self::editorial`] entry's.
     in_note: bool,
+    /// The open opaque subtree is a tracked deletion (D-01): one character
+    /// of the run's text, a [`paged_model::TRACKED_DELETION_MARKER`]. Its
+    /// events replay with an unchanged run; a run written from the model
+    /// writes the paragraph's deletion at the marker instead.
+    in_deletion: bool,
 }
 
 /// Append one decoded `<Content>` fragment to a run's reconstructed
@@ -6760,6 +6767,10 @@ impl RunBody {
 
     /// Buffer an event of an open opaque subtree (see [`Self::opaque`]).
     fn push_in_opaque(&mut self, event: Event<'static>) {
+        if self.in_deletion {
+            self.events.push(event);
+            return;
+        }
         if self.in_note {
             if let Some(sub) = self.editorial.last_mut() {
                 sub.push(event.clone());
@@ -6775,9 +6786,12 @@ impl RunBody {
     fn open_opaque(&mut self, e: &BytesStart) {
         self.active = true;
         self.in_note = e.name().as_ref() == b"Note";
+        self.in_deletion = !self.in_note && is_opaque_deletion(e);
         if self.in_note {
             self.text.push(paged_model::NOTE_MARKER);
             self.editorial.push(Vec::new());
+        } else if self.in_deletion {
+            self.text.push(paged_model::TRACKED_DELETION_MARKER);
         } else {
             self.opaque.push((self.text.chars().count(), Vec::new()));
         }
@@ -6915,6 +6929,7 @@ pub(crate) struct Before {
     endnotes: usize,
     notes: usize,
     ranges: usize,
+    deletions: usize,
 }
 
 impl Before {
@@ -6926,6 +6941,7 @@ impl Before {
             endnotes: self.endnotes + n(paged_model::ENDNOTE_REFERENCE_MARKER),
             notes: self.notes + n(paged_model::NOTE_MARKER),
             ranges: self.ranges + n(paged_model::ENDNOTE_NUMBER_MARKER),
+            deletions: self.deletions + n(paged_model::TRACKED_DELETION_MARKER),
         }
     }
 }
@@ -7073,6 +7089,41 @@ pub(crate) fn write_note(
 /// tracked deletion. Each holds ranges of its own; the writer carries it
 /// whole, as opaque markup of the run it stands in — a note as the run's
 /// note (`RunBody::editorial`), the others at their offsets.
+/// A tracked deletion as InDesign writes it (D-01; core
+/// `track-changes-probe`): `<Change ChangeType UserName Date
+/// AppliedDocumentUser>` around the deleted ranges, written verbatim.
+fn write_tracked_deletion(
+    writer: &mut Writer<Cursor<Vec<u8>>>,
+    change: &paged_model::TrackedChange,
+) -> Result<(), quick_xml::Error> {
+    use std::io::Write;
+    let mut el = BytesStart::new("Change");
+    if let Some(v) = &change.date {
+        el.push_attribute(("Date", v.as_str()));
+    }
+    el.push_attribute(("ChangeType", change.change_type.as_str()));
+    if let Some(v) = &change.user_name {
+        el.push_attribute(("UserName", v.as_str()));
+    }
+    if let Some(v) = &change.document_user {
+        el.push_attribute(("AppliedDocumentUser", v.as_str()));
+    }
+    match change.deleted_xml.as_deref() {
+        Some(inner) if !inner.is_empty() => {
+            writer.write_event(Event::Start(el))?;
+            writer.get_mut().write_all(inner.as_bytes())?;
+            writer.write_event(Event::End(BytesEnd::new("Change")))?;
+        }
+        _ => writer.write_event(Event::Empty(el))?,
+    }
+    Ok(())
+}
+
+/// `<Change ChangeType="DeletedText">`: a tracked deletion (D-01).
+fn is_opaque_deletion(e: &BytesStart) -> bool {
+    e.name().as_ref() == b"Change" && attr_value(e, b"ChangeType").as_deref() == Some("DeletedText")
+}
+
 fn is_opaque_subtree(e: &BytesStart) -> bool {
     match e.name().as_ref() {
         b"Note" | b"HiddenText" => true,
@@ -7222,6 +7273,7 @@ fn flush_run_body(
     body.opaque.clear();
     body.editorial.clear();
     body.in_note = false;
+    body.in_deletion = false;
     Ok(())
 }
 
@@ -7323,9 +7375,22 @@ fn write_run_marks(
     const MARK: char = paged_model::FOOTNOTE_REFERENCE_MARKER;
     const ENDNOTE: char = paged_model::ENDNOTE_REFERENCE_MARKER;
     const NOTE: char = paged_model::NOTE_MARKER;
-    if !text.contains(MARK) && !text.contains(ENDNOTE) && !text.contains(NOTE) {
+    const DEL: char = paged_model::TRACKED_DELETION_MARKER;
+    if !text.contains(MARK)
+        && !text.contains(ENDNOTE)
+        && !text.contains(NOTE)
+        && !text.contains(DEL)
+    {
         return write_run_content(writer, text);
     }
+    // The paragraph's tracked deletions before this run (D-01).
+    let deletions_before = para.map_or(0, |p| {
+        p.runs
+            .iter()
+            .take_while(|r| !std::ptr::eq(*r, run))
+            .map(|r| r.text.matches(DEL).count())
+            .sum::<usize>()
+    });
     let source = sources.notes;
     // The paragraph's endnote references before this run (core ADR 170).
     let endnotes_before = para.map_or(0, |p| {
@@ -7360,8 +7425,24 @@ fn write_run_marks(
         None => (&[], 0),
     };
     let mut segment = String::new();
-    let (mut k, mut e, mut n) = (0usize, 0usize, 0usize);
+    let (mut k, mut e, mut n, mut d) = (0usize, 0usize, 0usize, 0usize);
     for ch in text.chars() {
+        if ch == DEL {
+            // A tracked deletion (D-01): InDesign's `<Change>` with the
+            // deleted ranges as they were read.
+            if !segment.is_empty() {
+                write_run_content(writer, &segment)?;
+                segment.clear();
+            }
+            if let Some(change) = para.and_then(|p| {
+                p.tracked_deletions
+                    .get(deletions_before + before_piece.deletions + d)
+            }) {
+                write_tracked_deletion(writer, change)?;
+            }
+            d += 1;
+            continue;
+        }
         if ch == NOTE {
             // An editorial note (core ADR 172): the run's own subtree of the
             // same note when it held one, the model's otherwise.
