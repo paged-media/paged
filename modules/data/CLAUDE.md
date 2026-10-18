@@ -224,11 +224,11 @@ bun run validate:manifest
 
 # Publishing (publish.yml, after green CI): a version already on npm must be
 # bumped when its inputs changed, and the tarball must carry DuckDB.
-node scripts/package-hash.mjs --check
+bun scripts/package-hash.mjs --check
 bash scripts/pubcheck.sh <packed.tgz>
 
 # Oracles (docs/design/oracles.md): replays run in the suites above
-# (data-conformance oracle.rs / oracle_props.rs; vitest duckdb-sql-oracle +
+# (data-conformance oracle.rs / oracle_props.rs; bun test duckdb-sql-oracle +
 # indesign-merge-duckdb). Re-recording is local only:
 DUCKDB=/path/to/duckdb-v1.1.1 node conformance/duckdb-sql/record.mjs
 bash conformance/indesign-merge/record.sh   # drives InDesign 2025

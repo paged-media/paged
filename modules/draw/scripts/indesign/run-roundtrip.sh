@@ -241,7 +241,7 @@ unzip -p "$EXPORT" 'Spreads/*.xml' >"$ZORDER" 2>"$ERR" ||
   die 4 "InDesign's own IDML export has no readable spread" "$(cat "$ERR")" "Staging kept: $STAGE"
 SHA="$(shasum -a 256 <"$READER" | cut -d' ' -f1)"
 IDML_SHA="$(shasum -a 256 <"$IN" | cut -d' ' -f1)"
-node "$WRITER" \
+bun "$WRITER" \
   "$RAW" "$OUT" "$NAME" "${READER#"$ROOT"/}" "$SHA" "${IN#"$ROOT"/}" "$IDML_SHA" \
   "$(sw_vers -productVersion)" "$PDF" "$ZORDER" ||
   die 4 "InDesign's reply was refused; nothing was written to $OUT" "Raw reply kept: $RAW"
