@@ -64,7 +64,7 @@ die() {
 [ "$(uname -s)" = "Darwin" ] || die 2 "this drives Adobe InDesign through osascript; macOS only"
 [ -f "$1" ] || die 2 "no such IDML: $1"
 command -v osascript >/dev/null || die 2 "osascript not found"
-command -v node >/dev/null || die 2 "node not found (the reply is judged with it)"
+command -v bun >/dev/null || die 2 "bun not found (the reply is judged with it)"
 command -v unzip >/dev/null || die 2 "unzip not found (the label keys are read with it)"
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -117,7 +117,7 @@ rm -f "$PDF" "$EXPORT" "$ZORDER"
 # (`grep` finding no key is the common case, not a failure.)
 KEYS_JSON="$({ unzip -p "$IDML" 'Spreads/*.xml' 2>/dev/null || true; } |
   { grep -o 'KeyValuePair Key="[^"]*"' || true; } | sed 's/^KeyValuePair Key="//; s/"$//' | sort -u |
-  node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.stringify(s.split("\n").filter(Boolean))))')"
+  bun -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.stringify(s.split("\n").filter(Boolean))))')"
 
 # --- 0. the script InDesign will be handed ---------------------------------
 {

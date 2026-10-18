@@ -56,7 +56,7 @@ die() {
 [ "$(uname -s)" = "Darwin" ] || die 2 "this drives Adobe Illustrator through osascript; macOS only"
 [ -f "$1" ] || die 2 "no such probe: $1"
 command -v osascript >/dev/null || die 2 "osascript not found"
-command -v node >/dev/null || die 2 "node not found (the reply is validated with it)"
+command -v bun >/dev/null || die 2 "bun not found (the reply is validated with it)"
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 PROBE="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
