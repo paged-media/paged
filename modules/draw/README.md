@@ -42,7 +42,7 @@ No sibling checkout is needed: the plugin contract
 
 ```bash
 bun install
-bun run test           # contract-import lint + bun test in every package (+ draw-bundle's DOM task)
+bun run test           # bun test in every package (+ draw-bundle's DOM task); the import rule is lint (root: bun run lint)
 bun run typecheck      # the machines' wire shapes are the contract's Mutation variants
 bun run bench          # geometry benches (trended, never gated)
 node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json

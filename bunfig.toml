@@ -1,6 +1,30 @@
 # Bun configuration for the root workspace (see package.json `workspaces`).
 # Bun's version is pinned in /.prototools and in package.json `packageManager`.
 
+[fmt]
+# `bun fmt` (tooling/js/fmt.sh; the pinned Bun canary until a stable Bun
+# ships it). Prettier 3's defaults, written out so that a later change of a
+# default cannot reformat the repository silently. Measured on this code
+# (docs/migration/bun-fmt.md): each default rewrites fewer existing lines
+# than its alternative (printWidth 80: 34.5k lines; 100: 41.4k; 120: 54.9k).
+# What is not formatted, and why: /.prettierignore.
+printWidth = 80
+tabWidth = 2
+useTabs = false
+semi = true
+singleQuote = false
+jsxSingleQuote = false
+quoteProps = "as-needed"
+trailingComma = "all"
+bracketSpacing = true
+bracketSameLine = false
+objectWrap = "preserve"
+arrowParens = "always"
+proseWrap = "preserve"
+htmlWhitespaceSensitivity = "css"
+embeddedLanguageFormatting = "auto"
+endOfLine = "lf"
+
 [install]
 # Every package gets its own node_modules with exactly what it declares
 # (like pnpm): an undeclared import fails instead of resolving through a
@@ -15,3 +39,333 @@ linker = "isolated"
 # for a plain version range it happens to satisfy, which would hide a stray
 # npm pin instead of failing that check.
 linkWorkspacePackages = false
+
+# ---------------------------------------------------------------------------
+# bun lint: the one lint config for every JavaScript and TypeScript file in
+# the repository (docs/adr/PM-0003-one-lint-config.md). It holds correctness
+# rules and import boundaries only; formatting belongs to `bun fmt`.
+#
+# `bun lint` is not in a stable Bun release yet. Run it through
+# tooling/js/bun-canary.sh, which pins an exact canary build; the runtime and
+# package manager stay on the version in /.prototools. A stable Bun 1.4.3
+# reads this section and ignores it.
+#
+# Every rule is set here explicitly: the categories are off, so a Bun
+# upgrade cannot turn new rules on. A later [[lint.overrides]] entry replaces
+# an earlier one's options for the same rule (as in ESLint), so each override
+# restates the full list of restrictions that applies to its files.
+# tooling/js/lint-selftest.mjs proves that each boundary fires, and that the
+# allowed imports stay allowed.
+[lint]
+ignorePatterns = [
+  # Build output, whatever the directory is called. node_modules and the
+  # .gitignore'd paths are skipped anyway.
+  "**/dist/**",
+  "**/dist-demo/**",
+  "**/.vite/**",
+  "**/playwright-report/**",
+  "**/test-results/**",
+  # Type declarations (wasm-bindgen output, the vendored wire, the .d.mts
+  # beside a script).
+  "**/*.d.ts",
+  "**/*.d.mts",
+  "**/*.d.cts",
+  # A third-party prebuilt (pdfium), committed as shipped.
+  "modules/publish/packages/pdf-bundle/bin/**",
+  # ExtendScript (ES3) that InDesign, Illustrator and Photoshop run: the
+  # oracle and probe scripts. Not part of the JavaScript workspace.
+  "**/*.jsx",
+]
+# An eslint-disable comment for a rule that is on but reports nothing there
+# is an error. (bun lint does not check comments that name a rule this config
+# leaves off.)
+reportUnusedDisableDirectives = "error"
+
+[lint.categories]
+correctness = "off"
+suspicious = "off"
+pedantic = "off"
+perf = "off"
+style = "off"
+restriction = "off"
+nursery = "off"
+
+[lint.rules]
+# Bun turns these on by default. The test-runner rules are not part of this
+# config; jsx-uses-react only marks React as used and reports nothing.
+"bun:test/*" = "off"
+"react/jsx-uses-react" = "off"
+
+# Correctness: ESLint's `recommended` set, without no-unused-vars and no-undef
+# (the TypeScript compiler checks both). Where a rule has options, ESLint's
+# defaults are written out: with a bunfig config, Bun's own defaults apply,
+# and for some rules they are looser (no-irregular-whitespace skips regular
+# expressions, no-loss-of-precision skips decimals, no-empty-pattern allows {}
+# parameters). On TypeScript files bun lint runs the typescript-eslint
+# version of no-dupe-class-members, no-loss-of-precision, no-redeclare and
+# no-unused-private-class-members.
+"constructor-super" = "error"
+"for-direction" = "error"
+"getter-return" = ["error", { allowImplicit = false }]
+"no-async-promise-executor" = "error"
+"no-case-declarations" = "error"
+"no-class-assign" = "error"
+"no-compare-neg-zero" = "error"
+"no-cond-assign" = ["error", "except-parens"]
+"no-const-assign" = "error"
+"no-constant-binary-expression" = ["error", { allowLiteralToggle = false }]
+"no-constant-condition" = ["error", { checkLoops = "allExceptWhileTrue" }]
+"no-control-regex" = "error"
+"no-debugger" = "error"
+"no-delete-var" = "error"
+"no-dupe-args" = "error"
+"no-dupe-class-members" = "error"
+"no-dupe-else-if" = "error"
+"no-dupe-keys" = "error"
+"no-duplicate-case" = "error"
+"no-empty" = ["error", { allowEmptyCatch = false }]
+"no-empty-character-class" = "error"
+"no-empty-pattern" = ["error", { allowObjectPatternsAsParameters = false }]
+"no-empty-static-block" = "error"
+"no-ex-assign" = "error"
+"no-extra-boolean-cast" = "error"
+"no-fallthrough" = [
+  "error",
+  { commentPattern = '(?i:falls?\s?through)', allowEmptyCase = false, reportUnusedFallthroughComment = false },
+]
+"no-func-assign" = "error"
+"no-global-assign" = ["error", { exceptions = [] }]
+"no-import-assign" = "error"
+"no-invalid-regexp" = "error"
+"no-irregular-whitespace" = [
+  "error",
+  { skipStrings = true, skipComments = false, skipRegExps = false, skipTemplates = false, skipJSXText = false },
+]
+"no-loss-of-precision" = ["error", { ignoreDecimals = false }]
+"no-misleading-character-class" = ["error", { allowEscape = false }]
+"no-new-native-nonconstructor" = "error"
+"no-nonoctal-decimal-escape" = "error"
+"no-obj-calls" = "error"
+"no-octal" = "error"
+"no-prototype-builtins" = "error"
+"no-redeclare" = ["error", { builtinGlobals = true }]
+"no-regex-spaces" = "error"
+"no-self-assign" = ["error", { props = true }]
+"no-setter-return" = "error"
+"no-shadow-restricted-names" = ["error", { reportGlobalThis = false }]
+"no-sparse-arrays" = "error"
+"no-this-before-super" = "error"
+"no-unexpected-multiline" = "error"
+"no-unreachable" = "error"
+"no-unsafe-finally" = "error"
+"no-unsafe-negation" = ["error", { enforceForOrderingRelations = false }]
+"no-unsafe-optional-chaining" = [
+  "error",
+  { disallowArithmeticOperators = false },
+]
+"no-unused-labels" = "error"
+"no-unused-private-class-members" = "error"
+"no-useless-backreference" = "error"
+"no-useless-catch" = "error"
+"no-useless-escape" = ["error", { allowRegexCharacters = [] }]
+"no-with" = "error"
+"require-yield" = "error"
+"use-isnan" = [
+  "error",
+  { enforceForIndexOf = false, enforceForSwitchCase = true },
+]
+"valid-typeof" = ["error", { requireStringLiterals = false }]
+
+# The Rules of React: eslint-plugin-react-hooks 7.1's `recommended-latest`
+# set, built into bun lint (the compiler's checks included), every rule an
+# error. The violations that existed when they were turned on are recorded in
+# eslint-suppressions.json: CI fails on any new one, and the count there only
+# goes down (docs/migration/bun-lint.md).
+"react-hooks/rules-of-hooks" = "error"
+"react-hooks/exhaustive-deps" = "error"
+"react-hooks/config" = "error"
+"react-hooks/error-boundaries" = "error"
+"react-hooks/gating" = "error"
+"react-hooks/globals" = "error"
+"react-hooks/immutability" = "error"
+"react-hooks/incompatible-library" = "error"
+"react-hooks/preserve-manual-memoization" = "error"
+"react-hooks/purity" = "error"
+"react-hooks/refs" = "error"
+"react-hooks/set-state-in-effect" = "error"
+"react-hooks/set-state-in-render" = "error"
+"react-hooks/static-components" = "error"
+"react-hooks/unsupported-syntax" = "error"
+"react-hooks/use-memo" = "error"
+"react-hooks/void-use-memo" = "error"
+
+# --- The editor's architecture boundaries (apps/editor ADR 206) ------------
+#
+#   (a) apps/canvas/src/worker/**: no @paged-media/shell, no React. A worker
+#       that imports the shell's entry point loads React and hangs at startup.
+#   (b) packages/client/**: React-free. The client is the wasm/SAB boundary
+#       and the worker imports its entry point.
+#   (c) everything but the shell: no deep imports of shell internals.
+#   (d) the gesture-spine deep paths: only packages/tools and packages/client.
+
+# (c) + (d): the whole editor except the shell itself.
+[[lint.overrides]]
+files = ["apps/editor/**/*.{ts,tsx}"]
+excludeFiles = ["apps/editor/packages/shell/**"]
+[lint.overrides.rules]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { group = ["@paged-media/shell/components/*", "@paged-media/shell/src/*"], message = "Do not deep-import shell internals (components/ui/*, src/*). Import the public symbol from the @paged-media/shell barrel; the internals are not a stable API." },
+    { group = ["@paged-media/shell/tools/gesture-spine", "@paged-media/shell/src/tools/gesture-spine", "@paged-media/client/sab/gesture"], message = "The gesture-spine deep paths are reserved for packages/tools + packages/client. Everyone else uses the GestureSpine re-export from the @paged-media/shell barrel." },
+  ] },
+]
+
+# (d): packages/tools and packages/client may use the gesture-spine paths.
+[[lint.overrides]]
+files = [
+  "apps/editor/packages/tools/**/*.{ts,tsx}",
+  "apps/editor/packages/client/**/*.{ts,tsx}",
+]
+[lint.overrides.rules]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { group = ["@paged-media/shell/components/*", "@paged-media/shell/src/*"], message = "Do not deep-import shell internals (components/ui/*, src/*). Import the public symbol from the @paged-media/shell barrel; the internals are not a stable API." },
+  ] },
+]
+
+# (b): packages/client stays React-free.
+[[lint.overrides]]
+files = ["apps/editor/packages/client/**/*.{ts,tsx}"]
+[lint.overrides.rules]
+"no-restricted-imports" = [
+  "error",
+  { paths = [{ name = "react", message = "@paged-media/client must stay React-free — it is the wasm/SAB boundary and is imported by the worker. A React edge here reintroduces the worker-hang class." }, { name = "react-dom", message = "@paged-media/client must stay React-free (see the react restriction)." }], patterns = [{ group = ["@paged-media/shell/components/*", "@paged-media/shell/src/*"], message = "Do not deep-import shell internals (components/ui/*, src/*). Import the public symbol from the @paged-media/shell barrel; the internals are not a stable API." }] },
+]
+
+# (a): worker code. The most restrictive zone, so it comes last of the four.
+[[lint.overrides]]
+files = ["apps/editor/apps/canvas/src/worker/**/*.{ts,tsx}"]
+[lint.overrides.rules]
+"no-restricted-imports" = [
+  "error",
+  { paths = [{ name = "react", message = "Worker code must not import React. The shell barrel pulls React in and a worker that loads it HANGS at startup (real bug). Deep-import SAB/protocol primitives from @paged-media/client instead." }, { name = "react-dom", message = "Worker code must not import react-dom (see the react restriction)." }], patterns = [{ group = ["@paged-media/shell", "@paged-media/shell/*"], message = "Worker code must NEVER route through @paged-media/shell — the barrel loads React and the worker hangs at startup. Deep-import the primitive you need from @paged-media/client (its barrel is React-free)." }, { group = ["@paged-media/shell/components/*", "@paged-media/shell/src/*"], message = "Do not deep-import shell internals (components/ui/*, src/*). Import the public symbol from the @paged-media/shell barrel; the internals are not a stable API." }] },
+]
+
+# --- Built-ins and extensions (docs/adr/PM-0002) ---------------------------
+#
+# A built-in module's package sources (tests excluded) import only the
+# extension contract (@paged-media/plugin-api, @paged-media/plugin-sdk), the
+# internal shared packages under platform/shared/*, the module's own
+# packages, react, and the third-party packages listed for that module.
+# Everything else, the editor's packages and other modules included, is an
+# error. Each entry is an allow-list: the regex matches any import that is
+# NOT on it. Relative imports are always allowed.
+#
+# The internal shared packages: @paged-media/test-kit. The self-test reads
+# platform/shared/*/package.json and fails when a shared package is missing
+# from these lists, or when an extension may import it.
+
+[[lint.overrides]]
+files = ["modules/data/packages/**/src/**/*.{ts,tsx}"]
+excludeFiles = ["**/*.spec.*", "**/*.test.*"]
+[lint.overrides.rules]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit)|react|react-dom|@duckdb/duckdb-wasm|apache-arrow)(/|$)|@paged-media/data-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages, react, and its listed third-party packages (paged.data: @duckdb/duckdb-wasm, apache-arrow). Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+  ] },
+]
+
+[[lint.overrides]]
+files = ["modules/doc/packages/**/src/**/*.{ts,tsx}"]
+excludeFiles = ["**/*.spec.*", "**/*.test.*"]
+[lint.overrides.rules]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit|doc)|react|react-dom)(/|$)|@paged-media/doc-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+  ] },
+]
+
+[[lint.overrides]]
+files = ["modules/draw/packages/**/src/**/*.{ts,tsx}"]
+excludeFiles = ["**/*.spec.*", "**/*.test.*"]
+[lint.overrides.rules]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit)|react|react-dom)(/|$)|@paged-media/draw-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+  ] },
+]
+
+[[lint.overrides]]
+files = ["modules/image/{glue,manifest}/**/src/**/*.{ts,tsx}"]
+excludeFiles = ["**/*.spec.*", "**/*.test.*"]
+[lint.overrides.rules]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit)|react|react-dom)(/|$)|@paged-media/image-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+  ] },
+]
+
+[[lint.overrides]]
+files = ["modules/publish/packages/**/src/**/*.{ts,tsx}"]
+excludeFiles = ["**/*.spec.*", "**/*.test.*"]
+[lint.overrides.rules]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit|publish|pdf)|react|react-dom|jszip)(/|$)|@paged-media/(publish|pdf)-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages, react, and its listed third-party packages (publish: jszip). Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+  ] },
+]
+
+[[lint.overrides]]
+files = ["modules/sheet/packages/**/src/**/*.{ts,tsx}"]
+excludeFiles = ["**/*.spec.*", "**/*.test.*"]
+[lint.overrides.rules]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit)|react|react-dom)(/|$)|@paged-media/sheet-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+  ] },
+]
+
+[[lint.overrides]]
+files = ["modules/slide/packages/**/src/**/*.{ts,tsx}"]
+excludeFiles = ["**/*.spec.*", "**/*.test.*"]
+[lint.overrides.rules]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit|slide)|react|react-dom)(/|$)|@paged-media/slide-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+  ] },
+]
+
+[[lint.overrides]]
+files = ["modules/web/packages/**/src/**/*.{ts,tsx}"]
+excludeFiles = ["**/*.spec.*", "**/*.test.*"]
+[lint.overrides.rules]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit)|react|react-dom)(/|$)|@paged-media/web-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+  ] },
+]
+
+# Community-facing: everything in platform/extensions (tests and scripts
+# included) imports only the public packages (@paged-media/plugin-api,
+# @paged-media/plugin-sdk, @paged-media/idml-viewer, @paged-media/canvas-wasm)
+# and its own (plugin-cli, ai, cli). Never platform/shared/*, a module, or
+# the editor's packages. Third-party packages are not restricted.
+[[lint.overrides]]
+files = ["platform/extensions/**/*.{ts,tsx,js,mjs,cjs}"]
+[lint.overrides.rules]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { regex = '^@paged-media/(?!(plugin-api|plugin-sdk|idml-viewer|canvas-wasm|plugin-cli|ai|cli)(/|$))', message = "platform/extensions is what third-party extensions build on: it imports only the public @paged-media packages (plugin-api, plugin-sdk, idml-viewer, canvas-wasm) and its own. Internal shared code (platform/shared/*), the modules and the editor are not part of the contract (docs/adr/PM-0002)." },
+  ] },
+]

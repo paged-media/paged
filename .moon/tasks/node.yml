@@ -37,6 +37,18 @@ tasks:
     inputs:
       - '@group(js-sources)'
 
+  js-lint:
+    description: >-
+      bun lint over the project with the root config (/bunfig.toml [lint]),
+      through the pinned canary (tooling/js/bun-canary.sh).
+    toolchains: ['system']
+    command: 'bash $workspaceRoot/tooling/js/bun-canary.sh lint --no-script .'
+    inputs:
+      - '@group(js-sources)'
+      - '/eslint-suppressions.json'
+      - '/tooling/js/bun-canary.sh'
+      - '/tooling/js/bun-canary-version'
+
   js-test:
     description: 'The workspace `test` script.'
     command: 'bun run test'

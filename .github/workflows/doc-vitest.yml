@@ -61,8 +61,6 @@ jobs:
       - name: bun install (root workspace)
         working-directory: .
         run: bun install --frozen-lockfile
-      - name: contract-import lint (fail fast)
-        run: node scripts/check-contract-imports.mjs
       - name: typecheck
         run: bun run --filter './packages/*' typecheck
       # CI never checks out ../plugin-sdk (that path only exists in the local

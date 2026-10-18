@@ -19,9 +19,7 @@
 
 import type { ComponentType } from "react";
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { Camera } from "@paged-media/client";
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { PageId } from "@paged-media/client";
 
 import type { Disposable, VisibilityPredicate } from "./types";

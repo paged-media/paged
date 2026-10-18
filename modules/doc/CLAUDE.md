@@ -65,7 +65,7 @@ Rules for every code change in this repo:
   and published contracts — never core, never another plugin, not at build time,
   runtime, or via side channels. `docx-lower` is pure model→IR with **no core
   dependency**; the native model is reached only through `host.document.mutate`.
-  Rust guard: `deny.toml` `[sources]`. TS guard: `scripts/check-contract-imports.mjs`.
+  Rust guard: `deny.toml` `[sources]`. TS guard: the contract-import lint rule (`/bunfig.toml`, PM-0003).
   SDK gaps become RFI entries — NEVER core modifications from this repo.
 - **PURE LOWERING.** `docx-lower` is pure `docx-core → LoweredDoc`;
   `doc-host-model` is pure `LoweredDoc → Mutation[]`. Every behavior change lands

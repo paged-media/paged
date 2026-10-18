@@ -25,7 +25,7 @@ paged-sdk = { path = "../../crates/paged-sdk" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
-wgpu = { version = "22", default-features = false, features = ["webgpu"] }
+wgpu = { version = "30.0.1", default-features = false, features = ["webgpu"] }
 # NOTE: release-profile tweaks (opt-level = "z", lto, panic = abort, strip)
 # are applied via measure.sh flags rather than a package-level profile,
 # because Cargo ignores profiles declared in workspace-member packages.
