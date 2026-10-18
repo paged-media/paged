@@ -113,6 +113,7 @@ is not written yet.
 | [182](182-tagged-pdf.md) | Create Tagged PDF: stories and paragraphs as InDesign tags them | Accepted 2026-10-18 |
 | [183](183-structural-export.md) | The IDML a save writes holds the document's structure as InDesign reads it | Accepted 2026-10-18 |
 | [184](184-tracked-changes.md) | Tracked changes kept, accepted and rejected as InDesign keeps them | Accepted 2026-10-18 |
+| [185](185-the-wasm-packages-are-workspace-packages.md) | The engine's wasm packages are workspace packages | Accepted 2026-10-18 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).
