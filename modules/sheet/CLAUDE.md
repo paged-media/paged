@@ -28,7 +28,7 @@ per spec §4): `sheet-core` (frozen types + AST), `sheet-parser`,
 `sheet-grid` (windowed GridScene — the in-frame surface), `sheet-chart`
 (plotters + a custom paged.draw `DrawingBackend` → a frozen ChartGeometry
 IR — NOT charming, NOT hand-rolled SVG), `sheet-js` (wasm-bindgen
-surface), `sheet-conformance` (TEST-ONLY). TS packages (pnpm `packages/*`,
+surface), `sheet-conformance` (TEST-ONLY). TS packages (`packages/*`, in the root Bun workspace,
 draw/web convention): `sheet-host-model` (pure LoweredContent→Mutation
 translation) + `sheet-bundle` (manifest + `activate(host)` + workbook
 panel + grid panel + datasets panel + 12 commands + engine boot).
@@ -214,8 +214,8 @@ cargo deny check
 bash scripts/build-wasm.sh
 
 # TS (the bundle) — install order: editor → plugin-sdk → plugin-sheets
-pnpm install && pnpm test && pnpm typecheck
-pnpm validate:manifest
+bun install && bun run test && bun run typecheck
+bun run validate:manifest
 
 # Excel differential oracle — CI compares against the committed recordings:
 cargo test -p sheet-conformance --test it excel_oracle::
