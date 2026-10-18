@@ -6,8 +6,9 @@ target/
 /target-*/
 **/*.rs.bk
 
-# WASM build output
+# WASM build output (scripts/build-wasm-packages.sh writes dist/<package>/)
 pkg/
+/dist/
 
 # Fidelity artefacts (generated locally)
 corpus/**/out/
