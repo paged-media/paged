@@ -25,9 +25,35 @@ an MCP endpoint. Concept: `../docs/concept.md`.
 | `GET /v1/r/{repo}/file/{ref}` | the `.paged` projection; `?history=1` carries the history |
 | `GET /v1/r/{repo}/evidence` | the evidence log |
 
-Errors are RFC 9457 problem+json. Auth in M1 is service tokens only: the
-`PAGED_TOKENS` secret maps SHA-256(token) → actor id; without it every request
-is refused. The first writer of a repository owns it.
+Errors are RFC 9457 problem+json. The first writer of a repository owns it.
+
+## Sign-in
+
+paged.server is an OAuth 2.1 authorization server for its clients (an MCP client
+such as Claude, the editor, the CLI) and delegates identity to any OpenID Connect
+provider.
+
+| Route | |
+|---|---|
+| `GET /.well-known/oauth-authorization-server` | RFC 8414 metadata |
+| `GET /.well-known/oauth-protected-resource` | RFC 9728; a 401 names it in `WWW-Authenticate` |
+| `POST /oauth/register` | RFC 7591 dynamic registration; public clients, https or loopback redirects |
+| `GET /oauth/authorize` | PKCE S256 only → the provider (code + PKCE + nonce) → `/oauth/callback` |
+| `POST /oauth/token` | `authorization_code` (one-time, PKCE-checked) and `refresh_token` (rotating) |
+
+- Access tokens are HMAC-signed (`PAGED_TOKEN_SECRET`, ≥ 32 chars) and live an
+  hour: checking one needs no lookup.
+- Registered clients, pending logins, one-time codes and refresh tokens live in
+  the `AuthObject` Durable Object, so a code or refresh token is spent exactly
+  once.
+- The provider's ID token comes from its token endpoint over TLS with our client
+  secret (OIDC Core 3.1.3.7). So issuer, audience, expiry and nonce are checked,
+  and there is no JWKS code. The actor is `user:<sub>@<issuer host>`.
+- Configuration: `OIDC_ISSUER`, `OIDC_CLIENT_ID`, and the secrets
+  `OIDC_CLIENT_SECRET` and `PAGED_TOKEN_SECRET`. Without them every sign-in
+  route answers 503.
+- Service tokens still work: the `PAGED_TOKENS` secret maps SHA-256(token) →
+  actor id. With neither tokens nor sign-in configured, every request is refused.
 
 ## Local
 
@@ -38,14 +64,17 @@ npx wrangler dev --port 8791            # builds with worker-build; local worker
 cd ../.. && PAGED_SERVER_URL=http://127.0.0.1:8791 cargo test -p paged-sync
 ```
 
-The tests also want `other-token` → `user:other` in `PAGED_TOKENS`.
+The tests also want `other-token` → `user:other` in `PAGED_TOKENS`, and for
+`tests/oauth.rs` (which plays the identity provider on 127.0.0.1:8792):
+`OIDC_ISSUER=http://127.0.0.1:8792`, `OIDC_CLIENT_ID=paged-dev`,
+`OIDC_CLIENT_SECRET=fake-idp-secret` and a `PAGED_TOKEN_SECRET`.
 
 Nothing here deploys. Creating the bucket and deploying are separate,
 deliberate acts.
 
 ## Not yet
 
-OIDC sign-in and the OAuth server for MCP clients; the Workspace DO (members,
+The Workspace DO (members,
 roles, policy as governed data); change requests over HTTP; the MCP endpoint;
 the Session DO relay to an open editor tab. `paged-repo` is a path dependency
 into a sibling core checkout until core's `feat/paged-repo` is on origin.

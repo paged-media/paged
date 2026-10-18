@@ -27,13 +27,20 @@
 //!   GET  /v1/r/{repo}/file/{ref}     the .paged projection (?history=1 carries it)
 //!   GET  /v1/r/{repo}/evidence       the evidence log
 //!
-//! Errors are RFC 9457 problem+json.
+//!   /.well-known/oauth-authorization-server, /.well-known/oauth-protected-resource,
+//!   /oauth/{register,authorize,callback,token}   sign-in (see `oauth`)
+//!
+//! Errors are RFC 9457 problem+json (the OAuth token endpoint answers in OAuth's own shape).
 
 mod auth;
+mod auth_object;
+mod crypto;
+mod oauth;
 mod problem;
 mod repo_object;
 mod store;
 
+pub use auth_object::AuthObject;
 pub use repo_object::RepoObject;
 
 use worker::{event, Context, Env, Headers, Method, Request, RequestInit, Response, Result};
@@ -56,8 +63,31 @@ fn valid_repo(name: &str) -> bool {
 async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let url = req.url()?;
     let path = url.path().to_string();
-    if path == "/healthz" {
-        return Response::ok("ok");
+    match (req.method(), path.as_str()) {
+        (_, "/healthz") => return Response::ok("ok"),
+        (Method::Get, "/.well-known/oauth-authorization-server") => {
+            return oauth::authorization_server_metadata(&url)
+        }
+        (Method::Get, "/.well-known/oauth-protected-resource") => {
+            return oauth::protected_resource_metadata(&url)
+        }
+        _ => {}
+    }
+    if let Some(route) = path.strip_prefix("/oauth/") {
+        let Some(cfg) = oauth::Config::from(&env) else {
+            return problem(
+                503,
+                "Sign-in not configured",
+                "no identity provider or token secret",
+            );
+        };
+        return match (req.method(), route) {
+            (Method::Post, "register") => oauth::register(req, &env).await,
+            (Method::Get, "authorize") => oauth::authorize(req, &env, &cfg).await,
+            (Method::Get, "callback") => oauth::callback(req, &env, &cfg).await,
+            (Method::Post, "token") => oauth::token(req, &env, &cfg).await,
+            _ => problem(404, "Not found", "no such route"),
+        };
     }
     let Some(rest) = path.strip_prefix("/v1/r/") else {
         return problem(404, "Not found", "no such route");
@@ -73,11 +103,14 @@ async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let actor = match auth::actor(&req, &env) {
         Ok(a) => a,
         Err(auth::Denied::Unauthenticated) => {
-            return problem(
+            let mut r = problem(
                 401,
                 "Unauthenticated",
                 "a bearer token this server knows is required",
-            )
+            )?;
+            r.headers_mut()
+                .set("www-authenticate", &oauth::challenge(&url))?;
+            return Ok(r);
         }
         Err(auth::Denied::NotConfigured) => {
             return problem(

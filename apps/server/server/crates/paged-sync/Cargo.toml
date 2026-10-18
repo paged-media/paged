@@ -14,3 +14,7 @@ ureq = { version = "2", features = ["json"] }
 
 [dev-dependencies]
 zip = { version = "2", default-features = false, features = ["deflate"] }
+tiny_http = "0.12"
+sha2 = { workspace = true }
+base64 = "0.22"
+url = "2"

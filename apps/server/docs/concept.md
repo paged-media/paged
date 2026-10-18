@@ -29,8 +29,8 @@ endpoint** and a **relay** between Claude and an open editor tab.
 
 ## 3. Topology (Cloudflare, all Rust on workers-rs)
 
-One Worker (`paged-server`, crate `paged-server`, `worker` crate, wasm32), three Durable
-Object classes on SQLite storage, one R2 bucket, one KV namespace.
+One Worker (`paged-server`, crate `paged-server`, `worker` crate, wasm32), four Durable
+Object classes on SQLite storage, one R2 bucket. No KV.
 
 | Piece | Holds | Why this shape |
 |---|---|---|
@@ -39,7 +39,7 @@ Object classes on SQLite storage, one R2 bucket, one KV namespace.
 | **DO `Workspace`** (one per org) | members + roles, policy (versioned, itself governed), repo directory, agent definitions (accountable human, autonomy), service tokens, OAuth grants | the policy decision point for every Repo |
 | **DO `Session`** (one per live editor tab) | hibernating WebSocket to the tab, pending relayed calls, presence | the browser ↔ Claude proxy |
 | **R2 `paged-objects`** | objects > 64 KiB at `r/<repo>/<hash>` | free egress; per-repo prefix = delete-a-repo is one prefix delete |
-| **KV `OAUTH`** | short-lived OAuth codes | TTL eviction |
+| **DO `AuthObject`** (one) | OAuth clients, pending logins, one-time codes, rotating refresh tokens | strongly consistent: a code is spent exactly once (KV could not promise that); access tokens are HMAC-signed and need no lookup |
 
 Not used in v1: D1, Queues, Containers, Hyperdrive, Workflows. Each is a later lane (§9).
 
@@ -64,7 +64,7 @@ WebSocket hibernation semantics in workers-rs.
 - **The Worker is an OAuth 2.1 authorization server** for MCP clients (Claude): RFC 8414
   metadata, RFC 9728 protected-resource metadata, PKCE, dynamic client registration — the
   MCP authorization profile. Implemented in Rust (the JS `workers-oauth-provider` cannot be
-  used from a Rust Worker).
+  used from a Rust Worker). **Built (M1):** `server/crates/paged-server/src/oauth.rs`.
 - **Login is delegated to an upstream OIDC provider** (generic: GitHub/Google for
   development, Entra/Okta/Keycloak for an enterprise). The server keeps no passwords.
 - **The editor** uses a first-party HttpOnly cookie session on the same identity.
