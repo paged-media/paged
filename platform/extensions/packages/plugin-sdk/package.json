@@ -34,7 +34,7 @@
     "vitest": "^2.1.9"
   },
   "description": "The Paged plugin runtime: loadBundle, the in-process BundleHost adapter, the gesture kit, and version negotiation.",
-  "license": "MPL-2.0 OR LicenseRef-PMEL",
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "files": [
     "dist"
   ],

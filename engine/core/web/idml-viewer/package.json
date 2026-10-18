@@ -2,7 +2,7 @@
   "name": "@paged-media/idml-viewer",
   "version": "0.1.0-canary.0",
   "description": "Standalone IDML viewer for the browser — camera, pages, input and events over the @paged-media/sdk WebGPU ViewerSession.",
-  "license": "MPL-2.0 OR LicenseRef-PMEL",
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paged-media/paged.git",

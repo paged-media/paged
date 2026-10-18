@@ -246,7 +246,7 @@ jobs:
             main: 'paged_canvas_wasm.js',
             types: 'paged_canvas_wasm.d.ts',
             files: ['paged_canvas_wasm.js','paged_canvas_wasm_bg.wasm','paged_canvas_wasm.d.ts'],
-            license: 'MPL-2.0 OR LicenseRef-PMEL'
+            license: 'AGPL-3.0-only OR LicenseRef-PMEL'
           }, null, 2))"
 
       - name: Build @paged-media/introspect-wasm
@@ -270,7 +270,7 @@ jobs:
             main: 'paged_introspect_wasm.js',
             types: 'paged_introspect_wasm.d.ts',
             files: ['paged_introspect_wasm.js','paged_introspect_wasm_bg.wasm','paged_introspect_wasm.d.ts','catalog.json'],
-            license: 'MPL-2.0 OR LicenseRef-PMEL'
+            license: 'AGPL-3.0-only OR LicenseRef-PMEL'
           }, null, 2))"
 
       - name: Build @paged-media/repo-wasm
@@ -292,7 +292,7 @@ jobs:
             main: 'paged_repo_wasm.js',
             types: 'paged_repo_wasm.d.ts',
             files: ['paged_repo_wasm.js','paged_repo_wasm_bg.wasm','paged_repo_wasm.d.ts'],
-            license: 'MPL-2.0 OR LicenseRef-PMEL'
+            license: 'AGPL-3.0-only OR LicenseRef-PMEL'
           }, null, 2))"
 
       - name: Subset audit — paged-sdk must not link editor crates
@@ -328,7 +328,7 @@ jobs:
             main: 'paged_sdk.js',
             types: 'paged_sdk.d.ts',
             files: ['paged_sdk.js','paged_sdk_bg.wasm','paged_sdk.d.ts'],
-            license: 'MPL-2.0 OR LicenseRef-PMEL'
+            license: 'AGPL-3.0-only OR LicenseRef-PMEL'
           }, null, 2))"
           rm -f "$OUT/paged_sdk_bg.wasm.br"
 

@@ -20,7 +20,8 @@
 #
 # STANDALONE crate with its OWN workspace + lock (like the spike): the
 # Blitz tree pins its own kurbo/peniko/stylo and must stay out of any
-# engine lock. Proprietary (And The Next GmbH) — no MPL header.
+# engine lock. Dual-licensed AGPL-3.0-only OR PMEL (And The Next GmbH), like
+# the rest of the repository.
 
 [package]
 name = "web-render"
