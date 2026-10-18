@@ -45,8 +45,8 @@ tasks:
   rust-check:
     options:
       # server-rust.yml checks (native + wasm32) and runs the flo_curves
-      # guard; clippy has no baseline here yet, so check runs in CI instead.
-      runInCI: true
+      # guard; `moon ci` runs no Rust task (.moon/tasks/rust.yml).
+      runInCI: false
 
   rust-lint:
     options:

@@ -42,6 +42,8 @@ on:
       - "package.json"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!apps/editor/docs/**/*.md"
+      # Module prose (B3a made every module an editor input).
+      - "!modules/*/docs/**/*.md"
   workflow_dispatch:
   repository_dispatch:
     types: [engine-updated]

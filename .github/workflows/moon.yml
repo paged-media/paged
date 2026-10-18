@@ -14,8 +14,9 @@ concurrency:
 # .github/actions/engine-wasm (a cache restore, or a build on a miss). What it
 # does not run yet: the modules' wasm builds (`runInCI: skip`), so JS suites
 # that use a module's built engine skip those specs here; Playwright; the GPU,
-# fidelity and corpus lanes. No remote
-# cache and no Rust cache: every run builds from scratch.
+# fidelity and corpus lanes; and no Rust task at all (runInCI: false in
+# .moon/tasks/rust.yml, step A10): each workspace's Rust workflow runs those
+# with a cache. No remote cache.
 on:
   pull_request:
   workflow_dispatch:
@@ -30,20 +31,14 @@ jobs:
   moon-ci:
     name: moon ci (affected projects)
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # Without the Rust tasks the broadest diff so far ran its tasks in 4 min.
+    timeout-minutes: 30
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
           # `moon ci` diffs the pull request against its base branch.
           fetch-depth: 0
-
-      # The engine's debug test binaries outgrow the hosted runner's free
-      # disk (as in core-ci).
-      - name: free runner disk
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          df -h /
 
       # proto, then every tool in /.prototools (moon, bun, node) at the
       # pinned versions; Moon installs the root Bun workspace (bun.lock)
@@ -60,9 +55,6 @@ jobs:
       - name: engine wasm packages
         uses: ./.github/actions/engine-wasm
         with: { artifact: "false" }
-
-      - name: install cargo-nextest
-        uses: taiki-e/install-action@nextest
 
       - name: moon ci
         env:
