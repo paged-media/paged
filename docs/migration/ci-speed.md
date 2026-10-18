@@ -264,6 +264,65 @@ which is most of a test build. The result is in [This pull request's CI
 run](#this-pull-requests-ci-run); nothing switches to sccache unless the warm
 build beats rust-cache's hit.
 
+## Lever 4: job shape
+
+**Core's tests run once on Linux.** Before, Linux ran core's tests twice per
+push: `cargo test --workspace` in `check + test (ubuntu-latest)` and again
+under nextest in `nextest evidence`, for the JUnit file. Now `check + test
+(ubuntu-latest)` runs nextest (the gate, and the `nextest-junit` artifact as
+before) and `cargo test --workspace --doc` (the doctests nextest does not run),
+and the `nextest evidence` job is gone. macOS keeps `cargo test`.
+
+The tests that run are the same, now once on Linux:
+
+| Suite | Before | After |
+|---|---|---|
+| Linux `cargo test --workspace` (check + test, ubuntu) | 3,797 run / 19 skipped (includes 1 doctest run, 1 ignored) | — |
+| Linux nextest (nextest evidence) | 3,796 run / 18 skipped | 3,796 run / 18 skipped (check + test, ubuntu) |
+| Linux doctests | inside `cargo test` | 1 run / 1 ignored (check + test, ubuntu) |
+| macOS `cargo test --workspace` | 3,797 / 19 | 3,797 / 19 |
+| JUnit `nextest-junit` | from nextest evidence | from check + test (ubuntu), same tests |
+
+Counts from the logs of run 39128323274 (nextest's 3,796 + 18 plus the
+doctests' 1 + 1 equal `cargo test`'s 3,797 + 19).
+
+| Measure | Before | After | How measured |
+|---|---|---|---|
+| Linux core test job-minutes per core-ci run | 39.8 (check + test plus nextest evidence, median over 4 runs with both) | about 21.0 (the check job with nextest's test step in place of `cargo test`'s, plus 10 s of doctests) | step times of runs 39114572956, 39130787379, 39135306863, 39136471521 |
+| Linux core jobs and rust-cache entries | 2 jobs, 2 entries (810 + 718 MB) | 1 job, 1 entry | jobs API, cache list |
+| Linux job vs the macOS leg | — | about 21 min against macOS's 24–30 min: the critical path does not move | step times |
+
+**Does macOS add coverage?** Measured: the two legs run the same tests (3,797 /
+19 on both, run 39128323274, and in every run of A5's baseline); core has one
+platform-conditional code path (`paged-color`'s installed-profile
+directories); and in 47 runs where both legs reached the test step (28 old,
+19 new) macOS never failed alone. What macOS checks is the platform itself:
+the native arm64 build with its own linker (`tooling/rust/cc-lld`, A8c) and
+the Apple-side paths. It stays, once; running it only on `main` would free a
+macOS slot (5 for the whole org) and is left as an option.
+
+**No toolchain hop.** core-ci, fidelity and gpu each started with a 10 s job
+that read `rust-toolchain.toml`, and every other job `needs:` it. A dependent
+job is only created when its dependency finishes, so it joins the back of the
+queue a second time:
+
+| Workflow | Runs | Hop (run created → dependent jobs created) median / p90 | Hop minutes (sum) |
+|---|---|---|---|
+| core ci | 47 | 12m57s / 53m13s | 1,092 |
+| core fidelity | 25 | 5m53s / 36m59s | 353 |
+| core gpu | 26 | 4m07s / 11m26s | 192 |
+
+Each job now reads the pin itself (`bash scripts/rust-channel.sh`, as the
+toolchain job did), so its jobs are queued when the run starts. core-ci's
+toolchain job stays for now, needed by nothing and running beside the others,
+because U1 (#15) edits its comment; it can be deleted once U1 has merged.
+`wasm-size` also no longer `needs: check`: it waited for both check legs
+(macOS ~25 min) and then queued again, for a 2 min job.
+
+**Tiny jobs** (under 60 s) were not merged: 2.2 % of runner time (measurement
+4); merging the core guards would save under 1 min a run and touch jobs other
+open pull requests edit.
+
 ## Reproduce
 
 ```sh

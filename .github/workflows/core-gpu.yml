@@ -66,19 +66,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  toolchain:
-    name: resolve pinned toolchain
-    runs-on: ubuntu-latest
-    outputs:
-      channel: ${{ steps.pin.outputs.channel }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: pin
-        run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
-
   vello-lavapipe:
     name: vello on lavapipe
-    needs: toolchain
     runs-on: ubuntu-latest
     # No `continue-on-error` — failures are a VISIBLE red check. Not
     # branch-protection-required yet; see the header (audit 17082026
@@ -93,9 +82,13 @@ jobs:
       RUST_LOG: wgpu=warn,vello=warn
     steps:
       - uses: actions/checkout@v4
+      # The pinned toolchain from rust-toolchain.toml (audit B21), read here
+      # rather than in a job of its own that this one had to wait for.
+      - id: pin
+        run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ needs.toolchain.outputs.channel }}
+          toolchain: ${{ steps.pin.outputs.channel }}
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
         uses: rui314/setup-mold@v1
