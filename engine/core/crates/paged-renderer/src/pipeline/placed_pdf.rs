@@ -359,7 +359,7 @@ fn rgba8(
     let mut out = Vec::with_capacity(n * 4);
     match &data {
         hayro_interpret::ImageData::Rgb(rgb) if rgb.data.len() >= n * 3 => {
-            for px in rgb.data.chunks_exact(3).take(n) {
+            for px in rgb.data.as_chunks::<3>().0.iter().take(n) {
                 out.extend_from_slice(&[px[0], px[1], px[2], 255]);
             }
         }
@@ -371,7 +371,7 @@ fn rgba8(
         _ => return None,
     }
     if let Some(a) = alpha.filter(|a| a.width == w && a.height == h && a.data.len() >= n) {
-        for (px, &v) in out.chunks_exact_mut(4).zip(a.data.iter()) {
+        for (px, &v) in out.as_chunks_mut::<4>().0.iter_mut().zip(a.data.iter()) {
             px[3] = v;
         }
     }

@@ -128,7 +128,9 @@ impl Pixels {
                 });
                 std::borrow::Cow::Owned(
                     self.bytes
-                        .chunks_exact(2)
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
                         .map(|p| u16::from_ne_bytes([p[0], p[1]]).to_be_bytes()[0])
                         .collect(),
                 )

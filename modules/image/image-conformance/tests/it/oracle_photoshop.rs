@@ -217,7 +217,9 @@ fn f16_of(img: &Img) -> Vec<u8> {
 
 fn from_f16(bytes: &[u8]) -> Vec<[f64; 3]> {
     bytes
-        .chunks_exact(8)
+        .as_chunks::<8>()
+        .0
+        .iter()
         .map(|t| {
             std::array::from_fn(|c| half::f16::from_le_bytes([t[c * 2], t[c * 2 + 1]]).to_f64())
         })

@@ -186,7 +186,7 @@ pub enum LosslessShape {
 pub fn lossless_shape(rgba: &[u8]) -> LosslessShape {
     let mut grey = true;
     let mut opaque = true;
-    for px in rgba.chunks_exact(4) {
+    for px in rgba.as_chunks::<4>().0 {
         if px[0] != px[1] || px[1] != px[2] {
             grey = false;
         }
@@ -265,12 +265,20 @@ pub fn encode_rgba8_opt(
         LosslessShape::Rgb | LosslessShape::Rgba => (ChannelLayout::Rgba, None),
         LosslessShape::Gray => (
             ChannelLayout::Gray,
-            Some(rgba.chunks_exact(4).map(|p| p[0]).collect::<Vec<u8>>()),
+            Some(
+                rgba.as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|p| p[0])
+                    .collect::<Vec<u8>>(),
+            ),
         ),
         LosslessShape::GrayA => (
             ChannelLayout::GrayA,
             Some(
-                rgba.chunks_exact(4)
+                rgba.as_chunks::<4>()
+                    .0
+                    .iter()
                     .flat_map(|p| [p[0], p[3]])
                     .collect::<Vec<u8>>(),
             ),

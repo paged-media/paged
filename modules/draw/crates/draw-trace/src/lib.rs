@@ -205,7 +205,7 @@ fn check_raster(pixels: &[u8], width: u32, height: u32) -> Result<(), TraceError
 /// Order regions largest-first and apply the region cap. Returns the
 /// number dropped.
 fn cap_regions(regions: &mut Vec<Region>, max: usize) -> usize {
-    regions.sort_by(|a, b| b.pixels.cmp(&a.pixels));
+    regions.sort_by_key(|r| std::cmp::Reverse(r.pixels));
     if regions.len() <= max {
         return 0;
     }

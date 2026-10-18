@@ -1389,7 +1389,7 @@ mod tests {
         let s = StrokeSession::begin(1, &image, params(StrokeTool::Brush), None).expect("begin");
         let w = s.window_rgba8(Region::new(1, 1, 3, 3));
         assert_eq!(w.len(), 3 * 3 * 4);
-        let reds: Vec<u8> = w.chunks_exact(4).map(|p| p[0]).collect();
+        let reds: Vec<u8> = w.as_chunks::<4>().0.iter().map(|p| p[0]).collect();
         assert_eq!(reds, vec![5, 6, 7, 9, 10, 11, 13, 14, 15]);
     }
 
@@ -1745,7 +1745,7 @@ mod tests {
         );
         // Shifted right by 8, the same region reads the LIGHT half.
         let shifted = s.source_window_rgba8(region, 8.0, 0.0);
-        assert!(shifted.chunks_exact(4).all(|p| p[0] == 200));
+        assert!(shifted.as_chunks::<4>().0.iter().all(|p| p[0] == 200));
     }
 
     #[test]
@@ -1756,7 +1756,7 @@ mod tests {
         let image = two_tone(16, 8);
         let s = StrokeSession::begin(1, &image, params(StrokeTool::Clone), None).expect("begin");
         let w = s.source_window_rgba8(Region::new(0, 0, 4, 2), -100.0, 0.0);
-        assert!(w.chunks_exact(4).all(|p| p == [0, 0, 0, 0]));
+        assert!(w.as_chunks::<4>().0.iter().all(|p| *p == [0, 0, 0, 0]));
         // A PARTIAL overlap keeps the part that exists.
         let half = s.source_window_rgba8(Region::new(0, 0, 4, 2), -2.0, 0.0);
         assert_eq!(&half[0..4], &[0, 0, 0, 0], "outside stays empty");

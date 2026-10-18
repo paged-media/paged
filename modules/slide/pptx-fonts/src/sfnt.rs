@@ -135,7 +135,7 @@ pub(crate) fn checksum(data: &[u8]) -> u32 {
 /// Write a font: tables sorted by tag, each 4-byte aligned, with their
 /// checksums and `head.checkSumAdjustment`.
 pub(crate) fn write(version: u32, mut tables: Vec<([u8; 4], Vec<u8>)>) -> Vec<u8> {
-    tables.sort_by(|a, b| a.0.cmp(&b.0));
+    tables.sort_by_key(|t| t.0);
     let n = tables.len();
     let pow = if n == 0 {
         0

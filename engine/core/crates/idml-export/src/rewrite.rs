@@ -2056,7 +2056,8 @@ fn host_path_length(spread: &Spread, id: &str) -> Option<f32> {
                 p.bounds,
                 false,
             )
-        } else if let Some(l) = spread.graphic_lines.iter().find(|l| is(&l.self_id)) {
+        } else {
+            let l = spread.graphic_lines.iter().find(|l| is(&l.self_id))?;
             (
                 &l.anchors,
                 &l.subpath_starts,
@@ -2064,8 +2065,6 @@ fn host_path_length(spread: &Spread, id: &str) -> Option<f32> {
                 l.bounds,
                 true,
             )
-        } else {
-            return None;
         };
     if anchors.is_empty() {
         let w = (bounds.right - bounds.left).abs() as f64;

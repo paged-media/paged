@@ -35,7 +35,7 @@ fn ramp_tile(seed: u8) -> Arc<[u8]> {
     // One rgba16float tile; values vary by seed so re-pointing a param
     // actually changes the output.
     let mut v = vec![0u8; (TILE * TILE * 8) as usize];
-    for (i, px) in v.chunks_exact_mut(8).enumerate() {
+    for (i, px) in v.as_chunks_mut::<8>().0.iter_mut().enumerate() {
         let f = half::f16::from_f32(((i as u32 % 97) as f32 / 97.0 + seed as f32 * 0.001).fract());
         for c in 0..4 {
             px[c * 2..c * 2 + 2].copy_from_slice(&f.to_bits().to_le_bytes());

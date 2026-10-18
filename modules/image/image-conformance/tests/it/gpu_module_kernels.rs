@@ -1392,7 +1392,9 @@ fn module_kernel_output_is_finite() {
         let inputs = inputs_for(def);
         let got = dispatch(ctx, def, &inputs, &params_bytes(def, &row.stress), None);
         let bad = got
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .position(|b| nonfinite(u16::from_le_bytes([b[0], b[1]])));
         if let Some(i) = bad {
             let (texel, ch) = (i / 4, i % 4);

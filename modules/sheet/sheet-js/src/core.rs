@@ -2686,13 +2686,7 @@ fn resolve_values(model: &SheetModel, range: &RangeRef) -> Vec<f64> {
                 .and_then(|ws| ws.cell(row, col))
                 .map(|c| match &c.value {
                     CellValue::Number(n) => *n,
-                    CellValue::Bool(b) => {
-                        if *b {
-                            1.0
-                        } else {
-                            0.0
-                        }
-                    }
+                    CellValue::Bool(true) => 1.0,
                     _ => 0.0,
                 })
                 .unwrap_or(0.0);

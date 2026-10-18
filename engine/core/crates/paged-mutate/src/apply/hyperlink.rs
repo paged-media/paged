@@ -84,7 +84,7 @@ pub(super) fn tag_source_over_range(
             continue;
         }
 
-        let original_runs: Vec<paged_model::CharacterRun> = para.runs.drain(..).collect();
+        let original_runs: Vec<paged_model::CharacterRun> = std::mem::take(&mut para.runs);
         let mut new_runs: Vec<paged_model::CharacterRun> =
             Vec::with_capacity(original_runs.len() * 2);
         let mut local_offset: u32 = 0;
