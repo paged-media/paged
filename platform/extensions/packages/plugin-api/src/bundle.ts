@@ -22,8 +22,8 @@
 // fulfills the SAME `BundleHost` interface across a worker/isolate
 // RPC boundary, so bundle source never changes when isolation lands.
 
-import type { BundleHost, Disposable } from "./host";
-import type { PluginManifest } from "./manifest";
+import type { BundleHost, Disposable } from "./host.js";
+import type { PluginManifest } from "./manifest.js";
 
 /** Returned by `activate`. The host tracks every facade registration
  *  independently, so this handle only needs to release what the

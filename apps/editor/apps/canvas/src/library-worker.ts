@@ -25,9 +25,9 @@
 // Never the shell barrel here: it pulls in React, and a worker that loads it
 // hangs at startup. @paged-media/repository's barrel is framework-free.
 
-import init, { Repository } from "@paged-media/repo-wasm";
+import init, { Repository } from "@paged-media/canvas-wasm/repo";
 // The asset by explicit `?url`, as for the engine wasm (see main.tsx).
-import repoWasmUrl from "@paged-media/repo-wasm/paged_repo_wasm_bg.wasm?url";
+import repoWasmUrl from "@paged-media/canvas-wasm/repo/paged_repo_wasm_bg.wasm?url";
 import { Library, opfsFs, serveLibrary } from "@paged-media/repository";
 
 serveLibrary(

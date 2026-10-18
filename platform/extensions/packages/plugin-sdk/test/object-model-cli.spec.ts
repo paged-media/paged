@@ -37,7 +37,7 @@ import { VALUE_TYPE_KINDS } from "../src/object-schema";
 import { notesManifest } from "./fixtures/notes-bundle";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const CLI = resolve(here, "../../plugin-cli/bin/paged-plugin.mjs");
+const CLI = resolve(here, "../bin/paged-plugin.mjs");
 
 let dir: string | null = null;
 afterEach(() => {
@@ -253,10 +253,7 @@ describe("plugin-cli — the untyped-command baseline (shrink-only)", () => {
 
   it("the shipped baseline is well formed and the untyped generator reproduces a plugin's list", () => {
     const shipped = JSON.parse(
-      readFileSync(
-        resolve(here, "../../plugin-cli/untyped-commands.baseline.json"),
-        "utf8",
-      ),
+      readFileSync(resolve(here, "../untyped-commands.baseline.json"), "utf8"),
     );
     expect(shipped.adr).toBe("323");
     expect(Object.keys(shipped.plugins)).toEqual(

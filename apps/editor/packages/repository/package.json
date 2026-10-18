@@ -15,7 +15,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@paged-media/repo-wasm": "workspace:*"
+    "@paged-media/canvas-wasm": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:node25",

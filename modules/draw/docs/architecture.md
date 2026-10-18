@@ -232,7 +232,7 @@ for the C-15 handles and the B-18 nesting pair).
 
 - The root `build` script is the typecheck. No package builds on its own: all are private
   workspace packages (PM-0008), and the editor builds them from source.
-  `.github/workflows/draw-publish.yml` stays, dispatch-only, until the npm deprecation.
+  The dispatch-only `draw-publish.yml` was deleted with the npm deprecation (PM-0008).
 - `scripts/build-wasm.sh` builds `trace-js` in release mode, checks that the installed
   `wasm-bindgen` CLI matches `Cargo.lock`, runs `wasm-bindgen --target web` and, if
   present, `wasm-opt -Oz`, and writes `packages/draw-bundle/wasm/`. It is needed only when

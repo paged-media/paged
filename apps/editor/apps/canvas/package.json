@@ -38,7 +38,6 @@
     "@paged-media/plugin-api": "workspace:*",
     "@paged-media/plugin-sdk": "workspace:*",
     "@paged-media/publish": "workspace:*",
-    "@paged-media/repo-wasm": "workspace:*",
     "@paged-media/repository": "workspace:*",
     "@paged-media/sheet": "workspace:*",
     "@paged-media/shell": "workspace:*",

@@ -11,7 +11,7 @@ project:
   title: "modules/image"
   description: "Raster image module: kernels, codecs, PSD, GPU pipeline."
 
-# manifest/'s typecheck and test scripts run the in-tree plugin-cli.
+# manifest/'s typecheck and test scripts run the in-tree paged-plugin bin (plugin-sdk).
 dependsOn:
   - id: "extensions"
     scope: "development"
@@ -24,7 +24,8 @@ tasks:
       - project: "extensions"
         filter:
           [
-            "packages/plugin-cli/**/*",
+            "packages/plugin-sdk/bin/**/*",
+            "packages/plugin-sdk/untyped-commands.baseline.json",
             "packages/plugin-api/src/manifest.schema.json",
           ]
 
@@ -36,7 +37,8 @@ tasks:
       - project: "extensions"
         filter:
           [
-            "packages/plugin-cli/**/*",
+            "packages/plugin-sdk/bin/**/*",
+            "packages/plugin-sdk/untyped-commands.baseline.json",
             "packages/plugin-api/src/manifest.schema.json",
           ]
 

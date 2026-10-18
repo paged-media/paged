@@ -7,7 +7,9 @@ across a Web Worker, over the same typed wire the Paged editor itself
 speaks.
 
 There is no second engine here and no second vocabulary. This package is
-the editor's own client, published.
+the editor's own client. It is a private workspace package, not on npm
+([PM-0008](../../../../docs/adr/PM-0008-npm-packages-and-release.md)): the
+public write surface is `@paged-media/canvas-wasm` itself.
 
 ## Which SDK is which
 
@@ -26,9 +28,9 @@ display an IDML, use the viewer. If you want to author one, use this.
 
 ## Install
 
-```sh
-npm install @paged-media/client @paged-media/canvas-wasm
-```
+Inside this repository, depend on it through the workspace
+(`"@paged-media/client": "workspace:*"`); `@paged-media/canvas-wasm` comes the
+same way. Outside it, use `@paged-media/canvas-wasm` from npm.
 
 The package constructs a `Worker` and reads a `SharedArrayBuffer`, so the
 serving page must be cross-origin isolated (`Cross-Origin-Opener-Policy:

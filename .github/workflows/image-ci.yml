@@ -6,7 +6,7 @@
 # MONOREPO (step A3): ported from paged-media/plugin-image
 # .github/workflows/ci.yml; runs in modules/image. The ts job's sibling
 # paged-media/plugin-sdk checkout is gone: the manifest validate runs the
-# in-tree platform/extensions plugin-cli, so its sources join the filters.
+# in-tree `paged-plugin` bin of platform/extensions' plugin-sdk, so its sources join the filters.
 name: image / ci
 concurrency:
   # A newer push to a pull request cancels the older run. Main pushes share
@@ -36,7 +36,8 @@ on:
       - ".github/actions/engine-wasm/**"
       - ".github/actions/wasm-tools/**"
       - ".github/actions/module-wasm/**"
-      - "platform/extensions/packages/plugin-cli/**"
+      - "platform/extensions/packages/plugin-sdk/bin/**"
+      - "platform/extensions/packages/plugin-sdk/untyped-commands.baseline.json"
       - ".github/workflows/image-ci.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -67,7 +68,8 @@ on:
       - ".github/actions/engine-wasm/**"
       - ".github/actions/wasm-tools/**"
       - ".github/actions/module-wasm/**"
-      - "platform/extensions/packages/plugin-cli/**"
+      - "platform/extensions/packages/plugin-sdk/bin/**"
+      - "platform/extensions/packages/plugin-sdk/untyped-commands.baseline.json"
       - ".github/workflows/image-ci.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -345,8 +347,8 @@ jobs:
   # The TS bundle: the contract-import lint (isolation §2.1), typecheck,
   # bun test, and manifest validation. Pre-monorepo this nested two checkouts
   # (plugin-image/ + a plugin-sdk/ sibling) because the manifest package's
-  # scripts reach the plugin-cli by a relative path; the plugin-cli is now
-  # in-tree at platform/extensions/packages/plugin-cli, so one checkout.
+  # scripts reach the paged-plugin bin by a relative path; it is in-tree at
+  # platform/extensions/packages/plugin-sdk/bin, so one checkout.
   ts:
     name: ts bundle
     runs-on: ubuntu-latest
@@ -386,9 +388,9 @@ jobs:
         env:
           REQUIRE_REAL_WASM: "1"
 
-      # Validate the bundle manifest with the in-tree plugin-cli (the same
+      # Validate the bundle manifest with the in-tree paged-plugin bin (the same
       # binary the package.json validate:manifest script invokes).
       - name: validate manifest
         run: >-
-          bun "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs"
+          bun "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-sdk/bin/paged-plugin.mjs"
           validate manifest/manifest.json
