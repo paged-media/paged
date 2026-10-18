@@ -20,15 +20,15 @@
     "prepublishOnly": "bun run build"
   },
   "peerDependencies": {
-    "@paged-media/plugin-api": ">=0.2.45-canary.0",
-    "@paged-media/plugin-sdk": ">=0.2.45-canary.0",
+    "@paged-media/plugin-api": "workspace:*",
+    "@paged-media/plugin-sdk": "workspace:*",
     "react": "^18.3.0"
   },
   "devDependencies": {
-    "@paged-media/canvas-wasm": "0.71.13",
+    "@paged-media/canvas-wasm": "workspace:*",
     "@paged-media/data-host-model": "workspace:*",
-    "@paged-media/plugin-api": "0.2.58-canary.0",
-    "@paged-media/plugin-sdk": "0.2.58-canary.0",
+    "@paged-media/plugin-api": "workspace:*",
+    "@paged-media/plugin-sdk": "workspace:*",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "apache-arrow": "^17.0.0",
