@@ -48,7 +48,7 @@ package. It is gated on
 | publish-bundle | 13 | 13 | yes | codemod only |
 | pdf-bundle | 26 | 26 | yes | codemod only |
 | idml-viewer | 27 | 27 | yes | codemod only |
-| slide-bundle | 59 | 59 | yes | `vi.waitFor` → test kit (2 files) |
+| slide-bundle | 59 | 59 (60 after main) | yes | `vi.waitFor` → test kit (2 files). Main then added B6's test `slides-model.spec.ts` › "a new slide from a layout › takes the new slide's page from the engine's outcome…" (efa3d9597); it runs under bun test too |
 | doc-bundle | 41 | 41 | yes | codemod only (`it.fails` → `it.failing`) |
 | doc-host-model | 44 | 44 | yes | codemod only |
 | image glue | 343 | 343 | yes | 3 `vi.mock` factories with `importOriginal` → `importActual` + `mock.module`; `waitFor` (+ `clock: vi` under fake timers) and `advanceTimersByTimeAsync` → test kit |
