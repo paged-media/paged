@@ -108,11 +108,13 @@ jobs:
       # Both sources are in this checkout now: the wire is the .d.ts of the
       # canvas-wasm workspace package built above, the catalog is
       # engine/core's catalog.json. A wire or catalog change in the engine
-      # without a resync fails here.
-      - name: vendored wire and catalog match the engine
+      # without a resync fails here. The typed core commands are generated
+      # from the engine's wire schema (crates/paged-wire/schema, ADR 187).
+      - name: vendored wire, catalog and core commands match the engine
         run: |
           node scripts/sync-wire.mjs --check
           node scripts/sync-catalog.mjs --check
+          node scripts/gen-core-commands.mjs --check
 
       # Build BEFORE the suite: react-free-import.spec.ts asserts on the
       # SHIPPED artifact (no static react import, no AWAITED react import),

@@ -31,7 +31,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 // The generator is a plain .mjs (no .d.ts).
 // @ts-expect-error — JS module, no types; it exports pure fns and paths.
-import { generate, TARGET, WIRE } from "../../../scripts/gen-core-commands.mjs";
+import { generate, SCHEMA, TARGET } from "../../../scripts/gen-core-commands.mjs";
 import {
   CORE_COMMAND_CREATES,
   CORE_COMMAND_EXCLUSIONS,
@@ -68,7 +68,7 @@ describe("guard — every catalog operation is a typed command or excluded with 
 
   it("the wire and the catalog list the same ops, and the generated file is current", () => {
     expect(Object.keys(CORE_WIRE_OPS).sort()).toEqual([...catalog.operations].sort());
-    expect(readFileSync(TARGET, "utf8")).toBe(generate(readFileSync(WIRE, "utf8")));
+    expect(readFileSync(TARGET, "utf8")).toBe(generate(readFileSync(SCHEMA, "utf8")));
   });
 
   it("every command has a well-formed args and result schema; the creates table names commands", () => {
