@@ -12,6 +12,7 @@
     "test:modules": "bun test ./scripts/modules.test.mjs",
     "test:spread-pages": "bun test ./scripts/spread-pages.test.mjs",
     "test:repository": "bun run --filter ./packages/repository test",
+    "test:tools": "bun run --filter ./packages/tools test",
     "test:thresholds": "bun test ./scripts/fidelity-thresholds-schema.test.mjs",
     "test:journal": "bun test ./scripts/journal.test.mjs",
     "test:object-model": "bun test ./scripts/object-model.test.mjs",
