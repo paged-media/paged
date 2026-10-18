@@ -24,7 +24,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts"
   },
   "devDependencies": {
