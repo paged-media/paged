@@ -66,6 +66,8 @@ interface FormState {
   registrationMarks: boolean;
   colorBars: boolean;
   downsample: "off" | "300" | "150";
+  bookmarks: boolean;
+  tagged: boolean;
 }
 
 const DEFAULTS: FormState = {
@@ -81,6 +83,8 @@ const DEFAULTS: FormState = {
   registrationMarks: false,
   colorBars: false,
   downsample: "off",
+  bookmarks: false,
+  tagged: false,
 };
 
 function loadSaved(): FormState {
@@ -230,6 +234,8 @@ export function ExportPdfDialog() {
           ],
       downsamplePpi: form.downsample === "off" ? null : Number(form.downsample),
       title: docName,
+      bookmarks: form.bookmarks,
+      tagged: form.tagged,
     };
     const controller = new AbortController();
     abortRef.current = controller;
@@ -459,6 +465,28 @@ export function ExportPdfDialog() {
                 onChange={(e) => set("colorBars", e.target.checked)}
               />
               Color bars
+            </label>
+          </div>
+
+          <div style={fieldRow}>
+            <span style={labelStyle}>Include</span>
+            <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <input
+                type="checkbox"
+                checked={form.bookmarks}
+                disabled={exporting}
+                onChange={(e) => set("bookmarks", e.target.checked)}
+              />
+              Bookmarks
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <input
+                type="checkbox"
+                checked={form.tagged}
+                disabled={exporting}
+                onChange={(e) => set("tagged", e.target.checked)}
+              />
+              Create Tagged PDF
             </label>
           </div>
 

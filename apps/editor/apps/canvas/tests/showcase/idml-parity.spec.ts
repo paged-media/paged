@@ -39,13 +39,13 @@
 // loss ledger. Those pages are allowed a budget; every other page must
 // match within the anti-aliasing floor.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 import { openCanvas } from "../fidelity/canvas-driver";
 import { diffPngPixels } from "../e2e/harness/pixel-diff";
-import { CORPUS_FONTS, OUT } from "./chapter";
+import { CORPUS_FONTS, OUT, checkpointPath, discoverChapterIds } from "./chapter";
 import { ShowcaseDoc } from "./driver";
 import { ANNUAL_PAGES } from "./names-annual";
 import { zipEntryNames } from "../e2e/harness/read-zip";
@@ -101,6 +101,21 @@ test.describe("idml parity", () => {
         true,
       );
     }
+    // The book from THIS build. `showcase.paged` is also committed, so
+    // when a chapter or the assembly fails the file is still there: the
+    // committed copy, from whenever it was last rebuilt. This gate then
+    // compared that book instead and reported 51 differing pages, where
+    // the freshly built book differs only on the named mask pages. The
+    // assembly writes the book after the last chapter's checkpoint, so a
+    // book older than that checkpoint, or no checkpoint, is not this
+    // build's.
+    const chapterIds = discoverChapterIds();
+    const finalCheckpoint = checkpointPath(chapterIds[chapterIds.length - 1]);
+    expect(
+      existsSync(finalCheckpoint) &&
+        statSync(pagedPath).mtimeMs >= statSync(finalCheckpoint).mtimeMs,
+      `${pagedPath} is not this build's book — the chapter specs and the assembly run first`,
+    ).toBe(true);
     const outDir = join(OUT, "parity");
     mkdirSync(outDir, { recursive: true });
 

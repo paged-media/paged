@@ -44,7 +44,7 @@ import { openPanel } from "../../../fidelity/canvas-driver";
 import { withActivePage } from "../../active-page";
 import { assignLayer, marginNote, proseFrame, specLabel } from "../../annual-support";
 import { LAYER, STYLE, TABLE_STYLE, p } from "../../names-annual";
-import { partitionByPage, removeRefs } from "../../plugin-support";
+import { clearSelection, partitionByPage, removeRefs } from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
 import {
   GRID_PANEL,
@@ -185,6 +185,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await page.locator("[data-sheet-range]").fill("A1:C6");
   const before = await treeElements(page);
   let fresh: El[] = [];
+  // The bundle lowers AT the selection while it is on the spread in
+  // view, and it selected what it placed last: start from nothing.
+  await clearSelection(page);
   await withActivePage(page, pg99, async () => {
     await page.locator("[data-sheet-lower]").click();
     fresh = await settleNewElements(page, before);
@@ -192,9 +195,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   expect(fresh.length, "the computed range lowered onto this page").toBeGreaterThan(0);
   const { here, elsewhere } = await partitionByPage(page, fresh, pg99);
   if (elsewhere.length > 0) {
-    await removeRefs(doc, elsewhere).catch(() => undefined);
+    await removeRefs(doc, elsewhere);
     notes.push(`the lower strayed ${elsewhere.length} item(s); removed`);
   }
+  expect(here.length, "the computed range landed on page 99").toBeGreaterThan(0);
+
   await placeElements(doc, here, 1, 24, 126, notes);
   elements.push(...here.map((e) => e.id));
   covers.push("sheet.lower.page");

@@ -43,7 +43,7 @@ import { openPanel } from "../../../fidelity/canvas-driver";
 import { withActivePage } from "../../active-page";
 import { assignLayer, marginNote, proseFrame, specLabel } from "../../annual-support";
 import { LAYER, STYLE, p } from "../../names-annual";
-import { partitionByPage, removeRefs, settle } from "../../plugin-support";
+import { clearSelection, partitionByPage, removeRefs, settle } from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
 import {
   SHEET_CMD,
@@ -113,6 +113,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   const before = await treeElements(page);
   let fresh: El[] = [];
+  // The bundle lowers AT the selection while it is on the spread in
+  // view, and it selected what it placed last: start from nothing.
+  await clearSelection(page);
   await withActivePage(page, pg98, async () => {
     await doc.runCommand(`${SHEET_CMD}.lowerToFrame`);
     fresh = await settleNewElements(page, before);
@@ -120,7 +123,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   expect(fresh.length, "the range lowered a frame onto this page").toBeGreaterThan(0);
   const { here, elsewhere } = await partitionByPage(page, fresh, pg98);
   if (elsewhere.length > 0) {
-    await removeRefs(doc, elsewhere).catch(() => undefined);
+    await removeRefs(doc, elsewhere);
     notes.push(
       `the lower put ${elsewhere.length} item(s) on another page despite the ` +
         "supplied active page; removed",

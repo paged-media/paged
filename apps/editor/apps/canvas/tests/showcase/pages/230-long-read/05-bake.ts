@@ -173,7 +173,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
             }),
           ),
         ].join(", ");
-        await removeRefs(doc, strays).catch(() => undefined);
+        await removeRefs(doc, strays);
         notes.push(`the bake put ${strays.length} ${kind}(s) on ${spots}; removed`);
       }
       if (unresolved.length > 0) {

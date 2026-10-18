@@ -15,7 +15,7 @@
     "test": "node --experimental-strip-types --test test/*.test.ts"
   },
   "dependencies": {
-    "@paged-media/repo-wasm": "^0.73.0"
+    "@paged-media/repo-wasm": "0.74.0"
   },
   "devDependencies": {
     "@types/node": "^25.9.6",
