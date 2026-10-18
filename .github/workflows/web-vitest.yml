@@ -5,6 +5,12 @@
 # One checkout: the bundle resolves @paged-media/plugin-api / plugin-sdk
 # through the workspace, so no sibling repository is needed.
 name: web / bun test
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # MONOREPO (step A3): ported from paged-media/plugin-web
 # .github/workflows/vitest.yml; runs in modules/web.
 on:
@@ -30,6 +36,8 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/web/docs/**/*.md"
   # Pre-merge gate: a PR that breaks the bundle goes red BEFORE it lands.
   pull_request:
     paths:
@@ -52,14 +60,12 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/web/docs/**/*.md"
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: web-vitest-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:
@@ -93,6 +99,8 @@ jobs:
         with:
           workspaces: modules/web/packages/web-render -> target
           prefix-key: v0-rust-web
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: install pinned wasm-bindgen-cli (web-render Cargo.lock version)
         run: |
           V=$(grep -A1 '^name = "wasm-bindgen"$' packages/web-render/Cargo.lock | grep version | head -1 | cut -d'"' -f2)

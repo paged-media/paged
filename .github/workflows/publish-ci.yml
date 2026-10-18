@@ -1,4 +1,9 @@
 name: publish / ci
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # MONOREPO (step A3): ported from paged-media/plugin-publish
 # .github/workflows/ci.yml; runs in modules/publish.
@@ -29,6 +34,11 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/publish/docs/**/*.md"
   pull_request:
     paths:
       - "modules/publish/**"
@@ -54,6 +64,11 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/publish/docs/**/*.md"
 
 defaults:
   run:
@@ -85,6 +100,8 @@ jobs:
         with:
           workspaces: modules/publish -> target
           prefix-key: v0-rust-publish
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: fmt
         run: cargo fmt --all --check
@@ -187,6 +204,8 @@ jobs:
         with:
           workspaces: modules/publish -> target
           prefix-key: v0-rust-publish
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@nextest
 
       # Red results must still publish (the matrix wants the ✗), so the run

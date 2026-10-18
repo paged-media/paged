@@ -1,4 +1,9 @@
 name: server / rust
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # paged.server's Rust workspace (apps/server/server: the Worker crate and the
 # sync client). It path-depends on the engine's paged-repo and paged-mcp
@@ -13,19 +18,21 @@ on:
       - "engine/core/Cargo.toml"
       - "engine/core/crates/**"
       - ".github/workflows/server-rust.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
   pull_request:
     paths:
       - "apps/server/server/**"
       - "engine/core/Cargo.toml"
       - "engine/core/crates/**"
       - ".github/workflows/server-rust.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
 
 permissions:
   contents: read
-
-concurrency:
-  group: server-rust-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:
@@ -55,6 +62,8 @@ jobs:
         with:
           workspaces: apps/server/server -> target
           prefix-key: v0-rust-server
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # The engine patches flo_curves (engine/core/Cargo.toml, C-21), and a
       # [patch] applies only in the workspace that declares it. Depending on

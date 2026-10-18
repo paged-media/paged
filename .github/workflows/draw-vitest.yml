@@ -10,6 +10,12 @@
 # Runs on pull requests too. It used to run on push to main only, with a
 # red suite reported as a green job.
 name: draw / vitest
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # MONOREPO (step A3): ported from paged-media/plugin-draw
 # .github/workflows/vitest.yml. The old lane checked the repo out under
 # plugin-draw/ and ran some commands from its parent; it now runs in
@@ -39,6 +45,8 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/draw/docs/**/*.md"
   pull_request:
     paths:
       - "modules/draw/**"
@@ -61,14 +69,12 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/draw/docs/**/*.md"
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: draw-vitest-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:

@@ -10,6 +10,11 @@
 # against the fresh artifact, so an over-budget or unbuildable artifact
 # fails here even though the repo ships a prebuilt one.
 name: draw / rust
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # MONOREPO (step A3): ported from paged-media/plugin-draw
 # .github/workflows/rust.yml; runs in modules/draw. The sibling
@@ -22,19 +27,25 @@ on:
       - "modules/draw/**"
       - "platform/extensions/packages/plugin-cli/**"
       - ".github/workflows/draw-rust.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/draw/docs/**/*.md"
   pull_request:
     paths:
       - "modules/draw/**"
       - "platform/extensions/packages/plugin-cli/**"
       - ".github/workflows/draw-rust.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/draw/docs/**/*.md"
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: draw-rust-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:
@@ -53,6 +64,8 @@ jobs:
         with:
           workspaces: modules/draw -> target
           prefix-key: v0-rust-draw
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: fmt
         run: cargo fmt --all -- --check
       - name: clippy (native + wasm32)

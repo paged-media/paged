@@ -1,4 +1,9 @@
 name: core / gpu
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # W0.7 GPU lane (audit B14): exercise the Vello/wgpu rasterizer headlessly
 # on a software Vulkan stack (Mesa lavapipe) so the GPU code path gets CI
@@ -30,6 +35,11 @@ on:
     paths:
       - "engine/core/**"
       - ".github/workflows/core-gpu.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!engine/core/docs/**/*.md"
   pull_request:
     paths:
       - "engine/core/crates/paged-gpu/**"
@@ -39,6 +49,13 @@ on:
       - "engine/core/crates/paged-renderer/**"
       - "engine/core/corpus/generated/**"
       - ".github/workflows/core-gpu.yml"
+      # Dependency and toolchain updates (wgpu, vello) change what this lane renders.
+      - "engine/core/Cargo.toml"
+      - "engine/core/Cargo.lock"
+      - "engine/core/rust-toolchain.toml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
   workflow_dispatch:
 
 defaults:
@@ -49,19 +66,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  toolchain:
-    name: resolve pinned toolchain
-    runs-on: ubuntu-latest
-    outputs:
-      channel: ${{ steps.pin.outputs.channel }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: pin
-        run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
-
   vello-lavapipe:
     name: vello on lavapipe
-    needs: toolchain
     runs-on: ubuntu-latest
     # No `continue-on-error` — failures are a VISIBLE red check. Not
     # branch-protection-required yet; see the header (audit 17082026
@@ -76,9 +82,13 @@ jobs:
       RUST_LOG: wgpu=warn,vello=warn
     steps:
       - uses: actions/checkout@v4
+      # The pinned toolchain from rust-toolchain.toml (audit B21), read here
+      # rather than in a job of its own that this one had to wait for.
+      - id: pin
+        run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ needs.toolchain.outputs.channel }}
+          toolchain: ${{ steps.pin.outputs.channel }}
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
         uses: rui314/setup-mold@v1
@@ -86,6 +96,8 @@ jobs:
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-core
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: install Mesa lavapipe (software Vulkan) + vulkan tools
         # Bounded: unlike the poppler/brotli cases this genuinely needs
