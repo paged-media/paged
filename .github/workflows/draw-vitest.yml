@@ -165,7 +165,7 @@ jobs:
       # contract's `Mutation` variants).
       - name: contract-import lint
         if: ${{ !cancelled() }}
-        run: node scripts/check-contract-imports.mjs
+        run: bun scripts/check-contract-imports.mjs
       - name: typecheck
         if: ${{ !cancelled() }}
         run: bun run --filter './packages/*' typecheck

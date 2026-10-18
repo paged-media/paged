@@ -39,7 +39,7 @@ tasks:
     description: 'plugin-cli validate of the bundle manifest (measures the built wasm).'
     toolchains: ['system']
     deps: ['~:wasm']
-    command: 'node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json'
+    command: 'bun ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json'
     inputs:
       - 'packages/draw-bundle/manifest.json'
       - 'packages/draw-bundle/wasm/*'

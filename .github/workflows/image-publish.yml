@@ -80,7 +80,7 @@ jobs:
       # manifest package validates through a sibling plugin-sdk checkout,
       # which ci has and this job does not.
       - name: test
-        run: node scripts/check-contract-imports.mjs && bun run --cwd glue test
+        run: bun scripts/check-contract-imports.mjs && bun run --cwd glue test
         env:
           REQUIRE_REAL_WASM: "1"
       - run: bun run --filter './glue' --filter './manifest' build
@@ -94,7 +94,7 @@ jobs:
               echo "skip $name@$version (already published)"; continue
             fi
             tgz="$RUNNER_TEMP/$(echo "$name" | sed 's#@##; s#/#-#')-${version}.tgz"
-            node "$GITHUB_WORKSPACE/tooling/js/pack.mjs" "$dir" "$RUNNER_TEMP" >/dev/null
+            bun "$GITHUB_WORKSPACE/tooling/js/pack.mjs" "$dir" "$RUNNER_TEMP" >/dev/null
             echo "publish $name@$version via OIDC"
             npm publish "$tgz" --tag canary --access public
           done

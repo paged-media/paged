@@ -338,7 +338,7 @@ jobs:
       # sanctioned contract surface (spec §2.1). An editor-internal import
       # fails here with a pointer to BREAKAGE_LOG.md.
       - name: contract-import lint
-        run: node scripts/check-contract-imports.mjs
+        run: bun scripts/check-contract-imports.mjs
 
       - name: typecheck
         run: bun run --filter './glue' --filter './manifest' typecheck
@@ -356,5 +356,5 @@ jobs:
       # binary the package.json validate:manifest script invokes).
       - name: validate manifest
         run: >-
-          node "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs"
+          bun "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs"
           validate manifest/manifest.json

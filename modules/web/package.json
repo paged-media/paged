@@ -7,8 +7,8 @@
   "scripts": {
     "typecheck": "bun run --filter './packages/*' typecheck",
     "build": "bun run --filter './packages/*' typecheck",
-    "lint:contract": "node scripts/check-contract-imports.mjs",
-    "test": "node scripts/check-contract-imports.mjs && bun run --filter './packages/*' test"
+    "lint:contract": "bun scripts/check-contract-imports.mjs",
+    "test": "bun scripts/check-contract-imports.mjs && bun run --filter './packages/*' test"
   },
   "devDependencies": {
     "tsup": "^8.5.1",
