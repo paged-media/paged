@@ -22,8 +22,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
 
 use paged_repo::{
-    decode, pack_of, reachable, ChunkList, Commit, Ctx, EntryKind, Error as RepoError, Hash, Kind,
-    Repo, Store, Tree,
+    pack_of, reachable, read_records, Ctx, Error as RepoError, Hash, Kind, Repo, Store,
 };
 
 /// Packs above this are split, keeping each upload well under request limits.
@@ -194,15 +193,9 @@ impl Remote {
         Ok(report)
     }
 
-    fn object(&self, h: &Hash) -> Result<Vec<u8>, Error> {
-        Self::bytes(Self::answer(
-            self.call(ureq::get(&self.url(&format!("objects/{}", h.to_hex()))))
-                .call(),
-        )?)
-    }
-
-    /// Pulls `ref_name` into `local`, fetching what it lacks, then moves the
-    /// local ref through the local kernel (so local policy still applies).
+    /// Pulls `ref_name` into `local`: one pack of what the remote head adds to
+    /// what `local`'s heads reach, then the local ref moves through the local
+    /// kernel (so local policy still applies).
     pub fn pull(
         &self,
         local: &mut Repo<impl Store>,
@@ -216,40 +209,23 @@ impl Remote {
                 format!("no `{ref_name}` on the server"),
             )
         })?;
-        let mut objects: BTreeMap<Hash, (Kind, Vec<u8>)> = BTreeMap::new();
-        let mut commits = vec![head];
-        while let Some(c) = commits.pop() {
-            if local.store.has(&c) || objects.contains_key(&c) {
-                continue;
-            }
-            let bytes = self.object(&c)?;
-            let commit: Commit = decode(&bytes)?;
-            objects.insert(c, (Kind::Commit, bytes));
-            commits.extend(commit.parents.iter().copied());
-            if local.store.has(&commit.tree) || objects.contains_key(&commit.tree) {
-                continue;
-            }
-            let tree_bytes = self.object(&commit.tree)?;
-            let tree: Tree = decode(&tree_bytes)?;
-            objects.insert(commit.tree, (Kind::Tree, tree_bytes));
-            for e in tree.entries {
-                if local.store.has(&e.hash) || objects.contains_key(&e.hash) {
-                    continue;
-                }
-                let bytes = self.object(&e.hash)?;
-                if e.kind == EntryKind::Chunks {
-                    let list: ChunkList = decode(&bytes)?;
-                    for ch in list.chunks {
-                        if !local.store.has(&ch) && !objects.contains_key(&ch) {
-                            objects.insert(ch, (Kind::Blob, self.object(&ch)?));
-                        }
-                    }
-                    objects.insert(e.hash, (Kind::Chunks, bytes));
-                } else {
-                    objects.insert(e.hash, (Kind::Blob, bytes));
-                }
-            }
+        if local.head(ref_name) == Some(head) {
+            return Ok(head);
         }
+        let have: Vec<String> = local
+            .store
+            .refs()
+            .into_iter()
+            .map(|(_, h)| h.to_hex())
+            .collect();
+        let body = serde_json::json!({ "want": head.to_hex(), "have": have });
+        let pack = Self::bytes(Self::answer(
+            self.call(ureq::post(&self.url("fetch"))).send_json(body),
+        )?)?;
+        let objects: BTreeMap<Hash, (Kind, Vec<u8>)> = read_records(&pack)?
+            .into_iter()
+            .map(|(k, h, b)| (h, (k, b)))
+            .collect();
         let expected = local.head(ref_name);
         local.receive(objects, ref_name, expected, Some(head), ctx, false)?;
         Ok(head)

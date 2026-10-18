@@ -208,6 +208,43 @@ impl DurableObject for RepoObject {
                 }
                 Response::from_json(&serde_json::json!({ "stored": stored }))
             }
+            (Method::Post, "fetch") => {
+                if !may_read {
+                    return problem(404, "Not found", "no such repository");
+                }
+                #[derive(Deserialize)]
+                struct Want {
+                    want: String,
+                    #[serde(default)]
+                    have: Vec<String>,
+                }
+                let w: Want = req.json().await?;
+                let Some(want) = parse(&w.want) else {
+                    return problem(400, "Bad request", "want is an address");
+                };
+                // What `want` reaches, less what the client's heads already reach.
+                let have: std::collections::BTreeSet<Hash> = w
+                    .have
+                    .iter()
+                    .filter_map(|h| parse(h))
+                    .filter(|h| store.has(h))
+                    .collect();
+                let objects = match reachable(&store, &[want], |c| have.contains(c)) {
+                    Ok(o) => o,
+                    Err(e) => return answer(e),
+                };
+                self.fetch_r2(&store, objects.iter().map(|(_, h)| *h))
+                    .await?;
+                match paged_repo::pack_of(&store, &objects) {
+                    Ok(pack) => {
+                        let mut resp = Response::from_bytes(pack)?;
+                        resp.headers_mut()
+                            .set("content-type", "application/octet-stream")?;
+                        Ok(resp)
+                    }
+                    Err(e) => answer(e),
+                }
+            }
             (Method::Get, "refs") => {
                 if !may_read {
                     return problem(404, "Not found", "no such repository");

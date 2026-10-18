@@ -21,6 +21,7 @@
 //!   POST /v1/r/{repo}/have           JSON [address] -> the ones the server lacks
 //!   PUT  /v1/r/{repo}/objects        a pack -> every record checked, then stored
 //!   GET  /v1/r/{repo}/refs           {name: address}
+//!   POST /v1/r/{repo}/fetch          {want, have} -> one pack of what `want` adds
 //!   POST /v1/r/{repo}/refs/{name}    {expected, new} -> compare-and-set, governed
 //!   GET  /v1/r/{repo}/log/{ref}      first-parent history
 //!   GET  /v1/r/{repo}/objects/{a}    one object, immutable
@@ -34,6 +35,7 @@
 
 mod auth;
 mod auth_object;
+mod cors;
 mod crypto;
 mod oauth;
 mod problem;
@@ -60,7 +62,16 @@ fn valid_repo(name: &str) -> bool {
 }
 
 #[event(fetch)]
-async fn fetch(mut req: Request, env: Env, _ctx: Context) -> Result<Response> {
+async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+    let origin = cors::allowed(&env, req.headers().get("origin")?);
+    if req.method() == Method::Options {
+        return cors::apply(Response::empty()?.with_status(204), origin.as_deref());
+    }
+    let resp = route(req, env).await?;
+    cors::apply(resp, origin.as_deref())
+}
+
+async fn route(mut req: Request, env: Env) -> Result<Response> {
     let url = req.url()?;
     let path = url.path().to_string();
     match (req.method(), path.as_str()) {
