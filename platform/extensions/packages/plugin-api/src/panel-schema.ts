@@ -68,14 +68,14 @@
 
 import type { ComponentType } from "react";
 
-import type { BindingsSurface } from "./host";
+import type { BindingsSurface } from "./host.js";
 import type {
   Address,
   PropertyPathName,
   Selector,
   StructEdit,
-} from "./object-model";
-import type { PropertyPath, Value } from "./wire";
+} from "./object-model.js";
+import type { PropertyPath, Value } from "./wire.js";
 
 // ---------------------------------------------------------------- value binding
 //
