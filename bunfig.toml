@@ -140,6 +140,29 @@ nursery = "off"
 "use-isnan" = ["error", { enforceForIndexOf = false, enforceForSwitchCase = true }]
 "valid-typeof" = ["error", { requireStringLiterals = false }]
 
+# The Rules of React: eslint-plugin-react-hooks 7.1's `recommended-latest`
+# set, built into bun lint (the compiler's checks included), every rule an
+# error. The violations that existed when they were turned on are recorded in
+# eslint-suppressions.json: CI fails on any new one, and the count there only
+# goes down (docs/migration/bun-lint.md).
+"react-hooks/rules-of-hooks" = "error"
+"react-hooks/exhaustive-deps" = "error"
+"react-hooks/config" = "error"
+"react-hooks/error-boundaries" = "error"
+"react-hooks/gating" = "error"
+"react-hooks/globals" = "error"
+"react-hooks/immutability" = "error"
+"react-hooks/incompatible-library" = "error"
+"react-hooks/preserve-manual-memoization" = "error"
+"react-hooks/purity" = "error"
+"react-hooks/refs" = "error"
+"react-hooks/set-state-in-effect" = "error"
+"react-hooks/set-state-in-render" = "error"
+"react-hooks/static-components" = "error"
+"react-hooks/unsupported-syntax" = "error"
+"react-hooks/use-memo" = "error"
+"react-hooks/void-use-memo" = "error"
+
 # --- The editor's architecture boundaries (apps/editor ADR 206) ------------
 #
 #   (a) apps/canvas/src/worker/**: no @paged-media/shell, no React. A worker
