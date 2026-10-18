@@ -65,13 +65,6 @@ tasks:
       - project: 'web'
         filter: ['packages/web-bundle/**/*', 'packages/web-model/**/*']
 
-  js-lint:
-    description: 'ESLint architecture boundaries and their self-test.'
-    script: 'bun run lint && bun run lint:boundaries-selftest'
-    inputs:
-      - '@group(js-sources)'
-      - 'test/eslint-boundaries/**/*'
-
   js-test:
     description: 'The static guards of the editor-tests `checks` job, in its order.'
     script: >-
