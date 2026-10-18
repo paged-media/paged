@@ -288,6 +288,12 @@ jobs:
       # by some spec or sit under a per-kind ceiling that only ever falls.
       - name: editor surface coverage
         run: bun run test:surface-coverage
+      # The two-way manifest check (ADR 226): every bundle in the editor's
+      # table, activated against the headless engine, registers what its
+      # manifest declares — and, in 'warn' mode, nothing it does not. The
+      # host adapter only ever refused the second kind.
+      - name: bundle manifests match their registrations
+        run: bun run test:bundle-contracts
       # A seam may not outlive the gap it names: a capability lands and
       # the UI still says it is missing, which is the same lie as
       # claiming an unbuilt feature works, only harder to notice.
