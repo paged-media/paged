@@ -31,7 +31,7 @@ use hayro_interpret::{
     interpret_page, BlendMode as PdfBlend, ClipPath, Context, Device, DrawMode, DrawProps, Image,
     ImageDrawProps, InterpreterCache, InterpreterSettings, Paint as PdfPaint, SoftMask,
 };
-use kurbo13::{Affine, BezPath, PathEl};
+use kurbo::{Affine, BezPath, PathEl};
 use paged_compose::{
     BlendMode, Color, DisplayCommand, DisplayList, LineCap, LineJoin, Paint, PathData, PathSegment,
     Rect as ListRect, Stroke, Transform,
@@ -78,7 +78,7 @@ fn draw(
     let cache = InterpreterCache::new();
     let mut ctx = Context::new(
         Affine::new(page.initial_transform(true).as_coeffs()),
-        kurbo13::Rect::new(0.0, 0.0, w as f64, h as f64),
+        kurbo::Rect::new(0.0, 0.0, w as f64, h as f64),
         &cache,
         pdf.xref(),
         InterpreterSettings::default(),
@@ -230,14 +230,14 @@ impl ListDevice<'_> {
     ) {
         let mut stroke = Stroke::new(s.line_width);
         stroke.cap = match s.line_cap {
-            kurbo13::Cap::Butt => LineCap::Butt,
-            kurbo13::Cap::Round => LineCap::Round,
-            kurbo13::Cap::Square => LineCap::Square,
+            kurbo::Cap::Butt => LineCap::Butt,
+            kurbo::Cap::Round => LineCap::Round,
+            kurbo::Cap::Square => LineCap::Square,
         };
         stroke.join = match s.line_join {
-            kurbo13::Join::Miter => LineJoin::Miter,
-            kurbo13::Join::Round => LineJoin::Round,
-            kurbo13::Join::Bevel => LineJoin::Bevel,
+            kurbo::Join::Miter => LineJoin::Miter,
+            kurbo::Join::Round => LineJoin::Round,
+            kurbo::Join::Bevel => LineJoin::Bevel,
         };
         stroke.miter_limit = s.miter_limit;
         if !s.dash_array.is_empty() {
