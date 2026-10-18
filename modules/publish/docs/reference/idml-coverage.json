@@ -50,7 +50,7 @@
     },
     "misplacedReads": 34,
     "unseenReads": 405,
-    "unjustifiedUnseenReads": 3
+    "unjustifiedUnseenReads": 0
   },
   "rows": [
     {
@@ -38794,19 +38794,19 @@
       "element": "XMLAttribute",
       "attribute": "Name",
       "kind": "attr",
-      "reason": null
+      "reason": "A document's XML structure (D-02). InDesign 20.0.1 writes <XMLElement XMLContent> for an element that tags a story or a page item, and <XMLAttribute Name Value> for its attributes (asked of InDesign: core tools/indesign-export/xml-structure-probe). The census documents carry an XML structure without content references or attributes."
     },
     {
       "element": "XMLAttribute",
       "attribute": "Value",
       "kind": "attr",
-      "reason": null
+      "reason": "A document's XML structure (D-02). InDesign 20.0.1 writes <XMLElement XMLContent> for an element that tags a story or a page item, and <XMLAttribute Name Value> for its attributes (asked of InDesign: core tools/indesign-export/xml-structure-probe). The census documents carry an XML structure without content references or attributes."
     },
     {
       "element": "XMLElement",
       "attribute": "XMLContent",
       "kind": "attr",
-      "reason": null
+      "reason": "A document's XML structure (D-02). InDesign 20.0.1 writes <XMLElement XMLContent> for an element that tags a story or a page item, and <XMLAttribute Name Value> for its attributes (asked of InDesign: core tools/indesign-export/xml-structure-probe). The census documents carry an XML structure without content references or attributes."
     }
   ],
   "unresolved": [

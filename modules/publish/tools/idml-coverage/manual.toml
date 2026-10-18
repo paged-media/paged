@@ -1530,3 +1530,11 @@ keys = [
   "Change@Date",
   "Change@UserName",
 ]
+
+[[unseen]]
+reason = "A document's XML structure (D-02). InDesign 20.0.1 writes <XMLElement XMLContent> for an element that tags a story or a page item, and <XMLAttribute Name Value> for its attributes (asked of InDesign: core tools/indesign-export/xml-structure-probe). The census documents carry an XML structure without content references or attributes."
+keys = [
+  "XMLAttribute@Name",
+  "XMLAttribute@Value",
+  "XMLElement@XMLContent",
+]
