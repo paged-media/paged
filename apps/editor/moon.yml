@@ -79,6 +79,7 @@ tasks:
       && bun run test:network-policy
       && bun run test:modules
       && bun run test:spread-pages
+      && bun run test:repository
       && bun run test:thresholds
       && bun run test:wasm-budget
       && bun run test:surface-coverage

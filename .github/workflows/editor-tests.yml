@@ -238,6 +238,12 @@ jobs:
       - name: pasteboard placement (spread pages)
         run: bun run test:spread-pages
 
+      # The local library (ADR 225) against the repository wasm of this
+      # revision: import, versions, restore, history in and out. Its
+      # server tests (remote.test.ts) skip without PAGED_SERVER_URL.
+      - name: local library (packages/repository)
+        run: bun run test:repository
+
       # Every gated fidelity pack must carry a threshold entry, or the
       # fidelity gate silently skips it.
       - name: fidelity thresholds schema
