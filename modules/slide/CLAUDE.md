@@ -26,7 +26,7 @@ Read first: [docs/concept.md](docs/concept.md), [docs/architecture.md](docs/arch
 moon run slide:test     # Rust (nextest + doctests), then wasm + bun test, from anywhere
 cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace  # the Rust tests without Moon
-PAGED_REQUIRE_CORPUS=1 cargo test -p pptx-import --test it -- --nocapture corpus::
+PAGED_CORPUS_DIR=<corpus root> PAGED_REQUIRE_CORPUS=1 cargo nextest run --profile corpus --run-ignored only
 scripts/sync-ooxml.sh --check
 ```
 

@@ -18,5 +18,6 @@ quick-xml.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+paged-test-resources.workspace = true
 serde_json.workspace = true
 zip.workspace = true

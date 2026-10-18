@@ -49,6 +49,8 @@ slide-chart = { path = "slide-chart" }
 slide-resolve = { path = "slide-resolve" }
 slide-idml = { path = "slide-idml" }
 slide-js = { path = "slide-js" }
+# Optional test resources (docs/development/testing.md): dev-dependency only.
+paged-test-resources = { path = "../../platform/shared/test-resources" }
 
 [workspace.lints.clippy]
 all = "warn"
