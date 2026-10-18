@@ -64,7 +64,7 @@ pub struct CorpusFile {
 }
 
 /// Resolve the corpus root from the opt-in switch `var` (`1` = the
-/// sibling checkout, anything else = an explicit root). `None`, with a
+/// monorepo's `<repo root>/corpus`, anything else = an explicit root). `None`, with a
 /// printed reason, when the switch is unset or the root is missing.
 pub fn corpus_root(var: &str) -> Option<PathBuf> {
     let Some(switch) = std::env::var_os(var) else {
