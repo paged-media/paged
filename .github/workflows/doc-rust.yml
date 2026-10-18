@@ -1,4 +1,10 @@
 name: doc / rust
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # MONOREPO (step A3): ported from paged-media/plugin-doc
 # .github/workflows/rust.yml; runs in modules/doc. The old repository ran it
 # on push only; in the monorepo it also gates pull requests (step A10), like
@@ -26,10 +32,6 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  group: doc-rust-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:

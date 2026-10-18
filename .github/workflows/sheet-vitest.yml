@@ -1,4 +1,10 @@
 name: sheet / vitest
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # MONOREPO (step A3): ported from paged-media/plugin-sheets
 # .github/workflows/vitest.yml. The old lane checked the repo out under
 # plugin-sheets/ beside a paged-media/sdk checkout and ran from their parent.
@@ -31,10 +37,6 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  group: sheet-vitest-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:

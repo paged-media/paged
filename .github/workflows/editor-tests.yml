@@ -1,4 +1,9 @@
 name: editor / tests
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Editor Playwright surface → state-matrix evidence (W0.5).
 #
@@ -97,10 +102,6 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  group: editor-tests-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:

@@ -8,6 +8,11 @@
 # paged-media/plugin-sdk checkout is gone: the manifest validate runs the
 # in-tree platform/extensions plugin-cli, so its sources join the filters.
 name: image / ci
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
   push:
@@ -45,10 +50,6 @@ env:
 
 permissions:
   contents: read
-
-concurrency:
-  group: image-ci-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:

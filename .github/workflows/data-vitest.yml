@@ -1,4 +1,10 @@
 name: data / vitest
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # MONOREPO (step A3): ported from paged-media/plugin-data
 # .github/workflows/vitest.yml. The old lane checked the repo out under
 # plugin-data/ and ran every command from its parent; it now checks the
@@ -30,10 +36,6 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  group: data-vitest-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:

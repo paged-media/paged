@@ -1,4 +1,10 @@
 name: slide / rust
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # MONOREPO (step A3): ported from paged-media/plugin-slide
 # .github/workflows/rust.yml; runs in modules/slide.
 on:
@@ -25,10 +31,6 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  group: slide-rust-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:

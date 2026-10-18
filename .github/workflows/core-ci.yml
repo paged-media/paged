@@ -1,4 +1,9 @@
 name: core / ci
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Ported from paged-media/core .github/workflows/ci.yml (monorepo step A3).
 # Every `run:` step executes in engine/core (defaults below); `uses:` steps do
