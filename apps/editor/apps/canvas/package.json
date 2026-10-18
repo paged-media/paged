@@ -55,7 +55,7 @@
     "@types/pngjs": "^6.0.5",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "@vitejs/plugin-react": "^5.2.0",
+    "@vitejs/plugin-react": "^6.1.2",
     "autoprefixer": "^10.6.1",
     "pngjs": "^7.0.0",
     "postcss": "^8.5.31",
