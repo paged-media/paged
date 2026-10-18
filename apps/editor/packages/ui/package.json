@@ -15,7 +15,7 @@
     "@paged-media/client": "workspace:*",
     "@paged-media/shell": "workspace:*",
     "clsx": "^2.1.1",
-    "tailwind-merge": "^3.6.0"
+    "tailwind-merge": "^3.7.0"
   },
   "peerDependencies": {
     "react": "^18.3.0",
