@@ -1,0 +1,43 @@
+name: fmt / bun fmt
+
+# `bun fmt --check` over the whole repository, root files included:
+# bunfig.toml [fmt] (Prettier 3's defaults) minus what /.prettierignore
+# lists, through tooling/js/fmt.sh and the Bun canary pinned in
+# tooling/js/bun-canary-version (docs/migration/bun-fmt.md). Exit 1 (a file
+# needs formatting) and exit 2 (a file could not be formatted: a syntax
+# error, or an invalid config) both fail the job. Rust is checked by
+# `cargo fmt --check` in the component workflows.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fmt-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fmt:
+    name: bun fmt --check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # NON-BLOCKING until the mass format (tooling/js/mass-format.sh) is on
+    # main: until then most files are unformatted and the job fails. Delete
+    # this line in the follow-up that makes it blocking.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      # Bun at the version in /.prototools, installed by proto; bunx then
+      # fetches the pinned canary that has `bun fmt`.
+      - uses: moonrepo/setup-toolchain@v0.6.4
+        with:
+          auto-install: true
+          proto-version: "0.63.1"
+
+      - name: bun fmt --check
+        run: bash tooling/js/fmt.sh --check
