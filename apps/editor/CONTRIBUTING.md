@@ -40,9 +40,8 @@ bun run typecheck
 
 `bun fmt` formats the JavaScript, TypeScript, JSON, CSS, HTML, Markdown and
 YAML of the whole repository, and CI checks it: run `tooling/js/fmt.sh` from
-anywhere (see the root `CONTRIBUTING.md`). Until the one-time mass format is
-on main, run it on the files you change only (`tooling/js/fmt.sh <files>`),
-which is what the pre-commit hook does.
+anywhere (see the root `CONTRIBUTING.md`). The pre-commit hook formats the
+files you stage.
 
 ## Fidelity gate
 
