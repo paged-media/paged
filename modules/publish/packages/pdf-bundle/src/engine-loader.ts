@@ -75,8 +75,9 @@ async function importBundledGlue(): Promise<PdfMapperGlue> {
   // @ts-ignore — bin/pdf_import.js is the wasm-bindgen glue (build output of
   // scripts/build-wasm.sh from crates/pdf-import), its own module in the
   // editor's build. The type checker doesn't check the JS — typed via PdfMapperGlue.
-  const glue =
-    (await import("../bin/pdf_import.js")) as unknown as PdfMapperGlue;
+  // The import stays on one line of its own, so this directive covers it.
+  const mod = await import("../bin/pdf_import.js");
+  const glue = mod as unknown as PdfMapperGlue;
   if (isNode()) {
     // NODE (the headless host, the Node CLI): instantiate from the bytes
     // beside the glue — wasm-bindgen's own fetch of a file: URL fails here.
