@@ -203,13 +203,6 @@ export function endpointMovesMutationFor(
 }
 
 // ------------------------------------------------- the v56 weld lane
-//
-// WIRE-TYPE NOTE (skew, named): `closePath` / `joinPaths` are protocol
-// v56 ops the INSTALLED `@paged-media/plugin-api` (0.2.25-canary.0) does
-// not yet carry in its curated `Mutation` union — the published contract
-// lags the local engine. The builders below emit the EXACT v56 wire shape
-// and cast once, here, at the boundary; when the contract catches up the
-// cast is the only thing to delete.
 
 /** `closePath { elementId, subpath? }` — close one open subpath. */
 export function closePathMutationFor(
@@ -219,7 +212,7 @@ export function closePathMutationFor(
   return {
     op: "closePath",
     args: subpath === undefined ? { elementId } : { elementId, subpath },
-  } as unknown as Mutation;
+  };
 }
 
 /** `joinPaths { elementId, otherId }` — weld `other` INTO `elementId`
@@ -231,7 +224,7 @@ export function joinPathsMutationFor(
   return {
     op: "joinPaths",
     args: { elementId, otherId },
-  } as unknown as Mutation;
+  };
 }
 
 /** A deliberately unknown op name. The engine answers an unknown variant

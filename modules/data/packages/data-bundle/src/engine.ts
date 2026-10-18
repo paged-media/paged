@@ -24,7 +24,7 @@
 // boundary (CLAUDE.md hard rule) — this file only constructs the handle (and
 // hands a result's typed column buffers across the column door).
 
-import { WASM_ARTIFACTS, type WasmResolver } from "./module-door";
+import { WASM_ARTIFACTS, type WasmResolver } from "./bin-url";
 import { columnToValues, type ColumnBatch } from "./query/recordset";
 
 export const ENGINE_NOT_BUILT =
@@ -190,9 +190,9 @@ const ENGINE_GLUE = "../bin/data_js.js";
 
 /** Options for [`bootEngine`]. */
 export interface BootEngineOptions {
-  /** The module door (src/module-door.ts): where the HOST serves the
-   *  `data-engine` artifact. Absent, or answering null, the glue loads the
-   *  `.wasm` next to itself (`bin/data_js_bg.wasm`). */
+  /** The module door (`hostWasm`, bin-url.ts): where the HOST serves the
+   *  `data-engine` artifact. Absent, answering null or rejecting, the glue
+   *  loads the `.wasm` next to itself (`bin/data_js_bg.wasm`). */
   resolveWasm?: WasmResolver;
   /** Told when the host's copy failed and the bundle's own was used. */
   onFallback?: (reason: string) => void;

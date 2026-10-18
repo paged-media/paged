@@ -157,13 +157,12 @@ export function drawObjectModel(host: BundleHost): ObjectModelContribution {
   };
 }
 
-/** Contribute it. `null` on a host that predates the door (an editor
- *  without plugin-api 0.2.42's `contribute.objectModel`). */
+/** Contribute it. `null` where the host does not announce the door
+ *  (`contribute.objectModel@1`). */
 export function contributeDrawObjectModel(host: BundleHost): ObjectModelHandle | null {
-  const door = (host.contribute as { objectModel?: BundleHost["contribute"]["objectModel"] }).objectModel;
-  if (typeof door !== "function" || !host.supports("contribute.objectModel@1")) {
-    host.log.info("object model: this host has no contribute.objectModel door (plugin-api < 0.2.42) — skipped");
+  if (!host.supports("contribute.objectModel@1")) {
+    host.log.info("object model: this host does not announce contribute.objectModel@1 — skipped");
     return null;
   }
-  return door.call(host.contribute, drawObjectModel(host));
+  return host.contribute.objectModel(drawObjectModel(host));
 }

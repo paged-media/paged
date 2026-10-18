@@ -116,6 +116,8 @@ import type {
   BundleHost,
   Disposable,
   ElementId,
+  Mutation,
+  OpacityMaskType,
   PluginMetadataEnvelope,
   MutationInput,
 } from "@paged-media/plugin-api";
@@ -123,14 +125,50 @@ import type {
 import { stampDrawMetadata } from "./appearance-bake";
 import { selectionTopToBottom } from "./pathfinder-region";
 import { linkIndex } from "../link-index";
-import {
-  applyOpacityMaskMutationFor,
-  releaseOpacityMaskMutationFor,
-  supportsOpacityMask,
-  v58RefusalReason,
-  type OpacityMaskMode,
-} from "./v58-wire";
-import { batchMutationFor } from "./v59-wire";
+import { maskOrPathRefusalReason } from "./refusal";
+import { batchMutationFor } from "./batch-handles";
+
+/** C-28 — how the mask artwork's coverage is read. `luminosity` is
+ *  Illustrator's default and PDF's `/S /Luminosity`; `alpha` reads the
+ *  artwork's alpha channel instead. The contract's `OpacityMaskType`. */
+export type OpacityMaskMode = OpacityMaskType;
+
+// ------------------------------------------------------ wire builders
+// Exported so the conformance spec asserts the EXACT shapes the live
+// commands emit (no second copy to drift from). Every optional argument
+// is OMITTED when the caller does not set it rather than sent as `null`:
+// both are accepted (core declares each `#[serde(default)] Option<…>`),
+// but omission keeps the emitted wire minimal and the conformance
+// assertions exact.
+
+/** `applyOpacityMask { targetId, maskId, maskType?, invert? }` — the
+ *  item at `maskId` stops painting on its own and becomes the soft mask
+ *  of the item at `targetId`. */
+export function applyOpacityMaskMutationFor(args: {
+  targetId: ElementId;
+  maskId: ElementId;
+  maskType?: OpacityMaskType;
+  invert?: boolean;
+}): Mutation {
+  return {
+    op: "applyOpacityMask",
+    args: {
+      targetId: args.targetId,
+      maskId: args.maskId,
+      ...(args.maskType === undefined ? {} : { maskType: args.maskType }),
+      ...(args.invert === undefined ? {} : { invert: args.invert }),
+    },
+  };
+}
+
+/** `releaseOpacityMask { targetId }` — drop the relation; the artwork
+ *  returns to top level with its geometry untouched. */
+export function releaseOpacityMaskMutationFor(targetId: ElementId): Mutation {
+  return {
+    op: "releaseOpacityMask",
+    args: { targetId },
+  };
+}
 
 import { registerCommand } from "../command-registry";
 export const OPACITY_MASK_COMMAND_CATEGORY = "Transparency";
@@ -334,7 +372,7 @@ function reportRefusal(
   error: unknown,
 ): string {
   const reason =
-    v58RefusalReason(error) ?? "the engine refused the opacity-mask operation";
+    maskOrPathRefusalReason(error) ?? "the engine refused the opacity-mask operation";
   host.log.warn(`${label}: ${reason}`);
   host.bindings.publish(BIND_OPACITY_MASK_STATUS, reason);
   return reason;
@@ -362,13 +400,6 @@ export async function applyMakeOpacityMask(
   },
 ): Promise<OpacityMaskRef | null> {
   const label = MAKE_OPACITY_MASK_COMMAND_ID;
-  if (!(await supportsOpacityMask(host))) {
-    host.log.warn(
-      `${label}: this editor version cannot apply opacity masks — ` +
-        "opacity masks are unavailable here",
-    );
-    return null;
-  }
   let target = idOf(payload?.targetId);
   let mask = idOf(payload?.maskId);
   if (!target || !mask) {
@@ -423,13 +454,6 @@ export async function applyReleaseOpacityMask(
   payload?: { targetId?: unknown },
 ): Promise<boolean> {
   const label = RELEASE_OPACITY_MASK_COMMAND_ID;
-  if (!(await supportsOpacityMask(host))) {
-    host.log.warn(
-      `${label}: this editor version cannot release opacity masks — ` +
-        "opacity masks are unavailable here",
-    );
-    return false;
-  }
   const target = await resolveMaskTarget(host, payload);
   if (!target) {
     host.log.warn(

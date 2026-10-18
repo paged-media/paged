@@ -45,6 +45,8 @@ const host = {
   supports: () => false,
   selection: { get: () => [], set: async () => [] },
   document: {
+    onWillSave: () => ({ dispose() {} }),
+    onDidChange: () => ({ dispose() {} }),
     mutate: async () => ({ applied: true, pageIds: [] }),
     meta: async () => ({ activePage: "p1", documentName: "Catalog" }),
     collection: async () => [{ selfId: "p1" }],

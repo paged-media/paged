@@ -651,24 +651,6 @@ describe("draw conformance — the appearance GROUP BAKE (gap B-24)", () => {
       expect(shipped.restored).toBe(true);
       // As found: 2 — the before/after diff.
       expect(shipped.work.count("document.tree")).toBe(0);
-
-      // REPLY — an SDK before plugin-sdk 0.2.38, whose outcome carries no
-      // `minted`: the ids off the raw reply. The same document, the same
-      // writes and the same reads as the shipped (outcome) lane.
-      const reply = await through("reply");
-      expect(reply.picture).toBe(shipped.picture);
-      expect(reply.work.mutations).toEqual(shipped.work.mutations);
-      expect(reply.undoSteps).toBe(shipped.undoSteps);
-      expect(reply.restored).toBe(true);
-      expect(reply.work.count("document.tree")).toBe(shipped.work.count("document.tree"));
-
-      for (const lane of ["diff", "unlisted"] as const) {
-        const run = await through(lane);
-        expect(run.picture, lane).toBe(shipped.picture);
-        expect(run.undoSteps, lane).toBe(2);
-        expect(run.restored, lane).toBe(true);
-        expect(run.work.count("document.tree"), lane).toBe(2);
-      }
     });
 
     it("RELEASE — back to a single frame with the stack + the front-most layer", async () => {

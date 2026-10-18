@@ -34,10 +34,8 @@ import type { WebEngine } from "../src/engine-loader";
 const KEY = "x-paged:media.paged.web";
 const label = (html: string) => JSON.stringify(envelopeFor({ ...DEFAULT_SOURCE, html }));
 
-function modelHost(rows: { id: string; label?: string }[], opts: { didOpen?: boolean } = {}) {
-  // A host with `document.onDidOpen` (the default) announces an opened
-  // document there; an older one only on the raw client broadcast.
-  const didOpen = opts.didOpen !== false;
+function modelHost(rows: { id: string; label?: string }[]) {
+  // The host announces an opened document through `document.onDidOpen`.
   const opened: (() => void)[] = [];
   const raw: ((m: { kind: string }) => void)[] = [];
   const changes: ((e: { kind: string; pageIds: string[] }) => void)[] = [];
@@ -48,7 +46,7 @@ function modelHost(rows: { id: string; label?: string }[], opts: { didOpen?: boo
   const labels = new Map(rows.filter((r) => r.label).map((r) => [r.id, r.label!]));
   const geometry = { bounds: [0, 0, 100, 200] };
   const host = {
-    supports: (f: string) => f === "rendering.sceneLayer@1" || (f === "document.onDidOpen@1" && didOpen),
+    supports: (f: string) => f === "rendering.sceneLayer@1" || f === "document.onDidOpen@1",
     contribute: {
       sceneLayer: () => ({
         submit: async (id: string) => void submits.push(id),
@@ -88,23 +86,16 @@ function modelHost(rows: { id: string; label?: string }[], opts: { didOpen?: boo
         changes.push(l);
         return { dispose: () => void changes.splice(changes.indexOf(l), 1) };
       },
-      ...(didOpen
-        ? {
-            onDidOpen: (l: () => void) => {
-              opened.push(l);
-              return { dispose: () => void opened.splice(opened.indexOf(l), 1) };
-            },
-          }
-        : {}),
+      onDidOpen: (l: () => void) => {
+        opened.push(l);
+        return { dispose: () => void opened.splice(opened.indexOf(l), 1) };
+      },
     },
     parts: { read: async () => null },
     editor: { client: { subscribe: (l: (m: { kind: string }) => void) => (raw.push(l), () => void raw.splice(raw.indexOf(l), 1)) } },
     log: { debug() {}, info() {}, warn() {}, error() {} },
   } as unknown as BundleHost;
-  const open = () => {
-    if (didOpen) opened.forEach((l) => l());
-    else raw.forEach((l) => l({ kind: "documentLoaded" }));
-  };
+  const open = () => opened.forEach((l) => l());
   /** A raw editor-client message, as the editor broadcasts every reply. */
   const broadcast = (m: { kind: string; payload?: unknown }) => raw.forEach((l) => l(m));
   /** A committed change, as `document.onDidChange` reports it. */
@@ -204,23 +195,20 @@ describe("auto render — discovery and bounds", () => {
     auto.dispose();
   });
 
-  for (const didOpen of [true, false]) {
-    it(`an opened document is rendered afresh (${didOpen ? "document.onDidOpen" : "raw client broadcast"})`, async () => {
-      const m = modelHost([{ id: "a", label: label("<p>A</p>") }], { didOpen });
-      const auto = startAutoRender(m.host, { engine: async () => engine, debounceMs: 1 });
-      await auto.idle();
-      expect(m.submits).toEqual(["a"]);
-      // The same frame id in the newly opened document is a new frame: the
-      // bookkeeping of the old one must not skip its render.
-      m.open();
-      await auto.idle();
-      expect(m.submits).toEqual(["a", "a"]);
-      // The open path holds a raw subscription only on a host without the
-      // door, and nothing else does: document changes come through
-      // `document.onDidChange`.
-      expect(m.rawSubscribers()).toBe(didOpen ? 0 : 1);
-      auto.dispose();
-      expect(m.rawSubscribers()).toBe(0);
-    });
-  }
+  it("an opened document is rendered afresh (document.onDidOpen)", async () => {
+    const m = modelHost([{ id: "a", label: label("<p>A</p>") }]);
+    const auto = startAutoRender(m.host, { engine: async () => engine, debounceMs: 1 });
+    await auto.idle();
+    expect(m.submits).toEqual(["a"]);
+    // The same frame id in the newly opened document is a new frame: the
+    // bookkeeping of the old one must not skip its render.
+    m.open();
+    await auto.idle();
+    expect(m.submits).toEqual(["a", "a"]);
+    // Nothing holds a raw client subscription: opens come through
+    // `document.onDidOpen`, changes through `document.onDidChange`.
+    expect(m.rawSubscribers()).toBe(0);
+    auto.dispose();
+    expect(m.rawSubscribers()).toBe(0);
+  });
 });

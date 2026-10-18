@@ -74,6 +74,7 @@ function fakeHost(opts?: {
     selection: { get: () => [], set: async () => [] },
     network: { consentedOrigins: () => [], requestConsent: async () => ({ granted: [], denied: [] }) },
     document: {
+      onWillSave: () => ({ dispose() {} }),
       mutate: async (batch: Mutation) => applyBatch(batch, async (m: Mutation) => {
         mutations.push(m);
         // A freshly inserted frame mints a createdId so commitLoweredVariable can

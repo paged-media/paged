@@ -186,6 +186,8 @@ function fakeHost(opts?: { wired?: boolean }) {
   const openedPanels: string[] = [];
   const host = {
     log: { debug() {}, info() {}, warn() {}, error() {} },
+    // The document doors every host has; nothing here fires them.
+    document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
     supports: (f: string) => (wired ? f === "dataProviders@1" : false),
     // When NOT wired the surface itself is absent (the consumer guards on
     // both supports() AND the surface existing).

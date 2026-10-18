@@ -24,8 +24,8 @@
 //  1. WHAT THE ENGINE'S `minted` CONTAINS, op by op — measured against
 //     the booted engine through the raw client, with nothing of ours in
 //     between. A flow reads its created ids out of this list by ORDER.
-//  2. THE THREE LANES of `mutateMinting` answer the SAME thing for the
-//     same batch, and what each one costs in tree reads.
+//  2. `mutateMinting` answers that list off the outcome, with no tree
+//     read, and `bindMinted` binds it by the batch's own creations.
 //  3. THE BATCH RULES a flow that builds, replaces and groups in ONE
 //     batch has to keep — the two that were known, and the one that
 //     decides how many rebuilds one batch may carry.
@@ -43,7 +43,6 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import { drawBundle, stampDrawMetadata } from "../../src";
 import {
   bindMinted,
-  mintLaneOf,
   mintedIds,
   mutateMinting,
   type Minting,
@@ -52,7 +51,7 @@ import {
   batchMutationFor,
   bindCreatedMutationFor,
   handleElementId,
-} from "../../src/commands/v59-wire";
+} from "../../src/commands/batch-handles";
 import { F4_OVERLAP } from "../fixtures/corpus";
 import { countingHost, type WorkLog } from "../perf/counting-host";
 import { openHost } from "./host";
@@ -61,10 +60,6 @@ import {
   treeShape,
   undoMarkOn,
   undoStepsBackTo,
-  withMintedOutcome,
-  withoutHatch,
-  withoutMintedOutcome,
-  withoutMintedReplies,
 } from "./one-batch";
 
 const PAGE = F4_OVERLAP.pageId;
@@ -264,7 +259,7 @@ describe("draw conformance — the minted seam (what did my write create)", () =
     });
   });
 
-  describe("mutateMinting — three lanes, one answer", () => {
+  describe("mutateMinting — the list off the outcome", () => {
     /** A batch with everything in it a flow uses: two kept paths, one
      *  absorbed contour, a group. */
     const build = (): MutationInput =>
@@ -281,8 +276,7 @@ describe("draw conformance — the minted seam (what did my write create)", () =
       );
 
     /** Run `build()` through ONE counted view of a host, read what came
-     *  back, undo it. The view is made once per test: the lane a host
-     *  answers through is remembered per host OBJECT. */
+     *  back, undo it. */
     const run = async (counted: {
       host: BundleHost;
       work: WorkLog;
@@ -304,16 +298,11 @@ describe("draw conformance — the minted seam (what did my write create)", () =
       return { minting, bound, shape, undoSteps, reads };
     };
 
-    // Since plugin-sdk 0.2.38 the OUTCOME carries `minted` (RFI K-15),
-    // so the headless host and the editor answer through the first lane.
-    // The raw client is still listened to on the first write (nothing has
-    // shown yet that the outcome carries the list) — and is not needed.
+    // The OUTCOME carries `minted` (RFI K-15, plugin-sdk 0.2.38).
     it("OUTCOME (the headless host, and the editor, on plugin-sdk 0.2.38): the list off the outcome, no tree read", async () => {
       const before = await treeShape(h);
       const counted = countingHost(h.host);
       const { minting, bound, shape, undoSteps, reads } = await run(counted);
-      expect(minting.lane).toBe("outcome");
-      expect(mintLaneOf(counted.host)).toBe("outcome");
       expect(reads).toBe(0);
       // Everything minted, in order — the absorbed contour included.
       expect(mintedIds(minting).map((e) => `${e.kind}:${String(e.id)}`)).toEqual([
@@ -331,140 +320,33 @@ describe("draw conformance — the minted seam (what did my write create)", () =
       expect(shape).toBe("uf[ua uc ue] ub");
       expect(undoSteps).toBe(1);
       expect(await treeShape(h)).toBe(before);
-      // Having answered through the outcome, the host no longer listens.
+      // The same again, and the raw client is never listened to.
       const again = await run(counted);
-      expect(again.minting.lane).toBe("outcome");
       expect(again.reads).toBe(0);
       expect(counted.work.count("editor.client.subscribe")).toBe(0);
-    });
-
-    it("REPLY (an SDK before 0.2.38, with the raw client): the list off the raw reply, no tree read", async () => {
-      const before = await treeShape(h);
-      const counted = countingHost(withoutMintedOutcome(h.host));
-      const { minting, bound, shape, undoSteps, reads } = await run(counted);
-      expect(minting.lane).toBe("reply");
-      expect(mintLaneOf(counted.host)).toBe("reply");
-      expect(reads).toBe(0);
-      // Everything minted, in order — the absorbed contour included.
-      expect(mintedIds(minting).map((e) => `${e.kind}:${String(e.id)}`)).toEqual([
-        "polygon:uc",
-        "polygon:ud",
-        "polygon:ue",
-        "group:uf",
-      ]);
-      expect(Object.fromEntries(bound!.byHandle)).toEqual({
-        p0: { kind: "polygon", id: "uc" },
-        p0_hole: { kind: "polygon", id: "ud" },
-        p1: { kind: "polygon", id: "ue" },
-      });
-      expect(bound!.groups).toEqual([{ kind: "group", id: "uf" }]);
-      expect(shape).toBe("uf[ua uc ue] ub");
-      expect(undoSteps).toBe(1);
-      expect(await treeShape(h)).toBe(before);
     });
 
     it("the write went through `document.mutate` — the facade's door, counted and gated", async () => {
       const { host, work } = countingHost(h.host);
       await mutateMinting(host, build());
       expect(work.mutations).toEqual([{ op: "batch", ops: 9 }]);
-      // The hatch is LISTENED to, never written through.
-      expect(work.count("editor.client.subscribe")).toBe(1);
+      // The hatch is not touched.
+      expect(work.count("editor.client.subscribe")).toBe(0);
       expect(work.count("editor.client.send")).toBe(0);
       expect(work.count("editor.client.mutate")).toBe(0);
     });
 
-    it("OUTCOME with no raw client beside it: the same list, and the first write's one tree read", async () => {
-      const host = countingHost(withMintedOutcome(h.host));
-      const { minting, bound, undoSteps, reads } = await run(host);
-      expect(minting.lane).toBe("outcome");
-      // The first write on a host with no hatch reads the tree once, in
-      // case the outcome says nothing; having learned it does, the next
-      // reads nothing.
-      expect(reads).toBe(1);
-      expect(mintedIds(minting)).toHaveLength(4);
-      expect(bound!.groups).toHaveLength(1);
-      expect(undoSteps).toBe(1);
-      const again = await run(host);
-      expect(again.minting.lane).toBe("outcome");
-      expect(again.reads).toBe(0);
-      expect(Object.fromEntries(again.bound!.byHandle)).toEqual({
-        p0: { kind: "polygon", id: "uc" },
-        p0_hole: { kind: "polygon", id: "ud" },
-        p1: { kind: "polygon", id: "ue" },
-      });
-    });
-
-    it("DIFF (a host with neither — no raw client, an SDK before 0.2.38): two tree reads, and the same binding for everything that survived", async () => {
-      const host = countingHost(withoutHatch(withoutMintedOutcome(h.host)));
-      const { minting, bound, shape, undoSteps, reads } = await run(host);
-      expect(minting.lane).toBe("diff");
-      expect(reads).toBe(2);
-      // What a tree can show: the two kept paths, then the group. The
-      // absorbed contour was made and unmade inside the batch.
-      expect(mintedIds(minting).map((e) => `${e.kind}:${String(e.id)}`)).toEqual([
-        "polygon:uc",
-        "polygon:ue",
-        "group:uf",
-      ]);
-      expect(Object.fromEntries(bound!.byHandle)).toEqual({
-        p0: { kind: "polygon", id: "uc" },
-        p1: { kind: "polygon", id: "ue" },
-      });
-      expect(bound!.groups).toEqual([{ kind: "group", id: "uf" }]);
-      expect(shape).toBe("uf[ua uc ue] ub");
-      expect(undoSteps).toBe(1);
-    });
-
-    it("a hatch whose replies carry no list (and an outcome without one): found out ONCE, by stepping back and forward — then the diff lane", async () => {
-      const counted = countingHost(withoutMintedReplies(withoutMintedOutcome(h.host)));
-      const before = await treeShape(h);
-      const mark = await undoMarkOn(h, A);
-      const mutation = build();
-      const first = await mutateMinting(counted.host, mutation);
-      expect(first.lane).toBe("diff");
-      expect(first.outcome.applied).toBe(true);
-      // The batch had applied before anyone knew a "before" was needed:
-      // one undo, the tree, one redo, the tree.
-      expect(counted.work.count("document.undo")).toBe(1);
-      expect(counted.work.count("document.redo")).toBe(1);
-      expect(counted.work.count("document.tree")).toBe(2);
-      expect(counted.work.mutations).toHaveLength(1);
-      expect(Object.fromEntries(bindMinted(first, mutation)!.byHandle)).toEqual({
-        p0: { kind: "polygon", id: "uc" },
-        p1: { kind: "polygon", id: "ue" },
-      });
-      expect(await treeShape(h)).toBe("uf[ua uc ue] ub");
-      // The step back and forward left ONE entry on the undo stack.
-      expect(await undoStepsBackTo(h, mark)).toBe(1);
-      expect(await treeShape(h)).toBe(before);
-
-      // From here on this host reads its "before" up front: two reads, and
-      // no more stepping back.
-      const next = await run(counted);
-      expect(next.minting.lane).toBe("diff");
-      expect(next.reads).toBe(2);
-      expect(counted.work.count("document.undo")).toBe(0);
-      expect(next.undoSteps).toBe(1);
-    });
-
-    it("a REFUSED batch answers an empty list and leaves nothing behind, in every lane", async () => {
+    it("a REFUSED batch answers an empty list and leaves nothing behind", async () => {
       const before = await treeShape(h);
       // The bind before its creating child — refused BY NAME.
       const early = batch(bind("x"), square(10, 10));
-      for (const host of [
-        h.host,
-        withoutMintedOutcome(h.host),
-        withoutHatch(withoutMintedOutcome(h.host)),
-        withMintedOutcome(h.host),
-      ]) {
-        const minting = await mutateMinting(host, early);
-        expect(minting.outcome.applied).toBe(false);
-        expect(minting.minted).toEqual([]);
-        expect(bindMinted(minting, early)).toBeNull();
-        expect(JSON.stringify(minting.outcome)).toContain(
-          "has nothing to name — no creating child ran before it in this batch",
-        );
-      }
+      const minting = await mutateMinting(h.host, early);
+      expect(minting.outcome.applied).toBe(false);
+      expect(minting.minted).toEqual([]);
+      expect(bindMinted(minting, early)).toBeNull();
+      expect(JSON.stringify(minting.outcome)).toContain(
+        "has nothing to name — no creating child ran before it in this batch",
+      );
       expect(await treeShape(h)).toBe(before);
     });
 
@@ -483,7 +365,6 @@ describe("draw conformance — the minted seam (what did my write create)", () =
       const told = (element: ElementId, handle: string | null): Minting => ({
         outcome: { applied: true, createdId: null, pageIds: [] },
         minted: [{ element, handle }],
-        lane: "reply",
       });
       expect(bindMinted(told({ kind: "group", id: "g" } as ElementId, null), one)).toBeNull();
       // …and a name the engine reports differently from the batch's.

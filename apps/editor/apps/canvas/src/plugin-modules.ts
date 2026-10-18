@@ -34,10 +34,9 @@
 // gate: this backend is only ever asked about an artifact the bundle
 // DECLARED, and it answers only for packages and paths in the manifest —
 // never a URL a bundle typed.
-//
-// The pinned plugin-sdk may predate the door; `loadBundle` ignores options it
-// does not know, so `modules` rides along inert until the pin moves. Hence the
-// local types below: they are structurally the SDK's `ModulesBackend`.
+
+import type { WasmArtifact } from "@paged-media/plugin-api";
+import type { ModulesBackend } from "@paged-media/plugin-sdk";
 
 /** One declared artifact of an installed plugin package. */
 export interface ModuleFile {
@@ -57,14 +56,12 @@ export interface ModuleManifest {
   plugins: Record<string, { package: string; base: string }>;
 }
 
-/** The artifact fields the backend reads (plugin-api `WasmArtifact`). */
-export interface ModuleArtifact {
-  name: string;
-  path: string;
-}
+/** The artifact fields the backend reads. */
+export type ModuleArtifact = Pick<WasmArtifact, "name" | "path">;
 
-/** Structurally plugin-sdk's `ModulesBackend` (0.2.51+). */
-export interface EditorModulesBackend {
+/** plugin-sdk's `ModulesBackend`, answering synchronously with the
+ *  bytes' integrity always known (it is measured at build time). */
+export interface EditorModulesBackend extends ModulesBackend {
   url(pluginId: string, artifact: ModuleArtifact): { url: string; integrity: string } | null;
 }
 

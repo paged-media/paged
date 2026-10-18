@@ -114,7 +114,7 @@ under [Releases](#releases).
   variables), shows the picked item's property rows, which the host renders as property
   fields, and opens the panel that owns each kind.
 - **The engines load through the host's module door** where the host offers one
-  (`host.modules`, feature-detected; `src/module-door.ts`). The data engine and DuckDB ask
+  (`host.modules` where `modules@1`; `hostWasm` in `src/bin-url.ts`). The data engine and DuckDB ask
   the host where it serves their declared wasm and fetch it with its Subresource Integrity
   hash; with no door, no answer, a 404 or a mismatch they load from the package's own
   `bin/`. The DuckDB worker and JS API always load from `bin/`. The publish workflow stamps
@@ -196,10 +196,9 @@ Not done:
 
 ## Limits of what is shipped
 
-- **Saving the session follows undo only on engine protocol 69** (core v0.69.0;
-  feature-detected, `src/doors.ts`, `src/doc-label.ts`). With the document-label
-  doors each session version is written once as `sessions/<hash>.json` and the document's
-  own label (`setDocumentMetadata`, undoable) names the live one. The label rides the batch
+- **Saving the session follows undo** (engine protocol 69, core v0.69.0;
+  `src/doc-label.ts`). Each session version is written once as `sessions/<hash>.json`
+  and the document's own label (`setDocumentMetadata`, undoable) names the live one. The label rides the batch
   of the document write that made the change (a lower, a field refresh, a merge), so both
   undo together. A change no write carried takes no undo step: `session.json` records the
   version the label named when it was written (`base`), and a reopen reads `session.json`
@@ -209,9 +208,9 @@ Not done:
   never collected (an undo can bring back a session that names them), and old versions are
   kept. Verified on the v0.69.0 engine (`test/protocol69-real-core.spec.ts`); the count
   budgets carry a protocol-69 variant (`onLabelled`, `test/perf/harness.ts`): a write from
-  data carries one more op, the label. On an engine or host older than protocol 69 container
-  parts take no part in undo and defining a binding is not a document
-  change: what a binding writes undoes as usual, the session part does not.
+  data carries one more op, the label. If the engine refuses the label op, the write goes
+  again without it and the session stops labelling (then container parts take no part in
+  undo: what a binding writes undoes as usual, the session part does not).
 - **The Bindings panel binds over the query picked under "Records from"**: all rows of any
   source, or a query saved in the Data query panel. Until a source exists it shows an empty
   state that links to Data sources. The demo-binding buttons are gone.

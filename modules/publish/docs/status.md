@@ -117,10 +117,10 @@ The two repositories pin each other by git revision, so the steps run in this or
   On each page, text is stacked above all vectors and images.
 - **Both PDF paths need PDFium.** If its wasm cannot load, the file does not open and an
   error is logged. No password is passed to PDFium.
-- **The committed mapper wasm is older than its source.**
-  `packages/pdf-bundle/bin/pdf_import_bg.wasm` was last committed on 2026-07-23;
-  `crates/pdf-import` has changed since, most recently on 2026-10-01. No workflow rebuilds
-  the file or compares it with the crate.
+- **The mapper wasm has no freshness stamp.** `packages/pdf-bundle/bin/pdf_import*` is
+  build output (since B3b; it was committed, and lagged its crate by months), built from
+  the checkout in CI, but nothing compares a local build with the crate the way image's and
+  sheet's `wasm-fresh.spec.ts` do.
 - **PDFium is vendored as a binary.** The 5.2 MB module is not declared in the manifest's
   `capabilities.wasm`, and the repository holds no notice file for it.
 - **Manifests and comments lag.** The manifest versions (0.1.0-canary.0 and 0.2.3-canary.0)

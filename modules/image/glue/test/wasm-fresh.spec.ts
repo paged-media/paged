@@ -18,13 +18,19 @@
 
 // Is the wasm these specs execute the one the Rust sources build?
 //
-// Every spec that boots the engine runs glue/wasm. Until this spec, a
-// Rust change that was not followed by scripts/build-wasm.sh left the
-// suite testing the OLD engine and passing: on 2026-10-04 the wasm was
-// a build from 2026-08-09 that predated two PSD parser fixes. The build
-// script stamps the source hash into the wasm (`engine_source_hash()`)
-// and beside it (SOURCE_HASH); this recomputes the hash from the
-// checkout and compares all three.
+// Every spec that boots the engine runs glue/wasm, which is BUILD OUTPUT
+// (gitignored) — whatever scripts/build-wasm.sh last left there. Until this
+// spec a Rust change that was not followed by a rebuild left the suite
+// testing the OLD engine and passing: on 2026-10-04 the wasm (committed,
+// then) was a build from 2026-08-09 that predated two PSD parser fixes.
+// The build script stamps the source hash into the wasm
+// (`engine_source_hash()`) and beside it (SOURCE_HASH); this recomputes the
+// hash from the checkout and compares all three.
+//
+// The wasm-exec.spec.ts dual gate: no artifact at all skips locally (a
+// checkout without a Rust toolchain still runs the pure-TS specs) and FAILS
+// under REQUIRE_REAL_WASM=1, which image-ci sets after building it. A
+// PRESENT artifact is always checked — a stale one is never silently tested.
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -39,17 +45,19 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const WASM_DIR = join(HERE, "..", "wasm");
 const WASM = join(WASM_DIR, "image_js_bg.wasm");
 const STAMP = join(WASM_DIR, "SOURCE_HASH");
+const present = existsSync(WASM);
+const required = process.env.REQUIRE_REAL_WASM === "1";
 
-const REBUILD = "rebuild it with scripts/build-wasm.sh";
+const REBUILD = "rebuild it with `bash scripts/build-wasm.sh` (or `moon run image:wasm`)";
 
-describe("the committed engine wasm matches the Rust sources", () => {
+describe.skipIf(!present && !required)("the engine wasm in glue/wasm/ matches the Rust sources", () => {
   it("the wasm and its SOURCE_HASH are present", () => {
     expect(existsSync(WASM), `${WASM} missing — ${REBUILD}`).toBe(true);
     expect(existsSync(STAMP), `${STAMP} missing — ${REBUILD}`).toBe(true);
   });
 
   it("SOURCE_HASH equals the hash of the checkout's sources", () => {
-    const stamped = readFileSync(STAMP, "utf8").trim();
+    const stamped = existsSync(STAMP) ? readFileSync(STAMP, "utf8").trim() : "(none)";
     expect(
       stamped,
       `the wasm was built from different sources than this checkout — ${REBUILD}`,

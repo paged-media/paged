@@ -1516,37 +1516,6 @@ describe("draw conformance — PATTERN EDITING v1 (a re-editable tile FIELD, not
           expect(stepwise.undoSteps).toBe(2);
           expect(stepwise.restored).toBe(true);
 
-          // DIFF and UNLISTED — one batch still, with the created ids
-          // found the old way. Same document, still one undo step.
-          // REPLY — an SDK before plugin-sdk 0.2.38, whose outcome carries no
-          // `minted`: the ids off the raw reply. The same document, the same
-          // writes and the same reads as the shipped (outcome) lane.
-          const reply = await through("reply");
-          expect(reply.picture).toBe(shipped.picture);
-          expect(reply.work.mutations).toEqual(shipped.work.mutations);
-          expect(reply.undoSteps).toBe(shipped.undoSteps);
-          expect(reply.restored).toBe(true);
-          expect(reply.work.count("document.tree")).toBe(shipped.work.count("document.tree"));
-
-          for (const lane of ["diff", "unlisted"] as const) {
-            const run = await through(lane);
-            expect(run.picture, lane).toBe(shipped.picture);
-            expect(run.work.mutations, lane).toEqual([
-              { op: "batch", ops: scenario.ops },
-            ]);
-            expect(run.undoSteps, lane).toBe(1);
-            expect(run.restored, lane).toBe(true);
-            expect(run.work.count("document.tree"), lane).toBe(scenario.trees + 2);
-          }
-
-          // AS FOUND — no bind, no raw client. The numbers this flow
-          // started from, measured — plus ONE read: the refused first
-          // attempt had read its "before" by the time it was refused.
-          const asFound = await through("asFound");
-          expect(asFound.picture).toBe(shipped.picture);
-          expect(asFound.undoSteps).toBe(2);
-          expect(asFound.work.count("document.tree")).toBe(scenario.asFound + 1);
-
           expect(await sortedLeafIds(h)).toEqual(PRISTINE);
         });
       }

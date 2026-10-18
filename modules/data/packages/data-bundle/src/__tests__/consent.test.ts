@@ -33,6 +33,8 @@ function fakeHost(grant: string[], wired = true): BundleHost {
   return {
     manifest: { id: "media.paged.data", name: "d", version: "0.0.1", apiVersion: "^0.2" },
     log: { debug() {}, info() {}, warn() {}, error() {} },
+    // The document doors every host has; nothing here fires them.
+    document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
     supports: (f: string) => wired && f === "network.consent@1",
     network: {
       async requestConsent(origins: readonly string[]): Promise<ConsentResult> {
@@ -63,6 +65,7 @@ describe("session.requestNetworkConsent (D-03)", () => {
     const throwing = {
       manifest: { id: "media.paged.data", name: "d", version: "0.0.1", apiVersion: "^0.2" },
       log: { debug() {}, info() {}, warn() {}, error() {} },
+      document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }) },
       supports: () => false,
       network: {
         async requestConsent(): Promise<ConsentResult> {

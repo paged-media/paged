@@ -44,7 +44,6 @@ import { contributeMenu } from "./menu";
 import manifest from "../manifest.json";
 
 import { createImageSession } from "./session";
-import { enterEditContext, onWillSave, toolSettings } from "./host66";
 import { bindToolSettings, toolOptionFields } from "./tool-options";
 import { makeImagePanel } from "./panels/image-panel";
 import { makeCropGesture } from "./crop-tool";
@@ -136,7 +135,9 @@ export function activate(host: BundleHost): BundleHandle {
       // (the host's own double-click gesture, from a command).
       void session.ingestSelection().then(async (ok) => {
         const el = session.sourceElement();
-        if (ok && el) await enterEditContext(host, "rasterImage", el);
+        if (ok && el && host.supports("shell.enterEditContext@1")) {
+          await host.shell.enterEditContext("rasterImage", el).catch(() => false);
+        }
       });
     },
   });
@@ -175,7 +176,7 @@ export function activate(host: BundleHost): BundleHandle {
   // LIVE host.overlay door. The COMMIT rides the commitCrop command (and
   // the panel button) so it's a deliberate, single action.
   // Tool options in the host's bar, where the host reports them back.
-  const toolFields = toolSettings(host)
+  const toolFields = host.supports("tools.settings@1")
     ? toolOptionFields({
         brush: BRUSH_TOOL_ID,
         pencil: PENCIL_TOOL_ID,
@@ -916,19 +917,17 @@ export function activate(host: BundleHost): BundleHandle {
     [BUCKET_TOOL_ID]: "wand",
     [GRADIENT_TOOL_ID]: "gradient",
   });
-  const willSave = onWillSave(host, async () => {
-    if (session.state().uncommitted) await session.commitToDocument();
-  });
+  const willSave = host.supports("document.onWillSave@1")
+    ? host.document.onWillSave(async () => {
+        if (session.state().uncommitted) await session.commitToDocument();
+      })
+    : null;
 
   if (host.supports("contribute.editContext@1")) {
     host.contribute.editContext({
-      // Protocol 66: the Edit menu reads "Undo <step>" (the contract
-      // pinned here predates these two members; an older host ignores
-      // them).
-      ...({
-        undoLabel: () => session.state().history?.undoLabel ?? null,
-        redoLabel: () => session.state().history?.redoLabel ?? null,
-      } as object),
+      // The Edit menu reads "Undo <step>".
+      undoLabel: () => session.state().history?.undoLabel ?? null,
+      redoLabel: () => session.state().history?.redoLabel ?? null,
       type: "rasterImage",
       entry: "doubleClick",
       // Claimed by OUR OWN METADATA, never by kind. The candidate is a

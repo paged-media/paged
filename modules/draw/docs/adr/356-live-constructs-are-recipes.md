@@ -79,10 +79,9 @@ the engine is not asked to model symbols, live paint or pattern paints. In retur
   and a blend cost one, through `bindCreated` (`packages/draw-bundle/src/commands/repeat.ts:34-41`).
 - Moving a live-paint member can renumber faces under an unchanged id; Regenerate rebuilds the
   face ids that still resolve and reports the others.
-- Some headers describe an older contract: `packages/draw-bundle/src/commands/repeat.ts:55-57`
-  names `0.2.25-canary.0` and a cast; `packages/draw-bundle/package.json:24-25` pins
-  `0.2.33-canary.0`, and `packages/draw-bundle/src/commands/v59-wire.ts:34-45` says the three op
-  casts are gone (one cast remains in that file, in `batchMutationFor`, `:156-183`).
+- Some headers described an older contract; the version-skew seams they pointed at were
+  deleted in the monorepo (B3b, `docs/migration/seams.md` at the repository root), and the
+  batch-handle builders are in `packages/draw-bundle/src/commands/batch-handles.ts`.
 
 ## Related
 

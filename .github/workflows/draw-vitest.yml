@@ -34,6 +34,7 @@ on:
       - "tooling/bootstrap.sh"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/wasm-tools/**"
+      - ".github/actions/module-wasm/**"
       - ".github/workflows/draw-vitest.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -55,6 +56,7 @@ on:
       - "tooling/bootstrap.sh"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/wasm-tools/**"
+      - ".github/actions/module-wasm/**"
       - ".github/workflows/draw-vitest.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -100,6 +102,11 @@ jobs:
       # which the real-engine specs boot.
       - name: engine wasm packages
         uses: ./.github/actions/engine-wasm
+      # The image-trace wasm (packages/draw-bundle/wasm/, build output),
+      # which the image-trace specs boot.
+      - name: module wasm (draw)
+        uses: ./.github/actions/module-wasm
+        with: { module: draw }
       # One install for the whole root workspace (bun.lock).
       - name: bun install (root workspace)
         working-directory: .
@@ -138,7 +145,8 @@ jobs:
       # The two gates the root `bun run test` / `bun run typecheck` scripts carry
       # and this job used to bypass by calling vitest directly: the
       # contract-import lint (plugin-api is the ONLY sanctioned contract
-      # import) and the typecheck that holds `wire-compat.ts`.
+      # import) and the typecheck (the machines' wire shapes are the
+      # contract's `Mutation` variants).
       - name: contract-import lint
         if: ${{ !cancelled() }}
         run: node scripts/check-contract-imports.mjs

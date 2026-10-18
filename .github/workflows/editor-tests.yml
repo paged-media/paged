@@ -7,8 +7,9 @@ name: editor / tests
 # ai through `workspace:*`, and consumes them from this checkout. Their build
 # outputs are gitignored, so the jobs build them first:
 # .github/actions/engine-wasm fills the engine's packages and
-# .github/actions/module-wasm the bundles whose engine wasm is a build output
-# (doc, slide, sheet, data, web; draw, image and pdf commit theirs). Both
+# .github/actions/module-wasm the bundles' engine wasm (doc, slide, sheet,
+# data, web, draw, image and publish's pdf mapper; pdf's pdfium is a
+# committed third-party prebuilt). Both
 # restore from actions/cache when their sources are unchanged. The vite dev
 # server (spawned by playwright.config's `webServer`) sets the COOP/COEP
 # headers SharedArrayBuffer needs; that middleware runs in the server
@@ -191,6 +192,15 @@ jobs:
       - name: module wasm (web)
         uses: ./.github/actions/module-wasm
         with: { module: web }
+      - name: module wasm (draw)
+        uses: ./.github/actions/module-wasm
+        with: { module: draw }
+      - name: module wasm (image)
+        uses: ./.github/actions/module-wasm
+        with: { module: image }
+      - name: module wasm (publish)
+        uses: ./.github/actions/module-wasm
+        with: { module: publish }
 
       # The editor's typecheck. It ran only in the Playwright job, after the
       # private corpus checkout, which a missing repository secret stops;
@@ -505,9 +515,9 @@ jobs:
       # The engine and the bundles' engine wasm, as in `checks` (restored
       # from the cache that job, or an earlier run, saved). The Playwright
       # surface runs against the vite DEV server (playwright.config
-      # `webServer: npx vite`), whose import analysis resolves sheet's,
-      # web's and doc's `../bin/<glue>.js` at transform time. The typecheck
-      # runs in `checks`.
+      # `webServer: npx vite`), whose import analysis resolves the bundles'
+      # relative wasm glue (sheet, web, doc, draw, image, pdf) at transform
+      # time. The typecheck runs in `checks`.
       - name: engine wasm packages
         uses: ./.github/actions/engine-wasm
         with: { artifact: "false" }
@@ -526,6 +536,15 @@ jobs:
       - name: module wasm (web)
         uses: ./.github/actions/module-wasm
         with: { module: web }
+      - name: module wasm (draw)
+        uses: ./.github/actions/module-wasm
+        with: { module: draw }
+      - name: module wasm (image)
+        uses: ./.github/actions/module-wasm
+        with: { module: image }
+      - name: module wasm (publish)
+        uses: ./.github/actions/module-wasm
+        with: { module: publish }
 
       # NO `--with-deps`. That flag shells out to `apt-get update` as root,
       # and on the ubuntu-24.04 runner that hangs: azure.archive.ubuntu.com

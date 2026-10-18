@@ -117,24 +117,93 @@ import type {
   BundleHost,
   Disposable,
   ElementId,
+  Mutation,
   PluginMetadataEnvelope,
   MutationInput,
 } from "@paged-media/plugin-api";
 
 import { stampDrawMetadata } from "./appearance-bake";
 import { linkIndex } from "../link-index";
-import {
-  attachTextToPathMutationFor,
-  detachTextFromPathMutationFor,
-  supportsTextOnPath,
-  v58RefusalReason,
-  FLIP_PATH_EFFECTS,
-  PATH_TYPE_ALIGNMENTS,
-  type FlipPathEffect,
-  type PathTypeAlignment,
-  type TextPathSpec,
-} from "./v58-wire";
-import { batchMutationFor } from "./v59-wire";
+import { maskOrPathRefusalReason } from "./refusal";
+import { batchMutationFor } from "./batch-handles";
+
+/** The `pathTypeAlignment` values core accepts — the glyph's vertical
+ *  seat on the path. Baseline (the IDML default) and Center are the
+ *  well-exercised pair; Ascender / Descender land too, and the
+ *  renderer's own note says they are exercised less. */
+export const PATH_TYPE_ALIGNMENTS = [
+  "BaselinePathType",
+  "CenterPathType",
+  "AscenderPathType",
+  "DescenderPathType",
+] as const;
+
+export type PathTypeAlignment = (typeof PATH_TYPE_ALIGNMENTS)[number];
+
+/** The `flipPathEffect` values core accepts. `Flipped` reverses the path
+ *  direction so the run reads the other way round. */
+export const FLIP_PATH_EFFECTS = ["NotFlipped", "Flipped"] as const;
+
+export type FlipPathEffect = (typeof FLIP_PATH_EFFECTS)[number];
+
+/** The knobs `attachTextToPath` carries. Deliberately WITHOUT
+ *  `PathEffect`: only `RainbowPathEffect` actually renders (Skew /
+ *  3D-ribbon / stair-step / gravity parse and then draw as Rainbow), so
+ *  core does not expose one and neither does this bundle. A control
+ *  whose value is silently ignored is worse than no control. */
+export interface TextPathSpec {
+  pathTypeAlignment?: PathTypeAlignment | null;
+  flipPathEffect?: FlipPathEffect | null;
+  /** Arc-length window start, in pt along the tessellated path. */
+  startBracket?: number | null;
+  /** Arc-length window end. Glyphs past it are DROPPED and reported by
+   *  the engine as overset — the run is not compressed to fit. */
+  endBracket?: number | null;
+}
+
+// ------------------------------------------------------ wire builders
+// Exported so the conformance spec asserts the EXACT shapes the live
+// commands emit. An optional argument the caller does not set is
+// OMITTED rather than sent as `null` (both are accepted; omission keeps
+// the wire minimal and the assertions exact).
+
+/** `attachTextToPath { elementId, storyId, … }` — flow an EXISTING
+ *  story along an EXISTING path element. */
+export function attachTextToPathMutationFor(
+  elementId: ElementId,
+  storyId: string,
+  spec: TextPathSpec = {},
+): Mutation {
+  return {
+    op: "attachTextToPath",
+    args: {
+      elementId,
+      storyId,
+      ...(spec.pathTypeAlignment === undefined || spec.pathTypeAlignment === null
+        ? {}
+        : { pathTypeAlignment: spec.pathTypeAlignment }),
+      ...(spec.flipPathEffect === undefined || spec.flipPathEffect === null
+        ? {}
+        : { flipPathEffect: spec.flipPathEffect }),
+      ...(spec.startBracket === undefined || spec.startBracket === null
+        ? {}
+        : { startBracket: spec.startBracket }),
+      ...(spec.endBracket === undefined || spec.endBracket === null
+        ? {}
+        : { endBracket: spec.endBracket }),
+    },
+  };
+}
+
+/** `detachTextFromPath { elementId }` — unlink the text from the path.
+ *  THE STORY SURVIVES (core's deliberate choice: attach only ever
+ *  linked an existing story, so unlinking is its exact inverse). */
+export function detachTextFromPathMutationFor(elementId: ElementId): Mutation {
+  return {
+    op: "detachTextFromPath",
+    args: { elementId },
+  };
+}
 
 import { registerCommand } from "../command-registry";
 export const TEXT_ON_PATH_COMMAND_CATEGORY = "Type";
@@ -444,7 +513,7 @@ function reportRefusal(
   error: unknown,
 ): string {
   const reason =
-    v58RefusalReason(error) ??
+    maskOrPathRefusalReason(error) ??
     "the engine refused the text-on-a-path operation";
   host.log.warn(`${label}: ${reason}`);
   host.bindings.publish(BIND_TEXT_ON_PATH_STATUS, reason);
@@ -473,13 +542,6 @@ export async function applyAttachTextToPath(
   },
 ): Promise<TextOnPathRef | null> {
   const label = ATTACH_TEXT_TO_PATH_COMMAND_ID;
-  if (!(await supportsTextOnPath(host))) {
-    host.log.warn(
-      `${label}: this editor version cannot attach type to a path — ` +
-        "type on a path is unavailable here",
-    );
-    return null;
-  }
   const element = resolvePathHost(host, payload);
   if (!element) {
     host.log.warn(
@@ -538,13 +600,6 @@ export async function applyDetachTextFromPath(
   payload?: { elementId?: unknown },
 ): Promise<boolean> {
   const label = DETACH_TEXT_FROM_PATH_COMMAND_ID;
-  if (!(await supportsTextOnPath(host))) {
-    host.log.warn(
-      `${label}: this editor version cannot detach type from a path — ` +
-        "type on a path is unavailable here",
-    );
-    return false;
-  }
   const element = resolvePathHost(host, payload);
   if (!element) {
     host.log.warn(

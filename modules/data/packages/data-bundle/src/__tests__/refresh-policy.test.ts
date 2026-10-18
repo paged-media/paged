@@ -99,7 +99,7 @@ function fakeHost(consented: Set<string>, saved?: PersistedSession): BundleHost 
         return { granted: [...origins], denied: [], remembered: true };
       },
     },
-    document: {},
+    document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }) },
   } as unknown as BundleHost;
 }
 

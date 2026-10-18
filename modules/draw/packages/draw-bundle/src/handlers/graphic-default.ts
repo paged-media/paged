@@ -48,7 +48,7 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { rawStyleProperties } from "../raw-wire";
-import { batchMutationFor } from "../commands/v59-wire";
+import { batchMutationFor } from "../commands/batch-handles";
 
 /** A shape's paint: swatch refs (`null` = none) and a stroke weight. */
 export interface GraphicPaint {
