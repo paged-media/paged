@@ -50,7 +50,10 @@ export function CellStylesPanel() {
           op="createCellStyle"
           label="New cell style…"
           testId="cell-style-new"
-          prefill={{ selfId: `CellStyle/u${Date.now().toString(36)}`, name: "New cell style" }}
+          prefill={{
+            selfId: `CellStyle/u${Date.now().toString(36)}`,
+            name: "New cell style",
+          }}
         />
       </div>
       {items.length === 0 ? (

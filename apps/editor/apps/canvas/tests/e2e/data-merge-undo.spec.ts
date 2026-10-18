@@ -48,11 +48,17 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { openCanvas } from "../fidelity/canvas-driver";
 
-const HARNESS = pathResolve(dirname(fileURLToPath(import.meta.url)), "harness/data-merge");
+const HARNESS = pathResolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "harness/data-merge",
+);
 
 const TEMPLATE = pathResolve(HARNESS, "long-record-set.idml");
 const BATCHES = JSON.parse(
-  readFileSync(pathResolve(HARNESS, "long-record-set.merge-batches.json"), "utf8"),
+  readFileSync(
+    pathResolve(HARNESS, "long-record-set.merge-batches.json"),
+    "utf8",
+  ),
 ) as { pageOrder: string[]; pages: unknown; content: unknown };
 
 type Reply = { kind: string; payload: Record<string, unknown> };
@@ -76,7 +82,9 @@ type CanvasWindow = {
 };
 
 /** Per page in document order: its id and the ids of its text frames. */
-async function layout(page: Page): Promise<{ page: string; frames: string[] }[]> {
+async function layout(
+  page: Page,
+): Promise<{ page: string; frames: string[] }[]> {
   return page.evaluate(async () => {
     type Node = {
       kind: string;
@@ -86,10 +94,13 @@ async function layout(page: Page): Promise<{ page: string; frames: string[] }[]>
     const c = (globalThis as unknown as CanvasWindow).__canvas;
     // The tree's Page nodes carry no id; the pages collection lists the
     // same pages in the same (document) order.
-    const pages = await c.client.send({ kind: "requestCollection", payload: { name: "pages" } });
-    const ids = ((pages.payload as { items?: { selfId: string }[] }).items ?? []).map(
-      (p) => p.selfId,
-    );
+    const pages = await c.client.send({
+      kind: "requestCollection",
+      payload: { name: "pages" },
+    });
+    const ids = (
+      (pages.payload as { items?: { selfId: string }[] }).items ?? []
+    ).map((p) => p.selfId);
     const tree = await c.client.send({ kind: "requestSceneTree" });
     const out: { page: string; frames: string[] }[] = [];
     const walk = (nodes: Node[]) => {
@@ -99,7 +110,10 @@ async function layout(page: Page): Promise<{ page: string; frames: string[] }[]>
             page: ids[out.length] ?? "?",
             frames: (n.children ?? [])
               .map((x) => x.id)
-              .filter((id): id is { kind: string; id: string } => !!id && id.kind === "textFrame")
+              .filter(
+                (id): id is { kind: string; id: string } =>
+                  !!id && id.kind === "textFrame",
+              )
               .map((id) => id.id),
           });
         } else if (n.children) walk(n.children);
@@ -110,7 +124,8 @@ async function layout(page: Page): Promise<{ page: string; frames: string[] }[]>
   });
 }
 
-const counts = async (page: Page) => (await layout(page)).map((p) => p.frames.length);
+const counts = async (page: Page) =>
+  (await layout(page)).map((p) => p.frames.length);
 
 async function mutate(page: Page, m: unknown): Promise<Reply> {
   return page.evaluate(
@@ -136,9 +151,15 @@ async function mergeTwice(page: Page): Promise<void> {
   await openCanvas(page);
   await page.setInputFiles('input[type="file"]', TEMPLATE);
   await expect
-    .poll(() => page.evaluate(() => (globalThis as unknown as CanvasWindow).__canvas.ready), {
-      timeout: 30_000,
-    })
+    .poll(
+      () =>
+        page.evaluate(
+          () => (globalThis as unknown as CanvasWindow).__canvas.ready,
+        ),
+      {
+        timeout: 30_000,
+      },
+    )
     .toBe(true);
   await expect.poll(() => counts(page), { timeout: 30_000 }).toEqual([1]);
   const template = (await layout(page))[0];
@@ -154,9 +175,16 @@ async function mergeTwice(page: Page): Promise<void> {
   // Re-merge: C (clear run 1 + pages), D (content).
   const before = await layout(page);
   const clear = [
-    ...before.flatMap((p) => p.frames.map((f) => ({ op: "deleteFrame", args: { frameId: f } }))),
-    ...before.slice(1).map((p) => ({ op: "deletePage", args: { pageId: p.page } })),
-    ...[1, 2].map(() => ({ op: "duplicatePage", args: { page: template.page } })),
+    ...before.flatMap((p) =>
+      p.frames.map((f) => ({ op: "deleteFrame", args: { frameId: f } })),
+    ),
+    ...before
+      .slice(1)
+      .map((p) => ({ op: "deletePage", args: { pageId: p.page } })),
+    ...[1, 2].map(() => ({
+      op: "duplicatePage",
+      args: { page: template.page },
+    })),
   ];
   expect((await mutate(page, { op: "batch", args: { ops: clear } })).kind).toBe(
     "mutationApplied",
@@ -187,15 +215,21 @@ test.describe("D-29 · undo after a Data Merge re-merge (writer batches, no plug
         (globalThis as unknown as CanvasWindow).__canvas.client.undo(),
       );
       expect(r.kind, `undo ${i + 1}`).toBe("undoApplied");
-      await expect.poll(() => counts(page), { timeout: 10_000, message: `undo ${i + 1}` }).toEqual(want);
+      await expect
+        .poll(() => counts(page), { timeout: 10_000, message: `undo ${i + 1}` })
+        .toEqual(want);
     }
     const t = await layout(page);
     expect(t).toHaveLength(1);
     // Redo walks forward again to the re-merge.
     for (let i = 0; i < 4; i++) {
-      await page.evaluate(() => (globalThis as unknown as CanvasWindow).__canvas.client.redo());
+      await page.evaluate(() =>
+        (globalThis as unknown as CanvasWindow).__canvas.client.redo(),
+      );
     }
-    await expect.poll(() => counts(page), { timeout: 10_000 }).toEqual([26, 26, 5]);
+    await expect
+      .poll(() => counts(page), { timeout: 10_000 })
+      .toEqual([26, 26, 5]);
   });
 
   test("Edit ▸ Undo ×4 back to back: the template @feat:data.lower.content", async ({
@@ -205,7 +239,8 @@ test.describe("D-29 · undo after a Data Merge re-merge (writer batches, no plug
     await mergeTwice(page);
     // Fired without waiting between them, as a user's Cmd-Z run does.
     await page.evaluate(async () => {
-      const cmd = (globalThis as unknown as CanvasWindow).__canvas.registries.commands;
+      const cmd = (globalThis as unknown as CanvasWindow).__canvas.registries
+        .commands;
       const fn = cmd.invoke ?? cmd.execute ?? cmd.run;
       for (let i = 0; i < 4; i++) await fn?.call(cmd, "paged.editor.undo");
     });

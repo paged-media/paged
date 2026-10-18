@@ -111,8 +111,7 @@ async function elementScreenCenter(
               Array<{
                 bounds: [number, number, number, number];
                 itemTransform?:
-                  | [number, number, number, number, number, number]
-                  | null;
+                  [number, number, number, number, number, number] | null;
               }>
             >;
           };
@@ -359,7 +358,9 @@ test.describe("E2E edit-context (W3.2 — B-02 + W-03)", () => {
           globalThis as unknown as {
             __canvas: {
               client: {
-                elementGeometry: (ids: unknown[]) => Promise<
+                elementGeometry: (
+                  ids: unknown[],
+                ) => Promise<
                   Array<{ bounds: number[]; itemTransform?: number[] | null }>
                 >;
               };

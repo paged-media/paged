@@ -113,7 +113,9 @@ function useObjectNames(list: readonly string[] | null): Map<string, string> {
       list.map(async (a) => {
         try {
           const v = await model.objects.get(a, "name");
-          return v.kind === "value" && typeof v.value === "string" && v.value !== ""
+          return v.kind === "value" &&
+            typeof v.value === "string" &&
+            v.value !== ""
             ? ([a, v.value] as const)
             : null;
         } catch {
@@ -121,7 +123,12 @@ function useObjectNames(list: readonly string[] | null): Map<string, string> {
         }
       }),
     ).then((pairs) => {
-      if (!cancelled) setNames(new Map(pairs.filter((p): p is readonly [string, string] => p !== null)));
+      if (!cancelled)
+        setNames(
+          new Map(
+            pairs.filter((p): p is readonly [string, string] => p !== null),
+          ),
+        );
     });
     return () => {
       cancelled = true;
@@ -142,7 +149,12 @@ function Picker({
   onChange(v: string): void;
 }) {
   return (
-    <select data-options-picker={testId} className={SELECT} value={value} onChange={(e) => onChange(e.target.value)}>
+    <select
+      data-options-picker={testId}
+      className={SELECT}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
       {options.map((o) => (
         <option key={o.value} value={o.value}>
           {o.label}
@@ -154,7 +166,11 @@ function Picker({
 
 function Empty({ children }: { children: string }) {
   return (
-    <div className="px-3.5 pb-3 text-xs" style={{ color: "var(--pg-muted-fg)" }} data-options-empty="">
+    <div
+      className="px-3.5 pb-3 text-xs"
+      style={{ color: "var(--pg-muted-fg)" }}
+      data-options-empty=""
+    >
       {children}
     </div>
   );
@@ -197,17 +213,31 @@ function SwatchColorEditor({ address }: { address: string }) {
   const targets = useMemo(() => [address], [address]);
   const field = useObjectField({ path: "color", targets, schemaKind: address });
   const current =
-    field.state.state === "value" && field.state.value && typeof field.state.value === "object"
-      ? (field.state.value as { space?: string; value?: number[] } & Record<string, unknown>)
+    field.state.state === "value" &&
+    field.state.value &&
+    typeof field.state.value === "object"
+      ? (field.state.value as { space?: string; value?: number[] } & Record<
+          string,
+          unknown
+        >)
       : null;
   const [space, setSpace] = useState<string>("CMYK");
   const [text, setText] = useState("");
   useEffect(() => {
     setSpace(current?.space ?? "CMYK");
-    setText((current?.value ?? []).map((n) => String(Math.round(n * 1000) / 1000)).join(", "));
+    setText(
+      (current?.value ?? [])
+        .map((n) => String(Math.round(n * 1000) / 1000))
+        .join(", "),
+    );
   }, [current?.space, JSON.stringify(current?.value)]); // eslint-disable-line react-hooks/exhaustive-deps
-  const parts = text.split(/[\s,]+/).filter(Boolean).map(Number);
-  const valid = parts.length === COMPONENTS[space] && parts.every((n) => Number.isFinite(n));
+  const parts = text
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map(Number);
+  const valid =
+    parts.length === COMPONENTS[space] &&
+    parts.every((n) => Number.isFinite(n));
   const commit = field.commit;
   return (
     <ObjectFieldFrame field={field} className="relative flex flex-col gap-1.5">
@@ -241,7 +271,9 @@ function SwatchColorEditor({ address }: { address: string }) {
           sm
           testId="swatch-color-apply"
           disabled={!commit || !valid}
-          onClick={() => void commit?.({ ...(current ?? {}), space, value: parts })}
+          onClick={() =>
+            void commit?.({ ...(current ?? {}), space, value: parts })
+          }
         >
           Apply colour
         </CockpitBtn>
@@ -253,19 +285,32 @@ function SwatchColorEditor({ address }: { address: string }) {
 export function SwatchOptionsPanel() {
   const swatches = useCollection<SwatchSummary>("swatches");
   const [pick, setPick] = useState("");
-  const editable = (swatches ?? []).filter((s) => s.kind !== "none" && s.kind !== "registration");
-  const selfId = pick && editable.some((s) => s.selfId === pick) ? pick : (editable[0]?.selfId ?? "");
-  const address = selfId ? formatAddress({ kind: "swatch", name: selfId } as never) : null;
+  const editable = (swatches ?? []).filter(
+    (s) => s.kind !== "none" && s.kind !== "registration",
+  );
+  const selfId =
+    pick && editable.some((s) => s.selfId === pick)
+      ? pick
+      : (editable[0]?.selfId ?? "");
+  const address = selfId
+    ? formatAddress({ kind: "swatch", name: selfId } as never)
+    : null;
   const targets = useMemo(() => (address ? [address] : []), [address]);
   return (
-    <div data-swatch-options-panel={swatches ? "ready" : "loading"} data-options-target={address ?? ""}>
+    <div
+      data-swatch-options-panel={swatches ? "ready" : "loading"}
+      data-options-target={address ?? ""}
+    >
       <CockpitPanelHeader title="Swatch Options" />
       <div className="px-3.5 pb-2">
         <CockpitRow label="Swatch">
           <Picker
             testId="swatch"
             value={selfId}
-            options={editable.map((s) => ({ value: s.selfId, label: displayName(s.name) }))}
+            options={editable.map((s) => ({
+              value: s.selfId,
+              label: displayName(s.name),
+            }))}
             onChange={setPick}
           />
         </CockpitRow>
@@ -275,7 +320,12 @@ export function SwatchOptionsPanel() {
           <div className="px-3.5 pb-2">
             <SwatchColorEditor key={address} address={address} />
           </div>
-          <SchemaSections key={address} targets={targets} sections={SWATCH_SECTIONS} testId="swatch" />
+          <SchemaSections
+            key={address}
+            targets={targets}
+            sections={SWATCH_SECTIONS}
+            testId="swatch"
+          />
         </>
       ) : (
         <Empty>This document has no editable swatches.</Empty>
@@ -326,10 +376,16 @@ function AddressListPanel({
   const address = pick && list?.includes(pick) ? pick : (list?.[0] ?? null);
   const targets = useMemo(() => (address ? [address] : []), [address]);
   return (
-    <div data-object-options-panel={list ? testId : "loading"} data-options-target={address ?? ""}>
+    <div
+      data-object-options-panel={list ? testId : "loading"}
+      data-options-target={address ?? ""}
+    >
       <CockpitPanelHeader title={title} />
       {actions && (
-        <div className="flex flex-wrap gap-[5px] px-3.5 pb-2" data-options-actions={testId}>
+        <div
+          className="flex flex-wrap gap-[5px] px-3.5 pb-2"
+          data-options-actions={testId}
+        >
           {actions(address)}
         </div>
       )}
@@ -348,7 +404,12 @@ function AddressListPanel({
               />
             </CockpitRow>
           </div>
-          <SchemaSections key={address} targets={targets} sections={sections} testId={testId} />
+          <SchemaSections
+            key={address}
+            targets={targets}
+            sections={sections}
+            testId={testId}
+          />
         </>
       ) : (
         <Empty>{empty}</Empty>
@@ -367,7 +428,12 @@ export function TextVariablesPanel() {
       empty="No text variables (or this engine does not list them yet)."
       actions={(address) => (
         <>
-          <CoreCommandButton op="createTextVariable" label="New…" testId="text-variable-new" prefill={{ name: "New variable", contents: "" }} />
+          <CoreCommandButton
+            op="createTextVariable"
+            label="New…"
+            testId="text-variable-new"
+            prefill={{ name: "New variable", contents: "" }}
+          />
           <CoreCommandButton
             op="deleteTextVariable"
             label="Delete"
@@ -400,7 +466,12 @@ const GRADIENT_SECTIONS: readonly SectionSpec[] = [
         items: {
           itemLabel: "stopColor",
           fields: [
-            { field: "stopColor", label: "Colour", style: "collection", props: { collectionName: "swatches" } },
+            {
+              field: "stopColor",
+              label: "Colour",
+              style: "collection",
+              props: { collectionName: "swatches" },
+            },
             { field: "locationPct", label: "Location" },
             { field: "midpointPct", label: "Midpoint" },
           ],
@@ -467,11 +538,18 @@ export function SectionOptionsPanel() {
   const sections = useCollection<SectionSummary>("sections");
   const [pick, setPick] = useState("");
   const selfId =
-    pick && sections?.some((s) => s.selfId === pick) ? pick : (sections?.[0]?.selfId ?? "");
-  const address = selfId ? formatAddress({ kind: "section", id: selfId } as never) : null;
+    pick && sections?.some((s) => s.selfId === pick)
+      ? pick
+      : (sections?.[0]?.selfId ?? "");
+  const address = selfId
+    ? formatAddress({ kind: "section", id: selfId } as never)
+    : null;
   const targets = useMemo(() => (address ? [address] : []), [address]);
   return (
-    <div data-section-options-panel={sections ? "ready" : "loading"} data-options-target={address ?? ""}>
+    <div
+      data-section-options-panel={sections ? "ready" : "loading"}
+      data-options-target={address ?? ""}
+    >
       <CockpitPanelHeader title="Numbering & Section Options" />
       {address ? (
         <>
@@ -488,7 +566,12 @@ export function SectionOptionsPanel() {
               />
             </CockpitRow>
           </div>
-          <SchemaSections key={address} targets={targets} sections={SECTION_SECTIONS} testId="section" />
+          <SchemaSections
+            key={address}
+            targets={targets}
+            sections={SECTION_SECTIONS}
+            testId="section"
+          />
           <div className="px-3.5 pb-2">
             <CoreCommandButton
               op="deleteSection"
@@ -652,13 +735,30 @@ export function FieldOptionsPanel() {
         const m = address ? /^field:(.+)@(\d+)$/.exec(address) : null;
         return (
           <>
-            <CoreCommandButton op="insertField" label="Insert…" testId="field-insert" prefill={{ field: { placeholder: { plugin: "media.paged.data", key: "field", value: "" } } }} />
+            <CoreCommandButton
+              op="insertField"
+              label="Insert…"
+              testId="field-insert"
+              prefill={{
+                field: {
+                  placeholder: {
+                    plugin: "media.paged.data",
+                    key: "field",
+                    value: "",
+                  },
+                },
+              }}
+            />
             <CoreCommandButton
               op="setFieldValue"
               label="Set value…"
               testId="field-set-value"
               disabled={!m}
-              prefill={m ? { storyId: `story:${m[1]}`, offset: Number(m[2]) } : undefined}
+              prefill={
+                m
+                  ? { storyId: `story:${m[1]}`, offset: Number(m[2]) }
+                  : undefined
+              }
             />
           </>
         );

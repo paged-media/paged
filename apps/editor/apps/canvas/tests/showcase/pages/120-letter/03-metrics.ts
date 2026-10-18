@@ -75,22 +75,39 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   /** EB Garamond at 14/19 over a whole sample paragraph. */
   const face = async (storyId: string, start: number, text: string) => {
-    await set(storyId, start, start + text.length, "characterFontFamily", txt("EB Garamond"));
-    await set(storyId, start, start + text.length, "characterFontSize", len(14));
+    await set(
+      storyId,
+      start,
+      start + text.length,
+      "characterFontFamily",
+      txt("EB Garamond"),
+    );
+    await set(
+      storyId,
+      start,
+      start + text.length,
+      "characterFontSize",
+      len(14),
+    );
     await set(storyId, start, start + text.length, "characterLeading", len(19));
   };
 
   const [x0, y0, x1] = contentBox(p(22));
 
-  const head = await proseFrame(ctx, p(22), [x0, y0, x1, y0 + 30], [
-    { text: "Metal that moves", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(22),
+    [x0, y0, x1, y0 + 30],
+    [{ text: "Metal that moves", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   // ── tracking ramp: -50 .. +200 thousandths of an em ─────────────
   {
     const values = [-50, 0, 50, 120, 200];
-    const samples = values.map((v) => `letterforms breathe (${v >= 0 ? "+" : ""}${v})`);
+    const samples = values.map(
+      (v) => `letterforms breathe (${v >= 0 ? "+" : ""}${v})`,
+    );
     const b = await block(
       [x0, y0 + 38, x1, y0 + 196],
       "characterTracking · thousandths of an em, five stops",
@@ -99,7 +116,13 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     for (const [i, sample] of samples.entries()) {
       const s = b.starts[i + 1];
       await face(b.storyId, s, sample);
-      await set(b.storyId, s, s + sample.length, "characterTracking", len(values[i]));
+      await set(
+        b.storyId,
+        s,
+        s + sample.length,
+        "characterTracking",
+        len(values[i]),
+      );
     }
   }
 
@@ -116,11 +139,29 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       await face(b.storyId, s, sample);
     }
     const h70 = b.starts[1];
-    await set(b.storyId, h70, h70 + samples[0].length, "characterHorizontalScale", len(70));
+    await set(
+      b.storyId,
+      h70,
+      h70 + samples[0].length,
+      "characterHorizontalScale",
+      len(70),
+    );
     const h130 = b.starts[2];
-    await set(b.storyId, h130, h130 + samples[1].length, "characterHorizontalScale", len(130));
+    await set(
+      b.storyId,
+      h130,
+      h130 + samples[1].length,
+      "characterHorizontalScale",
+      len(130),
+    );
     const v160 = b.starts[3];
-    await set(b.storyId, v160, v160 + samples[2].length, "characterVerticalScale", len(160));
+    await set(
+      b.storyId,
+      v160,
+      v160 + samples[2].length,
+      "characterVerticalScale",
+      len(160),
+    );
   }
 
   // ── skew + baseline shift ───────────────────────────────────────
@@ -159,7 +200,13 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     for (const [i, sample] of samples.entries()) {
       const s = b.starts[i + 1];
       await face(b.storyId, s, sample);
-      await set(b.storyId, s, s + sample.length, "characterKerningMethod", txt(methods[i]));
+      await set(
+        b.storyId,
+        s,
+        s + sample.length,
+        "characterKerningMethod",
+        txt(methods[i]),
+      );
     }
   }
 
@@ -177,7 +224,13 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await set(b.storyId, u, u + under.length, "characterUnderline", flag(true));
     const st = b.starts[2];
     await face(b.storyId, st, struck);
-    await set(b.storyId, st, st + struck.length, "characterStrikethru", flag(true));
+    await set(
+      b.storyId,
+      st,
+      st + struck.length,
+      "characterStrikethru",
+      flag(true),
+    );
   }
 
   elements.push(

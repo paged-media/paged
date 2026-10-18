@@ -29,7 +29,11 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { openCanvas } from "../fidelity/canvas-driver";
-import { activateTool, loadViaReactPath, screenPoint } from "./harness/viewport";
+import {
+  activateTool,
+  loadViaReactPath,
+  screenPoint,
+} from "./harness/viewport";
 import { undo } from "./harness/gesture";
 
 async function pageCount(page: Page): Promise<number> {
@@ -38,7 +42,9 @@ async function pageCount(page: Page): Promise<number> {
       globalThis as unknown as {
         __canvas: {
           client: {
-            executeScript(src: string): Promise<{ output: string[]; error: string | null }>;
+            executeScript(
+              src: string,
+            ): Promise<{ output: string[]; error: string | null }>;
           };
         };
       }

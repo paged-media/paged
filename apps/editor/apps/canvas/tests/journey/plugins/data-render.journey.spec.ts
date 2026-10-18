@@ -68,7 +68,11 @@ const invoke = (page: Page, id: string) =>
     (c) =>
       (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (i: string) => Promise<unknown> } } };
+          __canvas: {
+            registries: {
+              commands: { invoke: (i: string) => Promise<unknown> };
+            };
+          };
         }
       ).__canvas.registries.commands.invoke(c),
     id,
@@ -101,7 +105,8 @@ test.describe("journey · paged.data render output", () => {
     try {
       await expect
         .poll(
-          async () => (await status.getAttribute("data-status").catch(() => null)) ?? "?",
+          async () =>
+            (await status.getAttribute("data-status").catch(() => null)) ?? "?",
           { timeout: 45_000 },
         )
         .toBe("ready");
@@ -111,7 +116,9 @@ test.describe("journey · paged.data render output", () => {
     }
 
     if (!ready) {
-      const got = (await status.getAttribute("data-status").catch(() => null)) ?? "unknown";
+      const got =
+        (await status.getAttribute("data-status").catch(() => null)) ??
+        "unknown";
       skipWithoutDuckDB(
         got,
         `paged.data render needs DuckDB-WASM to boot (engine status "${got}"). On the ` +
@@ -124,7 +131,9 @@ test.describe("journey · paged.data render output", () => {
     // The source registered (the panel sanitises `data-people.csv` →
     // `data_people`). The sanitised name surfaces in more than one place once
     // wired (the source row + a query referencing it), so target the first.
-    await expect(page.getByText(/data_people/).first()).toBeVisible({ timeout: 6_000 });
+    await expect(page.getByText(/data_people/).first()).toBeVisible({
+      timeout: 6_000,
+    });
 
     // ── 2. WIRE + LOWER — open the bindings panel, add bindings through its
     //    authoring row (a variable field and a table over "All rows of
@@ -133,7 +142,9 @@ test.describe("journey · paged.data render output", () => {
     //    and commits the resolved content as native Paged Mutations — the page,
     //    blank before, now carries the data-driven content. ──
     await openPanel(page, BINDINGS_PANEL);
-    await expect(page.locator("[data-data-bind-author]")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("[data-data-bind-author]")).toBeVisible({
+      timeout: 10_000,
+    });
 
     const beforeLower = await designer.renderBytes();
     await addBindingThroughPanel(page, "variable", "name");

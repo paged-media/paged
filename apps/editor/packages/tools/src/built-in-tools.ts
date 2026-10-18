@@ -59,7 +59,10 @@ import { createTypeHandler } from "./handlers/type-tool";
 import { createScissorsHandler } from "./handlers/scissors-tool";
 import { createShearHandler } from "./handlers/shear-tool";
 import { createSmoothHandler } from "./handlers/smooth-tool";
-import { createRotateHandler, createScaleHandler } from "./handlers/transform-tools";
+import {
+  createRotateHandler,
+  createScaleHandler,
+} from "./handlers/transform-tools";
 
 export const BUILT_IN_TOOLS: ToolContribution[] = [
   // ── A · Selection tools ──────────────────────────────────────
@@ -99,7 +102,8 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
   {
     id: "paged.tool.page",
     title: "Page",
-    description: "Click a page to select it, drag to resize it; Alt-click inserts a page after it.",
+    description:
+      "Click a page to select it, drag to resize it; Alt-click inserts a page after it.",
     icon: "tool-page",
     shortcut: "shift+p",
     group: "page",
@@ -205,7 +209,8 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
   {
     id: "paged.tool.pen",
     title: "Pen",
-    description: "Click for corner points, drag for curves; Enter finishes the path.",
+    description:
+      "Click for corner points, drag for curves; Enter finishes the path.",
     icon: "tool-pen",
     shortcut: "p",
     group: "pen",
@@ -310,8 +315,23 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
     options: {
       toolId: "paged.tool.polygon",
       fields: [
-        { kind: "number", key: "sides", label: "Number of Sides", min: 3, max: 100, step: 1 },
-        { kind: "number", key: "starInset", label: "Star Inset", min: 0, max: 100, step: 1, unit: "%" },
+        {
+          kind: "number",
+          key: "sides",
+          label: "Number of Sides",
+          min: 3,
+          max: 100,
+          step: 1,
+        },
+        {
+          kind: "number",
+          key: "starInset",
+          label: "Star Inset",
+          min: 0,
+          max: 100,
+          step: 1,
+          unit: "%",
+        },
       ],
     },
   },
@@ -346,7 +366,8 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
   {
     id: "paged.tool.polygon",
     title: "Polygon",
-    description: "Drag to draw a polygon or star; double-click for its settings.",
+    description:
+      "Drag to draw a polygon or star; double-click for its settings.",
     icon: "tool-polygon",
     group: "shape",
     section: "drawType",
@@ -359,8 +380,23 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
     options: {
       toolId: "paged.tool.polygon",
       fields: [
-        { kind: "number", key: "sides", label: "Number of Sides", min: 3, max: 100, step: 1 },
-        { kind: "number", key: "starInset", label: "Star Inset", min: 0, max: 100, step: 1, unit: "%" },
+        {
+          kind: "number",
+          key: "sides",
+          label: "Number of Sides",
+          min: 3,
+          max: 100,
+          step: 1,
+        },
+        {
+          kind: "number",
+          key: "starInset",
+          label: "Star Inset",
+          min: 0,
+          max: 100,
+          step: 1,
+          unit: "%",
+        },
       ],
     },
   },
@@ -444,7 +480,8 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
   {
     id: "paged.tool.gradientSwatch",
     title: "Gradient Swatch",
-    description: "Drag across an object to set its gradient's direction and length.",
+    description:
+      "Drag across an object to set its gradient's direction and length.",
     icon: "tool-gradientSwatch",
     shortcut: "g",
     group: "gradientSwatch",
@@ -500,7 +537,8 @@ export const BUILT_IN_TOOLS: ToolContribution[] = [
   {
     id: "paged.tool.eyedropper",
     title: "Eyedropper",
-    description: "Click the page to pick up a colour; it fills the selection and new objects.",
+    description:
+      "Click the page to pick up a colour; it fills the selection and new objects.",
     icon: "tool-eyedropper",
     shortcut: "i",
     group: "eyedropper",

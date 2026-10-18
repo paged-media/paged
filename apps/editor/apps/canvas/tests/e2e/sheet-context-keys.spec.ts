@@ -72,13 +72,18 @@ interface CanvasHandle {
       elementGeometry: (ids: unknown[]) => Promise<
         Array<{
           bounds: [number, number, number, number];
-          itemTransform?: [number, number, number, number, number, number] | null;
+          itemTransform?:
+            [number, number, number, number, number, number] | null;
         }>
       >;
-      executeScript: (s: string) => Promise<{ output: string[]; error: string | null }>;
+      executeScript: (
+        s: string,
+      ) => Promise<{ output: string[]; error: string | null }>;
     };
     registries: {
-      editContexts: { get: (type: string) => Record<string, unknown> | undefined };
+      editContexts: {
+        get: (type: string) => Record<string, unknown> | undefined;
+      };
     };
   };
 }
@@ -151,7 +156,10 @@ async function importAndLower(page: Page, range: string): Promise<ElementRef> {
 /** Enter the sheet context on `frame`, show the grid panel, and leave the
  *  keyboard focus on the canvas with the frame's grid live. Returns the
  *  frame's screen centre AFTER the dock relayout. */
-async function enterSheet(page: Page, frame: ElementRef): Promise<{ x: number; y: number }> {
+async function enterSheet(
+  page: Page,
+  frame: ElementRef,
+): Promise<{ x: number; y: number }> {
   const at = await elementScreenCenter(page, frame);
   await page.mouse.dblclick(at.x, at.y);
   await expect(page.locator("[data-edit-context-breadcrumb]")).toBeVisible({
@@ -172,11 +180,25 @@ test.describe("sheet frame — keys and wheel reach the active edit context", ()
   test("AC-KEYS-4 — an enabled guarded binding beats an unguarded one on the same combo @feat:editor-shell.tool-rail @level:edge", () => {
     const place = { key: "cmd+d", command: "host.place" };
     let inGrid = true;
-    const fill = { key: "cmd+d", command: "plugin.fillDown", when: () => inGrid };
-    const press = { key: "d", metaKey: true, ctrlKey: false, altKey: false, shiftKey: false };
+    const fill = {
+      key: "cmd+d",
+      command: "plugin.fillDown",
+      when: () => inGrid,
+    };
+    const press = {
+      key: "d",
+      metaKey: true,
+      ctrlKey: false,
+      altKey: false,
+      shiftKey: false,
+    };
     // Registered after the unguarded one, and still wins while it holds.
-    expect(resolveBinding([place, fill], press)?.command).toBe("plugin.fillDown");
-    expect(resolveBinding([fill, place], press)?.command).toBe("plugin.fillDown");
+    expect(resolveBinding([place, fill], press)?.command).toBe(
+      "plugin.fillDown",
+    );
+    expect(resolveBinding([fill, place], press)?.command).toBe(
+      "plugin.fillDown",
+    );
     // Its guard false → the global binding applies again.
     inGrid = false;
     expect(resolveBinding([place, fill], press)?.command).toBe("host.place");
@@ -185,7 +207,9 @@ test.describe("sheet frame — keys and wheel reach the active edit context", ()
     expect(resolveBinding([place, other], press)?.command).toBe("host.place");
     inGrid = true;
     const fill2 = { key: "cmd+d", command: "plugin.fill2", when: () => true };
-    expect(resolveBinding([fill, fill2], press)?.command).toBe("plugin.fillDown");
+    expect(resolveBinding([fill, fill2], press)?.command).toBe(
+      "plugin.fillDown",
+    );
     // A different chord never matches.
     expect(resolveBinding([fill], { ...press, shiftKey: true })).toBeNull();
   });
@@ -197,7 +221,9 @@ test.describe("sheet frame — keys and wheel reach the active edit context", ()
       await expect
         .poll(
           () =>
-            page.evaluate(() => (globalThis as unknown as CanvasHandle).__canvas.ready),
+            page.evaluate(
+              () => (globalThis as unknown as CanvasHandle).__canvas.ready,
+            ),
           { timeout: 30_000 },
         )
         .toBe(true);
@@ -240,9 +266,13 @@ test.describe("sheet frame — keys and wheel reach the active edit context", ()
       await expect(formula(page)).toHaveValue("21");
 
       // Still inside the sheet — none of these keys left the context.
-      await expect(page.locator("[data-edit-context-breadcrumb]")).toBeVisible();
+      await expect(
+        page.locator("[data-edit-context-breadcrumb]"),
+      ).toBeVisible();
       await page.keyboard.press("Escape");
-      await expect(page.locator("[data-edit-context-breadcrumb]")).toHaveCount(0);
+      await expect(page.locator("[data-edit-context-breadcrumb]")).toHaveCount(
+        0,
+      );
     });
 
     test("AC-KEYS-2 — Cmd+D fills down inside the sheet and Place does not open @feat:sheet.edit.fill @feat:sheet.grid.keyboard @level:gesture", async ({
@@ -259,14 +289,20 @@ test.describe("sheet frame — keys and wheel reach the active edit context", ()
       await page.keyboard.press("Shift+ArrowDown");
       await page.keyboard.press(`${MOD}+d`);
       await page.waitForTimeout(400);
-      expect(chooserOpened, "Place (Cmd+D) did not open a file picker").toBe(false);
+      expect(chooserOpened, "Place (Cmd+D) did not open a file picker").toBe(
+        false,
+      );
 
       // A2 now holds A1's 2, so A3 = SUM(A1:A2) recalculates to 4.
       await page.keyboard.press("ArrowDown");
       await expect(cellRef(page)).toHaveText("A2");
       await expect(formula(page)).toHaveValue("2");
-      await expect(page.locator("[data-sheet-panel='grid']")).toContainText("4");
-      await expect(page.locator("[data-edit-context-breadcrumb]")).toBeVisible();
+      await expect(page.locator("[data-sheet-panel='grid']")).toContainText(
+        "4",
+      );
+      await expect(
+        page.locator("[data-edit-context-breadcrumb]"),
+      ).toBeVisible();
     });
 
     test("AC-KEYS-3 — a chord the sheet does not claim still reaches the host @feat:sheet.grid.keyboard @level:edge", async ({
@@ -304,7 +340,9 @@ test.describe("sheet frame — keys and wheel reach the active edit context", ()
       // reverted the table's cell pour and emptied every placed cell.
       expect(await placedValues(page)).toEqual(original);
       await page.keyboard.press("Escape");
-      await expect(page.locator("[data-edit-context-breadcrumb]")).toHaveCount(0);
+      await expect(page.locator("[data-edit-context-breadcrumb]")).toHaveCount(
+        0,
+      );
       await page.waitForTimeout(500);
       expect(await placedValues(page)).toEqual(original);
     });
@@ -321,7 +359,10 @@ test.describe("sheet frame — keys and wheel reach the active edit context", ()
       // host side of it.)
       await page.evaluate(() => {
         const w = globalThis as unknown as CanvasHandle & {
-          __wheels: Array<{ delta: [number, number]; contentPoint: [number, number] }>;
+          __wheels: Array<{
+            delta: [number, number];
+            contentPoint: [number, number];
+          }>;
           __wheelTake: boolean;
         };
         w.__wheels = [];
@@ -343,8 +384,11 @@ test.describe("sheet frame — keys and wheel reach the active edit context", ()
       const wheels = () =>
         page.evaluate(
           () =>
-            (globalThis as unknown as { __wheels: Array<{ delta: [number, number] }> })
-              .__wheels,
+            (
+              globalThis as unknown as {
+                __wheels: Array<{ delta: [number, number] }>;
+              }
+            ).__wheels,
         );
 
       await page.mouse.move(at.x, at.y);
@@ -355,7 +399,9 @@ test.describe("sheet frame — keys and wheel reach the active edit context", ()
       // Content points: the screen delta divided by the camera scale.
       expect(first.delta[1]).toBeCloseTo(120 / before.scale, 3);
       await page.waitForTimeout(200);
-      expect(await camera(), "a claimed wheel does not pan the canvas").toEqual(before);
+      expect(await camera(), "a claimed wheel does not pan the canvas").toEqual(
+        before,
+      );
 
       // Declined → the host pans as ever.
       await page.evaluate(() => {

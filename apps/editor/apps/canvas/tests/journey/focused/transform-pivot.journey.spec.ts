@@ -44,7 +44,10 @@ const cornerAndAngle = (page: Page, ref: Ref) =>
         __canvas: {
           client: {
             elementGeometry: (ids: unknown[]) => Promise<
-              { bounds: [number, number, number, number]; itemTransform?: number[] | null }[]
+              {
+                bounds: [number, number, number, number];
+                itemTransform?: number[] | null;
+              }[]
             >;
           };
         };
@@ -54,7 +57,10 @@ const cornerAndAngle = (page: Page, ref: Ref) =>
     const [top, left] = g.bounds;
     const m = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
     return {
-      corner: [m[0] * left + m[2] * top + m[4], m[1] * left + m[3] * top + m[5]] as [number, number],
+      corner: [
+        m[0] * left + m[2] * top + m[4],
+        m[1] * left + m[3] * top + m[5],
+      ] as [number, number],
       angle: (Math.atan2(m[1], m[0]) * 180) / Math.PI,
     };
   }, ref);
@@ -64,7 +70,11 @@ async function click(page: Page, at: [number, number]): Promise<void> {
   await page.mouse.click(p.x, p.y);
 }
 
-async function drag(page: Page, from: [number, number], to: [number, number]): Promise<void> {
+async function drag(
+  page: Page,
+  from: [number, number],
+  to: [number, number],
+): Promise<void> {
   const a = await screenPoint(page, from[0], from[1]);
   const b = await screenPoint(page, to[0], to[1]);
   await page.mouse.move(a.x, a.y);
@@ -76,7 +86,10 @@ async function drag(page: Page, from: [number, number], to: [number, number]): P
 }
 
 test.describe("journey · rotate about a click-set pivot", () => {
-  test.skip(process.env.PAGED_REQUIRE_V66 !== "1", "needs a protocol-66 engine (PAGED_REQUIRE_V66=1)");
+  test.skip(
+    process.env.PAGED_REQUIRE_V66 !== "1",
+    "needs a protocol-66 engine (PAGED_REQUIRE_V66=1)",
+  );
 
   test("the clicked corner stays put while the frame rotates @feat:editor-tools.rotate @level:gesture", async ({
     page,
@@ -85,24 +98,38 @@ test.describe("journey · rotate about a click-set pivot", () => {
     await designer.open();
     await designer.newDocument();
 
-    const id = await designer.drawRectangle({ x0: 100, y0: 300, x1: 260, y1: 400 });
+    const id = await designer.drawRectangle({
+      x0: 100,
+      y0: 300,
+      x1: 260,
+      y1: 400,
+    });
     const ref: Ref = { kind: "rectangle", id };
     await designer.selectElement("rectangle", id);
     const before = await cornerAndAngle(page, ref);
 
     await activateTool(page, "transform");
     await expect(
-      page.locator('[data-tool-slot="transform"][data-tool="paged.tool.rotate"][data-active="true"]'),
+      page.locator(
+        '[data-tool-slot="transform"][data-tool="paged.tool.rotate"][data-active="true"]',
+      ),
     ).toBeVisible();
     // Click the top-left corner: the pivot moves there.
     await click(page, [100, 300]);
     await drag(page, [300, 350], [300, 250]);
 
     await expect
-      .poll(async () => Math.abs((await cornerAndAngle(page, ref)).angle), { timeout: 5000 })
+      .poll(async () => Math.abs((await cornerAndAngle(page, ref)).angle), {
+        timeout: 5000,
+      })
       .toBeGreaterThan(0.5);
     const after = await cornerAndAngle(page, ref);
     // About the centroid this corner would travel tens of points.
-    expect(Math.hypot(after.corner[0] - before.corner[0], after.corner[1] - before.corner[1])).toBeLessThan(1);
+    expect(
+      Math.hypot(
+        after.corner[0] - before.corner[0],
+        after.corner[1] - before.corner[1],
+      ),
+    ).toBeLessThan(1);
   });
 });

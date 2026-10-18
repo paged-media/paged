@@ -34,8 +34,18 @@ export const ENVATO_DIR = resolve(REPO_ROOT, "corpus", "idml");
 // caller resolving a pack against it addresses by bare name — the exact
 // bug that silenced this suite. Packs are addressed by (group, name);
 // see `listPacks`.
-export const OVERRIDES_DIR = resolve(REPO_ROOT, "corpus", "config", "overrides");
-export const MANIFEST_PATH = resolve(REPO_ROOT, "corpus", "config", "manifest.json");
+export const OVERRIDES_DIR = resolve(
+  REPO_ROOT,
+  "corpus",
+  "config",
+  "overrides",
+);
+export const MANIFEST_PATH = resolve(
+  REPO_ROOT,
+  "corpus",
+  "config",
+  "manifest.json",
+);
 
 // Default DPI mirrors corpus/harness/test.sh's IDML_ENVATO_DPI=144.
 // Override via the FIDELITY_DPI env var.
@@ -93,7 +103,13 @@ export function listPacks(): PackFixture[] {
     // whole spec was dropped — `--list` reported "Total: 0 tests in 0
     // files" AND EXITED 0. A fidelity gate that measures nothing and
     // passes is worse than one that fails.
-    const dir = resolve(REPO_ROOT, "corpus", entry.group ?? "idml", "packs", entry.name);
+    const dir = resolve(
+      REPO_ROOT,
+      "corpus",
+      entry.group ?? "idml",
+      "packs",
+      entry.name,
+    );
     const idmlPath = resolve(dir, "template.idml");
     const referencePdfPath = resolve(dir, "reference.pdf");
     let hasIdml = false;

@@ -194,7 +194,10 @@ export default defineConfig({
       // The GPU-backend journeys need the real-Chrome WebGPU lane
       // (journeys-gpu); under the bundled Chromium here they would always
       // fall back to CPU. Keep them out of the default journey suite.
-      testIgnore: ["**/gpu-backend.journey.spec.ts", "**/gpu-reentrancy.journey.spec.ts"],
+      testIgnore: [
+        "**/gpu-backend.journey.spec.ts",
+        "**/gpu-reentrancy.journey.spec.ts",
+      ],
       snapshotPathTemplate:
         "{testDir}/__screenshots__/{testFileName}/{arg}-{projectName}-{platform}{ext}",
       use: {

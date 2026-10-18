@@ -197,7 +197,6 @@ function Soon({ children, icon }: { children: ReactNode; icon?: string }) {
   );
 }
 
-
 /** Raise a registered panel into the active right dock — activates
  *  the tab if the mode already seeds it, otherwise opens it as a new
  *  closable tab (same surface the panel rail uses). Returns a click

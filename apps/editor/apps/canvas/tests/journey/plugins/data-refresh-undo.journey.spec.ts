@@ -44,13 +44,24 @@ import { expect, test, type Page } from "@playwright/test";
 import { openPanel } from "../../fidelity/canvas-driver";
 import { Designer } from "../driver/designer";
 import { skipWithoutDuckDB } from "./data-duckdb-gate";
-import { dataFields, ENGINE_PROTOCOL, partText, sessionLabel } from "./data-engine";
+import {
+  dataFields,
+  ENGINE_PROTOCOL,
+  partText,
+  sessionLabel,
+} from "./data-engine";
 
-const CSV_FIXTURE = pathResolve(dirname(fileURLToPath(import.meta.url)), "../../e2e/harness/data-people.csv");
+const CSV_FIXTURE = pathResolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../e2e/harness/data-people.csv",
+);
 const SOURCES_PANEL = "media.paged.data.panel.sources";
 const BINDINGS_PANEL = "media.paged.data.panel.bindings";
 const QUERY_PANEL = "media.paged.data.panel.query";
-const CMD = { importData: "media.paged.data.command.importData", undo: "paged.editor.undo" } as const;
+const CMD = {
+  importData: "media.paged.data.command.importData",
+  undo: "paged.editor.undo",
+} as const;
 const LABELLED = ENGINE_PROTOCOL >= 69;
 
 async function importCsv(page: Page, designer: Designer): Promise<void> {
@@ -64,21 +75,32 @@ async function importCsv(page: Page, designer: Designer): Promise<void> {
   const status = page.locator("[data-status]").last();
   try {
     await expect
-      .poll(async () => (await status.getAttribute("data-status").catch(() => null)) ?? "?", { timeout: 45_000 })
+      .poll(
+        async () =>
+          (await status.getAttribute("data-status").catch(() => null)) ?? "?",
+        { timeout: 45_000 },
+      )
       .toBe("ready");
   } catch {
-    const got = (await status.getAttribute("data-status").catch(() => null)) ?? "unknown";
-    skipWithoutDuckDB(got, `the refresh-undo journey needs DuckDB-WASM to boot (engine status "${got}")`);
+    const got =
+      (await status.getAttribute("data-status").catch(() => null)) ?? "unknown";
+    skipWithoutDuckDB(
+      got,
+      `the refresh-undo journey needs DuckDB-WASM to boot (engine status "${got}")`,
+    );
   }
 }
 
 async function bind(page: Page, field: string): Promise<void> {
   await page.locator("[data-data-bind-field]").fill(field);
   await page.locator("[data-data-bind-add]").click();
-  await expect(page.locator("[data-data-bind-msg]")).toContainText("variable binding");
+  await expect(page.locator("[data-data-bind-msg]")).toContainText(
+    "variable binding",
+  );
 }
 
-const values = async (page: Page) => (await dataFields(page)).map((f) => f.value).sort();
+const values = async (page: Page) =>
+  (await dataFields(page)).map((f) => f.value).sort();
 
 test.describe("journey · paged.data refresh and undo", () => {
   test("a refresh is one undo step; undo restores the values and the session label @feat:data.plugin.bundle @feat:data.bind.engine @level:happy", async ({
@@ -92,48 +114,80 @@ test.describe("journey · paged.data refresh and undo", () => {
     // ── 1. BIND + LOWER ───────────────────────────────────────────────────
     await importCsv(page, designer);
     await openPanel(page, BINDINGS_PANEL);
-    await expect(page.locator("[data-data-bind-author]")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("[data-data-bind-author]")).toBeVisible({
+      timeout: 10_000,
+    });
     await bind(page, "name");
     await bind(page, "role");
     await page.getByRole("button", { name: /lower to document/i }).click();
-    await expect.poll(() => values(page), { timeout: 20_000 }).toEqual(["Ada Lovelace", "Author"]);
+    await expect
+      .poll(() => values(page), { timeout: 20_000 })
+      .toEqual(["Ada Lovelace", "Author"]);
     const lowered = LABELLED ? await sessionLabel(page) : null;
-    if (LABELLED) expect(lowered, "the Lower write carried the session label").not.toBeNull();
+    if (LABELLED)
+      expect(
+        lowered,
+        "the Lower write carried the session label",
+      ).not.toBeNull();
 
     // ── 2. CHANGE THE QUERY — a session change, no document write ────────
     await designer.runCommand("media.paged.data.command.editQuery");
     await openPanel(page, QUERY_PANEL);
-    await page.locator("[data-data-query-sql]").fill("SELECT * FROM data_people WHERE name <> 'Ada Lovelace'");
+    await page
+      .locator("[data-data-query-sql]")
+      .fill("SELECT * FROM data_people WHERE name <> 'Ada Lovelace'");
     await page.locator("[data-data-query-id]").fill("q_all");
     await page.locator("[data-data-query-save]").click();
-    await expect(page.locator("[data-data-query-saved]")).toContainText("q_all", { timeout: 20_000 });
-    expect(await values(page), "saving a query writes nothing").toEqual(["Ada Lovelace", "Author"]);
+    await expect(page.locator("[data-data-query-saved]")).toContainText(
+      "q_all",
+      { timeout: 20_000 },
+    );
+    expect(await values(page), "saving a query writes nothing").toEqual([
+      "Ada Lovelace",
+      "Author",
+    ]);
     if (LABELLED) expect(await sessionLabel(page)).toBe(lowered);
 
     // ── 3. REFRESH — both fields in one write ─────────────────────────────
     await openPanel(page, BINDINGS_PANEL);
     await page.getByRole("button", { name: /refresh data/i }).click();
-    await expect(page.getByText(/Data refreshed from sources/)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Data refreshed from sources/)).toBeVisible({
+      timeout: 30_000,
+    });
     await page.getByRole("button", { name: /refresh fields/i }).click();
     // Record 1 without Ada is the file's next row, Grace Hopper (plugin-data
     // canary.16, DATA-1: a scan of one table keeps its file order; it read
     // Alan Turing under the old stabilized sort). `values` sorts.
-    await expect.poll(() => values(page), { timeout: 20_000 }).toEqual(["Engineer", "Grace Hopper"]);
+    await expect
+      .poll(() => values(page), { timeout: 20_000 })
+      .toEqual(["Engineer", "Grace Hopper"]);
     let refreshed: string | null = null;
     if (LABELLED) {
       refreshed = await sessionLabel(page);
-      expect(refreshed, "the refresh carried a new session label").not.toBe(lowered);
-      expect(await partText(page, `paged/media.paged.data/sessions/${refreshed}.json`)).toContain("WHERE");
+      expect(refreshed, "the refresh carried a new session label").not.toBe(
+        lowered,
+      );
+      expect(
+        await partText(
+          page,
+          `paged/media.paged.data/sessions/${refreshed}.json`,
+        ),
+      ).toContain("WHERE");
     }
 
     // ── 4. UNDO — one step takes both values back ─────────────────────────
     await designer.runCommand(CMD.undo);
-    await expect.poll(() => values(page), { timeout: 20_000 }).toEqual(["Ada Lovelace", "Author"]);
+    await expect
+      .poll(() => values(page), { timeout: 20_000 })
+      .toEqual(["Ada Lovelace", "Author"]);
     if (LABELLED) {
       // The label went back with the write: it names the version the Lower
       // wrote, whose part holds the query as it was.
       expect(await sessionLabel(page)).toBe(lowered);
-      const before = await partText(page, `paged/media.paged.data/sessions/${lowered}.json`);
+      const before = await partText(
+        page,
+        `paged/media.paged.data/sessions/${lowered}.json`,
+      );
       expect(before).not.toBeNull();
       expect(before).not.toContain("WHERE");
     }

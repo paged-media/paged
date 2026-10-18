@@ -42,48 +42,92 @@ const pt = (k: Kit, x: number, y: number) => screenPoint(k.page, x, y);
 async function ids(page: Page, kind: string): Promise<string[]> {
   return page.evaluate(async (want) => {
     type Node = { id?: { kind: string; id: string } | null; children?: Node[] };
-    const c = (globalThis as unknown as { __canvas: { client: { executeScript(s: string): Promise<{ output: string[] }> } } }).__canvas;
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: { executeScript(s: string): Promise<{ output: string[] }> };
+        };
+      }
+    ).__canvas;
     const r = await c.client.executeScript("JSON.stringify(paged.tree())");
     const out: string[] = [];
     const visit = (n: Node) => {
       if (n.id?.kind === want) out.push(n.id.id);
       for (const ch of n.children ?? []) visit(ch);
     };
-    for (const root of JSON.parse(JSON.parse(r.output[0])) as Node[]) visit(root);
+    for (const root of JSON.parse(JSON.parse(r.output[0])) as Node[])
+      visit(root);
     return out;
   }, kind);
 }
 
-async function subpathOpen(page: Page, id: string): Promise<boolean | undefined> {
+async function subpathOpen(
+  page: Page,
+  id: string,
+): Promise<boolean | undefined> {
   return page.evaluate(async (pid) => {
-    const c = (globalThis as unknown as { __canvas: { client: { pathAnchors(r: unknown): Promise<{ subpathOpen?: boolean[] } | null> } } }).__canvas;
-    return (await c.client.pathAnchors({ kind: "polygon", id: pid }))?.subpathOpen?.[0];
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            pathAnchors(
+              r: unknown,
+            ): Promise<{ subpathOpen?: boolean[] } | null>;
+          };
+        };
+      }
+    ).__canvas;
+    return (await c.client.pathAnchors({ kind: "polygon", id: pid }))
+      ?.subpathOpen?.[0];
   }, id);
 }
 
 /** The current selection, as element refs. */
-async function selection(page: Page): Promise<Array<{ kind: string; id: string }>> {
+async function selection(
+  page: Page,
+): Promise<Array<{ kind: string; id: string }>> {
   return page.evaluate(async () => {
-    const c = (globalThis as unknown as { __canvas: { client: { executeScript(s: string): Promise<{ output: string[] }> } } }).__canvas;
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: { executeScript(s: string): Promise<{ output: string[] }> };
+        };
+      }
+    ).__canvas;
     const r = await c.client.executeScript("paged.selection()");
-    return JSON.parse(r.output[0] ?? "[]") as Array<{ kind: string; id: string }>;
+    return JSON.parse(r.output[0] ?? "[]") as Array<{
+      kind: string;
+      id: string;
+    }>;
   });
 }
 
 /** A path's contours and how many of its anchors carry a curve handle (a
  *  handle away from its anchor); a box traced around an ellipse has none. */
-async function anchors(page: Page, id: string): Promise<{ subpathOpen?: boolean[]; count: number; curved: number } | null> {
+async function anchors(
+  page: Page,
+  id: string,
+): Promise<{ subpathOpen?: boolean[]; count: number; curved: number } | null> {
   return page.evaluate(async (pid) => {
     type Pt = [number, number];
-    type R = { anchors: Array<{ anchor: Pt; left: Pt; right: Pt }>; subpathOpen?: boolean[] };
-    const c = (globalThis as unknown as { __canvas: { client: { pathAnchors(r: unknown): Promise<R | null> } } }).__canvas;
+    type R = {
+      anchors: Array<{ anchor: Pt; left: Pt; right: Pt }>;
+      subpathOpen?: boolean[];
+    };
+    const c = (
+      globalThis as unknown as {
+        __canvas: { client: { pathAnchors(r: unknown): Promise<R | null> } };
+      }
+    ).__canvas;
     const r = await c.client.pathAnchors({ kind: "polygon", id: pid });
     if (!r) return null;
     const off = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]) > 0.5;
     return {
       subpathOpen: r.subpathOpen,
       count: r.anchors.length,
-      curved: r.anchors.filter((a) => off(a.left, a.anchor) || off(a.right, a.anchor)).length,
+      curved: r.anchors.filter(
+        (a) => off(a.left, a.anchor) || off(a.right, a.anchor),
+      ).length,
     };
   }, id);
 }
@@ -93,7 +137,9 @@ async function anchors(page: Page, id: string): Promise<{ subpathOpen?: boolean[
  *  goes to the field and the value changes in it, as it does for a person
  *  choosing from the list. */
 async function fillWith(k: Kit, swatch: string): Promise<void> {
-  const field = k.page.locator('[data-property-field="frameFillColor"] select').first();
+  const field = k.page
+    .locator('[data-property-field="frameFillColor"] select')
+    .first();
   await hover(k, field);
   await k.hold(250);
   await field.selectOption({ label: swatch });
@@ -104,7 +150,9 @@ async function fillWith(k: Kit, swatch: string): Promise<void> {
 /** Every page item, by kind. */
 async function census(page: Page): Promise<string> {
   const kinds = ["rectangle", "polygon", "oval", "textFrame", "graphicLine"];
-  const counts = await Promise.all(kinds.map(async (kind) => `${kind}:${(await ids(page, kind)).length}`));
+  const counts = await Promise.all(
+    kinds.map(async (kind) => `${kind}:${(await ids(page, kind)).length}`),
+  );
   return counts.join(" ");
 }
 
@@ -116,7 +164,9 @@ async function deselect(k: Kit): Promise<void> {
   await k.key("v");
   await k.pointer.click(await pt(k, -110, 420), { targetWidth: 120 });
   await k.hold(200);
-  expect(await census(k.page), "the deselect click created nothing").toBe(before);
+  expect(await census(k.page), "the deselect click created nothing").toBe(
+    before,
+  );
 }
 
 film("draw", async (k) => {
@@ -150,9 +200,15 @@ film("draw", async (k) => {
     await pointer.drag(await pt(k, 205, 90), await pt(k, 120, 90));
     await k.hold(400);
     await pointer.click(await pt(k, 100, 250), { targetWidth: 8 });
-    await expect.poll(async () => (await ids(page, "polygon")).length, { timeout: 6000 }).toBe(before.length + 1);
-    dome = (await ids(page, "polygon")).find((id) => !before.includes(id)) ?? "";
-    expect(await subpathOpen(page, dome), "the click on the first anchor closed the path").toBe(false);
+    await expect
+      .poll(async () => (await ids(page, "polygon")).length, { timeout: 6000 })
+      .toBe(before.length + 1);
+    dome =
+      (await ids(page, "polygon")).find((id) => !before.includes(id)) ?? "";
+    expect(
+      await subpathOpen(page, dome),
+      "the click on the first anchor closed the path",
+    ).toBe(false);
   });
 
   // ── Fill from the swatches. ──
@@ -169,16 +225,37 @@ film("draw", async (k) => {
     k.unfocus();
     await k.key("m", "Rectangle tool");
     const rects = (await ids(page, "rectangle")).length;
-    await pointer.drag(await pt(k, 360, 90), await pt(k, 540, 250), { speed: 1.2 });
-    await expect.poll(async () => (await ids(page, "rectangle")).length).toBe(rects + 1);
+    await pointer.drag(await pt(k, 360, 90), await pt(k, 540, 250), {
+      speed: 1.2,
+    });
+    await expect
+      .poll(async () => (await ids(page, "rectangle")).length)
+      .toBe(rects + 1);
     const card = (await ids(page, "rectangle")).at(-1)!;
     await menu(k, ["Draw", "Corners", "Rounded"]);
     await expect
       .poll(() =>
         page.evaluate(async (rid) => {
-          const c = (globalThis as unknown as { __canvas: { client: { elementProperties(r: unknown): Promise<{ entries: Array<{ path: string; value?: { value?: unknown } }> } | null> } } }).__canvas;
-          const p = await c.client.elementProperties({ kind: "rectangle", id: rid });
-          return p?.entries.find((e) => e.path === "frameCornerOptionTopLeft")?.value?.value;
+          const c = (
+            globalThis as unknown as {
+              __canvas: {
+                client: {
+                  elementProperties(r: unknown): Promise<{
+                    entries: Array<{
+                      path: string;
+                      value?: { value?: unknown };
+                    }>;
+                  } | null>;
+                };
+              };
+            }
+          ).__canvas;
+          const p = await c.client.elementProperties({
+            kind: "rectangle",
+            id: rid,
+          });
+          return p?.entries.find((e) => e.path === "frameCornerOptionTopLeft")
+            ?.value?.value;
         }, card),
       )
       .toBe("RoundedCorner");
@@ -193,11 +270,19 @@ film("draw", async (k) => {
     k.unfocus();
     await k.key("l", "Ellipse tool");
     const ovals = (await ids(page, "oval")).length;
-    await pointer.drag(await pt(k, 80, 320), await pt(k, 250, 450), { speed: 1.6 });
-    await expect.poll(async () => (await ids(page, "oval")).length).toBe(ovals + 1);
+    await pointer.drag(await pt(k, 80, 320), await pt(k, 250, 450), {
+      speed: 1.6,
+    });
+    await expect
+      .poll(async () => (await ids(page, "oval")).length)
+      .toBe(ovals + 1);
     await fillWith(k, "Rose");
-    await pointer.drag(await pt(k, 180, 320), await pt(k, 350, 450), { speed: 1.6 });
-    await expect.poll(async () => (await ids(page, "oval")).length).toBe(ovals + 2);
+    await pointer.drag(await pt(k, 180, 320), await pt(k, 350, 450), {
+      speed: 1.6,
+    });
+    await expect
+      .poll(async () => (await ids(page, "oval")).length)
+      .toBe(ovals + 2);
     await fillWith(k, "Violet");
   });
 
@@ -205,22 +290,42 @@ film("draw", async (k) => {
   //    regions (each ellipse's own part and the lens they share) become one
   //    closed path that keeps the ellipses' curves. ──
   await k.scene("merge", async () => {
-    const before = { ovals: await ids(page, "oval"), polygons: await ids(page, "polygon") };
+    const before = {
+      ovals: await ids(page, "oval"),
+      polygons: await ids(page, "polygon"),
+    };
     await k.key("v");
-    await pointer.drag(await pt(k, 60, 300), await pt(k, 372, 472), { speed: 1.4 });
+    await pointer.drag(await pt(k, 60, 300), await pt(k, 372, 472), {
+      speed: 1.4,
+    });
     await expect
-      .poll(async () => (await selection(page)).filter((e) => e.kind === "oval").length, { timeout: 6000 })
+      .poll(
+        async () =>
+          (await selection(page)).filter((e) => e.kind === "oval").length,
+        { timeout: 6000 },
+      )
       .toBe(2);
     await press(k, page.locator('[data-tool-slot="shapeBuilder"]'));
     k.focus(PAIR);
     await k.hold(700);
-    await pointer.drag(await pt(k, 105, 385), await pt(k, 325, 385), { speed: 0.8 });
-    await expect.poll(async () => (await ids(page, "oval")).length, { timeout: 6000 }).toBe(before.ovals.length - 2);
-    const made = (await ids(page, "polygon")).filter((id) => !before.polygons.includes(id));
+    await pointer.drag(await pt(k, 105, 385), await pt(k, 325, 385), {
+      speed: 0.8,
+    });
+    await expect
+      .poll(async () => (await ids(page, "oval")).length, { timeout: 6000 })
+      .toBe(before.ovals.length - 2);
+    const made = (await ids(page, "polygon")).filter(
+      (id) => !before.polygons.includes(id),
+    );
     expect(made, "the two ellipses became one path").toHaveLength(1);
     const outline = await anchors(page, made[0]);
-    expect(outline?.subpathOpen ?? [false], "one closed contour").toEqual([false]);
-    expect(outline?.curved, "the path keeps the ellipses' curves, not their bounding boxes").toBeGreaterThan(4);
+    expect(outline?.subpathOpen ?? [false], "one closed contour").toEqual([
+      false,
+    ]);
+    expect(
+      outline?.curved,
+      "the path keeps the ellipses' curves, not their bounding boxes",
+    ).toBeGreaterThan(4);
     await deselect(k);
     await k.hold(1500);
   });
@@ -233,7 +338,9 @@ film("draw", async (k) => {
     await menu(k, ["File", "Open…"]);
     k.chip("brand-kit.svg", "file");
     await (await chooser).setFiles(join(ASSETS, "brand-kit.svg"));
-    await expect.poll(async () => (await ids(page, "polygon")).length, { timeout: 8000 }).toBe(polys + 3);
+    await expect
+      .poll(async () => (await ids(page, "polygon")).length, { timeout: 8000 })
+      .toBe(polys + 3);
     k.focus(MARK);
     await k.hold(600);
     await k.key("v");
@@ -244,10 +351,16 @@ film("draw", async (k) => {
   // ── SVG out, from the export centre. ──
   await k.scene("svg-out", async () => {
     k.unfocus();
-    await press(k, page.getByRole("button", { name: "Export", exact: true }).last());
+    await press(
+      k,
+      page.getByRole("button", { name: "Export", exact: true }).last(),
+    );
     await k.hold(600);
     const download = page.waitForEvent("download");
-    await press(k, page.locator('[data-plugin-export="media.paged.draw.exporter.svg"]'));
+    await press(
+      k,
+      page.locator('[data-plugin-export="media.paged.draw.exporter.svg"]'),
+    );
     const file = await download;
     k.chip(`${file.suggestedFilename()} saved`, "save");
     const saved = join(k.dir, "exported.svg");

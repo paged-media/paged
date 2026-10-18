@@ -69,20 +69,28 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(38);
   const elements: string[] = [];
 
-  const head = await prose(ctx, page, [60, 104, 492, 130], [
-    { text: "The box that answers to the text", style: STYLE.head1 },
-  ]);
-  const intro = await prose(ctx, page, [60, 134, 492, 186], [
-    {
-      text:
-        "Five identical boxes, the same paragraph poured into each, and " +
-        "five auto-sizing modes: the control stays put and clips; the rest " +
-        "grow in the directions their mode allows. The page's own proof is " +
-        "a render taken before and after the five property writes — only " +
-        "the growth lies between.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await prose(
+    ctx,
+    page,
+    [60, 104, 492, 130],
+    [{ text: "The box that answers to the text", style: STYLE.head1 }],
+  );
+  const intro = await prose(
+    ctx,
+    page,
+    [60, 134, 492, 186],
+    [
+      {
+        text:
+          "Five identical boxes, the same paragraph poured into each, and " +
+          "five auto-sizing modes: the control stays put and clips; the rest " +
+          "grow in the directions their mode allows. The page's own proof is " +
+          "a render taken before and after the five property writes — only " +
+          "the growth lies between.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   const slate = await doc.swatch(SWATCH.slate);
@@ -93,7 +101,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     // label keeps clear of it.
     const capTop = ex.box[1] - 22;
     elements.push(
-      await caption(ctx, page, [ex.box[0], capTop, ex.box[0] + 160, capTop + 20], ex.label),
+      await caption(
+        ctx,
+        page,
+        [ex.box[0], capTop, ex.box[0] + 160, capTop + 20],
+        ex.label,
+      ),
     );
     const cell = await pourOne(ctx, page, ex.box, GROW_TEXT, STYLE.bodySmall);
     cellIds.push(cell.frameId);

@@ -65,11 +65,7 @@ export function snapshotPixelFor(
   snapshotWidthPx: number,
   snapshotHeightPx: number,
 ): [number, number] | null {
-  if (
-    !(pageWidthPt > 0) ||
-    !(snapshotWidthPx > 0) ||
-    !(snapshotHeightPx > 0)
-  ) {
+  if (!(pageWidthPt > 0) || !(snapshotWidthPx > 0) || !(snapshotHeightPx > 0)) {
     return null;
   }
   // The snapshot is the page rendered to `snapshotWidthPx`, so one

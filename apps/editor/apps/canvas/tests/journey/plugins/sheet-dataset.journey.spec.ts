@@ -94,9 +94,12 @@ test.describe("journey · paged.sheet data-provider consumer", () => {
       await sourceBtn.click();
       await page.waitForTimeout(500);
       // The row reflects the sourced state ("· in use") — the consumer ran.
-      await expect(datasetRows.first()).toContainText(/in use|update available/, {
-        timeout: 8_000,
-      });
+      await expect(datasetRows.first()).toContainText(
+        /in use|update available/,
+        {
+          timeout: 8_000,
+        },
+      );
     } else {
       // No provider wired (standalone editor) — the honest empty state is the
       // consumer surface's §2.1 graceful absence. Asserting it proves the
@@ -121,7 +124,9 @@ test.describe("journey · paged.sheet data-provider consumer", () => {
     await expect(panel).toBeVisible();
 
     for (const note of collected) {
-      test.info().annotations.push({ type: "render-finding", description: note });
+      test
+        .info()
+        .annotations.push({ type: "render-finding", description: note });
       // eslint-disable-next-line no-console
       console.log(`[sheet-dataset] finding: ${note}`);
     }

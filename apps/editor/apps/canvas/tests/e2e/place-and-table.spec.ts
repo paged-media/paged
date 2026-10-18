@@ -78,10 +78,14 @@ type CanvasGlobal = {
       send: (m: unknown) => Promise<{
         kind: string;
         payload: {
-          content?: { paragraphs: Array<{ runs: Array<{ text: string }> }> } | null;
+          content?: {
+            paragraphs: Array<{ runs: Array<{ text: string }> }>;
+          } | null;
         };
       }>;
-      caretGeometry: (s: unknown) => Promise<{ topPt: number; heightPt: number } | null>;
+      caretGeometry: (
+        s: unknown,
+      ) => Promise<{ topPt: number; heightPt: number } | null>;
       paragraphBounds: (
         storyId: string,
         offset: number,
@@ -95,7 +99,13 @@ type CanvasGlobal = {
         resolve: (
           name: string,
           mime?: string,
-        ) => { import: (req: { name: string; bytes: Uint8Array; mimeType?: string }) => Promise<void> } | null;
+        ) => {
+          import: (req: {
+            name: string;
+            bytes: Uint8Array;
+            mimeType?: string;
+          }) => Promise<void>;
+        } | null;
       };
     };
     debugContext: () => { panels: { open: string[] } };
@@ -116,15 +126,20 @@ function tinyPng(width: number, height: number): Buffer {
 const invoke = (page: Page, id: string) =>
   page.evaluate(
     (commandId) =>
-      (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke(commandId),
+      (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke(commandId),
     id,
   ) as Promise<Outcome>;
 
 const geometryOf = (page: Page, id: ElementId) =>
   page.evaluate(
     async (target) =>
-      (await (globalThis as unknown as CanvasGlobal).__canvas.client.elementGeometry([target]))[0] ??
-      null,
+      (
+        await (
+          globalThis as unknown as CanvasGlobal
+        ).__canvas.client.elementGeometry([target])
+      )[0] ?? null,
     id,
   );
 
@@ -136,9 +151,9 @@ const placementArmed = (page: Page) =>
 /** All page items, document order — for "nothing else was minted". */
 async function itemCount(page: Page): Promise<number> {
   return page.evaluate(async () => {
-    const r = await (globalThis as unknown as CanvasGlobal).__canvas.client.executeScript(
-      "paged.tree()",
-    );
+    const r = await (
+      globalThis as unknown as CanvasGlobal
+    ).__canvas.client.executeScript("paged.tree()");
     let n = 0;
     const visit = (node: { id?: unknown; children?: unknown[] }) => {
       if (node.id) n += 1;
@@ -183,9 +198,9 @@ async function spyOnPsdImporter(page: Page): Promise<void> {
     .poll(() =>
       page.evaluate(
         () =>
-          (globalThis as unknown as CanvasGlobal).__canvas.registries.importers.resolve(
-            "x.psd",
-          ) != null,
+          (
+            globalThis as unknown as CanvasGlobal
+          ).__canvas.registries.importers.resolve("x.psd") != null,
       ),
     )
     .toBe(true);
@@ -201,9 +216,9 @@ async function spyOnPsdImporter(page: Page): Promise<void> {
       w.__psdImports.push({
         name: req.name,
         size: req.bytes.length,
-        selected: (globalThis as unknown as CanvasGlobal).__canvas.elementSelection.map(
-          (e) => e.id,
-        ),
+        selected: (
+          globalThis as unknown as CanvasGlobal
+        ).__canvas.elementSelection.map((e) => e.id),
       });
       return real(req);
     };
@@ -213,9 +228,15 @@ async function spyOnPsdImporter(page: Page): Promise<void> {
 const psdImports = (page: Page) =>
   page.evaluate(
     () =>
-      (globalThis as unknown as {
-        __psdImports: Array<{ name: string; size: number; selected: string[] }>;
-      }).__psdImports,
+      (
+        globalThis as unknown as {
+          __psdImports: Array<{
+            name: string;
+            size: number;
+            selected: string[];
+          }>;
+        }
+      ).__psdImports,
   );
 
 test.describe("File ▸ Place… (film defects ED-6, IMG-2)", () => {
@@ -225,7 +246,9 @@ test.describe("File ▸ Place… (film defects ED-6, IMG-2)", () => {
     await openText(page);
     const chooser = page.waitForEvent("filechooser");
     const placed = invoke(page, "paged.insert.placeImage");
-    await (await chooser).setFiles({
+    await (
+      await chooser
+    ).setFiles({
       name: "wide.png",
       mimeType: "image/png",
       buffer: tinyPng(40, 20),
@@ -263,7 +286,9 @@ test.describe("File ▸ Place… (film defects ED-6, IMG-2)", () => {
 
     const chooser = page.waitForEvent("filechooser");
     const placed = invoke(page, "paged.insert.placeImage");
-    await (await chooser).setFiles({
+    await (
+      await chooser
+    ).setFiles({
       name: "wide.png",
       mimeType: "image/png",
       buffer: tinyPng(40, 20),
@@ -278,7 +303,9 @@ test.describe("File ▸ Place… (film defects ED-6, IMG-2)", () => {
     expect(outcome.createdId?.id).toBe(frame.id);
     expect((await geometryOf(page, frame))?.hasImage).toBe(true);
     // Its own bounds, and nothing new on the page.
-    expect((await geometryOf(page, frame))?.bounds).toEqual([400, 100, 520, 300]);
+    expect((await geometryOf(page, frame))?.bounds).toEqual([
+      400, 100, 520, 300,
+    ]);
     expect(await itemCount(page)).toBe(before);
   });
 
@@ -345,7 +372,9 @@ test.describe("File ▸ Place… (film defects ED-6, IMG-2)", () => {
     const before = await itemCount(page);
     const chooser = page.waitForEvent("filechooser");
     const placed = invoke(page, "paged.insert.placeImage");
-    await (await chooser).setFiles({
+    await (
+      await chooser
+    ).setFiles({
       name: "broken.png",
       mimeType: "image/png",
       buffer: Buffer.from("not an image at all"),
@@ -358,12 +387,16 @@ test.describe("File ▸ Place… (film defects ED-6, IMG-2)", () => {
     // in a panel nobody has open.
     await expect
       .poll(() =>
-        page.evaluate(() =>
-          (globalThis as unknown as CanvasGlobal).__canvas.debugContext().panels.open,
+        page.evaluate(
+          () =>
+            (globalThis as unknown as CanvasGlobal).__canvas.debugContext()
+              .panels.open,
         ),
       )
       .toContain("paged.problems");
-    await expect(page.getByText(/could not decode "broken\.png"/)).toBeVisible();
+    await expect(
+      page.getByText(/could not decode "broken\.png"/),
+    ).toBeVisible();
   });
 });
 
@@ -384,24 +417,37 @@ test.describe("Insert ▸ Table with a caret (film defect ED-7)", () => {
     await expect
       .poll(() =>
         page.evaluate(
-          () => (globalThis as unknown as CanvasGlobal).__canvas.contentSelection?.storyId ?? null,
+          () =>
+            (globalThis as unknown as CanvasGlobal).__canvas.contentSelection
+              ?.storyId ?? null,
         ),
       )
       .not.toBeNull();
     const storyId = await page.evaluate(
-      () => (globalThis as unknown as CanvasGlobal).__canvas.contentSelection!.storyId,
+      () =>
+        (globalThis as unknown as CanvasGlobal).__canvas.contentSelection!
+          .storyId,
     );
 
     const outcome = await invoke(page, "paged.insert.table");
     expect(outcome.applied).toBe(true);
-    const tableId = (outcome.createdId!.id as unknown as { table_id: string }).table_id;
+    const tableId = (outcome.createdId!.id as unknown as { table_id: string })
+      .table_id;
 
     // The caret is in the first cell.
     await expect
       .poll(() =>
-        page.evaluate(() => (globalThis as unknown as CanvasGlobal).__canvas.contentSelection),
+        page.evaluate(
+          () =>
+            (globalThis as unknown as CanvasGlobal).__canvas.contentSelection,
+        ),
       )
-      .toMatchObject({ storyId, start: 0, end: 0, cell: { tableId, row: 0, col: 0 } });
+      .toMatchObject({
+        storyId,
+        start: 0,
+        end: 0,
+        cell: { tableId, row: 0, col: 0 },
+      });
 
     // Typing lands in the cell, not in the body above the table.
     await page.evaluate(() => {
@@ -414,11 +460,13 @@ test.describe("Insert ▸ Table with a caret (film defect ED-7)", () => {
         page.evaluate(
           async ({ storyId, tableId }) =>
             (
-              await (globalThis as unknown as CanvasGlobal).__canvas.client.paragraphBounds(
-                storyId,
-                0x7fff_ffff,
-                { tableId, row: 0, col: 0 },
-              )
+              await (
+                globalThis as unknown as CanvasGlobal
+              ).__canvas.client.paragraphBounds(storyId, 0x7fff_ffff, {
+                tableId,
+                row: 0,
+                col: 0,
+              })
             )?.end ?? null,
           { storyId, tableId },
         ),
@@ -432,7 +480,9 @@ test.describe("Insert ▸ Table with a caret (film defect ED-7)", () => {
       page.evaluate(
         async ({ storyId, tableId, row }) =>
           (
-            await (globalThis as unknown as CanvasGlobal).__canvas.client.caretGeometry({
+            await (
+              globalThis as unknown as CanvasGlobal
+            ).__canvas.client.caretGeometry({
               storyId,
               start: 0,
               end: 0,
@@ -458,7 +508,9 @@ test.describe("Insert ▸ Table with a caret (film defect ED-7)", () => {
     await expect
       .poll(() =>
         page.evaluate(
-          () => (globalThis as unknown as CanvasGlobal).__canvas.contentSelection?.cell?.row,
+          () =>
+            (globalThis as unknown as CanvasGlobal).__canvas.contentSelection
+              ?.cell?.row,
         ),
       )
       .toBe(3);
@@ -469,7 +521,9 @@ test.describe("Insert ▸ Table with a caret (film defect ED-7)", () => {
     expect(last - first).toBeGreaterThan(3 * 15);
 
     const body = await page.evaluate(async (sid) => {
-      const r = await (globalThis as unknown as CanvasGlobal).__canvas.client.send({
+      const r = await (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.client.send({
         kind: "requestStoryContent",
         payload: { storyId: sid },
       });

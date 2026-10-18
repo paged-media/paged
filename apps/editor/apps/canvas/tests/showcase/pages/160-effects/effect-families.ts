@@ -76,7 +76,9 @@ export interface EffectFamily {
   citation: string;
   base: (sw: EffectSwatches) => EffectWrite[];
   /** p60's one-knob-at-a-time overrides, applied on top of `base`. */
-  variants: (sw: EffectSwatches) => Array<{ label: string; write: EffectWrite }>;
+  variants: (
+    sw: EffectSwatches,
+  ) => Array<{ label: string; write: EffectWrite }>;
 }
 
 const len = (path: string, value: number): EffectWrite => ({
@@ -266,7 +268,10 @@ export const EFFECT_FAMILIES: EffectFamily[] = [
       len("frameDirectionalFeatherChoke", 0),
     ],
     variants: () => [
-      { label: "bottom 18", write: len("frameDirectionalFeatherBottomWidth", 18) },
+      {
+        label: "bottom 18",
+        write: len("frameDirectionalFeatherBottomWidth", 18),
+      },
       { label: "angle 45", write: len("frameDirectionalFeatherAngle", 45) },
       { label: "choke 50", write: len("frameDirectionalFeatherChoke", 50) },
       { label: "noise 30", write: len("frameDirectionalFeatherNoise", 30) },

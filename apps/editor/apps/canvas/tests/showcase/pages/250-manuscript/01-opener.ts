@@ -30,29 +30,40 @@ import type { PageContext, PageReport } from "../../types";
 export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(115);
 
-  const number = await proseFrame(ctx, page, [48, 100, 220, 196], [
-    { text: "19", style: STYLE.chapterNumber },
-  ]);
-  const title = await proseFrame(ctx, page, [48, 200, 480, 252], [
-    { text: "The Manuscript", style: STYLE.chapterTitle },
-  ]);
-  const deck = await proseFrame(ctx, page, [48, 264, 456, 452], [
-    {
-      text:
-        "A manuscript arrives as a .docx, and this chapter treats that " +
-        "arrival as a PLACE, not an open: the Word file is poured into the " +
-        "open layout as native Paged content — real paragraphs, real " +
-        "character runs, styles synthesized from the document's own " +
-        "word/styles.xml — while the source bytes travel beside it as a " +
-        "container part. Nothing about the result needs the plugin to " +
-        "render, and nothing about the source is thrown away. The spread " +
-        "that follows pours a full circulation report and reads it here, " +
-        "tier by tier; the closing page tells the save-back story straight " +
-        "— what patches, what carries verbatim, and how to tell which " +
-        "happened.",
-      style: STYLE.deck,
-    },
-  ]);
+  const number = await proseFrame(
+    ctx,
+    page,
+    [48, 100, 220, 196],
+    [{ text: "19", style: STYLE.chapterNumber }],
+  );
+  const title = await proseFrame(
+    ctx,
+    page,
+    [48, 200, 480, 252],
+    [{ text: "The Manuscript", style: STYLE.chapterTitle }],
+  );
+  const deck = await proseFrame(
+    ctx,
+    page,
+    [48, 264, 456, 452],
+    [
+      {
+        text:
+          "A manuscript arrives as a .docx, and this chapter treats that " +
+          "arrival as a PLACE, not an open: the Word file is poured into the " +
+          "open layout as native Paged content — real paragraphs, real " +
+          "character runs, styles synthesized from the document's own " +
+          "word/styles.xml — while the source bytes travel beside it as a " +
+          "container part. Nothing about the result needs the plugin to " +
+          "render, and nothing about the source is thrown away. The spread " +
+          "that follows pours a full circulation report and reads it here, " +
+          "tier by tier; the closing page tells the save-back story straight " +
+          "— what patches, what carries verbatim, and how to tell which " +
+          "happened.",
+        style: STYLE.deck,
+      },
+    ],
+  );
   const rule = await plate(ctx, page, [48, 462, 300, 464], SWATCH.vermilion);
 
   const label = await specLabel(ctx, page, [

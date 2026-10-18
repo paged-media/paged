@@ -43,9 +43,13 @@ test.describe("journey · line tool", () => {
     await page.evaluate(() =>
       (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (id: string) => Promise<void> } } };
+          __canvas: {
+            registries: { commands: { invoke: (id: string) => Promise<void> } };
+          };
         }
-      ).__canvas.registries.commands.invoke("paged.tool.activate.paged.tool.line"),
+      ).__canvas.registries.commands.invoke(
+        "paged.tool.activate.paged.tool.line",
+      ),
     );
     const a = await screenPoint(page, 120, 200);
     const b = await screenPoint(page, 360, 200);

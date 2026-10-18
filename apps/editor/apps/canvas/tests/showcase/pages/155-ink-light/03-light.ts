@@ -107,16 +107,24 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const ink = await doc.swatch(SWATCH.ink);
   const contentLayer = await doc.layerId(LAYER.content);
 
-  const head = await proseFrame(ctx, PAGE, [60, 54, 492, 90], [
-    { text: "Gradients, opacity, masks", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    PAGE,
+    [60, 54, 492, 90],
+    [{ text: "Gradients, opacity, masks", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
-  const intro = await proseFrame(ctx, PAGE, [60, 94, 492, 150], [
-    {
-      text: "Everything on this page is light-work: two gradients minted on the wire while you watch, one of them edited after the fact; a ramp of vanishing vermilion; and two soft masks, one read by its luminance and one by its alpha.",
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const intro = await proseFrame(
+    ctx,
+    PAGE,
+    [60, 94, 492, 150],
+    [
+      {
+        text: "Everything on this page is light-work: two gradients minted on the wire while you watch, one of them edited after the fact; a ramp of vanishing vermilion; and two soft masks, one read by its luminance and one by its alpha.",
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(intro.frameId);
 
   // ── the gradients, minted live ──────────────────────────────────
@@ -174,12 +182,17 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       value: contentLayer,
     }),
   ]);
-  const capA = await proseFrame(ctx, PAGE, [60, 208, 492, 230], [
-    {
-      text: "Ink Dawn, linear — minted paper → vermilion → slate, then edited on press: the cold end you see is the editGradient, not the mint.",
-      style: STYLE.caption,
-    },
-  ]);
+  const capA = await proseFrame(
+    ctx,
+    PAGE,
+    [60, 208, 492, 230],
+    [
+      {
+        text: "Ink Dawn, linear — minted paper → vermilion → slate, then edited on press: the cold end you see is the editGradient, not the mint.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(capA.frameId);
 
   // Exhibit B — the radial halo on an oval.
@@ -227,12 +240,23 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       value: contentLayer,
     }),
   ]);
-  const capB = await proseFrame(ctx, PAGE, [60, 338, 266, 360], [
-    { text: "Ink Halo, radial fill.", style: STYLE.caption },
-  ]);
-  const capC = await proseFrame(ctx, PAGE, [286, 338, 492, 360], [
-    { text: "The dawn again, as a 10 pt gradient stroke.", style: STYLE.caption },
-  ]);
+  const capB = await proseFrame(
+    ctx,
+    PAGE,
+    [60, 338, 266, 360],
+    [{ text: "Ink Halo, radial fill.", style: STYLE.caption }],
+  );
+  const capC = await proseFrame(
+    ctx,
+    PAGE,
+    [286, 338, 492, 360],
+    [
+      {
+        text: "The dawn again, as a 10 pt gradient stroke.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(capB.frameId, capC.frameId);
 
   // ── editGradient, with a pixel proof ────────────────────────────
@@ -282,12 +306,17 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   }
   await doc.batch(rampOps);
   elements.push(...chipIds);
-  const capRamp = await proseFrame(ctx, PAGE, [60, 400, 492, 422], [
-    {
-      text: "frameOpacity · 100 · 80 · 60 · 40 · 20 · 10 — the same vermilion, surrendering to both grounds at once.",
-      style: STYLE.caption,
-    },
-  ]);
+  const capRamp = await proseFrame(
+    ctx,
+    PAGE,
+    [60, 400, 492, 422],
+    [
+      {
+        text: "frameOpacity · 100 · 80 · 60 · 40 · 20 · 10 — the same vermilion, surrendering to both grounds at once.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(capRamp.frameId);
 
   // ── the opacity masks, both modes ───────────────────────────────
@@ -353,18 +382,28 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     invert: true,
   });
 
-  const capLum = await proseFrame(ctx, PAGE, [60, 540, 266, 578], [
-    {
-      text: "Luminosity mask — the Annual Ramp as artwork: vermilion survives the light end, dies in the dark.",
-      style: STYLE.caption,
-    },
-  ]);
-  const capAlpha = await proseFrame(ctx, PAGE, [286, 540, 492, 578], [
-    {
-      text: "Alpha mask, inverted — a feathered oval punches a soft window through the slate.",
-      style: STYLE.caption,
-    },
-  ]);
+  const capLum = await proseFrame(
+    ctx,
+    PAGE,
+    [60, 540, 266, 578],
+    [
+      {
+        text: "Luminosity mask — the Annual Ramp as artwork: vermilion survives the light end, dies in the dark.",
+        style: STYLE.caption,
+      },
+    ],
+  );
+  const capAlpha = await proseFrame(
+    ctx,
+    PAGE,
+    [286, 540, 492, 578],
+    [
+      {
+        text: "Alpha mask, inverted — a feathered oval punches a soft window through the slate.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(capLum.frameId, capAlpha.frameId);
 
   // ── the transient battery ───────────────────────────────────────

@@ -174,7 +174,9 @@ async function styleFrom(
   collection: string,
   name: string,
 ): Promise<string> {
-  const items = (await doc.designer.collection(collection)) as unknown as Array<{
+  const items = (await doc.designer.collection(
+    collection,
+  )) as unknown as Array<{
     selfId: string;
     name?: string;
   }>;

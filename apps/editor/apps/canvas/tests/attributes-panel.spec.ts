@@ -51,7 +51,9 @@ test.describe("Phase 5 — Attributes panel", () => {
     expect(await mixed.count()).toBeGreaterThan(0);
   });
 
-  test("AC-ATTR-2 — frameNonprinting toggle round-trips @feat:editor-shell.panels.attributes @level:happy", async ({ page }) => {
+  test("AC-ATTR-2 — frameNonprinting toggle round-trips @feat:editor-shell.panels.attributes @level:happy", async ({
+    page,
+  }) => {
     const applied = await page.evaluate(async () => {
       type DebugCanvas = {
         client?: {
@@ -149,7 +151,9 @@ test.describe("Phase 5 — Attributes panel", () => {
 
       const read = async (path: string) => {
         const props = await dbg.client!.elementProperties(target);
-        return props?.entries.find((e) => e.path === path)?.value?.value ?? null;
+        return (
+          props?.entries.find((e) => e.path === path)?.value?.value ?? null
+        );
       };
 
       const before = {
@@ -240,7 +244,9 @@ test.describe("Phase 5 — Attributes panel", () => {
 
       const read = async (path: string) => {
         const props = await dbg.client!.elementProperties(target);
-        return props?.entries.find((e) => e.path === path)?.value?.value ?? null;
+        return (
+          props?.entries.find((e) => e.path === path)?.value?.value ?? null
+        );
       };
 
       const before = {

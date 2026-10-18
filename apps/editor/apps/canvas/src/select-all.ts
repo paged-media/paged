@@ -100,8 +100,11 @@ export async function selectAll(paged: PagedEditor): Promise<void> {
   paged.selection.setElementSelection(applied);
   // Objects are selected now, so the Type tool would only get in the way
   // of moving them — InDesign hands over the Selection tool too.
-  if (paged.selection.activeTool === "text") paged.selection.setActiveTool("select");
-  paged.selection.setElementGeometry(await paged.client.elementGeometry(applied));
+  if (paged.selection.activeTool === "text")
+    paged.selection.setActiveTool("select");
+  paged.selection.setElementGeometry(
+    await paged.client.elementGeometry(applied),
+  );
 }
 
 /** A text field has focus. Cmd+A is then the field's own: it selects the
@@ -115,10 +118,20 @@ function textFieldHasFocus(): boolean {
   if (el.isContentEditable || el.tagName === "TEXTAREA") return true;
   if (el.tagName !== "INPUT") return false;
   const type = (el as HTMLInputElement).type;
-  return ["", "text", "search", "number", "email", "url", "tel", "password"].includes(type);
+  return [
+    "",
+    "text",
+    "search",
+    "number",
+    "email",
+    "url",
+    "tel",
+    "password",
+  ].includes(type);
 }
 
-const selectAllKeyApplies = (state: unknown): boolean => selectAllApplies(state) && !textFieldHasFocus();
+const selectAllKeyApplies = (state: unknown): boolean =>
+  selectAllApplies(state) && !textFieldHasFocus();
 
 export const SELECT_ALL_COMMAND: CommandContribution = {
   id: PAGED_EDIT_SELECT_ALL,

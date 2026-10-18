@@ -39,7 +39,20 @@ import { typeHuman } from "../kit/pointer";
 import { menu, press, screenPoint } from "../kit/ui";
 
 const MEDIA = process.env.PAGED_MEDIA_ROOT ?? "";
-const FONTS = join(import.meta.dirname, "..", "..", "..", "..", "..", "..", "..", "engine", "core", "corpus", "fonts");
+const FONTS = join(
+  import.meta.dirname,
+  "..",
+  "..",
+  "..",
+  "..",
+  "..",
+  "..",
+  "..",
+  "engine",
+  "core",
+  "corpus",
+  "fonts",
+);
 const PHOTO = join(MEDIA, "assets", "pexels-618833-dolomites.jpg");
 
 type Bounds = [number, number, number, number]; // top, left, bottom, right (pt)
@@ -70,11 +83,24 @@ interface Item {
 const pt = (k: Kit, x: number, y: number) => screenPoint(k.page, x, y);
 const mid = (b: Bounds) => [(b[1] + b[3]) / 2, (b[0] + b[2]) / 2] as const;
 
-async function mutate(page: Page, op: string, args: unknown): Promise<{ kind: string }> {
-  return page.evaluate(async (m) => {
-    const c = (globalThis as unknown as { __canvas: { client: { mutate(m: unknown): Promise<{ kind: string }> } } }).__canvas;
-    return c.client.mutate(m);
-  }, { op, args });
+async function mutate(
+  page: Page,
+  op: string,
+  args: unknown,
+): Promise<{ kind: string }> {
+  return page.evaluate(
+    async (m) => {
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: { mutate(m: unknown): Promise<{ kind: string }> };
+          };
+        }
+      ).__canvas;
+      return c.client.mutate(m);
+    },
+    { op, args },
+  );
 }
 
 async function registerFonts(page: Page): Promise<void> {
@@ -83,15 +109,37 @@ async function registerFonts(page: Page): Promise<void> {
     { family: "Source Serif 4", style: null, file: "SourceSerif4.ttf" },
   ];
   await page.route("**/__film-fonts/*", (route) => {
-    const name = decodeURIComponent(route.request().url().split("/__film-fonts/")[1]);
-    return route.fulfill({ status: 200, contentType: "font/ttf", body: readFileSync(join(FONTS, name)) });
+    const name = decodeURIComponent(
+      route.request().url().split("/__film-fonts/")[1],
+    );
+    return route.fulfill({
+      status: 200,
+      contentType: "font/ttf",
+      body: readFileSync(join(FONTS, name)),
+    });
   });
   await page.evaluate(async (list) => {
-    const c = (globalThis as unknown as { __canvas: { client: { registerFont(f: string, b: Uint8Array, s: string | null): Promise<void> } } }).__canvas;
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            registerFont(
+              f: string,
+              b: Uint8Array,
+              s: string | null,
+            ): Promise<void>;
+          };
+        };
+      }
+    ).__canvas;
     for (const f of list) {
       const res = await fetch(`/__film-fonts/${encodeURIComponent(f.file)}`);
       if (!res.ok) throw new Error(`font ${f.file}: ${res.status}`);
-      await c.client.registerFont(f.family, new Uint8Array(await res.arrayBuffer()), f.style);
+      await c.client.registerFont(
+        f.family,
+        new Uint8Array(await res.arrayBuffer()),
+        f.style,
+      );
     }
   }, faces);
   await page.unroute("**/__film-fonts/*");
@@ -101,24 +149,63 @@ async function registerFonts(page: Page): Promise<void> {
 async function items(page: Page): Promise<Item[]> {
   return page.evaluate(async () => {
     type Node = { id?: { kind: string; id: string } | null; children?: Node[] };
-    const c = (globalThis as unknown as { __canvas: { client: { executeScript(s: string): Promise<{ output: string[] }>; send(m: unknown): Promise<{ payload: { items?: unknown[] } }> } } }).__canvas;
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            executeScript(s: string): Promise<{ output: string[] }>;
+            send(m: unknown): Promise<{ payload: { items?: unknown[] } }>;
+          };
+        };
+      }
+    ).__canvas;
     const r = await c.client.executeScript("JSON.stringify(paged.tree())");
     const ids: { kind: string; id: string }[] = [];
     const walk = (n: Node) => {
       if (n.id) ids.push(n.id);
       for (const ch of n.children ?? []) walk(ch);
     };
-    for (const root of JSON.parse(JSON.parse(r.output[0])) as Node[]) walk(root);
-    const g = await c.client.send({ kind: "requestElementGeometry", payload: { ids } });
+    for (const root of JSON.parse(JSON.parse(r.output[0])) as Node[])
+      walk(root);
+    const g = await c.client.send({
+      kind: "requestElementGeometry",
+      payload: { ids },
+    });
     return (g.payload.items ?? []) as Item[];
   });
 }
 
-async function story(page: Page, storyId: string): Promise<Array<{ style: string; text: string }>> {
+async function story(
+  page: Page,
+  storyId: string,
+): Promise<Array<{ style: string; text: string }>> {
   return page.evaluate(async (sid) => {
-    const c = (globalThis as unknown as { __canvas: { client: { send(m: unknown): Promise<{ payload: { content?: { paragraphs: Array<{ paragraphStyle: string; runs: Array<{ text: string }> }> } } }> } } }).__canvas;
-    const r = await c.client.send({ kind: "requestStoryContent", payload: { storyId: sid } });
-    return (r.payload.content?.paragraphs ?? []).map((p) => ({ style: p.paragraphStyle, text: p.runs.map((x) => x.text).join("") }));
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            send(m: unknown): Promise<{
+              payload: {
+                content?: {
+                  paragraphs: Array<{
+                    paragraphStyle: string;
+                    runs: Array<{ text: string }>;
+                  }>;
+                };
+              };
+            }>;
+          };
+        };
+      }
+    ).__canvas;
+    const r = await c.client.send({
+      kind: "requestStoryContent",
+      payload: { storyId: sid },
+    });
+    return (r.payload.content?.paragraphs ?? []).map((p) => ({
+      style: p.paragraphStyle,
+      text: p.runs.map((x) => x.text).join(""),
+    }));
   }, storyId);
 }
 
@@ -138,26 +225,74 @@ film("designers", async (k) => {
     await k.designer.newDocument();
     await registerFonts(page);
     const styles: Array<[string, string, Array<[string, unknown]>]> = [
-      ["ParagraphStyle/Headline", "Headline", [["characterFontFamily", "Fraunces"], ["characterFontSize", 28], ["characterLeading", 32], ["paragraphSpaceAfter", 6]]],
-      ["ParagraphStyle/Body", "Body", [["characterFontFamily", "Source Serif 4"], ["characterFontSize", 11], ["characterLeading", 16]]],
+      [
+        "ParagraphStyle/Headline",
+        "Headline",
+        [
+          ["characterFontFamily", "Fraunces"],
+          ["characterFontSize", 28],
+          ["characterLeading", 32],
+          ["paragraphSpaceAfter", 6],
+        ],
+      ],
+      [
+        "ParagraphStyle/Body",
+        "Body",
+        [
+          ["characterFontFamily", "Source Serif 4"],
+          ["characterFontSize", 11],
+          ["characterLeading", 16],
+        ],
+      ],
     ];
     for (const [selfId, name, props] of styles) {
-      await mutate(page, "createParagraphStyle", { selfId, name, basedOn: null });
+      await mutate(page, "createParagraphStyle", {
+        selfId,
+        name,
+        basedOn: null,
+      });
       for (const [path, v] of props) {
-        const value = typeof v === "string" ? { type: "text", value: v } : { type: "length", value: v };
-        expect((await mutate(page, "setStyleProperty", { collection: "paragraph", styleId: selfId, path, value })).kind).toBe("mutationApplied");
+        const value =
+          typeof v === "string"
+            ? { type: "text", value: v }
+            : { type: "length", value: v };
+        expect(
+          (
+            await mutate(page, "setStyleProperty", {
+              collection: "paragraph",
+              styleId: selfId,
+              path,
+              value,
+            })
+          ).kind,
+        ).toBe("mutationApplied");
       }
     }
-    const pageId = await page.evaluate(() => (globalThis as unknown as { __canvas: { handle: { pageIds: string[] } } }).__canvas.handle.pageIds[0]);
+    const pageId = await page.evaluate(
+      () =>
+        (
+          globalThis as unknown as {
+            __canvas: { handle: { pageIds: string[] } };
+          }
+        ).__canvas.handle.pageIds[0],
+    );
     await mutate(page, "insertTextFrame", { pageId, bounds: LEFT });
-    storyId = (await items(page)).find((i) => i.id.kind === "textFrame")!.storyId!;
+    storyId = (await items(page)).find(
+      (i) => i.id.kind === "textFrame",
+    )!.storyId!;
     // The empty frame the story will continue into. Made here, not drawn on
     // camera: after a frame is drawn with the Type tool, every later pointer
     // move across the canvas pans the view (a product bug).
     await mutate(page, "insertTextFrame", { pageId, bounds: RIGHT });
     const text = [HEAD, ...BODY].join("\n");
     await mutate(page, "insertText", { storyId, offset: 0, text });
-    await mutate(page, "applyStyle", { storyId, start: HEAD.length + 1, end: text.length, style: "ParagraphStyle/Body", scope: "paragraph" });
+    await mutate(page, "applyStyle", {
+      storyId,
+      start: HEAD.length + 1,
+      end: text.length,
+      style: "ParagraphStyle/Body",
+      scope: "paragraph",
+    });
     await page.keyboard.press("Escape");
     await k.hold(1200);
   });
@@ -170,7 +305,10 @@ film("designers", async (k) => {
     await press(k, page.locator('[data-tool-slot="select"]').first());
     const [x, y] = mid(LEFT);
     await pointer.click(await pt(k, x, y), { targetWidth: 120 });
-    await expect(page.locator('[data-thread-port="out"]')).toHaveAttribute("data-thread-state", "overset");
+    await expect(page.locator('[data-thread-port="out"]')).toHaveAttribute(
+      "data-thread-state",
+      "overset",
+    );
     await k.hold(600);
   });
 
@@ -183,9 +321,17 @@ film("designers", async (k) => {
     const [rx, ry] = mid(RIGHT);
     await pointer.click(await pt(k, rx, ry), { targetWidth: 120 });
     await expect
-      .poll(async () => (await items(page)).filter((i) => i.id.kind === "textFrame" && i.storyId === storyId).length)
+      .poll(
+        async () =>
+          (await items(page)).filter(
+            (i) => i.id.kind === "textFrame" && i.storyId === storyId,
+          ).length,
+      )
       .toBe(2);
-    await expect(page.locator('[data-thread-port="out"]')).not.toHaveAttribute("data-thread-state", "overset");
+    await expect(page.locator('[data-thread-port="out"]')).not.toHaveAttribute(
+      "data-thread-state",
+      "overset",
+    );
     await k.hold(400);
   });
 
@@ -203,10 +349,17 @@ film("designers", async (k) => {
   await k.scene("styles", async () => {
     k.unfocus();
     await press(k, page.locator('[data-tool-slot="type"]').first());
-    await pointer.click(await pt(k, LEFT[1] + 30, LEFT[0] + 8), { targetWidth: 40 });
+    await pointer.click(await pt(k, LEFT[1] + 30, LEFT[0] + 8), {
+      targetWidth: 40,
+    });
     await menu(k, ["Type", "Paragraph styles"]);
-    await press(k, page.locator('[data-apply-item="ParagraphStyle/Headline"]').first());
-    await expect.poll(async () => (await story(page, storyId))[0]?.style).toBe("ParagraphStyle/Headline");
+    await press(
+      k,
+      page.locator('[data-apply-item="ParagraphStyle/Headline"]').first(),
+    );
+    await expect
+      .poll(async () => (await story(page, storyId))[0]?.style)
+      .toBe("ParagraphStyle/Headline");
     k.focus(COPY);
     await k.hold(2200);
   });
@@ -217,7 +370,9 @@ film("designers", async (k) => {
     await k.key("End");
     await menu(k, ["Type", "Glyphs…"]);
     await press(k, page.locator('[data-glyph="†"]:visible').first());
-    await expect.poll(async () => (await story(page, storyId))[0]?.text).toBe(`${HEAD}†`);
+    await expect
+      .poll(async () => (await story(page, storyId))[0]?.text)
+      .toBe(`${HEAD}†`);
     k.focus(COPY);
     await k.hold(2200);
     k.unfocus();
@@ -231,8 +386,12 @@ film("designers", async (k) => {
     k.chip("dolomites.jpg", "file");
     await (await chooser).setFiles(PHOTO);
     await k.hold(500);
-    await pointer.click(await pt(k, PLACE_AT.x, PLACE_AT.y), { targetWidth: 40 });
-    await expect.poll(async () => (await items(page)).some((i) => i.hasImage)).toBe(true);
+    await pointer.click(await pt(k, PLACE_AT.x, PLACE_AT.y), {
+      targetWidth: 40,
+    });
+    await expect
+      .poll(async () => (await items(page)).some((i) => i.hasImage))
+      .toBe(true);
     k.focus(PICTURE);
     await k.hold(900);
   });
@@ -240,10 +399,21 @@ film("designers", async (k) => {
   // ── Cropped by its frame. ──
   await k.scene("crop", async () => {
     const photo = (await items(page)).find((i) => i.hasImage)!;
-    await pointer.drag(await pt(k, photo.bounds[3], photo.bounds[2]), await pt(k, CROP_TO.right, CROP_TO.bottom), { speed: 0.9 });
+    await pointer.drag(
+      await pt(k, photo.bounds[3], photo.bounds[2]),
+      await pt(k, CROP_TO.right, CROP_TO.bottom),
+      { speed: 0.9 },
+    );
     await expect
-      .poll(async () => (await items(page)).find((i) => i.hasImage)?.bounds.map(Math.round))
-      .toEqual([Math.round(photo.bounds[0]), Math.round(photo.bounds[1]), CROP_TO.bottom, CROP_TO.right]);
+      .poll(async () =>
+        (await items(page)).find((i) => i.hasImage)?.bounds.map(Math.round),
+      )
+      .toEqual([
+        Math.round(photo.bounds[0]),
+        Math.round(photo.bounds[1]),
+        CROP_TO.bottom,
+        CROP_TO.right,
+      ]);
     await deselect(k);
     await k.hold(900);
   });
@@ -255,16 +425,34 @@ film("designers", async (k) => {
     await k.hold(300);
     await typeHuman(page, "show text threads", 11);
     await k.hold(300);
-    await press(k, page.locator('[role="option"], [cmdk-item]').filter({ hasText: /^Show text threads/ }).first());
+    await press(
+      k,
+      page
+        .locator('[role="option"], [cmdk-item]')
+        .filter({ hasText: /^Show text threads/ })
+        .first(),
+    );
     await expect(page.locator("[data-thread-hop]")).toHaveCount(0);
     await k.hold(600);
   });
 
   // ── The workspace follows the job. ──
   await k.scene("modes", async () => {
-    const mode = () => page.evaluate(() => (globalThis as unknown as { __canvas: { mode?: string } }).__canvas.mode ?? null);
-    for (const [label, id] of [["Content", "content"], ["Export", "export"], ["Design", "design"]] as const) {
-      await press(k, page.getByRole("button", { name: label, exact: true }).last());
+    const mode = () =>
+      page.evaluate(
+        () =>
+          (globalThis as unknown as { __canvas: { mode?: string } }).__canvas
+            .mode ?? null,
+      );
+    for (const [label, id] of [
+      ["Content", "content"],
+      ["Export", "export"],
+      ["Design", "design"],
+    ] as const) {
+      await press(
+        k,
+        page.getByRole("button", { name: label, exact: true }).last(),
+      );
       await expect.poll(mode).toBe(id);
       await k.hold(label === "Design" ? 400 : 1000);
     }

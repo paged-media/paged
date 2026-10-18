@@ -41,7 +41,9 @@ test.describe("journey · GPU backend", () => {
 
     // Sanity: the browser exposes WebGPU at all (the lane's whole premise).
     const hasGpu = await page.evaluate(() => "gpu" in navigator);
-    expect(hasGpu, "navigator.gpu present (real Chrome + WebGPU flags)").toBe(true);
+    expect(hasGpu, "navigator.gpu present (real Chrome + WebGPU flags)").toBe(
+      true,
+    );
 
     // The worker attaches and reports its backend; gpuActive flips from null
     // (not attached) to true (GPU) / false (CPU fallback). Poll until known.
@@ -49,7 +51,9 @@ test.describe("journey · GPU backend", () => {
       .waitForFunction(
         () => {
           const v = (
-            globalThis as unknown as { __canvas?: { gpuActive?: boolean | null } }
+            globalThis as unknown as {
+              __canvas?: { gpuActive?: boolean | null };
+            }
           ).__canvas?.gpuActive;
           return v === true || v === false ? { v } : null;
         },
@@ -58,6 +62,8 @@ test.describe("journey · GPU backend", () => {
       )
       .then((h) => h.jsonValue() as Promise<{ v: boolean }>);
 
-    expect(gpuActive.v, "the WebGPU backend engaged (not CPU fallback)").toBe(true);
+    expect(gpuActive.v, "the WebGPU backend engaged (not CPU fallback)").toBe(
+      true,
+    );
   });
 });

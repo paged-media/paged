@@ -50,20 +50,34 @@ import {
   type ElementRef,
 } from "./web-kit";
 
-const WORDS = Array.from({ length: 150 }, (_, i) => `w${String(i + 1).padStart(3, "0")}`);
+const WORDS = Array.from(
+  { length: 150 },
+  (_, i) => `w${String(i + 1).padStart(3, "0")}`,
+);
 const HTML = [0, 50, 100]
   .map((start) => `<p>${WORDS.slice(start, start + 50).join(" ")}</p>`)
   .join("\n");
-const CSS = "p { margin: 0 0 8px; font: 14px/20px Inter, sans-serif; color: #101820; }";
+const CSS =
+  "p { margin: 0 0 8px; font: 14px/20px Inter, sans-serif; color: #101820; }";
 
-async function insertFrame(page: Page, pageId: string, bounds: number[]): Promise<ElementRef> {
-  const reply = await mutate(page, { op: "insertFrame", args: { pageId, bounds } });
+async function insertFrame(
+  page: Page,
+  pageId: string,
+  bounds: number[],
+): Promise<ElementRef> {
+  const reply = await mutate(page, {
+    op: "insertFrame",
+    args: { pageId, bounds },
+  });
   expect(reply.kind).toBe("mutationApplied");
   return reply.payload!.createdId!;
 }
 
 /** Each frame's words, in chain order. */
-async function distribution(page: Page, chain: ElementRef[]): Promise<string[][]> {
+async function distribution(
+  page: Page,
+  chain: ElementRef[],
+): Promise<string[][]> {
   const out: string[][] = [];
   for (const f of chain) out.push(words(await sceneText(page, f.id)));
   return out;
@@ -83,17 +97,31 @@ test.describe("journey · paged.web flow re-breaks on resize", () => {
     const b = await boundsOf(page, source);
     const h = b[2] - b[0];
     const w = b[3] - b[1];
-    const second = await insertFrame(page, pageIds[0]!, [b[2] + 20, b[1], b[2] + 20 + h, b[3]]);
-    const third = await insertFrame(page, pageIds[0]!, [b[0], b[3] + 20, b[2], b[3] + 20 + w]);
+    const second = await insertFrame(page, pageIds[0]!, [
+      b[2] + 20,
+      b[1],
+      b[2] + 20 + h,
+      b[3],
+    ]);
+    const third = await insertFrame(page, pageIds[0]!, [
+      b[0],
+      b[3] + 20,
+      b[2],
+      b[3] + 20 + w,
+    ]);
     const chain = [source, second, third];
 
     // ── 1. Thread: the chain is saved on the source's label. ──
     await select(page, chain);
     await invoke(page, THREAD);
     await expect
-      .poll(async () => (await webSource(page, source))?.flow?.recipients.map((r) => r.id), {
-        timeout: 10_000,
-      })
+      .poll(
+        async () =>
+          (await webSource(page, source))?.flow?.recipients.map((r) => r.id),
+        {
+          timeout: 10_000,
+        },
+      )
       .toEqual([second.id, third.id]);
 
     // ── 2. Rendered across all three, every word exactly once. ──
@@ -104,11 +132,17 @@ test.describe("journey · paged.web flow re-breaks on resize", () => {
           before = await distribution(page, chain);
           return before.flat();
         },
-        { timeout: 20_000, message: "the three frames hold the article, in order" },
+        {
+          timeout: 20_000,
+          message: "the three frames hold the article, in order",
+        },
       )
       .toEqual(WORDS);
     for (const [i, part] of before.entries()) {
-      expect(part.length, `frame ${i + 1} holds part of the flow`).toBeGreaterThan(0);
+      expect(
+        part.length,
+        `frame ${i + 1} holds part of the flow`,
+      ).toBeGreaterThan(0);
     }
     const pixels = await designer.renderBytes();
 
@@ -123,15 +157,22 @@ test.describe("journey · paged.web flow re-breaks on resize", () => {
       .poll(
         async () => {
           after = await distribution(page, chain);
-          return after[0]!.length < before[0]!.length && after.flat().join(" ") === WORDS.join(" ");
+          return (
+            after[0]!.length < before[0]!.length &&
+            after.flat().join(" ") === WORDS.join(" ")
+          );
         },
-        { timeout: 20_000, message: "the flow re-broke after the resize, conserving the text" },
+        {
+          timeout: 20_000,
+          message: "the flow re-broke after the resize, conserving the text",
+        },
       )
       .toBe(true);
     expect(after.flat(), "every word once, in order").toEqual(WORDS);
-    expect(after[1]![0], "the second frame now starts earlier in the article").not.toBe(
-      before[1]![0],
-    );
+    expect(
+      after[1]![0],
+      "the second frame now starts earlier in the article",
+    ).not.toBe(before[1]![0]);
     test.info().annotations.push({
       type: "flow",
       description: `words per frame ${before.map((p) => p.length).join("/")} → ${after

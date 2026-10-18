@@ -17,7 +17,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The journal code registry (ADR 025 §1).
 //
 // Every code the workspace may emit is declared here, with the `data` keys it

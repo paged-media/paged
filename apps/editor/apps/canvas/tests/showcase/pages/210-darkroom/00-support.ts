@@ -136,7 +136,9 @@ export async function replaceBytesFromFile(
       });
       return {
         kind: reply.kind,
-        error: reply.payload?.error ? JSON.stringify(reply.payload.error) : null,
+        error: reply.payload?.error
+          ? JSON.stringify(reply.payload.error)
+          : null,
         bytes: bytes.length,
       };
     },
@@ -182,7 +184,9 @@ export async function commitBytes(
       });
       return {
         kind: reply.kind,
-        error: reply.payload?.error ? JSON.stringify(reply.payload.error) : null,
+        error: reply.payload?.error
+          ? JSON.stringify(reply.payload.error)
+          : null,
       };
     },
     { frameId, b64: bytes.toString("base64") },
@@ -537,7 +541,9 @@ export async function selectionCoverage(
   return Number.isFinite(n) ? n : null;
 }
 
-export async function selectionBounds(ctx: PageContext): Promise<string | null> {
+export async function selectionBounds(
+  ctx: PageContext,
+): Promise<string | null> {
   const el = ctx.page.locator("[data-image-selection-bounds]");
   if ((await el.count()) === 0) return null;
   return (await el.first().textContent())?.trim() ?? null;

@@ -75,12 +75,19 @@ async function importWorkbook(page: Page, range: string): Promise<void> {
 
 /** Click cell (row,col) in the grid panel SVG so the formula bar/selection
  *  binds (the copy/paste anchor). */
-async function selectGridCell(page: Page, row: number, col: number): Promise<void> {
+async function selectGridCell(
+  page: Page,
+  row: number,
+  col: number,
+): Promise<void> {
   const svg = page.locator("[data-grid-svg-root]");
   await expect(svg).toBeVisible({ timeout: 10_000 });
   const box = await svg.boundingBox();
   if (!box) throw new Error("grid SVG has no bounding box");
-  await page.mouse.click(box.x + GRID_X0 + col * GRID_COL, box.y + GRID_Y0 + row * GRID_ROW);
+  await page.mouse.click(
+    box.x + GRID_X0 + col * GRID_COL,
+    box.y + GRID_Y0 + row * GRID_ROW,
+  );
 }
 
 test.describe("journey · paged.sheet edit ops", () => {
@@ -104,8 +111,12 @@ test.describe("journey · paged.sheet edit ops", () => {
     const findMsg = page.locator("[data-sheet-find-msg]");
     await expect(findMsg).toBeVisible({ timeout: 8_000 });
     // "N match(es)." with N ≥ 1 — a zero count would read "0 matches.".
-    await expect(findMsg).toHaveText(/^[1-9]\d* match(es)?\.$/, { timeout: 8_000 });
-    await expect(page.locator("[data-sheet-find-hits] [data-sheet-find-hit]").first()).toBeVisible({
+    await expect(findMsg).toHaveText(/^[1-9]\d* match(es)?\.$/, {
+      timeout: 8_000,
+    });
+    await expect(
+      page.locator("[data-sheet-find-hits] [data-sheet-find-hit]").first(),
+    ).toBeVisible({
       timeout: 8_000,
     });
 
@@ -160,7 +171,9 @@ test.describe("journey · paged.sheet edit ops", () => {
     }
 
     for (const note of collected) {
-      test.info().annotations.push({ type: "render-finding", description: note });
+      test
+        .info()
+        .annotations.push({ type: "render-finding", description: note });
       // eslint-disable-next-line no-console
       console.log(`[sheet-edit] finding: ${note}`);
     }

@@ -30,6 +30,7 @@ the panel and shell machinery that turn the engine into an editable application.
 - **A panel catalogue.** `packages/catalog` is the curated registry of bindings and
   composition nodes that declarative panels are described against.
 - **A separate inspector.** `apps/devtools`, a standalone scene-graph inspector.
+
 <!-- source: README.md:33-45, CLAUDE.md:28-43, CLAUDE.md:138-141, packages/client/README.md:3-10 -->
 
 Scripting belongs to the engine and is reached from here. The engine registers a global

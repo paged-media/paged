@@ -75,7 +75,10 @@ async function propOf(
           __canvas: {
             client: {
               elementProperties: (id: unknown) => Promise<{
-                entries?: Array<{ path: string; value?: { type: string; value?: unknown } | null }>;
+                entries?: Array<{
+                  path: string;
+                  value?: { type: string; value?: unknown } | null;
+                }>;
               } | null>;
             };
           };
@@ -112,7 +115,12 @@ test.describe("journey · paged.draw render output", () => {
     //    invoke the bundle's linear-gradient command. It mints two stop
     //    swatches + a gradient and points frameFillColor at it; the gradient
     //    fill must RENDER over the (until now empty) frame. ──
-    const r1 = await designer.drawRectangle({ x0: 160, y0: 170, x1: 420, y1: 360 });
+    const r1 = await designer.drawRectangle({
+      x0: 160,
+      y0: 170,
+      x1: 420,
+      y1: 360,
+    });
     expect(r1, "drew a rectangle").not.toBe("");
     // The Rectangle tool draws with a 1 pt black stroke; step 2 proves the
     // stroke command paints an edge, so the frame starts without one.
@@ -122,12 +130,20 @@ test.describe("journey · paged.draw render output", () => {
     const beforeFill = await designer.renderBytes();
     await invokeCommand(page, "media.paged.draw.command.fillGradientLinear");
     await expect
-      .poll(async () => (await propOf(page, { kind: "rectangle", id: r1 }, "frameFillColor"))?.value ?? "", {
-        timeout: 6_000,
-      })
+      .poll(
+        async () =>
+          (await propOf(page, { kind: "rectangle", id: r1 }, "frameFillColor"))
+            ?.value ?? "",
+        {
+          timeout: 6_000,
+        },
+      )
       .toEqual(expect.stringContaining("Gradient/"));
     const fillChanged = await designer.expectRenderChangesFrom(beforeFill);
-    expect(fillChanged, "the gradient fill rendered onto the frame").toBeGreaterThan(64);
+    expect(
+      fillChanged,
+      "the gradient fill rendered onto the frame",
+    ).toBeGreaterThan(64);
 
     // ── 2. STROKE (plugin) — the Appearance command bakes the front-most
     //    layer onto the frame's real frameStrokeWeight; the stroke edge must
@@ -135,10 +151,17 @@ test.describe("journey · paged.draw render output", () => {
     const beforeStroke = await designer.renderBytes();
     await invokeCommand(page, "media.paged.draw.command.appearanceAddStroke");
     await expect
-      .poll(async () => {
-        const v = await propOf(page, { kind: "rectangle", id: r1 }, "frameStrokeWeight");
-        return v?.type === "length" ? (v.value as number) ?? 0 : 0;
-      }, { timeout: 6_000 })
+      .poll(
+        async () => {
+          const v = await propOf(
+            page,
+            { kind: "rectangle", id: r1 },
+            "frameStrokeWeight",
+          );
+          return v?.type === "length" ? ((v.value as number) ?? 0) : 0;
+        },
+        { timeout: 6_000 },
+      )
       .toBeGreaterThan(0);
     await designer.expectRenderChangesFrom(beforeStroke);
 
@@ -148,7 +171,12 @@ test.describe("journey · paged.draw render output", () => {
     //    union geometry is the engine's contract, proven elsewhere; here we
     //    only assert that IF it drove, the page changed. ──
     try {
-      const r2 = await designer.drawRectangle({ x0: 300, y0: 280, x1: 520, y1: 440 });
+      const r2 = await designer.drawRectangle({
+        x0: 300,
+        y0: 280,
+        x1: 520,
+        y1: 440,
+      });
       await designer.applyFill("rectangle", r2, "Color/Black");
       await designer.selectElements([
         { kind: "rectangle", id: r1 },
@@ -160,7 +188,9 @@ test.describe("journey · paged.draw render output", () => {
       const afterUnite = await designer.renderBytes();
       const united = await designer.renderDiffPixels(beforeUnite, afterUnite);
       if (united <= 64) {
-        collected.push(`pathfinder unite: render changed only ${united}px (≤64)`);
+        collected.push(
+          `pathfinder unite: render changed only ${united}px (≤64)`,
+        );
       }
     } catch (err) {
       collected.push(`pathfinder unite threw: ${String(err)}`);
@@ -169,6 +199,9 @@ test.describe("journey · paged.draw render output", () => {
     // The gradient fill + stroke are HARD render assertions above (they gate
     // the test). The pathfinder render is collected so a partial drive is
     // visible without masking the proven steps.
-    expect(collected, `paged.draw render steps that did not visibly render: ${collected.join("; ")}`).toEqual([]);
+    expect(
+      collected,
+      `paged.draw render steps that did not visibly render: ${collected.join("; ")}`,
+    ).toEqual([]);
   });
 });

@@ -175,12 +175,20 @@ async function collectionIds(page: Page, name: string): Promise<Set<string>> {
 
 /** A scratch hyperlink on the story's first character (insertHyperlink,
  *  classified above); its `Hyperlink` id off the hyperlinks collection. */
-async function scratchHyperlink(page: Page, fx: LoadedFixture): Promise<string | null> {
+async function scratchHyperlink(
+  page: Page,
+  fx: LoadedFixture,
+): Promise<string | null> {
   if (!fx.firstStory || fx.firstStory.characterCount < 2) return null;
   const before = await collectionIds(page, "hyperlinks");
   const made = await tryMutate(page, {
     op: "insertHyperlink",
-    args: { storyId: fx.firstStory.selfId, start: 0, end: 1, url: "https://paged.media/probe-scratch" },
+    args: {
+      storyId: fx.firstStory.selfId,
+      start: 0,
+      end: 1,
+      url: "https://paged.media/probe-scratch",
+    },
   });
   return made.ok ? newCollectionId(page, "hyperlinks", before) : null;
 }
@@ -188,7 +196,10 @@ async function scratchHyperlink(page: Page, fx: LoadedFixture): Promise<string |
 /** A scratch editorial note on the story's second character (insertNote,
  *  classified above); its `id` off the notes collection — the rows carry
  *  `id`, not `selfId`, since InDesign writes no Self for a note. */
-async function scratchNote(page: Page, fx: LoadedFixture): Promise<string | null> {
+async function scratchNote(
+  page: Page,
+  fx: LoadedFixture,
+): Promise<string | null> {
   if (!fx.firstStory) return null;
   const made = await tryMutate(page, {
     op: "insertNote",
@@ -211,14 +222,19 @@ async function scratchNote(page: Page, fx: LoadedFixture): Promise<string | null
 /** A scratch endnote on the story's second character (insertEndnote,
  *  classified above; the first one makes the endnote story on a new
  *  page); its `id` off the endnotes collection, whose rows carry `id`. */
-async function scratchEndnote(page: Page, fx: LoadedFixture): Promise<string | null> {
+async function scratchEndnote(
+  page: Page,
+  fx: LoadedFixture,
+): Promise<string | null> {
   if (!fx.firstStory) return null;
   const ids = () =>
     page.evaluate(async () => {
       const c = (
         globalThis as unknown as {
           __canvas: {
-            client: { collection: (n: string) => Promise<Array<{ id: string }>> };
+            client: {
+              collection: (n: string) => Promise<Array<{ id: string }>>;
+            };
           };
         }
       ).__canvas;
@@ -227,7 +243,11 @@ async function scratchEndnote(page: Page, fx: LoadedFixture): Promise<string | n
   const before = new Set(await ids());
   const made = await tryMutate(page, {
     op: "insertEndnote",
-    args: { storyId: fx.firstStory.selfId, offset: 1, text: "Scratch endnote." },
+    args: {
+      storyId: fx.firstStory.selfId,
+      offset: 1,
+      text: "Scratch endnote.",
+    },
   });
   if (!made.ok) return null;
   return (await ids()).find((id) => !before.has(id)) ?? null;
@@ -774,10 +794,7 @@ const TEXT_PROBES: Probe[] = [
         // createdId is an ElementId object ({kind, id}); the wire
         // wants the bare id string.
         const created = reply.payload?.createdId as
-          | { id?: string }
-          | string
-          | null
-          | undefined;
+          { id?: string } | string | null | undefined;
         return typeof created === "string" ? created : (created?.id ?? null);
       }, fx.pages[0].pageId);
       return createdId
@@ -1265,8 +1282,11 @@ const TEXT_PROBES: Probe[] = [
           op: "insertTable",
           args: { storyId, rows: 2, cols: 2 },
         });
-        const created = r.kind === "mutationApplied" ? r.payload?.createdId : null;
-        return created && created.kind === "table" && typeof created.id === "object"
+        const created =
+          r.kind === "mutationApplied" ? r.payload?.createdId : null;
+        return created &&
+          created.kind === "table" &&
+          typeof created.id === "object"
           ? created.id.table_id
           : null;
       }, fx.firstStory.selfId);
@@ -1325,7 +1345,11 @@ const TEXT_PROBES: Probe[] = [
       fx.firstStory
         ? {
             op: "insertFootnote",
-            args: { storyId: fx.firstStory.selfId, offset: 1, text: "Probe note." },
+            args: {
+              storyId: fx.firstStory.selfId,
+              offset: 1,
+              text: "Probe note.",
+            },
           }
         : null,
   },
@@ -1343,7 +1367,10 @@ const TEXT_PROBES: Probe[] = [
       if (!made.ok) return null;
       const footnoteId = await newCollectionId(page, "footnotes", before);
       return footnoteId
-        ? { op: "deleteFootnote", args: { storyId: fx.firstStory.selfId, footnoteId } }
+        ? {
+            op: "deleteFootnote",
+            args: { storyId: fx.firstStory.selfId, footnoteId },
+          }
         : null;
     },
     setupUndo: 1, // the scratch insertFootnote
@@ -1353,7 +1380,9 @@ const TEXT_PROBES: Probe[] = [
     // ADR 164 — by the Hyperlink's Self id; a scratch link made first.
     build: async ({ page, fx }) => {
       const hyperlinkId = await scratchHyperlink(page, fx);
-      return hyperlinkId ? { op: "deleteHyperlink", args: { hyperlinkId } } : null;
+      return hyperlinkId
+        ? { op: "deleteHyperlink", args: { hyperlinkId } }
+        : null;
     },
     setupUndo: 1, // the scratch insertHyperlink
   },
@@ -1365,7 +1394,11 @@ const TEXT_PROBES: Probe[] = [
       return hyperlinkId
         ? {
             op: "editHyperlink",
-            args: { hyperlinkId, name: "Probe link", url: "https://paged.media/probe-edited" },
+            args: {
+              hyperlinkId,
+              name: "Probe link",
+              url: "https://paged.media/probe-edited",
+            },
           }
         : null;
     },
@@ -1378,7 +1411,9 @@ const TEXT_PROBES: Probe[] = [
     // ADR 168 — the index replaces the story's text (a title only when the
     // fixture has no topics).
     build: async ({ fx }) =>
-      fx.firstStory ? { op: "generateIndex", args: { storyId: fx.firstStory.selfId } } : null,
+      fx.firstStory
+        ? { op: "generateIndex", args: { storyId: fx.firstStory.selfId } }
+        : null,
   },
   {
     op: "insertNote",
@@ -1387,7 +1422,11 @@ const TEXT_PROBES: Probe[] = [
       fx.firstStory
         ? {
             op: "insertNote",
-            args: { storyId: fx.firstStory.selfId, offset: 1, text: "Probe note." },
+            args: {
+              storyId: fx.firstStory.selfId,
+              offset: 1,
+              text: "Probe note.",
+            },
           }
         : null,
   },
@@ -1395,7 +1434,9 @@ const TEXT_PROBES: Probe[] = [
     op: "editNote",
     build: async ({ page, fx }) => {
       const noteId = await scratchNote(page, fx);
-      return noteId ? { op: "editNote", args: { noteId, text: "Edited." } } : null;
+      return noteId
+        ? { op: "editNote", args: { noteId, text: "Edited." } }
+        : null;
     },
     setupUndo: 1, // the scratch insertNote
   },
@@ -1425,7 +1466,11 @@ const TEXT_PROBES: Probe[] = [
       fx.firstStory
         ? {
             op: "insertEndnote",
-            args: { storyId: fx.firstStory.selfId, offset: 1, text: "Probe endnote." },
+            args: {
+              storyId: fx.firstStory.selfId,
+              offset: 1,
+              text: "Probe endnote.",
+            },
           }
         : null,
   },
@@ -1516,9 +1561,8 @@ const TEXT_PROBES: Probe[] = [
           kind: "requestDocumentPlaceholders",
         });
         return (
-          reply.payload?.items?.find(
-            (i) => i.plugin === "media.paged.probe",
-          ) ?? null
+          reply.payload?.items?.find((i) => i.plugin === "media.paged.probe") ??
+          null
         );
       });
       return item
@@ -1877,7 +1921,10 @@ const GEOMETRY_PROBES: Probe[] = [
         args: { spreadId, orientation: "vertical", position: 50 },
       });
       return made.ok
-        ? { op: "moveGuide", args: { guideId: `Guide/${spreadId}/0`, position: 80 } }
+        ? {
+            op: "moveGuide",
+            args: { guideId: `Guide/${spreadId}/0`, position: 80 },
+          }
         : null;
     },
     setupUndo: 1, // the scratch guide
@@ -1957,7 +2004,12 @@ const GEOMETRY_PROBES: Probe[] = [
     // nothing repaints until applyMasterToPage); undo deletes it.
     build: async () => ({
       op: "createMaster",
-      args: { master: "uProbeCreate", name: "Probe", widthPt: 300, heightPt: 400 },
+      args: {
+        master: "uProbeCreate",
+        name: "Probe",
+        widthPt: 300,
+        heightPt: 400,
+      },
     }),
   },
   {
@@ -1969,7 +2021,10 @@ const GEOMETRY_PROBES: Probe[] = [
         args: { master: "uProbeRename", widthPt: 300, heightPt: 400 },
       });
       return made.ok
-        ? { op: "renameMaster", args: { master: "uProbeRename", name: "Renamed" } }
+        ? {
+            op: "renameMaster",
+            args: { master: "uProbeRename", name: "Renamed" },
+          }
         : null;
     },
     setupUndo: 1, // the scratch master
@@ -1983,7 +2038,9 @@ const GEOMETRY_PROBES: Probe[] = [
         op: "createMaster",
         args: { master: "uProbeDelete", widthPt: 300, heightPt: 400 },
       });
-      return made.ok ? { op: "deleteMaster", args: { master: "uProbeDelete" } } : null;
+      return made.ok
+        ? { op: "deleteMaster", args: { master: "uProbeDelete" } }
+        : null;
     },
     setupUndo: 1,
   },
@@ -2006,7 +2063,11 @@ const GEOMETRY_PROBES: Probe[] = [
               master: "uProbeOn",
               mutation: {
                 op: "insertGuide",
-                args: { spreadId: "uProbeOn", orientation: "vertical", position: 60 },
+                args: {
+                  spreadId: "uProbeOn",
+                  orientation: "vertical",
+                  position: 60,
+                },
               },
             },
           }
@@ -2051,7 +2112,10 @@ const GEOMETRY_PROBES: Probe[] = [
         args: { name: "ProbeDelete", contents: "x" },
       });
       return made.ok
-        ? { op: "deleteTextVariable", args: { variableId: "dTextVariablenProbeDelete" } }
+        ? {
+            op: "deleteTextVariable",
+            args: { variableId: "dTextVariablenProbeDelete" },
+          }
         : null;
     },
     setupUndo: 1,
@@ -2087,9 +2151,7 @@ const GEOMETRY_PROBES: Probe[] = [
       });
       if (!made.ok) return null;
       const sectionId = await lastCollectionId(page, "sections");
-      return sectionId
-        ? { op: "deleteSection", args: { sectionId } }
-        : null;
+      return sectionId ? { op: "deleteSection", args: { sectionId } } : null;
     },
     setupUndo: 1,
   },
@@ -2135,17 +2197,15 @@ const GEOMETRY_PROBES: Probe[] = [
       "pathfinderOutline",
       "pathfinderMinusBack",
     ] as const
-  ).map(
-    (op): Probe => ({
-      op,
-      build: async ({ page, fx }) => {
-        const a = await newPath(page, fx.pages[0].pageId);
-        const b = await newPath(page, fx.pages[0].pageId, 50, 50);
-        return a && b ? { op, args: { elementIds: [b, a] } } : null;
-      },
-      setupUndo: 2,
-    }),
-  ),
+  ).map((op): Probe => ({
+    op,
+    build: async ({ page, fx }) => {
+      const a = await newPath(page, fx.pages[0].pageId);
+      const b = await newPath(page, fx.pages[0].pageId, 50, 50);
+      return a && b ? { op, args: { elementIds: [b, a] } } : null;
+    },
+    setupUndo: 2,
+  })),
   {
     op: "pathfinderFaces",
     // The shape-builder verb: unite/delete NAMED faces of the planar
@@ -2683,7 +2743,10 @@ const NAVIGATION_PROBES: Probe[] = [
     build: async ({ page }) => {
       const bookmarkId = await firstBookmarkId(page);
       return bookmarkId
-        ? { op: "renameBookmark", args: { bookmarkId, name: "Renamed by the probe" } }
+        ? {
+            op: "renameBookmark",
+            args: { bookmarkId, name: "Renamed by the probe" },
+          }
         : null;
     },
   },
@@ -2854,19 +2917,23 @@ test("AC-E2E-CAPS — every wire op's engine support matches the table", async (
 // failing the classification run.
 test("AC-E2E-CAPS-COVER — every engine Mutation op appears in the table", () => {
   const require = createRequire(import.meta.url);
-  const dts = require.resolve(
-    "@paged-media/canvas-wasm/paged_canvas_wasm.d.ts",
-  );
+  const dts =
+    require.resolve("@paged-media/canvas-wasm/paged_canvas_wasm.d.ts");
   const src = readFileSync(dts, "utf8");
 
   // The union is emitted on one line: `export type Mutation = { op: "a";
   // args: {...} } | { op: "b"; ... };`. Slice that statement first so a
   // stray `op: "…"` in some other type cannot leak in.
   const start = src.indexOf("export type Mutation =");
-  expect(start, "engine .d.ts has no `export type Mutation`").toBeGreaterThan(-1);
+  expect(start, "engine .d.ts has no `export type Mutation`").toBeGreaterThan(
+    -1,
+  );
   const stmt = src.slice(start, src.indexOf(";\n", start));
   const engineOps = [...stmt.matchAll(/\bop: "([a-zA-Z]+)"/g)].map((m) => m[1]);
-  expect(engineOps.length, "parsed no ops from the Mutation union").toBeGreaterThan(50);
+  expect(
+    engineOps.length,
+    "parsed no ops from the Mutation union",
+  ).toBeGreaterThan(50);
 
   const listed = new Set(CAPABILITIES.map((c) => c.op));
   // `batch` is the envelope, not a capability — it carries other ops and
@@ -2909,11 +2976,11 @@ test("AC-E2E-CAPS-COVER — every engine Mutation op appears in the table", () =
     unexpected.length === 0
       ? ""
       : `The engine declares ${unexpected.length} NEW Mutation op(s) this table has never heard of:\n` +
-        `  ${unexpected.join("\n  ")}\n\n` +
-        `Add each to harness/capabilities.ts and give it a probe in this spec ` +
-        `(E2E_CAPS=capture to classify), then add or upgrade the real domain test. ` +
-        `Leaving them out does not just under-report here: paged-media/state's ` +
-        `completeness-check.mjs reads its wire-op list from this file, so an op ` +
-        `missing here is invisible to the capability registry too.`,
+          `  ${unexpected.join("\n  ")}\n\n` +
+          `Add each to harness/capabilities.ts and give it a probe in this spec ` +
+          `(E2E_CAPS=capture to classify), then add or upgrade the real domain test. ` +
+          `Leaving them out does not just under-report here: paged-media/state's ` +
+          `completeness-check.mjs reads its wire-op list from this file, so an op ` +
+          `missing here is invisible to the capability registry too.`,
   ).toEqual([]);
 });

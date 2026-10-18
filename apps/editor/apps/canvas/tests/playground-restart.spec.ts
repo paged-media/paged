@@ -53,17 +53,31 @@ test.describe("ED-12 — playground restart", () => {
     page,
   }) => {
     await page.route("**/scripts/restart-probe.js", (route) =>
-      route.fulfill({ status: 200, contentType: "text/javascript", body: SCRIPT }),
+      route.fulfill({
+        status: 200,
+        contentType: "text/javascript",
+        body: SCRIPT,
+      }),
     );
     const designer = new Designer(page);
     await designer.open({ search: "?script=restart-probe" });
-    await expect(page.locator("[data-playground-play]")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("[data-playground-play]")).toBeVisible({
+      timeout: 15_000,
+    });
 
     await page.locator("[data-playground-play]").click();
     await expect
-      .poll(() => page.evaluate(() => (globalThis as { __restartProbe?: string }).__restartProbe ?? null), {
-        timeout: 15_000,
-      })
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              (globalThis as { __restartProbe?: string }).__restartProbe ??
+              null,
+          ),
+        {
+          timeout: 15_000,
+        },
+      )
       .toBe("waiting");
     await page.locator("[data-playground-restart]").click();
 
@@ -71,7 +85,9 @@ test.describe("ED-12 — playground restart", () => {
     // written by now.
     await page.waitForTimeout(2500);
     expect(
-      await page.evaluate(() => (globalThis as { __restartProbe?: string }).__restartProbe),
+      await page.evaluate(
+        () => (globalThis as { __restartProbe?: string }).__restartProbe,
+      ),
     ).toBe("waiting");
     expect(await treeCount(page, "textFrame")).toBe(0);
   });
@@ -94,12 +110,20 @@ globalThis.__plainRun = "done";
     );
     const designer = new Designer(page);
     await designer.open({ search: "?script=plain-run" });
-    await expect(page.locator("[data-playground-play]")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("[data-playground-play]")).toBeVisible({
+      timeout: 15_000,
+    });
     await page.locator("[data-playground-play]").click();
     await expect
-      .poll(() => page.evaluate(() => (globalThis as { __plainRun?: string }).__plainRun ?? null), {
-        timeout: 15_000,
-      })
+      .poll(
+        () =>
+          page.evaluate(
+            () => (globalThis as { __plainRun?: string }).__plainRun ?? null,
+          ),
+        {
+          timeout: 15_000,
+        },
+      )
       .toBe("done");
     expect(await treeCount(page, "textFrame")).toBe(1);
     expect((await designer.elementSelection()).length).toBe(1);

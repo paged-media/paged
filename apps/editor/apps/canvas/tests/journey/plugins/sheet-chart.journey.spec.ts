@@ -122,10 +122,15 @@ test.describe("journey · paged.sheet chart engine", () => {
     //    page; the blank-before snapshot now carries the chart. ──
     await page.waitForTimeout(500);
     const chartPx = await designer.expectRenderChangesFrom(beforeChart);
-    expect(chartPx, "the lowered chart vector art rendered onto the page").toBeGreaterThan(64);
+    expect(
+      chartPx,
+      "the lowered chart vector art rendered onto the page",
+    ).toBeGreaterThan(64);
 
     for (const note of collected) {
-      test.info().annotations.push({ type: "render-finding", description: note });
+      test
+        .info()
+        .annotations.push({ type: "render-finding", description: note });
       // eslint-disable-next-line no-console
       console.log(`[sheet-chart] finding: ${note}`);
     }

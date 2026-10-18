@@ -55,7 +55,12 @@ export interface RendererWasm {
    * false means the wasm side detected a fault and the renderer
    * should fall back (snapshot blit) for this frame.
    */
-  presentFrame?: (scale: number, tx: number, ty: number, dpr: number) => boolean;
+  presentFrame?: (
+    scale: number,
+    tx: number,
+    ty: number,
+    dpr: number,
+  ) => boolean;
 }
 
 interface PageGeometry {
@@ -375,8 +380,8 @@ export class WorkerRenderer {
     if (k <= 0) {
       return { x: 0, y: 0, w: 0, h: 0 };
     }
-    const x = -camera.tx * this.dpr / k;
-    const y = -camera.ty * this.dpr / k;
+    const x = (-camera.tx * this.dpr) / k;
+    const y = (-camera.ty * this.dpr) / k;
     const w = this.canvas.width / k;
     const h = this.canvas.height / k;
     return { x, y, w, h };
@@ -389,9 +394,6 @@ function tileKey(k: TileKey): string {
 
 function intersects(a: PageRect, b: PageRect): boolean {
   return (
-    a.x < b.x + b.w &&
-    a.x + a.w > b.x &&
-    a.y < b.y + b.h &&
-    a.y + a.h > b.y
+    a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
   );
 }

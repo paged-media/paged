@@ -17,16 +17,44 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const S = await import(
-  pathToFileURL(resolvePath(here, "..", "packages", "shell", "src", "state", "spread-pages.ts")).href
+  pathToFileURL(
+    resolvePath(
+      here,
+      "..",
+      "packages",
+      "shell",
+      "src",
+      "state",
+      "spread-pages.ts",
+    ),
+  ).href
 );
 
 // Two spreads: a single right-hand page, then a facing pair. InDesign
 // centres a spread's coordinates, so a right-hand page sits at
 // (0, -h/2) and a left-hand one at (-w, -h/2).
 const PAGES = [
-  { selfId: "p1", index: 1, sizePt: [612, 792], spreadId: "s1", pageOrigin: [0, -396] },
-  { selfId: "p2", index: 2, sizePt: [612, 792], spreadId: "s2", pageOrigin: [-612, -396] },
-  { selfId: "p3", index: 3, sizePt: [612, 792], spreadId: "s2", pageOrigin: [0, -396] },
+  {
+    selfId: "p1",
+    index: 1,
+    sizePt: [612, 792],
+    spreadId: "s1",
+    pageOrigin: [0, -396],
+  },
+  {
+    selfId: "p2",
+    index: 2,
+    sizePt: [612, 792],
+    spreadId: "s2",
+    pageOrigin: [-612, -396],
+  },
+  {
+    selfId: "p3",
+    index: 3,
+    sizePt: [612, 792],
+    spreadId: "s2",
+    pageOrigin: [0, -396],
+  },
 ];
 const SIZES = new Map(PAGES.map((p) => [p.selfId, p.sizePt]));
 const sizeOf = (id) => SIZES.get(id) ?? null;
@@ -78,13 +106,20 @@ test("with the page summaries' origins, no marquee is asked for", async () => {
   const client = fakeClient({ pages: PAGES });
   const found = await S.probeSpreadPages(client, "s2");
   assert.deepEqual(client.asked, ["collection:pages"]);
-  assert.deepEqual(found.get("s2")?.map((p) => p.pageId), ["p2", "p3"]);
+  assert.deepEqual(
+    found.get("s2")?.map((p) => p.pageId),
+    ["p2", "p3"],
+  );
 });
 
 test("a pasteboard item on a spread whose pages hold nothing is placed by the summaries", () => {
   const known = S.spreadPagesFromSummaries(PAGES);
   // Left of the facing pair's left page, spread space: x -700..-650.
-  const [placed] = S.placeOnPages([pasteboard("s2", [0, -700, 50, -650])], known, sizeOf);
+  const [placed] = S.placeOnPages(
+    [pasteboard("s2", [0, -700, 50, -650])],
+    known,
+    sizeOf,
+  );
   assert.equal(placed.pageId, "p2", "the nearest page of its spread");
   // Spread → page space: minus the page's origin.
   assert.deepEqual(placed.itemTransform, [1, 0, 0, 1, 612, 396]);
@@ -93,14 +128,22 @@ test("a pasteboard item on a spread whose pages hold nothing is placed by the su
 
 test("nearest page: below the right page of a pair", () => {
   const known = S.spreadPagesFromSummaries(PAGES);
-  const [placed] = S.placeOnPages([pasteboard("s2", [0, 100, 50, 200], 0, 500)], known, sizeOf);
+  const [placed] = S.placeOnPages(
+    [pasteboard("s2", [0, 100, 50, 200], 0, 500)],
+    known,
+    sizeOf,
+  );
   assert.equal(placed.pageId, "p3");
   assert.deepEqual(placed.itemTransform, [1, 0, 0, 1, 0, 896]);
 });
 
 test("an item of a spread no page is known for stays pageless", () => {
   const item = pasteboard("s9", [0, 0, 10, 10]);
-  const [kept] = S.placeOnPages([item], S.spreadPagesFromSummaries(PAGES), sizeOf);
+  const [kept] = S.placeOnPages(
+    [item],
+    S.spreadPagesFromSummaries(PAGES),
+    sizeOf,
+  );
   assert.equal(kept, item);
 });
 
@@ -136,9 +179,24 @@ test("an older worker: the spread's page-owned items place it through a marquee"
 
 test("learned and found origins merge per page", () => {
   const learned = S.learnSpreadPages(S.NO_SPREAD_PAGES, [
-    { id: { kind: "rectangle", id: "a" }, pageId: "p2", spreadId: "s2", bounds: [0, 0, 1, 1], pageOrigin: [-612, -396] },
+    {
+      id: { kind: "rectangle", id: "a" },
+      pageId: "p2",
+      spreadId: "s2",
+      bounds: [0, 0, 1, 1],
+      pageOrigin: [-612, -396],
+    },
   ]);
-  const merged = S.mergeSpreadPages(learned, new Map([["s2", [{ pageId: "p3", origin: [0, -396] }]]]));
-  assert.deepEqual(merged.get("s2")?.map((p) => p.pageId).sort(), ["p2", "p3"]);
+  const merged = S.mergeSpreadPages(
+    learned,
+    new Map([["s2", [{ pageId: "p3", origin: [0, -396] }]]]),
+  );
+  assert.deepEqual(
+    merged
+      .get("s2")
+      ?.map((p) => p.pageId)
+      .sort(),
+    ["p2", "p3"],
+  );
   assert.equal(S.mergeSpreadPages(learned, new Map()), learned);
 });

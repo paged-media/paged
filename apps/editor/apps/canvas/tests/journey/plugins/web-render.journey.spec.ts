@@ -124,7 +124,9 @@ test.describe("journey · paged.web render output", () => {
       const reason =
         "the Blitz engine did not load in this realm (cannot fetch the sibling wasm) — render is source-lane only here";
       if (process.env.REQUIRE_REAL_ENGINE === "1") {
-        throw new Error(`REQUIRE_REAL_ENGINE=1: ${reason}; logs: ${logs.join(" | ")}`);
+        throw new Error(
+          `REQUIRE_REAL_ENGINE=1: ${reason}; logs: ${logs.join(" | ")}`,
+        );
       }
       test.skip(true, reason);
     }
@@ -190,14 +192,22 @@ test.describe("journey · paged.web render output", () => {
         globalThis as unknown as {
           __canvas: {
             client: {
-              registerFont(f: string, b: Uint8Array, s?: string | null): Promise<void>;
+              registerFont(
+                f: string,
+                b: Uint8Array,
+                s?: string | null,
+              ): Promise<void>;
             };
           };
         }
       ).__canvas;
       const resp = await fetch("/fonts/Inter.ttf");
       if (!resp.ok) throw new Error(`/fonts/Inter.ttf: ${resp.status}`);
-      await c.client.registerFont("Inter", new Uint8Array(await resp.arrayBuffer()), null);
+      await c.client.registerFont(
+        "Inter",
+        new Uint8Array(await resp.arrayBuffer()),
+        null,
+      );
     });
 
     await page.evaluate(() => {
@@ -244,15 +254,27 @@ test.describe("journey · paged.web render output", () => {
 
     await invoke(page, RENDER);
     await expect
-      .poll(() => logs.some((l) => /scene layer submitted|engine not loaded/i.test(l)), {
-        timeout: 15_000,
-      })
+      .poll(
+        () =>
+          logs.some((l) => /scene layer submitted|engine not loaded/i.test(l)),
+        {
+          timeout: 15_000,
+        },
+      )
       .toBe(true);
     if (!logs.some((l) => /scene layer submitted/i.test(l))) {
-      test.skip(true, "the Blitz engine did not load in this realm — no scene text to read");
+      test.skip(
+        true,
+        "the Blitz engine did not load in this realm — no scene text to read",
+      );
     }
 
-    type Item = { text?: string; family?: string; weight?: number; italic?: boolean };
+    type Item = {
+      text?: string;
+      family?: string;
+      weight?: number;
+      italic?: boolean;
+    };
     const read = () =>
       page.evaluate(
         () =>
@@ -264,7 +286,9 @@ test.describe("journey · paged.web render output", () => {
       );
     // The submit that carries the text (an auto render may submit first).
     await expect
-      .poll(async () => (await read()).some((s) => s.items.length > 0), { timeout: 10_000 })
+      .poll(async () => (await read()).some((s) => s.items.length > 0), {
+        timeout: 10_000,
+      })
       .toBe(true);
     const submits = await read();
     const last = [...submits].reverse().find((s) => s.items.length > 0)!;
@@ -279,20 +303,30 @@ test.describe("journey · paged.web render output", () => {
       "the run text is the source text",
     ).toEqual(["Spring", "line", "sheet"]);
     for (const it of items) {
-      expect(it.family, `run ${JSON.stringify(it)} names its family`).toBe("Inter");
-      expect(it.italic ?? false, `run ${JSON.stringify(it)} is upright`).toBe(false);
+      expect(it.family, `run ${JSON.stringify(it)} names its family`).toBe(
+        "Inter",
+      );
+      expect(it.italic ?? false, `run ${JSON.stringify(it)} is upright`).toBe(
+        false,
+      );
     }
     const bold = items.filter((i) => /line/.test(i.text ?? ""));
     expect(bold.length, "the <b> run is its own scene item").toBeGreaterThan(0);
     for (const it of bold) {
-      expect(it.text?.trim(), "the bold run holds only the bold text").toBe("line");
+      expect(it.text?.trim(), "the bold run holds only the bold text").toBe(
+        "line",
+      );
       expect(it.weight, "the bold run carries weight 700").toBe(700);
     }
     // A regular run may omit the field (absent = 400 on the wire).
     for (const it of items.filter((i) => !/line/.test(i.text ?? ""))) {
-      expect(it.weight ?? 400, `plain run "${it.text}" is weight 400`).toBe(400);
+      expect(it.weight ?? 400, `plain run "${it.text}" is weight 400`).toBe(
+        400,
+      );
     }
-    expect(last.fontFallbacks, "the host reports fallbacks as a list").toEqual([]);
+    expect(last.fontFallbacks, "the host reports fallbacks as a list").toEqual(
+      [],
+    );
 
     // And it paints.
     await designer.expectRenderChangesFrom(before);

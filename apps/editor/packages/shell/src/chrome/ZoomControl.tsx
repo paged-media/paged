@@ -40,7 +40,9 @@ const ZOOM_ITEMS: Array<[string, string]> = [
   ["Fit document", "paged.view.zoomFit"],
 ];
 
-export function ZoomControl({ side = "bottom" }: { side?: "top" | "bottom" } = {}) {
+export function ZoomControl({
+  side = "bottom",
+}: { side?: "top" | "bottom" } = {}) {
   const { camera } = useCamera();
   const { commands } = useRegistries();
   const pct = Math.round(camera.scale * 100);

@@ -48,7 +48,8 @@ import {
   webSource,
 } from "./web-kit";
 
-const CSS = "p { margin: 0; font: 22px/30px Inter, sans-serif; color: #101820; }";
+const CSS =
+  "p { margin: 0; font: 22px/30px Inter, sans-serif; color: #101820; }";
 const V1 = "<p>Autumn line sheet, first proof</p>";
 const V2 = "<p>Winter catalogue: second proof with corrections</p>";
 const V1_TEXT = "Autumn line sheet, first proof";
@@ -58,7 +59,9 @@ async function exportPaged(page: Page): Promise<Buffer> {
   const bytes = await page.evaluate(async () =>
     Array.from(
       await (
-        globalThis as unknown as { __canvas: { client: { exportPaged: () => Promise<Uint8Array> } } }
+        globalThis as unknown as {
+          __canvas: { client: { exportPaged: () => Promise<Uint8Array> } };
+        }
       ).__canvas.client.exportPaged(),
     ),
   );
@@ -67,7 +70,9 @@ async function exportPaged(page: Page): Promise<Buffer> {
 
 /** Open `paged` through the file door of a brand-new editor. */
 async function reopenFresh(browser: Browser, paged: Buffer): Promise<Page> {
-  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  const ctx = await browser.newContext({
+    viewport: { width: 1600, height: 1000 },
+  });
   const page = await ctx.newPage();
   await new Designer(page).open();
   await tapSceneLayers(page);
@@ -77,7 +82,9 @@ async function reopenFresh(browser: Browser, paged: Buffer): Promise<Page> {
     buffer: paged,
   });
   await expect
-    .poll(async () => (await webFrames(page).catch(() => [])).length, { timeout: 20_000 })
+    .poll(async () => (await webFrames(page).catch(() => [])).length, {
+      timeout: 20_000,
+    })
     .toBe(1);
   await fitFirstPage(page);
   return page;
@@ -96,12 +103,16 @@ test.describe("journey · paged.web edit persistence", () => {
     // ── 1. Version 1: the label holds it, the canvas shows it. ──
     const frame = await insertWebFrameWith(page, V1, CSS);
     expect((await webSource(page, frame))?.css).toBe(CSS);
-    await expect.poll(() => sceneText(page, frame.id), { timeout: 15_000 }).toBe(V1_TEXT);
+    await expect
+      .poll(() => sceneText(page, frame.id), { timeout: 15_000 })
+      .toBe(V1_TEXT);
     const v1Pixels = await designer.renderBytes();
 
     // ── 2. Version 2: edit + save → label and canvas follow. ──
     await saveSource(page, frame, V2, CSS);
-    await expect.poll(() => sceneText(page, frame.id), { timeout: 15_000 }).toBe(V2_TEXT);
+    await expect
+      .poll(() => sceneText(page, frame.id), { timeout: 15_000 })
+      .toBe(V2_TEXT);
     await designer.expectRenderChangesFrom(v1Pixels);
     const v2Pixels = await designer.renderBytes();
 
@@ -120,10 +131,17 @@ test.describe("journey · paged.web edit persistence", () => {
       // And the page reads back as the page that was saved.
       const reDesigner = new Designer(reopened);
       await expect
-        .poll(async () => reDesigner.renderDiffPixels(v2Pixels, await reDesigner.renderBytes()), {
-          timeout: 15_000,
-          message: "the reopened page renders like the saved one",
-        })
+        .poll(
+          async () =>
+            reDesigner.renderDiffPixels(
+              v2Pixels,
+              await reDesigner.renderBytes(),
+            ),
+          {
+            timeout: 15_000,
+            message: "the reopened page renders like the saved one",
+          },
+        )
         .toBeLessThanOrEqual(16);
     } finally {
       await reopened.context().close();
@@ -131,14 +149,24 @@ test.describe("journey · paged.web edit persistence", () => {
 
     // ── 4. One undo reverts the save: label AND canvas back to v1. ──
     await undo(page);
-    await expect.poll(async () => (await webSource(page, frame))?.html, { timeout: 10_000 }).toBe(V1);
-    await expect.poll(() => sceneText(page, frame.id), { timeout: 15_000 }).toBe(V1_TEXT);
+    await expect
+      .poll(async () => (await webSource(page, frame))?.html, {
+        timeout: 10_000,
+      })
+      .toBe(V1);
+    await expect
+      .poll(() => sceneText(page, frame.id), { timeout: 15_000 })
+      .toBe(V1_TEXT);
     await designer.expectRenderChangesFrom(v2Pixels);
     await expect
-      .poll(async () => designer.renderDiffPixels(v1Pixels, await designer.renderBytes()), {
-        timeout: 15_000,
-        message: "after undo the page renders like version 1",
-      })
+      .poll(
+        async () =>
+          designer.renderDiffPixels(v1Pixels, await designer.renderBytes()),
+        {
+          timeout: 15_000,
+          message: "after undo the page renders like version 1",
+        },
+      )
       .toBeLessThanOrEqual(16);
   });
 });

@@ -56,9 +56,7 @@ export interface RasterizedReference {
  * Returns the absolute paths of `ref-NNN.png` files in page order.
  * Re-runs pdftoppm unless the cached pages are still fresh.
  */
-export function rasterizeReferencePdf(
-  pack: PackFixture,
-): RasterizedReference {
+export function rasterizeReferencePdf(pack: PackFixture): RasterizedReference {
   if (!pack.hasReferencePdf) {
     return { pageCount: 0, pages: [] };
   }
@@ -91,7 +89,13 @@ export function rasterizeReferencePdf(
     if (existsSync(FOGRA39)) {
       args.push("-defaultcmykprofile", FOGRA39);
     }
-    args.push("-r", String(FIDELITY_DPI), "-png", pack.referencePdfPath, resolve(outDir, "ref"));
+    args.push(
+      "-r",
+      String(FIDELITY_DPI),
+      "-png",
+      pack.referencePdfPath,
+      resolve(outDir, "ref"),
+    );
     execFileSync("pdftoppm", args, { stdio: "pipe" });
     // `pdftoppm` writes ref-1.png … ref-12.png with no zero-padding
     // for small page counts; normalise to ref-001.png so the per-page

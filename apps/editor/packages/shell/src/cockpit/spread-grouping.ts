@@ -42,7 +42,9 @@ export interface SpreadEntry {
  *  shown beside it. A folio in another style (`i`, `A-1`) still shows. */
 export function isIdLikeLabel(label: string, selfId: string): boolean {
   const l = label.trim();
-  return l === selfId || /^u[0-9a-f]+$/i.test(l) || /^\d+(?:\s*[–-]\s*\d+)?$/.test(l);
+  return (
+    l === selfId || /^u[0-9a-f]+$/i.test(l) || /^\d+(?:\s*[–-]\s*\d+)?$/.test(l)
+  );
 }
 
 export function groupSpreads(

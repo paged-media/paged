@@ -53,7 +53,10 @@ function constrain45(
   if (len === 0) return end;
   const step = Math.PI / 4;
   const snapped = Math.round(Math.atan2(dy, dx) / step) * step;
-  return [start[0] + len * Math.cos(snapped), start[1] + len * Math.sin(snapped)];
+  return [
+    start[0] + len * Math.cos(snapped),
+    start[1] + len * Math.sin(snapped),
+  ];
 }
 
 export function createLineHandler(): GestureHandler {
@@ -97,7 +100,10 @@ export function createLineHandler(): GestureHandler {
       const { pageId, startLocal } = drag;
       const end = endFor(e);
       cancel();
-      if (Math.hypot(end[0] - startLocal[0], end[1] - startLocal[1]) < MIN_LENGTH_PT) {
+      if (
+        Math.hypot(end[0] - startLocal[0], end[1] - startLocal[1]) <
+        MIN_LENGTH_PT
+      ) {
         return;
       }
       void mutateGraphicAndSelect(

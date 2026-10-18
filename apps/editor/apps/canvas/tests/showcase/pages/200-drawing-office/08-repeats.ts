@@ -39,7 +39,13 @@ import { expect } from "@playwright/test";
 import { withActivePage } from "../../active-page";
 import { marginNote, proseFrame, specLabel } from "../../annual-support";
 import { LAYER, STYLE, SWATCH, contentBox, p } from "../../names-annual";
-import { ConsoleTap, geometryOf, newRefs, settle, type Ref } from "../../plugin-support";
+import {
+  ConsoleTap,
+  geometryOf,
+  newRefs,
+  settle,
+  type Ref,
+} from "../../plugin-support";
 import type { PageContext, PageReport } from "../../types";
 import {
   corner,
@@ -90,16 +96,23 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     );
   };
 
-  const head = await proseFrame(ctx, page, [left, 54, right, 82], [
-    { text: "Repeats and symbols", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, page, [left, 86, right, 126], [
-    {
-      text:
-        "Two ways to say 'again'. A repeat transforms copies of a source and stays re-plannable; a symbol is a named definition whose placed instances follow a redefine - until one breaks its link on purpose.",
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [left, 54, right, 82],
+    [{ text: "Repeats and symbols", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [left, 86, right, 126],
+    [
+      {
+        text: "Two ways to say 'again'. A repeat transforms copies of a source and stays re-plannable; a symbol is a named definition whose placed instances follow a redefine - until one breaks its link on purpose.",
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── the three repeat kinds ───────────────────────────────────────
@@ -223,14 +236,19 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
   expect(ringExpanded, "expand dropped the ring's recipe").toBe(true);
 
-  const repeatCaption = await proseFrame(ctx, page, [left, 300, right, 364], [
-    {
-      text: updateWorked
-        ? "Left: one petal, radially repeated 8 times on a 40 pt ring, every instance rotated to follow - then EXPANDED, so the rosette is now plain artwork with no recipe. Middle: a chip gridded 3x3, then re-planned to 5x2 by Update; every instance is a new element each time, which is what re-plannable honestly costs. Right: a pennant and its mirror twin over a vertical axis. Each make was ONE undo step - one batch inserts, binds, paints, links and groups."
-        : "Left: one petal, radially repeated 8 times on a 40 pt ring, every instance rotated to follow - then EXPANDED, so the rosette is now plain artwork with no recipe. Middle: a chip gridded 3x3; its re-plan by Update was REFUSED by this engine at the group re-create, and the margin note carries the sentence - the 3x3 field stands as made. Right: a pennant and its mirror twin over a vertical axis. Each make was ONE undo step.",
-      style: STYLE.caption,
-    },
-  ]);
+  const repeatCaption = await proseFrame(
+    ctx,
+    page,
+    [left, 300, right, 364],
+    [
+      {
+        text: updateWorked
+          ? "Left: one petal, radially repeated 8 times on a 40 pt ring, every instance rotated to follow - then EXPANDED, so the rosette is now plain artwork with no recipe. Middle: a chip gridded 3x3, then re-planned to 5x2 by Update; every instance is a new element each time, which is what re-plannable honestly costs. Right: a pennant and its mirror twin over a vertical axis. Each make was ONE undo step - one batch inserts, binds, paints, links and groups."
+          : "Left: one petal, radially repeated 8 times on a 40 pt ring, every instance rotated to follow - then EXPANDED, so the rosette is now plain artwork with no recipe. Middle: a chip gridded 3x3; its re-plan by Update was REFUSED by this engine at the group re-create, and the margin note carries the sentence - the 3x3 field stands as made. Right: a pennant and its mirror twin over a vertical axis. Each make was ONE undo step.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(repeatCaption.frameId);
 
   // ── symbols: define / place ×3 / redefine / break link ───────────
@@ -314,20 +332,27 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       return cx > placeXs[0] - 40 && cx < placeXs[0] + 60;
     })
     .map((g) => g.ref);
-  expect(firstLeaves.length, "found the first instance's leaves").toBeGreaterThan(0);
+  expect(
+    firstLeaves.length,
+    "found the first instance's leaves",
+  ).toBeGreaterThan(0);
   await doc.designer.selectElements(firstLeaves);
   await draw(ctx, "breakSymbolLink");
   notes.push(
     "redefineSymbol deliberately NOT run: its per-instance rebuild rides the one-batch dissolve-and-regroup this engine refuses (recorded for updateRepeat on this page), and a half-applied rebuild strands artwork",
   );
 
-  const symCaption = await proseFrame(ctx, page, [left, 496, right, 566], [
-    {
-      text:
-        "One badge defined from the two source shapes at far left and placed three times - each instance re-emitted native geometry with a per-leaf link. The source then turned blue, and no badge followed: an instance is STATIC (core has no symbol node and no duplicate op), so a new look travels only through Redefine's rebuild - which this engine refuses at the instance-group re-create, the same one-batch dissolve-and-regroup seam the margin note records for Update. The first instance also broke its link: it now would not follow even a successful redefine.",
-      style: STYLE.caption,
-    },
-  ]);
+  const symCaption = await proseFrame(
+    ctx,
+    page,
+    [left, 496, right, 566],
+    [
+      {
+        text: "One badge defined from the two source shapes at far left and placed three times - each instance re-emitted native geometry with a per-leaf link. The source then turned blue, and no badge followed: an instance is STATIC (core has no symbol node and no duplicate op), so a new look travels only through Redefine's rebuild - which this engine refuses at the instance-group re-create, the same one-batch dissolve-and-regroup seam the margin note records for Update. The first instance also broke its link: it now would not follow even a successful redefine.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(symCaption.frameId);
 
   elements.push(
@@ -343,7 +368,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       page,
       (updateWorked
         ? ""
-        : "updateRepeat's one-batch dissolve-and-regroup is refused by this engine (\"a member already belongs to another group\") - measured green on the protocol-60 wasm, refused on 0.62; ") +
+        : 'updateRepeat\'s one-batch dissolve-and-regroup is refused by this engine ("a member already belongs to another group") - measured green on the protocol-60 wasm, refused on 0.62; ') +
         "symbols v0 refuses TEXT (no wire op copies a story) and has no symbol-set tools, nine-slice or 3D mapping; Redefine's per-instance rebuild rides the same refused batch shape and is deliberately not run here → Appendix A",
     ),
   );

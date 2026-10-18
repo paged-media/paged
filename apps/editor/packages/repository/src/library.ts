@@ -50,12 +50,32 @@ export interface WasmRepository {
     readonly evidence: Uint8Array;
     free?(): void;
   };
-  importFile(file: Uint8Array, name: string, ref: string, actor: string, ts: number): string;
+  importFile(
+    file: Uint8Array,
+    name: string,
+    ref: string,
+    actor: string,
+    ts: number,
+  ): string;
   offer(ref: string, known: string): string;
   locateMany(addresses: string): string;
   packOf(objects: string): Uint8Array;
-  receivePack(pack: Uint8Array, ref: string, expected: string, next: string, actor: string, ts: number): void;
-  importParts(manifest: string, bytes: Uint8Array, ref: string, actor: string, message: string, ts: number): string;
+  receivePack(
+    pack: Uint8Array,
+    ref: string,
+    expected: string,
+    next: string,
+    actor: string,
+    ts: number,
+  ): void;
+  importParts(
+    manifest: string,
+    bytes: Uint8Array,
+    ref: string,
+    actor: string,
+    message: string,
+    ts: number,
+  ): string;
   readPart(target: string, path: string): Uint8Array;
   saveAgent(
     file: Uint8Array,
@@ -68,16 +88,39 @@ export interface WasmRepository {
     message: string,
     ts: number,
   ): string;
-  merge(source: string, target: string, actor: string, approvers: string[], ts: number): string;
-  save(file: Uint8Array, ref: string, actor: string, message: string, ts: number): string;
-  export(target: string, withHistory: boolean, actor: string, ts: number): Uint8Array;
+  merge(
+    source: string,
+    target: string,
+    actor: string,
+    approvers: string[],
+    ts: number,
+  ): string;
+  save(
+    file: Uint8Array,
+    ref: string,
+    actor: string,
+    message: string,
+    ts: number,
+  ): string;
+  export(
+    target: string,
+    withHistory: boolean,
+    actor: string,
+    ts: number,
+  ): Uint8Array;
   log(ref: string): string;
   refs(): string;
   branch(from: string, to: string, actor: string, ts: number): string;
   release(name: string, commit: string, actor: string, ts: number): void;
   restore(version: string, ref: string, actor: string, ts: number): string;
   diff(from: string, to: string): string;
-  record(actor: string, action: string, target: string, result: string, ts: number): void;
+  record(
+    actor: string,
+    action: string,
+    target: string,
+    result: string,
+    ts: number,
+  ): void;
   evidence(): string;
 }
 
@@ -120,8 +163,10 @@ export function parsePagedRef(url: string): PagedRef | null {
   const dot = authority.indexOf(".");
   const workspace = dot < 0 ? null : authority.slice(0, dot);
   const repository = dot < 0 ? authority : authority.slice(dot + 1);
-  if (!NAME.test(repository) || (workspace !== null && !NAME.test(workspace))) return null;
-  if (!path || path.split("/").some((s) => !s || s === "." || s === "..")) return null;
+  if (!NAME.test(repository) || (workspace !== null && !NAME.test(workspace)))
+    return null;
+  if (!path || path.split("/").some((s) => !s || s === "." || s === ".."))
+    return null;
   const ref = new URLSearchParams(query).get("ref") || "main";
   return { workspace, repository, path, ref };
 }
@@ -235,12 +280,20 @@ export class Library {
     for (const name of await this.fs.list(`${dir}/packs`)) {
       const m = /^(\d+)\.idx$/.exec(name);
       if (!m) continue;
-      repo.loadIndex(Number(m[1]), (await this.fs.read(`${dir}/packs/${name}`))!);
+      repo.loadIndex(
+        Number(m[1]),
+        (await this.fs.read(`${dir}/packs/${name}`))!,
+      );
     }
     const refs = await this.fs.read(`${dir}/refs.json`);
     if (refs) repo.loadRefs(refs);
-    repo.loadEvidence((await this.fs.read(`${dir}/evidence.jsonl`)) ?? new Uint8Array());
-    const o: Open = { repo, meta: JSON.parse(dec.decode(metaBytes)) as DocumentEntry };
+    repo.loadEvidence(
+      (await this.fs.read(`${dir}/evidence.jsonl`)) ?? new Uint8Array(),
+    );
+    const o: Open = {
+      repo,
+      meta: JSON.parse(dec.decode(metaBytes)) as DocumentEntry,
+    };
     await this.provide(o, JSON.parse(repo.metadata()) as Loc[]);
     this.open.set(id, o);
     return o;
@@ -249,7 +302,8 @@ export class Library {
   private async provide(o: Open, locs: Loc[]): Promise<void> {
     const dir = `repos/${o.meta.id}/packs`;
     const byPack = new Map<number, Loc[]>();
-    for (const l of locs) byPack.set(l.pack, [...(byPack.get(l.pack) ?? []), l]);
+    for (const l of locs)
+      byPack.set(l.pack, [...(byPack.get(l.pack) ?? []), l]);
     for (const [pack, ls] of byPack) {
       const path = `${dir}/${pack}.pack`;
       // Many objects from one pack: one read of the pack beats one per object.
@@ -269,7 +323,9 @@ export class Library {
       try {
         return op();
       } catch (e) {
-        const m = /^missing:([0-9a-f]{64})$/.exec(e instanceof Error ? e.message : String(e));
+        const m = /^missing:([0-9a-f]{64})$/.exec(
+          e instanceof Error ? e.message : String(e),
+        );
         const loc = m ? o.repo.locate(m[1]) : undefined;
         if (!loc) throw e;
         await this.provide(o, [JSON.parse(loc) as Loc]);
@@ -286,7 +342,8 @@ export class Library {
       await this.fs.write(`${dir}/packs/${f.packId}.idx`, f.packIndex);
     }
     await this.fs.write(`${dir}/refs.json`, f.refs);
-    if (f.evidence.length) await this.fs.append(`${dir}/evidence.jsonl`, f.evidence);
+    if (f.evidence.length)
+      await this.fs.append(`${dir}/evidence.jsonl`, f.evidence);
     f.free?.();
     const refs = JSON.parse(o.repo.refs()) as Record<string, string>;
     o.meta = { ...o.meta, updatedAt: this.now(), head: refs[MAIN] ?? null };
@@ -314,7 +371,11 @@ export class Library {
   }
 
   /** Commits a save. Returns the head and whether this save made a commit. */
-  save(id: string, bytes: Uint8Array, message = "Save"): Promise<{ head: string; changed: boolean }> {
+  save(
+    id: string,
+    bytes: Uint8Array,
+    message = "Save",
+  ): Promise<{ head: string; changed: boolean }> {
     return this.serial(async () => {
       const o = await this.load(id);
       const before = o.meta.head;
@@ -327,10 +388,17 @@ export class Library {
   }
 
   /** The `.paged` bytes of `target` (a ref or a commit), optionally with history. */
-  exportPaged(id: string, target = MAIN, withHistory = false): Promise<Uint8Array> {
+  exportPaged(
+    id: string,
+    target = MAIN,
+    withHistory = false,
+  ): Promise<Uint8Array> {
     return this.serial(async () => {
       const o = await this.load(id);
-      await this.provide(o, JSON.parse(o.repo.wanted(target, withHistory)) as Loc[]);
+      await this.provide(
+        o,
+        JSON.parse(o.repo.wanted(target, withHistory)) as Loc[],
+      );
       const bytes = await this.faulting(o, () =>
         o.repo.export(target, withHistory, this.owner, this.now()),
       );
@@ -343,18 +411,24 @@ export class Library {
   log(id: string, ref = MAIN): Promise<CommitInfo[]> {
     return this.serial(async () => {
       const o = await this.load(id);
-      return JSON.parse(await this.faulting(o, () => o.repo.log(ref))) as CommitInfo[];
+      return JSON.parse(
+        await this.faulting(o, () => o.repo.log(ref)),
+      ) as CommitInfo[];
     });
   }
 
   refs(id: string): Promise<Record<string, string>> {
-    return this.serial(async () => JSON.parse((await this.load(id)).repo.refs()));
+    return this.serial(async () =>
+      JSON.parse((await this.load(id)).repo.refs()),
+    );
   }
 
   release(id: string, name: string, commit: string): Promise<void> {
     return this.serial(async () => {
       const o = await this.load(id);
-      await this.faulting(o, () => o.repo.release(name, commit, this.owner, this.now()));
+      await this.faulting(o, () =>
+        o.repo.release(name, commit, this.owner, this.now()),
+      );
       await this.persist(o);
     });
   }
@@ -379,17 +453,26 @@ export class Library {
   }
 
   evidence(id: string): Promise<EvidenceInfo[]> {
-    return this.serial(async () => JSON.parse((await this.load(id)).repo.evidence()));
+    return this.serial(async () =>
+      JSON.parse((await this.load(id)).repo.evidence()),
+    );
   }
 
-  private async remoteCall(r: Remote, route: string, init: RequestInit = {}): Promise<Response> {
+  private async remoteCall(
+    r: Remote,
+    route: string,
+    init: RequestInit = {},
+  ): Promise<Response> {
     // `repo` or `workspace/repo`: a workspace's repository has its own prefix.
     const [first, second] = r.repo.split("/", 2);
     const prefix = second ? `w/${first}/r/${second}` : `r/${first}`;
     const url = `${r.url.replace(/\/$/, "")}/v1/${prefix}/${route}`;
     const resp = await fetch(url, {
       ...init,
-      headers: { ...(init.headers as Record<string, string>), authorization: `Bearer ${r.token}` },
+      headers: {
+        ...(init.headers as Record<string, string>),
+        authorization: `Bearer ${r.token}`,
+      },
     });
     if (!resp.ok) {
       let p: { title?: string; detail?: string } = {};
@@ -398,14 +481,21 @@ export class Library {
       } catch {
         /* not a problem document */
       }
-      throw new RemoteError(resp.status, p.title ?? resp.statusText, p.detail ?? "");
+      throw new RemoteError(
+        resp.status,
+        p.title ?? resp.statusText,
+        p.detail ?? "",
+      );
     }
     return resp;
   }
 
   private async remoteRefs(r: Remote): Promise<Record<string, string>> {
     try {
-      return (await (await this.remoteCall(r, "refs")).json()) as Record<string, string>;
+      return (await (await this.remoteCall(r, "refs")).json()) as Record<
+        string,
+        string
+      >;
     } catch (e) {
       // A repository nobody has pushed to has no refs yet.
       if (e instanceof RemoteError && e.status === 404) return {};
@@ -418,7 +508,9 @@ export class Library {
     return this.serial(async () => {
       const o = await this.load(id);
       const theirs = await this.remoteRefs(remote);
-      const offer = JSON.parse(o.repo.offer(MAIN, JSON.stringify(Object.values(theirs)))) as {
+      const offer = JSON.parse(
+        o.repo.offer(MAIN, JSON.stringify(Object.values(theirs))),
+      ) as {
         hash: string;
         kind: number;
       }[];
@@ -433,15 +525,20 @@ export class Library {
         for (const h of (await resp.json()) as string[]) missing.add(h);
       }
       const send = offer.filter((x) => missing.has(x.hash));
-      const locs = JSON.parse(o.repo.locateMany(JSON.stringify(send.map((x) => x.hash)))) as Loc[];
+      const locs = JSON.parse(
+        o.repo.locateMany(JSON.stringify(send.map((x) => x.hash))),
+      ) as Loc[];
       await this.provide(o, locs);
       const size = new Map(locs.map((l) => [l.hash, l.len]));
       let sent = 0;
       let bytes = 0;
-      for (let i = 0; i < send.length; ) {
+      for (let i = 0; i < send.length;) {
         let budget = 0;
         let j = i;
-        while (j < send.length && (j === i || budget + (size.get(send[j].hash) ?? 0) <= PACK_MAX)) {
+        while (
+          j < send.length &&
+          (j === i || budget + (size.get(send[j].hash) ?? 0) <= PACK_MAX)
+        ) {
           budget += size.get(send[j].hash) ?? 0;
           j++;
         }
@@ -462,7 +559,13 @@ export class Library {
         body: JSON.stringify({ expected: theirs[MAIN] ?? null, new: head }),
       });
       o.repo.evictBlobs();
-      o.repo.record(this.owner, "push", `${remote.url}/${remote.repo}`, "ok", this.now());
+      o.repo.record(
+        this.owner,
+        "push",
+        `${remote.url}/${remote.repo}`,
+        "ok",
+        this.now(),
+      );
       o.meta = { ...o.meta, remote: { url: remote.url, repo: remote.repo } };
       await this.persist(o);
       return { sent, bytes };
@@ -471,23 +574,43 @@ export class Library {
 
   /** Pulls `main` from `remote`. The local kernel decides: a remote that has
    *  moved away from this document's history is refused, not merged. */
-  pull(id: string, remote: Remote): Promise<{ head: string; changed: boolean }> {
+  pull(
+    id: string,
+    remote: Remote,
+  ): Promise<{ head: string; changed: boolean }> {
     return this.serial(async () => {
       const o = await this.load(id);
       const theirs = (await this.remoteRefs(remote))[MAIN];
-      if (!theirs) throw new RemoteError(404, "Not found", `no ${MAIN} on the server`);
+      if (!theirs)
+        throw new RemoteError(404, "Not found", `no ${MAIN} on the server`);
       const mine = (JSON.parse(o.repo.refs()) as Record<string, string>)[MAIN];
       if (mine === theirs) return { head: theirs, changed: false };
       const resp = await this.remoteCall(remote, "fetch", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ want: theirs, have: Object.values(JSON.parse(o.repo.refs())) }),
+        body: JSON.stringify({
+          want: theirs,
+          have: Object.values(JSON.parse(o.repo.refs())),
+        }),
       });
       const pack = new Uint8Array(await resp.arrayBuffer());
       await this.faulting(o, () =>
-        o.repo.receivePack(pack, MAIN, mine ?? "", theirs, this.owner, this.now()),
+        o.repo.receivePack(
+          pack,
+          MAIN,
+          mine ?? "",
+          theirs,
+          this.owner,
+          this.now(),
+        ),
       );
-      o.repo.record(this.owner, "pull", `${remote.url}/${remote.repo}`, "ok", this.now());
+      o.repo.record(
+        this.owner,
+        "pull",
+        `${remote.url}/${remote.repo}`,
+        "ok",
+        this.now(),
+      );
       o.meta = { ...o.meta, remote: { url: remote.url, repo: remote.repo } };
       await this.persist(o);
       return { head: theirs, changed: true };
@@ -498,7 +621,8 @@ export class Library {
   clone(remote: Remote, name: string): Promise<DocumentEntry> {
     return this.serial(async () => {
       const theirs = (await this.remoteRefs(remote))[MAIN];
-      if (!theirs) throw new RemoteError(404, "Not found", `no ${MAIN} on the server`);
+      if (!theirs)
+        throw new RemoteError(404, "Not found", `no ${MAIN} on the server`);
       const resp = await this.remoteCall(remote, "fetch", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -516,7 +640,13 @@ export class Library {
       };
       const o: Open = { repo: this.options.createRepository(this.owner), meta };
       o.repo.receivePack(pack, MAIN, "", theirs, this.owner, now);
-      o.repo.record(this.owner, "clone", `${remote.url}/${remote.repo}`, "ok", now);
+      o.repo.record(
+        this.owner,
+        "clone",
+        `${remote.url}/${remote.repo}`,
+        "ok",
+        now,
+      );
       await this.persist(o);
       this.open.set(meta.id, o);
       return o.meta;
@@ -537,7 +667,17 @@ export class Library {
       const run = who.run.toLowerCase().replace(/[^a-z0-9-]/g, "-") || "run";
       const branch = `agent/${run}/live`;
       const head = await this.faulting(o, () =>
-        o.repo.saveAgent(bytes, branch, MAIN, who.agent, who.client, run, this.owner, message, this.now()),
+        o.repo.saveAgent(
+          bytes,
+          branch,
+          MAIN,
+          who.agent,
+          who.client,
+          run,
+          this.owner,
+          message,
+          this.now(),
+        ),
       );
       await this.persist(o);
       return { branch, head };
@@ -548,7 +688,9 @@ export class Library {
   mergeBranch(id: string, source: string): Promise<string> {
     return this.serial(async () => {
       const o = await this.load(id);
-      const head = await this.faulting(o, () => o.repo.merge(source, MAIN, this.owner, [this.owner], this.now()));
+      const head = await this.faulting(o, () =>
+        o.repo.merge(source, MAIN, this.owner, [this.owner], this.now()),
+      );
       await this.persist(o);
       return head;
     });
@@ -556,7 +698,10 @@ export class Library {
 
   /** Opens a set of data files as a new dataset: a repository of data parts,
    *  versioned like any document and named by `paged://` references. */
-  importDataset(name: string, files: { path: string; bytes: Uint8Array }[]): Promise<DocumentEntry> {
+  importDataset(
+    name: string,
+    files: { path: string; bytes: Uint8Array }[],
+  ): Promise<DocumentEntry> {
     return this.serial(async () => {
       const total = files.reduce((n, f) => n + f.bytes.length, 0);
       const bytes = new Uint8Array(total);
@@ -568,9 +713,23 @@ export class Library {
         at += f.bytes.length;
       }
       const now = this.now();
-      const meta: DocumentEntry = { id: this.newId(), name, createdAt: now, updatedAt: now, head: null, kind: "data" };
+      const meta: DocumentEntry = {
+        id: this.newId(),
+        name,
+        createdAt: now,
+        updatedAt: now,
+        head: null,
+        kind: "data",
+      };
       const o: Open = { repo: this.options.createRepository(this.owner), meta };
-      o.repo.importParts(JSON.stringify(manifest), bytes, MAIN, this.owner, `Open ${name}`, now);
+      o.repo.importParts(
+        JSON.stringify(manifest),
+        bytes,
+        MAIN,
+        this.owner,
+        `Open ${name}`,
+        now,
+      );
       await this.persist(o);
       this.open.set(meta.id, o);
       return o.meta;
@@ -589,15 +748,29 @@ export class Library {
 
   /** The bytes a `paged://` reference names: from this library when it holds
    *  that repository (by its server name, or its own), else from `remote`. */
-  async resolve(url: string, remote?: { url: string; token: string }): Promise<Uint8Array> {
+  async resolve(
+    url: string,
+    remote?: { url: string; token: string },
+  ): Promise<Uint8Array> {
     const r = parsePagedRef(url);
     if (!r) throw new Error(`not a paged:// reference: ${url}`);
-    const wanted = r.workspace ? `${r.workspace}/${r.repository}` : r.repository;
-    const local = (await this.list()).find((d) => d.remote?.repo === wanted || (!r.workspace && d.name === r.repository));
+    const wanted = r.workspace
+      ? `${r.workspace}/${r.repository}`
+      : r.repository;
+    const local = (await this.list()).find(
+      (d) =>
+        d.remote?.repo === wanted || (!r.workspace && d.name === r.repository),
+    );
     if (local) return this.readPart(local.id, r.path, r.ref);
-    if (!remote) throw new Error(`${wanted} is not in this library, and there is no server to ask`);
+    if (!remote)
+      throw new Error(
+        `${wanted} is not in this library, and there is no server to ask`,
+      );
     const q = `ref=${encodeURIComponent(r.ref)}&path=${encodeURIComponent(r.path)}`;
-    const resp = await this.remoteCall({ url: remote.url, repo: wanted, token: remote.token }, `part?${q}`);
+    const resp = await this.remoteCall(
+      { url: remote.url, repo: wanted, token: remote.token },
+      `part?${q}`,
+    );
     return new Uint8Array(await resp.arrayBuffer());
   }
 
@@ -605,7 +778,10 @@ export class Library {
     return this.serial(async () => {
       const o = await this.load(id);
       o.meta = { ...o.meta, name };
-      await this.fs.write(`repos/${id}/meta.json`, enc.encode(JSON.stringify(o.meta)));
+      await this.fs.write(
+        `repos/${id}/meta.json`,
+        enc.encode(JSON.stringify(o.meta)),
+      );
       return o.meta;
     });
   }

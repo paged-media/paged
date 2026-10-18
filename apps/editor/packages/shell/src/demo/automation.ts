@@ -32,12 +32,17 @@
 
 import { demoShowInfo, demoHighlight } from "./overlay";
 import type { ShellObjectsSurface } from "../catalog/object-model-types";
-import { buildObjectAutomation, type ObjectAutomationApi } from "./object-automation";
+import {
+  buildObjectAutomation,
+  type ObjectAutomationApi,
+} from "./object-automation";
 
 /** The subset of the `__canvas` dev handle the automation needs. */
 export interface CanvasHandleLike {
   client: {
-    executeScript(source: string): Promise<{ output: string[]; error: string | null }>;
+    executeScript(
+      source: string,
+    ): Promise<{ output: string[]; error: string | null }>;
     mutate(mutation: unknown): Promise<unknown>;
     /** The worker's selection; answers the ids it applied. */
     setElementSelection?(ids: unknown[], mode: string): Promise<unknown[]>;
@@ -59,7 +64,10 @@ export interface CanvasHandleLike {
   elementSelection?: unknown[];
   handle?: { pageIds?: string[]; pageCount?: number } | null;
   /** ADR 323 — the app's shared object registry (`host.objects`). */
-  objects?: Pick<ShellObjectsSurface, "query" | "get" | "set" | "batch" | "schema"> | null;
+  objects?: Pick<
+    ShellObjectsSurface,
+    "query" | "get" | "set" | "batch" | "schema"
+  > | null;
 }
 
 export interface PagedScriptApi {
@@ -94,7 +102,11 @@ export interface EditorAutomationApi extends ObjectAutomationApi {
 
 export interface DemoNarrationApi {
   /** Show a titled message box and SUSPEND until the user advances (or autoMs). */
-  showInfo(title: string, body?: string, opts?: { autoMs?: number; cta?: string; index?: number; total?: number }): Promise<void>;
+  showInfo(
+    title: string,
+    body?: string,
+    opts?: { autoMs?: number; cta?: string; index?: number; total?: number },
+  ): Promise<void>;
   /** Alias for showInfo with just a message. */
   pause(message: string): Promise<void>;
   /** A chapter marker with no UI — names a step for the scrub bar / table of contents. */
@@ -117,18 +129,25 @@ export interface AutomationOptions {
   isSilent?: () => boolean;
 }
 
-export function buildAutomation(handle: CanvasHandleLike, opts: AutomationOptions = {}): DemoGlobals {
+export function buildAutomation(
+  handle: CanvasHandleLike,
+  opts: AutomationOptions = {},
+): DemoGlobals {
   const silent = () => opts.isSilent?.() ?? false;
   // `window.__canvas` is republished on every render (PagedShell), so the
   // object a script was started with goes stale: after `paged.file.new` its
   // `handle` still names no document and `editor.pageIds()` stays empty. Every
   // read goes to the live publication, falling back to the handle given (a
   // host without the global, or a test double).
-  const live = (): CanvasHandleLike => (globalThis as { __canvas?: CanvasHandleLike }).__canvas ?? handle;
+  const live = (): CanvasHandleLike =>
+    (globalThis as { __canvas?: CanvasHandleLike }).__canvas ?? handle;
   const commandInvoke = (id: string, payload?: unknown): Promise<unknown> => {
     const c = live().registries.commands;
     const fn = c.invoke ?? c.execute ?? c.run;
-    if (!fn) return Promise.reject(new Error("command registry has no invoke/execute/run"));
+    if (!fn)
+      return Promise.reject(
+        new Error("command registry has no invoke/execute/run"),
+      );
     return Promise.resolve(fn.call(c, id, payload));
   };
 
@@ -148,14 +167,21 @@ export function buildAutomation(handle: CanvasHandleLike, opts: AutomationOption
     select: async (ids, mode = "replace") => {
       // A bad id would reach the panels and take the whole UI down; a script
       // gets an error it can read instead.
-      const bad = ids.find((x) => !x || typeof x !== "object" || !("kind" in x) || !("id" in x));
-      if (bad !== undefined) throw new Error(`editor.select: ${JSON.stringify(bad) ?? String(bad)} is not an element id ({ kind, id })`);
+      const bad = ids.find(
+        (x) => !x || typeof x !== "object" || !("kind" in x) || !("id" in x),
+      );
+      if (bad !== undefined)
+        throw new Error(
+          `editor.select: ${JSON.stringify(bad) ?? String(bad)} is not an element id ({ kind, id })`,
+        );
       // The click path's three steps. Setting only the panels' mirror left
       // the engine's selection where it was (so `paged.selection()` and the
       // commands that read it disagreed with the panels) and the selection
       // box on whatever was selected before.
       const c = live();
-      const applied = c.client.setElementSelection ? await c.client.setElementSelection(ids, mode) : ids;
+      const applied = c.client.setElementSelection
+        ? await c.client.setElementSelection(ids, mode)
+        : ids;
       c.setElementSelection?.(applied, mode);
       if (!c.client.elementGeometry || !c.setElementGeometry) return;
       try {
@@ -168,7 +194,10 @@ export function buildAutomation(handle: CanvasHandleLike, opts: AutomationOption
     async setProperty(path, value) {
       const sel = live().elementSelection ?? [];
       for (const elementId of sel) {
-        await live().client.mutate({ op: "setElementProperty", args: { elementId, path, value } });
+        await live().client.mutate({
+          op: "setElementProperty",
+          args: { elementId, path, value },
+        });
       }
     },
     mutate: (op) => live().client.mutate(op),
@@ -177,8 +206,10 @@ export function buildAutomation(handle: CanvasHandleLike, opts: AutomationOption
   };
 
   const demo: DemoNarrationApi = {
-    showInfo: (title, body, info) => (silent() ? Promise.resolve() : demoShowInfo({ title, body, ...info })),
-    pause: (message) => (silent() ? Promise.resolve() : demoShowInfo({ title: message })),
+    showInfo: (title, body, info) =>
+      silent() ? Promise.resolve() : demoShowInfo({ title, body, ...info }),
+    pause: (message) =>
+      silent() ? Promise.resolve() : demoShowInfo({ title: message }),
     step: () => Promise.resolve(), // pure chapter marker; the scrub bar reads it from the source
     // Apply highlights even during silent replay — a spotlight is persistent
     // visual STATE (not a pause), so seeking must land on the correct one.
@@ -186,7 +217,8 @@ export function buildAutomation(handle: CanvasHandleLike, opts: AutomationOption
       demoHighlight(target);
       return Promise.resolve();
     },
-    wait: (ms) => (silent() ? Promise.resolve() : new Promise((r) => setTimeout(r, ms))),
+    wait: (ms) =>
+      silent() ? Promise.resolve() : new Promise((r) => setTimeout(r, ms)),
   };
 
   return { paged, editor, demo };

@@ -65,16 +65,23 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const screenBlue = await doc.swatch(SWATCH.screenBlue);
   const layerContent = await doc.layerId(LAYER.content);
 
-  const head = await proseFrame(ctx, page, [left, 54, right, 82], [
-    { text: "The pathfinder wall", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, page, [left, 86, right, 126], [
-    {
-      text:
-        "Ten planar verbs as paged.draw commands over a live selection. Each column holds the untouched scratch pair above and the same pair after its verb below - the operand order is the selection's, exactly as a menu invocation would read it.",
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [left, 54, right, 82],
+    [{ text: "The pathfinder wall", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [left, 86, right, 126],
+    [
+      {
+        text: "Ten planar verbs as paged.draw commands over a live selection. Each column holds the untouched scratch pair above and the same pair after its verb below - the operand order is the selection's, exactly as a menu invocation would read it.",
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   /** One overlapping scratch pair at (x, y): a warm quad under a blue
@@ -83,7 +90,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     const under = await path(
       ctx,
       pageId,
-      [corner(x, y), corner(x + 30, y + 2), corner(x + 28, y + 30), corner(x - 2, y + 28)],
+      [
+        corner(x, y),
+        corner(x + 30, y + 2),
+        corner(x + 28, y + 30),
+        corner(x - 2, y + 28),
+      ],
       false,
       { fill: vermilionTint },
     );
@@ -163,7 +175,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
             if ((await tableOf(overRef)) !== overBefore) return 1;
             return 0;
           },
-          { message: `${suffix} changed neither the polygon set nor an operand's geometry`, timeout: 120_000 },
+          {
+            message: `${suffix} changed neither the polygon set nor an operand's geometry`,
+            timeout: 120_000,
+          },
         )
         .toBe(1);
       const after = await polygons(ctx);
@@ -178,32 +193,44 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   };
 
   await runRow(VERBS_ROW1, 138);
-  const row1Caption = await proseFrame(ctx, page, [left, 250, right, 280], [
-    {
-      text:
-        "Unite, Subtract, Intersect, Exclude - the shape modes; the first-selected quad keeps its identity and receives the result. Fifth column: Divide splits the pair into every planar piece.",
-      style: STYLE.caption,
-    },
-  ]);
+  const row1Caption = await proseFrame(
+    ctx,
+    page,
+    [left, 250, right, 280],
+    [
+      {
+        text: "Unite, Subtract, Intersect, Exclude - the shape modes; the first-selected quad keeps its identity and receives the result. Fifth column: Divide splits the pair into every planar piece.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(row1Caption.frameId);
 
   await runRow(VERBS_ROW2, 292);
-  const row2Caption = await proseFrame(ctx, page, [left, 404, right, 434], [
-    {
-      text:
-        "Trim, Merge, Crop, Outline, Minus back - the region verbs, resolved over one planar arrangement with ownership following the z-order you see: the blue diamond sits in front, so it wins every contested face.",
-      style: STYLE.caption,
-    },
-  ]);
+  const row2Caption = await proseFrame(
+    ctx,
+    page,
+    [left, 404, right, 434],
+    [
+      {
+        text: "Trim, Merge, Crop, Outline, Minus back - the region verbs, resolved over one planar arrangement with ownership following the z-order you see: the blue diamond sits in front, so it wins every contested face.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(row2Caption.frameId);
 
-  const closing = await proseFrame(ctx, page, [left, 444, right, 500], [
-    {
-      text:
-        "The engine's planar ops were shown raw in Chapter 8. This wall is the COMMAND lane over them: the same arrangement kernel, reached through the registry a menu bar, a palette and a shortcut all share - which is why every result here also answers undo as a single step.",
-      style: STYLE.body,
-    },
-  ]);
+  const closing = await proseFrame(
+    ctx,
+    page,
+    [left, 444, right, 500],
+    [
+      {
+        text: "The engine's planar ops were shown raw in Chapter 8. This wall is the COMMAND lane over them: the same arrangement kernel, reached through the registry a menu bar, a palette and a shortcut all share - which is why every result here also answers undo as a single step.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(closing.frameId);
 
   elements.push(

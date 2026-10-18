@@ -198,7 +198,9 @@ async function drawTriangle(
   await clickAt(page, c.x + 80, c.y);
   await clickAt(page, c.x + 40, c.y + 60);
   await page.keyboard.press("Enter");
-  await expect.poll(() => selectedElement(page), { timeout: 5_000 }).not.toBeNull();
+  await expect
+    .poll(() => selectedElement(page), { timeout: 5_000 })
+    .not.toBeNull();
   return (await selectedElement(page))!;
 }
 
@@ -244,8 +246,12 @@ test.describe("E2E draw-plugin (pen + anchor tools, real viewport)", () => {
     expect(snap.subpathOpen?.[0] ?? false).toBe(true);
     // Clicks are corner anchors: handles collapsed onto the point.
     for (const a of snap.anchors) {
-      expect(Math.hypot(a.left[0] - a.anchor[0], a.left[1] - a.anchor[1])).toBeLessThan(1e-3);
-      expect(Math.hypot(a.right[0] - a.anchor[0], a.right[1] - a.anchor[1])).toBeLessThan(1e-3);
+      expect(
+        Math.hypot(a.left[0] - a.anchor[0], a.left[1] - a.anchor[1]),
+      ).toBeLessThan(1e-3);
+      expect(
+        Math.hypot(a.right[0] - a.anchor[0], a.right[1] - a.anchor[1]),
+      ).toBeLessThan(1e-3);
     }
 
     await undo(page);
@@ -371,10 +377,7 @@ test.describe("E2E draw-plugin (pen + anchor tools, real viewport)", () => {
           const snap = await pathAnchorsOf(page, ref);
           if (!snap) return 0;
           const a = snap.anchors[1];
-          return Math.hypot(
-            a.right[0] - a.anchor[0],
-            a.right[1] - a.anchor[1],
-          );
+          return Math.hypot(a.right[0] - a.anchor[0], a.right[1] - a.anchor[1]);
         },
         { timeout: 5_000 },
       )

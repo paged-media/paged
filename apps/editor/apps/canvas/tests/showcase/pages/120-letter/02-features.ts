@@ -117,9 +117,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const [vx0, vy0, vx1] = contentBox(p(20));
   const [rx0, ry0, rx1] = contentBox(p(21));
 
-  const vHead = await proseFrame(ctx, p(20), [vx0, vy0, vx1, vy0 + 30], [
-    { text: "The feature specimen", style: STYLE.head1 },
-  ]);
+  const vHead = await proseFrame(
+    ctx,
+    p(20),
+    [vx0, vy0, vx1, vy0 + 30],
+    [{ text: "The feature specimen", style: STYLE.head1 }],
+  );
   elements.push(vHead.frameId);
 
   const vRow = (i: number): [number, number, number, number] => [
@@ -193,7 +196,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   // ── Row 4 · figure styles — carried by styles, not by the shaper ─
   {
-    const sampleA = "0123456789 · 31,556,952 — Annual Body, ProportionalOldStyle";
+    const sampleA =
+      "0123456789 · 31,556,952 — Annual Body, ProportionalOldStyle";
     const sampleB = "0123456789 · 31,556,952 — Table Number, TabularLining";
     const r = await row(
       p(20),
@@ -224,9 +228,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   }
 
   // ── recto ───────────────────────────────────────────────────────
-  const rHead = await proseFrame(ctx, p(21), [rx0, ry0, rx1, ry0 + 30], [
-    { text: "The feature specimen, continued", style: STYLE.head1 },
-  ]);
+  const rHead = await proseFrame(
+    ctx,
+    p(21),
+    [rx0, ry0, rx1, ry0 + 30],
+    [{ text: "The feature specimen, continued", style: STYLE.head1 }],
+  );
   elements.push(rHead.frameId);
 
   // ── Row 6 · ordinals — GSUB metadata vs the metric alternative ──
@@ -268,9 +275,21 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     const s = r.starts[1];
     await face(r.storyId, s, s + sample.length, "EB Garamond", 15);
     const sup = (at: number, count: number) =>
-      set(r.storyId, s + at, s + at + count, "characterPosition", txt("Superscript"));
+      set(
+        r.storyId,
+        s + at,
+        s + at + count,
+        "characterPosition",
+        txt("Superscript"),
+      );
     const sub = (at: number, count: number) =>
-      set(r.storyId, s + at, s + at + count, "characterPosition", txt("Subscript"));
+      set(
+        r.storyId,
+        s + at,
+        s + at + count,
+        "characterPosition",
+        txt("Subscript"),
+      );
     await sup(sample.indexOf("mc2") + 2, 1);
     await sub(sample.indexOf("H2O") + 1, 1);
     await sup(sample.indexOf("Fe3+") + 2, 2);

@@ -43,15 +43,27 @@ const pt = (k: Kit, x: number, y: number) => screenPoint(k.page, x, y);
 
 async function storyLengths(page: Page): Promise<number[]> {
   return page.evaluate(async () => {
-    const c = (globalThis as unknown as { __canvas: { client: { collection(n: string): Promise<Array<{ characterCount: number }>> } } }).__canvas;
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            collection(n: string): Promise<Array<{ characterCount: number }>>;
+          };
+        };
+      }
+    ).__canvas;
     return (await c.client.collection("stories")).map((s) => s.characterCount);
   });
 }
 
 /** Every story XML in a saved package, as text. */
 function storiesOf(file: string): string {
-  const names = execFileSync("unzip", ["-Z1", file], { encoding: "utf8" }).split("\n").filter((n) => /^Stories\/.*\.xml$/.test(n));
-  return names.map((n) => execFileSync("unzip", ["-p", file, n], { encoding: "utf8" })).join("\n");
+  const names = execFileSync("unzip", ["-Z1", file], { encoding: "utf8" })
+    .split("\n")
+    .filter((n) => /^Stories\/.*\.xml$/.test(n));
+  return names
+    .map((n) => execFileSync("unzip", ["-p", file, n], { encoding: "utf8" }))
+    .join("\n");
 }
 
 film("indesign", async (k) => {
@@ -66,8 +78,22 @@ film("indesign", async (k) => {
     // Inter bytes are registered once under that name: no pixel changes,
     // only the false marker goes.
     await page.evaluate(async () => {
-      const c = (globalThis as unknown as { __canvas: { client: { registerFont(f: string, b: Uint8Array, s: string | null): Promise<void> } } }).__canvas;
-      const bytes = new Uint8Array(await (await fetch("/fonts/Inter.ttf")).arrayBuffer());
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              registerFont(
+                f: string,
+                b: Uint8Array,
+                s: string | null,
+              ): Promise<void>;
+            };
+          };
+        }
+      ).__canvas;
+      const bytes = new Uint8Array(
+        await (await fetch("/fonts/Inter.ttf")).arrayBuffer(),
+      );
       await c.client.registerFont("Inter", bytes, "Regular");
     });
     await k.key("v");
@@ -82,8 +108,12 @@ film("indesign", async (k) => {
     await menu(k, ["File", "Open…"]);
     k.chip("the-picture.idml", "file");
     await (await chooser).setFiles(join(ASSETS, "the-picture.idml"));
-    await expect.poll(async () => (await storyLengths(page)).length, { timeout: 15_000 }).toBe(24);
-    await expect(page.getByText("the-picture", { exact: true }).first()).toBeVisible();
+    await expect
+      .poll(async () => (await storyLengths(page)).length, { timeout: 15_000 })
+      .toBe(24);
+    await expect(
+      page.getByText("the-picture", { exact: true }).first(),
+    ).toBeVisible();
     await k.hold(900);
     // The new document is a different page size: the camera moved.
     await k.recamera();
@@ -102,10 +132,21 @@ film("indesign", async (k) => {
     await k.hold(400);
     await typeHuman(page, "Photograph");
     await expect
-      .poll(async () => (await storyLengths(page)).map((n, i) => n - (before[i] ?? 0)).filter((d) => d !== 0))
+      .poll(async () =>
+        (await storyLengths(page))
+          .map((n, i) => n - (before[i] ?? 0))
+          .filter((d) => d !== 0),
+      )
       .toEqual([3]);
     // The control bar names the paragraph's style, as InDesign's does.
-    await expect(page.locator("select").filter({ has: page.locator("option:checked", { hasText: "Chapter Title" }) }).first()).toBeVisible();
+    await expect(
+      page
+        .locator("select")
+        .filter({
+          has: page.locator("option:checked", { hasText: "Chapter Title" }),
+        })
+        .first(),
+    ).toBeVisible();
     await k.hold(1200);
     k.unfocus();
     // Out of the text by the tool rail: a key would land in the headline.
@@ -125,7 +166,9 @@ film("indesign", async (k) => {
     expect(text).toContain("The Photograph");
     expect(text).not.toContain("The Picture<");
     expect(text).not.toMatch(/Photograph[a-z]/);
-    expect(execFileSync("unzip", ["-p", saved, "mimetype"], { encoding: "utf8" })).toBe("application/vnd.adobe.indesign-idml-package");
+    expect(
+      execFileSync("unzip", ["-p", saved, "mimetype"], { encoding: "utf8" }),
+    ).toBe("application/vnd.adobe.indesign-idml-package");
     await k.hold(800);
   });
 
@@ -136,9 +179,15 @@ film("indesign", async (k) => {
 
   // ── The page image, from the export centre. ──
   await k.scene("export", async () => {
-    await press(k, page.getByRole("button", { name: "Export", exact: true }).last());
+    await press(
+      k,
+      page.getByRole("button", { name: "Export", exact: true }).last(),
+    );
     await k.hold(700);
-    await press(k, page.getByText("Page images (PNG)", { exact: true }).first());
+    await press(
+      k,
+      page.getByText("Page images (PNG)", { exact: true }).first(),
+    );
     await k.hold(500);
     const dpi = page.locator("[data-export-image-dpi]");
     await hover(k, dpi);

@@ -38,7 +38,10 @@ test.describe("ED-17 — canvas chrome", () => {
   // circle the canvas draws (thread lines use the token for lines only).
   const CROSSHAIR = 'circle[fill="var(--overlay-target)"]';
 
-  async function clickARectangle(page: import("@playwright/test").Page, search?: string) {
+  async function clickARectangle(
+    page: import("@playwright/test").Page,
+    search?: string,
+  ) {
     const designer = new Designer(page);
     await designer.open(search ? { search } : {});
     await designer.newDocument();
@@ -76,7 +79,12 @@ test.describe("ED-17 — canvas chrome", () => {
     const designer = new Designer(page);
     await designer.open();
     await designer.newDocument();
-    const frame = await designer.drawRectangle({ x0: 100, y0: 100, x1: 400, y1: 300 });
+    const frame = await designer.drawRectangle({
+      x0: 100,
+      y0: 100,
+      x1: 400,
+      y1: 300,
+    });
     await designer.selectElement("rectangle", frame);
     const props = page.locator("[data-properties-panel]");
     await expect(props).toHaveAttribute("data-inspector-kind", "frame");
@@ -84,7 +92,9 @@ test.describe("ED-17 — canvas chrome", () => {
     // A photo arrives in the selected frame.
     expect(await designer.placeImageLink(frame)).toBe(true);
 
-    await page.locator('[data-panel-rail-item="paged.properties:image"]').click();
+    await page
+      .locator('[data-panel-rail-item="paged.properties:image"]')
+      .click();
     await expect(props).toHaveAttribute("data-inspector-kind", "image");
     await expect(
       page.locator('[data-properties-section="fitting"]'),
@@ -97,12 +107,19 @@ test.describe("ED-17 — canvas chrome", () => {
     const designer = new Designer(page);
     await designer.open();
     await designer.newDocument();
-    const frame = await designer.drawRectangle({ x0: 100, y0: 100, x1: 400, y1: 300 });
+    const frame = await designer.drawRectangle({
+      x0: 100,
+      y0: 100,
+      x1: 400,
+      y1: 300,
+    });
     await designer.selectElement("rectangle", frame);
     const props = page.locator("[data-properties-panel]");
     await expect(props).toHaveAttribute("data-inspector-kind", "frame");
 
-    await page.locator('[data-panel-rail-item="paged.properties:image"]').click();
+    await page
+      .locator('[data-panel-rail-item="paged.properties:image"]')
+      .click();
     await expect(props).toHaveAttribute("data-inspector-kind", "image");
     await expect(page.locator("[data-properties-no-image]")).toBeVisible();
   });

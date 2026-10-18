@@ -67,7 +67,8 @@ export function useSelectionObjectType(): SelectionObjectType | null {
       let entries: ReadonlyArray<{ value?: unknown }> = [];
       try {
         const props = await client.elementProperties(element);
-        if (props) entries = props.entries as ReadonlyArray<{ value?: unknown }>;
+        if (props)
+          entries = props.entries as ReadonlyArray<{ value?: unknown }>;
       } catch {
         // Property read failed — unclassified, not an error state.
       }
@@ -77,7 +78,9 @@ export function useSelectionObjectType(): SelectionObjectType | null {
           id: element,
           kind,
           groupChain: [] as readonly string[],
-          metadata: ot.metadataKey ? readEnvelope(entries, ot.metadataKey) : null,
+          metadata: ot.metadataKey
+            ? readEnvelope(entries, ot.metadataKey)
+            : null,
         };
         try {
           if (ot.matches(candidate)) {
@@ -120,7 +123,9 @@ export function useSelectionEditContext(): EditContextContribution | null {
   const client = useCanvasClient();
   const { elementSelection } = useSelection();
   const { editContexts, objectTypes } = useRegistries();
-  const [resolved, setResolved] = useState<EditContextContribution | null>(null);
+  const [resolved, setResolved] = useState<EditContextContribution | null>(
+    null,
+  );
   const requestRef = useRef(0);
 
   useEffect(() => {
@@ -147,7 +152,8 @@ export function useSelectionEditContext(): EditContextContribution | null {
       let entries: ReadonlyArray<{ value?: unknown }> = [];
       try {
         const props = await client.elementProperties(element);
-        if (props) entries = props.entries as ReadonlyArray<{ value?: unknown }>;
+        if (props)
+          entries = props.entries as ReadonlyArray<{ value?: unknown }>;
       } catch {
         // Unreadable — classify by kind alone.
       }
@@ -204,7 +210,9 @@ export function useSelectionMetadataOwner(): EditContextContribution | null {
 
   useEffect(() => {
     const req = ++requestRef.current;
-    const keyed = editContexts.list().filter((c) => c.metadataKey && c.panelIds?.length);
+    const keyed = editContexts
+      .list()
+      .filter((c) => c.metadataKey && c.panelIds?.length);
     if (elementSelection.length !== 1 || keyed.length === 0) {
       setOwner(null);
       return;
@@ -214,12 +222,16 @@ export function useSelectionMetadataOwner(): EditContextContribution | null {
       let entries: ReadonlyArray<{ value?: unknown }> = [];
       try {
         const props = await client.elementProperties(element);
-        if (props) entries = props.entries as ReadonlyArray<{ value?: unknown }>;
+        if (props)
+          entries = props.entries as ReadonlyArray<{ value?: unknown }>;
       } catch {
         // Unreadable — no owner.
       }
       if (req !== requestRef.current) return;
-      setOwner(keyed.find((c) => readEnvelope(entries, c.metadataKey!) !== null) ?? null);
+      setOwner(
+        keyed.find((c) => readEnvelope(entries, c.metadataKey!) !== null) ??
+          null,
+      );
     })();
   }, [elementSelection, client, editContexts]);
 

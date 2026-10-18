@@ -34,34 +34,42 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(82);
   const elements: string[] = [];
 
-  const head = await proseFrame(ctx, page, [60, 104, 476, 146], [
-    { text: "Paint, banked", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [60, 104, 476, 146],
+    [{ text: "Paint, banked", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
-  const body = await proseFrame(ctx, page, [60, 160, 476, 380], [
-    {
-      text:
-        "This page was designed to carry paged.draw's paint lane: the " +
-        "two gradient commands minting their stop swatches, a brick " +
-        "pattern field of real copies, and the dash presets over a " +
-        "selected line. In isolation, every one of those exhibits runs " +
-        "and verifies. Against this document — ninety pages of authored " +
-        "content — the engine hangs indefinitely while composing this " +
-        "page once the exhibits are in place, and it kept hanging as " +
-        "the exhibits were trimmed: without the dotted presets, with a " +
-        "quarter of the pattern, with lines instead of paths.",
-      style: STYLE.body,
-    },
-    {
-      text:
-        "A specimen book that hid that fact would be a brochure. The " +
-        "paint lane's coverage is claimed nowhere on this page; its " +
-        "commands are proven by the isolated run this module cites, and " +
-        "the hang is the finding the margin carries.",
-      style: STYLE.body,
-    },
-  ]);
+  const body = await proseFrame(
+    ctx,
+    page,
+    [60, 160, 476, 380],
+    [
+      {
+        text:
+          "This page was designed to carry paged.draw's paint lane: the " +
+          "two gradient commands minting their stop swatches, a brick " +
+          "pattern field of real copies, and the dash presets over a " +
+          "selected line. In isolation, every one of those exhibits runs " +
+          "and verifies. Against this document — ninety pages of authored " +
+          "content — the engine hangs indefinitely while composing this " +
+          "page once the exhibits are in place, and it kept hanging as " +
+          "the exhibits were trimmed: without the dotted presets, with a " +
+          "quarter of the pattern, with lines instead of paths.",
+        style: STYLE.body,
+      },
+      {
+        text:
+          "A specimen book that hid that fact would be a brochure. The " +
+          "paint lane's coverage is claimed nowhere on this page; its " +
+          "commands are proven by the isolated run this module cites, and " +
+          "the hang is the finding the margin carries.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(body.frameId);
 
   elements.push(

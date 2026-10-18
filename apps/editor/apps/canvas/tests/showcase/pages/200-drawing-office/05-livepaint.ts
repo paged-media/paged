@@ -92,16 +92,23 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const marigold = await doc.swatch(SWATCH.labMarigold);
   const layerContent = await doc.layerId(LAYER.content);
 
-  const head = await proseFrame(ctx, page, [left, 54, right, 82], [
-    { text: "The builder and the bucket", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, page, [left, 86, right, 126], [
-    {
-      text:
-        "Two ways to paint with an overlap. The Shape Builder unites what a drag sweeps; Live Paint treats the overlap's regions as fillable faces - derived, painted and released below with every face id taken from the engine's own planar answer.",
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [left, 54, right, 82],
+    [{ text: "The builder and the bucket", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [left, 86, right, 126],
+    [
+      {
+        text: "Two ways to paint with an overlap. The Shape Builder unites what a drag sweeps; Live Paint treats the overlap's regions as fillable faces - derived, painted and released below with every face id taken from the engine's own planar answer.",
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── SHAPE BUILDER — a real drag across two filled rectangles ─────
@@ -157,9 +164,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
             globalThis as unknown as {
               __canvas: {
                 client: {
-                  executeScript: (
-                    s: string,
-                  ) => Promise<{ output: string[] }>;
+                  executeScript: (s: string) => Promise<{ output: string[] }>;
                 };
               };
             }
@@ -203,14 +208,19 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     );
   }
 
-  const sbCaption = await proseFrame(ctx, page, [left, 280, right, 320], [
-    {
-      text: builderUnited
-        ? "A warm and a blue rectangle overlapped corner over corner; one Shape Builder drag from inside the first to inside the second swept both and committed a single union - the stepped silhouette above is ONE element now, wearing the first-swept warm fill, and one undo step."
-        : "A warm and a blue rectangle overlapped for the Shape Builder's drag; on this build lane the pointer sweep did not commit, and the pair stands untouched as the record of the attempt.",
-      style: STYLE.caption,
-    },
-  ]);
+  const sbCaption = await proseFrame(
+    ctx,
+    page,
+    [left, 280, right, 320],
+    [
+      {
+        text: builderUnited
+          ? "A warm and a blue rectangle overlapped corner over corner; one Shape Builder drag from inside the first to inside the second swept both and committed a single union - the stepped silhouette above is ONE element now, wearing the first-swept warm fill, and one undo step."
+          : "A warm and a blue rectangle overlapped for the Shape Builder's drag; on this build lane the pointer sweep did not commit, and the pair stands untouched as the record of the attempt.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(sbCaption.frameId);
 
   // ── LIVE PAINT — derive, paint, select, release ──────────────────
@@ -331,16 +341,21 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     "release keeps every member and every painted face",
   ).toBe(beforeRelease);
 
-  const lpCaption = await proseFrame(ctx, page, [left, 520, right, 600], [
-    {
-      text:
-        `Three stroked, unfilled quads; their overlaps make ${faces.length} planar faces. ` +
-        `A Live Paint group recorded the trio, ${painted} faces were filled by id and interior point from the engine's planar answer, ` +
-        `Select faces put the ${paintedCount} painted fills on the selection, and Release kept every stroke and fill while dropping the recipe. ` +
-        "Nothing here holds a face object: each colour is a real polygon inserted over its region.",
-      style: STYLE.caption,
-    },
-  ]);
+  const lpCaption = await proseFrame(
+    ctx,
+    page,
+    [left, 520, right, 600],
+    [
+      {
+        text:
+          `Three stroked, unfilled quads; their overlaps make ${faces.length} planar faces. ` +
+          `A Live Paint group recorded the trio, ${painted} faces were filled by id and interior point from the engine's planar answer, ` +
+          `Select faces put the ${paintedCount} painted fills on the selection, and Release kept every stroke and fill while dropping the recipe. ` +
+          "Nothing here holds a face object: each colour is a real polygon inserted over its region.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(lpCaption.frameId);
 
   elements.push(

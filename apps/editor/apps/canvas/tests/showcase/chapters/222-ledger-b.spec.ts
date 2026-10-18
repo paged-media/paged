@@ -32,7 +32,6 @@ import { p } from "../names-annual";
 import { build as pour } from "../pages/220-ledger/03-pour";
 import { build as formulas } from "../pages/220-ledger/04-formulas";
 
-
 // Continuation of 220-ledger - split for the in-chain per-op cost;
 // the checkpoint chain absorbs splits with zero logic change.
 annualChapter({

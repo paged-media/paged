@@ -51,7 +51,11 @@ const invoke = (page: Page, id: string) =>
     (cmd) =>
       (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (c: string) => Promise<unknown> } } };
+          __canvas: {
+            registries: {
+              commands: { invoke: (c: string) => Promise<unknown> };
+            };
+          };
         }
       ).__canvas.registries.commands.invoke(cmd),
     id,
@@ -60,7 +64,11 @@ const openPanels = (page: Page) =>
   page.evaluate(() => {
     const p = (
       globalThis as unknown as {
-        __canvas: { debugContext: () => { panels: { open: string[]; active: string | null } } };
+        __canvas: {
+          debugContext: () => {
+            panels: { open: string[]; active: string | null };
+          };
+        };
       }
     ).__canvas.debugContext().panels;
     return [p.active, ...p.open].filter(Boolean) as string[];
@@ -131,7 +139,9 @@ test.describe("journey · paged.doc plugin", () => {
     await expect(page.locator('[data-doc-panel="ready"]')).toBeVisible({
       timeout: 5_000,
     });
-    await expect(page.locator("[data-doc-summary]")).toContainText("paragraphs");
+    await expect(page.locator("[data-doc-summary]")).toContainText(
+      "paragraphs",
+    );
     await expect(page.locator("[data-doc-styles]")).toBeVisible();
     await expect(page.locator("[data-doc-diagnostics]")).toBeVisible();
     // Value depends on the host's readStory door — assert presence, log lane.
@@ -146,16 +156,22 @@ test.describe("journey · paged.doc plugin", () => {
     // snapshot against the pre-place baseline (a single cold sample flakes;
     // see the journey-flake lesson) before pinning the count.
     await expect
-      .poll(async () => designer.renderDiffPixels(before, await designer.renderBytes()), {
-        timeout: 15_000,
-      })
+      .poll(
+        async () =>
+          designer.renderDiffPixels(before, await designer.renderBytes()),
+        {
+          timeout: 15_000,
+        },
+      )
       .toBeGreaterThan(64);
 
     // EXPORT — the exporter re-emits a .docx (ZIP "PK\x03\x04"). With the
     // v54/v55 doors it is the edited save-back; without them it degrades to
     // the verbatim source — both are valid, so assert shape, log which lane.
     const out = await exportDocx(page);
-    expect("reason" in out ? out.reason : "", `docx export did not drive`).toBe("");
+    expect("reason" in out ? out.reason : "", `docx export did not drive`).toBe(
+      "",
+    );
     if (!("reason" in out)) {
       expect(out.magic.startsWith("PK")).toBe(true);
       expect(out.byteLength).toBeGreaterThan(500);

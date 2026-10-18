@@ -70,30 +70,50 @@ export function planAlign(
   let minLeft = Infinity;
   let maxBottom = -Infinity;
   let maxRight = -Infinity;
-  for (const { bounds: [t, l, b, r] } of entries) {
+  for (const {
+    bounds: [t, l, b, r],
+  } of entries) {
     minTop = Math.min(minTop, t);
     minLeft = Math.min(minLeft, l);
     maxBottom = Math.max(maxBottom, b);
     maxRight = Math.max(maxRight, r);
   }
   const out: ShellObjectOp[] = [];
-  const push = (address: string, [t, l, b, r]: Bounds, nTop: number, nLeft: number) => {
+  const push = (
+    address: string,
+    [t, l, b, r]: Bounds,
+    nTop: number,
+    nLeft: number,
+  ) => {
     if (Math.abs(nTop - t) < 1e-3 && Math.abs(nLeft - l) < 1e-3) return;
     const w = r - l;
     const h = b - t;
-    out.push({ op: "set", address, path: "frameBounds", value: [nTop, nLeft, nTop + h, nLeft + w] });
+    out.push({
+      op: "set",
+      address,
+      path: "frameBounds",
+      value: [nTop, nLeft, nTop + h, nLeft + w],
+    });
   };
   if (distribute) {
     const h = kind === "distributeH";
     const center = ([t, l, b, r]: Bounds) => (h ? (l + r) / 2 : (t + b) / 2);
-    const sorted = [...entries].sort((a, b) => center(a.bounds) - center(b.bounds));
+    const sorted = [...entries].sort(
+      (a, b) => center(a.bounds) - center(b.bounds),
+    );
     const first = center(sorted[0].bounds);
-    const step = (center(sorted[sorted.length - 1].bounds) - first) / (sorted.length - 1);
+    const step =
+      (center(sorted[sorted.length - 1].bounds) - first) / (sorted.length - 1);
     for (let i = 1; i < sorted.length - 1; i++) {
       const { address, bounds } = sorted[i];
       const [t, l, b, r] = bounds;
       const target = first + step * i;
-      push(address, bounds, h ? t : target - (b - t) / 2, h ? target - (r - l) / 2 : l);
+      push(
+        address,
+        bounds,
+        h ? t : target - (b - t) / 2,
+        h ? target - (r - l) / 2 : l,
+      );
     }
     return out;
   }
@@ -115,8 +135,19 @@ export function planAlign(
 }
 
 interface AlignObjects {
-  get(address: string, path: string): Promise<{ kind: string; value?: unknown }>;
-  batch(ops: readonly ShellObjectOp[], opts?: { label?: string }): Promise<{ applied: boolean; undoSteps: 0 | 1; code?: string; reason?: string }>;
+  get(
+    address: string,
+    path: string,
+  ): Promise<{ kind: string; value?: unknown }>;
+  batch(
+    ops: readonly ShellObjectOp[],
+    opts?: { label?: string },
+  ): Promise<{
+    applied: boolean;
+    undoSteps: 0 | 1;
+    code?: string;
+    reason?: string;
+  }>;
 }
 
 /** Run an alignment: read → plan → ONE batch. Returns the batch result

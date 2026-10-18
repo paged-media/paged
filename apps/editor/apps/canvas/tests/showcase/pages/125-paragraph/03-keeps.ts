@@ -67,9 +67,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const notes: string[] = [];
   const page = p(26);
 
-  const head = await proseFrame(ctx, page, [60, 58, 492, 92], [
-    { text: "Keeps and breaks", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [60, 58, 492, 92],
+    [{ text: "Keeps and breaks", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   /** A linked column pair pouring `paras`; returns the story id and
@@ -114,14 +117,19 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     { text: LEAD, style: STYLE.bodyFirst },
     { text: DEMO, style: STYLE.body },
   ]);
-  const capA = await proseFrame(ctx, page, [60, 213, 492, 241], [
-    {
-      text:
-        "paragraphKeepLinesTogether = false · the boundary cuts the " +
-        "paragraph where the first column ends",
-      style: STYLE.caption,
-    },
-  ]);
+  const capA = await proseFrame(
+    ctx,
+    page,
+    [60, 213, 492, 241],
+    [
+      {
+        text:
+          "paragraphKeepLinesTogether = false · the boundary cuts the " +
+          "paragraph where the first column ends",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(capA.frameId);
 
   // ── pair B: the same text, keep-lines-together ON ────────────────
@@ -129,14 +137,19 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     { text: LEAD, style: STYLE.bodyFirst },
     { text: DEMO, style: STYLE.body },
   ]);
-  const capB = await proseFrame(ctx, page, [60, 364, 492, 392], [
-    {
-      text:
-        "paragraphKeepLinesTogether = true · the same text, asked to " +
-        "cross the boundary whole",
-      style: STYLE.caption,
-    },
-  ]);
+  const capB = await proseFrame(
+    ctx,
+    page,
+    [60, 364, 492, 392],
+    [
+      {
+        text:
+          "paragraphKeepLinesTogether = true · the same text, asked to " +
+          "cross the boundary whole",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(capB.frameId);
 
   // ── pair C: keep-with-next on a foot-of-column heading ───────────
@@ -145,12 +158,17 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     { text: KWN_HEAD, style: STYLE.head2 },
     { text: KWN_BODY, style: STYLE.body },
   ]);
-  const capC = await proseFrame(ctx, page, [60, 500, 492, 528], [
-    {
-      text: "paragraphKeepWithNext = 1 on the heading",
-      style: STYLE.caption,
-    },
-  ]);
+  const capC = await proseFrame(
+    ctx,
+    page,
+    [60, 500, 492, 528],
+    [
+      {
+        text: "paragraphKeepWithNext = 1 on the heading",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(capC.frameId);
 
   // Measure: render with the keep flags still off…
@@ -196,9 +214,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     "paragraph is set three lines deep, and the opening words carry " +
     "the Lead-In character style in small capitals, the classic " +
     "pairing of a cap and its runway.";
-  const drop = await proseFrame(ctx, page, [60, 540, 266, 636], [
-    { text: DROP, style: STYLE.body },
-  ]);
+  const drop = await proseFrame(
+    ctx,
+    page,
+    [60, 540, 266, 636],
+    [{ text: DROP, style: STYLE.body }],
+  );
   elements.push(drop.frameId);
   const dropRange = doc.storyRangeId(drop.storyId, 0, DROP.length);
   await doc.setProperty("storyRange", dropRange, "paragraphDropCapCharacters", {
@@ -219,8 +240,16 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   // ── the spacing / indent battery (each line says what it carries) ─
   const battery = [
-    { text: "Space before, 13 pt, opens this line.", path: "paragraphSpaceBefore", value: 13 },
-    { text: "Space after, 13 pt, follows this line.", path: "paragraphSpaceAfter", value: 13 },
+    {
+      text: "Space before, 13 pt, opens this line.",
+      path: "paragraphSpaceBefore",
+      value: 13,
+    },
+    {
+      text: "Space after, 13 pt, follows this line.",
+      path: "paragraphSpaceAfter",
+      value: 13,
+    },
     {
       text:
         "First-line indent, 26 pt: only the opening line of this " +

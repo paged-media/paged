@@ -90,41 +90,41 @@ export function PanelRail({ items }: { items: PanelRailItem[] }) {
   };
 
   const renderItem = (item: PanelRailItem, plugin: boolean) => {
-        const active = isActive(item);
-        return (
-          <button
-            key={`${item.panelId}:${item.inspectorContext ?? ""}`}
-            type="button"
-            data-panel-rail-item={
-              item.inspectorContext
-                ? `${item.panelId}:${item.inspectorContext}`
-                : item.panelId
-            }
-            data-active={active ? "true" : "false"}
-            title={item.title}
-            onClick={() => toggle(item)}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 3,
-              width: 56,
-              padding: "7px 0 6px",
-              borderRadius: "var(--radius-md)",
-              border: "none",
-              cursor: "pointer",
-              background: active ? "var(--selected-bg)" : "transparent",
-              color: active ? "var(--pg-primary)" : "var(--chrome-icon)",
-            }}
-          >
-            {plugin && !hasIcon(item.icon) && panels.get(item.panelId)?.iconSvg ? (
-              <PluginGlyph svg={panels.get(item.panelId)!.iconSvg!} size={17} />
-            ) : (
-              <Icon name={item.icon} size={17} />
-            )}
-            <span style={{ fontSize: 9.5, lineHeight: 1 }}>{item.title}</span>
-          </button>
-        );
+    const active = isActive(item);
+    return (
+      <button
+        key={`${item.panelId}:${item.inspectorContext ?? ""}`}
+        type="button"
+        data-panel-rail-item={
+          item.inspectorContext
+            ? `${item.panelId}:${item.inspectorContext}`
+            : item.panelId
+        }
+        data-active={active ? "true" : "false"}
+        title={item.title}
+        onClick={() => toggle(item)}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 3,
+          width: 56,
+          padding: "7px 0 6px",
+          borderRadius: "var(--radius-md)",
+          border: "none",
+          cursor: "pointer",
+          background: active ? "var(--selected-bg)" : "transparent",
+          color: active ? "var(--pg-primary)" : "var(--chrome-icon)",
+        }}
+      >
+        {plugin && !hasIcon(item.icon) && panels.get(item.panelId)?.iconSvg ? (
+          <PluginGlyph svg={panels.get(item.panelId)!.iconSvg!} size={17} />
+        ) : (
+          <Icon name={item.icon} size={17} />
+        )}
+        <span style={{ fontSize: 9.5, lineHeight: 1 }}>{item.title}</span>
+      </button>
+    );
   };
 
   return (

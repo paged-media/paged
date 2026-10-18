@@ -53,7 +53,13 @@ import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { openPanel } from "../../../fidelity/canvas-driver";
-import { assignLayer, marginNote, proseFrame, specLabel, type Para } from "../../annual-support";
+import {
+  assignLayer,
+  marginNote,
+  proseFrame,
+  specLabel,
+  type Para,
+} from "../../annual-support";
 import { LAYER, STYLE, SWATCH, p } from "../../names-annual";
 import {
   ConsoleTap,
@@ -78,7 +84,14 @@ import {
 } from "./00-support";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ARTICLE = pathResolve(__dirname, "..", "..", "assets", "web", "long-read.html");
+const ARTICLE = pathResolve(
+  __dirname,
+  "..",
+  "..",
+  "assets",
+  "web",
+  "long-read.html",
+);
 
 /** The two equivalent frames, page-space (x0, y0, x1, y1). */
 const BAKE_FRAME: [number, number, number, number] = [48, 186, 300, 560];
@@ -100,9 +113,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   try {
     // ── p107: the BAKED lane (recto — where spread and page agree) ──
-    const head107 = await proseFrame(ctx, p(107), [48, 96, 480, 124], [
-      { text: "The baked lane", style: STYLE.head1 },
-    ]);
+    const head107 = await proseFrame(
+      ctx,
+      p(107),
+      [48, 96, 480, 124],
+      [{ text: "The baked lane", style: STYLE.head1 }],
+    );
     elements.push(head107.frameId);
 
     const bakeHost = await doc.rectangle(pg107, BAKE_FRAME);
@@ -114,7 +130,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     const rectsBefore = await sceneRefs(page, "rectangle");
     const textsBefore = await sceneRefs(page, "textFrame");
     const pathsBefore = await sceneRefs(page, "polygon");
-    const swatchesBefore = (await doc.designer.collection("swatches")) as Array<{
+    const swatchesBefore = (await doc.designer.collection(
+      "swatches",
+    )) as Array<{
       selfId: string;
     }>;
 
@@ -174,7 +192,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
           ),
         ].join(", ");
         await removeRefs(doc, strays);
-        notes.push(`the bake put ${strays.length} ${kind}(s) on ${spots}; removed`);
+        notes.push(
+          `the bake put ${strays.length} ${kind}(s) on ${spots}; removed`,
+        );
       }
       if (unresolved.length > 0) {
         notes.push(
@@ -229,7 +249,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       ? bakeReadout
           .split(" · ")
           .slice(0, 5)
-          .map((s, i) => (i === 0 ? `  readout: ${s.slice(0, 26)}` : `  ${s.slice(0, 26)}`))
+          .map((s, i) =>
+            i === 0 ? `  readout: ${s.slice(0, 26)}` : `  ${s.slice(0, 26)}`,
+          )
       : ["  readout: (none published)"];
     const receipts: Para[] = [
       "bakeWebFrame — this run's receipt:",
@@ -242,17 +264,22 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     const block = await proseFrame(ctx, p(107), [312, 186, 480, 400], receipts);
     elements.push(block.frameId);
 
-    const cap107 = await proseFrame(ctx, p(107), [312, 412, 480, 560], [
-      {
-        text:
-          "Everything the bake could not lower honestly it counted and " +
-          "reported instead — the deferred kinds above are the plugin " +
-          "keeping its books straight. What it did lower is ordinary page " +
-          "content now: these rectangles and text frames export to IDML " +
-          "and PDF like anything else in this annual, engine or no engine.",
-        style: STYLE.bodySmall,
-      },
-    ]);
+    const cap107 = await proseFrame(
+      ctx,
+      p(107),
+      [312, 412, 480, 560],
+      [
+        {
+          text:
+            "Everything the bake could not lower honestly it counted and " +
+            "reported instead — the deferred kinds above are the plugin " +
+            "keeping its books straight. What it did lower is ordinary page " +
+            "content now: these rectangles and text frames export to IDML " +
+            "and PDF like anything else in this annual, engine or no engine.",
+          style: STYLE.bodySmall,
+        },
+      ],
+    );
     elements.push(cap107.frameId);
 
     // The container's answer: which web parts travel with the file. A
@@ -279,20 +306,28 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     );
     // Below the bake's own spill: the pull-quote path the bake minted
     // reaches ~590 pt, so the apparatus line clears it at 600.
-    const partsBlock = await proseFrame(ctx, p(107), [48, 600, 480, 640], [
-      {
-        text:
-          `listPagedParts ${WEB_PARTS_PREFIX} → ${parts.length} part(s): ` +
-          webAnswer,
-        style: STYLE.codeBlock,
-      },
-    ]);
+    const partsBlock = await proseFrame(
+      ctx,
+      p(107),
+      [48, 600, 480, 640],
+      [
+        {
+          text:
+            `listPagedParts ${WEB_PARTS_PREFIX} → ${parts.length} part(s): ` +
+            webAnswer,
+          style: STYLE.codeBlock,
+        },
+      ],
+    );
     elements.push(partsBlock.frameId);
 
     // ── p108: the LIVE lane, authored through the PANEL ─────────────
-    const head108 = await proseFrame(ctx, p(108), [60, 96, 492, 124], [
-      { text: "The live lane", style: STYLE.head1 },
-    ]);
+    const head108 = await proseFrame(
+      ctx,
+      p(108),
+      [60, 96, 492, 124],
+      [{ text: "The live lane", style: STYLE.head1 }],
+    );
     elements.push(head108.frameId);
 
     const live = await doc.rectangle(pg108, LIVE_FRAME);
@@ -308,8 +343,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     const convert = page.locator("[data-web-make]");
     const htmlLane = page.locator("[data-web-html] [data-code-input]");
     await Promise.race([
-      convert.waitFor({ state: "visible", timeout: 120_000 }).catch(() => undefined),
-      htmlLane.waitFor({ state: "visible", timeout: 120_000 }).catch(() => undefined),
+      convert
+        .waitFor({ state: "visible", timeout: 120_000 })
+        .catch(() => undefined),
+      htmlLane
+        .waitFor({ state: "visible", timeout: 120_000 })
+        .catch(() => undefined),
     ]);
     if (await convert.isVisible().catch(() => false)) {
       await convert.click();
@@ -352,7 +391,8 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       }
       await settle(
         page,
-        () => tap.saw(/scene layer submitted/i) || tap.saw(/engine not loaded/i),
+        () =>
+          tap.saw(/scene layer submitted/i) || tap.saw(/engine not loaded/i),
         25_000,
       );
       liveRendered = tap.saw(/scene layer submitted/i);
@@ -376,26 +416,31 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       );
     }
 
-    const cap108 = await proseFrame(ctx, p(108), [324, 186, 492, 560], [
-      {
-        text: liveRendered
-          ? "This frame is being drawn by the web engine right now: a scene " +
-            "layer composed inside the frame, recomputed on every render. " +
-            "It is the better reading experience and the weaker artifact — " +
-            "session state, owned by the running plugin."
-          : "This frame carries the article's panel-committed source; on " +
-            "this run the render lane declined after the chapter's flow " +
-            "renders, so the live paint is absent — which previews the " +
-            "very asymmetry this spread is about.",
-        style: STYLE.bodySmall,
-      },
-      {
-        text:
-          "Turn back one leaf: the same source, flattened to native " +
-          "content that needs no engine at all.",
-        style: STYLE.bodySmall,
-      },
-    ]);
+    const cap108 = await proseFrame(
+      ctx,
+      p(108),
+      [324, 186, 492, 560],
+      [
+        {
+          text: liveRendered
+            ? "This frame is being drawn by the web engine right now: a scene " +
+              "layer composed inside the frame, recomputed on every render. " +
+              "It is the better reading experience and the weaker artifact — " +
+              "session state, owned by the running plugin."
+            : "This frame carries the article's panel-committed source; on " +
+              "this run the render lane declined after the chapter's flow " +
+              "renders, so the live paint is absent — which previews the " +
+              "very asymmetry this spread is about.",
+          style: STYLE.bodySmall,
+        },
+        {
+          text:
+            "Turn back one leaf: the same source, flattened to native " +
+            "content that needs no engine at all.",
+          style: STYLE.bodySmall,
+        },
+      ],
+    );
     elements.push(cap108.frameId);
   } finally {
     tap.stop();

@@ -58,43 +58,54 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const elements: string[] = [];
 
   // ── p24 (verso): head + explanation + specimen A (justified) ─────
-  const head = await proseFrame(ctx, p(24), [60, 58, 492, 92], [
-    { text: "One paragraph, two disciplines", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(24),
+    [60, 58, 492, 92],
+    [{ text: "One paragraph, two disciplines", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
-  const explain = await proseFrame(ctx, p(24), [60, 104, 280, 470], [
-    {
-      text:
-        "The paragraph to the right and the paragraph facing it across " +
-        "the gutter are the same text in the same measure. They differ " +
-        "by two range properties and nothing else.",
-      style: STYLE.bodyFirst,
-    },
-    {
-      text:
-        "On this page: paragraphHyphenation true, paragraphJustification " +
-        "LeftJustified. The composer may divide words at the hyphenation " +
-        "points the TeX patterns license, and it flexes the spaces of " +
-        "every line between the H&J minimum and maximum so the right " +
-        "edge lands flush. Opposite: paragraphHyphenation false, " +
-        "paragraphJustification LeftAlign. No division, no flex - each " +
-        "break is simply the last word that fits.",
-      style: STYLE.body,
-    },
-    {
-      text:
-        "Below, the parameter row: the same passage three times under " +
-        "characterTracking minus twenty, zero, and plus sixty " +
-        "thousandths of an em. Spacing pressure moves the breaks.",
-      style: STYLE.body,
-    },
-  ]);
+  const explain = await proseFrame(
+    ctx,
+    p(24),
+    [60, 104, 280, 470],
+    [
+      {
+        text:
+          "The paragraph to the right and the paragraph facing it across " +
+          "the gutter are the same text in the same measure. They differ " +
+          "by two range properties and nothing else.",
+        style: STYLE.bodyFirst,
+      },
+      {
+        text:
+          "On this page: paragraphHyphenation true, paragraphJustification " +
+          "LeftJustified. The composer may divide words at the hyphenation " +
+          "points the TeX patterns license, and it flexes the spaces of " +
+          "every line between the H&J minimum and maximum so the right " +
+          "edge lands flush. Opposite: paragraphHyphenation false, " +
+          "paragraphJustification LeftAlign. No division, no flex - each " +
+          "break is simply the last word that fits.",
+        style: STYLE.body,
+      },
+      {
+        text:
+          "Below, the parameter row: the same passage three times under " +
+          "characterTracking minus twenty, zero, and plus sixty " +
+          "thousandths of an em. Spacing pressure moves the breaks.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(explain.frameId);
 
-  const specA = await proseFrame(ctx, p(24), [302, 104, 492, 440], [
-    { text: SPECIMEN, style: STYLE.body },
-  ]);
+  const specA = await proseFrame(
+    ctx,
+    p(24),
+    [302, 104, 492, 440],
+    [{ text: SPECIMEN, style: STYLE.body }],
+  );
   elements.push(specA.frameId);
   const rangeA = doc.storyRangeId(specA.storyId, 0, SPECIMEN.length);
   await doc.setProperty("storyRange", rangeA, "paragraphHyphenation", {
@@ -105,14 +116,19 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     type: "text",
     value: "LeftJustified",
   });
-  const capA = await proseFrame(ctx, p(24), [302, 446, 492, 500], [
-    {
-      text:
-        "paragraphJustification = LeftJustified · " +
-        "paragraphHyphenation = true",
-      style: STYLE.caption,
-    },
-  ]);
+  const capA = await proseFrame(
+    ctx,
+    p(24),
+    [302, 446, 492, 500],
+    [
+      {
+        text:
+          "paragraphJustification = LeftJustified · " +
+          "paragraphHyphenation = true",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(capA.frameId);
 
   // ── p24 lower band: the H&J parameter row (tracking) ─────────────
@@ -122,9 +138,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     { x0: 348, x1: 480, value: 60 },
   ];
   for (const col of trackingColumns) {
-    const frame = await proseFrame(ctx, p(24), [col.x0, 516, col.x1, 600], [
-      { text: TRACKING_TEXT, style: STYLE.bodySmall },
-    ]);
+    const frame = await proseFrame(
+      ctx,
+      p(24),
+      [col.x0, 516, col.x1, 600],
+      [{ text: TRACKING_TEXT, style: STYLE.bodySmall }],
+    );
     elements.push(frame.frameId);
     await doc.setProperty(
       "storyRange",
@@ -132,19 +151,27 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       "characterTracking",
       { type: "length", value: col.value },
     );
-    const cap = await proseFrame(ctx, p(24), [col.x0, 604, col.x1, 634], [
-      {
-        text: `characterTracking = ${col.value >= 0 ? "+" : ""}${col.value}`,
-        style: STYLE.caption,
-      },
-    ]);
+    const cap = await proseFrame(
+      ctx,
+      p(24),
+      [col.x0, 604, col.x1, 634],
+      [
+        {
+          text: `characterTracking = ${col.value >= 0 ? "+" : ""}${col.value}`,
+          style: STYLE.caption,
+        },
+      ],
+    );
     elements.push(cap.frameId);
   }
 
   // ── p25 (recto): specimen B (ragged, unhyphenated) + notes ───────
-  const specB = await proseFrame(ctx, p(25), [48, 104, 238, 440], [
-    { text: SPECIMEN, style: STYLE.body },
-  ]);
+  const specB = await proseFrame(
+    ctx,
+    p(25),
+    [48, 104, 238, 440],
+    [{ text: SPECIMEN, style: STYLE.body }],
+  );
   elements.push(specB.frameId);
   const rangeB = doc.storyRangeId(specB.storyId, 0, SPECIMEN.length);
   await doc.setProperty("storyRange", rangeB, "paragraphHyphenation", {
@@ -155,50 +182,60 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     type: "text",
     value: "LeftAlign",
   });
-  const capB = await proseFrame(ctx, p(25), [48, 446, 238, 500], [
-    {
-      text:
-        "paragraphJustification = LeftAlign · " +
-        "paragraphHyphenation = false",
-      style: STYLE.caption,
-    },
-  ]);
+  const capB = await proseFrame(
+    ctx,
+    p(25),
+    [48, 446, 238, 500],
+    [
+      {
+        text:
+          "paragraphJustification = LeftAlign · " +
+          "paragraphHyphenation = false",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(capB.frameId);
 
-  const hj = await proseFrame(ctx, p(25), [260, 104, 480, 470], [
-    {
-      text: "Reading the comparison",
-      style: STYLE.head2,
-    },
-    {
-      text:
-        "Count the hyphens in the justified column, then look for the " +
-        "lines they rescue: without them the composer would be forced " +
-        "to stretch a three-word line across the full measure. The " +
-        "ragged column pays the other way - no line is strained, but " +
-        "the silhouette gives up its even edge.",
-      style: STYLE.bodyFirst,
-    },
-    {
-      text:
-        "The flex itself is governed by the H&J limits - minimum, " +
-        "desired and maximum word spacing, letter spacing, and glyph " +
-        "scaling. The engine parses and honours all three families " +
-        "when it composes the justified column above; none of them is " +
-        "yet a property path on the wire, so the parameter row beneath " +
-        "uses tracking, the spacing control that is.",
-      style: STYLE.body,
-    },
-    {
-      text:
-        "The fixture's body style also declares a 36 pt hyphenation " +
-        "zone. The zone steers ragged hyphenation only - for justified " +
-        "text the engine zeroes it, deliberately, to mirror InDesign - " +
-        "and it too has no wire path, so the comparison you see is the " +
-        "style's declaration at work, not a live write.",
-      style: STYLE.body,
-    },
-  ]);
+  const hj = await proseFrame(
+    ctx,
+    p(25),
+    [260, 104, 480, 470],
+    [
+      {
+        text: "Reading the comparison",
+        style: STYLE.head2,
+      },
+      {
+        text:
+          "Count the hyphens in the justified column, then look for the " +
+          "lines they rescue: without them the composer would be forced " +
+          "to stretch a three-word line across the full measure. The " +
+          "ragged column pays the other way - no line is strained, but " +
+          "the silhouette gives up its even edge.",
+        style: STYLE.bodyFirst,
+      },
+      {
+        text:
+          "The flex itself is governed by the H&J limits - minimum, " +
+          "desired and maximum word spacing, letter spacing, and glyph " +
+          "scaling. The engine parses and honours all three families " +
+          "when it composes the justified column above; none of them is " +
+          "yet a property path on the wire, so the parameter row beneath " +
+          "uses tracking, the spacing control that is.",
+        style: STYLE.body,
+      },
+      {
+        text:
+          "The fixture's body style also declares a 36 pt hyphenation " +
+          "zone. The zone steers ragged hyphenation only - for justified " +
+          "text the engine zeroes it, deliberately, to mirror InDesign - " +
+          "and it too has no wire path, so the comparison you see is the " +
+          "style's declaration at work, not a live write.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(hj.frameId);
 
   await marginNote(

@@ -56,17 +56,44 @@ export function TextFrameOptionsPanel() {
 function FlowGrowSection() {
   const { elementGeometry } = useSelection();
   const { contentSelection } = useContentSelection();
-  const fromFrames = elementGeometry.map((g) => g.storyId).filter((s): s is string => !!s);
-  const ids = fromFrames.length ? fromFrames : contentSelection ? [contentSelection.storyId] : [];
+  const fromFrames = elementGeometry
+    .map((g) => g.storyId)
+    .filter((s): s is string => !!s);
+  const ids = fromFrames.length
+    ? fromFrames
+    : contentSelection
+      ? [contentSelection.storyId]
+      : [];
   const key = [...new Set(ids)].join(" ");
-  const targets = useMemo(() => (key ? key.split(" ").map((id) => `story:${id}`) : []), [key]);
+  const targets = useMemo(
+    () => (key ? key.split(" ").map((id) => `story:${id}`) : []),
+    [key],
+  );
   if (!targets.length) return null;
   return (
     <CockpitSection title="Page growth">
-      <div className="flex flex-col gap-1.5 pb-2" data-flow-grow={targets.join(" ")}>
-        <PropertyField path="flowGrow" label="Add pages as text overflows" targets={targets} schemaKind="story" />
-        <PropertyField path="flowGrowMaxPages" label="At most (pages)" targets={targets} schemaKind="story" />
-        <PropertyField path="flowGrowCopyFrameOptions" label="Copy frame options" targets={targets} schemaKind="story" />
+      <div
+        className="flex flex-col gap-1.5 pb-2"
+        data-flow-grow={targets.join(" ")}
+      >
+        <PropertyField
+          path="flowGrow"
+          label="Add pages as text overflows"
+          targets={targets}
+          schemaKind="story"
+        />
+        <PropertyField
+          path="flowGrowMaxPages"
+          label="At most (pages)"
+          targets={targets}
+          schemaKind="story"
+        />
+        <PropertyField
+          path="flowGrowCopyFrameOptions"
+          label="Copy frame options"
+          targets={targets}
+          schemaKind="story"
+        />
       </div>
     </CockpitSection>
   );

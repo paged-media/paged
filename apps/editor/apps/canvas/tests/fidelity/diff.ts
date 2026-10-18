@@ -47,7 +47,12 @@ export interface DiffMetrics {
 
 /** The engine workspace that builds paged-diff (`REPO_ROOT` is apps/editor). */
 const ENGINE_ROOT = resolve(REPO_ROOT, "..", "..", "engine", "core");
-const DIFF_BIN = resolve(ENGINE_ROOT, process.env.CARGO_TARGET_DIR ?? "target", "release", "paged-diff");
+const DIFF_BIN = resolve(
+  ENGINE_ROOT,
+  process.env.CARGO_TARGET_DIR ?? "target",
+  "release",
+  "paged-diff",
+);
 
 let built = false;
 function ensureBuilt(): void {
@@ -101,7 +106,9 @@ export function diffPng(
   }
   const line = res.stdout.trim();
   if (!line) {
-    throw new Error(`paged-diff produced no stdout (stderr=${res.stderr ?? ""})`);
+    throw new Error(
+      `paged-diff produced no stdout (stderr=${res.stderr ?? ""})`,
+    );
   }
   const parsed = JSON.parse(line) as {
     mean_de: number;

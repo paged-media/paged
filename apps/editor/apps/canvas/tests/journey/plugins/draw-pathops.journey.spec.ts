@@ -88,8 +88,18 @@ test.describe("journey · paged.draw path ops", () => {
 
     // Helper — two overlapping filled rects, returns their ids.
     const twoOverlapping = async (): Promise<[string, string]> => {
-      const a = await designer.drawRectangle({ x0: 150, y0: 180, x1: 340, y1: 360 });
-      const b = await designer.drawRectangle({ x0: 280, y0: 180, x1: 470, y1: 360 });
+      const a = await designer.drawRectangle({
+        x0: 150,
+        y0: 180,
+        x1: 340,
+        y1: 360,
+      });
+      const b = await designer.drawRectangle({
+        x0: 280,
+        y0: 180,
+        x1: 470,
+        y1: 360,
+      });
       await designer.applyFill("rectangle", a, "Color/Black");
       await designer.applyFill("rectangle", b, "Color/Black");
       return [a, b];
@@ -117,7 +127,9 @@ test.describe("journey · paged.draw path ops", () => {
       const after = await designer.renderBytes();
       const changed = await designer.renderDiffPixels(before, after);
       if (changed <= 64) {
-        renderNotes.push(`pathfinder subtract: render changed only ${changed}px (≤64)`);
+        renderNotes.push(
+          `pathfinder subtract: render changed only ${changed}px (≤64)`,
+        );
       }
     }
 
@@ -151,7 +163,12 @@ test.describe("journey · paged.draw path ops", () => {
     //    changes (HARD); on the PUBLISHED engine 0.49.0 it still no-ops until
     //    the paired publish → soft-reported (never faked green). ──
     try {
-      const id = await designer.drawRectangle({ x0: 160, y0: 420, x1: 400, y1: 560 });
+      const id = await designer.drawRectangle({
+        x0: 160,
+        y0: 420,
+        x1: 400,
+        y1: 560,
+      });
       await designer.applyStroke("rectangle", id, "Color/Black", 8);
       await designer.selectElement("rectangle", id);
       const before = await designer.renderBytes();
@@ -164,7 +181,10 @@ test.describe("journey · paged.draw path ops", () => {
           `outlineStroke: no render change on a rectangle (${changed}px) — core fix landed but the published engine 0.49.0 no-ops until the paired publish (HARD under the sync-wasm override)`,
         );
       }
-      expect(await designer.count("rectangle"), "outlineStroke kept the element").toBeGreaterThan(0);
+      expect(
+        await designer.count("rectangle"),
+        "outlineStroke kept the element",
+      ).toBeGreaterThan(0);
     } catch (err) {
       collected.push(`outline stroke: ${String(err).split("\n")[0]}`);
     }
@@ -176,7 +196,12 @@ test.describe("journey · paged.draw path ops", () => {
     //    under the sync-wasm override; soft-reported on the published engine
     //    0.49.0 until the paired publish. ──
     try {
-      const id = await designer.drawRectangle({ x0: 440, y0: 420, x1: 560, y1: 540 });
+      const id = await designer.drawRectangle({
+        x0: 440,
+        y0: 420,
+        x1: 560,
+        y1: 540,
+      });
       await designer.applyFill("rectangle", id, "Color/Black");
       await designer.selectElement("rectangle", id);
       const before = await designer.renderBytes();
@@ -189,7 +214,10 @@ test.describe("journey · paged.draw path ops", () => {
           `offsetPath: no render change on a closed rect (${changed}px) — core fix landed; published engine 0.49.0 no-ops until the paired publish (HARD under the override)`,
         );
       }
-      expect(await designer.count("rectangle"), "offsetPath kept the element").toBeGreaterThan(0);
+      expect(
+        await designer.count("rectangle"),
+        "offsetPath kept the element",
+      ).toBeGreaterThan(0);
     } catch (err) {
       collected.push(`offset path: ${String(err).split("\n")[0]}`);
     }
@@ -211,7 +239,10 @@ test.describe("journey · paged.draw path ops", () => {
       await invokeCommand(page, "media.paged.draw.command.simplifyPath");
       // No assertion on anchor reduction (pinned no-op); the drive must
       // not throw + the element survives.
-      expect(await designer.count("polygon"), "simplify kept the path").toBeGreaterThan(0);
+      expect(
+        await designer.count("polygon"),
+        "simplify kept the path",
+      ).toBeGreaterThan(0);
     } catch (err) {
       collected.push(`simplify: ${String(err).split("\n")[0]}`);
     }
@@ -228,14 +259,19 @@ test.describe("journey · paged.draw path ops", () => {
       await designer.selectElement("polygon", id);
       await invokeCommand(page, "media.paged.draw.command.averageEndpoints");
       await invokeCommand(page, "media.paged.draw.command.joinEndpoints");
-      expect(await designer.count("polygon"), "join/average kept the path").toBeGreaterThan(0);
+      expect(
+        await designer.count("polygon"),
+        "join/average kept the path",
+      ).toBeGreaterThan(0);
     } catch (err) {
       collected.push(`join/average: ${String(err).split("\n")[0]}`);
     }
 
     if (renderNotes.length) {
       // eslint-disable-next-line no-console
-      console.log(`[journey] path-ops soft render notes: ${renderNotes.join("; ")}`);
+      console.log(
+        `[journey] path-ops soft render notes: ${renderNotes.join("; ")}`,
+      );
     }
     expect(
       collected,

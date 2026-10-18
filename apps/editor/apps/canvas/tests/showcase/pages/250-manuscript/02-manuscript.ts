@@ -78,27 +78,37 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const elements: string[] = [];
   const covers: string[] = [];
 
-  const head = await proseFrame(ctx, pg116, [60, 54, 492, 82], [
-    { text: "A manuscript, poured", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, pg116, [60, 88, 492, 170], [
-    {
-      text:
-        "The circulation report below began as annual-report.docx. The " +
-        "plugin lowered its OOXML to native paragraphs and character runs, " +
-        "synthesized the styles its word/styles.xml declares, and poured it " +
-        "here — what you are reading is Paged content, not an embedded " +
-        "viewer, and it flows across this spread through an ordinary frame " +
-        "chain. The source file travels inside this container beside it.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    pg116,
+    [60, 54, 492, 82],
+    [{ text: "A manuscript, poured", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    pg116,
+    [60, 88, 492, 170],
+    [
+      {
+        text:
+          "The circulation report below began as annual-report.docx. The " +
+          "plugin lowered its OOXML to native paragraphs and character runs, " +
+          "synthesized the styles its word/styles.xml declares, and poured it " +
+          "here — what you are reading is Paged content, not an embedded " +
+          "viewer, and it flows across this spread through an ordinary frame " +
+          "chain. The source file travels inside this container beside it.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   const t0 = Date.now();
   const lap = (label: string): void => {
     // eslint-disable-next-line no-console
-    console.log(`[250 timing] ${label} at t+${Math.round((Date.now() - t0) / 1000)}s`);
+    console.log(
+      `[250 timing] ${label} at t+${Math.round((Date.now() - t0) / 1000)}s`,
+    );
   };
   const tap = new ConsoleTap(page, /paged\.doc|\[doc\]/i);
   let summaryText: string | null = null;
@@ -169,7 +179,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     const { here, elsewhere } = await partitionByPage(page, minted, versoId);
 
     if (here.length > 0) {
-      covers.push("plugin-doc.embedded-placement", "editor-shell.plugin-bundles", "plugin-platform.file-picker");
+      covers.push(
+        "plugin-doc.embedded-placement",
+        "editor-shell.plugin-bundles",
+        "plugin-platform.file-picker",
+      );
       chapterDoc.placed = true;
       const pouredFrame = here[0];
       if (here.length > 1) {
@@ -275,7 +289,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
           })
           .catch(() => undefined);
       } else {
-        await doc.mutate("unlinkFrames", { frame: pouredFrame.id }).catch(() => undefined);
+        await doc
+          .mutate("unlinkFrames", { frame: pouredFrame.id })
+          .catch(() => undefined);
         await removeRefs(doc, [{ kind: "textFrame", id: f2 }]);
         notes.push(
           "linkFrames did not carry the manuscript's story into the recto " +
@@ -350,43 +366,58 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   }
 
   // ── the spread's captions, from measured facts ────────────────────
-  const capLeft = await proseFrame(ctx, pg116, [60, 568, 240, 656], [
-    {
-      text:
-        "Tiers on this page: the report's Heading 1 / Heading 2 / caption " +
-        "styles were synthesized into this document's catalog and applied " +
-        "over these paragraphs, and the counting rules and press calendar " +
-        "carry its two list families. Measured honestly: on this engine " +
-        "the applied styles and list glyphs do not change the paint — the " +
-        "story reads complete but renders in one face and size. Recorded, " +
-        "not retouched.",
-      style: STYLE.caption,
-    },
-  ]);
-  const capRight = await proseFrame(ctx, pg116, [252, 568, 492, 656], [
-    {
-      text: pouredNote,
-      style: STYLE.caption,
-    },
-  ]);
+  const capLeft = await proseFrame(
+    ctx,
+    pg116,
+    [60, 568, 240, 656],
+    [
+      {
+        text:
+          "Tiers on this page: the report's Heading 1 / Heading 2 / caption " +
+          "styles were synthesized into this document's catalog and applied " +
+          "over these paragraphs, and the counting rules and press calendar " +
+          "carry its two list families. Measured honestly: on this engine " +
+          "the applied styles and list glyphs do not change the paint — the " +
+          "story reads complete but renders in one face and size. Recorded, " +
+          "not retouched.",
+        style: STYLE.caption,
+      },
+    ],
+  );
+  const capRight = await proseFrame(
+    ctx,
+    pg116,
+    [252, 568, 492, 656],
+    [
+      {
+        text: pouredNote,
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(capLeft.frameId, capRight.frameId);
 
-  const capRecto = await proseFrame(ctx, pg117, [48, 606, 480, 666], [
-    {
-      text:
-        "Tiers continuing here: the circulation table keeps its gridSpan " +
-        "title row and vMerge'd Alpine cell; the plate mark arrives as an " +
-        "anchored image frame that paints the missing-image marker — the " +
-        "embedded PNG's bytes have no URI the anchored-frame door can " +
-        "fetch — and it overlaps the rows beneath it; “paged.media/annual” " +
-        "and “docs.paged.media” are the two Word hyperlink encodings — " +
-        "w:hyperlink and a HYPERLINK field — both lowered to native links. " +
-        (chapterDoc.partPath
-          ? `Source part, from the container's own listing: ${chapterDoc.partPath}`
-          : "The container listing carried no source part on this lane."),
-      style: STYLE.caption,
-    },
-  ]);
+  const capRecto = await proseFrame(
+    ctx,
+    pg117,
+    [48, 606, 480, 666],
+    [
+      {
+        text:
+          "Tiers continuing here: the circulation table keeps its gridSpan " +
+          "title row and vMerge'd Alpine cell; the plate mark arrives as an " +
+          "anchored image frame that paints the missing-image marker — the " +
+          "embedded PNG's bytes have no URI the anchored-frame door can " +
+          "fetch — and it overlaps the rows beneath it; “paged.media/annual” " +
+          "and “docs.paged.media” are the two Word hyperlink encodings — " +
+          "w:hyperlink and a HYPERLINK field — both lowered to native links. " +
+          (chapterDoc.partPath
+            ? `Source part, from the container's own listing: ${chapterDoc.partPath}`
+            : "The container listing carried no source part on this lane."),
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(capRecto.frameId);
 
   elements.push(

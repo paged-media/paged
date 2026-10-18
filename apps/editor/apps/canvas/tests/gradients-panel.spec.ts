@@ -79,7 +79,9 @@ test.describe("Phase 5 — Gradients panel", () => {
     const target = await page.evaluate(async () => {
       type DebugCanvas = {
         client: {
-          executeScript(src: string): Promise<{ output: string[]; error: string | null }>;
+          executeScript(
+            src: string,
+          ): Promise<{ output: string[]; error: string | null }>;
           setElementSelection(ids: unknown[], mode: string): Promise<unknown[]>;
         };
         setElementSelection?(ids: unknown[]): void;
@@ -89,11 +91,15 @@ test.describe("Phase 5 — Gradients panel", () => {
       const treeJson = await dbg.client
         .executeScript("paged.tree()")
         .then((r) => r.output[0] ?? "[]");
-      type Node = { id?: { kind: string; id: string } | null; children?: Node[] };
+      type Node = {
+        id?: { kind: string; id: string } | null;
+        children?: Node[];
+      };
       const walk = (nodes: Node[] | undefined): Node["id"] => {
         if (!nodes) return null;
         for (const n of nodes) {
-          if (n.id && (n.id.kind === "rectangle" || n.id.kind === "textFrame")) return n.id;
+          if (n.id && (n.id.kind === "rectangle" || n.id.kind === "textFrame"))
+            return n.id;
           const found = walk(n.children);
           if (found) return found;
         }
@@ -120,15 +126,20 @@ test.describe("Phase 5 — Gradients panel", () => {
                 elementProperties(id: unknown): Promise<{
                   entries: Array<{
                     path: string;
-                    value: { type: string; value: string | number | null } | null;
+                    value: {
+                      type: string;
+                      value: string | number | null;
+                    } | null;
                   }>;
                 } | null>;
               };
             };
-            const dbg = (window as unknown as { __canvas?: DebugCanvas }).__canvas;
+            const dbg = (window as unknown as { __canvas?: DebugCanvas })
+              .__canvas;
             const props = await dbg?.client.elementProperties(t);
             return (
-              props?.entries.find((e) => e.path === "frameFillColor")?.value?.value ?? null
+              props?.entries.find((e) => e.path === "frameFillColor")?.value
+                ?.value ?? null
             );
           }, target),
         { timeout: 5_000 },
