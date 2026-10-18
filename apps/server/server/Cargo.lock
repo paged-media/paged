@@ -734,6 +734,7 @@ version = "0.0.0"
 dependencies = [
  "base64",
  "paged-repo",
+ "paged-test-resources",
  "serde",
  "serde_json",
  "sha2",
@@ -743,6 +744,10 @@ dependencies = [
  "url",
  "zip 2.6.1",
 ]
+
+[[package]]
+name = "paged-test-resources"
+version = "0.0.0"
 
 [[package]]
 name = "percent-encoding"

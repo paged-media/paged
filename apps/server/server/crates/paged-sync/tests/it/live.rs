@@ -87,9 +87,16 @@ fn tab(url: &str) -> (String, thread::JoinHandle<Vec<Value>>) {
     (session, handle)
 }
 
+/// `PAGED_SERVER_URL`, or `None` after reporting the server unavailable
+/// (`PAGED_REQUIRE_SERVER=1` makes that a failure).
+fn server() -> Option<String> {
+    paged_test_resources::env_var(paged_test_resources::Resource::Server, "PAGED_SERVER_URL")
+}
+
 #[test]
+#[ignore = "server: a running paged.server (PAGED_SERVER_URL)"]
 fn engine_tools_reach_the_owners_tab_and_no_one_elses() {
-    let Ok(url) = std::env::var("PAGED_SERVER_URL") else {
+    let Some(url) = server() else {
         return;
     };
     let (session, handle) = tab(&url);
