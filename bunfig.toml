@@ -129,12 +129,18 @@ nursery = "off"
 "no-empty-static-block" = "error"
 "no-ex-assign" = "error"
 "no-extra-boolean-cast" = "error"
-"no-fallthrough" = ["error", { commentPattern = '(?i:falls?\s?through)', allowEmptyCase = false, reportUnusedFallthroughComment = false }]
+"no-fallthrough" = [
+  "error",
+  { commentPattern = '(?i:falls?\s?through)', allowEmptyCase = false, reportUnusedFallthroughComment = false },
+]
 "no-func-assign" = "error"
 "no-global-assign" = ["error", { exceptions = [] }]
 "no-import-assign" = "error"
 "no-invalid-regexp" = "error"
-"no-irregular-whitespace" = ["error", { skipStrings = true, skipComments = false, skipRegExps = false, skipTemplates = false, skipJSXText = false }]
+"no-irregular-whitespace" = [
+  "error",
+  { skipStrings = true, skipComments = false, skipRegExps = false, skipTemplates = false, skipJSXText = false },
+]
 "no-loss-of-precision" = ["error", { ignoreDecimals = false }]
 "no-misleading-character-class" = ["error", { allowEscape = false }]
 "no-new-native-nonconstructor" = "error"
@@ -153,7 +159,10 @@ nursery = "off"
 "no-unreachable" = "error"
 "no-unsafe-finally" = "error"
 "no-unsafe-negation" = ["error", { enforceForOrderingRelations = false }]
-"no-unsafe-optional-chaining" = ["error", { disallowArithmeticOperators = false }]
+"no-unsafe-optional-chaining" = [
+  "error",
+  { disallowArithmeticOperators = false },
+]
 "no-unused-labels" = "error"
 "no-unused-private-class-members" = "error"
 "no-useless-backreference" = "error"
@@ -161,7 +170,10 @@ nursery = "off"
 "no-useless-escape" = ["error", { allowRegexCharacters = [] }]
 "no-with" = "error"
 "require-yield" = "error"
-"use-isnan" = ["error", { enforceForIndexOf = false, enforceForSwitchCase = true }]
+"use-isnan" = [
+  "error",
+  { enforceForIndexOf = false, enforceForSwitchCase = true },
+]
 "valid-typeof" = ["error", { requireStringLiterals = false }]
 
 # The Rules of React: eslint-plugin-react-hooks 7.1's `recommended-latest`
@@ -201,41 +213,45 @@ nursery = "off"
 files = ["apps/editor/**/*.{ts,tsx}"]
 excludeFiles = ["apps/editor/packages/shell/**"]
 [lint.overrides.rules]
-"no-restricted-imports" = ["error", { patterns = [
-  { group = ["@paged-media/shell/components/*", "@paged-media/shell/src/*"], message = "Do not deep-import shell internals (components/ui/*, src/*). Import the public symbol from the @paged-media/shell barrel; the internals are not a stable API." },
-  { group = ["@paged-media/shell/tools/gesture-spine", "@paged-media/shell/src/tools/gesture-spine", "@paged-media/client/sab/gesture"], message = "The gesture-spine deep paths are reserved for packages/tools + packages/client. Everyone else uses the GestureSpine re-export from the @paged-media/shell barrel." },
-] }]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { group = ["@paged-media/shell/components/*", "@paged-media/shell/src/*"], message = "Do not deep-import shell internals (components/ui/*, src/*). Import the public symbol from the @paged-media/shell barrel; the internals are not a stable API." },
+    { group = ["@paged-media/shell/tools/gesture-spine", "@paged-media/shell/src/tools/gesture-spine", "@paged-media/client/sab/gesture"], message = "The gesture-spine deep paths are reserved for packages/tools + packages/client. Everyone else uses the GestureSpine re-export from the @paged-media/shell barrel." },
+  ] },
+]
 
 # (d): packages/tools and packages/client may use the gesture-spine paths.
 [[lint.overrides]]
-files = ["apps/editor/packages/tools/**/*.{ts,tsx}", "apps/editor/packages/client/**/*.{ts,tsx}"]
+files = [
+  "apps/editor/packages/tools/**/*.{ts,tsx}",
+  "apps/editor/packages/client/**/*.{ts,tsx}",
+]
 [lint.overrides.rules]
-"no-restricted-imports" = ["error", { patterns = [
-  { group = ["@paged-media/shell/components/*", "@paged-media/shell/src/*"], message = "Do not deep-import shell internals (components/ui/*, src/*). Import the public symbol from the @paged-media/shell barrel; the internals are not a stable API." },
-] }]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { group = ["@paged-media/shell/components/*", "@paged-media/shell/src/*"], message = "Do not deep-import shell internals (components/ui/*, src/*). Import the public symbol from the @paged-media/shell barrel; the internals are not a stable API." },
+  ] },
+]
 
 # (b): packages/client stays React-free.
 [[lint.overrides]]
 files = ["apps/editor/packages/client/**/*.{ts,tsx}"]
 [lint.overrides.rules]
-"no-restricted-imports" = ["error", { paths = [
-  { name = "react", message = "@paged-media/client must stay React-free — it is the wasm/SAB boundary and is imported by the worker. A React edge here reintroduces the worker-hang class." },
-  { name = "react-dom", message = "@paged-media/client must stay React-free (see the react restriction)." },
-], patterns = [
-  { group = ["@paged-media/shell/components/*", "@paged-media/shell/src/*"], message = "Do not deep-import shell internals (components/ui/*, src/*). Import the public symbol from the @paged-media/shell barrel; the internals are not a stable API." },
-] }]
+"no-restricted-imports" = [
+  "error",
+  { paths = [{ name = "react", message = "@paged-media/client must stay React-free — it is the wasm/SAB boundary and is imported by the worker. A React edge here reintroduces the worker-hang class." }, { name = "react-dom", message = "@paged-media/client must stay React-free (see the react restriction)." }], patterns = [{ group = ["@paged-media/shell/components/*", "@paged-media/shell/src/*"], message = "Do not deep-import shell internals (components/ui/*, src/*). Import the public symbol from the @paged-media/shell barrel; the internals are not a stable API." }] },
+]
 
 # (a): worker code. The most restrictive zone, so it comes last of the four.
 [[lint.overrides]]
 files = ["apps/editor/apps/canvas/src/worker/**/*.{ts,tsx}"]
 [lint.overrides.rules]
-"no-restricted-imports" = ["error", { paths = [
-  { name = "react", message = "Worker code must not import React. The shell barrel pulls React in and a worker that loads it HANGS at startup (real bug). Deep-import SAB/protocol primitives from @paged-media/client instead." },
-  { name = "react-dom", message = "Worker code must not import react-dom (see the react restriction)." },
-], patterns = [
-  { group = ["@paged-media/shell", "@paged-media/shell/*"], message = "Worker code must NEVER route through @paged-media/shell — the barrel loads React and the worker hangs at startup. Deep-import the primitive you need from @paged-media/client (its barrel is React-free)." },
-  { group = ["@paged-media/shell/components/*", "@paged-media/shell/src/*"], message = "Do not deep-import shell internals (components/ui/*, src/*). Import the public symbol from the @paged-media/shell barrel; the internals are not a stable API." },
-] }]
+"no-restricted-imports" = [
+  "error",
+  { paths = [{ name = "react", message = "Worker code must not import React. The shell barrel pulls React in and a worker that loads it HANGS at startup (real bug). Deep-import SAB/protocol primitives from @paged-media/client instead." }, { name = "react-dom", message = "Worker code must not import react-dom (see the react restriction)." }], patterns = [{ group = ["@paged-media/shell", "@paged-media/shell/*"], message = "Worker code must NEVER route through @paged-media/shell — the barrel loads React and the worker hangs at startup. Deep-import the primitive you need from @paged-media/client (its barrel is React-free)." }, { group = ["@paged-media/shell/components/*", "@paged-media/shell/src/*"], message = "Do not deep-import shell internals (components/ui/*, src/*). Import the public symbol from the @paged-media/shell barrel; the internals are not a stable API." }] },
+]
 
 # --- Built-ins and extensions (docs/adr/PM-0002) ---------------------------
 #
@@ -255,65 +271,89 @@ files = ["apps/editor/apps/canvas/src/worker/**/*.{ts,tsx}"]
 files = ["modules/data/packages/**/src/**/*.{ts,tsx}"]
 excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 [lint.overrides.rules]
-"no-restricted-imports" = ["error", { patterns = [
-  { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit)|react|react-dom|@duckdb/duckdb-wasm|apache-arrow)(/|$)|@paged-media/data-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages, react, and its listed third-party packages (paged.data: @duckdb/duckdb-wasm, apache-arrow). Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
-] }]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit)|react|react-dom|@duckdb/duckdb-wasm|apache-arrow)(/|$)|@paged-media/data-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages, react, and its listed third-party packages (paged.data: @duckdb/duckdb-wasm, apache-arrow). Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+  ] },
+]
 
 [[lint.overrides]]
 files = ["modules/doc/packages/**/src/**/*.{ts,tsx}"]
 excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 [lint.overrides.rules]
-"no-restricted-imports" = ["error", { patterns = [
-  { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit|doc)|react|react-dom)(/|$)|@paged-media/doc-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
-] }]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit|doc)|react|react-dom)(/|$)|@paged-media/doc-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+  ] },
+]
 
 [[lint.overrides]]
 files = ["modules/draw/packages/**/src/**/*.{ts,tsx}"]
 excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 [lint.overrides.rules]
-"no-restricted-imports" = ["error", { patterns = [
-  { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit)|react|react-dom)(/|$)|@paged-media/draw-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
-] }]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit)|react|react-dom)(/|$)|@paged-media/draw-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+  ] },
+]
 
 [[lint.overrides]]
 files = ["modules/image/{glue,manifest}/**/src/**/*.{ts,tsx}"]
 excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 [lint.overrides.rules]
-"no-restricted-imports" = ["error", { patterns = [
-  { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit)|react|react-dom)(/|$)|@paged-media/image-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
-] }]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit)|react|react-dom)(/|$)|@paged-media/image-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+  ] },
+]
 
 [[lint.overrides]]
 files = ["modules/publish/packages/**/src/**/*.{ts,tsx}"]
 excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 [lint.overrides.rules]
-"no-restricted-imports" = ["error", { patterns = [
-  { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit|publish|pdf)|react|react-dom|jszip)(/|$)|@paged-media/(publish|pdf)-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages, react, and its listed third-party packages (publish: jszip). Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
-] }]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit|publish|pdf)|react|react-dom|jszip)(/|$)|@paged-media/(publish|pdf)-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages, react, and its listed third-party packages (publish: jszip). Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+  ] },
+]
 
 [[lint.overrides]]
 files = ["modules/sheet/packages/**/src/**/*.{ts,tsx}"]
 excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 [lint.overrides.rules]
-"no-restricted-imports" = ["error", { patterns = [
-  { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit)|react|react-dom)(/|$)|@paged-media/sheet-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
-] }]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit)|react|react-dom)(/|$)|@paged-media/sheet-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+  ] },
+]
 
 [[lint.overrides]]
 files = ["modules/slide/packages/**/src/**/*.{ts,tsx}"]
 excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 [lint.overrides.rules]
-"no-restricted-imports" = ["error", { patterns = [
-  { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit|slide)|react|react-dom)(/|$)|@paged-media/slide-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
-] }]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit|slide)|react|react-dom)(/|$)|@paged-media/slide-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+  ] },
+]
 
 [[lint.overrides]]
 files = ["modules/web/packages/**/src/**/*.{ts,tsx}"]
 excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 [lint.overrides.rules]
-"no-restricted-imports" = ["error", { patterns = [
-  { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit)|react|react-dom)(/|$)|@paged-media/web-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
-] }]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { regex = '^(?!\.|(@paged-media/(plugin-api|plugin-sdk|test-kit)|react|react-dom)(/|$)|@paged-media/web-)', message = "A built-in module imports only the extension contract, platform/shared/*, its own packages and react. Promote what you need to plugin-api, use an existing capability, or record it (docs/adr/PM-0002)." },
+  ] },
+]
 
 # Community-facing: everything in platform/extensions (tests and scripts
 # included) imports only the public packages (@paged-media/plugin-api,
@@ -323,6 +363,9 @@ excludeFiles = ["**/*.spec.*", "**/*.test.*"]
 [[lint.overrides]]
 files = ["platform/extensions/**/*.{ts,tsx,js,mjs,cjs}"]
 [lint.overrides.rules]
-"no-restricted-imports" = ["error", { patterns = [
-  { regex = '^@paged-media/(?!(plugin-api|plugin-sdk|idml-viewer|canvas-wasm|plugin-cli|ai|cli)(/|$))', message = "platform/extensions is what third-party extensions build on: it imports only the public @paged-media packages (plugin-api, plugin-sdk, idml-viewer, canvas-wasm) and its own. Internal shared code (platform/shared/*), the modules and the editor are not part of the contract (docs/adr/PM-0002)." },
-] }]
+"no-restricted-imports" = [
+  "error",
+  { patterns = [
+    { regex = '^@paged-media/(?!(plugin-api|plugin-sdk|idml-viewer|canvas-wasm|plugin-cli|ai|cli)(/|$))', message = "platform/extensions is what third-party extensions build on: it imports only the public @paged-media packages (plugin-api, plugin-sdk, idml-viewer, canvas-wasm) and its own. Internal shared code (platform/shared/*), the modules and the editor are not part of the contract (docs/adr/PM-0002)." },
+  ] },
+]
