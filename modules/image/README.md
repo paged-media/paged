@@ -54,13 +54,14 @@ implementers never read `references/`. See `CLAUDE.md` and spec §3.1.
 
 ## Setup
 
-Sibling checkouts expected (`~/paged/{editor,plugin-sdk,plugin-image}`),
-install order matters for the `link:` chain:
+In the monorepo the editor is `apps/editor`, the extension SDK
+`platform/extensions` and this module `modules/image`; install order
+matters for the `link:` chain (from the repository root):
 
 ```bash
-cd ~/paged/editor && pnpm install
-cd ~/paged/plugin-sdk && pnpm install
-cd ~/paged/plugin-image && pnpm install
+(cd apps/editor && pnpm install)
+(cd platform/extensions && pnpm install)
+cd modules/image && pnpm install
 
 # Engine
 cargo build --workspace && cargo test --workspace

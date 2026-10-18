@@ -11,7 +11,7 @@
 # own sandbox container, open it, `calculate full`, save as .xlsx, close, move
 # the result back to build/<family>.excel.xlsx.
 #
-# The lifecycle is the one `~/paged/corpus/harness/convert-office.sh` learned
+# The lifecycle is the one the private corpus's `harness/convert-office.sh` learned
 # the hard way (see its header): stage in the container — Excel cannot reach
 # the repo and /private/tmp is reachable only by a grant that is not durable;
 # quit gracefully before ever SIGKILLing; settle after launch; judge success by

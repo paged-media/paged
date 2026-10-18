@@ -41,10 +41,11 @@ test.skip(!ROOT, "PAGED_MEDIA_ROOT is not set (stills are captured locally)");
 test.use({ viewport: { width: 1536, height: 860 }, deviceScaleFactor: 2, colorScheme: "dark" });
 
 const OUT = join(ROOT ?? "", ".build", "stills");
-const WORKSPACE = resolve(import.meta.dirname, "..", "..", "..", "..", "..", "..");
-const FONTS = join(WORKSPACE, "core", "corpus", "fonts");
+/** The monorepo root (tests/films/stills is seven levels below it). */
+const REPO_ROOT = resolve(import.meta.dirname, "..", "..", "..", "..", "..", "..", "..");
+const FONTS = join(REPO_ROOT, "engine", "core", "corpus", "fonts");
 /** The showcase annual as the showcase project last built it. */
-const SHOWCASE = process.env.SHOWCASE_PAGED ?? join(WORKSPACE, "editor", "apps", "canvas", "showcase", "showcase.paged");
+const SHOWCASE = process.env.SHOWCASE_PAGED ?? join(REPO_ROOT, "apps", "editor", "apps", "canvas", "showcase", "showcase.paged");
 const CSV = join(ROOT ?? "", "assets", "catalogue.csv");
 
 type CanvasGlobal = { __canvas: any };

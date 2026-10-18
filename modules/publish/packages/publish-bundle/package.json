@@ -48,7 +48,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/paged-media/plugin-publish.git",
-    "directory": "packages/publish-bundle"
+    "url": "git+https://github.com/paged-media/paged.git",
+    "directory": "modules/publish/packages/publish-bundle"
   }
 }

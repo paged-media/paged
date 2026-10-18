@@ -1,14 +1,14 @@
 # `tests/showcase/assets/` — what the showcase places, and under what licence
 
 The showcase builds a real document, so it places real files. They live
-here rather than in `~/paged/corpus` for one reason: the corpus is a
+here rather than in the corpus (`<repo root>/corpus`) for one reason: the corpus is a
 **private** repo, and a generator that only runs where someone has it
 checked out is a generator that does not run. Everything in this folder
 is redistributable, small, and carries its grant below.
 
 | file | what | origin | licence |
 |---|---|---|---|
-| `showcase-cat.jpg` | 320×240 progressive JPEG photograph, 21 KB | `tests/images/jpg/progressive/cat.jpg` from [`image-rs/image`](https://github.com/image-rs/image), upstream commit `44ce9226c541dd2b11897b9ef07156a28871cdb7`; mirrored locally at `~/paged/corpus/raster/image-rs/` | **MIT OR Apache-2.0** — image-rs's own dual licence. See that tree's `PROVENANCE.md`: this file is in the 165-asset "everything else" tier, the one with a grant in the box, not in the vendored `png/apng/wpt/` (BSD-3-Clause) or `tga/testsuite/` (rights never established) subtrees. |
+| `showcase-cat.jpg` | 320×240 progressive JPEG photograph, 21 KB | `tests/images/jpg/progressive/cat.jpg` from [`image-rs/image`](https://github.com/image-rs/image), upstream commit `44ce9226c541dd2b11897b9ef07156a28871cdb7`; mirrored locally in the private corpus at `corpus/raster/image-rs/` | **MIT OR Apache-2.0** — image-rs's own dual licence. See that tree's `PROVENANCE.md`: this file is in the 165-asset "everything else" tier, the one with a grant in the box, not in the vendored `png/apng/wpt/` (BSD-3-Clause) or `tga/testsuite/` (rights never established) subtrees. |
 | `showcase-cat-cmyk.jpg` | CMYK JPEG, 320×240, with core's `default_cmyk.icc` embedded (235 KB) | derived from `showcase-cat.jpg` by `gen-cmyk-jpeg.py` (byte-stable; rerun to regenerate) | **MIT OR Apache-2.0** — same grant as its source; the ICC profile is core's own distributable default. |
 | `showcase-mark.svg` | "Signal" — the vector mark page 6 imports | authored here for this repository | **AGPL-3.0-only OR PMEL**, the same dual licence as the rest of the editor. |
 

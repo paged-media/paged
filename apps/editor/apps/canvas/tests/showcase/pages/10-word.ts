@@ -38,10 +38,10 @@
 // showcase drives arrives as a published `@paged-media/*` canary.
 // `@paged-media/doc` has never been published, so the editor consumes it
 // through a pnpm override — `"@paged-media/doc":
-// "link:../plugins/plugin-doc/packages/doc-bundle"` in the workspace
-// root `package.json`. This page's behaviour therefore depends on the
-// LOCAL `~/paged/plugins/plugin-doc` checkout being present and built,
-// and a change there changes this page with no version bump in between.
+// "link:../../modules/doc/packages/doc-bundle"` in the editor's
+// `package.json`. This page's behaviour therefore depends on the
+// in-repo `modules/doc` module being built (its engine wasm), and a
+// change there changes this page with no version bump in between.
 //
 // RECIPE FROM: `tests/journey/plugins/doc.journey.spec.ts` (place →
 // outline panel → the poured story paints → the .docx exporter).

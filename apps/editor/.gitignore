@@ -14,8 +14,8 @@ playwright-report/
 .idea/
 .claude/
 
-# Local side-by-side-dev symlinks (→ ~/paged/corpus, ~/paged/core/target);
-# the corpus assets live in the paged-media/corpus repo, never here.
+# Local dev symlinks (→ <repo root>/corpus, engine/core/target);
+# the corpus assets live in the private corpus repo, never here.
 /corpus
 /target
 

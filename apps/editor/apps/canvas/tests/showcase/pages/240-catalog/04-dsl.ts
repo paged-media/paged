@@ -118,13 +118,13 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     }
   } else {
     notes.push(
-      "the plugin-data function registry is not checked out beside the " +
-        "editor — the roster could not be read and the page says so.",
+      "the paged.data function registry (modules/data/registry/functions) " +
+        "is absent — the roster could not be read and the page says so.",
     );
     const missing = await proseFrame(ctx, pg, [60, 184, 492, 240], [
       {
         text:
-          "The function registry (plugins/plugin-data/registry/functions) " +
+          "The function registry (modules/data/registry/functions) " +
           "is absent from this checkout; the roster cannot be printed " +
           "honestly and is not.",
         style: STYLE.bodySmall,

@@ -55,7 +55,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/paged-media/plugin-web.git",
-    "directory": "packages/web-bundle"
+    "url": "git+https://github.com/paged-media/paged.git",
+    "directory": "modules/web/packages/web-bundle"
   }
 }

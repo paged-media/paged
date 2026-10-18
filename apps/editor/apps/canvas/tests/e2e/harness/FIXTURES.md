@@ -13,22 +13,22 @@ signal.
 
 | File | Canonical source | Refresh |
 |---|---|---|
-| `sheet-02-formulas.xlsx` | `plugin-sheets/corpus/xlsx-corpus/02-formulas.xlsx` | see below |
-| `sheet-07-tables.xlsx` | `plugin-sheets/corpus/xlsx-corpus/07-tables.xlsx` | see below |
-| `sheet-09-chart.xlsx` | `plugin-sheets/corpus/xlsx-corpus/09-chart.xlsx` | see below |
-| `sheet-14-textstyles.xlsx` | `plugin-sheets/corpus/xlsx-corpus/14-textstyles.xlsx` | see below |
-| `doc-memo.docx` | `plugin-doc/docx-conformance/src/lib.rs` → `memo_docx()` | re-emit from that fn |
-| `slide-deck.pptx` | `plugin-slide/slide-conformance/fixtures/placeholders.pptx` (authored in PowerPoint: one slide per built-in layout) | copy again |
+| `sheet-02-formulas.xlsx` | `modules/sheet/corpus/xlsx-corpus/02-formulas.xlsx` | see below |
+| `sheet-07-tables.xlsx` | `modules/sheet/corpus/xlsx-corpus/07-tables.xlsx` | see below |
+| `sheet-09-chart.xlsx` | `modules/sheet/corpus/xlsx-corpus/09-chart.xlsx` | see below |
+| `sheet-14-textstyles.xlsx` | `modules/sheet/corpus/xlsx-corpus/14-textstyles.xlsx` | see below |
+| `doc-memo.docx` | `modules/doc/docx-conformance/src/lib.rs` → `memo_docx()` | re-emit from that fn |
+| `slide-deck.pptx` | `modules/slide/slide-conformance/fixtures/placeholders.pptx` (authored in PowerPoint: one slide per built-in layout) | copy again |
 | `data-people.csv` | authored here (plain CSV, no generator) | edit in place |
 | `annual-layers.psd` | `website/media/assets/annual-layers.psd` (400 × 300 px, layered RGB) | copy again |
 
 All four `.xlsx` are byte-identical to their source as of 2026-08-19,
 only renamed with a `sheet-` prefix. To refresh after
-`plugin-sheets/corpus/xlsx-corpus/generate.py` runs:
+`modules/sheet/corpus/xlsx-corpus/generate.py` runs (from `apps/editor`):
 
 ```bash
 for n in 02-formulas 07-tables 09-chart 14-textstyles; do
-  cp ~/paged/plugins/plugin-sheets/corpus/xlsx-corpus/$n.xlsx \
+  cp ../../modules/sheet/corpus/xlsx-corpus/$n.xlsx \
      apps/canvas/tests/e2e/harness/sheet-$n.xlsx
 done
 ```

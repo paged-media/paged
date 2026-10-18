@@ -45,7 +45,7 @@ pnpm install
 pnpm test           # contract-import lint + vitest in every package
 pnpm typecheck      # includes the wire-compat assertions against plugin-api
 pnpm bench          # geometry benches (trended, never gated)
-node ../plugin-sdk/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
+node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
 ```
 
 ## Tests

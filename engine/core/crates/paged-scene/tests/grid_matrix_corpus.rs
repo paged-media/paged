@@ -27,7 +27,9 @@
 //! mishandles one axis shows up as a whole row or column failing, not a
 //! scatter.
 //!
-//! OPT-IN — the assets live in the private corpus checkout:
+//! OPT-IN — the assets live in the private corpus checkout
+//! (`<repo root>/corpus`, gitignored; a local symlink — or name the root
+//! in `PAGED_GRID_CORPUS`):
 //!
 //! ```text
 //! PAGED_GRID_CORPUS=1 cargo test -p paged-scene --test grid_matrix_corpus -- --ignored --nocapture
@@ -47,7 +49,9 @@ fn matrix_files() -> Option<Vec<PathBuf>> {
     };
     let switch = switch.to_string_lossy().into_owned();
     let root = if switch == "1" || switch.is_empty() {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../corpus")
+        // <repo root>/corpus: engine/core/crates/paged-scene is four
+        // levels below the monorepo root.
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../corpus")
     } else {
         PathBuf::from(switch)
     };

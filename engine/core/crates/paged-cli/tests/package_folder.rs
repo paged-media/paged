@@ -36,7 +36,7 @@ fn repo() -> PathBuf {
 fn package_collects_links_and_fonts_into_one_folder() {
     let work = dir("collect");
     // `images.idml` links `file:checker-128.png` (relative to the
-    // document) and an absolute `photo.webp` that is on no machine.
+    // document) and `file:photo.webp`, which is not beside it.
     let doc = work.join("images.idml");
     std::fs::copy(repo().join("corpus/generated/images.idml"), &doc).expect("copy fixture");
     std::fs::write(work.join("checker-128.png"), b"not decoded by a package").expect("link");

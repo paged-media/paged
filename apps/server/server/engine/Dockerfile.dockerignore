@@ -1,0 +1,7 @@
+# Build-context filter for engine/Dockerfile, whose context is the repository
+# root (BuildKit reads <Dockerfile>.dockerignore next to the Dockerfile).
+**/target
+**/target-*
+**/node_modules
+**/.git
+corpus

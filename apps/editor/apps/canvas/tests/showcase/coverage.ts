@@ -72,8 +72,9 @@ export interface CoverageReport {
 }
 
 /**
- * Load every registry row, keyed by id. Empty when the sibling repo is
- * not checked out.
+ * Load every registry row, keyed by id. Empty when the registry is
+ * unavailable (`PAGED_FEATURE_REGISTRY` unset — the registry is private
+ * and not part of this repository).
  *
  * This reads the registry files by SPLITTING them into per-row blocks
  * and asking two questions of each: what is the `id`, and does any
@@ -91,9 +92,9 @@ export interface CoverageReport {
  * note does today, and the alternative was adding a YAML parser to the
  * editor's dependency tree to answer a yes/no question in a test.
  */
-export function loadRegistry(registryDir: string): Map<string, RegistryRow> {
+export function loadRegistry(registryDir: string | null): Map<string, RegistryRow> {
   const out = new Map<string, RegistryRow>();
-  if (!existsSync(registryDir)) return out;
+  if (registryDir === null || !existsSync(registryDir)) return out;
   for (const file of readdirSync(registryDir)) {
     if (!file.endsWith(".yaml")) continue;
     const text = readFileSync(join(registryDir, file), "utf8");
@@ -118,7 +119,7 @@ export function loadRegistry(registryDir: string): Map<string, RegistryRow> {
 }
 
 export function buildCoverage(
-  registryDir: string,
+  registryDir: string | null,
   claims: CoverageClaim[],
 ): CoverageReport {
   const registry = loadRegistry(registryDir);
@@ -143,7 +144,7 @@ export function buildCoverage(
   }
 
   return {
-    generatedFrom: registryDir,
+    generatedFrom: registryDir ?? "unavailable",
     registryFound: registry.size > 0,
     registryRows: registry.size,
     claimedRows: seen.size,

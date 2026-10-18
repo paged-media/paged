@@ -3,7 +3,7 @@
 Everything in this directory is **output**. It is produced by
 
 ```bash
-cd ~/paged/editor/apps/canvas
+cd apps/editor/apps/canvas
 npx playwright test --project=showcase
 ```
 
@@ -15,7 +15,7 @@ the document is and why it exists.
 | `showcase.paged` | the live document. Plugin frames keep their `x-paged:<id>` metadata envelopes and their `paged/<plugin>/…` container parts, so reopening it in the editor rehydrates them |
 | `showcase.idml` | the baked twin — every native page item, none of the `paged/` namespace. What a reader without the plugins sees, and what InDesign opens |
 | `showcase.pdf` | the same document through the engine's own PDF writer |
-| `showcase.coverage.json` | which registry rows each page demonstrates, resolved against `state/registry/features` at build time |
+| `showcase.coverage.json` | which registry rows each page demonstrates, resolved against the private feature registry (`PAGED_FEATURE_REGISTRY`) at build time; `unavailable` when it is not set |
 | `pages/page-NN.png` | one render per page |
 
 The artifacts are committed rather than gitignored, deliberately: a

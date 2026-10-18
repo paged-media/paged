@@ -38,8 +38,8 @@ import { CORE } from "./chapter";
 import { ShowcaseDoc } from "./driver";
 
 // core's own paged-gen output, the same place the chapters take the base
-// fixture from: the nightly checks out core beside the editor and runs
-// regen-fixtures, but has no corpus checkout (the old `<editor>/corpus`
+// fixture from: the in-repo engine (`engine/core`), whose regen-fixtures
+// the nightly runs; it has no corpus checkout (the old `<editor>/corpus`
 // path only resolved through a local symlink).
 const FIXTURE = pathResolve(CORE, "corpus", "generated", "text.idml");
 

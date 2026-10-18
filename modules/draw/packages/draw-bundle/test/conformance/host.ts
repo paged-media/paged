@@ -49,14 +49,13 @@ export const mapBacking = () => {
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 /** Where the engine wasm actually lives: the editor's `packages/client`
- *  (the repo install order: editor → plugin-sdk → plugin-draw). The
- *  published harness's built-in editor anchor predates the 2026-08-03
- *  move of the plugin repos under `~/paged/plugins/`, so probe the two
- *  known checkout layouts and hand the harness an explicit
- *  `resolveFrom`; its own anchors stay the fallback when the probe
- *  finds nothing. */
+ *  (in the monorepo at `apps/editor`, two levels above this module's root
+ *  `modules/draw`). The published harness's built-in editor anchor
+ *  predates the monorepo layout, so probe it here and hand the harness an
+ *  explicit `resolveFrom`; its own anchors stay the fallback when the
+ *  probe finds nothing. */
 const editorClientAnchor = (): string | undefined => {
-  const repoRoot = resolve(HERE, "../../../.."); // …/plugin-draw
+  const repoRoot = resolve(HERE, "../../../.."); // …/modules/draw
   // `PAGED_ENGINE_FROM` — a directory whose `node_modules` holds a LOCAL
   // engine build (an unpublished protocol, built from a core branch).
   // It wins over every pinned install, so a protocol-ahead feature can be
@@ -81,8 +80,7 @@ const editorClientAnchor = (): string | undefined => {
     // canvas-wasm as a devDependency, and a consumer never installs
     // those. So the consumer has to bring its own.
     resolve(repoRoot, "packages/draw-bundle"),
-    resolve(repoRoot, "../../editor/packages/client"), // ~/paged/plugins/<repo> layout
-    resolve(repoRoot, "../editor/packages/client"), // sibling (CI) layout
+    resolve(repoRoot, "../../apps/editor/packages/client"), // <repo root>/apps/editor
   ]) {
     if (
       existsSync(

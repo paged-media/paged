@@ -10,7 +10,7 @@
     "lint:contract": "node scripts/check-contract-imports.mjs",
     "test": "node scripts/check-contract-imports.mjs && pnpm -r run test",
     "build:wasm": "bash scripts/build-wasm.sh",
-    "validate:manifest": "node ../plugin-sdk/packages/plugin-cli/bin/paged-plugin.mjs validate packages/slide-bundle/manifest.json"
+    "validate:manifest": "node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/slide-bundle/manifest.json"
   },
   "devDependencies": {
     "tsup": "^8.5.1",

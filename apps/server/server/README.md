@@ -125,11 +125,12 @@ With no editor tab connected, engine tools run headless:
   `EngineObject`, with `PAGED_ENGINE_CONTAINER=1`. Add to `wrangler.jsonc` at deploy time:
 
   ```jsonc
-  "containers": [{ "class_name": "EngineObject", "image": "../../engine/Dockerfile", "max_instances": 4 }],
+  "containers": [{ "class_name": "EngineObject", "image": "../../engine/Dockerfile", "image_build_context": "../../../../..", "max_instances": 4 }],
   "vars": { "PAGED_ENGINE_CONTAINER": "1" }
   ```
 
-  It is not in the local config, because `wrangler dev` would then need a Docker daemon.
+  The build context is the repository root (`image_build_context`): the Dockerfile copies
+  `engine/core` from it. It is not in the local config, because `wrangler dev` would then need a Docker daemon.
   The image has not been built yet.
 
 ## Live relay

@@ -39,7 +39,7 @@ import { menu, press, screenPoint } from "../kit/ui";
 
 const MEDIA = process.env.PAGED_MEDIA_ROOT ?? "";
 const CSV = join(MEDIA, "assets", "catalogue.csv");
-const FONTS = join(import.meta.dirname, "..", "..", "..", "..", "..", "..", "core", "corpus", "fonts");
+const FONTS = join(import.meta.dirname, "..", "..", "..", "..", "..", "..", "..", "engine", "core", "corpus", "fonts");
 const RECORDS = 24;
 /** Pages stack 24 pt apart (ui/layout.ts): page n's top in document space. */
 const pageTop = (n: number) => (n - 1) * (792 + 24);

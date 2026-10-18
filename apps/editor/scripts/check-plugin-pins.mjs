@@ -23,9 +23,10 @@
 // normal, correct intermediate state. Run it when publishing or when
 // reconciling what the editor actually runs.
 //
-// Sibling repos are optional. In CI the editor is often checked out alone,
-// and there is nothing to compare against — that reports SKIPPED and exits
-// 0 rather than pretending to have verified something.
+// The bundles are read from this monorepo's modules/ (formerly sibling
+// plugin repos). Should none be found (a partial checkout), there is nothing
+// to compare against — that reports SKIPPED and exits 0 rather than
+// pretending to have verified something.
 //
 //   node scripts/check-plugin-pins.mjs              # fails on drift
 //   node scripts/check-plugin-pins.mjs --warn-only  # reports, exits 0
@@ -41,25 +42,18 @@ const strict = !process.argv.includes("--warn-only");
 
 const readJson = (p) => JSON.parse(readFileSync(p, "utf8"));
 
-// Where a plugin bundle's package.json lives differs by repo: most use
-// packages/<name>-bundle/, paged.image uses glue/. Probe both, and probe
-// both workspace layouts — plugins/ (local, since 2026-08-03) and a flat
-// sibling checkout (the CI layout). Same dual-probe the vite config uses
-// for DUCKDB_DIST.
-const REPO_ROOTS = [join(ROOT, "..", "plugins"), join(ROOT, "..")];
+// Where a plugin bundle's package.json lives differs by module: most use
+// packages/<name>-bundle/, paged.image uses glue/. Probe both, in every
+// module of the monorepo (`<repo root>/modules/<name>`).
+const MODULES_DIR = join(ROOT, "..", "..", "modules");
 
 function repoVersions() {
   const found = new Map();
-  for (const base of REPO_ROOTS) {
-    if (!existsSync(base)) continue;
-    for (const entry of readdirSafe(base)) {
-      if (!entry.startsWith("plugin-")) continue;
-      for (const rel of bundleManifestPaths(join(base, entry))) {
-        const pkg = readJsonSafe(rel);
-        if (!pkg?.name?.startsWith("@paged-media/") || !pkg.version) continue;
-        // First layout wins: plugins/ is the authoritative local checkout.
-        if (!found.has(pkg.name)) found.set(pkg.name, { version: pkg.version, from: rel });
-      }
+  for (const entry of readdirSafe(MODULES_DIR).sort()) {
+    for (const rel of bundleManifestPaths(join(MODULES_DIR, entry))) {
+      const pkg = readJsonSafe(rel);
+      if (!pkg?.name?.startsWith("@paged-media/") || !pkg.version) continue;
+      if (!found.has(pkg.name)) found.set(pkg.name, { version: pkg.version, from: rel });
     }
   }
   return found;
@@ -106,9 +100,9 @@ const isLocallyLinked = (name) =>
 
 if (repos.size === 0) {
   console.log(
-    "SKIPPED — no sibling plugin repos found next to the editor, so there is\n" +
-      "nothing to compare the pins against. This is expected in a CI checkout\n" +
-      "of the editor alone; it is NOT evidence that the pins are current.",
+    "SKIPPED — no module bundles found under modules/, so there is\n" +
+      "nothing to compare the pins against. This is expected only in a partial\n" +
+      "checkout; it is NOT evidence that the pins are current.",
   );
   process.exit(0);
 }

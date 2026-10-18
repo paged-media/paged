@@ -35,18 +35,12 @@ const TARGET = resolve(ROOT, "packages/plugin-api/src/wire.d.ts");
 // packages/client is the canonical declarer of the
 // @paged-media/canvas-wasm dependency; resolving from there picks up
 // the exact pinned version the editor (and therefore the engine wire)
-// is on. Overridable for CI layouts via PAGED_CANVAS_WASM_FROM.
+// is on. Overridable via PAGED_CANVAS_WASM_FROM.
 //
-// TWO layouts are probed because the plugin repos moved under
-// `~/paged/plugins/` on 2026-08-03. A bare `../editor` was correct when
-// this repo sat beside the editor and now points at
-// `~/paged/plugins/editor`, which does not exist — so the script failed
-// closed (correctly, but opaquely) on every local run. First existing
-// candidate wins; the same both-layouts probe the editor's vite config
-// uses for DUCKDB_DIST.
+// In the monorepo the editor sits at `apps/editor`, two levels above this
+// package's root (`platform/extensions`). First existing candidate wins.
 const RESOLVE_CANDIDATES = [
-  resolve(ROOT, "../../editor/packages/client"), // ~/paged/editor — local
-  resolve(ROOT, "../editor/packages/client"), // sibling — CI checkout
+  resolve(ROOT, "../../apps/editor/packages/client"), // <repo root>/apps/editor
 ];
 const RESOLVE_FROM =
   process.env.PAGED_CANVAS_WASM_FROM ??

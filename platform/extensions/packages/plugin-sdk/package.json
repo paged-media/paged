@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/plugin-sdk",
-  "version": "0.2.63-canary.0",
+  "version": "0.2.64-canary.0",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -40,8 +40,8 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/paged-media/plugin-sdk.git",
-    "directory": "packages/plugin-sdk"
+    "url": "git+https://github.com/paged-media/paged.git",
+    "directory": "platform/extensions/packages/plugin-sdk"
   },
   "publishConfig": {
     "access": "public",

@@ -2,9 +2,12 @@
 # paged.sheet — classify the full recalc lane's disagreements.
 #
 # Usage:
-#   PAGED_XLSX_CORPUS=~/paged/corpus PAGED_RECALC_REPORT=/tmp/r.tsv \
+#   PAGED_XLSX_CORPUS=1 PAGED_RECALC_REPORT=/tmp/r.tsv \
 #     cargo test -p sheet-conformance --test xlsx_recalc_corpus -- --ignored --nocapture
-#   python3 classify.py /tmp/r.tsv [~/paged/corpus/xlsx]
+#   python3 classify.py /tmp/r.tsv [<corpus root>/xlsx]
+#
+# The corpus root defaults to <repo root>/corpus (gitignored; a local symlink
+# to the private corpus), as PAGED_XLSX_CORPUS=1 does for the cargo lane.
 #
 # Files each differing/unparsed cell under one cause, reading the workbook
 # XML for what the engine's model does not keep (is the cell a shared-formula
@@ -13,7 +16,8 @@ import os, sys, zipfile, re, collections
 import xml.etree.ElementTree as ET
 M="{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
 R="{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
-root=(sys.argv[2] if len(sys.argv) > 2 else os.path.expanduser("~/paged/corpus/xlsx")).rstrip("/") + "/"
+REPO_ROOT=os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../../../.."))
+root=(sys.argv[2] if len(sys.argv) > 2 else os.path.join(REPO_ROOT, "corpus", "xlsx")).rstrip("/") + "/"
 rep=sys.argv[1]
 rows=[r for r in (l.rstrip("\n").split("\t") for l in open(rep)) if len(r)==8][1:]
 cache={}

@@ -53,13 +53,13 @@ already-computed output into committed host mutations.
 
 ## Setup
 
-Sibling checkouts; install order matters (`link:` chain):
+Components of the monorepo; install order matters (`link:` chain):
 
 ```
-~/paged/
-├── editor/         pnpm install   (1st)
-├── plugin-sdk/     pnpm install   (2nd)
-└── plugin-sheets/  pnpm install   (3rd)
+<repo root>/
+├── apps/editor/           pnpm install   (1st)
+├── platform/extensions/   pnpm install   (2nd)
+└── modules/sheet/         pnpm install   (3rd)
 ```
 
 ```bash
@@ -69,7 +69,7 @@ bash scripts/build-wasm.sh        # → packages/sheet-bundle/bin/ (100 MB app w
 
 # TS bundle
 pnpm install && pnpm test && pnpm typecheck
-node ../plugin-sdk/packages/plugin-cli/bin/paged-plugin.mjs validate packages/sheet-bundle/manifest.json
+node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/sheet-bundle/manifest.json
 ```
 
 ## T0 scope honesty

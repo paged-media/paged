@@ -69,8 +69,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/paged-media/plugin-draw.git",
-    "directory": "packages/draw-bundle"
+    "url": "git+https://github.com/paged-media/paged.git",
+    "directory": "modules/draw/packages/draw-bundle"
   },
   "peerDependencies": {
     "@paged-media/plugin-api": ">=0.2.55-canary.0",

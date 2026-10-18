@@ -25,7 +25,10 @@
 // keeps results comparable.
 //
 // The binary is built once via `cargo build --release --bin
-// paged-diff` and then re-used per call.
+// paged-diff` in the in-repo engine (`<repo root>/engine/core`) and then
+// re-used per call. It lands in engine/core/target, or in
+// $CARGO_TARGET_DIR when that is set (resolved against engine/core, as
+// cargo does).
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
@@ -42,7 +45,9 @@ export interface DiffMetrics {
   passes: boolean;
 }
 
-const DIFF_BIN = resolve(REPO_ROOT, "target", "release", "paged-diff");
+/** The engine workspace that builds paged-diff (`REPO_ROOT` is apps/editor). */
+const ENGINE_ROOT = resolve(REPO_ROOT, "..", "..", "engine", "core");
+const DIFF_BIN = resolve(ENGINE_ROOT, process.env.CARGO_TARGET_DIR ?? "target", "release", "paged-diff");
 
 let built = false;
 function ensureBuilt(): void {
@@ -54,7 +59,7 @@ function ensureBuilt(): void {
   execFileSync(
     "cargo",
     ["build", "--release", "-p", "paged-fidelity", "--bin", "paged-diff"],
-    { cwd: REPO_ROOT, stdio: "inherit" },
+    { cwd: ENGINE_ROOT, stdio: "inherit" },
   );
   built = true;
 }

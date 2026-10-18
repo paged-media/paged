@@ -16,7 +16,7 @@ from PIL import Image
 HERE = Path(__file__).parent
 OUT = HERE / "photos" / "derived"
 OUT.mkdir(parents=True, exist_ok=True)
-ICC = (HERE / "../../../../../../core/corpus/profiles/default_cmyk.icc").resolve()
+ICC = (HERE / "../../../../../../../engine/core/corpus/profiles/default_cmyk.icc").resolve()
 
 src = Image.open(HERE / "photos" / "pexels-574919-apples.jpg")
 w = 800

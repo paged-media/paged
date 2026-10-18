@@ -13,7 +13,7 @@ from pathlib import Path
 from PIL import Image
 
 HERE = Path(__file__).parent
-ICC = HERE / "../../../../../../core/corpus/profiles/default_cmyk.icc"
+ICC = HERE / "../../../../../../../engine/core/corpus/profiles/default_cmyk.icc"
 
 src = Image.open(HERE / "showcase-cat.jpg").convert("CMYK")
 src.save(
