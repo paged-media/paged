@@ -17,6 +17,8 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/web/docs/**/*.md"
   # Pre-merge gate: a PR that breaks the bundle goes red BEFORE it lands.
   pull_request:
     paths:
@@ -25,6 +27,8 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/web/docs/**/*.md"
   workflow_dispatch:
 
 permissions:

@@ -75,6 +75,8 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!apps/editor/docs/**/*.md"
   pull_request:
     paths:
       - "apps/editor/apps/canvas/**"

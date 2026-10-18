@@ -18,10 +18,14 @@ on:
     paths:
       - "platform/extensions/**"
       - ".github/workflows/extensions-contract-guard.yml"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!platform/extensions/docs/**/*.md"
   pull_request:
     paths:
       - "platform/extensions/**"
       - ".github/workflows/extensions-contract-guard.yml"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!platform/extensions/docs/**/*.md"
   workflow_dispatch:
 
 defaults:

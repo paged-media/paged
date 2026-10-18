@@ -29,6 +29,8 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!apps/editor/docs/**/*.md"
   workflow_dispatch:
   repository_dispatch:
     types: [engine-updated]

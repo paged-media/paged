@@ -7,12 +7,22 @@ on:
     paths:
       - "modules/data/**"
       - ".github/workflows/data-rust.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/data/docs/**/*.md"
   # Pre-merge gate: a PR that breaks the engine goes red BEFORE it lands
   # (this lane used to run on push to main only).
   pull_request:
     paths:
       - "modules/data/**"
       - ".github/workflows/data-rust.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/data/docs/**/*.md"
   workflow_dispatch:
 
 permissions:

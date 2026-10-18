@@ -134,6 +134,45 @@ checkout until its secret is set). Over the whole window the monorepo spent
 roughly doubled for core and grew 7–30× for the small modules, while their
 job minutes grew 1–2.5× (cache misses): the difference is queueing.
 
+## Lever 1: run only what is affected
+
+The path filters were checked against the monorepo layout: which Cargo
+workspaces path-depend on which (apps/server and modules/publish on
+engine/core crates; nothing else crosses a workspace), which files every Cargo
+build reads, and which non-code files tests read (`git grep` for `.md` reads:
+none under any `docs/` directory; `modules/sheet` reads its root
+`DECIMAL-SPIKE.md`, and core's `idml-coverage` reads JSON under
+`engine/core/docs/reference/`, so only `docs/**/*.md` is excluded).
+
+| Gap | Before | After | How measured |
+|---|---|---|---|
+| Root Cargo config (`.cargo/config.toml`: profiles, linker, rustc wrapper; `tooling/rust/`: the scripts it names) | in no workflow's filter: a change to them (A8b made two) ran no Rust lane | in the filters of all 13 Rust workflows (core ci, fidelity, gpu; data, doc, draw, sheet, slide, web rust; server; image ci and publish-state; publish ci) | workflow files |
+| core-gpu pull-request filter | 4 crate directories and the generated corpus: a `wgpu`/`vello` update in `Cargo.lock`, or a toolchain update, did not run the GPU lane | also `engine/core/Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml` | workflow file |
+| doc rust | push to main only (ported as it was): a pull request that broke `modules/doc` went red after merging | also on pull requests touching `modules/doc` | workflow file |
+| Docs-only changes | `engine/core/docs/x.md` ran core ci (~104 job-minutes) and core licenses on the pull request, plus fidelity and gpu on main; a module's docs ran its Rust and vitest lanes. 2–10 % of each component's commits in the last 90 days touched only its `docs/**/*.md` (core 14 of 816, data 14 of 190, web 14 of 136, image 8 of 207, sheet 7 of 197, editor 10 of 588, extensions 5 of 150) | `!<component>/docs/**/*.md` in every component workflow's push and pull-request filters: those commits run nothing heavy | workflow files; `git log --name-only` over 2026-07-18 – 2026-10-18 |
+
+Left as they are, with reasons:
+
+- **JS consumers of the engine.** On `main` the JS workspaces still consume
+  the engine as npm packages; the change to workspace packages, and the engine
+  paths in the vitest and editor filters, are B3a's (#14). Its filters should
+  also exclude `modules/*/docs/**/*.md` and include `tooling/rust/**`, since
+  its editor filter takes all of `modules/**`.
+- **doc vitest** stays push-only: B3a rewrites what it builds against.
+- **core-fidelity pull-request filter**: U1 (#15) adds `Cargo.toml`,
+  `Cargo.lock` and `rust-toolchain.toml`.
+- **`moon ci`** runs on every pull request without a path filter, which is
+  right: it computes the affected projects itself, from the task inputs in
+  `.moon/` (which already exclude `docs/**` and `**/*.md` and include
+  `/.cargo/*.toml`). It is advisory and runs every affected task from scratch
+  with no Rust cache, so a core pull request runs core's tests a further time:
+  46 runs, 497 job-minutes in the window, up to 66.5 job-minutes per run. Two
+  gaps: its inputs miss `tooling/rust/**`, and `!**/*.md` also hides
+  `modules/sheet/DECIMAL-SPIKE.md`, which a sheet test reads. Making `moon ci`
+  the required check, and dropping the per-component workflows it covers, is
+  where this lever goes next; until then its duplicate core run is the largest
+  avoidable cost left in this lever.
+
 ## Reproduce
 
 ```sh

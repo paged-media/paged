@@ -10,6 +10,8 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/doc/docs/**/*.md"
   workflow_dispatch:
 
 permissions:
