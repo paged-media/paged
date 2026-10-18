@@ -44,3 +44,6 @@ tsify-next = { workspace = true }
 # the Node-hosted `wasm-bindgen-test-runner`, like paged-canvas-wasm's.
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
 wasm-bindgen-test = "0.3"
+
+[dev-dependencies]
+paged-test-resources.workspace = true

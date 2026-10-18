@@ -17,10 +17,9 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import type { Disposable, VisibilityPredicate } from "./types";
-import type { CursorSpec } from "../tools/cursor";
-import type { GestureHandler } from "../tools/gesture-handler";
-import type { ToolOptionsSpec } from "../tools/tool-options";
+import type * as Api from "@paged-media/plugin-api";
+
+import type { Disposable, Registrable } from "./types";
 
 /**
  * Concept 1 (toolbar) — the fifth registry / fifth Contribution-API
@@ -35,7 +34,7 @@ import type { ToolOptionsSpec } from "../tools/tool-options";
  * exist. The rail renders whatever is registered; bundles contribute
  * tools through the identical `register` path the built-ins use.
  */
-export type ToolId = string;
+export type ToolId = Api.ToolId;
 
 /**
  * Flyout group — one rail SLOT. Tools that share a group occupy the
@@ -43,7 +42,7 @@ export type ToolId = string;
  * triangle (e.g. Pen + Add/Delete/Convert-Anchor; Rectangle + Ellipse
  * + Polygon). Free-form string so bundles can introduce new slots.
  */
-export type ToolGroupId = string;
+export type ToolGroupId = Api.ToolGroupId;
 
 /**
  * The four lettered clusters of the InDesign toolbox (A–D). These are
@@ -52,7 +51,7 @@ export type ToolGroupId = string;
  * refined here into group = slot + section = divider, matching the
  * `toolbar.png` reference: a section contains several flyout slots.)
  */
-export type ToolSectionId = "selection" | "drawType" | "transform" | "modNav";
+export type ToolSectionId = Api.ToolSectionId;
 
 /**
  * A named run of slots on the two-column rail — what a tool is FOR
@@ -100,48 +99,20 @@ export const BUILT_IN_TOOL_CLUSTERS: ReadonlyArray<{
  */
 export type ToolStatus = "ready" | "planned";
 
-export interface ToolContribution {
-  /** Stable id. Format `<namespace>.<tool>`, e.g. `paged.tool.pen`. */
-  id: ToolId;
-  /** Rail tooltip / label. */
-  title: string;
-  /** Icon name, resolved by the shared icon component. */
-  icon: string;
-  /** Single-key shortcut, e.g. `"v"`, `"a"`, `"shift+p"`. Claimed via
-   *  the KeybindingRegistry as a class with the text-suppression guard. */
-  shortcut?: string;
-  /** Flyout group (one rail slot). */
-  group: ToolGroupId;
-  /** Which A–D section divider the slot sits under. */
-  section: ToolSectionId;
+/**
+ * A tool as the shell's registry holds it: the contract's
+ * `ToolContribution` (id, title, icon, shortcut, group, section, order,
+ * slotOrder, isGroupDefault, cursor, gesture, options, when — the single
+ * definition, in `@paged-media/plugin-api`) plus the fields only the
+ * editor's own tools set. A bundle's contribution carries none of them
+ * and registers unchanged (`_ToolRegistrable` below).
+ */
+export interface ToolContribution extends Api.ToolContribution {
   /** The rail cluster the slot sits in — see {@link ToolClusterId}. */
   cluster?: ToolClusterId;
   /** One sentence for the rail tooltip: what the tool does, in the
    *  user's terms. The title names it; this says what a drag does. */
   description?: string;
-  /** Ordering within the group's flyout (and of slots within a section). */
-  order?: number;
-  /** B-14 (2026-06-06) — SLOT position hint within the section: the
-   *  rail orders slots by the minimum `slotOrder` across a group's
-   *  members, falling back to first-seen registration order. Lets a
-   *  late-registered bundle place its slot among the built-ins
-   *  instead of trailing the section. */
-  slotOrder?: number;
-  /** Marks the group's default tool (the filled-square tools in the
-   *  image) — shown on the slot face at rest. */
-  isGroupDefault?: boolean;
-  /** Cursor while active. May be overridden per-position by the
-   *  handler's `cursorAt`. */
-  cursor?: CursorSpec;
-  /** The gesture handler factory the spine mounts on activation
-   *  (Phase 2). Absent for tools whose handler / engine op isn't
-   *  wired yet — they appear in the rail but don't mutate. */
-  gesture?: () => GestureHandler;
-  /** Optional tool-level options (e.g. Polygon sides), shown in a
-   *  double-click popover. */
-  options?: ToolOptionsSpec;
-  /** Optional enablement predicate against application state. */
-  when?: VisibilityPredicate;
   /** Honest-stub marker — see {@link ToolStatus}. Omitted ⇒ `"ready"`. */
   status?: ToolStatus;
   /** Transitional bridge to the legacy scalar `ActiveTool` union
@@ -149,6 +120,12 @@ export interface ToolContribution {
    *  Drop once consumers read `ToolId` directly. */
   legacyKey?: "select" | "text";
 }
+
+/** A contract-authored tool registers here unchanged. */
+export type _ToolRegistrable = Registrable<
+  ToolContribution,
+  Api.ToolContribution
+>;
 
 /** Transitional alias — existing code that imported `Tool` keeps
  *  compiling against the richer shape. */
@@ -158,7 +135,7 @@ export type ToolRegistryEvent =
   | { kind: "registered"; contribution: ToolContribution }
   | { kind: "unregistered"; id: ToolId };
 
-export interface ToolRegistry {
+export interface ToolRegistry extends Api.ToolRegistry {
   register(contribution: ToolContribution): Disposable;
   unregister(id: ToolId): void;
   get(id: ToolId): ToolContribution | undefined;

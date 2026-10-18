@@ -39,7 +39,9 @@ cites its proposal number, "ADR 323".
   (a hard gate in CI, see `publish.yml`) fails on content drift OR a
   stale stamp. The EDITOR asserts compat through its dev link
   (`apps/canvas/src/plugin-api-compat.ts`) — widen a handle type only
-  with API review. The workspace builds STANDALONE; sibling checkouts
+  with API review. Its shell extends the contribution types instead of
+  copying them (editor ADR 226), so an editor-only field never needs to
+  enter this package. The workspace builds STANDALONE; sibling checkouts
   are a dev-time luxury.
 - **Naming:** the plugin runtime is `@paged-media/plugin-sdk`;
   `@paged-media/sdk` is the core repo's WebGPU `ViewerSession` and must

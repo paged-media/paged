@@ -20,31 +20,28 @@
 //! elements and confirm `CanvasModel::handle()` surfaces them on
 //! `DocumentHandle.ruler_guides`. Resume-template-teacher carries 14
 //! guides across its body pages.
-
-use std::path::PathBuf;
+//!
+//! The pack is in the private corpus, so this is the `corpus: idml` lane:
+//!
+//! ```text
+//! PAGED_CORPUS_DIR=<corpus root> cargo nextest run --profile corpus --run-ignored only
+//! ```
 
 use paged_canvas::{CanvasModel, CanvasOptions};
 
-fn fixture_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("..")
-        .join("..")
-        .join("corpus")
-        .join("envato")
-        .join("packs")
-        .join("resume-template-teacher")
-        .join("template.idml")
-}
-
 #[test]
+#[ignore = "corpus: idml"]
 fn document_handle_exposes_ruler_guides_from_real_idml() {
-    let path = fixture_path();
-    if !path.exists() {
-        // Envato pack not checked out — skip rather than fail. The
-        // packs are gitignored; CI hosts may not have them.
-        eprintln!("skipping: {} not present", path.display());
+    let Some(idml) = paged_test_resources::corpus("idml", &[]) else {
         return;
-    }
+    };
+    // The corpus IS mounted, so a pack that is not there is a stale lane.
+    let path = idml.join("packs/resume-template-teacher/template.idml");
+    assert!(
+        path.is_file(),
+        "{} is missing: the pack moved or was renamed — fix the lane",
+        path.display()
+    );
     let bytes = std::fs::read(&path).expect("read fixture");
     let opts = CanvasOptions::default();
     let model = CanvasModel::load("doc-rg", &bytes, opts).expect("load + build");

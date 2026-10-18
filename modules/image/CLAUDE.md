@@ -161,5 +161,17 @@ python3 -m venv .venv && .venv/bin/pip install psd-tools
 # not a barrier — the switch is not a credential. Running it is harmless:
 # it discloses only aggregates the committed artifacts already publish.
 # Do not build a gate that tries to detect who ran it.
-PAGED_ABR_CORPUS=1 cargo test -p image-conformance --test it -- --ignored --nocapture abr_corpus::
+PAGED_ABR_CORPUS=1 cargo nextest run --profile abr --run-ignored only
+
+# The private-corpus lanes (`#[ignore = "corpus: …"]`: psd, jpeg, png, raster).
+# Without the corpus they print `unavailable: private corpus: …`;
+# PAGED_REQUIRE_CORPUS=1 turns that into a failure (docs/development/testing.md
+# at the repository root). The old PAGED_<LANE>_CORPUS switches still work, with
+# a deprecation warning.
+PAGED_CORPUS_DIR=<corpus root> cargo nextest run --profile corpus --run-ignored only
+
+# GPU device tests print `unavailable: GPU adapter: …` without an adapter;
+# PAGED_REQUIRE_GPU=1 fails them instead (the GPU lanes set it), and
+# PAGED_FORCE_NO_GPU=1 hides this machine's adapter to prove that path.
+PAGED_FORCE_NO_GPU=1 PAGED_REQUIRE_GPU=1 cargo nextest run --workspace   # must fail
 ```

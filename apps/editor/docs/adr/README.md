@@ -18,12 +18,12 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [200](200-engine-as-npm-wasm-packages.md) | The engine is consumed as published npm wasm packages | Accepted, recorded retroactively 2026-10-02 |
 | [201](201-plugins-as-pinned-packages.md) | First-party plugins are compiled in as pinned published packages | Accepted, recorded retroactively 2026-10-02 |
 | [202](202-render-worker-owns-the-canvas.md) | The render worker owns the canvas; main thread and engine talk over a sequenced channel and shared memory | Accepted, recorded retroactively 2026-10-02 |
-| [203](203-shell-is-a-registry-host.md) | The shell is an app-agnostic registry host: the app declares, the shell renders | Accepted, recorded retroactively 2026-10-02 |
+| [203](203-shell-is-a-registry-host.md) | The shell is an app-agnostic registry host: the app declares, the shell renders | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-18) |
 | [204](204-declarative-property-panels.md) | Property panels are declarative compositions over a curated catalogue | Accepted, recorded retroactively 2026-10-02 |
 | [205](205-client-packaged-as-write-sdk.md) | The editor's wasm client is packaged as the write SDK | Accepted, recorded retroactively 2026-10-02 |
 | [206](206-package-layering-lint-zones.md) | Package layering is enforced by lint zones that have their own tests | Accepted, recorded retroactively 2026-10-02 |
 | [207](207-honest-seams.md) | Unbacked UI ships as a visible, inert seam | Accepted, recorded retroactively 2026-10-02 |
-| [208](208-tools-are-data-plus-gesture-handler.md) | Tools are data plus a gesture handler | Accepted, recorded retroactively 2026-10-02 |
+| [208](208-tools-are-data-plus-gesture-handler.md) | Tools are data plus a gesture handler | Accepted, recorded retroactively 2026-10-02 (amended 2026-10-18) |
 | [209](209-command-is-the-action-primitive.md) | The command is the single action primitive | Accepted, recorded retroactively 2026-10-02 |
 | [210](210-design-token-bridge.md) | One token file bridges the brand system to the UI substrate | Accepted, recorded retroactively 2026-10-02 |
 | [211](211-no-backend.md) | The editor has no backend: documents are local files | Accepted, recorded retroactively 2026-10-02 |
@@ -41,6 +41,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [223](223-the-module-door.md) | The editor answers the module door from a build-time module manifest | Accepted 2026-10-11 |
 | [224](224-films-are-recorded-by-the-editor.md) | The paged.media films are recorded by the editor's own test runner | Accepted 2026-10-12 |
 | [225](225-the-local-library.md) | The local library: open is an import, save is a version | Proposed 2026-10-17 |
+| [226](226-contribution-types-have-one-definition.md) | Contribution types have one definition: the contract, extended by the shell | Accepted 2026-10-18 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

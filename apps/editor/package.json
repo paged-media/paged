@@ -17,6 +17,7 @@
     "test:object-model": "bun test ./scripts/object-model.test.mjs",
     "test:wasm-budget": "bun scripts/wasm-budget.mjs",
     "test:surface-coverage": "bun scripts/surface-coverage.mjs",
+    "test:bundle-contracts": "bun run --filter ./apps/canvas test:contracts",
     "test:seam-guard": "bun scripts/seam-guard.mjs",
     "test:applicability": "bun scripts/applicability-guard.mjs",
     "test:feat-vocabulary": "bun scripts/feat-vocabulary-guard.mjs",

@@ -700,6 +700,7 @@ dependencies = [
  "base64",
  "flate2",
  "paged-repo",
+ "paged-test-resources",
  "serde",
  "serde_json",
  "sha2",
@@ -709,6 +710,10 @@ dependencies = [
  "url",
  "zip",
 ]
+
+[[package]]
+name = "paged-test-resources"
+version = "0.0.0"
 
 [[package]]
 name = "percent-encoding"

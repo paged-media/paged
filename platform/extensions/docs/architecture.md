@@ -209,7 +209,11 @@ in Node. It boots the installed `@paged-media/canvas-wasm` through the loader's 
 `handleMessage`, and runs the same `createBundleHost` on top. Document, selection, undo and
 metadata calls therefore reach a real engine, while recording registries keep what the
 bundle contributes for a test to assert on. A loaded bundle is held to its manifest
-([ADR 309](adr/309-conformance-against-real-engine.md), §5).
+([ADR 309](adr/309-conformance-against-real-engine.md), §5). `checkManifestConformance`
+holds it to the manifest in the other direction too: it activates the bundle, compares what
+was registered with what `contributes` (and `capabilities.keybindings`) declares, and
+returns `{ declaredNotRegistered, registeredNotDeclared }` per category, with a `drive` step
+for a lazy registration and allowances that must give a reason.
 
 ## The editor, the plugins and the documentation site
 
@@ -219,7 +223,8 @@ bundle contributes for a test to assert on. A loaded bundle is held to its manif
   `diagnosticsSink`, `schemaPanelRenderer` and a per-plugin `console`
   (`editor: apps/canvas/src/main.tsx:1251-1285`). `editor: apps/canvas/src/plugin-api-compat.ts`
   asserts at type level that the editor's real handle and registries satisfy
-  `packages/plugin-api/src/editor.ts`.
+  `packages/plugin-api/src/editor.ts`; the editor's contribution types are this package's,
+  extended rather than copied (editor ADR 226).
 - **Plugin repositories.** A bundle imports types from `plugin-api` and helpers from
   `plugin-sdk`, both as peer dependencies ([ADR 307](adr/307-contract-as-peer-dependency.md)).
 - **`docs`.** `.github/workflows/notify-docs.yml` pings it when the manifest schema changes.

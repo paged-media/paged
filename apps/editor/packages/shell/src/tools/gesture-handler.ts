@@ -31,6 +31,17 @@
 // (beginGesture / updateGesture / commitGesture) — never by reaching
 // into the model. Imperative rendering; declarative mutation.
 
+// The CONTRACT is `@paged-media/plugin-api`'s (ADR 226): a bundle's tool
+// and a built-in tool implement the same `GestureHandler`. The shell
+// narrows two things for its own handlers — they receive the shell's
+// richer `PagedEditor`, and a pointer event's `target` is a DOM
+// `EventTarget` — and both narrowings are checked against the contract
+// by `extends` below. A contract handler still mounts where the spine
+// expects a shell one (`_ContractHandlerMountable`).
+
+import type * as Api from "@paged-media/plugin-api";
+
+import type { Registrable } from "../registries/types";
 import type { PagedEditor } from "../state/paged-editor";
 import type { CursorSpec } from "./cursor";
 
@@ -43,72 +54,39 @@ import type { CursorSpec } from "./cursor";
  *                momentary Hand); the handler must KEEP its in-flight
  *                gesture so it resumes when the override is released.
  */
-export type DeactivateReason = "switch" | "suspend";
+export type DeactivateReason = Api.DeactivateReason;
 
 /**
  * A pointer event on the canvas overlay, already page-resolved and
  * camera-inverted by the spine, so handlers never touch camera math.
  * Mirrors what ViewportCanvas computes today (viewportToDoc +
- * findContainingPage). Coordinates are document points (pt).
+ * findContainingPage). Coordinates are document points (pt). The
+ * contract's event with `target` narrowed to the DOM target the spine
+ * reads it from.
  */
-export interface CanvasPointerEvent {
-  /** Page the pointer is over, or null on the pasteboard. */
-  pageId: string | null;
-  /** Page-local point in pt (docPoint − pageRect origin). null off-page. */
-  pagePoint: [number, number] | null;
-  /** Page-independent document point in pt. */
-  docPoint: [number, number];
-  /** Modifier snapshot (constrain / from-centre / momentary tools). */
-  modifiers: { shift: boolean; alt: boolean; cmd: boolean; ctrl: boolean };
-  /** Largest pointer delta this gesture, CSS px — for click-vs-drag. */
-  maxDelta: number;
-  /** Mouse button (0 = primary). */
-  button: number;
+export interface CanvasPointerEvent extends Api.CanvasPointerEvent {
   /** Underlying DOM target — handlers may read `data-handle` etc. */
   target: EventTarget | null;
-  /**
-   * Pointer-Events normalized pressure, 0..1 (B-08). Read straight
-   * from the DOM `PointerEvent.pressure`, so browser semantics carry
-   * through: a pen reports physical pressure; a mouse reports `0`
-   * with no button held and `0.5` while a button is held. Gates
-   * variable-width stylus strokes (§13.12, Tier B). Defaults to
-   * `0.5` on synthetic events that omit it.
-   */
-  pressure: number;
-  /** Pen tilt around the X axis, −90..90 deg. `0` for mouse/touch and
-   *  pens without tilt support. */
-  tiltX: number;
-  /** Pen tilt around the Y axis, −90..90 deg. `0` for mouse/touch and
-   *  pens without tilt support. */
-  tiltY: number;
-  /** Originating device class (`PointerEvent.pointerType`). Defaults
-   *  to `"mouse"`. */
-  pointerType: "mouse" | "pen" | "touch";
 }
 
 /**
  * An ephemeral overlay primitive a handler publishes during a gesture
- * (rubber-band rect, pen path preview, anchor dots). The concrete
- * variants are defined alongside the active-tool overlay in Phase 2;
- * the contract keeps it opaque so the type is stable now.
+ * (rubber-band rect, pen path preview, anchor dots). Opaque in the
+ * contract so the type stays stable.
  */
-export type OverlayPrimitive = Record<string, unknown>;
+export type OverlayPrimitive = Api.OverlayPrimitive;
 
 /** What `renderOverlay` draws into. The active-tool overlay reads the
  *  published primitives and renders them in the shared camera-
  *  transformed SVG. */
-export interface OverlayContext {
-  /** Publish this frame's ephemeral primitives; cleared on the next
-   *  publish or on deactivate. */
-  setPreview(primitives: readonly OverlayPrimitive[]): void;
-}
+export type OverlayContext = Api.OverlayContext;
 
 /**
  * The contract every tool's `gesture()` factory returns. Optional
  * members let simple handlers ignore keys / cursors / overlay
  * rendering.
  */
-export interface GestureHandler {
+export interface GestureHandler extends Api.GestureHandler {
   /** Tool became active. Receives the editor handle. */
   onActivate(paged: PagedEditor): void;
   /** Another tool takes over (or a spring-load suspend). */
@@ -130,3 +108,15 @@ export interface GestureHandler {
   /** Draw the in-progress gesture on the overlay (rubber-band, handles). */
   renderOverlay?(ctx: OverlayContext): void;
 }
+
+/**
+ * A contract-authored handler (a bundle's tool) mounts where the spine
+ * expects a shell handler. `extends` above proves the other direction;
+ * this one holds because the narrowed members are methods, which
+ * TypeScript compares bivariantly — and stops holding if the shell ever
+ * adds a member the contract's handlers do not have.
+ */
+export type _ContractHandlerMountable = Registrable<
+  GestureHandler,
+  Api.GestureHandler
+>;

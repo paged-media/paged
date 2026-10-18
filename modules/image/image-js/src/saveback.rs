@@ -1196,7 +1196,10 @@ mod tests {
     #[allow(non_snake_case)]
     fn psd_tools_reads_the_layered_save__feat__image_io_save_back() {
         if std::env::var("PAGED_PSD_ORACLE").as_deref() != Ok("1") {
-            return;
+            paged_test_resources::skip!(
+                paged_test_resources::Resource::Tools,
+                "psd-tools oracle: PAGED_PSD_ORACLE != 1 (and .venv with psd-tools)"
+            );
         }
         let path = std::env::temp_dir().join("paged-layered-save-oracle.psd");
         std::fs::write(&path, write_layered()).expect("write");

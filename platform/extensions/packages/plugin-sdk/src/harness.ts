@@ -53,8 +53,15 @@
 //     (`lastToolPreview()`, `lastToolPreviews()`, `overlayLayers()`);
 //     viewport.camera/pxToPt — RECORDED /
 //     synthetic (no canvas; camera is a fixed identity unless set).
-//   · contribute.editContext / objectType — RESERVED (still throw
-//     PluginApiNotImplemented via the shared host adapter).
+//   · contribute.editContext / objectType / importer / exporter /
+//     schemaPanel — RECORDED (the harness hooks are the registration log).
+//   · contribute.menu — a no-op headlessly (no menu registry is wired);
+//     the host adapter still refuses an entry onto an undeclared command.
+//
+// THE TWO-WAY CHECK (`checkManifestConformance`, at the end of this file):
+// the host adapter refuses to register what the manifest does not
+// declare; the check adds the other direction — what the manifest
+// declares and the bundle never registers.
 //
 // RESIDUALS (carried in plugin-draw/BREAKAGE_LOG.md B-13): gesture
 // REPLAY (driving a tool's `gesture()` machine event-by-event against
@@ -65,6 +72,7 @@
 import type {
   BundleHost,
   EnteredEditContext,
+  PluginLogger,
   ToolSettingValue,
   WillSaveEvent,
   ClipboardPayload,
@@ -164,6 +172,7 @@ export interface HarnessOptions
       | "objects"
       | "willSave"
       | "toolSettings"
+      | "pages"
     > {
   /** D-27 — back `host.text` with the ENGINE's shaper
    *  (`CanvasWorker.measureText`, the one the editor's worker calls)
@@ -950,6 +959,9 @@ export async function createHeadlessHost(
       // way the editor shell does, so the harness vouches for it.
       editContextEnterPoint: true,
       documents: documentsBackend,
+      // v70 — page navigation, when the test supplies a backend (absent:
+      // `supports("viewport.pages@1")` is false, as before).
+      pages: options.pages,
       // Record the SCHEMA verbatim at registration — the panel registry
       // only ever sees the synthesized React panel, so the conformance
       // log gets the schema through this adapter seam (no host renderer
@@ -1241,4 +1253,257 @@ export async function createHeadlessHost(
   };
 
   return headless;
+}
+
+// ------------------------------------------------- the two-way check
+
+/** The manifest categories the two-way check compares. Each is a
+ *  `contributes.*` list (or, for `keybindings`, the
+ *  `capabilities.keybindings` flag) against what activation registered
+ *  through the matching `host.contribute.*` door. `partTypes` is not one:
+ *  it declares what the bundle persists, and no door registers it. */
+export type ContributionCategory =
+  | "tools"
+  | "panels"
+  | "commands"
+  | "keybindings"
+  | "editContexts"
+  | "objectTypes"
+  | "importers"
+  | "exporters"
+  | "objectModelKinds"
+  | "objectModelCommands";
+
+export const CONTRIBUTION_CATEGORIES: readonly ContributionCategory[] = [
+  "tools",
+  "panels",
+  "commands",
+  "keybindings",
+  "editContexts",
+  "objectTypes",
+  "importers",
+  "exporters",
+  "objectModelKinds",
+  "objectModelCommands",
+];
+
+/** One category's drift, ids sorted. */
+export interface CategoryDrift {
+  /** The manifest declares it; the bundle never registered it. */
+  declaredNotRegistered: string[];
+  /** The bundle registered it; the manifest does not declare it. Under
+   *  the default `'enforce'` mode the host adapter refuses these at
+   *  registration, so the check activates in `'warn'` to see them all. */
+  registeredNotDeclared: string[];
+}
+
+/** A declared id the check excuses, and why. For a registration the check
+ *  cannot drive (it waits on something no headless host can produce).
+ *  `reason` is required: an allowance that cannot say why is a blanket
+ *  ignore. */
+export interface ManifestAllowance {
+  category: ContributionCategory;
+  id: string;
+  /** Which direction it excuses. Default `"declaredNotRegistered"`. */
+  direction?: keyof CategoryDrift;
+  reason: string;
+}
+
+export interface ManifestConformanceOptions extends HarnessOptions {
+  /** Runs after activation and before the comparison: drive the trigger a
+   *  lazy registration waits on (load a document, enter an edit context
+   *  through `h.enterEditContext`, invoke a command, …). A trigger that
+   *  is a host capability is driven through the harness options instead
+   *  (e.g. `pages` makes `supports("viewport.pages@1")` true). */
+  drive?: (h: HeadlessHost, host: BundleHost) => void | Promise<void>;
+  /** Declared ids excused from the comparison, each with its reason.
+   *  Allowances that match no drift come back in `unusedAllowances`. */
+  allow?: readonly ManifestAllowance[];
+  /** Activate on this headless host instead of booting one (the check
+   *  then leaves it running). Its contribution log may already hold other
+   *  bundles' entries; only the ones this activation adds are compared. */
+  host?: HeadlessHost;
+}
+
+export interface ManifestConformanceReport {
+  /** The bundle's manifest id. */
+  bundle: string;
+  categories: Record<ContributionCategory, CategoryDrift>;
+  /** The allowances that excused a drift entry. */
+  excused: ManifestAllowance[];
+  /** Allowances that matched nothing — a gap that closed, or a typo. */
+  unusedAllowances: ManifestAllowance[];
+  /** What the host adapter logged while the bundle activated in `'warn'`
+   *  mode (each one is a refusal under `'enforce'`). Empty when the caller
+   *  passed its own `console`, which then receives them. */
+  warnings: string[];
+  /** Every category empty after the allowances, and no unused allowance. */
+  ok: boolean;
+}
+
+/** What a bundle registered, per category, as the check reads it back. */
+export type RegisteredContributions = Record<ContributionCategory, readonly string[]>;
+
+/** A `panels[]` entry that is a `*.panel.json` path is a design prototype
+ *  the host does not interpret (see `PluginContributions.panels`), not an
+ *  id the bundle promises to register. */
+const isPanelPrototype = (entry: string): boolean => entry.endsWith(".panel.json");
+
+/**
+ * The comparison itself, pure: the manifest's declarations against what
+ * was registered. `checkManifestConformance` feeds it from a real
+ * activation; it is exported so a host with its own recording can reuse
+ * it.
+ */
+export function diffManifestContributions(
+  manifest: PluginManifest,
+  registered: RegisteredContributions,
+  allow: readonly ManifestAllowance[] = [],
+): Omit<ManifestConformanceReport, "bundle" | "warnings"> {
+  const c = manifest.contributes ?? {};
+  const declared: Record<ContributionCategory, readonly string[]> = {
+    tools: c.tools ?? [],
+    panels: (c.panels ?? []).filter((p) => !isPanelPrototype(p)),
+    commands: c.commands ?? [],
+    // A flag, not a list: declared means "this bundle registers keybindings".
+    keybindings: manifest.capabilities?.keybindings === true ? ["capabilities.keybindings"] : [],
+    editContexts: (c.editContexts ?? []).map((e) => e.type),
+    objectTypes: (c.objectTypes ?? []).map((e) => e.type),
+    importers: c.importers ?? [],
+    exporters: c.exporters ?? [],
+    objectModelKinds: (c.objectModel?.kinds ?? []).map((k) => k.kind),
+    objectModelCommands: (c.objectModel?.commands ?? []).map((k) => k.id),
+  };
+  for (const a of allow) {
+    if (!a.reason || a.reason.trim() === "") {
+      throw new Error(
+        `checkManifestConformance: the allowance for ${a.category} "${a.id}" has no reason`,
+      );
+    }
+  }
+  const used = new Set<ManifestAllowance>();
+  const excused: ManifestAllowance[] = [];
+  const excuse = (category: ContributionCategory, direction: keyof CategoryDrift, id: string): boolean => {
+    const a = allow.find(
+      (x) =>
+        x.category === category &&
+        x.id === id &&
+        (x.direction ?? "declaredNotRegistered") === direction,
+    );
+    if (!a) return false;
+    if (!used.has(a)) excused.push(a);
+    used.add(a);
+    return true;
+  };
+  const categories = {} as Record<ContributionCategory, CategoryDrift>;
+  for (const cat of CONTRIBUTION_CATEGORIES) {
+    const d = new Set(declared[cat]);
+    let r = new Set(registered[cat]);
+    // Keybindings carry no id to list: one registration satisfies the
+    // flag; without the flag, each registration is reported by itself.
+    if (cat === "keybindings" && d.size > 0 && r.size > 0) {
+      r = new Set(d);
+    }
+    categories[cat] = {
+      declaredNotRegistered: [...d]
+        .filter((id) => !r.has(id) && !excuse(cat, "declaredNotRegistered", id))
+        .sort(),
+      registeredNotDeclared: [...r]
+        .filter((id) => !d.has(id) && !excuse(cat, "registeredNotDeclared", id))
+        .sort(),
+    };
+  }
+  const unusedAllowances = allow.filter((a) => !used.has(a));
+  const ok =
+    unusedAllowances.length === 0 &&
+    CONTRIBUTION_CATEGORIES.every(
+      (cat) =>
+        categories[cat].declaredNotRegistered.length === 0 &&
+        categories[cat].registeredNotDeclared.length === 0,
+    );
+  return { categories, excused, unusedAllowances, ok };
+}
+
+/**
+ * The TWO-WAY manifest ↔ registration check. The host adapter already
+ * refuses a registration the manifest does not declare; nothing caught a
+ * manifest promising a tool (or panel, command, importer, object kind, …)
+ * that the bundle never registers. This activates `bundle` against a
+ * recording headless host, plays `options.drive`, lets one macrotask run
+ * (a registration queued behind a resolved promise or a zero timeout is
+ * seen), and compares what was registered with what the manifest
+ * declares, per category.
+ *
+ * The bundle activates in `'warn'` mode unless `capabilityMode` says
+ * otherwise, so an undeclared registration is reported instead of
+ * aborting activation at the first one.
+ *
+ * Runner-agnostic: it returns the report; asserting on it (`ok`, or the
+ * per-category lists) is the caller's.
+ */
+export async function checkManifestConformance(
+  bundle: PagedBundle,
+  options: ManifestConformanceOptions = {},
+): Promise<ManifestConformanceReport> {
+  const { drive, allow = [], host: given, ...harnessOptions } = options;
+  const warnings: string[] = [];
+  const quiet: PluginLogger = {
+    debug() {},
+    info() {},
+    warn(message: string) {
+      warnings.push(message);
+    },
+    error(message: string, ...args: unknown[]) {
+      console.error(message, ...args);
+    },
+  };
+  const h =
+    given ??
+    (await createHeadlessHost({
+      ...harnessOptions,
+      console: harnessOptions.console ?? quiet,
+      capabilityMode: harnessOptions.capabilityMode ?? "warn",
+    }));
+  const before = new Set(h.contributions);
+  let loaded: Disposable | null = null;
+  try {
+    loaded = h.loadBundle(bundle);
+    if (drive) await drive(h, h.host);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    const mine = h.contributions.filter((e) => !before.has(e));
+    const ids = (...kinds: RecordedContribution["kind"][]): string[] => [
+      ...new Set(mine.filter((e) => kinds.includes(e.kind)).map((e) => e.id)),
+    ];
+    const id = bundle.manifest.id;
+    const prefix = `plugin:${id}/`;
+    const kinds = (await h.objects.kinds())
+      .filter((k) => k.owner === id)
+      .map((k) => (k.kind.startsWith(prefix) ? k.kind.slice(prefix.length) : k.kind));
+    const commands = (await h.objects.commands()).filter((k) => k.owner === id).map((k) => k.id);
+    const registered: RegisteredContributions = {
+      tools: ids("tool"),
+      // A schema panel registers both a synthesized React panel and its
+      // schema; one id either way.
+      panels: ids("panel", "schemaPanel"),
+      commands: ids("command"),
+      keybindings: mine
+        .filter((e) => e.kind === "keybinding")
+        .map((e) => `${(e.value as KeybindingContribution).key} → ${(e.value as KeybindingContribution).command}`),
+      editContexts: ids("editContext"),
+      objectTypes: ids("objectType"),
+      importers: ids("importer"),
+      exporters: ids("exporter"),
+      objectModelKinds: [...new Set(kinds)],
+      objectModelCommands: [...new Set(commands)],
+    };
+    return {
+      bundle: id,
+      ...diffManifestContributions(bundle.manifest, registered, allow),
+      warnings,
+    };
+  } finally {
+    loaded?.dispose();
+    if (!given) h.dispose();
+  }
 }

@@ -29,6 +29,7 @@ use paged_export_pdf::{
     export_pdf, ExportInkSettings, ExportInput, ExportOptions, ExportProfiles, PdfStandard,
 };
 use paged_renderer::pipeline::{self, FontTable, PipelineOptions};
+use paged_test_resources::{skip, Resource};
 
 fn fixture_bytes(name: &str) -> Option<Vec<u8>> {
     let manifest = env!("CARGO_MANIFEST_DIR");
@@ -78,7 +79,8 @@ struct Built {
 
 fn build_fixture(name: &str, font: &Option<Vec<u8>>) -> Option<Built> {
     let bytes = fixture_bytes(name)?;
-    let document = idml_import::import_idml_doc(&bytes).ok()?;
+    let document = idml_import::import_idml_doc(&bytes)
+        .unwrap_or_else(|e| panic!("corpus/generated/{name} does not import: {e:?}"));
     let mut opts = PipelineOptions {
         collect_glyph_runs: true,
         ..Default::default()
@@ -165,8 +167,10 @@ fn export(built: &Built, profile: Option<&[u8]>) -> Vec<u8> {
 fn x4_export_validates_with_lopdf() {
     let font = fallback_font();
     let Some(built) = build_fixture("geometry.idml", &font) else {
-        eprintln!("export_x4: corpus/generated/geometry.idml absent — skipping");
-        return;
+        skip!(
+            Resource::Fixtures,
+            "corpus/generated/geometry.idml is absent: run scripts/regen-fixtures.sh"
+        );
     };
     let profile = find_cmyk_profile();
     let is_x4 = profile.is_some();
@@ -281,8 +285,10 @@ fn x4_export_validates_with_lopdf() {
 fn double_export_is_byte_identical() {
     let font = fallback_font();
     let Some(built) = build_fixture("geometry.idml", &font) else {
-        eprintln!("export_x4: corpus/generated/geometry.idml absent — skipping");
-        return;
+        skip!(
+            Resource::Fixtures,
+            "corpus/generated/geometry.idml is absent: run scripts/regen-fixtures.sh"
+        );
     };
     let profile = find_cmyk_profile();
     let a = export(&built, profile.as_deref());
@@ -294,8 +300,10 @@ fn double_export_is_byte_identical() {
 fn effects_fixture_exports_transparency_groups() {
     let font = fallback_font();
     let Some(built) = build_fixture("effects.idml", &font) else {
-        eprintln!("export_x4: corpus/generated/effects.idml absent — skipping");
-        return;
+        skip!(
+            Resource::Fixtures,
+            "corpus/generated/effects.idml is absent: run scripts/regen-fixtures.sh"
+        );
     };
     let bytes = export(&built, None);
     let doc = lopdf::Document::load_mem(&bytes).expect("lopdf re-parse");
@@ -331,10 +339,7 @@ fn build_diagnostics_promote_to_preflight_findings() {
     let bytes = paged_gen::write_idml(&paged_gen::samples::preflight::build())
         .expect("emit preflight sample IDML");
     let font = fallback_font();
-    let Some(built) = build_from_bytes(&bytes, &font) else {
-        eprintln!("preflight: sample build failed — skipping");
-        return;
-    };
+    let built = build_from_bytes(&bytes, &font).expect("the preflight sample imports");
 
     // Sanity: the build itself collected the document-health diagnostics
     // (the source the exporter now promotes).

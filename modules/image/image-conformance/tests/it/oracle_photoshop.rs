@@ -41,7 +41,7 @@
 //! `PAGED_PHOTOSHOP_LEDGER=write cargo test -p image-conformance --test
 //! oracle_photoshop`). Scalar references run everywhere; cases whose
 //! only engine path is a GPU chain need a device and skip without one
-//! (`REQUIRE_GPU=1` makes that a failure).
+//! (`PAGED_REQUIRE_GPU=1` makes that a failure).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;

@@ -71,7 +71,7 @@
 //! `tests/it/unmodelled_item_roundtrip.rs`,
 //! `tests/it/tint_sentinel_roundtrip.rs`,
 //! `tests/it/graphic_line_fill_roundtrip.rs` and `tests/it/label_roundtrip.rs`
-//! (opt-in `PAGED_IDML_CORPUS` lanes); this is what you run to find the
+//! (the opt-in `corpus: idml` lanes); this is what you run to find the
 //! next one.
 //!
 //! As of the `None`-is-not-absent wave every lane reads 0 over all
@@ -217,9 +217,13 @@ where
 
 fn main() {
     let root = std::env::args().nth(1).unwrap_or_else(|| {
-        // The default: the monorepo's <repo root>/corpus (gitignored; a
-        // local symlink to the private corpus).
-        format!("{}/../../../../corpus", env!("CARGO_MANIFEST_DIR"))
+        // The default: PAGED_CORPUS_DIR, else the monorepo's
+        // <repo root>/corpus (gitignored; a local symlink to the private
+        // corpus).
+        std::env::var("PAGED_CORPUS_DIR")
+            .ok()
+            .filter(|d| !d.is_empty())
+            .unwrap_or_else(|| format!("{}/../../../../corpus", env!("CARGO_MANIFEST_DIR")))
     });
     let opts = Opts {
         verbose: std::env::var("SWEEP_VERBOSE").is_ok(),

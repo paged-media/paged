@@ -31,7 +31,9 @@
 //!   ANY count moves — a regression lowers `agree`, a fix raises it, and both
 //!   must update the table in the same commit. A file present without a row,
 //!   or a row without a file, fails too.
-//! * **Local, full** — `PAGED_XLSX_CORPUS=1` (or a corpus root) walks the
+//! * **Local, full** — `#[ignore = "corpus: xlsx"]` (`PAGED_CORPUS_DIR=<corpus
+//!   root> cargo nextest run --profile corpus --run-ignored only`, see
+//!   docs/development/testing.md) walks the
 //!   private corpus's `xlsx/authored` + `xlsx/poi-converted`, selects by
 //!   CONTENT (a ZIP that opens and carries formula cells — never by
 //!   extension), and REPORTS pass rates and the top disagreement classes.
@@ -202,30 +204,14 @@ fn xlsx_recalc_matches_excel_cached_values_ci_subset__feat__sheet_calc_engine() 
     );
 }
 
-fn corpus_root() -> Option<PathBuf> {
-    let v = std::env::var_os("PAGED_XLSX_CORPUS")?;
-    let v = v.to_string_lossy().into_owned();
-    let root = if v == "1" || v.is_empty() {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../corpus")
-    } else {
-        PathBuf::from(v)
-    };
-    Some(root.join("xlsx"))
-}
-
 #[test]
-#[ignore = "full recalc lane: opt-in (PAGED_XLSX_CORPUS=1 + the private corpus mount)"]
+#[ignore = "corpus: xlsx"]
 fn xlsx_recalc_full_corpus_report() {
-    let Some(root) = corpus_root() else {
-        eprintln!("SKIP: PAGED_XLSX_CORPUS unset");
+    // An absent corpus reports `unavailable` (a failure under
+    // PAGED_REQUIRE_CORPUS=1); a missing source directory below panics.
+    let Some(root) = paged_test_resources::corpus("xlsx", &["PAGED_XLSX_CORPUS"]) else {
         return;
     };
-    // An ABSENT corpus is a skip; a set PATH that is wrong is a failure.
-    assert!(
-        root.is_dir(),
-        "PAGED_XLSX_CORPUS points at {}, which has no xlsx/",
-        root.display()
-    );
     let mut report: Vec<String> =
         vec!["source\tfile\tsheet\tcell\tclass\tformula\tcached\tengine".into()];
     let mut by_src: BTreeMap<String, (usize, Counts)> = BTreeMap::new();

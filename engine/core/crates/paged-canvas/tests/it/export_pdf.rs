@@ -22,6 +22,7 @@
 //! validation. The wasm dispatch is a thin map around exactly these
 //! calls; the Playwright layer re-tests it through the real wire.
 
+use paged_test_resources::{skip, Resource};
 use std::io::Write;
 
 use paged_canvas::channel::ExportPdfWireOptions;
@@ -180,8 +181,11 @@ fn x4_requires_a_profile_and_honours_a_registered_one() {
 
     // With a registered profile resolved BY NAME: X-4 exports.
     let Some(profile) = find_profile() else {
-        eprintln!("export_pdf: no CMYK profile available — skipping the X-4 half");
-        return;
+        skip!(
+            Resource::Icc,
+            "{}",
+            paged_color::test_profiles::NO_PROFILE_HINT
+        );
     };
     // Registered under the NAME the designmap declares, so it
     // activates as the working space at load — swatches then carry

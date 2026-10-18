@@ -72,10 +72,9 @@ fn count_dark_in_band_y(img: &image::RgbaImage, y0: u32, y1: u32, threshold: u8)
 
 #[test]
 fn cascade_pages_render_and_otf_features_change_the_raster() {
-    let Some(res) = resolver() else {
-        eprintln!("skip: corpus fonts not present");
-        return;
-    };
+    let res = resolver().expect(
+        "Inter.ttf and OpenSans.ttf are committed at engine/core/corpus/fonts; a partial checkout?",
+    );
     let opts = PipelineOptions {
         assets: Some(&res),
         ..PipelineOptions::default()

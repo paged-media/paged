@@ -17,7 +17,21 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import type { Disposable, VisibilityPredicate } from "./types";
+import type * as Api from "@paged-media/plugin-api";
+
+import type { Disposable, Registrable, VisibilityPredicate } from "./types";
+
+/**
+ * The item the SDK adapter hands this registry for a plugin's
+ * `contribute.menu`: the contract's menu-registry item (path, command,
+ * order, group, and the `when` the adapter derives from the entry's
+ * `scope`). The plugin-facing `MenuContribution` never reaches the
+ * shell; the adapter translates it, so `scope` arrives as `when` and
+ * `mode` does not arrive at all.
+ */
+type ContractMenuItem = Parameters<
+  NonNullable<Api.ShellRegistries["menus"]>["register"]
+>[0];
 
 /**
  * Declarative menu item. Items contribute themselves to a path-based
@@ -29,21 +43,16 @@ import type { Disposable, VisibilityPredicate } from "./types";
  * `commands.invoke(command)`. Reuse beats parallel surfaces, so
  * keybindings, palette entries, and menu items all dispatch to the
  * same command id.
+ *
+ * The contract's menu-registry item ({@link ContractMenuItem}: `path`
+ * — slash-separated, `"File/Open…"`; `command`; `order` — lower floats
+ * up within the group, default 100; `group` — items sharing one cluster,
+ * a separator between groups) plus the fields only the editor's own
+ * items set. `when` is WIDENED to the full `VisibilityPredicate`: the
+ * shell's items may use the (inert) string form; the adapter only ever
+ * passes a function.
  */
-export interface MenuItemContribution {
-  /** Slash-separated path. `"File/Open…"`, `"View/Show: Pages"`. */
-  path: string;
-
-  /** Command id this item invokes when selected. */
-  command: string;
-
-  /** Lower numbers float up within their menu group. Default 100. */
-  order?: number;
-
-  /** Optional separator group. Items with the same group cluster;
-   * different groups render with a visual separator between them. */
-  group?: string;
-
+export interface MenuItemContribution extends Omit<ContractMenuItem, "when"> {
   /** E4 — a human heading for this item's group.
    *
    *  The Window menu already computes these (`WINDOW_MENU_CATEGORIES`:
@@ -88,11 +97,20 @@ export interface MenuItemContribution {
   kind?: "item" | "label";
 }
 
+/** A plugin's menu entry, as the adapter hands it over, registers here
+ *  unchanged. */
+export type _MenuItemRegistrable = Registrable<
+  MenuItemContribution,
+  ContractMenuItem
+>;
+
 export type MenuRegistryEvent =
   | { kind: "registered"; contribution: MenuItemContribution }
   | { kind: "unregistered"; path: string };
 
-export interface MenuRegistry {
+export interface MenuRegistry extends NonNullable<
+  Api.ShellRegistries["menus"]
+> {
   register(contribution: MenuItemContribution): Disposable;
   unregister(path: string): void;
   get(path: string): MenuItemContribution | undefined;

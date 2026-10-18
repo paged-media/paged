@@ -17,36 +17,37 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import type { ComponentType } from "react";
+import type * as Api from "@paged-media/plugin-api";
 
-import type { DockEdge, Disposable, VisibilityPredicate } from "./types";
+import type { Disposable, Registrable } from "./types";
 
 /**
- * Lifecycle handle dockview passes into a panel. Bundles never
+ * Lifecycle handle the substrate passes into a panel. Bundles never
  * read this directly — the substrate wraps it so panel code only
- * sees the high-level `paged` handle.
+ * sees the high-level `paged` handle. The contract's `PanelApi`.
  */
-export interface PanelApi {
-  // Step 3e fleshes this out alongside `DockingSubstrate`.
-  id: string;
-}
+export type PanelApi = Api.PanelApi;
 
 /**
- * Props every panel component receives. Step 3d defines the shape;
- * Step 3f mounts panels through it.
+ * Props every panel component receives: the editor handle (`paged`,
+ * resolved to `PagedEditor` in the editor module) and the substrate's
+ * lifecycle (`api`). The contract's `PanelProps`.
  */
-export interface PanelProps {
-  /** Editor handle — context providers, registries, client. */
-  paged: unknown; // Resolved to PagedEditor in the editor module.
-  /** Substrate-provided lifecycle. */
-  api: PanelApi;
-}
+export type PanelProps = Api.PanelProps;
 
 /**
- * Declarative panel manifest. Panels are data: a stable id, a
- * title, a React component, and placement / visibility metadata.
+ * Declarative panel manifest. Panels are data: a stable id, a title, a
+ * React component, and placement / visibility metadata — the contract's
+ * `PanelContribution` (one definition, `@paged-media/plugin-api`) plus
+ * the one field only the editor's own panels set.
+ *
+ * `source` is the contract's too: provenance, the display name of the
+ * owning bundle, which the SDK adapter STAMPS from the manifest when a
+ * bundle registers (whatever the bundle passed is overwritten). The
+ * editor's built-in panels leave it unset, and `PanelHost` renders them
+ * as `host`.
  */
-export interface PanelContribution {
+export interface PanelContribution extends Api.PanelContribution {
   /** E6 — a DEVELOPER surface: kept out of the Window menu.
    *
    *  The menu listed every registered panel, so an end user browsing it
@@ -61,50 +62,19 @@ export interface PanelContribution {
    *  not the problem; offering it to a designer browsing for a workspace
    *  is. */
   devOnly?: boolean;
-
-  /** Stable identifier. Format: `<namespace>.<panel>`. */
-  id: string;
-
-  /** Human-readable title shown in the tab header. */
-  title: string;
-
-  /** The React component to render inside the panel. */
-  component: ComponentType<PanelProps>;
-
-  /** Initial dock edge. Users may rearrange; this is initial only. */
-  defaultDock?: DockEdge;
-
-  /** Semantic group name. Panels with the same group land in one
-   * dockview group at startup. */
-  defaultGroup?: string;
-
-  /** Optional icon name for the tab header. */
-  icon?: string;
-
-  /** K-8 — opt into the panel rail: the rail renders a launcher item
-   *  for this panel after the app's built-in items. Off by default. */
-  rail?: boolean;
-
-  /** K-8 — a self-contained SVG glyph (inner markup of a 24×24 viewBox,
-   *  currentColor, no script/event handlers). SANITIZED before render;
-   *  used when `icon` names no host glyph. */
-  iconSvg?: string;
-
-  /** Optional visibility predicate against application state. */
-  when?: VisibilityPredicate;
-
-  /** Whether the panel is closable. Defaults to true. */
-  closable?: boolean;
-
-  /** Whether the panel can be moved. Defaults to true. */
-  movable?: boolean;
 }
+
+/** A contract-authored panel registers here unchanged. */
+export type _PanelRegistrable = Registrable<
+  PanelContribution,
+  Api.PanelContribution
+>;
 
 export type PanelRegistryEvent =
   | { kind: "registered"; contribution: PanelContribution }
   | { kind: "unregistered"; id: string };
 
-export interface PanelRegistry {
+export interface PanelRegistry extends Api.PanelRegistry {
   register(contribution: PanelContribution): Disposable;
   unregister(id: string): void;
   get(id: string): PanelContribution | undefined;

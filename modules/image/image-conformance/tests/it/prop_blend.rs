@@ -33,7 +33,7 @@
 //!
 //! The scalar reference (`compose_ref::composite`, the parity golden) is
 //! checked on every run; the GPU kernels are checked against the same
-//! laws when a device exists (`REQUIRE_GPU=1` turns a missing one into a
+//! laws when a device exists (`PAGED_REQUIRE_GPU=1` turns a missing one into a
 //! failure). Seeded and modest in case count, for CI time.
 
 use half::f16;

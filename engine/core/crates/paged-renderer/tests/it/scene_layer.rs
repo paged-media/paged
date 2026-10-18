@@ -146,10 +146,12 @@ fn text_item_emits_glyph_fills_with_a_font() {
     // Corpus-optional (mirrors the other render tests): skip if the test
     // font isn't in this checkout.
     let font_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../corpus/fonts/Inter.ttf");
-    let Ok(font) = std::fs::read(&font_path) else {
-        eprintln!("skipping: {} not present", font_path.display());
-        return;
-    };
+    let font = std::fs::read(&font_path).unwrap_or_else(|e| {
+        panic!(
+            "{}: {e} — committed at engine/core/corpus/fonts; a partial checkout?",
+            font_path.display()
+        )
+    });
     let doc = sample_doc();
     let id = first_text_frame_id(&doc);
 

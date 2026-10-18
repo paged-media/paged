@@ -29,7 +29,9 @@
 #
 # Exit status:
 #   0  every fixture's gated pages stayed within threshold (or advisory mode)
-#   1  one or more fixtures regressed past threshold
+#   1  one or more fixtures regressed past threshold, or the gate was
+#      unavailable (no FOGRA39 profile) while PAGED_REQUIRE_FOGRA39=1
+#   3  unavailable: no Coated FOGRA39 profile, so nothing was measured
 
 set -euo pipefail
 
@@ -228,6 +230,7 @@ fi
 if [ -n "$(find "$GATE_OUT" -name .no-cmyk-profile -print -quit 2>/dev/null)" ]; then
     echo
     echo "======================================================================"
+    echo "unavailable: FOGRA39 profile: the pixel gate measured nothing"
     echo "INCONCLUSIVE — not a regression."
     echo
     echo "The reference PDFs were exported by InDesign in Coated FOGRA39. This"
@@ -240,6 +243,14 @@ if [ -n "$(find "$GATE_OUT" -name .no-cmyk-profile -print -quit 2>/dev/null)" ];
     echo "Install a FOGRA39 profile, or set PAGED_CMYK_PROFILE to one, and"
     echo "re-run. Exiting 3 (inconclusive), NOT 1 (regressed)."
     echo "======================================================================"
+    # A runner that claims the profile fails instead (the PAGED_REQUIRE_<X>
+    # convention of docs/development/testing.md).
+    case "${PAGED_REQUIRE_FOGRA39:-}" in
+        1|true|yes)
+            echo "PAGED_REQUIRE_FOGRA39=1 is set, so the unavailable gate is a failure." >&2
+            exit 1
+            ;;
+    esac
     exit 3
 fi
 echo "==> one or more fixtures regressed"

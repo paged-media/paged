@@ -6,3 +6,12 @@
 # docx-conformance/tests/it/feature_evidence.rs (extracted at join time).
 [profile.ci.junit]
 path = "junit.xml"
+
+# The opt-in corpus lane: every `#[ignore = "corpus: docx"]` test, which
+# reads the private corpus (docs/development/testing.md).
+#
+#   PAGED_CORPUS_DIR=<corpus root> PAGED_REQUIRE_CORPUS=1 \
+#     cargo nextest run --profile corpus --run-ignored only
+[profile.corpus]
+default-filter = "binary_id(docx-conformance::it) & (test(/^poi_corpus::/) | test(/^real_word_corpus::/))"
+fail-fast = false
