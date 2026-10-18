@@ -55,6 +55,8 @@ jobs:
         with:
           workspaces: modules/sheet -> target
           prefix-key: v0-rust-sheet
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       # Each guard fails explicitly. They used to be two `! (… | grep …)`
@@ -87,6 +89,8 @@ jobs:
         with:
           workspaces: modules/sheet -> target
           prefix-key: v0-rust-sheet
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@nextest
       # No `|| true` here (audit P2 / June V18): a red suite must redden the
       # job. The junit artifact still publishes on failure — the upload step
@@ -139,6 +143,8 @@ jobs:
         with:
           workspaces: modules/sheet -> target
           prefix-key: v0-rust-sheet
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: install pinned wasm-bindgen-cli (Cargo.lock version)
         run: |
           V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)

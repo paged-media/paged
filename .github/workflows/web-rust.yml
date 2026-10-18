@@ -60,6 +60,8 @@ jobs:
         with:
           workspaces: modules/web/packages/web-render -> target
           prefix-key: v0-rust-web
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --check
       # Both feature sets: the default build is the pure lowering lane, the
       # `blitz` build adds the capture layer and the flow fragmentation.
@@ -81,6 +83,8 @@ jobs:
         with:
           workspaces: modules/web/packages/web-render -> target
           prefix-key: v0-rust-web
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@nextest
       # No `|| true`: a red test reddens the job; the JUnit still uploads
       # (the step below runs under !cancelled()). `--features blitz` is the

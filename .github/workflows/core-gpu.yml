@@ -103,6 +103,8 @@ jobs:
         with:
           workspaces: engine/core -> target
           prefix-key: v0-rust-core
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: install Mesa lavapipe (software Vulkan) + vulkan tools
         # Bounded: unlike the poppler/brotli cases this genuinely needs
