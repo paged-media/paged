@@ -29,6 +29,7 @@ on:
       - "engine/core/Cargo.*"
       - "engine/core/rust-toolchain.toml"
       - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/scripts/rust-channel.sh"
       - "engine/core/packages/**"
       - ".cargo/config.toml"
       - "tooling/bootstrap.sh"
@@ -59,6 +60,7 @@ on:
       - "engine/core/Cargo.*"
       - "engine/core/rust-toolchain.toml"
       - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/scripts/rust-channel.sh"
       - "engine/core/packages/**"
       - ".cargo/config.toml"
       - "tooling/bootstrap.sh"
@@ -93,10 +95,10 @@ defaults:
 jobs:
   # The Rust engine: fmt + clippy + test, the three isolation-contract
   # dependency guards (spec §2.1 / §4 dep rule 3), and the wasm size
-  # report against the 100 MB app wasm budget (BREAKAGE I-07). dtolnay/rust-toolchain
-  # reads the channel straight from rust-toolchain.toml (`channel = 1.93.0`)
-  # — same single-source-of-truth posture as core's resolved `toolchain`
-  # job, without a separate channel-resolver script in this repo.
+  # report against the 100 MB app wasm budget (BREAKAGE I-07). Every job
+  # reads its toolchain from modules/image/rust-toolchain.toml through
+  # engine/core/scripts/rust-channel.sh, as core's jobs do, so the pin has
+  # one source.
   rust:
     name: rust engine
     runs-on: ubuntu-latest
@@ -111,10 +113,13 @@ jobs:
       # the file is honoured by rustup at invocation time, not by the
       # installer). @master hard-fails the input check instead: "'toolchain'
       # is a required input", exit 1 — which is what has been killing this
-      # job. Pin it here and MIRROR rust-toolchain.toml; bump both together.
+      # job. It is read from rust-toolchain.toml here (it used to be a
+      # literal that had to mirror the file, and stopped mirroring it).
+      - id: pin
+        run: echo "channel=$(bash ../../engine/core/scripts/rust-channel.sh .)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.93.0" # mirrors rust-toolchain.toml
+          toolchain: ${{ steps.pin.outputs.channel }}
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
@@ -260,9 +265,12 @@ jobs:
       PAGED_REQUIRE_GPU: "1"
     steps:
       - uses: actions/checkout@v4
+      # The pin, read from rust-toolchain.toml (see the rust job).
+      - id: pin
+        run: echo "channel=$(bash ../../engine/core/scripts/rust-channel.sh .)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.93.0" # mirrors rust-toolchain.toml
+          toolchain: ${{ steps.pin.outputs.channel }}
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
         uses: rui314/setup-mold@v1
@@ -309,9 +317,12 @@ jobs:
       PAGED_REQUIRE_GPU: "1"
     steps:
       - uses: actions/checkout@v4
+      # The pin, read from rust-toolchain.toml (see the rust job).
+      - id: pin
+        run: echo "channel=$(bash ../../engine/core/scripts/rust-channel.sh .)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.93.0" # mirrors rust-toolchain.toml
+          toolchain: ${{ steps.pin.outputs.channel }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: modules/image -> target

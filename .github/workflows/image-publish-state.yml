@@ -63,9 +63,20 @@ jobs:
         with:
           auto-install: true
           proto-version: "0.63.1"
+      # The engine's wasm packages (canvas-wasm and the rest, workspace:*),
+      # which the real-engine specs boot.
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
       - name: install (root workspace)
         working-directory: .
         run: bun install --frozen-lockfile
+      # paged.image's engine wasm (glue/wasm/, manifest/wasm/) is a build
+      # output since B3b: without it 138 specs publish as red rows ("engine
+      # wasm not built") while the job stays green. Built here, or restored
+      # from the cache when the Rust sources are unchanged, as image-ci does.
+      - name: module wasm (image)
+        uses: ./.github/actions/module-wasm
+        with: { module: image }
 
       - name: bun test (junit per package; red results still publish)
         # The state matrix wants every red row, so don't let a failing
@@ -79,7 +90,7 @@ jobs:
           bun ../../tooling/js/bun-junit.mjs --out junit-all.xml ./*/junit.bun.xml || true
           [ -s junit-all.xml ] # at least one package must have produced results
         env:
-          # wasm-exec.spec.ts must run against the committed artifact
+          # wasm-exec.spec.ts must run against the artifact built above
           # here too — a missing artifact publishes as a red row, never
           # as a silent skip.
           REQUIRE_REAL_WASM: "1"
