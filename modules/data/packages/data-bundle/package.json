@@ -47,7 +47,6 @@
     "bin/duckdb-ext/v1.1.1/wasm_eh/json.duckdb_extension.wasm",
     "bin/duckdb-ext/v1.1.1/wasm_eh/parquet.duckdb_extension.wasm",
     "bin/SOURCE_HASH",
-    "bin/PACKAGE_HASH",
     "manifest.json"
   ],
   "repository": {

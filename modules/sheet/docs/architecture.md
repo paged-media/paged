@@ -209,8 +209,8 @@ The manifest declares `document` (read `broad`, write `scoped`), `rendering` (`h
   mode, checks that the installed `wasm-bindgen` CLI has the version in `Cargo.lock`, runs
   `wasm-bindgen --target web` into `packages/sheet-bundle/bin/` (gitignored) and, if
   installed, `wasm-opt -Oz`. It fails above 100 MB; the manifest declares 8 MiB for the same
-  file. The bundle has no build step of its own; `.github/workflows/sheet-publish.yml`
-  stays, dispatch-only, until the npm deprecation.
+  file. The bundle has no build step of its own; the dispatch-only `sheet-publish.yml` was
+  deleted with the npm deprecation (PM-0008).
 - Rust lane (`.github/workflows/rust.yml`, on pull requests and on `main`): `cargo fmt`,
   `clippy` with warnings denied, the dependency guards, `cargo deny`, `cargo nextest`, then
   `coverage-gate`, which fails when a registry row marked `implemented` names no test or
