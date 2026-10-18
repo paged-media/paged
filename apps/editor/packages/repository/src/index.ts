@@ -24,7 +24,9 @@
 export { memoryFs, opfsFs, type RepoFs } from "./fs.ts";
 export {
   Library,
+  RemoteError,
   type CommitInfo,
+  type Remote,
   type DocumentEntry,
   type EvidenceInfo,
   type LibraryOptions,

@@ -51,6 +51,10 @@ export interface WasmRepository {
     free?(): void;
   };
   importFile(file: Uint8Array, name: string, ref: string, actor: string, ts: number): string;
+  offer(ref: string, known: string): string;
+  locateMany(addresses: string): string;
+  packOf(objects: string): Uint8Array;
+  receivePack(pack: Uint8Array, ref: string, expected: string, next: string, actor: string, ts: number): void;
   save(file: Uint8Array, ref: string, actor: string, message: string, ts: number): string;
   export(target: string, withHistory: boolean, actor: string, ts: number): Uint8Array;
   log(ref: string): string;
@@ -69,7 +73,29 @@ export interface DocumentEntry {
   createdAt: number;
   updatedAt: number;
   head: string | null;
+  /** The paged.server repository this document syncs with, when it has one. */
+  remote?: { url: string; repo: string };
 }
+
+/** A paged.server repository and the bearer token to reach it with. */
+export interface Remote {
+  url: string;
+  repo: string;
+  token: string;
+}
+
+/** A paged.server error: its status and RFC 9457 problem. */
+export class RemoteError extends Error {
+  readonly status: number;
+  constructor(status: number, title: string, detail: string) {
+    super(`${status} ${title}${detail ? `: ${detail}` : ""}`);
+    this.status = status;
+  }
+}
+
+/** Uploads above this are split, well under the server's request limits. */
+const PACK_MAX = 32 * 1024 * 1024;
+const OFFER_BATCH = 4096;
 
 export interface CommitInfo {
   hash: string;
@@ -305,6 +331,144 @@ export class Library {
 
   evidence(id: string): Promise<EvidenceInfo[]> {
     return this.serial(async () => JSON.parse((await this.load(id)).repo.evidence()));
+  }
+
+  private async remoteCall(r: Remote, route: string, init: RequestInit = {}): Promise<Response> {
+    const url = `${r.url.replace(/\/$/, "")}/v1/r/${encodeURIComponent(r.repo)}/${route}`;
+    const resp = await fetch(url, {
+      ...init,
+      headers: { ...(init.headers as Record<string, string>), authorization: `Bearer ${r.token}` },
+    });
+    if (!resp.ok) {
+      let p: { title?: string; detail?: string } = {};
+      try {
+        p = await resp.json();
+      } catch {
+        /* not a problem document */
+      }
+      throw new RemoteError(resp.status, p.title ?? resp.statusText, p.detail ?? "");
+    }
+    return resp;
+  }
+
+  private async remoteRefs(r: Remote): Promise<Record<string, string>> {
+    try {
+      return (await (await this.remoteCall(r, "refs")).json()) as Record<string, string>;
+    } catch (e) {
+      // A repository nobody has pushed to has no refs yet.
+      if (e instanceof RemoteError && e.status === 404) return {};
+      throw e;
+    }
+  }
+
+  /** Pushes `main` to `remote`: only what the server lacks travels. */
+  push(id: string, remote: Remote): Promise<{ sent: number; bytes: number }> {
+    return this.serial(async () => {
+      const o = await this.load(id);
+      const theirs = await this.remoteRefs(remote);
+      const offer = JSON.parse(o.repo.offer(MAIN, JSON.stringify(Object.values(theirs)))) as {
+        hash: string;
+        kind: number;
+      }[];
+      const missing = new Set<string>();
+      for (let i = 0; i < offer.length; i += OFFER_BATCH) {
+        const batch = offer.slice(i, i + OFFER_BATCH).map((x) => x.hash);
+        const resp = await this.remoteCall(remote, "have", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(batch),
+        });
+        for (const h of (await resp.json()) as string[]) missing.add(h);
+      }
+      const send = offer.filter((x) => missing.has(x.hash));
+      const locs = JSON.parse(o.repo.locateMany(JSON.stringify(send.map((x) => x.hash)))) as Loc[];
+      await this.provide(o, locs);
+      const size = new Map(locs.map((l) => [l.hash, l.len]));
+      let sent = 0;
+      let bytes = 0;
+      for (let i = 0; i < send.length; ) {
+        let budget = 0;
+        let j = i;
+        while (j < send.length && (j === i || budget + (size.get(send[j].hash) ?? 0) <= PACK_MAX)) {
+          budget += size.get(send[j].hash) ?? 0;
+          j++;
+        }
+        const pack = o.repo.packOf(JSON.stringify(send.slice(i, j)));
+        await this.remoteCall(remote, "objects", {
+          method: "PUT",
+          headers: { "content-type": "application/octet-stream" },
+          body: pack as BodyInit,
+        });
+        sent += j - i;
+        bytes += pack.length;
+        i = j;
+      }
+      const head = (JSON.parse(o.repo.refs()) as Record<string, string>)[MAIN];
+      await this.remoteCall(remote, `refs/${MAIN}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ expected: theirs[MAIN] ?? null, new: head }),
+      });
+      o.repo.evictBlobs();
+      o.repo.record(this.owner, "push", `${remote.url}/${remote.repo}`, "ok", this.now());
+      o.meta = { ...o.meta, remote: { url: remote.url, repo: remote.repo } };
+      await this.persist(o);
+      return { sent, bytes };
+    });
+  }
+
+  /** Pulls `main` from `remote`. The local kernel decides: a remote that has
+   *  moved away from this document's history is refused, not merged. */
+  pull(id: string, remote: Remote): Promise<{ head: string; changed: boolean }> {
+    return this.serial(async () => {
+      const o = await this.load(id);
+      const theirs = (await this.remoteRefs(remote))[MAIN];
+      if (!theirs) throw new RemoteError(404, "Not found", `no ${MAIN} on the server`);
+      const mine = (JSON.parse(o.repo.refs()) as Record<string, string>)[MAIN];
+      if (mine === theirs) return { head: theirs, changed: false };
+      const resp = await this.remoteCall(remote, "fetch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ want: theirs, have: Object.values(JSON.parse(o.repo.refs())) }),
+      });
+      const pack = new Uint8Array(await resp.arrayBuffer());
+      await this.faulting(o, () =>
+        o.repo.receivePack(pack, MAIN, mine ?? "", theirs, this.owner, this.now()),
+      );
+      o.repo.record(this.owner, "pull", `${remote.url}/${remote.repo}`, "ok", this.now());
+      o.meta = { ...o.meta, remote: { url: remote.url, repo: remote.repo } };
+      await this.persist(o);
+      return { head: theirs, changed: true };
+    });
+  }
+
+  /** Clones a remote repository into the library as a new document. */
+  clone(remote: Remote, name: string): Promise<DocumentEntry> {
+    return this.serial(async () => {
+      const theirs = (await this.remoteRefs(remote))[MAIN];
+      if (!theirs) throw new RemoteError(404, "Not found", `no ${MAIN} on the server`);
+      const resp = await this.remoteCall(remote, "fetch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ want: theirs, have: [] }),
+      });
+      const pack = new Uint8Array(await resp.arrayBuffer());
+      const now = this.now();
+      const meta: DocumentEntry = {
+        id: this.newId(),
+        name,
+        createdAt: now,
+        updatedAt: now,
+        head: null,
+        remote: { url: remote.url, repo: remote.repo },
+      };
+      const o: Open = { repo: this.options.createRepository(this.owner), meta };
+      o.repo.receivePack(pack, MAIN, "", theirs, this.owner, now);
+      o.repo.record(this.owner, "clone", `${remote.url}/${remote.repo}`, "ok", now);
+      await this.persist(o);
+      this.open.set(meta.id, o);
+      return o.meta;
+    });
   }
 
   rename(id: string, name: string): Promise<DocumentEntry> {
