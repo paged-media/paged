@@ -9,53 +9,59 @@
 # drift. What it does instead is REBUILD and re-validate the manifest
 # against the fresh artifact, so an over-budget or unbuildable artifact
 # fails here even though the repo ships a prebuilt one.
-name: rust
+name: draw / rust
 
+# MONOREPO (step A3): ported from paged-media/plugin-draw
+# .github/workflows/rust.yml; runs in modules/draw. The sibling
+# paged-media/sdk checkout is gone: the manifest validator is the in-tree
+# platform/extensions plugin-cli, so its sources are in the path filters too.
 on:
   push:
     branches: [main]
+    paths:
+      - "modules/draw/**"
+      - "platform/extensions/packages/plugin-cli/**"
+      - ".github/workflows/draw-rust.yml"
   pull_request:
+    paths:
+      - "modules/draw/**"
+      - "platform/extensions/packages/plugin-cli/**"
+      - ".github/workflows/draw-rust.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: rust-${{ github.ref }}
+  group: draw-rust-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: modules/draw
 
 jobs:
   rust:
     runs-on: ubuntu-latest
     steps:
+      # One checkout of the repository: modules/draw and the plugin-cli the
+      # manifest validate below needs (platform/extensions) are both in it.
       - uses: actions/checkout@v4
-        with:
-          path: plugin-draw
-      # plugin-cli lives in the SDK repo; the manifest validate below
-      # needs it (same sibling layout the vitest job uses).
-      - uses: actions/checkout@v4
-        with:
-          repository: paged-media/sdk
-          path: sdk
-          token: ${{ secrets.STATE_DISPATCH_TOKEN || github.token }}
       - name: toolchain (rust-toolchain.toml pins the channel + target)
         run: rustup show
-        working-directory: plugin-draw
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: plugin-draw
+          workspaces: modules/draw -> target
+          prefix-key: v0-rust-draw
       - name: fmt
         run: cargo fmt --all -- --check
-        working-directory: plugin-draw
       - name: clippy (native + wasm32)
         run: |
           cargo clippy --workspace --all-targets -- -D warnings
           cargo clippy --workspace --all-targets \
             --target wasm32-unknown-unknown -- -D warnings
-        working-directory: plugin-draw
       - name: test
         run: cargo test --workspace
-        working-directory: plugin-draw
       # binaryen is PINNED: an old apt binaryen breaks wasm-bindgen
       # externref table grow (the "Table.grow failed" gotcha), and it also
       # validates bulk-memory off by default, which rustc emits.
@@ -68,12 +74,9 @@ jobs:
           V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock \
               | grep version | head -1 | cut -d'"' -f2)
           cargo install wasm-bindgen-cli --version "$V" --locked
-        working-directory: plugin-draw
       - name: build the wasm artifact (enforces the size budget)
         run: ./scripts/build-wasm.sh
-        working-directory: plugin-draw
       - name: manifest validate (measures the freshly built artifact)
         run: |
-          node ../sdk/packages/plugin-cli/bin/paged-plugin.mjs validate \
+          node "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs" validate \
             packages/draw-bundle/manifest.json
-        working-directory: plugin-draw

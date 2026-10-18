@@ -1,16 +1,25 @@
-name: publish
+name: doc / publish
 
+# Disabled in the monorepo: built-in modules are no longer published separately (PM-0008). Kept for reference until wave D.
+#
+# MONOREPO (step A3): ported from paged-media/plugin-doc .github/workflows/
+# publish.yml with `on: workflow_dispatch` only. Paths are ported so the file
+# stays readable as a reference; the npm Trusted Publisher it names is bound
+# to the OLD repo and file name, so a dispatch could not publish anyway.
+#
 # Publish @paged-media/doc to npm via OIDC TRUSTED PUBLISHING (tokenless).
 # Requires a Trusted Publisher on npm: org paged-media, this repo, workflow
 # publish.yml. Pre-1.0 -canary.N under the `canary` dist-tag; unchanged skip.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   id-token: write # OIDC token for trusted publishing
   contents: read
+
+defaults:
+  run:
+    working-directory: modules/doc
 
 jobs:
   publish:
@@ -22,6 +31,9 @@ jobs:
           toolchain: 1.93.0
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/doc -> target
+          prefix-key: v0-rust-doc
       - name: install pinned wasm-bindgen-cli (Cargo.lock version)
         run: |
           V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)

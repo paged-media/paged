@@ -1,15 +1,24 @@
-name: vitest
+name: doc / vitest
+# MONOREPO (step A3): ported from paged-media/plugin-doc
+# .github/workflows/vitest.yml; runs in modules/doc. Push-only, as before.
 on:
   push:
     branches: [main]
+    paths:
+      - "modules/doc/**"
+      - ".github/workflows/doc-vitest.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: vitest-${{ github.ref }}
+  group: doc-vitest-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: modules/doc
 
 jobs:
   vitest:
@@ -57,7 +66,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vitest-junit
-          path: junit-all.xml
+          path: modules/doc/junit-all.xml
           if-no-files-found: error
           retention-days: 14
       - name: tests failed

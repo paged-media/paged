@@ -1,15 +1,24 @@
-name: rust
+name: doc / rust
+# MONOREPO (step A3): ported from paged-media/plugin-doc
+# .github/workflows/rust.yml; runs in modules/doc. Push-only, as before.
 on:
   push:
     branches: [main]
+    paths:
+      - "modules/doc/**"
+      - ".github/workflows/doc-rust.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: rust-${{ github.ref }}
+  group: doc-rust-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: modules/doc
 
 jobs:
   check:
@@ -22,12 +31,17 @@ jobs:
           targets: wasm32-unknown-unknown
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/doc -> target
+          prefix-key: v0-rust-doc
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: isolation guard (no core/plugin reach-around into docx-js wasm)
         run: |
           ! (cargo tree -p docx-js --target wasm32-unknown-unknown | grep -E 'docx-conformance|proptest')
       - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: modules/doc/Cargo.toml
 
   test:
     runs-on: ubuntu-latest
@@ -37,6 +51,9 @@ jobs:
         with:
           toolchain: 1.93.0
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/doc -> target
+          prefix-key: v0-rust-doc
       - uses: taiki-e/install-action@nextest
       # Red results must still upload (the state matrix wants the ✗), so the
       # run does not abort here — the gate at the end fails the job once the
@@ -59,7 +76,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nextest-junit
-          path: target/nextest/ci/junit.xml
+          path: modules/doc/target/nextest/ci/junit.xml
           if-no-files-found: error
           retention-days: 14
       - name: tests failed
@@ -75,6 +92,9 @@ jobs:
           toolchain: 1.93.0
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/doc -> target
+          prefix-key: v0-rust-doc
       - name: install pinned wasm-bindgen-cli (Cargo.lock version)
         run: |
           V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
