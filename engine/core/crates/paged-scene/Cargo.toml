@@ -1,0 +1,25 @@
+[package]
+name = "paged-scene"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Resolved scene graph: spreads, pages, frames, stories, flattened style state."
+
+[lints]
+workspace = true
+
+[dependencies]
+paged-model = { path = "../paged-model" }
+paged-flow = { path = "../paged-flow" }
+paged-composition = { path = "../paged-composition" }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+blake3 = "1"
+
+[dev-dependencies]
+idml-import = { git = "https://github.com/paged-media/plugin-publish", rev = "05c57195d9a7514357cede90d89d987141bf01d8" }
+serde_json = "1"
+zip = { workspace = true }

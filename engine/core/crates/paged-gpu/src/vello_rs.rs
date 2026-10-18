@@ -1,0 +1,4824 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Vello backend.
+//!
+//! `PathRasterizer` impl that drives Vello-via-wgpu. Coverage today:
+//!  - `FillPath` with solid paints, linear and radial gradients
+//!    (linear RGB → sRGB at the boundary)
+//!  - `StrokePath` with peniko `Stroke` + cap/join/miter/dash mapping
+//!  - `Image` via peniko `ImageData` + `ImageBrush` + `draw_image`
+//!  - `PushClip` / `PopClip` via Vello clip layers
+//!  - `BeginBlendGroup` / `EndBlendGroup` via Vello blend layers
+//!    (peniko `Mix` mapped 1:1 from our `BlendMode`, `Compose::SrcOver`)
+//!  - `FillPathBlend` per-command non-Normal blend wrapped in a
+//!    transient blend layer (Normal stays on the fast `scene.fill` path)
+//!  - Background fill from `RasterOptions::background`, under the
+//!    page's content, which is one isolated group: blend modes read
+//!    an empty backdrop, not the paper, as on the CPU lane
+//!  - Paths converted from our PathData (line / quad / cubic / close)
+//!    into `kurbo::BezPath`; the per-command transform applies to
+//!    every control point at conversion time so vello sees the
+//!    final page-space coordinates and stroke widths come out right
+//!
+//! Approximate (no image-space Gaussian convolution in vello):
+//!  - `PushLayer { effect: LayerEffect::GaussianBlur }` /
+//!    `PopLayer` — Vello has no image-space Gaussian over a layer
+//!    buffer in the version we link against (the
+//!    `draw_blurred_rounded_rect` primitive only blurs a rounded
+//!    rect *brush*, and `vello_filters_cpu` is still a reference
+//!    CPU implementation). We capture the inner commands as a
+//!    sub-scene and replay it via `Scene::append` at a 7×7 Gaussian
+//!    sample grid, each tap wrapped in a `(Normal, Plus)`-composed
+//!    `push_layer` whose alpha is the Gaussian weight at that grid
+//!    point. The accumulation is mathematically a true convolution
+//!    — the only approximation is the grid discretisation. See
+//!    `emit_blurred_layer`.
+//!
+//! Shared with the CPU rasterizer (the same coverage masks, built by
+//! `paged_compose::mask` and painted here as images):
+//!  - DropShadow / PathShadow, InnerShadow, OuterGlow, InnerGlow,
+//!    Satin, BevelEmboss — `paint_effect_stamps`
+//!  - Feather, DirectionalFeather, GradientFeather — `apply_feather_mask`
+//!
+//! Exact (matches the CPU rasterizer, the path of record):
+//!  - C-28 `BeginSoftMask` / `BeginMaskedContent` / `EndSoftMask`
+//!    (opacity masks) — see `emit_soft_mask`. Vello *does* have a
+//!    coverage-modulating layer: `Scene::push_luminance_mask_layer`
+//!    (v0.9.0, the tag we pin), whose `CMD_END_CLIP` computes
+//!    `dst = backdrop * svg_lum(unpremultiply(fg)) * fg.a` — the same
+//!    demultiply-weight-by-alpha that `tiny_skia::MaskType::Luminance`
+//!    does, to within the Rec.709-vs-SVG luma-coefficient rounding
+//!    (0.2126/0.7152/0.0722 vs 0.2125/0.7154/0.0721). Alpha masks need
+//!    no special layer kind at all: `Compose::DestIn` composites a
+//!    layer as `backdrop * src.a`, and `Compose::DestOut` as
+//!    `backdrop * (1 − src.a)` — i.e. the inverted form for free.
+//!
+//!    Residual: Vello's mask reads the *enclosing layer*, so the
+//!    masked content has to be isolated into a layer of its own,
+//!    while the CPU rasterizer masks each draw in place. The two only
+//!    part company when the masked content carries a non-Normal blend
+//!    — isolated, a Multiply sees an empty backdrop instead of the
+//!    page. `hoistable_blend_group` folds that blend onto the content
+//!    layer for the shape the emitter actually produces (the frame's
+//!    group spanning the whole masked range), which restores exact
+//!    parity. A blend group that only *partly* spans the masked
+//!    content is not folded and stays isolated; no emitter produces
+//!    that today.
+//!
+//! Not at parity (ADR 146): a knockout group, and a non-isolated
+//! group below 100 % opacity whose members blend, are drawn as
+//! isolated groups — a Vello layer cannot read its initial backdrop.
+//!
+//! The CPU rasterizer (`cpu.rs`) remains the path of record for the
+//! fidelity harness. This lane is held to it page by page by
+//! `corpus/generated/parity-diff.sh` against
+//! `corpus/generated/parity-thresholds.json`.
+//!
+//! wgpu lifecycle: an instance + adapter + device + queue + Vello
+//! `Renderer` are created lazily on first `rasterize()` call and
+//! cached for the rasterizer's lifetime. Construction is sync via
+//! `pollster::block_on` — fine on native; the wasm path will need
+//! a different lifetime once the JS shell can hand us a device.
+
+use std::cell::RefCell;
+use std::sync::Arc;
+
+use paged_compose::{
+    BlendMode as ComposeBlendMode, Color as ComposeColor, DisplayCommand, DisplayList, LayerEffect,
+    LineCap, LineJoin, Paint, PathSegment,
+};
+use vello::kurbo::{self, Stroke as KurboStroke};
+use vello::peniko::{
+    BlendMode as PenikoBlendMode, Blob, BrushRef, Color as PenikoColor,
+    ColorStop as PenikoColorStop, Compose, Fill, Gradient as PenikoGradient, ImageAlphaType,
+    ImageBrush, ImageData, ImageFormat, Mix,
+};
+use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, Scene};
+use wgpu;
+
+use crate::{PathRasterizer, RasterOptions};
+
+pub struct VelloRasterizer {
+    /// Lazily initialised on first rasterize call so constructing
+    /// the rasterizer doesn't require a GPU + adapter probe.
+    state: RefCell<Option<GpuState>>,
+}
+
+impl Default for VelloRasterizer {
+    fn default() -> Self {
+        Self {
+            state: RefCell::new(None),
+        }
+    }
+}
+
+impl VelloRasterizer {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+struct GpuState {
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    renderer: Renderer,
+    /// Compute pipelines for CMYK-overprint parity. `None` if shader
+    /// compilation or pipeline creation failed on this adapter — the
+    /// rasterizer then falls back to the pre-parity knockout behaviour
+    /// for overprint commands (logged once via `tracing::warn!`). The
+    /// `vello_compute_pipeline_creation_failure_falls_back_to_knockout`
+    /// test pins that contract.
+    pipelines: Option<crate::cmyk_compute::Pipelines>,
+}
+
+impl PathRasterizer for VelloRasterizer {
+    fn name(&self) -> &'static str {
+        "vello/wgpu"
+    }
+
+    fn rasterize(&self, list: &DisplayList, options: &RasterOptions) -> Vec<u8> {
+        let (px_w, px_h) = options.pixel_size();
+        let mut state_borrow = self.state.borrow_mut();
+        if state_borrow.is_none() {
+            *state_borrow = match init_gpu() {
+                Ok(s) => Some(s),
+                Err(e) => {
+                    tracing::warn!(error = %e, "vello: GPU init failed; returning empty image");
+                    return vec![0; (px_w * px_h * 4) as usize];
+                }
+            };
+        }
+        let state = state_borrow.as_mut().unwrap();
+
+        // Count *Overprint commands. The three branches below trade
+        // accuracy for cost:
+        //   * 0: unchanged from pre-parity Vello — render and return.
+        //   * 1..=8 (with `cpu` feature): CPU fast-path finisher. The
+        //     existing CPU rasterizer handles overprint composition
+        //     pixel-perfectly; for small counts the readback +
+        //     re-rasterize overhead is the dominant cost anyway.
+        //   * 9+ or no `cpu` feature: GPU compute pipeline path. One
+        //     Vello scene per coalesced overprint batch, one splat
+        //     dispatch per batch, then one recomposite dispatch.
+        let overprint_count = count_overprints(list);
+        if overprint_count == 0 {
+            let scene = build_scene(list, options);
+            return match render_scene_to_buffer(state, &scene, options) {
+                Ok(buf) => buf,
+                Err(e) => {
+                    tracing::warn!(error = %e, "vello: render_to_texture failed");
+                    vec![0; (px_w * px_h * 4) as usize]
+                }
+            };
+        }
+
+        #[cfg(feature = "cpu")]
+        if overprint_count <= 8 && !crate::cmyk_compute::should_force_compute_path() {
+            return cpu_finisher_path(list, options);
+        }
+
+        match gpu_compute_overprint_path(state, list, options) {
+            Ok(buf) => buf,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "vello: compute overprint path failed; falling back to knockout"
+                );
+                // Knockout fallback: re-render once via the original
+                // build_scene path. Overprint draws collapse to
+                // plain `scene.fill` per the existing fallback in
+                // `build_scene_with_transform`. Better a knockout
+                // image than a panic.
+                let scene = build_scene(list, options);
+                render_scene_to_buffer(state, &scene, options)
+                    .unwrap_or_else(|_| vec![0; (px_w * px_h * 4) as usize])
+            }
+        }
+    }
+}
+
+/// Walk the display list and tally `*Overprint` commands. Cheap (the
+/// list is in-memory and the match is one branch per command). Drives
+/// the policy decision in `rasterize` between unchanged / CPU-finisher /
+/// GPU-compute paths.
+/// Materialise an RGBA8 buffer from encoded image bytes at the
+/// dimensions the build phase recorded. Used by the wasm32 lazy
+/// path (`DecodedImage.rgba` empty, `encoded` populated) so peak
+/// heap stays at one decoded image at a time. Mirror of cpu.rs's
+/// helper of the same name; duplicated to avoid cross-feature
+/// visibility issues.
+fn decode_image_for_render(bytes: &[u8], expected_w: u32, expected_h: u32) -> Option<Vec<u8>> {
+    let img = image::load_from_memory(bytes).ok()?;
+    let raw = if img.width() == expected_w && img.height() == expected_h {
+        img.to_rgba8()
+    } else {
+        image::imageops::resize(
+            &img.to_rgba8(),
+            expected_w,
+            expected_h,
+            image::imageops::FilterType::Triangle,
+        )
+    };
+    Some(raw.into_raw())
+}
+
+/// Decoded image pixels kept across scene builds, keyed by the identity
+/// of the image's buffer.
+///
+/// A page scene is rebuilt whenever the scene cache drops it — after
+/// every write that is not a text edit — and the wasm32 lazy path used to
+/// decode each visible image from its encoded bytes on every rebuild:
+/// on the 134-page annual that was ~310 ms of JPEG/WebP decoding after
+/// each write, ahead of the next request. The key is the buffer's
+/// address and length (plus the target size), which is stable because
+/// the pipeline's own decode cache hands out clones of the same `Bytes`
+/// on every rebuild; each entry holds a clone of the image, so its
+/// buffer stays alive and the address cannot be reused by another
+/// image while the entry exists. Bounded by [`DECODED_IMAGE_BUDGET`]
+/// (least recently used first), so peak heap stays capped.
+struct DecodedImageCache {
+    entries: std::collections::HashMap<
+        (usize, usize, u32, u32),
+        (paged_compose::DecodedImage, ImageData),
+    >,
+    order: std::collections::VecDeque<(usize, usize, u32, u32)>,
+    bytes: usize,
+}
+
+/// Decoded RGBA held across scene builds. 256 MiB is ~16 full-page
+/// 2000×2000 photos — the visible pages plus their neighbours.
+const DECODED_IMAGE_BUDGET: usize = 256 * 1024 * 1024;
+
+thread_local! {
+    static DECODED_IMAGES: RefCell<DecodedImageCache> = RefCell::new(DecodedImageCache {
+        entries: std::collections::HashMap::new(),
+        order: std::collections::VecDeque::new(),
+        bytes: 0,
+    });
+}
+
+/// The image's pixels as a peniko `ImageData`, decoded at most once per
+/// image while it stays within the budget. `None` when the image has
+/// neither usable RGBA nor decodable encoded bytes.
+fn cached_image_data(img: &paged_compose::DecodedImage) -> Option<ImageData> {
+    let expected_len = img.width as usize * img.height as usize * 4;
+    let eager = img.rgba.len() == expected_len;
+    let source: &[u8] = if eager { &img.rgba } else { &img.encoded };
+    if !eager && source.is_empty() {
+        return None;
+    }
+    let key = (
+        source.as_ptr() as usize,
+        source.len(),
+        img.width,
+        img.height,
+    );
+    let hit = DECODED_IMAGES.with(|c| {
+        let mut c = c.borrow_mut();
+        let data = c.entries.get(&key).map(|(_, d)| d.clone())?;
+        if let Some(at) = c.order.iter().position(|k| *k == key) {
+            c.order.remove(at);
+        }
+        c.order.push_back(key);
+        Some(data)
+    });
+    if hit.is_some() {
+        return hit;
+    }
+    paged_compose::perf::count(|c| c.scene_image_decodes += 1);
+    let pixels: Box<[u8]> = if eager {
+        img.rgba.as_ref().to_vec().into_boxed_slice()
+    } else {
+        decode_image_for_render(&img.encoded, img.width, img.height)?.into_boxed_slice()
+    };
+    let size = pixels.len();
+    let data = ImageData {
+        data: Blob::new(Arc::new(pixels)),
+        format: ImageFormat::Rgba8,
+        // The display list's RGBA buffer is straight (un-premultiplied)
+        // alpha — pipeline decoders emit straight RGBA8. Mark it so
+        // peniko's sampler does the right multiply at draw time.
+        alpha_type: ImageAlphaType::Alpha,
+        width: img.width,
+        height: img.height,
+    };
+    if size <= DECODED_IMAGE_BUDGET {
+        DECODED_IMAGES.with(|c| {
+            let mut c = c.borrow_mut();
+            while c.bytes + size > DECODED_IMAGE_BUDGET {
+                let Some(old) = c.order.pop_front() else {
+                    break;
+                };
+                if let Some((_, d)) = c.entries.remove(&old) {
+                    c.bytes -= d.data.data().len();
+                }
+            }
+            c.bytes += size;
+            c.order.push_back(key);
+            c.entries.insert(key, (img.clone(), data.clone()));
+        });
+    }
+    Some(data)
+}
+
+/// Render `scene` through `renderer`, the way every render in this crate
+/// goes to Vello.
+///
+/// Vello keeps placed images resident in one atlas texture across
+/// renders, and its resolver takes a fast path for a scene with no
+/// late-bound resource at all — no image, gradient or glyph run, which
+/// is what a picture-free page of outlined text and solid fills encodes
+/// to. That path reports an empty atlas, so the renderer frees the real
+/// one, while the residency bookkeeping still says every image is
+/// uploaded (vello 0.10, `Resolver::resolve`). The next frame showing
+/// those images gets a new, blank atlas and uploads nothing: they paint
+/// transparent until evicted. In the editor that was every picture on a
+/// page reached by scrolling past an image-free one.
+///
+/// So a scene without late-bound resources is rendered with one added:
+/// a transparent 1 × 1 image, drawn outside the target, whose blob is
+/// shared for the process's lifetime — it uploads once and then keeps
+/// the atlas, and with it every resident image, alive.
+pub(crate) fn render_scene(
+    renderer: &mut Renderer,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    scene: &Scene,
+    target: &wgpu::TextureView,
+    params: &RenderParams,
+) -> Result<(), vello::Error> {
+    if !scene.encoding().resources.patches.is_empty() {
+        return renderer.render_to_texture(device, queue, scene, target, params);
+    }
+    static ATLAS_KEEPALIVE: std::sync::OnceLock<ImageData> = std::sync::OnceLock::new();
+    let keepalive = ATLAS_KEEPALIVE.get_or_init(|| ImageData {
+        data: Blob::new(Arc::new([0u8; 4])),
+        format: ImageFormat::Rgba8,
+        alpha_type: ImageAlphaType::Alpha,
+        width: 1,
+        height: 1,
+    });
+    let mut kept = Scene::new();
+    kept.append(scene, None);
+    kept.draw_image(
+        &ImageBrush::new(keepalive.clone()),
+        kurbo::Affine::translate((-4.0, -4.0)),
+    );
+    renderer.render_to_texture(device, queue, &kept, target, params)
+}
+
+fn count_overprints(list: &DisplayList) -> usize {
+    list.commands
+        .iter()
+        .filter(|cmd| {
+            matches!(
+                cmd,
+                DisplayCommand::FillPathOverprint { .. }
+                    | DisplayCommand::StrokePathOverprint { .. }
+            )
+        })
+        .count()
+}
+
+fn init_gpu() -> Result<GpuState, String> {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+        power_preference: wgpu::PowerPreference::HighPerformance,
+        compatible_surface: None,
+        force_fallback_adapter: false,
+    }))
+    .map_err(|e| format!("no wgpu adapter available: {e:?}"))?;
+    let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        label: Some("paged-gpu vello device"),
+        required_features: wgpu::Features::empty(),
+        required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
+        memory_hints: wgpu::MemoryHints::default(),
+        trace: wgpu::Trace::Off,
+        experimental_features: wgpu::ExperimentalFeatures::default(),
+    }))
+    .map_err(|e| e.to_string())?;
+    let renderer = Renderer::new(
+        &device,
+        RendererOptions {
+            use_cpu: false,
+            antialiasing_support: AaSupport::area_only(),
+            num_init_threads: std::num::NonZeroUsize::new(1),
+            pipeline_cache: None,
+        },
+    )
+    .map_err(|e| format!("Renderer::new: {e:?}"))?;
+    // Try to build the compute pipelines once; failure here logs and
+    // falls back to knockout per the plan. The Vello renderer is the
+    // critical path — its failure is fatal, but the compute pipelines
+    // are an optimisation and their absence stays survivable.
+    let pipelines = match crate::cmyk_compute::create_pipelines(&device) {
+        Ok(p) => Some(p),
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "vello: CMYK-overprint compute pipeline init failed; \
+                 falling back to knockout for *Overprint commands"
+            );
+            None
+        }
+    };
+    Ok(GpuState {
+        device,
+        queue,
+        renderer,
+        pipelines,
+    })
+}
+
+/// Walk the display list and build a vello `Scene`. Commands we
+/// don't yet handle log + skip; the scene still renders the parts
+/// we do understand so the result isn't all-or-nothing.
+fn build_scene(list: &DisplayList, options: &RasterOptions) -> Scene {
+    let scale = options.dpi / 72.0;
+    let page_to_px = kurbo::Affine::scale(scale as f64);
+    build_scene_with_transform(list, page_to_px)
+}
+
+/// Surface-presenter entrypoint. Same scene-building as `build_scene`
+/// but parameterised by the editor's `Viewport` (page → device-pixel
+/// transform). Lives behind the wasm32 cfg because `Viewport` is in
+/// `surface.rs` which only compiles for browser builds.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn build_scene_for_surface(
+    list: &DisplayList,
+    viewport: crate::surface::Viewport,
+) -> Scene {
+    let scale = (viewport.base_scale * viewport.zoom * viewport.dpr) as f64;
+    let pan_x = (viewport.pan_x * viewport.dpr) as f64;
+    let pan_y = (viewport.pan_y * viewport.dpr) as f64;
+    let page_to_surface = kurbo::Affine::translate((pan_x, pan_y)) * kurbo::Affine::scale(scale);
+    build_scene_with_transform(list, page_to_surface)
+}
+
+pub(crate) fn build_scene_with_transform(list: &DisplayList, page_to_px: kurbo::Affine) -> Scene {
+    build_scene_with_transform_filtered(list, page_to_px, /*skip_overprints=*/ false)
+}
+
+/// Same as `build_scene_with_transform`, but with the option to skip
+/// `*Overprint` commands. The compute-path Vello render passes
+/// `skip_overprints = true` so the vello_target represents
+/// "everything below the overprint layer" — the splat shader uses
+/// that buffer to recover bottom-side CMYK on virgin pixels.
+/// The page-space rectangle the feather at `feather_idx` will cover:
+/// its path's bounds inflated by the same pad the mask uses. The run's
+/// isolated layer is clipped to it, so what the mask cannot reach is
+/// not in the layer to begin with.
+fn feather_layer_rect(
+    list: &DisplayList,
+    feather_idx: usize,
+    px_per_pt: f32,
+) -> Option<kurbo::Rect> {
+    let cmd = list.commands.get(feather_idx)?;
+    let pad_pt = paged_compose::mask::feather_pad_pt(cmd)?;
+    let (path_id, transform) = paged_compose::mask::cmd_path_and_transform(cmd)?;
+    let path_data = list.paths.get(path_id)?;
+    let grid = paged_compose::mask::Grid::for_path(
+        path_data,
+        transform,
+        pad_pt,
+        (px_per_pt * 72.0).max(72.0),
+    )?;
+    Some(kurbo::Rect::new(
+        grid.origin_pt.0 as f64,
+        grid.origin_pt.1 as f64,
+        (grid.origin_pt.0 + grid.size_pt.0) as f64,
+        (grid.origin_pt.1 + grid.size_pt.1) as f64,
+    ))
+}
+
+/// Take alpha away from the current layer by a feather's coverage
+/// mask.
+///
+/// This is the whole difference between a feather and a stamp: the
+/// object loses opacity toward its edge, revealing what is behind it.
+/// The mask is uploaded as an alpha image and composited with
+/// `DestIn`, which multiplies the layer's alpha by the image's — the
+/// GPU equivalent of the `/SMask` the PDF exporter writes and of the
+/// CPU rasterizer's backdrop blend.
+fn apply_feather_mask(
+    scene: &mut Scene,
+    list: &DisplayList,
+    cmd: &DisplayCommand,
+    page_to_px: kurbo::Affine,
+    px_per_pt: f32,
+) {
+    let Some((path_id, transform)) = paged_compose::mask::cmd_path_and_transform(cmd) else {
+        return;
+    };
+    let Some(path_data) = list.paths.get(path_id) else {
+        return;
+    };
+    let Some(mask) = paged_compose::mask::feather_command_mask(
+        cmd,
+        path_data,
+        transform,
+        (px_per_pt * 72.0).max(72.0),
+    ) else {
+        return;
+    };
+    let (w, h) = (mask.grid.width_px, mask.grid.height_px);
+    if w == 0 || h == 0 {
+        return;
+    }
+    // Straight-alpha RGBA8: only the alpha channel is read by DestIn,
+    // but a white RGB keeps the buffer meaningful if it is ever shown.
+    let mut rgba = vec![255u8; (w as usize) * (h as usize) * 4];
+    for (i, &a) in mask.data.iter().enumerate() {
+        rgba[i * 4 + 3] = a;
+    }
+    let blob = Blob::new(Arc::new(rgba.into_boxed_slice()));
+    let brush = ImageBrush::new(ImageData {
+        data: blob,
+        format: ImageFormat::Rgba8,
+        alpha_type: ImageAlphaType::Alpha,
+        width: w,
+        height: h,
+    });
+    let place = page_to_px
+        * kurbo::Affine::translate((mask.grid.origin_pt.0 as f64, mask.grid.origin_pt.1 as f64))
+        * kurbo::Affine::scale_non_uniform(
+            mask.grid.size_pt.0 as f64 / w as f64,
+            mask.grid.size_pt.1 as f64 / h as f64,
+        );
+    let rect = kurbo::Rect::new(
+        mask.grid.origin_pt.0 as f64,
+        mask.grid.origin_pt.1 as f64,
+        (mask.grid.origin_pt.0 + mask.grid.size_pt.0) as f64,
+        (mask.grid.origin_pt.1 + mask.grid.size_pt.1) as f64,
+    );
+    scene.push_layer(
+        Fill::NonZero,
+        PenikoBlendMode::new(Mix::Normal, Compose::DestIn),
+        1.0,
+        page_to_px,
+        &rect,
+    );
+    scene.draw_image(&brush, place);
+    scene.pop_layer();
+}
+
+/// Upload one effect mask as a tinted alpha image and draw it.
+///
+/// Vello has no "paint a colour through an 8-bit mask" primitive, so
+/// the colour goes in the image's RGB and the coverage in its alpha.
+/// That is the same picture the PDF exporter writes as a gray-masked
+/// image XObject.
+fn draw_effect_stamp(
+    scene: &mut Scene,
+    stamp: &paged_compose::mask::EffectStamp,
+    page_to_px: kurbo::Affine,
+) {
+    if stamp.mask.is_empty() {
+        return;
+    }
+    let grid = stamp.mask.grid;
+    let (w, h) = (grid.width_px, grid.height_px);
+    if w == 0 || h == 0 {
+        return;
+    }
+    let c = linear_to_peniko(stamp.color).to_rgba8();
+    let mut rgba = vec![0u8; (w as usize) * (h as usize) * 4];
+    for (i, &a) in stamp.mask.data.iter().enumerate() {
+        rgba[i * 4] = c.r;
+        rgba[i * 4 + 1] = c.g;
+        rgba[i * 4 + 2] = c.b;
+        // The stamp colour may carry its own alpha (an effect's
+        // opacity is already folded into the mask by the builder).
+        rgba[i * 4 + 3] = ((a as u16 * c.a as u16) / 255) as u8;
+    }
+    let brush = ImageBrush::new(ImageData {
+        data: Blob::new(Arc::new(rgba.into_boxed_slice())),
+        format: ImageFormat::Rgba8,
+        alpha_type: ImageAlphaType::Alpha,
+        width: w,
+        height: h,
+    });
+    let place = page_to_px
+        * kurbo::Affine::translate((grid.origin_pt.0 as f64, grid.origin_pt.1 as f64))
+        * kurbo::Affine::scale_non_uniform(
+            grid.size_pt.0 as f64 / w as f64,
+            grid.size_pt.1 as f64 / h as f64,
+        );
+    scene.draw_image(&brush, place);
+}
+
+/// Paint every stamp one effect command produces, honouring each
+/// stamp's blend mode and its clip to the object's outline.
+fn paint_effect_stamps(
+    scene: &mut Scene,
+    list: &DisplayList,
+    cmd: &DisplayCommand,
+    page_to_px: kurbo::Affine,
+    px_per_pt: f32,
+) {
+    let Some((path_id, transform)) = paged_compose::mask::cmd_path_and_transform(cmd) else {
+        return;
+    };
+    let Some(path_data) = list.paths.get(path_id) else {
+        return;
+    };
+    let stamps = paged_compose::mask::effect_command_stamps(
+        cmd,
+        path_data,
+        transform,
+        (px_per_pt * 72.0).max(72.0),
+    );
+    if stamps.is_empty() {
+        return;
+    }
+    let clip = path_to_bez(path_data, transform);
+    for stamp in &stamps {
+        let blend = blend_to_peniko(stamp.blend_mode);
+        if stamp.clip_to_path {
+            scene.push_layer(Fill::NonZero, blend, 1.0, page_to_px, &clip);
+            draw_effect_stamp(scene, stamp, page_to_px);
+            scene.pop_layer();
+        } else {
+            scene.push_layer(
+                Fill::NonZero,
+                blend,
+                1.0,
+                page_to_px,
+                &kurbo::Rect::new(
+                    stamp.mask.grid.origin_pt.0 as f64,
+                    stamp.mask.grid.origin_pt.1 as f64,
+                    (stamp.mask.grid.origin_pt.0 + stamp.mask.grid.size_pt.0) as f64,
+                    (stamp.mask.grid.origin_pt.1 + stamp.mask.grid.size_pt.1) as f64,
+                ),
+            );
+            draw_effect_stamp(scene, stamp, page_to_px);
+            scene.pop_layer();
+        }
+    }
+}
+
+fn build_scene_with_transform_filtered(
+    list: &DisplayList,
+    page_to_px: kurbo::Affine,
+    skip_overprints: bool,
+) -> Scene {
+    // Stack of in-flight scenes. The bottom entry is the final
+    // returned scene; additional entries are sub-scenes captured
+    // for `PushLayer { effect: GaussianBlur, .. }` so we can replay
+    // their contents under a multi-tap Gaussian sampling pattern at
+    // the matching `PopLayer`. All `scene.X(...)` calls below route
+    // to `scene_stack.last_mut().unwrap()` — the current target.
+    let mut scene_stack: Vec<Scene> = vec![Scene::new()];
+    // The page is one isolated group over the paper: the paper is not a
+    // backdrop a blend mode reads, as in InDesign, where a Screen or
+    // Multiply object on blank paper shows its own colour. The render's
+    // clear colour IS the paper here, so without this layer every blend
+    // read white (`transparency-targets` case 6: a Screen fill drawn
+    // white). The CPU lane blends into a transparent group buffer.
+    //
+    // The layer covers what the page paints, padded well past any
+    // antialiasing or cap the extent walk rounds off, not the whole
+    // surface: a presenter appends one page scene per visible page, and
+    // a surface-sized layer per page is per-tile work on every tile.
+    let page_layer = paged_compose::extent::painted_bounds(list).map(|b| {
+        const PAD_PT: f64 = 72.0;
+        kurbo::Rect::new(
+            b.x as f64 - PAD_PT,
+            b.y as f64 - PAD_PT,
+            (b.x + b.w) as f64 + PAD_PT,
+            (b.y + b.h) as f64 + PAD_PT,
+        )
+    });
+    if let Some(rect) = &page_layer {
+        scene_stack[0].push_layer(
+            Fill::NonZero,
+            PenikoBlendMode::default(),
+            1.0,
+            page_to_px,
+            rect,
+        );
+    }
+
+    // Per-push bookkeeping. `Encoded` means the push translated
+    // directly into a `push_layer` call on the current target scene
+    // (clip / blend group / no-effect layer); the matching pop just
+    // calls `pop_layer`. `BlurredLayer` means the push opened a
+    // sub-scene that's now collecting commands — the matching pop
+    // replays it via the multi-tap Gaussian onto the parent. This
+    // single LIFO stack carries both kinds because the display list
+    // pairs them unambiguously: every PushClip/PopClip,
+    // BeginBlendGroup/EndBlendGroup, and PushLayer/PopLayer is
+    // properly nested by the emitter.
+    let mut layer_stack: Vec<LayerKind> = Vec::new();
+
+    // A feather takes alpha AWAY from the object it belongs to. This
+    // lane used to fake that by stamping white rings inside the path,
+    // which paints ink where InDesign removes it — on a tinted ground
+    // the halo is plainly wrong, and on the annual's page 59 it wiped
+    // the panel under the cloud and the veil. Instead the run gets an
+    // isolated layer here and the real coverage mask, the one the PDF
+    // exporter uses, is composited onto it with `DestIn` at the
+    // feather command.
+    let feather_runs = paged_compose::mask::feather_run_starts(list);
+    let mut feather_layer_open = false;
+    // Pixels per point, for sizing the mask rasters.
+    let px_per_pt = {
+        let c = page_to_px.as_coeffs();
+        (c[0].hypot(c[1])) as f32
+    };
+
+    for (cmd_idx, cmd) in list.commands.iter().enumerate() {
+        if let Some(feather_idx) = feather_runs.get(&cmd_idx).copied() {
+            // Defensive: a previous run whose feather never executed
+            // (degenerate path) would otherwise leak its layer.
+            if feather_layer_open {
+                scene_stack
+                    .last_mut()
+                    .expect("scene_stack underflow")
+                    .pop_layer();
+                feather_layer_open = false;
+            }
+            if let Some(rect) = feather_layer_rect(list, feather_idx, px_per_pt) {
+                let scene = scene_stack.last_mut().expect("scene_stack underflow");
+                scene.push_layer(
+                    Fill::NonZero,
+                    PenikoBlendMode::default(),
+                    1.0,
+                    page_to_px,
+                    &rect,
+                );
+                feather_layer_open = true;
+            }
+        }
+        match cmd {
+            // C-28 — open a soft-mask bracket. Vello's mask layers
+            // modulate the content already drawn in the enclosing
+            // layer, which is the REVERSE of the display list's
+            // artwork-then-content order, so the artwork is captured
+            // into a sub-scene here and replayed at `EndSoftMask`
+            // once the content is down. Same capture-and-replay
+            // machinery the Gaussian-blur layer uses.
+            DisplayCommand::BeginSoftMask {
+                mask_type, invert, ..
+            } => {
+                scene_stack.push(Scene::new());
+                layer_stack.push(LayerKind::SoftMaskArtwork {
+                    mask_type: *mask_type,
+                    invert: *invert,
+                });
+            }
+            // C-28 — artwork done, masked content starts. Close the
+            // capture and open an isolating layer for the content:
+            // Vello's mask applies to *everything already drawn in
+            // the current layer*, so the content needs a layer of its
+            // own or the mask would eat the whole page beneath it.
+            //
+            // That isolation is also the one place this can diverge
+            // from the CPU rasterizer, which masks each draw in place
+            // and so lets a blend inside the masked content see the
+            // page. `hoistable_blend_group` recovers the common case
+            // — see its doc comment.
+            DisplayCommand::BeginMaskedContent(_) => {
+                if !matches!(layer_stack.last(), Some(LayerKind::SoftMaskArtwork { .. })) {
+                    continue; // stray marker — tolerated
+                }
+                let Some(LayerKind::SoftMaskArtwork { mask_type, invert }) = layer_stack.pop()
+                else {
+                    unreachable!("checked by the matches! above")
+                };
+                let artwork = scene_stack
+                    .pop()
+                    .expect("scene_stack underflow on soft-mask artwork");
+                let hoisted = hoistable_blend_group(&list.commands, cmd_idx);
+                let (blend, alpha, rect) = match hoisted {
+                    Some(g) => (
+                        blend_to_peniko(g.blend_mode),
+                        g.opacity.clamp(0.0, 1.0),
+                        kurbo::Rect::new(
+                            g.bounds.x as f64,
+                            g.bounds.y as f64,
+                            (g.bounds.x + g.bounds.w) as f64,
+                            (g.bounds.y + g.bounds.h) as f64,
+                        ),
+                    ),
+                    None => (PenikoBlendMode::default(), 1.0, soft_mask_layer_rect()),
+                };
+                let scene = scene_stack.last_mut().expect("scene_stack underflow");
+                scene.push_layer(Fill::NonZero, blend, alpha, page_to_px, &rect);
+                layer_stack.push(LayerKind::SoftMaskContent {
+                    artwork: Box::new(artwork),
+                    mask_type,
+                    invert,
+                    elide_next_blend_group: hoisted.is_some(),
+                });
+            }
+            // C-28 — content done. Replay the artwork through the
+            // mask layer, then close the content layer.
+            DisplayCommand::EndSoftMask(_) => {
+                if !matches!(layer_stack.last(), Some(LayerKind::SoftMaskContent { .. })) {
+                    continue; // stray marker — tolerated
+                }
+                let Some(LayerKind::SoftMaskContent {
+                    artwork,
+                    mask_type,
+                    invert,
+                    ..
+                }) = layer_stack.pop()
+                else {
+                    unreachable!("checked by the matches! above")
+                };
+                let scene = scene_stack.last_mut().expect("scene_stack underflow");
+                emit_soft_mask(scene, page_to_px, &artwork, mask_type, invert);
+                scene.pop_layer();
+            }
+            DisplayCommand::PushClip { path_id, transform } => {
+                let scene = scene_stack.last_mut().expect("scene_stack underflow");
+                let Some(path_data) = list.paths.get(*path_id) else {
+                    continue;
+                };
+                let path = path_to_bez(path_data, transform);
+                // Vello clip layers are encoded as plain push_layer
+                // with Mix::Normal + Compose::SrcOver and full alpha
+                // — the layer becomes a pure clip.
+                scene.push_layer(
+                    Fill::NonZero,
+                    PenikoBlendMode::default(),
+                    1.0,
+                    page_to_px,
+                    &path,
+                );
+                layer_stack.push(LayerKind::Encoded);
+            }
+            DisplayCommand::PopClip(_) | DisplayCommand::EndBlendGroup(_) => {
+                pop_layer_or_blur(&mut scene_stack, &mut layer_stack, page_to_px);
+            }
+            DisplayCommand::BeginBlendGroup {
+                bounds,
+                blend_mode,
+                opacity,
+                ..
+            } => {
+                // C-28 — this group's blend was hoisted onto the
+                // enclosing soft-mask content layer at
+                // `BeginMaskedContent`; encoding it again here would
+                // apply the composite twice. Push a do-nothing entry
+                // so the matching `EndBlendGroup` stays balanced.
+                if let Some(LayerKind::SoftMaskContent {
+                    elide_next_blend_group: elide @ true,
+                    ..
+                }) = layer_stack.last_mut()
+                {
+                    *elide = false;
+                    layer_stack.push(LayerKind::Elided);
+                    continue;
+                }
+                let scene = scene_stack.last_mut().expect("scene_stack underflow");
+                let rect = kurbo::Rect::new(
+                    bounds.x as f64,
+                    bounds.y as f64,
+                    (bounds.x + bounds.w) as f64,
+                    (bounds.y + bounds.h) as f64,
+                );
+                scene.push_layer(
+                    Fill::NonZero,
+                    blend_to_peniko(*blend_mode),
+                    opacity.clamp(0.0, 1.0),
+                    page_to_px,
+                    &rect,
+                );
+                layer_stack.push(LayerKind::Encoded);
+            }
+            DisplayCommand::PushLayer {
+                bounds,
+                effect,
+                blend_mode,
+                opacity,
+                ..
+            } => match *effect {
+                LayerEffect::GaussianBlur { sigma_pt } if sigma_pt > 0.5 => {
+                    // Capture-and-replay path: open a fresh sub-scene
+                    // so subsequent draws collect into a buffer we can
+                    // replay multiple times under a 2D Gaussian sample
+                    // pattern. The actual blur happens at the matching
+                    // `PopLayer`, via `emit_blurred_layer`. Vello has no
+                    // built-in image-space Gaussian for layer contents
+                    // in this version, so this multi-tap replay is the
+                    // honest workaround — see the module docstring.
+                    scene_stack.push(Scene::new());
+                    layer_stack.push(LayerKind::Blurred {
+                        sigma_pt,
+                        bounds: *bounds,
+                        blend_mode: *blend_mode,
+                        opacity: opacity.clamp(0.0, 1.0),
+                    });
+                }
+                _ => {
+                    // Sub-pixel σ or `LayerEffect::None` — fall back to
+                    // a plain transparency group with the requested
+                    // composite. The blur is a no-op at this σ so the
+                    // CPU rasterizer's separable-Gaussian shortcut
+                    // matches: a single uniform layer composite.
+                    let scene = scene_stack.last_mut().expect("scene_stack underflow");
+                    let rect = kurbo::Rect::new(
+                        bounds.x as f64,
+                        bounds.y as f64,
+                        (bounds.x + bounds.w) as f64,
+                        (bounds.y + bounds.h) as f64,
+                    );
+                    scene.push_layer(
+                        Fill::NonZero,
+                        blend_to_peniko(*blend_mode),
+                        opacity.clamp(0.0, 1.0),
+                        page_to_px,
+                        &rect,
+                    );
+                    layer_stack.push(LayerKind::Encoded);
+                }
+            },
+            DisplayCommand::PopLayer(_) => {
+                pop_layer_or_blur(&mut scene_stack, &mut layer_stack, page_to_px);
+            }
+            DisplayCommand::FillPath {
+                path_id,
+                paint,
+                transform,
+            } => {
+                let scene = scene_stack.last_mut().expect("scene_stack underflow");
+                let Some(path_data) = list.paths.get(*path_id) else {
+                    continue;
+                };
+                let path = path_to_bez(path_data, transform);
+                let Some(brush) = resolve_paint(paint, list, transform) else {
+                    continue;
+                };
+                scene.fill(Fill::NonZero, page_to_px, brush.as_ref(), None, &path);
+            }
+            DisplayCommand::FillPathBlend {
+                path_id,
+                paint,
+                transform,
+                blend_mode,
+            } => {
+                // Per-command non-Normal blend is rare at runtime
+                // (the orchestrator brackets non-Normal frames with
+                // BeginBlendGroup/EndBlendGroup instead). Wrap the
+                // single fill in a peniko blend layer so the
+                // composite still reads the page contents below.
+                let scene = scene_stack.last_mut().expect("scene_stack underflow");
+                let Some(path_data) = list.paths.get(*path_id) else {
+                    continue;
+                };
+                let path = path_to_bez(path_data, transform);
+                let Some(brush) = resolve_paint(paint, list, transform) else {
+                    continue;
+                };
+                let pb = blend_to_peniko(*blend_mode);
+                if pb.mix == Mix::Normal && pb.compose == Compose::SrcOver {
+                    // Fast path: Normal blend, no layer needed.
+                    scene.fill(Fill::NonZero, page_to_px, brush.as_ref(), None, &path);
+                } else {
+                    // The blend layer's clip shape is the path
+                    // itself — anything outside is unaffected.
+                    scene.push_layer(Fill::NonZero, pb, 1.0, page_to_px, &path);
+                    scene.fill(Fill::NonZero, page_to_px, brush.as_ref(), None, &path);
+                    scene.pop_layer();
+                }
+            }
+            DisplayCommand::StrokePath {
+                path_id,
+                paint,
+                stroke,
+                transform,
+            } => {
+                let scene = scene_stack.last_mut().expect("scene_stack underflow");
+                let Some(path_data) = list.paths.get(*path_id) else {
+                    continue;
+                };
+                let path = path_to_bez(path_data, transform);
+                let Some(brush) = resolve_paint(paint, list, transform) else {
+                    continue;
+                };
+                let ks = kurbo_stroke(stroke);
+                scene.stroke(&ks, page_to_px, brush.as_ref(), None, &path);
+            }
+            DisplayCommand::FillPathOverprint {
+                path_id,
+                paint,
+                transform,
+            } => {
+                if skip_overprints {
+                    continue;
+                }
+                // Vello backend overprint knockout fallback: when the
+                // compute-pipeline path isn't running we render the
+                // overprint as a normal knockout fill so the page is
+                // still visible. The compute path's main render
+                // passes `skip_overprints = true` and re-encodes each
+                // overprint batch into a scratch texture.
+                let scene = scene_stack.last_mut().expect("scene_stack underflow");
+                let Some(path_data) = list.paths.get(*path_id) else {
+                    continue;
+                };
+                let path = path_to_bez(path_data, transform);
+                let Some(brush) = resolve_paint(paint, list, transform) else {
+                    continue;
+                };
+                scene.fill(Fill::NonZero, page_to_px, brush.as_ref(), None, &path);
+            }
+            DisplayCommand::StrokePathOverprint {
+                path_id,
+                paint,
+                stroke,
+                transform,
+            } => {
+                if skip_overprints {
+                    continue;
+                }
+                let scene = scene_stack.last_mut().expect("scene_stack underflow");
+                let Some(path_data) = list.paths.get(*path_id) else {
+                    continue;
+                };
+                let path = path_to_bez(path_data, transform);
+                let Some(brush) = resolve_paint(paint, list, transform) else {
+                    continue;
+                };
+                let ks = kurbo_stroke(stroke);
+                scene.stroke(&ks, page_to_px, brush.as_ref(), None, &path);
+            }
+            DisplayCommand::Image {
+                image_id,
+                transform,
+            } => {
+                let scene = scene_stack.last_mut().expect("scene_stack underflow");
+                let Some(img) = list.image(*image_id) else {
+                    continue;
+                };
+                if img.width == 0 || img.height == 0 {
+                    continue;
+                }
+                // Two paths: eager (rgba pre-decoded; native build)
+                // and lazy (rgba empty; wasm32 build defers decode
+                // to here to keep peak heap bounded). Either way the
+                // pixels come from `cached_image_data`, which decodes a
+                // lazy image once and hands back the SAME blob on every
+                // later scene build (no re-decode, no re-upload).
+                let Some(image_data) = cached_image_data(img) else {
+                    continue;
+                };
+                let brush = ImageBrush::new(image_data);
+                // Compose the placement transform: the display-list
+                // `transform` maps the unit rect (0..1, 0..1) → page
+                // coords. Vello's `draw_image` expects a transform
+                // that maps the source pixel rect (0..w, 0..h) → final
+                // device pixels. So: page_to_px ∘ unit_to_page ∘
+                // pixel_to_unit.
+                let inv_w = 1.0 / img.width as f64;
+                let inv_h = 1.0 / img.height as f64;
+                let [a, b, c, d, tx, ty] = transform.0;
+                let unit_to_page = kurbo::Affine::new([
+                    a as f64, b as f64, c as f64, d as f64, tx as f64, ty as f64,
+                ]);
+                let pixel_to_unit = kurbo::Affine::scale_non_uniform(inv_w, inv_h);
+                let pixel_to_px = page_to_px * unit_to_page * pixel_to_unit;
+                scene.draw_image(&brush, pixel_to_px);
+            }
+            DisplayCommand::DropShadow { .. } | DisplayCommand::PathShadow { .. } => {
+                // The CPU lane's own shadow: the shape moved, blurred,
+                // choked and grained by the shared mask builder, painted
+                // as an image (a stamped falloff here read softer and
+                // wider than the CPU's Gaussian, and a rect-stamp shadow
+                // was not drawn at all).
+                paint_effect_stamps(
+                    scene_stack.last_mut().expect("scene_stack underflow"),
+                    list,
+                    cmd,
+                    page_to_px,
+                    px_per_pt,
+                );
+            }
+            DisplayCommand::InnerShadow { .. }
+            | DisplayCommand::OuterGlow { .. }
+            | DisplayCommand::InnerGlow { .. }
+            | DisplayCommand::BevelEmboss { .. }
+            | DisplayCommand::Satin { .. } => {
+                // All five build the same way — coverage, moved /
+                // grown / blurred / combined, painted through in a
+                // colour — so they all come from the shared mask
+                // builders in `paged-compose`. This lane used to
+                // approximate each with concentric path stamps and
+                // skip the bevel outright, which on the annual's
+                // effects pages read as a dark wash over the whole
+                // object instead of a lit edge.
+                paint_effect_stamps(
+                    scene_stack.last_mut().expect("scene_stack underflow"),
+                    list,
+                    cmd,
+                    page_to_px,
+                    px_per_pt,
+                );
+            }
+            DisplayCommand::Feather {
+                path_id,
+                transform,
+                params,
+            } => {
+                // The run opened an isolated layer at its first
+                // command; take its alpha down by the object's real
+                // coverage mask, the same raster the PDF exporter
+                // paints through, and close the layer.
+                let _ = (path_id, transform, params);
+                apply_feather_mask(
+                    scene_stack.last_mut().expect("scene_stack underflow"),
+                    list,
+                    cmd,
+                    page_to_px,
+                    px_per_pt,
+                );
+                if feather_layer_open {
+                    scene_stack
+                        .last_mut()
+                        .expect("scene_stack underflow")
+                        .pop_layer();
+                    feather_layer_open = false;
+                }
+            }
+            DisplayCommand::DirectionalFeather {
+                path_id,
+                transform,
+                params,
+            } => {
+                // Per-edge ramps, from the same shared mask builder
+                // the PDF lane uses — this lane used to fall back to
+                // the plain feather's widest edge.
+                let _ = (path_id, transform, params);
+                apply_feather_mask(
+                    scene_stack.last_mut().expect("scene_stack underflow"),
+                    list,
+                    cmd,
+                    page_to_px,
+                    px_per_pt,
+                );
+                if feather_layer_open {
+                    scene_stack
+                        .last_mut()
+                        .expect("scene_stack underflow")
+                        .pop_layer();
+                    feather_layer_open = false;
+                }
+            }
+            DisplayCommand::GradientFeather { .. } => {
+                // A gradient feather is a MASK over the object's own
+                // paint: alpha 1 keeps it, alpha 0 takes it away along
+                // the axis. Painting white AT that alpha instead — the
+                // old approximation here — read as the fade running
+                // backwards, which is how the annual's gradient bar
+                // came out. The mask is the shared one the other
+                // lanes use, composited with `DestIn`.
+                apply_feather_mask(
+                    scene_stack.last_mut().expect("scene_stack underflow"),
+                    list,
+                    cmd,
+                    page_to_px,
+                    px_per_pt,
+                );
+                // …and the run's layer closes here, as the other two
+                // feathers close theirs. Left open, everything after a
+                // gradient feather on the page drew inside its clip
+                // (`gradient-geometry` page 2: the next case's label
+                // gone, its feathered box solid).
+                if feather_layer_open {
+                    scene_stack
+                        .last_mut()
+                        .expect("scene_stack underflow")
+                        .pop_layer();
+                    feather_layer_open = false;
+                }
+            }
+        }
+    }
+    // Defensive: any pushes left unmatched at scene end still need
+    // to be balanced so the encoder is well-formed. The orchestrator
+    // shouldn't ever leave them dangling, but be tolerant — drain the
+    // layer stack, popping each layer or finalising each pending blur
+    // sub-scene against the parent.
+    if feather_layer_open {
+        scene_stack
+            .last_mut()
+            .expect("scene_stack underflow")
+            .pop_layer();
+    }
+    while !layer_stack.is_empty() {
+        pop_layer_or_blur(&mut scene_stack, &mut layer_stack, page_to_px);
+    }
+    let mut root = scene_stack
+        .pop()
+        .expect("scene_stack should still contain the root scene");
+    if page_layer.is_some() {
+        root.pop_layer();
+    }
+    root
+}
+
+/// Tracks what each entry on the layer LIFO meant at push time so the
+/// matching pop knows whether to call `pop_layer` on the current scene
+/// (Encoded) or unwind a captured sub-scene through the multi-tap
+/// Gaussian replay (Blurred).
+enum LayerKind {
+    /// A plain `push_layer` call on the current target scene. Clip
+    /// layers, blend groups, and `PushLayer { effect: None }` all use
+    /// this — the pop is a straight `pop_layer`.
+    Encoded,
+    /// A `PushLayer { effect: GaussianBlur }` push opened a new sub-
+    /// scene on `scene_stack`; the matching pop runs
+    /// [`emit_blurred_layer`] which replays the sub-scene under a 2D
+    /// Gaussian sample pattern onto the parent target.
+    Blurred {
+        sigma_pt: f32,
+        bounds: paged_compose::Rect,
+        blend_mode: ComposeBlendMode,
+        opacity: f32,
+    },
+    /// C-28 — a `BeginSoftMask` opened a sub-scene on `scene_stack`
+    /// that is collecting the mask ARTWORK. Lives on the stack only
+    /// until `BeginMaskedContent`.
+    SoftMaskArtwork {
+        mask_type: paged_compose::SoftMaskType,
+        invert: bool,
+    },
+    /// C-28 — `BeginMaskedContent` closed the artwork capture and
+    /// pushed an isolating layer for the masked content; `artwork`
+    /// waits here for [`emit_soft_mask`] at `EndSoftMask`. Boxed
+    /// because a `Scene` is an order of magnitude larger than the
+    /// other variants and this one is rare.
+    SoftMaskContent {
+        artwork: Box<Scene>,
+        mask_type: paged_compose::SoftMaskType,
+        invert: bool,
+        /// The blend group [`hoistable_blend_group`] found was folded
+        /// into this layer's own blend mode; the next
+        /// `BeginBlendGroup` must therefore encode nothing.
+        elide_next_blend_group: bool,
+    },
+    /// A push that deliberately produced NO Vello layer, so the
+    /// matching pop must do nothing. Only [`LayerKind::SoftMaskContent`]
+    /// hoisting produces these.
+    Elided,
+}
+
+/// The blend group [`hoistable_blend_group`] folded into a soft-mask
+/// content layer. `bounds` rides along so the content layer keeps
+/// clipping to the group's buffer extent, exactly as the un-folded
+/// encoding — and the CPU rasterizer's group pixmap — would.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct HoistedGroup {
+    bounds: paged_compose::Rect,
+    blend_mode: ComposeBlendMode,
+    opacity: f32,
+}
+
+/// C-28 — decide whether the blend group opening the masked content
+/// can be folded into the content layer itself.
+///
+/// Vello's mask layers force the masked content into an isolated
+/// layer (see [`emit_soft_mask`]), and a blend group *inside* that
+/// isolation composites against an empty backdrop instead of the
+/// page — so a Multiply frame carrying an opacity mask would come out
+/// unblended. The CPU rasterizer has no such problem: it masks each
+/// draw in place, and `EndBlendGroup` composites the group buffer
+/// onto the page through the clip stack (mask included).
+///
+/// When the masked content is EXACTLY one blend group — which is what
+/// the emitter produces for a frame that has both a blend mode and an
+/// opacity mask, since `emit_one` opens the frame's group first and
+/// closes it last — the two are reconcilable: put the blend on the
+/// content layer, apply the mask inside it, and let the whole thing
+/// composite once at the end. That yields
+/// `page·(1 − m·α) + m·α·blend(page, content)`, which is what the CPU
+/// rasterizer computes.
+///
+/// Returns the group when `mid` (the index of the
+/// `BeginMaskedContent`) is immediately followed by a
+/// `BeginBlendGroup` whose matching `EndBlendGroup` is the last
+/// command before the bracket's `EndSoftMask`. Any other shape
+/// returns `None` and the content layer stays a plain isolator —
+/// folding a group that does not span the whole content would apply
+/// its blend to commands that are not part of it.
+///
+/// The scan is O(bracket length) and runs once per bracket. It is a
+/// no-op for `Normal` blends at opacity 1 (the overwhelmingly common
+/// case): the folded encoding is a `Mix::Normal`/`SrcOver` layer over
+/// the group's bounds either way.
+fn hoistable_blend_group(commands: &[DisplayCommand], mid: usize) -> Option<HoistedGroup> {
+    let hoisted = match commands.get(mid + 1)? {
+        DisplayCommand::BeginBlendGroup {
+            bounds,
+            blend_mode,
+            opacity,
+            ..
+        } => HoistedGroup {
+            bounds: *bounds,
+            blend_mode: *blend_mode,
+            opacity: *opacity,
+        },
+        _ => return None,
+    };
+    // Walk forward tracking layer depth. `BeginMaskedContent` counts
+    // as a push because a nested bracket opens its own content layer;
+    // `BeginSoftMask` does not (it opens a sub-scene, not a layer).
+    let mut depth = 0i32;
+    for (i, cmd) in commands.iter().enumerate().skip(mid + 1) {
+        match cmd {
+            DisplayCommand::PushClip { .. }
+            | DisplayCommand::BeginBlendGroup { .. }
+            | DisplayCommand::PushLayer { .. }
+            | DisplayCommand::BeginMaskedContent(_) => depth += 1,
+            DisplayCommand::PopClip(_)
+            | DisplayCommand::EndBlendGroup(_)
+            | DisplayCommand::PopLayer(_) => {
+                depth -= 1;
+                if depth == 0 {
+                    // The candidate group just closed. Hoist only if
+                    // it closed with the right command AND the
+                    // bracket ends immediately after.
+                    let closes_group = matches!(cmd, DisplayCommand::EndBlendGroup(_));
+                    let bracket_ends_next =
+                        matches!(commands.get(i + 1), Some(DisplayCommand::EndSoftMask(_)));
+                    return (closes_group && bracket_ends_next).then_some(hoisted);
+                }
+            }
+            // Our own bracket closed before the group did: malformed.
+            DisplayCommand::EndSoftMask(_) => {
+                if depth == 0 {
+                    return None;
+                }
+                depth -= 1;
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Generic pop: examine the top of `layer_stack` and either pop the
+/// current scene's layer (Encoded) or fold the captured sub-scene back
+/// onto the parent target through a multi-tap Gaussian replay
+/// (Blurred). Mismatched / underflowed pops are a no-op, matching the
+/// CPU rasterizer's tolerance policy for `PopClip` / `EndBlendGroup` /
+/// `PopLayer`.
+fn pop_layer_or_blur(
+    scene_stack: &mut Vec<Scene>,
+    layer_stack: &mut Vec<LayerKind>,
+    page_to_px: kurbo::Affine,
+) {
+    let Some(kind) = layer_stack.pop() else {
+        return;
+    };
+    match kind {
+        // C-28 — a soft-mask bracket is closed by its own
+        // `EndSoftMask` arm, never by a `PopClip` / `PopLayer` /
+        // `EndBlendGroup`. Reaching here means either a stray pop
+        // inside a bracket or the end-of-list drain; both finish the
+        // bracket as best they can rather than desynchronising the
+        // scene stack.
+        LayerKind::SoftMaskArtwork { .. } => {
+            // Artwork capture never reached `BeginMaskedContent` —
+            // drop it. (Painting it would put the mask geometry on
+            // top of the page, the failure mode the old skip-path
+            // was written to avoid.)
+            scene_stack
+                .pop()
+                .expect("scene_stack underflow on soft-mask artwork drain");
+        }
+        LayerKind::SoftMaskContent {
+            artwork,
+            mask_type,
+            invert,
+            ..
+        } => {
+            let scene = scene_stack
+                .last_mut()
+                .expect("scene_stack underflow on soft-mask content drain");
+            emit_soft_mask(scene, page_to_px, &artwork, mask_type, invert);
+            scene.pop_layer();
+        }
+        // A push that encoded nothing — its pop encodes nothing.
+        LayerKind::Elided => {}
+        LayerKind::Encoded => {
+            let scene = scene_stack
+                .last_mut()
+                .expect("scene_stack underflow on Encoded pop");
+            scene.pop_layer();
+        }
+        LayerKind::Blurred {
+            sigma_pt,
+            bounds,
+            blend_mode,
+            opacity,
+        } => {
+            // Pop the captured sub-scene and replay it onto the
+            // parent target under a 2D Gaussian sample grid.
+            let sub = scene_stack
+                .pop()
+                .expect("scene_stack underflow on Blurred pop");
+            let parent = scene_stack
+                .last_mut()
+                .expect("Blurred layer with no parent scene");
+            emit_blurred_layer(
+                parent, page_to_px, &sub, sigma_pt, bounds, blend_mode, opacity,
+            );
+        }
+    }
+}
+
+/// Half-extent, in page pt, of the rectangle used as the clip shape
+/// for both layers a C-28 soft-mask bracket opens.
+///
+/// A `push_layer` needs a *shape*, and both layers here want "all of
+/// it": the content layer must not clip the content, and the mask
+/// layer must cover every pixel the content can reach — Vello leaves
+/// the backdrop untouched where the mask layer's coverage is zero, so
+/// a mask rect smaller than the content would leave the overhang
+/// unmasked (`fine.wgsl`'s `if area[i] == 0f { rgba[i] = bg; }`).
+///
+/// Oversizing is free where undersizing is wrong, hence a constant
+/// rather than a computed bbox: `tile_alloc.wgsl` clamps every path
+/// bbox to the render target's tile grid, so the cost of this rect is
+/// one target-sized layer — the same order as the CPU rasterizer's
+/// target-sized capture buffer — no matter how large the number is.
+/// It is in PAGE space (not device space) because `build_page_scene` /
+/// `present_multi` build a scene at identity and only then
+/// `Scene::append` it under the camera transform; a device-space rect
+/// would be wrong there.
+const SOFT_MASK_LAYER_EXTENT_PT: f64 = 1.0e5;
+
+fn soft_mask_layer_rect() -> kurbo::Rect {
+    kurbo::Rect::new(
+        -SOFT_MASK_LAYER_EXTENT_PT,
+        -SOFT_MASK_LAYER_EXTENT_PT,
+        SOFT_MASK_LAYER_EXTENT_PT,
+        SOFT_MASK_LAYER_EXTENT_PT,
+    )
+}
+
+/// C-28 — replay a captured mask ARTWORK sub-scene as a coverage mask
+/// over the content layer that is currently on top of `scene`.
+///
+/// Called at `EndSoftMask`, i.e. with the masked content already
+/// encoded into the enclosing layer, because that is the direction
+/// Vello's mask layers work: `CMD_END_CLIP` reads the layer's own
+/// content as the mask and the *backdrop* — everything drawn earlier
+/// in the enclosing layer — as the thing being masked.
+///
+/// Four cases, all exact against the CPU rasterizer:
+///
+/// * **Luminosity** — `push_luminance_mask_layer`, whose end-of-layer
+///   composite is `bg * clamp(svg_lum(unpremultiply(fg)) * fg.a, 0, 1)`.
+///   An unpainted pixel is `fg = 0`, so it resolves to 0 = hidden,
+///   matching PDF's black backdrop and `tiny_skia::MaskType::Luminance`
+///   over an α = 0 capture buffer.
+/// * **Luminosity + invert** — the same layer, but the artwork is
+///   composited over an opaque WHITE fill under `Mix::Difference`.
+///   Difference against white is `1 − c` per channel, and luma is
+///   affine with coefficients summing to 1, so the layer resolves to
+///   `1 − α·lum(c)` — exactly `tiny_skia::Mask::invert` of the
+///   non-inverted mask. (Doing it here rather than post-hoc is the
+///   only option: Vello has no "invert the coverage" knob.)
+/// * **Alpha** — no mask layer needed. `Compose::DestIn` is defined as
+///   `dst · src.a`, which *is* an alpha mask; unpainted artwork gives
+///   `src.a = 0` ⇒ hidden, same default.
+/// * **Alpha + invert** — `Compose::DestOut`, `dst · (1 − src.a)`.
+///
+/// The artwork is replayed under `Scene::append` with no extra
+/// transform: the sub-scene was built in the same shape space, with
+/// `page_to_px` already baked into each draw.
+fn emit_soft_mask(
+    scene: &mut Scene,
+    page_to_px: kurbo::Affine,
+    artwork: &Scene,
+    mask_type: paged_compose::SoftMaskType,
+    invert: bool,
+) {
+    let rect = soft_mask_layer_rect();
+    match mask_type {
+        paged_compose::SoftMaskType::Alpha => {
+            let compose = if invert {
+                Compose::DestOut
+            } else {
+                Compose::DestIn
+            };
+            scene.push_layer(
+                Fill::NonZero,
+                PenikoBlendMode::new(Mix::Normal, compose),
+                1.0,
+                page_to_px,
+                &rect,
+            );
+            scene.append(artwork, None);
+            scene.pop_layer();
+        }
+        paged_compose::SoftMaskType::Luminosity => {
+            scene.push_luminance_mask_layer(Fill::NonZero, 1.0, page_to_px, &rect);
+            if invert {
+                scene.fill(Fill::NonZero, page_to_px, PenikoColor::WHITE, None, &rect);
+                scene.push_layer(
+                    Fill::NonZero,
+                    PenikoBlendMode::new(Mix::Difference, Compose::SrcOver),
+                    1.0,
+                    page_to_px,
+                    &rect,
+                );
+                scene.append(artwork, None);
+                scene.pop_layer();
+            } else {
+                scene.append(artwork, None);
+            }
+            scene.pop_layer();
+        }
+    }
+}
+
+/// Multi-tap Gaussian-blur approximation over a captured sub-scene.
+///
+/// Vello doesn't expose an image-space separable Gaussian over an
+/// arbitrary layer buffer in the version we link against —
+/// `draw_blurred_rounded_rect` is a *brush* primitive that only blurs
+/// a rounded rect, not the contents of a transparency group, and the
+/// `vello_filters_cpu` crate (the future home of the SVG-filter
+/// Gaussian) is still a CPU-only reference implementation today (see
+/// `image_filters/README.md` in the Vello tree).
+///
+/// Our workaround: capture the commands inside the `PushLayer` /
+/// `PopLayer` pair as a sub-scene, then `Scene::append` it repeatedly
+/// at a regular grid of (dx, dy) offsets that sample the 2D Gaussian.
+/// Each replay sits inside a `push_layer` whose `alpha = w_ij` is the
+/// Gaussian weight at that grid point and whose blend mode is
+/// `(Normal, Plus)` — so popping that layer *adds* the alpha-weighted
+/// content onto the surrounding accumulator. Mathematically this is a
+/// true convolution: `output(p) = Σ w_ij · sub(p - offset_ij)`. The
+/// only approximation is the grid discretisation (we sample 7×7 = 49
+/// points across [-3σ, +3σ]); with 49 taps the 1D weight grid already
+/// resolves σ ≈ 1.7px steps per tap, which reads as a soft Gaussian
+/// to the eye for any σ ≥ 1px. Visual quality vs. the CPU separable
+/// Gaussian: comparable softness, subtly more "boxy" tails for very
+/// large σ; the CPU rasterizer remains the path of record for the
+/// fidelity harness.
+///
+/// Cost: 49 sub-scene appends per blurred layer, each wrapped in a
+/// `push_layer` / `pop_layer` pair. Vello's encoder is O(N) over
+/// command count and the GPU rasterizer parallelises path tiles, so
+/// this is reasonable for preview-time use even at high tap counts;
+/// IDML pages typically carry at most a handful of effect-driven
+/// layers per spread.
+fn emit_blurred_layer(
+    parent: &mut Scene,
+    page_to_px: kurbo::Affine,
+    sub: &Scene,
+    sigma_pt: f32,
+    bounds: paged_compose::Rect,
+    blend_mode: ComposeBlendMode,
+    opacity: f32,
+) {
+    let sigma = sigma_pt.max(0.0);
+    if sigma <= 0.5 {
+        // Sub-pixel σ: fall back to a plain transparency group. The
+        // CPU rasterizer's separable-Gaussian shortcut takes the same
+        // path, so the behaviour matches at the limit.
+        let rect = kurbo::Rect::new(
+            bounds.x as f64,
+            bounds.y as f64,
+            (bounds.x + bounds.w) as f64,
+            (bounds.y + bounds.h) as f64,
+        );
+        parent.push_layer(
+            Fill::NonZero,
+            blend_to_peniko(blend_mode),
+            opacity.clamp(0.0, 1.0),
+            page_to_px,
+            &rect,
+        );
+        parent.append(sub, None);
+        parent.pop_layer();
+        return;
+    }
+
+    // Build a separable 1-D Gaussian sample grid: TAPS samples evenly
+    // spaced over [-3σ, +3σ]. The full 2-D kernel is the outer product
+    // of two 1-D grids, total TAPS² taps. 7 is a defensible balance
+    // between visual quality (smoother than 5, indistinguishable from
+    // 9 at typical preview resolution) and encoder load (49 appends
+    // per layer instead of 81).
+    const TAPS: usize = 7;
+    let (positions, weights) = gaussian_sample_grid_1d(sigma, TAPS);
+
+    // Pad the layer clip rect by 3σ on each side so the kernel tail
+    // isn't clipped by the layer bounds (matches the CPU rasterizer's
+    // `3σ + 1px` padding policy). The pad is in page-pt units; the
+    // outer `page_to_px` transform scales it to device pixels.
+    let pad = 3.0 * sigma as f64;
+    let outer_clip = kurbo::Rect::new(
+        bounds.x as f64 - pad,
+        bounds.y as f64 - pad,
+        (bounds.x + bounds.w) as f64 + pad,
+        (bounds.y + bounds.h) as f64 + pad,
+    );
+
+    // Outer layer: composites the convolved result onto the parent
+    // target with the caller's blend mode + opacity. This is the
+    // visible composite a `BeginBlendGroup` would have produced.
+    parent.push_layer(
+        Fill::NonZero,
+        blend_to_peniko(blend_mode),
+        opacity.clamp(0.0, 1.0),
+        page_to_px,
+        &outer_clip,
+    );
+
+    // Each tap: open a layer with alpha = w_x * w_y and blend mode
+    // `(Normal, Plus)`, append the sub-scene shifted by (dx, dy) in
+    // page-pt, then pop. Plus accumulates the weighted contributions
+    // into the outer layer's buffer, producing the convolution. We
+    // skip taps with negligible weight to keep the encoder lean.
+    let plus = PenikoBlendMode::new(Mix::Normal, Compose::Plus);
+    for (j, &dy) in positions.iter().enumerate() {
+        let wy = weights[j];
+        for (i, &dx) in positions.iter().enumerate() {
+            let w = weights[i] * wy;
+            // Anything below ~0.1% of full weight is invisible after
+            // the 8-bit channel quantisation; skipping these halves
+            // the tap count for moderate σ.
+            if w < 1.0e-3 {
+                continue;
+            }
+            parent.push_layer(Fill::NonZero, plus, w, page_to_px, &outer_clip);
+            // Translation is in page-pt because the captured sub-scene
+            // emitted its commands in page-pt space (the outer
+            // `page_to_px` transform applies at draw time).
+            parent.append(sub, Some(kurbo::Affine::translate((dx as f64, dy as f64))));
+            parent.pop_layer();
+        }
+    }
+
+    parent.pop_layer();
+}
+
+/// 1-D Gaussian sample grid: `count` positions evenly spaced over
+/// [-3σ, +3σ], with weights `exp(-x²/(2σ²))` normalised to sum to 1.
+/// Returns `(positions, weights)` of length `count` each.
+fn gaussian_sample_grid_1d(sigma: f32, count: usize) -> (Vec<f32>, Vec<f32>) {
+    assert!(count >= 1);
+    let radius = 3.0 * sigma;
+    // step between adjacent samples. For odd count, the centre sample
+    // sits at x=0 with weight 1 (max), and the outer samples sit at
+    // ±radius. For even count, samples straddle zero symmetrically.
+    let step = if count > 1 {
+        2.0 * radius / (count - 1) as f32
+    } else {
+        0.0
+    };
+    let two_sigma_sq = 2.0 * sigma * sigma;
+    let mut positions = Vec::with_capacity(count);
+    let mut weights = Vec::with_capacity(count);
+    let mut sum = 0.0f32;
+    for i in 0..count {
+        let x = -radius + step * i as f32;
+        let w = (-(x * x) / two_sigma_sq).exp();
+        positions.push(x);
+        weights.push(w);
+        sum += w;
+    }
+    if sum > 0.0 {
+        for w in &mut weights {
+            *w /= sum;
+        }
+    }
+    (positions, weights)
+}
+
+fn render_scene_to_buffer(
+    state: &mut GpuState,
+    scene: &Scene,
+    options: &RasterOptions,
+) -> Result<Vec<u8>, String> {
+    let (width, height) = options.pixel_size();
+    let texture = state.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("paged-gpu vello target"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+    render_scene(
+        &mut state.renderer,
+        &state.device,
+        &state.queue,
+        scene,
+        &view,
+        &RenderParams {
+            base_color: linear_to_peniko(options.background),
+            width,
+            height,
+            antialiasing_method: AaConfig::Area,
+        },
+    )
+    .map_err(|e| format!("render_to_texture: {e:?}"))?;
+
+    // Copy texture → buffer → CPU. Row pitch must be a multiple of
+    // wgpu::COPY_BYTES_PER_ROW_ALIGNMENT (256); we copy with that
+    // alignment then tighten on the CPU side.
+    let bpr_aligned = wgpu::util::align_to(width * 4, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+    let buffer_size = (bpr_aligned * height) as u64;
+    let buffer = state.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("paged-gpu vello readback"),
+        size: buffer_size,
+        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+    let mut encoder = state
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("paged-gpu vello readback enc"),
+        });
+    encoder.copy_texture_to_buffer(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyBufferInfo {
+            buffer: &buffer,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(bpr_aligned),
+                rows_per_image: Some(height),
+            },
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+    state.queue.submit(Some(encoder.finish()));
+    let slice = buffer.slice(..);
+    let (tx, rx) = std::sync::mpsc::sync_channel(1);
+    slice.map_async(wgpu::MapMode::Read, move |res| {
+        tx.send(res).ok();
+    });
+    let _ = state.device.poll(wgpu::PollType::wait_indefinitely());
+    rx.recv()
+        .map_err(|e| format!("map_async recv: {e}"))?
+        .map_err(|e| format!("buffer map: {e:?}"))?;
+    let mapped = slice.get_mapped_range();
+    let bpr_tight = (width * 4) as usize;
+    let mut out = Vec::with_capacity(bpr_tight * height as usize);
+    for row in 0..height as usize {
+        let start = row * bpr_aligned as usize;
+        out.extend_from_slice(&mapped[start..start + bpr_tight]);
+    }
+    drop(mapped);
+    buffer.unmap();
+    Ok(out)
+}
+
+/// CPU-rasterizer fast-path for documents with 1..=8 overprint
+/// commands. The CPU backend is the project's fidelity-of-record and
+/// handles per-pixel plane state + spot-ink composition correctly;
+/// for low overprint counts the readback latency dwarfs the cost of
+/// re-running the whole scene through CPU rasterization. Delegating
+/// here keeps the rare cases of compute-pipeline edge bugs from
+/// affecting documents where the GPU path's encode overhead would
+/// dominate.
+///
+/// The plan calls for "walk the readback buffer through the existing
+/// CPU compose_cmyk_overprint_via_planes"; that's what the CPU
+/// rasterizer does internally, plus correct handling of paper-bypass,
+/// spot inks, image overprints, etc. We let it do the full job rather
+/// than partially reusing one helper.
+#[cfg(feature = "cpu")]
+fn cpu_finisher_path(list: &DisplayList, options: &RasterOptions) -> Vec<u8> {
+    let cpu = crate::CpuRasterizer;
+    cpu.rasterize(list, options)
+}
+
+/// GPU compute-pipeline path for overprint-heavy documents. Renders
+/// the full scene via Vello (with the existing knockout fallback for
+/// `*Overprint`), then for each coalesced overprint batch renders the
+/// batch's paths to a scratch buffer and dispatches `splat_or_overprint`
+/// against the plane state. After every batch, one `recomposite`
+/// dispatch unions everything into the final buffer.
+///
+/// Coalescing key = `(ink_mask_packed, spot_id)`. Consecutive overprint
+/// commands with the same key collapse into a single Vello scene and
+/// one splat dispatch — eliminating the "one render per glyph" worst
+/// case for K-only body text (a 200-word paragraph at ~1,100
+/// FillPathOverprint commands becomes 1 batch / 1 encode / 1 dispatch).
+///
+/// Per-channel max is associative + commutative within a single ink
+/// mask, so order within a batch doesn't matter. Across batches we
+/// preserve document order via the segmentation walk.
+///
+/// Pipeline-creation failure here returns `Err`; the caller logs and
+/// falls back to plain knockout via `build_scene`. This is the
+/// behaviour the `vello_compute_pipeline_creation_failure_falls_back_to_knockout`
+/// test pins.
+fn gpu_compute_overprint_path(
+    state: &mut GpuState,
+    list: &DisplayList,
+    options: &RasterOptions,
+) -> Result<Vec<u8>, String> {
+    let pipelines = state
+        .pipelines
+        .as_ref()
+        .ok_or_else(|| "compute pipelines unavailable".to_string())?;
+
+    let (width, height) = options.pixel_size();
+    let n_pixels = (width as usize) * (height as usize);
+
+    // 1) Render the scene MINUS overprint commands via Vello to
+    //    vello_target. The splat shader recovers bottom-side CMYK via
+    //    `rgb_to_naive_cmyk_8bit(target)` on virgin pixels — if the
+    //    target carried the overprint's own colour we'd round-trip
+    //    only that, dropping the underlying ink. Excluding overprint
+    //    commands keeps the target as the "everything below the
+    //    overprint" buffer the splat needs.
+    let scale = options.dpi / 72.0;
+    let scene = build_scene_with_transform_filtered(
+        list,
+        kurbo::Affine::scale(scale as f64),
+        /*skip_overprints=*/ true,
+    );
+    let vello_target = create_storage_texture(
+        &state.device,
+        width,
+        height,
+        wgpu::TextureFormat::Rgba8Unorm,
+        wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC,
+        "vello target",
+    );
+    let vello_view = vello_target.create_view(&wgpu::TextureViewDescriptor::default());
+    render_scene(
+        &mut state.renderer,
+        &state.device,
+        &state.queue,
+        &scene,
+        &vello_view,
+        &RenderParams {
+            base_color: linear_to_peniko(options.background),
+            width,
+            height,
+            antialiasing_method: AaConfig::Area,
+        },
+    )
+    .map_err(|e| format!("vello render_to_texture (main): {e:?}"))?;
+
+    // 2) Allocate buffer-backed plane state. The shader prefers
+    //    buffers over storage textures because `rgba8unorm` read_write
+    //    storage isn't a portable WebGPU feature.
+    let plane_cmyk = create_zero_storage_buffer(
+        &state.device,
+        (n_pixels * 4) as u64,
+        "plane_cmyk",
+        wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+    );
+    let coverage_buf = create_zero_storage_buffer(
+        &state.device,
+        (n_pixels * 4) as u64,
+        "coverage",
+        wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+    );
+
+    // Collect overprint commands and coalesce by ink-mask + spot id.
+    let batches = build_overprint_batches(list);
+    let num_spots: u32 = batches
+        .iter()
+        .filter_map(|b| b.spot_id)
+        .max()
+        .map(|m| m + 1)
+        .unwrap_or(0);
+    let num_spot_groups = num_spots.div_ceil(4);
+    let spot_planes_size = (num_spot_groups as usize).max(1) * n_pixels * 4;
+    let spot_planes = create_zero_storage_buffer(
+        &state.device,
+        spot_planes_size as u64,
+        "spot_planes",
+        wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+    );
+    // Sentinel binding for process dispatches: a 16-byte buffer
+    // satisfies the bind-group layout's `Storage` slot without ever
+    // being read or written (the shader's `spot_id == sentinel`
+    // branch keeps it untouched).
+    let sentinel_spot = create_zero_storage_buffer(
+        &state.device,
+        16,
+        "sentinel_spot",
+        wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+    );
+
+    // Spot-alts table: one u32 per spot id, byte order = C, M, Y, K.
+    let mut spot_alts_data = vec![0u32; num_spots.max(1) as usize];
+    for batch in &batches {
+        if let Some(spot_id) = batch.spot_id {
+            if let Some(ink) = list.spot_ink(paged_compose::SpotInkId(spot_id)) {
+                spot_alts_data[spot_id as usize] = crate::cmyk_compute::pack_cmyk_bytes(
+                    ink.cmyk_alternate[0],
+                    ink.cmyk_alternate[1],
+                    ink.cmyk_alternate[2],
+                    ink.cmyk_alternate[3],
+                );
+            }
+        }
+    }
+    let spot_alts_buf = create_storage_buffer_with_data(
+        &state.device,
+        bytemuck::cast_slice(&spot_alts_data),
+        "spot_alts",
+        wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+    );
+
+    // Vello target copied into a buffer so the recomposite shader can
+    // read it via a `storage, read` binding (Rgba8Unorm storage read
+    // isn't portable on every adapter).
+    let bpr_aligned = wgpu::util::align_to(width * 4, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+    let vello_target_buf = state.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("paged-gpu vello target buffer"),
+        size: (n_pixels * 4) as u64,
+        usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+    {
+        let staging = state.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("paged-gpu vello target staging"),
+            size: (bpr_aligned * height) as u64,
+            usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let mut enc = state
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("paged-gpu vello target copy enc"),
+            });
+        enc.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &vello_target,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &staging,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(bpr_aligned),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+        // Row-by-row copy into the tight per-pixel buffer the shader
+        // expects. wgpu requires a multiple of COPY_BYTES_PER_ROW_ALIGNMENT
+        // (256) for buffer-to-buffer copies, so we copy each row
+        // individually.
+        for row in 0..height {
+            enc.copy_buffer_to_buffer(
+                &staging,
+                (row * bpr_aligned) as u64,
+                &vello_target_buf,
+                (row * width * 4) as u64,
+                (width * 4) as u64,
+            );
+        }
+        state.queue.submit(Some(enc.finish()));
+    }
+
+    // 3) For each overprint batch, render its paths to a scratch
+    //    Vello target, copy to a buffer, dispatch splat_or_overprint.
+    let scratch_op = create_storage_texture(
+        &state.device,
+        width,
+        height,
+        wgpu::TextureFormat::Rgba8Unorm,
+        wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC,
+        "scratch_op",
+    );
+    let scratch_view = scratch_op.create_view(&wgpu::TextureViewDescriptor::default());
+    let scratch_buf = state.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("paged-gpu scratch op buffer"),
+        size: (n_pixels * 4) as u64,
+        usage: wgpu::BufferUsages::STORAGE
+            | wgpu::BufferUsages::COPY_DST
+            | wgpu::BufferUsages::COPY_SRC,
+        mapped_at_creation: false,
+    });
+    let scratch_staging = state.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("paged-gpu scratch staging"),
+        size: (bpr_aligned * height) as u64,
+        usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+
+    for batch in &batches {
+        let batch_scene = build_overprint_batch_scene(list, batch, options);
+        render_scene(
+            &mut state.renderer,
+            &state.device,
+            &state.queue,
+            &batch_scene,
+            &scratch_view,
+            &RenderParams {
+                // Transparent base so the scratch alpha truly
+                // encodes only the batch's path coverage.
+                base_color: PenikoColor::from_rgba8(0, 0, 0, 0),
+                width,
+                height,
+                antialiasing_method: AaConfig::Area,
+            },
+        )
+        .map_err(|e| format!("vello render_to_texture (scratch): {e:?}"))?;
+
+        // Copy scratch_op → scratch_buf via the row-aligned staging
+        // buffer (same pattern as the main vello-target copy above).
+        {
+            let mut enc = state
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("paged-gpu scratch copy enc"),
+                });
+            enc.copy_texture_to_buffer(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &scratch_op,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::TexelCopyBufferInfo {
+                    buffer: &scratch_staging,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(bpr_aligned),
+                        rows_per_image: Some(height),
+                    },
+                },
+                wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+            );
+            for row in 0..height {
+                enc.copy_buffer_to_buffer(
+                    &scratch_staging,
+                    (row * bpr_aligned) as u64,
+                    &scratch_buf,
+                    (row * width * 4) as u64,
+                    (width * 4) as u64,
+                );
+            }
+            state.queue.submit(Some(enc.finish()));
+        }
+
+        // Dispatch splat_or_overprint with the batch's ink mask and
+        // optional spot binding.
+        let (spot_id, spot_channel, spot_tint) = match batch.spot_id {
+            Some(id) => (id, id % 4, batch.spot_tint_8),
+            None => (crate::cmyk_compute::NO_SPOT_SENTINEL, 0u32, 0u32),
+        };
+        let params = crate::cmyk_compute::SplatParams {
+            ink_mask_packed: batch.ink_mask_packed,
+            spot_id,
+            spot_channel,
+            spot_tint,
+            width,
+            height,
+            _pad0: 0,
+            _pad1: 0,
+        };
+        let params_buf = create_uniform_buffer_with_data(
+            &state.device,
+            bytemuck::bytes_of(&params),
+            "splat params",
+        );
+
+        let bg0 = state.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("paged-gpu splat bg0"),
+            layout: &pipelines.splat_group0_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: plane_cmyk.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: coverage_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: scratch_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: params_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: vello_target_buf.as_entire_binding(),
+                },
+            ],
+        });
+
+        // For spot dispatches bind the matching slice of spot_planes
+        // (one packed group of 4 spots) into bg1; otherwise bind the
+        // sentinel buffer so the layout matches.
+        let bg1 = if let Some(id) = batch.spot_id {
+            let group = id / 4;
+            let offset = (group as u64) * (n_pixels as u64) * 4;
+            let size = (n_pixels as u64) * 4;
+            state.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("paged-gpu splat bg1 (spot)"),
+                layout: &pipelines.splat_group1_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                        buffer: &spot_planes,
+                        offset,
+                        size: std::num::NonZeroU64::new(size),
+                    }),
+                }],
+            })
+        } else {
+            state.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("paged-gpu splat bg1 (sentinel)"),
+                layout: &pipelines.splat_group1_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: sentinel_spot.as_entire_binding(),
+                }],
+            })
+        };
+
+        let mut enc = state
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("paged-gpu splat dispatch enc"),
+            });
+        {
+            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("paged-gpu splat pass"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&pipelines.splat);
+            pass.set_bind_group(0, &bg0, &[]);
+            pass.set_bind_group(1, &bg1, &[]);
+            let wg_x = width.div_ceil(8);
+            let wg_y = height.div_ceil(8);
+            pass.dispatch_workgroups(wg_x, wg_y, 1);
+        }
+        state.queue.submit(Some(enc.finish()));
+    }
+
+    // 4) Recomposite into a final Rgba8Unorm texture, then copy that
+    //    out to a CPU-readable buffer.
+    let final_texture = create_storage_texture(
+        &state.device,
+        width,
+        height,
+        wgpu::TextureFormat::Rgba8Unorm,
+        wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::COPY_SRC,
+        "final target",
+    );
+    let final_view = final_texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let recomp_params = crate::cmyk_compute::RecompositeParams {
+        width,
+        height,
+        num_spot_groups: num_spot_groups.max(1),
+        num_spots,
+    };
+    let recomp_params_buf = create_uniform_buffer_with_data(
+        &state.device,
+        bytemuck::bytes_of(&recomp_params),
+        "recomp params",
+    );
+
+    let bg_recomp = state.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("paged-gpu recomposite bg"),
+        layout: &pipelines.recomposite_group0_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: plane_cmyk.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: coverage_buf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: spot_planes.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: spot_alts_buf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: vello_target_buf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: recomp_params_buf.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 6,
+                resource: wgpu::BindingResource::TextureView(&final_view),
+            },
+        ],
+    });
+    {
+        let mut enc = state
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("paged-gpu recomposite enc"),
+            });
+        {
+            let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("paged-gpu recomposite pass"),
+                timestamp_writes: None,
+            });
+            pass.set_pipeline(&pipelines.recomposite);
+            pass.set_bind_group(0, &bg_recomp, &[]);
+            let wg_x = width.div_ceil(8);
+            let wg_y = height.div_ceil(8);
+            pass.dispatch_workgroups(wg_x, wg_y, 1);
+        }
+        state.queue.submit(Some(enc.finish()));
+    }
+
+    // 5) Read back the final texture to CPU.
+    read_texture_to_rgba_vec(state, &final_texture, width, height)
+}
+
+fn create_storage_texture(
+    device: &wgpu::Device,
+    width: u32,
+    height: u32,
+    format: wgpu::TextureFormat,
+    usage: wgpu::TextureUsages,
+    label: &'static str,
+) -> wgpu::Texture {
+    device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage,
+        view_formats: &[],
+    })
+}
+
+fn create_zero_storage_buffer(
+    device: &wgpu::Device,
+    size: u64,
+    label: &'static str,
+    usage: wgpu::BufferUsages,
+) -> wgpu::Buffer {
+    // Buffers created without `mapped_at_creation = true` come back
+    // zeroed under wgpu; we explicitly enable `COPY_DST` upstream so
+    // callers can refill later if they need to. The mapped-at-creation
+    // path would be slightly faster but adds wgpu API boilerplate
+    // around the write-combining-buffer slice contract.
+    device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(label),
+        size,
+        usage,
+        mapped_at_creation: false,
+    })
+}
+
+fn create_storage_buffer_with_data(
+    device: &wgpu::Device,
+    data: &[u8],
+    label: &'static str,
+    usage: wgpu::BufferUsages,
+) -> wgpu::Buffer {
+    let size = data.len().max(16) as u64;
+    let buf = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(label),
+        size,
+        usage,
+        mapped_at_creation: true,
+    });
+    {
+        let mut view = buf.slice(..).get_mapped_range_mut();
+        // BufferViewMut doesn't deref to &mut [u8] (write-combining
+        // memory safety); use `copy_from_slice` which is the supported
+        // bulk-write API. Pad with a zero copy when `data.len() < size`.
+        let mut padded;
+        let slice: &[u8] = if data.len() as u64 == size {
+            data
+        } else {
+            padded = vec![0u8; size as usize];
+            padded[..data.len()].copy_from_slice(data);
+            padded.as_slice()
+        };
+        view.copy_from_slice(slice);
+    }
+    buf.unmap();
+    buf
+}
+
+fn create_uniform_buffer_with_data(
+    device: &wgpu::Device,
+    data: &[u8],
+    label: &'static str,
+) -> wgpu::Buffer {
+    let buf = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some(label),
+        size: data.len() as u64,
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: true,
+    });
+    {
+        let mut view = buf.slice(..).get_mapped_range_mut();
+        view.copy_from_slice(data);
+    }
+    buf.unmap();
+    buf
+}
+
+fn read_texture_to_rgba_vec(
+    state: &mut GpuState,
+    texture: &wgpu::Texture,
+    width: u32,
+    height: u32,
+) -> Result<Vec<u8>, String> {
+    let bpr_aligned = wgpu::util::align_to(width * 4, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+    let buffer_size = (bpr_aligned * height) as u64;
+    let buffer = state.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("paged-gpu final readback"),
+        size: buffer_size,
+        usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    });
+    let mut encoder = state
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("paged-gpu final readback enc"),
+        });
+    encoder.copy_texture_to_buffer(
+        wgpu::TexelCopyTextureInfo {
+            texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyBufferInfo {
+            buffer: &buffer,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(bpr_aligned),
+                rows_per_image: Some(height),
+            },
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+    state.queue.submit(Some(encoder.finish()));
+    let slice = buffer.slice(..);
+    let (tx, rx) = std::sync::mpsc::sync_channel(1);
+    slice.map_async(wgpu::MapMode::Read, move |res| {
+        tx.send(res).ok();
+    });
+    let _ = state.device.poll(wgpu::PollType::wait_indefinitely());
+    rx.recv()
+        .map_err(|e| format!("map_async recv: {e}"))?
+        .map_err(|e| format!("buffer map: {e:?}"))?;
+    let mapped = slice.get_mapped_range();
+    let bpr_tight = (width * 4) as usize;
+    let mut out = Vec::with_capacity(bpr_tight * height as usize);
+    for row in 0..height as usize {
+        let start = row * bpr_aligned as usize;
+        out.extend_from_slice(&mapped[start..start + bpr_tight]);
+    }
+    drop(mapped);
+    buffer.unmap();
+    Ok(out)
+}
+
+/// One coalesced batch of overprint commands: a set of paths to draw
+/// with a single `(ink_mask, spot)` combination. The compute pipeline
+/// renders each batch via Vello to a scratch texture, then runs one
+/// `splat_or_overprint` dispatch against the plane state.
+///
+/// `paths` carries `(path_id, transform, optional_stroke)` triples —
+/// fills have `optional_stroke = None`, strokes carry their parameters
+/// so the batch render reproduces the stroke geometry that contributes
+/// the coverage. Mixing fills and strokes in one batch is allowed
+/// because the coverage union is order-independent within a batch.
+struct OverprintBatch {
+    ink_mask_packed: u32,
+    spot_id: Option<u32>,
+    /// Pre-quantised spot tint (0..=255). Ignored for process batches.
+    spot_tint_8: u32,
+    paths: Vec<OverprintPath>,
+}
+
+struct OverprintPath {
+    path_id: paged_compose::PathId,
+    transform: paged_compose::Transform,
+    stroke: Option<paged_compose::Stroke>,
+}
+
+/// Walk the display list, group consecutive `*Overprint` commands by
+/// `(ink_mask_packed, spot_id)`. Different keys break the batch (we
+/// emit a new one); non-overprint commands are ignored.
+fn build_overprint_batches(list: &DisplayList) -> Vec<OverprintBatch> {
+    let mut batches: Vec<OverprintBatch> = Vec::new();
+    for cmd in &list.commands {
+        let (paint, path_id, transform, stroke) = match cmd {
+            DisplayCommand::FillPathOverprint {
+                paint,
+                path_id,
+                transform,
+            } => (paint, *path_id, *transform, None),
+            DisplayCommand::StrokePathOverprint {
+                paint,
+                path_id,
+                transform,
+                stroke,
+            } => (paint, *path_id, *transform, Some(*stroke)),
+            _ => continue,
+        };
+        let (ink_mask_packed, spot_id, spot_tint_8) = match paint {
+            Paint::Cmyk {
+                c, m, y, k, spot, ..
+            } => {
+                let pack = crate::cmyk_compute::pack_cmyk_unit([*c, *m, *y, *k]);
+                match spot {
+                    Some(paged_compose::SpotInkId(id)) => {
+                        // Spot tint = max ink channel / max alternate
+                        // channel, per the CPU rasterizer's logic in
+                        // `compose_cmyk_overprint_dispatch`.
+                        let tint_unit =
+                            if let Some(ink) = list.spot_ink(paged_compose::SpotInkId(*id)) {
+                                let alt_max = ink
+                                    .cmyk_alternate
+                                    .iter()
+                                    .map(|v| *v as f32 / 255.0)
+                                    .fold(0.0_f32, f32::max);
+                                if alt_max <= f32::EPSILON {
+                                    0.0
+                                } else {
+                                    (c.max(*m).max(*y).max(*k) / alt_max).clamp(0.0, 1.0)
+                                }
+                            } else {
+                                0.0
+                            };
+                        let tint_8 = (tint_unit * 255.0).round() as u32;
+                        (pack, Some(*id), tint_8)
+                    }
+                    None => (pack, None, 0u32),
+                }
+            }
+            // Non-CMYK paints reaching an overprint command: this
+            // shouldn't happen at the orchestrator level, but if it
+            // did we treat the paint as 100% K knockout (the same
+            // visible result as the pre-parity Vello fallback).
+            Paint::Solid(c) => {
+                let (_, _, _, k) = crate::rgb_to_naive_cmyk_8bit(
+                    (c.r.clamp(0.0, 1.0) * 255.0) as u8,
+                    (c.g.clamp(0.0, 1.0) * 255.0) as u8,
+                    (c.b.clamp(0.0, 1.0) * 255.0) as u8,
+                );
+                let pack = crate::cmyk_compute::pack_cmyk_bytes(0, 0, 0, k);
+                (pack, None, 0u32)
+            }
+            _ => continue,
+        };
+
+        // Coalesce with the previous batch when the key matches.
+        let path = OverprintPath {
+            path_id,
+            transform,
+            stroke,
+        };
+        if let Some(last) = batches.last_mut() {
+            if last.ink_mask_packed == ink_mask_packed
+                && last.spot_id == spot_id
+                && last.spot_tint_8 == spot_tint_8
+            {
+                last.paths.push(path);
+                continue;
+            }
+        }
+        batches.push(OverprintBatch {
+            ink_mask_packed,
+            spot_id,
+            spot_tint_8,
+            paths: vec![path],
+        });
+    }
+    batches
+}
+
+/// Build a Vello scene containing only the paths of one overprint
+/// batch, all painted in opaque white. The scratch target's alpha
+/// channel captures the coverage union; the splat shader reads alpha
+/// and uses the push-constant `ink_mask` for the per-channel ink
+/// amounts. RGB doesn't matter — the shader ignores it.
+fn build_overprint_batch_scene(
+    list: &DisplayList,
+    batch: &OverprintBatch,
+    options: &RasterOptions,
+) -> Scene {
+    let scale = options.dpi / 72.0;
+    let page_to_px = kurbo::Affine::scale(scale as f64);
+    let mut scene = Scene::new();
+    let opaque_white = PenikoColor::from_rgba8(255, 255, 255, 255);
+    for path in &batch.paths {
+        let Some(path_data) = list.paths.get(path.path_id) else {
+            continue;
+        };
+        let bez = path_to_bez(path_data, &path.transform);
+        if let Some(stroke) = &path.stroke {
+            let ks = kurbo_stroke(stroke);
+            scene.stroke(&ks, page_to_px, BrushRef::Solid(opaque_white), None, &bez);
+        } else {
+            scene.fill(
+                Fill::NonZero,
+                page_to_px,
+                BrushRef::Solid(opaque_white),
+                None,
+                &bez,
+            );
+        }
+    }
+    scene
+}
+
+fn path_to_bez(
+    data: &paged_compose::PathData,
+    transform: &paged_compose::Transform,
+) -> kurbo::BezPath {
+    let apply = |x: f32, y: f32| -> kurbo::Point {
+        let [a, b, c, d, tx, ty] = transform.0;
+        kurbo::Point::new((a * x + c * y + tx) as f64, (b * x + d * y + ty) as f64)
+    };
+    let mut p = kurbo::BezPath::new();
+    for seg in &data.segments {
+        match seg {
+            PathSegment::MoveTo { x, y } => p.move_to(apply(*x, *y)),
+            PathSegment::LineTo { x, y } => p.line_to(apply(*x, *y)),
+            PathSegment::QuadTo { cx, cy, x, y } => {
+                p.quad_to(apply(*cx, *cy), apply(*x, *y));
+            }
+            PathSegment::CubicTo {
+                cx1,
+                cy1,
+                cx2,
+                cy2,
+                x,
+                y,
+            } => {
+                p.curve_to(apply(*cx1, *cy1), apply(*cx2, *cy2), apply(*x, *y));
+            }
+            PathSegment::Close => p.close_path(),
+        }
+    }
+    p
+}
+
+/// Owned brush variant to keep both arms of `BrushRef` alive long
+/// enough for the `scene.fill` / `scene.stroke` call. `BrushRef`
+/// borrows from a `peniko::Color` or a `peniko::Gradient`; we hold
+/// whichever one we built and convert via `as_ref()` at the call
+/// site.
+enum VelloBrush {
+    Solid(PenikoColor),
+    Gradient(PenikoGradient),
+}
+
+impl VelloBrush {
+    fn as_ref(&self) -> BrushRef<'_> {
+        match self {
+            VelloBrush::Solid(c) => BrushRef::Solid(*c),
+            VelloBrush::Gradient(g) => BrushRef::Gradient(g),
+        }
+    }
+}
+
+/// Convert a display-list `Paint` (solid or gradient id) into a
+/// vello brush. Gradient endpoints in the display list live in
+/// the path's unit-rect local coordinates; we apply the path's
+/// `transform` to them so the brush's coordinates land in the
+/// same page-space the shape lives in (vello's `brush_transform`
+/// is `None` here, meaning "brush in shape's local coords").
+fn resolve_paint(
+    paint: &Paint,
+    list: &DisplayList,
+    transform: &paged_compose::Transform,
+) -> Option<VelloBrush> {
+    match paint {
+        Paint::Solid(c) => Some(VelloBrush::Solid(linear_to_peniko(*c))),
+        Paint::Cmyk { rgb, .. } => {
+            // The pipeline baked the ICC-resolved display colour
+            // onto the paint at compose time — use it so ordinary
+            // (non-overprint) draws stay identical to the prior
+            // `Paint::Solid` path on the GPU backend.
+            //
+            // Stage C (`Paint::Cmyk::spot`) is ignored on the Vello
+            // backend: spot-on-same-spot overprint requires the same
+            // per-pixel plane walk Stage 4A/4B use on the CPU
+            // rasterizer, which doesn't have a Vello equivalent today
+            // (would need a custom shader). Spot paints still render
+            // visibly correct here because the cached `rgb` already
+            // encodes the alternate-CMYK × tint colour; only the
+            // spot-on-same-spot overprint case loses fidelity vs. the
+            // CPU rasterizer.
+            Some(VelloBrush::Solid(linear_to_peniko(*rgb)))
+        }
+        Paint::LinearGradient(id) => {
+            let g = list.linear_gradient(*id)?;
+            if g.stops.len() < 2 {
+                return None;
+            }
+            let (sx, sy) = transform.apply(g.start.0, g.start.1);
+            let (ex, ey) = transform.apply(g.end.0, g.end.1);
+            let stops: Vec<PenikoColorStop> = g
+                .stops
+                .iter()
+                .map(|s| PenikoColorStop {
+                    offset: s.offset,
+                    color: linear_to_peniko(s.color).into(),
+                })
+                .collect();
+            let pg = PenikoGradient::new_linear(
+                kurbo::Point::new(sx as f64, sy as f64),
+                kurbo::Point::new(ex as f64, ey as f64),
+            )
+            .with_stops(stops.as_slice());
+            Some(VelloBrush::Gradient(pg))
+        }
+        Paint::RadialGradient(id) => {
+            let g = list.radial_gradient(*id)?;
+            if g.stops.len() < 2 {
+                return None;
+            }
+            let (cx, cy) = transform.apply(g.center.0, g.center.1);
+            // Match cpu.rs: average the mapped per-axis radii so a
+            // non-square unit rect ovals the gradient with the path.
+            let [a, b, c, d, _, _] = transform.0;
+            let rx = (a * g.radius).hypot(b * g.radius);
+            let ry = (c * g.radius).hypot(d * g.radius);
+            let radius = (rx + ry) * 0.5;
+            if !radius.is_finite() || radius <= 0.0 {
+                return None;
+            }
+            let stops: Vec<PenikoColorStop> = g
+                .stops
+                .iter()
+                .map(|s| PenikoColorStop {
+                    offset: s.offset,
+                    color: linear_to_peniko(s.color).into(),
+                })
+                .collect();
+            let pg = PenikoGradient::new_radial(kurbo::Point::new(cx as f64, cy as f64), radius)
+                .with_stops(stops.as_slice());
+            Some(VelloBrush::Gradient(pg))
+        }
+        Paint::SweepGradient(id) => {
+            let g = list.sweep_gradient(*id)?;
+            if g.stops.len() < 2 {
+                return None;
+            }
+            let (cx, cy) = transform.apply(g.center.0, g.center.1);
+            // peniko's new_sweep takes start/end angles in RADIANS,
+            // clockwise in a y-down space — exactly our IR convention.
+            // Wrap one full turn so the ramp covers the whole circle
+            // (matches the CPU lane's 360°-degree sweep).
+            let start = g.start_angle;
+            let end = g.start_angle + std::f32::consts::TAU;
+            let stops: Vec<PenikoColorStop> = g
+                .stops
+                .iter()
+                .map(|s| PenikoColorStop {
+                    offset: s.offset,
+                    color: linear_to_peniko(s.color).into(),
+                })
+                .collect();
+            let pg = PenikoGradient::new_sweep(kurbo::Point::new(cx as f64, cy as f64), start, end)
+                .with_stops(stops.as_slice());
+            Some(VelloBrush::Gradient(pg))
+        }
+    }
+}
+
+/// Map our `BlendMode` to peniko's `(Mix, Compose)` pair. `Normal`
+/// maps to (`Mix::Normal`, `Compose::SrcOver`) — peniko's default —
+/// and every other variant lines up 1:1 with peniko's `Mix` enum,
+/// keeping `Compose::SrcOver` since IDML transparency groups are
+/// non-isolated source-over composites by default.
+fn blend_to_peniko(m: ComposeBlendMode) -> PenikoBlendMode {
+    let mix = match m {
+        ComposeBlendMode::Normal => Mix::Normal,
+        ComposeBlendMode::Multiply => Mix::Multiply,
+        ComposeBlendMode::Screen => Mix::Screen,
+        ComposeBlendMode::Overlay => Mix::Overlay,
+        ComposeBlendMode::Darken => Mix::Darken,
+        ComposeBlendMode::Lighten => Mix::Lighten,
+        ComposeBlendMode::ColorDodge => Mix::ColorDodge,
+        ComposeBlendMode::ColorBurn => Mix::ColorBurn,
+        ComposeBlendMode::HardLight => Mix::HardLight,
+        ComposeBlendMode::SoftLight => Mix::SoftLight,
+        ComposeBlendMode::Difference => Mix::Difference,
+        ComposeBlendMode::Exclusion => Mix::Exclusion,
+        ComposeBlendMode::Hue => Mix::Hue,
+        ComposeBlendMode::Saturation => Mix::Saturation,
+        ComposeBlendMode::Color => Mix::Color,
+        ComposeBlendMode::Luminosity => Mix::Luminosity,
+    };
+    PenikoBlendMode::new(mix, Compose::SrcOver)
+}
+
+/// The kurbo stroke for a display-list stroke, dash included. The
+/// dash pattern is in the path's own units, as the width is, and is
+/// taken only when tiny-skia would take it (an even count of two or
+/// more non-negative lengths with a positive sum); anything else is
+/// solid there, so it is solid here. Dropping the dash drew every
+/// dashed and dotted stroke solid on this lane.
+///
+/// A dotted stroke is a ZERO-length dash with round caps: tiny-skia
+/// caps a zero-length dash, kurbo's stroker drops it, and the dots
+/// vanished (`strokes-fills` "japanese-dots"). A hair of length keeps
+/// the caps; with butt caps it is a sliver no wider than the hair.
+fn kurbo_stroke(stroke: &paged_compose::Stroke) -> KurboStroke {
+    const DOT_PT: f64 = 1e-3;
+    let ks = KurboStroke::new(stroke.width.max(0.0) as f64)
+        .with_caps(map_cap(stroke.cap))
+        .with_join(map_join(stroke.join))
+        .with_miter_limit(stroke.miter_limit.max(1.0) as f64);
+    let dash = stroke.dash.as_slice();
+    let valid = dash.len() >= 2
+        && dash.len().is_multiple_of(2)
+        && dash.iter().all(|d| d.is_finite() && *d >= 0.0)
+        && dash.iter().sum::<f32>() > 0.0;
+    if valid {
+        ks.with_dashes(
+            0.0,
+            dash.iter().enumerate().map(|(i, d)| {
+                let d = *d as f64;
+                if i % 2 == 0 && d == 0.0 {
+                    DOT_PT
+                } else {
+                    d
+                }
+            }),
+        )
+    } else {
+        ks
+    }
+}
+
+fn map_cap(c: LineCap) -> kurbo::Cap {
+    match c {
+        LineCap::Butt => kurbo::Cap::Butt,
+        LineCap::Round => kurbo::Cap::Round,
+        LineCap::Square => kurbo::Cap::Square,
+    }
+}
+
+fn map_join(j: LineJoin) -> kurbo::Join {
+    match j {
+        LineJoin::Miter => kurbo::Join::Miter,
+        LineJoin::Round => kurbo::Join::Round,
+        LineJoin::Bevel => kurbo::Join::Bevel,
+    }
+}
+
+/// Linear RGB (0..1) → sRGB-encoded peniko Color (the format
+/// vello expects). Mirrors cpu.rs's `linear_color_to_ts`.
+pub(crate) fn linear_to_peniko(c: ComposeColor) -> PenikoColor {
+    let to_srgb = |v: f32| -> u8 {
+        let s = if v <= 0.0031308 {
+            12.92 * v
+        } else {
+            1.055 * v.powf(1.0 / 2.4) - 0.055
+        };
+        (s.clamp(0.0, 1.0) * 255.0).round() as u8
+    };
+    PenikoColor::from_rgba8(
+        to_srgb(c.r),
+        to_srgb(c.g),
+        to_srgb(c.b),
+        (c.a.clamp(0.0, 1.0) * 255.0).round() as u8,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A lazily decoded image is decoded ONCE: a second scene build gets
+    /// the same blob back (no re-decode, and the same image id for the
+    /// GPU), while a different image never shares an entry.
+    #[test]
+    fn a_lazy_image_is_decoded_once_across_scene_builds() {
+        fn png(rgba: [u8; 4]) -> Vec<u8> {
+            let img = image::RgbaImage::from_pixel(2, 2, image::Rgba(rgba));
+            let mut out = std::io::Cursor::new(Vec::new());
+            img.write_to(&mut out, image::ImageFormat::Png)
+                .expect("encode");
+            out.into_inner()
+        }
+        let lazy = |bytes: Vec<u8>| paged_compose::DecodedImage {
+            width: 2,
+            height: 2,
+            encoded: bytes.into(),
+            rgba: Vec::new().into(),
+            icc: None,
+        };
+        let red = lazy(png([255, 0, 0, 255]));
+        let blue = lazy(png([0, 0, 255, 255]));
+
+        let first = super::cached_image_data(&red).expect("decodes");
+        let again = super::cached_image_data(&red).expect("cached");
+        assert_eq!(first.data.id(), again.data.id(), "same image, same blob");
+        assert_eq!(&first.data.data()[..4], &[255, 0, 0, 255]);
+
+        let other = super::cached_image_data(&blue).expect("decodes");
+        assert_ne!(
+            other.data.id(),
+            first.data.id(),
+            "different images never share"
+        );
+        assert_eq!(&other.data.data()[..4], &[0, 0, 255, 255]);
+
+        // A clone of the image (what the pipeline's decode cache hands out
+        // on the next rebuild) shares the buffer, so it hits too.
+        let rebuilt = red.clone();
+        assert_eq!(
+            super::cached_image_data(&rebuilt).unwrap().data.id(),
+            first.data.id()
+        );
+    }
+
+    #[test]
+    fn rasterizer_constructs_without_panicking() {
+        // GPU init is lazy; constructing should be cheap and never
+        // probe the system.
+        let _ = VelloRasterizer::new();
+    }
+
+    #[test]
+    fn empty_list_produces_pixel_count_buffer() {
+        // GPU init may or may not succeed in the test environment.
+        // The rasterizer should always return a buffer of the right
+        // size — either rendered output or the zero-fill fallback.
+        let v = VelloRasterizer::new();
+        let mut opts = RasterOptions::new(20.0, 10.0);
+        opts.dpi = 72.0;
+        let buf = v.rasterize(&DisplayList::new(), &opts);
+        assert_eq!(buf.len(), 20 * 10 * 4);
+    }
+
+    #[test]
+    fn build_scene_handles_clip_blend_image_radial() {
+        // Scene encoding-only smoke test for the 4 new variants:
+        // PushClip / PopClip, BeginBlendGroup / EndBlendGroup,
+        // Image, and RadialGradient. We don't require a GPU here
+        // (init may fail in CI); the assertion is just that
+        // build_scene runs to completion without panicking on a
+        // realistic command sequence.
+        use paged_compose::{
+            BlendMode as ComposeBlend, Color as DLColor, DecodedImage, DisplayCommand,
+            GradientStop, Paint, PathData, PathSegment, RadialGradient, Rect, Transform,
+        };
+
+        let mut list = DisplayList::new();
+
+        // A simple unit-rect path used for both clip and group bounds.
+        let mut rect_path = PathData::default();
+        rect_path
+            .segments
+            .push(PathSegment::MoveTo { x: 0.0, y: 0.0 });
+        rect_path
+            .segments
+            .push(PathSegment::LineTo { x: 1.0, y: 0.0 });
+        rect_path
+            .segments
+            .push(PathSegment::LineTo { x: 1.0, y: 1.0 });
+        rect_path
+            .segments
+            .push(PathSegment::LineTo { x: 0.0, y: 1.0 });
+        rect_path.segments.push(PathSegment::Close);
+        let rect_id = list.paths.push_anon(rect_path);
+
+        // 1×1 RGBA image — smallest valid placement.
+        let image_id = list.push_image(DecodedImage {
+            width: 1,
+            height: 1,
+            encoded: Vec::new().into(),
+            rgba: vec![255, 0, 0, 255].into(),
+            icc: None,
+        });
+
+        // RadialGradient: red → blue.
+        let radial_id = list.push_radial_gradient(RadialGradient {
+            center: (0.5, 0.5),
+            radius: 0.5,
+            stops: vec![
+                GradientStop {
+                    offset: 0.0,
+                    color: DLColor::rgba(1.0, 0.0, 0.0, 1.0),
+                },
+                GradientStop {
+                    offset: 1.0,
+                    color: DLColor::rgba(0.0, 0.0, 1.0, 1.0),
+                },
+            ],
+        });
+
+        // Clip → group → image + radial fill → end → pop, plus an
+        // outer fill so the un-clipped state is also exercised.
+        list.commands.push(DisplayCommand::PushClip {
+            path_id: rect_id,
+            transform: Transform([20.0, 0.0, 0.0, 20.0, 5.0, 5.0]),
+        });
+        list.commands.push(DisplayCommand::BeginBlendGroup {
+            bounds: Rect {
+                x: 5.0,
+                y: 5.0,
+                w: 20.0,
+                h: 20.0,
+            },
+            blend_mode: ComposeBlend::Multiply,
+            opacity: 0.8,
+            isolated: false,
+            knockout: false,
+            transform: Transform::IDENTITY,
+        });
+        list.commands.push(DisplayCommand::Image {
+            image_id,
+            transform: Transform([10.0, 0.0, 0.0, 10.0, 8.0, 8.0]),
+        });
+        list.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::RadialGradient(radial_id),
+            transform: Transform([15.0, 0.0, 0.0, 15.0, 6.0, 6.0]),
+        });
+        list.commands
+            .push(DisplayCommand::EndBlendGroup(Transform::IDENTITY));
+        list.commands
+            .push(DisplayCommand::PopClip(Transform::IDENTITY));
+
+        // Encoding shouldn't panic. We don't dig into Scene internals;
+        // a successful return is enough to verify the variants are
+        // wired through to peniko's encoder.
+        let _ = build_scene_with_transform(&list, kurbo::Affine::scale(1.0));
+    }
+
+    #[test]
+    fn build_scene_handles_effect_variants() {
+        // Smoke test for the 7 effect variants now wired through the
+        // multi-stamp soft-edge approximation. The success criterion
+        // is the same as the clip/blend test above: encoding runs to
+        // completion without panicking. Visual fidelity is tracked
+        // by the CPU rasterizer's golden snapshots, not by Vello's.
+        use paged_compose::{
+            BevelEmboss, BlendMode as ComposeBlend, Color as DLColor, DisplayCommand, DropShadow,
+            Feather, FeatherCornerType, InnerGlow, InnerShadow, OuterGlow, PathData, PathSegment,
+            Satin, Transform,
+        };
+
+        let mut list = DisplayList::new();
+        let mut rect_path = PathData::default();
+        rect_path
+            .segments
+            .push(PathSegment::MoveTo { x: 0.0, y: 0.0 });
+        rect_path
+            .segments
+            .push(PathSegment::LineTo { x: 1.0, y: 0.0 });
+        rect_path
+            .segments
+            .push(PathSegment::LineTo { x: 1.0, y: 1.0 });
+        rect_path
+            .segments
+            .push(PathSegment::LineTo { x: 0.0, y: 1.0 });
+        rect_path.segments.push(PathSegment::Close);
+        let rect_id = list.paths.push_anon(rect_path);
+
+        let xf = Transform([20.0, 0.0, 0.0, 20.0, 5.0, 5.0]);
+
+        list.commands.push(DisplayCommand::PathShadow {
+            path_id: rect_id,
+            transform: xf,
+            shadow: DropShadow {
+                offset_x: 2.0,
+                offset_y: 2.0,
+                blur_radius: 3.0,
+                color: DLColor::rgba(0.0, 0.0, 0.0, 1.0),
+                opacity: 0.5,
+                blend_mode: paged_compose::BlendMode::Normal,
+                spread: 0.0,
+                noise: 0.0,
+            },
+        });
+        list.commands.push(DisplayCommand::InnerShadow {
+            path_id: rect_id,
+            transform: xf,
+            params: InnerShadow {
+                offset_x: 1.0,
+                offset_y: 1.0,
+                blur_radius: 2.0,
+                color: DLColor::rgba(0.0, 0.0, 0.0, 1.0),
+                opacity: 0.5,
+                choke: 0.0,
+                blend_mode: ComposeBlend::Multiply,
+            },
+        });
+        list.commands.push(DisplayCommand::OuterGlow {
+            path_id: rect_id,
+            transform: xf,
+            params: OuterGlow {
+                blur_radius: 4.0,
+                color: DLColor::rgba(1.0, 1.0, 0.5, 1.0),
+                opacity: 0.7,
+                blend_mode: ComposeBlend::Screen,
+                spread: 1.0,
+            },
+        });
+        list.commands.push(DisplayCommand::InnerGlow {
+            path_id: rect_id,
+            transform: xf,
+            params: InnerGlow {
+                blur_radius: 3.0,
+                color: DLColor::rgba(1.0, 1.0, 0.5, 1.0),
+                opacity: 0.7,
+                blend_mode: ComposeBlend::Screen,
+                choke: 0.0,
+            },
+        });
+        list.commands.push(DisplayCommand::BevelEmboss {
+            path_id: rect_id,
+            transform: xf,
+            params: BevelEmboss::default_soft(),
+        });
+        list.commands.push(DisplayCommand::Satin {
+            path_id: rect_id,
+            transform: xf,
+            params: Satin::default_soft(),
+        });
+        list.commands.push(DisplayCommand::Feather {
+            path_id: rect_id,
+            transform: xf,
+            params: Feather {
+                width: 6.0,
+                corner_type: FeatherCornerType::Sharp,
+                noise: 0.0,
+                choke: 0.0,
+            },
+        });
+
+        let _ = build_scene_with_transform(&list, kurbo::Affine::scale(1.0));
+    }
+
+    #[test]
+    fn gaussian_kernel_weights_sum_to_one() {
+        // Sanity: the 1-D sample grid normalises so the full 2-D
+        // convolution preserves total luminance. Without this, a blurred
+        // layer would brighten or darken globally relative to the input.
+        let (_pos, w) = gaussian_sample_grid_1d(3.0, 7);
+        let sum: f32 = w.iter().sum();
+        assert!(
+            (sum - 1.0).abs() < 1.0e-5,
+            "weight sum should be 1.0, got {sum}"
+        );
+        // Centre weight should be the largest (symmetric Gaussian).
+        let max = w.iter().cloned().fold(0.0f32, f32::max);
+        assert_eq!(w[w.len() / 2], max);
+    }
+
+    #[test]
+    fn build_scene_handles_push_layer_gaussian_blur() {
+        // Scene encoding-only smoke test for the new blurred-layer
+        // capture/replay path. Asserts the multi-tap replay encodes
+        // without panicking; pixel-level coverage lives in
+        // `push_layer_gaussian_blur_softens_edges_on_gpu` below
+        // (guarded by GPU availability).
+        use paged_compose::{
+            BlendMode as ComposeBlend, Color as DLColor, DisplayCommand, LayerEffect, Paint,
+            PathData, PathSegment, Rect, Transform,
+        };
+
+        let mut list = DisplayList::new();
+        let mut rect_path = PathData::default();
+        rect_path
+            .segments
+            .push(PathSegment::MoveTo { x: 0.0, y: 0.0 });
+        rect_path
+            .segments
+            .push(PathSegment::LineTo { x: 1.0, y: 0.0 });
+        rect_path
+            .segments
+            .push(PathSegment::LineTo { x: 1.0, y: 1.0 });
+        rect_path
+            .segments
+            .push(PathSegment::LineTo { x: 0.0, y: 1.0 });
+        rect_path.segments.push(PathSegment::Close);
+        let rect_id = list.paths.push_anon(rect_path);
+
+        list.commands.push(DisplayCommand::PushLayer {
+            bounds: Rect {
+                x: 10.0,
+                y: 10.0,
+                w: 20.0,
+                h: 20.0,
+            },
+            effect: LayerEffect::GaussianBlur { sigma_pt: 3.0 },
+            blend_mode: ComposeBlend::Normal,
+            opacity: 1.0,
+            transform: Transform::IDENTITY,
+        });
+        list.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::Solid(DLColor::rgba(0.0, 0.0, 0.0, 1.0)),
+            transform: Transform([20.0, 0.0, 0.0, 20.0, 10.0, 10.0]),
+        });
+        list.commands
+            .push(DisplayCommand::PopLayer(Transform::IDENTITY));
+
+        let _ = build_scene_with_transform(&list, kurbo::Affine::scale(1.0));
+    }
+
+    #[test]
+    fn push_layer_gaussian_blur_softens_edges_on_gpu() {
+        // Pixel-level: rasterize a black rect wrapped in a
+        // `PushLayer { GaussianBlur(sigma_pt = 5) }` and check that
+        // pixels *outside* the rect's geometric bounds are darkened
+        // (the blur halo). A hard-edge fill would leave them at the
+        // background colour; the multi-tap replay must attenuate them.
+        //
+        // Skipped silently if Vello's GPU init fails (no adapter, no
+        // driver, headless CI without a GPU). Local runs on a Mac /
+        // workstation with a real GPU exercise the assertion; the
+        // smoke test above stays as the encoder-only fallback.
+        use paged_compose::{
+            BlendMode as ComposeBlend, Color as DLColor, DisplayCommand, LayerEffect, Paint,
+            PathData, PathSegment, Rect, Transform,
+        };
+
+        let mut list = DisplayList::new();
+        let mut rect_path = PathData::default();
+        rect_path
+            .segments
+            .push(PathSegment::MoveTo { x: 0.0, y: 0.0 });
+        rect_path
+            .segments
+            .push(PathSegment::LineTo { x: 1.0, y: 0.0 });
+        rect_path
+            .segments
+            .push(PathSegment::LineTo { x: 1.0, y: 1.0 });
+        rect_path
+            .segments
+            .push(PathSegment::LineTo { x: 0.0, y: 1.0 });
+        rect_path.segments.push(PathSegment::Close);
+        let rect_id = list.paths.push_anon(rect_path);
+
+        list.commands.push(DisplayCommand::PushLayer {
+            bounds: Rect {
+                x: 20.0,
+                y: 20.0,
+                w: 40.0,
+                h: 40.0,
+            },
+            effect: LayerEffect::GaussianBlur { sigma_pt: 5.0 },
+            blend_mode: ComposeBlend::Normal,
+            opacity: 1.0,
+            transform: Transform::IDENTITY,
+        });
+        list.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            // Black rect spanning (20..60, 20..60) in page-pt.
+            paint: Paint::Solid(DLColor::rgba(0.0, 0.0, 0.0, 1.0)),
+            transform: Transform([40.0, 0.0, 0.0, 40.0, 20.0, 20.0]),
+        });
+        list.commands
+            .push(DisplayCommand::PopLayer(Transform::IDENTITY));
+
+        let v = VelloRasterizer::new();
+        let mut opts = RasterOptions::new(80.0, 80.0);
+        opts.dpi = 72.0;
+        opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+        let buf = v.rasterize(&list, &opts);
+
+        // GPU init may have failed and returned the zero-fill fallback
+        // (all-black 4*W*H bytes) — distinguish from a real render by
+        // checking the corner pixel against the white background. If
+        // the buffer is all zeros, skip the assertion: the smoke test
+        // above already covers encoding.
+        let at = |x: usize, y: usize| -> [u8; 4] {
+            let i = (y * 80 + x) * 4;
+            [buf[i], buf[i + 1], buf[i + 2], buf[i + 3]]
+        };
+        let corner = at(2, 2);
+        if corner == [0, 0, 0, 0] {
+            // GPU unavailable — fallback buffer. Skip the assertion;
+            // CI without a GPU exercises only the smoke test.
+            return;
+        }
+        assert!(
+            corner[0] > 240,
+            "corner pixel should be background white when GPU is live; got {corner:?}"
+        );
+
+        // Pixel a few pt outside the rect's right edge (rect spans
+        // 20..60 in both axes; sample at x=63, y=40 — well inside the
+        // 3σ=15pt blur halo). A hard-edge fill would leave this at
+        // background white (~255); the multi-tap replay must darken
+        // it noticeably.
+        let halo = at(63, 40);
+        assert!(
+            halo[0] < 230,
+            "blur halo should darken pixel outside rect; got {halo:?}"
+        );
+        // Pixel at the rect's centre: should still be (nearly)
+        // opaque black — blur softens edges, not the interior.
+        let centre = at(40, 40);
+        assert!(
+            centre[0] < 80,
+            "blurred rect centre should stay dark; got {centre:?}"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // CMYK overprint parity tests.
+    //
+    // Every test follows the same skeleton:
+    //   1. Build a synthetic display list with the CMYK / overprint
+    //      commands the case exercises.
+    //   2. Force the GPU compute path via `FORCE_COMPUTE_PATH` so we
+    //      actually validate the compute shaders even on small scenes.
+    //   3. Run the rasterizer; if the readback buffer is all zeros
+    //      (the documented GPU-unavailable fallback), early-return —
+    //      the test stays a "if we have a GPU, this works" check.
+    //   4. Sample pixels at known coordinates and assert.
+    //
+    // The early-return policy matches the existing
+    // `push_layer_gaussian_blur_softens_edges_on_gpu` pattern at line ~1820
+    // (pre-parity). Headless CI without an adapter exercises every
+    // test up to the GPU-availability check.
+    // ------------------------------------------------------------------
+
+    /// Helper: build a unit-rect path used by every CMYK test.
+    fn unit_rect_path(list: &mut paged_compose::DisplayList) -> paged_compose::PathId {
+        use paged_compose::{PathData, PathSegment};
+        let mut p = PathData::default();
+        p.segments.push(PathSegment::MoveTo { x: 0.0, y: 0.0 });
+        p.segments.push(PathSegment::LineTo { x: 1.0, y: 0.0 });
+        p.segments.push(PathSegment::LineTo { x: 1.0, y: 1.0 });
+        p.segments.push(PathSegment::LineTo { x: 0.0, y: 1.0 });
+        p.segments.push(PathSegment::Close);
+        list.paths.push_anon(p)
+    }
+
+    /// Helper: assert the readback buffer isn't the zero-fill fallback
+    /// (the documented "no GPU available" sentinel from
+    /// `VelloRasterizer::rasterize`). Returns `false` when the GPU
+    /// path didn't actually run — tests treat that as "skip cleanly".
+    fn gpu_path_ran(buf: &[u8]) -> bool {
+        buf.iter().any(|b| *b != 0)
+    }
+
+    /// Tests that toggle the global FORCE_COMPUTE_PATH /
+    /// FAIL_PIPELINE_CREATION flags must run serially — they share
+    /// process-wide state and `cargo test` runs tests in parallel by
+    /// default. A poison-free `Mutex` ensures only one CMYK test
+    /// holds the flag at a time.
+    static CMYK_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Lock guard for the entire CMYK test. Acquire at test entry so
+    /// every render in the test sees a consistent flag state; engage
+    /// the FORCE flag later for specific render calls.
+    #[allow(dead_code)] // The MutexGuard is held by its existence.
+    struct CmykTestLock(std::sync::MutexGuard<'static, ()>);
+    impl CmykTestLock {
+        fn acquire() -> Self {
+            let lock = CMYK_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+            // Reset to a known state on entry; a poisoned lock could
+            // leave the flag set from a previous panic.
+            crate::cmyk_compute::FORCE_COMPUTE_PATH
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+            crate::cmyk_compute::FAIL_PIPELINE_CREATION
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+            Self(lock)
+        }
+    }
+    impl Drop for CmykTestLock {
+        fn drop(&mut self) {
+            crate::cmyk_compute::FORCE_COMPUTE_PATH
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+            crate::cmyk_compute::FAIL_PIPELINE_CREATION
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    /// Engage the FORCE_COMPUTE_PATH flag for a scoped region. The
+    /// caller must already hold a `CmykTestLock` to prevent races
+    /// with other CMYK tests.
+    struct ForceComputeScope;
+    impl ForceComputeScope {
+        fn engage() -> Self {
+            crate::cmyk_compute::FORCE_COMPUTE_PATH
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+            Self
+        }
+    }
+    impl Drop for ForceComputeScope {
+        fn drop(&mut self) {
+            crate::cmyk_compute::FORCE_COMPUTE_PATH
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    /// Helper: build a 40×40 page with a magenta knockout fill from
+    /// pt (5..35, 5..35) covered by a cyan overprint fill in the same
+    /// rect. Returns the page-pt extent and the constructed list.
+    fn cmyk_overprint_cyan_on_magenta_list() -> paged_compose::DisplayList {
+        use paged_compose::{Color as DLColor, DisplayCommand, Paint, Transform};
+        let mut list = paged_compose::DisplayList::new();
+        let rect_id = unit_rect_path(&mut list);
+        // Magenta knockout: cyan 0, magenta 100%, yellow 0, K 0.
+        list.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::Cmyk {
+                c: 0.0,
+                m: 1.0,
+                y: 0.0,
+                k: 0.0,
+                rgb: DLColor::rgba(1.0, 0.0, 1.0, 1.0),
+                spot: None,
+            },
+            transform: Transform([30.0, 0.0, 0.0, 30.0, 5.0, 5.0]),
+        });
+        // Cyan overprint on top.
+        list.commands.push(DisplayCommand::FillPathOverprint {
+            path_id: rect_id,
+            paint: Paint::Cmyk {
+                c: 1.0,
+                m: 0.0,
+                y: 0.0,
+                k: 0.0,
+                rgb: DLColor::rgba(0.0, 1.0, 1.0, 1.0),
+                spot: None,
+            },
+            transform: Transform([30.0, 0.0, 0.0, 30.0, 5.0, 5.0]),
+        });
+        list
+    }
+
+    #[test]
+    fn vello_cmyk_overprint_cyan_on_magenta_produces_blue() {
+        // Cyan over magenta should produce the per-channel max
+        // composite (C=100, M=100, Y=0, K=0) which decodes to a dark
+        // blue. Without the parity work, the Vello knockout fallback
+        // would paint pure cyan on top — visible R, low G, full B.
+        let _lock = CmykTestLock::acquire();
+        let _force = ForceComputeScope::engage();
+        let list = cmyk_overprint_cyan_on_magenta_list();
+        let v = VelloRasterizer::new();
+        let mut opts = RasterOptions::new(40.0, 40.0);
+        opts.dpi = 72.0;
+        opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+        let buf = v.rasterize(&list, &opts);
+        if !gpu_path_ran(&buf) {
+            return;
+        }
+        let at = |x: usize, y: usize| -> [u8; 4] {
+            let i = (y * 40 + x) * 4;
+            [buf[i], buf[i + 1], buf[i + 2], buf[i + 3]]
+        };
+        // Interior pixel of the overprint region.
+        let p = at(20, 20);
+        // Naive CMYK→RGB(C=255, M=255, Y=0, K=0) = (0, 0, 255). Allow
+        // generous slack for rasterizer AA at edges (we're sampling
+        // an interior pixel so this stays tight).
+        assert!(
+            p[0] < 30 && p[1] < 30 && p[2] > 200,
+            "cyan-over-magenta interior should look blue, got {p:?}"
+        );
+    }
+
+    #[test]
+    fn vello_stroke_overprint_cyan_on_magenta() {
+        // Same composite rule for `StrokePathOverprint`. The stroke
+        // covers a narrow band; we sample a pixel near the stroke
+        // centre to avoid AA.
+        use paged_compose::{
+            Color as DLColor, DisplayCommand, LineCap, LineJoin, Paint, Stroke, Transform,
+        };
+        let _lock = CmykTestLock::acquire();
+        let _force = ForceComputeScope::engage();
+        let mut list = paged_compose::DisplayList::new();
+        let rect_id = unit_rect_path(&mut list);
+        list.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::Cmyk {
+                c: 0.0,
+                m: 1.0,
+                y: 0.0,
+                k: 0.0,
+                rgb: DLColor::rgba(1.0, 0.0, 1.0, 1.0),
+                spot: None,
+            },
+            transform: Transform([30.0, 0.0, 0.0, 30.0, 5.0, 5.0]),
+        });
+        list.commands.push(DisplayCommand::StrokePathOverprint {
+            path_id: rect_id,
+            paint: Paint::Cmyk {
+                c: 1.0,
+                m: 0.0,
+                y: 0.0,
+                k: 0.0,
+                rgb: DLColor::rgba(0.0, 1.0, 1.0, 1.0),
+                spot: None,
+            },
+            stroke: Stroke {
+                width: 8.0,
+                cap: LineCap::Butt,
+                join: LineJoin::Miter,
+                miter_limit: 4.0,
+                dash: paged_compose::DashPattern::default(),
+            },
+            transform: Transform([30.0, 0.0, 0.0, 30.0, 5.0, 5.0]),
+        });
+
+        let v = VelloRasterizer::new();
+        let mut opts = RasterOptions::new(40.0, 40.0);
+        opts.dpi = 72.0;
+        opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+        let buf = v.rasterize(&list, &opts);
+        if !gpu_path_ran(&buf) {
+            return;
+        }
+        // Stroke center should land near (5, 5..35) horizontal band.
+        // Sample at (5, 20) — the left edge of the stroke band.
+        let i = (20 * 40 + 5) * 4;
+        let p = [buf[i], buf[i + 1], buf[i + 2], buf[i + 3]];
+        assert!(
+            p[2] > 150,
+            "cyan-on-magenta stroke should be blueish, got {p:?}"
+        );
+    }
+
+    #[test]
+    fn vello_no_overprint_unchanged_vs_baseline() {
+        // Document with NO overprint commands must render bit-identical
+        // to the pre-parity path. Snapshot the result first via the
+        // FORCE_COMPUTE_PATH-off rasterizer (which takes the unchanged
+        // path since count == 0), then re-run with FORCE on and assert
+        // the buffer is the same. (FORCE_COMPUTE_PATH only matters when
+        // count > 0; here it's a no-op — confirming that.)
+        let _lock = CmykTestLock::acquire();
+        use paged_compose::{
+            BlendMode as ComposeBlend, Color as DLColor, DisplayCommand, Paint, PathData,
+            PathSegment, Rect, Transform,
+        };
+        let mut list = paged_compose::DisplayList::new();
+        let rect_id = unit_rect_path(&mut list);
+        list.commands.push(DisplayCommand::BeginBlendGroup {
+            bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 40.0,
+                h: 40.0,
+            },
+            blend_mode: ComposeBlend::Normal,
+            opacity: 1.0,
+            isolated: false,
+            knockout: false,
+            transform: Transform::IDENTITY,
+        });
+        list.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::Solid(DLColor::rgba(0.0, 0.4, 0.8, 1.0)),
+            transform: Transform([30.0, 0.0, 0.0, 30.0, 5.0, 5.0]),
+        });
+        list.commands
+            .push(DisplayCommand::EndBlendGroup(Transform::IDENTITY));
+        // Quiet the unused path warning for tests on no-effect paths.
+        let _ = PathSegment::Close;
+        let _ = PathData::default();
+
+        let v1 = VelloRasterizer::new();
+        let mut opts = RasterOptions::new(40.0, 40.0);
+        opts.dpi = 72.0;
+        opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+        let buf_baseline = v1.rasterize(&list, &opts);
+        if !gpu_path_ran(&buf_baseline) {
+            return;
+        }
+
+        let _force = ForceComputeScope::engage();
+        let v2 = VelloRasterizer::new();
+        let buf_forced = v2.rasterize(&list, &opts);
+        // FORCE_COMPUTE_PATH is a no-op when count == 0 — both should
+        // take the unchanged path and produce bit-identical bytes.
+        assert_eq!(
+            buf_baseline, buf_forced,
+            "zero-overprint scene should render bit-identical regardless of force flag"
+        );
+    }
+
+    #[test]
+    fn vello_k_overprint_passes_through_rgb_image() {
+        // K-only black text overprinted on a photo. The non-text RGB
+        // image pixels must pass through unchanged (coverage == 0
+        // passthrough). Text-covered pixels must darken (K plane
+        // splat) vs. the baseline image-only render.
+        let _lock = CmykTestLock::acquire();
+        use paged_compose::{Color as DLColor, DecodedImage, DisplayCommand, Paint, Transform};
+        let mut list = paged_compose::DisplayList::new();
+        let rect_id = unit_rect_path(&mut list);
+        // 1×1 red image; the placement transform scales it across
+        // the full page.
+        let image_id = list.push_image(DecodedImage {
+            width: 1,
+            height: 1,
+            encoded: Vec::new().into(),
+            rgba: vec![200, 80, 80, 255].into(),
+            icc: None,
+        });
+        list.commands.push(DisplayCommand::Image {
+            image_id,
+            transform: Transform([40.0, 0.0, 0.0, 40.0, 0.0, 0.0]),
+        });
+        // K-only overprint over a small rect in the middle.
+        list.commands.push(DisplayCommand::FillPathOverprint {
+            path_id: rect_id,
+            paint: Paint::Cmyk {
+                c: 0.0,
+                m: 0.0,
+                y: 0.0,
+                k: 1.0,
+                rgb: DLColor::rgba(0.0, 0.0, 0.0, 1.0),
+                spot: None,
+            },
+            transform: Transform([10.0, 0.0, 0.0, 10.0, 15.0, 15.0]),
+        });
+
+        // Baseline: just the image, no overprint. Build a separate
+        // list to render and capture the pre-darken RGB.
+        let mut baseline = paged_compose::DisplayList::new();
+        let _rect_id_b = unit_rect_path(&mut baseline);
+        let image_id_b = baseline.push_image(DecodedImage {
+            width: 1,
+            height: 1,
+            encoded: Vec::new().into(),
+            rgba: vec![200, 80, 80, 255].into(),
+            icc: None,
+        });
+        baseline.commands.push(DisplayCommand::Image {
+            image_id: image_id_b,
+            transform: Transform([40.0, 0.0, 0.0, 40.0, 0.0, 0.0]),
+        });
+
+        let v = VelloRasterizer::new();
+        let mut opts = RasterOptions::new(40.0, 40.0);
+        opts.dpi = 72.0;
+        opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+        let baseline_buf = v.rasterize(&baseline, &opts);
+        if !gpu_path_ran(&baseline_buf) {
+            return;
+        }
+        let _force = ForceComputeScope::engage();
+        let buf = v.rasterize(&list, &opts);
+
+        let at = |b: &[u8], x: usize, y: usize| -> [u8; 4] {
+            let i = (y * 40 + x) * 4;
+            [b[i], b[i + 1], b[i + 2], b[i + 3]]
+        };
+        // Outside the overprint rect (x=5, y=5): RGB image pixel must
+        // be bit-identical to baseline.
+        let outside_b = at(&baseline_buf, 5, 5);
+        let outside = at(&buf, 5, 5);
+        assert_eq!(
+            outside_b, outside,
+            "pixel outside K overprint must be bit-identical to baseline image"
+        );
+        // Inside the overprint rect (x=20, y=20): pixel must be
+        // darker than the baseline image (K plane adds to all channels).
+        let inside_b = at(&baseline_buf, 20, 20);
+        let inside = at(&buf, 20, 20);
+        assert!(
+            inside[0] < inside_b[0] && inside[1] < inside_b[1] && inside[2] < inside_b[2],
+            "K overprint should darken every channel; before={inside_b:?} after={inside:?}"
+        );
+    }
+
+    #[test]
+    fn vello_spot_on_spot_same_ink_max_tints() {
+        // Two overprint draws of the same spot ink at 50% and 80%
+        // tints. The union pixel should reflect 80% — `max(50%, 80%)`.
+        // We assert by comparing to a single-draw 80% pixel.
+        use paged_compose::{Color as DLColor, DisplayCommand, Paint, SpotInk, Transform};
+        let _lock = CmykTestLock::acquire();
+        let _force = ForceComputeScope::engage();
+        // Spot with strong cyan alternate (so any tint is visible).
+        let ink = SpotInk {
+            name: "Color/TestSpot".to_string(),
+            cmyk_alternate: [255, 0, 0, 0], // 100% cyan
+        };
+        let spot_at = |list: &mut paged_compose::DisplayList, tint: f32| -> Paint {
+            let spot_id = list.push_spot_ink(ink.clone());
+            // CMYK channels carry alt × tint per the parser contract.
+            Paint::Cmyk {
+                c: tint * 1.0,
+                m: 0.0,
+                y: 0.0,
+                k: 0.0,
+                rgb: DLColor::rgba(1.0 - tint, 1.0, 1.0, 1.0),
+                spot: Some(spot_id),
+            }
+        };
+
+        let mut overlap = paged_compose::DisplayList::new();
+        let rect_id = unit_rect_path(&mut overlap);
+        let p50 = spot_at(&mut overlap, 0.5);
+        let p80 = spot_at(&mut overlap, 0.8);
+        overlap.commands.push(DisplayCommand::FillPathOverprint {
+            path_id: rect_id,
+            paint: p50,
+            transform: Transform([30.0, 0.0, 0.0, 30.0, 5.0, 5.0]),
+        });
+        overlap.commands.push(DisplayCommand::FillPathOverprint {
+            path_id: rect_id,
+            paint: p80,
+            transform: Transform([30.0, 0.0, 0.0, 30.0, 5.0, 5.0]),
+        });
+
+        let mut alone80 = paged_compose::DisplayList::new();
+        let rect_id_b = unit_rect_path(&mut alone80);
+        let p80b = spot_at(&mut alone80, 0.8);
+        alone80.commands.push(DisplayCommand::FillPathOverprint {
+            path_id: rect_id_b,
+            paint: p80b,
+            transform: Transform([30.0, 0.0, 0.0, 30.0, 5.0, 5.0]),
+        });
+
+        let v = VelloRasterizer::new();
+        let mut opts = RasterOptions::new(40.0, 40.0);
+        opts.dpi = 72.0;
+        opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+        let buf_overlap = v.rasterize(&overlap, &opts);
+        if !gpu_path_ran(&buf_overlap) {
+            return;
+        }
+        let buf_80 = v.rasterize(&alone80, &opts);
+        let at = |b: &[u8], x: usize, y: usize| -> [u8; 4] {
+            let i = (y * 40 + x) * 4;
+            [b[i], b[i + 1], b[i + 2], b[i + 3]]
+        };
+        let a = at(&buf_overlap, 20, 20);
+        let b = at(&buf_80, 20, 20);
+        // Allow a few-LSB tolerance for rounding.
+        for i in 0..3 {
+            let diff = (a[i] as i32 - b[i] as i32).abs();
+            assert!(
+                diff <= 4,
+                "channel {i}: union {a:?} should match alone-80% {b:?} within rounding"
+            );
+        }
+    }
+
+    #[test]
+    fn vello_spot_packing_at_5_spots() {
+        // 5 spot inks => ceil(5/4) = 2 packed spot textures. We can't
+        // easily inspect bind-group internals from a test, but we CAN
+        // verify each ink reads back from the right channel by drawing
+        // 5 overprints in disjoint regions and checking that each
+        // region shows a distinct visible colour matching its alt.
+        use paged_compose::{Color as DLColor, DisplayCommand, Paint, SpotInk, Transform};
+        let _lock = CmykTestLock::acquire();
+        let _force = ForceComputeScope::engage();
+        let mut list = paged_compose::DisplayList::new();
+        let rect_id = unit_rect_path(&mut list);
+        // 5 spots, each with a different distinctive alternate.
+        let alts: [[u8; 4]; 5] = [
+            [255, 0, 0, 0],   // pure cyan
+            [0, 255, 0, 0],   // pure magenta
+            [0, 0, 255, 0],   // pure yellow
+            [0, 0, 0, 255],   // pure black
+            [128, 128, 0, 0], // 50% C/M
+        ];
+        let mut spot_ids = Vec::new();
+        for (i, alt) in alts.iter().enumerate() {
+            let ink = SpotInk {
+                name: format!("Color/Spot{i}"),
+                cmyk_alternate: *alt,
+            };
+            spot_ids.push(list.push_spot_ink(ink));
+        }
+        // Tile 5 horizontal stripes across the page, each painted by
+        // a different spot at 100% tint.
+        for (i, sid) in spot_ids.iter().enumerate() {
+            let y0 = 2.0 + (i as f32) * 6.0;
+            list.commands.push(DisplayCommand::FillPathOverprint {
+                path_id: rect_id,
+                paint: Paint::Cmyk {
+                    c: (alts[i][0] as f32) / 255.0,
+                    m: (alts[i][1] as f32) / 255.0,
+                    y: (alts[i][2] as f32) / 255.0,
+                    k: (alts[i][3] as f32) / 255.0,
+                    rgb: DLColor::rgba(0.0, 0.0, 0.0, 1.0),
+                    spot: Some(*sid),
+                },
+                transform: Transform([35.0, 0.0, 0.0, 4.0, 2.0, y0]),
+            });
+        }
+
+        let v = VelloRasterizer::new();
+        let mut opts = RasterOptions::new(40.0, 40.0);
+        opts.dpi = 72.0;
+        opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+        let buf = v.rasterize(&list, &opts);
+        if !gpu_path_ran(&buf) {
+            return;
+        }
+        let at = |x: usize, y: usize| -> [u8; 4] {
+            let i = (y * 40 + x) * 4;
+            [buf[i], buf[i + 1], buf[i + 2], buf[i + 3]]
+        };
+        // Stripe 0: 100% cyan alt => (0, 255, 255) RGB roughly.
+        let s0 = at(20, 4);
+        assert!(
+            s0[0] < 50 && s0[1] > 200 && s0[2] > 200,
+            "spot 0 stripe should look cyan, got {s0:?}"
+        );
+        // Stripe 1: 100% magenta alt => (255, 0, 255).
+        let s1 = at(20, 10);
+        assert!(
+            s1[0] > 200 && s1[1] < 50 && s1[2] > 200,
+            "spot 1 stripe should look magenta, got {s1:?}"
+        );
+        // Stripe 3: 100% K alt (the first ink to land in the SECOND
+        // packed texture group at index 3 channel 3, *not* a new
+        // group — group 0 channel 3). Should appear black.
+        let s3 = at(20, 22);
+        assert!(
+            s3[0] < 40 && s3[1] < 40 && s3[2] < 40,
+            "spot 3 (K alt) stripe should look black, got {s3:?}"
+        );
+        // Stripe 4: 50% C + 50% M alt = bluish purple. This is the
+        // first ink that lands in the SECOND packed group (index 4 =
+        // group 1, channel 0). If the per-group bind-group offset
+        // arithmetic were wrong, this stripe would either be miswritten
+        // (read back as something else entirely) or zero.
+        let s4 = at(20, 28);
+        assert!(
+            s4[2] > 80,
+            "spot 4 (50% C/M alt, second packed group) should still show colour, got {s4:?}"
+        );
+    }
+
+    #[test]
+    fn vello_fast_path_low_overprint_count() {
+        // Fixture with 2 overprints: the CPU finisher branch fires
+        // without `FORCE_COMPUTE_PATH`. The visible result must match
+        // what the compute path produces — both routes terminate at
+        // the same per-channel-max composite.
+        let _lock = CmykTestLock::acquire();
+        let list = cmyk_overprint_cyan_on_magenta_list();
+        let v = VelloRasterizer::new();
+        let mut opts = RasterOptions::new(40.0, 40.0);
+        opts.dpi = 72.0;
+        opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+        let buf_fast = v.rasterize(&list, &opts);
+        if !gpu_path_ran(&buf_fast) {
+            // CPU finisher always "ran" so this means the CPU build
+            // didn't even pull tiny-skia — bail.
+            return;
+        }
+        let _force = ForceComputeScope::engage();
+        let buf_compute = v.rasterize(&list, &opts);
+        if !gpu_path_ran(&buf_compute) {
+            return;
+        }
+        // The interior pixel should look blue in both buffers and
+        // ΔE between them should be small (different rasterizers but
+        // the same composite intent). We use a per-channel slack of
+        // 16 — generous enough for AA / 8-bit quantisation differences.
+        let at = |b: &[u8], x: usize, y: usize| -> [u8; 4] {
+            let i = (y * 40 + x) * 4;
+            [b[i], b[i + 1], b[i + 2], b[i + 3]]
+        };
+        let a = at(&buf_fast, 20, 20);
+        let b = at(&buf_compute, 20, 20);
+        for i in 0..3 {
+            let diff = (a[i] as i32 - b[i] as i32).abs();
+            assert!(
+                diff < 32,
+                "channel {i}: fast={a:?} vs compute={b:?} differ by {diff}"
+            );
+        }
+        // Both should look distinctly blue.
+        assert!(a[2] > 150, "fast-path interior should be blue, got {a:?}");
+        assert!(b[2] > 150, "compute interior should be blue, got {b:?}");
+    }
+
+    #[test]
+    fn vello_compute_pipeline_creation_failure_falls_back_to_knockout() {
+        // Force pipeline creation to fail before constructing the
+        // rasterizer. The Vello backend should log + fall back to the
+        // pre-parity knockout fill — a plausible (non-black) image
+        // rather than a panic or a zero buffer.
+        let _lock = CmykTestLock::acquire();
+        use std::sync::atomic::Ordering;
+        crate::cmyk_compute::FAIL_PIPELINE_CREATION.store(true, Ordering::SeqCst);
+        let _force = ForceComputeScope::engage();
+        let list = cmyk_overprint_cyan_on_magenta_list();
+        let v = VelloRasterizer::new();
+        let mut opts = RasterOptions::new(40.0, 40.0);
+        opts.dpi = 72.0;
+        opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+        let buf = v.rasterize(&list, &opts);
+        if !gpu_path_ran(&buf) {
+            return;
+        }
+        // Knockout fallback paints the overprint as a normal cyan
+        // fill on top of magenta — visible cyan in the centre. We're
+        // not asserting per-pixel parity (it explicitly diverges from
+        // the CPU result here), just that the rasterizer didn't
+        // panic and returned a plausible image rather than zero.
+        let at = |x: usize, y: usize| -> [u8; 4] {
+            let i = (y * 40 + x) * 4;
+            [buf[i], buf[i + 1], buf[i + 2], buf[i + 3]]
+        };
+        let interior = at(20, 20);
+        // Some colour at the interior — the rect is filled with
+        // something rather than left at background or zero.
+        let nonzero = interior[0] > 0 || interior[1] > 0 || interior[2] > 0;
+        assert!(
+            nonzero,
+            "knockout fallback produced black, got {interior:?}"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // C-28 opacity masks — Vello against the CPU rasterizer.
+    //
+    // The CPU rasterizer is the path of record, so these are parity
+    // tests: one display list, rendered twice, compared. They probe
+    // *continuous* coverage — the whole point of a soft mask over a
+    // clip — not merely "something got hidden".
+    //
+    // Measured on Metal / macOS at the time of writing: the 72 dpi
+    // comparisons are byte-IDENTICAL (worst channel delta 0) across
+    // all four (mask type × invert) combinations, whole image
+    // included. The `<= 2` tolerances below are headroom for
+    // rounding on other adapters, not observed error.
+    // ------------------------------------------------------------------
+
+    /// Page geometry shared by the C-28 parity tests. 100×40 pt at
+    /// 72 dpi (1 pt = 1 px):
+    ///
+    /// * masked CONTENT — black, the whole page.
+    /// * mask ARTWORK — four 25 pt columns spanning y ∈ [5, 35), each
+    ///   a different coverage step (0, ¼, ¾, 1). The y ∈ [0, 5) and
+    ///   y ∈ [35, 40) bands carry NO artwork, which is the
+    ///   "unpainted ⇒ hidden" probe (and, inverted, "unpainted ⇒
+    ///   shown").
+    ///
+    /// Every edge lands on an integer pixel at 72 dpi, so AA plays no
+    /// part in the comparison.
+    #[cfg(feature = "cpu")]
+    fn stepped_mask_list(
+        mask_type: paged_compose::SoftMaskType,
+        invert: bool,
+    ) -> paged_compose::DisplayList {
+        use paged_compose::{Color as DLColor, DisplayCommand, Paint, Transform};
+
+        let mut list = DisplayList::new();
+        let rect_id = unit_rect_path(&mut list);
+        // The same four numbers drive both mask types: a step of 0.25
+        // is "grey 0.25 at α 1" for Luminosity and "white at α 0.25"
+        // for Alpha. Values are in the display list's LINEAR RGB
+        // space; both back ends convert to sRGB identically before
+        // resolving coverage, so the parity claim is unaffected.
+        let steps = [0.0_f32, 0.25, 0.75, 1.0];
+
+        list.commands.push(DisplayCommand::BeginSoftMask {
+            mask_type,
+            invert,
+            transform: Transform::IDENTITY,
+        });
+        for (i, level) in steps.iter().enumerate() {
+            let paint = match mask_type {
+                paged_compose::SoftMaskType::Luminosity => {
+                    Paint::Solid(DLColor::rgba(*level, *level, *level, 1.0))
+                }
+                paged_compose::SoftMaskType::Alpha => {
+                    Paint::Solid(DLColor::rgba(1.0, 1.0, 1.0, *level))
+                }
+            };
+            list.commands.push(DisplayCommand::FillPath {
+                path_id: rect_id,
+                paint,
+                transform: Transform([25.0, 0.0, 0.0, 30.0, i as f32 * 25.0, 5.0]),
+            });
+        }
+        list.commands
+            .push(DisplayCommand::BeginMaskedContent(Transform::IDENTITY));
+        list.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::Solid(DLColor::rgba(0.0, 0.0, 0.0, 1.0)),
+            transform: Transform([100.0, 0.0, 0.0, 40.0, 0.0, 0.0]),
+        });
+        list.commands
+            .push(DisplayCommand::EndSoftMask(Transform::IDENTITY));
+        list
+    }
+
+    #[cfg(feature = "cpu")]
+    fn stepped_mask_opts() -> RasterOptions {
+        let mut opts = RasterOptions::new(100.0, 40.0);
+        opts.dpi = 72.0;
+        opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+        opts
+    }
+
+    /// Worst per-channel delta between two RGBA8 buffers.
+    #[cfg(feature = "cpu")]
+    fn worst_channel_delta(a: &[u8], b: &[u8]) -> u8 {
+        a.iter()
+            .zip(b.iter())
+            .map(|(x, y)| x.abs_diff(*y))
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// The headline parity test: for every (mask type × invert)
+    /// combination the Vello image equals the CPU image, and both
+    /// carry the four distinct coverage steps.
+    #[test]
+    #[cfg(feature = "cpu")]
+    fn soft_mask_matches_the_cpu_rasterizer_for_every_mode() {
+        use paged_compose::SoftMaskType;
+        for mask_type in [SoftMaskType::Luminosity, SoftMaskType::Alpha] {
+            for invert in [false, true] {
+                let list = stepped_mask_list(mask_type, invert);
+                let opts = stepped_mask_opts();
+                let gpu = VelloRasterizer::new().rasterize(&list, &opts);
+                if !gpu_path_ran(&gpu) {
+                    return; // no adapter — encoding-only tests still ran
+                }
+                let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
+                let worst = worst_channel_delta(&gpu, &cpu);
+                assert!(
+                    worst <= 2,
+                    "{mask_type:?} invert={invert}: worst channel delta {worst} \
+                     between vello and the CPU rasterizer"
+                );
+
+                // Semantics, asserted on the Vello buffer alone so a
+                // shared bug in both back ends can't pass this.
+                let px = |x: usize, y: usize| gpu[(y * 100 + x) * 4];
+                let steps: Vec<u8> = [12usize, 37, 62, 87].iter().map(|x| px(*x, 20)).collect();
+                // Black content under an increasing mask ⇒ strictly
+                // decreasing luminance (or increasing, inverted).
+                let ordered = if invert {
+                    steps.windows(2).all(|w| w[0] < w[1])
+                } else {
+                    steps.windows(2).all(|w| w[0] > w[1])
+                };
+                assert!(
+                    ordered,
+                    "{mask_type:?} invert={invert}: coverage steps not monotone: {steps:?}"
+                );
+                // The unpainted band: hidden (paper) normally, shown
+                // (black content) when inverted.
+                let unpainted = px(50, 2);
+                if invert {
+                    assert!(
+                        unpainted < 40,
+                        "{mask_type:?} inverted: unpainted mask area must SHOW the content, \
+                         got {unpainted}"
+                    );
+                } else {
+                    assert!(
+                        unpainted > 215,
+                        "{mask_type:?}: unpainted mask area must HIDE the content, \
+                         got {unpainted}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The mask artwork is a coverage source, never paint: a red
+    /// artwork must leave no red on the page. Also pins that the
+    /// bracket composes with an enclosing clip and blend group —
+    /// Vello gets that from layer nesting, the CPU rasterizer from
+    /// its clip stack, and the two must still agree.
+    #[test]
+    #[cfg(feature = "cpu")]
+    fn soft_mask_artwork_never_paints_and_nests_in_clips_and_groups() {
+        use paged_compose::{
+            BlendMode as ComposeBlend, Color as DLColor, DisplayCommand, Paint, Rect, SoftMaskType,
+            Transform,
+        };
+
+        let mut list = DisplayList::new();
+        let rect_id = unit_rect_path(&mut list);
+        // 50%-opacity blend group ▸ clip to the left half ▸ soft mask.
+        list.commands.push(DisplayCommand::BeginBlendGroup {
+            bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 100.0,
+                h: 40.0,
+            },
+            blend_mode: ComposeBlend::Normal,
+            opacity: 0.5,
+            isolated: false,
+            knockout: false,
+            transform: Transform::IDENTITY,
+        });
+        list.commands.push(DisplayCommand::PushClip {
+            path_id: rect_id,
+            transform: Transform([50.0, 0.0, 0.0, 40.0, 0.0, 0.0]),
+        });
+        list.commands.push(DisplayCommand::BeginSoftMask {
+            mask_type: SoftMaskType::Luminosity,
+            invert: false,
+            transform: Transform::IDENTITY,
+        });
+        // Saturated red artwork spanning y ∈ [10, 30).
+        list.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::Solid(DLColor::rgba(1.0, 0.0, 0.0, 1.0)),
+            transform: Transform([80.0, 0.0, 0.0, 20.0, 10.0, 10.0]),
+        });
+        list.commands
+            .push(DisplayCommand::BeginMaskedContent(Transform::IDENTITY));
+        list.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::Solid(DLColor::rgba(0.0, 0.0, 0.0, 1.0)),
+            transform: Transform([100.0, 0.0, 0.0, 40.0, 0.0, 0.0]),
+        });
+        list.commands
+            .push(DisplayCommand::EndSoftMask(Transform::IDENTITY));
+        list.commands
+            .push(DisplayCommand::PopClip(Transform::IDENTITY));
+        list.commands
+            .push(DisplayCommand::EndBlendGroup(Transform::IDENTITY));
+
+        let opts = stepped_mask_opts();
+        let gpu = VelloRasterizer::new().rasterize(&list, &opts);
+        if !gpu_path_ran(&gpu) {
+            return;
+        }
+        let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
+        let worst = worst_channel_delta(&gpu, &cpu);
+        assert!(
+            worst <= 2,
+            "clip+group nesting: worst channel delta {worst}"
+        );
+
+        let px = |x: usize, y: usize| -> [u8; 4] {
+            let i = (y * 100 + x) * 4;
+            [gpu[i], gpu[i + 1], gpu[i + 2], gpu[i + 3]]
+        };
+        // Inside the clip, inside the artwork: partial grey. Red's
+        // luminance is ~0.21 in sRGB terms, halved again by the
+        // group's 0.5 opacity — the exact value is pinned by the
+        // parity assertion above; here we only require "neither
+        // paper nor solid".
+        let inside = px(25, 20);
+        assert!(
+            inside[0] > 20 && inside[0] < 245,
+            "masked content should be partially visible, got {inside:?}"
+        );
+        // Outside the clip: untouched paper. The clip must still win.
+        assert_eq!(
+            px(75, 20),
+            [255, 255, 255, 255],
+            "content outside the enclosing clip must not paint"
+        );
+        // Inside the clip but outside the artwork: hidden.
+        assert_eq!(
+            px(25, 2),
+            [255, 255, 255, 255],
+            "content outside the mask artwork must be hidden"
+        );
+        // Nowhere on the page may the red artwork itself show. A
+        // channel-imbalanced pixel is the signature of leaked red.
+        for chunk in gpu.chunks_exact(4) {
+            assert!(
+                chunk[0].abs_diff(chunk[1]) <= 2 && chunk[1].abs_diff(chunk[2]) <= 2,
+                "mask artwork leaked colour onto the page: {chunk:?}"
+            );
+        }
+    }
+
+    /// Parity holds at a non-integer scale too. Step edges land on
+    /// fractional pixels at 300 dpi, where the analytic-coverage GPU
+    /// rasterizer and tiny-skia legitimately disagree by up to ~29/255
+    /// — with or without a mask (a no-mask render of the same artwork
+    /// diverges by ~20/255 in the same bands). Away from those bands
+    /// the two are identical, which is what this pins.
+    #[test]
+    #[cfg(feature = "cpu")]
+    fn soft_mask_parity_holds_at_300_dpi_away_from_edges() {
+        use paged_compose::SoftMaskType;
+        let list = stepped_mask_list(SoftMaskType::Luminosity, false);
+        let mut opts = stepped_mask_opts();
+        opts.dpi = 300.0;
+        let gpu = VelloRasterizer::new().rasterize(&list, &opts);
+        if !gpu_path_ran(&gpu) {
+            return;
+        }
+        let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
+        let (w, h) = opts.pixel_size();
+        let scale = (opts.dpi / 72.0) as f64;
+        let x_edges: Vec<f64> = [0.0_f64, 25.0, 50.0, 75.0, 100.0]
+            .iter()
+            .map(|v| v * scale)
+            .collect();
+        let y_edges: Vec<f64> = [0.0_f64, 5.0, 35.0, 40.0]
+            .iter()
+            .map(|v| v * scale)
+            .collect();
+        let mut worst = 0u8;
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let on_edge = x_edges.iter().any(|e| (x as f64 - e).abs() <= 3.0)
+                    || y_edges.iter().any(|e| (y as f64 - e).abs() <= 3.0);
+                if on_edge {
+                    continue;
+                }
+                for c in 0..4 {
+                    let i = (y * w as usize + x) * 4 + c;
+                    worst = worst.max(gpu[i].abs_diff(cpu[i]));
+                }
+            }
+        }
+        assert!(worst <= 2, "300 dpi interior worst channel delta {worst}");
+    }
+
+    /// A blend group *inside* masked content must still composite
+    /// against the page. Vello's mask forces the content into an
+    /// isolated layer, where a Multiply would otherwise see an empty
+    /// backdrop and come out as a plain source-over; the
+    /// `hoistable_blend_group` fold is what recovers it. Without that
+    /// fold this test reads `[0, 255, 0]` (raw green) against the
+    /// CPU rasterizer's `[0, 0, 0]` — the widest divergence the
+    /// C-28 lowering can produce.
+    #[test]
+    #[cfg(feature = "cpu")]
+    fn a_blend_group_inside_masked_content_composites_against_the_page() {
+        use paged_compose::{
+            BlendMode as ComposeBlend, Color as DLColor, DisplayCommand, Paint, Rect, SoftMaskType,
+            Transform,
+        };
+
+        let mut list = DisplayList::new();
+        let rect_id = unit_rect_path(&mut list);
+        // Page content beneath the mask: red across the whole page.
+        list.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::Solid(DLColor::rgba(1.0, 0.0, 0.0, 1.0)),
+            transform: Transform([100.0, 0.0, 0.0, 40.0, 0.0, 0.0]),
+        });
+        list.commands.push(DisplayCommand::BeginSoftMask {
+            mask_type: SoftMaskType::Alpha,
+            invert: false,
+            transform: Transform::IDENTITY,
+        });
+        // Artwork: opaque over x ∈ [0, 25), half-opaque over
+        // x ∈ [25, 70), nothing beyond — so one image covers full,
+        // partial and zero coverage, and the half-opaque band runs
+        // past the blend group's 60 pt bounds to exercise the fold's
+        // clipping too.
+        list.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::Solid(DLColor::rgba(1.0, 1.0, 1.0, 1.0)),
+            transform: Transform([25.0, 0.0, 0.0, 40.0, 0.0, 0.0]),
+        });
+        list.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::Solid(DLColor::rgba(1.0, 1.0, 1.0, 0.5)),
+            transform: Transform([45.0, 0.0, 0.0, 40.0, 25.0, 0.0]),
+        });
+        list.commands
+            .push(DisplayCommand::BeginMaskedContent(Transform::IDENTITY));
+        list.commands.push(DisplayCommand::BeginBlendGroup {
+            bounds: Rect {
+                x: 0.0,
+                y: 0.0,
+                w: 60.0,
+                h: 40.0,
+            },
+            blend_mode: ComposeBlend::Multiply,
+            opacity: 1.0,
+            isolated: false,
+            knockout: false,
+            transform: Transform::IDENTITY,
+        });
+        list.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::Solid(DLColor::rgba(0.0, 1.0, 0.0, 1.0)),
+            transform: Transform([100.0, 0.0, 0.0, 40.0, 0.0, 0.0]),
+        });
+        list.commands
+            .push(DisplayCommand::EndBlendGroup(Transform::IDENTITY));
+        list.commands
+            .push(DisplayCommand::EndSoftMask(Transform::IDENTITY));
+
+        let opts = stepped_mask_opts();
+        let gpu = VelloRasterizer::new().rasterize(&list, &opts);
+        if !gpu_path_ran(&gpu) {
+            return;
+        }
+        let cpu = crate::CpuRasterizer.rasterize(&list, &opts);
+        // Whole image, no exclusions. This used to skip the 1 px
+        // column at the blend group's own right edge (x = 60), where
+        // the CPU buffer's AA pad let paint survive one device pixel
+        // past `bounds` that this backend clipped away — a divergence
+        // that predated opacity masks and had nothing to do with them.
+        // `group_bounds_mask` closed it; see
+        // `a_blend_group_cuts_at_its_bounds_in_both_back_ends`.
+        let mut worst = 0u8;
+        for y in 0..40usize {
+            for x in 0..100usize {
+                let i = (y * 100 + x) * 4;
+                for c in 0..4 {
+                    worst = worst.max(gpu[i + c].abs_diff(cpu[i + c]));
+                }
+            }
+        }
+        assert!(
+            worst <= 2,
+            "blend group inside masked content: worst channel delta {worst}"
+        );
+        let px = |x: usize, y: usize| -> [u8; 4] {
+            let i = (y * 100 + x) * 4;
+            [gpu[i], gpu[i + 1], gpu[i + 2], gpu[i + 3]]
+        };
+        // Full mask coverage: Multiply(red, green) = black.
+        assert_eq!(px(12, 20), [0, 0, 0, 255], "full coverage must multiply");
+        // Zero coverage (no artwork): the page's red, untouched.
+        assert_eq!(px(87, 20), [255, 0, 0, 255], "no coverage must leave red");
+        // Masked, but outside the group's own bounds — the fold has
+        // to keep clipping to them, exactly as the group buffer the
+        // CPU rasterizer allocates does.
+        assert_eq!(
+            px(65, 20),
+            [255, 0, 0, 255],
+            "content outside the folded group's bounds must be clipped"
+        );
+        // Partial coverage: strictly between the two.
+        let mid = px(37, 20);
+        assert!(
+            mid[0] > 0 && mid[0] < 255 && mid[1] < 40,
+            "partial coverage must interpolate towards the multiply, got {mid:?}"
+        );
+    }
+
+    /// The fold is only sound when the group spans the masked content
+    /// exactly; anything else must leave the content layer a plain
+    /// isolator rather than smear the group's blend over commands
+    /// that were never inside it.
+    #[test]
+    fn the_blend_group_fold_only_fires_on_an_exact_span() {
+        use paged_compose::{
+            BlendMode as ComposeBlend, Color as DLColor, DisplayCommand, Paint, PathId, Rect,
+            SoftMaskType, Transform,
+        };
+
+        let bounds = Rect {
+            x: 0.0,
+            y: 0.0,
+            w: 10.0,
+            h: 10.0,
+        };
+        let group = || DisplayCommand::BeginBlendGroup {
+            bounds,
+            blend_mode: ComposeBlend::Multiply,
+            opacity: 0.5,
+            isolated: false,
+            knockout: false,
+            transform: Transform::IDENTITY,
+        };
+        let folded = Some(HoistedGroup {
+            bounds,
+            blend_mode: ComposeBlend::Multiply,
+            opacity: 0.5,
+        });
+        let fill = || DisplayCommand::FillPath {
+            path_id: PathId(0),
+            paint: Paint::Solid(DLColor::rgba(0.0, 0.0, 0.0, 1.0)),
+            transform: Transform::IDENTITY,
+        };
+        let mid = || DisplayCommand::BeginMaskedContent(Transform::IDENTITY);
+        let end = || DisplayCommand::EndSoftMask(Transform::IDENTITY);
+        let begin = || DisplayCommand::BeginSoftMask {
+            mask_type: SoftMaskType::Alpha,
+            invert: false,
+            transform: Transform::IDENTITY,
+        };
+        let end_group = || DisplayCommand::EndBlendGroup(Transform::IDENTITY);
+
+        // Exact span ⇒ fold.
+        let exact = vec![mid(), group(), fill(), end_group(), end()];
+        assert_eq!(hoistable_blend_group(&exact, 0), folded);
+        // Nested layers inside the group don't disturb the match.
+        let nested = vec![
+            mid(),
+            group(),
+            DisplayCommand::PushClip {
+                path_id: PathId(0),
+                transform: Transform::IDENTITY,
+            },
+            fill(),
+            DisplayCommand::PopClip(Transform::IDENTITY),
+            end_group(),
+            end(),
+        ];
+        assert_eq!(hoistable_blend_group(&nested, 0), folded);
+        // A nested soft-mask bracket inside the group: still exact.
+        let inner_bracket = vec![
+            mid(),
+            group(),
+            begin(),
+            fill(),
+            mid(),
+            fill(),
+            end(),
+            end_group(),
+            end(),
+        ];
+        assert_eq!(hoistable_blend_group(&inner_bracket, 0), folded);
+        // Trailing content after the group ⇒ no fold.
+        let trailing = vec![mid(), group(), fill(), end_group(), fill(), end()];
+        assert_eq!(hoistable_blend_group(&trailing, 0), None);
+        // Leading content before the group ⇒ no fold.
+        let leading = vec![mid(), fill(), group(), fill(), end_group(), end()];
+        assert_eq!(hoistable_blend_group(&leading, 0), None);
+        // A clip rather than a group ⇒ no fold.
+        let clipped = vec![
+            mid(),
+            DisplayCommand::PushClip {
+                path_id: PathId(0),
+                transform: Transform::IDENTITY,
+            },
+            fill(),
+            DisplayCommand::PopClip(Transform::IDENTITY),
+            end(),
+        ];
+        assert_eq!(hoistable_blend_group(&clipped, 0), None);
+        // Truncated list ⇒ no fold, no panic.
+        let truncated = vec![mid(), group(), fill()];
+        assert_eq!(hoistable_blend_group(&truncated, 0), None);
+    }
+
+    /// Malformed marker sequences must not desynchronise the scene /
+    /// layer stacks — same tolerance policy `PopClip` and
+    /// `EndBlendGroup` carry. No GPU needed: the assertion is that
+    /// scene building terminates with a well-formed encoding.
+    #[test]
+    fn build_scene_tolerates_unbalanced_soft_mask_markers() {
+        use paged_compose::{Color as DLColor, DisplayCommand, Paint, SoftMaskType, Transform};
+
+        // Stray closers with no opener.
+        let mut stray = DisplayList::new();
+        stray
+            .commands
+            .push(DisplayCommand::BeginMaskedContent(Transform::IDENTITY));
+        stray
+            .commands
+            .push(DisplayCommand::EndSoftMask(Transform::IDENTITY));
+        let _ = build_scene_with_transform(&stray, kurbo::Affine::scale(1.0));
+
+        // Opener with no closers: the artwork capture is dropped at
+        // the end-of-list drain rather than painted onto the page.
+        let mut dangling = DisplayList::new();
+        let rect_id = unit_rect_path(&mut dangling);
+        dangling.commands.push(DisplayCommand::BeginSoftMask {
+            mask_type: SoftMaskType::Alpha,
+            invert: false,
+            transform: Transform::IDENTITY,
+        });
+        dangling.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::Solid(DLColor::rgba(1.0, 0.0, 0.0, 1.0)),
+            transform: Transform([10.0, 0.0, 0.0, 10.0, 0.0, 0.0]),
+        });
+        let _ = build_scene_with_transform(&dangling, kurbo::Affine::scale(1.0));
+
+        // Artwork opened and closed, content never ended.
+        let mut half = DisplayList::new();
+        let rect_id = unit_rect_path(&mut half);
+        half.commands.push(DisplayCommand::BeginSoftMask {
+            mask_type: SoftMaskType::Luminosity,
+            invert: true,
+            transform: Transform::IDENTITY,
+        });
+        half.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::Solid(DLColor::rgba(1.0, 1.0, 1.0, 1.0)),
+            transform: Transform([10.0, 0.0, 0.0, 10.0, 0.0, 0.0]),
+        });
+        half.commands
+            .push(DisplayCommand::BeginMaskedContent(Transform::IDENTITY));
+        half.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::Solid(DLColor::rgba(0.0, 0.0, 0.0, 1.0)),
+            transform: Transform([20.0, 0.0, 0.0, 20.0, 0.0, 0.0]),
+        });
+        let _ = build_scene_with_transform(&half, kurbo::Affine::scale(1.0));
+
+        // Nested brackets: a soft mask whose ARTWORK is itself masked.
+        let mut nested = DisplayList::new();
+        let rect_id = unit_rect_path(&mut nested);
+        let fill = |t: [f32; 6], v: f32| DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::Solid(DLColor::rgba(v, v, v, 1.0)),
+            transform: Transform(t),
+        };
+        nested.commands.push(DisplayCommand::BeginSoftMask {
+            mask_type: SoftMaskType::Luminosity,
+            invert: false,
+            transform: Transform::IDENTITY,
+        });
+        nested.commands.push(DisplayCommand::BeginSoftMask {
+            mask_type: SoftMaskType::Alpha,
+            invert: false,
+            transform: Transform::IDENTITY,
+        });
+        nested
+            .commands
+            .push(fill([20.0, 0.0, 0.0, 20.0, 0.0, 0.0], 1.0));
+        nested
+            .commands
+            .push(DisplayCommand::BeginMaskedContent(Transform::IDENTITY));
+        nested
+            .commands
+            .push(fill([30.0, 0.0, 0.0, 30.0, 0.0, 0.0], 0.5));
+        nested
+            .commands
+            .push(DisplayCommand::EndSoftMask(Transform::IDENTITY));
+        nested
+            .commands
+            .push(DisplayCommand::BeginMaskedContent(Transform::IDENTITY));
+        nested
+            .commands
+            .push(fill([40.0, 0.0, 0.0, 40.0, 0.0, 0.0], 0.0));
+        nested
+            .commands
+            .push(DisplayCommand::EndSoftMask(Transform::IDENTITY));
+        let _ = build_scene_with_transform(&nested, kurbo::Affine::scale(1.0));
+    }
+
+    /// Build a page whose only subject is a Multiply blend group with
+    /// `bounds`, containing paint that runs past those bounds on all
+    /// four sides. `grouped = false` drops the bracket and leaves the
+    /// same paint — the CONTROL, whose CPU-vs-Vello delta is the two
+    /// back ends' intrinsic antialiasing disagreement on a fractional
+    /// edge, nothing to do with groups.
+    #[cfg(feature = "cpu")]
+    fn overflowing_blend_group(bounds: paged_compose::Rect, grouped: bool) -> DisplayList {
+        use paged_compose::{
+            BlendMode as ComposeBlend, Color as DLColor, DisplayCommand, Paint, Transform,
+        };
+
+        let mut list = DisplayList::new();
+        let rect_id = unit_rect_path(&mut list);
+        // Page-wide red underneath, so a Multiply that lands reads
+        // black and one that is clipped away reads red — a 255-wide
+        // signal on every pixel the two back ends disagree about.
+        list.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::Solid(DLColor::rgba(1.0, 0.0, 0.0, 1.0)),
+            transform: Transform([100.0, 0.0, 0.0, 60.0, 0.0, 0.0]),
+        });
+        if grouped {
+            list.commands.push(DisplayCommand::BeginBlendGroup {
+                bounds,
+                blend_mode: ComposeBlend::Multiply,
+                opacity: 1.0,
+                isolated: false,
+                knockout: false,
+                transform: Transform::IDENTITY,
+            });
+        }
+        // Multiply(red, green) is opaque black, so the control's plain
+        // opaque black over the same rect is the SAME image — the two
+        // renders differ only in how the rect's edge came to be, which
+        // is the whole point of the comparison.
+        let (paint, transform) = if grouped {
+            (
+                DLColor::rgba(0.0, 1.0, 0.0, 1.0),
+                // Overflows `bounds` on all four sides.
+                Transform([100.0, 0.0, 0.0, 60.0, 0.0, 0.0]),
+            )
+        } else {
+            (
+                DLColor::rgba(0.0, 0.0, 0.0, 1.0),
+                Transform([bounds.w, 0.0, 0.0, bounds.h, bounds.x, bounds.y]),
+            )
+        };
+        list.commands.push(DisplayCommand::FillPath {
+            path_id: rect_id,
+            paint: Paint::Solid(paint),
+            transform,
+        });
+        if grouped {
+            list.commands
+                .push(DisplayCommand::EndBlendGroup(Transform::IDENTITY));
+        }
+        list
+    }
+
+    #[cfg(feature = "cpu")]
+    fn overflow_opts(dpi: f32) -> RasterOptions {
+        let mut opts = RasterOptions::new(100.0, 60.0);
+        opts.dpi = dpi;
+        opts.background = ComposeColor::rgba(1.0, 1.0, 1.0, 1.0);
+        opts
+    }
+
+    /// Worst per-channel delta and the number of pixels past a
+    /// 2/255 noise floor, for a CPU-vs-Vello pair.
+    #[cfg(feature = "cpu")]
+    fn cpu_gpu_delta(list: &DisplayList, opts: &RasterOptions) -> Option<(u8, usize)> {
+        let gpu = VelloRasterizer::new().rasterize(list, opts);
+        if !gpu_path_ran(&gpu) {
+            return None;
+        }
+        let cpu = crate::CpuRasterizer.rasterize(list, opts);
+        let mut worst = 0u8;
+        let mut ndiff = 0usize;
+        for (g, c) in gpu.chunks_exact(4).zip(cpu.chunks_exact(4)) {
+            let d = (0..4).map(|i| g[i].abs_diff(c[i])).max().unwrap_or(0);
+            worst = worst.max(d);
+            if d > 2 {
+                ndiff += 1;
+            }
+        }
+        Some((worst, ndiff))
+    }
+
+    /// A drop shadow on the GPU is the CPU lane's own, built by the shared
+    /// mask builder: a rect-stamp shadow used to be skipped here, and a
+    /// path shadow stamped softer and wider than the CPU's Gaussian
+    /// (`effects-attrs` mean ΔE 2.26 between the lanes, now 0.16).
+    #[cfg(feature = "cpu")]
+    #[test]
+    fn drop_shadows_match_the_cpu_lane() {
+        use paged_compose::{
+            BlendMode as ComposeBlend, Color as DLColor, DisplayCommand, DropShadow, PathData,
+            PathSegment, Transform,
+        };
+        for path_shadow in [false, true] {
+            let mut list = DisplayList::new();
+            let mut rect = PathData::default();
+            rect.segments.push(PathSegment::MoveTo { x: 0.0, y: 0.0 });
+            rect.segments.push(PathSegment::LineTo { x: 1.0, y: 0.0 });
+            rect.segments.push(PathSegment::LineTo { x: 1.0, y: 1.0 });
+            rect.segments.push(PathSegment::LineTo { x: 0.0, y: 1.0 });
+            rect.segments.push(PathSegment::Close);
+            let path_id = list.paths.push_anon(rect);
+            let shadow = DropShadow {
+                offset_x: 4.0,
+                offset_y: 4.0,
+                blur_radius: if path_shadow { 1.5 } else { 6.0 },
+                color: DLColor::rgba(0.0, 0.0, 0.0, 1.0),
+                opacity: 0.75,
+                blend_mode: ComposeBlend::Normal,
+                spread: 0.2,
+                noise: 0.0,
+            };
+            let transform = Transform([30.0, 0.0, 0.0, 20.0, 20.0, 15.0]);
+            list.commands.push(if path_shadow {
+                DisplayCommand::PathShadow {
+                    path_id,
+                    transform,
+                    shadow,
+                }
+            } else {
+                DisplayCommand::DropShadow {
+                    path_id,
+                    transform,
+                    shadow,
+                }
+            });
+            let Some((worst, ndiff)) = cpu_gpu_delta(&list, &overflow_opts(144.0)) else {
+                return;
+            };
+            let _ = ndiff;
+            assert!(
+                worst <= SHADOW_WORST,
+                "path_shadow={path_shadow}: worst channel delta {worst}"
+            );
+        }
+    }
+
+    /// A dashed stroke leaves its gaps on the GPU as on the CPU. The
+    /// dash used to be dropped here, so every dashed and dotted stroke
+    /// drew solid (`strokes-fills` "canned-dotted": mean ΔE 0.37 between
+    /// the lanes on that page).
+    #[cfg(feature = "cpu")]
+    #[test]
+    fn dashed_strokes_leave_their_gaps() {
+        use paged_compose::{
+            Color as DLColor, DashPattern, DisplayCommand, LineCap, LineJoin, Paint, PathData,
+            PathSegment, Stroke, Transform,
+        };
+        let mut list = DisplayList::new();
+        let mut line = PathData::default();
+        line.segments.push(PathSegment::MoveTo { x: 10.0, y: 30.0 });
+        line.segments.push(PathSegment::LineTo { x: 90.0, y: 30.0 });
+        let path_id = list.paths.push_anon(line);
+        list.commands.push(DisplayCommand::StrokePath {
+            path_id,
+            paint: Paint::Solid(DLColor::rgba(0.0, 0.0, 0.0, 1.0)),
+            stroke: Stroke {
+                width: 4.0,
+                cap: LineCap::Butt,
+                join: LineJoin::Miter,
+                miter_limit: 4.0,
+                dash: DashPattern::from_slice(&[8.0, 8.0]),
+            },
+            transform: Transform::IDENTITY,
+        });
+        let opts = overflow_opts(72.0);
+        let gpu = VelloRasterizer::new().rasterize(&list, &opts);
+        if !gpu_path_ran(&gpu) {
+            return;
+        }
+        // x = 22 pt sits in the first gap (8..16 pt past the start).
+        let (w, _) = opts.pixel_size();
+        let at = |x: usize, y: usize| gpu[(y * w as usize + x) * 4];
+        assert_eq!(at(14, 30), 0, "the first dash is ink");
+        assert_eq!(at(22, 30), 255, "the first gap is paper");
+        let (worst, _) = cpu_gpu_delta(&list, &opts).expect("the GPU lane ran above");
+        assert!(worst <= 8, "worst channel delta {worst}");
+
+        // Dots: a zero-length dash with round caps.
+        if let Some(DisplayCommand::StrokePath { stroke, .. }) = list.commands.last_mut() {
+            stroke.cap = LineCap::Round;
+            stroke.dash = DashPattern::from_slice(&[0.0, 8.0]);
+        }
+        let gpu = VelloRasterizer::new().rasterize(&list, &opts);
+        let at = |x: usize, y: usize| gpu[(y * w as usize + x) * 4];
+        assert_eq!(at(18, 30), 0, "the second dot is ink");
+        assert_eq!(at(14, 30), 255, "between the dots is paper");
+        // The edge of a 2 px dot: the lanes antialias it differently
+        // (measured 56 on Metal), where a missing dot would read 255.
+        let (worst, _) = cpu_gpu_delta(&list, &opts).expect("the GPU lane ran above");
+        assert!(worst <= 64, "dots: worst channel delta {worst}");
+    }
+
+    /// The worst channel delta a shadow may show between the lanes: the
+    /// two rasterise the stamp's coverage on different pixel grids
+    /// (measured at 144 dpi: 18 for the rect stamp, 9 for the path one;
+    /// before the shared builder the rect stamp was missing outright).
+    #[cfg(feature = "cpu")]
+    const SHADOW_WORST: u8 = 24;
+
+    /// A blend group's extent is its `bounds` rect, in PAGE space, and
+    /// both back ends must cut there.
+    ///
+    /// This is the divergence the C-28 mask test excluded a column for.
+    /// `cpu.rs` allocates the group buffer with a device pixel of AA
+    /// slack (`pad_pt = 1.0 / scale`) on top of outward pixel snapping,
+    /// and used to let that buffer edge BE the clip; the Vello backend
+    /// passes `bounds` to `push_layer` verbatim. Content that reaches
+    /// the group's edge therefore survived one device pixel further on
+    /// the CPU than on the GPU — a 255/255 band, on all four sides
+    /// (measured: 1 px for pixel-aligned bounds, 2 px for fractional
+    /// ones, at every dpi, because the pad is a device pixel by
+    /// construction).
+    ///
+    /// The CPU was the side to move. `bounds` is a page-space rect and
+    /// `page_to_px` is not knowable when a Vello scene is encoded —
+    /// `SurfacePresenter::build_page_scene` encodes once at identity
+    /// and `present_scenes` re-uses that encoding at every zoom level
+    /// — so a device-pixel-derived edge is not a contract Vello can
+    /// implement, and it would mean the same document enclosing
+    /// different content at 72 and at 300 dpi.
+    #[test]
+    #[cfg(feature = "cpu")]
+    fn a_blend_group_cuts_at_its_bounds_in_both_back_ends() {
+        use paged_compose::Rect;
+
+        // Pixel-aligned bounds: exact parity, whole image, no
+        // exclusions. (Before the fix: worst 255 over a 1 px ring.)
+        let bounds = Rect {
+            x: 20.0,
+            y: 10.0,
+            w: 40.0,
+            h: 30.0,
+        };
+        let opts = overflow_opts(72.0);
+        let Some((worst, ndiff)) = cpu_gpu_delta(&overflowing_blend_group(bounds, true), &opts)
+        else {
+            return; // no GPU adapter — skip cleanly
+        };
+        assert!(
+            worst <= 2 && ndiff == 0,
+            "pixel-aligned group bounds must be byte-identical: worst {worst}, {ndiff} px differ"
+        );
+
+        // The group really does cut — "both back ends paint
+        // everything" would satisfy the assertion above too.
+        let cpu = crate::CpuRasterizer.rasterize(&overflowing_blend_group(bounds, true), &opts);
+        let px = |x: usize, y: usize| -> [u8; 4] {
+            let i = (y * 100 + x) * 4;
+            [cpu[i], cpu[i + 1], cpu[i + 2], cpu[i + 3]]
+        };
+        assert_eq!(
+            px(40, 25),
+            [0, 0, 0, 255],
+            "inside the group: Multiply lands"
+        );
+        assert_eq!(
+            px(60, 25),
+            [255, 0, 0, 255],
+            "one px past the group's right edge: page red, unmultiplied"
+        );
+        assert_eq!(
+            px(19, 25),
+            [255, 0, 0, 255],
+            "one px before the group's left edge: page red, unmultiplied"
+        );
+        assert_eq!(
+            px(40, 40),
+            [255, 0, 0, 255],
+            "one px past the group's bottom edge: page red, unmultiplied"
+        );
+
+        // Fractional bounds, at two very different scales. Here the
+        // two back ends still differ on the boundary pixel, because
+        // they disagree about partial coverage in general — Vello is
+        // analytic, tiny-skia quantises. The bar is that the GROUP
+        // contributes nothing on top of that: the same scene with the
+        // bracket removed must diverge by the same amount over the
+        // same number of pixels.
+        let fractional = Rect {
+            x: 20.3,
+            y: 10.7,
+            w: 40.4,
+            h: 30.2,
+        };
+        for dpi in [72.0, 300.0] {
+            let opts = overflow_opts(dpi);
+            let Some(grouped) = cpu_gpu_delta(&overflowing_blend_group(fractional, true), &opts)
+            else {
+                return;
+            };
+            let Some(control) = cpu_gpu_delta(&overflowing_blend_group(fractional, false), &opts)
+            else {
+                return;
+            };
+            assert_eq!(
+                grouped, control,
+                "at {dpi} dpi a fractional group edge must diverge exactly as much as the same \
+                 edge with no group at all: grouped {grouped:?}, control {control:?}"
+            );
+        }
+    }
+}

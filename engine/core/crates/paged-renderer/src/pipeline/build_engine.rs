@@ -1,0 +1,9584 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! The document build + story-emission engine: build_document_inner +
+//! StoryEmitter (per-story paragraph composition, chain threading) +
+//! index/TOC paragraph builders. Extracted from pipeline/mod.rs (1.6b).
+
+use super::*;
+use std::collections::HashMap;
+
+/// ADR 028 — re-emit passes a story may spend on keep options beyond the
+/// footnote ones, on top of two per chain frame. A break holds only where
+/// it was decided (`keeps` module doc), so a break that moves text
+/// invalidates the ones decided after it, and the fixpoint settles the
+/// frame boundaries in flow order: at least one per pass, a few for a
+/// chain of keeps at one boundary (a heading kept with a heading kept
+/// with text). The cap bounds a pathological oscillation.
+const MAX_KEEP_PASSES: usize = 4;
+
+use paged_compose::{
+    emit_glyph_slice, emit_glyph_slice_stroke, DisplayList, DropShadow, Paint, PathData,
+    PathSegment, Rect, Transform, TtfOutliner,
+};
+use paged_model::{Graphic, PathAnchor, TextFrame};
+use paged_scene::Document;
+
+use crate::diagnostics::{Diagnostic, DiagnosticCode, RenderDiagnostics};
+use crate::module::geometry::rewrite_tail_for_overprint;
+
+/// B-18 paste-into: the container's outline as a clip path in the
+/// container's INNER coordinate space, plus the container's
+/// (spread-space) item transform. Per page,
+/// [`frame_outer_transform`] maps the path into page coords — so
+/// rotated / sheared containers clip correctly. The geometry mirrors
+/// what the container itself paints: corner effects on rectangles
+/// (and the authored Bezier outline for path-shaped ones), the
+/// inscribed ellipse for ovals, the authored outline for polygons.
+/// C-28 — the `Self` id behind a `FrameRef` (leaf kinds and groups).
+/// Queue one contiguous command block for the z-slot of the text frame
+/// `frame_id` on `page_idx`. A frame with no recorded slot (no `Self`
+/// id, or a page the walk never gave it) keeps the block where it is.
+/// thoughts ADR 027 — what a cached emission assumes of the page it is
+/// replayed into: the path buffer's fingerprint (the ids it hands out per
+/// intern key) and the other pools (the ids a command can refer to). Two
+/// lists with equal prints resolve a delta's ids alike.
+/// thoughts ADR 027 plan step 7 — a print of the paths and commands an
+/// emission appended to `list` from `path_base` / `cmd_base` on.
+fn range_print(list: &paged_compose::DisplayList, path_base: usize, cmd_base: usize) -> u64 {
+    use std::fmt::Write as _;
+    struct Fnv(u64);
+    impl std::fmt::Write for Fnv {
+        fn write_str(&mut self, s: &str) -> std::fmt::Result {
+            for b in s.bytes() {
+                self.0 ^= u64::from(b);
+                self.0 = self.0.wrapping_mul(0x0000_0100_0000_01b3);
+            }
+            Ok(())
+        }
+    }
+    let mut h = Fnv(0xcbf2_9ce4_8422_2325);
+    for cmd in &list.commands[cmd_base..] {
+        let _ = write!(h, "c{cmd:?}");
+    }
+    for p in list.paths.slice(path_base, list.paths.len()) {
+        let _ = write!(h, "p{p:?}");
+    }
+    let _ = write!(h, "b{path_base}");
+    h.0
+}
+
+pub(super) fn pool_print(list: &paged_compose::DisplayList) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    list.paths.fingerprint().hash(&mut h);
+    other_pools_print(list).hash(&mut h);
+    h.finish()
+}
+
+/// The non-path pools' part of [`pool_print`]. A delta replays paths and
+/// commands only, so an emit that changed any of these is not cached.
+fn other_pools_print(list: &paged_compose::DisplayList) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    list.gradients.len().hash(&mut h);
+    list.radial_gradients.len().hash(&mut h);
+    list.sweep_gradients.len().hash(&mut h);
+    list.images.len().hash(&mut h);
+    for ink in &list.spot_inks {
+        ink.name.hash(&mut h);
+    }
+    h.finish()
+}
+
+fn record_text_block(
+    pending: &mut [Vec<text_slots::TextBlock>],
+    slots: &HashMap<(usize, String), crate::module::TextSlot>,
+    frame_id: Option<&str>,
+    page_idx: usize,
+    start: usize,
+    end: usize,
+) {
+    if start >= end || page_idx >= pending.len() {
+        return;
+    }
+    let Some(id) = frame_id else { return };
+    let Some(slot) = slots.get(&(page_idx, id.to_string())) else {
+        return;
+    };
+    if slot.slot > start {
+        // The slot is inside or after the block — the text already sits
+        // where it belongs (a frame with nothing above it).
+        return;
+    }
+    pending[page_idx].push(text_slots::TextBlock {
+        start,
+        end,
+        slot: slot.slot,
+        z_seq: slot.z_seq,
+    });
+}
+
+/// Queue one block per chain frame, given the block's per-frame cut
+/// points (see [`text_slots::segment_story_block`]) and where the whole
+/// block ends.
+fn record_story_blocks(
+    pending: &mut [Vec<text_slots::TextBlock>],
+    slots: &HashMap<(usize, String), crate::module::TextSlot>,
+    chain: &[&TextFrame],
+    page_idx: usize,
+    segments: &[(usize, usize)],
+    block_end: usize,
+) {
+    for (n, (chain_idx, start)) in segments.iter().enumerate() {
+        let end = segments.get(n + 1).map(|(_, s)| *s).unwrap_or(block_end);
+        let frame_id = chain.get(*chain_idx).and_then(|f| f.self_id.as_deref());
+        record_text_block(pending, slots, frame_id, page_idx, *start, end);
+    }
+}
+
+pub(super) fn frame_ref_self_id(
+    spread: &paged_model::Spread,
+    fr: paged_model::FrameRef,
+) -> Option<&str> {
+    use paged_model::FrameRef as F;
+    match fr {
+        F::TextFrame(i) => spread.text_frames.get(i)?.self_id.as_deref(),
+        F::Rectangle(i) => spread.rectangles.get(i)?.self_id.as_deref(),
+        F::Oval(i) => spread.ovals.get(i)?.self_id.as_deref(),
+        F::GraphicLine(i) => spread.graphic_lines.get(i)?.self_id.as_deref(),
+        F::Polygon(i) => spread.polygons.get(i)?.self_id.as_deref(),
+        F::Group(i) => spread.groups.get(i)?.self_id.as_deref(),
+    }
+}
+
+/// C-28 — the reverse: which `FrameRef` carries this `Self` id. Only
+/// the leaf kinds an opacity mask can use.
+pub(super) fn frame_ref_for_self_id(
+    spread: &paged_model::Spread,
+    id: &str,
+) -> Option<paged_model::FrameRef> {
+    use paged_model::FrameRef as F;
+    let hit = |v: Option<usize>| v;
+    hit(spread
+        .rectangles
+        .iter()
+        .position(|r| r.self_id.as_deref() == Some(id)))
+    .map(F::Rectangle)
+    .or_else(|| {
+        spread
+            .ovals
+            .iter()
+            .position(|o| o.self_id.as_deref() == Some(id))
+            .map(F::Oval)
+    })
+    .or_else(|| {
+        spread
+            .graphic_lines
+            .iter()
+            .position(|l| l.self_id.as_deref() == Some(id))
+            .map(F::GraphicLine)
+    })
+    .or_else(|| {
+        spread
+            .polygons
+            .iter()
+            .position(|p| p.self_id.as_deref() == Some(id))
+            .map(F::Polygon)
+    })
+}
+
+/// C-28 — the spread-local page indices a `FrameRef` overlaps, using
+/// the same bounds+transform routing `emit_one` applies per kind.
+/// Never empty: a frame that overlaps nothing still routes to its
+/// nearest page, matching `emit_one`'s `unwrap_or(0)` fallback.
+pub(super) fn frame_ref_local_pages(
+    spread: &paged_model::Spread,
+    fr: paged_model::FrameRef,
+    local_geoms: &[PageGeom],
+) -> Vec<usize> {
+    use paged_model::FrameRef as F;
+    let b = match fr {
+        F::TextFrame(i) => spread
+            .text_frames
+            .get(i)
+            .map(|f| transform_bounds(f.bounds, f.item_transform)),
+        F::Rectangle(i) => spread
+            .rectangles
+            .get(i)
+            .map(|f| transform_bounds(f.bounds, f.item_transform)),
+        F::Oval(i) => spread
+            .ovals
+            .get(i)
+            .map(|f| transform_bounds(f.bounds, f.item_transform)),
+        F::GraphicLine(i) => spread
+            .graphic_lines
+            .get(i)
+            .map(|f| transform_bounds(f.bounds, f.item_transform)),
+        F::Polygon(i) => spread
+            .polygons
+            .get(i)
+            .map(|f| transform_bounds(f.bounds, f.item_transform)),
+        F::Group(_) => None,
+    };
+    let Some(b) = b else { return vec![0] };
+    let overlaps = pages_overlapping_frame(&b, local_geoms);
+    if overlaps.is_empty() {
+        vec![page_for_frame(&b, local_geoms).unwrap_or(0)]
+    } else {
+        overlaps
+    }
+}
+
+pub(super) fn container_clip_geometry(
+    spread: &paged_model::Spread,
+    host_id: &str,
+) -> Option<(PathData, Option<[f32; 6]>)> {
+    if let Some(rect) = spread
+        .rectangles
+        .iter()
+        .find(|r| r.self_id.as_deref() == Some(host_id))
+    {
+        let path = if rect.anchors.len() > 4 {
+            // B-23: a lifted (curved) rectangle clips through the same
+            // corner-effected outline it paints.
+            super::text_path::polygon_outline_path(
+                &rect.anchors,
+                &rect.subpath_starts,
+                &rect.subpath_open,
+                super::shapes::uniform_corner(&rect.corners),
+            )
+        } else {
+            let r = Rect {
+                x: rect.bounds.left,
+                y: rect.bounds.top,
+                w: rect.bounds.width(),
+                h: rect.bounds.height(),
+            };
+            let radii = per_corner_radii(&rect.corners);
+            if radii.iter().any(|r| r.is_some()) {
+                let kinds = per_corner_kinds(&rect.corners);
+                corner_rect_path(r, radii, kinds)
+            } else {
+                super::shapes::axis_rect_path(r)
+            }
+        };
+        return Some((path, rect.item_transform));
+    }
+    if let Some(oval) = spread
+        .ovals
+        .iter()
+        .find(|o| o.self_id.as_deref() == Some(host_id))
+    {
+        let r = Rect {
+            x: oval.bounds.left,
+            y: oval.bounds.top,
+            w: oval.bounds.width(),
+            h: oval.bounds.height(),
+        };
+        return Some((super::shapes::ellipse_outline_path(r), oval.item_transform));
+    }
+    if let Some(poly) = spread
+        .polygons
+        .iter()
+        .find(|p| p.self_id.as_deref() == Some(host_id))
+    {
+        let path = if poly.anchors.is_empty() {
+            super::shapes::axis_rect_path(Rect {
+                x: poly.bounds.left,
+                y: poly.bounds.top,
+                w: poly.bounds.width(),
+                h: poly.bounds.height(),
+            })
+        } else {
+            // B-18 × B-23 tie-in: a polygon container clips its nested
+            // children to the outline it PAINTS, corner effect and all
+            // — same helper the polygon emit uses, so a rounded polygon
+            // container masks pasted-in content along the rounded edge
+            // rather than the raw anchor path.
+            super::text_path::polygon_outline_path(
+                &poly.anchors,
+                &poly.subpath_starts,
+                &poly.subpath_open,
+                super::shapes::uniform_corner(&poly.corners),
+            )
+        };
+        return Some((path, poly.item_transform));
+    }
+    None
+}
+
+/// B-18 paste-into: nested-text-frame glyphs are emitted by the story
+/// passes long after the frame-body brackets, so the container clip
+/// has to be spliced around the glyph ranges separately (mirroring
+/// `apply_polygon_clip`). Map: nested TextFrame `Self` id → ancestor
+/// containers' clip geometry, OUTERMOST FIRST, so a frame nested two
+/// containers deep is masked by both outlines.
+pub(super) type NestedTextClips = HashMap<String, Vec<(PathData, Option<[f32; 6]>)>>;
+
+pub(super) fn collect_nested_text_clips(document: &Document) -> NestedTextClips {
+    let mut out: NestedTextClips = HashMap::new();
+    for parsed in &document.spreads {
+        let spread = &parsed.spread;
+        if spread.nested_children.is_empty() {
+            continue;
+        }
+        // Reverse index: child self id → host self id, for the
+        // ancestor walk (a container can itself be nested).
+        let mut host_of: HashMap<&str, &str> = HashMap::new();
+        for (host, children) in &spread.nested_children {
+            for &c in children {
+                let child_id = match c {
+                    paged_model::FrameRef::TextFrame(i) => {
+                        spread.text_frames.get(i).and_then(|f| f.self_id.as_deref())
+                    }
+                    paged_model::FrameRef::Rectangle(i) => {
+                        spread.rectangles.get(i).and_then(|f| f.self_id.as_deref())
+                    }
+                    paged_model::FrameRef::Oval(i) => {
+                        spread.ovals.get(i).and_then(|f| f.self_id.as_deref())
+                    }
+                    paged_model::FrameRef::Polygon(i) => {
+                        spread.polygons.get(i).and_then(|f| f.self_id.as_deref())
+                    }
+                    paged_model::FrameRef::GraphicLine(i) => spread
+                        .graphic_lines
+                        .get(i)
+                        .and_then(|f| f.self_id.as_deref()),
+                    paged_model::FrameRef::Group(_) => None,
+                };
+                if let Some(id) = child_id {
+                    host_of.insert(id, host.as_str());
+                }
+            }
+        }
+        for (host, children) in &spread.nested_children {
+            for &c in children {
+                let paged_model::FrameRef::TextFrame(i) = c else {
+                    continue;
+                };
+                let Some(child_id) = spread.text_frames.get(i).and_then(|f| f.self_id.clone())
+                else {
+                    continue;
+                };
+                // Ancestor chain, innermost → outermost, then flip.
+                let mut chain: Vec<&str> = vec![host.as_str()];
+                let mut cursor = host.as_str();
+                while let Some(&h) = host_of.get(cursor) {
+                    // Defensive: a malformed cycle must not hang the
+                    // build.
+                    if chain.len() > 64 || chain.contains(&h) {
+                        break;
+                    }
+                    chain.push(h);
+                    cursor = h;
+                }
+                chain.reverse();
+                let clips: Vec<(PathData, Option<[f32; 6]>)> = chain
+                    .iter()
+                    .filter_map(|h| container_clip_geometry(spread, h))
+                    .collect();
+                if !clips.is_empty() {
+                    out.insert(child_id, clips);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Expand a frame chain so every multi-column frame becomes N
+/// side-by-side single-column frames, in flow order.
+///
+/// **Columns are a chain of regions.** The emitter already walks a
+/// chain and steps to the next entry when a line overflows the current
+/// one; a two-column frame is two regions side by side, so expanding
+/// the chain gives column flow, the column x origin and the column
+/// wrap width out of machinery that already exists and is already
+/// tested. Nothing in the emit loop needs to learn what a column is.
+///
+/// Before this, `TextColumnCount` was parsed, stored, round-tripped and
+/// advertised as a settable path — and the renderer laid every frame
+/// out at its full inner width regardless, so one column and two
+/// rendered byte-identically in both the raster and PDF lanes.
+///
+/// Returns an EMPTY vec when no frame declares more than one column,
+/// and the caller then keeps its original borrowed chain — so the
+/// single-column path allocates nothing and cannot shift by a pixel.
+///
+/// The column geometry itself comes from
+/// [`paged_flow::RegionGeometry::column_boxes`], the one place that sum
+/// is written; a second copy here is how one capability becomes two
+/// answers that disagree.
+/// The column geometry a text frame declares, measured in its own
+/// CONTENT box (horizontal insets already removed).
+///
+/// One function, because two callers have to agree exactly: the chain
+/// expansion below lays the columns out, and the auto-size fitter has
+/// to measure against the same bands or it grows the frame to a height
+/// its own columns never use.
+/// The text area's bottom inset — what a line's baseline must stay
+/// above, measured up from the frame's bottom edge.
+pub(super) fn inset_bottom(f: &TextFrame) -> f32 {
+    f.inset_spacing.map_or(0.0, |i| i[2])
+}
+
+pub(super) fn frame_column_geometry(f: &TextFrame) -> paged_flow::RegionGeometry {
+    let [_, inset_left, _, inset_right] = f.inset_spacing.unwrap_or([0.0; 4]);
+    paged_flow::RegionGeometry {
+        width_pt: (f.bounds.width() - inset_left - inset_right).max(0.0),
+        height_pt: f.bounds.height().max(0.0),
+        columns: f.column_count.unwrap_or(1).max(1),
+        column_gap_pt: f.column_gutter.unwrap_or(DEFAULT_COLUMN_GUTTER_PT),
+    }
+}
+
+/// The centres of an unexpanded columnar frame's gutters, frame-inner x.
+pub(super) fn frame_gutter_centres(f: &TextFrame) -> Vec<f32> {
+    let left = f.bounds.left + f.inset_spacing.map_or(0.0, |i| i[1]);
+    frame_column_geometry(f)
+        .column_boxes()
+        .windows(2)
+        .map(|w| left + (w[0].x_pt + w[0].width_pt + w[1].x_pt) * 0.5)
+        .collect()
+}
+
+fn expand_column_chain(
+    chain: &[&TextFrame],
+    balance: Option<&ColumnBalance<'_>>,
+) -> Vec<TextFrame> {
+    if !chain.iter().any(|f| f.column_count.unwrap_or(1) > 1) {
+        return Vec::new();
+    }
+    let mut out: Vec<TextFrame> = Vec::with_capacity(chain.len());
+    for f in chain {
+        let n = f.column_count.unwrap_or(1).max(1);
+        if n == 1 {
+            out.push((*f).clone());
+            continue;
+        }
+        let [inset_top, inset_left, inset_bottom, _] = f.inset_spacing.unwrap_or([0.0; 4]);
+        let geom = frame_column_geometry(f);
+        // `VerticalBalanceColumns` — InDesign levels the LINE COUNT,
+        // measured against its own export: 44 single-line paragraphs in
+        // a balanced two-column frame come back 22 / 22, where the same
+        // frame unbalanced gives 35 / 9. So the columns are not filled
+        // to the same height by some separate pass; they are each
+        // capped at ceil(total / n) lines and the frame keeps whatever
+        // space is left below.
+        //
+        // The cap is expressed as a shortened column, because the
+        // emitter's only notion of "full" is a baseline crossing the
+        // bottom. Cutting between the k-th and (k+1)-th baseline puts
+        // exactly k lines in each column and needs no new concept in
+        // the emit loop.
+        let balanced_bottom = balance
+            .filter(|_| f.column_balance == Some(true))
+            .and_then(|b| {
+                let widest = geom.column_boxes().first()?.width_pt;
+                let baselines = b.measurer.line_baselines(f, b.story, widest);
+                let per_column = baselines.len().div_ceil(n as usize);
+                // Only a cut BETWEEN two lines shortens anything: when
+                // the whole story already fits one column there is
+                // nothing to balance.
+                let next = baselines.get(per_column)?;
+                let last_kept = baselines.get(per_column.checked_sub(1)?)?;
+                Some(f.bounds.top + (last_kept + next) * 0.5)
+            });
+        for band in geom.column_boxes() {
+            let mut col = (*f).clone();
+            let left = f.bounds.left + inset_left + band.x_pt;
+            col.bounds = paged_model::Bounds {
+                left,
+                right: left + band.width_pt,
+                bottom: balanced_bottom.unwrap_or(f.bounds.bottom),
+                ..f.bounds
+            };
+            // The band already excludes the horizontal insets, so
+            // re-applying them would inset each column twice. The
+            // vertical pair still applies to every column.
+            // A balanced column's bottom is a cut between two baselines,
+            // already a text-area position: the bottom inset is spent.
+            let bottom_inset = if balanced_bottom.is_some() {
+                0.0
+            } else {
+                inset_bottom
+            };
+            col.inset_spacing = Some([inset_top, 0.0, bottom_inset, 0.0]);
+            // A column is not itself columnar — clearing these is what
+            // stops a re-entrant expansion.
+            col.column_count = None;
+            col.column_gutter = None;
+            out.push(col);
+        }
+    }
+    out
+}
+
+/// What a balanced multi-column frame needs to measure itself: the
+/// auto-size trial machinery, and the story whose lines are counted.
+struct ColumnBalance<'a> {
+    measurer: &'a auto_size::Measurer<'a>,
+    story: &'a paged_scene::ParsedStory,
+}
+
+/// What the span / split columns planner hands the emitter: the region
+/// chain, the region each paragraph's first line opens, and each
+/// region's measure.
+struct SpanPlan {
+    regions: Vec<TextFrame>,
+    starts: HashMap<u32, usize>,
+    widths: Vec<f32>,
+}
+
+/// Plan a story whose paragraphs span or split columns (see
+/// `span_columns`); `None` when none does, and the story keeps the
+/// plain column expansion.
+///
+/// `style_spans` memoises, per applied paragraph style and for one build,
+/// whether the style resolves to a span or split. A paragraph whose own
+/// `SpanColumnType` is unset takes its style's, so a story none of whose
+/// paragraphs or styles span or split returns before resolving every
+/// paragraph's attributes (most stories, every build).
+fn plan_span_columns<'d>(
+    document: &'d Document,
+    measurer: &auto_size::Measurer<'_>,
+    story: &'d paged_scene::ParsedStory,
+    chain: &[&TextFrame],
+    style_spans: &mut HashMap<Option<&'d str>, bool>,
+) -> Option<SpanPlan> {
+    use super::span_columns::{self, FrameSpec, Kind, Measured, ParaSpec, Top};
+    use paged_model::SpanColumnType;
+    let head = *chain.first()?;
+    let may_span = story
+        .story
+        .paragraphs
+        .iter()
+        .any(|p| match p.span_columns.column_type {
+            Some(t) => t != SpanColumnType::SingleColumn,
+            None => *style_spans
+                .entry(p.paragraph_style.as_deref())
+                .or_insert_with(|| {
+                    document
+                        .resolved_paragraph_attrs(p)
+                        .span_columns
+                        .column_type
+                        .unwrap_or_default()
+                        != SpanColumnType::SingleColumn
+                }),
+        });
+    if !may_span {
+        return None;
+    }
+    let paras: Vec<ParaSpec> = story
+        .story
+        .paragraphs
+        .iter()
+        .map(|p| ParaSpec::from_attrs(&document.resolved_paragraph_attrs(p)))
+        .collect();
+    let columnar = chain.iter().any(|f| f.column_count.unwrap_or(1) > 1);
+    let wanted = paras.iter().any(|p| match p.kind {
+        Kind::Single => false,
+        Kind::Span(_) => columnar,
+        Kind::Split { .. } => true,
+    });
+    if !wanted {
+        return None;
+    }
+    let leading_offset = |f: &TextFrame| {
+        f.first_baseline_offset == Some(paged_model::FirstBaselineOffset::LeadingOffset)
+    };
+    let frames: Vec<FrameSpec> = chain
+        .iter()
+        .map(|f| FrameSpec {
+            // Where the text area ends: a line fits while its baseline
+            // is above it, and the regions below are cut to it.
+            height: f.bounds.height() - inset_bottom(f),
+            inset_top: f.inset_spacing.map_or(0.0, |i| i[0]),
+            columns: frame_column_geometry(f)
+                .column_boxes()
+                .iter()
+                .map(|b| (b.x_pt, b.width_pt))
+                .collect(),
+            leading_offset: leading_offset(f),
+        })
+        .collect();
+    let head_inset_top = frames[0].inset_top;
+    let head_leading_offset = frames[0].leading_offset;
+    let mut cache: HashMap<u32, std::rc::Rc<Measured>> = HashMap::new();
+    let mut measure = |width: f32| -> std::rc::Rc<Measured> {
+        cache
+            .entry(width.to_bits())
+            .or_insert_with(|| {
+                let baselines = measurer.paragraph_baselines(head, story, width);
+                std::rc::Rc::new(line_pitches(
+                    &baselines,
+                    &paras,
+                    head_inset_top,
+                    head_leading_offset,
+                ))
+            })
+            .clone()
+    };
+    let plan = span_columns::plan(&frames, &paras, &mut measure);
+    if plan.regions.is_empty() {
+        return None;
+    }
+    let mut regions = Vec::with_capacity(plan.regions.len());
+    let mut widths = Vec::with_capacity(plan.regions.len());
+    for r in &plan.regions {
+        let f = chain[r.frame];
+        let [inset_top, inset_left, _, _] = f.inset_spacing.unwrap_or([0.0; 4]);
+        let mut region = f.clone();
+        let left = f.bounds.left + inset_left + r.x;
+        let (top, top_inset) = match r.top {
+            Top::Frame => (f.bounds.top, inset_top),
+            Top::Anchor(y) => (f.bounds.top + y, 0.0),
+        };
+        region.bounds = paged_model::Bounds {
+            left,
+            right: left + r.width,
+            top,
+            bottom: (f.bounds.top + r.bottom).max(top),
+        };
+        // The planner's bottoms are text-area positions already.
+        region.inset_spacing = Some([top_inset, 0.0, 0.0, 0.0]);
+        if let Top::Anchor(_) = r.top {
+            // Mid-frame, the first baseline continues the line grid:
+            // one leading below the anchor, which already carries the
+            // space above.
+            region.first_baseline_offset = Some(paged_model::FirstBaselineOffset::LeadingOffset);
+            region.minimum_first_baseline_offset = None;
+        }
+        region.column_count = None;
+        region.column_gutter = None;
+        region.column_balance = None;
+        regions.push(region);
+        widths.push(r.width);
+    }
+    Some(SpanPlan {
+        regions,
+        starts: plan.starts,
+        widths,
+    })
+}
+
+/// Line pitches from measured baselines: each line's leading, the
+/// paragraph spacing the emitter put between them taken back out.
+fn line_pitches(
+    baselines: &[Vec<f32>],
+    paras: &[super::span_columns::ParaSpec],
+    inset_top: f32,
+    leading_offset: bool,
+) -> super::span_columns::Measured {
+    let mut leads = Vec::with_capacity(baselines.len());
+    let mut prev: Option<(usize, f32)> = None;
+    let mut first_offset = None;
+    for (p, b) in baselines.iter().enumerate() {
+        let mut l = Vec::with_capacity(b.len());
+        for (i, y) in b.iter().enumerate() {
+            let lead = if i > 0 {
+                y - b[i - 1]
+            } else if let Some((q, last)) = prev {
+                y - last - paras[q].space_after - paras[p].space_before
+            } else if leading_offset || b.len() < 2 {
+                y - inset_top
+            } else {
+                b[1] - b[0]
+            };
+            l.push(lead.max(0.0));
+        }
+        if let (Some(y), None) = (b.first(), first_offset) {
+            first_offset = Some(y - inset_top);
+        }
+        if let Some(last) = b.last() {
+            prev = Some((p, *last));
+        }
+        leads.push(l);
+    }
+    super::span_columns::Measured {
+        leads,
+        first_offset: first_offset.unwrap_or(0.0),
+    }
+}
+
+/// IDML's default gutter when a frame declares a column count and no
+/// `TextColumnGutter`. Mirrors `paged_scene`'s constant of the same
+/// name — both read the same IDML default, and neither owns the other.
+const DEFAULT_COLUMN_GUTTER_PT: f32 = 12.0;
+
+pub(super) fn build_document_inner(
+    document: &Document,
+    options: &PipelineOptions,
+    post: Option<&PostLayoutCtx>,
+    adopt: bool,
+) -> anyhow::Result<BuiltDocument> {
+    let palette = &document.palette;
+    // The CMYK ICC transform: from the caller's cache when it keeps one
+    // across builds, otherwise built once for this render.
+    let cmyk_xform: Option<CmykTransformRef<'_>> =
+        options
+            .cmyk_icc_profile
+            .and_then(|bytes| match options.cmyk_transform_cache {
+                Some(cache) => cache.get(bytes, options.cmyk_intent, options.cmyk_bpc),
+                None => build_cmyk_transform(bytes, options.cmyk_intent, options.cmyk_bpc)
+                    .map(CmykTransformRef::Owned),
+            });
+    // One colour-resolution context for the whole build: the transform
+    // above plus the ink-manager policy. Every paint resolver takes it,
+    // so the page cannot disagree with itself about what a spot is.
+    let color_ctx = ColorCtx {
+        icc: cmyk_xform.as_deref(),
+        standard_lab_for_spots: options.use_standard_lab_for_spots,
+        global_light_angle: document
+            .designmap
+            .transparency_preference
+            .global_light_angle,
+        global_light_altitude: document
+            .designmap
+            .transparency_preference
+            .global_light_altitude,
+    };
+    let mut pages: Vec<BuiltPage> = Vec::new();
+    let mut total_stats = PipelineStats::default();
+    let mut breaks: Vec<BreakRecord> = Vec::new();
+    // Document-level diagnostics drained from per-story emitters
+    // (overset) and from page-label computation (section fallback).
+    // Per-page image diagnostics are aggregated separately at the end.
+    let mut emit_diagnostics: Vec<Diagnostic> = Vec::new();
+    // Lines each overset body story laid out past its chain's end.
+    let mut overset: HashMap<String, OversetMeasure> = HashMap::new();
+
+    // W1.18c — the first pass's deltas carry the PRE-running-header
+    // variable text. thoughts ADR 027 plan step 5: the post-layout
+    // (second) pass still uses the caches, keyed so that cannot leak:
+    // - master text: a frame that prints no page context renders the same
+    //   in both passes and may splice the first pass's delta; one that
+    //   prints any re-emits, and the second pass captures nothing;
+    // - body stories: the second pass keeps entries of its own (salted
+    //   key), and a story that prints page context also keys on the
+    //   running-header index it resolves against (`post_key`).
+    let master_text_emit_cache = options.master_text_emit_cache;
+    let body_story_emit_cache = options.body_story_emit_cache;
+    let post_key: Option<u64> = post.map(|p| {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        for map in [&p.running_headers.first, &p.running_headers.last] {
+            let mut entries: Vec<(&(usize, String), &String)> = map.iter().collect();
+            entries.sort();
+            entries.hash(&mut h);
+        }
+        let mut xref: Vec<(&String, &usize)> = p.xref_page.iter().collect();
+        xref.sort();
+        xref.hash(&mut h);
+        h.finish()
+    });
+
+    // Perf-FontTable — reuse the caller's pre-built table when
+    // provided; otherwise build a fresh one for this call. The
+    // `owned_font_table` binding holds the local value's storage
+    // for the duration of the build when we fall through to the
+    // None branch (its address is stable in that scope).
+    let owned_font_table: Option<FontTable> = match options.pre_built_font_table {
+        Some(_) => None,
+        None => Some(FontTable::build(document, options)),
+    };
+    let font_table: &FontTable = options
+        .pre_built_font_table
+        .unwrap_or_else(|| owned_font_table.as_ref().expect("set on None branch"));
+    // A4 — one FontSubstituted diagnostic per (family, style) the
+    // resolver served with its catch-all substitute (traced at the A1
+    // resolver seam; BTreeSet order keeps the report deterministic).
+    // Fired regardless of `degraded_asset_markers`: the substitution
+    // happened either way — the option only gates the visual marker.
+    for (family, style) in font_table.substituted_keys() {
+        let label = match style.as_deref() {
+            Some(s) => format!("{family} {s}"),
+            None => family.clone(),
+        };
+        emit_diagnostics.push(Diagnostic::new(
+            DiagnosticCode::FontSubstituted,
+            format!("font \"{label}\" is not available; a substitute face was used"),
+        ));
+    }
+    // Every hyphenator the document might ask for. The comment that
+    // stood here claimed the document's `AppliedLanguage` was "honoured
+    // via the cascade" — it was cascaded, all the way onto
+    // `ResolvedParagraphAttrs`, and then nothing read it: one American
+    // English hyphenator did every paragraph of every document. Holding
+    // the whole set costs nothing, because a hyphenator parses its
+    // pattern file on first use.
+    let hyphenators = paged_text::Hyphenators::new();
+    let hyphenator = paged_text::Hyphenator::for_language(paged_text::Language::EnglishUS);
+
+    // Auto-sizing text frames are FITTED to their text up front (see
+    // `auto_size` — every mode is a measured fit, the way InDesign
+    // resizes the box before composing it). The fitted bounds feed
+    // three consumers that must agree: the frame-paint pass (the box
+    // paints at the fitted extent), the text-wrap collection
+    // (neighbours wrap around the fitted box), and the story emit
+    // (the chain composes into a clone carrying the fitted bounds).
+    // Only frames whose fit differs from their authored bounds get an
+    // entry.
+    let measurer = auto_size::Measurer::new(
+        document,
+        options,
+        palette,
+        color_ctx,
+        font_table,
+        &hyphenator,
+    );
+    let auto_sized: HashMap<String, auto_size::AutoSized> = measurer.fit_all();
+    let auto_sized_bounds: HashMap<String, paged_model::Bounds> = auto_sized
+        .iter()
+        .map(|(id, fitted)| (id.clone(), fitted.bounds))
+        .collect();
+    // Every text frame composes into its TEXT AREA: a stroked frame's
+    // clone carries the stroke's share in its insets (`text_area_frame`).
+    // Fitted frames are clones of these, so a fit and the final layout
+    // see the same inset.
+    let layout_frames: HashMap<String, TextFrame> = document
+        .spreads
+        .iter()
+        .flat_map(|parsed| parsed.spread.text_frames.iter())
+        .filter_map(|frame| {
+            let id = frame.self_id.as_deref()?;
+            match text_area_frame(frame, document) {
+                std::borrow::Cow::Owned(folded) => Some((id.to_string(), folded)),
+                std::borrow::Cow::Borrowed(_) => None,
+            }
+        })
+        .collect();
+    let fitted_frames: HashMap<String, TextFrame> = document
+        .spreads
+        .iter()
+        .flat_map(|parsed| parsed.spread.text_frames.iter())
+        .filter_map(|frame| {
+            let id = frame.self_id.as_deref()?;
+            let fitted = auto_sized.get(id)?;
+            let mut clone = layout_frames.get(id).unwrap_or(frame).clone();
+            clone.bounds = fitted.bounds;
+            Some((id.to_string(), clone))
+        })
+        .collect();
+
+    // Walk every page in every spread. We capture each page's bounds,
+    // origin, and applied-master reference so the next passes can
+    // route frames by containment and apply master backgrounds.
+    //
+    // `spread_page_ranges[i]` is the half-open page-index range
+    // owned by `document.spreads[i]`; frames within a spread route
+    // only to that range, since each IDML spread has its own
+    // coordinate system and two spreads' page bounds can collide.
+    let mut page_geometries: Vec<PageGeom> = Vec::new();
+    let mut page_labels: Vec<String> = Vec::new();
+    let mut page_numbering = links::PageNumbering::default();
+    let mut section_walk = SectionWalk::new(&document.designmap.sections);
+    let mut spread_page_ranges: Vec<std::ops::Range<usize>> =
+        Vec::with_capacity(document.spreads.len());
+    for (spread_idx, parsed) in document.spreads.iter().enumerate() {
+        total_stats.spreads += 1;
+        let start = pages.len();
+        // W1.9 — the spread's own `<Spread ItemTransform>` rotation/scale
+        // (linear part; translation drops because it cancels against the
+        // spread-inner page origin). IDENTITY for the common case
+        // (absent / pure-translation transform).
+        let spread_transform = spread_linear_transform(parsed.spread.item_transform);
+        for (local_idx, p) in parsed.spread.pages.iter().enumerate() {
+            // Per spec §10.3.3: GeometricBounds is in the page's
+            // *inner* coords; ItemTransform maps page-inner →
+            // spread. Real InDesign exports rely on this — without
+            // it every frame routes to the wrong page (or to none).
+            let bounds_in_spread = transform_bounds(p.bounds, p.item_transform);
+            page_geometries.push(PageGeom {
+                bounds_in_spread,
+                applied_master: p.applied_master.clone(),
+                host_spread_idx: spread_idx,
+                local_page_idx: local_idx,
+            });
+            // A page's number is what the document's `<Section>` rules
+            // give it, as InDesign computes it on open: it ignores
+            // `Page@Name` (InDesign 20.0.1 prints `3` on `annual-base`'s
+            // page named `annual-base · p003 · front`, and `markers`' page
+            // count as the section's last number, not the last page's
+            // name). InDesign writes the computed label there itself, so
+            // its own documents agree either way.
+            page_labels.push(section_walk.derived_label(p.self_id.as_deref()));
+            page_numbering.numbers.push(section_walk.current_number());
+            page_numbering
+                .section_of
+                .push(section_walk.active_section());
+            page_numbering.spread_of.push(spread_idx);
+            let page_id = p
+                .self_id
+                .clone()
+                .map(PageId)
+                .unwrap_or_else(|| PageId::synthetic(spread_idx, local_idx));
+            let mut page_list = DisplayList::new();
+            if options.collect_glyph_runs {
+                page_list.glyph_runs = Some(paged_compose::GlyphRunTable::default());
+            }
+            if options.collect_link_regions {
+                page_list.link_regions = Some(paged_compose::LinkRegionTable::default());
+            }
+            pages.push(BuiltPage {
+                id: page_id,
+                width_pt: bounds_in_spread.width(),
+                height_pt: bounds_in_spread.height(),
+                spread_origin: (bounds_in_spread.left, bounds_in_spread.top),
+                spread_transform,
+                list: page_list,
+                layout_generation: 0,
+                numbering_generation: 0,
+                stats: PipelineStats::default(),
+                story_layout: Vec::new(),
+                footnotes: Vec::new(),
+                diagnostics: Vec::new(),
+                cell_rects: Vec::new(),
+                resource_tiles_needed: Vec::new(),
+                scene_layer_frames: Vec::new(),
+            });
+        }
+        spread_page_ranges.push(start..pages.len());
+    }
+    total_stats.pages = pages.len();
+    // Surface that one or more page labels were computed rather than
+    // read from a baked `<Page Name>` — an honest signal that numbering
+    // came from section rules / the 1-based fallback, not InDesign.
+    if section_walk.used_fallback() {
+        let detail = if document.designmap.sections.is_empty() {
+            "page label(s) computed via 1-based fallback (no <Page Name>, no <Section>)"
+        } else {
+            "page label(s) computed from <Section> numbering rules (no baked <Page Name>)"
+        };
+        emit_diagnostics.push(Diagnostic::new(
+            DiagnosticCode::SectionNumberingFallback,
+            detail,
+        ));
+    }
+    if pages.is_empty() {
+        // Documents without a page (rare but valid) get a single
+        // letter-sized canvas so callers always see a renderable output.
+        pages.push(BuiltPage {
+            id: PageId::synthetic(0, 0),
+            width_pt: 612.0,
+            height_pt: 792.0,
+            spread_origin: (0.0, 0.0),
+            spread_transform: Transform::IDENTITY,
+            list: DisplayList::new(),
+            layout_generation: 0,
+            numbering_generation: 0,
+            stats: PipelineStats::default(),
+            story_layout: Vec::new(),
+            footnotes: Vec::new(),
+            diagnostics: Vec::new(),
+            cell_rects: Vec::new(),
+            resource_tiles_needed: Vec::new(),
+            scene_layer_frames: Vec::new(),
+        });
+        page_geometries.push(PageGeom {
+            bounds_in_spread: paged_model::Bounds {
+                top: 0.0,
+                left: 0.0,
+                bottom: 792.0,
+                right: 612.0,
+            },
+            applied_master: None,
+            host_spread_idx: 0,
+            local_page_idx: 0,
+        });
+        page_labels.push("1".to_string());
+        page_numbering.numbers.push(1);
+        page_numbering.section_of.push(None);
+        page_numbering.spread_of.push(0);
+    }
+
+    // W1.4 — total body-page count, frozen here (pages are all created
+    // above). Feeds `PageCountType` text-variable resolution.
+    let total_page_count = pages.len();
+    // W1.4 — `<Page Self=...>` id → flat body-page index, for resolving
+    // hyperlink page destinations. Built only when link-region
+    // collection is on (the live render never pays for it). A page's
+    // `PageId(self_id)` is its `<Page Self>`; synthetic ids (no baked
+    // Self) won't be hyperlink targets, so they harmlessly miss.
+    let mut page_index_map: HashMap<String, u32> = if options.collect_link_regions {
+        pages
+            .iter()
+            .enumerate()
+            .map(|(idx, p)| (p.id.0.clone(), idx as u32))
+            .collect()
+    } else {
+        HashMap::new()
+    };
+    // W1.19 — on the post-layout pass, fold in story / text-anchor →
+    // page entries so a cross-reference (or text-anchor hyperlink) whose
+    // destination is a story resolves to the page that story landed on.
+    // `<Page Self>` entries stay authoritative (a real page id never
+    // collides with a story id).
+    if let Some(post) = post {
+        for (id, idx) in &post.story_page {
+            page_index_map.entry(id.clone()).or_insert(*idx);
+        }
+    }
+
+    // Page-numbering context of everything that prints a page: the
+    // labels and numbers above, plus the page count. A cached master or
+    // body emission captured under a different context printed different
+    // page numbers (a grow pass adds pages), so the caches key on it.
+    let numbering_key = {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        page_labels.hash(&mut h);
+        page_numbering.numbers.hash(&mut h);
+        page_numbering.section_of.hash(&mut h);
+        page_numbering.spread_of.hash(&mut h);
+        total_page_count.hash(&mut h);
+        h.finish()
+    };
+    // W1.18c — the post-layout running-header pickup index, threaded into
+    // the emit passes only on the second (post-layout) build. `None` on
+    // the first pass — running headers then keep their baked value.
+    let running_header_index: Option<&links::RunningHeaderIndex> = post.map(|p| &p.running_headers);
+    // ADR 169 — the cross-references' destination pages, on the same pass.
+    let xref_page_index: Option<&HashMap<String, usize>> = post.map(|p| &p.xref_page);
+    // ADR 170 — every endnote's number, once per build.
+    let endnote_ordinals: HashMap<String, u32> = document.endnote_ordinals();
+
+    // Per-page (URI → ImageId) cache so multiple rectangles on the
+    // same page sharing an image share a single ImageId in the
+    // page's display list.
+    let mut page_image_caches: Vec<HashMap<String, paged_compose::ImageId>> =
+        (0..pages.len()).map(|_| HashMap::new()).collect();
+    // Renderer-scoped (URI → DecodedImage) cache so an image
+    // referenced from multiple pages is decoded once. The cached
+    // DecodedImage is cloned into each page's image pool — the
+    // memcpy is cheap; the saved decode (PNG/JPEG → RGBA) is not.
+    // Build a layer-visibility map once: any item whose `ItemLayer`
+    // points at a hidden or non-printable layer is suppressed. Items
+    // without an explicit ItemLayer always render — matches InDesign's
+    // single-layer-by-default behaviour. The same predicate is consumed
+    // by the canvas hit-tester so selection cannot disagree with paint.
+    let layer_renders = paged_scene::build_layer_render_map(&document.designmap);
+    let layer_visible = |layer_ref: Option<&str>| -> bool {
+        paged_scene::lookup_layer_render_visible(&layer_renders, layer_ref)
+    };
+
+    // Perf-S — when the caller supplies a persistent cache, decode
+    // results survive across `build_document` calls; otherwise fall
+    // back to a per-call scratch. The match holds the RefMut alive
+    // for the duration of the build via the `_owned_borrow` binding
+    // — dropping it would invalidate the `&mut HashMap` reference.
+    let mut local_image_cache: HashMap<String, paged_compose::DecodedImage> = HashMap::new();
+    let mut _owned_borrow: Option<
+        std::cell::RefMut<'_, HashMap<String, paged_compose::DecodedImage>>,
+    > = None;
+    let decoded_image_cache: &mut HashMap<String, paged_compose::DecodedImage> =
+        match options.image_decode_cache {
+            Some(rc) => {
+                _owned_borrow = Some(rc.borrow_mut());
+                _owned_borrow.as_mut().unwrap()
+            }
+            None => &mut local_image_cache,
+        };
+
+    // Master-spread pass — runs first so master items end up at the
+    // bottom of each page's display list (page-level frames overlay on
+    // top). Master frames are stamped into every page that references
+    // the master.
+    //
+    // (master_text_emissions is populated in this loop and consumed by
+    // a later master-story pass that emits page-number footers, headers,
+    // and other master story content per body page.)
+    let mut master_text_emissions: Vec<(usize, TextFrame)> = Vec::new();
+    // Text wraps of master items, per live page in its spread coords: a
+    // master item's wrap acts on the page's own text unless it applies
+    // to the master only (asked of InDesign 20.0.1, `text-wrap-sides`
+    // pages 14 and 15, ADR 151).
+    let mut master_wraps: Vec<Vec<WrapShape>> = vec![Vec::new(); page_geometries.len()];
+    //
+    // Per IDML spec §10.3.3, master items live in master-spread
+    // coords (each master page maps to spread via its own
+    // ItemTransform). The live `<Page>`'s `MasterPageTransform`
+    // positions the master overlay relative to the live page; for
+    // the common case both transforms are identity and the
+    // (dx, dy) collapses to "shift master-page origin → live-page
+    // origin". We compute it via the spread-coord bounds of both
+    // sides so the math composes cleanly with our existing Page
+    // ItemTransform plumbing.
+    for (i, geom) in page_geometries.iter().enumerate() {
+        let Some(master_ref) = geom.applied_master.as_deref() else {
+            continue;
+        };
+        let Some(master) = document.master_spread(master_ref) else {
+            continue;
+        };
+        if master.spread.pages.is_empty() {
+            continue;
+        }
+        let body_page = document.spreads[geom.host_spread_idx]
+            .spread
+            .pages
+            .get(geom.local_page_idx);
+        // `ShowMasterItems="false"` hides every master overlay item for
+        // this page (InDesign's per-page "Hide Master Items"). Skipping
+        // the whole loop body suppresses master frames, lines, and the
+        // master-story page-number text (all stamped below) at once.
+        if body_page.and_then(|p| p.show_master_items) == Some(false) {
+            continue;
+        }
+        // Body-page OverrideList enumerates master items the body has
+        // replaced with its own copies — skip them here so we don't
+        // stamp the placeholder under the body's override.
+        let override_set: std::collections::HashSet<&str> = body_page
+            .map(|p| p.override_list.iter().map(String::as_str).collect())
+            .unwrap_or_default();
+
+        // Each master page in spread coords. Master items get routed
+        // to one of these by their own spread-coord centroid; the
+        // matching live page consumes only the items belonging to
+        // its same-ordinal master page. This is what InDesign's
+        // "Master Page Overlay" feature actually does — without
+        // routing, a master with both white-LEFT-page and navy-RIGHT-
+        // page rectangles would stamp both onto every live page.
+        let master_page_bounds: Vec<paged_model::Bounds> = master
+            .spread
+            .pages
+            .iter()
+            .map(|p| transform_bounds(p.bounds, p.item_transform))
+            .collect();
+        let body_page_bounds: Vec<paged_model::Bounds> = document.spreads[geom.host_spread_idx]
+            .spread
+            .pages
+            .iter()
+            .map(|p| transform_bounds(p.bounds, p.item_transform))
+            .collect();
+        let local_master_page_idx =
+            master_page_index(&body_page_bounds, geom.local_page_idx, &master_page_bounds);
+        let master_page_origin = (
+            master_page_bounds[local_master_page_idx].left,
+            master_page_bounds[local_master_page_idx].top,
+        );
+        let target_origin = pages[i].spread_origin;
+        // MasterPageTransform sits between master-spread coords and
+        // live-page coords (for sample.idml it is identity). Build the
+        // full outer transform once for this page — `translate(live
+        // origin) ∘ MPT ∘ translate(-master origin)` — so a MPT carrying
+        // rotation/scale (not just translation) is honoured. With an
+        // identity MPT this collapses to the plain origin shift the
+        // common case relies on. Each master item below is stamped as
+        // `mpt_outer ∘ item_transform`.
+        let mpt = document.spreads[geom.host_spread_idx]
+            .spread
+            .pages
+            .get(geom.local_page_idx)
+            .and_then(|p| p.master_page_transform);
+        // W1.9 — the MASTER spread's own `<MasterSpread ItemTransform>`
+        // rotation/scale (linear part). Inserted between the
+        // MasterPageTransform and the master-page-origin re-base so it
+        // rotates/scales the master overlay about the master page origin,
+        // mirroring how the body spread's `spread_transform` rotates the
+        // body page. IDENTITY for the common (untransformed master) case,
+        // collapsing the chain to the historical translation-only stamp.
+        // (The body spread's own transform separately rides the live
+        // page's `spread_transform` in `frame_outer_transform`.)
+        let master_spread_linear = spread_linear_transform(master.spread.item_transform);
+        let mpt_outer = Transform::translate(target_origin.0, target_origin.1)
+            .compose(&Transform(mpt.unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0])))
+            .compose(&master_spread_linear)
+            .compose(&Transform::translate(
+                -master_page_origin.0,
+                -master_page_origin.1,
+            ));
+
+        // Pick the master page index that contains the centroid of
+        // the given spread-coord bounds; falls back to the nearest
+        // page so items hugging the centre line don't get dropped.
+        let master_page_for = |b: paged_model::Bounds| -> usize {
+            let cx = (b.left + b.right) * 0.5;
+            let cy = (b.top + b.bottom) * 0.5;
+            for (idx, mb) in master_page_bounds.iter().enumerate() {
+                if cx >= mb.left && cx <= mb.right && cy >= mb.top && cy <= mb.bottom {
+                    return idx;
+                }
+            }
+            // Outside any master page (rare): pick by horizontal proximity.
+            master_page_bounds
+                .iter()
+                .enumerate()
+                .min_by(|(_, a), (_, b)| {
+                    let da = ((a.left + a.right) * 0.5 - cx).abs();
+                    let db = ((b.left + b.right) * 0.5 - cx).abs();
+                    da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .map(|(idx, _)| idx)
+                .unwrap_or(0)
+        };
+
+        // Master items belong to the current live page when either
+        // (a) their centroid lands on the matching master page, or
+        // (b) they're "full-bleed-ish" — area ≥ 50% of a master page
+        //     AND the item's spread bounds intersect this master page.
+        // The second arm covers spread-spanning brand-colour
+        // backgrounds whose centroid lands across the page fold; the
+        // pure centroid test would route them to the wrong page or
+        // (for items straddling the gutter) to one page only.
+        let target_master = &master_page_bounds[local_master_page_idx];
+        let target_master_area = (target_master.right - target_master.left).max(0.0)
+            * (target_master.bottom - target_master.top).max(0.0);
+        let item_belongs = |b: paged_model::Bounds| -> bool {
+            if master_page_for(b) == local_master_page_idx {
+                return true;
+            }
+            let item_area = (b.right - b.left).max(0.0) * (b.bottom - b.top).max(0.0);
+            if target_master_area <= 0.0 || item_area < 0.5 * target_master_area {
+                return false;
+            }
+            // Intersection test against the target master page.
+            b.right > target_master.left
+                && b.left < target_master.right
+                && b.bottom > target_master.top
+                && b.top < target_master.bottom
+        };
+
+        // Master items paint in the master spread's own stacking order
+        // (`frames_in_order`, groups expanded to their members), exactly
+        // as body items do. Walking the backing vecs kind by kind put
+        // every polygon above every rectangle, so a full-page background
+        // polygon covered a master's placed picture. Items the walk does
+        // not reach (pasted-in children, mask sources) keep the legacy
+        // kind-by-kind order after it.
+        {
+            let verso = pages[i].binding_edge() == super::metrics::BindingEdge::Right;
+            let overridden = |id: Option<&str>| id.is_some_and(|id| override_set.contains(id));
+            let mut add = |src: WrapSource<'_>,
+                           wrap: Option<paged_model::TextWrap>,
+                           self_id: Option<&str>| {
+                let Some(wrap) = wrap else {
+                    return;
+                };
+                if wrap.apply_to_master_page_only == Some(true) || overridden(self_id) {
+                    return;
+                }
+                if !item_belongs(transform_bounds(src.bounds, src.item_transform)) {
+                    return;
+                }
+                let live = WrapSource {
+                    item_transform: Some(compose_outer_matrix(mpt_outer, src.item_transform)),
+                    ..src
+                };
+                if let Some(shape) = live.shape(wrap, verso) {
+                    master_wraps[i].push(shape);
+                }
+            };
+            let styles = &document.styles;
+            let ms = &master.spread;
+            for f in &ms.text_frames {
+                add(
+                    WrapSource {
+                        bounds: f.bounds,
+                        item_transform: f.item_transform,
+                        anchors: &f.anchors,
+                        subpath_starts: &f.subpath_starts,
+                        subpath_open: &f.subpath_open,
+                        oval: false,
+                        stroke_color: f.stroke_color.as_deref(),
+                        stroke_weight: f.stroke_weight,
+                    },
+                    styles.item_text_wrap(f.text_wrap, f.applied_object_style.as_deref()),
+                    f.self_id.as_deref(),
+                );
+            }
+            for r in &ms.rectangles {
+                add(
+                    WrapSource {
+                        bounds: r.bounds,
+                        item_transform: r.item_transform,
+                        anchors: &r.anchors,
+                        subpath_starts: &r.subpath_starts,
+                        subpath_open: &r.subpath_open,
+                        oval: false,
+                        stroke_color: r.stroke_color.as_deref(),
+                        stroke_weight: r.stroke_weight,
+                    },
+                    styles.item_text_wrap(r.text_wrap, r.applied_object_style.as_deref()),
+                    r.self_id.as_deref(),
+                );
+            }
+            for o in &ms.ovals {
+                add(
+                    WrapSource {
+                        bounds: o.bounds,
+                        item_transform: o.item_transform,
+                        anchors: &[],
+                        subpath_starts: &[],
+                        subpath_open: &[],
+                        oval: true,
+                        stroke_color: o.stroke_color.as_deref(),
+                        stroke_weight: o.stroke_weight,
+                    },
+                    styles.item_text_wrap(o.text_wrap, o.applied_object_style.as_deref()),
+                    o.self_id.as_deref(),
+                );
+            }
+            for p in &ms.polygons {
+                add(
+                    WrapSource {
+                        bounds: p.bounds,
+                        item_transform: p.item_transform,
+                        anchors: &p.anchors,
+                        subpath_starts: &p.subpath_starts,
+                        subpath_open: &p.subpath_open,
+                        oval: false,
+                        stroke_color: p.stroke_color.as_deref(),
+                        stroke_weight: p.stroke_weight,
+                    },
+                    styles.item_text_wrap(p.text_wrap, p.applied_object_style.as_deref()),
+                    p.self_id.as_deref(),
+                );
+            }
+        }
+        let master_order = master_paint_order(&master.spread);
+        let mut emit_master = |fr: paged_model::FrameRef| {
+            match fr {
+                paged_model::FrameRef::TextFrame(idx) => {
+                    let Some(frame) = master.spread.text_frames.get(idx) else {
+                        return;
+                    };
+                    let spread_b = transform_bounds(frame.bounds, frame.item_transform);
+                    if !item_belongs(spread_b) {
+                        return;
+                    }
+                    if frame
+                        .self_id
+                        .as_deref()
+                        .is_some_and(|id| override_set.contains(id))
+                    {
+                        return;
+                    }
+                    total_stats.frames += 1;
+                    // Master items live in master-spread coords. Compose an
+                    // outer translate(dx, dy) into the frame's existing
+                    // ItemTransform so the inner-coord rect ends up in the
+                    // *live* spread coords once frame_outer_transform applies.
+                    // Mutating bounds (inner coords) would be wrong now that
+                    // PathGeometry-derived shapes carry geometry in inner
+                    // space.
+                    let mut copy = frame.clone();
+                    copy.item_transform =
+                        Some(compose_outer_matrix(mpt_outer, copy.item_transform));
+                    // A master frame's text is not moved into a slot, so
+                    // its own bracket stays in the glyph post-pass.
+                    let _ = emit_text_frame_into(
+                        &mut pages[i],
+                        &copy,
+                        document,
+                        palette,
+                        options.fallback_frame_fill,
+                        color_ctx,
+                        None, // master items don't carry a drop shadow today.
+                        None, // master frames don't auto-size in our model.
+                    );
+                    // Stash a relocated copy so the master-story pass below
+                    // can flow this frame's hosted story (page-number footers,
+                    // running headers, etc.) onto this body page. Skipping it
+                    // when ParentStory is missing is fine — the rectangle was
+                    // still drawn above.
+                    if copy.parent_story.is_some() {
+                        let copy = text_area_frame(&copy, document).into_owned();
+                        master_text_emissions.push((i, copy));
+                    }
+                }
+                paged_model::FrameRef::Rectangle(idx) => {
+                    let Some(rect) = master.spread.rectangles.get(idx) else {
+                        return;
+                    };
+                    let spread_b = transform_bounds(rect.bounds, rect.item_transform);
+                    if !item_belongs(spread_b) {
+                        return;
+                    }
+                    if rect
+                        .self_id
+                        .as_deref()
+                        .is_some_and(|id| override_set.contains(id))
+                    {
+                        return;
+                    }
+                    total_stats.frames += 1;
+                    let mut copy = rect.clone();
+                    copy.item_transform =
+                        Some(compose_outer_matrix(mpt_outer, copy.item_transform));
+                    // A master's placed picture (a slide-master background
+                    // photo, a logo) paints on every page that applies it,
+                    // between the frame's fill and its stroke.
+                    let image_cache = &mut page_image_caches[i];
+                    emit_rectangle_into(
+                        &mut pages[i],
+                        &copy,
+                        document,
+                        palette,
+                        options.fallback_frame_fill,
+                        color_ctx,
+                        None,
+                        &mut |page: &mut BuiltPage| {
+                            emit_rectangle_image(
+                                page,
+                                &copy,
+                                options,
+                                image_cache,
+                                decoded_image_cache,
+                                resolve_frame_shadow(
+                                    copy.content_drop_shadow.as_ref(),
+                                    None,
+                                    palette,
+                                    color_ctx,
+                                ),
+                            )
+                        },
+                    );
+                }
+                paged_model::FrameRef::Polygon(idx) => {
+                    let Some(poly) = master.spread.polygons.get(idx) else {
+                        return;
+                    };
+                    let spread_b = transform_bounds(poly.bounds, poly.item_transform);
+                    if !item_belongs(spread_b) {
+                        return;
+                    }
+                    if poly
+                        .self_id
+                        .as_deref()
+                        .is_some_and(|id| override_set.contains(id))
+                    {
+                        return;
+                    }
+                    total_stats.frames += 1;
+                    let mut copy = poly.clone();
+                    copy.item_transform =
+                        Some(compose_outer_matrix(mpt_outer, copy.item_transform));
+                    emit_polygon_into(
+                        &mut pages[i],
+                        &copy,
+                        document,
+                        palette,
+                        options.fallback_frame_fill,
+                        color_ctx,
+                        &mut |_: &mut BuiltPage| {},
+                    );
+                }
+                paged_model::FrameRef::Oval(idx) => {
+                    let Some(oval) = master.spread.ovals.get(idx) else {
+                        return;
+                    };
+                    let spread_b = transform_bounds(oval.bounds, oval.item_transform);
+                    if !item_belongs(spread_b) {
+                        return;
+                    }
+                    if oval
+                        .self_id
+                        .as_deref()
+                        .is_some_and(|id| override_set.contains(id))
+                    {
+                        return;
+                    }
+                    total_stats.frames += 1;
+                    let mut copy = oval.clone();
+                    copy.item_transform =
+                        Some(compose_outer_matrix(mpt_outer, copy.item_transform));
+                    emit_oval_into(
+                        &mut pages[i],
+                        &copy,
+                        document,
+                        palette,
+                        options.fallback_frame_fill,
+                        color_ctx,
+                        &mut |_: &mut BuiltPage| {},
+                    );
+                }
+                paged_model::FrameRef::GraphicLine(idx) => {
+                    let Some(line) = master.spread.graphic_lines.get(idx) else {
+                        return;
+                    };
+                    let spread_b = transform_bounds(line.bounds, line.item_transform);
+                    if !item_belongs(spread_b) {
+                        return;
+                    }
+                    if line
+                        .self_id
+                        .as_deref()
+                        .is_some_and(|id| override_set.contains(id))
+                    {
+                        return;
+                    }
+                    total_stats.frames += 1;
+                    let mut copy = line.clone();
+                    copy.item_transform =
+                        Some(compose_outer_matrix(mpt_outer, copy.item_transform));
+                    emit_line_into(&mut pages[i], &copy, document, palette, color_ctx);
+                }
+                paged_model::FrameRef::Group(_) => {}
+            }
+        };
+        for &fr in &master_order {
+            emit_master(fr);
+        }
+    }
+
+    // Frame pass: route every frame to the page whose bounds contain
+    // Per-frame (by Self id) page lookup. The story pass builds
+    // each story's frame chain via Document::frame_chain and uses
+    // this map to find each chain entry's page so threaded stories
+    // can route line emission across pages.
+    let mut frame_to_page: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+    // Aggregated queue of image-bearing anchored Rectangles captured
+    // during the master + body story passes. Drained after both
+    // passes complete so `emit_rectangle_image` can route the
+    // already-resolved placements through the per-page + decoded
+    // image caches that live in this scope. Order is preserved so
+    // multiple anchored images on the same page composite in
+    // story-pass order.
+    let mut anchored_image_queue: Vec<AnchoredImageEmit> = Vec::new();
+    // Per-spread per-frame-kind command spans, captured in document
+    // order so the post-pass `group_pass` can translate each
+    // group's `Vec<FrameRef>` into the page-space command ranges
+    // it brackets with `BeginBlendGroup` / `EndBlendGroup`.
+    let mut spread_frame_spans: Vec<crate::module::SpreadFrameSpans> =
+        Vec::with_capacity(document.spreads.len());
+    // Q-10: IDML lists layers bottom-first (designmap[0] = backmost,
+    // paints first); see the cycle-8 sort below and the convention
+    // note in `paged_scene::layer`. Shared helper so the canvas
+    // hit-tester walks items in the same paint order — divergence here
+    // would break selection on multi-layer documents.
+    let layer_z_index = paged_scene::layer_z_index(&document.designmap);
+    for (spread_idx, parsed) in document.spreads.iter().enumerate() {
+        let spread = &parsed.spread;
+        let range = spread_page_ranges[spread_idx].clone();
+        let local_geoms = &page_geometries[range.clone()];
+        let mut frame_spans = crate::module::SpreadFrameSpans {
+            text_frames: vec![None; spread.text_frames.len()],
+            rectangles: vec![None; spread.rectangles.len()],
+            ovals: vec![None; spread.ovals.len()],
+            graphic_lines: vec![None; spread.graphic_lines.len()],
+            polygons: vec![None; spread.polygons.len()],
+            text_slots: vec![Vec::new(); spread.text_frames.len()],
+            z_seq: 0,
+        };
+
+        // Q-10: build a flat (layer_z, xml_order, FrameRef) list from
+        // `frames_in_order` so cross-shape z-order honours ItemLayer.
+        // Items without `ItemLayer` keep their XML position by sharing
+        // `usize::MAX` as the sort key — combined with a stable sort
+        // they stay where they were. The sort is a no-op when all
+        // items resolve to the same layer-z (legacy behaviour).
+        let layer_z_of = |fr: paged_model::FrameRef| -> usize {
+            let id = match fr {
+                paged_model::FrameRef::TextFrame(i) => spread
+                    .text_frames
+                    .get(i)
+                    .and_then(|f| f.item_layer.as_deref()),
+                paged_model::FrameRef::Rectangle(i) => spread
+                    .rectangles
+                    .get(i)
+                    .and_then(|f| f.item_layer.as_deref()),
+                paged_model::FrameRef::Oval(i) => {
+                    spread.ovals.get(i).and_then(|f| f.item_layer.as_deref())
+                }
+                paged_model::FrameRef::GraphicLine(i) => spread
+                    .graphic_lines
+                    .get(i)
+                    .and_then(|f| f.item_layer.as_deref()),
+                paged_model::FrameRef::Polygon(i) => {
+                    spread.polygons.get(i).and_then(|f| f.item_layer.as_deref())
+                }
+                // Group: derive layer from the first leaf member with
+                // an ItemLayer. If none, treat as "no layer" (MAX).
+                paged_model::FrameRef::Group(_) => None,
+            };
+            id.and_then(|s| layer_z_index.get(s).copied())
+                .unwrap_or(usize::MAX)
+        };
+        // The z table when the spread has one; otherwise the legacy
+        // synthetic walk — a parser revision predating
+        // `frames_in_order`, a spread carrying only frames the parser
+        // could not classify, or (until the mutation lane learned to
+        // materialise it) every spread an editor session authored from
+        // nothing. Either way the LAYER sort below runs: it used to be
+        // skipped on the synthetic path, so a document built by
+        // mutation painted its Background rectangles over its Content
+        // text — which is how the annual's cover lost its title while
+        // the same document exported to IDML and re-imported showed it.
+        let base_order: Vec<paged_model::FrameRef> = if spread.frames_in_order.is_empty() {
+            let mut v: Vec<paged_model::FrameRef> = Vec::new();
+            v.extend((0..spread.text_frames.len()).map(paged_model::FrameRef::TextFrame));
+            v.extend((0..spread.rectangles.len()).map(paged_model::FrameRef::Rectangle));
+            v.extend((0..spread.ovals.len()).map(paged_model::FrameRef::Oval));
+            v.extend((0..spread.graphic_lines.len()).map(paged_model::FrameRef::GraphicLine));
+            v.extend((0..spread.polygons.len()).map(paged_model::FrameRef::Polygon));
+            v
+        } else {
+            spread.frames_in_order.clone()
+        };
+        let frames_ordered: Vec<paged_model::FrameRef> = {
+            let mut keyed: Vec<(usize, usize, paged_model::FrameRef)> = base_order
+                .iter()
+                .enumerate()
+                .map(|(xi, &fr)| (layer_z_of(fr), xi, fr))
+                .collect();
+            // Sort no-op safeguard: only reorder when at least two
+            // distinct layer-z values appear. Single-layer spreads
+            // (the overwhelming majority) keep verbatim XML order.
+            let mut zs = keyed.iter().map(|(z, _, _)| *z);
+            let first = zs.next();
+            let multi_layer = first.is_some_and(|f| zs.any(|z| z != f));
+            if multi_layer {
+                // Cycle-8: IDML's designmap lists layers in the order
+                // matching InDesign's layer panel from BOTTOM to TOP
+                // (designmap[0] = bottom layer, paints first; the
+                // cycle-2 Q-10 commit's assumption of top-first was
+                // inverted, manifesting on company-profile-template
+                // page 20 where the Bg layer covered the image
+                // instead of sitting beneath it). Sort ascending
+                // by layer-z so low-index (bottom) layers paint first
+                // and high-index (top) layers paint last. Stable
+                // sort preserves XML order as the tiebreaker within
+                // a layer.
+                keyed.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+            }
+            keyed.into_iter().map(|(_, _, fr)| fr).collect()
+        };
+
+        // Emit one FrameRef. Recurses through Group members so group
+        // children render at the group's XML slot.
+        fn emit_one(
+            fr: paged_model::FrameRef,
+            spread: &paged_model::Spread,
+            range: &std::ops::Range<usize>,
+            local_geoms: &[PageGeom],
+            pages: &mut [BuiltPage],
+            page_image_caches: &mut [HashMap<String, paged_compose::ImageId>],
+            decoded_image_cache: &mut HashMap<String, paged_compose::DecodedImage>,
+            frame_to_page: &mut HashMap<String, usize>,
+            frame_spans: &mut crate::module::SpreadFrameSpans,
+            total_stats: &mut PipelineStats,
+            document: &Document,
+            palette: &Graphic,
+            options: &PipelineOptions,
+            color_ctx: ColorCtx<'_>,
+            auto_sized_bounds: &HashMap<String, paged_model::Bounds>,
+        ) {
+            match fr {
+                paged_model::FrameRef::TextFrame(idx) => {
+                    let Some(frame) = spread.text_frames.get(idx) else {
+                        return;
+                    };
+                    // W2.5 — element-level Visible="false" hides the item
+                    // (same skip as a hidden layer). Locked is NOT a render
+                    // gate (locked items still paint); selection-gating
+                    // lives in the canvas hit-tester.
+                    if !is_layer_visible(document, frame.item_layer.as_deref()) || !frame.visible {
+                        return;
+                    }
+                    total_stats.frames += 1;
+                    // W1.7 Phase B: paint the box at its grown extent when
+                    // this frame auto-sizes (key by Self id). Routing still
+                    // uses the authored bounds — the grown box only changes
+                    // what's painted, not which page hosts the frame.
+                    let grown = frame
+                        .self_id
+                        .as_deref()
+                        .and_then(|id| auto_sized_bounds.get(id))
+                        .copied();
+                    let spread_bounds = transform_bounds(frame.bounds, frame.item_transform);
+                    let centroid_local = page_for_frame(&spread_bounds, local_geoms).unwrap_or(0);
+                    let centroid_page = range.start + centroid_local;
+                    if let Some(self_id) = frame.self_id.clone() {
+                        frame_to_page.insert(self_id, centroid_page);
+                    }
+                    // The box paints on every page the FITTED extent
+                    // reaches (a stalled WidthOnly fit stretches across
+                    // the gutter onto the facing page).
+                    let painted_spread_bounds = grown
+                        .map(|g| transform_bounds(g, frame.item_transform))
+                        .unwrap_or(spread_bounds);
+                    let overlaps = pages_overlapping_frame(&painted_spread_bounds, local_geoms);
+                    let local_indices: Vec<usize> = if overlaps.is_empty() {
+                        vec![centroid_local]
+                    } else {
+                        overlaps
+                    };
+                    for &local_idx in &local_indices {
+                        let page_idx = range.start + local_idx;
+                        let before = pages[page_idx].list.commands.len();
+                        let slot_in_group = emit_text_frame_into(
+                            &mut pages[page_idx],
+                            frame,
+                            document,
+                            palette,
+                            options.fallback_frame_fill,
+                            color_ctx,
+                            options.frame_drop_shadow,
+                            grown,
+                        );
+                        let after = pages[page_idx].list.commands.len();
+                        if after > before && frame_spans.text_frames[idx].is_none() {
+                            frame_spans.text_frames[idx] = Some(crate::module::FrameCmdSpan {
+                                page_idx,
+                                start: before,
+                                end: after,
+                            });
+                        }
+                        // C-6: a claimed image provider assembles pyramid
+                        // tiles inside this frame. This is the frame's OWN
+                        // image content (the tiled form of the placed-image
+                        // lane a claim replaces), so it paints with the
+                        // native content — BEFORE the C-1 layer above.
+                        emit_frame_resource_tiles(
+                            &mut pages[page_idx],
+                            frame.self_id.as_deref(),
+                            frame.bounds,
+                            frame.inset_spacing,
+                            frame.item_transform,
+                            options.resource_providers,
+                            options.render_scale,
+                        );
+                        // C-1: the plugin's own render of this frame's
+                        // content, ON TOP of everything native — the frame
+                        // fill, the placed image, and the C-6 tiles emitted
+                        // immediately before it.
+                        emit_frame_scene_layer(
+                            &mut pages[page_idx],
+                            frame.self_id.as_deref(),
+                            frame.bounds,
+                            frame.inset_spacing,
+                            frame.item_transform,
+                            options.scene_layers,
+                            options.font,
+                            options.assets,
+                            options.scene_fonts,
+                        );
+                        // W2 — the z-slot this frame's story text belongs
+                        // at. Recorded AFTER the box, the C-6 tiles and the
+                        // C-1 plugin layer, so relocating the glyphs keeps
+                        // their order against those three exactly as it is
+                        // today, and only moves them below the page items
+                        // that come LATER in z — which is where InDesign
+                        // draws them. Recorded unconditionally: a frame with
+                        // no fill and no stroke emits nothing, and that is
+                        // the common case.
+                        frame_spans.z_seq += 1;
+                        let z_seq = frame_spans.z_seq;
+                        frame_spans.text_slots[idx].push(crate::module::TextSlot {
+                            page_idx,
+                            // R-10: inside the body's object group when it
+                            // has one, so the frame composites as one.
+                            slot: slot_in_group.unwrap_or(pages[page_idx].list.commands.len()),
+                            z_seq,
+                            in_object_group: slot_in_group.is_some(),
+                        });
+                    }
+                }
+                paged_model::FrameRef::Rectangle(idx) => {
+                    let Some(rect) = spread.rectangles.get(idx) else {
+                        return;
+                    };
+                    // W2.5 — element-level Visible="false" hides the item.
+                    if !is_layer_visible(document, rect.item_layer.as_deref()) || !rect.visible {
+                        return;
+                    }
+                    total_stats.frames += 1;
+                    let spread_bounds = transform_bounds(rect.bounds, rect.item_transform);
+                    let overlaps = pages_overlapping_frame(&spread_bounds, local_geoms);
+                    let local_indices: Vec<usize> = if overlaps.is_empty() {
+                        vec![page_for_frame(&spread_bounds, local_geoms).unwrap_or(0)]
+                    } else {
+                        overlaps
+                    };
+                    // Cycle-8 Track 1: page-routing diagnostic. Emit
+                    // one record per Rectangle when --trace-routing
+                    // is on; downstream callers filter by self_id.
+                    // Note: kept narrow so the trace is useful for
+                    // future routing investigations without poking at
+                    // every shape kind.
+                    tracing::debug!(
+                        target: "paged_renderer::routing",
+                        kind = "rect",
+                        self_id = rect.self_id.as_deref().unwrap_or("?"),
+                        spread_bounds = ?spread_bounds,
+                        chosen_local = ?local_indices,
+                        "rect page-routing"
+                    );
+                    for &local_idx in &local_indices {
+                        let page_idx = range.start + local_idx;
+                        let before = pages[page_idx].list.commands.len();
+                        // The placed image paints between the frame's fill
+                        // and its stroke, inside the frame's groups.
+                        let image_cache = &mut page_image_caches[page_idx];
+                        emit_rectangle_into(
+                            &mut pages[page_idx],
+                            rect,
+                            document,
+                            palette,
+                            options.fallback_frame_fill,
+                            color_ctx,
+                            options.frame_drop_shadow,
+                            &mut |page: &mut BuiltPage| {
+                                emit_rectangle_image(
+                                    page,
+                                    rect,
+                                    options,
+                                    image_cache,
+                                    decoded_image_cache,
+                                    resolve_frame_shadow(
+                                        rect.content_drop_shadow.as_ref(),
+                                        None,
+                                        palette,
+                                        color_ctx,
+                                    ),
+                                )
+                            },
+                        );
+                        let after = pages[page_idx].list.commands.len();
+                        if after > before && frame_spans.rectangles[idx].is_none() {
+                            frame_spans.rectangles[idx] = Some(crate::module::FrameCmdSpan {
+                                page_idx,
+                                start: before,
+                                end: after,
+                            });
+                        }
+                        // C-6: a claimed image provider assembles pyramid
+                        // tiles inside this frame. This is the frame's OWN
+                        // image content (the tiled form of the placed-image
+                        // lane a claim replaces), so it paints with the
+                        // native content — BEFORE the C-1 layer above.
+                        emit_frame_resource_tiles(
+                            &mut pages[page_idx],
+                            rect.self_id.as_deref(),
+                            rect.bounds,
+                            None,
+                            rect.item_transform,
+                            options.resource_providers,
+                            options.render_scale,
+                        );
+                        // C-1: the plugin's own render of this frame's
+                        // content, ON TOP of everything native — the frame
+                        // fill, the placed image, and the C-6 tiles emitted
+                        // immediately before it.
+                        emit_frame_scene_layer(
+                            &mut pages[page_idx],
+                            rect.self_id.as_deref(),
+                            rect.bounds,
+                            None,
+                            rect.item_transform,
+                            options.scene_layers,
+                            options.font,
+                            options.assets,
+                            options.scene_fonts,
+                        );
+                    }
+                    // B-18 paste-into: nested children paint inside
+                    // the container, masked by its outline.
+                    emit_nested_children(
+                        rect.self_id.as_deref(),
+                        &local_indices,
+                        spread,
+                        range,
+                        local_geoms,
+                        pages,
+                        page_image_caches,
+                        decoded_image_cache,
+                        frame_to_page,
+                        frame_spans,
+                        total_stats,
+                        document,
+                        palette,
+                        options,
+                        color_ctx,
+                        auto_sized_bounds,
+                    );
+                }
+                paged_model::FrameRef::Oval(idx) => {
+                    let Some(oval) = spread.ovals.get(idx) else {
+                        return;
+                    };
+                    // W2.5 — element-level Visible="false" hides the item.
+                    if !is_layer_visible(document, oval.item_layer.as_deref()) || !oval.visible {
+                        return;
+                    }
+                    total_stats.frames += 1;
+                    let spread_bounds = transform_bounds(oval.bounds, oval.item_transform);
+                    let overlaps = pages_overlapping_frame(&spread_bounds, local_geoms);
+                    let local_indices: Vec<usize> = if overlaps.is_empty() {
+                        vec![page_for_frame(&spread_bounds, local_geoms).unwrap_or(0)]
+                    } else {
+                        overlaps
+                    };
+                    for &local_idx in &local_indices {
+                        let page_idx = range.start + local_idx;
+                        let before = pages[page_idx].list.commands.len();
+                        let image_cache = &mut page_image_caches[page_idx];
+                        emit_oval_into(
+                            &mut pages[page_idx],
+                            oval,
+                            document,
+                            palette,
+                            options.fallback_frame_fill,
+                            color_ctx,
+                            &mut |page: &mut BuiltPage| {
+                                emit_oval_image(
+                                    page,
+                                    oval,
+                                    options,
+                                    image_cache,
+                                    decoded_image_cache,
+                                )
+                            },
+                        );
+                        let after = pages[page_idx].list.commands.len();
+                        if after > before && frame_spans.ovals[idx].is_none() {
+                            frame_spans.ovals[idx] = Some(crate::module::FrameCmdSpan {
+                                page_idx,
+                                start: before,
+                                end: after,
+                            });
+                        }
+                        // C-6: a claimed image provider assembles pyramid
+                        // tiles inside this frame. This is the frame's OWN
+                        // image content (the tiled form of the placed-image
+                        // lane a claim replaces), so it paints with the
+                        // native content — BEFORE the C-1 layer above.
+                        emit_frame_resource_tiles(
+                            &mut pages[page_idx],
+                            oval.self_id.as_deref(),
+                            oval.bounds,
+                            None,
+                            oval.item_transform,
+                            options.resource_providers,
+                            options.render_scale,
+                        );
+                        // C-1: the plugin's own render of this frame's
+                        // content, ON TOP of everything native — the frame
+                        // fill, the placed image, and the C-6 tiles emitted
+                        // immediately before it.
+                        emit_frame_scene_layer(
+                            &mut pages[page_idx],
+                            oval.self_id.as_deref(),
+                            oval.bounds,
+                            None,
+                            oval.item_transform,
+                            options.scene_layers,
+                            options.font,
+                            options.assets,
+                            options.scene_fonts,
+                        );
+                    }
+                    // B-18 paste-into: nested children paint inside
+                    // the container, masked by its outline.
+                    emit_nested_children(
+                        oval.self_id.as_deref(),
+                        &local_indices,
+                        spread,
+                        range,
+                        local_geoms,
+                        pages,
+                        page_image_caches,
+                        decoded_image_cache,
+                        frame_to_page,
+                        frame_spans,
+                        total_stats,
+                        document,
+                        palette,
+                        options,
+                        color_ctx,
+                        auto_sized_bounds,
+                    );
+                }
+                paged_model::FrameRef::GraphicLine(idx) => {
+                    let Some(line) = spread.graphic_lines.get(idx) else {
+                        return;
+                    };
+                    // W2.5 — element-level Visible="false" hides the item.
+                    if !is_layer_visible(document, line.item_layer.as_deref()) || !line.visible {
+                        return;
+                    }
+                    total_stats.frames += 1;
+                    let spread_bounds = transform_bounds(line.bounds, line.item_transform);
+                    let overlaps = pages_overlapping_frame(&spread_bounds, local_geoms);
+                    let local_indices: Vec<usize> = if overlaps.is_empty() {
+                        vec![page_for_frame(&spread_bounds, local_geoms).unwrap_or(0)]
+                    } else {
+                        overlaps
+                    };
+                    for &local_idx in &local_indices {
+                        let page_idx = range.start + local_idx;
+                        let before = pages[page_idx].list.commands.len();
+                        emit_line_into(&mut pages[page_idx], line, document, palette, color_ctx);
+                        let after = pages[page_idx].list.commands.len();
+                        if after > before && frame_spans.graphic_lines[idx].is_none() {
+                            frame_spans.graphic_lines[idx] = Some(crate::module::FrameCmdSpan {
+                                page_idx,
+                                start: before,
+                                end: after,
+                            });
+                        }
+                        // C-6: a claimed image provider assembles pyramid
+                        // tiles inside this frame. This is the frame's OWN
+                        // image content (the tiled form of the placed-image
+                        // lane a claim replaces), so it paints with the
+                        // native content — BEFORE the C-1 layer above.
+                        emit_frame_resource_tiles(
+                            &mut pages[page_idx],
+                            line.self_id.as_deref(),
+                            line.bounds,
+                            None,
+                            line.item_transform,
+                            options.resource_providers,
+                            options.render_scale,
+                        );
+                        // C-1: the plugin's own render of this frame's
+                        // content, ON TOP of everything native — the frame
+                        // fill, the placed image, and the C-6 tiles emitted
+                        // immediately before it.
+                        emit_frame_scene_layer(
+                            &mut pages[page_idx],
+                            line.self_id.as_deref(),
+                            line.bounds,
+                            None,
+                            line.item_transform,
+                            options.scene_layers,
+                            options.font,
+                            options.assets,
+                            options.scene_fonts,
+                        );
+                    }
+                }
+                paged_model::FrameRef::Polygon(idx) => {
+                    let Some(poly) = spread.polygons.get(idx) else {
+                        return;
+                    };
+                    // W2.5 — element-level Visible="false" hides the item.
+                    if !is_layer_visible(document, poly.item_layer.as_deref()) || !poly.visible {
+                        return;
+                    }
+                    total_stats.frames += 1;
+                    // Route by the PATH's box, not the stored one (see
+                    // `path_bounds_or`): a polygon whose stored bounds
+                    // undersell its path would otherwise skip the page
+                    // its far half lies on.
+                    let spread_bounds = transform_bounds(
+                        super::text_frame::path_bounds_or(poly.bounds, &poly.anchors),
+                        poly.item_transform,
+                    );
+                    let overlaps = pages_overlapping_frame(&spread_bounds, local_geoms);
+                    let local_indices: Vec<usize> = if overlaps.is_empty() {
+                        vec![page_for_frame(&spread_bounds, local_geoms).unwrap_or(0)]
+                    } else {
+                        overlaps
+                    };
+                    for &local_idx in &local_indices {
+                        let page_idx = range.start + local_idx;
+                        let before = pages[page_idx].list.commands.len();
+                        let image_cache = &mut page_image_caches[page_idx];
+                        emit_polygon_into(
+                            &mut pages[page_idx],
+                            poly,
+                            document,
+                            palette,
+                            options.fallback_frame_fill,
+                            color_ctx,
+                            &mut |page: &mut BuiltPage| {
+                                emit_polygon_image(
+                                    page,
+                                    poly,
+                                    options,
+                                    image_cache,
+                                    decoded_image_cache,
+                                )
+                            },
+                        );
+                        let after = pages[page_idx].list.commands.len();
+                        if after > before && frame_spans.polygons[idx].is_none() {
+                            frame_spans.polygons[idx] = Some(crate::module::FrameCmdSpan {
+                                page_idx,
+                                start: before,
+                                end: after,
+                            });
+                        }
+                        // C-6: a claimed image provider assembles pyramid
+                        // tiles inside this frame. This is the frame's OWN
+                        // image content (the tiled form of the placed-image
+                        // lane a claim replaces), so it paints with the
+                        // native content — BEFORE the C-1 layer above.
+                        emit_frame_resource_tiles(
+                            &mut pages[page_idx],
+                            poly.self_id.as_deref(),
+                            poly.bounds,
+                            None,
+                            poly.item_transform,
+                            options.resource_providers,
+                            options.render_scale,
+                        );
+                        // C-1: the plugin's own render of this frame's
+                        // content, ON TOP of everything native — the frame
+                        // fill, the placed image, and the C-6 tiles emitted
+                        // immediately before it.
+                        emit_frame_scene_layer(
+                            &mut pages[page_idx],
+                            poly.self_id.as_deref(),
+                            poly.bounds,
+                            None,
+                            poly.item_transform,
+                            options.scene_layers,
+                            options.font,
+                            options.assets,
+                            options.scene_fonts,
+                        );
+                    }
+                    // B-18 paste-into: nested children paint inside
+                    // the container, masked by its outline.
+                    emit_nested_children(
+                        poly.self_id.as_deref(),
+                        &local_indices,
+                        spread,
+                        range,
+                        local_geoms,
+                        pages,
+                        page_image_caches,
+                        decoded_image_cache,
+                        frame_to_page,
+                        frame_spans,
+                        total_stats,
+                        document,
+                        palette,
+                        options,
+                        color_ctx,
+                        auto_sized_bounds,
+                    );
+                }
+                paged_model::FrameRef::Group(gi) => {
+                    if let Some(g) = spread.groups.get(gi) {
+                        for &m in &g.members {
+                            emit_one(
+                                m,
+                                spread,
+                                range,
+                                local_geoms,
+                                pages,
+                                page_image_caches,
+                                decoded_image_cache,
+                                frame_to_page,
+                                frame_spans,
+                                total_stats,
+                                document,
+                                palette,
+                                options,
+                                color_ctx,
+                                auto_sized_bounds,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // B-18 paste-into: emit a container's nested children
+        // bracketed by `PushClip(container outline)` / `PopClip` on
+        // every page the container painted, so the content is masked
+        // to the container's path (incl. corner effects) exactly like
+        // InDesign's paste-into. Children route pages through the
+        // normal `emit_one` arms; a child that painted on a page the
+        // container did NOT paint would land there unclipped, but
+        // that content lies outside the container geometrically, so
+        // real documents never hit it (B-18 residual: no cross-page
+        // clamp). Nested containers recurse — the inner bracket nests
+        // inside this one, intersecting the clips.
+        //
+        // NOTE: a nested TextFrame's GLYPHS are emitted later by the
+        // story pass; `StoryEmitter::apply_container_clip` splices
+        // the same clip over that range.
+        #[allow(clippy::too_many_arguments)]
+        fn emit_nested_children(
+            host_id: Option<&str>,
+            host_local_indices: &[usize],
+            spread: &paged_model::Spread,
+            range: &std::ops::Range<usize>,
+            local_geoms: &[PageGeom],
+            pages: &mut [BuiltPage],
+            page_image_caches: &mut [HashMap<String, paged_compose::ImageId>],
+            decoded_image_cache: &mut HashMap<String, paged_compose::DecodedImage>,
+            frame_to_page: &mut HashMap<String, usize>,
+            frame_spans: &mut crate::module::SpreadFrameSpans,
+            total_stats: &mut PipelineStats,
+            document: &Document,
+            palette: &Graphic,
+            options: &PipelineOptions,
+            color_ctx: ColorCtx<'_>,
+            auto_sized_bounds: &HashMap<String, paged_model::Bounds>,
+        ) {
+            let Some(host_id) = host_id else { return };
+            let Some(children) = spread.nested_children.get(host_id) else {
+                return;
+            };
+            if children.is_empty() {
+                return;
+            }
+            let Some((path, host_transform)) = container_clip_geometry(spread, host_id) else {
+                return;
+            };
+            for &local_idx in host_local_indices {
+                let page_idx = range.start + local_idx;
+                let page = &mut pages[page_idx];
+                let path_id = page.list.paths.push_anon(path.clone());
+                let transform = super::text_frame::frame_outer_transform(page, host_transform);
+                page.list
+                    .push(paged_compose::DisplayCommand::PushClip { path_id, transform });
+            }
+            for &child in children {
+                emit_one(
+                    child,
+                    spread,
+                    range,
+                    local_geoms,
+                    pages,
+                    page_image_caches,
+                    decoded_image_cache,
+                    frame_to_page,
+                    frame_spans,
+                    total_stats,
+                    document,
+                    palette,
+                    options,
+                    color_ctx,
+                    auto_sized_bounds,
+                );
+            }
+            for &local_idx in host_local_indices {
+                let page_idx = range.start + local_idx;
+                pages[page_idx]
+                    .list
+                    .push(paged_compose::DisplayCommand::PopClip(Transform::IDENTITY));
+            }
+        }
+
+        /// C-28 — emit `fr`, wrapped in a soft-mask bracket when the
+        /// spread's `opacity_masks` names it.
+        ///
+        /// Markers go on the UNION of the pages the target and the
+        /// mask artwork overlap. That keeps every page's stream
+        /// balanced without inspecting what `emit_one` decided
+        /// internally: `emit_one` only ever writes to pages the item
+        /// overlaps, which is a subset of the union, so a union page
+        /// sees `Begin…, [maybe artwork], BeginMasked…, [maybe
+        /// target], End…` and a non-union page sees nothing at all.
+        /// (Single-page spreads — nearly every real document — reduce
+        /// to the obvious one-page case.)
+        #[allow(clippy::too_many_arguments)]
+        fn emit_masked(
+            fr: paged_model::FrameRef,
+            spread: &paged_model::Spread,
+            range: &std::ops::Range<usize>,
+            local_geoms: &[PageGeom],
+            pages: &mut [BuiltPage],
+            page_image_caches: &mut [HashMap<String, paged_compose::ImageId>],
+            decoded_image_cache: &mut HashMap<String, paged_compose::DecodedImage>,
+            frame_to_page: &mut HashMap<String, usize>,
+            frame_spans: &mut crate::module::SpreadFrameSpans,
+            total_stats: &mut PipelineStats,
+            document: &Document,
+            palette: &Graphic,
+            options: &PipelineOptions,
+            color_ctx: ColorCtx<'_>,
+            auto_sized_bounds: &HashMap<String, paged_model::Bounds>,
+        ) {
+            let mask_entry = frame_ref_self_id(spread, fr)
+                .and_then(|id| spread.opacity_masks.get(id))
+                .and_then(|m| frame_ref_for_self_id(spread, &m.mask_item).map(|art| (m, art)));
+            let Some((mask, artwork_ref)) = mask_entry else {
+                emit_one(
+                    fr,
+                    spread,
+                    range,
+                    local_geoms,
+                    pages,
+                    page_image_caches,
+                    decoded_image_cache,
+                    frame_to_page,
+                    frame_spans,
+                    total_stats,
+                    document,
+                    palette,
+                    options,
+                    color_ctx,
+                    auto_sized_bounds,
+                );
+                return;
+            };
+            let mut union: Vec<usize> = frame_ref_local_pages(spread, fr, local_geoms);
+            for p in frame_ref_local_pages(spread, artwork_ref, local_geoms) {
+                if !union.contains(&p) {
+                    union.push(p);
+                }
+            }
+            let mask_type = match mask.mask_type {
+                paged_model::OpacityMaskType::Luminosity => paged_compose::SoftMaskType::Luminosity,
+                paged_model::OpacityMaskType::Alpha => paged_compose::SoftMaskType::Alpha,
+            };
+            for &local_idx in &union {
+                pages[range.start + local_idx].list.push(
+                    paged_compose::DisplayCommand::BeginSoftMask {
+                        mask_type,
+                        invert: mask.invert,
+                        transform: Transform::IDENTITY,
+                    },
+                );
+            }
+            emit_one(
+                artwork_ref,
+                spread,
+                range,
+                local_geoms,
+                pages,
+                page_image_caches,
+                decoded_image_cache,
+                frame_to_page,
+                frame_spans,
+                total_stats,
+                document,
+                palette,
+                options,
+                color_ctx,
+                auto_sized_bounds,
+            );
+            for &local_idx in &union {
+                pages[range.start + local_idx].list.push(
+                    paged_compose::DisplayCommand::BeginMaskedContent(Transform::IDENTITY),
+                );
+            }
+            emit_one(
+                fr,
+                spread,
+                range,
+                local_geoms,
+                pages,
+                page_image_caches,
+                decoded_image_cache,
+                frame_to_page,
+                frame_spans,
+                total_stats,
+                document,
+                palette,
+                options,
+                color_ctx,
+                auto_sized_bounds,
+            );
+            for &local_idx in &union {
+                pages[range.start + local_idx].list.push(
+                    paged_compose::DisplayCommand::EndSoftMask(Transform::IDENTITY),
+                );
+            }
+        }
+
+        for fr in frames_ordered {
+            // C-28: a masked item's whole frame-body emission is
+            // bracketed by the mask artwork. Defensive skip for a
+            // hand-authored / round-tripped model in which the mask
+            // artwork was left in the z-table — `ApplyOpacityMask`
+            // removes it, but a model that never went through the op
+            // would otherwise paint it twice (once as artwork, once
+            // as a visible object).
+            if frame_ref_self_id(spread, fr)
+                .is_some_and(|id| spread.opacity_masks.values().any(|m| m.mask_item == id))
+            {
+                continue;
+            }
+            emit_masked(
+                fr,
+                spread,
+                &range,
+                local_geoms,
+                &mut pages,
+                &mut page_image_caches,
+                decoded_image_cache,
+                &mut frame_to_page,
+                &mut frame_spans,
+                &mut total_stats,
+                document,
+                palette,
+                options,
+                color_ctx,
+                &auto_sized_bounds,
+            );
+        }
+        spread_frame_spans.push(frame_spans);
+    }
+
+    // Story pass: layout text into its hosting frame's page.
+    //
+    // The font table pre-resolves every distinct (family, style)
+    // referenced anywhere in the document so each paragraph picks up
+    // the right TTF without re-querying the resolver. Per paragraph
+    // we still build `Face`s on demand — `paged_text::Face::from_slice`
+    // is cheap (parses font tables, no allocation churn).
+    // Group transparency pass: bracket every group's emitted frame
+    // range with `BeginBlendGroup` / `EndBlendGroup` whenever the
+    // group's `<TransparencySetting>` has non-default values. Runs
+    // *before* the story pass so text glyphs added later don't fall
+    // inside the wrong bracket (per-text-frame brackets land later
+    // via `apply_blend_groups`). Each spread's groups are resolved
+    // against the per-frame command spans recorded above.
+    for (spread_idx, parsed) in document.spreads.iter().enumerate() {
+        let Some(spans) = spread_frame_spans.get_mut(spread_idx) else {
+            continue;
+        };
+        crate::module::group_pass(&parsed.spread, spans, &mut pages);
+    }
+
+    // W2 — the z-slot table, flattened out of the per-spread spans and
+    // keyed the way the story passes can look it up: (page, frame Self
+    // id). `group_pass` has just run, so the slots already account for
+    // its brackets and nothing else moves commands until the relocation
+    // at the end of this function.
+    let text_slots: HashMap<(usize, String), crate::module::TextSlot> = document
+        .spreads
+        .iter()
+        .enumerate()
+        .filter_map(|(i, parsed)| spread_frame_spans.get(i).map(|s| (parsed, s)))
+        .flat_map(|(parsed, spans)| {
+            parsed
+                .spread
+                .text_frames
+                .iter()
+                .enumerate()
+                .filter_map(move |(idx, frame)| {
+                    let id = frame.self_id.clone()?;
+                    Some((id, spans.text_slots.get(idx)?))
+                })
+                .flat_map(|(id, slots)| slots.iter().map(move |s| ((s.page_idx, id.clone()), *s)))
+        })
+        .collect();
+    // Blocks of commands to move into those slots, per page. Filled by
+    // the master-text and body-story passes below.
+    let mut pending_text: Vec<Vec<text_slots::TextBlock>> =
+        (0..pages.len()).map(|_| Vec::new()).collect();
+
+    // Per-page wrap exclusion rectangles (spread coords, expanded by
+    // the wrap's offsets). Only items with TextWrapMode != "None"
+    // contribute. Used by StoryEmitter::new to shrink the head text
+    // frame's effective column width and shift its origin past any
+    // intruding shape.
+    let mut wrap_rects_per_page =
+        collect_wrap_rects_per_page(document, &spread_page_ranges, &auto_sized_bounds);
+    for (page, wraps) in wrap_rects_per_page.iter_mut().zip(master_wraps) {
+        page.extend(wraps);
+    }
+
+    // Master-story pass: emit each master text frame's hosted story
+    // (page-number footers, running headers) per body page that
+    // references the master. The frame copies stashed during the
+    // master overlay pass already carry the dx/dy translation from
+    // master-spread coords to live spread coords, so a single-frame
+    // chain is enough for the StoryEmitter.
+    //
+    // Per-page emission is what makes <?ACE 18?> resolve to the live
+    // page number — pipeline.rs::emit_paragraph reads chain_pages[
+    // frame_idx] and substitutes AUTO_PAGE_NUMBER_MARKER with that
+    // body page's index. Run before the body-story pass so master
+    // content sits below body content; future work to hard-enforce
+    // z-order (rather than rely on display-list append order) should
+    // tag these commands as "master layer" if/when we add layering.
+    // B-18 paste-into: nested TextFrame glyph ranges get the
+    // container clip spliced by `apply_container_clip` in the story
+    // passes below — collect each nested text frame's ancestor
+    // outlines once up front.
+    let container_clips = collect_nested_text_clips(document);
+
+    // thoughts ADR 027 plan step 7 — which pages this pass lays content out
+    // on afresh (see `BuiltDocument::fresh_pages`). Without any cache every
+    // page is.
+    let tracking = master_text_emit_cache.is_some() || body_story_emit_cache.is_some();
+    let mut fresh: Vec<bool> = vec![!tracking; pages.len()];
+    for (page_idx, master_frame) in &master_text_emissions {
+        let Some(story_id) = master_frame.parent_story.as_deref() else {
+            continue;
+        };
+        // When the body spreads carry their own frame for this same
+        // story, the body has overridden the master placeholder (IDML
+        // "Override Master Page Items"). The body-story pass below
+        // will emit it — skipping here avoids the doubled header you
+        // get when both copies render on top of each other.
+        if !document.frame_chain(story_id).is_empty() {
+            continue;
+        }
+        let Some(parsed) = document.stories.iter().find(|s| s.self_id == story_id) else {
+            continue;
+        };
+
+        // Perf-MasterText — try the cache before running the emit.
+        // Key is (master_frame_self_id, page_idx). On hit we splice
+        // the cached delta into the page's display list, renumbering
+        // path-ids relative to the page's current path-buffer size.
+        // The cache is populated below on emit-miss; structural
+        // mutations clear it via `CanvasModel::apply_operation`.
+        let cache_key = master_frame
+            .self_id
+            .as_deref()
+            .map(|id| (id.to_string(), *page_idx));
+        let master_prints_context = story_prints_page_context(&parsed.story);
+        if let (Some(ref key), Some(rc), false) = (
+            &cache_key,
+            master_text_emit_cache,
+            post.is_some() && master_prints_context,
+        ) {
+            // A delta captured under other page numbering printed other
+            // page numbers — a footer's "of N" from before a grow pass
+            // added pages (thoughts ADR 033). Re-emit it.
+            // thoughts ADR 027 — and a delta replays only into the path
+            // buffer it was captured from, or its path ids point elsewhere.
+            let print = pool_print(&pages[*page_idx].list);
+            let hit = rc
+                .borrow()
+                .get(key)
+                .filter(|d| d.numbering == numbering_key && d.pre_fingerprint == print)
+                .cloned();
+            if let Some(delta) = hit {
+                let base = pages[*page_idx].list.commands.len();
+                splice_master_text_delta(&mut pages[*page_idx].list, &delta);
+                pages[*page_idx]
+                    .story_layout
+                    .extend(delta.story_layout.iter().cloned());
+                record_text_block(
+                    &mut pending_text,
+                    &text_slots,
+                    master_frame.self_id.as_deref(),
+                    *page_idx,
+                    base,
+                    pages[*page_idx].list.commands.len(),
+                );
+                continue;
+            }
+        }
+
+        // Snapshot path-buffer + commands + side-effect pools BEFORE
+        // emit so the post-emit extraction can compute deltas.
+        let path_base = pages[*page_idx].list.paths.len();
+        let pre_fingerprint = pool_print(&pages[*page_idx].list);
+        let pre_others = other_pools_print(&pages[*page_idx].list);
+        let layout_base = pages[*page_idx].story_layout.len();
+        let footnote_base = pages[*page_idx].footnotes.len();
+        let cmd_base = pages[*page_idx].list.commands.len();
+        let grad_base = pages[*page_idx].list.gradients.len();
+        let rad_grad_base = pages[*page_idx].list.radial_gradients.len();
+        let image_base = pages[*page_idx].list.images.len();
+
+        let chain: Vec<&TextFrame> = vec![master_frame];
+        let chain_pages: Vec<usize> = vec![*page_idx];
+        let head_wrap_rects: &[WrapShape] = &[];
+        let chain_wrap_rects: Vec<&[WrapShape]> = vec![&[]];
+        let mut emitter = StoryEmitter::new(
+            document,
+            options,
+            palette,
+            color_ctx,
+            font_table,
+            chain,
+            chain_pages,
+            &page_labels,
+            Some(&hyphenator),
+            head_wrap_rects,
+            chain_wrap_rects,
+        )
+        .with_languages(&hyphenators)
+        .with_optical_margin(
+            parsed.story.optical_margin_alignment,
+            parsed.story.optical_margin_size,
+        )
+        .with_story_id(&parsed.self_id)
+        .with_page_count(total_page_count)
+        .with_page_index_map(&page_index_map)
+        .with_page_numbering(&page_numbering);
+        if let Some(index) = running_header_index {
+            emitter = emitter.with_running_headers(index);
+        }
+        if let Some(pages) = xref_page_index {
+            emitter = emitter.with_xref_pages(pages);
+        }
+        if !endnote_ordinals.is_empty() {
+            emitter = emitter.with_endnote_ordinals(&endnote_ordinals);
+        }
+        for paragraph in &parsed.story.paragraphs {
+            emitter.emit_paragraph(paragraph, &mut pages, &mut total_stats);
+        }
+        emitter.apply_vertical_justification(&mut pages);
+        emitter.apply_column_rules(&mut pages);
+        emitter.apply_polygon_clip(&mut pages);
+        emitter.apply_container_clip(&mut pages, &container_clips);
+        emitter.apply_blend_groups(&mut pages);
+        record_text_block(
+            &mut pending_text,
+            &text_slots,
+            master_frame.self_id.as_deref(),
+            *page_idx,
+            cmd_base,
+            pages[*page_idx].list.commands.len(),
+        );
+        let anchored_q = emitter.take_anchored_image_queue();
+        let new_breaks = emitter.take_breaks();
+        let new_diags = emitter.take_diagnostics();
+        // A master laid out afresh marks its page only when its output is
+        // not what the previous build's was.
+        if let (Some(prints), Some(frame_id)) =
+            (options.emission_prints, master_frame.self_id.as_deref())
+        {
+            let print = range_print(&pages[*page_idx].list, path_base, cmd_base);
+            let key = (
+                frame_id.to_string(),
+                pages[*page_idx].id.0.clone(),
+                post.is_some(),
+            );
+            if prints.borrow_mut().insert(key, print) != Some(print) || !anchored_q.is_empty() {
+                fresh[*page_idx] = true;
+            }
+        } else {
+            fresh[*page_idx] = true;
+        }
+        anchored_image_queue.extend(anchored_q.iter().cloned());
+        breaks.extend(new_breaks.iter().cloned());
+        emit_diagnostics.extend(new_diags.iter().cloned());
+
+        // Perf-MasterText — capture the delta if the emit didn't
+        // touch the gradient / image / anchored / breaks side
+        // channels (the common case for footers + running headers,
+        // which are pure text with solid paints). Skipping the
+        // cache on the uncacheable cases keeps the splice path
+        // pure-path; gradient/image renumbering is a follow-up.
+        let list = &pages[*page_idx].list;
+        let uncacheable = list.gradients.len() != grad_base
+            || list.radial_gradients.len() != rad_grad_base
+            || list.images.len() != image_base
+            || other_pools_print(list) != pre_others
+            || pages[*page_idx].footnotes.len() != footnote_base
+            || !anchored_q.is_empty()
+            || !new_breaks.is_empty()
+            || !new_diags.is_empty();
+        if let (Some(ref key), Some(rc), false) = (
+            &cache_key,
+            master_text_emit_cache,
+            uncacheable || post.is_some(),
+        ) {
+            let new_paths: Vec<paged_compose::PathData> =
+                list.paths.slice(path_base, list.paths.len()).to_vec();
+            let mut new_commands: Vec<paged_compose::DisplayCommand> =
+                list.commands[cmd_base..list.commands.len()].to_vec();
+            // Rebase path-ids in the captured commands so they're
+            // relative to the start of the captured paths slice.
+            for cmd in new_commands.iter_mut() {
+                rebase_path_ids(cmd, -(path_base as i64));
+            }
+            rc.borrow_mut().insert(
+                key.clone(),
+                MasterTextEmitDelta {
+                    paths: new_paths,
+                    path_keys: list.paths.keys(path_base, list.paths.len()).to_vec(),
+                    pre_fingerprint,
+                    story_layout: pages[*page_idx].story_layout[layout_base..].to_vec(),
+                    commands: new_commands,
+                    numbering: numbering_key,
+                },
+            );
+        }
+    }
+
+    // Text on a path is laid out every build: its pages are fresh.
+    let pre_path_text: Vec<usize> = pages.iter().map(|p| p.list.commands.len()).collect();
+    // Text-on-path pass: walk every spread's shapes and emit any
+    // attached `<TextPath>` along the host's tessellated curve.
+    // Stories that flow only via TextPath have an empty
+    // `frame_chain`, so the body-story pass below skips them — this
+    // pass is what gives those stories their visible glyphs.
+    for (spread_idx, parsed) in document.spreads.iter().enumerate() {
+        let spread = &parsed.spread;
+        let range = spread_page_ranges[spread_idx].clone();
+        let local_geoms = &page_geometries[range.clone()];
+        for poly in &spread.polygons {
+            if poly.text_paths.is_empty() {
+                continue;
+            }
+            // W2.5 — element-level Visible="false" hides the shape and
+            // its text-on-path.
+            if !layer_visible(poly.item_layer.as_deref()) || !poly.visible {
+                continue;
+            }
+            let spread_bounds = transform_bounds(poly.bounds, poly.item_transform);
+            let local_idx = page_for_frame(&spread_bounds, local_geoms).unwrap_or(0);
+            let page_idx = range.start + local_idx;
+            for tp in &poly.text_paths {
+                emit_text_path_into(
+                    &mut pages[page_idx],
+                    page_idx,
+                    &mut breaks,
+                    tp,
+                    &poly.anchors,
+                    poly.item_transform,
+                    poly.stroke_weight.unwrap_or(0.0),
+                    document,
+                    options,
+                    palette,
+                    color_ctx,
+                    font_table,
+                );
+            }
+        }
+        for rect in &spread.rectangles {
+            if rect.text_paths.is_empty() {
+                continue;
+            }
+            // W2.5 — element-level Visible="false" hides the shape and
+            // its text-on-path.
+            if !layer_visible(rect.item_layer.as_deref()) || !rect.visible {
+                continue;
+            }
+            let spread_bounds = transform_bounds(rect.bounds, rect.item_transform);
+            let local_idx = page_for_frame(&spread_bounds, local_geoms).unwrap_or(0);
+            let page_idx = range.start + local_idx;
+            // Rectangles serialise their corners as PathPointType
+            // anchors only when they carry custom geometry; the
+            // simple-rect case stores `GeometricBounds` only. Build
+            // a 4-corner anchor list as a fallback so straight-edge
+            // rect-hosted TextPaths still flow.
+            let synth_corners: Vec<PathAnchor>;
+            let anchors: &[PathAnchor] = {
+                synth_corners = vec![
+                    PathAnchor {
+                        anchor: (rect.bounds.left, rect.bounds.top),
+                        left: (rect.bounds.left, rect.bounds.top),
+                        right: (rect.bounds.left, rect.bounds.top),
+                    },
+                    PathAnchor {
+                        anchor: (rect.bounds.right, rect.bounds.top),
+                        left: (rect.bounds.right, rect.bounds.top),
+                        right: (rect.bounds.right, rect.bounds.top),
+                    },
+                    PathAnchor {
+                        anchor: (rect.bounds.right, rect.bounds.bottom),
+                        left: (rect.bounds.right, rect.bounds.bottom),
+                        right: (rect.bounds.right, rect.bounds.bottom),
+                    },
+                    PathAnchor {
+                        anchor: (rect.bounds.left, rect.bounds.bottom),
+                        left: (rect.bounds.left, rect.bounds.bottom),
+                        right: (rect.bounds.left, rect.bounds.bottom),
+                    },
+                ];
+                &synth_corners
+            };
+            for tp in &rect.text_paths {
+                emit_text_path_into(
+                    &mut pages[page_idx],
+                    page_idx,
+                    &mut breaks,
+                    tp,
+                    anchors,
+                    rect.item_transform,
+                    rect.stroke_weight.unwrap_or(0.0),
+                    document,
+                    options,
+                    palette,
+                    color_ctx,
+                    font_table,
+                );
+            }
+        }
+        for line in &spread.graphic_lines {
+            if line.text_paths.is_empty() {
+                continue;
+            }
+            // W2.5 — element-level Visible="false" hides the shape and
+            // its text-on-path.
+            if !layer_visible(line.item_layer.as_deref()) || !line.visible {
+                continue;
+            }
+            let spread_bounds = transform_bounds(line.bounds, line.item_transform);
+            let local_idx = page_for_frame(&spread_bounds, local_geoms).unwrap_or(0);
+            let page_idx = range.start + local_idx;
+            // GraphicLines without anchors fall back to the bounds
+            // diagonal endpoints — matches the line-renderer's
+            // fallback geometry.
+            let synth_endpoints: Vec<PathAnchor>;
+            let anchors: &[PathAnchor] = if !line.anchors.is_empty() {
+                line.anchors.as_slice()
+            } else {
+                synth_endpoints = vec![
+                    PathAnchor {
+                        anchor: (line.bounds.left, line.bounds.top),
+                        left: (line.bounds.left, line.bounds.top),
+                        right: (line.bounds.left, line.bounds.top),
+                    },
+                    PathAnchor {
+                        anchor: (line.bounds.right, line.bounds.bottom),
+                        left: (line.bounds.right, line.bounds.bottom),
+                        right: (line.bounds.right, line.bounds.bottom),
+                    },
+                ];
+                &synth_endpoints
+            };
+            for tp in &line.text_paths {
+                emit_text_path_into(
+                    &mut pages[page_idx],
+                    page_idx,
+                    &mut breaks,
+                    tp,
+                    anchors,
+                    line.item_transform,
+                    line.stroke_weight.unwrap_or(0.0),
+                    document,
+                    options,
+                    palette,
+                    color_ctx,
+                    font_table,
+                );
+            }
+        }
+    }
+
+    for (i, n) in pre_path_text.iter().enumerate() {
+        if pages[i].list.commands.len() != *n {
+            fresh[i] = true;
+        }
+    }
+
+    // W1.22 (engine gap 22) — cross-story numbering ledger. When the
+    // document declares at least one `<NumberingList>` with
+    // `ContinueNumbersAcrossStories="true"`, paragraphs sharing that
+    // list keep counting across stories. The ledger (list id → last
+    // counter) lives here, outside the per-story loop, and is threaded
+    // into each story's emitter. Built lazily — `None`/empty when no
+    // such list exists, so the overwhelming-common case pays nothing
+    // and the per-story counter owns everything as before.
+    //
+    // Determinism: stories emit in `document.stories` order (designmap
+    // story order); the ledger is updated in that single forward walk.
+    // The footnote-reservation re-emit loop snapshots + restores the
+    // ledger around its passes (below) so a re-emit doesn't double the
+    // count, and the body-story emit cache is disabled for stories that
+    // touch a continue-across-stories list (a cache replay wouldn't
+    // re-run the ledger update). Same source bytes ⇒ same numbers.
+    let has_continue_across_stories = document
+        .styles
+        .numbering_lists
+        .values()
+        .any(|d| d.continue_across_stories == Some(true));
+    let cross_story_numbering: Option<std::cell::RefCell<HashMap<String, u32>>> =
+        has_continue_across_stories.then(|| std::cell::RefCell::new(HashMap::new()));
+    // Span/split planning: which applied paragraph styles span or split.
+    let mut span_style_memo: HashMap<Option<&str>, bool> = HashMap::new();
+
+    for parsed in &document.stories {
+        total_stats.stories += 1;
+        // An auto-sizing frame composes at its FITTED bounds: swap in
+        // the clone the fit pass prepared (routing already ran on the
+        // authored bounds, so the chain's pages are unchanged).
+        let authored_chain: Vec<&TextFrame> = document
+            .frame_chain(&parsed.self_id)
+            .into_iter()
+            .map(|f| {
+                f.self_id
+                    .as_deref()
+                    .and_then(|id| fitted_frames.get(id).or_else(|| layout_frames.get(id)))
+                    .unwrap_or(f)
+            })
+            .collect();
+        // A vertical story is laid out in its frames turned on their side
+        // (InDesign 20.0.1 sets vertical text as horizontal text turned a
+        // quarter clockwise: vertical-text-probe), and the post-pass
+        // turns its lines into columns.
+        let story_vertical = matches!(
+            parsed.story.story_direction,
+            Some(paged_model::StoryDirection::VerticalWritingDirection)
+        );
+        let turned: Vec<TextFrame> = if story_vertical {
+            authored_chain
+                .iter()
+                .map(|f| super::text_frame::turned_for_vertical(f))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let authored_chain: Vec<&TextFrame> = if story_vertical {
+            turned.iter().collect()
+        } else {
+            authored_chain
+        };
+        // Multi-column frames become N side-by-side regions here, so
+        // everything downstream — chain pages, spread bounds, wrap
+        // rects, the emitter's overflow walk — sees columns as the
+        // frames they behave like. Empty when nothing is columnar,
+        // and then the authored chain is used unchanged.
+        // Span / split columns re-plan the chain as the regions the
+        // story actually uses, with the region each paragraph opens.
+        let span_plan = if authored_chain
+            .first()
+            .is_some_and(|f| f.applied_toc_style.is_none())
+        {
+            plan_span_columns(
+                document,
+                &measurer,
+                parsed,
+                &authored_chain,
+                &mut span_style_memo,
+            )
+        } else {
+            None
+        };
+        let (column_arena, span_starts, span_widths) = match span_plan {
+            Some(plan) => (plan.regions, plan.starts, plan.widths),
+            None => (
+                expand_column_chain(
+                    &authored_chain,
+                    Some(&ColumnBalance {
+                        measurer: &measurer,
+                        story: parsed,
+                    }),
+                ),
+                HashMap::new(),
+                Vec::new(),
+            ),
+        };
+        let chain: Vec<&TextFrame> = if column_arena.is_empty() {
+            authored_chain
+        } else {
+            column_arena.iter().collect()
+        };
+        if chain.is_empty() {
+            continue;
+        }
+        let all_text_overset = chain.iter().any(|f| {
+            f.self_id
+                .as_deref()
+                .and_then(|id| auto_sized.get(id))
+                .is_some_and(|fitted| fitted.text_dropped)
+        });
+        // Perf-BodyStory — try the cache before running the emit.
+        // Signature hashes the chain's frames (bounds + transforms)
+        // and the wrap_rects_per_page entries for every page the
+        // chain touches. Stories whose chain doesn't include the
+        // dragged frame AND whose chain pages don't see a wrap
+        // change keep hitting through the drag. Capture happens
+        // post-emit (and post-all-post-passes) so the cached
+        // commands are fully baked.
+        let chain_pages_pre: Vec<usize> = chain
+            .iter()
+            .map(|f| {
+                f.self_id
+                    .as_deref()
+                    .and_then(|id| frame_to_page.get(id).copied())
+                    .unwrap_or(0)
+            })
+            .collect();
+        // thoughts ADR 027 plan step 4 — a TOC's paragraphs are built from
+        // OTHER stories' headings, which no key of its own can see: never
+        // cached.
+        let is_toc = chain
+            .first()
+            .and_then(|f| f.applied_toc_style.as_deref())
+            .is_some_and(|id| document.styles.toc_styles.contains_key(id));
+        let cache_key: Option<(String, u64)> = if body_story_emit_cache.is_some() && !is_toc {
+            let signature = body_story_signature(&chain, &chain_pages_pre, &wrap_rects_per_page);
+            // A continued list counts on from the ledger the stories
+            // before left (W1.22): the ledger IN is an input, and the
+            // delta stores the ledger OUT a hit restores.
+            let signature = match cross_story_numbering.as_ref() {
+                Some(ledger) => {
+                    use std::hash::{Hash, Hasher};
+                    let mut entries: Vec<(String, u32)> = ledger
+                        .borrow()
+                        .iter()
+                        .map(|(k, v)| (k.clone(), *v))
+                        .collect();
+                    entries.sort();
+                    let mut h = std::collections::hash_map::DefaultHasher::new();
+                    signature.hash(&mut h);
+                    entries.hash(&mut h);
+                    h.finish()
+                }
+                None => signature,
+            };
+            // A story that prints page numbers or variables depends on
+            // the page numbering too, which its frames do not capture.
+            let prints_context = story_prints_page_context(&parsed.story);
+            let signature = if prints_context {
+                signature.rotate_left(17) ^ numbering_key
+            } else {
+                signature
+            };
+            // thoughts ADR 027 plan step 5 — the post-layout pass keeps its
+            // own entries; one that prints page context resolved its
+            // running headers against `post_key`.
+            let signature = match post_key {
+                Some(pk) => {
+                    let salted = signature.rotate_left(29) ^ 0x5bd1_e995_2f3a_7c41;
+                    if prints_context {
+                        salted ^ pk.rotate_left(7)
+                    } else {
+                        salted
+                    }
+                }
+                None => signature,
+            };
+            Some((parsed.self_id.clone(), signature))
+        } else {
+            None
+        };
+        if let (Some(ref key), Some(rc)) = (&cache_key, body_story_emit_cache) {
+            if let Some(delta) = rc.borrow().get(key) {
+                // Defense in depth — the signature includes the chain's
+                // page indices, so a stale-index hit should be
+                // impossible; but the cache is long-lived interactive
+                // state, and splicing past pages.len() is a hard panic
+                // inside the worker (mutate() never resolves). If any
+                // captured index is out of range, treat the entry as a
+                // miss and re-emit fresh.
+                //
+                // thoughts ADR 027 — every page must also hold the path
+                // buffer the delta was captured from: an earlier story on
+                // the page that re-emitted moves the ids it refers to.
+                if delta.per_page.iter().all(|(idx, d)| {
+                    *idx < pages.len() && pool_print(&pages[*idx].list) == d.pre_fingerprint
+                }) {
+                    for (page_idx, page_delta) in &delta.per_page {
+                        let base = pages[*page_idx].list.commands.len();
+                        splice_body_story_page_delta(&mut pages[*page_idx], page_delta);
+                        let block_end = pages[*page_idx].list.commands.len();
+                        record_story_blocks(
+                            &mut pending_text,
+                            &text_slots,
+                            &chain,
+                            *page_idx,
+                            &page_delta
+                                .segments
+                                .iter()
+                                .map(|(i, rel)| (*i, base + rel))
+                                .collect::<Vec<_>>(),
+                            block_end,
+                        );
+                    }
+                    anchored_image_queue.extend(delta.anchored.iter().cloned());
+                    breaks.extend(delta.breaks.iter().cloned());
+                    emit_diagnostics.extend(delta.diagnostics.iter().cloned());
+                    if let Some(m) = &delta.overset {
+                        overset.insert(parsed.self_id.clone(), m.clone());
+                    }
+                    if let (Some(ledger), Some(out)) =
+                        (cross_story_numbering.as_ref(), delta.ledger_out.as_ref())
+                    {
+                        *ledger.borrow_mut() = out.clone();
+                    }
+                    total_stats.add_emitted(&delta.stats);
+                    total_stats.body_stories_reused += 1;
+                    continue;
+                }
+            }
+        }
+        // Snapshot per-page pool sizes BEFORE this story emits so
+        // post-emit extraction can compute per-page deltas. Tracks
+        // path / command / gradient / image pool sizes plus the
+        // story_layout + footnotes vec lengths — the latter two
+        // are extended by emit_paragraph and must be replayed on
+        // cache hit so caret / hit-test / footnote pools match a
+        // from-scratch emit.
+        let pre_snapshot: Vec<(usize, usize, usize, usize, usize, usize, usize)> = pages
+            .iter()
+            .map(|p| {
+                (
+                    p.list.paths.len(),
+                    p.list.commands.len(),
+                    p.list.gradients.len(),
+                    p.list.radial_gradients.len(),
+                    p.list.images.len(),
+                    p.story_layout.len(),
+                    p.footnotes.len(),
+                )
+            })
+            .collect();
+        // The table cell rects already on each page: the story's own are
+        // the tail past this, captured into the cache delta beside its lines.
+        let pre_cells: Vec<usize> = pages.iter().map(|p| p.cell_rects.len()).collect();
+        // The pool prints of the pages the story lays out on (its chain's),
+        // for the cache capture below.
+        let pre_prints: HashMap<usize, (u64, u64)> = chain_pages_pre
+            .iter()
+            .filter(|&&p| p < pages.len())
+            .map(|&p| {
+                (
+                    p,
+                    (
+                        pool_print(&pages[p].list),
+                        other_pools_print(&pages[p].list),
+                    ),
+                )
+            })
+            .collect();
+        // A TOC story prints the text it holds, as InDesign prints it until
+        // Update Table of Contents (docs audit 2026-10, ADR 120); an empty
+        // one prints nothing. The entries are written by the
+        // `updateTableOfContents` op over `toc_paragraphs` (ADR 165).
+        let chain_pages = chain_pages_pre.clone();
+        // Per-chain wrap rects so threaded frames inherit per-line
+        // wrap. Each chain index maps to its frame's page's
+        // exclusion list; a frame that ignores text wrap gets none.
+        let chain_wrap_rects: Vec<&[WrapShape]> = chain_pages
+            .iter()
+            .zip(chain.iter())
+            .map(|(&p, f)| {
+                if f.ignore_wrap == Some(true) {
+                    return &[][..];
+                }
+                wrap_rects_per_page
+                    .get(p)
+                    .map(|v| v.as_slice())
+                    .unwrap_or(&[])
+            })
+            .collect();
+        let head_wrap_rects: &[WrapShape] = chain_wrap_rects.first().copied().unwrap_or(&[]);
+        // Phase 7 — clone chain refs + page indices BEFORE moving them
+        // into the StoryEmitter so the vertical-writing post-pass can
+        // resolve the host frame for each page.
+        let chain_for_post = chain.clone();
+        let chain_pages_for_post = chain_pages.clone();
+        let is_vertical = matches!(
+            parsed.story.story_direction,
+            Some(paged_model::StoryDirection::VerticalWritingDirection)
+        );
+
+        // W1.7 — footnote space reservation. Footnotes are discovered
+        // while composing the very text that references them, so the
+        // pool's height isn't known until the body has been laid out —
+        // a chicken-and-egg the standard fix resolves by COMPOSING,
+        // MEASURING, then RE-COMPOSING with the bottom of each frame's
+        // text area held back by the measured pool height.
+        //
+        // Convergence: each iteration emits the whole story, measures
+        // every frame's pool, and sets `reserved[frame]` to that pool's
+        // height. A taller pool pushes the last body lines (and any
+        // footnote they reference) into the next frame, which can shrink
+        // THIS frame's pool — so we iterate to a fixpoint. In practice
+        // the reservation only ever grows or holds within a frame, so
+        // the loop settles in 1–2 passes; we cap at
+        // `MAX_FOOTNOTE_RESERVE_PASSES` and accept whatever the last
+        // pass produced (the pool is still drawn as an overlay, so a
+        // non-converged page degrades to today's behaviour rather than
+        // dropping content). A footnote whose reference moved to the
+        // next frame simply moves WITH it — the per-page pool the
+        // post-pass draws follows the capture, matching InDesign's
+        // "footnote travels with its reference" rule for the stable
+        // subset; cross-frame *splitting* of a single oversized
+        // footnote is still deferred (reported via FootnoteOverflow).
+        let pre_reset = snapshot_body_story_reset(&pages);
+        let pre_total_stats = total_stats;
+        let mut reserved_64: Vec<i32> = vec![0; chain_for_post.len()];
+        // The room a frame keeps for a reference line it moved on (ADR 161).
+        let mut held_64: Vec<i32> = vec![0; chain_for_post.len()];
+        let mut chain_page_set: Vec<usize> = chain_pages_for_post.clone();
+        chain_page_set.sort_unstable();
+        chain_page_set.dedup();
+
+        // Captured from the FINAL emit pass for the cache + side
+        // channels below.
+        let mut final_frame_ranges: Vec<Option<(usize, usize)>> = Vec::new();
+        let mut new_anchored: Vec<AnchoredImageEmit> = Vec::new();
+        let mut new_breaks: Vec<BreakRecord> = Vec::new();
+        let mut new_diags: Vec<Diagnostic> = Vec::new();
+        let mut new_overset: Option<OversetMeasure> = None;
+
+        // W1.22 — snapshot the cross-story numbering ledger so a
+        // footnote-reservation re-emit (pass > 0) restarts this story's
+        // numbering from the same pre-story state instead of counting
+        // on top of the previous pass's writes.
+        let cross_story_pre: Option<HashMap<String, u32>> =
+            cross_story_numbering.as_ref().map(|c| c.borrow().clone());
+
+        // ADR 028 — keep options re-emit the story with forced frame breaks
+        // until the set stops changing. A story without keeps never asks
+        // for an extra pass, so its passes are exactly the footnote ones.
+        let mut forced_breaks = super::keeps::ForcedBreaks::new();
+        let mut footnotes_settled = false;
+        // ADR 027 plan step 3 — start from the breaks the previous build
+        // settled on before the edit (see `KeepSeed`). A story that reads
+        // variables (a page count, a running header) can lay out
+        // differently before the edit too, and is never seeded.
+        let seed_key = (parsed.self_id.clone(), post.is_some());
+        let reads_variables = parsed
+            .story
+            .paragraphs
+            .iter()
+            .any(|p| p.runs.iter().any(|r| r.text_variable.is_some()));
+        let seed_sig = options
+            .keep_seeds
+            .map(|_| body_story_signature(&chain_for_post, &chain_pages_pre, &wrap_rects_per_page));
+        let seed_edit: Option<u32> = options
+            .keep_seed_hints
+            .and_then(|h| h.get(&parsed.self_id).copied())
+            .filter(|_| !reads_variables);
+        // Only a break decided wholly before the edit is reused: its
+        // paragraph and the next one (keep with next reads it) end before
+        // the edited paragraph, so the text and the layout it was decided
+        // on are unchanged. Every break holds only where it was decided
+        // (`keeps` module doc), so the fixpoint from this start settles on
+        // what it settles on from nothing.
+        if let (Some(store), Some(e), Some(sig)) = (options.keep_seeds, seed_edit, seed_sig) {
+            if let Some(seed) = store.borrow().get(&seed_key) {
+                if seed.chain_sig == sig {
+                    forced_breaks = seed
+                        .forced
+                        .iter()
+                        .filter(|(&p, _)| p + 1 < e)
+                        .map(|(&p, &b)| (p, b))
+                        .collect();
+                }
+            }
+        }
+        // ADR 028 — the builds of one `build_document` call lay out the same
+        // text over a chain that only grows at its end, so the breaks the
+        // previous grow build settled on are a valid start: each one holds
+        // only where it was decided (`keeps` module doc), and the fixpoint
+        // drops the rest. A long story otherwise re-settled every break
+        // from nothing on each grow build.
+        let mut carried = false;
+        if forced_breaks.is_empty() && !reads_variables {
+            if let Some(seed) = options
+                .keep_carry
+                .and_then(|c| c.borrow().get(&seed_key).cloned())
+            {
+                forced_breaks = seed.forced;
+                carried = !forced_breaks.is_empty();
+            }
+        }
+        // ADR 027 plan step 6 — a story whose emission is a pure function of
+        // the flow state keeps a mark per paragraph; an edited one resumes at
+        // the edit and stops where its flow rejoins the previous emission.
+        let resumable = options.story_resume.is_some()
+            && !is_toc
+            && !is_vertical
+            && cross_story_numbering.is_none()
+            && span_starts.is_empty()
+            && column_arena.is_empty()
+            && !story_prints_page_context(&parsed.story)
+            && resume::eligible(
+                &parsed.story,
+                &chain_for_post,
+                &chain_pages_for_post,
+                options,
+            );
+        let resume_sig = resumable
+            .then(|| body_story_signature(&chain_for_post, &chain_pages_pre, &wrap_rects_per_page));
+        let resume_key = (parsed.self_id.clone(), post.is_some());
+        let resume_guard = options
+            .story_resume
+            .filter(|_| resumable)
+            .map(|store| store.borrow());
+        let resume_rec = resume_guard.as_ref().and_then(|g| g.get(&resume_key));
+        let resume_span = options.edit_spans.and_then(|m| m.get(&parsed.self_id));
+        // A pass may resume when its forced breaks before the edit are the
+        // record's (`resume::plan`), the keeps fixpoint's re-emits included:
+        // each break holds only where it was decided, so a re-emit is the
+        // same function of its breaks as the first pass.
+        let plan_for = |forced: &super::keeps::ForcedBreaks, pages: &[BuiltPage]| match (
+            resume_rec,
+            resume_span,
+            resume_sig,
+        ) {
+            (Some(rec), Some(span), Some(sig)) => resume::plan(
+                rec,
+                *span,
+                sig,
+                options.build_generation,
+                parsed.story.paragraphs.len(),
+                forced,
+                pages,
+            ),
+            _ => None,
+        };
+        let mut marks: Vec<resume::ParaMark> = Vec::new();
+        let mut resume_end: Option<resume::EmitterEnd> = None;
+        // ADR 027 plan step 7 — the pages the final pass laid out afresh:
+        // `Some((from, to))` after a resume (to the stop), `None` for all
+        // the pages the story wrote to.
+        let mut fresh_range: Option<(usize, usize)> = None;
+        // Pages the final pass spliced whole from the resume record: their
+        // delta is reused as is by the capture below.
+        let mut verbatim: Vec<(usize, std::sync::Arc<BodyStoryPageDelta>)> = Vec::new();
+        let mut converged = false;
+        let pass_cap = MAX_FOOTNOTE_RESERVE_PASSES + MAX_KEEP_PASSES + 2 * chain_for_post.len();
+        for pass in 0..pass_cap {
+            let p = pass;
+            paged_compose::perf::count(|c| c.story_emits += 1);
+            // Re-emit passes start from the pre-story snapshot so the
+            // page accumulates exactly one story's worth of commands.
+            if pass > 0 {
+                rollback_body_story(&mut pages, &pre_reset);
+                total_stats = pre_total_stats;
+                if let (Some(c), Some(pre)) =
+                    (cross_story_numbering.as_ref(), cross_story_pre.as_ref())
+                {
+                    *c.borrow_mut() = pre.clone();
+                }
+            }
+            let mut emitter = StoryEmitter::new(
+                document,
+                options,
+                palette,
+                color_ctx,
+                font_table,
+                chain_for_post.clone(),
+                chain_pages_for_post.clone(),
+                &page_labels,
+                Some(&hyphenator),
+                head_wrap_rects,
+                chain_wrap_rects.clone(),
+            )
+            .with_languages(&hyphenators)
+            .with_optical_margin(
+                parsed.story.optical_margin_alignment,
+                parsed.story.optical_margin_size,
+            )
+            .with_vertical(is_vertical)
+            .with_story_id(&parsed.self_id)
+            .with_page_count(total_page_count)
+            .with_page_index_map(&page_index_map)
+            .with_page_numbering(&page_numbering)
+            .with_footnote_reservation(&reserved_64)
+            .with_forced_breaks(&forced_breaks)
+            .with_span_plan(&span_starts, &span_widths)
+            .with_all_text_overset(all_text_overset)
+            .with_text_slots(&text_slots);
+            // W1.18c — running-header pickup index on the post-layout pass.
+            if let Some(index) = running_header_index {
+                emitter = emitter.with_running_headers(index);
+            }
+            if let Some(pages) = xref_page_index {
+                emitter = emitter.with_xref_pages(pages);
+            }
+            if !endnote_ordinals.is_empty() {
+                emitter = emitter.with_endnote_ordinals(&endnote_ordinals);
+            }
+            // W1.22 — thread the cross-story numbering ledger when one
+            // exists (only built for documents with a continue-across-
+            // stories list).
+            if let Some(ref ledger) = cross_story_numbering {
+                emitter = emitter.with_cross_story_numbering(ledger);
+            }
+            // Phase 7 — capture each page's command count BEFORE this
+            // story's emit so a post-pass can rotate the story's commands
+            // when StoryDirection="VerticalWritingDirection".
+            let pre_story_cmd_counts: Vec<usize> =
+                pages.iter().map(|p| p.list.commands.len()).collect();
+            // ADR 027 plan step 6 — a resumable story carries no
+            // footnotes, so every pass is a keeps pass and may resume.
+            let plan = plan_for(&forced_breaks, &pages);
+            marks.clear();
+            verbatim.clear();
+            fresh_range = plan.as_ref().map(|pl| (pl.resume_page(), usize::MAX));
+            let mut start = 0;
+            if let Some(plan) = plan.as_ref() {
+                resume::splice_prefix(
+                    &mut emitter,
+                    &mut pages,
+                    &pre_snapshot,
+                    plan,
+                    &mut total_stats,
+                    &mut verbatim,
+                );
+                start = plan.first();
+                marks.extend(plan.prefix_marks().iter().cloned());
+            }
+            let mut relaid: Option<usize> = None;
+            for (j, paragraph) in parsed.story.paragraphs.iter().enumerate().skip(start) {
+                if resumable {
+                    let m = resume::mark(
+                        &emitter,
+                        &pages,
+                        &pre_snapshot,
+                        &total_stats,
+                        &pre_total_stats,
+                    );
+                    if let Some(plan) = plan.as_ref().filter(|pl| pl.past_edit(j)) {
+                        relaid = resume::try_stop(
+                            &mut emitter,
+                            &mut pages,
+                            &pre_snapshot,
+                            plan,
+                            j,
+                            &m,
+                            &mut total_stats,
+                            Some(&mut marks),
+                            &mut verbatim,
+                        );
+                        if relaid.is_some() {
+                            // The record's later pages are this
+                            // build's, unless their lines moved to
+                            // other paragraph indices.
+                            let to = if plan.shifts() { usize::MAX } else { m.page };
+                            fresh_range = Some((plan.resume_page(), to));
+                            break;
+                        }
+                    }
+                    marks.push(m);
+                }
+                emitter.emit_paragraph(paragraph, &mut pages, &mut total_stats);
+            }
+            if resumable && relaid.is_none() {
+                marks.push(resume::mark(
+                    &emitter,
+                    &pages,
+                    &pre_snapshot,
+                    &total_stats,
+                    &pre_total_stats,
+                ));
+            }
+            total_stats.frames_emitted += match relaid {
+                Some(frames) => {
+                    total_stats.stories_resumed += 1;
+                    frames
+                }
+                None => emitter
+                    .frame_cmd_ranges
+                    .iter()
+                    .skip(plan.as_ref().map_or(0, |pl| pl.resume_frame()))
+                    .filter(|r| r.is_some())
+                    .count(),
+            };
+            let post_pass_counts: Vec<usize> = chain_page_set
+                .iter()
+                .map(|&p| pages[p].list.commands.len())
+                .collect();
+            emitter.apply_vertical_justification(&mut pages);
+            emitter.apply_column_rules(&mut pages);
+            emitter.apply_polygon_clip(&mut pages);
+            emitter.apply_container_clip(&mut pages, &container_clips);
+            emitter.apply_blend_groups(&mut pages);
+            // A record replays raw emission, so a story some post-pass
+            // rewrote is not recorded.
+            resume_end = (resumable
+                && chain_page_set
+                    .iter()
+                    .zip(&post_pass_counts)
+                    .all(|(&p, &n)| pages[p].list.commands.len() == n))
+            .then(|| resume::EmitterEnd::of(&emitter, &pre_snapshot));
+            // W2 — the per-frame command ranges as they stand after
+            // every pass that splices. The fixpoint below may roll this
+            // pass back and re-emit, so the LAST pass wins, which is
+            // exactly what `pages` ends up holding.
+            final_frame_ranges = emitter.frame_cmd_ranges.clone();
+            // Phase 7 — vertical writing post-rotation. When the source
+            // story declares `StoryDirection="VerticalWritingDirection"`,
+            // rotate every command this story emitted by 90° CW around
+            // each host frame's top-left corner, then translate right
+            // by the frame's width. This maps the horizontal layout
+            // (lines top-to-bottom, chars left-to-right within a line)
+            // to CJK vertical convention (columns right-to-left, chars
+            // top-to-bottom within a column). Latin glyphs render
+            // sideways — full per-glyph upright counter-rotation
+            // (matched to InDesign's `<RotateSingleByteCharacters>` flag)
+            // is queued.
+            if is_vertical {
+                apply_vertical_writing_rotation(
+                    &mut pages,
+                    &pre_story_cmd_counts,
+                    &chain_for_post,
+                    &chain_pages_for_post,
+                );
+            }
+            new_anchored = emitter.take_anchored_image_queue();
+            new_breaks = emitter.take_breaks();
+            new_diags = emitter.take_diagnostics();
+            new_overset = emitter.overset_measure();
+
+            // ADR 028 — the breaks the next pass must force; equal to
+            // `forced_breaks` when this pass satisfied every keep option.
+            let next_forced = emitter.keep_breaks();
+            let keeps_changed = next_forced != forced_breaks;
+            forced_breaks = next_forced;
+
+            // Plan where the story's notes go and fold the room each frame
+            // gives them into the reservation (ADR 161). Vertical-writing
+            // stories lay the area out in horizontal page space too, so
+            // the plan is valid there; we skip the reserve loop only when
+            // no footnotes were captured. Only the chain's own pages can
+            // hold an area of its frames, so the plan walks those.
+            if !footnotes_settled {
+                let any_footnotes = chain_page_set
+                    .iter()
+                    .any(|&p| !pages[p].footnotes.is_empty());
+                if !any_footnotes {
+                    footnotes_settled = true;
+                } else {
+                    let flow = plan_footnote_flow(
+                        &pages,
+                        &chain_for_post,
+                        &chain_pages_for_post,
+                        &parsed.self_id,
+                        options,
+                        document,
+                        font_table,
+                        &hyphenators,
+                        palette,
+                        color_ctx,
+                    );
+                    for (held, &h) in held_64.iter_mut().zip(&flow.hold_64) {
+                        *held = (*held).max(h);
+                    }
+                    let next_reserved: Vec<i32> = flow
+                        .reserve_64
+                        .iter()
+                        .zip(&held_64)
+                        .map(|(&r, &h)| r.max(h))
+                        .collect();
+                    if next_reserved == reserved_64 || p + 1 >= MAX_FOOTNOTE_RESERVE_PASSES {
+                        // Fixpoint, or the bail cap — accept the reservation.
+                        // The pool emit post-pass paints below the reserved band.
+                        footnotes_settled = true;
+                    }
+                    reserved_64 = next_reserved;
+                }
+            }
+            // Done when the footnote reservation and the keep breaks both
+            // hold. A keep change re-emits until its own cap, accepting the
+            // last pass after that (text is then placed, never dropped).
+            if footnotes_settled && !keeps_changed {
+                converged = true;
+                if pass == 0 && !forced_breaks.is_empty() && !carried {
+                    total_stats.keep_seeds_used += 1;
+                }
+                break;
+            }
+            if footnotes_settled && p + 1 >= pass_cap {
+                break;
+            }
+        }
+        // The settled layout's notes: a note split between two areas keeps
+        // its first lines and continues at the head of the next (ADR 161).
+        if chain_page_set
+            .iter()
+            .any(|&p| pages[p].footnotes.len() > pre_snapshot[p].6)
+        {
+            let flow = plan_footnote_flow(
+                &pages,
+                &chain_for_post,
+                &chain_pages_for_post,
+                &parsed.self_id,
+                options,
+                document,
+                font_table,
+                &hyphenators,
+                palette,
+                color_ctx,
+            );
+            apply_footnote_flow(&flow, &mut pages, &chain_for_post, document);
+        }
+        // Keep the settled breaks for the next build's seed. A story that
+        // reads variables or carries footnotes is never seeded, so it is
+        // not stored either.
+        let footnoted = pages
+            .iter()
+            .zip(&pre_snapshot)
+            .any(|(page, snap)| page.footnotes.len() > snap.6);
+        if let Some(carry) = options.keep_carry {
+            if converged && !reads_variables && !footnoted {
+                carry.borrow_mut().insert(
+                    seed_key.clone(),
+                    KeepSeed {
+                        forced: forced_breaks.clone(),
+                        chain_sig: 0,
+                    },
+                );
+            } else {
+                carry.borrow_mut().remove(&seed_key);
+            }
+        }
+        if let (Some(store), Some(sig)) = (options.keep_seeds, seed_sig) {
+            if converged && !reads_variables && !footnoted {
+                store.borrow_mut().insert(
+                    seed_key,
+                    KeepSeed {
+                        forced: forced_breaks.clone(),
+                        chain_sig: sig,
+                    },
+                );
+            } else {
+                store.borrow_mut().remove(&seed_key);
+            }
+        }
+
+        anchored_image_queue.extend(new_anchored.iter().cloned());
+        breaks.extend(new_breaks.iter().cloned());
+        if let Some(m) = &new_overset {
+            overset.insert(parsed.self_id.clone(), m.clone());
+        }
+        emit_diagnostics.extend(new_diags.iter().cloned());
+        // ADR 027 plan step 7 — the pages this story wrote to afresh. A
+        // resumed story's spliced prefix and suffix are the previous
+        // build's output; an anchored image lands where its host put it.
+        for (page_idx, snap) in pre_snapshot.iter().enumerate() {
+            let wrote = pages[page_idx].list.commands.len() > snap.1
+                || pages[page_idx].story_layout.len() > snap.5
+                || pages[page_idx].footnotes.len() > snap.6;
+            let in_range = fresh_range.is_none_or(|(from, to)| page_idx >= from && page_idx <= to);
+            if wrote && in_range {
+                fresh[page_idx] = true;
+            }
+        }
+        for a in &new_anchored {
+            fresh[a.target_page] = true;
+        }
+
+        // W2 — cut this story's per-page output into per-frame blocks
+        // and queue each for its frame's z-slot. Computed once here and
+        // reused (as relative offsets) by the cache capture below.
+        let mut story_segments: Vec<(usize, Vec<(usize, usize)>)> = Vec::new();
+        for (page_idx, snap) in pre_snapshot.iter().enumerate() {
+            let block_end = pages[page_idx].list.commands.len();
+            if block_end <= snap.1 {
+                continue;
+            }
+            let segs = text_slots::segment_story_block(
+                &final_frame_ranges,
+                &chain_pages_for_post,
+                page_idx,
+                snap.1,
+                block_end,
+            );
+            record_story_blocks(
+                &mut pending_text,
+                &text_slots,
+                &chain_for_post,
+                page_idx,
+                &segs,
+                block_end,
+            );
+            story_segments.push((page_idx, segs));
+        }
+
+        // Perf-BodyStory — capture the per-page delta if the emit
+        // didn't touch gradient/image pools. Same conservative
+        // policy as master_text: skip caching when gradient or
+        // image entries were added, since the cached splice path
+        // only renumbers path-ids.
+        let caching = cache_key.is_some() && body_story_emit_cache.is_some();
+        // ADR 027 plan step 6 — a record is kept for a story that ended
+        // where it can be resumed from: the fixpoint converged, and no
+        // footnote or anchored image rides outside the per-page output.
+        let resume_end = resume_end.filter(|_| converged && !footnoted && new_anchored.is_empty());
+        // The plan borrowed the store; release it before writing.
+        drop(resume_guard);
+        if caching || resume_end.is_some() {
+            // Diagnostics (overset) ride along in the delta and are
+            // replayed on a hit (thoughts ADR 027 plan step 4).
+            let mut uncacheable = false;
+            let mut per_page: Vec<(usize, std::sync::Arc<BodyStoryPageDelta>)> = Vec::new();
+            for (page_idx, snap) in pre_snapshot.iter().enumerate() {
+                let page = &pages[page_idx];
+                let list = &page.list;
+                if list.gradients.len() != snap.2
+                    || list.radial_gradients.len() != snap.3
+                    || list.images.len() != snap.4
+                    || pre_prints
+                        .get(&page_idx)
+                        .is_some_and(|p| other_pools_print(list) != p.1)
+                {
+                    uncacheable = true;
+                    break;
+                }
+                let grew_list = list.paths.len() > snap.0 || list.commands.len() > snap.1;
+                let grew_layout = page.story_layout.len() > snap.5;
+                let grew_footnotes = page.footnotes.len() > snap.6;
+                let grew_cells = page.cell_rects.len() > pre_cells[page_idx];
+                if let Some((_, d)) = verbatim.iter().find(|(p, _)| *p == page_idx) {
+                    per_page.push((page_idx, d.clone()));
+                    continue;
+                }
+                if grew_list || grew_layout || grew_footnotes || grew_cells {
+                    // Output off the story's own chain pages has no print to
+                    // replay against.
+                    let Some(&(pre_print, _)) = pre_prints.get(&page_idx) else {
+                        uncacheable = true;
+                        break;
+                    };
+                    let new_paths: Vec<paged_compose::PathData> =
+                        list.paths.slice(snap.0, list.paths.len()).to_vec();
+                    let mut new_commands: Vec<paged_compose::DisplayCommand> =
+                        list.commands[snap.1..list.commands.len()].to_vec();
+                    for cmd in new_commands.iter_mut() {
+                        rebase_path_ids(cmd, -(snap.0 as i64));
+                    }
+                    let new_story_layout: Vec<LineLayout> = page.story_layout[snap.5..].to_vec();
+                    let new_footnotes: Vec<EmittedFootnote> = page.footnotes[snap.6..].to_vec();
+                    let segments = story_segments
+                        .iter()
+                        .find(|(p, _)| *p == page_idx)
+                        .map(|(_, segs)| {
+                            segs.iter()
+                                .map(|(i, start)| (*i, start.saturating_sub(snap.1)))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                    per_page.push((
+                        page_idx,
+                        std::sync::Arc::new(BodyStoryPageDelta {
+                            paths: new_paths,
+                            path_keys: list.paths.keys(snap.0, list.paths.len()).to_vec(),
+                            pre_fingerprint: pre_print,
+                            commands: new_commands,
+                            story_layout: new_story_layout,
+                            footnotes: new_footnotes,
+                            cell_rects: page.cell_rects[pre_cells[page_idx]..].to_vec(),
+                            segments,
+                        }),
+                    ));
+                }
+            }
+            // A story emitted and not recorded loses its old record: the
+            // next edit's span describes content that record never saw.
+            match (resume_end, options.story_resume, resume_sig, uncacheable) {
+                (Some(end), Some(store), Some(sig), false) => {
+                    store.borrow_mut().insert(
+                        resume_key,
+                        resume::record(
+                            end,
+                            sig,
+                            options.build_generation,
+                            per_page.clone(),
+                            std::mem::take(&mut marks),
+                            forced_breaks.clone(),
+                            new_diags.clone(),
+                        ),
+                    );
+                }
+                (_, Some(store), _, _) => {
+                    store.borrow_mut().remove(&resume_key);
+                }
+                _ => {}
+            }
+            if let (Some(key), Some(rc), false) = (cache_key, body_story_emit_cache, uncacheable) {
+                rc.borrow_mut().insert(
+                    key,
+                    BodyStoryEmissionDelta {
+                        per_page,
+                        anchored: new_anchored,
+                        breaks: new_breaks,
+                        diagnostics: new_diags,
+                        ledger_out: cross_story_numbering.as_ref().map(|l| l.borrow().clone()),
+                        stats: total_stats.emitted_since(&pre_total_stats),
+                        overset: new_overset,
+                    },
+                );
+            }
+        } else if let Some(store) = options.story_resume {
+            store.borrow_mut().remove(&resume_key);
+        }
+    }
+
+    // Anchored-rectangle image post-pass. Each entry was captured
+    // during the story pass after placement resolution; replay
+    // through `emit_rectangle_image` so anchored images share the
+    // same per-page ImageId cache + renderer-scoped decoded-image
+    // cache as spread-level Rectangles. Drains both master + body
+    // captures (master frames currently never carry anchored
+    // images, but the queue is unified for symmetry).
+    for entry in anchored_image_queue {
+        emit_anchored_rect_image(
+            &mut pages[entry.target_page],
+            &entry.af,
+            entry.place_x,
+            entry.place_y,
+            entry.width,
+            entry.height,
+            options,
+            &mut page_image_caches[entry.target_page],
+            decoded_image_cache,
+        );
+    }
+
+    total_stats.decoded_images = decoded_image_cache.len();
+
+    // ADR 027 plan step 7 — a page nothing was laid out on afresh is the
+    // previous build's final page: take that one, and skip it below.
+    let mut adopted = vec![false; pages.len()];
+    if let (true, Some(previous)) = (adopt, options.previous_pages) {
+        let mut previous = previous.borrow_mut();
+        for (i, page) in pages.iter_mut().enumerate() {
+            if !fresh[i] && previous.get(i).is_some_and(|p| p.id == page.id) {
+                std::mem::swap(page, &mut previous[i]);
+                adopted[i] = true;
+            }
+        }
+    }
+    total_stats.pages_adopted = adopted.iter().filter(|a| **a).count();
+
+    // Phase 5 — footnote pool post-pass. For each page that captured
+    // footnotes during the story emit, lay out the bodies at the
+    // bottom of the host frame's content area. Bodies stack
+    // upward from the frame's bottom; each prints its number where its
+    // text holds its reference character. Overlay rather than reflow
+    // today — body content remains where it was, and footnotes can
+    // overlap it if the host frame is fully populated.
+    // Cross-page overflow (a footnote pool taller than the host
+    // frame) is a queued follow-up.
+    let footnote_options = options.clone();
+    emit_footnote_pools(
+        &mut pages,
+        &adopted,
+        font_table,
+        &hyphenators,
+        &footnote_options,
+        document,
+        palette,
+        color_ctx,
+        &mut breaks,
+    );
+
+    // Size every transparency group to what it actually PAINTS.
+    //
+    // `BeginBlendGroup { bounds }` is a clip in both back ends
+    // (7751cda made the CPU stop leaking past it), and every site that
+    // opens one sizes it from the GEOMETRY it has to hand — a frame's
+    // rect, a glyph range's frame bbox, a page — padded by 0.5 pt for
+    // glyph antialiasing. A drop shadow lands at `geometry + offset +
+    // 3σ`; a centred stroke reaches half its weight past the outline;
+    // an outer glow reaches `3σ + spread`. All of that used to be cut
+    // with a hard edge, while `paged-export-pdf` gave the same group's
+    // form the media box and kept it — the raster and the PDF
+    // disagreed about one document. Growing `bounds` here makes the
+    // clip harmless instead of lossy, which is what keeps 7751cda's
+    // cross-backend parity intact.
+    //
+    // Runs LAST, once, per page: four different passes splice these
+    // brackets in (frame groups, glyph-range brackets, the
+    // glyph-shadow wrapper, `<Group>` transparency) and the footnote /
+    // anchored-image post-passes above still add commands, so only
+    // here is the list final.
+    // W2 — move every story's glyphs to their text frame's z-slot.
+    // Runs after the footnote pools and the anchored images (both of
+    // which append to the page tail, so their indices are settled) and
+    // before the transparency fit below, which must see the final list.
+    if options.text_at_frame_z {
+        for (page_idx, blocks) in pending_text.iter_mut().enumerate() {
+            if blocks.is_empty() || page_idx >= pages.len() || adopted[page_idx] {
+                continue;
+            }
+            text_slots::relocate_text_blocks(&mut pages[page_idx].list, blocks);
+        }
+    }
+
+    for (page, adopted) in pages.iter_mut().zip(&adopted) {
+        if !adopted {
+            paged_compose::fit_transparency_group_bounds(&mut page.list);
+        }
+    }
+    // Debug-only: the invariant the pass above establishes, verified by
+    // an independent walk of the FINAL list. It is a second O(commands)
+    // traversal, so it does not earn its place in a release build — but
+    // in debug it turns "a shadow looks subtly clipped" into a loud
+    // failure here, at the emitter, instead of a pixel diff nobody
+    // reads. It fires when a bracket is emitted or moved after the fit.
+    #[cfg(debug_assertions)]
+    for (page_idx, page) in pages.iter().enumerate() {
+        if let Some(fit) = paged_compose::transparency_group_overflow(&page.list) {
+            panic!(
+                "page {page_idx}: the transparency group opened at command {} paints outside \
+                 its own bounds (declared {:?}, needs {:?}). Both rasterizers CLIP a group to \
+                 `bounds`, so that paint is cut with a hard edge. Something opened or moved a \
+                 blend-group bracket after `fit_transparency_group_bounds` ran.",
+                fit.index, fit.declared, fit.required
+            );
+        }
+    }
+
+    // Aggregate diagnostics: the per-story emit channel (overset,
+    // section fallback) already carries page indices; the per-page
+    // collectors (missing image, footnote overflow) get their flat
+    // page index backfilled here.
+    let mut diagnostics = RenderDiagnostics {
+        items: emit_diagnostics,
+    };
+    for (page_idx, p) in pages.iter().enumerate() {
+        for d in &p.diagnostics {
+            let mut d = d.clone();
+            if d.page_index.is_none() {
+                d.page_index = Some(page_idx);
+            }
+            diagnostics.push(d);
+        }
+    }
+
+    // C-6 — aggregate each page's tile-miss requests verbatim (they carry
+    // their own image_id; no page backfill needed).
+    let resource_tiles_needed: Vec<_> = pages
+        .iter()
+        .flat_map(|p| p.resource_tiles_needed.iter().cloned())
+        .collect();
+
+    let paragraph_starts = document
+        .stories
+        .iter()
+        .map(|s| {
+            let mut at = 0u32;
+            let starts = s
+                .story
+                .paragraphs
+                .iter()
+                .map(|p| {
+                    let start = at;
+                    at += p.runs.iter().map(|r| r.text.len() as u32).sum::<u32>() + 1;
+                    start
+                })
+                .collect();
+            (s.self_id.clone(), starts)
+        })
+        .collect();
+
+    let mut structure_roles = std::collections::BTreeMap::new();
+    let structure_names = if options.collect_glyph_runs {
+        document
+            .stories
+            .iter()
+            .map(|s| {
+                s.story
+                    .paragraphs
+                    .iter()
+                    .map(|p| {
+                        let id = p
+                            .paragraph_style
+                            .as_deref()
+                            .unwrap_or("ParagraphStyle/$ID/[No paragraph style]");
+                        let def = document.styles.paragraph_styles.get(id);
+                        let name = def
+                            .and_then(|d| d.name.as_deref())
+                            .unwrap_or_else(|| id.strip_prefix("ParagraphStyle/").unwrap_or(id));
+                        let name = super::structure_name(name);
+                        let role =
+                            super::structure_role(def.and_then(|d| d.pdf_export_tag.as_deref()));
+                        structure_roles
+                            .entry(name.clone())
+                            .or_insert_with(|| role.to_string());
+                        name
+                    })
+                    .collect()
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    Ok(BuiltDocument {
+        pages,
+        stats: total_stats,
+        breaks,
+        diagnostics,
+        resource_tiles_needed,
+        overset,
+        paragraph_starts,
+        structure_names,
+        structure_roles,
+        grow_passes: 1,
+        fresh_pages: fresh,
+    })
+}
+
+/// A paragraph segment's run texts with the generated markers the story
+/// parser left in them substituted, and where each substitution landed.
+pub(super) struct GeneratedText {
+    /// Per run: its text with every marker substituted, or `None` when it
+    /// holds none.
+    pub texts: Vec<Option<String>>,
+    /// Per run: each substitution as `(byte in the substituted text, its
+    /// length, what it prints)`. Each stands for one marker of the model's
+    /// text — a private-use character, three bytes of UTF-8.
+    pub spans: Vec<Vec<(u32, u32, GeneratedKind)>>,
+}
+
+/// The characters the story parser leaves for generated text print what
+/// they stand for: the page markers the page's label (or the next /
+/// previous frame's page, or the section marker), and a footnote
+/// reference its note's number.
+///
+/// A reference is a character of its line (asked of InDesign 20.0.1,
+/// `footnote-references`): it prints the number in its own run's
+/// formatting — InDesign spells a reference's superscript on the range
+/// around it — so it takes width and can move a break. Notes are numbered
+/// through the story in the order their references are placed
+/// (`capture_footnotes`, `FootnoteOptions::label`); the references of this
+/// paragraph before this segment were placed with an earlier segment's
+/// lines, so the j-th reference here is the j-th note still waiting. A
+/// reference with no note left prints nothing.
+pub(super) fn substitute_generated_markers(
+    em: &StoryEmitter,
+    paragraph: &paged_model::Paragraph,
+) -> GeneratedText {
+    let n = paragraph.runs.len();
+    let mut out = GeneratedText {
+        texts: vec![None; n],
+        spans: vec![Vec::new(); n],
+    };
+    if !paragraph
+        .runs
+        .iter()
+        .any(|r| r.text.chars().any(paged_model::is_generated_marker))
+    {
+        return out;
+    }
+    // A page marker prints the label of the page this frame sits on (the
+    // labels table is keyed by flat body-page index and carries the
+    // user-visible label: Arabic / Roman / section-overridden). Measured on
+    // InDesign 20.0.1: the NEXT page number is the page of the next frame
+    // in the story's thread and the PREVIOUS one that of the previous
+    // frame, each falling back to the frame's own page at the end of the
+    // thread (a frame outside any thread — a master footer — prints its
+    // own page); the section marker is the `Marker` of the page's section.
+    let cur_idx = em.chain_pages[em.frame_idx];
+    let label_of = |idx: usize| {
+        em.page_labels
+            .get(idx)
+            .cloned()
+            .unwrap_or_else(|| (idx + 1).to_string())
+    };
+    let page = |ch: char| -> String {
+        match ch {
+            paged_model::NEXT_PAGE_NUMBER_MARKER => em
+                .chain_pages
+                .get(em.frame_idx + 1)
+                .map_or_else(|| label_of(cur_idx), |&idx| label_of(idx)),
+            paged_model::PREVIOUS_PAGE_NUMBER_MARKER => em
+                .frame_idx
+                .checked_sub(1)
+                .and_then(|i| em.chain_pages.get(i))
+                .map_or_else(|| label_of(cur_idx), |&idx| label_of(idx)),
+            paged_model::SECTION_MARKER => em
+                .page_numbering
+                .section_of
+                .get(cur_idx)
+                .copied()
+                .flatten()
+                .and_then(|si| em.document.designmap.sections.get(si))
+                .and_then(|sec| sec.marker.clone())
+                .unwrap_or_default(),
+            _ => label_of(cur_idx),
+        }
+    };
+    let options = &em.document.designmap.footnote_options;
+    // A note restarts its numbering on the page its reference lands on.
+    // Composed before it is placed, a paragraph's references are labelled
+    // for the page its start rule sends it to (`StartParagraph`); a line
+    // that later overflows into a new restart scope keeps the label it
+    // was composed with (status.md).
+    let note_page = if em.para_line == 0 && em.start_rule != paged_model::StartParagraph::Anywhere {
+        let frames: Vec<Option<&str>> = em.chain.iter().map(|f| f.self_id.as_deref()).collect();
+        match super::keeps::start_target(
+            em.start_rule,
+            em.frame_idx,
+            em.last_placed_frame,
+            &frames,
+            &em.chain_pages,
+        ) {
+            super::keeps::StartMove::To(j) => em.chain_pages.get(j).copied().unwrap_or(cur_idx),
+            _ => cur_idx,
+        }
+    } else {
+        cur_idx
+    };
+    let mut reference = 0u32;
+    // ADR 170 — the k-th endnote reference / number marker of the
+    // paragraph prints the k-th entry's ordinal.
+    let endnote_options = em
+        .document
+        .designmap
+        .endnote_options
+        .clone()
+        .unwrap_or_default();
+    let endnote_label = |id: Option<&str>, reference: bool| -> String {
+        id.and_then(|id| em.endnote_ordinals.and_then(|m| m.get(id)))
+            .map(|n| {
+                if reference {
+                    endnote_options.reference_label(*n)
+                } else {
+                    endnote_options.text_label(*n)
+                }
+            })
+            .unwrap_or_default()
+    };
+    let (mut endnote_ref, mut endnote_num) = (0usize, 0usize);
+    for (i, run) in paragraph.runs.iter().enumerate() {
+        if !run.text.chars().any(paged_model::is_generated_marker) {
+            continue;
+        }
+        let mut text = String::with_capacity(run.text.len());
+        for ch in run.text.chars() {
+            let (printed, kind) = if ch == paged_model::ENDNOTE_REFERENCE_MARKER {
+                let id = paragraph
+                    .endnote_references
+                    .get(endnote_ref)
+                    .map(|r| r.self_id.as_str());
+                endnote_ref += 1;
+                (endnote_label(id, true), GeneratedKind::FootnoteNumber)
+            } else if ch == paged_model::ENDNOTE_NUMBER_MARKER {
+                let id = paragraph
+                    .endnote_ranges
+                    .get(endnote_num)
+                    .and_then(|r| r.source.as_deref());
+                endnote_num += 1;
+                (endnote_label(id, false), GeneratedKind::FootnoteNumber)
+            } else if ch == paged_model::FOOTNOTE_REFERENCE_MARKER {
+                let waiting = (reference as usize) < em.pending_footnotes.len();
+                let label = if waiting {
+                    options.reference_label(em.footnote_ordinal_at(note_page) + 1 + reference)
+                } else {
+                    String::new()
+                };
+                reference += 1;
+                (label, GeneratedKind::FootnoteNumber)
+            } else if ch == paged_model::NOTE_MARKER {
+                // ADR 172 — an editorial note prints nothing.
+                (String::new(), GeneratedKind::Note)
+            } else if ch == paged_model::TRACKED_DELETION_MARKER {
+                // D-01 — deleted text prints nothing: InDesign prints a
+                // story as if every change were accepted.
+                (String::new(), GeneratedKind::TrackedDeletion)
+            } else if ch == paged_model::SECTION_MARKER {
+                (page(ch), GeneratedKind::SectionMarker)
+            } else if paged_model::is_page_marker(ch) {
+                (page(ch), GeneratedKind::PageNumber)
+            } else {
+                text.push(ch);
+                continue;
+            };
+            out.spans[i].push((text.len() as u32, printed.len() as u32, kind));
+            text.push_str(&printed);
+        }
+        out.texts[i] = Some(text);
+    }
+    out
+}
+
+/// What a paragraph prints that its story does not hold, as half-open
+/// byte ranges of the concatenated text of `styled_runs` (the paragraph's
+/// runs as shaped, led by the list marker's run when it is shaped on its
+/// own: `head_run` is then 1), in text order.
+///
+/// `marker_len` is the list marker's length, which opens the text;
+/// `marker_in_first_run` says it is the head of run 0 rather than a run
+/// of its own. A text variable's run is generated whole. A run whose
+/// generated markers were substituted keeps their spans when it is
+/// printed as substituted (capitals that keep its length included).
+/// `placeholders` are the bytes of the inline objects' placeholders.
+pub(super) fn paragraph_generated_spans(
+    styled_runs: &[paged_text::StyledRun],
+    head_run: usize,
+    marker_len: usize,
+    marker_in_first_run: bool,
+    is_variable: impl Fn(usize) -> bool,
+    generated: &GeneratedText,
+    placeholders: impl Iterator<Item = usize>,
+) -> Vec<GeneratedRange> {
+    let mut out = Vec::new();
+    if marker_len > 0 {
+        out.push((0..marker_len, GeneratedKind::ListMarker, None));
+    }
+    let mut end = 0usize;
+    for (k, run) in styled_runs.iter().enumerate() {
+        let run_start = end;
+        end += run.text.len();
+        let Some(i) = k.checked_sub(head_run) else {
+            continue;
+        };
+        let start = if i == 0 && marker_in_first_run {
+            (run_start + marker_len).min(end)
+        } else {
+            run_start
+        };
+        if is_variable(i) {
+            if start < end {
+                out.push((start..end, GeneratedKind::TextVariable, None));
+            }
+            continue;
+        }
+        let Some(substituted) = generated.texts.get(i).and_then(|t| t.as_deref()) else {
+            continue;
+        };
+        if end - start != substituted.len() {
+            continue;
+        }
+        for &(at, len, kind) in &generated.spans[i] {
+            let at = start + at as usize;
+            if len > 0 {
+                out.push((at..at + len as usize, kind, None));
+            }
+        }
+    }
+    let placeholder_len = paged_text::layout::OBJECT_REPLACEMENT.len_utf8();
+    out.extend(placeholders.map(|p| (p..p + placeholder_len, GeneratedKind::AnchoredObject, None)));
+    out.sort_by_key(|(r, ..)| r.start);
+    out
+}
+
+/// A paragraph's footnotes as `capture_footnotes` waits for them: each
+/// at the byte of its reference in the paragraph's text, in text order.
+/// A note's reference is its [`paged_model::FOOTNOTE_REFERENCE_MARKER`]:
+/// when the paragraph holds one per note, the k-th note waits for the
+/// k-th marker wherever an edit left its recorded anchor (an undone
+/// deletion re-inserts the marker, not the offset). Otherwise each note
+/// waits at its anchor.
+pub(super) fn queued_footnotes(
+    paragraph: &paged_model::Paragraph,
+) -> Vec<(u32, paged_model::Footnote)> {
+    let mut notes: Vec<(u32, paged_model::Footnote)> = paragraph
+        .footnotes
+        .iter()
+        .map(|f| {
+            let byte = paragraph.byte_of_char_offset(f.anchor.unwrap_or(0)) as u32;
+            (byte, f.clone())
+        })
+        .collect();
+    notes.sort_by_key(|(byte, _)| *byte);
+    let mut markers = Vec::new();
+    let mut at = 0u32;
+    for run in &paragraph.runs {
+        for (b, ch) in run.text.char_indices() {
+            if ch == paged_model::FOOTNOTE_REFERENCE_MARKER {
+                markers.push(at + b as u32);
+            }
+        }
+        at += run.text.len() as u32;
+    }
+    if markers.len() == notes.len() {
+        for ((byte, _), marker) in notes.iter_mut().zip(markers) {
+            *byte = marker;
+        }
+    }
+    notes
+}
+
+/// Hand the pending footnotes whose anchor is at or before byte `up_to`
+/// (all of them for `None`) to the page of the frame being filled: the
+/// frame their reference's line is in. They are numbered in the order
+/// they are captured, through the story. `ref_baseline_64` is how far down
+/// the frame the references stand (the line's baseline): the frame's pool
+/// may never reserve that room (see [`StoryEmitter::footnote_reserve_caps`]).
+pub(super) fn capture_footnotes(
+    em: &mut StoryEmitter,
+    pages: &mut [BuiltPage],
+    up_to: Option<u32>,
+    ref_baseline_64: i32,
+) {
+    let take = em
+        .pending_footnotes
+        .iter()
+        .take_while(|(byte, _)| up_to.is_none_or(|end| *byte <= end))
+        .count();
+    if take == 0 {
+        return;
+    }
+    let Some(&page) = em.chain_pages.get(em.frame_idx) else {
+        return;
+    };
+    // The host frame's page-local content rect, and the rect its notes
+    // are set in: the same, or the whole frame's when they span its
+    // columns (ADR 160).
+    let frame = em.chain[em.frame_idx];
+    let (_, sy) = frame_spread_top_left(frame.bounds, frame.item_transform);
+    let (_, oy) = pages[page].spread_origin;
+    let host_frame_rect_pt = frame_content_rect(frame, pages[page].spread_origin);
+    let pool_rect_pt = footnote_pool_rect(
+        &em.chain,
+        em.frame_idx,
+        pages[page].spread_origin,
+        em.document,
+    );
+    let frame_footnotes = frame.footnotes;
+    let ref_baseline_pt = sy - oy + ref_baseline_64 as f32 / paged_text::shape::ADVANCE_PRECISION;
+    // Every note captured here stands on one page: its restart scope is
+    // settled once.
+    em.footnote_counter = em.footnote_ordinal_at(page);
+    em.footnote_scope = em.footnote_scope_of(page);
+    for (_, note) in em.pending_footnotes.drain(..take) {
+        em.footnote_counter += 1;
+        pages[page].footnotes.push(EmittedFootnote {
+            number: em.footnote_counter,
+            host_story_id: em.current_story_id.clone(),
+            host_paragraph_idx: em.paragraph_idx,
+            footnote_self_id: note.self_id,
+            paragraphs: note.paragraphs,
+            host_frame_rect_pt,
+            pool_rect_pt,
+            frame_footnotes,
+            first_line: 0,
+            end_line: None,
+            continued: false,
+            resume_at: None,
+            ref_baseline_pt,
+        });
+    }
+}
+
+/// Emits a story's paragraphs into the page list, flowing across
+/// the frame chain on overflow and applying TextFramePreference
+/// vertical justification once the story finishes.
+///
+/// Carries all the per-story mutable state the build_document loop
+/// previously held inline:
+///  - frame_idx + y_cursor: which frame is currently filling and
+///    where the next baseline goes inside it.
+///  - frame_cmd_ranges + frame_max_baseline_64: tracked during
+///    emission so the post-story vertical-justification shift can
+///    target this story's commands without touching frame outlines.
+impl<'a> StoryEmitter<'a> {
+    /// The scope a note on `page` is numbered in under the document's
+    /// `RestartNumbering`: its page, spread or section; `None` when
+    /// numbering runs through the story (`DontRestart`).
+    pub(super) fn footnote_scope_of(&self, page: usize) -> Option<usize> {
+        use paged_model::FootnoteRestart as R;
+        match self.document.designmap.footnote_options.restart() {
+            R::DontRestart => None,
+            R::PageRestart => Some(page),
+            R::SpreadRestart => Some(
+                self.page_numbering
+                    .spread_of
+                    .get(page)
+                    .copied()
+                    .unwrap_or(page),
+            ),
+            R::SectionRestart => Some(
+                self.page_numbering
+                    .section_of
+                    .get(page)
+                    .copied()
+                    .flatten()
+                    .map_or(usize::MAX, |s| s),
+            ),
+        }
+    }
+
+    /// How many notes of this story come before one placed on `page`:
+    /// the story's count so far, or none when `page` opens a new restart
+    /// scope. InDesign numbers notes through each story, restarting at
+    /// every page, spread or section as `RestartNumbering` says
+    /// (`footnote-numbering`, `footnote-restart`).
+    pub(super) fn footnote_ordinal_at(&self, page: usize) -> u32 {
+        match self.footnote_scope_of(page) {
+            Some(scope) if self.footnote_scope != Some(scope) => 0,
+            _ => self.footnote_counter,
+        }
+    }
+
+    /// The cursor exactly, in 1/64 pt (see [`Self::y_cursor_exact`]).
+    pub(super) fn y_exact(&self) -> f64 {
+        self.y_cursor_exact
+            .filter(|e| e.round() as i32 == self.y_cursor)
+            .unwrap_or(self.y_cursor as f64)
+    }
+
+    /// Move the cursor to `y` (1/64 pt, exact).
+    pub(super) fn set_y_exact(&mut self, y: f64) {
+        self.y_cursor = y.round() as i32;
+        self.y_cursor_exact = Some(y);
+    }
+
+    /// The previous line's leading exactly, when one was placed.
+    pub(super) fn prev_line_height_exact(&self) -> Option<f64> {
+        let rounded = self.prev_line_height_64?;
+        Some(
+            self.prev_line_height_exact
+                .filter(|e| e.round() as i32 == rounded)
+                .unwrap_or(rounded as f64),
+        )
+    }
+
+    /// Record the leading of the line (or empty paragraph) just placed.
+    pub(super) fn set_prev_line_height(&mut self, exact: f64) {
+        self.prev_line_height_64 = Some(exact.round() as i32);
+        self.prev_line_height_exact = Some(exact);
+    }
+
+    /// Wire the per-language hyphenator set, so each paragraph gets the
+    /// dictionary its own `AppliedLanguage` names.
+    pub(super) fn with_languages(mut self, set: &'a paged_text::Hyphenators) -> Self {
+        self.hyphenators = Some(set);
+        self
+    }
+
+    /// The hyphenator this paragraph should be composed with — the one
+    /// its own `AppliedLanguage` names.
+    ///
+    /// `None` means leave its words whole. That is the answer for a
+    /// paragraph marked `[No Language]` AND for one naming a language
+    /// we hold no patterns for: before this every paragraph was
+    /// hyphenated as American English, so a Russian or Polish one was
+    /// broken by English patterns. When no language set is wired (the
+    /// measuring passes), the document-wide hyphenator stands.
+    pub(super) fn hyphenator_for(
+        &self,
+        resolved: &paged_scene::ResolvedParagraphAttrs,
+        runs: &[paged_scene::ResolvedRunAttrs],
+    ) -> Option<&'a paged_text::Hyphenator> {
+        // The RUN's language, because that is where InDesign writes it
+        // — 1,003 times across the corpus's real packages, against 314
+        // on a `<ParagraphStyle>` and 271 on `<TextDefault>`. A run
+        // naming none has already inherited the paragraph's (and
+        // through it the document default) in `merge_below_paragraph`,
+        // so the first run's resolved value IS the whole cascade.
+        //
+        // Hyphenation is character-level in InDesign and a paragraph
+        // may mix languages; composing the whole paragraph with its
+        // first run's dictionary is an approximation, and a stated one.
+        let named = runs
+            .iter()
+            .find_map(|r| r.applied_language.as_deref())
+            .or(resolved.applied_language.as_deref());
+        match self.hyphenators {
+            Some(set) => set.resolve(named),
+            None => self.hyphenator,
+        }
+    }
+}
+
+pub(super) struct StoryEmitter<'a> {
+    pub(super) document: &'a Document,
+    pub(super) options: &'a PipelineOptions<'a>,
+    /// W2 / R-10 — the body frames' text slots, so the glyph post-pass
+    /// knows which frames' text will move INSIDE their body's object
+    /// group (and so needs no object bracket of its own). `None` for the
+    /// passes whose text is not relocated.
+    pub(super) text_slots: Option<&'a HashMap<(usize, String), crate::module::TextSlot>>,
+    pub(super) palette: &'a Graphic,
+    /// Reserved for the upcoming CMYK text-fill path. The current
+    /// per-glyph paint picker resolves through `palette` directly.
+    #[allow(dead_code)]
+    pub(super) color_ctx: ColorCtx<'a>,
+    pub(super) font_table: &'a FontTable,
+    pub(super) chain: Vec<&'a TextFrame>,
+    pub(super) chain_pages: Vec<usize>,
+    /// User-visible page labels indexed by flat body-page idx (parallel
+    /// to `pages`). The auto-page-number marker substitutes
+    /// `page_labels[chain_pages[frame_idx]]`; ACE 19 looks one slot
+    /// further ahead. Owned by the document, not the emitter.
+    pub(super) page_labels: &'a [String],
+    /// Pre-built hyphenator for the document's primary language.
+    /// `None` ⇒ the document opts out of hyphenation entirely (the
+    /// composer skips the language-specific pattern lookup).
+    pub(super) hyphenator: Option<&'a paged_text::Hyphenator>,
+    /// One hyphenator per language we hold patterns for, so a
+    /// paragraph gets the dictionary its own `AppliedLanguage` names.
+    /// `None` keeps `hyphenator` as the answer for every paragraph —
+    /// the measuring passes that predate the per-paragraph lookup.
+    pub(super) hyphenators: Option<&'a paged_text::Hyphenators>,
+    pub(super) column_width_pt: Option<f32>,
+    /// Inner-coord x-shift to apply to the head frame's text
+    /// origin when an obstacle on the page intrudes from the left
+    /// of the frame for the *whole* frame's height. Zero unless
+    /// wrap rectangles overlap the head frame.
+    pub(super) column_x_shift_pt: f32,
+    /// Spread-coord wrap exclusion rectangles for the head frame's
+    /// page. Per-paragraph wrap (per-line column carving) reads
+    /// these and computes a `column_widths` slice + per-line
+    /// glyph x-shifts so body text flows around an island
+    /// obstacle (the chairman page's pull quote, for example).
+    /// Superseded by `chain_wrap_rects[0]` for the per-line walk;
+    /// retained alongside `head_frame_spread` for callers that
+    /// want the head's wraps without indexing.
+    #[allow(dead_code)]
+    pub(super) head_wrap_rects: Vec<WrapShape>,
+    /// Spread-coord bounds of the head frame, cached so the
+    /// per-paragraph wrap pass doesn't recompute per paragraph.
+    /// Currently superseded by `chain_spread_bounds[0]` for the
+    /// per-line walk; retained for future per-frame optimisations
+    /// that read the head's bounds without indexing.
+    #[allow(dead_code)]
+    pub(super) head_frame_spread: paged_model::Bounds,
+    /// Spread-coord wrap exclusion rectangles per chain index — the
+    /// threaded-frame extension of `head_wrap_rects`. Each chain
+    /// index `i` carries the wrap rectangles on chain[i]'s page.
+    /// Used by `build_perline_wrap_widths` so overflow lines that
+    /// land in chain[1+] get the right exclusions for that frame's
+    /// page.
+    pub(super) chain_wrap_rects: Vec<Vec<WrapShape>>,
+    /// Spread-coord bounds for every frame in the chain. Same
+    /// motivation as `chain_wrap_rects`: per-frame per-line wrap
+    /// needs each frame's spread rect.
+    pub(super) chain_spread_bounds: Vec<paged_model::Bounds>,
+    pub(super) frame_idx: usize,
+    pub(super) y_cursor: i32,
+    /// Leading (in 1/64 pt) of the most recently placed line (or
+    /// empty paragraph). Adobe positions each baseline at
+    /// `prev_baseline + leading(THIS line)`; our `y_cursor` instead
+    /// tracks `prev_baseline + leading(THAT line)`. When the new
+    /// line/paragraph has a different leading (mixed-size flow:
+    /// 12pt body → 24pt heading, or vice versa), the next baseline
+    /// needs to rewind by `prev_line_height_64` and re-apply with
+    /// the new line's leading. We record the most recent advance so
+    /// the next placement can do that adjustment. None at frame
+    /// start (no baseline yet — `first_baseline_for_frame` will be
+    /// used instead).
+    pub(super) prev_line_height_64: Option<i32>,
+    /// `y_cursor` before it was rounded to 1/64 pt: the exact sum of the
+    /// leadings and paragraph spaces placed so far, so a 14.4 pt leading
+    /// does not drift 0.00625 pt a line (InDesign steps it exactly).
+    /// Trusted only while it rounds to `y_cursor` ([`Self::y_exact`]):
+    /// a path that moves the cursor without it falls back to the
+    /// rounded value.
+    pub(super) y_cursor_exact: Option<f64>,
+    /// `prev_line_height_64` before it was rounded, on the same terms.
+    pub(super) prev_line_height_exact: Option<f64>,
+    pub(super) frame_cmd_ranges: Vec<Option<(usize, usize)>>,
+    pub(super) frame_max_baseline_64: Vec<i32>,
+    /// The descent (1/64 pt) of the line at `frame_max_baseline_64`:
+    /// its faces' hhea descenders at their sizes, the deepest. Where a
+    /// column rule ends (ADR 155).
+    pub(super) frame_max_descent_64: Vec<i32>,
+    /// How far below `frame_max_baseline_64` the text a Japanese composer
+    /// set ends for vertical justification: its em box bottom (1/64 pt;
+    /// 0 under the Paragraph Composer, which ends at the baseline).
+    /// InDesign 20.0.1 centres such a block to the last line's em box
+    /// bottom (vertical-text-probe `vjcenter`).
+    pub(super) frame_max_em_bottom_64: Vec<i32>,
+    /// W1.7 footnote space reservation — per chain-frame height (in
+    /// 1/64 pt) to hold back from the bottom of the frame's text area
+    /// for the footnote pool. Body text overflows to the next frame
+    /// once a line's baseline crosses `frame_height - reserved`, so the
+    /// pool drawn in the post-pass sits *below* the last body line
+    /// instead of overlapping it. All zero on the first (measuring)
+    /// emit; the body-story loop fills it from the measured pool
+    /// heights and re-emits to a fixpoint. See `emit_footnote_pools`
+    /// and the reservation loop in `build_document`.
+    pub(super) reserved_footnote_64: Vec<i32>,
+    /// Per-frame list of `(cmd_start, cmd_end)` slices, one entry
+    /// per paragraph that contributed glyph commands to the frame,
+    /// in emission order. A paragraph that flows across N frames
+    /// contributes one entry to each of those frames'
+    /// `paragraph_cmd_ranges` lists. Drives `JustifyAlign` vertical
+    /// justification, which distributes the per-frame slack as
+    /// extra inter-paragraph space.
+    pub(super) paragraph_cmd_ranges: Vec<Vec<(usize, usize)>>,
+    /// Counter for `NumberedList` paragraphs in this story. The
+    /// renderer treats the count as a sticky story-level value
+    /// across paragraphs of different kinds; the implicit-reset
+    /// fires only when entering a `NumberedList` paragraph whose
+    /// prior neighbour wasn't also numbered (and the paragraph
+    /// hasn't explicitly opted into `NumberingContinue`). 0 is the
+    /// initial value; the first numbered paragraph either lifts it
+    /// to its `NumberingStartAt` or to 1.
+    pub(super) numbered_counter: u32,
+    /// Tracks whether the previous paragraph was a `NumberedList`.
+    /// Drives the implicit-reset decision for the next paragraph:
+    /// a `NumberedList` paragraph that follows a non-numbered one
+    /// resets the counter to 0 (so the first increment lands at 1)
+    /// unless the paragraph carries `NumberingContinue="true"` or
+    /// `NumberingStartAt`.
+    pub(super) prev_was_numbered: bool,
+    /// The levels of a multi-level list above level 1 (L-07, ADR 158).
+    pub(super) list_levels: super::numbering::ListLevels,
+    /// W1.22 (engine gap 22) — document-level numbering ledger keyed
+    /// by `<NumberingList>` self id, shared across every story's
+    /// emitter so a list with `ContinueNumbersAcrossStories="true"`
+    /// keeps its counter as the body-story loop walks stories in
+    /// document order. `None` when the document declares no
+    /// continue-across-stories list (the common case) — the per-story
+    /// `numbered_counter` then owns everything as before. See
+    /// `numbering::list_prefix` and `build_document`'s ledger.
+    ///
+    /// Determinism: the ledger is updated in the FROM-SCRATCH emit
+    /// order, which is the `for parsed in &document.stories` walk =
+    /// designmap story order. Footnote-reservation re-emit passes and
+    /// the body-story cache are made ledger-safe by `build_document`
+    /// (snapshot/restore around re-emits; cross-story lists disable
+    /// the cache), so a given source always yields the same numbers.
+    pub(super) cross_story_numbering: Option<&'a std::cell::RefCell<HashMap<String, u32>>>,
+    /// `<StoryPreference OpticalMarginAlignment>` flag. When true,
+    /// the per-line emit pass nudges the leftmost / rightmost glyph
+    /// of each line outward per `paged_text::optical_margin_offset`.
+    pub(super) optical_margin_alignment: bool,
+    /// `<StoryPreference OpticalMarginSize>` (point size). Bounds the
+    /// hang for glyphs smaller than this size; ignored when
+    /// `optical_margin_alignment` is false.
+    pub(super) optical_margin_size_pt: f32,
+    /// The story is set vertically (`StoryOrientation="Vertical"`): its
+    /// lines are laid out in frames turned on their side and its
+    /// characters that stand upright are shaped top to bottom.
+    pub(super) vertical: bool,
+    /// How many anchored-frame story recursions deep this emitter is.
+    /// 0 for the top-level body / master pass; 1+ for an emitter
+    /// constructed by `emit_anchored_textframe_story`. Bounded at
+    /// `MAX_ANCHORED_STORY_RECURSION` so a malformed document with an
+    /// anchored TextFrame referencing its own host story can't blow
+    /// the stack.
+    pub(super) anchored_recursion_depth: u32,
+    /// Image-bearing anchored frames captured during emission so the
+    /// caller can replay them through `emit_rectangle_image` once the
+    /// story pass completes. Image emission needs the per-page
+    /// `ImageId` cache + decoded-image cache that live in
+    /// `build_document`'s scope, outside StoryEmitter — collecting the
+    /// already-resolved (target_page, place_x, place_y, AnchoredFrame
+    /// clone) tuples here lets the post-pass run with the caches in
+    /// hand without re-doing placement.
+    pub(super) anchored_image_queue: Vec<AnchoredImageEmit>,
+    /// The inline and above-line objects of the paragraph being emitted,
+    /// set while its lines are composed (see [`anchored::InlineObjects`]).
+    pub(super) inline_objects: Option<anchored::InlineObjects>,
+    /// The footnotes of the paragraph being emitted that no line has
+    /// carried yet: `(the anchor's byte in the paragraph's text, the
+    /// note)`, in text order. See [`capture_footnotes`].
+    pub(super) pending_footnotes: Vec<(u32, paged_model::Footnote)>,
+    /// The paragraph is being emitted piece by piece (forced line breaks):
+    /// the pieces share its pending footnotes.
+    pub(super) in_segments: bool,
+    /// Footnotes captured in this story so far: the next one's number is
+    /// one more. InDesign numbers footnotes through the story by default
+    /// (`restartNumbering = DONT_RESTART`, measured, ADR 034 case 7).
+    pub(super) footnote_counter: u32,
+    /// Where the last note was numbered: its page, spread or section,
+    /// whichever `RestartNumbering` restarts at (`None` before the first
+    /// note, and always for `DontRestart`).
+    pub(super) footnote_scope: Option<usize>,
+    /// Track 2: per-line records collected when
+    /// `options.collect_breaks` is set. Drained by `take_breaks` once
+    /// the story finishes emitting.
+    pub(super) breaks: Vec<BreakRecord>,
+    /// Track 2: identifies which story this emitter is processing.
+    /// Set by `StoryEmitter::with_story_id` before emit; included in
+    /// every pushed `BreakRecord`. Empty string when collection isn't
+    /// enabled.
+    pub(super) current_story_id: String,
+    /// The story's ordinal in document order, its tagged-PDF structure
+    /// key's first half (ADR 182).
+    pub(super) story_ordinal: u32,
+    /// ADR 182 — the paragraph of the current model paragraph being
+    /// emitted, counted from 0 at each paragraph mark the model paragraph
+    /// holds (its segments).
+    pub(super) struct_sub: u32,
+    /// Track 2: monotonically incremented as `emit_paragraph` fires.
+    /// Resets to 0 per emitter (i.e. per story).
+    pub(super) paragraph_idx: u32,
+    /// ADR 028 — keep options. Breaks this pass must force: top-level
+    /// paragraph index → the line (within it) that opens the next frame.
+    /// Decided from the previous pass by `keeps::keep_breaks`.
+    pub(super) forced_breaks: super::keeps::ForcedBreaks,
+    /// The paragraphs whose forced break this pass applied; the others
+    /// were stale (`keeps` module doc) and are dropped.
+    pub(super) applied_breaks: std::collections::HashSet<u32>,
+    /// The line (`(paragraph, line)`) that opened the current frame.
+    pub(super) frame_first_line: Option<(u32, u32)>,
+    /// Resolved keep options per top-level paragraph, this pass.
+    pub(super) keep_specs: Vec<super::keeps::KeepSpec>,
+    /// Where each laid-out line of each top-level paragraph landed.
+    pub(super) placements: Vec<Vec<super::keeps::LinePlace>>,
+    /// Line heights (1/64 pt) placed per chain frame, and laid out past
+    /// the chain's end: the page-growth loop's measure (`OversetMeasure`).
+    placed_height_64: HashMap<usize, i64>,
+    overset_height_64: i64,
+    /// Line counter within the current top-level paragraph (split
+    /// sub-paragraphs share it).
+    pub(super) para_line: u32,
+    /// Frame of the most recently PLACED line: a line opens its frame when
+    /// this differs from the current frame.
+    pub(super) last_placed_frame: Option<usize>,
+    /// Lossy-render signals collected during this story's emit (overset
+    /// drop). Drained by `take_diagnostics` into the document-level
+    /// collector, mirroring `breaks`. A non-empty drain marks the emit
+    /// uncacheable so a body-story cache hit can't silently swallow it.
+    pub(super) diagnostics: Vec<Diagnostic>,
+    /// Set once a story-overflow drop has been reported so the overset
+    /// diagnostic fires once per story, not once per dropped line.
+    pub(super) overset_reported: bool,
+    /// W1.4 — total body-page count, for `PageCountType` text-variable
+    /// resolution. Set once per build (the same value for every
+    /// emitter); 0 only before pages exist.
+    pub(super) page_count: usize,
+    /// W1.4 — when true, the LineLayout capture also pushes
+    /// [`paged_compose::LinkRegion`]s for runs tagged with
+    /// `hyperlink_source`. Mirrors `options.collect_link_regions`;
+    /// cached so the per-line path doesn't re-read options.
+    pub(super) collect_link_regions: bool,
+    /// W1.4 — `<Page Self=...>` id → flat 0-based body-page index, for
+    /// resolving hyperlink page destinations. `None` when link-region
+    /// collection is off (the map isn't built). Owned by the build, not
+    /// the emitter.
+    pub(super) page_index_map: Option<&'a HashMap<String, u32>>,
+    /// Every page's number and section, by flat index — read by the
+    /// section marker and the page-number variables. Owned by the build.
+    pub(super) page_numbering: &'a links::PageNumbering,
+    /// W1.18c — post-layout running-header pickup index. `None` on the
+    /// first (pre-layout) pass — running headers then keep their baked
+    /// value; populated for the re-emit so they resolve to the matching
+    /// on-page paragraph. Owned by the build.
+    pub(super) running_headers: Option<&'a links::RunningHeaderIndex>,
+    /// ADR 169 — cross-reference source → its destination's flat page
+    /// index, on the post-layout pass; `None` on the first, where an
+    /// `XRefPageNumber` keeps its stored value.
+    pub(super) xref_pages: Option<&'a HashMap<String, usize>>,
+    /// ADR 170 — every endnote's ordinal by its `<Endnote>` `Self`.
+    pub(super) endnote_ordinals: Option<&'a HashMap<String, u32>>,
+    /// The auto-size fit found InDesign composes NOTHING in this chain
+    /// (a `WidthOnly` fit stalled on a `NextColumnTextWrap` obstacle —
+    /// see `auto_size`): every line is treated as not fitting, so the
+    /// story oversets in full and reports it once.
+    pub(super) force_overset: bool,
+    /// The current top-level paragraph's `StartParagraph` (ADR 028).
+    pub(super) start_rule: paged_model::StartParagraph,
+    /// Span / split columns: the chain region each paragraph's first
+    /// line opens (`span_columns`), and each region's measure. Empty for
+    /// every story without spanning or split paragraphs.
+    pub(super) span_starts: HashMap<u32, usize>,
+    pub(super) region_widths: Vec<f32>,
+    /// The split segment of the current paragraph being emitted.
+    pub(super) segment: SegmentState,
+}
+
+/// Where the paragraph piece being emitted sits in its paragraph (see
+/// [`super::geom::BreakSegment`]). An unsplit paragraph is one segment
+/// that opens and closes it at byte 0, line 0.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct SegmentState {
+    /// `false` after a forced line break: no first-line indent, space
+    /// before, rule above or list marker — those belong to the
+    /// paragraph's first line.
+    pub(super) opens_paragraph: bool,
+    /// `false` before a forced line break: no space after or rule below.
+    pub(super) closes_paragraph: bool,
+    /// Whether the segment counts its paragraph in the build's stats:
+    /// the one that opens it — or, when that one held nothing (the
+    /// paragraph starts with a forced line break), the next.
+    pub(super) counts_paragraph: bool,
+    /// Added to the segment's line bytes and line indices so its
+    /// `LineLayout`s address the whole paragraph.
+    pub(super) byte_base: u32,
+    pub(super) line_base: u32,
+    /// Lines the segment has laid out so far (the next segment's base).
+    pub(super) lines: u32,
+}
+
+impl Default for SegmentState {
+    fn default() -> Self {
+        Self {
+            opens_paragraph: true,
+            closes_paragraph: true,
+            counts_paragraph: true,
+            byte_base: 0,
+            line_base: 0,
+            lines: 0,
+        }
+    }
+}
+
+impl SegmentState {
+    /// Drop the paragraph-boundary attributes a segment inside a
+    /// paragraph doesn't own.
+    pub(super) fn mask(
+        &self,
+        mut attrs: paged_scene::ResolvedParagraphAttrs,
+    ) -> paged_scene::ResolvedParagraphAttrs {
+        if !self.opens_paragraph {
+            attrs.first_line_indent = None;
+            attrs.space_before = None;
+            attrs.rule_above.on = Some(false);
+        }
+        if !self.closes_paragraph {
+            attrs.space_after = None;
+            attrs.rule_below.on = Some(false);
+        }
+        attrs
+    }
+}
+
+impl<'a> StoryEmitter<'a> {
+    pub(super) fn new(
+        document: &'a Document,
+        options: &'a PipelineOptions<'a>,
+        palette: &'a Graphic,
+        color_ctx: ColorCtx<'a>,
+        font_table: &'a FontTable,
+        chain: Vec<&'a TextFrame>,
+        chain_pages: Vec<usize>,
+        page_labels: &'a [String],
+        hyphenator: Option<&'a paged_text::Hyphenator>,
+        head_wrap_rects: &[WrapShape],
+        chain_wrap_rects: Vec<&[WrapShape]>,
+    ) -> Self {
+        // Head frame's L+R insets shrink the column width. Threaded
+        // frames usually share the same insets; honouring per-frame
+        // insets requires recomputing the column width when
+        // crossing frame boundaries.
+        let head_insets = chain[0].inset_spacing.unwrap_or([0.0; 4]);
+        let head_frame_spread = transform_bounds(chain[0].bounds, chain[0].item_transform);
+        let (mut shrink_left, mut shrink_right) = (0.0f32, 0.0f32);
+        // Treat any wrap rectangle that overlaps the head frame's
+        // vertical extent as a side exclusion: extend `shrink_left`
+        // when the rect intrudes from the left, `shrink_right` when
+        // from the right. This is the simplest of the IDML wrap
+        // modes (BoundingBoxTextWrap, BothSides) and handles the
+        // common "image to one side of body text" layout. True
+        // per-line island wrap needs column-segment support in
+        // compose_paragraph and is queued.
+        let frame_height = head_frame_spread.height();
+        for shape in head_wrap_rects {
+            if shape.kind != WrapKind::Around {
+                continue;
+            }
+            let w = shape.bounds;
+            // Vertical overlap check.
+            let v_overlap =
+                w.bottom.min(head_frame_spread.bottom) - w.top.max(head_frame_spread.top);
+            if v_overlap <= 0.0 {
+                continue;
+            }
+            // Skip rects that fully cover the frame horizontally.
+            if w.left <= head_frame_spread.left && w.right >= head_frame_spread.right {
+                continue;
+            }
+            // Side-shrink is only correct when the obstacle spans
+            // most of the frame vertically (sidebars, full-height
+            // images). Smaller obstacles (pull quotes, inline
+            // figures) need true per-line island wrap; shrinking
+            // the whole column for them would collapse the body
+            // text. Threshold: ≥ 80% vertical overlap.
+            if frame_height > 0.0 && v_overlap < 0.8 * frame_height {
+                continue;
+            }
+            let frame_cx = (head_frame_spread.left + head_frame_spread.right) * 0.5;
+            let rect_cx = (w.left + w.right) * 0.5;
+            // Text stands on the side the wrap names; both sides and the
+            // largest area take the wider one.
+            let text_right = match shape.side {
+                WrapSide::Right => true,
+                WrapSide::Left => false,
+                WrapSide::Both | WrapSide::Largest => rect_cx < frame_cx,
+            };
+            if text_right {
+                let new_left = w.right.max(head_frame_spread.left);
+                shrink_left = shrink_left.max(new_left - head_frame_spread.left);
+            } else {
+                let new_right = w.left.min(head_frame_spread.right);
+                shrink_right = shrink_right.max(head_frame_spread.right - new_right);
+            }
+        }
+
+        // Use the head frame's *inner-coord* width for column sizing
+        // so rotated TextFrames (90° sidebar labels, vertical
+        // wordmarks) don't degenerate to a frame-height-sized column.
+        // `transform_bounds` produces the spread-space AABB which
+        // swaps width/height under a 90° ItemTransform; that's the
+        // right input for wrap-obstacle / page-routing but the wrong
+        // one for the rotation-invariant text column. The post-emit
+        // pass at `frame_is_upright` later rotates the glyph commands
+        // around the frame's spread top-left so they land along the
+        // rotated axis.
+        let raw_width = (chain[0].bounds.width() - head_insets[1] - head_insets[3]).max(0.0);
+        let wrapped_width = (raw_width - shrink_left - shrink_right).max(0.0);
+        // The column is the frame's own inner width. An auto-sizing
+        // frame already arrives here as the clone carrying its FITTED
+        // bounds (see `auto_size`), so no estimate is layered on top.
+        let column_width_pt = options.fallback_column_width_pt.or(Some(wrapped_width));
+        let len = chain.len();
+        let chain_spread_bounds: Vec<paged_model::Bounds> = chain
+            .iter()
+            .map(|f| transform_bounds(f.bounds, f.item_transform))
+            .collect();
+        let chain_wrap_rects_owned: Vec<Vec<WrapShape>> =
+            chain_wrap_rects.iter().map(|s| s.to_vec()).collect();
+        Self {
+            document,
+            options,
+            text_slots: None,
+            palette,
+            color_ctx,
+            font_table,
+            chain,
+            chain_pages,
+            page_labels,
+            hyphenator,
+            hyphenators: None,
+            column_width_pt,
+            column_x_shift_pt: shrink_left,
+            head_wrap_rects: head_wrap_rects.to_vec(),
+            head_frame_spread,
+            chain_wrap_rects: chain_wrap_rects_owned,
+            chain_spread_bounds,
+            frame_idx: 0,
+            y_cursor: -1,
+            prev_line_height_64: None,
+            y_cursor_exact: None,
+            prev_line_height_exact: None,
+            forced_breaks: super::keeps::ForcedBreaks::new(),
+            applied_breaks: std::collections::HashSet::new(),
+            frame_first_line: None,
+            keep_specs: Vec::new(),
+            placements: Vec::new(),
+            placed_height_64: HashMap::new(),
+            overset_height_64: 0,
+            para_line: 0,
+            last_placed_frame: None,
+            frame_cmd_ranges: vec![None; len],
+            frame_max_baseline_64: vec![0; len],
+            frame_max_em_bottom_64: vec![0; len],
+            frame_max_descent_64: vec![0; len],
+            reserved_footnote_64: vec![0; len],
+            paragraph_cmd_ranges: vec![Vec::new(); len],
+            numbered_counter: 0,
+            prev_was_numbered: false,
+            list_levels: Default::default(),
+            cross_story_numbering: None,
+            optical_margin_alignment: false,
+            vertical: false,
+            optical_margin_size_pt: 0.0,
+            anchored_recursion_depth: 0,
+            anchored_image_queue: Vec::new(),
+            inline_objects: None,
+            pending_footnotes: Vec::new(),
+            in_segments: false,
+            footnote_counter: 0,
+            footnote_scope: None,
+            breaks: Vec::new(),
+            current_story_id: String::new(),
+            story_ordinal: 0,
+            struct_sub: 0,
+            paragraph_idx: 0,
+            diagnostics: Vec::new(),
+            overset_reported: false,
+            page_count: 0,
+            collect_link_regions: options.collect_link_regions,
+            page_index_map: None,
+            page_numbering: links::PageNumbering::empty(),
+            running_headers: None,
+            xref_pages: None,
+            endnote_ordinals: None,
+            force_overset: false,
+            start_rule: paged_model::StartParagraph::Anywhere,
+            span_starts: HashMap::new(),
+            region_widths: Vec::new(),
+            segment: SegmentState::default(),
+        }
+    }
+
+    /// Overset every line of the story regardless of room (the
+    /// auto-size fit's "InDesign composed nothing here" verdict).
+    pub(super) fn with_all_text_overset(mut self, force: bool) -> Self {
+        self.force_overset = force;
+        self
+    }
+
+    /// W1.4 — wire the `<Page Self=...>` → flat-index map used to
+    /// resolve hyperlink page destinations. Called only when
+    /// link-region collection is on.
+    pub(super) fn with_page_index_map(mut self, map: &'a HashMap<String, u32>) -> Self {
+        self.page_index_map = Some(map);
+        self
+    }
+
+    /// Wire the per-page numbering the section marker and the
+    /// page-number variables read.
+    pub(super) fn with_page_numbering(mut self, numbering: &'a links::PageNumbering) -> Self {
+        self.page_numbering = numbering;
+        self
+    }
+
+    /// W2 / R-10 — the body frames' text slots; see
+    /// [`StoryEmitter::text_slots`].
+    pub(super) fn with_text_slots(
+        mut self,
+        slots: &'a HashMap<(usize, String), crate::module::TextSlot>,
+    ) -> Self {
+        self.text_slots = Some(slots);
+        self
+    }
+
+    /// W1.18c — wire the post-layout running-header pickup index used by
+    /// `RunningHeaderType` variables. Set only on the re-emit pass.
+    pub(super) fn with_running_headers(mut self, index: &'a links::RunningHeaderIndex) -> Self {
+        self.running_headers = Some(index);
+        self
+    }
+
+    /// ADR 170 — wire the endnotes' ordinals.
+    pub(super) fn with_endnote_ordinals(mut self, ordinals: &'a HashMap<String, u32>) -> Self {
+        self.endnote_ordinals = Some(ordinals);
+        self
+    }
+
+    /// ADR 169 — wire the cross-references' destination pages. Set only
+    /// on the re-emit pass.
+    pub(super) fn with_xref_pages(mut self, pages: &'a HashMap<String, usize>) -> Self {
+        self.xref_pages = Some(pages);
+        self
+    }
+
+    /// W1.4 — resolve a hyperlink destination target id (a `<Page>`
+    /// self id, or a story / text-anchor id) to a flat body-page index.
+    /// Only page ids resolve in v1; story / text-anchor ids fall through
+    /// to `None` (the caller records them as `Unresolved`).
+    pub(super) fn page_index_for_target(&self, target_id: &str) -> Option<u32> {
+        self.page_index_map.and_then(|m| m.get(target_id).copied())
+    }
+
+    pub(super) fn with_story_id(mut self, story_id: &str) -> Self {
+        self.current_story_id = story_id.to_string();
+        self.story_ordinal = self
+            .document
+            .stories
+            .iter()
+            .position(|s| s.self_id == story_id)
+            .unwrap_or(usize::MAX) as u32;
+        self
+    }
+
+    /// ADR 182 — the paragraph the next glyphs belong to, for a tagged
+    /// PDF's structure; set on `list`'s glyph capture (a no-op when the
+    /// build captures none) and cleared with `None`.
+    /// ADR 182 — a table cell's paragraph in the paragraph being emitted:
+    /// its glyphs carry the cell as well (`None` clears the capture).
+    pub(super) fn tag_cell_glyphs(
+        &self,
+        list: &mut DisplayList,
+        cell: Option<paged_compose::CellKey>,
+    ) {
+        if let Some(runs) = list.glyph_runs.as_mut() {
+            runs.current = cell.map(|cell| paged_compose::StructKey {
+                story: self.story_ordinal,
+                paragraph: self.paragraph_idx,
+                sub: self.struct_sub,
+                cell: Some(cell),
+            });
+        }
+    }
+
+    pub(super) fn tag_glyphs(&self, list: &mut DisplayList, on: bool) {
+        if let Some(runs) = list.glyph_runs.as_mut() {
+            runs.current = on.then_some(paged_compose::StructKey {
+                story: self.story_ordinal,
+                paragraph: self.paragraph_idx,
+                sub: self.struct_sub,
+                cell: None,
+            });
+        }
+    }
+
+    /// W1.22 — wire the document-level numbering ledger so
+    /// `list_prefix` can carry a `ContinueNumbersAcrossStories` list's
+    /// counter across story boundaries. Only set by `build_document`'s
+    /// body-story pass when the document declares such a list.
+    pub(super) fn with_cross_story_numbering(
+        mut self,
+        ledger: &'a std::cell::RefCell<HashMap<String, u32>>,
+    ) -> Self {
+        self.cross_story_numbering = Some(ledger);
+        self
+    }
+
+    /// W1.4 — record the document's total body-page count for
+    /// `PageCountType` text-variable resolution. Called by the body /
+    /// master pass once `pages` is sized.
+    pub(super) fn with_page_count(mut self, count: usize) -> Self {
+        self.page_count = count;
+        self
+    }
+
+    pub(super) fn take_breaks(&mut self) -> Vec<BreakRecord> {
+        std::mem::take(&mut self.breaks)
+    }
+
+    pub(super) fn take_diagnostics(&mut self) -> Vec<Diagnostic> {
+        std::mem::take(&mut self.diagnostics)
+    }
+
+    /// Cycle 6 Track 1: gate per-line break collection on the
+    /// optional story / page filters. Returns true when the current
+    /// emitter context is selected by both filters (each `None`
+    /// filter passes anything).
+    pub(super) fn break_filter_passes(&self, target_page: u32) -> bool {
+        if !self.options.collect_breaks {
+            return false;
+        }
+        if let Some(want) = self.options.break_story_filter.as_deref() {
+            if self.current_story_id != want {
+                return false;
+            }
+        }
+        if let Some(range) = self.options.break_page_range.as_ref() {
+            if !range.contains(&target_page) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Mark this emitter as a `depth`-deep anchored-story sub-emitter.
+    /// The body/master pass leaves the default of 0; the anchored
+    /// recursion path bumps the value before constructing each nested
+    /// emitter so [`MAX_ANCHORED_STORY_RECURSION`] caps the depth.
+    pub(super) fn with_anchored_recursion_depth(mut self, depth: u32) -> Self {
+        self.anchored_recursion_depth = depth;
+        self
+    }
+
+    /// Hand off any image-bearing anchored frames captured during the
+    /// story pass. The body / master pass calls this after
+    /// `apply_blend_groups` so the post-pass below can reuse the
+    /// already-resolved per-page + decoded caches without
+    /// re-traversing the story tree.
+    pub(super) fn take_anchored_image_queue(&mut self) -> Vec<AnchoredImageEmit> {
+        std::mem::take(&mut self.anchored_image_queue)
+    }
+
+    /// Set the story's `<StoryPreference>` optical-margin flags so
+    /// the per-paragraph emit pass can nudge the leftmost / rightmost
+    /// glyph of every line. `size_pt = 0.0` disables the feature even
+    /// if the flag is true (matches `apply_optical_margin`'s noop).
+    pub(super) fn with_optical_margin(mut self, alignment: bool, size_pt: f32) -> Self {
+        self.optical_margin_alignment = alignment;
+        self.optical_margin_size_pt = size_pt;
+        self
+    }
+
+    pub(super) fn with_vertical(mut self, vertical: bool) -> Self {
+        self.vertical = vertical;
+        self
+    }
+
+    /// W1.7 — seed the per-frame footnote space reservation (1/64 pt)
+    /// before a re-emit. `reserved[i]` is held back from chain frame
+    /// `i`'s text bottom so the footnote pool drawn underneath does
+    /// not overlap the body. A shorter/empty slice is padded with
+    /// zeros; entries past the chain length are ignored.
+    /// The measure of chain region `k` (ADR 179): the span plan's when
+    /// there is one, the head region's column width (its wrap shrink
+    /// included) for the first, else the region's own inner width. A
+    /// story threads frames of different widths, and InDesign sets each
+    /// frame's lines at its own measure (`chain-widths`).
+    pub(super) fn region_measure_pt(&self, k: usize) -> Option<f32> {
+        if let Some(&w) = self.region_widths.get(k) {
+            return Some(w);
+        }
+        if k == 0 || self.options.fallback_column_width_pt.is_some() {
+            return self.column_width_pt;
+        }
+        let f = self.chain.get(k)?;
+        let [_, left, _, right] = f.inset_spacing.unwrap_or([0.0; 4]);
+        Some((f.bounds.width() - left - right).max(0.0))
+    }
+
+    /// ADR 179 — per-line measures for a paragraph that may run on into
+    /// regions of other widths: as many lines as its current region holds
+    /// below the first baseline (above the text area's bottom and its
+    /// footnote reservation) at that region's measure, then each next
+    /// region's lines at its own. InDesign keeps a frame's lines and sets
+    /// the rest of the paragraph at the next frame's measure from the
+    /// line that moves there (`chain-widths`). `None` when every region
+    /// from here on has the current measure: the scalar width serves.
+    pub(super) fn chain_line_measures(
+        &self,
+        lopts: &paged_text::LayoutOptions,
+        indents_pt: f32,
+        paragraph_size: f32,
+    ) -> Option<Vec<i32>> {
+        let here = self.region_measure_pt(self.frame_idx)?;
+        if (self.frame_idx..self.chain.len())
+            .filter_map(|k| self.region_measure_pt(k))
+            .all(|w| (w - here).abs() < 0.25)
+        {
+            return None;
+        }
+        let to_64 = |pt: f32| (pt * paged_text::shape::ADVANCE_PRECISION).round() as i32;
+        let leading = lopts.leading_override.unwrap_or(lopts.line_height).max(1);
+        let mut widths: Vec<i32> = Vec::new();
+        for k in self.frame_idx..self.chain.len() {
+            let frame = self.chain[k];
+            let bottom = to_64(frame.bounds.height() - inset_bottom(frame))
+                - self.reserved_footnote_64.get(k).copied().unwrap_or(0);
+            // The current region's lines start at the paragraph's first
+            // baseline; a next region's about its first line's ascent
+            // below its top inset (a prediction: only the lines past it
+            // depend on it).
+            let first = if k == self.frame_idx {
+                lopts.first_baseline
+            } else {
+                to_64(frame.inset_spacing.map_or(0.0, |i| i[0]) + paragraph_size * 0.8)
+            };
+            let lines = if first > bottom {
+                0
+            } else {
+                ((bottom - first) / leading + 1) as usize
+            };
+            let measure = to_64((self.region_measure_pt(k)? - indents_pt).max(1.0));
+            widths.extend(std::iter::repeat_n(measure, lines.min(512)));
+            if widths.len() >= 512 {
+                break;
+            }
+        }
+        // Past the chain the composer repeats the last entry.
+        (!widths.is_empty()).then_some(widths)
+    }
+
+    pub(super) fn with_footnote_reservation(mut self, reserved: &[i32]) -> Self {
+        for (slot, &r) in self.reserved_footnote_64.iter_mut().zip(reserved.iter()) {
+            *slot = r.max(0);
+        }
+        self
+    }
+
+    /// ADR 028 — the keep-option breaks this pass must force (from the
+    /// previous pass's `keeps::keep_breaks`).
+    /// Span / split columns: where each paragraph starts, and the
+    /// measure of every region in the chain.
+    pub(super) fn with_span_plan(mut self, starts: &HashMap<u32, usize>, widths: &[f32]) -> Self {
+        self.span_starts = starts.clone();
+        self.region_widths = widths.to_vec();
+        self
+    }
+
+    pub(super) fn with_forced_breaks(mut self, forced: &super::keeps::ForcedBreaks) -> Self {
+        self.forced_breaks = forced.clone();
+        self
+    }
+
+    /// The height of what this pass laid out past the chain's last frame
+    /// (overset), and of what each frame took; `None` when nothing
+    /// oversetted.
+    pub(super) fn overset_measure(&self) -> Option<OversetMeasure> {
+        if self.overset_height_64 <= 0 {
+            return None;
+        }
+        let mut frame_heights_64: HashMap<String, i64> = HashMap::new();
+        for (&idx, &h) in &self.placed_height_64 {
+            if let Some(id) = self.chain.get(idx).and_then(|f| f.self_id.clone()) {
+                *frame_heights_64.entry(id).or_default() += h;
+            }
+        }
+        Some(OversetMeasure {
+            dropped_height_64: self.overset_height_64,
+            frame_heights_64,
+        })
+    }
+
+    /// ADR 028 — the breaks the NEXT pass must force for this pass's keep
+    /// options to hold (`forced` itself when every rule held).
+    pub(super) fn keep_breaks(&self) -> super::keeps::ForcedBreaks {
+        super::keeps::keep_breaks(
+            &self.placements,
+            &self.keep_specs,
+            &self.forced_breaks,
+            &self.applied_breaks,
+            &self.reserved_footnote_64,
+        )
+    }
+
+    pub(super) fn emit_paragraph(
+        &mut self,
+        paragraph: &paged_model::Paragraph,
+        pages: &mut [BuiltPage],
+        total_stats: &mut PipelineStats,
+    ) {
+        let attrs = self.document.resolved_paragraph_attrs(paragraph);
+        self.keep_specs
+            .push(super::keeps::KeepSpec::from_attrs(&attrs));
+        self.start_rule = attrs.start_paragraph.unwrap_or_default();
+        self.placements.push(Vec::new());
+        self.para_line = 0;
+        // Span / split columns: the paragraph opens the region the plan
+        // gave it, at that region's first baseline.
+        if let Some(&r) = self.span_starts.get(&self.paragraph_idx) {
+            if r != self.frame_idx && r < self.chain.len() {
+                self.frame_idx = r;
+                self.y_cursor = -1;
+                self.prev_line_height_64 = None;
+            }
+        }
+        emit_paragraph_into_chain(self, paragraph, pages, total_stats);
+        self.paragraph_idx = self.paragraph_idx.saturating_add(1);
+    }
+
+    /// ADR 028 — whether the line about to be placed must open the next
+    /// frame for a keep option, recording the break as applied. Only when
+    /// something already sits in this frame (an empty frame gains nothing
+    /// from a break), and only in the frame the break was decided in, while
+    /// that frame starts where it did and holds back the same footnote
+    /// space: otherwise the text has moved and the break is stale (`keeps`
+    /// module doc).
+    fn take_forced_break(&mut self) -> bool {
+        let here = self.last_placed_frame == Some(self.frame_idx)
+            && self
+                .forced_breaks
+                .get(&self.paragraph_idx)
+                .is_some_and(|b| {
+                    b.line == self.para_line
+                        && b.frame == self.frame_idx
+                        && b.frame_start == self.frame_first_line
+                        && Some(&b.reserve_64) == self.reserved_footnote_64.get(self.frame_idx)
+                });
+        if here {
+            self.applied_breaks.insert(self.paragraph_idx);
+        }
+        here
+    }
+
+    /// Record where the current top-level paragraph's next line landed
+    /// (`None` = dropped as overset).
+    fn record_line(&mut self, frame: Option<usize>) {
+        let opens_frame = frame.is_some() && self.last_placed_frame != frame;
+        if frame.is_some() {
+            self.last_placed_frame = frame;
+        }
+        if opens_frame {
+            self.frame_first_line = Some((self.paragraph_idx, self.para_line));
+        }
+        if let Some(lines) = self.placements.last_mut() {
+            lines.push(super::keeps::LinePlace { frame, opens_frame });
+        }
+        self.para_line = self.para_line.saturating_add(1);
+    }
+
+    /// How far (1/64 pt) a line aligned to the baseline grid moves down
+    /// from `baseline_64` in the current frame (ADR 140).
+    fn grid_snap_64(&self, pages: &[BuiltPage], baseline_64: i32) -> i32 {
+        let frame = self.chain[self.frame_idx];
+        let page = &pages[self.chain_pages[self.frame_idx]];
+        super::baseline_grid::frame_grid(self.document, frame, page)
+            .map_or(0, |grid| grid.snap_64(baseline_64))
+    }
+
+    /// [`Self::grid_snap_64`] for an exact baseline (1/64 pt, unrounded).
+    fn grid_snap_exact(&self, pages: &[BuiltPage], baseline: f64) -> f64 {
+        let frame = self.chain[self.frame_idx];
+        let page = &pages[self.chain_pages[self.frame_idx]];
+        super::baseline_grid::frame_grid(self.document, frame, page)
+            .map_or(0.0, |grid| grid.snap_exact(baseline))
+    }
+
+    pub(super) fn apply_vertical_justification(&self, pages: &mut [BuiltPage]) {
+        for (i, frame) in self.chain.iter().enumerate() {
+            let Some((start, end)) = self.frame_cmd_ranges[i] else {
+                continue;
+            };
+            let Some(vj) = frame.vertical_justification else {
+                continue;
+            };
+            if vj == paged_model::VerticalJustification::Top {
+                continue;
+            }
+            // The text area ends the bottom inset above the frame's edge
+            // (a stroke's share included, see `text_area_frame`).
+            let frame_height_64 = ((frame.bounds.height() - inset_bottom(frame))
+                * paged_text::shape::ADVANCE_PRECISION)
+                .round() as i32;
+            let used_64 = self.frame_max_baseline_64[i] + self.frame_max_em_bottom_64[i];
+            // W1.7 — the footnote pool reserves the bottom of the
+            // frame, so vertical justification must distribute slack
+            // against the reduced text area. Without this, Center /
+            // Bottom / Justify would shove the body text back down into
+            // the reserved band and the pool would overlap it again.
+            let reserved_64 = self.reserved_footnote_64.get(i).copied().unwrap_or(0);
+            let usable_64 = (frame_height_64 - reserved_64).max(0);
+            let slack_64 = (usable_64 - used_64).max(0);
+            if vj == paged_model::VerticalJustification::Justify {
+                // JustifyAlign distributes the frame's slack as extra
+                // space between paragraphs (NOT inside a paragraph —
+                // that would distort leading). With < 2 paragraphs in
+                // the frame or non-positive slack (overflow), the
+                // result is identical to Top: nothing to shift.
+                let segments = &self.paragraph_cmd_ranges[i];
+                if slack_64 <= 0 || segments.len() < 2 {
+                    continue;
+                }
+                let gaps = (segments.len() as i32 - 1).max(1);
+                let gap_64 = slack_64 / gaps;
+                if gap_64 == 0 {
+                    continue;
+                }
+                let list = &mut pages[self.chain_pages[i]].list;
+                for (idx, &(seg_start, seg_end)) in segments.iter().enumerate() {
+                    let dy_64 = gap_64 * idx as i32;
+                    if dy_64 == 0 {
+                        continue;
+                    }
+                    let dy_pt = dy_64 as f32 / paged_text::shape::ADVANCE_PRECISION;
+                    list.map_transforms(seg_start..seg_end, |t| t.0[5] += dy_pt);
+                }
+                continue;
+            }
+            let dy_64 = match vj {
+                paged_model::VerticalJustification::Center => slack_64 / 2,
+                paged_model::VerticalJustification::Bottom => slack_64,
+                _ => 0,
+            };
+            if dy_64 == 0 {
+                continue;
+            }
+            let dy_pt = dy_64 as f32 / paged_text::shape::ADVANCE_PRECISION;
+            pages[self.chain_pages[i]]
+                .list
+                .map_transforms(start..end, |t| t.0[5] += dy_pt);
+        }
+    }
+
+    /// Bracket each text frame's glyph range with `BeginBlendGroup`
+    /// / `EndBlendGroup` whenever the frame's blend mode is non-Normal
+    /// or opacity < 100%. Run after `apply_vertical_justification` so
+    /// the splice is over the final glyph positions; the inserted
+    /// stub commands carry no rendering side-effects beyond the group
+    /// composite at end-of-range.
+    ///
+    /// Splice `PushClip` / `PopClip` around the glyph range of any
+    /// chain frame whose `<PathGeometry>` is non-rectangular (a
+    /// triangle, pentagon, …). The clip path is the frame's polygon
+    /// outline in spread coords (already post-`item_transform`); the
+    /// clip transform is the per-page origin shift. Run BEFORE
+    /// `apply_blend_groups` so blend / shadow brackets nest inside
+    /// the clip and `frame_cmd_ranges` can be updated once.
+    ///
+    /// Layout still happens at the frame's AABB width — paragraph_breaker
+    /// doesn't strictly enforce the per-line widths the polygon-clip
+    /// path produces (`build_perline_wrap_widths`) when the carved
+    /// segment is below the widest word. The clip is the structural
+    /// guarantee that pixels outside the polygon never paint glyphs,
+    /// even when the layout overflows visually. Background outside
+    /// the polygon shows through as page paper.
+    ///
+    /// Skip list (mirrors `frame_polygon_spread`): rectangles, frames
+    /// with <3 anchors, and rotated/sheared frames (where the polygon
+    /// would need to be transformed *with* the frame at emit time —
+    /// out of scope today).
+    /// A post-pass spliced `count` commands at `at` on `page_idx` on
+    /// behalf of chain frame `owner`. Every OTHER chain frame whose
+    /// range starts at or after that point has just moved, and W2's
+    /// relocation reads those starts to cut the story block into
+    /// per-frame pieces — so they have to be kept honest.
+    fn shift_ranges_for_insert(&mut self, page_idx: usize, at: usize, count: usize, owner: usize) {
+        if count == 0 {
+            return;
+        }
+        for (j, range) in self.frame_cmd_ranges.iter_mut().enumerate() {
+            if j == owner || self.chain_pages.get(j).copied() != Some(page_idx) {
+                continue;
+            }
+            if let Some((start, end)) = range {
+                if *start >= at {
+                    *start += count;
+                    *end += count;
+                }
+            }
+        }
+    }
+
+    /// ADR 155 — the rules between a frame's columns, spliced at the
+    /// start of the frame's command range: above its fill and stroke,
+    /// under its text. InDesign 20.0.1 (`column-rules`): one rule per
+    /// gutter, at the gutter's centre moved by `ColumnRuleOffset`, from
+    /// the text area's top moved down by the top inset to the bottom of
+    /// the frame's deepest line (its baseline plus its faces' descent)
+    /// moved up by the bottom inset; butt caps, a dash fitted like any
+    /// open path's. A frame with one column, or no text, draws none.
+    pub(super) fn apply_column_rules(&mut self, pages: &mut [BuiltPage]) {
+        // A columnar frame reaches the emitter as one chain entry per
+        // column (`expand_column_chain`): clones sharing the frame's
+        // `Self`, each with its column's box. A gutter is the gap
+        // between two neighbouring boxes.
+        struct Rules {
+            first: usize,
+            gutters: Vec<f32>,
+            text_bottom_64: i32,
+        }
+        let mut per_page: HashMap<usize, Vec<Rules>> = HashMap::new();
+        let mut i = 0;
+        while i < self.chain.len() {
+            let f = self.chain[i];
+            let mut j = i + 1;
+            while f.self_id.is_some()
+                && j < self.chain.len()
+                && self.chain[j].self_id == f.self_id
+                && self.chain_pages[j] == self.chain_pages[i]
+            {
+                j += 1;
+            }
+            let group = i..j;
+            i = j;
+            if f.column_rule.is_none() {
+                continue;
+            }
+            let gutters: Vec<f32> = if group.len() >= 2 {
+                group
+                    .clone()
+                    .skip(1)
+                    .map(|k| (self.chain[k - 1].bounds.right + self.chain[k].bounds.left) * 0.5)
+                    .collect()
+            } else {
+                frame_gutter_centres(f)
+            };
+            let with_text: Vec<usize> = group
+                .clone()
+                .filter(|k| self.frame_cmd_ranges[*k].is_some())
+                .collect();
+            let Some(&first) = with_text
+                .iter()
+                .min_by_key(|k| self.frame_cmd_ranges[**k].map(|r| r.0))
+            else {
+                continue;
+            };
+            if gutters.is_empty() {
+                continue;
+            }
+            let text_bottom_64 = with_text
+                .iter()
+                .map(|k| self.frame_max_baseline_64[*k] + self.frame_max_descent_64[*k])
+                .max()
+                .unwrap_or(0);
+            per_page
+                .entry(self.chain_pages[first])
+                .or_default()
+                .push(Rules {
+                    first,
+                    gutters,
+                    text_bottom_64,
+                });
+        }
+        for (page_idx, mut groups) in per_page {
+            // Splice the latest range first, so an earlier start stays put.
+            groups.sort_by_key(|g| std::cmp::Reverse(self.frame_cmd_ranges[g.first].map(|r| r.0)));
+            for g in groups {
+                let Some((start, end)) = self.frame_cmd_ranges[g.first] else {
+                    continue;
+                };
+                let page = &mut pages[page_idx];
+                let before = page.list.commands.len();
+                self.push_column_rules(page, self.chain[g.first], &g.gutters, g.text_bottom_64);
+                let added: Vec<paged_compose::DisplayCommand> =
+                    page.list.commands.drain(before..).collect();
+                let n = added.len();
+                for (k, cmd) in added.into_iter().enumerate() {
+                    page.list.insert_command(start + k, cmd);
+                }
+                self.frame_cmd_ranges[g.first] = Some((start, end + n));
+                self.shift_ranges_for_insert(page_idx, start, n, g.first);
+            }
+        }
+    }
+
+    /// Push the rules of the frame `column` belongs to, one at each of
+    /// `gutters` (frame-inner x), at the end of `page`'s list.
+    fn push_column_rules(
+        &self,
+        page: &mut BuiltPage,
+        column: &TextFrame,
+        gutters: &[f32],
+        text_bottom_64: i32,
+    ) {
+        let Some(rule) = column.column_rule.as_ref() else {
+            return;
+        };
+        let inset_top = column.inset_spacing.map_or(0.0, |i| i[0]);
+        let top = column.bounds.top + inset_top + rule.top_inset;
+        let bottom = column.bounds.top
+            + text_bottom_64 as f32 / paged_text::shape::ADVANCE_PRECISION
+            - rule.bottom_inset;
+        if bottom <= top {
+            return;
+        }
+        let color = rule.stroke_color.as_deref().unwrap_or("Color/Black");
+        let Some(base) = color_id_to_paint(color, self.palette, self.color_ctx) else {
+            return;
+        };
+        let paint = apply_fill_tint_ctx(
+            base,
+            object_tint(self.palette, Some(color), rule.stroke_tint),
+            &self.color_ctx,
+        );
+        let stroke = stroke_for(
+            rule.stroke_type.as_deref(),
+            rule.stroke_width.max(0.0),
+            None,
+            None,
+            None,
+            Some(&self.document.styles.stroke_styles),
+            &[],
+        );
+        let (ox, oy) = page.spread_origin;
+        let transform = Transform::translate(-ox, -oy).compose(&Transform(
+            column
+                .item_transform
+                .unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
+        ));
+        let before = page.list.commands.len();
+        for &gutter in gutters {
+            let x = gutter + rule.offset;
+            let path_id = page.list.paths.push_anon(PathData {
+                segments: vec![
+                    PathSegment::MoveTo { x, y: top },
+                    PathSegment::LineTo { x, y: bottom },
+                ],
+            });
+            paged_compose::dash_fit::push_stroke(&mut page.list, path_id, stroke, paint, transform);
+        }
+        if rule.overprint {
+            rewrite_tail_for_overprint(page, before, false, true);
+        }
+    }
+
+    pub(super) fn apply_polygon_clip(&mut self, pages: &mut [BuiltPage]) {
+        // Collect (frame_idx, start, end, shape) clip records grouped by
+        // page so we can splice in reverse start-order. The `FrameShape`
+        // carries one flattened, transformed contour per
+        // `<GeometryPathType>` — so an oval clips to its curve and a
+        // compound path keeps its hole (W1.10), rather than the old
+        // anchors-only single-contour diamond.
+        type ClipRecord = (usize, usize, usize, paged_text::FrameShape);
+        let mut per_page: HashMap<usize, Vec<ClipRecord>> = HashMap::new();
+        for (i, frame) in self.chain.iter().enumerate() {
+            let Some((start, end)) = self.frame_cmd_ranges[i] else {
+                continue;
+            };
+            if start == end {
+                continue;
+            }
+            let Some(shape) = frame_shape_spread(frame) else {
+                continue;
+            };
+            let page_idx = self.chain_pages[i];
+            per_page
+                .entry(page_idx)
+                .or_default()
+                .push((i, start, end, shape));
+        }
+        for (page_idx, mut entries) in per_page {
+            entries.sort_by(|a, b| b.1.cmp(&a.1));
+            for (frame_idx, start, end, shape) in entries {
+                let page = &mut pages[page_idx];
+                // Build a closed clip path: one MoveTo/LineTo*/Close
+                // sub-path per contour. Coordinates are in spread
+                // coords; the clip transform below maps to page coords.
+                // The rasterizer fills with NonZero, so a hole contour
+                // authored with opposite winding (IDML's convention)
+                // carves the interior — its flattened ring preserves
+                // that winding.
+                let mut path = PathData::default();
+                for contour in shape.contours() {
+                    let Some(&(x, y)) = contour.first() else {
+                        continue;
+                    };
+                    path.segments.push(PathSegment::MoveTo { x, y });
+                    for &(x, y) in &contour[1..] {
+                        path.segments.push(PathSegment::LineTo { x, y });
+                    }
+                    path.segments.push(PathSegment::Close);
+                }
+                let path_id = page.list.paths.push_anon(path);
+                let (ox, oy) = page.spread_origin;
+                let clip_transform = Transform::translate(-ox, -oy);
+                // Splice in end-then-start order so the start-insert
+                // doesn't shift `end`.
+                page.list.insert_command(
+                    end,
+                    paged_compose::DisplayCommand::PopClip(Transform::IDENTITY),
+                );
+                page.list.insert_command(
+                    start,
+                    paged_compose::DisplayCommand::PushClip {
+                        path_id,
+                        transform: clip_transform,
+                    },
+                );
+                // Range expanded by 2 commands (PushClip + PopClip).
+                // `apply_blend_groups` reads this updated range so
+                // its BeginBlendGroup / EndBlendGroup wraps OUTSIDE
+                // the clip — clip nests inside the blend group,
+                // matching PDF state-vs-buffer semantics.
+                self.frame_cmd_ranges[frame_idx] = Some((start, end + 2));
+                self.shift_ranges_for_insert(page_idx, start, 2, frame_idx);
+            }
+        }
+    }
+
+    /// B-18 paste-into: splice `PushClip(container outline)` /
+    /// `PopClip` around the glyph range of any chain frame that is
+    /// nested content (a TextFrame pasted into a Rectangle / Oval /
+    /// Polygon). One bracket per ancestor container — outermost
+    /// pushed first — so a frame nested two containers deep is
+    /// masked by both outlines, matching the frame-body brackets
+    /// `emit_nested_children` emits. The clip path is in the
+    /// container's INNER coords and rides `frame_outer_transform`,
+    /// so rotated containers clip correctly (no upright restriction,
+    /// unlike `apply_polygon_clip`'s spread-space path). Run after
+    /// `apply_polygon_clip` and before `apply_blend_groups`; same
+    /// range-update contract (splice high-start-first per page,
+    /// update only the spliced frame's range).
+    pub(super) fn apply_container_clip(
+        &mut self,
+        pages: &mut [BuiltPage],
+        container_clips: &NestedTextClips,
+    ) {
+        if container_clips.is_empty() {
+            return;
+        }
+        type ClipRecord<'c> = (usize, usize, usize, &'c [(PathData, Option<[f32; 6]>)]);
+        let mut per_page: HashMap<usize, Vec<ClipRecord>> = HashMap::new();
+        for (i, frame) in self.chain.iter().enumerate() {
+            let Some((start, end)) = self.frame_cmd_ranges[i] else {
+                continue;
+            };
+            if start == end {
+                continue;
+            }
+            let Some(clips) = frame
+                .self_id
+                .as_deref()
+                .and_then(|id| container_clips.get(id))
+            else {
+                continue;
+            };
+            per_page.entry(self.chain_pages[i]).or_default().push((
+                i,
+                start,
+                end,
+                clips.as_slice(),
+            ));
+        }
+        for (page_idx, mut entries) in per_page {
+            entries.sort_by(|a, b| b.1.cmp(&a.1));
+            for (frame_idx, start, end, clips) in entries {
+                let page = &mut pages[page_idx];
+                // End-then-start splice order so the start inserts
+                // don't shift `end`. Pops: one per ancestor.
+                for _ in clips {
+                    page.list.insert_command(
+                        end,
+                        paged_compose::DisplayCommand::PopClip(Transform::IDENTITY),
+                    );
+                }
+                // Pushes at `start`: inserting at a fixed index
+                // reverses order, so walk the ancestors innermost →
+                // outermost to end up with the OUTERMOST push first.
+                for (path, host_transform) in clips.iter().rev() {
+                    let path_id = page.list.paths.push_anon(path.clone());
+                    let transform = super::text_frame::frame_outer_transform(page, *host_transform);
+                    page.list.insert_command(
+                        start,
+                        paged_compose::DisplayCommand::PushClip { path_id, transform },
+                    );
+                }
+                self.frame_cmd_ranges[frame_idx] = Some((start, end + 2 * clips.len()));
+                self.shift_ranges_for_insert(page_idx, start, 2 * clips.len(), frame_idx);
+            }
+        }
+    }
+
+    /// The frame body (fill / stroke / drop-shadow) is bracketed at body
+    /// emit time inside `emit_text_frame_into`, and the frame's text slot
+    /// sits INSIDE that object group: when the glyphs move to the slot
+    /// (`text_at_frame_z`), the whole frame composites as one group, as
+    /// InDesign does (R-10, `transparency-targets` case 1 — two groups
+    /// faded the text twice). Glyphs that stay where they were emitted
+    /// (a master frame's, or with `text_at_frame_z` off) get the object's
+    /// bracket of their own here. The text's own target
+    /// (`<ContentTransparencySetting>`) is always bracketed here.
+    pub(super) fn apply_blend_groups(&mut self, pages: &mut [BuiltPage]) {
+        // Per-frame post-emit work: optionally splice glyph-shaped
+        // drop shadows in front of the frame's glyph fills, then
+        // optionally bracket the (still-original) glyph range with the
+        // text's own transparency group and the object's. All run from
+        // the same per-page reverse-start-order pass so command-index
+        // bookkeeping stays straightforward.
+        // R-10: one entry per chain frame with glyphs to shadow or
+        // bracket.
+        struct Entry {
+            start: usize,
+            end: usize,
+            glyph_shadow: Option<(DropShadow, crate::module::GlyphShadowKind)>,
+            frame_bounds_in_page: paged_compose::Rect,
+            /// The object's bracket — `None` when the frame needs none, or
+            /// when the glyphs will move into a text slot INSIDE the body's
+            /// own object group (one group for the whole frame, as
+            /// InDesign composites it: `transparency-targets` case 1).
+            blend_group: Option<(paged_compose::Rect, paged_compose::BlendMode, f32)>,
+            /// The content target — the text's own opacity / blend mode
+            /// (`<ContentTransparencySetting>`) and its own shadow, cast
+            /// glyph by glyph (cases 10–12, 28).
+            content_group: Option<(paged_compose::Rect, paged_compose::BlendMode, f32)>,
+            content_shadow: Option<DropShadow>,
+            frame_idx: usize,
+        }
+        let mut per_page: HashMap<usize, Vec<Entry>> = HashMap::new();
+        for (i, frame) in self.chain.iter().enumerate() {
+            let Some((start, end)) = self.frame_cmd_ranges[i] else {
+                continue;
+            };
+            if start == end {
+                // No glyphs were emitted into this frame — nothing
+                // to bracket or shadow, skip.
+                continue;
+            }
+            let page_idx = self.chain_pages[i];
+            let blend_mode = blend_mode_from_idml(frame.blend_mode.as_deref());
+            let opacity = frame.opacity;
+            let in_body_group = self.options.text_at_frame_z
+                && frame.self_id.as_ref().is_some_and(|id| {
+                    self.text_slots
+                        .and_then(|slots| slots.get(&(page_idx, id.clone())))
+                        .is_some_and(|slot| slot.in_object_group && slot.slot <= start)
+                });
+            let needs_group = !in_body_group
+                && (!matches!(blend_mode, paged_compose::BlendMode::Normal)
+                    || matches!(opacity, Some(o) if o < 100.0 - f32::EPSILON));
+            let opacity_f = opacity.map(|p| (p / 100.0).clamp(0.0, 1.0)).unwrap_or(1.0);
+            let outer = frame_outer_transform(&pages[page_idx], frame.item_transform);
+            let inner_rect = paged_compose::Rect {
+                x: frame.bounds.left,
+                y: frame.bounds.top,
+                w: frame.bounds.width(),
+                h: frame.bounds.height(),
+            };
+            let frame_bounds_in_page = rect_bounds_in_page(inner_rect, outer);
+            // The frame's rect + 0.5 pt of AA headroom, matching
+            // `push_blend_group`. It is a starting point: glyph ink can
+            // overshoot the frame box (descenders past the bottom inset,
+            // an italic's overhang), and `bounds` is a CLIP in both back
+            // ends. `fit_transparency_group_bounds`, run at the end of
+            // `build_document_inner`, grows it to the glyphs' actual
+            // extent.
+            let padded = paged_compose::Rect {
+                x: frame_bounds_in_page.x - 0.5,
+                y: frame_bounds_in_page.y - 0.5,
+                w: frame_bounds_in_page.w + 1.0,
+                h: frame_bounds_in_page.h + 1.0,
+            };
+            let blend_group = needs_group.then_some((padded, blend_mode, opacity_f));
+            let content_group = frame
+                .content_transparency
+                .as_ref()
+                .filter(|t| t.is_active())
+                .map(|t| {
+                    (
+                        padded,
+                        blend_mode_from_idml(t.blend_mode.as_deref()),
+                        target_opacity(Some(t)),
+                    )
+                });
+            let content_shadow = resolve_frame_shadow(
+                frame.content_drop_shadow.as_ref(),
+                None,
+                self.palette,
+                self.color_ctx,
+            );
+            // Glyph-shaped shadow: emit when the frame carries a
+            // stroke-transparency drop shadow AND both fill and
+            // stroke are transparent (so the rect-shaped stamp from
+            // the body-time drop_shadow_module wouldn't fire). Real
+            // InDesign casts the shadow off the visible TEXT
+            // outlines in this case.
+            // Stroke weight defaults to 1.0pt when absent (InDesign
+            // default); the stroke-visibility check still gates on
+            // `Swatch/None` so absent-stroke-color frames register
+            // as invisible regardless.
+            let stroke_w = frame.stroke_weight.unwrap_or(1.0);
+            let stroke_visible = frame_stroke_is_visible(frame.stroke_color.as_deref(), stroke_w);
+            let fill_transparent = frame_fill_is_transparent(frame.fill_color.as_deref());
+            //
+            // ADR 130: an OBJECT drop shadow on a frame with no fill is
+            // cast from everything the frame paints — InDesign shadows
+            // the text as well as the stroke (measured by the
+            // `rect-shadows` fixture). The stroke band is stamped by
+            // the body-time `drop_shadow_module`; the text's shadow is
+            // stamped here, glyph by glyph, at the object shadow's
+            // own softness.
+            let object_glyph_shadow = if fill_transparent {
+                resolve_frame_shadow(
+                    frame.drop_shadow.as_ref(),
+                    None,
+                    self.palette,
+                    self.color_ctx,
+                )
+                .map(|s| (s, crate::module::GlyphShadowKind::Object))
+            } else {
+                None
+            };
+            let glyph_shadow = object_glyph_shadow.or_else(|| {
+                if !stroke_visible && fill_transparent && frame.stroke_drop_shadow.is_some() {
+                    resolve_frame_shadow(
+                        frame.stroke_drop_shadow.as_ref(),
+                        None,
+                        self.palette,
+                        self.color_ctx,
+                    )
+                    .map(|s| (s, crate::module::GlyphShadowKind::Stroke))
+                } else {
+                    None
+                }
+            });
+            if glyph_shadow.is_none()
+                && blend_group.is_none()
+                && content_group.is_none()
+                && content_shadow.is_none()
+            {
+                continue;
+            }
+            per_page.entry(page_idx).or_default().push(Entry {
+                start,
+                end,
+                glyph_shadow,
+                frame_bounds_in_page,
+                blend_group,
+                content_group,
+                content_shadow,
+                frame_idx: i,
+            });
+        }
+        let shadow_bounds = |frame_bounds_in_page: paged_compose::Rect, shadow: &DropShadow| {
+            // Group-buffer bounds for the shadow wrapper: the frame's
+            // bbox in page coords, padded by `(|offset| + 3*blur)` on
+            // each side so soft edges don't get clipped to the buffer.
+            // The helper inserts the BeginBlendGroup itself.
+            let pad = shadow.offset_x.abs().max(shadow.offset_y.abs())
+                + 3.0 * shadow.blur_radius.abs()
+                + 1.0;
+            paged_compose::Rect {
+                x: frame_bounds_in_page.x - pad,
+                y: frame_bounds_in_page.y - pad,
+                w: frame_bounds_in_page.w + 2.0 * pad,
+                h: frame_bounds_in_page.h + 2.0 * pad,
+            }
+        };
+        let bracket = |page: &mut BuiltPage,
+                       from: usize,
+                       to: usize,
+                       (bounds, blend_mode, opacity): (
+            paged_compose::Rect,
+            paged_compose::BlendMode,
+            f32,
+        )| {
+            // End first so the start-insert doesn't shift `to`.
+            page.list.insert_command(
+                to,
+                paged_compose::DisplayCommand::EndBlendGroup(Transform::IDENTITY),
+            );
+            page.list.insert_command(
+                from,
+                paged_compose::DisplayCommand::BeginBlendGroup {
+                    bounds,
+                    blend_mode,
+                    opacity,
+                    isolated: false,
+                    knockout: false,
+                    transform: Transform::IDENTITY,
+                },
+            );
+        };
+        // Splice in reverse start-order per page so earlier ranges
+        // stay valid.
+        for (page_idx, mut entries) in per_page {
+            entries.sort_by(|a, b| b.start.cmp(&a.start));
+            for e in entries {
+                let (start, end) = (e.start, e.end);
+                let page = &mut pages[page_idx];
+                // Step 1: splice the object's (or the stroke target's)
+                // glyph-shaped shadows in front of the original glyph
+                // range. The stamps land *before* any BeginBlendGroup we
+                // add below, so a Lighten-blend frame's glyphs still cast
+                // a dark shadow against the page below (Lighten of dark
+                // gray on white = white = invisible — the shadow has to
+                // be outside the group). Returns the number of commands
+                // added (one PathShadow per glyph fill plus the wrapper
+                // BeginBlendGroup / EndBlendGroup); every later index
+                // (incl. `end`) shifts forward by that count.
+                let inserted = match e.glyph_shadow {
+                    Some((shadow, kind)) => crate::module::emit_glyph_shadow_pass(
+                        page,
+                        start..end,
+                        shadow,
+                        kind,
+                        shadow_bounds(e.frame_bounds_in_page, &shadow),
+                    ),
+                    None => 0,
+                };
+                let content_start = start + inserted;
+                let mut glyphs_end = end + inserted;
+                let mut total = inserted;
+                // Step 2: the text's own shadow, inside the content
+                // target, so the text's opacity fades it with the glyphs.
+                if let Some(shadow) = e.content_shadow {
+                    let n = crate::module::emit_glyph_shadow_pass(
+                        page,
+                        content_start..glyphs_end,
+                        shadow,
+                        crate::module::GlyphShadowKind::Object,
+                        shadow_bounds(e.frame_bounds_in_page, &shadow),
+                    );
+                    glyphs_end += n;
+                    total += n;
+                }
+                // Step 3: the content target's bracket around the text
+                // (and its shadow).
+                if let Some(g) = e.content_group {
+                    bracket(page, content_start, glyphs_end, g);
+                    glyphs_end += 2;
+                    total += 2;
+                }
+                // Step 4: the object's bracket, when the glyphs are not
+                // moving into the body's own object group.
+                if let Some(g) = e.blend_group {
+                    bracket(page, content_start, glyphs_end, g);
+                    total += 2;
+                }
+                // W2 — this frame's block grew by the shadow stamps and
+                // the brackets; record its final extent and push every
+                // other frame on the page along.
+                if total > 0 {
+                    self.frame_cmd_ranges[e.frame_idx] = Some((start, end + total));
+                    self.shift_ranges_for_insert(page_idx, start, total, e.frame_idx);
+                }
+            }
+        }
+    }
+}
+
+/// The paragraphs Generate Index writes, as InDesign 20.0.1 writes them
+/// (`index-probe`, ADR 168), from `options` (`<IndexOptions>`, InDesign's
+/// defaults where absent) over `entries`
+/// ([`paged_scene::Document::resolve_index_tree_on`]):
+///
+/// - the `Title` (`Index`) in the `TitleStyle`;
+/// - with section headings on (the default), the first letter of each
+///   group of level 1 topics in the section heading style, empty groups
+///   left out (a topic not starting with a letter goes under `Symbols`);
+/// - one paragraph per topic in its level's style: the topic, then its
+///   pages behind the following-topic separator (two spaces), joined by
+///   the between-page-numbers separator (`, `), each in the page number
+///   style; then each cross-reference behind its separator (`. `): the
+///   reference's words (`See`, `See also`, …) in the cross-reference
+///   style, a no-break space, and the topic it names in the
+///   cross-reference topic style; then the entry-end separator.
+pub fn index_paragraphs(
+    options: Option<&paged_model::IndexOptions>,
+    entries: Vec<paged_scene::IndexTreeEntry>,
+    page_labels: &[String],
+) -> Vec<paged_model::Paragraph> {
+    let default = paged_model::IndexOptions::default();
+    let o = options.unwrap_or(&default);
+    let style = |s: &Option<String>, fallback: &str| -> Option<String> {
+        let s = s.clone().unwrap_or_else(|| fallback.to_string());
+        (!s.ends_with("[No paragraph style]") && !s.ends_with("[No character style]")).then_some(s)
+    };
+    let text = |s: &Option<String>, fallback: &str| -> String {
+        expand_toc_specials(s.as_deref().unwrap_or(fallback))
+    };
+    let run = |text: String, style: Option<String>| paged_model::CharacterRun {
+        text,
+        character_style: style,
+        ..paged_model::CharacterRun::default()
+    };
+    let para = |style: Option<String>, runs: Vec<paged_model::CharacterRun>| {
+        let mut merged: Vec<paged_model::CharacterRun> = Vec::with_capacity(runs.len());
+        for r in runs.into_iter().filter(|r| !r.text.is_empty()) {
+            match merged.last_mut() {
+                Some(last) if last.character_style == r.character_style => {
+                    last.text.push_str(&r.text)
+                }
+                _ => merged.push(r),
+            }
+        }
+        paged_model::Paragraph {
+            paragraph_style: style,
+            runs: merged,
+            ..paged_model::Paragraph::default()
+        }
+    };
+    let following = text(&o.following_topic_separator, "  ");
+    let between = text(&o.between_page_numbers_separator, ", ");
+    let before_xref = text(&o.before_cross_reference_separator, ". ");
+    let entry_end = text(&o.entry_end_separator, "");
+    let number_style = style(
+        &o.page_number_style,
+        "CharacterStyle/$ID/[No character style]",
+    );
+    let xref_style = style(
+        &o.cross_reference_style,
+        "CharacterStyle/$ID/Index Cross-reference",
+    );
+    let xref_topic_style = style(
+        &o.cross_reference_topic_style,
+        "CharacterStyle/$ID/[No character style]",
+    );
+
+    let mut out: Vec<paged_model::Paragraph> = Vec::with_capacity(entries.len() + 8);
+    let title = o.title.clone().unwrap_or_else(|| "Index".to_string());
+    if !title.is_empty() {
+        out.push(para(
+            style(&o.title_style, "ParagraphStyle/$ID/Index Title"),
+            vec![run(title, None)],
+        ));
+    }
+    let headings = o.include_section_headings.unwrap_or(true);
+    let mut section: Option<String> = None;
+    for e in entries {
+        if headings && e.level == 1 {
+            let first = e
+                .sort_key
+                .chars()
+                .next()
+                .filter(|c| c.is_alphabetic())
+                .map(|c| c.to_uppercase().collect::<String>())
+                .unwrap_or_else(|| "Symbols".to_string());
+            if section.as_deref() != Some(first.as_str()) {
+                out.push(para(
+                    style(
+                        &o.section_heading_style,
+                        "ParagraphStyle/$ID/Index Section Head",
+                    ),
+                    vec![run(first.clone(), None)],
+                ));
+                section = Some(first);
+            }
+        }
+        let level = (e.level.clamp(1, 4) - 1) as usize;
+        let level_style = style(
+            &o.level_styles[level],
+            &format!("ParagraphStyle/$ID/Index Level {}", level + 1),
+        );
+        let mut runs = vec![run(e.topic, None)];
+        let labels: Vec<String> = e
+            .pages
+            .iter()
+            .filter_map(|p| page_labels.get(*p).cloned())
+            .collect();
+        for (n, label) in labels.into_iter().enumerate() {
+            let sep = if n == 0 { &following } else { &between };
+            runs.push(run(sep.clone(), None));
+            runs.push(run(label, number_style.clone()));
+        }
+        for x in e.cross_references {
+            let words = match x.kind.as_str() {
+                "SeeAlso" => "See also".to_string(),
+                "SeeHerein" => "See herein".to_string(),
+                "SeeAlsoHerein" => "See also herein".to_string(),
+                "SeeOrAlsoBracket" => "See [also]".to_string(),
+                k if k.starts_with("Custom") => x.custom.clone().unwrap_or_default(),
+                _ => "See".to_string(),
+            };
+            runs.push(run(before_xref.clone(), None));
+            runs.push(run(words, xref_style.clone()));
+            runs.push(run("\u{00A0}".to_string(), None));
+            runs.push(run(x.target, xref_topic_style.clone()));
+        }
+        runs.push(run(entry_end.clone(), None));
+        out.push(para(level_style, runs));
+    }
+    out
+}
+
+/// The paragraphs Update Table of Contents writes into a TOC story, as
+/// InDesign 20.0.1 writes them (`toc-probe`, ADR 165):
+///
+/// - the style's `Title`, when it has one, in its `TitleStyle`;
+/// - one paragraph per entry in the entry's `FormatStyle`: the heading's
+///   text, the separator and the page number (`AfterEntry`, the default),
+///   the number, the separator and the text (`BeforeEntry`), or the text
+///   alone (`None`);
+/// - the number in the entry's `PageNumberStyle` and the separator in its
+///   `SeparatorStyle`; the text takes no character style.
+///
+/// `entries` come from [`paged_scene::Document::resolve_toc_on`] over the
+/// last layout; `page_labels` are the pages' labels in body order
+/// (section numbering included).
+pub fn toc_paragraphs(
+    toc_style: &paged_model::TOCStyleDef,
+    entries: Vec<paged_scene::TOCEntry>,
+    page_labels: &[String],
+) -> Vec<paged_model::Paragraph> {
+    let run = |text: String, style: Option<String>| paged_model::CharacterRun {
+        text,
+        character_style: style,
+        ..paged_model::CharacterRun::default()
+    };
+    let mut out: Vec<paged_model::Paragraph> = Vec::with_capacity(entries.len() + 1);
+    if let Some(title) = toc_style.title.as_deref().filter(|t| !t.is_empty()) {
+        out.push(paged_model::Paragraph {
+            paragraph_style: toc_style.title_style.clone(),
+            runs: vec![run(title.to_string(), None)],
+            ..paged_model::Paragraph::default()
+        });
+    }
+    for entry in entries {
+        let separator = expand_toc_specials(&entry.separator);
+        let label = entry
+            .page_number
+            .filter(|_| entry.page_number_visible)
+            .and_then(|i| page_labels.get(i).cloned());
+        let mut runs: Vec<paged_model::CharacterRun> = Vec::with_capacity(3);
+        match label {
+            Some(label) if entry.page_number_before => {
+                runs.push(run(label, entry.page_number_style.clone()));
+                runs.push(run(separator, entry.separator_style.clone()));
+                runs.push(run(entry.text, None));
+            }
+            Some(label) => {
+                runs.push(run(entry.text, None));
+                runs.push(run(separator, entry.separator_style.clone()));
+                runs.push(run(label, entry.page_number_style.clone()));
+            }
+            None => runs.push(run(entry.text, None)),
+        }
+        // Neighbouring runs of one style are one run, as InDesign writes
+        // them (`Getting Started⇥` is one range when the separator has no
+        // style of its own).
+        let mut merged: Vec<paged_model::CharacterRun> = Vec::with_capacity(runs.len());
+        for r in runs.into_iter().filter(|r| !r.text.is_empty()) {
+            match merged.last_mut() {
+                Some(last) if last.character_style == r.character_style => {
+                    last.text.push_str(&r.text)
+                }
+                _ => merged.push(r),
+            }
+        }
+        out.push(paged_model::Paragraph {
+            paragraph_style: entry.format_style,
+            runs: merged,
+            ..paged_model::Paragraph::default()
+        });
+    }
+    out
+}
+
+/// A TOC separator's metacharacters as the characters they stand for:
+/// `^t` tab, `^m` em space, `^>` en space, `^<` thin space, `^|` hair
+/// space, `^s` no-break space, `^f` flush space; `^y` (right-indent tab)
+/// is set as a tab.
+fn expand_toc_specials(separator: &str) -> String {
+    let mut out = String::with_capacity(separator.len());
+    let mut chars = separator.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '^' {
+            out.push(c);
+            continue;
+        }
+        let expanded = match chars.peek() {
+            Some('t') | Some('y') => '\t',
+            Some('m') => '\u{2003}',
+            Some('>') => '\u{2002}',
+            Some('<') => '\u{2009}',
+            Some('|') => '\u{200A}',
+            Some('s') => '\u{00A0}',
+            Some('f') => '\u{2001}',
+            _ => {
+                out.push('^');
+                continue;
+            }
+        };
+        chars.next();
+        out.push(expanded);
+    }
+    out
+}
+
+/// The stops a paragraph's tabs snap to: its `<TabList>`, plus the
+/// hanging indent's own stop.
+///
+/// When the first line starts left of the left indent (a negative
+/// `FirstLineIndent`), InDesign treats the left indent as a Left stop
+/// for that line, ranked with the explicit stops by position: a tab goes
+/// to whichever comes first past the pen, and only when neither does to
+/// the next 36 pt default stop. Measured on `list-markers` (InDesign
+/// 20.0.1): after a bullet the text starts at the left indent (18, 50,
+/// 30) with no `<TabList>`, with a stop beyond it (60) and with one under
+/// the marker (2); an explicit stop between the marker and the indent
+/// (30 of 50, 10 of 50) wins; a marker wider than the indent (6) goes on
+/// to the 36 pt default; and a plain tab in a hanging paragraph with no
+/// list at all stops at the indent the same way. Later lines start AT
+/// the left indent, so the extra stop can never be ahead of their pen.
+pub(super) fn paragraph_tab_stops(
+    resolved: &paged_scene::ResolvedParagraphAttrs,
+    left_indent_pt: f32,
+    first_line_indent_pt: f32,
+) -> Vec<paged_text::layout::TabStopSpec> {
+    let mut stops: Vec<paged_text::layout::TabStopSpec> = resolved
+        .tab_list
+        .iter()
+        .map(|t| paged_text::layout::TabStopSpec {
+            position_pt: t.position,
+            alignment: map_tab_alignment(t.alignment.as_deref()),
+            alignment_character: t
+                .alignment_character
+                .as_deref()
+                .and_then(|s| s.chars().next())
+                .unwrap_or('.'),
+            // IDML's `Leader` is a short string (commonly ".",
+            // ". ", or "…"). Empty leaders are treated as absent
+            // so the tab snaps without filling. Trailing
+            // whitespace is significant — ". " produces
+            // space-separated dots — so it's kept verbatim.
+            leader: t.leader.clone().filter(|s| !s.is_empty()),
+        })
+        .collect();
+    if first_line_indent_pt < 0.0
+        && left_indent_pt > 0.0
+        && !stops
+            .iter()
+            .any(|t| (t.position_pt - left_indent_pt).abs() < 0.01)
+    {
+        let at = stops
+            .iter()
+            .position(|t| t.position_pt > left_indent_pt)
+            .unwrap_or(stops.len());
+        stops.insert(at, paged_text::layout::TabStopSpec::left(left_indent_pt));
+    }
+    stops
+}
+
+/// Body of `StoryEmitter::emit_paragraph`. Lives as a free fn so
+/// the long, branching layout/emit pipeline isn't visually
+/// indented under `impl`. The free fn has full mutable access to
+/// the emitter state via `&mut StoryEmitter`.
+pub(super) fn emit_paragraph_into_chain(
+    em: &mut StoryEmitter,
+    paragraph: &paged_model::Paragraph,
+    pages: &mut [BuiltPage],
+    total_stats: &mut PipelineStats,
+) {
+    // Conditional text goes first: a hidden run takes its anchored
+    // objects and footnote references with it, before anything below
+    // counts placeholders or reads an anchor's offset (`conditions`).
+    // Undeclared conditions hide nothing, so a document declaring none
+    // skips the pass.
+    let declared = &em.document.styles.conditions;
+    let shown = if declared.is_empty() {
+        None
+    } else {
+        super::conditions::without_hidden_runs(paragraph, declared)
+    };
+    let paragraph = shown.as_ref().unwrap_or(paragraph);
+    // An anchored object takes the options it leaves out from its object
+    // style (ADR 143): read them over it once, before anything below asks
+    // where an object sits.
+    let styled = anchored::with_style_anchoring(paragraph, &em.document.styles);
+    let paragraph = styled.as_ref().unwrap_or(paragraph);
+    // A footnote is set at the foot of the frame holding its REFERENCE's
+    // line (InDesign, thoughts ADR 034 R1), so its notes wait here until
+    // the line holding each one's reference is placed
+    // (`capture_footnotes`). Queued once for the whole paragraph, before
+    // a split and before any placeholder goes in: the pieces of a split
+    // paragraph report paragraph-wide bytes of the model's text, so the
+    // anchors hold.
+    if !em.in_segments {
+        em.pending_footnotes = queued_footnotes(paragraph);
+    }
+    // An inline or above-line anchored object is a character of its
+    // line, as InDesign sets it: the paragraph composes with one
+    // placeholder character per object at its anchor, and the objects
+    // are drawn where those characters landed, once every segment of
+    // the paragraph is laid out. The segments re-enter here while
+    // `inline_objects` is set.
+    if em.inline_objects.is_none() {
+        if let Some((with_objects, objects)) = anchored::with_object_placeholders(paragraph) {
+            em.inline_objects = Some(objects);
+            emit_paragraph_lines(em, &with_objects, pages, total_stats);
+            if let Some(objects) = em.inline_objects.take() {
+                anchored::emit_inline_objects(em, paragraph, &objects, pages);
+            }
+            return;
+        }
+    }
+    emit_paragraph_lines(em, paragraph, pages, total_stats);
+}
+
+fn emit_paragraph_lines(
+    em: &mut StoryEmitter,
+    paragraph: &paged_model::Paragraph,
+    pages: &mut [BuiltPage],
+    total_stats: &mut PipelineStats,
+) {
+    // Tables ride on a paragraph but render with their own
+    // grid-of-mini-frames pipeline. A paragraph that is only its table
+    // hands off here. One that carries TEXT as well is split below: the
+    // table is a character of its paragraph on a line of its own, so the
+    // text before it ends a line and the text after it starts the next,
+    // both lines of the one paragraph (asked of InDesign 20.0.1,
+    // `table-inline-text`; `…text<Br/><Table>` in one range is two
+    // paragraphs, the break before the table being a paragraph mark —
+    // measured 2026-09-06 on the annual's page 117).
+    let has_text = paragraph.runs.iter().any(|r| !r.text.is_empty());
+    if let Some(table) = paragraph.table.as_ref().filter(|_| !has_text) {
+        // The table's line takes its paragraph's alignment (InDesign
+        // 20.0.1, `table-inline-text`: centred and right-aligned
+        // paragraphs centre and right-align the table).
+        let line_align = match em
+            .document
+            .resolved_paragraph_attrs(paragraph)
+            .justification
+        {
+            Some(paged_model::Justification::CenterAlign) => 0.5,
+            Some(paged_model::Justification::RightAlign) => 1.0,
+            _ => 0.0,
+        };
+        emit_table_into_chain(em, table, line_align, pages, total_stats);
+        return;
+    }
+    // Nested styles (and the style's drop cap they may name): layered
+    // into the runs once, on the whole paragraph, before it is split at
+    // its forced breaks — a segment carries what it was given, and a
+    // nested style never restarts at a forced line break.
+    let paragraph_nested;
+    let paragraph: &paged_model::Paragraph = if em.in_segments {
+        paragraph
+    } else {
+        paragraph_nested = with_nested_styles(em.document, paragraph);
+        &paragraph_nested
+    };
+    // IDML's paragraph mark `<Br/>` reads as `\n` inside run text, so
+    // one style range can hold several paragraphs. The composer treats
+    // `\n` as ordinary whitespace, which would let it merge into a
+    // glue and lay text either side of it on the same line. Split the
+    // paragraph at every `\n` and emit each piece as a paragraph of the
+    // same style — no layout-engine change required.
+    //
+    // A forced line break (U+2028) splits the same way, but its pieces
+    // stay lines of ONE paragraph: `SegmentState` withholds what only
+    // the paragraph's first / last line carries, keeps the lines'
+    // bytes and indices paragraph-wide, and counts the paragraph once.
+    if paragraph.table.is_some()
+        || paragraph
+            .runs
+            .iter()
+            .any(|r| r.text.contains(['\n', super::geom::FORCED_LINE_BREAK]))
+    {
+        let mut line_base = 0;
+        // The paragraph is still to be counted: its opening piece was empty.
+        let mut uncounted = false;
+        em.in_segments = true;
+        em.struct_sub = 0;
+        for (k, seg) in split_paragraph_into_segments(paragraph)
+            .into_iter()
+            .enumerate()
+        {
+            if k > 0 && seg.opens_paragraph {
+                em.struct_sub += 1;
+            }
+            let counts_paragraph = seg.opens_paragraph || uncounted;
+            em.segment = SegmentState {
+                opens_paragraph: seg.opens_paragraph,
+                closes_paragraph: seg.closes_paragraph,
+                counts_paragraph,
+                byte_base: seg.byte_base,
+                line_base,
+                lines: 0,
+            };
+            let counted = total_stats.paragraphs;
+            emit_paragraph_into_chain(em, &seg.paragraph, pages, total_stats);
+            uncounted = counts_paragraph && total_stats.paragraphs == counted;
+            line_base += em.segment.lines;
+        }
+        em.segment = SegmentState::default();
+        em.in_segments = false;
+        em.struct_sub = 0;
+        return;
+    }
+
+    // Empty paragraph: a sub-paragraph produced by `<Br/><Br/>` and
+    // similar patterns. Advance the baseline cursor by one line of
+    // auto-leading at the paragraph style's resolved point size so
+    // the visible vertical rhythm matches InDesign. No glyphs emit.
+    // A paragraph of nothing but spaces is a blank line too: the composer
+    // finds no word in it and lays out no line, so without this it took
+    // no room at all and the next paragraph moved up a line.
+    let runs_have_text = paragraph
+        .runs
+        .iter()
+        .any(|r| r.text.chars().any(|c| c != ' ' && c != '\n'));
+    if !runs_have_text {
+        // No line will carry them: the notes anchored up to here go with the
+        // frame it is in (all that are left, when it closes the paragraph).
+        let up_to = (!em.segment.closes_paragraph).then_some(em.segment.byte_base);
+        capture_footnotes(em, pages, up_to, em.y_cursor);
+        let resolved_paragraph = em
+            .segment
+            .mask(em.document.resolved_paragraph_attrs(paragraph));
+        // Prefer the synthetic zero-text run's resolved PointSize when
+        // present (the split function plants it on every empty
+        // sub-paragraph so the leading reflects the surrounding text
+        // size — e.g. 24pt `<Br/><Br/>` produces a 28.8pt gap, not
+        // 14.4pt). Falls back to the paragraph style's PointSize and
+        // ultimately the renderer-wide default.
+        let run_pt = paragraph
+            .runs
+            .first()
+            .and_then(|r| em.document.resolved_run_attrs(paragraph, r).point_size);
+        let style = em.document.styles.resolve_paragraph(
+            paragraph
+                .paragraph_style
+                .as_deref()
+                .unwrap_or("ParagraphStyle/$ID/[No paragraph style]"),
+        );
+        let para_pt =
+            run_pt.unwrap_or_else(|| style.point_size.unwrap_or(em.options.default_point_size));
+        let space_before_64 =
+            resolved_paragraph.space_before.unwrap_or(0.0) * paged_text::shape::ADVANCE_PRECISION;
+        // An empty paragraph advances by its leading too — the explicit
+        // one its runs or style carry, else auto (1.2 × size). With NO
+        // run (a blank line a plugin poured and styled) the paragraph
+        // style's own leading is the only one there is: Word's blank
+        // lines carry their spacing that way (plugin-doc, ADR 029).
+        let line_height_exact = paragraph
+            .runs
+            .first()
+            .and_then(|r| em.document.resolved_run_attrs(paragraph, r).leading)
+            .or(style.leading)
+            .filter(|l| *l > 0.0)
+            .map(|l| l as f64 * paged_text::shape::ADVANCE_PRECISION as f64)
+            .unwrap_or_else(|| para_pt as f64 * 1.2 * paged_text::shape::ADVANCE_PRECISION as f64);
+        let line_height_64 = line_height_exact.round() as i32;
+        // Establish the first baseline if we haven't placed any
+        // content yet — same convention as the populated branch
+        // below — then advance by a full line height.
+        if em.y_cursor < 0 {
+            // Same first-baseline rule as a populated head paragraph:
+            // the frame's policy and top inset, the real face's
+            // ascender when the run's face is the one it asked for.
+            let head_metrics = paragraph.runs.first().and_then(|r| {
+                let attrs = em.document.resolved_run_attrs(paragraph, r);
+                attrs
+                    .font
+                    .as_deref()
+                    .and_then(|f| em.font_table.metrics_for_family(f))
+                    .or_else(|| {
+                        em.font_table.metrics_for_real_face(
+                            attrs.font.as_deref(),
+                            attrs.font_style.as_deref(),
+                        )
+                    })
+            });
+            em.y_cursor = first_baseline_for_frame(
+                em.chain[em.frame_idx],
+                para_pt,
+                (para_pt * 0.8 * paged_text::shape::ADVANCE_PRECISION).round() as i32,
+                head_metrics,
+                // A `LeadingOffset` frame sets its first baseline one
+                // leading down, empty line or not.
+                Some(
+                    line_height_64
+                        - super::text_frame::japanese_leading_drop_64(
+                            &resolved_paragraph,
+                            head_metrics,
+                            para_pt,
+                        ),
+                ),
+            );
+        }
+        // Adobe places the empty paragraph's virtual baseline at
+        // `prev_baseline + leading(empty)`, then the next line at
+        // `empty_baseline + leading(next)`. Our y_cursor encodes
+        // `prev_baseline + leading(prev_line)`; rewind the previous
+        // advance and re-apply with this paragraph's leading so a
+        // 12pt empty between 24pt body and 24pt heading still
+        // contributes only ~14.4pt (matching InDesign), while a
+        // 12pt empty after a 12pt run unchanged (no-op when prev
+        // and current leadings agree).
+        let prev_lh = em.prev_line_height_exact().unwrap_or(line_height_exact);
+        em.set_y_exact(
+            em.y_exact() + space_before_64 as f64 - prev_lh + line_height_exact + line_height_exact,
+        );
+        em.set_prev_line_height(line_height_exact);
+        // An empty line aligned to the baseline grid stands on it like any
+        // other (`baseline-grid` case 10, ADR 140).
+        if super::baseline_grid::line_aligns(&resolved_paragraph, em.segment.opens_paragraph) {
+            let d = em.grid_snap_exact(pages, em.y_exact() - line_height_exact);
+            em.set_y_exact(em.y_exact() + d);
+        }
+        // The blank line is a line: the caret can stand on it, a click
+        // on it lands in it, and a selection across it shows it. Its one
+        // cluster is a zero-width stop at the line's left edge.
+        if em.segment.opens_paragraph {
+            if let Some(&target_page) = em.chain_pages.get(em.frame_idx) {
+                let frame = em.chain[em.frame_idx];
+                let (ox, oy) = pages[target_page].spread_origin;
+                let frame_insets = frame.inset_spacing.unwrap_or([0.0; 4]);
+                let (sx, sy) = frame_spread_top_left(frame.bounds, frame.item_transform);
+                let x_pt = sx - ox
+                    + frame_insets[1]
+                    + em.column_x_shift_pt
+                    + resolved_paragraph.left_indent.unwrap_or(0.0);
+                let line_h_pt = line_height_64 as f32 / paged_text::shape::ADVANCE_PRECISION;
+                let baseline_pt_local =
+                    (em.y_cursor - line_height_64) as f32 / paged_text::shape::ADVANCE_PRECISION;
+                let byte = em.segment.byte_base;
+                let host_page_id = pages[target_page].id.clone();
+                pages[target_page].story_layout.push(LineLayout {
+                    story_id: em.current_story_id.clone(),
+                    page_id: host_page_id,
+                    cell: None,
+                    paragraph_idx: em.paragraph_idx,
+                    line_idx: em.segment.line_base,
+                    frame_id: frame.self_id.clone(),
+                    baseline_y_pt: sy - oy + baseline_pt_local,
+                    ascent_pt: 0.8 * line_h_pt,
+                    descent_pt: 0.2 * line_h_pt,
+                    byte_range: byte..byte,
+                    clusters: vec![ClusterPos {
+                        byte,
+                        x_pt,
+                        advance_pt: 0.0,
+                    }],
+                    marker: Vec::new(),
+                });
+            }
+        }
+        let space_after_64 =
+            resolved_paragraph.space_after.unwrap_or(0.0) * paged_text::shape::ADVANCE_PRECISION;
+        em.set_y_exact(em.y_exact() + space_after_64 as f64);
+        return;
+    }
+    // A forced line break's pieces are lines of ONE paragraph, as
+    // InDesign counts them: only one piece counts it.
+    let counts = usize::from(em.segment.counts_paragraph);
+    total_stats.paragraphs += counts;
+    total_stats.runs += paragraph.runs.len();
+    pages[em.chain_pages[em.frame_idx]].stats.paragraphs += counts;
+    pages[em.chain_pages[em.frame_idx]].stats.runs += paragraph.runs.len();
+
+    let resolved_runs: Vec<paged_scene::ResolvedRunAttrs> = paragraph
+        .runs
+        .iter()
+        .map(|r| em.document.resolved_run_attrs(paragraph, r))
+        .collect();
+    let resolved_paragraph = em
+        .segment
+        .mask(em.document.resolved_paragraph_attrs(paragraph));
+    // The list marker's own formatting, when its character style gives
+    // it one (`marker_run_attrs`). It is then shaped as a run of its
+    // own, ahead of run 0, in slot `paragraph.runs.len()` of the
+    // per-run font arrays below. A drop cap keeps the marker glued to
+    // run 0: the cap pass carves `styled_runs[0]`.
+    let marker_attrs: Option<paged_scene::ResolvedRunAttrs> = if em.segment.opens_paragraph
+        && !(paragraph.drop_cap_characters > 0 && paragraph.drop_cap_lines > 0)
+    {
+        resolved_runs
+            .first()
+            .and_then(|head| marker_run_attrs(em.document, &resolved_paragraph, head))
+    } else {
+        None
+    };
+    let marker_slot = paragraph.runs.len();
+    let font_runs: std::borrow::Cow<[paged_scene::ResolvedRunAttrs]> = match &marker_attrs {
+        Some(m) => {
+            let mut v = resolved_runs.clone();
+            v.push(m.clone());
+            std::borrow::Cow::Owned(v)
+        }
+        None => std::borrow::Cow::Borrowed(&resolved_runs),
+    };
+
+    // Resolve every run's font bytes up front so the borrows for
+    // `Face` construction below all live in the same scope. Any run
+    // whose (family, style) is unknown to the FontTable inherits a
+    // paragraph-level fallback (first resolvable sibling > document
+    // default font) — without this, an IDML referencing one missing
+    // font (e.g. an obscure decorative face) would silently drop the
+    // entire paragraph and lose every neighbouring run with it.
+    let Some(resolved_fonts) = em.font_table.resolve_paragraph_bytes(&font_runs) else {
+        return;
+    };
+    // A1/A2 — split the per-run (bytes, substituted) pairs; the flags
+    // ride each StyledRun into layout so substituted glyphs can be
+    // highlighted (degraded_asset_markers).
+    let (bytes_pool, substituted_flags): (Vec<Bytes>, Vec<bool>) =
+        resolved_fonts.into_iter().unzip();
+
+    // Per-run wght axis values. Variable fonts ship one TTF that
+    // covers the whole weight axis; a run flagged `FontStyle="Bold"`
+    // would otherwise render at the file's default weight (~400).
+    // Pin a wght axis variation per run so bold / light / etc.
+    // headings get the right thickness.
+    let wghts: Vec<f32> = font_runs
+        .iter()
+        .map(|r| wght_for_font_style(r.font_style.as_deref()))
+        .collect();
+
+    // Dedup faces by (Bytes pointer identity, wght). Two runs with
+    // the same font bytes but different weights need separate
+    // faces because each holds a different fvar variation. When a
+    // paragraph is single-weight (the common case) every run still
+    // shares one face.
+    let mut unique_idx: Vec<usize> = Vec::with_capacity(bytes_pool.len());
+    for (i, b) in bytes_pool.iter().enumerate() {
+        let head = bytes_pool[..i]
+            .iter()
+            .zip(wghts[..i].iter())
+            .position(|(prior, w)| prior.as_ptr() == b.as_ptr() && (*w - wghts[i]).abs() < 0.5)
+            .unwrap_or(i);
+        unique_idx.push(head);
+    }
+    // Outline faces stay per-paragraph (ttf_parser::Face is cheap
+    // and the outline interner already caches glyph outlines at the
+    // DisplayList level — caching the Face itself buys little).
+    let mut outline_faces: Vec<Option<ttf_parser::Face>> =
+        (0..bytes_pool.len()).map(|_| None).collect();
+    // Shaping faces: prefer the per-render FontTable cache; fall
+    // back to building one on the fly when the cache misses (e.g.
+    // a run added dynamically after build, or a fallback-font slot
+    // the harvest pass didn't see). `owned_shaping_faces` holds the
+    // fallbacks; `shaping_faces` is the parallel array of borrowed
+    // references that StyledRun consumes downstream.
+    let mut owned_shaping_faces: Vec<Option<paged_text::Face>> =
+        (0..bytes_pool.len()).map(|_| None).collect();
+    let mut shaping_faces: Vec<Option<&paged_text::Face>> =
+        (0..bytes_pool.len()).map(|_| None).collect();
+    let wght_tag = ttf_parser::Tag::from_bytes(b"wght");
+    let bytes_font_ids: Vec<u32> = bytes_pool.iter().map(font_id).collect();
+    for i in 0..bytes_pool.len() {
+        if unique_idx[i] != i {
+            continue;
+        }
+        let bytes_ref = bytes_pool[i].as_ref();
+        let Ok(mut of) = ttf_parser::Face::parse(bytes_ref, 0) else {
+            return;
+        };
+        let has_wght_axis = of
+            .variation_axes()
+            .into_iter()
+            .any(|axis| axis.tag == wght_tag);
+        if has_wght_axis {
+            let _ = of.set_variation(wght_tag, wghts[i]);
+        } else if (wghts[i] - 400.0).abs() > 50.0 {
+            // Q-25: the IDML asked for a non-Regular weight but the
+            // matched font has no `wght` variation axis (single-
+            // weight TTF). Surface this as a trace so users know
+            // catalog-brochure-template / brand-guidelines display
+            // headlines render at the substitute's intrinsic weight
+            // (e.g. "Catalog" hero ~30% thicker than ref). Curable
+            // by routing the affected family through a variable font
+            // in the per-pack fonts overrides.
+            tracing::warn!(
+                font_id = bytes_font_ids[i],
+                requested_wght = wghts[i],
+                "matched font has no wght axis; requested weight ignored — substitute will render at the file's intrinsic weight"
+            );
+        }
+        outline_faces[i] = Some(of);
+
+        // Shaping Face: cache lookup first, build on miss.
+        if em
+            .font_table
+            .face(bytes_font_ids[i], wghts[i].to_bits())
+            .is_none()
+        {
+            let Some(mut rf) = paged_text::Face::from_slice(bytes_ref, 0) else {
+                return;
+            };
+            if has_wght_axis {
+                rf.set_variations(&[paged_text::Variation {
+                    tag: wght_tag,
+                    value: wghts[i],
+                }]);
+            }
+            owned_shaping_faces[i] = Some(rf);
+        }
+    }
+    // Second pass: assemble the borrowed-reference array. The cache
+    // is borrowed via `em.font_table` (which outlives this scope);
+    // the on-demand owned faces are borrowed from `owned_shaping_faces`
+    // (which lives to the end of the paragraph emission).
+    for i in 0..bytes_pool.len() {
+        let head = unique_idx[i];
+        if let Some(cached) = em
+            .font_table
+            .face(bytes_font_ids[head], wghts[head].to_bits())
+        {
+            shaping_faces[i] = Some(cached);
+        } else if let Some(owned) = owned_shaping_faces[head].as_ref() {
+            shaping_faces[i] = Some(owned);
+        }
+    }
+
+    // font_id mixes in the wght variation so the glyph-outline cache
+    // (keyed on (font_id, glyph_id)) doesn't conflate outlines from a
+    // variable font fed at two different wght axis values.
+    let font_ids: Vec<u32> = bytes_pool
+        .iter()
+        .zip(wghts.iter())
+        .map(|(b, w)| font_id(b) ^ w.to_bits())
+        .collect();
+
+    // Bulleted paragraphs prepend `<bullet><separator>` to the
+    // paragraph text. The marker takes the first run's formatting, or,
+    // when its character style changes that, is shaped as a run of its
+    // own (`marker_run` below). IDML serialises tabs in
+    // BulletsTextAfter as the literal `^t` two-byte sequence — expand
+    // to a real `\t` so apply_tab_stops snaps it.
+    // W1.22 — resolve whether this paragraph's named NumberingList
+    // wants cross-story continuity. When it does, seed the counter
+    // from the document-level ledger (so a list spanning stories keeps
+    // counting) and write the post-increment value back afterwards.
+    // `None` keeps the legacy per-story scope.
+    let cross_story_list_id: Option<&str> = resolved_paragraph
+        .applied_numbering_list
+        .as_deref()
+        .filter(|id| {
+            em.document
+                .styles
+                .numbering_lists
+                .get(*id)
+                .and_then(|def| def.continue_across_stories)
+                .unwrap_or(false)
+        });
+    let cross_story_seed: Option<u32> = match (cross_story_list_id, em.cross_story_numbering) {
+        (Some(id), Some(ledger)) => Some(ledger.borrow().get(id).copied().unwrap_or(0)),
+        _ => None,
+    };
+    // The characters the story parser left for generated text print what
+    // they stand for (`substitute_generated_markers`).
+    let generated = substitute_generated_markers(em, paragraph);
+    // The marker belongs to the paragraph's first line only; a line after
+    // a forced break neither shows one nor advances the counter.
+    let list_prefix_text: Option<String> = em
+        .segment
+        .opens_paragraph
+        .then(|| {
+            list_prefix_with_levels(
+                &resolved_paragraph,
+                &mut em.numbered_counter,
+                &mut em.prev_was_numbered,
+                cross_story_seed,
+                &mut em.list_levels,
+            )
+        })
+        .flatten()
+        .filter(|_| !paragraph.runs.is_empty());
+    let list_first_text: Option<String> = list_prefix_text.as_deref().and_then(|prefix| {
+        paragraph.runs.first().map(|r| {
+            let text = generated.texts[0].as_deref().unwrap_or(&r.text);
+            format!("{prefix}{text}")
+        })
+    });
+    // The marker shaped as its own run: its text and attributes.
+    let marker_run: Option<(&str, &paged_scene::ResolvedRunAttrs)> = list_prefix_text
+        .as_deref()
+        .filter(|prefix| !prefix.is_empty())
+        .zip(marker_attrs.as_ref());
+    // Index of run 0 in `styled_runs` (1 when the marker leads).
+    let head_run = usize::from(marker_run.is_some());
+    // Save the post-increment counter back to the ledger so the next
+    // story sharing this list continues from here. Only writes for a
+    // numbered paragraph that actually advanced the counter (the
+    // prefix was emitted); a bullet / NoList paragraph in the same
+    // list leaves the ledger untouched.
+    let advanced_numbered = list_first_text.is_some()
+        && resolved_paragraph.bullets_list_type.as_deref() == Some("NumberedList");
+    if let (Some(id), Some(ledger), true) = (
+        cross_story_list_id,
+        em.cross_story_numbering,
+        advanced_numbered,
+    ) {
+        ledger
+            .borrow_mut()
+            .insert(id.to_string(), em.numbered_counter);
+    }
+
+    // W1.4 — text-variable substitution. Each run tagged with
+    // `text_variable` (produced by the parser splitting a
+    // `<TextVariableInstance>` into its own run) is re-resolved per the
+    // variable's type: real page count, document name, custom literal,
+    // etc. `None` ⇒ keep the run's baked `ResultText` (already its
+    // `text`). Mirrors the auto-page-number marker substitution above;
+    // the resolved string flows through the same per-run text override
+    // as `capitalized` / `page_substituted`.
+    let total_pages = em.page_count;
+    let needs_var_subst = paragraph.runs.iter().any(|r| r.text_variable.is_some());
+    let variable_resolved: Vec<Option<String>> = if needs_var_subst {
+        // W1.18 — the frame currently filling resolves variables FOR its
+        // host page: date variables read the deterministic clock, the
+        // chapter number is the section owning this page, and (on the
+        // re-emit) running headers pick up the matching paragraph on this
+        // very page.
+        let host_page = em.chain_pages.get(em.frame_idx).copied().unwrap_or(0);
+        let caption_link = paragraph
+            .runs
+            .iter()
+            .filter_map(|r| r.text_variable.as_deref())
+            .any(|v| links::is_live_caption(&em.document.designmap, v))
+            .then(|| em.chain.get(em.frame_idx))
+            .flatten()
+            .and_then(|frame| links::caption_link(em.document, frame));
+        let ctx = links::VarResolveCtx {
+            designmap: &em.document.designmap,
+            total_pages,
+            clock: &em.options.document_clock,
+            page_labels: em.page_labels,
+            numbering: em.page_numbering,
+            page_index: host_page,
+            running_headers: em.running_headers,
+            caption_link,
+        };
+        paragraph
+            .runs
+            .iter()
+            .map(|r| {
+                let var_id = r.text_variable.as_deref()?;
+                // ADR 169 — a cross-reference's page number is its
+                // destination's page, live (InDesign prints it so before
+                // any Update Cross-References).
+                let xref = em
+                    .xref_pages
+                    .zip(r.hyperlink_source.as_deref())
+                    .filter(|_| links::is_xref_page_number(&em.document.designmap, var_id))
+                    .and_then(|(pages, src)| pages.get(src))
+                    .and_then(|page| em.page_labels.get(*page).cloned());
+                xref.or_else(|| links::resolve_variable(&ctx, var_id, &r.text))
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let var_text = |i: usize| -> Option<&str> {
+        if needs_var_subst {
+            variable_resolved.get(i).and_then(|o| o.as_deref())
+        } else {
+            None
+        }
+    };
+
+    // Per-run uppercase override for `Capitalization=AllCaps`. The
+    // previous implementation also uppercased SmallCaps / CapToSmallCap,
+    // but our shaper doesn't drive the `smcp` OT feature yet — the
+    // result was a row of full-height capitals where the IDML asked
+    // for capital-tall + small-tall rhythm. Pass SmallCaps through
+    // with its original case until a real small-caps fallback lands
+    // (P-12). Allocates only for runs whose resolved capitalization
+    // actually differs from their input.
+    let capitalized: Vec<Option<String>> = paragraph
+        .runs
+        .iter()
+        .enumerate()
+        .map(
+            |(i, run)| match resolved_runs[i].capitalization.as_deref() {
+                Some("AllCaps") => {
+                    let src: &str = if let Some(v) = var_text(i) {
+                        v
+                    } else if let Some(t) = generated.texts[i].as_deref() {
+                        t
+                    } else {
+                        &run.text
+                    };
+                    let upper = src.to_uppercase();
+                    if upper != src {
+                        Some(upper)
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            },
+        )
+        .collect();
+
+    // P-20: per-cluster glyph fallback. Build a list of every
+    // distinct sibling face used in this paragraph so a run that
+    // shapes a cluster to `.notdef` can retry against another run's
+    // face. Same-face siblings collapse via raw-pointer comparison
+    // so the fallback list is bounded by the number of distinct
+    // fonts in the paragraph (typically 1-3).
+    let mut fallback_faces_pool: Vec<&paged_text::Face> = Vec::new();
+    for (i, f) in shaping_faces.iter().enumerate() {
+        if unique_idx[i] != i {
+            continue;
+        }
+        let Some(face) = f else { continue };
+        if !fallback_faces_pool
+            .iter()
+            .any(|existing| std::ptr::eq(*existing, *face))
+        {
+            fallback_faces_pool.push(face);
+        }
+    }
+    // Glyph scaling scales every glyph, the list marker's too.
+    let glyph_scale = desired_glyph_scale(&resolved_paragraph);
+    let mut styled_runs: Vec<paged_text::StyledRun> = paragraph
+        .runs
+        .iter()
+        .enumerate()
+        .map(|(i, run)| {
+            // `Position` (super/subscript) shrinks the run to a
+            // fraction of its base size and adds a baseline offset on
+            // top of any explicit `BaselineShift` — see
+            // `position_adjusted_metrics`.
+            let base_size = resolved_runs[i]
+                .point_size
+                .unwrap_or(em.options.default_point_size);
+            let (point_size, baseline_shift_pt) = position_adjusted_metrics(
+                base_size,
+                resolved_runs[i].baseline_shift,
+                resolved_runs[i].position.as_deref(),
+            );
+            paged_text::StyledRun {
+                text: if i == 0 && marker_run.is_none() {
+                    list_first_text.as_deref().unwrap_or_else(|| {
+                        if let Some(c) = capitalized[i].as_deref() {
+                            c
+                        } else if let Some(v) = var_text(i) {
+                            v
+                        } else if let Some(t) = generated.texts[i].as_deref() {
+                            t
+                        } else {
+                            &run.text
+                        }
+                    })
+                } else if let Some(c) = capitalized[i].as_deref() {
+                    c
+                } else if let Some(v) = var_text(i) {
+                    v
+                } else if let Some(t) = generated.texts[i].as_deref() {
+                    t
+                } else {
+                    &run.text
+                },
+                face: shaping_faces[unique_idx[i]].unwrap(),
+                point_size,
+                tracking: resolved_runs[i].tracking,
+                font_id: font_ids[i],
+                underline: resolved_runs[i].underline.unwrap_or(false),
+                strikethru: resolved_runs[i].strikethru.unwrap_or(false),
+                substituted: substituted_flags[i],
+                baseline_shift_pt,
+                horizontal_scale_pct: resolved_runs[i].horizontal_scale.unwrap_or(100.0)
+                    * glyph_scale,
+                vertical_scale_pct: resolved_runs[i].vertical_scale.unwrap_or(100.0),
+                skew_deg: resolved_runs[i].skew.unwrap_or(0.0),
+                fallback_faces: &fallback_faces_pool,
+                shaping_features: shaping_features_from(
+                    resolved_runs[i].ligatures_on,
+                    resolved_runs[i].kerning_method.as_deref(),
+                    &resolved_runs[i].otf,
+                    resolved_runs[i].capitalization.as_deref(),
+                    resolved_runs[i].position.as_deref(),
+                ),
+            }
+        })
+        .collect();
+    if let Some((prefix, m)) = marker_run {
+        let base_size = m.point_size.unwrap_or(em.options.default_point_size);
+        let (point_size, baseline_shift_pt) =
+            position_adjusted_metrics(base_size, m.baseline_shift, m.position.as_deref());
+        styled_runs.insert(
+            0,
+            paged_text::StyledRun {
+                text: prefix,
+                face: shaping_faces[unique_idx[marker_slot]].unwrap(),
+                point_size,
+                tracking: m.tracking,
+                font_id: font_ids[marker_slot],
+                underline: m.underline.unwrap_or(false),
+                strikethru: m.strikethru.unwrap_or(false),
+                substituted: substituted_flags[marker_slot],
+                baseline_shift_pt,
+                horizontal_scale_pct: m.horizontal_scale.unwrap_or(100.0) * glyph_scale,
+                vertical_scale_pct: m.vertical_scale.unwrap_or(100.0),
+                skew_deg: m.skew.unwrap_or(0.0),
+                fallback_faces: &fallback_faces_pool,
+                shaping_features: shaping_features_from(
+                    m.ligatures_on,
+                    m.kerning_method.as_deref(),
+                    &m.otf,
+                    m.capitalization.as_deref(),
+                    m.position.as_deref(),
+                ),
+            },
+        );
+    }
+
+    // W1.4 — hyperlink/cross-reference source spans for this paragraph,
+    // as paragraph-local byte ranges into the concatenated styled-run
+    // text (the same string the line clusters index into). Each entry
+    // pre-resolves the source id to a `LinkTarget` so the per-line
+    // capture below only intersects byte ranges. Empty (and skipped)
+    // unless `collect_link_regions` is on AND a run carries a source.
+    let link_spans: Vec<(std::ops::Range<usize>, paged_compose::LinkTarget)> =
+        if em.collect_link_regions && paragraph.runs.iter().any(|r| r.hyperlink_source.is_some()) {
+            let mut spans = Vec::new();
+            let mut byte_cursor = marker_run.map_or(0, |(prefix, _)| prefix.len());
+            for (i, sr) in styled_runs.iter().skip(head_run).enumerate() {
+                let run_len = sr.text.len();
+                let start = byte_cursor;
+                byte_cursor += run_len;
+                let Some(source_id) = paragraph
+                    .runs
+                    .get(i)
+                    .and_then(|r| r.hyperlink_source.as_deref())
+                else {
+                    continue;
+                };
+                if run_len == 0 {
+                    continue;
+                }
+                let target =
+                    links::resolve_link_target(&em.document.designmap, source_id, |page_id| {
+                        em.page_index_for_target(page_id)
+                    });
+                spans.push((start..byte_cursor, target));
+            }
+            spans
+        } else {
+            Vec::new()
+        };
+
+    let paragraph_size = styled_runs
+        .get(head_run)
+        .map(|r| r.point_size)
+        .unwrap_or(12.0);
+    let Some(full_col_pt) = em.region_measure_pt(em.frame_idx) else {
+        return;
+    };
+    // FINDING #7.2 — LeftIndent / RightIndent narrow the composed
+    // column (so the breaker wraps inside the indented measure) and the
+    // body shifts right by LeftIndent post-layout. Clamp so a pathological
+    // indent can't drive the column non-positive.
+    let left_indent_pt = resolved_paragraph.left_indent.unwrap_or(0.0).max(0.0);
+    let right_indent_pt = resolved_paragraph.right_indent.unwrap_or(0.0).max(0.0);
+    let col_pt = (full_col_pt - left_indent_pt - right_indent_pt).max(1.0);
+    let mut lopts = paged_text::LayoutOptions::new(col_pt, paragraph_size);
+    lopts.vertical = em.vertical;
+    let binding = em
+        .chain_pages
+        .get(em.frame_idx)
+        .and_then(|&p| pages.get(p))
+        .map(BuiltPage::binding_edge)
+        .unwrap_or_default();
+    (lopts.alignment, lopts.last_line_alignment) =
+        map_justification(resolved_paragraph.justification, binding);
+    lopts.justify_last_line = !em.segment.closes_paragraph;
+    // The last line's right indent, on the segment that ends the
+    // paragraph only (ADR 153).
+    if em.segment.closes_paragraph {
+        lopts.compose.last_line_indent = resolved_paragraph
+            .line_setting
+            .last_line_indent
+            .filter(|v| *v > 0.0)
+            .map_or(0, |v| {
+                (v * paged_text::shape::ADVANCE_PRECISION).round() as i32
+            });
+    }
+    if let Some((prefix, _)) = marker_run {
+        lopts.auto_leading_from_byte = prefix.len() as u32;
+    }
+    apply_paragraph_compose_options(
+        &mut lopts,
+        em.hyphenator_for(&resolved_paragraph, &resolved_runs),
+        &resolved_paragraph,
+    );
+    lopts.compose.fit_tolerance = fit_tolerance_64(
+        paragraph_size,
+        lopts.alignment == paged_text::Alignment::Justify,
+    );
+    // Auto leading is the paragraph's `AutoLeading` per cent of a line's
+    // largest size (InDesign's 120 by default; ADR 153).
+    set_auto_leading(&mut lopts, &resolved_paragraph, paragraph_size);
+    apply_leadings(&mut lopts, &resolved_runs, &styled_runs, head_run);
+    apply_no_break(&mut lopts, &resolved_runs, &styled_runs, head_run);
+
+    // First-baseline metrics for this paragraph's head run. A
+    // family-keyed override (`--font-metrics`) wins, so a documented
+    // Arial → Roboto substitution can pin Arial's ascender. Otherwise
+    // the face the run shapes with supplies its own ascender — but
+    // only when that face is the one the run asked for: InDesign sets
+    // the first baseline at the REAL font's hhea ascender (measured
+    // 2026-09-06: Source Serif 4 at 1.036 em, Space Grotesk at
+    // 0.984 em, both exactly the font's table), and the annual's
+    // caption frame that InDesign oversets on its third line fitted
+    // here only because the `0.8 × pt` heuristic sat every baseline
+    // 1.3 pt too high. A substitute's ascender says nothing about
+    // where InDesign put the baseline (it had the real face), so
+    // substituted runs keep the heuristic — empirically closer to
+    // Adobe's ~0.7–0.75 em typo ascenders than a stand-in's raw
+    // value (Cormorant Garamond 0.924, Roboto 1.048).
+    let head_font_metrics = resolved_runs
+        .first()
+        .and_then(|r| r.font.as_deref())
+        .and_then(|f| em.font_table.metrics_for_family(f))
+        .or_else(|| {
+            resolved_runs.first().and_then(|r| {
+                em.font_table
+                    .metrics_for_real_face(r.font.as_deref(), r.font_style.as_deref())
+            })
+        });
+    // True when this paragraph OPENS the frame — the only moment a
+    // shaped outline may walk the first baseline down (see
+    // `shaped_first_baseline_push_pt`).
+    let frame_first_paragraph = em.y_cursor < 0;
+    if em.y_cursor < 0 {
+        em.y_cursor = first_baseline_for_frame(
+            em.chain[em.frame_idx],
+            paragraph_size,
+            lopts.first_baseline,
+            head_font_metrics,
+            Some(
+                lopts.leading_override.unwrap_or(lopts.line_height)
+                    - super::text_frame::japanese_leading_drop_64(
+                        &resolved_paragraph,
+                        head_font_metrics,
+                        paragraph_size,
+                    ),
+            ),
+        );
+    } else {
+        let space_before_64 =
+            resolved_paragraph.space_before.unwrap_or(0.0) * paged_text::shape::ADVANCE_PRECISION;
+        let mut y = em.y_exact() + space_before_64 as f64;
+        // Adobe places each baseline at `prev_baseline + leading(THIS
+        // line)`, not `+ leading(prev line)`. The most recent
+        // y_cursor bump used the previous line/empty-paragraph's
+        // leading; rewind that and re-apply with this paragraph's
+        // first-line leading so mixed-size flows (12pt body → 24pt
+        // heading) gain the extra leading Adobe expects. No-op when
+        // previous and current leadings agree (the common case).
+        if let Some(prev_lh) = em.prev_line_height_exact() {
+            y += lopts.paragraph_leading_exact() - prev_lh;
+        }
+        em.set_y_exact(y);
+    }
+    lopts.first_baseline = em.y_cursor;
+    lopts.first_baseline_exact = Some(em.y_exact());
+    // Ragged text breaks by minimum raggedness, the rule InDesign's
+    // Paragraph Composer was measured to follow in shaped frames, in every
+    // frame: the lines the chain holds, and the first one past it, are
+    // priced by the space they leave (ADR 142).
+    if lopts.alignment != paged_text::Alignment::Justify {
+        lopts.compose.minimum_raggedness = true;
+        lopts.compose.overrun_size = Some(paragraph_size);
+        lopts.compose.visible_lines = super::text_frame::visible_rows(
+            em,
+            lopts.first_baseline,
+            lopts.leading_override.unwrap_or(lopts.line_height),
+            paragraph_size,
+            head_font_metrics,
+        );
+    }
+
+    // Drop cap: when the paragraph carries
+    // `<ParagraphStyleRange DropCapCharacters="N" DropCapLines="M">`,
+    // the first N characters render at an enlarged size for M body
+    // lines. We carve the first M lines narrower in `column_widths`
+    // and shape the dropped run separately at
+    // `drop_cap_point_size(line_height_pt, M)` for emission below.
+    //
+    // The implementation:
+    //   1. Decide the byte split inside the first styled run (the
+    //      first `DropCapCharacters` Unicode scalars).
+    //   2. Shape the dropped slice at the enlarged point size to
+    //      measure `glyph_advance` for the column carve.
+    //   3. Build a `DropCapSpec` and ask
+    //      `paged_text::drop_cap_column_widths` for the carved widths.
+    //   4. Replace the first styled run's text with the slice past
+    //      the drop cap, then run `layout_runs` as normal.
+    //   5. After layout, splice the dropped glyphs in at the
+    //      paragraph origin.
+    let drop_cap_spec_emit: Option<(
+        usize,
+        paged_text::DropCapSpec,
+        paged_text::ShapedRun,
+        f32,
+        u32,
+        ttf_parser::Face<'_>,
+        paged_compose::Paint,
+    )> = if paragraph.drop_cap_characters > 0
+        && paragraph.drop_cap_lines > 0
+        && !styled_runs.is_empty()
+        && !styled_runs[0].text.is_empty()
+    {
+        // The lines the cap drops through are the paragraph's leading,
+        // stated or auto: `nested-styles` n13, 11/14 in Inter, sets its
+        // cap at 30.24 pt in InDesign 20.0.1 (the body beside it starts
+        // 19.17 pt in), which 14 pt gives and the 13.2 pt auto leading
+        // does not.
+        let body_line_height_pt = lopts.leading_override.unwrap_or(lopts.line_height) as f32
+            / paged_text::shape::ADVANCE_PRECISION;
+        // InDesign scales the cap so its CAP HEIGHT — not its em box —
+        // spans the dropped lines, so the size depends on the real
+        // face's cap-height ratio (the same lookup the frame's first
+        // baseline makes). A face with no metric keeps the 0.7
+        // heuristic the frame rule already uses.
+        let cap_ratio = head_font_metrics.and_then(|m| m.cap_height).unwrap_or(0.7);
+        let cap_point_size = paged_text::drop_cap_point_size(
+            body_line_height_pt,
+            styled_runs[0].point_size,
+            cap_ratio,
+            paragraph.drop_cap_lines,
+        );
+        // Byte split: take `drop_cap_characters` Unicode scalars
+        // off the front of run 0's text. Whitespace counts as a
+        // character; IDML's serialisation matches char count not
+        // grapheme count.
+        let head = styled_runs[0].text;
+        // Byte offset of the `drop_cap_characters`th scalar; past the
+        // end keeps the whole run (split == head.len()).
+        let split = head
+            .char_indices()
+            .nth(paragraph.drop_cap_characters as usize)
+            .map(|(i, _)| i)
+            .unwrap_or(head.len());
+        if split > 0 {
+            let dropped_slice = &head[..split];
+            let cap_face_idx = unique_idx[0];
+            let cap_face_ref = shaping_faces[cap_face_idx].unwrap();
+            let cap_shaped = paged_text::shape_run(cap_face_ref, dropped_slice, cap_point_size);
+            // Gutter: half the body's space-glyph advance — a small
+            // proxy for InDesign's `DropCapDetail` side-bearing.
+            let space_shaped = paged_text::shape_run(cap_face_ref, " ", styled_runs[0].point_size);
+            let gutter_64 = space_shaped.total_advance / 2;
+            // The first dropped glyph's ink left edge at the enlarged
+            // size. InDesign flushes that edge to the text margin, so
+            // the glyph is drawn this far LEFT of it and the carve
+            // narrows by that much less.
+            let ink_left_64 = cap_shaped
+                .glyphs
+                .first()
+                .and_then(|g| {
+                    cap_face_ref
+                        .glyph_bounding_box(ttf_parser::GlyphId(g.glyph_id as u16))
+                        .map(|bb| {
+                            let em_units = cap_face_ref.units_per_em() as f32;
+                            ((bb.x_min as f32 / em_units)
+                                * cap_point_size
+                                * paged_text::shape::ADVANCE_PRECISION)
+                                .round() as i32
+                        })
+                })
+                .unwrap_or(0)
+                .max(0);
+            let spec = paged_text::DropCapSpec {
+                characters: paragraph.drop_cap_characters,
+                lines: paragraph.drop_cap_lines,
+                glyph_advance: cap_shaped.total_advance,
+                // Measured: InDesign leaves NO gutter between the cap's
+                // advance and the body text.
+                gutter: 0,
+                ink_left: ink_left_64,
+            };
+            let _ = gutter_64;
+            // Outline face for the dropped glyphs. Shares bytes with
+            // the body run's face but parses fresh because the
+            // existing `outline_faces[cap_face_idx]` instance lives
+            // borrowed by the body emit loop below.
+            let bytes_ref = bytes_pool[cap_face_idx].as_ref();
+            let outline = ttf_parser::Face::parse(bytes_ref, 0).ok();
+            // Drop-cap paint: pick from the first run's resolved
+            // fill (same as the body's run-0 paint).
+            let fallback_paint = em.options.fallback_text_paint;
+            let cap_paint = resolved_runs
+                .first()
+                .and_then(|r| r.fill_color.as_deref())
+                .and_then(|id| color_id_to_paint(id, em.palette, em.color_ctx))
+                .unwrap_or(fallback_paint);
+            // Now overlay the carved widths onto lopts so the
+            // remainder body wraps narrower for the first M lines.
+            // If a wrap pass set widths already, take min per line.
+            //
+            // P-19: clamp every carved width to at least the widest
+            // shaped word in the remainder so paragraph_breaker can
+            // still place at least one token per line. Without this,
+            // wide-fallback fonts or aggressive cap sizes produced
+            // an empty break list and the entire body text dropped.
+            let scalar_width_64 = lopts.compose.column_width;
+            let max_word_width_64 = styled_runs.iter().fold(0i32, |acc, run| {
+                let shaped = paged_text::shape::shape_run(run.face, run.text, run.point_size);
+                let mut local_max = 0i32;
+                let mut current = 0i32;
+                let text_bytes = run.text.as_bytes();
+                let is_break = |i: u32| -> bool {
+                    let idx = i as usize;
+                    idx < text_bytes.len()
+                        && (text_bytes[idx] == b' '
+                            || text_bytes[idx] == b'\t'
+                            || text_bytes[idx] == b'\n')
+                };
+                for g in &shaped.glyphs {
+                    if is_break(g.cluster) {
+                        local_max = local_max.max(current);
+                        current = 0;
+                    } else {
+                        current = current.saturating_add(g.x_advance);
+                    }
+                }
+                local_max = local_max.max(current);
+                acc.max(local_max)
+            });
+            let carved = paged_text::drop_cap_column_widths_with_min(
+                &spec,
+                scalar_width_64,
+                max_word_width_64,
+            );
+            if let Some(existing) = lopts.compose.column_widths.as_deref() {
+                let mut merged: Vec<i32> = carved.clone();
+                for (i, w) in merged.iter_mut().enumerate() {
+                    if let Some(&e) = existing.get(i) {
+                        *w = (*w).min(e);
+                    }
+                }
+                for &e in existing.iter().skip(merged.len()) {
+                    merged.push(e);
+                }
+                lopts.compose.column_widths = Some(merged);
+            } else {
+                lopts.compose.column_widths = Some(carved);
+            }
+            outline.map(|o| {
+                (
+                    split,
+                    spec,
+                    cap_shaped,
+                    cap_point_size,
+                    font_ids[0] ^ 0xD0DC_AAA0u32,
+                    o,
+                    cap_paint,
+                )
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // Cycle-7 Track 2: capture the dropped slice text so the first
+    // line's BreakRecord source_text can include it. pdftotext sees
+    // the drop-cap glyph as part of the line's first word; without
+    // this, word_match_rate stays 0.0 on drop-cap-bearing fixtures
+    // like text-advanced.
+    let dropped_text_for_breaks: Option<String> =
+        if em.options.collect_breaks && drop_cap_spec_emit.is_some() {
+            let head = styled_runs[0].text;
+            let split = drop_cap_spec_emit.as_ref().map(|t| t.0).unwrap_or(0);
+            Some(head[..split].to_string())
+        } else {
+            None
+        };
+
+    // If we have a drop cap, splice the body-run text past the
+    // dropped slice. We can't mutate `styled_runs` in place because
+    // its `text` field borrows the source string; build a fresh
+    // styled_runs vec borrowing from the same source at the new
+    // offset.
+    let styled_runs_storage: Vec<paged_text::StyledRun>;
+    let styled_runs_ref: &[paged_text::StyledRun] =
+        if let Some((split, _, _, _, _, _, _)) = &drop_cap_spec_emit {
+            let mut adjusted: Vec<paged_text::StyledRun> = Vec::with_capacity(styled_runs.len());
+            for (i, r) in styled_runs.iter().enumerate() {
+                let new_text = if i == 0 { &r.text[*split..] } else { r.text };
+                adjusted.push(paged_text::StyledRun {
+                    text: new_text,
+                    face: r.face,
+                    point_size: r.point_size,
+                    tracking: r.tracking,
+                    font_id: r.font_id,
+                    underline: r.underline,
+                    strikethru: r.strikethru,
+                    substituted: r.substituted,
+                    baseline_shift_pt: r.baseline_shift_pt,
+                    horizontal_scale_pct: r.horizontal_scale_pct,
+                    vertical_scale_pct: r.vertical_scale_pct,
+                    skew_deg: r.skew_deg,
+                    fallback_faces: r.fallback_faces,
+                    shaping_features: r.shaping_features,
+                });
+            }
+            styled_runs_storage = adjusted;
+            &styled_runs_storage
+        } else {
+            &styled_runs
+        };
+
+    // Per-line wrap: build a `column_widths` slice + per-line
+    // x-shifts + twin-pair markers based on which wrap rectangles
+    // each predicted line intersects. Shifts are stored in 1/64 pt
+    // so the post-layout pass can add them to each glyph's x;
+    // twin_after[i] = true means line i shares its baseline with
+    // line i-1 (BothSides flow around an obstacle).
+    let WrapPlan {
+        line_x_shifts_64,
+        twin_after,
+        no_room: plan_no_room,
+        first_baseline_push_pt,
+    } = build_perline_wrap_widths(em, styled_runs_ref, &mut lopts, frame_first_paragraph);
+    // ADR 179 — a chain of frames of different widths, which the wrap
+    // plan leaves to the scalar measure.
+    if lopts.compose.column_widths.is_none() {
+        lopts.compose.column_widths =
+            em.chain_line_measures(&lopts, left_indent_pt + right_indent_pt, paragraph_size);
+    }
+
+    // A shaped frame whose top is too narrow to start on moves its
+    // first baseline down; the widths above were already built from
+    // the moved baseline, so the cursor has to follow or the glyphs
+    // land on a line whose measure belongs to a different height.
+    if first_baseline_push_pt > 0.0 {
+        em.y_cursor +=
+            (first_baseline_push_pt * paged_text::shape::ADVANCE_PRECISION).round() as i32;
+        lopts.first_baseline = em.y_cursor;
+    }
+
+    // Twin segments (text wrap on both sides of an obstacle) emit
+    // alternating narrow/wide widths to the breaker. For long
+    // paragraphs `paragraph_breaker::total_fit`'s fitness-class
+    // machinery prunes every candidate before the end-of-paragraph
+    // penalty and returns zero breaks. Bumping the glue stretch
+    // budget from 0.33 (Adobe's calibrated default) to 0.5 gives
+    // Knuth-Plass enough headroom to absorb the narrow-to-wide row
+    // transitions and converge on a feasible solution — verified
+    // against the manual-sample page 7 case (~300 words flowing
+    // around two obstacles, previously emitted zero lines). We
+    // bump only when twins are present so the regular-column
+    // corpus keeps the tightly-calibrated 0.33 and its 100%
+    // line-break parity on the calibration suite. The bump trades
+    // tighter line-break match against InDesign for the ability to
+    // render at all — without it, a wrap-around-object paragraph
+    // longer than ~165 words drops to an empty frame.
+    let twins_present = twin_after.iter().any(|&t| t);
+    if twins_present {
+        lopts.compose.stretch_ratio = lopts.compose.stretch_ratio.max(0.5);
+    }
+
+    // FirstLineIndent NARROWS the first line's measure; it does not
+    // only move it. We shifted the laid-out glyphs right by the indent
+    // after breaking and left the measure alone, so every indented
+    // first line in the document ran past its frame by exactly the
+    // indent — measured on the annual's page 94, where InDesign's
+    // justified lines end at the frame's 492 pt right edge and ours
+    // ended at 504.6 pt, one indent beyond, and fitted a word more
+    // because of it. A negative (hanging) indent widens line 0 the
+    // same way, which is what puts a hanging number outside the
+    // margin.
+    if let Some(indent_pt) = resolved_paragraph.first_line_indent {
+        let indent_64 = (indent_pt * paged_text::shape::ADVANCE_PRECISION).round() as i32;
+        if indent_64 != 0 {
+            let mut widths = lopts
+                .compose
+                .column_widths
+                .clone()
+                .unwrap_or_else(|| vec![lopts.compose.column_width]);
+            // The last entry repeats for every line past the slice, so
+            // a one-entry slice would narrow the whole paragraph.
+            if widths.len() == 1 {
+                widths.push(widths[0]);
+            }
+            let floor_64 = paged_text::shape::ADVANCE_PRECISION as i32;
+            widths[0] = (widths[0] - indent_64).max(floor_64);
+            lopts.compose.column_widths = Some(widths);
+        }
+    }
+
+    // Tabs: let the composer set each tab at its stop while it breaks,
+    // so a line is measured at the width its tabs actually take. The
+    // stops are frame-relative, so it needs every line's start x — the
+    // same shifts applied after layout below. A flush-right or centred
+    // line then moves only its text after the last tab (InDesign 20.0.1,
+    // `tools/indesign-export/footnote-paragraphs-probe`, `bodyright` and
+    // `bodycenter`; `paged_text`'s `shift_ragged`).
+    if styled_runs_ref.iter().any(|r| r.text.contains('\t')) {
+        let to_64 = |pt: f32| (pt * paged_text::shape::ADVANCE_PRECISION).round() as i32;
+        let left_64 = to_64(left_indent_pt);
+        let first_64 = to_64(resolved_paragraph.first_line_indent.unwrap_or(0.0));
+        let (cap_lines, cap_64) = drop_cap_spec_emit
+            .as_ref()
+            .map(|(_, spec, _, _, _, _, _)| {
+                (
+                    spec.lines as usize,
+                    spec.glyph_advance
+                        .saturating_add(spec.gutter)
+                        .saturating_sub(spec.ink_left),
+                )
+            })
+            .unwrap_or((0, 0));
+        let n = line_x_shifts_64.len().max(cap_lines + 1).max(2);
+        let line_starts_64 = (0..n)
+            .map(|i| {
+                let shift = if line_x_shifts_64.is_empty() {
+                    0
+                } else {
+                    line_x_shifts_64[i.min(line_x_shifts_64.len() - 1)]
+                };
+                left_64
+                    + if i == 0 { first_64 } else { 0 }
+                    + if i < cap_lines { cap_64 } else { 0 }
+                    + shift
+            })
+            .collect();
+        lopts.tabs = Some(paged_text::layout::TabLayout {
+            stops: paragraph_tab_stops(
+                &resolved_paragraph,
+                left_indent_pt,
+                resolved_paragraph.first_line_indent.unwrap_or(0.0),
+            ),
+            default_stop_pt: 36.0,
+            line_starts_64,
+        });
+    }
+
+    // The in-line objects this segment's placeholders stand for, in text
+    // order: an inline object is as wide as its visible box, an
+    // above-line one takes no width.
+    let (segment_objects, objects_before): (Vec<usize>, usize) = match em.inline_objects.as_mut() {
+        Some(objs) => {
+            let count: usize = styled_runs_ref
+                .iter()
+                .map(|r| {
+                    r.text
+                        .matches(paged_text::layout::OBJECT_REPLACEMENT)
+                        .count()
+                })
+                .sum();
+            let before = objs.next;
+            let ids: Vec<usize> = (before..(before + count).min(objs.objects.len())).collect();
+            objs.next += ids.len();
+            lopts.object_advances = ids
+                .iter()
+                .map(|&i| {
+                    let o = &objs.objects[i];
+                    if o.above_line {
+                        0
+                    } else {
+                        (o.width * paged_text::shape::ADVANCE_PRECISION).round() as i32
+                    }
+                })
+                .collect();
+            (ids, before)
+        }
+        None => (Vec::new(), 0),
+    };
+
+    // A placeholder is not a character of the story: positions handed
+    // out (caret clusters, line ranges) skip its three bytes.
+    let placeholder_bytes: Vec<u32> = if segment_objects.is_empty() {
+        Vec::new()
+    } else {
+        let mut at = 0u32;
+        let mut v = Vec::new();
+        for r in styled_runs_ref {
+            for (b, ch) in r.text.char_indices() {
+                if ch == paged_text::layout::OBJECT_REPLACEMENT {
+                    v.push(at + b as u32);
+                }
+            }
+            at += r.text.len() as u32;
+        }
+        v
+    };
+    // The list marker leads the shaped text and is not in the model's:
+    // a line's bytes count from the paragraph's own first character.
+    let marker_bytes = list_prefix_text.as_deref().map_or(0, |p| p.len() as u32);
+    // Past the list marker, the shaped text differs from the model's
+    // where the engine put something in or printed something else: a
+    // placeholder is three bytes the model lacks, a generated marker is
+    // three model bytes printed as its text. Each as (shaped start after
+    // the marker, shaped length, model length), in text order.
+    let placeholder_len = paged_text::layout::OBJECT_REPLACEMENT.len_utf8() as u32;
+    let mut synthetic: Vec<(u32, u32, u32)> = placeholder_bytes
+        .iter()
+        .map(|&p| (p.saturating_sub(marker_bytes), placeholder_len, 0))
+        .collect();
+    {
+        let dropped = drop_cap_spec_emit.as_ref().map_or(0, |t| t.0 as u32);
+        let mut start = 0u32;
+        for (i, spans) in generated.spans.iter().enumerate() {
+            let shaped = styled_runs
+                .get(head_run + i)
+                .map_or(0, |r| r.text.len() as u32);
+            let merged_marker = if i == 0 && marker_run.is_none() {
+                marker_bytes
+            } else {
+                0
+            };
+            if generated.texts[i].is_some() && capitalized[i].is_none() && var_text(i).is_none() {
+                for &(at, len, _) in spans {
+                    let model_len = paged_model::FOOTNOTE_REFERENCE_MARKER.len_utf8() as u32;
+                    synthetic.push(((start + at).saturating_sub(dropped), len, model_len));
+                }
+            }
+            start += shaped.saturating_sub(merged_marker);
+        }
+    }
+    synthetic.sort_unstable();
+    let model_byte = |b: u32| -> u32 {
+        let b = b.saturating_sub(marker_bytes);
+        // The segment's base counts the placeholders of the segments
+        // before it.
+        let mut delta = i64::from(placeholder_len) * objects_before as i64;
+        for &(start, len, model_len) in &synthetic {
+            if start >= b {
+                break;
+            }
+            if start + len > b {
+                // Inside a printed marker: its character.
+                return (i64::from(start) - delta).max(0) as u32;
+            }
+            delta += i64::from(len) - i64::from(model_len);
+        }
+        (i64::from(b) - delta).max(0) as u32
+    };
+
+    // Kenten and ruby print only under InDesign's Japanese composers
+    // (`HL Composer J` / `HL Single J`): InDesign 20.0.1 set neither under
+    // the Paragraph or World-Ready Composer, same font and text
+    // (tools/indesign-export/cjk-composer-probe). A ruby wider than its
+    // base spaces the base out before the lines break.
+    let japanese = resolved_paragraph
+        .composer
+        .as_ref()
+        .is_some_and(paged_model::Composer::is_japanese);
+    // The faces ruby and a custom kenten mark print in, where a run names
+    // its own (`RubyFont`, `KentenFont`) and the font table holds it; the
+    // base's otherwise.
+    let mark_face_bytes: Vec<[Option<Bytes>; 2]> = if japanese {
+        resolved_runs
+            .iter()
+            .map(|r| {
+                let named = |family: &Option<String>, style: &Option<String>| {
+                    let (bytes, substituted) = em
+                        .font_table
+                        .bytes_for(family.as_deref(), style.as_deref())?;
+                    (!substituted).then_some(bytes)
+                };
+                let m = &r.marks;
+                [
+                    m.ruby_font
+                        .as_ref()
+                        .and(named(&m.ruby_font, &m.ruby_font_style)),
+                    m.kenten_font
+                        .as_ref()
+                        .and(named(&m.kenten_font, &m.kenten_font_style)),
+                ]
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let mark_faces: Vec<[Option<(paged_text::Face, ttf_parser::Face, u32)>; 2]> = mark_face_bytes
+        .iter()
+        .map(|pair| {
+            [0, 1].map(|i| {
+                let b = pair[i].as_ref()?;
+                Some((
+                    paged_text::Face::from_slice(b, 0)?,
+                    ttf_parser::Face::parse(b, 0).ok()?,
+                    font_id(b) ^ 400f32.to_bits(),
+                ))
+            })
+        })
+        .collect();
+    // A styled run's ruby (`which` 0) or custom kenten (1) face.
+    let mark_face = |k: usize, which: usize| -> Option<super::ruby::MarkFace> {
+        let i = k.checked_sub(head_run).unwrap_or(marker_slot);
+        if let Some((shaping, outline, id)) = mark_faces.get(i).and_then(|p| p[which].as_ref()) {
+            return Some((shaping, outline, em.font_table.font_ref(*id)));
+        }
+        let outline = outline_faces.get(*unique_idx.get(i)?)?.as_ref()?;
+        Some((
+            styled_runs_ref.get(k)?.face,
+            outline,
+            em.font_table.font_ref(font_ids[i]),
+        ))
+    };
+    let ruby = if japanese {
+        super::ruby::ruby_groups(
+            styled_runs_ref,
+            &resolved_runs,
+            head_run,
+            |k| mark_face(k, 0).map(|(shaping, ..)| shaping),
+            em.vertical,
+        )
+    } else {
+        Vec::new()
+    };
+    lopts.ruby_aki = ruby
+        .iter()
+        .filter(|g| g.fit.is_some())
+        .map(|g| g.aki.clone())
+        .collect();
+    // Each styled run's first byte, to find a character's run.
+    let styled_starts: Vec<u32> = styled_runs_ref
+        .iter()
+        .scan(0u32, |at, r| {
+            let start = *at;
+            *at += r.text.len() as u32;
+            Some(start)
+        })
+        .collect();
+    let mut laid_out = paged_text::cache::layout_runs_cached(styled_runs_ref, &lopts);
+
+    // The paragraph's first line was placed one leading below the line
+    // before it, by the leading its head run asks for (above). The line
+    // takes the LARGEST leading among its characters: when that is another
+    // one, the whole paragraph moves by the difference. (A paragraph that
+    // opens its frame is placed by the frame's first-baseline rule.)
+    if !frame_first_paragraph {
+        if let Some(first) = laid_out.lines.first() {
+            let assumed = lopts.leading_override.unwrap_or(lopts.line_height);
+            let own = paged_text::layout::line_leading(&first.glyphs, &lopts).unwrap_or(assumed);
+            let delta = own - assumed;
+            if delta != 0 {
+                for line in &mut laid_out.lines {
+                    line.baseline_y += delta;
+                    for g in &mut line.glyphs {
+                        g.y += delta;
+                    }
+                }
+            }
+        }
+    }
+
+    // Optical margin alignment: when the story carries
+    // `<StoryPreference OpticalMarginAlignment="true" />`, nudge the
+    // leftmost / rightmost glyph of each line outward per
+    // `paged_text::optical_margin_offset`. Operates directly on the
+    // positioned glyphs (not the shaped run, since layout_runs has
+    // already converted advances to absolute x). The leftmost glyph
+    // shifts negative (hangs outward); the rightmost glyph shifts
+    // positive when right/centre-aligned, no-op for left-aligned
+    // lines (the trim leaves trailing whitespace inside the column
+    // — which is what hanging punctuation visually achieves).
+    if em.optical_margin_alignment && em.optical_margin_size_pt > 0.0 {
+        // Build the concatenated paragraph text the way layout_runs
+        // saw it — clusters point into this string.
+        let mut paragraph_concat = String::new();
+        for r in &styled_runs {
+            paragraph_concat.push_str(r.text);
+        }
+        let bytes = paragraph_concat.as_bytes();
+        let margin_size_pt = em.optical_margin_size_pt;
+        for line in laid_out.lines.iter_mut() {
+            if line.glyphs.is_empty() {
+                continue;
+            }
+            let first_idx = 0usize;
+            let last_idx = line.glyphs.len() - 1;
+            let first_cluster = line.glyphs[first_idx].cluster as usize;
+            let last_cluster = line.glyphs[last_idx].cluster as usize;
+            let first_pt_size = line.glyphs[first_idx].point_size.max(1e-3);
+            let last_pt_size = line.glyphs[last_idx].point_size.max(1e-3);
+            let first_char = char_at_byte(bytes, first_cluster);
+            let last_char = char_at_byte(bytes, last_cluster);
+            // Left-side trim: shift leftmost glyph negative by
+            // factor*pt, scaled by min(point_size,
+            // margin_size_pt)/point_size so smaller glyphs hang less.
+            if let Some(c) = first_char {
+                let scale = if first_pt_size >= margin_size_pt {
+                    1.0
+                } else {
+                    first_pt_size / margin_size_pt
+                };
+                let off_pt = paged_text::optical_margin_offset(
+                    c,
+                    paged_text::MarginSide::Left,
+                    first_pt_size,
+                ) * scale;
+                if off_pt != 0.0 {
+                    let off_64 = (off_pt * paged_text::shape::ADVANCE_PRECISION).round() as i32;
+                    line.glyphs[first_idx].x -= off_64;
+                }
+            }
+            // Right-side trim: shrink the rightmost glyph's advance
+            // (so the line's natural width drops by `off_64`) — the
+            // alignment pass already ran inside layout_runs, so the
+            // pixel-level effect lands on the right edge of the
+            // line. We mutate `x_advance` to keep the line width
+            // bookkeeping consistent if any later pass reads it.
+            if let Some(c) = last_char {
+                let scale = if last_pt_size >= margin_size_pt {
+                    1.0
+                } else {
+                    last_pt_size / margin_size_pt
+                };
+                let off_pt = paged_text::optical_margin_offset(
+                    c,
+                    paged_text::MarginSide::Right,
+                    last_pt_size,
+                ) * scale;
+                if off_pt != 0.0 {
+                    let off_64 = (off_pt * paged_text::shape::ADVANCE_PRECISION).round() as i32;
+                    let g = &mut line.glyphs[last_idx];
+                    let trim = off_64.min(g.x_advance);
+                    g.x_advance -= trim;
+                    line.width -= trim;
+                }
+            }
+        }
+    }
+
+    // A row a hole splits is ONE line to InDesign, and a centred one
+    // closes in on the hole: its first part sits flush right, its last
+    // flush left (measured on InDesign 20.0.1, `shaped-bands` and
+    // `text-in-shape`'s donut — every split row of both). The composer
+    // centred each part in its own band; move them.
+    if lopts.compose.minimum_raggedness
+        && lopts.alignment == paged_text::Alignment::Center
+        && twins_present
+    {
+        let n = laid_out.lines.len();
+        let mut i = 0;
+        while i < n {
+            let mut j = i + 1;
+            while j < n && twin_after.get(j).copied().unwrap_or(false) {
+                j += 1;
+            }
+            if j - i >= 2 {
+                for (k, sign) in [(i, 1), (j - 1, -1)] {
+                    let line = &mut laid_out.lines[k];
+                    // A centred part starts half its slack in.
+                    let lead = line.glyphs.first().map_or(0, |g| g.x);
+                    for g in &mut line.glyphs {
+                        g.x += sign * lead;
+                    }
+                }
+            }
+            i = j;
+        }
+    }
+
+    // Apply per-line x-shifts (text wrap around objects).
+    if !line_x_shifts_64.is_empty() {
+        for (i, line) in laid_out.lines.iter_mut().enumerate() {
+            let shift_64 = line_x_shifts_64[i.min(line_x_shifts_64.len() - 1)];
+            if shift_64 == 0 {
+                continue;
+            }
+            for g in &mut line.glyphs {
+                g.x += shift_64;
+            }
+        }
+    }
+
+    // BothSides flow: collapse twin lines onto the previous line's
+    // baseline so the two segments render side by side at the same
+    // y. Subsequent non-twin lines step down by the original
+    // composer leading from the most recent unique-baseline row,
+    // not by their composer-assigned baseline (which counted twins
+    // as separate rows). Without this pass twins would render as
+    // sequential rows, which Knuth-Plass produced naively.
+    if !twin_after.is_empty() {
+        // Rows step by the paragraph's leading, summed exactly like the
+        // composer's own baselines (`LaidOutLine::baseline_exact`).
+        let line_height_exact = lopts.paragraph_leading_exact().max(1.0);
+        let mut prev_unique_baseline: Option<i32> = None;
+        let mut prev_unique_exact = 0.0_f64;
+        for (i, line) in laid_out.lines.iter_mut().enumerate() {
+            let is_twin = twin_after.get(i).copied().unwrap_or(false) && i > 0;
+            if is_twin {
+                if let Some(target) = prev_unique_baseline {
+                    let diff = line.baseline_y - target;
+                    line.baseline_exact = prev_unique_exact;
+                    if diff != 0 {
+                        line.baseline_y = target;
+                        for g in &mut line.glyphs {
+                            g.y -= diff;
+                        }
+                    }
+                }
+                // Twin partner — stays on previous unique row, doesn't
+                // advance prev_unique_baseline.
+            } else {
+                let new_exact = match prev_unique_baseline {
+                    Some(_) => prev_unique_exact + line_height_exact,
+                    None if line.baseline_exact.round() as i32 == line.baseline_y => {
+                        line.baseline_exact
+                    }
+                    None => line.baseline_y as f64,
+                };
+                let new_baseline = new_exact.round() as i32;
+                let diff = line.baseline_y - new_baseline;
+                line.baseline_exact = new_exact;
+                if diff != 0 {
+                    line.baseline_y = new_baseline;
+                    for g in &mut line.glyphs {
+                        g.y -= diff;
+                    }
+                }
+                prev_unique_baseline = Some(new_baseline);
+                prev_unique_exact = new_exact;
+            }
+        }
+    }
+
+    // FINDING #7.2 — LeftIndent shifts the whole paragraph body right.
+    // The column was already narrowed by left+right indent above (so the
+    // breaker wrapped inside the measure); this slides every line to the
+    // left margin. FirstLineIndent (below) stacks on top of this on line 0.
+    if left_indent_pt != 0.0 {
+        let left_64 = (left_indent_pt * paged_text::shape::ADVANCE_PRECISION).round() as i32;
+        if left_64 != 0 {
+            for line in laid_out.lines.iter_mut() {
+                for g in &mut line.glyphs {
+                    g.x += left_64;
+                }
+            }
+        }
+    }
+
+    // FirstLineIndent shifts the first line's glyphs after
+    // breaking — Knuth-Plass can't model a per-line x-shift, so
+    // it's a post-layout pass.
+    if let Some(indent_pt) = resolved_paragraph.first_line_indent {
+        let indent_64 = (indent_pt * paged_text::shape::ADVANCE_PRECISION).round() as i32;
+        if indent_64 != 0 {
+            if let Some(line) = laid_out.lines.first_mut() {
+                for g in &mut line.glyphs {
+                    g.x += indent_64;
+                }
+            }
+        }
+    }
+
+    // Drop cap indent: when a drop cap is active, the body text on
+    // the first M=drop_cap_lines lines must start to the right of
+    // the dropped glyph. The carved column widths got `layout_runs`
+    // to break tighter; this shift moves the laid-out glyphs to the
+    // cap's right edge so the body doesn't overstrike it. Lines past
+    // M are unindented.
+    //
+    // The shift is `advance - ink_left`, the SAME figure the carve
+    // uses: the cap hangs `ink_left` to the left of the margin, so
+    // its advance ends that much closer to it. Shifting by the bare
+    // advance while the measure had already been narrowed pushed the
+    // body 6 pt too far right and cost the third line a word
+    // (measured on `text-advanced` page 1: InDesign indents 41.98 pt,
+    // we indented 47.98).
+    if let Some((_, spec, _, _, _, _, _)) = &drop_cap_spec_emit {
+        let indent_64 = spec
+            .glyph_advance
+            .saturating_add(spec.gutter)
+            .saturating_sub(spec.ink_left);
+        for (i, line) in laid_out.lines.iter_mut().enumerate() {
+            if (i as u32) >= spec.lines {
+                break;
+            }
+            for g in &mut line.glyphs {
+                g.x += indent_64;
+            }
+        }
+    }
+
+    // Build the paragraph text that matches the cluster offsets
+    // layout_runs saw — bulleted paragraphs include the prepended
+    // bullet+separator on run 0. Compute lazily; only the tab
+    // pass actually needs it.
+    let needs_paragraph_text = paragraph.runs.iter().any(|r| r.text.contains('\t'))
+        || list_first_text.as_deref().is_some_and(|t| t.contains('\t'));
+    // The leaders each line's tabs drew, for its break record.
+    let mut line_leaders: Vec<Vec<paged_text::layout::DrawnLeader>> = Vec::new();
+    if needs_paragraph_text {
+        let tab_stops = paragraph_tab_stops(
+            &resolved_paragraph,
+            left_indent_pt,
+            resolved_paragraph.first_line_indent.unwrap_or(0.0),
+        );
+        // The text as shaped: the cluster offsets index it. Built from the
+        // model's runs it drifted wherever a generated number replaced its
+        // marker character (an endnote's `iv` for a 3-byte marker put the
+        // next tab one character late, ADR 170).
+        let paragraph_text: String = styled_runs_ref.iter().map(|r| r.text).collect();
+        // Pre-build the leader context once per paragraph so each
+        // `\t` snap that has a non-empty `<TabStop Leader="...">` can
+        // shape the leader with the run that owns the tab.
+        let any_leader = tab_stops.iter().any(|t| t.leader.is_some());
+        let leader_ctx = if any_leader {
+            Some(paged_text::layout::LeaderContext::new(styled_runs_ref))
+        } else {
+            None
+        };
+        for line in laid_out.lines.iter_mut() {
+            let drawn = paged_text::layout::apply_tab_stops_with_leaders(
+                line,
+                &paragraph_text,
+                &tab_stops,
+                36.0,
+                leader_ctx.as_ref(),
+            );
+            if em.options.collect_breaks {
+                line_leaders.push(drawn);
+            }
+        }
+    }
+
+    // The marker's paint, when its character style gives it one:
+    // the marker run's resolved fill (with `FillTint`) when it is
+    // shaped on its own, else the style's `FillColor` over run 0's.
+    let bullet_paint_override: Option<(u32, Paint)> = list_first_text.as_deref().and_then(|lft| {
+        let bullet_len = lft
+            .len()
+            .saturating_sub(paragraph.runs.first().map(|r| r.text.len()).unwrap_or(0));
+        if bullet_len == 0 {
+            return None;
+        }
+        if let Some((_, m)) = marker_run {
+            // The marker's paint is its own run's: the style's fill, else
+            // run 0's.
+            let base = m
+                .fill_color
+                .as_deref()
+                .and_then(|id| color_id_to_paint(id, em.palette, em.color_ctx))
+                .unwrap_or(em.options.fallback_text_paint);
+            return Some((
+                bullet_len as u32,
+                apply_fill_tint_ctx(
+                    base,
+                    object_tint(em.palette, m.fill_color.as_deref(), m.fill_tint),
+                    &em.color_ctx,
+                ),
+            ));
+        }
+        let style_id = bullet_marker_character_style(&resolved_paragraph)?;
+        let resolved = em.document.styles.resolve_character(style_id);
+        let fill_id = resolved.fill_color.as_deref()?;
+        let base = color_id_to_paint(fill_id, em.palette, em.color_ctx)?;
+        let paint = apply_fill_tint_ctx(
+            base,
+            object_tint(em.palette, Some(fill_id), resolved.fill_tint),
+            &em.color_ctx,
+        );
+        Some((bullet_len as u32, paint))
+    });
+
+    let picker = build_run_paint_picker_resolved(
+        paragraph,
+        &resolved_runs,
+        em.palette,
+        em.color_ctx,
+        em.options.fallback_text_paint,
+        bullet_paint_override,
+    );
+    let stroke_picker = build_run_stroke_picker(
+        paragraph,
+        &resolved_runs,
+        em.palette,
+        em.color_ctx,
+        bullet_paint_override.map(|(len, _)| len).unwrap_or(0),
+    );
+    // A drop cap's characters are shaped and drawn apart, and the body
+    // is laid out without them: its clusters start after the cap. The
+    // pickers count from the paragraph's first byte, so they move back
+    // by the cap's bytes — or a run starting right after the cap (a
+    // nested style's) paints one character late.
+    let cap_bytes = drop_cap_spec_emit.as_ref().map_or(0, |cap| cap.0 as u32);
+    let picker = picker.without_leading(cap_bytes);
+    let stroke_picker = stroke_picker.without_leading(cap_bytes);
+    let any_text_stroke = stroke_picker.any_visible();
+
+    let space_after_64 =
+        resolved_paragraph.space_after.unwrap_or(0.0) * paged_text::shape::ADVANCE_PRECISION;
+    // Per-frame segment tracker for the JustifyAlign vertical-justify
+    // mode: each line's commands extend the active segment for its
+    // host frame, and a frame switch closes the prior segment so the
+    // pass can shift each paragraph independently.
+    let mut active_seg: Option<(usize, usize, usize)> = None; // (frame_idx, cmd_start, cmd_end)
+    let mut dropped_overflow_lines: usize = 0;
+    // Q-09: resolve paragraph-shading band once per paragraph. The
+    // per-line emit below stamps the band before each line's glyphs
+    // so multi-line shaded paragraphs span continuously visually.
+    // We bake the resolved (color, tint, offsets) up-front so the
+    // per-line code path stays cheap.
+    let shading_paint = if resolved_paragraph.shading.on == Some(true) {
+        resolved_paragraph
+            .shading
+            .color
+            .as_deref()
+            .and_then(|id| color_id_to_paint(id, em.palette, em.color_ctx))
+            .map(|p| {
+                let tint = resolved_paragraph.shading.tint.unwrap_or(100.0);
+                // IDML tint of -1 means "use stop color as-is"; 0..100
+                // scales the swatch toward white.
+                if tint < 0.0 {
+                    p
+                } else {
+                    apply_fill_tint_ctx(
+                        p,
+                        object_tint(
+                            em.palette,
+                            resolved_paragraph.shading.color.as_deref(),
+                            Some(tint),
+                        ),
+                        &em.color_ctx,
+                    )
+                }
+            })
+    } else {
+        None
+    };
+    let shading_offsets = [
+        resolved_paragraph.shading.offset_top.unwrap_or(0.0),
+        resolved_paragraph.shading.offset_left.unwrap_or(0.0),
+        resolved_paragraph.shading.offset_bottom.unwrap_or(0.0),
+        resolved_paragraph.shading.offset_right.unwrap_or(0.0),
+    ];
+    // Q-09: resolve RuleAbove / RuleBelow paint + geometry once per
+    // paragraph. The per-line emit below stamps the line above the
+    // first line (RuleAbove) or below the last line (RuleBelow).
+    let resolve_rule_paint = |r: &paged_model::ParagraphRule| -> Option<Paint> {
+        if r.on != Some(true) {
+            return None;
+        }
+        let id = r.color.as_deref()?;
+        let base = color_id_to_paint(id, em.palette, em.color_ctx)?;
+        let tint = r.tint.unwrap_or(100.0);
+        if tint < 0.0 {
+            Some(base)
+        } else {
+            Some(apply_fill_tint_ctx(
+                base,
+                object_tint(em.palette, Some(id), Some(tint)),
+                &em.color_ctx,
+            ))
+        }
+    };
+    let rule_above_paint = resolve_rule_paint(&resolved_paragraph.rule_above);
+    let rule_below_paint = resolve_rule_paint(&resolved_paragraph.rule_below);
+    // Q-09: resolve ParagraphBorder paint once per paragraph. The
+    // four-edge stroke lands at the END of the last line, using the
+    // first line's baseline (captured below) to anchor the top edge.
+    let border_paint = if resolved_paragraph.border.on == Some(true) {
+        resolved_paragraph
+            .border
+            .color
+            .as_deref()
+            .and_then(|id| color_id_to_paint(id, em.palette, em.color_ctx))
+            .map(|p| {
+                let tint = resolved_paragraph.border.tint.unwrap_or(100.0);
+                if tint < 0.0 {
+                    p
+                } else {
+                    apply_fill_tint_ctx(
+                        p,
+                        object_tint(
+                            em.palette,
+                            resolved_paragraph.border.color.as_deref(),
+                            Some(tint),
+                        ),
+                        &em.color_ctx,
+                    )
+                }
+            })
+    } else {
+        None
+    };
+    let last_line_index = laid_out.lines.len().saturating_sub(1);
+    let mut current_line_idx: usize = 0;
+    // Q-09: capture the first line's baseline so the border's top
+    // edge anchors above it; closed out at the last-line emit.
+    let mut first_baseline_pt: Option<f32> = None;
+    // Cycle-5 Track 1: pre-concatenate the paragraph text once so the
+    // Track-2 BreakRecord can slice per-line `[first_byte..last_byte]`
+    // without re-walking the run vec. Only built when break collection
+    // is enabled — production renders skip the allocation entirely.
+    let paragraph_text_for_breaks: Option<String> = if em.options.collect_breaks {
+        let mut buf = String::new();
+        for r in styled_runs_ref {
+            buf.push_str(r.text);
+        }
+        Some(buf)
+    } else {
+        None
+    };
+    // What the paragraph prints that its story does not hold, as byte
+    // ranges of its whole text (a drop cap's letters included, which the
+    // text above starts after), for the break records.
+    let drop_split = dropped_text_for_breaks.as_deref().map_or(0, str::len);
+    let generated_for_breaks: Vec<GeneratedRange> = if em.options.collect_breaks {
+        paragraph_generated_spans(
+            &styled_runs,
+            head_run,
+            list_first_text
+                .as_ref()
+                .and(list_prefix_text.as_deref())
+                .map_or(0, str::len),
+            marker_run.is_none(),
+            |i| {
+                paragraph
+                    .runs
+                    .get(i)
+                    .is_some_and(|r| r.text_variable.is_some())
+            },
+            &generated,
+            placeholder_bytes.iter().map(|&p| p as usize + drop_split),
+        )
+    } else {
+        Vec::new()
+    };
+    // The running baseline shift owed to every frame advance so far in
+    // THIS paragraph.
+    //
+    // The advance below used to move only the line that overflowed. The
+    // lines after it kept baselines composed for one continuous run, so
+    // they were still measured against the *previous* frame's extent —
+    // already past the new frame's bottom — and the drop branch ate
+    // them. A paragraph spanning a frame break therefore put ONE line
+    // in the continuation frame and dropped the rest.
+    //
+    // It stayed invisible because a paragraph BOUNDARY re-enters this
+    // function with a fresh line set, so multi-paragraph stories thread
+    // correctly; only a single paragraph crossing the break was wrong.
+    // Columns made it obvious — equal-height columns put the very next
+    // baseline past the bottom immediately, so column two got exactly
+    // one line — but threaded frames had it first.
+    //
+    // Carrying the shift forward is what makes the continuation
+    // continuous: the next line lands at `new_baseline + line_h`,
+    // because `shift == new_baseline - prev_baseline`.
+    // In-line objects: which composed line holds each one, and how far
+    // that line moves down for it (`anchored::line_object_shift`).
+    let line_leading_64 = |glyphs: &[paged_text::layout::PositionedGlyph]| {
+        paged_text::layout::line_leading(glyphs, &lopts).unwrap_or(lopts.line_height)
+    };
+    let mut line_objects: Vec<Vec<anchored::LineObject>> = Vec::new();
+    if !segment_objects.is_empty() {
+        let mut ids = segment_objects.iter().copied();
+        for line in &laid_out.lines {
+            let mut on_line = Vec::new();
+            let mut last_cluster = None;
+            for g in &line.glyphs {
+                if g.ch == Some(paged_text::layout::OBJECT_REPLACEMENT)
+                    && last_cluster != Some(g.cluster)
+                {
+                    last_cluster = Some(g.cluster);
+                    if let Some(object) = ids.next() {
+                        on_line.push(anchored::LineObject {
+                            object,
+                            cluster: g.cluster,
+                            point_size: g.point_size,
+                        });
+                    }
+                }
+            }
+            line_objects.push(on_line);
+        }
+    }
+    let mut line_object_shifts_64: Vec<i32> = vec![0; line_objects.len()];
+    if let Some(objs) = em.inline_objects.as_ref() {
+        let top_inset_64 = em.chain[em.frame_idx].inset_spacing.map_or(0, |i| {
+            (i[0] * paged_text::shape::ADVANCE_PRECISION).round() as i32
+        });
+        let mut shift_64 = 0;
+        for (k, line) in laid_out.lines.iter_mut().enumerate() {
+            if let Some(on_line) = line_objects.get(k).filter(|v| !v.is_empty()) {
+                let first = (k == 0 && frame_first_paragraph)
+                    .then_some((line.baseline_y + shift_64, top_inset_64));
+                let d = anchored::line_object_shift(
+                    objs,
+                    on_line,
+                    lopts.leading_override.is_none(),
+                    line_leading_64(&line.glyphs),
+                    first,
+                );
+                line_object_shifts_64[k] = d;
+                shift_64 += d;
+            }
+            if shift_64 != 0 {
+                line.baseline_y += shift_64;
+                for g in &mut line.glyphs {
+                    g.y += shift_64;
+                }
+            }
+        }
+    }
+    // No line sits beside a jump-object wrap: lines meeting one move
+    // below it (`text_frame::jump_object_wraps`).
+    super::text_frame::jump_object_wraps(
+        em,
+        &mut laid_out.lines,
+        &twin_after,
+        lopts.paragraph_leading_exact(),
+    );
+    // A next-column wrap ends the column for the line that meets it and
+    // everything after (`next_column_here` below): the row above the
+    // line being placed, for its slug.
+    let mut slug_above_64: Option<(usize, i32)> = None;
+    let mut chain_shift_64: i32 = 0;
+    for mut line in laid_out.lines.into_iter() {
+        if chain_shift_64 != 0 {
+            line.baseline_y += chain_shift_64;
+            for g in &mut line.glyphs {
+                g.y += chain_shift_64;
+            }
+        }
+        // Align to baseline grid (ADR 140): the line stands on the first
+        // grid line at or below where its leading put it, and the lines
+        // after it are placed from there — so the shift carries forward
+        // like a frame advance's.
+        let grid_aligned = super::baseline_grid::line_aligns(
+            &resolved_paragraph,
+            em.segment.opens_paragraph && current_line_idx == 0,
+        );
+        if grid_aligned {
+            let d = em.grid_snap_64(pages, line.baseline_y);
+            if d != 0 {
+                chain_shift_64 += d;
+                line.baseline_y += d;
+                for g in &mut line.glyphs {
+                    g.y += d;
+                }
+            }
+        }
+        // A line advances by its leading: the explicit one (a run's, or
+        // its style's, cascaded) when there is one, else auto leading
+        // from the largest glyph. The composer already pitched the
+        // lines this way; the emitter's advance used to read the auto
+        // value regardless, so a one-line paragraph in a 13 pt-leaded
+        // style stepped 10.2 pt to the next (the annual's code block,
+        // 30 lines in a frame that holds 28 at 13 pt — measured
+        // 2026-09-06 against InDesign, which oversets it).
+        let line_h =
+            paged_text::layout::line_leading(&line.glyphs, &lopts).unwrap_or(lopts.line_height);
+        // A line fits while its baseline is inside the TEXT AREA, which
+        // ends the bottom inset above the frame's edge. Measured on
+        // InDesign 20.0.1 (`stroke-inset`): a 66 pt frame with a 6 pt
+        // bottom inset and a 1 pt centre stroke takes four 12 pt lines,
+        // the fifth's baseline (62.5) being below 66 - 6.5.
+        let frame_height_64 = ((em.chain[em.frame_idx].bounds.height()
+            - inset_bottom(em.chain[em.frame_idx]))
+            * paged_text::shape::ADVANCE_PRECISION)
+            .round() as i32;
+        // W1.7 — the usable text bottom is the frame height minus the
+        // space reserved for this frame's footnote pool. Lines whose
+        // baseline crosses it flow on (or drop, on the last frame) so
+        // the pool drawn in the post-pass lands below the body text
+        // rather than over it. Zero reservation reproduces the old
+        // `frame_height_64` comparison byte-for-byte (the no-footnote
+        // regression guard). Never let the reservation invert the
+        // usable area to a negative bottom — a pool taller than the
+        // frame is the FootnoteOverflow case, handled by accepting the
+        // overlap rather than dropping every line.
+        let text_bottom_64 = (frame_height_64
+            - em.reserved_footnote_64
+                .get(em.frame_idx)
+                .copied()
+                .unwrap_or(0))
+        .max(0);
+        // A line whose band lies outside the frame's outline has no
+        // room even when its baseline is inside the bounding box.
+        let no_room_here = plan_no_room.get(current_line_idx).copied().unwrap_or(false);
+        // A next-column wrap the line's slug meets sends it, and the rest
+        // of the story, to the next column (InDesign 20.0.1, `text-wrap`
+        // page 4: the frame ends above the obstacle; its only frame
+        // oversets the rest).
+        let above_64 = match slug_above_64 {
+            Some((f, b)) if f == em.frame_idx => b,
+            _ => em
+                .frame_max_baseline_64
+                .get(em.frame_idx)
+                .copied()
+                .filter(|b| *b > 0)
+                .unwrap_or_else(|| {
+                    em.chain[em.frame_idx].inset_spacing.map_or(0, |i| {
+                        (i[0] * paged_text::shape::ADVANCE_PRECISION).round() as i32
+                    })
+                }),
+        };
+        let next_column_here =
+            super::text_frame::meets_next_column_wrap(em, above_64, line.baseline_y);
+        if next_column_here && em.frame_idx + 1 >= em.chain.len() {
+            em.force_overset = true;
+        }
+        // ADR 028 — a keep option decided (from the previous pass) that
+        // this line opens the next frame.
+        let keep_break_here = em.take_forced_break();
+        // ADR 028 — the break-before rule moves a paragraph's FIRST line.
+        let mut start_to = None;
+        if em.para_line == 0 && em.start_rule != paged_model::StartParagraph::Anywhere {
+            let frames: Vec<Option<&str>> = em.chain.iter().map(|f| f.self_id.as_deref()).collect();
+            match super::keeps::start_target(
+                em.start_rule,
+                em.frame_idx,
+                em.last_placed_frame,
+                &frames,
+                &em.chain_pages,
+            ) {
+                super::keeps::StartMove::Stay => {}
+                super::keeps::StartMove::To(j) => start_to = Some(j),
+                // No column, frame or page satisfies the rule: InDesign
+                // oversets the rest of the story (and a growing chain adds
+                // pages, ADR 026).
+                super::keeps::StartMove::Overset => {
+                    em.frame_idx = em.chain.len().saturating_sub(1);
+                    em.force_overset = true;
+                }
+            }
+        }
+        if (paged_flow::region_overflows(line.baseline_y, text_bottom_64)
+            || no_room_here
+            || next_column_here
+            || keep_break_here
+            || start_to.is_some())
+            && em.frame_idx + 1 < em.chain.len()
+        {
+            let prev_baseline = line.baseline_y;
+            em.frame_idx = start_to.unwrap_or(em.frame_idx + 1);
+            // The continuation frame's own first-baseline policy and
+            // top inset, with the same real-face ascender as the head.
+            let mut new_baseline = first_baseline_for_frame(
+                em.chain[em.frame_idx],
+                paragraph_size,
+                (paragraph_size * 0.8 * paged_text::shape::ADVANCE_PRECISION).round() as i32,
+                head_font_metrics,
+                Some(
+                    line_h
+                        - super::text_frame::japanese_leading_drop_64(
+                            &resolved_paragraph,
+                            head_font_metrics,
+                            paragraph_size,
+                        ),
+                ),
+            );
+            // The frame's first line obeys the first-line object rule.
+            if let (Some(objs), Some(on_line)) = (
+                em.inline_objects.as_ref(),
+                line_objects.get(current_line_idx).filter(|v| !v.is_empty()),
+            ) {
+                let top_64 = em.chain[em.frame_idx].inset_spacing.map_or(0, |i| {
+                    (i[0] * paged_text::shape::ADVANCE_PRECISION).round() as i32
+                });
+                new_baseline += anchored::line_object_shift(
+                    objs,
+                    on_line,
+                    lopts.leading_override.is_none(),
+                    line_h,
+                    Some((new_baseline, top_64)),
+                );
+            }
+            // …and on the continuation frame's grid.
+            if grid_aligned {
+                new_baseline += em.grid_snap_64(pages, new_baseline);
+            }
+            let dy = new_baseline - prev_baseline;
+            chain_shift_64 += dy;
+            for g in &mut line.glyphs {
+                g.y += dy;
+            }
+            line.baseline_y = new_baseline;
+        }
+        // A-09 (AutoSizing height): a frame whose AutoSizingType grows
+        // height is authored undersized and expected to grow to fit its
+        // text. Rather than dropping the overflow (below), keep placing
+        // lines — the frame effectively extends downward (the common
+        // Top* reference point). The visible fill/stroke box growth +
+        // the text-wrap cascade for neighbouring frames are Phase B.
+        let last_frame_grows_height = em
+            .chain
+            .get(em.frame_idx)
+            .and_then(|f| f.auto_sizing)
+            .map(|a| a.grows_height())
+            .unwrap_or(false);
+        // P-13 short-term: when the last frame in the chain overflows
+        // (typically because a font substitute is wider than the
+        // requested face), drop the overflow lines rather than letting
+        // them spill across following frames/pages with no clip. The
+        // reference PDFs hide the overflow via the same out-of-frame
+        // clip; matching this prevents large ΔE regions.
+        if (paged_flow::region_overflows(line.baseline_y, text_bottom_64)
+            || no_room_here
+            || em.force_overset)
+            && em.frame_idx + 1 >= em.chain.len()
+            && !last_frame_grows_height
+        {
+            dropped_overflow_lines += 1;
+            em.overset_height_64 += i64::from(line_h)
+                + i64::from(
+                    line_object_shifts_64
+                        .get(current_line_idx)
+                        .copied()
+                        .unwrap_or(0),
+                );
+            // Report once per story: the count of dropped lines isn't
+            // known until the paragraph finishes, but a single signal
+            // that this story is overset is the actionable bit.
+            if !em.overset_reported {
+                em.overset_reported = true;
+                let page = em.chain_pages[em.frame_idx];
+                // First-class overset continuation (paged_flow::Overset::
+                // Remains): record WHERE the flow overran — this line is the
+                // first that didn't fit, so `current_line_idx` (not yet
+                // incremented; the increment is at the end of the loop, past
+                // this `continue`) is the overset line within the paragraph.
+                let mut d = Diagnostic::new(
+                    DiagnosticCode::OversetTextDropped,
+                    "text overflows the last frame in its chain; trailing lines clipped (overset)",
+                )
+                .with_page(page)
+                .with_overset(em.paragraph_idx, current_line_idx as u32);
+                if !em.current_story_id.is_empty() {
+                    d = d.with_story(em.current_story_id.clone());
+                }
+                em.diagnostics.push(d);
+            }
+            em.record_line(None);
+            continue;
+        }
+
+        em.record_line(Some(em.frame_idx));
+        let object_room_64 = line_object_shifts_64
+            .get(current_line_idx)
+            .copied()
+            .unwrap_or(0);
+        *em.placed_height_64.entry(em.frame_idx).or_default() +=
+            i64::from(line_h) + i64::from(object_room_64);
+        let target_page = em.chain_pages[em.frame_idx];
+        pages[target_page].stats.glyphs += line.glyphs.len();
+        pages[target_page].stats.lines += 1;
+        total_stats.glyphs += line.glyphs.len();
+        total_stats.lines += 1;
+
+        // Track 2: A/B-harness break record. Cheap when disabled; the
+        // collector flag is checked once per line. baseline_y / width
+        // live in paged_text's 1/64-pt units (ADVANCE_PRECISION) so we
+        // divide back to pt here so downstream tooling (the Python
+        // reference-side extractor) reads natural units. Cycle-6
+        // Track 1: also gated on optional story / page-range filters.
+        if em.break_filter_passes(target_page as u32) {
+            // Slice the line's source text from the paragraph buffer
+            // we pre-built above. byte_range is a half-open
+            // `[start..end)` of bytes; clamp to the buffer length so
+            // a malformed breaker output can't out-of-bounds.
+            // For the first line of a drop-cap paragraph, prepend the
+            // dropped characters PLUS any paragraph-text bytes the
+            // breaker skipped before the line's first_byte (typically
+            // a leading space — InDesign's content "In a hole..." with
+            // DropCapCharacters="2" leaves the body as " a hole..."
+            // and the breaker starts line 0 at the 'a', skipping the
+            // space). pdftotext sees the contiguous "In a" so we
+            // reconstruct that here for word-match parity.
+            let source_text = paragraph_text_for_breaks
+                .as_deref()
+                .map(|pt| {
+                    let start = if current_line_idx == 0 && dropped_text_for_breaks.is_some() {
+                        0
+                    } else {
+                        line.byte_range.start.min(pt.len())
+                    };
+                    let end = line.byte_range.end.min(pt.len());
+                    let body = pt.get(start..end).unwrap_or("");
+                    if current_line_idx == 0 {
+                        if let Some(dropped) = dropped_text_for_breaks.as_deref() {
+                            return format!("{dropped}{body}");
+                        }
+                    }
+                    body.to_string()
+                })
+                .unwrap_or_default();
+            // The line's stretch of the paragraph's whole text, as
+            // `source_text` holds it.
+            let pt_len = paragraph_text_for_breaks.as_deref().map_or(0, str::len);
+            let end = drop_split + line.byte_range.end.min(pt_len);
+            let start = if current_line_idx == 0 && dropped_text_for_breaks.is_some() {
+                0
+            } else {
+                drop_split + line.byte_range.start.min(pt_len)
+            };
+            let leaders: Vec<_> = line_leaders
+                .get(current_line_idx)
+                .into_iter()
+                .flatten()
+                .map(|l| {
+                    let at = l.cluster as usize + drop_split;
+                    (at..at + 1, GeneratedKind::TabLeader, Some(l.text.clone()))
+                })
+                .collect();
+            let mut generated = GeneratedSpan::clip_to_line(&generated_for_breaks, start..end);
+            generated.extend(GeneratedSpan::clip_to_line(&leaders, start..end));
+            generated.sort_by_key(|g| g.start);
+            em.breaks.push(BreakRecord {
+                story_id: em.current_story_id.clone(),
+                paragraph_idx: em.paragraph_idx,
+                line_idx: current_line_idx as u32,
+                page_idx: target_page as u32,
+                frame_idx: em.frame_idx as u32,
+                first_byte: line.byte_range.start as u32,
+                last_byte: line.byte_range.end as u32,
+                baseline_y_pt: line.baseline_y as f32 / paged_text::shape::ADVANCE_PRECISION,
+                width_pt: line.width as f32 / paged_text::shape::ADVANCE_PRECISION,
+                source_text,
+                generated,
+                text_path: None,
+            });
+        }
+
+        let frame = em.chain[em.frame_idx];
+        let (ox, oy) = pages[target_page].spread_origin;
+        let frame_insets = frame.inset_spacing.unwrap_or([0.0; 4]);
+        // frame.bounds is in the frame's *inner* coordinate system
+        // (PathGeometry-derived for real-world IDMLs). The frame's
+        // ItemTransform maps that to spread coords; subtracting the
+        // page's spread_origin then puts text in page-local pt.
+        // column_x_shift_pt is non-zero only when a wrap rectangle
+        // intrudes from the head frame's left side.
+        let (sx, sy) = frame_spread_top_left(frame.bounds, frame.item_transform);
+        let text_origin_pt = (sx - ox + frame_insets[1] + em.column_x_shift_pt, sy - oy);
+
+        // Phase 3 Item A — capture per-cluster page-local positions.
+        // Lets the canvas hit-test by character offset, place the
+        // caret, and compute selection geometry. Captured
+        // unconditionally; cost is O(glyphs on this line). The
+        // captured baseline / x_pt are in page-local pt — already
+        // includes the frame's spread→page→origin offset. Rotated
+        // frames receive their visual rotation via the post-emit
+        // pass that follows; the captured positions here are the
+        // upright pre-rotation values, suitable for content-side
+        // selection math (rotation only affects how we *render* the
+        // caret, not which character it points at).
+        {
+            let baseline_pt_local = line.baseline_y as f32 / paged_text::shape::ADVANCE_PRECISION;
+            let line_h_pt = line_h as f32 / paged_text::shape::ADVANCE_PRECISION;
+            let mut clusters: Vec<ClusterPos> = Vec::with_capacity(line.glyphs.len());
+            // Coalesce glyphs that share a source cluster (ligatures,
+            // multi-glyph clusters) into one ClusterPos entry.
+            let mut last_cluster: Option<u32> = None;
+            for g in &line.glyphs {
+                let adv = g.x_advance as f32 / paged_text::shape::ADVANCE_PRECISION;
+                if last_cluster == Some(g.cluster) {
+                    if let Some(c) = clusters.last_mut() {
+                        c.advance_pt += adv;
+                    }
+                    continue;
+                }
+                last_cluster = Some(g.cluster);
+                let x_pt_page =
+                    text_origin_pt.0 + g.x as f32 / paged_text::shape::ADVANCE_PRECISION;
+                clusters.push(ClusterPos {
+                    byte: g.cluster,
+                    x_pt: x_pt_page,
+                    advance_pt: adv,
+                });
+            }
+            // W1.4 — clickable link regions. For each hyperlink source
+            // span that overlaps this visible line, bound the clusters
+            // in the overlap into one page-local pt rect and push a
+            // `LinkRegion` carrying the pre-resolved target. The rect's
+            // vertical extent follows the line's ascent / descent (same
+            // heuristic the LineLayout uses); a span covering multiple
+            // lines yields one region per line, which the PDF backend
+            // emits as separate annotations — the correct behaviour for
+            // a wrapped link.
+            if em.collect_link_regions && !link_spans.is_empty() {
+                let baseline_y_page = text_origin_pt.1 + baseline_pt_local;
+                let asc = 0.8 * line_h_pt;
+                let desc = 0.2 * line_h_pt;
+                let line_start = line.byte_range.start;
+                let line_end = line.byte_range.end;
+                for (span, target) in &link_spans {
+                    // Byte intersection of the span with this line.
+                    let lo = span.start.max(line_start);
+                    let hi = span.end.min(line_end);
+                    if lo >= hi {
+                        continue;
+                    }
+                    // Bound the clusters whose byte falls in [lo, hi).
+                    let mut min_x = f32::MAX;
+                    let mut max_x = f32::MIN;
+                    for c in &clusters {
+                        let b = c.byte as usize;
+                        if b >= lo && b < hi {
+                            min_x = min_x.min(c.x_pt);
+                            max_x = max_x.max(c.x_pt + c.advance_pt);
+                        }
+                    }
+                    if min_x > max_x {
+                        // No cluster landed in the overlap (e.g. the
+                        // span covers only trailing whitespace) — skip.
+                        continue;
+                    }
+                    if let Some(table) = pages[target_page].list.link_regions.as_mut() {
+                        table.push(paged_compose::LinkRegion {
+                            rect: paged_compose::Rect {
+                                x: min_x,
+                                y: baseline_y_page - asc,
+                                w: (max_x - min_x).max(0.0),
+                                h: asc + desc,
+                            },
+                            target: target.clone(),
+                        });
+                    }
+                }
+            }
+
+            let host_page_id = pages[target_page].id.clone();
+            // A split paragraph's segment reports paragraph-wide bytes and
+            // line indices (zero bases for an unsplit paragraph).
+            let seg = em.segment;
+            // The marker's glyphs are not characters the caret can reach.
+            let marker: Vec<ClusterPos> = clusters
+                .iter()
+                .filter(|c| c.byte < marker_bytes)
+                .copied()
+                .collect();
+            clusters.retain(|c| c.byte >= marker_bytes);
+            for c in &mut clusters {
+                c.byte = seg.byte_base + model_byte(c.byte);
+            }
+            em.segment.lines = em.segment.lines.max(current_line_idx as u32 + 1);
+            pages[target_page].story_layout.push(LineLayout {
+                story_id: em.current_story_id.clone(),
+                page_id: host_page_id,
+                cell: None,
+                paragraph_idx: em.paragraph_idx,
+                line_idx: seg.line_base + current_line_idx as u32,
+                frame_id: frame.self_id.clone(),
+                baseline_y_pt: text_origin_pt.1 + baseline_pt_local,
+                // Phase 3 first cut: line-height heuristic for ascent
+                // / descent. Real font metrics arrive alongside the
+                // main-thread fast composer.
+                ascent_pt: 0.8 * line_h_pt,
+                descent_pt: 0.2 * line_h_pt,
+                byte_range: seg.byte_base + model_byte(line.byte_range.start as u32)
+                    ..seg.byte_base + model_byte(line.byte_range.end as u32),
+                clusters,
+                marker,
+            });
+        }
+        // The notes whose reference stands on this line go to its frame; all
+        // that are left, on the paragraph's last line. Every build does this,
+        // not only one that collects line records.
+        {
+            let line_end = em.segment.byte_base + model_byte(line.byte_range.end as u32);
+            let last_line = em.segment.closes_paragraph && current_line_idx == last_line_index;
+            capture_footnotes(em, pages, (!last_line).then_some(line_end), line.baseline_y);
+        }
+
+        // Where this line's in-line objects landed; their placeholder
+        // characters paint nothing.
+        if let Some(on_line) = line_objects.get(current_line_idx).filter(|v| !v.is_empty()) {
+            let cap_height = head_font_metrics.and_then(|m| m.cap_height).unwrap_or(0.7);
+            let to_pt = |v: i32| v as f32 / paged_text::shape::ADVANCE_PRECISION;
+            if let Some(objs) = em.inline_objects.as_mut() {
+                for lo in on_line {
+                    let Some(g) = line.glyphs.iter().find(|g| g.cluster == lo.cluster) else {
+                        continue;
+                    };
+                    if let Some(slot) = objs.placed.get_mut(lo.object) {
+                        *slot = Some(anchored::PlacedObject {
+                            page: target_page,
+                            x: text_origin_pt.0 + to_pt(g.x),
+                            baseline: text_origin_pt.1 + to_pt(line.baseline_y),
+                            column: (text_origin_pt.0, text_origin_pt.0 + full_col_pt),
+                            point_size: lo.point_size,
+                            cap_height,
+                        });
+                    }
+                }
+            }
+            line.glyphs
+                .retain(|g| !on_line.iter().any(|lo| lo.cluster == g.cluster));
+        }
+
+        // Pull just the rotation/scale 2×2 from the frame's
+        // ItemTransform. emit_glyph_slice positions glyphs in upright
+        // page coords offset by `text_origin_pt`; the post-emit pass
+        // below rotates each glyph command around the frame's spread
+        // top-left so rotated TextFrames render with text rotated.
+        let frame_linear = frame
+            .item_transform
+            .map(|m| [m[0], m[1], m[2], m[3]])
+            .unwrap_or([1.0, 0.0, 0.0, 1.0]);
+        let frame_is_upright = (frame_linear[1].abs() < 1e-5)
+            && (frame_linear[2].abs() < 1e-5)
+            && ((frame_linear[0] - 1.0).abs() < 1e-5)
+            && ((frame_linear[3] - 1.0).abs() < 1e-5);
+
+        let before_cmds = pages[target_page].list.commands.len();
+
+        // Q-09: emit RuleAbove BEFORE the shading rect on the first
+        // line so the rule sits above the shading band.
+        let is_first_line = current_line_idx == 0;
+        let is_last_line = current_line_idx == last_line_index;
+        let line_h_pt_local = line_h as f32 / paged_text::shape::ADVANCE_PRECISION;
+        let baseline_pt_local = line.baseline_y as f32 / paged_text::shape::ADVANCE_PRECISION;
+        if is_first_line {
+            first_baseline_pt = Some(baseline_pt_local);
+            if let Some(paint) = rule_above_paint {
+                let r = &resolved_paragraph.rule_above;
+                let weight = r.weight.unwrap_or(1.0).max(0.01);
+                let offset = r.offset.unwrap_or(0.0);
+                let left = r.left_indent.unwrap_or(0.0);
+                let right = r.right_indent.unwrap_or(0.0);
+                let col_w_pt = em.column_width_pt.unwrap_or(0.0);
+                // Rule y: above the first line's baseline by
+                // (line_h * 0.8 + offset). InDesign's default origin
+                // for RuleAbove is the baseline; we approximate with
+                // ascent ≈ 0.8 line_h.
+                let rule_y = text_origin_pt.1 + baseline_pt_local - line_h_pt_local * 0.8 - offset;
+                let x_left = text_origin_pt.0 + left;
+                let x_right = text_origin_pt.0 + col_w_pt - right;
+                if x_right > x_left {
+                    let rect = paged_compose::Rect {
+                        x: x_left,
+                        y: rule_y - weight * 0.5,
+                        w: x_right - x_left,
+                        h: weight,
+                    };
+                    paged_compose::emit_rect_transformed(
+                        rect,
+                        Transform::IDENTITY,
+                        paint,
+                        &mut pages[target_page].list,
+                    );
+                }
+            }
+        }
+
+        // Q-09: paint the shading band BEFORE the line's glyphs so it
+        // composites behind the text. Width spans the column (modulo
+        // the per-side offsets); vertical extents are line_h above
+        // and a descent-fudge below the baseline. The renderer doesn't
+        // yet differentiate `AscentTopOrigin` vs `BaselineTopOrigin`
+        // etc. — `line_h * 0.8` covers the ascent portion well enough
+        // for the visible band to read correctly for most display
+        // headlines.
+        if let Some(paint) = shading_paint {
+            let line_h_pt = line_h as f32 / paged_text::shape::ADVANCE_PRECISION;
+            let baseline_pt = line.baseline_y as f32 / paged_text::shape::ADVANCE_PRECISION;
+            let col_w_pt = em.column_width_pt.unwrap_or(0.0);
+            let y_top = text_origin_pt.1 + baseline_pt - line_h_pt * 0.8 - shading_offsets[0];
+            let y_bot = text_origin_pt.1 + baseline_pt + line_h_pt * 0.2 + shading_offsets[2];
+            let x_left = text_origin_pt.0 + shading_offsets[1];
+            let x_right = text_origin_pt.0 + col_w_pt - shading_offsets[3];
+            if x_right > x_left && y_bot > y_top {
+                let rect = paged_compose::Rect {
+                    x: x_left,
+                    y: y_top,
+                    w: x_right - x_left,
+                    h: y_bot - y_top,
+                };
+                paged_compose::emit_rect_transformed(
+                    rect,
+                    Transform::IDENTITY,
+                    paint,
+                    &mut pages[target_page].list,
+                );
+            }
+        }
+
+        // A3 — pink substituted-font highlight, BEFORE the line's glyph
+        // fills so it paints behind the text (same `text_origin_pt`
+        // origin as `emit_glyph_slice`). Glyph font_ids mix the wght
+        // bits in (`fnv ^ wght`); map back to the plain byte-hash key
+        // `FontTable::metrics_for` uses.
+        if em.options.degraded_asset_markers {
+            emit_substituted_highlight_for_line(
+                &line,
+                &|fid| {
+                    font_ids
+                        .iter()
+                        .position(|f| *f == fid)
+                        .and_then(|i| em.font_table.metrics_for(bytes_font_ids[i]))
+                        .copied()
+                },
+                text_origin_pt,
+                &mut pages[target_page].list,
+            );
+        }
+
+        let mut start = 0;
+        while start < line.glyphs.len() {
+            let fid = line.glyphs[start].font_id;
+            // A slice is drawn at ONE size, so it ends where the size does:
+            // two runs in the same face at different sizes (a list marker in
+            // its 20 pt character style before 10 pt text) share a font_id.
+            let size = line.glyphs[start].point_size;
+            let mut end = start + 1;
+            while end < line.glyphs.len()
+                && line.glyphs[end].font_id == fid
+                && (line.glyphs[end].point_size - size).abs() < 0.01
+            {
+                end += 1;
+            }
+            let face_idx = match font_ids.iter().position(|f| *f == fid) {
+                Some(i) => unique_idx[i],
+                None => {
+                    start = end;
+                    continue;
+                }
+            };
+            let Some(outline) = outline_faces[face_idx].as_ref() else {
+                start = end;
+                continue;
+            };
+            let outliner = TtfOutliner::new(outline);
+            // A glyph set upright in vertical text is drawn from its
+            // column's centre line: its face's em box centre, up from the
+            // baseline the line is laid out on.
+            let upright_slice;
+            let slice: &[paged_text::PositionedGlyph] =
+                if line.glyphs[start..end].iter().any(|g| g.upright.is_some()) {
+                    let em_box = super::font_table::em_box(outline);
+                    let centre = ((em_box.top - 0.5) * size * paged_text::shape::ADVANCE_PRECISION)
+                        .round() as i32;
+                    upright_slice = line.glyphs[start..end]
+                        .iter()
+                        .map(|g| {
+                            let mut g = *g;
+                            if g.upright.is_some() {
+                                g.y -= centre;
+                            }
+                            g
+                        })
+                        .collect::<Vec<_>>();
+                    &upright_slice
+                } else {
+                    &line.glyphs[start..end]
+                };
+            // Frame blend mode is applied at the transparency-group
+            // level by `bracket_text_frame_glyph_ranges` after the
+            // story pass completes; the glyphs themselves emit at
+            // BlendMode::Normal so the group composite is the single
+            // place the IDML BlendingSetting takes effect.
+            em.tag_glyphs(&mut pages[target_page].list, true);
+            emit_glyph_slice(
+                slice,
+                em.font_table.font_ref(fid),
+                line.glyphs[start].point_size,
+                |cluster| picker.pick(cluster),
+                text_origin_pt,
+                &outliner,
+                &mut pages[target_page].list,
+            );
+            // Text strokes are sparse — guard the second sweep with
+            // `any_text_stroke` so paragraphs without a single
+            // `StrokeColor` cascade skip the per-glyph picker probe
+            // entirely. When active, the stroke commands land in
+            // display order *after* the matching fills so the outline
+            // paints on top of the silhouette (InDesign's default for
+            // `OutsideAlignment`-style outlines).
+            if any_text_stroke {
+                emit_glyph_slice_stroke(
+                    slice,
+                    em.font_table.font_ref(fid),
+                    line.glyphs[start].point_size,
+                    |cluster| stroke_picker.pick(cluster),
+                    text_origin_pt,
+                    &outliner,
+                    &mut pages[target_page].list,
+                );
+            }
+            em.tag_glyphs(&mut pages[target_page].list, false);
+            start = end;
+        }
+        emit_line_decorations(
+            &line,
+            &picker,
+            (sx - ox, sy - oy),
+            &mut pages[target_page].list,
+        );
+
+        // Kenten and ruby (`ruby`), under the Japanese composers only.
+        if japanese {
+            let origin = (sx - ox, sy - oy);
+            let em_of = |font_id: u32| {
+                font_ids
+                    .iter()
+                    .position(|f| *f == font_id)
+                    .and_then(|i| outline_faces.get(unique_idx[i])?.as_ref())
+                    .map_or(
+                        super::font_table::EmBox {
+                            top: 0.88,
+                            bottom: 0.12,
+                        },
+                        super::font_table::em_box,
+                    )
+            };
+            let run_of = |cluster: u32| {
+                styled_starts
+                    .partition_point(|&s| s <= cluster)
+                    .saturating_sub(1)
+            };
+            super::ruby::emit_kenten_for_line(
+                &line,
+                |g| {
+                    use super::ruby::{Kenten, KentenMark, MarkShape};
+                    let run = run_of(g.cluster);
+                    let r = resolved_runs.get(run.checked_sub(head_run)?)?;
+                    let kind = r.kenten_kind.as_deref()?;
+                    let shape = match Kenten::from_idml(kind) {
+                        Some(k) => MarkShape::Drawn(k),
+                        None if kind == "Custom" => {
+                            MarkShape::Character(r.kenten_character.as_deref()?.chars().next()?)
+                        }
+                        None => return None,
+                    };
+                    let m = &r.marks;
+                    let pct = |v: Option<f32>| v.filter(|p| *p > 0.0).map_or(1.0, |p| p / 100.0);
+                    Some(KentenMark {
+                        shape,
+                        size: r
+                            .kenten_font_size
+                            .filter(|s| *s > 0.0)
+                            .unwrap_or(g.point_size * 0.5),
+                        x_scale: pct(m.kenten_x_scale),
+                        y_scale: pct(m.kenten_y_scale),
+                        placement: m.kenten_placement.unwrap_or(0.0),
+                        below: m.kenten_position.as_deref() == Some("BelowLeft"),
+                        left: m.kenten_alignment.as_deref() == Some("AlignKentenLeft"),
+                        run,
+                    })
+                },
+                em_of,
+                |k| mark_face(k, 1),
+                |cluster| picker.pick(cluster),
+                origin,
+                em.vertical,
+                &mut pages[target_page].list,
+            );
+            super::ruby::emit_ruby_for_line(
+                &line,
+                &ruby,
+                em_of,
+                |k| mark_face(k, 0),
+                |cluster| picker.pick(cluster),
+                origin,
+                em.vertical,
+                &mut pages[target_page].list,
+            );
+        }
+
+        // For rotated/sheared TextFrames, post-multiply each glyph
+        // command's transform by the frame's linear 2×2, pivoting
+        // around the frame's page-space top-left so glyphs end up
+        // rotated *with* their host frame. Upright frames skip the
+        // pass entirely (the common case).
+        let after_glyph_cmds = pages[target_page].list.commands.len();
+        if !frame_is_upright {
+            let pivot_x = sx - ox;
+            let pivot_y = sy - oy;
+            pages[target_page]
+                .list
+                .map_transforms(before_cmds..after_glyph_cmds, |xf| {
+                    rotate_transform_around(xf, frame_linear, pivot_x, pivot_y)
+                });
+        }
+
+        let after_cmds = pages[target_page].list.commands.len();
+        // Glyph-level overprint: when the paragraph cascade sets
+        // `OverprintFill="true"` (or stroke) on a `<ParagraphStyleRange>`
+        // or its applied paragraph style, rewrite this line's freshly
+        // emitted `FillPath` / `StrokePath` (including decoration
+        // strokes) to their `*Overprint` variants. Per-run mixing within
+        // a paragraph (some runs overprint, others knockout) is not yet
+        // honoured — the slice loop already groups glyphs by (font,
+        // paint), so a future batch can extend the picker to include
+        // the flag in the band identity.
+        let op_fill = resolved_paragraph.overprint_fill.unwrap_or(false);
+        let op_stroke = resolved_paragraph.overprint_stroke.unwrap_or(false);
+        if op_fill || op_stroke {
+            rewrite_tail_for_overprint(&mut pages[target_page], before_cmds, op_fill, op_stroke);
+        }
+        let frame_idx = em.frame_idx;
+        match &mut em.frame_cmd_ranges[frame_idx] {
+            Some((_, e)) => *e = after_cmds,
+            None => em.frame_cmd_ranges[frame_idx] = Some((before_cmds, after_cmds)),
+        }
+        match active_seg {
+            Some((f, _, _)) if f != frame_idx => {
+                if let Some((prev_f, s, e)) = active_seg.take() {
+                    if s != e {
+                        em.paragraph_cmd_ranges[prev_f].push((s, e));
+                    }
+                }
+                active_seg = Some((frame_idx, before_cmds, after_cmds));
+            }
+            Some((f, s, _)) => active_seg = Some((f, s, after_cmds)),
+            None => active_seg = Some((frame_idx, before_cmds, after_cmds)),
+        }
+        if line.baseline_y >= em.frame_max_baseline_64[frame_idx] {
+            let descent_64 = line
+                .glyphs
+                .iter()
+                .filter_map(|g| {
+                    // Glyph font ids mix the wght bits in; metrics are
+                    // keyed by the plain byte hash.
+                    let i = font_ids.iter().position(|f| *f == g.font_id)?;
+                    let m = em.font_table.metrics_for(bytes_font_ids[i])?;
+                    Some(m.descender * g.point_size * paged_text::shape::ADVANCE_PRECISION)
+                })
+                .fold(0.0_f32, f32::max)
+                .round() as i32;
+            let em_bottom_64 = if japanese {
+                line.glyphs
+                    .iter()
+                    .filter_map(|g| {
+                        let i = font_ids.iter().position(|f| *f == g.font_id)?;
+                        let face = outline_faces.get(unique_idx[i])?.as_ref()?;
+                        let em_box = super::font_table::em_box(face);
+                        Some(em_box.bottom * g.point_size * paged_text::shape::ADVANCE_PRECISION)
+                    })
+                    .fold(0.0_f32, f32::max)
+                    .round() as i32
+            } else {
+                0
+            };
+            if line.baseline_y > em.frame_max_baseline_64[frame_idx] {
+                em.frame_max_descent_64[frame_idx] = descent_64;
+                em.frame_max_em_bottom_64[frame_idx] = em_bottom_64;
+            } else {
+                em.frame_max_descent_64[frame_idx] =
+                    em.frame_max_descent_64[frame_idx].max(descent_64);
+                em.frame_max_em_bottom_64[frame_idx] =
+                    em.frame_max_em_bottom_64[frame_idx].max(em_bottom_64);
+            }
+            em.frame_max_baseline_64[frame_idx] = line.baseline_y;
+        }
+
+        // The next line sits this line's leading below it, exactly
+        // (`StoryEmitter::y_cursor_exact`).
+        let baseline_exact = if line.baseline_exact.round() as i32 == line.baseline_y {
+            line.baseline_exact
+        } else {
+            line.baseline_y as f64
+        };
+        let line_h_exact = paged_text::layout::line_leading_exact(&line.glyphs, &lopts)
+            .filter(|e| e.round() as i32 == line_h)
+            .unwrap_or(line_h as f64);
+        em.set_y_exact(baseline_exact + line_h_exact);
+        em.set_prev_line_height(line_h_exact);
+        slug_above_64 = Some((em.frame_idx, line.baseline_y));
+
+        // Q-09: emit RuleBelow AFTER the last line's glyphs so the
+        // rule sits in front of the body text. Mirror of the
+        // RuleAbove emit at the top of the loop. Same column +
+        // indent + weight handling; offset is measured below the
+        // baseline so positive `offset` pushes the rule further down.
+        if is_last_line {
+            if let Some(paint) = rule_below_paint {
+                let r = &resolved_paragraph.rule_below;
+                let weight = r.weight.unwrap_or(1.0).max(0.01);
+                let offset = r.offset.unwrap_or(0.0);
+                let left = r.left_indent.unwrap_or(0.0);
+                let right = r.right_indent.unwrap_or(0.0);
+                let col_w_pt = em.column_width_pt.unwrap_or(0.0);
+                let rule_y = text_origin_pt.1 + baseline_pt_local + line_h_pt_local * 0.2 + offset;
+                let x_left = text_origin_pt.0 + left;
+                let x_right = text_origin_pt.0 + col_w_pt - right;
+                if x_right > x_left {
+                    let rect = paged_compose::Rect {
+                        x: x_left,
+                        y: rule_y - weight * 0.5,
+                        w: x_right - x_left,
+                        h: weight,
+                    };
+                    paged_compose::emit_rect_transformed(
+                        rect,
+                        Transform::IDENTITY,
+                        paint,
+                        &mut pages[target_page].list,
+                    );
+                }
+            }
+        }
+        // Q-09: emit ParagraphBorder on the last line. Sharp corners
+        // (all radii 0) keep the cheap four-fill-rect path; any rounded
+        // corner switches to a single rounded-outline StrokePath
+        // (Track 4d).
+        if is_last_line {
+            if let (Some(paint), Some(first_baseline)) = (border_paint, first_baseline_pt) {
+                let b = &resolved_paragraph.border;
+                let weight = b.weight.unwrap_or(1.0).max(0.01);
+                let off_top = b.offset_top.unwrap_or(0.0);
+                let off_left = b.offset_left.unwrap_or(0.0);
+                let off_bottom = b.offset_bottom.unwrap_or(0.0);
+                let off_right = b.offset_right.unwrap_or(0.0);
+                let col_w_pt = em.column_width_pt.unwrap_or(0.0);
+                let x_left = text_origin_pt.0 + off_left;
+                let x_right = text_origin_pt.0 + col_w_pt - off_right;
+                let y_top = text_origin_pt.1 + first_baseline - line_h_pt_local * 0.8 - off_top;
+                let y_bot =
+                    text_origin_pt.1 + baseline_pt_local + line_h_pt_local * 0.2 + off_bottom;
+                if x_right > x_left && y_bot > y_top {
+                    let radii = per_corner_radii(&b.corners);
+                    let kinds = per_corner_kinds(&b.corners);
+                    let any_rounded = radii.iter().any(|r| r.map(|v| v > 0.0).unwrap_or(false));
+                    if any_rounded {
+                        let outline_rect = paged_compose::Rect {
+                            x: x_left,
+                            y: y_top,
+                            w: x_right - x_left,
+                            h: y_bot - y_top,
+                        };
+                        let path = corner_rect_path(outline_rect, radii, kinds);
+                        let path_id = pages[target_page].list.paths.push_anon(path);
+                        pages[target_page]
+                            .list
+                            .push(paged_compose::DisplayCommand::StrokePath {
+                                path_id,
+                                paint,
+                                stroke: paged_compose::Stroke::new(weight),
+                                transform: Transform::IDENTITY,
+                            });
+                    } else {
+                        let top = paged_compose::Rect {
+                            x: x_left - weight * 0.5,
+                            y: y_top - weight * 0.5,
+                            w: (x_right - x_left) + weight,
+                            h: weight,
+                        };
+                        let bottom = paged_compose::Rect {
+                            x: x_left - weight * 0.5,
+                            y: y_bot - weight * 0.5,
+                            w: (x_right - x_left) + weight,
+                            h: weight,
+                        };
+                        let left_edge = paged_compose::Rect {
+                            x: x_left - weight * 0.5,
+                            y: y_top - weight * 0.5,
+                            w: weight,
+                            h: (y_bot - y_top) + weight,
+                        };
+                        let right_edge = paged_compose::Rect {
+                            x: x_right - weight * 0.5,
+                            y: y_top - weight * 0.5,
+                            w: weight,
+                            h: (y_bot - y_top) + weight,
+                        };
+                        for r in [top, right_edge, bottom, left_edge] {
+                            paged_compose::emit_rect_transformed(
+                                r,
+                                Transform::IDENTITY,
+                                paint,
+                                &mut pages[target_page].list,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        current_line_idx += 1;
+    }
+    // Drop-cap glyph emission: now that the body lines have landed,
+    // position the dropped run at the paragraph's origin (left edge,
+    // first baseline). The dropped glyphs share the head frame's
+    // page; we use the first laid-out line's baseline_y as the
+    // y reference (already adjusted for text_origin_pt). Cluster=0
+    // routes the paint picker to run 0 — same fill as the body's
+    // first character.
+    if let Some((_, cap_spec, cap_shaped, cap_point_size, cap_font_id, cap_outline, cap_paint)) =
+        drop_cap_spec_emit
+    {
+        let target_page = em.chain_pages[em.frame_idx];
+        let frame = em.chain[em.frame_idx];
+        let (ox, oy) = pages[target_page].spread_origin;
+        let frame_insets = frame.inset_spacing.unwrap_or([0.0; 4]);
+        let (sx, sy) = frame_spread_top_left(frame.bounds, frame.item_transform);
+        let text_origin_pt = (sx - ox + frame_insets[1] + em.column_x_shift_pt, sy - oy);
+        // Drop-cap baseline = M-th body line's baseline, where
+        // M = `paragraph.drop_cap_lines`. InDesign aligns the cap-
+        // height of the dropped glyph with the first body line's
+        // cap-height; the glyph then descends to the M-th body
+        // line's baseline. We compute that as
+        // `first_baseline + (M - 1) * line_height` (M >= 1 always
+        // when the spec is active). Falls back to the emitter's
+        // y_cursor when no body line was emitted (drop cap consumed
+        // the entire paragraph).
+        let baseline_64 = if em.y_cursor < 0 {
+            (cap_point_size * 0.8 * paged_text::shape::ADVANCE_PRECISION).round() as i32
+        } else {
+            let m = paragraph.drop_cap_lines.saturating_sub(1) as i32;
+            lopts.first_baseline + m * lopts.line_height
+        };
+        let mut positioned: Vec<paged_text::PositionedGlyph> =
+            Vec::with_capacity(cap_shaped.glyphs.len());
+        // InDesign flushes the cap's INK to the text margin, not its
+        // pen origin: measured 2026-09-04..06, the dropped "I" starts
+        // one side bearing LEFT of where a normal glyph would, and its
+        // ink column lands on the margin to within a 600 dpi pixel.
+        let mut pen_x = -cap_spec.ink_left;
+        for g in &cap_shaped.glyphs {
+            positioned.push(paged_text::PositionedGlyph {
+                glyph_id: g.glyph_id,
+                cluster: 0, // route paint to run 0
+                x: pen_x + g.x_offset,
+                y: baseline_64 + g.y_offset,
+                x_advance: g.x_advance,
+                font_id: cap_font_id,
+                point_size: cap_point_size,
+                underline: false,
+                strikethru: false,
+                substituted: false,
+                x_scale: 1.0,
+                y_scale: 1.0,
+                // Drop caps inherit run 0's skew (the cap is the head of
+                // the first run) so a skewed paragraph leans its cap too.
+                skew_deg: resolved_runs.first().and_then(|r| r.skew).unwrap_or(0.0),
+                ch: None,
+                upright: None,
+            });
+            pen_x += g.x_advance;
+        }
+        let outliner = TtfOutliner::new(&cap_outline);
+        let before_cap_cmds = pages[target_page].list.commands.len();
+        em.tag_glyphs(&mut pages[target_page].list, true);
+        emit_glyph_slice(
+            &positioned,
+            em.font_table.font_ref(cap_font_id),
+            cap_point_size,
+            |_cluster| cap_paint,
+            text_origin_pt,
+            &outliner,
+            &mut pages[target_page].list,
+        );
+        // Drop-cap glyphs inherit run 0's outline when the paragraph
+        // resolves a text stroke (cluster=0 routes the picker to the
+        // first run's band). Rare but cheap to honour for the few
+        // paragraphs where it applies.
+        if any_text_stroke {
+            emit_glyph_slice_stroke(
+                &positioned,
+                em.font_table.font_ref(cap_font_id),
+                cap_point_size,
+                |cluster| stroke_picker.pick(cluster),
+                text_origin_pt,
+                &outliner,
+                &mut pages[target_page].list,
+            );
+        }
+        em.tag_glyphs(&mut pages[target_page].list, false);
+        let after_cap_cmds = pages[target_page].list.commands.len();
+        // Track the drop-cap glyphs against the same frame range so
+        // any later transparency / vertical-justification pass
+        // covers them.
+        let frame_idx = em.frame_idx;
+        match &mut em.frame_cmd_ranges[frame_idx] {
+            Some((_, e)) => *e = after_cap_cmds,
+            None => em.frame_cmd_ranges[frame_idx] = Some((before_cap_cmds, after_cap_cmds)),
+        }
+        match active_seg {
+            Some((f, _, _)) if f != frame_idx => {
+                if let Some((prev_f, s, e)) = active_seg.take() {
+                    if s != e {
+                        em.paragraph_cmd_ranges[prev_f].push((s, e));
+                    }
+                }
+                active_seg = Some((frame_idx, before_cap_cmds, after_cap_cmds));
+            }
+            Some((f, s, _)) => active_seg = Some((f, s, after_cap_cmds)),
+            None => active_seg = Some((frame_idx, before_cap_cmds, after_cap_cmds)),
+        }
+    }
+    if let Some((f, s, e)) = active_seg {
+        if s != e {
+            em.paragraph_cmd_ranges[f].push((s, e));
+        }
+    }
+    if dropped_overflow_lines > 0 {
+        total_stats.dropped_overflow_lines += dropped_overflow_lines;
+    }
+    em.set_y_exact(em.y_exact() + space_after_64 as f64);
+
+    // Anchored object pass: walk the paragraph's `anchored_frames`
+    // list and emit each one. We support InlinePosition (the most
+    // common case) plus a best-effort AbovePosition / Custom that
+    // applies anchor_x / anchor_y offsets relative to the
+    // paragraph's baseline. Frame content recursion is intentionally
+    // shallow — the parser provides bounds + setting + a story ref
+    // for TextFrames; richer recursion (nested transparency, full
+    // fill cascade) lands when the corpus needs it.
+    if paragraph
+        .anchored_frames
+        .iter()
+        .any(|af| !anchored::sits_in_line(af))
+    {
+        // Resolve the anchor line's vertical metrics (x-height /
+        // cap-height / leading-top) for the `Line*` vertical reference
+        // points. Source the metrics the same way as the rest of the
+        // baseline math: the IDML family override first, then the head
+        // run's real parsed font metrics keyed by the raw byte hash
+        // (NOT `font_ids[0]`, which mixes in the wght axis and is
+        // keyed differently from `FontTable::metrics`). The leading is
+        // the paragraph's effective line height (explicit override or
+        // 1.2× auto).
+        let anchor_family = resolved_runs.first().and_then(|r| r.font.as_deref());
+        let anchor_metrics = anchor_family
+            .and_then(|f| em.font_table.metrics_for_family(f))
+            .or_else(|| {
+                bytes_pool
+                    .first()
+                    .map(font_id)
+                    .and_then(|id| em.font_table.metrics_for(id))
+            });
+        let baseline_y_pt = {
+            let frame = em.chain[em.frame_idx];
+            let (_ox, oy) = pages[em.chain_pages[em.frame_idx]].spread_origin;
+            let (_sx, sy) = frame_spread_top_left(frame.bounds, frame.item_transform);
+            let para_origin_y = sy - oy;
+            if em.y_cursor >= 0 {
+                para_origin_y + em.y_cursor as f32 / paged_text::shape::ADVANCE_PRECISION
+            } else {
+                para_origin_y
+            }
+        };
+        let leading_pt = lopts.leading_override.unwrap_or(lopts.line_height).max(1) as f32
+            / paged_text::shape::ADVANCE_PRECISION;
+        let line_metrics = anchored::LineRefMetrics::resolve(
+            baseline_y_pt,
+            paragraph_size,
+            leading_pt,
+            anchor_metrics,
+        );
+        // W0.6 margin box for the anchor's host page, page-local pt.
+        let margin_box = resolve_page_margin_box(em.document, &pages[em.chain_pages[em.frame_idx]]);
+        emit_anchored_frames_for_paragraph(
+            em,
+            paragraph,
+            pages,
+            line_metrics,
+            margin_box,
+            total_stats,
+        );
+    }
+}
+
+/// True when the story's text depends on the page numbering: a page
+/// marker or a text variable anywhere in it (table cells included).
+fn story_prints_page_context(story: &paged_model::Story) -> bool {
+    fn paragraphs_print(paragraphs: &[paged_model::Paragraph]) -> bool {
+        paragraphs.iter().any(|p| {
+            p.runs.iter().any(|r| {
+                r.text_variable.is_some() || r.text.chars().any(paged_model::is_page_marker)
+            }) || p
+                .table
+                .as_ref()
+                .is_some_and(|t| t.cells.iter().any(|c| paragraphs_print(&c.paragraphs)))
+        })
+    }
+    paragraphs_print(&story.paragraphs)
+}
+
+/// The paint order of a master spread's items: `frames_in_order` with
+/// every group expanded to its members (depth first), followed by any
+/// item of the backing vecs the walk did not reach, in the legacy
+/// kind-by-kind order. A spread without `frames_in_order` yields the
+/// legacy order alone.
+fn master_paint_order(spread: &paged_model::Spread) -> Vec<paged_model::FrameRef> {
+    use paged_model::FrameRef;
+    fn walk(spread: &paged_model::Spread, fr: FrameRef, out: &mut Vec<FrameRef>, depth: usize) {
+        match fr {
+            FrameRef::Group(gi) => {
+                if depth > 64 {
+                    return;
+                }
+                if let Some(g) = spread.groups.get(gi) {
+                    for &m in &g.members {
+                        walk(spread, m, out, depth + 1);
+                    }
+                }
+            }
+            leaf => out.push(leaf),
+        }
+    }
+    let mut order = Vec::new();
+    for &fr in &spread.frames_in_order {
+        walk(spread, fr, &mut order, 0);
+    }
+    let seen = |fr: &FrameRef| order.contains(fr);
+    let legacy = (0..spread.text_frames.len())
+        .map(FrameRef::TextFrame)
+        .chain((0..spread.rectangles.len()).map(FrameRef::Rectangle))
+        .chain((0..spread.polygons.len()).map(FrameRef::Polygon))
+        .chain((0..spread.ovals.len()).map(FrameRef::Oval))
+        .chain((0..spread.graphic_lines.len()).map(FrameRef::GraphicLine));
+    let rest: Vec<FrameRef> = legacy.filter(|fr| !seen(fr)).collect();
+    order.extend(rest);
+    order
+}

@@ -1,0 +1,844 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Convert a laid-out paragraph into display-list commands.
+//!
+//! Produces one `FillPath` command per glyph. Glyph outlines are
+//! interned in the list's `PathBuffer` via a `(font_id, glyph_id)`
+//! cache key so repeated glyphs (the common case) share tessellated
+//! data.
+//!
+//! Coordinate system:
+//! - Font outlines are y-up with the baseline at y=0.
+//! - IDML pages are y-down with the top-left at (0, 0).
+//! - The per-glyph transform scales by `point_size / units_per_em`
+//!   and flips y, then translates to the glyph's (x, y) position on
+//!   the page (in pt).
+//!
+//! All text input positions are in 1/64 pt, as produced by
+//! `paged_text::layout`; we divide by 64 at the emit boundary.
+
+use paged_text::layout::{LaidOutParagraph, PositionedGlyph};
+
+use crate::display_list::{
+    DisplayCommand, DisplayList, GlyphCacheKey, Paint, PathId, Stroke, Transform,
+};
+use crate::glyph::GlyphOutliner;
+
+/// Advance precision used by `paged_text::layout`: positions are in
+/// 1/64 pt. We divide by this when converting to float pt.
+const ADVANCE_PRECISION: f32 = 64.0;
+
+/// Which font a run of glyphs belongs to, in BOTH id spaces.
+///
+/// They are not interchangeable, and passing one where the other was
+/// wanted is a bug that hides completely: the display list renders
+/// correctly either way, because the outline cache only needs
+/// [`Self::outline`]. It is the PDF exporter that needs
+/// [`Self::bytes`], and when it asked with the outline id every lookup
+/// missed — silently, since a miss means "outline this text", which is
+/// also what a font that legitimately forbids embedding produces. Every
+/// PDF the engine exported carried no text layer.
+///
+/// So the two ids travel together in one value that a caller cannot
+/// mix up, rather than as two `u32` parameters side by side.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FontRef {
+    /// Glyph-outline cache key: `fnv(face bytes) ^ wght_bits`. Mixing
+    /// the weight in is what stops one variable face fed at two
+    /// weights from sharing one set of cached outlines.
+    pub outline: u32,
+    /// The id that resolves to face BYTES (`fnv(face bytes)`), or
+    /// `None` when a `wght` variation is baked into these outlines and
+    /// the bytes alone would reproduce the wrong weight.
+    pub bytes: Option<u32>,
+}
+
+impl FontRef {
+    /// A face rendered as its own bytes give it — one id serves both.
+    #[must_use]
+    pub fn plain(id: u32) -> Self {
+        Self {
+            outline: id,
+            bytes: Some(id),
+        }
+    }
+
+    /// A varied instance: the outlines are not what the bytes alone
+    /// would produce, so nothing may embed them.
+    #[must_use]
+    pub fn varied(outline: u32) -> Self {
+        Self {
+            outline,
+            bytes: None,
+        }
+    }
+}
+
+/// Emit `FillPath` commands for every glyph in `laid_out`.
+///
+/// - `font` identifies the font in both id spaces — see [`FontRef`].
+///   The outline half is the glyph-cache key and must stay stable for
+///   a single render; the bytes half is what the PDF exporter embeds.
+/// - `point_size` is the em size the glyphs were shaped at.
+/// - `paint_for(cluster)` returns the paint for the glyph at `cluster`
+///   (byte offset into the source paragraph). Single-colour callers
+///   pass `|_| Paint::Solid(my_color)`.
+/// - `frame_origin_pt` is the page-space position of the frame's
+///   top-left corner. Glyph positions are offset by it so the
+///   commands live in page coordinates.
+pub fn emit_paragraph<O, F>(
+    laid_out: &LaidOutParagraph,
+    font: FontRef,
+    point_size: f32,
+    paint_for: F,
+    frame_origin_pt: (f32, f32),
+    outliner: &O,
+    list: &mut DisplayList,
+) where
+    O: GlyphOutliner,
+    F: Fn(u32) -> Paint,
+{
+    emit_paragraph_blend(
+        laid_out,
+        font,
+        point_size,
+        paint_for,
+        frame_origin_pt,
+        outliner,
+        list,
+        crate::display_list::BlendMode::Normal,
+    );
+}
+
+/// Like [`emit_paragraph`] but composites every glyph fill with
+/// `blend_mode`. Normal (the default in [`emit_paragraph`]) keeps the
+/// fast `FillPath` path; non-Normal modes route through
+/// `FillPathBlend` so the rasterizer stamps each glyph through an
+/// offscreen scratch and composites with the requested mode. Used to
+/// honour a TextFrame's `<BlendingSetting>` on its body text.
+pub fn emit_paragraph_blend<O, F>(
+    laid_out: &LaidOutParagraph,
+    font: FontRef,
+    point_size: f32,
+    paint_for: F,
+    frame_origin_pt: (f32, f32),
+    outliner: &O,
+    list: &mut DisplayList,
+    blend_mode: crate::display_list::BlendMode,
+) where
+    O: GlyphOutliner,
+    F: Fn(u32) -> Paint,
+{
+    for line in &laid_out.lines {
+        emit_glyph_slice_blend(
+            &line.glyphs,
+            font,
+            point_size,
+            &paint_for,
+            frame_origin_pt,
+            outliner,
+            list,
+            blend_mode,
+        );
+    }
+}
+
+/// Emit `FillPath` commands for a contiguous slice of glyphs that all
+/// share `font` (and therefore one outliner). Multi-font callers
+/// group glyphs by `glyph.font_id` and call this once per group.
+/// A glyph's outline transform: scaled and flipped to y down, sheared by
+/// its skew, at `(gx, gy)`. A glyph set upright in vertical text
+/// (`PositionedGlyph::upright`) is laid out in a line the renderer turns
+/// 90° clockwise into a column; its `(gx, gy)` is its vertical pen on the
+/// column's centre line, and it is drawn turned back a quarter turn,
+/// from the point its upright offset gives, so it stands upright there.
+fn glyph_transform(
+    g: &PositionedGlyph,
+    sx: f32,
+    sy: f32,
+    cterm: f32,
+    gx: f32,
+    gy: f32,
+) -> Transform {
+    match g.upright {
+        // Upright: the turn back, x' = -sy·y and y' = -sx·x, about the
+        // pen moved by the offset turned the same way: once the column
+        // turn maps (x, y) to (-y, x), the outline is plain and scaled,
+        // and drawn from the pen plus (dx, dy).
+        Some(u) => {
+            let dx = u.dx as f32 / ADVANCE_PRECISION;
+            let dy = u.dy as f32 / ADVANCE_PRECISION;
+            Transform([0.0, -sx, -sy, 0.0, gx + dy, gy - dx])
+        }
+        None => Transform([sx, 0.0, cterm, -sy, gx, gy]),
+    }
+}
+
+pub fn emit_glyph_slice<O, F>(
+    glyphs: &[PositionedGlyph],
+    font: FontRef,
+    point_size: f32,
+    paint_for: F,
+    frame_origin_pt: (f32, f32),
+    outliner: &O,
+    list: &mut DisplayList,
+) where
+    O: GlyphOutliner,
+    F: Fn(u32) -> Paint,
+{
+    emit_glyph_slice_blend(
+        glyphs,
+        font,
+        point_size,
+        paint_for,
+        frame_origin_pt,
+        outliner,
+        list,
+        crate::display_list::BlendMode::Normal,
+    );
+}
+
+/// Like [`emit_glyph_slice`] but emits `FillPathBlend` for non-Normal
+/// blend modes.
+pub fn emit_glyph_slice_blend<O, F>(
+    glyphs: &[PositionedGlyph],
+    font: FontRef,
+    point_size: f32,
+    paint_for: F,
+    frame_origin_pt: (f32, f32),
+    outliner: &O,
+    list: &mut DisplayList,
+    blend_mode: crate::display_list::BlendMode,
+) where
+    O: GlyphOutliner,
+    F: Fn(u32) -> Paint,
+{
+    let upem = outliner.units_per_em();
+    let scale = point_size / upem;
+    let (ox, oy) = frame_origin_pt;
+    let normal = matches!(blend_mode, crate::display_list::BlendMode::Normal);
+    for g in glyphs {
+        let Some(path_id) = get_or_intern_glyph_outline(font.outline, g.glyph_id, outliner, list)
+        else {
+            continue;
+        };
+        let gx = ox + g.x as f32 / ADVANCE_PRECISION;
+        let gy = oy + g.y as f32 / ADVANCE_PRECISION;
+        let paint = paint_for(g.cluster);
+        // Column-major 2×3 as `[a b c d tx ty]`: scale by (scale,
+        // scale) and flip y by negating the y-axis scale. Then
+        // translate to (gx, gy). `x_scale` folds IDML `HorizontalScale`
+        // into the glyph affine (P-08); the breaker already accounted
+        // for the advance, so glyphs are merely stretched in place.
+        let sx = scale * g.x_scale;
+        // `y_scale` folds IDML `VerticalScale` into the glyph affine's
+        // y-axis (the `-scale` y-flip term), scaling glyph height about
+        // the baseline (`gy`) without touching the advance or leading.
+        let sy = scale * g.y_scale;
+        // IDML `Skew` (false italic) → the affine's `c` (x-shear) term.
+        // A glyph point at em-height `y` lands at page-x `sx·x + c·y`;
+        // positive `Skew` must push the glyph *top* (positive `y`) to
+        // the right, so `c = +tan(skew)·sy` (scaled by the y-axis so the
+        // lean tracks the glyph's painted height). 0° → 0 → upright.
+        let cterm = skew_shear(g.skew_deg, sy);
+        let transform = glyph_transform(g, sx, sy, cterm, gx, gy);
+        // Concept 3 — glyph-run side-channel (collect_glyph_runs
+        // builds only): record the parallel text-run entry BEFORE
+        // pushing, so command_index points at the outline command.
+        if let Some(runs) = list.glyph_runs.as_mut() {
+            runs.push(crate::display_list::GlyphRunEntry {
+                command_index: list.commands.len() as u32,
+                font_id: font.outline,
+                face_id: font.bytes,
+                glyph_id: g.glyph_id,
+                font_size: point_size,
+                transform,
+                paint,
+                unicode: g.ch,
+                is_stroke: false,
+                structure: runs.current,
+            });
+        }
+        if normal {
+            list.push(DisplayCommand::FillPath {
+                path_id,
+                paint,
+                transform,
+            });
+        } else {
+            list.push(DisplayCommand::FillPathBlend {
+                path_id,
+                paint,
+                transform,
+                blend_mode,
+            });
+        }
+    }
+}
+
+/// Emit `StrokePath` commands for glyphs whose run cascade resolves a
+/// visible text stroke. `stroke_for(cluster)` returns `Some((paint,
+/// stroke))` for clusters that should be outlined and `None` for
+/// clusters that should remain fill-only — the typical sparse case
+/// where only a handful of runs carry a `StrokeColor`. The stroke
+/// commands are appended *after* the matching fills so they land on
+/// top of the glyph in display order (matching InDesign's default
+/// `OutsideAlignment` look: fill underneath, stroke around the
+/// silhouette).
+pub fn emit_glyph_slice_stroke<O, S>(
+    glyphs: &[PositionedGlyph],
+    font: FontRef,
+    point_size: f32,
+    stroke_for: S,
+    frame_origin_pt: (f32, f32),
+    outliner: &O,
+    list: &mut DisplayList,
+) where
+    O: GlyphOutliner,
+    S: Fn(u32) -> Option<(Paint, Stroke)>,
+{
+    let upem = outliner.units_per_em();
+    let scale = point_size / upem;
+    let (ox, oy) = frame_origin_pt;
+    for g in glyphs {
+        let Some((paint, stroke)) = stroke_for(g.cluster) else {
+            continue;
+        };
+        let Some(path_id) = get_or_intern_glyph_outline(font.outline, g.glyph_id, outliner, list)
+        else {
+            continue;
+        };
+        let gx = ox + g.x as f32 / ADVANCE_PRECISION;
+        let gy = oy + g.y as f32 / ADVANCE_PRECISION;
+        // Same column-major 2×3 as `emit_glyph_slice`: y-flip + scale,
+        // then translate to (gx, gy). Stroke widths are document-space
+        // pt so the rasterizer reads `stroke.width` directly rather
+        // than transforming through `scale`. `x_scale` mirrors the fill
+        // path so a stretched run keeps its stroke aligned (P-08).
+        let sx = scale * g.x_scale;
+        // `y_scale` folds IDML `VerticalScale` into the glyph affine's
+        // y-axis (the `-scale` y-flip term), scaling glyph height about
+        // the baseline (`gy`) without touching the advance or leading.
+        let sy = scale * g.y_scale;
+        // IDML `Skew` (false italic) → the affine's `c` (x-shear) term;
+        // mirrors the fill path so a skewed run keeps stroke + fill
+        // aligned. See `emit_glyph_slice_blend` for the sign rationale.
+        let cterm = skew_shear(g.skew_deg, sy);
+        let transform = glyph_transform(g, sx, sy, cterm, gx, gy);
+        // Concept 3 — glyph-run side-channel (stroked text keeps
+        // is_stroke so the exporter falls back to the outline: PDF
+        // text render mode 1 strokes are a refinement).
+        if let Some(runs) = list.glyph_runs.as_mut() {
+            runs.push(crate::display_list::GlyphRunEntry {
+                command_index: list.commands.len() as u32,
+                font_id: font.outline,
+                face_id: font.bytes,
+                glyph_id: g.glyph_id,
+                font_size: point_size,
+                transform,
+                paint,
+                unicode: g.ch,
+                is_stroke: true,
+                structure: runs.current,
+            });
+        }
+        list.push(DisplayCommand::StrokePath {
+            path_id,
+            paint,
+            stroke,
+            transform,
+        });
+    }
+}
+
+/// IDML `Skew` (false-italic shear) → the glyph affine's `c` term.
+/// `skew_deg` is the clockwise lean in degrees (InDesign's Skew /
+/// Shear field; positive leans the glyph top to the right). `sy` is the
+/// affine's painted y-scale, so the shear tracks the glyph's height.
+/// Returns 0.0 for an upright glyph — the common case — so the affine
+/// stays byte-identical to the pre-skew code path when `Skew` is unset.
+#[inline]
+fn skew_shear(skew_deg: f32, sy: f32) -> f32 {
+    if skew_deg == 0.0 {
+        return 0.0;
+    }
+    skew_deg.to_radians().tan() * sy
+}
+
+fn get_or_intern_glyph_outline(
+    font_id: u32,
+    glyph_id: u32,
+    outliner: &impl GlyphOutliner,
+    list: &mut DisplayList,
+) -> Option<PathId> {
+    let key = GlyphCacheKey { font_id, glyph_id }.to_u64();
+    // `PathBuffer::intern` already treats a repeated key as a cache
+    // hit and does not store a second copy. Build the outline only on
+    // a miss by probing the cache first.
+    if let Some(existing) = list.paths.find_by_key(key) {
+        return Some(existing);
+    }
+    let outline = outliner.outline(glyph_id)?;
+    let (id, _fresh) = list.paths.intern(key, outline);
+    Some(id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::display_list::Color;
+    use crate::glyph::UnitSquareOutliner;
+    use paged_text::compose::{ComposeOptions, MonospaceMeasurer};
+    use paged_text::layout::{layout_paragraph, LayoutOptions};
+
+    fn laid_out(text: &str) -> LaidOutParagraph {
+        let shaper = MonospaceMeasurer::new(500, 500);
+        let opts = LayoutOptions {
+            compose: ComposeOptions {
+                column_width: 500 * 8,
+                column_widths: None,
+                tolerance: 10.0,
+                stretch_ratio: 1.0,
+                shrink_ratio: 0.5,
+                desired_space_ratio: 1.0,
+                letter_spacing_pct: 0.0,
+                looseness: 0,
+                hyphenator: None,
+                hyphen_penalty: 50,
+                hyphenation_limits: paged_text::HyphenationLimits::default(),
+                hyphenation_zone: 0,
+                kinsoku_enforce: false,
+                mojikumi_half_width: false,
+                minimum_raggedness: false,
+                last_line_indent: 0,
+                balance_ragged: false,
+                visible_lines: None,
+                joined_lines: None,
+                fit_tolerance: 0,
+                overrun_size: None,
+                single_line: None,
+            },
+            line_height: 64 * 14,
+            first_baseline: 64 * 10,
+            alignment: paged_text::Alignment::Left,
+            leading_override: None,
+            leading_override_exact: None,
+            line_height_exact: None,
+            first_baseline_exact: None,
+            run_leadings: Vec::new(),
+            auto_leading_from_byte: 0,
+            no_break: Vec::new(),
+            auto_leading: 1.2,
+            justify_last_line: false,
+            last_line_alignment: paged_text::Alignment::Left,
+            single_word_alignment: paged_text::Alignment::Justify,
+            tabs: None,
+            object_advances: Vec::new(),
+            ruby_aki: Vec::new(),
+            vertical: false,
+        };
+        layout_paragraph(text, &shaper, &opts)
+    }
+
+    #[test]
+    fn emit_produces_one_command_per_glyph() {
+        let p = laid_out("hello world foo bar");
+        let mut list = DisplayList::new();
+        emit_paragraph(
+            &p,
+            FontRef::plain(1),
+            12.0,
+            |_| Paint::Solid(Color::BLACK),
+            (0.0, 0.0),
+            &UnitSquareOutliner::default(),
+            &mut list,
+        );
+        let total_glyphs: usize = p.lines.iter().map(|l| l.glyphs.len()).sum();
+        assert_eq!(list.commands.len(), total_glyphs);
+    }
+
+    #[test]
+    fn repeated_glyph_shares_path_id() {
+        // "aaaa" — every glyph id identical → every FillPath reuses
+        // the same interned path.
+        let p = laid_out("aaaa aaaa");
+        let mut list = DisplayList::new();
+        emit_paragraph(
+            &p,
+            FontRef::plain(1),
+            12.0,
+            |_| Paint::Solid(Color::BLACK),
+            (0.0, 0.0),
+            &UnitSquareOutliner::default(),
+            &mut list,
+        );
+        // Path buffer holds one outline for 'a' plus one for ' '.
+        // (MonospaceMeasurer issues a real glyph per space too.)
+        assert!(
+            list.paths.len() <= 2,
+            "expected ≤ 2 unique paths, got {}",
+            list.paths.len()
+        );
+    }
+
+    #[test]
+    fn glyph_positions_are_offset_by_frame_origin() {
+        let p = laid_out("abc");
+        let mut list = DisplayList::new();
+        emit_paragraph(
+            &p,
+            FontRef::plain(1),
+            12.0,
+            |_| Paint::Solid(Color::BLACK),
+            (100.0, 200.0),
+            &UnitSquareOutliner::default(),
+            &mut list,
+        );
+        let first = match &list.commands[0] {
+            DisplayCommand::FillPath { transform, .. } => transform.0,
+            other => panic!("expected FillPath, got {other:?}"),
+        };
+        // tx = 100 + glyph.x/64 = 100 + 0 = 100 (first glyph at x=0).
+        assert!((first[4] - 100.0).abs() < 1e-4, "tx = {}", first[4]);
+        // ty should be 200 + baseline_y/64 = 200 + 10 = 210.
+        assert!((first[5] - 210.0).abs() < 1e-4, "ty = {}", first[5]);
+    }
+
+    #[test]
+    fn paint_picker_receives_cluster_byte_offset() {
+        // "ab" with MonospaceMeasurer → 2 glyphs at clusters 0 and 1.
+        let p = laid_out("ab");
+        let mut list = DisplayList::new();
+        let red = Paint::Solid(Color::rgba(1.0, 0.0, 0.0, 1.0));
+        let blue = Paint::Solid(Color::rgba(0.0, 0.0, 1.0, 1.0));
+        emit_paragraph(
+            &p,
+            FontRef::plain(1),
+            12.0,
+            |c| if c == 0 { red } else { blue },
+            (0.0, 0.0),
+            &UnitSquareOutliner::default(),
+            &mut list,
+        );
+        assert_eq!(list.commands.len(), 2);
+        let paints: Vec<Paint> = list
+            .commands
+            .iter()
+            .map(|c| match c {
+                DisplayCommand::FillPath { paint, .. } => *paint,
+                other => panic!("expected FillPath, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(paints[0], red);
+        assert_eq!(paints[1], blue);
+    }
+
+    #[test]
+    fn y_axis_is_flipped_by_transform_matrix() {
+        let p = laid_out("x");
+        let mut list = DisplayList::new();
+        emit_paragraph(
+            &p,
+            FontRef::plain(1),
+            12.0,
+            |_| Paint::Solid(Color::BLACK),
+            (0.0, 0.0),
+            &UnitSquareOutliner::default(),
+            &mut list,
+        );
+        let m = match &list.commands[0] {
+            DisplayCommand::FillPath { transform, .. } => transform.0,
+            other => panic!("expected FillPath, got {other:?}"),
+        };
+        // d (y-scale) must be negative — fonts are y-up, pages y-down.
+        assert!(m[3] < 0.0, "y-scale not flipped: {:?}", m);
+    }
+
+    #[test]
+    fn vertical_scale_scales_glyph_affine_y_axis() {
+        // `y_scale` folds IDML VerticalScale into the affine's d term
+        // (the y-flip), independent of `x_scale` (HorizontalScale → a).
+        let glyph = |x_scale: f32, y_scale: f32| PositionedGlyph {
+            glyph_id: 65,
+            cluster: 0,
+            x: 0,
+            y: 0,
+            x_advance: 0,
+            font_id: 0,
+            point_size: 0.0,
+            underline: false,
+            strikethru: false,
+            substituted: false,
+            x_scale,
+            y_scale,
+            skew_deg: 0.0,
+            ch: None,
+            upright: None,
+        };
+        let mut list = DisplayList::new();
+        for g in [glyph(1.0, 1.0), glyph(1.0, 2.0)] {
+            emit_glyph_slice(
+                &[g],
+                FontRef::plain(1),
+                12.0,
+                |_| Paint::Solid(Color::BLACK),
+                (0.0, 0.0),
+                &UnitSquareOutliner::default(),
+                &mut list,
+            );
+        }
+        let aff = |i: usize| match &list.commands[i] {
+            DisplayCommand::FillPath { transform, .. } => transform.0,
+            other => panic!("expected FillPath, got {other:?}"),
+        };
+        let (m1, m2) = (aff(0), aff(1));
+        // d (y-scale) doubles with VerticalScale=200%; a (x-scale) is
+        // untouched. Both d's stay negative (the page-down y-flip).
+        assert!(m1[3] < 0.0 && m2[3] < 0.0);
+        assert!(
+            (m2[3] - 2.0 * m1[3]).abs() < 1e-4,
+            "d1={} d2={}",
+            m1[3],
+            m2[3]
+        );
+        assert!((m1[0] - m2[0]).abs() < 1e-4, "x-scale must not change");
+    }
+
+    #[test]
+    fn horizontal_scale_scales_glyph_affine_x_axis_only() {
+        // HorizontalScale → the affine's `a` term (x-scale). Doubling
+        // x_scale doubles `a` and leaves `d` (y-scale) untouched —
+        // mirror of the VerticalScale test.
+        let glyph = |x_scale: f32, y_scale: f32| PositionedGlyph {
+            glyph_id: 65,
+            cluster: 0,
+            x: 0,
+            y: 0,
+            x_advance: 0,
+            font_id: 0,
+            point_size: 0.0,
+            underline: false,
+            strikethru: false,
+            substituted: false,
+            x_scale,
+            y_scale,
+            skew_deg: 0.0,
+            ch: None,
+            upright: None,
+        };
+        let mut list = DisplayList::new();
+        for g in [glyph(1.0, 1.0), glyph(2.0, 1.0)] {
+            emit_glyph_slice(
+                &[g],
+                FontRef::plain(1),
+                12.0,
+                |_| Paint::Solid(Color::BLACK),
+                (0.0, 0.0),
+                &UnitSquareOutliner::default(),
+                &mut list,
+            );
+        }
+        let aff = |i: usize| match &list.commands[i] {
+            DisplayCommand::FillPath { transform, .. } => transform.0,
+            other => panic!("expected FillPath, got {other:?}"),
+        };
+        let (m1, m2) = (aff(0), aff(1));
+        assert!(
+            (m2[0] - 2.0 * m1[0]).abs() < 1e-4,
+            "a1={} a2={}",
+            m1[0],
+            m2[0]
+        );
+        assert!((m1[3] - m2[3]).abs() < 1e-4, "y-scale must not change");
+    }
+
+    #[test]
+    fn skew_folds_into_glyph_affine_c_term_and_leans_right() {
+        // FINDING #7.1 — IDML `Skew` (false italic) reaches the glyph
+        // affine's `c` (x-shear) term. Upright = 0; a positive skew
+        // makes `c > 0` so a point at positive em-`y` (the glyph top)
+        // lands further right (`x' = a·x + c·y + tx`). Twin axes (a/d)
+        // are untouched.
+        let glyph = |skew_deg: f32| PositionedGlyph {
+            glyph_id: 65,
+            cluster: 0,
+            x: 0,
+            y: 0,
+            x_advance: 0,
+            font_id: 0,
+            point_size: 0.0,
+            underline: false,
+            strikethru: false,
+            substituted: false,
+            x_scale: 1.0,
+            y_scale: 1.0,
+            skew_deg,
+            ch: None,
+            upright: None,
+        };
+        let mut list = DisplayList::new();
+        for g in [glyph(0.0), glyph(15.0), glyph(-15.0)] {
+            emit_glyph_slice(
+                &[g],
+                FontRef::plain(1),
+                12.0,
+                |_| Paint::Solid(Color::BLACK),
+                (0.0, 0.0),
+                &UnitSquareOutliner::default(),
+                &mut list,
+            );
+        }
+        let aff = |i: usize| match &list.commands[i] {
+            DisplayCommand::FillPath { transform, .. } => transform.0,
+            other => panic!("expected FillPath, got {other:?}"),
+        };
+        let (upright, right, left) = (aff(0), aff(1), aff(2));
+        // Upright: c term is exactly 0 (byte-identical to pre-skew).
+        assert_eq!(upright[2], 0.0, "upright glyph must keep c=0");
+        // Positive skew → positive c (lean right); negative → negative c.
+        assert!(right[2] > 0.0, "positive skew must lean right: {right:?}");
+        assert!(left[2] < 0.0, "negative skew must lean left: {left:?}");
+        // Skew touches only `c`; the scale terms (a, d) are unchanged.
+        assert!(
+            (right[0] - upright[0]).abs() < 1e-6,
+            "skew must not touch a"
+        );
+        assert!(
+            (right[3] - upright[3]).abs() < 1e-6,
+            "skew must not touch d"
+        );
+        // Magnitude: c = tan(15°)·sy. sy = -d (the positive y-scale).
+        let sy = -upright[3];
+        assert!(
+            (right[2] - 15f32.to_radians().tan() * sy).abs() < 1e-5,
+            "c must be tan(skew)·sy, got {}",
+            right[2]
+        );
+    }
+
+    #[test]
+    fn baseline_shift_offsets_glyph_y_via_positioned_y() {
+        // Super/subscript baseline shift reaches the affine as the
+        // glyph's `y` (1/64 pt, frame-relative): a lifted glyph has a
+        // smaller `ty` than an unshifted one (page y grows downward, so
+        // "up" = a more negative y offset added to the origin). This
+        // pins that the `y` field flows straight into the affine's `ty`.
+        let glyph = |y: i32| PositionedGlyph {
+            glyph_id: 65,
+            cluster: 0,
+            x: 0,
+            y,
+            x_advance: 0,
+            font_id: 0,
+            point_size: 0.0,
+            underline: false,
+            strikethru: false,
+            substituted: false,
+            x_scale: 1.0,
+            y_scale: 1.0,
+            skew_deg: 0.0,
+            ch: None,
+            upright: None,
+        };
+        let mut list = DisplayList::new();
+        // y = 0 (baseline) vs y = -64 (lifted one pt above baseline).
+        for g in [glyph(0), glyph(-64)] {
+            emit_glyph_slice(
+                &[g],
+                FontRef::plain(1),
+                12.0,
+                |_| Paint::Solid(Color::BLACK),
+                (0.0, 100.0),
+                &UnitSquareOutliner::default(),
+                &mut list,
+            );
+        }
+        let ty = |i: usize| match &list.commands[i] {
+            DisplayCommand::FillPath { transform, .. } => transform.0[5],
+            other => panic!("expected FillPath, got {other:?}"),
+        };
+        // Origin oy = 100; baseline glyph lands at 100, lifted glyph at
+        // 100 + (-64/64) = 99 (one pt higher up the page).
+        assert!((ty(0) - 100.0).abs() < 1e-4, "baseline ty={}", ty(0));
+        assert!((ty(1) - 99.0).abs() < 1e-4, "lifted ty={}", ty(1));
+    }
+
+    #[test]
+    fn emit_glyph_slice_caches_per_font_id() {
+        // Two glyph slices with the same glyph_id but different
+        // font_ids must intern two distinct outlines — otherwise a
+        // 'B' in font A would steal the path of a 'B' in font B.
+        let mut list = DisplayList::new();
+        let glyphs_a = vec![PositionedGlyph {
+            glyph_id: 65,
+            cluster: 0,
+            x: 0,
+            y: 0,
+            x_advance: 0,
+            font_id: 0,
+            point_size: 0.0,
+            underline: false,
+            strikethru: false,
+            substituted: false,
+            x_scale: 1.0,
+            y_scale: 1.0,
+            skew_deg: 0.0,
+            ch: None,
+            upright: None,
+        }];
+        let glyphs_b = vec![PositionedGlyph {
+            glyph_id: 65,
+            cluster: 0,
+            x: 0,
+            y: 0,
+            x_advance: 0,
+            font_id: 0,
+            point_size: 0.0,
+            underline: false,
+            strikethru: false,
+            substituted: false,
+            x_scale: 1.0,
+            y_scale: 1.0,
+            skew_deg: 0.0,
+            ch: None,
+            upright: None,
+        }];
+        emit_glyph_slice(
+            &glyphs_a,
+            FontRef::plain(111),
+            12.0,
+            |_| Paint::Solid(Color::BLACK),
+            (0.0, 0.0),
+            &UnitSquareOutliner::default(),
+            &mut list,
+        );
+        emit_glyph_slice(
+            &glyphs_b,
+            FontRef::plain(222),
+            12.0,
+            |_| Paint::Solid(Color::BLACK),
+            (0.0, 0.0),
+            &UnitSquareOutliner::default(),
+            &mut list,
+        );
+        // Two FillPath commands, two distinct paths in the buffer.
+        assert_eq!(list.commands.len(), 2);
+        assert_eq!(
+            list.paths.len(),
+            2,
+            "different font_ids must intern distinct outlines"
+        );
+    }
+}

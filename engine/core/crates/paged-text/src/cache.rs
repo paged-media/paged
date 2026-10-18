@@ -1,0 +1,833 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Per-paragraph layout cache.
+//!
+//! Phase 4 step 1 — `layout_runs` / `layout_paragraph` are pure
+//! functions of (text + styling + column geometry + font identity).
+//! When a single mutation only touches one paragraph, the other ~N-1
+//! paragraphs in the document re-arrive at the K-P engine byte-for-byte
+//! identical. Caching their `LaidOutParagraph` results lets a mutation-
+//! triggered rebuild skip Knuth-Plass for every unchanged paragraph,
+//! collapsing the dominant rebuild cost from O(stories × paragraphs) to
+//! O(touched paragraphs).
+//!
+//! The cache key is a 32-byte blake3 digest folded by [`LayoutKeyHasher`].
+//! Callers add every input that affects the laid-out output in a fixed
+//! order; salting with the constant tag string guards against accidental
+//! collisions with other digests stored in the same workspace (the
+//! scene-level `Document::canonical_hash` uses a different domain
+//! prefix).
+//!
+//! The cache itself is a bounded `HashMap` keyed by digest. Every hit
+//! and insert stamps the entry with a use tick; when an insert finds the
+//! cache full, the least recently used quarter is evicted in one batch
+//! (an amortised O(1) per insert). Entries the current build touched are
+//! the newest, so crossing the bound mid-build keeps the working set
+//! instead of re-laying out every paragraph (the old policy cleared the
+//! whole map: on a 232-page story a paste that tipped it over cost 4 125
+//! misses).
+
+use std::cell::RefCell;
+use std::collections::HashMap;
+
+use crate::compose::ComposeOptions;
+use crate::layout::{layout_runs, Alignment, LaidOutParagraph, LayoutOptions, StyledRun};
+use crate::shape::{FigureStyle, KerningMethod};
+
+/// Bounded per-paragraph layout cache.
+#[derive(Debug)]
+pub struct LayoutCache {
+    /// Entry plus the tick of its last use.
+    entries: HashMap<[u8; 32], (LaidOutParagraph, u64)>,
+    capacity: usize,
+    /// Monotonic use counter for the LRU stamps.
+    tick: u64,
+    hits: u64,
+    misses: u64,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct CacheStats {
+    pub hits: u64,
+    pub misses: u64,
+    pub len: usize,
+    pub capacity: usize,
+}
+
+impl LayoutCache {
+    /// Build an empty cache capped at `capacity` entries. A capacity of
+    /// 0 disables caching (every lookup misses, every insert is a
+    /// no-op) — useful for diff-baseline benchmarking.
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            entries: HashMap::new(),
+            capacity,
+            tick: 0,
+            hits: 0,
+            misses: 0,
+        }
+    }
+
+    /// Lookup. Increments hits/misses; returns a clone of the entry on
+    /// hit (cheap — `LaidOutParagraph` is glyphs + line metadata, no
+    /// nested allocations of significance).
+    pub fn get(&mut self, key: &[u8; 32]) -> Option<LaidOutParagraph> {
+        if self.capacity == 0 {
+            self.misses += 1;
+            return None;
+        }
+        self.tick += 1;
+        if let Some((p, used)) = self.entries.get_mut(key) {
+            *used = self.tick;
+            self.hits += 1;
+            return Some(p.clone());
+        }
+        self.misses += 1;
+        None
+    }
+
+    /// Insert. If the cache is full, evict the least recently used
+    /// entries first — see module docs.
+    pub fn insert(&mut self, key: [u8; 32], value: LaidOutParagraph) {
+        if self.capacity == 0 {
+            return;
+        }
+        if self.entries.len() >= self.capacity && !self.entries.contains_key(&key) {
+            self.evict_lru();
+        }
+        self.tick += 1;
+        self.entries.insert(key, (value, self.tick));
+    }
+
+    /// Drop the least recently used quarter of the entries (at least one),
+    /// keeping the rest.
+    fn evict_lru(&mut self) {
+        let drop = (self.entries.len() / 4).max(1);
+        let mut ticks: Vec<u64> = self.entries.values().map(|(_, t)| *t).collect();
+        let (_, &mut cutoff, _) = ticks.select_nth_unstable(drop - 1);
+        // Ticks are unique, so exactly `drop` entries are at or below it.
+        self.entries.retain(|_, (_, t)| *t > cutoff);
+    }
+
+    pub fn stats(&self) -> CacheStats {
+        CacheStats {
+            hits: self.hits,
+            misses: self.misses,
+            len: self.entries.len(),
+            capacity: self.capacity,
+        }
+    }
+
+    pub fn reset_stats(&mut self) {
+        self.hits = 0;
+        self.misses = 0;
+    }
+
+    pub fn clear(&mut self) {
+        self.entries.clear();
+        self.reset_stats();
+    }
+}
+
+impl Default for LayoutCache {
+    fn default() -> Self {
+        // 10 000 entries × ~2 KB per LaidOutParagraph ≈ 20 MB ceiling.
+        // Generous; tighten when measured.
+        Self::new(10_000)
+    }
+}
+
+/// Folds the inputs of a layout call into a 32-byte cache key. Add
+/// every input that affects the output in a fixed order — order is
+/// part of the key.
+///
+/// Typical usage:
+/// ```ignore
+/// let mut h = LayoutKeyHasher::new("layout_runs");
+/// for r in runs {
+///     h.add_str(r.text);
+///     h.add_u32(r.font_id);
+///     h.add_f32(r.point_size);
+///     // …every field that matters…
+/// }
+/// h.add_layout_options(options);
+/// let key = h.finalize();
+/// ```
+pub struct LayoutKeyHasher {
+    hasher: blake3::Hasher,
+}
+
+impl LayoutKeyHasher {
+    /// Initialise with a domain tag. Different tags produce different
+    /// hashes for the same input so single-font and multi-font layouts
+    /// don't accidentally share cache entries.
+    pub fn new(tag: &str) -> Self {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(b"paged-text/layout-cache/v1/");
+        hasher.update(tag.as_bytes());
+        hasher.update(b":");
+        Self { hasher }
+    }
+
+    /// Hash a length-prefixed UTF-8 string. Length-prefix prevents
+    /// adjacent strings from concatenating into the same digest.
+    pub fn add_str(&mut self, s: &str) {
+        self.add_u64(s.len() as u64);
+        self.hasher.update(s.as_bytes());
+    }
+
+    /// Hash an opaque byte slice (length-prefixed).
+    pub fn add_bytes(&mut self, b: &[u8]) {
+        self.add_u64(b.len() as u64);
+        self.hasher.update(b);
+    }
+
+    pub fn add_bool(&mut self, v: bool) {
+        self.hasher.update(&[v as u8]);
+    }
+
+    pub fn add_i32(&mut self, v: i32) {
+        self.hasher.update(&v.to_le_bytes());
+    }
+
+    pub fn add_u32(&mut self, v: u32) {
+        self.hasher.update(&v.to_le_bytes());
+    }
+
+    pub fn add_u64(&mut self, v: u64) {
+        self.hasher.update(&v.to_le_bytes());
+    }
+
+    /// Hash a `f32` via its bit representation. NaN inputs would produce
+    /// unstable hashes; the layout pipeline never feeds NaNs (column
+    /// width, point size, tracking are always finite) so this is fine.
+    pub fn add_f32(&mut self, v: f32) {
+        self.hasher.update(&v.to_bits().to_le_bytes());
+    }
+
+    pub fn add_optional_i32(&mut self, v: Option<i32>) {
+        match v {
+            Some(x) => {
+                self.add_bool(true);
+                self.add_i32(x);
+            }
+            None => self.add_bool(false),
+        }
+    }
+
+    /// Field separator. Insert between logical groups so a longer
+    /// `&str` field can't bleed into the next field's bytes.
+    pub fn sep(&mut self) {
+        self.hasher.update(b"|");
+    }
+
+    pub fn finalize(self) -> [u8; 32] {
+        *self.hasher.finalize().as_bytes()
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Thread-local install/take API.
+//
+// Pipeline call sites use `layout_runs_cached(...)`. When a cache is
+// installed on the current thread it serves cache hits and writes
+// back fresh results; when no cache is installed every call falls
+// through to plain `layout_runs(...)` (zero-cost wrapper). The
+// pipeline doesn't need to know whether caching is active.
+//
+// CanvasModel installs its cache once per rebuild via
+// `with_layout_cache(cache, || pipeline::build_document(...))`. The
+// helper takes the cache back at the end so the caller can read its
+// stats; nesting is supported (an inner `with_layout_cache` shadows
+// the outer for its scope).
+// ────────────────────────────────────────────────────────────────────
+
+thread_local! {
+    static ACTIVE_CACHE: RefCell<Option<LayoutCache>> = const { RefCell::new(None) };
+}
+
+/// Install `cache` as the active layout cache for the current thread,
+/// run `f`, and take the cache back so the caller can read its stats.
+/// Re-entrant: an inner `with_layout_cache` saves the outer cache,
+/// installs the inner cache for its scope, then restores.
+pub fn with_layout_cache<R>(cache: LayoutCache, f: impl FnOnce() -> R) -> (R, LayoutCache) {
+    let prev = ACTIVE_CACHE.with(|slot| slot.replace(Some(cache)));
+    let result = f();
+    let used = ACTIVE_CACHE.with(|slot| slot.replace(prev));
+    (
+        result,
+        used.expect("active cache disappeared mid-`with_layout_cache`"),
+    )
+}
+
+/// Internal — try the active cache; on miss compute via `f` and store.
+/// When no cache is installed, just calls `f`.
+fn cached<F: FnOnce() -> LaidOutParagraph>(key: [u8; 32], f: F) -> LaidOutParagraph {
+    let hit = ACTIVE_CACHE.with(|slot| slot.borrow_mut().as_mut().and_then(|c| c.get(&key)));
+    if let Some(p) = hit {
+        return p;
+    }
+    let result = f();
+    ACTIVE_CACHE.with(|slot| {
+        if let Some(c) = slot.borrow_mut().as_mut() {
+            c.insert(key, result.clone());
+        }
+    });
+    result
+}
+
+/// Cached flavour of [`layout_runs`]. When a layout cache is installed
+/// on the current thread, this short-circuits cached entries; otherwise
+/// it behaves identically to the plain function. Pipeline call sites
+/// use this so installing a cache is a one-line opt-in at the top.
+pub fn layout_runs_cached(runs: &[StyledRun], options: &LayoutOptions) -> LaidOutParagraph {
+    // ADR 027 — `layout_runs` only ever ADDS `first_baseline` to
+    // the baselines it steps down from it, so a paragraph's layout is the
+    // same at any height. The entry is keyed and laid out at baseline 0
+    // and moved to `first_baseline` on the way out: a paragraph that only
+    // moved (the lines above it re-wrapped, a paste above it) hits.
+    let origin = options.first_baseline;
+    let key = layout_runs_key(runs, options);
+    let mut laid = cached(key, || {
+        if origin == 0 {
+            layout_runs(runs, options)
+        } else {
+            let at_zero = LayoutOptions {
+                first_baseline: 0,
+                first_baseline_exact: None,
+                ..options.clone()
+            };
+            layout_runs(runs, &at_zero)
+        }
+    });
+    // The exact origin, so every baseline is the exact sum rounded once
+    // (`LaidOutLine::baseline_exact`), as an uncached layout sets it.
+    let origin_exact = options.first_baseline_exact();
+    if origin != 0 || origin_exact != 0.0 {
+        for line in &mut laid.lines {
+            let exact = line.baseline_exact + origin_exact;
+            let dy = exact.round() as i32 - line.baseline_y;
+            line.baseline_y += dy;
+            line.baseline_exact = exact;
+            for g in &mut line.glyphs {
+                g.y += dy;
+            }
+        }
+    }
+    laid
+}
+
+/// Fold the inputs of [`layout_runs`] into a 32-byte cache key.
+///
+/// Hashed inputs (in order):
+/// - Per run: text, `font_id`, point size, tracking, underline,
+///   strikethru, baseline_shift_pt, horizontal_scale_pct,
+///   vertical_scale_pct, skew_deg, fallback-face count (not contents —
+///   see module docs), and every OTF shaping-feature toggle.
+/// - LayoutOptions: alignment, line_height and its exact value (NOT
+///   first_baseline: the cached layout is translated to it),
+///   leading_override, auto_leading_from_byte, auto_leading, justify_last_line,
+///   last_line_alignment, single_word_alignment, the tab layout (stops, default grid, line
+///   starts), the inline objects' advances and the ruby bases' spacing
+///   (`ruby_aki`), and whether it is set vertically.
+/// - ComposeOptions: column_width, column_widths, tolerance, looseness,
+///   stretch_ratio, shrink_ratio, desired_space_ratio,
+///   hyphenator language id, hyphen_penalty, kinsoku_enforce,
+///   minimum_raggedness, visible_lines, joined_lines, the hyphenation
+///   limits, the Single-line Composer's settings (`single_line`), the
+///   letter spacing, the mojikumi switch and the fit tolerance.
+///
+/// **Caching contract assumption.** `font_id` is treated as a stable
+/// per-font identifier within a render. If the caller maps different
+/// fonts to the same id (a bug), the cache will alias them — same as
+/// any cache keyed on a logical id. Fallback faces are not hashed by
+/// content because their content depends only on the configured font
+/// set, which is stable per render.
+pub fn layout_runs_key(runs: &[StyledRun], options: &LayoutOptions) -> [u8; 32] {
+    let mut h = LayoutKeyHasher::new("layout_runs");
+    h.add_u32(runs.len() as u32);
+    for r in runs {
+        h.add_str(r.text);
+        h.add_u32(r.font_id);
+        h.add_f32(r.point_size);
+        h.add_optional_f32(r.tracking);
+        h.add_bool(r.underline);
+        h.add_bool(r.strikethru);
+        // Substitution reaches every laid-out glyph (the degraded-asset
+        // highlight reads it), so two runs identical except for the
+        // flag must not alias in the cache.
+        h.add_bool(r.substituted);
+        h.add_f32(r.baseline_shift_pt);
+        h.add_f32(r.horizontal_scale_pct);
+        h.add_f32(r.vertical_scale_pct);
+        // IDML `Skew` (false-italic shear). Carried straight through to
+        // each glyph's emit affine (`PositionedGlyph::skew_deg`), so two
+        // runs identical except for skew lay out to different glyph
+        // affines and MUST hash to distinct keys. Threaded into
+        // `StyledRun` after the key was first written (render-honor
+        // batch); omitting it aliased skewed/unskewed runs and made the
+        // persistent layout cache return a stale (un)skewed paragraph on
+        // a SetProperty(CharacterSkew) and its undo.
+        h.add_f32(r.skew_deg);
+        h.add_u32(r.fallback_faces.len() as u32);
+        h.add_bool(r.shaping_features.ligatures_on);
+        h.add_u32(match r.shaping_features.kerning {
+            KerningMethod::Metrics => 0,
+            KerningMethod::Optical => 1,
+            KerningMethod::Off => 2,
+        });
+        // OTF feature toggles: two runs that differ only in their
+        // OpenType features (fractions, swash, stylistic sets, …) shape
+        // differently, so they must hash to distinct cache keys.
+        let f = &r.shaping_features;
+        h.add_bool(f.discretionary_ligatures);
+        h.add_bool(f.fractions);
+        h.add_bool(f.ordinals);
+        h.add_bool(f.swash);
+        h.add_bool(f.slashed_zero);
+        h.add_bool(f.titling);
+        h.add_bool(f.contextual_alternates);
+        h.add_u32(figure_style_tag(f.figure_style));
+        h.add_u32(f.stylistic_sets);
+        h.add_u32(match f.small_caps {
+            crate::shape::SmallCaps::None => 0,
+            crate::shape::SmallCaps::Lowercase => 1,
+            crate::shape::SmallCaps::All => 2,
+        });
+        h.add_bool(f.stylistic_alternates);
+        h.add_bool(f.historical);
+        h.add_u32(f.position as u32);
+        h.add_bool(f.all_caps);
+        h.sep();
+    }
+    fold_layout_options(&mut h, options);
+    h.finalize()
+}
+
+fn fold_layout_options(h: &mut LayoutKeyHasher, options: &LayoutOptions) {
+    h.sep();
+    h.add_i32(options.line_height);
+    h.add_u64(options.line_height_exact.map_or(u64::MAX, |e| e.to_bits()));
+    // `first_baseline` is not an input: `layout_runs_cached` lays out at 0
+    // and translates.
+    h.add_optional_i32(options.leading_override);
+    h.add_u64(
+        options
+            .leading_override_exact
+            .map_or(u64::MAX, |e| e.to_bits()),
+    );
+    h.add_u32(options.run_leadings.len() as u32);
+    for (start, leading) in &options.run_leadings {
+        h.add_u32(*start);
+        h.add_optional_i32(*leading);
+    }
+    h.add_u32(options.auto_leading_from_byte);
+    h.add_u32(options.auto_leading.to_bits());
+    h.add_u32(options.compose.last_line_indent as u32);
+    h.add_u32(u32::from(options.compose.balance_ragged));
+    h.add_u32(options.no_break.len() as u32);
+    for r in &options.no_break {
+        h.add_u32(r.start);
+        h.add_u32(r.end);
+    }
+    h.add_u32(alignment_tag(options.alignment));
+    h.add_bool(options.justify_last_line);
+    h.add_u32(alignment_tag(options.last_line_alignment));
+    h.add_u32(alignment_tag(options.single_word_alignment));
+    match &options.tabs {
+        Some(t) => {
+            h.add_bool(true);
+            h.add_f32(t.default_stop_pt);
+            h.add_u32(t.stops.len() as u32);
+            for stop in &t.stops {
+                h.add_f32(stop.position_pt);
+                h.add_u32(stop.alignment as u32);
+                h.add_u32(stop.alignment_character as u32);
+                // Leaders are drawn after composing; they never move a
+                // break, so they stay out of the key.
+            }
+            h.add_u32(t.line_starts_64.len() as u32);
+            for x in &t.line_starts_64 {
+                h.add_i32(*x);
+            }
+        }
+        None => h.add_bool(false),
+    }
+    // An inline object's width moves every break after it.
+    h.add_u32(options.object_advances.len() as u32);
+    for a in &options.object_advances {
+        h.add_i32(*a);
+    }
+    // So does a ruby base spaced out to its ruby.
+    h.add_u32(u32::from(options.vertical));
+    h.add_u32(options.ruby_aki.len() as u32);
+    for aki in &options.ruby_aki {
+        h.add_u32(aki.chars.len() as u32);
+        for range in &aki.chars {
+            h.add_u32(range.start);
+            h.add_u32(range.end);
+        }
+        for variant in &aki.variants {
+            h.add_u32(variant.len() as u32);
+            for &(before, after) in variant {
+                h.add_i32(before);
+                h.add_i32(after);
+            }
+        }
+    }
+    fold_compose_options(h, &options.compose);
+}
+
+fn fold_compose_options(h: &mut LayoutKeyHasher, options: &ComposeOptions) {
+    h.sep();
+    h.add_i32(options.column_width);
+    match &options.column_widths {
+        Some(ws) => {
+            h.add_bool(true);
+            h.add_u32(ws.len() as u32);
+            for w in ws {
+                h.add_i32(*w);
+            }
+        }
+        None => h.add_bool(false),
+    }
+    h.add_f32(options.tolerance);
+    h.add_i32(options.looseness);
+    h.add_f32(options.stretch_ratio);
+    h.add_f32(options.shrink_ratio);
+    h.add_f32(options.desired_space_ratio);
+    match options.hyphenator {
+        Some(hyph) => {
+            h.add_bool(true);
+            h.add_u32(hyph.lang_id() as u32);
+        }
+        None => h.add_bool(false),
+    }
+    h.add_i32(options.hyphen_penalty);
+    h.add_i32(options.hyphenation_zone);
+    h.add_bool(options.kinsoku_enforce);
+    h.add_bool(options.minimum_raggedness);
+    match options.overrun_size {
+        Some(size) => {
+            h.add_bool(true);
+            h.add_f32(size);
+        }
+        None => h.add_bool(false),
+    }
+    match options.visible_lines {
+        Some(n) => {
+            h.add_bool(true);
+            h.add_u32(n as u32);
+        }
+        None => h.add_bool(false),
+    }
+    match &options.joined_lines {
+        Some(js) => {
+            h.add_bool(true);
+            h.add_u32(js.len() as u32);
+            for j in js {
+                h.add_bool(*j);
+            }
+        }
+        None => h.add_bool(false),
+    }
+    let l = &options.hyphenation_limits;
+    h.add_u32(l.after_first as u32);
+    h.add_u32(l.before_last as u32);
+    h.add_u32(l.words_longer_than as u32);
+    h.add_bool(l.capitalized_words);
+    h.add_bool(l.last_word);
+    h.add_u32(l.ladder_limit as u32);
+    match &options.single_line {
+        Some(sl) => {
+            h.add_bool(true);
+            h.add_i32(sl.zone);
+            h.add_u32(sl.ladder_limit as u32);
+            h.add_f32(sl.letter_shrink_ratio);
+            h.add_f32(sl.max_stretch_ratio);
+        }
+        None => h.add_bool(false),
+    }
+    // Each moves glyphs or breaks, so two paragraphs differing only in one
+    // must not share an entry: they used to, letter spacing among them.
+    h.add_f32(options.letter_spacing_pct);
+    h.add_bool(options.mojikumi_half_width);
+    h.add_i32(options.fit_tolerance);
+}
+
+fn alignment_tag(a: Alignment) -> u32 {
+    match a {
+        Alignment::Left => 0,
+        Alignment::Right => 1,
+        Alignment::Center => 2,
+        Alignment::Justify => 3,
+    }
+}
+
+fn figure_style_tag(f: FigureStyle) -> u32 {
+    match f {
+        FigureStyle::Default => 0,
+        FigureStyle::Lining => 1,
+        FigureStyle::OldStyle => 2,
+        FigureStyle::TabularLining => 3,
+        FigureStyle::ProportionalLining => 4,
+        FigureStyle::TabularOldstyle => 5,
+        FigureStyle::ProportionalOldstyle => 6,
+    }
+}
+
+impl LayoutKeyHasher {
+    pub fn add_optional_f32(&mut self, v: Option<f32>) {
+        match v {
+            Some(x) => {
+                self.add_bool(true);
+                self.add_f32(x);
+            }
+            None => self.add_bool(false),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_cache_returns_none() {
+        let mut c = LayoutCache::new(8);
+        assert!(c.get(&[0; 32]).is_none());
+        assert_eq!(c.stats().misses, 1);
+        assert_eq!(c.stats().hits, 0);
+    }
+
+    #[test]
+    fn round_trip_hits() {
+        let mut c = LayoutCache::new(8);
+        let key = [42u8; 32];
+        let p = LaidOutParagraph { lines: Vec::new() };
+        c.insert(key, p);
+        assert!(c.get(&key).is_some());
+        assert_eq!(c.stats().hits, 1);
+    }
+
+    fn key(i: u32) -> [u8; 32] {
+        let mut k = [0u8; 32];
+        k[..4].copy_from_slice(&i.to_le_bytes());
+        k
+    }
+
+    #[test]
+    fn crossing_the_bound_keeps_hot_entries() {
+        let mut c = LayoutCache::new(8);
+        for i in 0..8 {
+            c.insert(key(i), LaidOutParagraph { lines: Vec::new() });
+        }
+        // Entries 4..8 are touched again (the current build's working
+        // set); 0..4 are cold.
+        for i in 4..8 {
+            assert!(c.get(&key(i)).is_some());
+        }
+        c.insert(key(100), LaidOutParagraph { lines: Vec::new() });
+        assert!(c.stats().len <= 8, "bounded: {}", c.stats().len);
+        for i in 4..8 {
+            assert!(c.get(&key(i)).is_some(), "hot entry {i} survived");
+        }
+        assert!(c.get(&key(100)).is_some(), "the new entry is in");
+        // The evicted ones are the two oldest (a quarter of 8).
+        assert!(c.get(&key(0)).is_none() && c.get(&key(1)).is_none());
+        assert!(c.get(&key(2)).is_some() && c.get(&key(3)).is_some());
+    }
+
+    #[test]
+    fn reinserting_a_present_key_evicts_nothing() {
+        let mut c = LayoutCache::new(2);
+        c.insert(key(0), LaidOutParagraph { lines: Vec::new() });
+        c.insert(key(1), LaidOutParagraph { lines: Vec::new() });
+        c.insert(key(1), LaidOutParagraph { lines: Vec::new() });
+        assert_eq!(c.stats().len, 2);
+        c.insert(key(2), LaidOutParagraph { lines: Vec::new() });
+        assert_eq!(c.stats().len, 2, "one LRU entry made room");
+        assert!(c.get(&key(0)).is_none());
+    }
+
+    #[test]
+    fn disabled_cache_never_stores() {
+        let mut c = LayoutCache::new(0);
+        c.insert([1; 32], LaidOutParagraph { lines: Vec::new() });
+        assert_eq!(c.stats().len, 0);
+        assert!(c.get(&[1; 32]).is_none());
+    }
+
+    #[test]
+    fn key_hasher_differentiates_inputs() {
+        let mut h1 = LayoutKeyHasher::new("layout_runs");
+        h1.add_str("hello");
+        h1.add_i32(42);
+        let k1 = h1.finalize();
+
+        let mut h2 = LayoutKeyHasher::new("layout_runs");
+        h2.add_str("hello");
+        h2.add_i32(43);
+        let k2 = h2.finalize();
+
+        assert_ne!(k1, k2);
+    }
+
+    #[test]
+    fn key_hasher_str_length_prefix_prevents_collision() {
+        // Without length-prefixing, "ab" + "cd" would equal "a" + "bcd".
+        let mut h1 = LayoutKeyHasher::new("t");
+        h1.add_str("ab");
+        h1.add_str("cd");
+        let k1 = h1.finalize();
+
+        let mut h2 = LayoutKeyHasher::new("t");
+        h2.add_str("a");
+        h2.add_str("bcd");
+        let k2 = h2.finalize();
+
+        assert_ne!(k1, k2);
+    }
+
+    #[test]
+    fn different_tags_produce_different_keys() {
+        let h1 = LayoutKeyHasher::new("layout_runs").finalize();
+        let h2 = LayoutKeyHasher::new("layout_paragraph").finalize();
+        assert_ne!(h1, h2);
+    }
+
+    #[test]
+    fn with_layout_cache_returns_cache_back() {
+        let cache = LayoutCache::new(8);
+        let (sum, taken) = with_layout_cache(cache, || 1 + 1);
+        assert_eq!(sum, 2);
+        assert_eq!(taken.stats().len, 0);
+    }
+
+    #[test]
+    fn layout_runs_cached_no_active_cache_does_not_panic() {
+        // No `with_layout_cache` wrap → call falls through to plain
+        // `layout_runs` (the runs slice is empty so this is cheap).
+        let empty: [StyledRun; 0] = [];
+        let opts = LayoutOptions::new(400.0, 12.0);
+        let p = layout_runs_cached(&empty, &opts);
+        assert!(p.lines.is_empty());
+    }
+
+    /// AC-E2E-CHAR-skew-undo (cache-key unit) — every `StyledRun` field
+    /// that reaches the laid-out glyphs must change `layout_runs_key`, or
+    /// the persistent layout cache aliases runs that differ only in that
+    /// field. Audits the render-honor batch's per-glyph affine inputs
+    /// (skew + the scales) plus baseline shift. `skew_deg` regressed here
+    /// (threaded into `StyledRun` after the key was written).
+    #[test]
+    fn layout_runs_key_distinguishes_per_glyph_affine_fields() {
+        let bytes = std::fs::read(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../corpus/fonts/Inter.ttf"),
+        )
+        .expect("Inter.ttf fixture");
+        let face = crate::shape::Face::from_slice(&bytes, 0).expect("parse Inter");
+        let opts = LayoutOptions::new(400.0, 12.0);
+
+        let base = StyledRun {
+            text: "lean",
+            face: &face,
+            point_size: 12.0,
+            tracking: None,
+            font_id: 1,
+            underline: false,
+            strikethru: false,
+            substituted: false,
+            baseline_shift_pt: 0.0,
+            horizontal_scale_pct: 100.0,
+            vertical_scale_pct: 100.0,
+            skew_deg: 0.0,
+            fallback_faces: &[],
+            shaping_features: crate::shape::ShapingFeatures::default(),
+        };
+        let base_key = layout_runs_key(std::slice::from_ref(&base), &opts);
+
+        // Each variant flips exactly one render-relevant field; every
+        // resulting key must differ from the baseline.
+        let variants = [
+            (
+                "skew_deg",
+                StyledRun {
+                    skew_deg: 15.0,
+                    ..base
+                },
+            ),
+            (
+                "vertical_scale_pct",
+                StyledRun {
+                    vertical_scale_pct: 160.0,
+                    ..base
+                },
+            ),
+            (
+                "horizontal_scale_pct",
+                StyledRun {
+                    horizontal_scale_pct: 160.0,
+                    ..base
+                },
+            ),
+            (
+                "baseline_shift_pt",
+                StyledRun {
+                    baseline_shift_pt: 4.0,
+                    ..base
+                },
+            ),
+            (
+                "substituted",
+                StyledRun {
+                    substituted: true,
+                    ..base
+                },
+            ),
+        ];
+        for (field, run) in variants {
+            let key = layout_runs_key(std::slice::from_ref(&run), &opts);
+            assert_ne!(
+                base_key, key,
+                "two runs differing only in {field} must hash to distinct \
+                 layout-cache keys (else the cache aliases them)",
+            );
+        }
+
+        // The options `layout_runs` reads that the key once left out.
+        let mut letter_spaced = opts.clone();
+        letter_spaced.compose.letter_spacing_pct = 10.0;
+        let mut mojikumi = opts.clone();
+        mojikumi.compose.mojikumi_half_width = true;
+        let mut tolerant = opts.clone();
+        tolerant.compose.fit_tolerance = 64;
+        let mut exact = opts.clone();
+        exact.line_height_exact = Some(1000.5);
+        for (field, o) in [
+            ("letter_spacing_pct", letter_spaced),
+            ("mojikumi_half_width", mojikumi),
+            ("fit_tolerance", tolerant),
+            ("line_height_exact", exact),
+        ] {
+            assert_ne!(
+                base_key,
+                layout_runs_key(std::slice::from_ref(&base), &o),
+                "two layouts differing only in {field} must not share a cache entry",
+            );
+        }
+    }
+}

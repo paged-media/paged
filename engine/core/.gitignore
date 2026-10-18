@@ -1,0 +1,51 @@
+# Rust build output. `target/` misses a `target` SYMLINK (a worktree whose
+# build cache lives on another disk) and a worktree's own target dir under
+# another name (`CARGO_TARGET_DIR=target-repo`), so name all three.
+target/
+/target
+/target-*/
+**/*.rs.bk
+
+# WASM build output
+pkg/
+
+# Fidelity artefacts (generated locally)
+corpus/**/out/
+corpus/**/diff/
+*.actual.png
+
+# InDesign lock files (created next to a .indd while it's open).
+*.idlk
+~*
+
+# Adobe-copyrighted reference material kept locally only.
+idml-specification.pdf
+
+# Node (tools/ may pull in deps)
+node_modules/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Claude Code runtime state (agent worktrees, scheduled-task lock).
+.claude/
+
+# Playwright artefact dir.
+test-results/
+
+# NOTE: Cargo.lock IS tracked in this repo (it publishes binaries +
+# a reproducible workspace) — do not add it here.
+
+# web/idml-viewer — package build + CI-placed wasm artifacts
+web/idml-viewer/node_modules/
+web/idml-viewer/dist/
+web/idml-viewer/wasm/
+web/idml-viewer/package-lock.json
+
+# blitz-wasm spike is workspace-excluded — its target dir is its own
+spikes/blitz-wasm/target/
+
+# Local mount of the PRIVATE corpus's shared fidelity engine (machine-specific symlink)
+/corpus/samples

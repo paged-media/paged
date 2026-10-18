@@ -1,0 +1,41 @@
+[package]
+name = "paged-mutate"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Operation-based mutation channel for the Paged scene graph. Typed, serializable, invertible Operations + undo/redo + change notification. Consumed by paged-introspect."
+
+[lints]
+workspace = true
+
+[dependencies]
+paged-model = { path = "../paged-model" }
+paged-scene = { path = "../paged-scene" }
+serde = { workspace = true }
+# Lossless style-delete undo serialises the captured StyleDef to JSON
+# (the def is Serialize+Deserialize) and restores it verbatim.
+serde_json = "1"
+thiserror = { workspace = true }
+tsify-next = { workspace = true }
+wasm-bindgen = { workspace = true }
+# Curve-preserving Bezier CSG for Pathfinder ops + foundation for
+# future curve-based features (offset / outline-stroke / curve
+# simplification). See path_math::bezier_conv for the
+# PathAnchor ↔ SimpleBezierPath converters.
+kurbo = "0.11.3"
+# Not pinned with `=`: the workspace patches this to a build carrying the
+# upstream total-order fix (C-21, see the root Cargo.toml), and an exact pin
+# would exclude it. `Cargo.lock` is tracked, so the exact build stays
+# reproducible without the `=`.
+flo_curves = "0.8"
+
+[dev-dependencies]
+idml-import = { git = "https://github.com/paged-media/plugin-publish", rev = "05c57195d9a7514357cede90d89d987141bf01d8" }
+paged-renderer = { path = "../paged-renderer" }
+paged-compose = { path = "../paged-compose" }
+bytes = { workspace = true }
+# W1.16 — the anchored-object round-trip test builds an in-memory IDML
+# package (anchored frame nested in a story) to drive `Document::open`.
+zip = { workspace = true }

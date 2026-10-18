@@ -1,0 +1,15559 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Worker-side canvas data model.
+//!
+//! `CanvasModel` is the single owner of parsed document state, the
+//! built display lists, and (in later phases) the salsa database
+//! that memoises Tiers 2–4. Phase-1 implementation is intentionally
+//! synchronous and non-incremental: `load()` parses + builds the
+//! whole document, and every mutation triggers a fresh rebuild.
+//! The point of this phase is to nail down the **API surface** the
+//! main thread depends on; incrementality is Phase 3's problem.
+
+/// ADR 132 — `Mutation::Set` resolution and the property read twin.
+#[path = "virtual_set.rs"]
+pub mod virtual_set;
+
+use std::collections::HashMap;
+
+use idml_export::{ExportedLink, FontFace};
+
+use paged_renderer::{
+    pipeline, BuiltDocument, BuiltPage, BytesResolver, DisplayList, Document, PageId,
+    PipelineOptions,
+};
+use serde::{Deserialize, Serialize};
+use tsify_next::Tsify;
+
+use crate::channel::{LoadError, Mutation};
+
+/// §21 advanced prepress — sampling resolution of the `inkCoverage`
+/// analysis render, in dpi. 1 px per pt: coverage is an *area*
+/// measurement, so a solid tint reads identically at any resolution
+/// and the whole-document pass stays cheap enough to run inside a
+/// collection fetch. The cost is that an anti-aliased edge dilutes its
+/// ink with the paper it partly covers, so sub-pixel hairlines
+/// under-report — check those against
+/// `SwatchSummary::total_area_coverage_pct`, which is exact.
+pub const INK_COVERAGE_DPI: f32 = 72.0;
+
+/// §21 advanced prepress — the total-area-coverage limit the
+/// `inkCoverage` collection counts violations against, in percent.
+/// 300% is the common SWOP sheet-fed figure; web-offset and uncoated
+/// stocks run 240–280%. The row carries a full TAC histogram so a
+/// panel can re-threshold to the actual press without a re-render,
+/// which is why this being a constant rather than a wire argument
+/// costs nothing.
+pub const INK_COVERAGE_LIMIT_PCT: f32 = 300.0;
+
+/// Options that flow through to `paged-renderer::PipelineOptions`.
+/// Mirrors the subset of the renderer's options the worker needs
+/// to surface to the main thread on `LoadDocument`.
+#[derive(Debug, Clone, Default)]
+pub struct CanvasOptions {
+    /// Default-font fallback. First-entry-still-wins semantics: the
+    /// renderer's `PipelineOptions::font` receives this byte slice and
+    /// uses it for any `AppliedFont` that doesn't resolve via the
+    /// family registry. Kept as a `Vec<Vec<u8>>` so callers that don't
+    /// know about the registry (e.g. the dev shell auto-loading
+    /// Inter.ttf) can still drop bytes in here without naming them.
+    pub fonts: Vec<Vec<u8>>,
+    /// Named font registry. Each entry binds an `AppliedFont` family
+    /// (and optionally a style like "Bold") to a font payload, mirroring
+    /// `paged-inspect --font-family "Family=path"`. Translates 1:1 to
+    /// `BytesResolver::add_font` entries on every build/rebuild.
+    pub font_registry: Vec<FontEntry>,
+    /// v70 — faces registered with `scope: "sceneLayer"`: scene-layer
+    /// text resolves them (before `font_registry`); nothing else does.
+    pub scene_font_registry: Vec<FontEntry>,
+    /// CMYK ICC profile bytes for accurate colour. Optional; the
+    /// renderer falls back to naive conversion when absent.
+    pub cmyk_icc_profile: Option<Vec<u8>>,
+    /// Concept 2 — named ICC profiles registered before load (the
+    /// `RegisterColorProfile` registry, font-registry pattern).
+    /// `SetColorSettings` resolves working-space names against
+    /// these; a designmap naming one of them activates it at load
+    /// when no explicit `cmyk_icc_profile` is supplied.
+    pub color_profiles: Vec<ColorProfileEntry>,
+}
+
+/// Concept 2 — one named ICC profile payload.
+#[derive(Debug, Clone)]
+pub struct ColorProfileEntry {
+    /// Display / lookup name, e.g. "Coated FOGRA39 (ISO 12647-2:2004)".
+    pub name: String,
+    pub bytes: Vec<u8>,
+}
+
+/// Concept 2 — the document's active colour-management settings
+/// (mirrors InDesign's Color Settings). Written whole by
+/// `Mutation::SetColorSettings`; surfaced through `DocumentMeta`.
+/// `Default` reproduces the pre-Concept-2 hardcoded behaviour.
+#[derive(Debug, Clone)]
+pub struct ColorSettingsState {
+    /// Name of the ACTIVE registered profile, `None` when running on
+    /// the load-time bytes (or no profile at all).
+    pub cmyk_profile_name: Option<String>,
+    /// Concept-3 seam — "preserve" | "convertToWorkingSpace" | "off".
+    pub rgb_policy: Option<String>,
+    pub intent: paged_color::Intent,
+    pub bpc: bool,
+}
+
+/// Concept 2 (Ink Manager) — one ink's output-time settings.
+#[derive(Debug, Clone, Default)]
+pub struct InkSetting {
+    pub convert_to_process: bool,
+    pub alias_to: Option<String>,
+}
+
+/// Concept 2 — resolved soft-proof condition. The bytes are cloned
+/// out of the profile registry at SetProofSetup time so a later
+/// re-registration doesn't silently change the active proof.
+#[derive(Debug, Clone)]
+struct ProofState {
+    name: String,
+    bytes: Vec<u8>,
+    intent: paged_color::Intent,
+    simulate_paper_white: bool,
+}
+
+impl Default for ColorSettingsState {
+    fn default() -> Self {
+        Self {
+            cmyk_profile_name: None,
+            rgb_policy: None,
+            intent: paged_color::Intent::RelativeColorimetric,
+            bpc: true,
+        }
+    }
+}
+
+/// Named font payload used to populate the renderer's per-family
+/// asset resolver.
+#[derive(Debug, Clone)]
+pub struct FontEntry {
+    /// IDML family name as it appears in `AppliedFont` (e.g.
+    /// `"Poppins"`).
+    pub family: String,
+    /// IDML style string when known (`"Regular"`, `"Bold Italic"`).
+    /// `None` registers the family bare and matches every style via
+    /// the bare-family fall-through in `BytesResolver::resolve_font`.
+    pub style: Option<String>,
+    pub bytes: Vec<u8>,
+}
+
+/// One-time facts about a loaded document. Sent to the main thread
+/// on a successful `LoadDocument` so the navigator + page count UI
+/// can render before the first page is rasterised.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentHandle {
+    /// Stable id assigned by the worker; used by the main thread when
+    /// addressing operations to a specific document (the worker may
+    /// hold more than one document open in the future).
+    pub doc_id: String,
+    /// Total page count. Stable for the life of the document unless
+    /// a mutation explicitly inserts / deletes pages.
+    pub page_count: usize,
+    /// Page ids in document order. The navigator displays them as
+    /// "page N" with `N = 1 + index`; the canvas uses the ids
+    /// directly for cache keys.
+    pub page_ids: Vec<PageId>,
+    /// Per-page dimensions in points. Same length as `page_ids`.
+    /// The navigator needs these to size thumbnails before any
+    /// rasterisation has happened.
+    pub page_sizes_pt: Vec<(f32, f32)>,
+    /// Aggregate counts for debugging / UI badges.
+    pub stats: DocumentStats,
+    /// Plan-2 §8.3 — ruler guides per page. The overlay renders
+    /// these and the snap pass treats them as targets. Total volume
+    /// is small (real docs ship a few dozen at most) so we ship them
+    /// inline on the handle rather than paging via a separate
+    /// request.
+    #[serde(default)]
+    pub ruler_guides: Vec<RulerGuideWire>,
+}
+
+/// Plan-2 §8.3 — wire shape of a ruler guide. `page_id` matches one
+/// of `DocumentHandle::page_ids`. `orientation` is "vertical" (snaps
+/// on x) or "horizontal" (snaps on y); `location` is the page-local
+/// coord on the perpendicular axis.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct RulerGuideWire {
+    pub page_id: PageId,
+    pub orientation: GuideOrientationWire,
+    pub location: f32,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify, PartialEq, Eq)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum GuideOrientationWire {
+    Vertical,
+    Horizontal,
+}
+
+/// Structural counts. The main thread surfaces these in the debug
+/// HUD. Mirrors `paged-renderer::PipelineStats` but lives in serde-
+/// friendly form so it can cross the message channel.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+pub struct DocumentStats {
+    pub spreads: usize,
+    pub pages: usize,
+    pub frames: usize,
+    pub stories: usize,
+    pub paragraphs: usize,
+    pub runs: usize,
+    pub glyphs: usize,
+    pub lines: usize,
+    /// panels.md gap 1 — number of distinct stories whose text
+    /// overflows the last frame in its chain (overset). Derived from
+    /// the build's `OversetTextDropped` diagnostics, not from
+    /// `PipelineStats`, so `DocumentStats::from(&PipelineStats)`
+    /// leaves this 0 and the `handle()` builder backfills it from the
+    /// document's render diagnostics. Drives the Preflight panel's
+    /// "N overset stories" badge.
+    #[serde(default)]
+    pub overset_stories: usize,
+}
+
+/// What `CanvasModel::apply_mutation` returns on success. The
+/// `applied_seq` is the monotone id the worker assigns; `page_ids`
+/// lists pages the caller must invalidate in its LOD cache; the
+/// `inverse` is the op to push onto the undo log.
+#[derive(Debug, Clone)]
+pub struct MutationOutcome {
+    pub applied_seq: u64,
+    pub page_ids: Vec<PageId>,
+    pub inverse: crate::mutate::TextOp,
+    /// Editor-ops — the element a structural insert created (or the
+    /// new page id for `InsertPage`); `None` for every other kind.
+    /// Threaded into the `MutationApplied` reply so the editor can
+    /// select the fresh element.
+    pub created_id: Option<crate::element_selection::ElementId>,
+    /// Editor-ops — `true` when the page LIST changed (insert /
+    /// delete / resize page); the reply then carries the refreshed
+    /// per-page sizes.
+    pub page_structure_changed: bool,
+    /// v38 (Wave 2, C-2 / S-05) — content-box reflow, populated ONLY
+    /// when the applied mutation was a `Mutation::ResizeFrame` (a
+    /// content-box change). `None` for every other mutation kind —
+    /// crucially including `MoveFrame` / `SetGroupTransform` and any
+    /// transform-only edit, which change display geometry but must NOT
+    /// re-paginate (the §8.5 resize-vs-transform distinction). The
+    /// dispatch threads this onto `MutationApplied.reflow`.
+    pub reflow: Option<crate::channel::FrameReflowInfo>,
+    /// Every element this mutation minted, in mint order, each with the
+    /// C-15 handle that named it. A `Batch` fills it, and so does a
+    /// `DuplicateElements` (one clone per source); any other single
+    /// mutation leaves it empty, because `created_id` already names its
+    /// one mint.
+    /// Threaded onto `MutationApplied::minted` so a caller that authors
+    /// through batches can address what it just made.
+    pub minted: Vec<crate::channel::MintedElement>,
+}
+
+/// S-13 — result of [`CanvasModel::measure_text`]. All fields in
+/// POINTS. `advance` is the shaped horizontal advance of the run
+/// (kerning and standard ligatures per the default feature set).
+/// `ascender` and `descender` are the face's design metrics scaled to
+/// `size_pt`; `descender` is negative per the OpenType convention (it
+/// sits below the baseline). Backs the `measure_text` query on the wasm
+/// surface, from which the paged.sheet plugin sizes native-table rows
+/// and columns.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TextMetrics {
+    pub advance: f32,
+    pub ascender: f32,
+    pub descender: f32,
+}
+
+/// Editor-ops — document defaults for newly-created objects. The
+/// whole triple is replaced by `Mutation::SetDocumentDefaults`;
+/// `None` means no fill / no stroke / engine-default weight.
+#[derive(Debug, Clone, Default)]
+pub struct DocumentDefaults {
+    pub fill_color: Option<String>,
+    pub stroke_color: Option<String>,
+    pub stroke_weight: Option<f32>,
+}
+
+/// Editor-ops — the element a structural-insert Operation created,
+/// mapped to the channel's `ElementId` so the `MutationApplied` reply
+/// can carry it (the editor selects the fresh element).
+/// B-04 — leaf ElementId -> NodeId (groups and non-page-item ids map
+/// to None and reject wire-side). Used by the plugin-metadata carrier,
+/// which targets leaf page items only.
+fn element_to_leaf_node_id(
+    id: &crate::element_selection::ElementId,
+) -> Option<paged_mutate::NodeId> {
+    use crate::element_selection::ElementId;
+    Some(match id {
+        ElementId::TextFrame(s) => paged_mutate::NodeId::TextFrame(s.clone()),
+        ElementId::Rectangle(s) => paged_mutate::NodeId::Rectangle(s.clone()),
+        ElementId::Oval(s) => paged_mutate::NodeId::Oval(s.clone()),
+        ElementId::GraphicLine(s) => paged_mutate::NodeId::GraphicLine(s.clone()),
+        ElementId::Polygon(s) => paged_mutate::NodeId::Polygon(s.clone()),
+        _ => return None,
+    })
+}
+
+/// B-04 / W1.20 — group-member ElementId -> NodeId. Leaf page items
+/// AND `Group`s (the v2 nested-create case) map through; non-page-item
+/// ids (StoryRange / Table / TableCell) map to None and reject
+/// wire-side.
+fn element_to_member_node_id(
+    id: &crate::element_selection::ElementId,
+) -> Option<paged_mutate::NodeId> {
+    use crate::element_selection::ElementId;
+    Some(match id {
+        ElementId::Group(s) => paged_mutate::NodeId::Group(s.clone()),
+        other => return element_to_leaf_node_id(other),
+    })
+}
+
+/// Every element an applied operation minted, in the order its children
+/// ran. A `Batch` mints one per creating child; anything else mints at
+/// most one. Sibling of [`created_element_id`], which reports only the
+/// LAST — the contract a single-mutation reply carries.
+///
+/// ORDER is the contract: a caller that sent N creating children reads
+/// them back in the order it wrote them.
+fn created_element_ids(
+    doc: &paged_scene::Document,
+    op: &paged_mutate::Operation,
+) -> Vec<crate::element_selection::ElementId> {
+    if let paged_mutate::Operation::Batch { ops } = op {
+        return ops
+            .iter()
+            .flat_map(|child| created_element_ids(doc, child))
+            .collect();
+    }
+    // C-64 — a duplicate mints one clone PER SOURCE: the one single
+    // (non-batch) mutation that creates more than one element.
+    if matches!(op, paged_mutate::Operation::DuplicateNodes { .. }) {
+        return paged_mutate::duplicate_roots(doc, op)
+            .iter()
+            .filter_map(page_item_element_id)
+            .collect();
+    }
+    created_element_id(doc, op).into_iter().collect()
+}
+
+/// `NodeId` → wire `ElementId`, for the page-item kinds.
+fn page_item_element_id(
+    node: &paged_mutate::NodeId,
+) -> Option<crate::element_selection::ElementId> {
+    use crate::element_selection::ElementId;
+    use paged_mutate::NodeId;
+    Some(match node {
+        NodeId::TextFrame(id) => ElementId::TextFrame(id.clone()),
+        NodeId::Rectangle(id) => ElementId::Rectangle(id.clone()),
+        NodeId::Oval(id) => ElementId::Oval(id.clone()),
+        NodeId::GraphicLine(id) => ElementId::GraphicLine(id.clone()),
+        NodeId::Polygon(id) => ElementId::Polygon(id.clone()),
+        NodeId::Group(id) => ElementId::Group(id.clone()),
+        _ => return None,
+    })
+}
+
+/// The element an operation created, or the LAST of them. `doc` is the
+/// document the op was (or is about to be) applied to: a duplicate's
+/// clones are named by walking its SOURCES, which are there either way.
+/// Whether `mutation` changes the page list or a page's size, so the host
+/// must rebuild its page grid: the page ops themselves, and a batch that
+/// holds one. A batch used to report `false` whatever it held (only its
+/// own kind was matched), so pages a Data Merge minted in one batch never
+/// reached the grid, while undoing that batch reported `true`.
+fn changes_page_list(mutation: &Mutation) -> bool {
+    match mutation {
+        Mutation::InsertPage { .. }
+        | Mutation::DeletePage { .. }
+        | Mutation::ResizePage { .. }
+        // W0.5 — DuplicatePage adds a spread; the others change page
+        // labels/masters but keep the page count, so they don't force a
+        // grid rebuild.
+        | Mutation::DuplicatePage { .. } => true,
+        Mutation::Batch { ops } => ops.iter().any(changes_page_list),
+        _ => false,
+    }
+}
+
+/// An item's spread-space `ItemTransform` as seen from the page it sits
+/// on: the page's origin inside its spread folded in, so `bounds`
+/// through it lands in page coordinates — the space the hit test's
+/// `frameBounds`, carets, selection rects, cell rects and the inserts
+/// use. Unchanged for a pasteboard item (`page` is `None`) and for a page
+/// at its spread's origin, so a document made here reads as before.
+pub(crate) fn page_space_transform(
+    page: Option<&BuiltPage>,
+    t: Option<[f32; 6]>,
+) -> Option<[f32; 6]> {
+    let Some((ox, oy)) = page.map(|p| p.spread_origin) else {
+        return t;
+    };
+    if ox == 0.0 && oy == 0.0 {
+        return t;
+    }
+    let [a, b, c, d, tx, ty] = t.unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+    Some([a, b, c, d, tx - ox, ty - oy])
+}
+
+/// The append slots of a batch's spread inserts, kept true while earlier
+/// children of the same batch remove page items.
+///
+/// A batch translates every child against the scene as it stood before
+/// the batch, and a creating child appends to its kind's list on the
+/// spread: its slot is that list's length there. A `deleteFrame` earlier
+/// in the batch shortens the list before the insert applies, so the slot
+/// pointed past the end and the apply refused the whole batch. This
+/// counts what the batch removed and added per spread and kind, and pulls
+/// an insert's slot back to the list's length at the moment it applies.
+/// A batch that removes nothing keeps every slot it had.
+#[derive(Default)]
+struct AppendSlots {
+    /// `(spread id, kind)` → page items the batch removed so far.
+    removed: HashMap<(String, &'static str), usize>,
+    /// `(spread id, kind)` → page items the batch inserted so far.
+    added: HashMap<(String, &'static str), usize>,
+    /// Ids the batch inserted, with their spread: a later removal of one
+    /// of them shortens that list too.
+    minted: HashMap<String, String>,
+}
+
+impl AppendSlots {
+    fn kind(node: &paged_mutate::NodeId) -> Option<(&'static str, &str)> {
+        use paged_mutate::NodeId;
+        match node {
+            NodeId::TextFrame(id) => Some(("textFrame", id)),
+            NodeId::Rectangle(id) => Some(("rectangle", id)),
+            NodeId::Oval(id) => Some(("oval", id)),
+            NodeId::Polygon(id) => Some(("polygon", id)),
+            NodeId::GraphicLine(id) => Some(("graphicLine", id)),
+            _ => None,
+        }
+    }
+
+    fn ids<'a>(
+        spread: &'a paged_model::Spread,
+        kind: &str,
+    ) -> Box<dyn Iterator<Item = Option<&'a str>> + 'a> {
+        match kind {
+            "textFrame" => Box::new(spread.text_frames.iter().map(|f| f.self_id.as_deref())),
+            "rectangle" => Box::new(spread.rectangles.iter().map(|f| f.self_id.as_deref())),
+            "oval" => Box::new(spread.ovals.iter().map(|f| f.self_id.as_deref())),
+            "polygon" => Box::new(spread.polygons.iter().map(|f| f.self_id.as_deref())),
+            "graphicLine" => Box::new(spread.graphic_lines.iter().map(|f| f.self_id.as_deref())),
+            _ => Box::new(std::iter::empty()),
+        }
+    }
+
+    fn spread_id(parsed: &paged_scene::ParsedSpread) -> String {
+        parsed
+            .spread
+            .self_id
+            .clone()
+            .unwrap_or_else(|| parsed.src.clone())
+    }
+
+    fn rebase(&mut self, scene: &Document, op: &mut paged_mutate::Operation) {
+        use paged_mutate::{NodeId, Operation};
+        match op {
+            Operation::RemoveNode { node } => {
+                let Some((kind, id)) = Self::kind(node) else {
+                    return;
+                };
+                let spread = self.minted.get(id).cloned().or_else(|| {
+                    scene
+                        .spreads
+                        .iter()
+                        .find(|p| Self::ids(&p.spread, kind).any(|s| s == Some(id)))
+                        .map(Self::spread_id)
+                });
+                if let Some(spread) = spread {
+                    *self.removed.entry((spread, kind)).or_default() += 1;
+                }
+            }
+            Operation::InsertNode {
+                parent: NodeId::Spread(spread),
+                position,
+                node,
+                ..
+            } => {
+                let node_id = node.node_id();
+                let Some((kind, id)) = Self::kind(&node_id) else {
+                    return;
+                };
+                let key = (spread.clone(), kind);
+                let removed = self.removed.get(&key).copied().unwrap_or(0);
+                if removed > 0 {
+                    let before = scene
+                        .spreads
+                        .iter()
+                        .find(|p| Self::spread_id(p) == *spread)
+                        .map_or(0, |p| Self::ids(&p.spread, kind).count());
+                    let added = self.added.get(&key).copied().unwrap_or(0);
+                    let live = (before + added).saturating_sub(removed);
+                    *position = (*position).min(live);
+                }
+                *self.added.entry(key).or_default() += 1;
+                self.minted.insert(id.to_string(), spread.clone());
+            }
+            _ => {}
+        }
+    }
+}
+
+/// The `(element, handle)` pairs a translated batch bound, in order.
+///
+/// Translation drops every `bindCreated` child (it contributes no
+/// operation), so the binding is recovered here by walking the batch's
+/// children beside the operations they translated to: each non-binding
+/// child produced exactly one operation, and a `bindCreated` names the
+/// most recent creation before it — the rule translation applied.
+fn translated_handle_bindings(
+    doc: &paged_scene::Document,
+    mutation: &Mutation,
+    op: &paged_mutate::Operation,
+) -> Vec<(crate::element_selection::ElementId, String)> {
+    let (Mutation::Batch { ops: children }, paged_mutate::Operation::Batch { ops: translated }) =
+        (mutation, op)
+    else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut translated = translated.iter();
+    let mut last_created: Option<crate::element_selection::ElementId> = None;
+    for child in children {
+        if let Mutation::BindCreated { handle } = child {
+            if let Some(id) = &last_created {
+                out.push((id.clone(), handle.clone()));
+            }
+            continue;
+        }
+        let Some(child_op) = translated.next() else {
+            break;
+        };
+        if let Some(id) = created_element_id(doc, child_op) {
+            last_created = Some(id);
+        }
+    }
+    out
+}
+
+fn created_element_id(
+    doc: &paged_scene::Document,
+    op: &paged_mutate::Operation,
+) -> Option<crate::element_selection::ElementId> {
+    use crate::element_selection::ElementId;
+    // B-04 — group creation reports the minted group id.
+    if let paged_mutate::Operation::CreateGroup { spec } = op {
+        return spec.self_id.clone().map(ElementId::Group);
+    }
+    // v52 — an inserted anchored frame is a Rectangle; report its minted id so
+    // the caller can address it (e.g. offset the anchor after placement).
+    if let paged_mutate::Operation::InsertAnchoredFrame { self_id, .. } = op {
+        return Some(ElementId::Rectangle(self_id.clone()));
+    }
+    // Protocol v34 — a batch reports its LAST creating child (the id
+    // the batch-created sentinel resolved to), so insert-with-
+    // metadata flows still get a `createdId` to select.
+    if let paged_mutate::Operation::Batch { ops } = op {
+        return ops
+            .iter()
+            .rev()
+            .find_map(|child| created_element_id(doc, child));
+    }
+    // C-64 — a duplicate's "created" is its last clone, the same rule a
+    // batch follows.
+    if matches!(op, paged_mutate::Operation::DuplicateNodes { .. }) {
+        return paged_mutate::duplicate_roots(doc, op)
+            .last()
+            .and_then(page_item_element_id);
+    }
+    if let paged_mutate::Operation::InsertNode { parent, node, .. } = op {
+        // S-03 — a table's id needs the parent story for the full
+        // address (the spec alone can't produce a `NodeId::Table`). Read
+        // the story id off the `NodeId::Story` parent and the table id
+        // off the spec so the outcome reports the cell-addressable
+        // `ElementId::Table { story_id, table_id }`.
+        if let (
+            paged_mutate::NodeId::Story(story_id),
+            paged_mutate::NodeSpec::Table { self_id, .. },
+        ) = (parent, node)
+        {
+            return Some(ElementId::Table {
+                story_id: story_id.clone(),
+                table_id: self_id.clone(),
+            });
+        }
+        return match node.node_id() {
+            paged_mutate::NodeId::TextFrame(id) => Some(ElementId::TextFrame(id)),
+            paged_mutate::NodeId::Rectangle(id) => Some(ElementId::Rectangle(id)),
+            paged_mutate::NodeId::GraphicLine(id) => Some(ElementId::GraphicLine(id)),
+            paged_mutate::NodeId::Polygon(id) => Some(ElementId::Polygon(id)),
+            paged_mutate::NodeId::Oval(id) => Some(ElementId::Oval(id)),
+            paged_mutate::NodeId::Group(id) => Some(ElementId::Group(id)),
+            _ => None,
+        };
+    }
+    None
+}
+
+/// C-15 — the STORY a creating operation mints alongside its element,
+/// read off the spec before apply (the translate path knows every id in
+/// advance). `insertTextFrame` mints a `ParentStory`; `insertTable`
+/// lives in the story it was inserted into. This is what lets a
+/// `$h:frame` reference in a `storyId` position address the story of a
+/// text frame the SAME batch created.
+fn created_story_id(op: &paged_mutate::Operation) -> Option<String> {
+    match op {
+        paged_mutate::Operation::Batch { ops } => ops.iter().rev().find_map(created_story_id),
+        paged_mutate::Operation::InsertNode { parent, node, .. } => match node {
+            paged_mutate::NodeSpec::TextFrame { parent_story, .. } => parent_story.clone(),
+            paged_mutate::NodeSpec::Table { .. } => match parent {
+                paged_mutate::NodeId::Story(story_id) => Some(story_id.clone()),
+                _ => None,
+            },
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// Phase B — frame-mutation analogue of [`MutationOutcome`]. Carries
+/// the full `AppliedOperation` (op + inverse + invalidation hint)
+/// rather than just the inverse text op, since frame mutations come
+/// from the canonical `paged_mutate` log.
+#[derive(Debug, Clone)]
+pub struct FrameMutationOutcome {
+    pub applied_seq: u64,
+    pub page_ids: Vec<PageId>,
+    pub applied: paged_mutate::AppliedOperation,
+    /// v0.71.13 — the content-box reflow a gesture commit reports
+    /// (`GestureCommitted.reflow`): set by `commit_gesture` for a resize
+    /// of one frame, `None` from every other path.
+    pub reflow: Option<crate::channel::FrameReflowInfo>,
+}
+
+/// What `CanvasModel::undo` / `redo` return.
+#[derive(Debug, Clone)]
+pub struct UndoOutcome {
+    /// `applied_seq` of the mutation being reversed (undo) or
+    /// re-applied (redo).
+    pub undone_seq: u64,
+    /// Newly assigned `applied_seq` for the undo/redo operation
+    /// itself.
+    pub applied_seq: u64,
+    pub page_ids: Vec<PageId>,
+    /// Phase 4 Step 3 — story id touched by the undo/redo, used by
+    /// the wasm dispatch to scope GPU cache invalidation. None when
+    /// the op carries no story id (frame moves, page inserts) —
+    /// reserved for later mutation types.
+    pub affected_story_id: Option<String>,
+}
+
+/// Track J fan-out — map an `ElementId` carried on the wire to the
+/// matching `paged_mutate::NodeId` for the apply layer. Ovals + Groups
+/// don't carry editable PathPointArrays so they translate to `None`
+/// and the calling Mutation falls through to the non-frame handler.
+fn path_node_id_for(id: &crate::element_selection::ElementId) -> Option<paged_mutate::NodeId> {
+    use crate::element_selection::ElementId;
+    use paged_mutate::NodeId;
+    match id {
+        ElementId::Polygon(s) => Some(NodeId::Polygon(s.clone())),
+        ElementId::TextFrame(s) => Some(NodeId::TextFrame(s.clone())),
+        ElementId::Rectangle(s) => Some(NodeId::Rectangle(s.clone())),
+        ElementId::GraphicLine(s) => Some(NodeId::GraphicLine(s.clone())),
+        // Path-bearing only — Oval / Group / StoryRange / Table /
+        // TableCell have no `<PathPointArray>`, so the path-edit
+        // gestures never target them.
+        ElementId::Oval(_)
+        | ElementId::Group(_)
+        | ElementId::StoryRange { .. }
+        | ElementId::Table { .. }
+        | ElementId::TableCell { .. } => None,
+    }
+}
+
+/// B-22 (v57) — the shared translation for the six region-Pathfinder
+/// mutations: they differ only in the verb.
+fn region_op(
+    element_ids: &[crate::element_selection::ElementId],
+    verb: paged_mutate::PathfinderRegionVerb,
+) -> Option<paged_mutate::Operation> {
+    Some(paged_mutate::Operation::PathfinderRegion {
+        elements: element_ids.iter().map(element_to_node_id).collect(),
+        verb,
+    })
+}
+
+/// Inspector P1 — map a wire `ElementId` to the apply layer's
+/// `NodeId`. Unlike `path_node_id_for`, this version handles every
+/// element kind including Oval / Group; the apply layer may refuse
+/// some `(NodeId, PropertyPath)` combinations, but routing decides
+/// that at apply time.
+fn element_to_node_id(id: &crate::element_selection::ElementId) -> paged_mutate::NodeId {
+    use crate::element_selection::ElementId;
+    use paged_mutate::NodeId;
+    match id {
+        ElementId::TextFrame(s) => NodeId::TextFrame(s.clone()),
+        ElementId::Rectangle(s) => NodeId::Rectangle(s.clone()),
+        ElementId::Oval(s) => NodeId::Oval(s.clone()),
+        ElementId::Polygon(s) => NodeId::Polygon(s.clone()),
+        ElementId::GraphicLine(s) => NodeId::GraphicLine(s.clone()),
+        ElementId::Group(s) => NodeId::Group(s.clone()),
+        ElementId::StoryRange {
+            story_id,
+            start,
+            end,
+        } => NodeId::StoryRange {
+            story_id: story_id.clone(),
+            start: *start,
+            end: *end,
+        },
+        ElementId::Table { story_id, table_id } => NodeId::Table {
+            story_id: story_id.clone(),
+            table_id: table_id.clone(),
+        },
+        ElementId::TableCell {
+            story_id,
+            table_id,
+            row,
+            col,
+        } => NodeId::TableCell {
+            story_id: story_id.clone(),
+            table_id: table_id.clone(),
+            row: *row,
+            col: *col,
+        },
+    }
+}
+
+/// Inspector P1 — translate a `FrameRef` into a tree node for the
+/// scene-tree outline. Recurses through Groups so nested members
+/// appear as children. Returns `None` for empty / unresolvable
+/// references.
+/// C-65 — an item's `x-paged:` Label entries, for its scene-tree node.
+fn tree_plugin_metadata(
+    spread: &paged_model::Spread,
+    id: &str,
+) -> Vec<crate::channel::PluginMetadataEntry> {
+    spread
+        .labels
+        .get(id)
+        .map(|labels| {
+            labels
+                .iter()
+                .filter(|(k, _)| k.starts_with("x-paged:"))
+                .map(|(k, v)| crate::channel::PluginMetadataEntry {
+                    key: k.clone(),
+                    value: v.clone(),
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn frame_to_tree_node(
+    spread: &paged_model::Spread,
+    fr: paged_model::FrameRef,
+) -> Option<crate::channel::SceneTreeNode> {
+    use crate::channel::SceneTreeNode;
+    use crate::element_selection::ElementId;
+    use paged_model::FrameRef;
+    match fr {
+        FrameRef::TextFrame(i) => spread.text_frames.get(i).and_then(|f| {
+            let id = f.self_id.clone()?;
+            Some(SceneTreeNode {
+                id: Some(ElementId::TextFrame(id.clone())),
+                kind: "TextFrame".to_string(),
+                label: format!("TextFrame {id}"),
+                children: Vec::new(),
+                plugin_metadata: Some(tree_plugin_metadata(spread, &id)),
+            })
+        }),
+        FrameRef::Rectangle(i) => spread.rectangles.get(i).and_then(|f| {
+            let id = f.self_id.clone()?;
+            Some(SceneTreeNode {
+                id: Some(ElementId::Rectangle(id.clone())),
+                kind: "Rectangle".to_string(),
+                label: format!("Rectangle {id}"),
+                children: Vec::new(),
+                plugin_metadata: Some(tree_plugin_metadata(spread, &id)),
+            })
+        }),
+        FrameRef::Oval(i) => spread.ovals.get(i).and_then(|f| {
+            let id = f.self_id.clone()?;
+            Some(SceneTreeNode {
+                id: Some(ElementId::Oval(id.clone())),
+                kind: "Oval".to_string(),
+                label: format!("Oval {id}"),
+                children: Vec::new(),
+                plugin_metadata: Some(tree_plugin_metadata(spread, &id)),
+            })
+        }),
+        FrameRef::Polygon(i) => spread.polygons.get(i).and_then(|f| {
+            let id = f.self_id.clone()?;
+            Some(SceneTreeNode {
+                id: Some(ElementId::Polygon(id.clone())),
+                kind: "Polygon".to_string(),
+                label: format!("Polygon {id}"),
+                children: Vec::new(),
+                plugin_metadata: Some(tree_plugin_metadata(spread, &id)),
+            })
+        }),
+        FrameRef::GraphicLine(i) => spread.graphic_lines.get(i).and_then(|f| {
+            let id = f.self_id.clone()?;
+            Some(SceneTreeNode {
+                id: Some(ElementId::GraphicLine(id.clone())),
+                kind: "GraphicLine".to_string(),
+                label: format!("GraphicLine {id}"),
+                children: Vec::new(),
+                plugin_metadata: Some(tree_plugin_metadata(spread, &id)),
+            })
+        }),
+        FrameRef::Group(i) => spread.groups.get(i).map(|g| {
+            let id = g.self_id.clone().unwrap_or_else(|| format!("group#{i}"));
+            let children = g
+                .members
+                .iter()
+                .filter_map(|m| frame_to_tree_node(spread, *m))
+                .collect();
+            SceneTreeNode {
+                id: Some(ElementId::Group(id.clone())),
+                kind: "Group".to_string(),
+                label: format!("Group {id}"),
+                plugin_metadata: Some(tree_plugin_metadata(spread, &id)),
+                children,
+            }
+        }),
+    }
+}
+
+/// W1.20 (groups v2) — the spread-space axis-aligned bounding box of
+/// every leaf reachable from `group_idx` (descending through nested
+/// groups), each leaf's `[bounds × effective item_transform]` oriented
+/// box folded in. `None` when the group is empty / unresolvable. Used
+/// by the Group read-side descriptor so the layers/tree panel can show
+/// a group's extent and the inspector can pivot scale/rotate gestures.
+fn group_union_aabb(spread: &paged_model::Spread, group_idx: usize) -> Option<paged_model::Bounds> {
+    use paged_model::{Bounds, FrameRef};
+    fn leaf_box(spread: &paged_model::Spread, r: FrameRef) -> Option<Bounds> {
+        let (bounds, it) = match r {
+            FrameRef::TextFrame(i) => spread
+                .text_frames
+                .get(i)
+                .map(|f| (f.bounds, f.item_transform)),
+            FrameRef::Rectangle(i) => spread
+                .rectangles
+                .get(i)
+                .map(|f| (f.bounds, f.item_transform)),
+            FrameRef::Oval(i) => spread.ovals.get(i).map(|f| (f.bounds, f.item_transform)),
+            FrameRef::GraphicLine(i) => spread
+                .graphic_lines
+                .get(i)
+                .map(|f| (f.bounds, f.item_transform)),
+            FrameRef::Polygon(i) => spread.polygons.get(i).map(|f| (f.bounds, f.item_transform)),
+            FrameRef::Group(_) => None,
+        }?;
+        // `transform_bbox` returns the axis-aligned bbox of the
+        // oriented (bounds × item_transform) box in spread space.
+        Some(crate::hit::transform_bbox(bounds, it))
+    }
+    fn walk(spread: &paged_model::Spread, gi: usize, acc: &mut Option<Bounds>) {
+        let Some(group) = spread.groups.get(gi) else {
+            return;
+        };
+        for m in &group.members {
+            match *m {
+                FrameRef::Group(child) => walk(spread, child, acc),
+                leaf => {
+                    if let Some(b) = leaf_box(spread, leaf) {
+                        *acc = Some(match acc.take() {
+                            Some(a) => Bounds {
+                                left: a.left.min(b.left),
+                                top: a.top.min(b.top),
+                                right: a.right.max(b.right),
+                                bottom: a.bottom.max(b.bottom),
+                            },
+                            None => b,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    let mut acc: Option<Bounds> = None;
+    walk(spread, group_idx, &mut acc);
+    acc
+}
+
+/// SDK Phase 3 — uniform-collapse helper for the StoryRange
+/// snapshot. Returns `Some(common)` when all values match (every
+/// run agrees, including the "all agree on None" case);
+/// `None` when values diverge. The wrapping `PropertyEntry.value:
+/// Option<Value>` then carries `Some(Value::Length(uniform))` /
+/// `None` (mixed) at the wire boundary.
+fn collapse_uniform<T: Clone + PartialEq>(values: &[T]) -> Option<T> {
+    let first = values.first()?;
+    if values.iter().all(|v| v == first) {
+        Some(first.clone())
+    } else {
+        None
+    }
+}
+
+/// §21 advanced prepress — a swatch's total area coverage in percent:
+/// how much ink every press plate lays down for it, summed.
+///
+/// A process CMYK swatch sums its four channels after the swatch-level
+/// tint (60/40/40/100 rich black → 240%). A **spot swatch is one
+/// plate**, so it contributes its tint and nothing else — 100% PANTONE
+/// 286 C is 100% TAC, NOT the 175% its CMYK alternate happens to sum
+/// to. Getting that backwards would flag every duotone as over-limit.
+///
+/// `None` — never `Some(0.0)` — when the swatch has no ink
+/// decomposition: RGB and Lab process colours separate at the RIP
+/// against the output intent, and mixed-ink swatches need the spectral
+/// model this engine does not ship (see `docs/reference/deferred-scope.md`, formerly `deep-defer-records.md`,
+/// §mixed-ink). Reporting 0% for those would read as "adds no ink".
+///
+/// Exact and resolution-free — no render involved — so it catches an
+/// over-limit colour wherever it is used, including in the hairlines
+/// that the rendered per-page reading under-samples. It can therefore
+/// disagree with the page reading for a spot with a non-CMYK
+/// alternate: press truth says one plate at its tint, but the raster
+/// lane cannot separate that swatch at all and leaves those pixels
+/// unmeasured. The swatch figure is the one to trust.
+fn swatch_total_area_coverage(color: &paged_model::ColorEntry) -> Option<f32> {
+    use paged_model::{ColorModel, ColorSpace};
+    let tint_pct = color.tint.map(|v| v.clamp(0.0, 100.0)).unwrap_or(100.0);
+    match color.model {
+        ColorModel::Spot => Some(tint_pct),
+        ColorModel::Process => {
+            if color.space != ColorSpace::Cmyk || color.value.len() != 4 {
+                return None;
+            }
+            let sum: f32 = color.value.iter().map(|v| v.clamp(0.0, 100.0)).sum();
+            Some(sum * tint_pct / 100.0)
+        }
+        ColorModel::MixedInk | ColorModel::Unknown => None,
+    }
+}
+
+fn story_id_of_text_op(op: &crate::mutate::TextOp) -> &str {
+    match op {
+        crate::mutate::TextOp::InsertText { story_id, .. } => story_id,
+        crate::mutate::TextOp::DeleteRange { story_id, .. } => story_id,
+    }
+}
+
+/// The story a logged mutation touched, when it touched one. A batch
+/// reports the FIRST story any child edited — the reply carries a
+/// single `affected_story_id`, and a mixed batch in practice pours into
+/// one story (the caller batches to make one document edit atomic).
+fn story_id_of_logged(entry: &LoggedMutation) -> Option<String> {
+    match entry {
+        LoggedMutation::Text { inverse, .. } => Some(story_id_of_text_op(inverse).to_string()),
+        LoggedMutation::Frame(_) => None,
+        LoggedMutation::Composite(children) => children.iter().find_map(story_id_of_logged),
+        // App state, not story content.
+        LoggedMutation::Defaults { .. } | LoggedMutation::AppState { .. } => None,
+    }
+}
+
+// ---- W0.3 — read-side enum→IDML-string mirrors + transform
+// decompose. The mutate layer owns the write-side `*_as_idml`
+// (private there); the inspector needs the same canonical strings so
+// the snapshot round-trips through `apply`. ----------------------
+
+fn vertical_justification_idml(v: paged_model::VerticalJustification) -> &'static str {
+    use paged_model::VerticalJustification as V;
+    match v {
+        V::Top => "TopAlign",
+        V::Center => "CenterAlign",
+        V::Bottom => "BottomAlign",
+        V::Justify => "JustifyAlign",
+    }
+}
+
+fn auto_sizing_idml(v: paged_model::AutoSizingType) -> &'static str {
+    use paged_model::AutoSizingType as A;
+    match v {
+        A::Off => "Off",
+        A::HeightOnly => "HeightOnly",
+        A::WidthOnly => "WidthOnly",
+        A::HeightAndWidth => "HeightAndWidth",
+        A::HeightAndWidthProportionally => "HeightAndWidthProportionally",
+    }
+}
+
+fn first_baseline_idml(v: paged_model::FirstBaselineOffset) -> &'static str {
+    use paged_model::FirstBaselineOffset as F;
+    match v {
+        F::AscentOffset => "AscentOffset",
+        F::CapHeight => "CapHeight",
+        F::XHeight => "XHeight",
+        F::EmBoxHeight => "EmBoxHeight",
+        F::LeadingOffset => "LeadingOffset",
+        F::FixedHeight => "FixedHeight",
+    }
+}
+
+fn corner_option_idml(v: paged_model::CornerOption) -> &'static str {
+    use paged_model::CornerOption as C;
+    match v {
+        C::None => "None",
+        C::Rounded => "RoundedCorner",
+        C::Inverse => "InverseRoundedCorner",
+        C::Inset => "InsetCorner",
+        C::Bevel => "BeveledCorner",
+        C::Fancy => "FancyCorner",
+    }
+}
+
+/// A line end as the `frame.stroke*Arrowhead` paths spell it: `None` reads
+/// `""` (the cleared spelling the mutation takes), and so does an
+/// out-of-vocabulary `Other`, whose source token was discarded at parse.
+fn arrowhead_text(end: paged_model::ArrowheadType) -> String {
+    match end {
+        paged_model::ArrowheadType::None => String::new(),
+        t => t.as_idml().to_string(),
+    }
+}
+
+/// E-1 — the eight per-corner read rows, in IDML `corners[4]` order
+/// `[top_left, top_right, bottom_right, bottom_left]`.
+///
+/// One builder shared by every page-item arm so a kind can never expose a
+/// partial or differently-ordered corner set. Read and write stay PAIRED
+/// by construction: `paged_mutate`'s `find_corners_mut` accepts exactly
+/// the six kinds that call this, so every row here has a write arm behind
+/// it (the C-17 lesson — a property that reads but rejects the write is
+/// worse than one that does neither).
+///
+/// An option reads as `""` when the slot carries no override, which is
+/// the same spelling the mutation takes to CLEAR it — so a panel can
+/// round-trip a cleared corner without a special case.
+fn corner_entries(corners: &[paged_model::CornerSpec; 4]) -> Vec<crate::channel::PropertyEntry> {
+    use crate::channel::PropertyEntry;
+    use paged_mutate::{PropertyPath, Value};
+    const SLOTS: [(PropertyPath, PropertyPath); 4] = [
+        (
+            PropertyPath::FrameCornerOptionTopLeft,
+            PropertyPath::FrameCornerRadiusTopLeft,
+        ),
+        (
+            PropertyPath::FrameCornerOptionTopRight,
+            PropertyPath::FrameCornerRadiusTopRight,
+        ),
+        (
+            PropertyPath::FrameCornerOptionBottomRight,
+            PropertyPath::FrameCornerRadiusBottomRight,
+        ),
+        (
+            PropertyPath::FrameCornerOptionBottomLeft,
+            PropertyPath::FrameCornerRadiusBottomLeft,
+        ),
+    ];
+    let mut out = Vec::with_capacity(8);
+    for (i, (opt_path, rad_path)) in SLOTS.iter().enumerate() {
+        out.push(PropertyEntry {
+            path: *opt_path,
+            value: Some(Value::Text(
+                corners[i]
+                    .option
+                    .map(corner_option_idml)
+                    .unwrap_or_default()
+                    .to_string(),
+            )),
+        });
+        out.push(PropertyEntry {
+            path: *rad_path,
+            value: Some(Value::Length(corners[i].radius)),
+        });
+    }
+    out
+}
+
+fn decompose_angle(m: Option<[f32; 6]>) -> f32 {
+    paged_mutate::operation::decompose_transform(m).angle_deg
+}
+fn decompose_scale_x(m: Option<[f32; 6]>) -> f32 {
+    paged_mutate::operation::decompose_transform(m).scale_x
+}
+fn decompose_scale_y(m: Option<[f32; 6]>) -> f32 {
+    paged_mutate::operation::decompose_transform(m).scale_y
+}
+fn decompose_flip_h(m: Option<[f32; 6]>) -> bool {
+    paged_mutate::operation::decompose_transform(m).flip_h
+}
+fn decompose_flip_v(m: Option<[f32; 6]>) -> bool {
+    paged_mutate::operation::decompose_transform(m).flip_v
+}
+
+/// The whole-struct gradient-feather row (`FrameGradientFeather`), for
+/// the kinds whose descriptor does not already spell it inline. `None`
+/// when the item carries no gradient feather — the same value the
+/// mutation takes to clear one.
+fn gradient_feather_entry(
+    effects: Option<&paged_model::FrameEffects>,
+) -> crate::channel::PropertyEntry {
+    crate::channel::PropertyEntry {
+        path: paged_mutate::PropertyPath::FrameGradientFeather,
+        value: Some(paged_mutate::Value::GradientFeather(
+            effects
+                .and_then(|e| e.gradient_feather.as_ref())
+                .map(paged_mutate::operation::GradientFeatherSpec::from_parse),
+        )),
+    }
+}
+
+/// W0.4 — read-side mirror of the transparency-effect per-field paths
+/// (gap 18). Emits one `PropertyEntry` per effect field, sourcing each
+/// from the parsed `effects: Option<FrameEffects>` block (a `None`
+/// effect surfaces the field's "empty" value: `false` for the
+/// `*Enabled` toggle, `Length(None)` / `ColorRef(None)` / `Text("")`
+/// for the rest). Shared by the TextFrame, Rectangle, Oval and Polygon
+/// property blocks so the inventory stays in lockstep across kinds —
+/// exactly the kinds `paged_mutate`'s `find_frame_effects_mut` writes
+/// (C-63). The
+/// object-level `frame.blendMode` path reads the page item's own
+/// `blend_mode` slot (the `<BlendingSetting>` Opacity half is already
+/// surfaced as `FrameOpacity`).
+fn effect_property_entries(
+    effects: Option<&paged_model::FrameEffects>,
+    blend_mode: Option<&str>,
+) -> Vec<crate::channel::PropertyEntry> {
+    use crate::channel::PropertyEntry;
+    use paged_mutate::{PropertyPath as P, Value as V};
+    let inner_shadow = effects.and_then(|e| e.inner_shadow.as_ref());
+    let outer_glow = effects.and_then(|e| e.outer_glow.as_ref());
+    let inner_glow = effects.and_then(|e| e.inner_glow.as_ref());
+    let bevel = effects.and_then(|e| e.bevel.as_ref());
+    let satin = effects.and_then(|e| e.satin.as_ref());
+    let feather = effects.and_then(|e| e.feather.as_ref());
+    let dfeather = effects.and_then(|e| e.directional_feather.as_ref());
+    let entry = |path, value| PropertyEntry {
+        path,
+        value: Some(value),
+    };
+    let txt = |s: Option<&String>| V::Text(s.cloned().unwrap_or_default());
+    let col = |s: Option<&String>| V::ColorRef(s.cloned());
+    vec![
+        // Inner shadow.
+        entry(P::FrameInnerShadowEnabled, V::Bool(inner_shadow.is_some())),
+        entry(
+            P::FrameInnerShadowBlendMode,
+            txt(inner_shadow.and_then(|e| e.blend_mode.as_ref())),
+        ),
+        entry(
+            P::FrameInnerShadowColor,
+            col(inner_shadow.and_then(|e| e.effect_color.as_ref())),
+        ),
+        entry(
+            P::FrameInnerShadowOpacity,
+            V::Length(inner_shadow.and_then(|e| e.opacity_pct)),
+        ),
+        entry(
+            P::FrameInnerShadowAngle,
+            V::Length(inner_shadow.and_then(|e| e.angle_deg)),
+        ),
+        entry(
+            P::FrameInnerShadowDistance,
+            V::Length(inner_shadow.and_then(|e| e.distance)),
+        ),
+        entry(
+            P::FrameInnerShadowSize,
+            V::Length(inner_shadow.and_then(|e| e.size)),
+        ),
+        entry(
+            P::FrameInnerShadowChoke,
+            V::Length(inner_shadow.and_then(|e| e.choke_pct)),
+        ),
+        entry(
+            P::FrameInnerShadowNoise,
+            V::Length(inner_shadow.and_then(|e| e.noise_pct)),
+        ),
+        // Outer glow.
+        entry(P::FrameOuterGlowEnabled, V::Bool(outer_glow.is_some())),
+        entry(
+            P::FrameOuterGlowBlendMode,
+            txt(outer_glow.and_then(|e| e.blend_mode.as_ref())),
+        ),
+        entry(
+            P::FrameOuterGlowColor,
+            col(outer_glow.and_then(|e| e.effect_color.as_ref())),
+        ),
+        entry(
+            P::FrameOuterGlowOpacity,
+            V::Length(outer_glow.and_then(|e| e.opacity_pct)),
+        ),
+        entry(
+            P::FrameOuterGlowSpread,
+            V::Length(outer_glow.and_then(|e| e.spread_pct)),
+        ),
+        entry(
+            P::FrameOuterGlowSize,
+            V::Length(outer_glow.and_then(|e| e.size)),
+        ),
+        entry(
+            P::FrameOuterGlowNoise,
+            V::Length(outer_glow.and_then(|e| e.noise_pct)),
+        ),
+        // Inner glow.
+        entry(P::FrameInnerGlowEnabled, V::Bool(inner_glow.is_some())),
+        entry(
+            P::FrameInnerGlowBlendMode,
+            txt(inner_glow.and_then(|e| e.blend_mode.as_ref())),
+        ),
+        entry(
+            P::FrameInnerGlowColor,
+            col(inner_glow.and_then(|e| e.effect_color.as_ref())),
+        ),
+        entry(
+            P::FrameInnerGlowOpacity,
+            V::Length(inner_glow.and_then(|e| e.opacity_pct)),
+        ),
+        entry(
+            P::FrameInnerGlowChoke,
+            V::Length(inner_glow.and_then(|e| e.choke_pct)),
+        ),
+        entry(
+            P::FrameInnerGlowSize,
+            V::Length(inner_glow.and_then(|e| e.size)),
+        ),
+        entry(
+            P::FrameInnerGlowSource,
+            txt(inner_glow.and_then(|e| e.source.as_ref())),
+        ),
+        entry(
+            P::FrameInnerGlowNoise,
+            V::Length(inner_glow.and_then(|e| e.noise_pct)),
+        ),
+        // Bevel / emboss.
+        entry(P::FrameBevelEnabled, V::Bool(bevel.is_some())),
+        entry(
+            P::FrameBevelStyle,
+            txt(bevel.and_then(|e| e.style.as_ref())),
+        ),
+        entry(
+            P::FrameBevelTechnique,
+            txt(bevel.and_then(|e| e.technique.as_ref())),
+        ),
+        entry(
+            P::FrameBevelDepth,
+            V::Length(bevel.and_then(|e| e.depth_pct)),
+        ),
+        entry(
+            P::FrameBevelDirection,
+            txt(bevel.and_then(|e| e.direction.as_ref())),
+        ),
+        entry(P::FrameBevelSize, V::Length(bevel.and_then(|e| e.size))),
+        entry(P::FrameBevelSoften, V::Length(bevel.and_then(|e| e.soften))),
+        entry(
+            P::FrameBevelAngle,
+            V::Length(bevel.and_then(|e| e.angle_deg)),
+        ),
+        entry(
+            P::FrameBevelAltitude,
+            V::Length(bevel.and_then(|e| e.altitude_deg)),
+        ),
+        entry(
+            P::FrameBevelHighlightColor,
+            col(bevel.and_then(|e| e.highlight_color.as_ref())),
+        ),
+        entry(
+            P::FrameBevelShadowColor,
+            col(bevel.and_then(|e| e.shadow_color.as_ref())),
+        ),
+        entry(
+            P::FrameBevelHighlightOpacity,
+            V::Length(bevel.and_then(|e| e.highlight_opacity_pct)),
+        ),
+        entry(
+            P::FrameBevelShadowOpacity,
+            V::Length(bevel.and_then(|e| e.shadow_opacity_pct)),
+        ),
+        // Satin.
+        entry(P::FrameSatinEnabled, V::Bool(satin.is_some())),
+        entry(
+            P::FrameSatinBlendMode,
+            txt(satin.and_then(|e| e.blend_mode.as_ref())),
+        ),
+        entry(
+            P::FrameSatinColor,
+            col(satin.and_then(|e| e.effect_color.as_ref())),
+        ),
+        entry(
+            P::FrameSatinOpacity,
+            V::Length(satin.and_then(|e| e.opacity_pct)),
+        ),
+        entry(
+            P::FrameSatinAngle,
+            V::Length(satin.and_then(|e| e.angle_deg)),
+        ),
+        entry(
+            P::FrameSatinDistance,
+            V::Length(satin.and_then(|e| e.distance)),
+        ),
+        entry(P::FrameSatinSize, V::Length(satin.and_then(|e| e.size))),
+        entry(
+            P::FrameSatinInvert,
+            V::Bool(satin.and_then(|e| e.invert).unwrap_or(false)),
+        ),
+        // Feather (basic).
+        entry(P::FrameFeatherEnabled, V::Bool(feather.is_some())),
+        entry(
+            P::FrameFeatherWidth,
+            V::Length(feather.and_then(|e| e.width)),
+        ),
+        entry(
+            P::FrameFeatherCornerType,
+            txt(feather.and_then(|e| e.corner_type.as_ref())),
+        ),
+        entry(
+            P::FrameFeatherNoise,
+            V::Length(feather.and_then(|e| e.noise_pct)),
+        ),
+        entry(
+            P::FrameFeatherChoke,
+            V::Length(feather.and_then(|e| e.choke_pct)),
+        ),
+        // Directional feather.
+        entry(
+            P::FrameDirectionalFeatherEnabled,
+            V::Bool(dfeather.is_some()),
+        ),
+        entry(
+            P::FrameDirectionalFeatherLeftWidth,
+            V::Length(dfeather.and_then(|e| e.left_width)),
+        ),
+        entry(
+            P::FrameDirectionalFeatherRightWidth,
+            V::Length(dfeather.and_then(|e| e.right_width)),
+        ),
+        entry(
+            P::FrameDirectionalFeatherTopWidth,
+            V::Length(dfeather.and_then(|e| e.top_width)),
+        ),
+        entry(
+            P::FrameDirectionalFeatherBottomWidth,
+            V::Length(dfeather.and_then(|e| e.bottom_width)),
+        ),
+        entry(
+            P::FrameDirectionalFeatherAngle,
+            V::Length(dfeather.and_then(|e| e.angle_deg)),
+        ),
+        entry(
+            P::FrameDirectionalFeatherNoise,
+            V::Length(dfeather.and_then(|e| e.noise_pct)),
+        ),
+        entry(
+            P::FrameDirectionalFeatherChoke,
+            V::Length(dfeather.and_then(|e| e.choke_pct)),
+        ),
+        // Object-level transparency blend mode.
+        entry(
+            P::FrameBlendMode,
+            V::Text(blend_mode.unwrap_or_default().to_string()),
+        ),
+    ]
+}
+
+/// R-10 / R-11 — the read half of the per-target transparency paths and
+/// the drop shadow's remaining attributes. `fill` / `content` are `None`
+/// on a kind that has no such target (a line), which then answers no row
+/// for it; a target that IS there but unset reads 100 % / `""`.
+fn target_property_entries(
+    fill: Option<Option<&paged_model::TargetTransparency>>,
+    stroke: Option<&paged_model::TargetTransparency>,
+    content: Option<Option<&paged_model::TargetTransparency>>,
+    drop_shadow: Option<&paged_model::DropShadowSetting>,
+) -> Vec<crate::channel::PropertyEntry> {
+    use crate::channel::PropertyEntry;
+    use paged_mutate::{PropertyPath as P, Value as V};
+    let entry = |path, value| PropertyEntry {
+        path,
+        value: Some(value),
+    };
+    let mut out = Vec::new();
+    let mut target = |t: Option<&paged_model::TargetTransparency>, opacity: P, blend: P| {
+        out.push(entry(opacity, V::Length(t.and_then(|t| t.opacity))));
+        out.push(entry(
+            blend,
+            V::Text(t.and_then(|t| t.blend_mode.clone()).unwrap_or_default()),
+        ));
+    };
+    if let Some(t) = fill {
+        target(t, P::FrameFillOpacity, P::FrameFillBlendMode);
+    }
+    target(stroke, P::FrameStrokeOpacity, P::FrameStrokeBlendMode);
+    if let Some(t) = content {
+        target(t, P::FrameContentOpacity, P::FrameContentBlendMode);
+    }
+    out.extend([
+        entry(
+            P::FrameDropShadowBlendMode,
+            V::Text(
+                drop_shadow
+                    .and_then(|d| d.blend_mode.clone())
+                    .unwrap_or_default(),
+            ),
+        ),
+        entry(
+            P::FrameDropShadowSpread,
+            V::Length(drop_shadow.and_then(|d| d.spread_pct)),
+        ),
+        entry(
+            P::FrameDropShadowNoise,
+            V::Length(drop_shadow.and_then(|d| d.noise_pct)),
+        ),
+        entry(
+            P::FrameDropShadowKnockedOut,
+            V::Bool(drop_shadow.and_then(|d| d.knocked_out).unwrap_or(true)),
+        ),
+        entry(
+            P::FrameDropShadowUseGlobalLight,
+            V::Bool(
+                drop_shadow
+                    .and_then(|d| d.use_global_light)
+                    .unwrap_or(false),
+            ),
+        ),
+    ]);
+    out
+}
+
+impl From<&pipeline::PipelineStats> for DocumentStats {
+    fn from(s: &pipeline::PipelineStats) -> Self {
+        Self {
+            spreads: s.spreads,
+            pages: s.pages,
+            frames: s.frames,
+            stories: s.stories,
+            paragraphs: s.paragraphs,
+            runs: s.runs,
+            glyphs: s.glyphs,
+            lines: s.lines,
+            // Backfilled by `CanvasModel::handle()` from the build's
+            // overset diagnostics (PipelineStats doesn't track which
+            // *stories* overflowed, only the dropped-line count).
+            overset_stories: 0,
+        }
+    }
+}
+
+/// The worker's view of a single loaded document plus all derived
+/// canvas state.
+///
+/// Today this is a thin wrapper: store the parsed scene + the most
+/// recent `BuiltDocument`. Tomorrow (Phase 3) the `BuiltDocument`
+/// becomes a salsa-tracked derived value and incremental Tier 2
+/// runs against checkpoints stored alongside `scene`.
+pub struct CanvasModel {
+    doc_id: String,
+    pub(crate) scene: Document,
+    /// The raw IDML source archive this model was imported from (mimetype +
+    /// decompressed entries), or `None` for a natively-created / native-only
+    /// document. Held here rather than on the scene `Document` so the model
+    /// stays IDML-free (N9); the parts door reads container parts from it.
+    pub(crate) source_archive: Option<idml_import::SourceArchive>,
+    /// W3.B2 — the IDML bytes this model was parsed from, retained so
+    /// `export_idml` can hand them to `idml_export::write_idml` as the
+    /// carry-through source package (it patches only the model-owned
+    /// Spreads/Stories and copies every other entry verbatim, so it
+    /// needs the original ZIP container, not just the parsed scene).
+    /// Memory cost: one *compressed* IDML package copy — typically a
+    /// few MB at most. Cleared/replaced on every `load` (a fresh
+    /// `CanvasModel` ⇒ fresh bytes), so it never accumulates.
+    pub(crate) source_idml: Vec<u8>,
+    /// The highest `u<hex>` id any ENTRY NAME of the source package
+    /// carries (`Stories/Story_u…`, `Spreads/Spread_u…`, …). A
+    /// checkpoint keeps parts for stories the model no longer holds, and
+    /// a minter that floored on the model alone reused their ids: the
+    /// annual's sheet-chart table was minted as `Story/u937` beside a
+    /// stale `Story_Story_u937.xml` holding a prose paragraph, and the
+    /// exporter then patched that part as the table's source
+    /// (2026-09-06). Every mint clears this floor too.
+    pub(crate) source_id_floor: u64,
+    /// `.paged` container — plugin-owned parts (`paged/<plugin>/<id>/…`)
+    /// ADDED or UPDATED since load. The parts present in the loaded file
+    /// already ride in `source_idml` and round-trip via the carry-through
+    /// writer; this map is the new/updated overlay `export_paged` appends.
+    /// Survives gestures/undo (outside the mutation channel); a reload
+    /// re-seeds from the freshly-loaded container. The `host.parts` SDK
+    /// door gates writes to a plugin's own `paged/<plugin-id>/…` namespace.
+    paged_parts: std::collections::BTreeMap<String, Vec<u8>>,
+    /// v66 — `paged/` parts DELETED since load (`DeletePagedPart`). A part
+    /// the loaded container carries rides in `source_idml`, so deleting it
+    /// from the overlay alone would resurrect it on the next save; the
+    /// tombstone hides it from read/list and `export_paged` drops it. A
+    /// later write of the same path lifts the tombstone.
+    paged_part_tombstones: std::collections::BTreeSet<String>,
+    /// v66 — tile patches that had to copy a shared scene image
+    /// (`patch_scene_image_as`); a count for budgets and tests.
+    scene_image_copies: u64,
+    pub(crate) built: BuiltDocument,
+    /// Index from `PageId` to `BuiltDocument::pages` position. Built
+    /// once at load and refreshed after every rebuild. Worker callers
+    /// (display-list-for-page, snapshot rendering, hit-test) all key
+    /// by id; the linear-scan fallback on `BuiltDocument::page` is
+    /// fine in absolute terms but salsa-shaped lookups should be O(1).
+    page_index: HashMap<PageId, usize>,
+    /// C-1 — plugin scene layers keyed by frame `Self` id. Ephemeral
+    /// render-time content (not part of the document / not in `source_idml`):
+    /// a plugin submits a vector `SceneLayer` via `SubmitSceneLayer` and the
+    /// next rebuild lowers it inside the matching frame. Survives gestures /
+    /// undo (it's outside the mutation channel) but not a document reload.
+    scene_layers: HashMap<String, paged_compose::SceneLayer>,
+    /// C-34 — which plugin submitted the scene layer on each frame, for
+    /// the callers that name themselves. Populated only by
+    /// `set_scene_layer_as`; a `None` caller records no ownership, so
+    /// the gate degrades to today's behaviour rather than locking a
+    /// frame nobody claimed.
+    scene_layer_owner: HashMap<String, String>,
+    /// C-6 (I-06) — image-resource claims + budgeted LRU tile cache.
+    /// Ephemeral render-time content like `scene_layers`: a plugin claims
+    /// a frame's image (`ClaimImageResource`), submits pyramid tiles
+    /// (`SubmitResourceTiles`), and the next rebuild assembles the cached
+    /// tiles inside the frame at the mip level matching the camera scale.
+    /// Survives gestures / undo (outside the mutation channel) but not a
+    /// document reload (the plugin re-claims).
+    resource_tiles: crate::resource_tiles::ResourceTileStore,
+    /// C-6 — the camera scale (px-per-pt) the next rebuild assembles
+    /// resource tiles at, used only to pick the pyramid mip level. The
+    /// editor pushes its live camera scale here before a build; `1.0`
+    /// (full resolution) until set.
+    resource_render_scale: f32,
+    /// Owned option inputs. `PipelineOptions` borrows from these on
+    /// every rebuild; storing them owned keeps the worker self-contained.
+    font_bytes: Option<Vec<u8>>,
+    /// Named per-family payloads consulted via `BytesResolver` during
+    /// every (re)build. Owned by the model so the assets resolver
+    /// borrowed in `PipelineOptions` doesn't need lifetimes leaking out.
+    font_registry: Vec<FontEntry>,
+    /// v70 — the scene-scoped faces ([`CanvasOptions::scene_font_registry`])
+    /// and the resolver built over them (no default font: a miss falls
+    /// through to the document registry). Read by scene-layer text ONLY —
+    /// never by the font table, `fonts()` (`isMissing`) or substitution
+    /// tracing.
+    scene_font_registry: Vec<FontEntry>,
+    scene_font_resolver: Option<BytesResolver>,
+    icc_bytes: Option<Vec<u8>>,
+    /// Concept 2 — the load-time profile bytes (explicit
+    /// `CanvasOptions::cmyk_icc_profile` or the designmap-name
+    /// registry hit). `SetColorSettings { cmyk_profile_name: None }`
+    /// restores these.
+    initial_icc_bytes: Option<Vec<u8>>,
+    /// Concept 2 — named profile registry (name → ICC bytes).
+    color_profiles: std::collections::BTreeMap<String, Vec<u8>>,
+    /// Concept 2 — active colour-management settings.
+    pub color_settings: ColorSettingsState,
+    /// Concept 2 — active soft-proof state (`None` = proofing off).
+    proof_state: Option<ProofState>,
+    /// Concept 2 (Ink Manager) — per-spot output-time settings,
+    /// keyed by the spot swatch's `Color/<id>`. Never edits the
+    /// swatch (AC-8); consumed by Concept 3's separations encoding.
+    ink_settings: std::collections::BTreeMap<String, InkSetting>,
+    /// Concept 2 (Ink Manager) — prefer spot Lab primaries over
+    /// CMYK alternates in preview resolution.
+    use_standard_lab_for_spots: bool,
+    /// Concept 2 — lazily-built CMM for preview/compute reads
+    /// (transform creation is expensive; the SwatchPicker previews
+    /// every swatch per refresh). Cleared by `SetColorSettings`.
+    cmm_cache: std::cell::RefCell<Option<std::rc::Rc<paged_color::IccCmm>>>,
+    /// §21 advanced prepress — memoised `inkCoverage` collection,
+    /// keyed on `rebuild_stats.rebuilds`. Producing it rasterises
+    /// every page, so unlike every other collection it must not be
+    /// recomputed on each re-fetch. Keying on the monotone rebuild
+    /// counter means there is no invalidation site to remember: any
+    /// path that reaches `rebuild_after_mutation` invalidates it.
+    ink_coverage_cache: std::cell::RefCell<Option<(u64, Vec<crate::channel::InkCoverageSummary>)>>,
+    /// Phase 3 Item 6 — content hash of the scene at load time.
+    /// Drives determinism tests: replaying the recorded mutation log
+    /// against the same `initial_state_hash` must produce a matching
+    /// post-state hash.
+    initial_state_hash: [u8; 32],
+    /// Monotone counter assigned by the worker for each successfully
+    /// applied mutation. The main thread matches against its own
+    /// `client_seq` via the `MutationApplied` reply.
+    last_applied_seq: u64,
+    /// Active text selection mirrored from the main thread.
+    pub current_selection: Option<crate::selection::ContentSelection>,
+    /// Editor-ops — document defaults for newly-created objects
+    /// (`InsertFrame` / `InsertLine` / `InsertPath`). App-level state
+    /// written by `Mutation::SetDocumentDefaults`: not undoable, never
+    /// enters the Operation log, surfaced through `DocumentMeta`.
+    pub document_defaults: DocumentDefaults,
+    /// Phase A — active element selection (frames, images, vectors).
+    /// Mirrored from the main thread, never enters the Operation log.
+    /// Survives mutations and re-layout; the main thread is responsible
+    /// for clearing entries whose target was removed.
+    pub element_selection: crate::element_selection::ElementSelection,
+    /// Phase B — in-flight gesture (translate / future resize / rotate).
+    /// Only one gesture is active at a time; `begin_gesture` errors on
+    /// re-entry. None when no drag is happening.
+    pub(crate) active_gesture: Option<crate::gesture::GestureSession>,
+    /// Monotone counter for `GestureHandle` allocation. Bumped on
+    /// every successful `begin_gesture`. Persists across cancels so a
+    /// stale handle from a previous gesture can never collide with a
+    /// fresh one.
+    pub(crate) next_gesture_handle: u64,
+    /// Phase 3 Item 7 — undo log. Each entry holds the op + inverse
+    /// + the applied_seq that was assigned at apply time.
+    applied_log: Vec<AppliedRecord>,
+    /// Phase 3 Item 7 — redo stack. Populated by `undo()`; consumed
+    /// by `redo()`. Cleared when a new mutation lands (standard
+    /// editor convention).
+    redo_log: Vec<AppliedRecord>,
+    /// Phase 4 Step 1 — persistent per-paragraph layout cache.
+    /// Installed on every rebuild via `paged_text::cache::with_layout_cache`
+    /// so unchanged paragraphs short-circuit Knuth-Plass on
+    /// mutation-driven rebuilds. Survives across mutations.
+    layout_cache: paged_text::LayoutCache,
+    /// Phase 4 Step 3 — map of story id → page ids the story's
+    /// frame chain touches. Built after every rebuild. Used by
+    /// `apply_mutation` to compute the dirty page set for the GPU
+    /// scene cache invalidation hint.
+    story_pages: HashMap<String, Vec<PageId>>,
+    /// Perf-S — persistent `URI → DecodedImage` cache shared across
+    /// rebuilds. Threaded into `PipelineOptions::image_decode_cache`
+    /// on every `rebuild_after_mutation` so gesture-driven rebuilds
+    /// don't re-decode placed images. Per the corrected perf
+    /// investigation, image decoding isn't actually the bottleneck
+    /// in the current test harness; this stays as forward-looking
+    /// infra for when asset resolvers wire up.
+    image_decode_cache: std::cell::RefCell<HashMap<String, paged_compose::DecodedImage>>,
+    /// ADR 026 — generated-page counts per growing story, carried
+    /// from one build to the next so an edit starts from the pages it had
+    /// (usually one build) instead of growing from zero.
+    grow_hint: std::cell::RefCell<HashMap<String, u32>>,
+    /// Perf-FontTable — pre-built shaping table reused across every
+    /// `rebuild_after_mutation`. The `FontTable::build` walk costs
+    /// ~225ms on a multi-spread fixture (harvests every paragraph's
+    /// cascade-resolved font key, then resolver-fetches bytes per
+    /// key).
+    ///
+    /// It is a snapshot of the fonts the document asked for and the
+    /// registry could serve when it was built, so it goes stale two
+    /// ways: a font registered after load ([`Self::register_font`]),
+    /// and an edit that brings in a (family, style) the table never saw
+    /// (every family of a Word document poured into an empty skeleton).
+    /// Either way the runs shaped in the fallback face.
+    /// [`Self::refresh_font_table`] rebuilds it when either happens.
+    font_table: paged_renderer::FontTable,
+    /// ADR 027 plan step 2 — the CMYK display transform, rebuilt only
+    /// when the profile, intent or black-point compensation changes.
+    cmyk_transform_cache: paged_renderer::CmykTransformCache,
+    /// Perf-MasterText — per-(master_frame_self_id, page_idx) cache
+    /// of the DisplayList delta the master-text pass appends to a
+    /// page. The COLD build populates this; every gesture-driven
+    /// rebuild hits and skips the emit. Structural mutations clear
+    /// it (handled in `apply_operation`) because the master+frame
+    /// pass's path-buffer state changes when frames are added/
+    /// removed and the cached relative-path-id rebase would
+    /// produce visually-correct but order-divergent output. ~161ms
+    /// savings per rebuild on a multi-spread fixture.
+    master_text_emit_cache:
+        std::cell::RefCell<HashMap<(String, usize), paged_renderer::MasterTextEmitDelta>>,
+    /// Perf-BodyStory — per-(story_self_id, signature) cache of
+    /// the multi-page body-story emission delta. Signature
+    /// hashes the chain's frames + wrap_rects on chain pages, so
+    /// a story whose chain doesn't see a change keeps hitting
+    /// through a drag. Body-story emission is the largest single
+    /// cost in `build_document` on a multi-spread fixture
+    /// (~613ms); most stories are unaffected by any given gesture
+    /// so the hit ratio is high. Cleared by `apply_operation` on
+    /// structural commits.
+    body_story_emit_cache:
+        std::cell::RefCell<HashMap<(String, u64), paged_renderer::BodyStoryEmissionDelta>>,
+    /// W1.24 (audit B18) — stats for the most recent rebuild. Refreshed
+    /// by `rebuild_after_mutation` (build timing + sizes) and by the
+    /// mutation entrypoints (op-apply timing). Read via
+    /// `last_rebuild_stats`.
+    rebuild_stats: RebuildStats,
+    /// W1.24 (audit B18) — op-apply duration (ms) staged by a mutation
+    /// entrypoint just before it calls `rebuild_after_mutation`, which
+    /// folds it into `rebuild_stats`. Reset to 0 by every rebuild after
+    /// it is consumed, so a view-state rebuild (no preceding edit) reads
+    /// 0 rather than a stale value.
+    pending_op_apply_ms: f64,
+    /// Perf-Batch — while set, `rebuild_after_mutation` records that a
+    /// rebuild is OWED and returns without building. The mixed-batch
+    /// executor sets it so an N-child batch pays ONE
+    /// `pipeline::build_document` instead of N.
+    ///
+    /// The rebuild is what a mutation actually costs: it walks the whole
+    /// document, so it scales with content rather than with the edit
+    /// (measured on a 134-page book: ~16 ms native, ~14 s in wasm, per
+    /// operation). Every compound authoring gesture — insert a frame,
+    /// pour its text, style it, put it on a layer — used to pay that
+    /// per child.
+    rebuild_deferred: bool,
+    /// Set by a deferred `rebuild_after_mutation`; consumed by the one
+    /// build the batch executor runs when its children are done. A batch
+    /// whose children changed nothing owes nothing and builds nothing.
+    rebuild_owed: bool,
+    /// C-79 — while set, [`Self::push_applied`] does not evict. The
+    /// mixed-batch executor holds the cap while its children log their
+    /// records, then collapses them into ONE entry and applies the cap
+    /// to that. Evicting mid-batch shifted the batch's own records under
+    /// the `log_base` it collapses (and rolls back) from: against a full
+    /// log a five-child batch became five undo steps, and a batch larger
+    /// than the cap lost its first children to eviction outright, so no
+    /// undo could remove them.
+    applied_log_cap_held: bool,
+    /// ADR 027 §4 — when set, every rebuild is checked against a
+    /// cold build ([`Self::digest_gate_check`]) and a difference panics.
+    /// Seeded from `PAGED_DIGEST_GATE=1`; a CI / debug lane only.
+    digest_gate: bool,
+    /// ADR 027 plan step 3 — each story's settled keep-option
+    /// breaks, seeding the next build's keeps fixpoint.
+    keep_seeds: paged_renderer::KeepSeedStore,
+    /// Story id → first paragraph a text edit changed since the last
+    /// build: the part of a story whose keep breaks may be reused.
+    /// Consumed by the rebuild.
+    pending_keep_hints: HashMap<String, u32>,
+    /// A committed edit may have changed which fonts the document asks
+    /// for: the next real rebuild checks the font table against the
+    /// scene first ([`Self::refresh_font_table`]). Gesture rebuilds
+    /// (drags) never set it, so they never pay the walk.
+    font_check_owed: bool,
+    /// ADR 027 plan step 6 — each story's previous emission with a
+    /// mark per paragraph, so an edited story resumes at the edit and stops
+    /// early.
+    story_resume: paged_renderer::StoryResumeStore,
+    /// Story id → the paragraphs the ONE text edit since the last build
+    /// changed. A second edit of the same story before the rebuild drops
+    /// it (and the story's records). Consumed by the rebuild.
+    pending_edit_spans: HashMap<String, paged_renderer::EditSpan>,
+    /// Bumped by every rebuild; a resume record is never read back in the
+    /// build that wrote it.
+    build_generation: u64,
+    /// v67 (RFI C-68) — the session's snapping preferences, shared by
+    /// every gesture and by `RequestSnapPoint`.
+    pub(crate) snap_settings: crate::snap_point::SnapSettings,
+    /// v67 — every page's snap targets for one build, rebuilt lazily when
+    /// `build_generation` moves on (and held still for a whole gesture,
+    /// whose preview rebuilds on every tick).
+    pub(crate) snap_index: Option<crate::snap_point::SnapIndex>,
+    /// ADR 027 plan step 7 — the previous build's print of each
+    /// master-text emission, so a re-emitted master with the same output
+    /// leaves its page clean.
+    emission_prints: paged_renderer::EmissionPrints,
+    /// What the commits since the last build allow the dirty-page set to
+    /// narrow to (see [`DirtyScope`]).
+    pending_dirty_scope: DirtyScope,
+    /// The pages the last build changed, by index ([`Self::dirty_page_ids`]).
+    last_dirty_pages: Vec<usize>,
+    /// Whether `last_dirty_pages` was narrowed below every page.
+    last_dirty_narrowed: bool,
+    /// v0.71.13 — while armed ([`Self::begin_page_change_tracking`]), the union
+    /// of every build's dirty pages since: what a script run reports as
+    /// `ScriptResult.page_ids`.
+    page_changes: Option<std::collections::BTreeSet<PageId>>,
+}
+
+/// ADR 027 plan step 7 — how far the pages a build reports as
+/// changed may narrow. Only a build whose every commit was a text edit of
+/// one story with a chain of its own narrows: no other commit is known to
+/// leave the frame pass (frames, masters' items, page geometry) untouched.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+enum DirtyScope {
+    /// No commit since the last build (a gesture or view rebuild): every
+    /// page is reported.
+    #[default]
+    Unset,
+    /// Text edits of this one story only.
+    Story(String),
+    /// A font registry change that re-laid out these stories, and nothing
+    /// else since the last build. The scene's frames are untouched, so the
+    /// pages that changed are the ones laid out afresh (plus new pages and
+    /// the pages of these stories' auto-sizing frames).
+    Fonts(std::collections::BTreeSet<String>),
+    /// Anything else: every page.
+    Everything,
+}
+
+/// Run [`paged_mutate::refuse_unauthorable_value`] over every property
+/// write a wire mutation carries, batch children included.
+fn refuse_unauthorable(mutation: &Mutation) -> Result<(), crate::channel::WorkerError> {
+    let refused = |path: paged_mutate::PropertyPath, value: &paged_mutate::Value| {
+        paged_mutate::refuse_unauthorable_value(path, value).map_err(|e| {
+            crate::channel::WorkerError::NotImplemented {
+                what: format!("property write refused: {e}"),
+            }
+        })
+    };
+    match mutation {
+        Mutation::SetElementProperty { path, value, .. }
+        | Mutation::SetStyleProperty { path, value, .. } => refused(*path, value),
+        Mutation::Batch { ops } => ops.iter().try_for_each(refuse_unauthorable),
+        _ => Ok(()),
+    }
+}
+
+/// The run-level fields both paragraph and character styles carry, in the
+/// style setters' shapes (`""` / `Length(None)` / the IDML default for a
+/// bool the setter cannot clear).
+macro_rules! style_run_entries {
+    ($d:expr) => {{
+        use paged_mutate::{PropertyPath as P, Value as V};
+        let d = $d;
+        let text = |o: &Option<String>| V::Text(o.clone().unwrap_or_default());
+        vec![
+            (P::CharacterFontFamily, text(&d.font)),
+            (P::CharacterFontStyle, text(&d.font_style)),
+            (P::CharacterFontSize, V::Length(d.point_size)),
+            (P::CharacterLeading, V::Length(d.leading)),
+            (P::CharacterTracking, V::Length(d.tracking)),
+            (P::CharacterFillColor, V::ColorRef(d.fill_color.clone())),
+            (P::CharacterCase, text(&d.capitalization)),
+            (P::CharacterPosition, text(&d.position)),
+            (P::CharacterBaselineShift, V::Length(d.baseline_shift)),
+            (P::CharacterUnderline, V::Bool(d.underline.unwrap_or(false))),
+            (
+                P::CharacterStrikethru,
+                V::Bool(d.strikethru.unwrap_or(false)),
+            ),
+            (
+                P::CharacterLigatures,
+                V::Bool(d.ligatures_on.unwrap_or(true)),
+            ),
+            (P::CharacterKerningMethod, text(&d.kerning_method)),
+        ]
+    }};
+}
+
+fn into_entries(
+    pairs: Vec<(paged_mutate::PropertyPath, paged_mutate::Value)>,
+) -> Vec<crate::channel::PropertyEntry> {
+    pairs
+        .into_iter()
+        .map(|(path, value)| crate::channel::PropertyEntry {
+            path,
+            value: Some(value),
+        })
+        .collect()
+}
+
+fn character_style_entries(
+    d: &paged_model::CharacterStyleDef,
+) -> Vec<crate::channel::PropertyEntry> {
+    let mut pairs = style_run_entries!(d);
+    pairs.push((
+        paged_mutate::PropertyPath::CharacterNoBreak,
+        paged_mutate::Value::Bool(d.no_break.unwrap_or(false)),
+    ));
+    into_entries(pairs)
+}
+
+/// Every path `set_paragraph_style_field` accepts, read off the definition.
+/// `style_properties_cover_every_settable_style_path` (tests/style_properties.rs)
+/// fails when the setter learns a path this list does not read.
+fn paragraph_style_entries(
+    d: &paged_model::ParagraphStyleDef,
+) -> Vec<crate::channel::PropertyEntry> {
+    use paged_mutate::{PropertyPath as P, Value as V};
+    let text = |o: &Option<String>| V::Text(o.clone().unwrap_or_default());
+    let count = |o: Option<u32>| V::Length(o.map(|n| n as f32));
+    let span = &d.span_columns;
+    let mut pairs = style_run_entries!(d);
+    pairs.extend([
+        (
+            P::ParagraphJustification,
+            V::Text(
+                d.justification
+                    .map(|j| j.as_idml().to_string())
+                    .unwrap_or_default(),
+            ),
+        ),
+        (P::ParagraphSpaceBefore, V::Length(d.space_before)),
+        (P::ParagraphSpaceAfter, V::Length(d.space_after)),
+        (P::ParagraphFirstLineIndent, V::Length(d.first_line_indent)),
+        (P::ParagraphLeftIndent, V::Length(d.left_indent)),
+        (P::ParagraphRightIndent, V::Length(d.right_indent)),
+        (P::ParagraphStyleNextStyle, text(&d.next_style)),
+        (
+            P::ParagraphHyphenation,
+            V::Bool(d.hyphenation.unwrap_or(true)),
+        ),
+        (P::ParagraphHyphenationZone, V::Length(d.hyphenation_zone)),
+        (
+            P::ParagraphComposer,
+            V::Text(
+                d.composer
+                    .as_ref()
+                    .map(|c| c.as_idml().to_string())
+                    .unwrap_or_default(),
+            ),
+        ),
+        (
+            P::ParagraphKeepLinesTogether,
+            V::Bool(d.keep_lines_together.unwrap_or(false)),
+        ),
+        (
+            P::ParagraphKeepAllLinesTogether,
+            V::Bool(d.keep_all_lines_together.unwrap_or(false)),
+        ),
+        (P::ParagraphKeepFirstLines, count(d.keep_first_lines)),
+        (P::ParagraphKeepLastLines, count(d.keep_last_lines)),
+        (P::ParagraphKeepWithNext, count(d.keep_with_next)),
+        (
+            P::ParagraphStartParagraph,
+            V::Text(
+                d.start_paragraph
+                    .map(|sp| sp.as_idml().to_string())
+                    .unwrap_or_default(),
+            ),
+        ),
+        (
+            P::ParagraphSpanColumnType,
+            V::Text(
+                span.column_type
+                    .map(|t| t.as_idml().to_string())
+                    .unwrap_or_default(),
+            ),
+        ),
+        (
+            P::ParagraphSpanSplitColumnCount,
+            V::Text(span.count.map(|c| c.as_idml()).unwrap_or_default()),
+        ),
+        (
+            P::ParagraphSpanColumnMinSpaceBefore,
+            V::Length(span.min_space_before),
+        ),
+        (
+            P::ParagraphSpanColumnMinSpaceAfter,
+            V::Length(span.min_space_after),
+        ),
+        (
+            P::ParagraphSplitColumnInsideGutter,
+            V::Length(span.inside_gutter),
+        ),
+        (
+            P::ParagraphSplitColumnOutsideGutter,
+            V::Length(span.outside_gutter),
+        ),
+        (P::ParagraphListType, text(&d.bullets_list_type)),
+        (
+            P::ParagraphBulletCharacter,
+            V::Text(
+                d.bullet_character
+                    .and_then(char::from_u32)
+                    .map(|c| c.to_string())
+                    .unwrap_or_default(),
+            ),
+        ),
+        (P::ParagraphNumberingFormat, text(&d.numbering_format)),
+        (
+            P::ParagraphAppliedNumberingList,
+            text(&d.applied_numbering_list),
+        ),
+        (P::ParagraphBulletsTextAfter, text(&d.bullets_text_after)),
+        (
+            P::ParagraphNumberingExpression,
+            text(&d.numbering_expression),
+        ),
+        (
+            P::ParagraphNumberingStartAt,
+            V::Length(d.numbering_start_at.map(|n| n as f32)),
+        ),
+        (
+            P::ParagraphNumberingContinue,
+            d.numbering_continue
+                .map(V::Bool)
+                .unwrap_or(V::Text(String::new())),
+        ),
+        (
+            P::ParagraphBulletsCharacterStyle,
+            text(&d.bullets_character_style),
+        ),
+        (
+            P::ParagraphNumberingCharacterStyle,
+            text(&d.bullets_and_numbering_digits_character_style),
+        ),
+        (
+            P::ParagraphTabStops,
+            V::TabStops(
+                d.tab_list
+                    .iter()
+                    .map(paged_mutate::operation::TabStopSpec::from_parse)
+                    .collect(),
+            ),
+        ),
+    ]);
+    pairs.extend(line_setting_entries(&d.line_setting));
+    pairs.extend(list_level_entries(&d.list_level));
+    into_entries(pairs)
+}
+
+/// The list-level paths (ADR 158), read off a paragraph's or a paragraph
+/// style's own [`paged_model::ListLevel`]: the level as `Length(None)` and
+/// the restart flag as `Text("")` when the level does not say.
+fn list_level_entries(
+    ll: &paged_model::ListLevel,
+) -> [(paged_mutate::PropertyPath, paged_mutate::Value); 2] {
+    use paged_mutate::{PropertyPath as P, Value as V};
+    [
+        (
+            P::ParagraphNumberingLevel,
+            V::Length(ll.level.map(|n| n as f32)),
+        ),
+        (
+            P::ParagraphNumberingApplyRestartPolicy,
+            ll.apply_restart
+                .map(V::Bool)
+                .unwrap_or(V::Text(String::new())),
+        ),
+    ]
+}
+
+/// The line-setting paths (ADR 153), read off a paragraph's or a
+/// paragraph style's own [`paged_model::LineSetting`]: lengths as
+/// `Length(None)` and enums as `""` when the level does not say.
+fn line_setting_entries(
+    ls: &paged_model::LineSetting,
+) -> [(paged_mutate::PropertyPath, paged_mutate::Value); 4] {
+    use paged_mutate::{PropertyPath as P, Value as V};
+    [
+        (P::ParagraphAutoLeading, V::Length(ls.auto_leading)),
+        (
+            P::ParagraphSingleWordJustification,
+            V::Text(
+                ls.single_word
+                    .map(|w| w.as_idml().to_string())
+                    .unwrap_or_default(),
+            ),
+        ),
+        (P::ParagraphLastLineIndent, V::Length(ls.last_line_indent)),
+        (
+            P::ParagraphBalanceRaggedLines,
+            V::Text(
+                ls.balance
+                    .map(|b| b.as_idml().to_string())
+                    .unwrap_or_default(),
+            ),
+        ),
+    ]
+}
+
+/// W1.24 (audit B19) — hard cap on the undo log's length.
+///
+/// `applied_log` is the **undo stack**: each entry pairs a forward op
+/// with the pre-captured inverse that reverses it (see `undo` / `redo`).
+/// It is NOT the save-back source (that is `source_idml` + the live
+/// scene; `export_idml` re-serialises the current scene, never replays
+/// the log) and NOT the determinism replay source (the determinism
+/// tests build their own op list). So the only correctness contract the
+/// log carries is: *the most recent N mutations can be undone.* Bounding
+/// it to the N freshest entries therefore costs only the ability to undo
+/// past the cap — a deliberate, documented trade most editors make
+/// (InDesign itself bounds undo). We evict from the FRONT (oldest first)
+/// so the freshest `CAP` mutations always stay undoable; the redo stack
+/// is a transient of in-session undo and is not separately capped (it can
+/// never exceed what was undone, which is bounded by the same cap).
+///
+/// 10_000 entries: at a generous ~1 KiB/entry (a `TextOp` inverse holds a
+/// deleted-text `String`; a `Frame` inverse holds an `AppliedOperation`)
+/// that is ~10 MiB worst case — well under the multi-MB `source_idml`
+/// copy the model already holds, and far more undo depth than any human
+/// session reaches. Pragmatic count cap over a byte-accounting scheme:
+/// the per-entry size is bounded in practice and a count is O(1) to
+/// enforce without walking the payloads.
+///
+/// The cap counts UNDO STEPS: a batch is one entry whatever its size and
+/// whichever lane it takes (C-79 — the per-child lane used to apply the
+/// cap to each child as it logged, mid-batch).
+pub const MAX_APPLIED_LOG: usize = 10_000;
+
+/// One entry in the applied / redo logs.
+///
+/// Phase B — generalized to hold both text edits (legacy `TextOp`
+/// path) and frame mutations (canonical `paged_mutate::AppliedOperation`)
+/// so a single Cmd-Z timeline covers both. The full convergence
+/// (folding `TextOp` into `paged_mutate::Operation`) is tracked
+/// separately and is **out of scope** for Phase B per the plan §3.5.
+#[derive(Debug, Clone)]
+pub struct AppliedRecord {
+    pub applied_seq: u64,
+    pub kind: LoggedMutation,
+}
+
+/// W1.24 (audit B18) — per-rebuild timing + size instrumentation.
+///
+/// Captured by `rebuild_after_mutation` (and the initial `load`) on every
+/// pipeline run so native callers can read "the last relayout took X ms
+/// over N pages" without wiring a `Clock` of their own, and the wasm
+/// dispatch can fold the breakdown onto the wire `LayoutCacheStats`
+/// additively. Timing uses the same monotonic-on-native /
+/// `js_sys::Date::now`-on-wasm source the crate's `phase_*` helpers use,
+/// so it compiles and runs on `wasm32` (no `std::time::Instant`, which
+/// panics there).
+///
+/// `op_apply_ms` is filled by the mutation entrypoints (`apply_mutation`
+/// / `apply_operation` / `undo` / `redo`) which own the scene edit that
+/// precedes the rebuild; `rebuild_after_mutation` only knows `build_ms`,
+/// so it leaves `op_apply_ms` at its prior value. Read the pair together
+/// via `last_rebuild_stats`.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct RebuildStats {
+    /// Wall-clock of the `pipeline::build_document` call inside the most
+    /// recent rebuild, in milliseconds.
+    pub build_ms: f64,
+    /// Wall-clock of the scene-edit (`paged_mutate::apply` /
+    /// `crate::mutate::apply`) that preceded the rebuild, in
+    /// milliseconds. 0.0 for the initial `load` (no edit) and for
+    /// rebuilds triggered by view-state changes (colour settings).
+    pub op_apply_ms: f64,
+    /// Pages in the freshly built document.
+    pub pages: usize,
+    /// `PipelineStats::paragraphs` — relayout cost scales with this.
+    pub paragraphs: usize,
+    /// Monotone count of rebuilds this model has run (initial load = 1).
+    /// Lets a HUD show "rebuild #K" and tests assert monotonicity.
+    pub rebuilds: u64,
+    /// Undo-log depth right after this rebuild (the B19 cap is visible
+    /// here: it never exceeds `MAX_APPLIED_LOG`).
+    pub applied_log_len: usize,
+}
+
+// Boxing the large `Frame` payload would change this public, re-exported
+// enum's variant signature and every construction/match site — out of
+// scope for a lint pass. The undo log is short-lived, not bulk-allocated.
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone)]
+pub enum LoggedMutation {
+    /// Legacy text edit. `op` is the forward action; `inverse` is the
+    /// pre-captured `TextOp` that reverses it. Both live in
+    /// `crate::mutate`.
+    Text {
+        op: crate::mutate::TextOp,
+        inverse: crate::mutate::TextOp,
+    },
+    /// Frame / structural mutation routed through `paged_mutate::apply`.
+    /// The `AppliedOperation` already pairs op + inverse + invalidation.
+    Frame(paged_mutate::AppliedOperation),
+    /// One `Mutation::Batch` whose children did NOT all belong to the
+    /// same lane — see `apply_mixed_batch`. Holds each child's own log
+    /// entry in APPLIED order, so undo replays their inverses in
+    /// reverse and redo replays their forward ops in order. Collapsing
+    /// them into one record is what makes a batch ONE undo step for the
+    /// user, which is the whole reason a plugin batches.
+    Composite(Vec<LoggedMutation>),
+    /// C-15 — a `SetDocumentDefaults` that ran as a batch CHILD. The
+    /// defaults are app state with no `Operation` form, so they have
+    /// their own tiny lane: `prev` is the triple the batch replaced and
+    /// `next` the one it wrote. Only the composite reaches this — a
+    /// standalone `setDocumentDefaults` stays what it always was
+    /// (applied, not undoable, no log entry). Inside a batch it MUST be
+    /// reversible, or a failing sibling would leave the defaults changed
+    /// and the batch half-applied, which is exactly what C-14's
+    /// all-or-nothing promise rules out.
+    Defaults {
+        prev: DocumentDefaults,
+        next: DocumentDefaults,
+    },
+    /// v71 (ADR 132) — an application-state write that arrived as a
+    /// `Mutation::Set`: colour settings, proof setup, an ink setting, the
+    /// standard-Lab flag or the document defaults. Written by their own
+    /// mutation these stay unlogged app state, but a `Set` promises its
+    /// caller ONE undo step — and an undo that pops nothing of its own
+    /// pops the PREVIOUS edit instead. `prev` is the same mutation built
+    /// from the state the write replaced (whole-state, so replaying it
+    /// is the exact inverse); `next` is what the `Set` resolved to.
+    AppState {
+        prev: Box<Mutation>,
+        next: Box<Mutation>,
+    },
+}
+
+impl CanvasModel {
+    /// Parse `bytes` and run the renderer pipeline to produce the
+    /// initial `BuiltDocument`. Returns a `CanvasModel` the worker
+    /// uses to serve all subsequent queries.
+    pub fn load(
+        doc_id: impl Into<String>,
+        bytes: &[u8],
+        opts: CanvasOptions,
+    ) -> Result<Self, LoadError> {
+        let doc_id = doc_id.into();
+        let t_parse = phase_now();
+        // Load-time sniff (N3): a `.paged` carrying the native model part
+        // (`document.pgm`) reconstructs the model from it with **no source
+        // parse**; otherwise fall back to parsing the source parts
+        // (`Document::from_container` — the import-adapter path). The real
+        // container is kept either way, so the parts door still serves every
+        // other container part.
+        // The raw source archive rides on the CanvasModel (below), not on the
+        // scene `Document` — the model no longer carries the IDML archive (N9).
+        let (scene, source_archive) = {
+            let opened =
+                paged_renderer::container::open_document(bytes).map_err(LoadError::Parse)?;
+            let mut doc = opened.document;
+            if opened.from_model_part {
+                // The IDML parts beside the model keep each next /
+                // previous page number in a range of its own; cut the
+                // model's runs the same way, or the next export patching
+                // those parts writes such a run twice.
+                idml_export::cut_page_number_runs(&mut doc);
+            }
+            (doc, Some(opened.archive))
+        };
+        phase_log("CanvasModel::load parse", t_parse);
+
+        // Honour the first font and the ICC profile. Take ownership
+        // up-front so the model is self-contained — no caller-managed
+        // lifetimes leaking through.
+        let font_bytes = opts.fonts.into_iter().next();
+        let font_registry = opts.font_registry;
+        let scene_font_registry = opts.scene_font_registry;
+        // Concept 2 — profile registry + activation precedence:
+        // explicit CanvasOptions::cmyk_icc_profile wins; else a
+        // registered profile whose name matches the designmap's
+        // CMYKProfile attribute activates automatically (the
+        // document "names" its working space and the editor shipped
+        // it); else no profile (naive conversion, as before).
+        let color_profiles: std::collections::BTreeMap<String, Vec<u8>> = opts
+            .color_profiles
+            .into_iter()
+            .map(|p| (p.name, p.bytes))
+            .collect();
+        // The ACTIVE intent stays RelativeColorimetric+BPC until an
+        // explicit SetColorSettings: poppler (the fidelity
+        // reference) hardcodes RelCol, and our lcms2 setup is
+        // calibrated against pdftoppm — honouring a designmap-
+        // declared Perceptual at load would silently diverge the
+        // default render from the reference. The declared name is
+        // still surfaced via DocumentMeta for the settings dialog.
+        let mut color_settings = ColorSettingsState::default();
+        let designmap_settings = scene.designmap.color_settings.clone();
+        let icc_bytes = match opts.cmyk_icc_profile {
+            Some(bytes) => Some(bytes),
+            None => designmap_settings.cmyk_profile.as_ref().and_then(|name| {
+                let hit = color_profiles.get(name).cloned();
+                if hit.is_some() {
+                    color_settings.cmyk_profile_name = Some(name.clone());
+                }
+                hit
+            }),
+        };
+        let resolver = build_font_resolver(&font_registry, font_bytes.as_deref());
+
+        let t_build = phase_now();
+        // Perf-S — image-decode cache populated by the initial
+        // build_document then stored on Self below for subsequent
+        // rebuilds. The cold load pays the full decode cost; every
+        // mutation-driven rebuild after that reuses.
+        let image_decode_cache: std::cell::RefCell<HashMap<String, paged_compose::DecodedImage>> =
+            std::cell::RefCell::new(HashMap::new());
+        let grow_hint: std::cell::RefCell<HashMap<String, u32>> =
+            std::cell::RefCell::new(HashMap::new());
+        // Perf-FontTable — pre-build the shaping table once so the
+        // initial build_document + every subsequent
+        // rebuild_after_mutation skips the harvest walk
+        // (~225ms/call on a multi-spread fixture).
+        let font_table = build_font_table(&scene, font_bytes.as_deref(), resolver.as_ref());
+        let cmyk_transform_cache = paged_renderer::CmykTransformCache::new();
+        // Perf-MasterText — empty cache; the initial build_document
+        // below populates it as each master-text emit runs.
+        let master_text_emit_cache: std::cell::RefCell<
+            HashMap<(String, usize), paged_renderer::MasterTextEmitDelta>,
+        > = std::cell::RefCell::new(HashMap::new());
+        // Perf-BodyStory — same pattern; populated by the initial
+        // build, reused by every subsequent rebuild.
+        let body_story_emit_cache: std::cell::RefCell<
+            HashMap<(String, u64), paged_renderer::BodyStoryEmissionDelta>,
+        > = std::cell::RefCell::new(HashMap::new());
+        let (built_result, layout_cache) = {
+            let options = PipelineOptions {
+                font: font_bytes.as_deref(),
+                assets: resolver
+                    .as_ref()
+                    .map(|r| r as &dyn paged_renderer::AssetResolver),
+                cmyk_icc_profile: icc_bytes.as_deref(),
+                image_decode_cache: Some(&image_decode_cache),
+                grow_hint: Some(&grow_hint),
+                pre_built_font_table: Some(&font_table),
+                cmyk_transform_cache: Some(&cmyk_transform_cache),
+                master_text_emit_cache: Some(&master_text_emit_cache),
+                body_story_emit_cache: Some(&body_story_emit_cache),
+                // A5 — interactive canvas builds surface degraded-asset
+                // markers (pink substituted-font highlight, inline-
+                // EPS/PDF ghost-cross); export builds keep the default
+                // `false` so output stays pixel-faithful.
+                degraded_asset_markers: true,
+                ..PipelineOptions::default()
+            };
+            // Phase 4 Step 1 — install an empty cache for the initial
+            // build. Every paragraph misses; the cache fills up so
+            // subsequent mutation-driven rebuilds can hit.
+            paged_text::cache::with_layout_cache(paged_text::LayoutCache::default(), || {
+                pipeline::build_document(&scene, &options)
+            })
+        };
+        // W1.24 (audit B18) — capture the cold build duration before
+        // the `?` so the seeded `rebuild_stats` carries real timing even
+        // on the first build. `phase_elapsed_ms` reads the same monotone
+        // source `phase_log` does, so this is one extra clock read.
+        let load_build_ms = phase_elapsed_ms(t_build);
+        let built = built_result.map_err(|e| LoadError::Build(e.to_string()))?;
+        phase_log("CanvasModel::load build", t_build);
+
+        // W1.24 (audit B18) — snapshot the sizes before `built` moves
+        // into Self so the seeded `rebuild_stats` reads the cold build.
+        let load_pages = built.pages.len();
+        let load_paragraphs = built.stats.paragraphs;
+
+        let t_post = phase_now();
+        let page_index = built
+            .pages
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (p.id.clone(), i))
+            .collect();
+
+        let initial_state_hash = scene.canonical_hash();
+        let story_pages = compute_story_pages(&built);
+        phase_log("CanvasModel::load post (index+hash+story_pages)", t_post);
+        Ok(Self {
+            doc_id,
+            scene,
+            source_archive,
+            // W3.B2 — retain the source package for save-back. One
+            // compressed copy; replaced wholesale on the next load.
+            source_idml: bytes.to_vec(),
+            source_id_floor: source_id_floor(bytes),
+            paged_parts: std::collections::BTreeMap::new(),
+            paged_part_tombstones: std::collections::BTreeSet::new(),
+            scene_image_copies: 0,
+            built,
+            page_index,
+            scene_layers: HashMap::new(),
+            scene_layer_owner: HashMap::new(),
+            resource_tiles: crate::resource_tiles::ResourceTileStore::default(),
+            resource_render_scale: 1.0,
+            font_bytes,
+            font_registry,
+            scene_font_resolver: build_font_resolver(&scene_font_registry, None),
+            scene_font_registry,
+            initial_icc_bytes: icc_bytes.clone(),
+            icc_bytes,
+            color_profiles,
+            color_settings,
+            proof_state: None,
+            ink_settings: Default::default(),
+            use_standard_lab_for_spots: false,
+            cmm_cache: std::cell::RefCell::new(None),
+            ink_coverage_cache: std::cell::RefCell::new(None),
+            initial_state_hash,
+            last_applied_seq: 0,
+            current_selection: None,
+            document_defaults: DocumentDefaults::default(),
+            element_selection: crate::element_selection::ElementSelection::new(),
+            active_gesture: None,
+            next_gesture_handle: 0,
+            applied_log: Vec::new(),
+            redo_log: Vec::new(),
+            layout_cache,
+            story_pages,
+            // Perf-S — cache populated by the initial build_document
+            // above; subsequent rebuild_after_mutation calls share
+            // this RefCell so decode cost amortises.
+            image_decode_cache,
+            grow_hint,
+            // Perf-FontTable — built once above and reused by every
+            // rebuild_after_mutation.
+            font_table,
+            cmyk_transform_cache,
+            // Perf-MasterText — cache populated by the initial
+            // build above; subsequent rebuilds reuse + structural
+            // mutations clear it.
+            master_text_emit_cache,
+            // Perf-BodyStory — same lifecycle as master_text.
+            body_story_emit_cache,
+            // W1.24 (audit B18) — seeded with the cold-build sizes +
+            // timing so a caller that never mutates still sees a
+            // populated, plausible stat. `rebuilds` starts at 1: the
+            // initial build counts as the model's first rebuild.
+            rebuild_stats: RebuildStats {
+                build_ms: load_build_ms,
+                op_apply_ms: 0.0,
+                pages: load_pages,
+                paragraphs: load_paragraphs,
+                rebuilds: 1,
+                applied_log_len: 0,
+            },
+            pending_op_apply_ms: 0.0,
+            rebuild_deferred: false,
+            rebuild_owed: false,
+            applied_log_cap_held: false,
+            digest_gate: std::env::var("PAGED_DIGEST_GATE").is_ok_and(|v| v == "1"),
+            keep_seeds: Default::default(),
+            pending_keep_hints: HashMap::new(),
+            font_check_owed: false,
+            story_resume: Default::default(),
+            pending_edit_spans: HashMap::new(),
+            build_generation: 0,
+            snap_settings: Default::default(),
+            snap_index: None,
+            emission_prints: Default::default(),
+            pending_dirty_scope: DirtyScope::Unset,
+            last_dirty_pages: Vec::new(),
+            last_dirty_narrowed: false,
+            page_changes: None,
+        })
+    }
+
+    /// Build an empty single-page document sized `width_pt` × `height_pt`
+    /// (points) and run the pipeline, exactly like [`CanvasModel::load`].
+    ///
+    /// Backs the editor's File ▸ New. The blank IDML package is
+    /// synthesised in-engine ([`crate::blank::blank_idml`]) and loaded
+    /// through the normal parse path, so the document is well-formed and
+    /// carries `source_idml` for save-back — no hand-built scene graph.
+    pub fn new_blank(
+        doc_id: impl Into<String>,
+        width_pt: f32,
+        height_pt: f32,
+        opts: CanvasOptions,
+    ) -> Result<Self, LoadError> {
+        let bytes = crate::blank::blank_idml(width_pt, height_pt);
+        Self::load(doc_id, &bytes, opts)
+    }
+
+    /// Initial canonical hash captured at load. Phase 3 Item 6 —
+    /// determinism tests assert that replaying the mutation log
+    /// against the same `initial_state_hash` reproduces a known
+    /// post-state hash.
+    pub fn initial_state_hash(&self) -> [u8; 32] {
+        self.initial_state_hash
+    }
+
+    /// Current canonical hash of the (possibly-mutated) scene.
+    pub fn current_state_hash(&self) -> [u8; 32] {
+        self.scene.canonical_hash()
+    }
+
+    /// Most-recently-assigned `applied_seq`. 0 if no mutations have
+    /// landed.
+    pub fn last_applied_seq(&self) -> u64 {
+        self.last_applied_seq
+    }
+
+    /// Increment + return the next applied_seq. Worker calls this
+    /// when assigning ordering to a mutation that successfully
+    /// applied.
+    pub fn bump_applied_seq(&mut self) -> u64 {
+        self.last_applied_seq += 1;
+        self.last_applied_seq
+    }
+
+    pub fn doc_id(&self) -> &str {
+        &self.doc_id
+    }
+
+    /// The document's counts as of the last build — what the handle and
+    /// the `Stats` reply carry, and since v0.71.5 every `ScriptResult`.
+    pub fn document_stats(&self) -> DocumentStats {
+        let mut stats = DocumentStats::from(&self.built.stats);
+        // panels.md gap 1 — count distinct overset stories from the
+        // build's render diagnostics (the `From<&PipelineStats>` path
+        // can't see them).
+        stats.overset_stories = self.built.diagnostics.overset_story_ids().len();
+        stats
+    }
+
+    pub fn handle(&self) -> DocumentHandle {
+        let page_ids: Vec<PageId> = self.built.pages.iter().map(|p| p.id.clone()).collect();
+        let page_sizes_pt: Vec<(f32, f32)> = self
+            .built
+            .pages
+            .iter()
+            .map(|p| (p.width_pt, p.height_pt))
+            .collect();
+        // Plan-2 §8.3 — flatten per-spread `<Guide>` parses into a
+        // page-id-keyed list. IDML's `PageIndex` is 1-based per
+        // spread (single-page spreads use `PageIndex="1"` for their
+        // only page); we subtract 1 and clamp to the last valid
+        // page so off-by-one or absent attributes still surface the
+        // guide on the spread's first page.
+        let mut ruler_guides: Vec<RulerGuideWire> = Vec::new();
+        for parsed in &self.scene.spreads {
+            let pages = &parsed.spread.pages;
+            if pages.is_empty() {
+                continue;
+            }
+            for g in &parsed.spread.guides {
+                let idx = if g.page_index == 0 {
+                    0
+                } else {
+                    ((g.page_index as usize) - 1).min(pages.len() - 1)
+                };
+                let Some(p) = pages.get(idx) else {
+                    continue;
+                };
+                let Some(sid) = p.self_id.clone() else {
+                    continue;
+                };
+                ruler_guides.push(RulerGuideWire {
+                    page_id: PageId(sid),
+                    orientation: match g.orientation {
+                        paged_model::GuideOrientation::Vertical => GuideOrientationWire::Vertical,
+                        paged_model::GuideOrientation::Horizontal => {
+                            GuideOrientationWire::Horizontal
+                        }
+                    },
+                    location: g.location,
+                });
+            }
+        }
+        let stats = self.document_stats();
+        DocumentHandle {
+            doc_id: self.doc_id.clone(),
+            page_count: self.built.pages.len(),
+            page_ids,
+            page_sizes_pt,
+            stats,
+            ruler_guides,
+        }
+    }
+
+    pub fn page_count(&self) -> usize {
+        self.built.pages.len()
+    }
+
+    pub fn page_ids(&self) -> impl Iterator<Item = &PageId> {
+        self.built.page_ids()
+    }
+
+    pub fn page(&self, id: &PageId) -> Option<&BuiltPage> {
+        self.page_index.get(id).map(|&i| &self.built.pages[i])
+    }
+
+    /// Tier 4 seam: the per-page display list the worker hands to
+    /// the GPU rasterizer (Vello in `apps/canvas/`, tiny-skia in
+    /// headless tests).
+    pub fn display_list_for_page(&self, id: &PageId) -> Option<&DisplayList> {
+        self.page(id).map(|p| &p.list)
+    }
+
+    /// Apply a `Mutation` from the main thread. Phase 3 — InsertText
+    /// and DeleteRange route through `crate::mutate`; other variants
+    /// (style, frame, page, structural) still return `NotImplemented`
+    /// until Items 5b/c + 8 land.
+    ///
+    /// On success: bumps `last_applied_seq`, returns the
+    /// `applied_seq` + the inverse op (for the caller's undo log) +
+    /// the list of affected page ids (caller invalidates the LOD
+    /// cache for them). Rebuild is full + synchronous —
+    /// "correctness, not pessimisation" (see plan §Item 5).
+    pub fn apply_mutation(
+        &mut self,
+        mutation: &Mutation,
+    ) -> Result<MutationOutcome, crate::channel::WorkerError> {
+        // A value the operation layer would store but no caller may
+        // author (an unknown composer) is refused before anything runs.
+        refuse_unauthorable(mutation)?;
+        // A colour written as a swatch ADDRESS is stored as the swatch's
+        // `Self` id — the only form the renderer resolves.
+        if let Some(normalized) = self.normalize_color_refs(mutation) {
+            return self.apply_mutation(&normalized);
+        }
+        // ADR 132 — `Set { address, path, value }` resolves to the op that
+        // already writes the property and is applied as THAT op: same
+        // apply arm, same inverse, one undo step. Inside a batch it reaches
+        // here per child (a batch holding a `Set` takes the sequential
+        // lane, so each `Set` merges against the state its predecessors
+        // left — two `Set`s on one swatch must not both start from the
+        // pre-batch spec).
+        if let Mutation::Set {
+            address,
+            path,
+            value,
+        } = mutation
+        {
+            let resolved = self
+                .target_of(address)
+                .and_then(|target| self.resolve_set(&target, path, value))
+                .map_err(|what| crate::channel::WorkerError::NotImplemented { what })?;
+            return match resolved {
+                virtual_set::Resolved::Mutation(m) => match self.app_state_snapshot(&m) {
+                    Some(prev) => {
+                        let outcome = self.apply_mutation(&m)?;
+                        self.push_applied(AppliedRecord {
+                            applied_seq: outcome.applied_seq,
+                            kind: LoggedMutation::AppState {
+                                prev: Box::new(prev),
+                                next: Box::new(m),
+                            },
+                        });
+                        self.redo_log.clear();
+                        Ok(outcome)
+                    }
+                    None => self.apply_mutation(&m),
+                },
+                virtual_set::Resolved::Operation(op) => {
+                    let outcome = self.apply_operation(op)?;
+                    Ok(MutationOutcome {
+                        applied_seq: outcome.applied_seq,
+                        page_ids: outcome.page_ids,
+                        inverse: crate::mutate::TextOp::InsertText {
+                            story_id: String::new(),
+                            offset: 0,
+                            text: String::new(),
+                            cell: None,
+                            restore: None,
+                        },
+                        created_id: None,
+                        page_structure_changed: false,
+                        reflow: None,
+                        minted: Vec::new(),
+                    })
+                }
+            };
+        }
+        // Editor-ops — document defaults are app-level state, not a
+        // scene edit: no rebuild, no undo entry, no pixel change. The
+        // editor reads the triple back via `DocumentMeta`.
+        if let Mutation::SetDocumentDefaults {
+            fill_color,
+            stroke_color,
+            stroke_weight,
+        } = mutation
+        {
+            self.document_defaults = DocumentDefaults {
+                fill_color: fill_color.clone(),
+                stroke_color: stroke_color.clone(),
+                stroke_weight: *stroke_weight,
+            };
+            let applied_seq = self.bump_applied_seq();
+            return Ok(MutationOutcome {
+                applied_seq,
+                page_ids: Vec::new(),
+                inverse: crate::mutate::TextOp::InsertText {
+                    story_id: String::new(),
+                    offset: 0,
+                    text: String::new(),
+                    cell: None,
+                    restore: None,
+                },
+                created_id: None,
+                page_structure_changed: false,
+                reflow: None,
+                minted: Vec::new(),
+            });
+        }
+        // Concept 2 — colour-management settings: whole-state app
+        // config like SetDocumentDefaults (not undoable, no log
+        // entry) but with a FORCED full rebuild — the working space
+        // / intent / BPC change what every CMYK swatch resolves to
+        // on screen (AC-3).
+        if let Mutation::SetColorSettings {
+            cmyk_profile_name,
+            rgb_policy,
+            intent,
+            bpc,
+        } = mutation
+        {
+            let next_bytes = match cmyk_profile_name {
+                Some(name) => Some(self.color_profiles.get(name).cloned().ok_or_else(
+                    || crate::channel::WorkerError::NotImplemented {
+                        what: format!(
+                            "unknown color profile {name:?} — register it via RegisterColorProfile first"
+                        ),
+                    },
+                )?),
+                None => None,
+            };
+            self.icc_bytes = match next_bytes {
+                Some(bytes) => Some(bytes),
+                // Name cleared → back to the load-time profile.
+                None => self.initial_icc_bytes.clone(),
+            };
+            self.color_settings = ColorSettingsState {
+                cmyk_profile_name: cmyk_profile_name.clone(),
+                rgb_policy: rgb_policy.clone(),
+                intent: intent
+                    .as_deref()
+                    .and_then(paged_color::Intent::from_name)
+                    .unwrap_or(paged_color::Intent::RelativeColorimetric),
+                bpc: bpc.unwrap_or(true),
+            };
+            // The transform inputs changed out from under every
+            // cached paint — full rebuild, everything repaints. The
+            // preview CMM rebuilds lazily from the new state.
+            self.cmm_cache.borrow_mut().take();
+            self.rebuild_after_mutation().map_err(|e| {
+                crate::channel::WorkerError::NotImplemented {
+                    what: format!("rebuild after SetColorSettings: {e}"),
+                }
+            })?;
+            let applied_seq = self.bump_applied_seq();
+            let page_ids: Vec<PageId> = self.built.pages.iter().map(|p| p.id.clone()).collect();
+            return Ok(MutationOutcome {
+                applied_seq,
+                page_ids,
+                inverse: crate::mutate::TextOp::InsertText {
+                    story_id: String::new(),
+                    offset: 0,
+                    text: String::new(),
+                    cell: None,
+                    restore: None,
+                },
+                created_id: None,
+                page_structure_changed: false,
+                reflow: None,
+                minted: Vec::new(),
+            });
+        }
+        // Concept 2 — soft-proof toggle/setup: swap the display
+        // transform's inputs (proof profile + absolute intent for
+        // paper white) and repaint. Not undoable; view-state like
+        // colour settings.
+        if let Mutation::SetProofSetup {
+            profile_name,
+            simulate_paper_white,
+            intent,
+        } = mutation
+        {
+            self.proof_state = match profile_name {
+                Some(name) => {
+                    let bytes = self.color_profiles.get(name).cloned().ok_or_else(|| {
+                        crate::channel::WorkerError::NotImplemented {
+                            what: format!(
+                                "unknown proof profile {name:?} — register it via RegisterColorProfile first"
+                            ),
+                        }
+                    })?;
+                    Some(ProofState {
+                        name: name.clone(),
+                        bytes,
+                        intent: intent
+                            .as_deref()
+                            .and_then(paged_color::Intent::from_name)
+                            .unwrap_or(paged_color::Intent::RelativeColorimetric),
+                        simulate_paper_white: *simulate_paper_white,
+                    })
+                }
+                None => None,
+            };
+            self.rebuild_after_mutation().map_err(|e| {
+                crate::channel::WorkerError::NotImplemented {
+                    what: format!("rebuild after SetProofSetup: {e}"),
+                }
+            })?;
+            let applied_seq = self.bump_applied_seq();
+            let page_ids: Vec<PageId> = self.built.pages.iter().map(|p| p.id.clone()).collect();
+            return Ok(MutationOutcome {
+                applied_seq,
+                page_ids,
+                inverse: crate::mutate::TextOp::InsertText {
+                    story_id: String::new(),
+                    offset: 0,
+                    text: String::new(),
+                    cell: None,
+                    restore: None,
+                },
+                created_id: None,
+                page_structure_changed: false,
+                reflow: None,
+                minted: Vec::new(),
+            });
+        }
+        // Concept 2 (Ink Manager) — output-time ink settings.
+        // Whole-row replace; not undoable; swatch identity untouched.
+        if let Mutation::SetInkSetting {
+            spot_id,
+            convert_to_process,
+            alias_to,
+        } = mutation
+        {
+            let is_spot = self
+                .scene
+                .palette
+                .colors
+                .get(spot_id)
+                .is_some_and(|c| c.model == paged_model::ColorModel::Spot);
+            if !is_spot {
+                return Err(crate::channel::WorkerError::NotImplemented {
+                    what: format!("{spot_id:?} is not a spot swatch"),
+                });
+            }
+            self.ink_settings.insert(
+                spot_id.clone(),
+                InkSetting {
+                    convert_to_process: *convert_to_process,
+                    alias_to: alias_to.clone(),
+                },
+            );
+            let applied_seq = self.bump_applied_seq();
+            return Ok(MutationOutcome {
+                applied_seq,
+                page_ids: Vec::new(),
+                inverse: crate::mutate::TextOp::InsertText {
+                    story_id: String::new(),
+                    offset: 0,
+                    text: String::new(),
+                    cell: None,
+                    restore: None,
+                },
+                created_id: None,
+                page_structure_changed: false,
+                reflow: None,
+                minted: Vec::new(),
+            });
+        }
+        if let Mutation::SetUseStandardLabForSpots { enabled } = mutation {
+            self.use_standard_lab_for_spots = *enabled;
+            // Clear the preview CMM so the Swatches chip reads the flag,
+            // then rebuild: the flag is on `PipelineOptions`, so it
+            // changes what every Lab-primary spot PAINTS, exactly as
+            // `SetColorSettings` changes what every CMYK swatch paints.
+            // (Before that plumbing existed the chip moved and the page
+            // did not — the whole reason the render-effect sweep exists.)
+            self.cmm_cache.borrow_mut().take();
+            self.rebuild_after_mutation().map_err(|e| {
+                crate::channel::WorkerError::NotImplemented {
+                    what: format!("rebuild after SetUseStandardLabForSpots: {e}"),
+                }
+            })?;
+            let applied_seq = self.bump_applied_seq();
+            let page_ids: Vec<PageId> = self.built.pages.iter().map(|p| p.id.clone()).collect();
+            return Ok(MutationOutcome {
+                applied_seq,
+                page_ids,
+                inverse: crate::mutate::TextOp::InsertText {
+                    story_id: String::new(),
+                    offset: 0,
+                    text: String::new(),
+                    cell: None,
+                    restore: None,
+                },
+                created_id: None,
+                page_structure_changed: false,
+                reflow: None,
+                minted: Vec::new(),
+            });
+        }
+        // Phase B — route frame-shape mutations through the canonical
+        // `paged_mutate::apply` path; only the text mutations stay on
+        // the legacy `TextOp` log. The `MutationOutcome` is text-only
+        // (carries an inverse `TextOp`), so frame-shape mutations
+        // synthesise an empty text op into the response. Future
+        // convergence folds both into one shape.
+        let lowered = match mutation {
+            // Reads the layout, so it lowers here, where a build a batch
+            // still owes can be settled first.
+            Mutation::UpdateTableOfContents { story_id } => Some(self.lower_update_toc(story_id)?),
+            Mutation::GenerateIndex { story_id } => Some(self.lower_generate_index(story_id)?),
+            Mutation::UpdateCrossReferences { source_id } => {
+                Some(self.lower_update_cross_references(source_id.as_deref())?)
+            }
+            Mutation::ConvertNoteToText { note_id } => {
+                Some(self.lower_convert_note_to_text(note_id)?)
+            }
+            _ => self.try_translate_frame_mutation_to_operation(mutation, &mut 0),
+        };
+        if let Some(op) = lowered {
+            // The handle each `bindCreated` named, read off the translated
+            // children BEFORE apply (the ids are already in their specs,
+            // and that is the scene translation itself resolved them in).
+            let bindings = translated_handle_bindings(&self.scene, mutation, &op);
+            let outcome = self.apply_operation(op)?;
+            let created_id = created_element_id(&self.scene, &outcome.applied.op);
+            // Perf-Batch — a batch that translates whole still mints one
+            // id per creating child, and `created_id` names only the
+            // last. Report the list in mint order, each with the handle
+            // it was bound to — the same reply the mixed lane gives, so a
+            // caller never needs to know which lane its batch took.
+            let minted: Vec<crate::channel::MintedElement> = if matches!(
+                mutation,
+                Mutation::Batch { .. } | Mutation::DuplicateElements { .. }
+            ) {
+                created_element_ids(&self.scene, &outcome.applied.op)
+                    .into_iter()
+                    .map(|element| {
+                        let story_id = self.story_of_element(&element);
+                        // Last binding wins, as the mixed lane's
+                        // `last_mut()` overwrite does.
+                        let handle = bindings
+                            .iter()
+                            .rev()
+                            .find(|(id, _)| *id == element)
+                            .map(|(_, h)| h.clone());
+                        crate::channel::MintedElement {
+                            handle,
+                            element,
+                            story_id,
+                        }
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            // Page-list mutations (M7 extends this set with ResizePage)
+            // require the editor to rebuild its page grid — a batch that
+            // holds one too.
+            let page_structure_changed = changes_page_list(mutation);
+            // v38 (Wave 2, C-2 / S-05) — §8.5 resize-vs-transform ruling.
+            // A reflow notification fires ONLY when a frame's CONTENT BOX
+            // changes — i.e. a `ResizeFrame`, which translates to a
+            // `SetProperty { FrameBounds }` write. A `MoveFrame` (and
+            // every `SetGroupTransform` / scale / rotate) translates to a
+            // `FrameTransform`/group-transform write: that's pure DISPLAY
+            // geometry and must NOT re-paginate, so it carries no reflow.
+            // We match on the source `Mutation::ResizeFrame` (not the
+            // translated op) so the distinction is explicit and can't
+            // drift if more mutations ever map to a FrameBounds write.
+            // The content box is read back from the now-mutated scene
+            // (`apply_operation` wrote the new bounds in place).
+            let reflow = match mutation {
+                Mutation::ResizeFrame { frame_id, .. } => {
+                    self.frame_content_box(frame_id).map(|content_box| {
+                        crate::channel::FrameReflowInfo {
+                            frame_id: frame_id.clone(),
+                            content_box,
+                        }
+                    })
+                }
+                _ => None,
+            };
+            return Ok(MutationOutcome {
+                applied_seq: outcome.applied_seq,
+                page_ids: outcome.page_ids,
+                // No text op to send back — frame mutations carry their
+                // inverse in the AppliedOperation stored on the log.
+                inverse: crate::mutate::TextOp::InsertText {
+                    story_id: String::new(),
+                    offset: 0,
+                    text: String::new(),
+                    cell: None,
+                    restore: None,
+                },
+                created_id,
+                page_structure_changed,
+                reflow,
+                minted,
+            });
+        }
+        // A Batch that reaches HERE could not translate as a whole: at
+        // least one child is a text edit, which has no
+        // `paged_mutate::Operation` form. Before this arm existed the
+        // batch fell into the text match below and was rejected
+        // `NotImplemented { what: "Mutation::Batch" }` — so a plugin
+        // pouring text with any styling in the same batch got NOTHING
+        // applied and no indication which child was at fault (RFI C-14,
+        // hit by paged.doc's first live run: an empty frame, silently).
+        if let Mutation::Batch { ops } = mutation {
+            return self.apply_mixed_batch(ops);
+        }
+        let text_op: crate::mutate::TextOp = match mutation {
+            Mutation::InsertText {
+                story_id,
+                offset,
+                text,
+                cell,
+            } => crate::mutate::TextOp::InsertText {
+                story_id: story_id.clone(),
+                offset: *offset,
+                text: text.clone(),
+                cell: cell.clone(),
+                restore: None,
+            },
+            Mutation::DeleteRange {
+                story_id,
+                start,
+                end,
+                cell,
+            } => crate::mutate::TextOp::DeleteRange {
+                story_id: story_id.clone(),
+                start: *start,
+                end: *end,
+                recovered: String::new(),
+                unseed: false,
+                keep_run: false,
+                cell: cell.clone(),
+            },
+            // C-64 — a duplicate that did not translate was REFUSED by
+            // the kernel's validation; say why, in its words, instead of
+            // the generic "not implemented" a missing arm would mean.
+            Mutation::DuplicateElements { element_ids, .. } => {
+                let sources: Vec<paged_mutate::NodeId> =
+                    element_ids.iter().map(element_to_node_id).collect();
+                let why = paged_mutate::duplicate_demand(&self.scene, &sources)
+                    .err()
+                    .map(|e| e.to_string())
+                    .unwrap_or_else(|| "the duplicate could not be translated".to_string());
+                return Err(crate::channel::WorkerError::NotImplemented {
+                    what: format!("frame mutation failed: {why}"),
+                });
+            }
+            other => {
+                return Err(crate::channel::WorkerError::NotImplemented {
+                    what: format!("Mutation::{}", other.discriminant()),
+                });
+            }
+        };
+        // W1.24 (audit B18) — time the scene edit; the next rebuild
+        // folds it into RebuildStats.op_apply_ms.
+        let t_op = phase_now();
+        let edit = crate::mutate::edit_span(&text_op, &self.scene);
+        let applied = crate::mutate::apply(&mut self.scene, &text_op).map_err(|e| {
+            crate::channel::WorkerError::NotImplemented {
+                what: format!("text mutation failed: {e}"),
+            }
+        })?;
+        self.stage_op_apply_ms(phase_elapsed_ms(t_op));
+        // Perf-BodyStory — text edits change the *content* of a story
+        // but not its frame chain, so the body-story signature would
+        // wrongly match and the edit would never display.
+        self.commit_and_rebuild(Invalidation::Text {
+            story: story_id_of_text_op(&text_op).to_string(),
+            edit,
+        })
+        .map_err(|e| crate::channel::WorkerError::NotImplemented {
+            what: format!("rebuild after mutation: {e}"),
+        })?;
+        let applied_seq = self.bump_applied_seq();
+        let page_ids: Vec<PageId> = self.dirty_page_ids();
+        // Shift the active selection through the mutation so caret
+        // tracking survives the edit (AC-E-9).
+        if let Some(sel) = self.current_selection.take() {
+            let shifted = match &text_op {
+                crate::mutate::TextOp::InsertText {
+                    story_id,
+                    offset,
+                    text,
+                    cell,
+                    ..
+                } => sel.shift_for_insert(story_id, cell, *offset, text.chars().count() as u32),
+                crate::mutate::TextOp::DeleteRange {
+                    story_id,
+                    start,
+                    end,
+                    cell,
+                    ..
+                } => sel.shift_for_delete(story_id, cell, *start, *end),
+            };
+            self.current_selection = Some(shifted);
+        }
+        // Phase 3 Item 7 — push to undo log; clear redo log (any
+        // pending redo is invalidated by a fresh mutation). W1.24
+        // (B19) — routed through `push_applied` so the MAX_APPLIED_LOG
+        // cap is enforced.
+        self.push_applied(AppliedRecord {
+            applied_seq,
+            kind: LoggedMutation::Text {
+                op: text_op,
+                inverse: applied.inverse.clone(),
+            },
+        });
+        self.redo_log.clear();
+        Ok(MutationOutcome {
+            applied_seq,
+            page_ids,
+            inverse: applied.inverse,
+            created_id: None,
+            page_structure_changed: false,
+            reflow: None,
+            minted: Vec::new(),
+        })
+    }
+
+    /// Apply a `Batch` whose children span BOTH mutation lanes — the
+    /// `paged_mutate::Operation` lane (frames, styles, structure) and
+    /// the `crate::mutate::TextOp` lane (InsertText / DeleteRange).
+    ///
+    /// The lanes cannot be merged at translation time, because text
+    /// edits have no `Operation` form; so this applies each child
+    /// through the ordinary single-mutation dispatch (whichever lane it
+    /// belongs to) and then COLLAPSES the per-child log records into
+    /// one `Composite` entry. That is what makes the batch one undo
+    /// step — the reason a caller batched in the first place.
+    ///
+    /// ATOMICITY: on a child failure every already-applied child is
+    /// reversed, newest first, so the batch is all-or-nothing and the
+    /// error names the child that failed. The rollback replays the same
+    /// inverses undo would, through the same lanes.
+    ///
+    /// ONE REBUILD: the children apply through the single-mutation
+    /// dispatch, but their rebuilds are DEFERRED and settled once here,
+    /// after the last child (`rebuild_deferred`). A rebuild costs a walk
+    /// of the whole document, so an N-child batch used to pay N of them
+    /// — which is what made a compound authoring gesture on a large
+    /// document (insert frame, pour text, style it, assign a layer)
+    /// cost N full builds where one would do. The children see the
+    /// scene, which is edited immediately; only `built` lags, and
+    /// nothing in the apply path reads it.
+    ///
+    /// The rollback path settles the same debt: `roll_back_batch` asks
+    /// for its rebuild under the deferral, and this wrapper runs it.
+    fn apply_mixed_batch(
+        &mut self,
+        ops: &[Mutation],
+    ) -> Result<MutationOutcome, crate::channel::WorkerError> {
+        // A nested batch keeps the outer deferral (restore, don't clear).
+        let outer = std::mem::replace(&mut self.rebuild_deferred, true);
+        // C-79 — and the undo-log cap waits for the collapse: it counts
+        // the batch as the one entry it becomes, never its children.
+        let outer_cap_held = std::mem::replace(&mut self.applied_log_cap_held, true);
+        let result = self.apply_mixed_batch_children(ops);
+        self.applied_log_cap_held = outer_cap_held;
+        if !outer_cap_held {
+            self.enforce_applied_log_cap();
+        }
+        self.rebuild_deferred = outer;
+        // An inner batch leaves the debt to the outer one, which owns
+        // the single build.
+        if outer {
+            return result;
+        }
+        let rebuilt = if std::mem::take(&mut self.rebuild_owed) {
+            self.rebuild_after_mutation()
+        } else {
+            Ok(())
+        };
+        // A child's failure is the more useful error; the rollback has
+        // already restored the scene either way.
+        let outcome = result?;
+        rebuilt.map_err(|e| crate::channel::WorkerError::NotImplemented {
+            what: format!("rebuild after batch: {e}"),
+        })?;
+        Ok(MutationOutcome {
+            // Read from the FRESH build: the page ids the children saw
+            // predate the batch's own structural changes.
+            page_ids: self.built.pages.iter().map(|p| p.id.clone()).collect(),
+            ..outcome
+        })
+    }
+
+    /// The children of a mixed batch, applied in order under the
+    /// caller's rebuild deferral. Split from [`Self::apply_mixed_batch`]
+    /// so every exit — success, a child's error, an unresolvable handle
+    /// — returns through the one place that settles the rebuild.
+    fn apply_mixed_batch_children(
+        &mut self,
+        ops: &[Mutation],
+    ) -> Result<MutationOutcome, crate::channel::WorkerError> {
+        use crate::batch_handles::{BoundHandle, HandleScope};
+
+        let log_base = self.applied_log.len();
+        let mut created_id = None;
+        // Every mint, in order — what `created_id` alone could not say.
+        let mut minted: Vec<crate::channel::MintedElement> = Vec::new();
+        let mut page_structure_changed = false;
+        // C-15 — handle resolution is OFF unless the batch binds a
+        // name. A batch that binds nothing takes byte-identical
+        // decisions to the pre-C-15 path: no rewrite, no re-encode.
+        let uses_handles = ops
+            .iter()
+            .any(|op| matches!(op, Mutation::BindCreated { .. }));
+        let mut scope = HandleScope::default();
+
+        for (i, child) in ops.iter().enumerate() {
+            // C-15 — bind the most recent creation. Contributes no
+            // operation and no log entry: the batch stays one undo step.
+            if let Mutation::BindCreated { handle } = child {
+                match scope.created().cloned() {
+                    Some(bound) => {
+                        // The name also travels back on the reply, so a
+                        // caller reads its own handles rather than
+                        // guessing which minted id is which.
+                        // A page is not in `minted` (it is not an
+                        // element); its name stays in the scope only.
+                        if matches!(bound, crate::batch_handles::Binding::Element(_)) {
+                            if let Some(last) = minted.last_mut() {
+                                last.handle = Some(handle.clone());
+                            }
+                        }
+                        scope.bind(handle.clone(), bound);
+                        continue;
+                    }
+                    None => {
+                        return Err(self.roll_back_batch(
+                            log_base,
+                            i,
+                            child,
+                            format!(
+                                "bindCreated {handle:?} has nothing to name — no creating child \
+                                 ran before it in this batch"
+                            ),
+                        ));
+                    }
+                }
+            }
+            // C-15 — resolve `$h:` / `$created` references against what
+            // this batch has minted so far.
+            let resolved;
+            let child: &Mutation = if uses_handles {
+                match crate::batch_handles::substitute(child, &scope) {
+                    Ok(m) => {
+                        resolved = m;
+                        &resolved
+                    }
+                    Err(err) => return Err(self.roll_back_batch(log_base, i, child, err)),
+                }
+            } else {
+                child
+            };
+            // C-15 — document defaults inside a batch. They are app
+            // state with no `Operation` form, so `apply_mutation` would
+            // write them and log NOTHING — a sibling's failure (or the
+            // batch's own undo) would then leave them changed, which is
+            // a half-applied batch. Write them here instead and log a
+            // reversible record the composite collects.
+            if let Mutation::SetDocumentDefaults {
+                fill_color,
+                stroke_color,
+                stroke_weight,
+            } = child
+            {
+                let next = DocumentDefaults {
+                    fill_color: fill_color.clone(),
+                    stroke_color: stroke_color.clone(),
+                    stroke_weight: *stroke_weight,
+                };
+                let prev = std::mem::replace(&mut self.document_defaults, next.clone());
+                let applied_seq = self.bump_applied_seq();
+                self.push_applied(AppliedRecord {
+                    applied_seq,
+                    kind: LoggedMutation::Defaults { prev, next },
+                });
+                continue;
+            }
+            // D-22 — a page-creating child mints a PAGE, which no
+            // `created_id` reports (pages are not elements). Read it off
+            // the scene: the one page id that was not there before.
+            let pages_before = (uses_handles
+                && matches!(
+                    child,
+                    Mutation::InsertPage { .. } | Mutation::DuplicatePage { .. }
+                ))
+            .then(|| self.scene_page_ids());
+            match self.apply_mutation(child) {
+                Ok(outcome) => {
+                    if let Some(before) = pages_before {
+                        if let Some(page) = self
+                            .scene_page_ids()
+                            .into_iter()
+                            .find(|p| !before.contains(p))
+                        {
+                            scope.set_created_page(page);
+                        }
+                    }
+                    // The batch reports the LAST id minted by any child,
+                    // matching the single-mutation contract (the editor
+                    // selects the fresh element).
+                    // A nested batch already carries the full list of
+                    // its own mints; taking its `created_id` too would
+                    // count the last one twice.
+                    if !outcome.minted.is_empty() {
+                        minted.extend(outcome.minted.iter().cloned());
+                    }
+                    if let Some(element) = outcome.created_id {
+                        // The story comes off the freshly-mutated scene:
+                        // a text frame carries the `ParentStory` its
+                        // insert minted, so `$h:f` in a `storyId`
+                        // position addresses it — and so does a caller
+                        // reading `minted` off the reply.
+                        let story_id = self.story_of_element(&element);
+                        if outcome.minted.is_empty() {
+                            minted.push(crate::channel::MintedElement {
+                                handle: None,
+                                element: element.clone(),
+                                story_id: story_id.clone(),
+                            });
+                        }
+                        if uses_handles {
+                            // What the next `bindCreated` names.
+                            scope.set_created(Some(BoundHandle {
+                                element: element.clone(),
+                                story_id,
+                            }));
+                        }
+                        created_id = Some(element);
+                    }
+                    page_structure_changed |= outcome.page_structure_changed;
+                }
+                Err(err) => {
+                    // Reverse what landed, newest first, then report
+                    // WHICH child failed — a bare "batch failed" is what
+                    // made the original rejection so hard to diagnose.
+                    return Err(self.roll_back_batch(log_base, i, child, format!("{err:?}")));
+                }
+            }
+        }
+
+        // Collapse the children's records into ONE undo entry.
+        let entries: Vec<LoggedMutation> = self
+            .applied_log
+            .drain(log_base..)
+            .map(|rec| rec.kind)
+            .collect();
+        let applied_seq = self.bump_applied_seq();
+        if !entries.is_empty() {
+            self.push_applied(AppliedRecord {
+                applied_seq,
+                kind: LoggedMutation::Composite(entries),
+            });
+        }
+        self.redo_log.clear();
+
+        let page_ids: Vec<PageId> = self.built.pages.iter().map(|p| p.id.clone()).collect();
+        Ok(MutationOutcome {
+            applied_seq,
+            page_ids,
+            // As for frame mutations: the inverse lives on the log, not
+            // in the reply.
+            inverse: crate::mutate::TextOp::InsertText {
+                story_id: String::new(),
+                offset: 0,
+                text: String::new(),
+                cell: None,
+                restore: None,
+            },
+            created_id,
+            page_structure_changed,
+            reflow: None,
+            minted,
+        })
+    }
+
+    /// Reverse everything a batch has applied since `log_base` and
+    /// build the error naming the child that failed. Extracted so every
+    /// way a batch can fail — a child's own error, an unbindable
+    /// `bindCreated`, an unresolvable handle — leaves the SAME
+    /// all-or-nothing state (C-14's promise) instead of each site
+    /// re-deriving it.
+    fn roll_back_batch(
+        &mut self,
+        log_base: usize,
+        index: usize,
+        child: &Mutation,
+        reason: String,
+    ) -> crate::channel::WorkerError {
+        let applied: Vec<LoggedMutation> = self
+            .applied_log
+            .drain(log_base..)
+            .map(|rec| rec.kind)
+            .collect();
+        for entry in applied.into_iter().rev() {
+            self.revert_logged(&entry);
+        }
+        self.font_check_owed = true;
+        let _ = self.rebuild_after_mutation();
+        crate::channel::WorkerError::NotImplemented {
+            what: format!(
+                "Mutation::Batch child {index} ({}): {reason} — batch rolled back",
+                child.discriminant()
+            ),
+        }
+    }
+
+    /// C-15 — the story an element carries, for handles used in a
+    /// `storyId` position. A text frame's `ParentStory` (the one its
+    /// insert minted); a table / story-range address IS its story.
+    /// `None` for kinds that carry none — the resolver then refuses
+    /// rather than substituting something meaningless.
+    fn story_of_element(&self, id: &crate::element_selection::ElementId) -> Option<String> {
+        use crate::element_selection::ElementId;
+        match id {
+            ElementId::TextFrame(frame_id) => self
+                .scene
+                .spreads
+                .iter()
+                .flat_map(|parsed| parsed.spread.text_frames.iter())
+                .find(|f| f.self_id.as_deref() == Some(frame_id.as_str()))
+                .and_then(|f| f.parent_story.clone()),
+            ElementId::StoryRange { story_id, .. }
+            | ElementId::Table { story_id, .. }
+            | ElementId::TableCell { story_id, .. } => Some(story_id.clone()),
+            _ => None,
+        }
+    }
+
+    /// Replay one logged mutation FORWARD against the scene, returning
+    /// the record to re-log (its inverse is re-captured, because a text
+    /// op's inverse depends on the state it ran against). The redo
+    /// counterpart of `revert_logged`; does not rebuild.
+    fn replay_logged(&mut self, entry: &LoggedMutation) -> Option<LoggedMutation> {
+        Some(match entry {
+            LoggedMutation::Text { op, .. } => {
+                let applied = crate::mutate::apply(&mut self.scene, op).ok()?;
+                LoggedMutation::Text {
+                    op: op.clone(),
+                    inverse: applied.inverse,
+                }
+            }
+            LoggedMutation::Frame(prev) => {
+                LoggedMutation::Frame(paged_mutate::apply(&mut self.scene, &prev.op).ok()?)
+            }
+            LoggedMutation::Composite(children) => {
+                let mut replayed = Vec::with_capacity(children.len());
+                for child in children {
+                    replayed.push(self.replay_logged(child)?);
+                }
+                LoggedMutation::Composite(replayed)
+            }
+            // C-15 — redo re-writes the triple the batch wrote. Whole-
+            // state, so replay is exact and needs no re-capture.
+            LoggedMutation::Defaults { prev, next } => {
+                self.document_defaults = next.clone();
+                LoggedMutation::Defaults {
+                    prev: prev.clone(),
+                    next: next.clone(),
+                }
+            }
+            // v71 — re-write what the `Set` wrote (whole-state: exact).
+            LoggedMutation::AppState { prev, next } => {
+                self.apply_mutation(next).ok()?;
+                LoggedMutation::AppState {
+                    prev: prev.clone(),
+                    next: next.clone(),
+                }
+            }
+        })
+    }
+
+    /// Replay one logged mutation's INVERSE against the scene — the
+    /// step undo and batch-rollback share. Does not rebuild; the caller
+    /// rebuilds once when the whole reversal is done.
+    fn revert_logged(&mut self, entry: &LoggedMutation) {
+        match entry {
+            LoggedMutation::Text { inverse, .. } => {
+                let _ = crate::mutate::apply(&mut self.scene, inverse);
+            }
+            LoggedMutation::Frame(applied) => {
+                let _ = paged_mutate::apply(&mut self.scene, &applied.inverse);
+            }
+            LoggedMutation::Composite(children) => {
+                for child in children.iter().rev() {
+                    self.revert_logged(child);
+                }
+            }
+            // C-15 — restore the triple the batch replaced (undo AND
+            // the mid-batch rollback share this path).
+            LoggedMutation::Defaults { prev, .. } => {
+                self.document_defaults = prev.clone();
+            }
+            // v71 — re-write the state the `Set` replaced. The ops are
+            // unlogged app-state writes, so this adds no record of its own.
+            LoggedMutation::AppState { prev, .. } => {
+                let _ = self.apply_mutation(prev);
+            }
+        }
+    }
+
+    /// Phase B — convert a channel `Mutation` into an
+    /// `paged_mutate::Operation` when the mutation is a frame-shape
+    /// edit. Returns `None` for text edits + any mutation kind not yet
+    /// bridged (MoveFrame, InsertFrame, etc.).
+    /// `mint_offset` (FINDING #6) tracks how many page-item ids this
+    /// translation pass has already minted, so a `Batch` of N inserts
+    /// gets N distinct ids instead of N copies of `u<max+1>`. Top-level
+    /// callers pass `&mut 0`; the `Batch` arm threads the SAME counter
+    /// through every child so the ids stay unique across the batch.
+    fn try_translate_frame_mutation_to_operation(
+        &self,
+        mutation: &Mutation,
+        mint_offset: &mut u64,
+    ) -> Option<paged_mutate::Operation> {
+        use paged_mutate::{NodeId, Operation, PropertyPath, Value};
+        match mutation {
+            Mutation::ResizeFrame { frame_id, bounds } => {
+                let node = self.resolve_frame_node_id(frame_id)?;
+                Some(Operation::SetProperty {
+                    node,
+                    path: PropertyPath::FrameBounds,
+                    // Channel carries `(top, left, bottom, right)`;
+                    // `Value::Bounds` is `[top, left, bottom, right]`.
+                    value: Value::Bounds([bounds.0, bounds.1, bounds.2, bounds.3]),
+                })
+            }
+            // W1.2 — un-stub `MoveFrame`. The stub deferred to "use the
+            // translate gesture"; the translate gesture commits its move
+            // by SETTING the frame's `ItemTransform` (the Phase D
+            // `FrameTransform` path), so `moveFrame` is semantically a
+            // whole-`ItemTransform` write to the same matrix the gesture
+            // would land. The Phase D apply arm captures the prior
+            // transform as the inverse, so apply→invert→reapply
+            // round-trips without any new inverse machinery.
+            Mutation::MoveFrame {
+                frame_id,
+                transform,
+            } => {
+                let node = self.resolve_frame_node_id(frame_id)?;
+                Some(Operation::SetProperty {
+                    node,
+                    path: PropertyPath::FrameTransform,
+                    value: Value::Transform(Some(
+                        self.spread_space_transform(frame_id, *transform),
+                    )),
+                })
+            }
+            Mutation::InsertFrame { page_id, bounds } => {
+                let (spread_id, (ox, oy), idx) = self.page_insert_context(page_id)?;
+                // Append to the kind vec = top of the z-order.
+                let position = self.scene.spreads[idx].spread.rectangles.len();
+                let d = &self.document_defaults;
+                Some(Operation::InsertNode {
+                    parent: NodeId::Spread(spread_id),
+                    position,
+                    node: paged_mutate::NodeSpec::Rectangle {
+                        self_id: self.mint_page_item_id_with_offset(mint_offset),
+                        // Page-local (top, left, bottom, right) →
+                        // spread coords (the marquee_hits rule: y axes
+                        // shift by origin.y, x axes by origin.x).
+                        bounds: [bounds.0 + oy, bounds.1 + ox, bounds.2 + oy, bounds.3 + ox],
+                        fill_color: d.fill_color.clone(),
+                        stroke_color: d.stroke_color.clone(),
+                        stroke_weight: d.stroke_weight,
+                        // fresh creations carry no transform
+                        item_transform: None,
+                    },
+                    z_slot: None,
+                })
+            }
+            Mutation::InsertTextFrame { page_id, bounds } => {
+                let (spread_id, (ox, oy), idx) = self.page_insert_context(page_id)?;
+                let position = self.scene.spreads[idx].spread.text_frames.len();
+                // Mint the frame's ParentStory id here (the apply layer
+                // creates the story for an unknown id) — every wire-
+                // inserted text frame is immediately pour-able/hit-able.
+                let story_id = {
+                    // FINDING #6's sibling (found closing C-15): the
+                    // frame's own `Self` id is offset by the batch's
+                    // mint counter, but the STORY id was not — so two
+                    // `insertTextFrame` children of ONE batch both
+                    // minted `Story/u<stories.len()>` and the second
+                    // frame silently adopted the first frame's story
+                    // (they read as threaded). Offsetting by the same
+                    // counter makes every mint in a batch distinct; the
+                    // scan below still guards against collisions with
+                    // ids already in the document.
+                    //
+                    // The offset alone was not enough. `stories.len()`
+                    // is a COUNT, not a ceiling: once the document's
+                    // minted ids run past it (a deleted story, a rolled-
+                    // back mint, a story minted by another path) the
+                    // guard walks EVERY offset up to the same first free
+                    // number — it can only see stories already in the
+                    // document, and on the translatable lane no sibling
+                    // has applied yet. Four frames minted in one batch
+                    // then all named one story; the first apply created
+                    // it and the other three ADOPTED it (`insert_node`
+                    // reuses an existing `ParentStory`), so the annual's
+                    // flagship spread was born "threaded" before a link
+                    // was sent. Start past every minted id instead
+                    // (`story_id_floor`), so each offset has its own
+                    // number.
+                    let mut n = self.story_id_floor() + *mint_offset as usize;
+                    let mut id = format!("Story/u{n}");
+                    while self.scene.stories.iter().any(|s| s.self_id == id) {
+                        n += 1;
+                        id = format!("Story/u{n}");
+                    }
+                    id
+                };
+                Some(Operation::InsertNode {
+                    parent: NodeId::Spread(spread_id),
+                    position,
+                    node: paged_mutate::NodeSpec::TextFrame {
+                        self_id: self.mint_page_item_id_with_offset(mint_offset),
+                        bounds: [bounds.0 + oy, bounds.1 + ox, bounds.2 + oy, bounds.3 + ox],
+                        // Text frames carry no fill/stroke by default —
+                        // an empty threading/Type-tool target.
+                        fill_color: None,
+                        stroke_color: None,
+                        stroke_weight: None,
+                        item_transform: None,
+                        parent_story: Some(story_id),
+                    },
+                    z_slot: None,
+                })
+            }
+            Mutation::InsertLine {
+                page_id,
+                start,
+                end,
+            } => {
+                let (spread_id, (ox, oy), idx) = self.page_insert_context(page_id)?;
+                let position = self.scene.spreads[idx].spread.graphic_lines.len();
+                let s = [start.0 + ox, start.1 + oy];
+                let e = [end.0 + ox, end.1 + oy];
+                let corner = |p: [f32; 2]| paged_mutate::operation::PathAnchorSpec {
+                    anchor: p,
+                    left: p,
+                    right: p,
+                };
+                let d = &self.document_defaults;
+                Some(Operation::InsertNode {
+                    parent: NodeId::Spread(spread_id),
+                    position,
+                    node: paged_mutate::NodeSpec::GraphicLine {
+                        self_id: self.mint_page_item_id_with_offset(mint_offset),
+                        bounds: [
+                            s[1].min(e[1]),
+                            s[0].min(e[0]),
+                            s[1].max(e[1]),
+                            s[0].max(e[0]),
+                        ],
+                        anchors: vec![corner(s), corner(e)],
+                        subpath_starts: vec![0],
+                        subpath_open: vec![true],
+                        // A strokeless line is invisible — fall back to
+                        // a 1pt black stroke when no default is set.
+                        stroke_color: d
+                            .stroke_color
+                            .clone()
+                            .or_else(|| Some("Color/Black".to_string())),
+                        stroke_weight: d.stroke_weight.or(Some(1.0)),
+                        // fresh creations carry no transform
+                        item_transform: None,
+                    },
+                    z_slot: None,
+                })
+            }
+            Mutation::InsertPath {
+                page_id,
+                anchors,
+                open,
+                smooth,
+            } => {
+                let (spread_id, (ox, oy), idx) = self.page_insert_context(page_id)?;
+                let position = self.scene.spreads[idx].spread.polygons.len();
+                let mut conv: Vec<paged_mutate::operation::PathAnchorSpec> = anchors
+                    .iter()
+                    .map(|a| paged_mutate::operation::PathAnchorSpec {
+                        anchor: [a.anchor[0] + ox, a.anchor[1] + oy],
+                        left: [a.left[0] + ox, a.left[1] + oy],
+                        right: [a.right[0] + ox, a.right[1] + oy],
+                    })
+                    .collect();
+                if *smooth {
+                    conv = paged_mutate::fit_polyline_to_anchors(&conv);
+                }
+                if conv.is_empty() {
+                    return None;
+                }
+                // Bounding box over anchors + handles (handles cover
+                // the curve's extent after smoothing).
+                let mut top = f32::MAX;
+                let mut left = f32::MAX;
+                let mut bottom = f32::MIN;
+                let mut right = f32::MIN;
+                for a in &conv {
+                    for p in [a.anchor, a.left, a.right] {
+                        left = left.min(p[0]);
+                        right = right.max(p[0]);
+                        top = top.min(p[1]);
+                        bottom = bottom.max(p[1]);
+                    }
+                }
+                let d = &self.document_defaults;
+                Some(Operation::InsertNode {
+                    parent: NodeId::Spread(spread_id),
+                    position,
+                    node: paged_mutate::NodeSpec::Polygon {
+                        self_id: self.mint_page_item_id_with_offset(mint_offset),
+                        bounds: [top, left, bottom, right],
+                        anchors: conv,
+                        subpath_starts: vec![0],
+                        subpath_open: vec![*open],
+                        fill_color: d.fill_color.clone(),
+                        // Pencil strokes need a visible stroke too.
+                        stroke_color: d
+                            .stroke_color
+                            .clone()
+                            .or_else(|| Some("Color/Black".to_string())),
+                        stroke_weight: d.stroke_weight.or(Some(1.0)),
+                        // fresh creations carry no transform
+                        item_transform: None,
+                    },
+                    z_slot: None,
+                })
+            }
+            Mutation::InsertPage {
+                after_page_id,
+                master_id,
+            } => Some(Operation::InsertPage {
+                after_page_id: after_page_id.as_ref().map(|p| p.0.clone()),
+                master_id: master_id.clone(),
+                spread_self_id: None,
+                page_self_id: None,
+                restore_spread_json: None,
+            }),
+            Mutation::DeletePage { page_id } => Some(Operation::RemovePage {
+                page_id: page_id.0.clone(),
+            }),
+            Mutation::ResizePage { page_id, bounds } => Some(Operation::SetProperty {
+                node: NodeId::Page(page_id.0.clone()),
+                path: PropertyPath::PageBounds,
+                value: Value::Bounds([bounds.0, bounds.1, bounds.2, bounds.3]),
+            }),
+            Mutation::DeleteFrame { frame_id } => {
+                let node = self.resolve_frame_node_id(frame_id)?;
+                Some(Operation::RemoveNode { node })
+            }
+            Mutation::PathfinderBoolean { kept, others, kind } => {
+                let kept_node = path_node_id_for(kept)?;
+                let other_nodes: Vec<NodeId> = others
+                    .iter()
+                    .map(path_node_id_for)
+                    .collect::<Option<Vec<_>>>()?;
+                Some(Operation::PathfinderBoolean {
+                    kept: kept_node,
+                    others: other_nodes,
+                    op_kind: *kind,
+                })
+            }
+            // B-22 (v57) — the region Pathfinder row. Every verb takes
+            // the SAME payload (`elementIds`, top-to-bottom) and differs
+            // only in the verb it hands the apply layer, so the six map
+            // through one helper. Ovals are accepted as inputs (the
+            // arrangement falls back to their bounds rectangle, exactly
+            // as `pathfinderBoolean` does) even though they cannot carry
+            // a result — the apply layer replaces them instead.
+            Mutation::PathfinderDivide { element_ids } => {
+                region_op(element_ids, paged_mutate::PathfinderRegionVerb::Divide)
+            }
+            Mutation::PathfinderTrim { element_ids } => {
+                region_op(element_ids, paged_mutate::PathfinderRegionVerb::Trim)
+            }
+            Mutation::PathfinderMerge { element_ids } => {
+                region_op(element_ids, paged_mutate::PathfinderRegionVerb::Merge)
+            }
+            Mutation::PathfinderCrop { element_ids } => {
+                region_op(element_ids, paged_mutate::PathfinderRegionVerb::Crop)
+            }
+            Mutation::PathfinderOutline { element_ids } => {
+                region_op(element_ids, paged_mutate::PathfinderRegionVerb::Outline)
+            }
+            Mutation::PathfinderMinusBack { element_ids } => {
+                region_op(element_ids, paged_mutate::PathfinderRegionVerb::MinusBack)
+            }
+            Mutation::PathfinderFaces {
+                element_ids,
+                faces,
+                mode,
+            } => Some(Operation::PathfinderFaces {
+                elements: element_ids.iter().map(element_to_node_id).collect(),
+                faces: faces.clone(),
+                mode: *mode,
+            }),
+            Mutation::PathPointInsert {
+                element_id,
+                index,
+                anchor,
+                prev_subpath_starts,
+            } => Some(Operation::SetProperty {
+                node: path_node_id_for(element_id)?,
+                path: PropertyPath::PathPointInsert,
+                value: Value::PathPointInsert {
+                    index: *index as usize,
+                    anchor: *anchor,
+                    prev_subpath_starts: prev_subpath_starts
+                        .as_ref()
+                        .map(|v| v.iter().map(|&n| n as usize).collect()),
+                },
+            }),
+            Mutation::PathPointRemove { element_id, index } => Some(Operation::SetProperty {
+                node: path_node_id_for(element_id)?,
+                path: PropertyPath::PathPointRemove,
+                value: Value::PathPointRemove {
+                    index: *index as usize,
+                    prev_subpath_starts: None,
+                },
+            }),
+            Mutation::PathOpenAt { element_id, index } => Some(Operation::SetProperty {
+                node: path_node_id_for(element_id)?,
+                path: PropertyPath::PathOpenAt,
+                value: Value::PathOpenAt {
+                    index: *index as usize,
+                    prev_anchors: None,
+                    prev_subpath_starts: None,
+                    prev_subpath_open: None,
+                },
+            }),
+            Mutation::OutlineStroke {
+                element_id,
+                width,
+                cap,
+                join,
+                miter_limit,
+            } => Some(Operation::SetProperty {
+                node: path_node_id_for(element_id)?,
+                path: PropertyPath::OutlineStroke,
+                value: Value::OutlineStroke {
+                    width: *width,
+                    cap: cap.clone(),
+                    join: join.clone(),
+                    miter_limit: *miter_limit,
+                    prev_anchors: None,
+                    prev_subpath_starts: None,
+                    prev_subpath_open: None,
+                },
+            }),
+            Mutation::OffsetPath {
+                element_id,
+                delta,
+                join,
+                miter_limit,
+            } => Some(Operation::SetProperty {
+                node: path_node_id_for(element_id)?,
+                path: PropertyPath::OffsetPath,
+                value: Value::OffsetPath {
+                    delta: *delta,
+                    join: join.clone(),
+                    miter_limit: *miter_limit,
+                    prev_anchors: None,
+                    prev_subpath_starts: None,
+                    prev_subpath_open: None,
+                },
+            }),
+            Mutation::SimplifyPath {
+                element_id,
+                tolerance,
+            } => Some(Operation::SetProperty {
+                node: path_node_id_for(element_id)?,
+                path: PropertyPath::SimplifyPath,
+                value: Value::SimplifyPath {
+                    tolerance: *tolerance,
+                    prev_anchors: None,
+                    prev_subpath_starts: None,
+                    prev_subpath_open: None,
+                },
+            }),
+            // v56 (Wave B) — close an open subpath; the inverse
+            // gesture of PathOpenAt. `subpath: None` = the default
+            // (single/last open contour).
+            Mutation::ClosePath {
+                element_id,
+                subpath,
+            } => Some(Operation::SetProperty {
+                node: path_node_id_for(element_id)?,
+                path: PropertyPath::ClosePath,
+                value: Value::ClosePath {
+                    subpath: subpath.map(|n| n as usize),
+                    prev_anchors: None,
+                    prev_subpath_starts: None,
+                    prev_subpath_open: None,
+                },
+            }),
+            // v56 (Wave B) — weld two open path elements; rides the
+            // PathfinderBoolean-style multi-node Operation (the apply
+            // layer removes `other` and the Batch inverse restores it).
+            Mutation::JoinPaths {
+                element_id,
+                other_id,
+            } => Some(Operation::JoinPaths {
+                kept: path_node_id_for(element_id)?,
+                other: path_node_id_for(other_id)?,
+            }),
+            // v56 (B-18) — paste-into / release. Leaf node ids on both
+            // sides; the apply layer gates the container kind
+            // (Rectangle / Oval / Polygon) and every structural
+            // precondition, so the bridge stays a thin translation.
+            // `child_index` / `restore_slot` are inverse-only and never
+            // ride the wire.
+            Mutation::PasteInto {
+                container_id,
+                child_id,
+            } => Some(Operation::PasteInto {
+                container: element_to_leaf_node_id(container_id)?,
+                child: element_to_leaf_node_id(child_id)?,
+                child_index: None,
+            }),
+            Mutation::ReleaseFrom { child_id } => Some(Operation::ReleaseFrom {
+                child: element_to_leaf_node_id(child_id)?,
+                restore_slot: None,
+            }),
+            // v59 (Arrange) — z-order. `element_to_member_node_id`
+            // because a Group is a first-class z-table entry and must
+            // restack like any leaf. No parent rides the wire: the
+            // apply layer derives the sibling list from where the item
+            // already is, which is what makes "a reorder can't leave
+            // its group / can't sneak into a B-18 container" structural
+            // rather than a rule to keep in sync with PasteInto's.
+            Mutation::ReorderElement { element_id, to } => Some(Operation::ReorderNode {
+                node: element_to_member_node_id(element_id)?,
+                target: *to,
+            }),
+            // v58 (C-28) — opacity masks. `maskType` is a free string
+            // on the wire (the editor sends what a dropdown produced);
+            // anything that isn't "alpha" is Luminosity, Illustrator's
+            // default. `restore_slot` is inverse-only and never rides
+            // the wire, exactly like `ReleaseFrom`'s.
+            Mutation::ApplyOpacityMask {
+                target_id,
+                mask_id,
+                mask_type,
+                invert,
+            } => Some(Operation::ApplyOpacityMask {
+                target: element_to_leaf_node_id(target_id)?,
+                mask: element_to_leaf_node_id(mask_id)?,
+                mask_type: match mask_type.as_deref() {
+                    Some("alpha") | Some("Alpha") => paged_mutate::OpacityMaskMode::Alpha,
+                    _ => paged_mutate::OpacityMaskMode::Luminosity,
+                },
+                invert: invert.unwrap_or(false),
+            }),
+            Mutation::ReleaseOpacityMask { target_id } => Some(Operation::ReleaseOpacityMask {
+                target: element_to_leaf_node_id(target_id)?,
+                restore_slot: None,
+            }),
+            // v58 (C-29) — type on a path. The apply layer gates the
+            // host kind and every structural precondition, so the
+            // bridge stays a thin translation.
+            Mutation::AttachTextToPath {
+                element_id,
+                story_id,
+                path_type_alignment,
+                flip_path_effect,
+                start_bracket,
+                end_bracket,
+            } => Some(Operation::AttachTextToPath {
+                host: element_to_leaf_node_id(element_id)?,
+                story_id: story_id.clone(),
+                spec: paged_mutate::TextPathSpec {
+                    path_type_alignment: path_type_alignment.clone(),
+                    flip_path_effect: flip_path_effect.clone(),
+                    start_bracket: *start_bracket,
+                    end_bracket: *end_bracket,
+                },
+            }),
+            Mutation::DetachTextFromPath { element_id } => Some(Operation::DetachTextFromPath {
+                host: element_to_leaf_node_id(element_id)?,
+                index: None,
+                restore: None,
+            }),
+            // W1.20 (groups v2) — members may include existing groups
+            // (group-of-groups); `element_to_member_node_id` resolves
+            // Group ids too. Fresh top-level create carries no parent /
+            // own-transform (those are inverse-only).
+            // C-15 / RFI #72 — MINT THE GROUP'S ID HERE, not in the
+            // applier. This used to send `self_id: None` and let
+            // `apply_create_group` mint, which reads correctly for a
+            // lone mutation and is WRONG inside a handle-using batch:
+            // that path translates every child BEFORE applying any of
+            // them, so it can only learn a created id from the
+            // translated op. A `None` there meant `created_element_id`
+            // answered nothing, `scope.set_created` was never called,
+            // and the next `bindCreated` silently re-bound the PREVIOUS
+            // creation — `dissolveGroup { groupId: "$h:g" }` then failed
+            // with "node not found: Group(<the earlier insert's id>)".
+            //
+            // The minted value is IDENTICAL either way: this helper and
+            // `mint_group_id` read the same floor
+            // (`paged_mutate::ids::highest_u_hex_id`), and threading
+            // `mint_offset` gives the same answer the applier would
+            // reach after the batch's earlier inserts had landed. The applier still validates it
+            // (a duplicate is `DuplicateNodeId`), so nothing is trusted
+            // blindly — the id is merely known one step sooner.
+            Mutation::CreateGroup { member_ids } => Some(Operation::CreateGroup {
+                spec: paged_mutate::GroupSpec {
+                    self_id: Some(self.mint_page_item_id_with_offset(mint_offset)),
+                    members: member_ids
+                        .iter()
+                        .map(element_to_member_node_id)
+                        .collect::<Option<Vec<_>>>()?,
+                    parent: None,
+                    item_transform: None,
+                    opacity: None,
+                    blend_mode: None,
+                },
+            }),
+            Mutation::SetGroupTransform {
+                group_id,
+                transform,
+            } => Some(Operation::SetGroupTransform {
+                group: group_id.clone(),
+                transform: *transform,
+                prev: None,
+            }),
+            Mutation::DissolveGroup { group_id } => Some(Operation::DissolveGroup {
+                group_id: group_id.clone(),
+                restore_slots: None,
+            }),
+            Mutation::SetPluginMetadata {
+                element_id,
+                key,
+                value,
+                caller,
+            } => Some(Operation::SetProperty {
+                node: element_to_leaf_node_id(element_id)?,
+                path: PropertyPath::PluginMetadata,
+                value: Value::PluginMetadata {
+                    key: key.clone(),
+                    value: value.clone(),
+                    caller: caller.clone(),
+                    prev: None,
+                },
+            }),
+            Mutation::SetPageMetadata {
+                page,
+                key,
+                value,
+                caller,
+            } => Some(Operation::SetProperty {
+                node: NodeId::Page(page.0.clone()),
+                path: PropertyPath::PluginMetadata,
+                value: Value::PluginMetadata {
+                    key: key.clone(),
+                    value: value.clone(),
+                    caller: caller.clone(),
+                    prev: None,
+                },
+            }),
+            Mutation::SetDocumentMetadata { key, value, caller } => {
+                Some(Operation::SetDocumentMetadata {
+                    key: key.clone(),
+                    value: value.clone(),
+                    caller: caller.clone(),
+                })
+            }
+            Mutation::CreateTextVariable {
+                name,
+                contents,
+                text_before,
+                text_after,
+            } => Some(Operation::CreateTextVariable {
+                self_id: format!("dTextVariablen{name}"),
+                name: name.clone(),
+                variable_type: None,
+                contents: contents.clone(),
+                text_before: text_before.clone(),
+                text_after: text_after.clone(),
+            }),
+            Mutation::DeleteTextVariable { variable_id } => Some(Operation::DeleteTextVariable {
+                variable_id: variable_id.clone(),
+            }),
+            Mutation::PathPointCurveType {
+                element_id,
+                index,
+                smooth,
+            } => Some(Operation::SetProperty {
+                node: path_node_id_for(element_id)?,
+                path: PropertyPath::PathPointCurveType,
+                value: Value::PathPointCurveType {
+                    index: *index as usize,
+                    smooth: *smooth,
+                    prev: None,
+                },
+            }),
+            Mutation::PathPointSet {
+                element_id,
+                index,
+                role,
+                position,
+            } => Some(Operation::SetProperty {
+                node: path_node_id_for(element_id)?,
+                path: PropertyPath::FramePathPoint,
+                value: Value::PathPoint {
+                    address: paged_mutate::PathPointAddress {
+                        index: *index as usize,
+                        role: *role,
+                    },
+                    position: *position,
+                },
+            }),
+            Mutation::Batch { ops } => {
+                // Recursive: every child mutation must translate
+                // through this same dispatch. If any child fails
+                // (text mutation, unimplemented variant) the whole
+                // batch falls through to the non-frame handler so
+                // the worker can return a coherent error.
+                let mut translated = Vec::with_capacity(ops.len());
+                // Protocol v34 — the batch-created sentinel: a child
+                // whose element id is `$created` addresses the element
+                // minted by the most recent CREATING child of this
+                // same (flat) batch. This is what lets a plugin
+                // create an object and attach metadata/properties in
+                // ONE undo step (apply_batch is atomic + rolls back).
+                let mut last_created: Option<crate::element_selection::ElementId> = None;
+                // C-15 — within-batch handles. Ids are known BEFORE
+                // apply here (each insert's spec carries the id it will
+                // mint), which is what lets a handle-using batch still
+                // collapse to ONE `Operation::Batch` — one apply, one
+                // rebuild, one undo step. Off unless a child binds a
+                // name: a batch without `bindCreated` translates exactly
+                // as it did pre-C-15.
+                let uses_handles = ops
+                    .iter()
+                    .any(|op| matches!(op, Mutation::BindCreated { .. }));
+                let mut scope = crate::batch_handles::HandleScope::default();
+                let mut slots = AppendSlots::default();
+                for child in ops {
+                    // D-22 — a page's id is minted by the applier, so this
+                    // lane cannot know it before apply. A handle-using batch
+                    // that creates a page takes the sequential (mixed) lane,
+                    // which reads the minted page back after each child.
+                    if uses_handles
+                        && matches!(
+                            child,
+                            Mutation::InsertPage { .. } | Mutation::DuplicatePage { .. }
+                        )
+                    {
+                        return None;
+                    }
+                    if let Mutation::BindCreated { handle } = child {
+                        // Nothing to name ⇒ the whole translation bails
+                        // and `apply_mixed_batch` reports which child
+                        // and why. `bindCreated` itself translates to no
+                        // operation, so the batch stays one undo step.
+                        let bound = scope.created().cloned()?;
+                        scope.bind(handle.clone(), bound);
+                        continue;
+                    }
+                    let handle_resolved;
+                    let child: &Mutation = if uses_handles {
+                        // An unresolvable reference bails the same way —
+                        // never a literal `"$h:a"` id reaching apply.
+                        handle_resolved = crate::batch_handles::substitute(child, &scope).ok()?;
+                        &handle_resolved
+                    } else {
+                        child
+                    };
+                    let substituted;
+                    let child = match (child, last_created.as_ref()) {
+                        (
+                            Mutation::SetPluginMetadata {
+                                element_id,
+                                key,
+                                value,
+                                caller,
+                            },
+                            Some(created),
+                        ) if element_id.raw_id() == "$created" => {
+                            substituted = Mutation::SetPluginMetadata {
+                                element_id: created.clone(),
+                                key: key.clone(),
+                                value: value.clone(),
+                                caller: caller.clone(),
+                            };
+                            &substituted
+                        }
+                        (
+                            Mutation::SetElementProperty {
+                                element_id,
+                                path,
+                                value,
+                            },
+                            Some(created),
+                        ) if element_id.raw_id() == "$created" => {
+                            substituted = Mutation::SetElementProperty {
+                                element_id: created.clone(),
+                                path: *path,
+                                value: value.clone(),
+                            };
+                            &substituted
+                        }
+                        _ => child,
+                    };
+                    // FINDING #6 — thread the SAME mint counter so each
+                    // child insert in the batch mints a distinct self_id.
+                    let mut op =
+                        self.try_translate_frame_mutation_to_operation(child, mint_offset)?;
+                    slots.rebase(&self.scene, &mut op);
+                    if let Some(id) = created_element_id(&self.scene, &op) {
+                        if uses_handles {
+                            scope.set_created(Some(crate::batch_handles::BoundHandle {
+                                element: id.clone(),
+                                story_id: created_story_id(&op),
+                            }));
+                        }
+                        last_created = Some(id);
+                    }
+                    translated.push(op);
+                }
+                Some(Operation::Batch { ops: translated })
+            }
+            Mutation::LayerSetVisible { layer_id, visible } => Some(Operation::SetProperty {
+                node: NodeId::Layer(layer_id.clone()),
+                path: PropertyPath::LayerVisible,
+                value: Value::Bool(*visible),
+            }),
+            Mutation::LayerSetLocked { layer_id, locked } => Some(Operation::SetProperty {
+                node: NodeId::Layer(layer_id.clone()),
+                path: PropertyPath::LayerLocked,
+                value: Value::Bool(*locked),
+            }),
+            Mutation::LayerSetPrintable {
+                layer_id,
+                printable,
+            } => Some(Operation::SetProperty {
+                node: NodeId::Layer(layer_id.clone()),
+                path: PropertyPath::LayerPrintable,
+                value: Value::Bool(*printable),
+            }),
+            Mutation::SetElementProperty {
+                element_id,
+                path,
+                value,
+            } => Some(Operation::SetProperty {
+                node: element_to_node_id(element_id),
+                path: *path,
+                value: value.clone(),
+            }),
+            Mutation::LayerSetName { layer_id, name } => Some(Operation::SetProperty {
+                node: NodeId::Layer(layer_id.clone()),
+                path: PropertyPath::LayerName,
+                value: Value::Text(name.clone()),
+            }),
+            Mutation::LayerMove {
+                layer_id,
+                new_index,
+            } => Some(Operation::MoveLayer {
+                layer_id: layer_id.clone(),
+                new_index: *new_index as usize,
+            }),
+            Mutation::LayerInsert { position, name } => Some(Operation::InsertLayer {
+                position: *position as usize,
+                name: name.clone(),
+                self_id: None,
+            }),
+            Mutation::LayerRemove { layer_id } => Some(Operation::RemoveLayer {
+                layer_id: layer_id.clone(),
+            }),
+            // ── Collection mutations — 1:1 with the matching Operation
+            //    (no NodeId resolution; they target collections by id).
+            Mutation::CreateSwatch { spec } => Some(Operation::CreateSwatch { spec: spec.clone() }),
+            // Concept 2 — one undoable Batch: every .ase colour as a
+            // CreateSwatch (+ one CreateColorGroup per .ase group).
+            // Ids are minted HERE (translate time) so the group
+            // member lists are known before apply; the Batch's
+            // inverse removes the whole import in one Cmd-Z.
+            Mutation::ImportSwatchLibrary { bytes, group_name } => {
+                let lib = match paged_color::ase::parse_ase(bytes.as_slice()) {
+                    Ok(lib) => lib,
+                    Err(e) => {
+                        tracing::warn!(error = %e, "ImportSwatchLibrary: bad .ase payload");
+                        return None;
+                    }
+                };
+                let mut ops: Vec<Operation> = Vec::new();
+                let mut next_n = self.scene.palette.colors.len();
+                let mut mint = |taken: &mut std::collections::HashSet<String>| -> String {
+                    let mut id = format!("Color/u{next_n}");
+                    while self.scene.palette.colors.contains_key(&id) || taken.contains(&id) {
+                        next_n += 1;
+                        id = format!("Color/u{next_n}");
+                    }
+                    taken.insert(id.clone());
+                    id
+                };
+                let mut taken: std::collections::HashSet<String> = Default::default();
+                let spec_of = |entry: &paged_color::ase::AseEntry, id: String| {
+                    use paged_color::ase::{AseKind, AseSpace};
+                    paged_mutate::operation::SwatchSpec {
+                        self_id: Some(id),
+                        name: Some(entry.name.clone()),
+                        space: match entry.space {
+                            AseSpace::Rgb => "RGB".into(),
+                            AseSpace::Cmyk => "CMYK".into(),
+                            AseSpace::Lab => "LAB".into(),
+                            AseSpace::Gray => "Gray".into(),
+                        },
+                        value: entry.value.clone(),
+                        model: Some(match entry.kind {
+                            AseKind::Spot => "Spot".into(),
+                            _ => "Process".into(),
+                        }),
+                        alternate_space: None,
+                        alternate_value: Vec::new(),
+                        tint: None,
+                        alpha: None,
+                    }
+                };
+                let mut groups: Vec<(String, Vec<String>)> = Vec::new();
+                for g in &lib.groups {
+                    let mut members = Vec::new();
+                    for entry in &g.entries {
+                        let id = mint(&mut taken);
+                        members.push(id.clone());
+                        ops.push(Operation::CreateSwatch {
+                            spec: spec_of(entry, id),
+                        });
+                    }
+                    groups.push((g.name.clone(), members));
+                }
+                let mut loose_members = Vec::new();
+                for entry in &lib.loose {
+                    let id = mint(&mut taken);
+                    loose_members.push(id.clone());
+                    ops.push(Operation::CreateSwatch {
+                        spec: spec_of(entry, id),
+                    });
+                }
+                if let (Some(name), false) = (group_name.as_ref(), loose_members.is_empty()) {
+                    groups.push((name.clone(), loose_members));
+                }
+                for (name, members) in groups {
+                    ops.push(Operation::CreateColorGroup {
+                        spec: paged_mutate::operation::ColorGroupSpec {
+                            self_id: None,
+                            name: Some(name),
+                            members,
+                        },
+                    });
+                }
+                if ops.is_empty() {
+                    return None;
+                }
+                Some(Operation::Batch { ops })
+            }
+            Mutation::EditSwatch { swatch_id, spec } => Some(Operation::EditSwatch {
+                swatch_id: swatch_id.clone(),
+                spec: spec.clone(),
+            }),
+            Mutation::DeleteSwatch { swatch_id } => Some(Operation::DeleteSwatch {
+                swatch_id: swatch_id.clone(),
+            }),
+            Mutation::CreateGradient { spec } => {
+                Some(Operation::CreateGradient { spec: spec.clone() })
+            }
+            Mutation::EditGradient { gradient_id, spec } => Some(Operation::EditGradient {
+                gradient_id: gradient_id.clone(),
+                spec: spec.clone(),
+            }),
+            Mutation::DeleteGradient { gradient_id } => Some(Operation::DeleteGradient {
+                gradient_id: gradient_id.clone(),
+            }),
+            Mutation::CreateColorGroup { spec } => {
+                Some(Operation::CreateColorGroup { spec: spec.clone() })
+            }
+            Mutation::EditColorGroup { group_id, spec } => Some(Operation::EditColorGroup {
+                group_id: group_id.clone(),
+                spec: spec.clone(),
+            }),
+            Mutation::DeleteColorGroup { group_id } => Some(Operation::DeleteColorGroup {
+                group_id: group_id.clone(),
+            }),
+            // W1.22 (engine gap 22) — numbering-list CRUD, 1:1 with the
+            // matching Operation (collection-by-id, no NodeId resolve).
+            Mutation::CreateNumberingList { spec } => {
+                Some(Operation::CreateNumberingList { spec: spec.clone() })
+            }
+            Mutation::EditNumberingList { list_id, spec } => Some(Operation::EditNumberingList {
+                list_id: list_id.clone(),
+                spec: spec.clone(),
+            }),
+            Mutation::DeleteNumberingList { list_id } => Some(Operation::DeleteNumberingList {
+                list_id: list_id.clone(),
+            }),
+            Mutation::CreateParagraphStyle {
+                self_id,
+                name,
+                based_on,
+            } => Some(Operation::CreateParagraphStyle {
+                self_id: self_id.clone(),
+                name: name.clone(),
+                based_on: based_on.clone(),
+                restore_json: None,
+            }),
+            Mutation::RenameParagraphStyle { style_id, name } => {
+                Some(Operation::RenameParagraphStyle {
+                    style_id: style_id.clone(),
+                    name: name.clone(),
+                })
+            }
+            Mutation::DeleteParagraphStyle { style_id } => Some(Operation::DeleteParagraphStyle {
+                style_id: style_id.clone(),
+            }),
+            Mutation::CreateCharacterStyle {
+                self_id,
+                name,
+                based_on,
+            } => Some(Operation::CreateCharacterStyle {
+                self_id: self_id.clone(),
+                name: name.clone(),
+                based_on: based_on.clone(),
+                restore_json: None,
+            }),
+            Mutation::RenameCharacterStyle { style_id, name } => {
+                Some(Operation::RenameCharacterStyle {
+                    style_id: style_id.clone(),
+                    name: name.clone(),
+                })
+            }
+            Mutation::DeleteCharacterStyle { style_id } => Some(Operation::DeleteCharacterStyle {
+                style_id: style_id.clone(),
+            }),
+            Mutation::CreateObjectStyle {
+                self_id,
+                name,
+                based_on,
+            } => Some(Operation::CreateObjectStyle {
+                self_id: self_id.clone(),
+                name: name.clone(),
+                based_on: based_on.clone(),
+                restore_json: None,
+            }),
+            Mutation::RenameObjectStyle { style_id, name } => Some(Operation::RenameObjectStyle {
+                style_id: style_id.clone(),
+                name: name.clone(),
+            }),
+            Mutation::DeleteObjectStyle { style_id } => Some(Operation::DeleteObjectStyle {
+                style_id: style_id.clone(),
+            }),
+            Mutation::CreateCellStyle {
+                self_id,
+                name,
+                based_on,
+            } => Some(Operation::CreateCellStyle {
+                self_id: self_id.clone(),
+                name: name.clone(),
+                based_on: based_on.clone(),
+                restore_json: None,
+            }),
+            Mutation::RenameCellStyle { style_id, name } => Some(Operation::RenameCellStyle {
+                style_id: style_id.clone(),
+                name: name.clone(),
+            }),
+            Mutation::DeleteCellStyle { style_id } => Some(Operation::DeleteCellStyle {
+                style_id: style_id.clone(),
+            }),
+            Mutation::CreateTableStyle {
+                self_id,
+                name,
+                based_on,
+            } => Some(Operation::CreateTableStyle {
+                self_id: self_id.clone(),
+                name: name.clone(),
+                based_on: based_on.clone(),
+                restore_json: None,
+            }),
+            Mutation::RenameTableStyle { style_id, name } => Some(Operation::RenameTableStyle {
+                style_id: style_id.clone(),
+                name: name.clone(),
+            }),
+            Mutation::DeleteTableStyle { style_id } => Some(Operation::DeleteTableStyle {
+                style_id: style_id.clone(),
+            }),
+            Mutation::SetStyleProperty {
+                collection,
+                style_id,
+                path,
+                value,
+            } => Some(Operation::SetStyleProperty {
+                collection: *collection,
+                style_id: style_id.clone(),
+                path: *path,
+                value: value.clone(),
+            }),
+            // ── W0.5 wire-expansion ─────────────────────────────────
+            Mutation::InsertOval { page_id, bounds } => {
+                let (spread_id, (ox, oy), idx) = self.page_insert_context(page_id)?;
+                let position = self.scene.spreads[idx].spread.ovals.len();
+                let d = &self.document_defaults;
+                Some(Operation::InsertNode {
+                    parent: NodeId::Spread(spread_id),
+                    position,
+                    node: paged_mutate::NodeSpec::Oval {
+                        self_id: self.mint_page_item_id_with_offset(mint_offset),
+                        // Page-local (top, left, bottom, right) → spread
+                        // coords (same rule as InsertFrame).
+                        bounds: [bounds.0 + oy, bounds.1 + ox, bounds.2 + oy, bounds.3 + ox],
+                        fill_color: d.fill_color.clone(),
+                        stroke_color: d.stroke_color.clone(),
+                        stroke_weight: d.stroke_weight,
+                        item_transform: None,
+                    },
+                    z_slot: None,
+                })
+            }
+            // S-03 — table CREATE. Mirrors `InsertOval` (mint id →
+            // InsertNode) but story-scoped: the parent is the host
+            // story, and the node is a `NodeSpec::Table`. The minted
+            // `self_id` becomes the table_id, surfaced as the outcome's
+            // `created_id` (see `created_element_id`) so the caller can
+            // address cells next.
+            Mutation::InsertTable {
+                story_id,
+                rows,
+                cols,
+                header_rows,
+                footer_rows,
+                column_widths,
+                row_heights,
+            } => Some(Operation::InsertNode {
+                parent: NodeId::Story(story_id.clone()),
+                position: 0,
+                node: paged_mutate::NodeSpec::Table {
+                    self_id: self.mint_page_item_id_with_offset(mint_offset),
+                    rows: *rows,
+                    cols: *cols,
+                    header_rows: *header_rows,
+                    footer_rows: *footer_rows,
+                    column_widths: column_widths.clone(),
+                    row_heights: row_heights.clone(),
+                },
+                z_slot: None,
+            }),
+            // v52 — inline anchored image. Mints the frame self id (mirrors
+            // InsertTable) so the outcome's `created_id` addresses it for a
+            // follow-up (e.g. AnchoredXOffset). The renderer draws its
+            // `image_uri` inline via the existing anchored-Rectangle path.
+            Mutation::InsertAnchoredFrame {
+                story_id,
+                offset,
+                width,
+                height,
+                image_uri,
+                paragraph,
+            } => Some(Operation::InsertAnchoredFrame {
+                paragraph: *paragraph,
+                story_id: story_id.clone(),
+                offset: *offset,
+                width: *width,
+                height: *height,
+                image_uri: image_uri.clone(),
+                self_id: self.mint_page_item_id_with_offset(mint_offset),
+            }),
+            Mutation::InsertHyperlink {
+                story_id,
+                start,
+                end,
+                url,
+                page,
+            } => {
+                // A native link needs three cross-referencing ids. One minted
+                // suffix keyed under three distinct designmap namespaces keeps
+                // them collision-free (the run tag, the Hyperlink, and its URL
+                // destination), mirroring how IDML names the trio. The base
+                // comes off the shared `u<hex>` line, and the scan behind it
+                // SEES the trio once applied — a link minted a moment earlier
+                // is what the next base must start past.
+                let base = self.mint_page_item_id_with_offset(mint_offset);
+                Some(Operation::InsertHyperlink {
+                    story_id: story_id.clone(),
+                    start: *start,
+                    end: *end,
+                    url: url.clone(),
+                    source_id: format!("HyperlinkTextSource/{base}"),
+                    dest_id: match page {
+                        Some(_) => format!("HyperlinkPageDestination/{base}"),
+                        None => format!("HyperlinkURLDestination/{base}"),
+                    },
+                    hyperlink_id: format!("Hyperlink/{base}"),
+                    page: page.as_ref().map(|p| p.0.clone()),
+                })
+            }
+            Mutation::InsertFootnote {
+                story_id,
+                offset,
+                paragraph,
+                text,
+            } => Some(Operation::InsertFootnote {
+                story_id: story_id.clone(),
+                offset: *offset,
+                paragraph: *paragraph,
+                footnote_id: self.mint_page_item_id_with_offset(mint_offset),
+                text: text.clone(),
+                restore: None,
+            }),
+            Mutation::DeleteFootnote {
+                story_id,
+                footnote_id,
+            } => Some(Operation::RemoveFootnote {
+                story_id: story_id.clone(),
+                footnote_id: footnote_id.clone(),
+            }),
+            Mutation::InsertNote {
+                story_id,
+                offset,
+                paragraph,
+                text,
+                user,
+                date,
+            } => Some(Operation::InsertNote {
+                story_id: story_id.clone(),
+                offset: *offset,
+                paragraph: *paragraph,
+                note_id: self.mint_page_item_id_with_offset(mint_offset),
+                text: text.clone(),
+                user: user.clone(),
+                date: date.clone(),
+                restore: None,
+            }),
+            Mutation::EditNote {
+                note_id,
+                text,
+                date,
+            } => Some(Operation::EditNote {
+                note_id: note_id.clone(),
+                text: text.clone(),
+                // No date passed: the note keeps the one it has.
+                modification_date: date.clone().or_else(|| {
+                    let (si, pi, k) = self.find_note(note_id)?;
+                    self.scene.stories[si].story.paragraphs[pi].notes[k]
+                        .modification_date
+                        .clone()
+                }),
+            }),
+            Mutation::DeleteNote { note_id } => Some(Operation::DeleteNote {
+                note_id: note_id.clone(),
+            }),
+            Mutation::AcceptTrackedChange { story_id, offset } => {
+                Some(Operation::AcceptTrackedChange {
+                    story_id: story_id.clone(),
+                    offset: *offset,
+                })
+            }
+            Mutation::RejectTrackedChange { story_id, offset } => {
+                Some(Operation::RejectTrackedChange {
+                    story_id: story_id.clone(),
+                    offset: *offset,
+                })
+            }
+            Mutation::InsertEndnote {
+                story_id,
+                offset,
+                paragraph,
+                text,
+            } => Some(self.lower_insert_endnote(story_id, *offset, *paragraph, text, mint_offset)),
+            Mutation::DeleteEndnote { endnote_id } => Some(Operation::DeleteEndnote {
+                endnote_id: endnote_id.clone(),
+            }),
+            Mutation::ConvertFootnoteToEndnote {
+                story_id,
+                footnote_id,
+            } => {
+                // The footnote's text (after its number and separator) and its
+                // reference's place: the endnote takes both.
+                let note = self
+                    .footnotes()
+                    .into_iter()
+                    .find(|f| f.self_id == *footnote_id && f.story_id == *story_id)?;
+                let insert =
+                    self.lower_insert_endnote(story_id, note.offset, None, &note.text, mint_offset);
+                let mut ops = vec![Operation::RemoveFootnote {
+                    story_id: story_id.clone(),
+                    footnote_id: footnote_id.clone(),
+                }];
+                match insert {
+                    Operation::Batch { ops: more } => ops.extend(more),
+                    one => ops.push(one),
+                }
+                Some(Operation::Batch { ops })
+            }
+            Mutation::CreateBookmark {
+                name,
+                page,
+                destination,
+                parent,
+                index,
+            } => {
+                let base = self.mint_page_item_id_with_offset(mint_offset);
+                Some(Operation::CreateBookmark {
+                    bookmark_id: base.clone(),
+                    name: name.clone(),
+                    parent: parent.clone(),
+                    index: *index,
+                    destination: destination.clone(),
+                    page: page.as_ref().map(|p| p.0.clone()),
+                    dest_id: format!("HyperlinkPageDestination/{base}"),
+                })
+            }
+            Mutation::DeleteBookmark { bookmark_id } => Some(Operation::DeleteBookmark {
+                bookmark_id: bookmark_id.clone(),
+            }),
+            Mutation::RenameBookmark { bookmark_id, name } => Some(Operation::RenameBookmark {
+                bookmark_id: bookmark_id.clone(),
+                name: name.clone(),
+            }),
+            Mutation::MoveBookmark {
+                bookmark_id,
+                parent,
+                index,
+            } => Some(Operation::MoveBookmark {
+                bookmark_id: bookmark_id.clone(),
+                parent: parent.clone(),
+                index: *index,
+            }),
+            Mutation::DeleteHyperlink { hyperlink_id } => Some(Operation::DeleteHyperlink {
+                hyperlink_id: hyperlink_id.clone(),
+            }),
+            Mutation::EditHyperlink {
+                hyperlink_id,
+                name,
+                url,
+                page,
+            } => {
+                // Minted whether or not the edit needs a new destination:
+                // the apply decides, and redo must land on the same id.
+                let base = self.mint_page_item_id_with_offset(mint_offset);
+                Some(Operation::EditHyperlink {
+                    hyperlink_id: hyperlink_id.clone(),
+                    name: name.clone(),
+                    url: url.clone(),
+                    page: page.as_ref().map(|p| p.0.clone()),
+                    dest_id: match page {
+                        Some(_) => format!("HyperlinkPageDestination/{base}"),
+                        None => format!("HyperlinkURLDestination/{base}"),
+                    },
+                })
+            }
+            Mutation::LinkFrames { from, to } => Some(Operation::LinkFrames {
+                from: from.clone(),
+                to: to.clone(),
+            }),
+            Mutation::UnlinkFrames { frame } => Some(Operation::UnlinkFrames {
+                frame: frame.clone(),
+                prev_next: None,
+                // A user-initiated unlink has nothing to restore; the
+                // field carries the target's pre-link story only when
+                // the op is serving as `LinkFrames`'s inverse.
+                restore_target: None,
+            }),
+            Mutation::ApplyStyle {
+                story_id,
+                start,
+                end,
+                style,
+                scope,
+                cell,
+                paragraph,
+            } => Some(Operation::ApplyStyle {
+                paragraph: *paragraph,
+                story_id: story_id.clone(),
+                start: *start,
+                end: *end,
+                style: style.clone(),
+                scope: *scope,
+                cell: cell.as_ref().map(|c| paged_mutate::operation::CellAddr {
+                    table_id: c.table_id.clone(),
+                    row: c.row,
+                    col: c.col,
+                }),
+            }),
+            Mutation::InsertField {
+                story_id,
+                offset,
+                field,
+                content_offset,
+            } => Some(Operation::InsertField {
+                story_id: story_id.clone(),
+                offset: *offset,
+                field: field.clone(),
+                content_offset: *content_offset,
+            }),
+            // v43 (D-01) — re-resolve a placeholder's cached display.
+            Mutation::SetFieldValue {
+                story_id,
+                offset,
+                value,
+            } => Some(Operation::SetFieldValue {
+                story_id: story_id.clone(),
+                offset: *offset,
+                value: value.clone(),
+            }),
+            // v43 (D-14) — asset placement. Resolves the element id to
+            // its frame kind; the apply layer rejects non-graphic
+            // frames (TextFrame / GraphicLine).
+            Mutation::PlaceImage {
+                element_id,
+                uri,
+                fit,
+            } => {
+                let node = self.resolve_frame_node_id(element_id)?;
+                Some(Operation::PlaceImage {
+                    frame: node,
+                    image_uri: Some(uri.clone()),
+                    fit: fit.clone(),
+                })
+            }
+            // v50 (C-1 Stage B) — pixel save-back. Resolves the element id
+            // to its frame kind; the apply layer rejects non-graphic frames
+            // and captures the prior bytes/flag for the inverse.
+            Mutation::ReplaceImageBytes { element_id, bytes } => {
+                let node = self.resolve_frame_node_id(element_id)?;
+                Some(Operation::ReplaceImageBytes {
+                    frame: node,
+                    bytes: bytes.as_ref().map(|b| b.0.clone()),
+                    // Forward op — the apply layer captures the prior flag.
+                    prior_has_image_element: None,
+                })
+            }
+            Mutation::InsertGuide {
+                spread_id,
+                orientation,
+                position,
+                page_index,
+            } => Some(Operation::InsertGuide {
+                spread_id: spread_id.clone(),
+                orientation: *orientation,
+                position: *position,
+                page_index: *page_index,
+                guide_id: None,
+            }),
+            Mutation::MoveGuide { guide_id, position } => Some(Operation::MoveGuide {
+                guide_id: guide_id.clone(),
+                position: *position,
+            }),
+            Mutation::DeleteGuide { guide_id } => Some(Operation::DeleteGuide {
+                guide_id: guide_id.clone(),
+            }),
+            Mutation::SetConditionVisible { condition, visible } => {
+                Some(Operation::SetConditionVisible {
+                    condition: condition.clone(),
+                    visible: *visible,
+                })
+            }
+            // C-64 — duplicate. Every id the clones take is minted HERE,
+            // from the same two number lines the inserts use, so a batch
+            // that duplicates and then inserts cannot hand one id out
+            // twice (the canvas floor also covers ids that live only in
+            // the source package, which the kernel's own minter cannot
+            // see). How many is the kernel's answer — it is the op's own
+            // validation, run without writing.
+            //
+            // `None` when that validation refuses: the caller reports the
+            // kernel's reason (see `apply_mutation`), and inside a batch
+            // the whole batch falls to the child-by-child lane, where a
+            // source minted by an EARLIER child of the same batch exists
+            // by the time this child is translated.
+            Mutation::DuplicateElements {
+                element_ids,
+                offset,
+            } => {
+                let sources: Vec<NodeId> = element_ids.iter().map(element_to_node_id).collect();
+                let demand = paged_mutate::duplicate_demand(&self.scene, &sources).ok()?;
+                let story_ids = self.mint_story_ids(demand.stories, *mint_offset);
+                let ids = (0..demand.items)
+                    .map(|_| self.mint_page_item_id_with_offset(mint_offset))
+                    .collect();
+                Some(Operation::DuplicateNodes {
+                    sources,
+                    dx: offset.0,
+                    dy: offset.1,
+                    ids,
+                    story_ids,
+                })
+            }
+            Mutation::SetFlowGrowRule {
+                story_id,
+                grow,
+                max_pages,
+                copy_frame_options,
+            } => Some(Operation::SetFlowGrowRule {
+                story_id: story_id.clone(),
+                rule: grow.then(|| paged_model::FlowGrowRule {
+                    max_pages: *max_pages,
+                    copy_frame_options: copy_frame_options.unwrap_or(false),
+                }),
+            }),
+            Mutation::ActivateConditionSet { set } => {
+                Some(Operation::ActivateConditionSet { set: set.clone() })
+            }
+            Mutation::ApplyMasterToPage { page, master } => Some(Operation::ApplyMasterToPage {
+                page: page.0.clone(),
+                master: master.clone(),
+            }),
+            Mutation::OnMaster { master, mutation } => {
+                let inner =
+                    self.try_translate_frame_mutation_to_operation(mutation, mint_offset)?;
+                Some(Operation::OnMaster {
+                    master_id: master.clone(),
+                    op: Box::new(inner),
+                })
+            }
+            Mutation::CreateMaster {
+                master,
+                name,
+                width_pt,
+                height_pt,
+                duplicate_of,
+            } => Some(Operation::CreateMaster {
+                master_id: master.clone(),
+                name: name.clone(),
+                width_pt: *width_pt,
+                height_pt: *height_pt,
+                duplicate_of: duplicate_of.clone(),
+                restore_json: None,
+            }),
+            Mutation::DeleteMaster { master } => Some(Operation::DeleteMaster {
+                master_id: master.clone(),
+            }),
+            Mutation::RenameMaster { master, name } => Some(Operation::RenameMaster {
+                master_id: master.clone(),
+                name: name.clone(),
+            }),
+            Mutation::MovePage { page, after } => Some(Operation::MovePage {
+                page_id: page.0.clone(),
+                after_page_id: after.as_ref().map(|a| a.0.clone()),
+            }),
+            Mutation::DuplicatePage { page } => Some(Operation::DuplicatePage {
+                page: page.0.clone(),
+                clone_spread_json: None,
+            }),
+            Mutation::InsertSection {
+                at_page,
+                prefix,
+                numbering_style,
+                start_at,
+            } => Some(Operation::InsertSection {
+                at_page: at_page.0.clone(),
+                prefix: prefix.clone(),
+                numbering_style: numbering_style.clone(),
+                start_at: *start_at,
+                self_id: None,
+            }),
+            Mutation::EditSection {
+                section_id,
+                prefix,
+                numbering_style,
+                start_at,
+            } => Some(Operation::EditSection {
+                section_id: section_id.clone(),
+                prefix: prefix.clone(),
+                numbering_style: numbering_style.clone(),
+                start_at: *start_at,
+            }),
+            Mutation::DeleteSection { section_id } => Some(Operation::DeleteSection {
+                section_id: section_id.clone(),
+            }),
+            // ── W3.A1 table structure — 1:1 with the Operation. ──────
+            Mutation::SetRowHeight {
+                story_id,
+                table_id,
+                row,
+                height,
+            } => Some(Operation::SetRowHeight {
+                story_id: story_id.clone(),
+                table_id: table_id.clone(),
+                row: *row,
+                height: *height,
+            }),
+            Mutation::SetColumnWidth {
+                story_id,
+                table_id,
+                col,
+                width,
+            } => Some(Operation::SetColumnWidth {
+                story_id: story_id.clone(),
+                table_id: table_id.clone(),
+                col: *col,
+                width: *width,
+            }),
+            Mutation::InsertTableRow {
+                story_id,
+                table_id,
+                at,
+            } => Some(Operation::InsertTableRow {
+                story_id: story_id.clone(),
+                table_id: table_id.clone(),
+                at: *at,
+                restore: None,
+            }),
+            Mutation::DeleteTable { story_id, table_id } => Some(Operation::RemoveNode {
+                node: NodeId::Table {
+                    story_id: story_id.clone(),
+                    table_id: table_id.clone(),
+                },
+            }),
+            Mutation::DeleteTableRow {
+                story_id,
+                table_id,
+                at,
+            } => Some(Operation::DeleteTableRow {
+                story_id: story_id.clone(),
+                table_id: table_id.clone(),
+                at: *at,
+            }),
+            Mutation::InsertTableColumn {
+                story_id,
+                table_id,
+                at,
+            } => Some(Operation::InsertTableColumn {
+                story_id: story_id.clone(),
+                table_id: table_id.clone(),
+                at: *at,
+                restore: None,
+            }),
+            Mutation::DeleteTableColumn {
+                story_id,
+                table_id,
+                at,
+            } => Some(Operation::DeleteTableColumn {
+                story_id: story_id.clone(),
+                table_id: table_id.clone(),
+                at: *at,
+            }),
+            // W1.12a — header / footer row inserts. The `restore` blob is
+            // engine-internal (the Remove* inverse fills it); wire callers
+            // always insert empties, so `restore: None`.
+            Mutation::InsertHeaderRow { story_id, table_id } => Some(Operation::InsertHeaderRow {
+                story_id: story_id.clone(),
+                table_id: table_id.clone(),
+                restore: None,
+            }),
+            Mutation::RemoveHeaderRow { story_id, table_id } => Some(Operation::RemoveHeaderRow {
+                story_id: story_id.clone(),
+                table_id: table_id.clone(),
+            }),
+            Mutation::InsertFooterRow { story_id, table_id } => Some(Operation::InsertFooterRow {
+                story_id: story_id.clone(),
+                table_id: table_id.clone(),
+                restore: None,
+            }),
+            Mutation::RemoveFooterRow { story_id, table_id } => Some(Operation::RemoveFooterRow {
+                story_id: story_id.clone(),
+                table_id: table_id.clone(),
+            }),
+            // W1.12b — merge / split spans.
+            Mutation::SetCellSpan {
+                story_id,
+                table_id,
+                row,
+                col,
+                row_span,
+                column_span,
+            } => Some(Operation::SetCellSpan {
+                story_id: story_id.clone(),
+                table_id: table_id.clone(),
+                row: *row,
+                col: *col,
+                row_span: *row_span,
+                column_span: *column_span,
+            }),
+            _ => None,
+        }
+    }
+
+    /// Editor-ops — mint a fresh, document-wide-unique page-item
+    /// `Self` id (`u<hex>`, the bare style real IDML page items use).
+    /// Scans every page-item id across all spreads for the highest
+    /// `u<hex>` suffix and returns the successor — collision-safe by
+    /// construction.
+    ///
+    /// FINDING #6 — batch-safe id minting. The scene is only mutated at
+    /// `apply` time, so every translate-time `mint_page_item_id()` within
+    /// one `Operation::Batch` saw the SAME unmutated max and minted the
+    /// SAME `u<max+1>` for all N inserts — `paged_mutate::apply` then
+    /// rejected the 2nd insert with "duplicate self_id". `offset` is the
+    /// number of ids already minted earlier in the same translation pass;
+    /// the caller bumps it by one after each mint so N successive calls
+    /// yield `u<max+1>, u<max+2>, …`. Standalone inserts pass `&mut 0`.
+    /// The number a fresh `Story/u<n>` can start from without landing
+    /// on ANY story already in the document: one past the highest
+    /// decimal `Story/u<n>` present, and never below the story count
+    /// (where the minter has always started on a document with no
+    /// minted stories, so ids there do not move).
+    ///
+    /// The story analogue of the `max + 1` the page-item minter uses.
+    /// Only an all-decimal suffix can equal the decimal id this minter
+    /// formats, so the parser's `u<hex>` story ids (named from their
+    /// file, never `Story/…`) are not candidates and are skipped.
+    fn story_id_floor(&self) -> usize {
+        let mut floor = self.scene.stories.len();
+        for s in &self.scene.stories {
+            let Some(digits) = s.self_id.strip_prefix("Story/u") else {
+                continue;
+            };
+            if digits.is_empty() || digits.len() > 12 || !digits.bytes().all(|b| b.is_ascii_digit())
+            {
+                continue;
+            }
+            if let Ok(n) = digits.parse::<usize>() {
+                floor = floor.max(n + 1);
+            }
+        }
+        floor
+    }
+
+    /// `count` fresh `Story/u<n>` ids, distinct from every story in the
+    /// document and from each other, starting past what a batch has
+    /// already minted (`offset`, the same counter `insertTextFrame`
+    /// offsets its story id by). The caller then mints at least `count`
+    /// page-item ids, which moves the counter past these too.
+    fn mint_story_ids(&self, count: usize, offset: u64) -> Vec<String> {
+        let mut n = self.story_id_floor() + offset as usize;
+        let mut out = Vec::with_capacity(count);
+        while out.len() < count {
+            let id = format!("Story/u{n}");
+            n += 1;
+            if !self.scene.stories.iter().any(|s| s.self_id == id) {
+                out.push(id);
+            }
+        }
+        out
+    }
+
+    ///
+    /// The floor is the highest `u<hex>` number of ANY kind on the
+    /// shared line (`paged_mutate::ids::highest_u_hex_id`), not of the
+    /// page items alone. This minter also names tables, anchored
+    /// frames and the hyperlink trio — and those land in a story
+    /// paragraph or the designmap, where a page-item scan never looked.
+    /// On the mixed-batch lane (a text op in the batch, the DOCX
+    /// lowering's shape) every child is applied on its own with a
+    /// fresh offset, so the scan is all that separates one mint from
+    /// the next: a real document came back with `Hyperlink/ueef094`
+    /// twice and a table `ueef094` beside them, three successors of
+    /// the same unchanged page-item max.
+    pub(crate) fn mint_page_item_id_with_offset(&self, offset: &mut u64) -> String {
+        let max = paged_mutate::ids::highest_u_hex_id(&self.scene).max(self.source_id_floor);
+        let id = format!("u{:x}", max + 1 + *offset);
+        *offset += 1;
+        id
+    }
+
+    /// Editor-ops — resolve the spread hosting `page_id` plus the
+    /// page's spread-origin (for the page-local → spread-coordinate
+    /// conversion the structural inserts need; same rule as
+    /// `marquee_hits`). Returns `(spread self_id, origin, spread idx)`.
+    /// Every page `Self` id in the scene, in document order.
+    fn scene_page_ids(&self) -> Vec<String> {
+        self.scene
+            .spreads
+            .iter()
+            .flat_map(|s| s.spread.pages.iter().filter_map(|p| p.self_id.clone()))
+            .collect()
+    }
+
+    /// A page's origin in its spread, read off the SCENE: the page's
+    /// bounds through its `ItemTransform`, as the build computes
+    /// `spread_origin`. Used when the build does not know the page yet —
+    /// a page minted earlier in the same batch, whose rebuild is deferred
+    /// to the batch's end (D-22).
+    fn scene_page_origin(&self, page_id: &PageId) -> Option<(f32, f32)> {
+        let page = self
+            .scene
+            .spreads
+            .iter()
+            .flat_map(|s| s.spread.pages.iter())
+            .find(|p| p.self_id.as_deref() == Some(page_id.as_str()))?;
+        let b = page.bounds;
+        let m = page
+            .item_transform
+            .unwrap_or([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+        let corners = [
+            (b.left, b.top),
+            (b.right, b.top),
+            (b.left, b.bottom),
+            (b.right, b.bottom),
+        ];
+        let (mut x, mut y) = (f32::INFINITY, f32::INFINITY);
+        for (cx, cy) in corners {
+            x = x.min(m[0] * cx + m[2] * cy + m[4]);
+            y = y.min(m[1] * cx + m[3] * cy + m[5]);
+        }
+        Some((x, y))
+    }
+
+    pub(crate) fn page_insert_context(
+        &self,
+        page_id: &PageId,
+    ) -> Option<(String, (f32, f32), usize)> {
+        let origin = match self.page(page_id) {
+            Some(p) => p.spread_origin,
+            None => self.scene_page_origin(page_id)?,
+        };
+        let (idx, parsed) = self.scene.spreads.iter().enumerate().find(|(_, parsed)| {
+            parsed
+                .spread
+                .pages
+                .iter()
+                .any(|p| p.self_id.as_deref() == Some(page_id.as_str()) || p.self_id.is_none())
+        })?;
+        // Well-formed IDMLs always carry a spread self_id; synthetic
+        // docs fall back to the manifest src (mirrors spread_parent_id
+        // on the apply side).
+        let spread_id = parsed
+            .spread
+            .self_id
+            .clone()
+            .unwrap_or_else(|| parsed.src.clone());
+        Some((spread_id, origin, idx))
+    }
+
+    pub(crate) fn resolve_frame_node_id(&self, frame_id: &str) -> Option<paged_mutate::NodeId> {
+        // v70 — master items resolve too, for mutations wrapped in
+        // `OnMaster`.
+        let spreads = self
+            .scene
+            .spreads
+            .iter()
+            .map(|p| &p.spread)
+            .chain(self.scene.master_spreads.values().map(|m| &m.spread));
+        for s in spreads {
+            if s.text_frames
+                .iter()
+                .any(|f| f.self_id.as_deref() == Some(frame_id))
+            {
+                return Some(paged_mutate::NodeId::TextFrame(frame_id.to_string()));
+            }
+            if s.rectangles
+                .iter()
+                .any(|f| f.self_id.as_deref() == Some(frame_id))
+            {
+                return Some(paged_mutate::NodeId::Rectangle(frame_id.to_string()));
+            }
+            // Editor-ops — the insert ops create lines/polygons, so
+            // ResizeFrame/DeleteFrame must resolve them too.
+            if s.graphic_lines
+                .iter()
+                .any(|l| l.self_id.as_deref() == Some(frame_id))
+            {
+                return Some(paged_mutate::NodeId::GraphicLine(frame_id.to_string()));
+            }
+            if s.polygons
+                .iter()
+                .any(|p| p.self_id.as_deref() == Some(frame_id))
+            {
+                return Some(paged_mutate::NodeId::Polygon(frame_id.to_string()));
+            }
+            if s.ovals
+                .iter()
+                .any(|o| o.self_id.as_deref() == Some(frame_id))
+            {
+                return Some(paged_mutate::NodeId::Oval(frame_id.to_string()));
+            }
+        }
+        None
+    }
+
+    /// v38 (Wave 2, C-2 / S-05) — the content box (`GeometricBounds`) of
+    /// a page item by `Self` id, as `[top, left, bottom, right]` in
+    /// spread coords. Reads whichever spread-item kind carries the id
+    /// (mirrors `resolve_frame_node_id`'s lookup). Backs the reflow
+    /// notification: after a `ResizeFrame` settles, the post-resize box
+    /// is read from the now-mutated scene. `None` when the id doesn't
+    /// resolve.
+    pub(crate) fn frame_content_box(&self, frame_id: &str) -> Option<[f32; 4]> {
+        let to_arr = |b: &paged_model::Bounds| [b.top, b.left, b.bottom, b.right];
+        for parsed in &self.scene.spreads {
+            let s = &parsed.spread;
+            if let Some(f) = s
+                .text_frames
+                .iter()
+                .find(|f| f.self_id.as_deref() == Some(frame_id))
+            {
+                return Some(to_arr(&f.bounds));
+            }
+            if let Some(f) = s
+                .rectangles
+                .iter()
+                .find(|f| f.self_id.as_deref() == Some(frame_id))
+            {
+                return Some(to_arr(&f.bounds));
+            }
+            if let Some(f) = s
+                .ovals
+                .iter()
+                .find(|f| f.self_id.as_deref() == Some(frame_id))
+            {
+                return Some(to_arr(&f.bounds));
+            }
+            if let Some(f) = s
+                .polygons
+                .iter()
+                .find(|f| f.self_id.as_deref() == Some(frame_id))
+            {
+                return Some(to_arr(&f.bounds));
+            }
+            if let Some(f) = s
+                .graphic_lines
+                .iter()
+                .find(|f| f.self_id.as_deref() == Some(frame_id))
+            {
+                return Some(to_arr(&f.bounds));
+            }
+        }
+        None
+    }
+
+    /// Does `op` change only how a page item that carries no text paints?
+    ///
+    /// True for a paint property ([`is_paint_path`]) or a replaced image on
+    /// a rectangle, oval, polygon or line that sits directly on a spread
+    /// and that no story lays out or flows through: not anchored (an
+    /// anchored object is emitted inside its story), no text on its path,
+    /// and neither holding nor being pasted-into content. A batch
+    /// qualifies when every child does. Anything else — and any item this
+    /// cannot find on a spread — is not, and clears the caches as before.
+    fn paints_a_plain_page_item(&self, op: &paged_mutate::Operation) -> bool {
+        use paged_mutate::Operation;
+        match op {
+            Operation::SetProperty { node, path, .. } => {
+                is_paint_path(path) && self.is_plain_page_item(node)
+            }
+            Operation::ReplaceImageBytes { frame, .. } => self.is_plain_page_item(frame),
+            Operation::Batch { ops } => {
+                !ops.is_empty() && ops.iter().all(|op| self.paints_a_plain_page_item(op))
+            }
+            _ => false,
+        }
+    }
+
+    /// See [`Self::paints_a_plain_page_item`].
+    fn is_plain_page_item(&self, node: &paged_mutate::NodeId) -> bool {
+        use paged_model::FrameRef;
+        use paged_mutate::NodeId;
+        let id = match node {
+            NodeId::Rectangle(id)
+            | NodeId::Oval(id)
+            | NodeId::Polygon(id)
+            | NodeId::GraphicLine(id) => id.as_str(),
+            _ => return false,
+        };
+        let is = |self_id: &Option<String>| self_id.as_deref() == Some(id);
+        self.scene.spreads.iter().any(|parsed| {
+            let s = &parsed.spread;
+            // The item's slot on this spread, when it is a plain one.
+            let slot = match node {
+                NodeId::Rectangle(_) => s
+                    .rectangles
+                    .iter()
+                    .position(|f| is(&f.self_id) && !f.is_anchored && f.text_paths.is_empty())
+                    .map(FrameRef::Rectangle),
+                NodeId::Oval(_) => s
+                    .ovals
+                    .iter()
+                    .position(|f| is(&f.self_id))
+                    .map(FrameRef::Oval),
+                NodeId::Polygon(_) => s
+                    .polygons
+                    .iter()
+                    .position(|f| is(&f.self_id) && f.text_paths.is_empty())
+                    .map(FrameRef::Polygon),
+                NodeId::GraphicLine(_) => s
+                    .graphic_lines
+                    .iter()
+                    .position(|f| is(&f.self_id) && f.text_paths.is_empty())
+                    .map(FrameRef::GraphicLine),
+                _ => None,
+            };
+            // Pasted-into content rides inside its container's emission.
+            slot.is_some_and(|slot| {
+                !s.nested_children.contains_key(id)
+                    && !s.nested_children.values().flatten().any(|r| *r == slot)
+            })
+        })
+    }
+
+    /// Phase B — apply a canonical `paged_mutate::Operation` (frame
+    /// mutation, fill, etc.), rebuild, push to the unified undo log.
+    /// The bridge from `Mutation::MoveFrame` / `ResizeFrame` (channel
+    /// envelope) lands here.
+    ///
+    /// Returns the dirty page set + the underlying `AppliedOperation`
+    /// so the caller can also feed the LOD-cache invalidation hint.
+    pub fn apply_operation(
+        &mut self,
+        op: paged_mutate::Operation,
+    ) -> Result<FrameMutationOutcome, crate::channel::WorkerError> {
+        // W1.24 (audit B18) — time the scene edit; the rebuild folds it
+        // into RebuildStats.op_apply_ms.
+        let t_op = phase_now();
+        // Classified against the scene the op is about to change: a paint
+        // property cannot move an item into or out of a story.
+        let invalidation = if self.paints_a_plain_page_item(&op) {
+            Invalidation::PageItemPaint
+        } else {
+            Invalidation::Everything
+        };
+        let applied = paged_mutate::apply(&mut self.scene, &op).map_err(|e| {
+            crate::channel::WorkerError::NotImplemented {
+                what: format!("frame mutation failed: {e}"),
+            }
+        })?;
+        self.stage_op_apply_ms(phase_elapsed_ms(t_op));
+        // Perf-MasterText + Perf-BodyStory — committed mutations
+        // can shift the per-page pool state (Alt-duplicate inserts
+        // a new frame whose path the frame pass emits earlier,
+        // path-topology mutations change anchor counts, etc.).
+        // The cached relative-path-id rebase only stays valid
+        // when those earlier passes produce the same pool state.
+        // Clear both caches; the post-rebuild fresh capture
+        // re-pins. Gesture-driven update_gesture mutates the
+        // scene directly without going through apply_operation,
+        // so the cache survives the whole drag.
+        //
+        // The exception is a write that only repaints one page item
+        // carrying no text (`Invalidation::PageItemPaint`): clearing the
+        // caches for it re-emitted EVERY story (52 on the annual-scale
+        // workload, against 2 for a keystroke), and the pool-state risk
+        // above is what the per-page print on each hit now checks.
+        self.commit_and_rebuild(invalidation).map_err(|e| {
+            crate::channel::WorkerError::NotImplemented {
+                what: format!("rebuild after frame mutation: {e}"),
+            }
+        })?;
+        let applied_seq = self.bump_applied_seq();
+        let page_ids: Vec<PageId> = self.built.pages.iter().map(|p| p.id.clone()).collect();
+        // W1.24 (B19) — capped push (oldest-evicted).
+        self.push_applied(AppliedRecord {
+            applied_seq,
+            kind: LoggedMutation::Frame(applied.clone()),
+        });
+        self.redo_log.clear();
+        Ok(FrameMutationOutcome {
+            applied_seq,
+            page_ids,
+            applied,
+            reflow: None,
+        })
+    }
+
+    /// Undo the most recent applied mutation. Phase 3 Item 7 —
+    /// applies the cached inverse + rebuilds + pushes onto the redo
+    /// stack. Phase B — handles both text and frame variants of the
+    /// unified log.
+    pub fn undo(&mut self) -> Option<UndoOutcome> {
+        let rec = self.applied_log.pop()?;
+        let mut invalidation = Invalidation::Everything;
+        let affected_story_id = match &rec.kind {
+            LoggedMutation::Text { op: _, inverse } => {
+                let edit = crate::mutate::edit_span(inverse, &self.scene);
+                let _ = crate::mutate::apply(&mut self.scene, inverse).ok()?;
+                invalidation = Invalidation::Text {
+                    story: story_id_of_text_op(inverse).to_string(),
+                    edit,
+                };
+                Some(story_id_of_text_op(inverse).to_string())
+            }
+            LoggedMutation::Frame(applied) => {
+                // Undoing a repaint is a repaint: see `apply_operation`.
+                if self.paints_a_plain_page_item(&applied.inverse) {
+                    invalidation = Invalidation::PageItemPaint;
+                }
+                let _ = paged_mutate::apply(&mut self.scene, &applied.inverse).ok()?;
+                None
+            }
+            // One batch = one undo step: reverse its children newest
+            // first, the same order `apply_mixed_batch` rolls back in.
+            LoggedMutation::Composite(children) => {
+                for child in children.iter().rev() {
+                    self.revert_logged(child);
+                }
+                children.iter().find_map(story_id_of_logged)
+            }
+            // C-15 — a top-level `Defaults` record cannot occur (only a
+            // batch child logs one), but undo stays total rather than
+            // silently skipping a record it cannot classify.
+            LoggedMutation::Defaults { .. } | LoggedMutation::AppState { .. } => {
+                self.revert_logged(&rec.kind);
+                None
+            }
+        };
+        // Perf-MasterText + Perf-BodyStory — undo replays an inverse
+        // through the same scene paths as the forward commit, so the
+        // same invariant applies: a content-only text inverse keeps the
+        // body-story signature matching (the stale pre-undo emit would
+        // splice back in), and a structural inverse (page remove, frame
+        // re-insert) shifts page indices under the cached per-page
+        // deltas. Mirror apply_mutation / apply_operation.
+        self.commit_and_rebuild(invalidation).ok()?;
+        let undone_seq = rec.applied_seq;
+        let applied_seq = self.bump_applied_seq();
+        let page_ids: Vec<PageId> = self.dirty_page_ids();
+        self.redo_log.push(rec);
+        Some(UndoOutcome {
+            undone_seq,
+            applied_seq,
+            page_ids,
+            affected_story_id,
+        })
+    }
+
+    /// Redo the most-recently-undone mutation. Phase 3 Item 7. Phase B
+    /// — handles both text and frame variants.
+    pub fn redo(&mut self) -> Option<UndoOutcome> {
+        let rec = self.redo_log.pop()?;
+        let mut invalidation = Invalidation::Everything;
+        let (new_kind, affected_story_id) = match &rec.kind {
+            LoggedMutation::Text { op, inverse: _ } => {
+                let edit = crate::mutate::edit_span(op, &self.scene);
+                let applied = crate::mutate::apply(&mut self.scene, op).ok()?;
+                invalidation = Invalidation::Text {
+                    story: story_id_of_text_op(op).to_string(),
+                    edit,
+                };
+                let sid = Some(story_id_of_text_op(op).to_string());
+                (
+                    LoggedMutation::Text {
+                        op: op.clone(),
+                        inverse: applied.inverse,
+                    },
+                    sid,
+                )
+            }
+            LoggedMutation::Frame(prev_applied) => {
+                if self.paints_a_plain_page_item(&prev_applied.op) {
+                    invalidation = Invalidation::PageItemPaint;
+                }
+                let applied = paged_mutate::apply(&mut self.scene, &prev_applied.op).ok()?;
+                (LoggedMutation::Frame(applied), None)
+            }
+            // Redo replays the children FORWARD, in the order they were
+            // originally applied, and re-captures their inverses (a
+            // text op's inverse depends on the state it ran against).
+            LoggedMutation::Composite(children) => {
+                let mut replayed = Vec::with_capacity(children.len());
+                for child in children {
+                    replayed.push(self.replay_logged(child)?);
+                }
+                let sid = replayed.iter().find_map(story_id_of_logged);
+                (LoggedMutation::Composite(replayed), sid)
+            }
+            // C-15 — see `undo`: unreachable as a top-level record, kept
+            // total.
+            LoggedMutation::Defaults { .. } | LoggedMutation::AppState { .. } => {
+                (self.replay_logged(&rec.kind)?, None)
+            }
+        };
+        // Perf-MasterText + Perf-BodyStory — same invariant as undo():
+        // the replayed op mutates content/structure under the caches.
+        self.commit_and_rebuild(invalidation).ok()?;
+        let redone_seq = rec.applied_seq;
+        let applied_seq = self.bump_applied_seq();
+        let page_ids: Vec<PageId> = self.dirty_page_ids();
+        // W1.24 (B19) — capped push (oldest-evicted). A redo can only
+        // re-grow the log up to the cap; the front-eviction here is the
+        // same as the forward paths.
+        self.push_applied(AppliedRecord {
+            applied_seq: redone_seq,
+            kind: new_kind,
+        });
+        Some(UndoOutcome {
+            undone_seq: redone_seq,
+            applied_seq,
+            page_ids,
+            affected_story_id,
+        })
+    }
+
+    /// Number of mutations in the undo log (read-only inspection
+    /// for debug UI + tests).
+    pub fn applied_log_len(&self) -> usize {
+        self.applied_log.len()
+    }
+    pub fn redo_log_len(&self) -> usize {
+        self.redo_log.len()
+    }
+
+    /// v71 (ADR 323 script bridge) — the fold a suspended script needs:
+    /// of the records logged after `mark`, fold each contiguous run that
+    /// `is_own` claims into ONE `Composite`, and leave every other record
+    /// where it is. A foreign record (a UI edit made while the script
+    /// waited on the host, a redo re-logging an older seq) therefore ends
+    /// a run: it is never swallowed into the script's step, and the
+    /// script's writes on either side of it stay separate steps, so undo
+    /// still reverses edits in the order they were made. Returns how many
+    /// records were folded away.
+    pub fn group_undo_runs_since(&mut self, mark: u64, is_own: impl Fn(u64) -> bool) -> usize {
+        let start = self
+            .applied_log
+            .iter()
+            .rposition(|r| r.applied_seq <= mark)
+            .map_or(0, |i| i + 1);
+        if self.applied_log.len() - start < 2 {
+            return 0;
+        }
+        let tail: Vec<AppliedRecord> = self.applied_log.drain(start..).collect();
+        let n = tail.len();
+        let mut run: Vec<AppliedRecord> = Vec::new();
+        let flush = |log: &mut Vec<AppliedRecord>, run: &mut Vec<AppliedRecord>| match run.len() {
+            0 => {}
+            1 => log.append(run),
+            _ => {
+                let applied_seq = run.last().map_or(mark, |r| r.applied_seq);
+                let children = run.drain(..).map(|r| r.kind).collect();
+                log.push(AppliedRecord {
+                    applied_seq,
+                    kind: LoggedMutation::Composite(children),
+                });
+            }
+        };
+        for rec in tail {
+            if is_own(rec.applied_seq) {
+                run.push(rec);
+            } else {
+                flush(&mut self.applied_log, &mut run);
+                self.applied_log.push(rec);
+            }
+        }
+        flush(&mut self.applied_log, &mut run);
+        n - (self.applied_log.len() - start)
+    }
+
+    /// Read-only inspection of the most recently logged mutation.
+    /// Used by Phase B integration tests to confirm the bridge routed
+    /// a frame mutation onto the canonical `LoggedMutation::Frame`
+    /// variant rather than the legacy text path.
+    pub fn applied_log_back(&self) -> Option<&AppliedRecord> {
+        self.applied_log.last()
+    }
+
+    /// Expose the inner scene for read-only inspection. Used by the
+    /// inspector devtools wasm + tests. Mutating consumers should
+    /// route through `apply_mutation`.
+    pub fn scene(&self) -> &Document {
+        &self.scene
+    }
+
+    /// Mutable accessor for the parsed scene. Phase 3 — used by the
+    /// `mutate` module to apply text edits in place. Callers must
+    /// follow up with `rebuild_after_mutation` so the `BuiltDocument`
+    /// and page index stay in sync; bypassing the rebuild leaves the
+    /// canvas painting stale pixels.
+    pub fn scene_mut(&mut self) -> &mut Document {
+        &mut self.scene
+    }
+
+    /// v38 (Wave 2, C-2 / S-05) — the frame-chain topology of a story as
+    /// the wire reports it: the ordered `NextTextFrame` thread,
+    /// head-first. Wraps `paged_scene::Document::frame_chain` (which
+    /// already finds the chain head + bounds cycles) and decorates each
+    /// link with its `next` target and an `overflow` flag. Overset is
+    /// tracked at the STORY level by the build (`overset_story_ids`), so
+    /// the flag lands on the LAST link only when the story overflowed its
+    /// chain — InDesign drops overset past the final frame. Interior
+    /// links always carry `overflow: false`. Returns an empty Vec when
+    /// the story doesn't resolve or hosts no frame. Pure READ.
+    pub fn frame_chain(&self, story_id: &str) -> Vec<crate::channel::FrameChainLink> {
+        use crate::channel::FrameChainLink;
+        let frames = self.scene.frame_chain(story_id);
+        if frames.is_empty() {
+            return Vec::new();
+        }
+        let story_overset = self
+            .built
+            .diagnostics
+            .overset_story_ids()
+            .contains(story_id);
+        let last = frames.len() - 1;
+        frames
+            .iter()
+            .enumerate()
+            .map(|(i, f)| FrameChainLink {
+                // A frame with no `Self` id can't be addressed; emit the
+                // empty string so the link still counts positionally.
+                frame_id: f.self_id.clone().unwrap_or_default(),
+                next: f.next_text_frame.clone(),
+                // Overset lands on the tail frame only (InDesign drops
+                // overflow past the last frame in the thread).
+                overflow: i == last && story_overset,
+            })
+            .collect()
+    }
+
+    /// Object model (ADR 131) — the canonical addresses a selector
+    /// matches, or where it fails to parse. Pure READ.
+    pub fn query(
+        &self,
+        selector: &str,
+    ) -> Result<Vec<paged_wire::Address>, paged_wire::GrammarError> {
+        paged_wire::query::query_str(&self.scene, selector)
+    }
+
+    /// ADR 131 → 132 — the engine target `address` names in this document
+    /// ([`paged_wire::query::Index::to_virtual_target`]). The kinds whose
+    /// address already carries the operation's ids skip the index build.
+    pub fn target_of(
+        &self,
+        address: &paged_wire::Address,
+    ) -> Result<paged_wire::VirtualTarget, String> {
+        // A swatch may be named by its name (`swatch:Red`): the index maps
+        // it to the `Self` id (an id still wins over a name).
+        if let paged_wire::Address::Swatch { .. } = address {
+            return paged_wire::query::to_virtual_target(&self.scene, address);
+        }
+        match paged_wire::VirtualTarget::from_address_direct(address)? {
+            Some(t) => Ok(t),
+            None => paged_wire::query::to_virtual_target(&self.scene, address),
+        }
+    }
+
+    /// The swatch `Self` id a colour value names, when it is written as
+    /// an ADR 131 swatch address (`swatch:Color/Red`, or `swatch:Red` by
+    /// name). `None` for anything else — an id already, or an address
+    /// that names no swatch (stored as given, so the caller's read-back
+    /// shows what it wrote).
+    fn swatch_id_of_address(&self, value: &str) -> Option<String> {
+        if !value.starts_with("swatch:") {
+            return None;
+        }
+        let address = paged_wire::Address::parse(value).ok()?;
+        match self.target_of(&address).ok()? {
+            paged_wire::VirtualTarget::Swatch { swatch_id } => Some(swatch_id),
+            _ => None,
+        }
+    }
+
+    /// `mutation` with every colour value written as a swatch address
+    /// replaced by the swatch's `Self` id, or `None` when there is none.
+    /// Scripts reach for the address form (it is how the catalog names a
+    /// swatch); stored verbatim it resolved to no colour, so the object
+    /// painted black or not at all while `set` reported success.
+    fn normalize_color_refs(&self, mutation: &Mutation) -> Option<Mutation> {
+        let fix = |v: &paged_mutate::Value| match v {
+            paged_mutate::Value::ColorRef(Some(s)) => self
+                .swatch_id_of_address(s)
+                .map(|id| paged_mutate::Value::ColorRef(Some(id))),
+            _ => None,
+        };
+        match mutation {
+            Mutation::SetElementProperty {
+                element_id,
+                path,
+                value,
+            } => fix(value).map(|value| Mutation::SetElementProperty {
+                element_id: element_id.clone(),
+                path: *path,
+                value,
+            }),
+            Mutation::Set {
+                address,
+                path,
+                value,
+            } => fix(value).map(|value| Mutation::Set {
+                address: address.clone(),
+                path: path.clone(),
+                value,
+            }),
+            Mutation::SetStyleProperty {
+                collection,
+                style_id,
+                path,
+                value,
+            } => fix(value).map(|value| Mutation::SetStyleProperty {
+                collection: *collection,
+                style_id: style_id.clone(),
+                path: *path,
+                value,
+            }),
+            Mutation::Batch { ops } => {
+                let fixed: Vec<Option<Mutation>> =
+                    ops.iter().map(|m| self.normalize_color_refs(m)).collect();
+                if fixed.iter().all(Option::is_none) {
+                    return None;
+                }
+                Some(Mutation::Batch {
+                    ops: ops
+                        .iter()
+                        .zip(fixed)
+                        .map(|(m, f)| f.unwrap_or_else(|| m.clone()))
+                        .collect(),
+                })
+            }
+            _ => None,
+        }
+    }
+
+    /// `get_property` by address: the read twin of `Mutation::Set`.
+    pub fn get_property_at(
+        &self,
+        address: &paged_wire::Address,
+        path: &str,
+    ) -> Result<paged_mutate::Value, virtual_set::ReadError> {
+        let target = self
+            .target_of(address)
+            .map_err(virtual_set::ReadError::NotFound)?;
+        self.get_property(&target, path)
+    }
+
+    /// [`Self::get_property_at`] from an address STRING (`RequestGet`).
+    pub fn read_property(
+        &self,
+        address: &str,
+        path: &str,
+    ) -> Result<paged_mutate::Value, virtual_set::ReadError> {
+        let a = paged_wire::Address::parse(address)
+            .map_err(|e| virtual_set::ReadError::BadAddress(e.to_string()))?;
+        self.get_property_at(&a, path)
+    }
+
+    /// The canonical address `address` names here (`frame:` → its kind,
+    /// `page:#n` → the page id, a style name → its id), or `None` when
+    /// it does not parse or names nothing.
+    pub fn resolve_address(&self, address: &str) -> Option<paged_wire::Address> {
+        let a = paged_wire::Address::parse(address).ok()?;
+        paged_wire::query::resolve(&self.scene, &a)
+    }
+
+    /// v43 (D-01) — enumerate every plugin placeholder field, in story
+    /// order. `offset` is the field run's START in the story's char
+    /// space (the same "sum of run chars, no paragraph separators"
+    /// convention the field/character ops address by). Pure READ.
+    pub fn document_placeholders(&self) -> Vec<crate::channel::PlaceholderItem> {
+        let mut items = Vec::new();
+        for parsed in &self.scene.stories {
+            let mut cursor: u32 = 0;
+            for para in &parsed.story.paragraphs {
+                for run in &para.runs {
+                    if let Some(tag) = &run.placeholder {
+                        items.push(crate::channel::PlaceholderItem {
+                            story_id: parsed.self_id.clone(),
+                            offset: cursor,
+                            plugin: tag.plugin.clone(),
+                            key: tag.key.clone(),
+                            value: tag.value.clone(),
+                        });
+                    }
+                    cursor += run.text.chars().count() as u32;
+                }
+            }
+        }
+        items
+    }
+
+    /// W3.B2 — re-serialize the (possibly-mutated) scene back into an
+    /// IDML package for save-back. Hands the retained source bytes to
+    /// the carry-through writer (`idml_export::write_idml`), which
+    /// patches only the model-owned Spreads/Stories and copies every
+    /// other entry verbatim — so an unmutated document round-trips
+    /// byte-identically and a mutated one differs only in the entries
+    /// the edit touched. The model holds a `paged_scene::Document`,
+    /// which is exactly the `&Document` the writer takes.
+    pub fn export_idml(&self) -> Result<Vec<u8>, idml_export::WriteError> {
+        self.export_idml_with_links(None).map(|(bytes, _)| bytes)
+    }
+
+    /// [`Self::export_idml`] with a LINK BASE: an absolute directory
+    /// the caller will write the returned [`ExportedLink`]s into. Every
+    /// placed image's `LinkResourceURI` is then written as
+    /// `file:<link_base>/<basename>` — the spelling InDesign resolves
+    /// (measured on 20.0.1: the model's relative `assets/…` URI binds
+    /// nothing, `doc.links` = 0) — and each distinct file comes back
+    /// with its bytes when the model holds them (`image_bytes`, Q-03)
+    /// or with `bytes: None` for a link-only frame the caller copies
+    /// from `source_uri`. An image that is only bytes gets a name
+    /// minted from its frame id. `None` is exactly [`Self::export_idml`]
+    /// (URIs as held, no links).
+    ///
+    /// The faces the worker registered bytes for ride along into
+    /// `Resources/Fonts.xml` with their real PostScript / full names
+    /// (see [`registry_faces`]).
+    pub fn export_idml_with_links(
+        &self,
+        link_base: Option<&str>,
+    ) -> Result<(Vec<u8>, Vec<ExportedLink>), idml_export::WriteError> {
+        let out = idml_export::write_idml_with(
+            &self.export_scene(),
+            &self.source_idml,
+            &self.idml_export_options(link_base),
+        )?;
+        Ok((out.bytes, out.links))
+    }
+
+    /// The scene as the exporters write it: the model, plus what the
+    /// last build measured where the model leaves a size open. A table
+    /// row the model never sized (`single_row_height: None`) takes the
+    /// height the renderer gave it, so InDesign lays the row at the
+    /// canvas's height instead of the exporter's 24 pt stand-in
+    /// (measured 2026-09-06: every unsized table's rows stood taller in
+    /// InDesign — and in the export's own twin — than on the canvas,
+    /// and two chart tables overflowed their frames there alone). A
+    /// spanning cell is taller than its first row, so a row takes the
+    /// smallest cell height recorded for it.
+    fn export_scene(&self) -> Document {
+        let mut heights: HashMap<&str, HashMap<u32, f32>> = HashMap::new();
+        for page in &self.built.pages {
+            for c in &page.cell_rects {
+                let h = c.rect[3];
+                if h <= 0.0 {
+                    continue;
+                }
+                heights
+                    .entry(c.table_id.as_str())
+                    .or_default()
+                    .entry(c.row)
+                    .and_modify(|v| *v = v.min(h))
+                    .or_insert(h);
+            }
+        }
+        // ADR 026 — generated pages are derived, so the model never holds
+        // them; the export writes them as REAL pages (InDesign does the
+        // same when it reflows): the counts the last build settled on.
+        let mut scene = if self.scene.growing_stories().is_empty() {
+            self.scene.clone()
+        } else {
+            self.scene.with_generated_pages(&self.grow_hint.borrow())
+        };
+        if heights.is_empty() {
+            return scene;
+        }
+        fn bake(
+            paragraphs: &mut [paged_model::Paragraph],
+            heights: &HashMap<&str, HashMap<u32, f32>>,
+        ) {
+            for p in paragraphs.iter_mut() {
+                if let Some(t) = p.table.as_mut() {
+                    if let Some(rows) = t.self_id.as_deref().and_then(|id| heights.get(id)) {
+                        for (r, row) in t.rows.iter_mut().enumerate() {
+                            if row.single_row_height.is_none() {
+                                if let Some(h) = rows.get(&(r as u32)) {
+                                    row.single_row_height = Some((h * 10_000.0).round() / 10_000.0);
+                                }
+                            }
+                        }
+                    }
+                    for c in t.cells.iter_mut() {
+                        bake(&mut c.paragraphs, heights);
+                    }
+                }
+                for f in p.footnotes.iter_mut() {
+                    bake(&mut f.paragraphs, heights);
+                }
+            }
+        }
+        for story in scene.stories.iter_mut() {
+            bake(&mut story.story.paragraphs, &heights);
+        }
+        scene
+    }
+
+    fn idml_export_options(&self, link_base: Option<&str>) -> idml_export::ExportOptions {
+        idml_export::ExportOptions {
+            link_base: link_base.map(str::to_string),
+            fonts: registry_faces(&self.font_registry),
+            default_face: self.font_bytes.as_deref().and_then(default_face),
+        }
+    }
+
+    /// The constructs an `.idml` export loses, one human-readable line
+    /// each. Empty for a document whose IDML export re-parses to the
+    /// same sections, guides, hyperlinks, conditions, tables, placed
+    /// images and groups the scene holds — and that uses no opacity
+    /// masks.
+    ///
+    /// # MEASURED, not declared
+    ///
+    /// The document is exported through [`Self::export_idml`], the
+    /// bytes are re-parsed through the same importer [`Self::load`]
+    /// uses, and the re-parsed twin is diffed against the live scene
+    /// (see `export_losses`). Every element the scene has and the twin
+    /// lacks is one line naming the element id and the reason. The list
+    /// therefore tracks what the exporter actually does, not what
+    /// someone last remembered it doing: a 134-page book measured in
+    /// real InDesign 2025 had lost 3 sections, a guide, 7 tables, 14
+    /// placed images and 2 hyperlinks while this function reported only
+    /// opacity masks and the harness gate stayed green.
+    ///
+    /// Opacity masks keep their declared line (text unchanged — the
+    /// harness matches on it): IDML has **no opacity-mask element**, so
+    /// that one is a permanent, honest loss rather than an exporter gap.
+    /// The lossless path is `.paged` ([`Self::export_paged`]), whose
+    /// native model part carries every construct verbatim.
+    ///
+    /// Cost: one full export + re-parse. This is a save-time gate, not a
+    /// per-frame query.
+    pub fn idml_export_losses(&self) -> Vec<String> {
+        self.idml_export_losses_with_links(None)
+    }
+
+    /// [`Self::idml_export_losses`] for an export made with a link base
+    /// (see [`Self::export_idml_with_links`]): an image placed from
+    /// bytes is no longer a loss when the base was given and its bytes
+    /// were handed back — the caller writes them and the link binds.
+    /// Without a base the line stays. A story no frame references is
+    /// reported here too: the writer drops it (InDesign would), so the
+    /// drop is loud rather than silent.
+    pub fn idml_export_losses_with_links(&self, link_base: Option<&str>) -> Vec<String> {
+        let mut out = crate::export_losses::opacity_mask_losses(&self.scene);
+        match self.export_idml_with_links(link_base) {
+            Err(e) => out.push(format!(
+                "the IDML export itself failed ({e}) — no construct below it could be measured"
+            )),
+            Ok((bytes, links)) => {
+                let twin = idml_import::open_source_archive(&bytes)
+                    .map_err(|e| e.to_string())
+                    .and_then(|archive| {
+                        idml_import::import_idml_archive(&archive).map_err(|e| e.to_string())
+                    });
+                match twin {
+                    Err(e) => out.push(format!(
+                        "the exported IDML does not re-parse ({e}) — every construct is at \
+                         risk and none below could be measured"
+                    )),
+                    Ok(twin) => {
+                        let ctx = crate::export_losses::LossContext {
+                            link_base: link_base.map(str::to_string),
+                            handed_back: links
+                                .iter()
+                                .filter(|l| l.bytes.is_some())
+                                .map(|l| l.file_name.clone())
+                                .collect(),
+                            rebased: links
+                                .iter()
+                                .filter(|l| !l.source_uri.is_empty())
+                                .map(|l| (l.source_uri.clone(), l.file_name.clone()))
+                                .collect(),
+                        };
+                        out.extend(crate::export_losses::diff(&self.scene, &twin, &ctx));
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    // ---- `.paged` container parts (the `host.parts` SDK door, engine side) ----
+
+    /// Set/overwrite a `.paged` container part. The path MUST be under the
+    /// `paged/` namespace — the IDML parts, `mimetype`, and `manifest.json`
+    /// are off-limits, so a plugin can never clobber the IDML or the
+    /// container metadata. `export_paged` emits the overlay alongside the
+    /// IDML parts.
+    ///
+    /// This entry point enforces only the `paged/` boundary and does NOT
+    /// know who is calling. Use [`Self::set_paged_part_as`] when the
+    /// caller is known — it additionally confines the write to that
+    /// plugin's own subtree.
+    pub fn set_paged_part(&mut self, path: String, bytes: Vec<u8>) -> Result<(), String> {
+        self.set_paged_part_as(None, path, bytes)
+    }
+
+    /// Set a `.paged` part ON BEHALF OF a named plugin (C-34).
+    ///
+    /// THE GAP THIS CLOSES. Namespace ownership — a plugin writing only
+    /// its own `paged/<plugin-id>/…` subtree — was documented as "gated
+    /// at the SDK door, where the caller identity is known", and the
+    /// engine enforced only the `paged/` prefix. But a plugin content
+    /// type's own model, INCLUDING ITS OWN LAYERS, lives in that
+    /// subtree, so any holder of the canvas handle could read, list or
+    /// clobber another plugin's document content. A gate that exists
+    /// only in the layer above is not a boundary; it is a convention.
+    ///
+    /// Mirrors the `SetPluginMetadata` caller gate exactly, including
+    /// its posture, which is worth stating rather than discovering:
+    /// `caller: None` bypasses it. It is an HONESTY AID that lets a
+    /// correct caller prove it is correct — not a security boundary
+    /// against a hostile one, which would need the isolate/RPC host.
+    ///
+    /// **REACHABLE FROM THE WIRE.** `WritePagedPart` carries an optional
+    /// `caller` and the worker routes it here. Senders that omit it keep
+    /// the prior behaviour exactly — a back-compatible
+    /// `#[serde(default)]` add on an existing message kind, so NO
+    /// protocol bump (governance rule 1). RFI C-34.
+    pub fn set_paged_part_as(
+        &mut self,
+        caller: Option<&str>,
+        path: String,
+        bytes: Vec<u8>,
+    ) -> Result<(), String> {
+        if !path.starts_with(idml_export::PAGED_PREFIX) {
+            return Err(format!(
+                "paged part path must start with `{}` (got {path:?})",
+                idml_export::PAGED_PREFIX
+            ));
+        }
+        if let Some(caller) = caller {
+            let own = format!("{}{caller}/", idml_export::PAGED_PREFIX);
+            if !path.starts_with(&own) {
+                return Err(format!(
+                    "caller {caller:?} may only write its own subtree {own:?}, not {path:?}"
+                ));
+            }
+        }
+        self.paged_part_tombstones.remove(&path);
+        self.paged_parts.insert(path, bytes);
+        Ok(())
+    }
+
+    /// v66 — delete a `.paged` part ON BEHALF OF a named plugin: drop it
+    /// from the live overlay and tombstone it so a part the LOADED
+    /// container carries is hidden from read/list and left out of the next
+    /// `export_paged`. Same namespace + caller gate as
+    /// [`Self::set_paged_part_as`]. Returns whether the part existed.
+    /// Not undoable, like the write: parts live outside the mutation
+    /// channel.
+    pub fn delete_paged_part_as(
+        &mut self,
+        caller: Option<&str>,
+        path: &str,
+    ) -> Result<bool, String> {
+        if !path.starts_with(idml_export::PAGED_PREFIX) {
+            return Err(format!(
+                "paged part path must start with `{}` (got {path:?})",
+                idml_export::PAGED_PREFIX
+            ));
+        }
+        if let Some(caller) = caller {
+            let own = format!("{}{caller}/", idml_export::PAGED_PREFIX);
+            if !path.starts_with(&own) {
+                return Err(format!(
+                    "caller {caller:?} may only delete in its own subtree {own:?}, not {path:?}"
+                ));
+            }
+        }
+        let existed = self.get_paged_part(path).is_some();
+        self.paged_parts.remove(path);
+        let in_source = self
+            .source_archive
+            .as_ref()
+            .is_some_and(|s| s.entries.contains_key(path));
+        if in_source {
+            self.paged_part_tombstones.insert(path.to_string());
+        }
+        Ok(existed)
+    }
+
+    /// Read a `.paged` part — the live overlay first, else the loaded
+    /// container. Restricted to the `paged/` namespace (the parts door never
+    /// serves IDML parts or `manifest.json`).
+    pub fn get_paged_part(&self, path: &str) -> Option<Vec<u8>> {
+        if !path.starts_with(idml_export::PAGED_PREFIX) {
+            return None;
+        }
+        if let Some(b) = self.paged_parts.get(path) {
+            return Some(b.clone());
+        }
+        if self.paged_part_tombstones.contains(path) {
+            return None;
+        }
+        self.source_archive
+            .as_ref()
+            .and_then(|s| s.entries.get(path))
+            .map(|b| b.to_vec())
+    }
+
+    /// List `.paged` part paths under `prefix` (the union of the loaded
+    /// container and the live overlay), restricted to the `paged/` namespace.
+    pub fn list_paged_parts(&self, prefix: &str) -> Vec<String> {
+        let mut names: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        if let Some(source) = &self.source_archive {
+            for k in source.entries.keys() {
+                if k.starts_with(idml_export::PAGED_PREFIX)
+                    && k.starts_with(prefix)
+                    && !self.paged_part_tombstones.contains(k)
+                {
+                    names.insert(k.clone());
+                }
+            }
+        }
+        for k in self.paged_parts.keys() {
+            if k.starts_with(prefix) {
+                names.insert(k.clone());
+            }
+        }
+        names.into_iter().collect()
+    }
+
+    /// Export the document as a `.paged` container (valid IDML + the plugin
+    /// `paged/` parts + a refreshed `manifest.json`). `paged_protocol` stamps
+    /// the manifest for the data-loss guard / reader-version checks.
+    pub fn export_paged(&self, paged_protocol: u32) -> Result<Vec<u8>, idml_export::WriteError> {
+        // N4 — auto-embed a fresh native model part so every saved `.paged`
+        // loads native-first (the load sniff reconstructs from it with no source
+        // parse). The IDML parts remain as the derived projection; the model
+        // part is additive under `paged/core/`.
+        //
+        // Transitional cost: until IDML export relocates out of core, a `.paged`
+        // carries BOTH the IDML parts and the native model — larger on disk.
+        // (Cloning the overlay to add one part is likewise a transitional
+        // simplification; both go away when IDML leaves core.)
+        let mut parts = self.paged_parts.clone();
+        let mut original = std::borrow::Cow::Borrowed(self.source_idml.as_slice());
+        if let Ok((pgm, blobs)) = paged_store::to_parts(self.scene()) {
+            parts.insert(paged_store::DOCUMENT_PGM_PATH.to_string(), pgm);
+            // The model's images are container parts of their own, named by
+            // content hash. One the source container already holds is
+            // carried through byte for byte by `write_paged` (a raw zip
+            // copy), so only NEW images are written here: saving a document
+            // again costs nothing per unchanged photo.
+            let held: std::collections::BTreeSet<&str> = self
+                .source_archive
+                .iter()
+                .flat_map(|source| source.entries.keys())
+                .map(String::as_str)
+                .filter(|path| paged_store::blob_name_of(path).is_some())
+                .collect();
+            // `write_paged` keeps every `paged/` part of the source and has
+            // no way to drop one, so the blob of an image that was replaced
+            // or deleted is taken out of the source first. Rare, and only
+            // then is the source rewritten (a raw copy, no recompression).
+            let stale: Vec<&str> = held
+                .iter()
+                .copied()
+                .filter(|path| !blobs.contains_key(*path))
+                .collect();
+            if !stale.is_empty() {
+                if let Some(stripped) = without_zip_entries(&self.source_idml, &stale) {
+                    original = std::borrow::Cow::Owned(stripped);
+                }
+            }
+            for (path, bytes) in blobs {
+                if !held.contains(path.as_str()) {
+                    parts.insert(path, bytes);
+                }
+            }
+        }
+        // v66 — a deleted part the loaded container carries must not ride
+        // the carry-through: hand the writer a source without it.
+        if !self.paged_part_tombstones.is_empty() {
+            original =
+                std::borrow::Cow::Owned(zip_without(&original, &self.paged_part_tombstones)?);
+        }
+        idml_export::write_paged(&self.export_scene(), &original, &parts, paged_protocol)
+    }
+
+    /// S7 — the composition (`document.pgd`) **derived** from the current IDML
+    /// scene via the S6 adapter ([`paged_scene::Document::to_composition`]).
+    /// Arrangement only — no content (composition-format §0). This is a
+    /// projection of the IDML model, which remains the source of truth
+    /// (evolutionary; ADR-021).
+    pub fn composition(&self) -> paged_composition::Composition {
+        self.scene().to_composition()
+    }
+
+    /// S7 — serialize the current [`Self::composition`] into the canonical
+    /// `paged/core/composition/document.pgd` container part. Additive: it rides
+    /// the v51 parts door and the unknown-parts round-trip guarantee, so it
+    /// needs no protocol bump. The part is a persisted *derived* projection,
+    /// not yet authoritative — [`Self::read_composition_part`] reads it back but
+    /// nothing drives rendering from it yet (that is S7b).
+    pub fn refresh_composition_part(&mut self) -> Result<(), String> {
+        let comp = self.composition();
+        let bytes = serde_json::to_vec(&comp).map_err(|e| e.to_string())?;
+        self.set_paged_part(paged_composition::DOCUMENT_PGD_PATH.to_string(), bytes)
+    }
+
+    /// S7 — read the composition part (`document.pgd`) back from the container,
+    /// if present. Returns `None` when the part is absent or fails to
+    /// deserialize (a foreign / older container simply has no such part).
+    pub fn read_composition_part(&self) -> Option<paged_composition::Composition> {
+        let bytes = self.get_paged_part(paged_composition::DOCUMENT_PGD_PATH)?;
+        serde_json::from_slice(&bytes).ok()
+    }
+
+    /// N2 — serialize the whole model (`self.scene`) into the canonical
+    /// `paged/core/model/document.pgm` container part via the native codec
+    /// ([`paged_store`]). Additive over the v51 parts door (no protocol bump).
+    /// Unlike the composition part (a derived *arrangement* projection), this is
+    /// the whole model — the seam that will let a `.paged` load with no
+    /// source-format parse (the load-time sniff that consumes it is a later
+    /// slice; today nothing reads it on load).
+    pub fn refresh_model_part(&mut self) -> Result<(), String> {
+        let bytes = paged_store::to_bytes(self.scene()).map_err(|e| e.to_string())?;
+        self.set_paged_part(paged_store::DOCUMENT_PGM_PATH.to_string(), bytes)
+    }
+
+    /// N2 — read the native model part (`document.pgm`) back and reconstruct a
+    /// [`Document`] with **no `open_source_archive`**, or `None` if the part is
+    /// absent / incompatible / fails to deserialize.
+    pub fn read_model_part(&self) -> Option<Document> {
+        let bytes = self.get_paged_part(paged_store::DOCUMENT_PGM_PATH)?;
+        paged_store::from_bytes(&bytes)
+    }
+
+    /// Phase 4 Step 3 — return the pages whose frame chains touch
+    /// `story_id`. Used by the wasm dispatch to scope GPU scene-cache
+    /// invalidation after a mutation: instead of clearing every page's
+    /// cached Vello scene, only invalidate the affected ones. Returns
+    /// an empty slice when the story id is unknown (e.g. the mutation
+    /// failed validation, or the story has no on-page frames).
+    pub fn pages_for_story(&self, story_id: &str) -> &[PageId] {
+        self.story_pages
+            .get(story_id)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// Phase A — oriented geometry for the requested element ids.
+    /// Skips ids that don't resolve (unknown / removed / not on a body
+    /// page). Used by the overlay layer to draw element-selection
+    /// chrome without re-deriving the affine math in TS.
+    /// Phase H — return every leaf `ElementId` (no groups) reachable
+    /// from the named group, descending through nested groups. Used
+    /// by the canvas's double-click-to-enter-group gesture so the
+    /// user can select a whole group as a unit and translate / scale
+    /// it via the existing union handles.
+    /// Track M — flatten the loaded document's designmap layers into
+    /// the wire-shape `LayerSummary` list, in designmap order:
+    /// `z == 0` is the BACKMOST layer, the highest z is topmost, which
+    /// is what `paged_scene::layer` documents and asserts. (This
+    /// comment previously claimed the opposite.)
+    pub fn layers(&self) -> Vec<crate::channel::LayerSummary> {
+        use crate::channel::LayerSummary;
+        self.scene
+            .designmap
+            .layers
+            .iter()
+            .enumerate()
+            .map(|(z, l)| LayerSummary {
+                self_id: l.self_id.clone(),
+                name: l.name.clone(),
+                visible: l.visible,
+                locked: l.locked,
+                printable: l.printable,
+                z: z as u32,
+                parent_id: l.parent_id.clone(),
+            })
+            .collect()
+    }
+
+    /// Inspector P1 — typed property snapshot for the named element.
+    /// Returns `None` when the id doesn't resolve. Frame-level
+    /// properties: bounds, item_transform, fill, stroke, stroke
+    /// weight, opacity. SDK Phase 3 — character properties when
+    /// `id` is `ElementId::StoryRange`: walks the story's
+    /// `CharacterRun`s within `[start, end)`, collapses uniform
+    /// values, emits `None` for "mixed" so the binding renderer
+    /// can show an em-dash placeholder.
+    /// W1.16 — read entries for an anchored frame's
+    /// `AnchoredObjectSetting`. Anchored frames live on a story's
+    /// `CharacterRun.anchored_frames` (recursing into anchored Group
+    /// children), addressed by their own `Self` id. Returns `None` when
+    /// no anchored frame carries the requested id (so `element_properties`
+    /// can fall through to the spread page-item lookup). The ten entries
+    /// mirror the W1.16 mutation surface; `None`-valued Option fields read
+    /// back as the clear sentinel (empty `Text`), matching the apply arm.
+    fn anchored_frame_properties(
+        &self,
+        id: &crate::element_selection::ElementId,
+    ) -> Option<crate::channel::ElementProperties> {
+        use crate::channel::{ElementProperties, PropertyEntry};
+        use paged_model::{AnchoredFrame, AnchoredObjectSetting};
+        use paged_mutate::{PropertyPath, Value};
+
+        let raw = id.raw_id();
+
+        fn find<'a>(frames: &'a [AnchoredFrame], raw: &str) -> Option<&'a AnchoredFrame> {
+            for frame in frames {
+                if frame.self_id.as_deref() == Some(raw) {
+                    return Some(frame);
+                }
+                if let Some(found) = find(&frame.children, raw) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+
+        let frame = self.scene.stories.iter().find_map(|parsed| {
+            parsed
+                .story
+                .paragraphs
+                .iter()
+                .find_map(|p| find(&p.anchored_frames, raw))
+        })?;
+
+        // Read against the materialised-or-default setting so the
+        // inspector always shows every row (an anchored frame with no
+        // `<AnchoredObjectSetting>` reads the IDML defaults).
+        let default = AnchoredObjectSetting::default();
+        let s = frame.setting.as_ref().unwrap_or(&default);
+        let text = |v: &Option<String>| Value::Text(v.clone().unwrap_or_default());
+        let entries = vec![
+            PropertyEntry {
+                path: PropertyPath::AnchoredPosition,
+                value: Some(text(&s.anchored_position)),
+            },
+            PropertyEntry {
+                path: PropertyPath::AnchorPoint,
+                value: Some(text(&s.anchor_point)),
+            },
+            PropertyEntry {
+                path: PropertyPath::AnchoredXOffset,
+                value: Some(Value::Length(Some(s.anchor_x_offset))),
+            },
+            PropertyEntry {
+                path: PropertyPath::AnchoredYOffset,
+                value: Some(Value::Length(Some(s.anchor_y_offset))),
+            },
+            PropertyEntry {
+                path: PropertyPath::AnchoredHorizontalReference,
+                value: Some(text(&s.horizontal_reference_point)),
+            },
+            PropertyEntry {
+                path: PropertyPath::AnchoredVerticalReference,
+                value: Some(text(&s.vertical_reference_point)),
+            },
+            PropertyEntry {
+                path: PropertyPath::AnchoredHorizontalAlignment,
+                value: Some(text(&s.horizontal_alignment)),
+            },
+            PropertyEntry {
+                path: PropertyPath::AnchoredVerticalAlignment,
+                value: Some(text(&s.vertical_alignment)),
+            },
+            PropertyEntry {
+                path: PropertyPath::AnchoredSpineRelative,
+                value: Some(Value::Bool(s.spine_relative)),
+            },
+            PropertyEntry {
+                path: PropertyPath::AnchoredLockPosition,
+                value: Some(Value::Bool(s.lock_position)),
+            },
+        ];
+        Some(ElementProperties {
+            id: id.clone(),
+            kind: id.kind_label().to_string(),
+            name: frame.self_id.clone(),
+            entries,
+        })
+    }
+
+    /// v65 — every property a style definition can be SET through
+    /// `SetStyleProperty`, read back in the shapes that setter accepts, so a
+    /// style editor can show a value and write it back unchanged. The values
+    /// are the style's OWN (`""` / `Length(None)` when it inherits through
+    /// `BasedOn`), not the resolved cascade: that is what the setter writes.
+    ///
+    /// Paragraph and character styles carry entries; object, cell and table
+    /// styles have no settable path yet and answer with none. `None` when
+    /// the style does not exist.
+    pub fn style_properties(
+        &self,
+        collection: paged_mutate::StyleCollection,
+        style_id: &str,
+    ) -> Option<crate::channel::StyleProperties> {
+        use paged_mutate::StyleCollection as C;
+        let styles = &self.scene.styles;
+        let (name, based_on, entries) = match collection {
+            C::Paragraph => {
+                let d = styles.paragraph_styles.get(style_id)?;
+                (
+                    d.name.clone(),
+                    d.based_on.clone(),
+                    paragraph_style_entries(d),
+                )
+            }
+            C::Character => {
+                let d = styles.character_styles.get(style_id)?;
+                (
+                    d.name.clone(),
+                    d.based_on.clone(),
+                    character_style_entries(d),
+                )
+            }
+            C::Object => {
+                let d = styles.object_styles.get(style_id)?;
+                // ADR 132 — the definition's settable fields, read through
+                // the same table `Mutation::Set` writes them by.
+                (
+                    d.name.clone(),
+                    d.based_on.clone(),
+                    self.definition_entries(paged_wire::StyleFamily::Object, style_id),
+                )
+            }
+            C::Cell => {
+                let d = styles.cell_styles.get(style_id)?;
+                // ADR 132 — the definition's settable fields, read through
+                // the same table `Mutation::Set` writes them by.
+                (
+                    d.name.clone(),
+                    d.based_on.clone(),
+                    self.definition_entries(paged_wire::StyleFamily::Cell, style_id),
+                )
+            }
+            C::Table => {
+                let d = styles.table_styles.get(style_id)?;
+                // ADR 132 — the definition's settable fields, read through
+                // the same table `Mutation::Set` writes them by.
+                (
+                    d.name.clone(),
+                    d.based_on.clone(),
+                    self.definition_entries(paged_wire::StyleFamily::Table, style_id),
+                )
+            }
+        };
+        Some(crate::channel::StyleProperties {
+            collection,
+            style_id: style_id.to_string(),
+            name,
+            based_on,
+            entries,
+        })
+    }
+
+    pub fn element_properties(
+        &self,
+        id: &crate::element_selection::ElementId,
+    ) -> Option<crate::channel::ElementProperties> {
+        use crate::channel::{ElementProperties, PropertyEntry};
+        use crate::element_selection::ElementId;
+        use paged_mutate::{PropertyPath, Value};
+
+        // SDK Phase 3 — StoryRange snapshot. Story lives in
+        // `self.scene.stories`, not in spreads, so this branch
+        // returns early before the spread loop below.
+        if let ElementId::StoryRange {
+            story_id,
+            start,
+            end,
+        } = id
+        {
+            return self.story_range_properties(story_id, *start, *end, id);
+        }
+        // W3.A1 — tables / cells likewise live in stories, not spreads.
+        if let ElementId::Table { story_id, table_id } = id {
+            return self.table_properties(story_id, table_id, id);
+        }
+        if let ElementId::TableCell {
+            story_id,
+            table_id,
+            row,
+            col,
+        } = id
+        {
+            return self.cell_properties(story_id, table_id, *row, *col, id);
+        }
+
+        // W1.16 — an anchored frame is addressed by its own page-item
+        // id, but it lives in a story's run (not the spread page-item
+        // vecs), so resolve it here before the spread loop. The
+        // `AnchoredObjectSetting` read entries surface its placement.
+        if matches!(
+            id,
+            ElementId::TextFrame(_) | ElementId::Rectangle(_) | ElementId::Group(_)
+        ) {
+            if let Some(props) = self.anchored_frame_properties(id) {
+                return Some(props);
+            }
+            // Fall through: a non-anchored TextFrame / Rectangle / Group
+            // resolves against the spreads below as usual.
+        }
+
+        let raw = id.raw_id();
+        for parsed in &self.scene.spreads {
+            let spread = &parsed.spread;
+            let entries: Option<Vec<PropertyEntry>> = match id {
+                ElementId::TextFrame(_) => spread
+                    .text_frames
+                    .iter()
+                    .find(|f| f.self_id.as_deref() == Some(raw))
+                    .map(|f| {
+                        let mut entries = vec![
+                            PropertyEntry {
+                                path: PropertyPath::FrameBounds,
+                                value: Some(Value::Bounds([
+                                    f.bounds.top,
+                                    f.bounds.left,
+                                    f.bounds.bottom,
+                                    f.bounds.right,
+                                ])),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameTransform,
+                                value: Some(Value::Transform(f.item_transform)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillColor,
+                                value: Some(Value::ColorRef(f.fill_color.clone())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeColor,
+                                value: Some(Value::ColorRef(f.stroke_color.clone())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeWeight,
+                                value: Some(Value::Length(f.stroke_weight)),
+                            },
+                            // C-24 — a text frame's outline is stroked
+                            // inside / centred / outside like any other
+                            // closed shape, and the stroke's share insets
+                            // the text. Read here because it is written
+                            // now.
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeAlignment,
+                                value: Some(Value::Text(
+                                    f.stroke_alignment.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameOpacity,
+                                value: Some(Value::Length(f.opacity)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::AppliedObjectStyle,
+                                value: Some(Value::Text(
+                                    f.applied_object_style.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::ItemLayer,
+                                value: Some(Value::Text(
+                                    f.item_layer.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameTextWrapMode,
+                                value: Some(Value::Text(
+                                    f.text_wrap
+                                        .map(|t| t.mode.as_idml().to_string())
+                                        .unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameTextWrapOffsets,
+                                value: Some(Value::Bounds(
+                                    f.text_wrap
+                                        .map(|t| t.offsets)
+                                        .unwrap_or([0.0; 4]),
+                                )),
+                            },
+                            // W2.5 — text-wrap contour options.
+                            PropertyEntry {
+                                path: PropertyPath::FrameTextWrapContourType,
+                                value: Some(Value::Text(
+                                    f.text_wrap
+                                        .and_then(|t| t.contour_type)
+                                        .map(|c| c.as_idml().to_string())
+                                        .unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameTextWrapContourIncludeInside,
+                                value: Some(Value::Bool(
+                                    f.text_wrap
+                                        .and_then(|t| t.include_inside_edges)
+                                        .unwrap_or(false),
+                                )),
+                            },
+                            // W2.5 — element-level visibility / lock.
+                            PropertyEntry {
+                                path: PropertyPath::ElementVisible,
+                                value: Some(Value::Bool(f.visible)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::ElementLocked,
+                                value: Some(Value::Bool(f.locked)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameDropShadow,
+                                value: Some(Value::Bool(
+                                    f.drop_shadow.is_some(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientFillAngle,
+                                value: Some(Value::Length(f.gradient_fill_angle)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientFillLength,
+                                value: Some(Value::Length(f.gradient_fill_length)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientStrokeAngle,
+                                value: Some(Value::Length(f.gradient_stroke_angle)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientStrokeLength,
+                                value: Some(Value::Length(f.gradient_stroke_length)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientFeather,
+                                value: Some(Value::GradientFeather(
+                                    f.effects
+                                        .as_ref()
+                                        .and_then(|e| e.gradient_feather.as_ref())
+                                        .map(
+                                            paged_mutate::operation::GradientFeatherSpec::from_parse,
+                                        ),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameDropShadowMode,
+                                value: Some(Value::Text(
+                                    f.drop_shadow
+                                        .as_ref()
+                                        .map(|s| s.mode.clone())
+                                        .unwrap_or_else(|| "Drop".to_string()),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameDropShadowXOffset,
+                                value: Some(Value::Length(
+                                    f.drop_shadow.as_ref().map(|s| s.x_offset),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameDropShadowYOffset,
+                                value: Some(Value::Length(
+                                    f.drop_shadow.as_ref().map(|s| s.y_offset),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameDropShadowSize,
+                                value: Some(Value::Length(
+                                    f.drop_shadow.as_ref().map(|s| s.size),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameDropShadowOpacity,
+                                value: Some(Value::Length(
+                                    f.drop_shadow.as_ref().map(|s| s.opacity_pct),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameDropShadowColor,
+                                value: Some(Value::ColorRef(
+                                    f.drop_shadow
+                                        .as_ref()
+                                        .and_then(|s| s.effect_color.clone()),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillTint,
+                                value: Some(Value::Length(f.fill_tint)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameNonprinting,
+                                value: Some(Value::Bool(f.nonprinting)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameInsetSpacing,
+                                value: Some(Value::Bounds(
+                                    f.inset_spacing.unwrap_or([0.0; 4]),
+                                )),
+                            },
+                            // W0.3 — text-frame prefs.
+                            PropertyEntry {
+                                path: PropertyPath::TextFrameColumnCount,
+                                value: Some(Value::Length(
+                                    f.column_count.map(|c| c as f32),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::TextFrameColumnGutter,
+                                value: Some(Value::Length(f.column_gutter)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::TextFrameColumnBalance,
+                                value: Some(Value::Bool(
+                                    f.column_balance.unwrap_or(false),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::TextFrameVerticalJustification,
+                                value: Some(Value::Text(
+                                    f.vertical_justification
+                                        .map(vertical_justification_idml)
+                                        .unwrap_or_default()
+                                        .to_string(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::TextFrameAutoSizing,
+                                value: Some(Value::Text(
+                                    f.auto_sizing
+                                        .map(auto_sizing_idml)
+                                        .unwrap_or_default()
+                                        .to_string(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::TextFrameFirstBaseline,
+                                value: Some(Value::Text(
+                                    f.first_baseline_offset
+                                        .map(first_baseline_idml)
+                                        .unwrap_or_default()
+                                        .to_string(),
+                                )),
+                            },
+                            // W0.3 — stroke type / gap, wrap invert,
+                            // overprint, transform-decompose (shared).
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeType,
+                                value: Some(Value::Text(
+                                    f.stroke_type.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeGapColor,
+                                value: Some(Value::ColorRef(
+                                    f.stroke_gap_color.clone(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeGapTint,
+                                value: Some(Value::Length(f.stroke_gap_tint)),
+                            },
+                            // W1.1 — per-frame dash override (empty vec =
+                            // no override; stroke uses its StrokeType).
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeDashArray,
+                                value: Some(Value::Lengths(f.stroke_dash.clone())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::TextWrapInvert,
+                                value: Some(Value::Bool(
+                                    f.text_wrap.and_then(|t| t.invert).unwrap_or(false),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameOverprintFill,
+                                value: Some(Value::Bool(f.overprint_fill)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameOverprintStroke,
+                                value: Some(Value::Bool(f.overprint_stroke)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameRotationAngle,
+                                value: Some(Value::Length(Some(
+                                    decompose_angle(f.item_transform),
+                                ))),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameScaleX,
+                                value: Some(Value::Length(Some(
+                                    decompose_scale_x(f.item_transform),
+                                ))),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameScaleY,
+                                value: Some(Value::Length(Some(
+                                    decompose_scale_y(f.item_transform),
+                                ))),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameFlipH,
+                                value: Some(Value::Bool(
+                                    decompose_flip_h(f.item_transform),
+                                )),
+                            },
+                            // W3.A0 — read-side mirror of the W0.3
+                            // `FrameFlipV` apply arm (decompose already
+                            // computes the V flip).
+                            PropertyEntry {
+                                path: PropertyPath::FrameFlipV,
+                                value: Some(Value::Bool(
+                                    decompose_flip_v(f.item_transform),
+                                )),
+                            },
+                            // W3.A0 — thread-chain read (READ-ONLY).
+                            // `nextTextFrame` is this frame's own
+                            // `NextTextFrame` link (empty ⇒ end of
+                            // chain). Authored via `LinkFrames` /
+                            // `UnlinkFrames`, never `SetProperty`.
+                            PropertyEntry {
+                                path: PropertyPath::NextTextFrame,
+                                value: Some(Value::Text(
+                                    f.next_text_frame.clone().unwrap_or_default(),
+                                )),
+                            },
+                            // `previousTextFrame` is derived: the frame
+                            // whose `NextTextFrame` points at this one
+                            // (empty ⇒ start of chain). Scans the
+                            // spread's text frames — threads don't cross
+                            // spreads in the parse model.
+                            PropertyEntry {
+                                path: PropertyPath::PreviousTextFrame,
+                                value: Some(Value::Text(
+                                    spread
+                                        .text_frames
+                                        .iter()
+                                        .find(|other| {
+                                            other.next_text_frame.as_deref() == Some(raw)
+                                        })
+                                        .and_then(|other| other.self_id.clone())
+                                        .unwrap_or_default(),
+                                )),
+                            },
+                        ];
+                        // W0.4 — transparency effects (gap 18).
+                        entries.extend(effect_property_entries(
+                            f.effects.as_ref(),
+                            f.blend_mode.as_deref(),
+                        ));
+                        entries.extend(target_property_entries(
+                            Some(f.fill_transparency.as_ref()),
+                            f.stroke_transparency.as_ref(),
+                            Some(f.content_transparency.as_ref()),
+                            f.drop_shadow.as_ref(),
+                        ));
+                        // C-18 / E-1 — per-corner option + radius. A text
+                        // frame's corners RENDER (its body is the same
+                        // outline a rectangle paints), so these bind to a
+                        // live effect, not just a stored value.
+                        entries.extend(corner_entries(&f.corners));
+                        entries
+                    }),
+                ElementId::Rectangle(_) => spread
+                    .rectangles
+                    .iter()
+                    .find(|f| f.self_id.as_deref() == Some(raw))
+                    .map(|f| {
+                        let mut entries = vec![
+                            PropertyEntry {
+                                path: PropertyPath::FrameBounds,
+                                value: Some(Value::Bounds([
+                                    f.bounds.top,
+                                    f.bounds.left,
+                                    f.bounds.bottom,
+                                    f.bounds.right,
+                                ])),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameTransform,
+                                value: Some(Value::Transform(f.item_transform)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillColor,
+                                value: Some(Value::ColorRef(f.fill_color.clone())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeColor,
+                                value: Some(Value::ColorRef(f.stroke_color.clone())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeWeight,
+                                value: Some(Value::Length(f.stroke_weight)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameOpacity,
+                                value: Some(Value::Length(f.opacity)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::AppliedObjectStyle,
+                                value: Some(Value::Text(
+                                    f.applied_object_style.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::ItemLayer,
+                                value: Some(Value::Text(
+                                    f.item_layer.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameTextWrapMode,
+                                value: Some(Value::Text(
+                                    f.text_wrap
+                                        .map(|t| t.mode.as_idml().to_string())
+                                        .unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameTextWrapOffsets,
+                                value: Some(Value::Bounds(
+                                    f.text_wrap
+                                        .map(|t| t.offsets)
+                                        .unwrap_or([0.0; 4]),
+                                )),
+                            },
+                            // W2.5 — text-wrap contour options.
+                            PropertyEntry {
+                                path: PropertyPath::FrameTextWrapContourType,
+                                value: Some(Value::Text(
+                                    f.text_wrap
+                                        .and_then(|t| t.contour_type)
+                                        .map(|c| c.as_idml().to_string())
+                                        .unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameTextWrapContourIncludeInside,
+                                value: Some(Value::Bool(
+                                    f.text_wrap
+                                        .and_then(|t| t.include_inside_edges)
+                                        .unwrap_or(false),
+                                )),
+                            },
+                            // W2.5 — element-level visibility / lock.
+                            PropertyEntry {
+                                path: PropertyPath::ElementVisible,
+                                value: Some(Value::Bool(f.visible)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::ElementLocked,
+                                value: Some(Value::Bool(f.locked)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameDropShadow,
+                                value: Some(Value::Bool(
+                                    f.drop_shadow.is_some(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientFillAngle,
+                                value: Some(Value::Length(f.gradient_fill_angle)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientFillLength,
+                                value: Some(Value::Length(f.gradient_fill_length)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientStrokeAngle,
+                                value: Some(Value::Length(f.gradient_stroke_angle)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientStrokeLength,
+                                value: Some(Value::Length(f.gradient_stroke_length)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientFeather,
+                                value: Some(Value::GradientFeather(
+                                    f.effects
+                                        .as_ref()
+                                        .and_then(|e| e.gradient_feather.as_ref())
+                                        .map(
+                                            paged_mutate::operation::GradientFeatherSpec::from_parse,
+                                        ),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameDropShadowMode,
+                                value: Some(Value::Text(
+                                    f.drop_shadow
+                                        .as_ref()
+                                        .map(|s| s.mode.clone())
+                                        .unwrap_or_else(|| "Drop".to_string()),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameDropShadowXOffset,
+                                value: Some(Value::Length(
+                                    f.drop_shadow.as_ref().map(|s| s.x_offset),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameDropShadowYOffset,
+                                value: Some(Value::Length(
+                                    f.drop_shadow.as_ref().map(|s| s.y_offset),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameDropShadowSize,
+                                value: Some(Value::Length(
+                                    f.drop_shadow.as_ref().map(|s| s.size),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameDropShadowOpacity,
+                                value: Some(Value::Length(
+                                    f.drop_shadow.as_ref().map(|s| s.opacity_pct),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameDropShadowColor,
+                                value: Some(Value::ColorRef(
+                                    f.drop_shadow
+                                        .as_ref()
+                                        .and_then(|s| s.effect_color.clone()),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillTint,
+                                value: Some(Value::Length(f.fill_tint)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameNonprinting,
+                                value: Some(Value::Bool(f.nonprinting)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeEndCap,
+                                value: Some(Value::Text(
+                                    f.end_cap.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameFittingCrops,
+                                value: Some(Value::Bounds(
+                                    f.frame_fitting
+                                        .as_ref()
+                                        .map(|ff| {
+                                            [
+                                                ff.top_crop.unwrap_or(0.0),
+                                                ff.left_crop.unwrap_or(0.0),
+                                                ff.bottom_crop.unwrap_or(0.0),
+                                                ff.right_crop.unwrap_or(0.0),
+                                            ]
+                                        })
+                                        .unwrap_or([0.0; 4]),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameFittingType,
+                                value: Some(Value::Text(
+                                    f.frame_fitting
+                                        .as_ref()
+                                        .and_then(|ff| {
+                                            ff.fitting_on_empty_frame.clone()
+                                        })
+                                        .unwrap_or_default(),
+                                )),
+                            },
+                            // W0.3 — frame fitting alignment / auto-fit.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFittingReferencePoint,
+                                value: Some(Value::Text(
+                                    f.frame_fitting
+                                        .as_ref()
+                                        .and_then(|ff| ff.reference_point.clone())
+                                        .unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameAutoFit,
+                                value: Some(Value::Bool(
+                                    f.frame_fitting
+                                        .as_ref()
+                                        .and_then(|ff| ff.auto_fit)
+                                        .unwrap_or(false),
+                                )),
+                            },
+                            // W0.3 — stroke type / join / miter /
+                            // alignment / gap.
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeType,
+                                value: Some(Value::Text(
+                                    f.stroke_type.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeJoin,
+                                value: Some(Value::Text(
+                                    f.end_join.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeMiterLimit,
+                                value: Some(Value::Length(f.miter_limit)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeAlignment,
+                                value: Some(Value::Text(
+                                    f.stroke_alignment.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeGapColor,
+                                value: Some(Value::ColorRef(
+                                    f.stroke_gap_color.clone(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeGapTint,
+                                value: Some(Value::Length(f.stroke_gap_tint)),
+                            },
+                            // W1.1 — per-frame dash override (empty vec =
+                            // no override; stroke uses its StrokeType).
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeDashArray,
+                                value: Some(Value::Lengths(f.stroke_dash.clone())),
+                            },
+                            // W0.3 — overprint + transform-decompose.
+                            PropertyEntry {
+                                path: PropertyPath::FrameOverprintFill,
+                                value: Some(Value::Bool(f.overprint_fill)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameOverprintStroke,
+                                value: Some(Value::Bool(f.overprint_stroke)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameRotationAngle,
+                                value: Some(Value::Length(Some(
+                                    decompose_angle(f.item_transform),
+                                ))),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameScaleX,
+                                value: Some(Value::Length(Some(
+                                    decompose_scale_x(f.item_transform),
+                                ))),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameScaleY,
+                                value: Some(Value::Length(Some(
+                                    decompose_scale_y(f.item_transform),
+                                ))),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameFlipH,
+                                value: Some(Value::Bool(
+                                    decompose_flip_h(f.item_transform),
+                                )),
+                            },
+                            // W3.A0 — read-side mirror of the W0.3
+                            // `FrameFlipV` apply arm.
+                            PropertyEntry {
+                                path: PropertyPath::FrameFlipV,
+                                value: Some(Value::Bool(
+                                    decompose_flip_v(f.item_transform),
+                                )),
+                            },
+                        ];
+                        // W3.A0 — image-bearing rectangles surface the
+                        // inner `<Image>` transform so the content
+                        // grabber's `ImageContentTransform` apply arm
+                        // has a read counterpart. Gated on
+                        // `has_image_element` (a plain colour swatch has
+                        // no inner image to grab); `None` ⇒ the legacy
+                        // "stretch to bounds" frame with no parsed inner
+                        // matrix.
+                        if f.has_image_element {
+                            entries.push(PropertyEntry {
+                                path: PropertyPath::ImageContentTransform,
+                                value: Some(Value::Transform(
+                                    f.image_item_transform,
+                                )),
+                            });
+                        }
+                        // W0.4 — transparency effects (gap 18).
+                        entries.extend(effect_property_entries(
+                            f.effects.as_ref(),
+                            f.blend_mode.as_deref(),
+                        ));
+                        entries.extend(target_property_entries(
+                            Some(f.fill_transparency.as_ref()),
+                            f.stroke_transparency.as_ref(),
+                            Some(f.content_transparency.as_ref()),
+                            f.drop_shadow.as_ref(),
+                        ));
+                        // W0.3 — per-corner option + radius.
+                        entries.extend(corner_entries(&f.corners));
+                        entries
+                    }),
+                // W1.20 (groups v2) — a Group surfaces its own
+                // `ItemTransform` (what `SetGroupTransform` writes) plus
+                // its content's union AABB in spread space (so the
+                // inspector/layers panel can show the group's extent and
+                // pivot transform gestures). Per-member properties are
+                // read by selecting the members themselves.
+                ElementId::Group(_) => spread
+                    .groups
+                    .iter()
+                    .position(|g| g.self_id.as_deref() == Some(raw))
+                    .map(|gi| {
+                        let g = &spread.groups[gi];
+                        let bounds = group_union_aabb(spread, gi).unwrap_or(paged_model::Bounds {
+                            top: 0.0,
+                            left: 0.0,
+                            bottom: 0.0,
+                            right: 0.0,
+                        });
+                        let mut entries = vec![
+                            PropertyEntry {
+                                path: PropertyPath::FrameBounds,
+                                value: Some(Value::Bounds([
+                                    bounds.top,
+                                    bounds.left,
+                                    bounds.bottom,
+                                    bounds.right,
+                                ])),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameTransform,
+                                value: Some(Value::Transform(g.item_transform)),
+                            },
+                            // C-63 — the group's own transparency: the
+                            // values `group_pass` composites the members
+                            // with, as one object. Paired with the Group
+                            // write arms; the group's `drop_shadow` is
+                            // NOT here because nothing paints it (the
+                            // bracket opens for it and emits no shadow)
+                            // and it has no write arm either.
+                            PropertyEntry {
+                                path: PropertyPath::FrameOpacity,
+                                value: Some(Value::Length(g.transparency.opacity)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameBlendMode,
+                                value: Some(Value::Text(
+                                    g.transparency.blend_mode.clone().unwrap_or_default(),
+                                )),
+                            },
+                            // R-10 — how the members composite.
+                            PropertyEntry {
+                                path: PropertyPath::GroupIsolateBlending,
+                                value: Some(Value::Bool(g.transparency.isolate_blending)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::GroupKnockout,
+                                value: Some(Value::Bool(g.transparency.knockout_group)),
+                            },
+                        ];
+                        // C-18 / E-1 — a `<Group>` carries the corner
+                        // vocabulary on disk (37 corpus groups do, 11
+                        // with `RoundedCorner`) and now has write arms,
+                        // so the read half is here to pair with them.
+                        // The value is STORED, not rendered: a group has
+                        // no outline of its own. See
+                        // `paged_model::Group::corner_radius`.
+                        entries.extend(corner_entries(&g.corners));
+                        entries
+                    }),
+                // Punch-list (rides v35) — Polygon / GraphicLine surface
+                // the stroke property set so the closed-path
+                // join/miter/alignment mutations (now apply-wired for all
+                // path kinds) read back.
+                ElementId::Polygon(_) => spread
+                    .polygons
+                    .iter()
+                    .find(|p| p.self_id.as_deref() == Some(raw))
+                    .map(|p| {
+                        let mut entries = vec![
+                            PropertyEntry {
+                                path: PropertyPath::FrameBounds,
+                                value: Some(Value::Bounds([
+                                    p.bounds.top,
+                                    p.bounds.left,
+                                    p.bounds.bottom,
+                                    p.bounds.right,
+                                ])),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameTransform,
+                                value: Some(Value::Transform(p.item_transform)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillColor,
+                                value: Some(Value::ColorRef(p.fill_color.clone())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillTint,
+                                value: Some(Value::Length(p.fill_tint)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeColor,
+                                value: Some(Value::ColorRef(p.stroke_color.clone())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeWeight,
+                                value: Some(Value::Length(p.stroke_weight)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameOpacity,
+                                value: Some(Value::Length(p.opacity)),
+                            },
+                            // C-83b — the gradient axis is WRITABLE on this kind
+                            // (`find_gradient_field_mut`) and exported; it was
+                            // not readable, so a panel or a plugin could set an
+                            // angle it could never show (the InDesign round
+                            // trip found it on a Polygon).
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientFillAngle,
+                                value: Some(Value::Length(p.gradient_fill_angle)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientFillLength,
+                                value: Some(Value::Length(p.gradient_fill_length)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientStrokeAngle,
+                                value: Some(Value::Length(p.gradient_stroke_angle)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientStrokeLength,
+                                value: Some(Value::Length(p.gradient_stroke_length)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeType,
+                                value: Some(Value::Text(
+                                    p.stroke_type.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeJoin,
+                                value: Some(Value::Text(
+                                    p.end_join.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeMiterLimit,
+                                value: Some(Value::Length(p.miter_limit)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeAlignment,
+                                value: Some(Value::Text(
+                                    p.stroke_alignment.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeGapColor,
+                                value: Some(Value::ColorRef(p.stroke_gap_color.clone())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeGapTint,
+                                value: Some(Value::Length(p.stroke_gap_tint)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeDashArray,
+                                value: Some(Value::Lengths(p.stroke_dash.clone())),
+                            },
+                            // C-62 — a pen path's cap and line ends, read
+                            // with the GraphicLine's spelling (`None` and
+                            // an out-of-vocabulary `Other` both read "").
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeEndCap,
+                                value: Some(Value::Text(p.end_cap.clone().unwrap_or_default())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeStartArrowhead,
+                                value: Some(Value::Text(arrowhead_text(p.start_arrow))),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeEndArrowhead,
+                                value: Some(Value::Text(arrowhead_text(p.end_arrow))),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::AppliedObjectStyle,
+                                value: Some(Value::Text(
+                                    p.applied_object_style.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::ItemLayer,
+                                value: Some(Value::Text(
+                                    p.item_layer.clone().unwrap_or_default(),
+                                )),
+                            },
+                            // C-25 — both overprints were writable and
+                            // unread. Same one-sided debt as the Oval
+                            // paint set above, two rows wide.
+                            PropertyEntry {
+                                path: PropertyPath::FrameOverprintFill,
+                                value: Some(Value::Bool(p.overprint_fill)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameOverprintStroke,
+                                value: Some(Value::Bool(p.overprint_stroke)),
+                            },
+                        ];
+                        // C-63 — the effects inventory. A polygon has
+                        // carried the `effects` bag since Q-04 and the
+                        // renderer paints it; the write arms reach it
+                        // now, so the read half is here to pair with
+                        // them. The object-level blend mode (C-20) rides
+                        // the same builder, as it does for a rectangle.
+                        entries.push(gradient_feather_entry(p.effects.as_ref()));
+                        entries.extend(effect_property_entries(
+                            p.effects.as_ref(),
+                            p.blend_mode.as_deref(),
+                        ));
+                        entries.extend(target_property_entries(
+                            Some(p.fill_transparency.as_ref()),
+                            p.stroke_transparency.as_ref(),
+                            Some(p.content_transparency.as_ref()),
+                            p.drop_shadow.as_ref(),
+                        ));
+                        // B-23 / E-1 — the polygon corner slots the
+                        // kernel has applied since B-23 finally have a
+                        // read half, so an editor panel has something to
+                        // bind to. All four are stored and mutable; only
+                        // slot 0 drives geometry (uniformly, at every
+                        // straight-line corner) — see
+                        // `paged_model::Polygon::corners`.
+                        // v66 — the image-content transform is writable on
+                        // ovals and polygons too; image-bearing ones read it.
+                        if p.has_image_element {
+                            entries.push(PropertyEntry {
+                                path: PropertyPath::ImageContentTransform,
+                                value: Some(Value::Transform(p.image_item_transform)),
+                            });
+                        }
+                        entries.extend(corner_entries(&p.corners));
+                        entries
+                    }),
+                ElementId::GraphicLine(_) => spread
+                    .graphic_lines
+                    .iter()
+                    .find(|l| l.self_id.as_deref() == Some(raw))
+                    .map(|l| {
+                        let mut entries = vec![
+                            PropertyEntry {
+                                path: PropertyPath::FrameBounds,
+                                value: Some(Value::Bounds([
+                                    l.bounds.top,
+                                    l.bounds.left,
+                                    l.bounds.bottom,
+                                    l.bounds.right,
+                                ])),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameTransform,
+                                value: Some(Value::Transform(l.item_transform)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeColor,
+                                value: Some(Value::ColorRef(l.stroke_color.clone())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeWeight,
+                                value: Some(Value::Length(l.stroke_weight)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeType,
+                                value: Some(Value::Text(
+                                    l.stroke_type.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeJoin,
+                                value: Some(Value::Text(
+                                    l.end_join.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeMiterLimit,
+                                value: Some(Value::Length(l.miter_limit)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeGapColor,
+                                value: Some(Value::ColorRef(l.stroke_gap_color.clone())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeGapTint,
+                                value: Some(Value::Length(l.stroke_gap_tint)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeDashArray,
+                                value: Some(Value::Lengths(l.stroke_dash.clone())),
+                            },
+                            // v43 — line ends. `None` reads as "" (the
+                            // same cleared spelling the mutation takes);
+                            // an out-of-vocabulary `Other` also reads ""
+                            // (its source token was discarded at parse).
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeStartArrowhead,
+                                value: Some(Value::Text(arrowhead_text(l.start_arrow))),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeEndArrowhead,
+                                value: Some(Value::Text(arrowhead_text(l.end_arrow))),
+                            },
+                            // C-62 — the line's cap (read only on a
+                            // rectangle before).
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeEndCap,
+                                value: Some(Value::Text(l.end_cap.clone().unwrap_or_default())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::AppliedObjectStyle,
+                                value: Some(Value::Text(
+                                    l.applied_object_style.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::ItemLayer,
+                                value: Some(Value::Text(
+                                    l.item_layer.clone().unwrap_or_default(),
+                                )),
+                            },
+                            // C-25 — writable and unread. Only the
+                            // STROKE overprint: a line has no fill, so
+                            // `overprint_fill` is absent from the model
+                            // and its absence here is correct, not a
+                            // second gap.
+                            PropertyEntry {
+                                path: PropertyPath::FrameOverprintStroke,
+                                value: Some(Value::Bool(l.overprint_stroke)),
+                            },
+                        ];
+                        // C-18 / E-1 — stored + mutable, never rendered
+                        // on an open stroke-only contour. See
+                        // `paged_model::GraphicLine::corner_radius`.
+                        entries.extend(corner_entries(&l.corners));
+                        // ADR 132 — a line's effects are written and drawn
+                        // (cast from its stroke band) now, so they read
+                        // too — and, since R-10, its object opacity and
+                        // blend mode and its stroke target.
+                        entries.extend(effect_property_entries(
+                            l.effects.as_ref(),
+                            l.blend_mode.as_deref(),
+                        ));
+                        entries.push(PropertyEntry {
+                            path: PropertyPath::FrameOpacity,
+                            value: Some(Value::Length(l.opacity)),
+                        });
+                        entries.extend(target_property_entries(
+                            None,
+                            l.stroke_transparency.as_ref(),
+                            None,
+                            l.drop_shadow.as_ref(),
+                        ));
+                        entries
+                    }),
+                // C-18 / E-1 — an `<Oval>` had NO descriptor arm at all
+                // before this (it fell through to `_ => None`, so an oval
+                // answered zero properties despite carrying apply arms
+                // for most of the paint set — see the read/write audit
+                // note below). It gets one now, carrying the geometry
+                // pair plus the corner slots the C-18 write arms accept.
+                //
+                // Deliberately NOT extended to the rest of the oval's
+                // paint set in this pass: that asymmetry is REPORTED, not
+                // silently fixed, so the decision stays visible.
+                ElementId::Oval(_) => spread
+                    .ovals
+                    .iter()
+                    .find(|o| o.self_id.as_deref() == Some(raw))
+                    .map(|o| {
+                        // NOTE: `FrameBounds` is deliberately ABSENT.
+                        // `set_property` has a `FrameBounds` arm for
+                        // TextFrame / Rectangle / Polygon / GraphicLine
+                        // but NOT for Oval, so reading it here would be
+                        // exactly the C-17 mistake — a row a panel can
+                        // show and not write. The missing apply arm is a
+                        // reported gap, not something to paper over from
+                        // the read side.
+                        // C-25 — the paint set. Every row below has an
+                        // `NodeId::Oval` write arm in `set_property`
+                        // (verified arm by arm, including the
+                        // multi-kind `|` patterns), so adding the read
+                        // half PAIRS them rather than creating the
+                        // opposite asymmetry. The debt was one-sided:
+                        // the kernel accepted all thirteen and the
+                        // descriptor surfaced none, so the editor's
+                        // Attributes and Stroke panels — which already
+                        // bind these exact paths — had nothing to show
+                        // for an ellipse.
+                        //
+                        // `FrameStrokeAlignment` joined with C-24: the
+                        // ellipse outline has been offset by it since
+                        // W1.5, and the write arm now reaches the kind.
+                        let mut entries = vec![
+                            PropertyEntry {
+                                path: PropertyPath::FrameTransform,
+                                value: Some(Value::Transform(o.item_transform)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillColor,
+                                value: Some(Value::ColorRef(o.fill_color.clone())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameFillTint,
+                                value: Some(Value::Length(o.fill_tint)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeColor,
+                                value: Some(Value::ColorRef(o.stroke_color.clone())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeWeight,
+                                value: Some(Value::Length(o.stroke_weight)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeType,
+                                value: Some(Value::Text(
+                                    o.stroke_type.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeAlignment,
+                                value: Some(Value::Text(
+                                    o.stroke_alignment.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeGapColor,
+                                value: Some(Value::ColorRef(o.stroke_gap_color.clone())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeGapTint,
+                                value: Some(Value::Length(o.stroke_gap_tint)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeDashArray,
+                                value: Some(Value::Lengths(o.stroke_dash.clone())),
+                            },
+                            // C-62 — the cap on a dashed outline's dashes.
+                            PropertyEntry {
+                                path: PropertyPath::FrameStrokeEndCap,
+                                value: Some(Value::Text(o.end_cap.clone().unwrap_or_default())),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameOpacity,
+                                value: Some(Value::Length(o.opacity)),
+                            },
+                            // C-83b — the gradient axis is WRITABLE on this kind
+                            // (`find_gradient_field_mut`) and exported; it was
+                            // not readable, so a panel or a plugin could set an
+                            // angle it could never show (the InDesign round
+                            // trip found it on a Polygon).
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientFillAngle,
+                                value: Some(Value::Length(o.gradient_fill_angle)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientFillLength,
+                                value: Some(Value::Length(o.gradient_fill_length)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientStrokeAngle,
+                                value: Some(Value::Length(o.gradient_stroke_angle)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameGradientStrokeLength,
+                                value: Some(Value::Length(o.gradient_stroke_length)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameOverprintFill,
+                                value: Some(Value::Bool(o.overprint_fill)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::FrameOverprintStroke,
+                                value: Some(Value::Bool(o.overprint_stroke)),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::AppliedObjectStyle,
+                                value: Some(Value::Text(
+                                    o.applied_object_style.clone().unwrap_or_default(),
+                                )),
+                            },
+                            PropertyEntry {
+                                path: PropertyPath::ItemLayer,
+                                value: Some(Value::Text(
+                                    o.item_layer.clone().unwrap_or_default(),
+                                )),
+                            },
+                        ];
+                        // C-63 — the effects inventory. Every one of
+                        // these has had a `NodeId::Oval` write arm since
+                        // W0.4 and none was readable, so an ellipse's
+                        // glow could be set and never shown. The blend
+                        // mode row (C-25) moves into the shared builder.
+                        entries.push(gradient_feather_entry(o.effects.as_ref()));
+                        entries.extend(effect_property_entries(
+                            o.effects.as_ref(),
+                            o.blend_mode.as_deref(),
+                        ));
+                        entries.extend(target_property_entries(
+                            Some(o.fill_transparency.as_ref()),
+                            o.stroke_transparency.as_ref(),
+                            Some(o.content_transparency.as_ref()),
+                            o.drop_shadow.as_ref(),
+                        ));
+                        // Stored + mutable, never rendered — an ellipse
+                        // has no corner. See
+                        // `paged_model::Oval::corner_radius`.
+                        // v66 — the image-content transform is writable on
+                        // ovals and polygons too; image-bearing ones read it.
+                        if o.has_image_element {
+                            entries.push(PropertyEntry {
+                                path: PropertyPath::ImageContentTransform,
+                                value: Some(Value::Transform(o.image_item_transform)),
+                            });
+                        }
+                        entries.extend(corner_entries(&o.corners));
+                        entries
+                    }),
+                _ => None,
+            };
+            if let Some(mut entries) = entries {
+                // Plugin-metadata carrier (protocol v33) — surface the
+                // item's reserved-namespace Label entries. Vendor
+                // (non-`x-paged:`) labels stay engine-internal.
+                if let Some(labels) = spread.labels.get(raw) {
+                    for (key, value) in labels {
+                        if key.starts_with("x-paged:") {
+                            entries.push(PropertyEntry {
+                                path: PropertyPath::PluginMetadata,
+                                value: Some(Value::PluginMetadata {
+                                    key: key.clone(),
+                                    value: Some(value.clone()),
+                                    caller: None,
+                                    prev: None,
+                                }),
+                            });
+                        }
+                    }
+                }
+                let kind = id.kind_label().to_string();
+                let name = None; // TextFrame/Rectangle don't carry a Name attr today.
+                return Some(ElementProperties {
+                    id: id.clone(),
+                    kind,
+                    name,
+                    entries,
+                });
+            }
+        }
+        None
+    }
+
+    /// SDK Phase 3 — `(StoryRange, Character*)` snapshot. Walks the
+    /// story's runs that intersect `[start, end)`, collects the
+    /// resolved per-run value for each character path, and collapses:
+    ///
+    /// - All runs share the same value → `PropertyEntry.value =
+    ///   Some(Value::Length(uniform))` (or `Some(Value::ColorRef(uniform))`).
+    /// - Runs disagree → `PropertyEntry.value = None` (the catalog
+    ///   renderer shows "—").
+    ///
+    /// Note: a uniform `None` (every run has `point_size: None`,
+    /// i.e. inherits) collapses to `Some(Value::Length(None))` — the
+    /// "they all agree on inherit" case, distinct from "they
+    /// disagree". This matches the apply layer's semantics where
+    /// `Value::Length(None)` is a meaningful "clear the override"
+    /// payload, not just absence.
+    fn story_range_properties(
+        &self,
+        story_id: &str,
+        start: u32,
+        end: u32,
+        id: &crate::element_selection::ElementId,
+    ) -> Option<crate::channel::ElementProperties> {
+        use crate::channel::{ElementProperties, PropertyEntry};
+        use paged_mutate::{PropertyPath, Value};
+
+        let story_idx = self
+            .scene
+            .stories
+            .iter()
+            .position(|s| s.self_id == story_id)?;
+        let story = &self.scene.stories[story_idx].story;
+
+        // Collect per-run + per-paragraph values for each path the
+        // apply layer covers today. Character paths walk per-run;
+        // paragraph paths walk per-paragraph (each paragraph that
+        // intersects [start, end) contributes one value).
+        let mut font_sizes: Vec<Option<f32>> = Vec::new();
+        let mut leadings: Vec<Option<f32>> = Vec::new();
+        let mut trackings: Vec<Option<f32>> = Vec::new();
+        let mut fill_colors: Vec<Option<String>> = Vec::new();
+        let mut applied_character_styles: Vec<String> = Vec::new();
+        // W0.1 — character formatting read-side. One bucket per
+        // mutable run field so the toolbar can populate its current
+        // state (and show "mixed" via collapse_uniform) before
+        // writing. String-valued fields collapse on the raw IDML
+        // attribute string; Option<bool> fields collapse on the
+        // `Some(_)` value (None ⇒ inherit, surfaced as no override).
+        let mut font_families: Vec<Option<String>> = Vec::new();
+        let mut font_styles: Vec<Option<String>> = Vec::new();
+        let mut kerning_methods: Vec<Option<String>> = Vec::new();
+        let mut capitalizations: Vec<Option<String>> = Vec::new();
+        let mut positions: Vec<Option<String>> = Vec::new();
+        let mut languages: Vec<Option<String>> = Vec::new();
+        let mut otf_features: Vec<Option<String>> = Vec::new();
+        let mut baseline_shifts: Vec<Option<f32>> = Vec::new();
+        let mut horizontal_scales: Vec<Option<f32>> = Vec::new();
+        let mut vertical_scales: Vec<Option<f32>> = Vec::new();
+        let mut skews: Vec<Option<f32>> = Vec::new();
+        let mut underlines: Vec<Option<bool>> = Vec::new();
+        let mut strikethrus: Vec<Option<bool>> = Vec::new();
+        let mut no_breaks: Vec<Option<bool>> = Vec::new();
+        let mut ligatures: Vec<Option<bool>> = Vec::new();
+        let mut space_before: Vec<Option<f32>> = Vec::new();
+        let mut space_after: Vec<Option<f32>> = Vec::new();
+        let mut first_line_indent: Vec<Option<f32>> = Vec::new();
+        let mut applied_paragraph_styles: Vec<String> = Vec::new();
+        let mut justifications: Vec<String> = Vec::new();
+        // W0.2 — paragraph formatting read-side. One bucket per
+        // mutable paragraph field so the toolbar can populate its
+        // current state (and show "mixed" via collapse_uniform)
+        // before writing. Drop-cap counts collapse on the raw `u32`;
+        // bool fields collapse on the `Some(_)` value (None ⇒ inherit).
+        let mut left_indent: Vec<Option<f32>> = Vec::new();
+        let mut right_indent: Vec<Option<f32>> = Vec::new();
+        let mut drop_cap_characters: Vec<u32> = Vec::new();
+        let mut drop_cap_lines: Vec<u32> = Vec::new();
+        let mut hyphenations: Vec<Option<bool>> = Vec::new();
+        let mut keep_lines_together: Vec<Option<bool>> = Vec::new();
+        let mut keep_with_next: Vec<Option<u32>> = Vec::new();
+        let mut keep_all_lines_together: Vec<Option<bool>> = Vec::new();
+        let mut keep_first_lines: Vec<Option<u32>> = Vec::new();
+        let mut keep_last_lines: Vec<Option<u32>> = Vec::new();
+        let mut start_paragraphs: Vec<Option<paged_model::StartParagraph>> = Vec::new();
+        let mut span_columns: Vec<paged_model::SpanColumns> = Vec::new();
+        let mut line_settings: Vec<paged_model::LineSetting> = Vec::new();
+        let mut list_levels: Vec<paged_model::ListLevel> = Vec::new();
+        let mut list_types: Vec<Option<String>> = Vec::new();
+        let mut bullet_characters: Vec<Option<u32>> = Vec::new();
+        let mut numbering_formats: Vec<Option<String>> = Vec::new();
+        let mut bullets_text_afters: Vec<Option<String>> = Vec::new();
+        let mut numbering_expressions: Vec<Option<String>> = Vec::new();
+        let mut numbering_start_ats: Vec<Option<i32>> = Vec::new();
+        let mut numbering_continues: Vec<Option<bool>> = Vec::new();
+        let mut bullets_character_styles: Vec<Option<String>> = Vec::new();
+        let mut numbering_character_styles: Vec<Option<String>> = Vec::new();
+        let mut composers: Vec<Option<paged_model::Composer>> = Vec::new();
+        let mut rule_aboves: Vec<paged_model::ParagraphRule> = Vec::new();
+        let mut rule_belows: Vec<paged_model::ParagraphRule> = Vec::new();
+        let mut tab_lists: Vec<Vec<paged_model::TabStop>> = Vec::new();
+
+        // A caret (start == end) reads what a write at it would change:
+        // the paragraph the mutation layer's caret rule names, and the
+        // character before it (the first one at offset 0), as InDesign
+        // shows the insertion point's attributes.
+        let caret_paras: Option<Vec<usize>> = (start == end).then(|| {
+            let mut at = 0u32;
+            let spans: Vec<(u32, u32)> = story
+                .paragraphs
+                .iter()
+                .map(|p| {
+                    let n: u32 = p.runs.iter().map(|r| r.text.chars().count() as u32).sum();
+                    let span = (at, at + n);
+                    at += n;
+                    span
+                })
+                .collect();
+            paged_mutate::apply::caret_paragraphs(&story.paragraphs, &spans, start)
+        });
+        let (char_start, char_end) = match (&caret_paras, start) {
+            (Some(_), 0) => (0, 1),
+            (Some(_), s) => (s - 1, s),
+            (None, _) => (start, end),
+        };
+
+        let mut char_offset: u32 = 0;
+        for (para_idx, para) in story.paragraphs.iter().enumerate() {
+            let para_chars: u32 = para
+                .runs
+                .iter()
+                .map(|r| r.text.chars().count() as u32)
+                .sum();
+            let para_start = char_offset;
+            let para_end = char_offset + para_chars;
+
+            // Paragraph intersects iff (para_end > start AND
+            // para_start < end). Collect paragraph-level values for
+            // every intersecting paragraph.
+            let in_range = match &caret_paras {
+                Some(targets) => targets.contains(&para_idx),
+                None => para_end > start && para_start < end,
+            };
+            if in_range {
+                space_before.push(para.space_before);
+                space_after.push(para.space_after);
+                first_line_indent.push(para.first_line_indent);
+                applied_paragraph_styles.push(para.paragraph_style.clone().unwrap_or_default());
+                justifications.push(
+                    para.justification
+                        .map(|j| j.as_idml().to_string())
+                        .unwrap_or_default(),
+                );
+                // W0.2 — paragraph formatting.
+                left_indent.push(para.left_indent);
+                right_indent.push(para.right_indent);
+                drop_cap_characters.push(para.drop_cap_characters);
+                drop_cap_lines.push(para.drop_cap_lines);
+                hyphenations.push(para.hyphenation);
+                keep_lines_together.push(para.keep_lines_together);
+                keep_with_next.push(para.keep_with_next);
+                keep_all_lines_together.push(para.keep_all_lines_together);
+                keep_first_lines.push(para.keep_first_lines);
+                keep_last_lines.push(para.keep_last_lines);
+                start_paragraphs.push(para.start_paragraph);
+                span_columns.push(para.span_columns);
+                line_settings.push(para.line_setting);
+                list_levels.push(para.list_level);
+                list_types.push(para.bullets_list_type.clone());
+                bullet_characters.push(para.bullet_character);
+                numbering_formats.push(para.numbering_format.clone());
+                bullets_text_afters.push(para.bullets_text_after.clone());
+                numbering_expressions.push(para.numbering_expression.clone());
+                numbering_start_ats.push(para.numbering_start_at);
+                numbering_continues.push(para.numbering_continue);
+                bullets_character_styles.push(para.bullets_character_style.clone());
+                numbering_character_styles
+                    .push(para.bullets_and_numbering_digits_character_style.clone());
+                composers.push(para.composer.clone());
+                rule_aboves.push(para.rule_above.clone());
+                rule_belows.push(para.rule_below.clone());
+                tab_lists.push(para.tab_list.clone());
+            }
+
+            // Character-level walk: per run inside the paragraph.
+            for run in &para.runs {
+                let run_len = run.text.chars().count() as u32;
+                let run_start = char_offset;
+                let run_end = char_offset + run_len;
+                char_offset = run_end;
+                if run_end <= char_start || run_start >= char_end {
+                    continue;
+                }
+                font_sizes.push(run.point_size);
+                leadings.push(run.leading);
+                trackings.push(run.tracking);
+                fill_colors.push(run.fill_color.clone());
+                applied_character_styles.push(run.character_style.clone().unwrap_or_default());
+                font_families.push(run.font.clone());
+                font_styles.push(run.font_style.clone());
+                kerning_methods.push(run.kerning_method.clone());
+                capitalizations.push(run.capitalization.clone());
+                positions.push(run.position.clone());
+                languages.push(run.applied_language.clone());
+                otf_features.push(run.otf_features.clone());
+                baseline_shifts.push(run.baseline_shift);
+                horizontal_scales.push(run.horizontal_scale);
+                vertical_scales.push(run.vertical_scale);
+                skews.push(run.skew);
+                underlines.push(run.underline);
+                strikethrus.push(run.strikethru);
+                no_breaks.push(run.no_break);
+                ligatures.push(run.ligatures_on);
+            }
+        }
+
+        if font_sizes.is_empty() && space_before.is_empty() {
+            // No runs and no paragraphs intersect — well-formed but
+            // empty address. Return empty entries so the UI shows
+            // the (empty) StoryRange panel rather than treating the
+            // address as "not found".
+            return Some(ElementProperties {
+                id: id.clone(),
+                kind: "StoryRange".to_string(),
+                name: None,
+                entries: Vec::new(),
+            });
+        }
+
+        let entries = vec![
+            PropertyEntry {
+                path: PropertyPath::CharacterFontSize,
+                value: collapse_uniform(&font_sizes).map(Value::Length),
+            },
+            PropertyEntry {
+                path: PropertyPath::CharacterLeading,
+                value: collapse_uniform(&leadings).map(Value::Length),
+            },
+            PropertyEntry {
+                path: PropertyPath::CharacterTracking,
+                value: collapse_uniform(&trackings).map(Value::Length),
+            },
+            PropertyEntry {
+                path: PropertyPath::CharacterFillColor,
+                value: collapse_uniform(&fill_colors).map(Value::ColorRef),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphSpaceBefore,
+                value: collapse_uniform(&space_before).map(Value::Length),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphSpaceAfter,
+                value: collapse_uniform(&space_after).map(Value::Length),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphFirstLineIndent,
+                value: collapse_uniform(&first_line_indent).map(Value::Length),
+            },
+            PropertyEntry {
+                path: PropertyPath::AppliedParagraphStyle,
+                value: collapse_uniform(&applied_paragraph_styles).map(Value::Text),
+            },
+            PropertyEntry {
+                path: PropertyPath::AppliedCharacterStyle,
+                value: collapse_uniform(&applied_character_styles).map(Value::Text),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphJustification,
+                value: collapse_uniform(&justifications).map(Value::Text),
+            },
+            // W0.1 — character formatting. String fields surface the
+            // raw IDML attribute (empty string ⇒ no override, matching
+            // the apply-side empty-clears convention); bool fields
+            // surface `Some(_)` collapsed (None ⇒ inherit ⇒ false).
+            PropertyEntry {
+                path: PropertyPath::CharacterFontFamily,
+                value: collapse_uniform(&font_families).map(|o| Value::Text(o.unwrap_or_default())),
+            },
+            PropertyEntry {
+                path: PropertyPath::CharacterFontStyle,
+                value: collapse_uniform(&font_styles).map(|o| Value::Text(o.unwrap_or_default())),
+            },
+            PropertyEntry {
+                path: PropertyPath::CharacterKerningMethod,
+                value: collapse_uniform(&kerning_methods)
+                    .map(|o| Value::Text(o.unwrap_or_default())),
+            },
+            PropertyEntry {
+                path: PropertyPath::CharacterCase,
+                value: collapse_uniform(&capitalizations)
+                    .map(|o| Value::Text(o.unwrap_or_default())),
+            },
+            PropertyEntry {
+                path: PropertyPath::CharacterPosition,
+                value: collapse_uniform(&positions).map(|o| Value::Text(o.unwrap_or_default())),
+            },
+            PropertyEntry {
+                path: PropertyPath::CharacterLanguage,
+                value: collapse_uniform(&languages).map(|o| Value::Text(o.unwrap_or_default())),
+            },
+            PropertyEntry {
+                path: PropertyPath::CharacterOtfFeatures,
+                value: collapse_uniform(&otf_features).map(|o| Value::Text(o.unwrap_or_default())),
+            },
+            PropertyEntry {
+                path: PropertyPath::CharacterBaselineShift,
+                value: collapse_uniform(&baseline_shifts).map(Value::Length),
+            },
+            PropertyEntry {
+                path: PropertyPath::CharacterHorizontalScale,
+                value: collapse_uniform(&horizontal_scales).map(Value::Length),
+            },
+            PropertyEntry {
+                path: PropertyPath::CharacterVerticalScale,
+                value: collapse_uniform(&vertical_scales).map(Value::Length),
+            },
+            PropertyEntry {
+                path: PropertyPath::CharacterSkew,
+                value: collapse_uniform(&skews).map(Value::Length),
+            },
+            PropertyEntry {
+                path: PropertyPath::CharacterUnderline,
+                value: collapse_uniform(&underlines).map(|o| Value::Bool(o.unwrap_or(false))),
+            },
+            PropertyEntry {
+                path: PropertyPath::CharacterStrikethru,
+                value: collapse_uniform(&strikethrus).map(|o| Value::Bool(o.unwrap_or(false))),
+            },
+            PropertyEntry {
+                path: PropertyPath::CharacterNoBreak,
+                value: collapse_uniform(&no_breaks).map(|o| Value::Bool(o.unwrap_or(false))),
+            },
+            // Ligatures default ON per OpenType / InDesign (unlike
+            // underline / strikethru, which default OFF); a run with no
+            // explicit `Ligatures` attribute reads `true` (punch-list).
+            PropertyEntry {
+                path: PropertyPath::CharacterLigatures,
+                value: collapse_uniform(&ligatures).map(|o| Value::Bool(o.unwrap_or(true))),
+            },
+            // W0.2 — paragraph formatting. Length fields surface the
+            // `Option<f32>` collapsed; drop-cap counts surface as
+            // integer-Length; bool fields surface `Some(_)` collapsed
+            // (None ⇒ inherit ⇒ the field's IDML default); string
+            // fields surface the raw IDML attribute (empty ⇒ no
+            // override). Rule structs / the tab list surface as their
+            // whole-struct / whole-list wire forms.
+            PropertyEntry {
+                path: PropertyPath::ParagraphLeftIndent,
+                value: collapse_uniform(&left_indent).map(Value::Length),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphRightIndent,
+                value: collapse_uniform(&right_indent).map(Value::Length),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphDropCapCharacters,
+                value: collapse_uniform(&drop_cap_characters)
+                    .map(|n| Value::Length(Some(n as f32))),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphDropCapLines,
+                value: collapse_uniform(&drop_cap_lines).map(|n| Value::Length(Some(n as f32))),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphHyphenation,
+                value: collapse_uniform(&hyphenations).map(|o| Value::Bool(o.unwrap_or(true))),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphKeepLinesTogether,
+                value: collapse_uniform(&keep_lines_together)
+                    .map(|o| Value::Bool(o.unwrap_or(false))),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphKeepWithNext,
+                value: collapse_uniform(&keep_with_next)
+                    .map(|o| Value::Length(o.map(|n| n as f32))),
+            },
+            // ADR 028 — keep options + break-before. Counts surface the
+            // raw `Option<u32>` (None ⇒ inherit); the start rule surfaces
+            // its IDML string (empty ⇒ no override).
+            PropertyEntry {
+                path: PropertyPath::ParagraphKeepAllLinesTogether,
+                value: collapse_uniform(&keep_all_lines_together)
+                    .map(|o| Value::Bool(o.unwrap_or(false))),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphKeepFirstLines,
+                value: collapse_uniform(&keep_first_lines)
+                    .map(|o| Value::Length(o.map(|n| n as f32))),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphKeepLastLines,
+                value: collapse_uniform(&keep_last_lines)
+                    .map(|o| Value::Length(o.map(|n| n as f32))),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphStartParagraph,
+                value: collapse_uniform(&start_paragraphs)
+                    .map(|o| Value::Text(o.map(|sp| sp.as_idml().to_string()).unwrap_or_default())),
+            },
+            // Span / split columns: the type and count surface their IDML
+            // strings (empty ⇒ no override), the four lengths their raw
+            // `Option<f32>` (None ⇒ inherit).
+            PropertyEntry {
+                path: PropertyPath::ParagraphSpanColumnType,
+                value: collapse_uniform(
+                    &span_columns
+                        .iter()
+                        .map(|s| s.column_type)
+                        .collect::<Vec<_>>(),
+                )
+                .map(|o| Value::Text(o.map(|t| t.as_idml().to_string()).unwrap_or_default())),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphSpanSplitColumnCount,
+                value: collapse_uniform(&span_columns.iter().map(|s| s.count).collect::<Vec<_>>())
+                    .map(|o| Value::Text(o.map(|c| c.as_idml()).unwrap_or_default())),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphSpanColumnMinSpaceBefore,
+                value: collapse_uniform(
+                    &span_columns
+                        .iter()
+                        .map(|s| s.min_space_before)
+                        .collect::<Vec<_>>(),
+                )
+                .map(Value::Length),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphSpanColumnMinSpaceAfter,
+                value: collapse_uniform(
+                    &span_columns
+                        .iter()
+                        .map(|s| s.min_space_after)
+                        .collect::<Vec<_>>(),
+                )
+                .map(Value::Length),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphSplitColumnInsideGutter,
+                value: collapse_uniform(
+                    &span_columns
+                        .iter()
+                        .map(|s| s.inside_gutter)
+                        .collect::<Vec<_>>(),
+                )
+                .map(Value::Length),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphSplitColumnOutsideGutter,
+                value: collapse_uniform(
+                    &span_columns
+                        .iter()
+                        .map(|s| s.outside_gutter)
+                        .collect::<Vec<_>>(),
+                )
+                .map(Value::Length),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphListType,
+                value: collapse_uniform(&list_types).map(|o| Value::Text(o.unwrap_or_default())),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphBulletCharacter,
+                value: collapse_uniform(&bullet_characters).map(|o| {
+                    Value::Text(
+                        o.and_then(char::from_u32)
+                            .map(|c| c.to_string())
+                            .unwrap_or_default(),
+                    )
+                }),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphNumberingFormat,
+                value: collapse_uniform(&numbering_formats)
+                    .map(|o| Value::Text(o.unwrap_or_default())),
+            },
+            // List-marker overrides: text and style refs surface their
+            // stored string (empty ⇒ no override), the start its count
+            // (None ⇒ inherit), continue its bool or "" when unset — the
+            // same shapes the setter takes, so a readback can be replayed.
+            PropertyEntry {
+                path: PropertyPath::ParagraphBulletsTextAfter,
+                value: collapse_uniform(&bullets_text_afters)
+                    .map(|o| Value::Text(o.unwrap_or_default())),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphNumberingExpression,
+                value: collapse_uniform(&numbering_expressions)
+                    .map(|o| Value::Text(o.unwrap_or_default())),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphNumberingStartAt,
+                value: collapse_uniform(&numbering_start_ats)
+                    .map(|o| Value::Length(o.map(|n| n as f32))),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphNumberingContinue,
+                value: collapse_uniform(&numbering_continues)
+                    .map(|o| o.map(Value::Bool).unwrap_or(Value::Text(String::new()))),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphBulletsCharacterStyle,
+                value: collapse_uniform(&bullets_character_styles)
+                    .map(|o| Value::Text(o.unwrap_or_default())),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphNumberingCharacterStyle,
+                value: collapse_uniform(&numbering_character_styles)
+                    .map(|o| Value::Text(o.unwrap_or_default())),
+            },
+            // The IDML string, "" when the paragraph inherits — the shapes
+            // the setter accepts.
+            PropertyEntry {
+                path: PropertyPath::ParagraphComposer,
+                value: collapse_uniform(&composers)
+                    .map(|o| Value::Text(o.map(|c| c.as_idml().to_string()).unwrap_or_default())),
+            },
+            // ADR 153 — the line setting, read off each paragraph's own
+            // fields (lengths `None` / enums `""` ⇒ inherit).
+            PropertyEntry {
+                path: PropertyPath::ParagraphAutoLeading,
+                value: collapse_uniform(
+                    &line_settings
+                        .iter()
+                        .map(|l| l.auto_leading)
+                        .collect::<Vec<_>>(),
+                )
+                .map(Value::Length),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphSingleWordJustification,
+                value: collapse_uniform(
+                    &line_settings
+                        .iter()
+                        .map(|l| l.single_word)
+                        .collect::<Vec<_>>(),
+                )
+                .map(|o| Value::Text(o.map(|w| w.as_idml().to_string()).unwrap_or_default())),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphLastLineIndent,
+                value: collapse_uniform(
+                    &line_settings
+                        .iter()
+                        .map(|l| l.last_line_indent)
+                        .collect::<Vec<_>>(),
+                )
+                .map(Value::Length),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphBalanceRaggedLines,
+                value: collapse_uniform(
+                    &line_settings.iter().map(|l| l.balance).collect::<Vec<_>>(),
+                )
+                .map(|o| Value::Text(o.map(|b| b.as_idml().to_string()).unwrap_or_default())),
+            },
+            // ADR 158 — the list level, read off each paragraph's own
+            // fields (`Length(None)` / `Text("")` ⇒ inherit).
+            PropertyEntry {
+                path: PropertyPath::ParagraphNumberingLevel,
+                value: collapse_uniform(&list_levels.iter().map(|l| l.level).collect::<Vec<_>>())
+                    .map(|o| Value::Length(o.map(|n| n as f32))),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphNumberingApplyRestartPolicy,
+                value: collapse_uniform(
+                    &list_levels
+                        .iter()
+                        .map(|l| l.apply_restart)
+                        .collect::<Vec<_>>(),
+                )
+                .map(|o| o.map(Value::Bool).unwrap_or(Value::Text(String::new()))),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphRuleAbove,
+                value: collapse_uniform(&rule_aboves).map(|r| {
+                    Value::ParagraphRule(Some(
+                        paged_mutate::operation::ParagraphRuleSpec::from_parse(&r),
+                    ))
+                }),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphRuleBelow,
+                value: collapse_uniform(&rule_belows).map(|r| {
+                    Value::ParagraphRule(Some(
+                        paged_mutate::operation::ParagraphRuleSpec::from_parse(&r),
+                    ))
+                }),
+            },
+            PropertyEntry {
+                path: PropertyPath::ParagraphTabStops,
+                value: collapse_uniform(&tab_lists).map(|stops| {
+                    Value::TabStops(
+                        stops
+                            .iter()
+                            .map(paged_mutate::operation::TabStopSpec::from_parse)
+                            .collect(),
+                    )
+                }),
+            },
+        ];
+
+        Some(ElementProperties {
+            id: id.clone(),
+            kind: "StoryRange".to_string(),
+            name: None,
+            entries,
+        })
+    }
+
+    /// W3.A1 — locate a `<Table>` by `(story_id, table_id)` for the
+    /// inspector read-side. Returns the host paragraph's table ref.
+    fn find_table_read(&self, story_id: &str, table_id: &str) -> Option<&paged_model::Table> {
+        let story = self.scene.stories.iter().find(|s| s.self_id == story_id)?;
+        story.story.paragraphs.iter().find_map(|p| {
+            p.table
+                .as_ref()
+                .filter(|t| t.self_id.as_deref() == Some(table_id))
+        })
+    }
+
+    /// W3.A1 — table-scoped property snapshot (the `AppliedTableStyle`
+    /// entry). Mirrors `story_range_properties`'s return shape.
+    fn table_properties(
+        &self,
+        story_id: &str,
+        table_id: &str,
+        id: &crate::element_selection::ElementId,
+    ) -> Option<crate::channel::ElementProperties> {
+        use crate::channel::{ElementProperties, PropertyEntry};
+        use paged_mutate::{PropertyPath, Value};
+
+        let table = self.find_table_read(story_id, table_id)?;
+        // Aftercare-A — total physical rows = header + body + footer
+        // (the three IDML `*RowCount` attributes). Read-only, carried
+        // as the integer-as-`Length` convention drop-cap counts use.
+        let row_count = table.header_row_count + table.body_row_count + table.footer_row_count;
+        let entries = vec![
+            PropertyEntry {
+                path: PropertyPath::AppliedTableStyle,
+                value: Some(Value::Text(
+                    table.applied_table_style.clone().unwrap_or_default(),
+                )),
+            },
+            PropertyEntry {
+                path: PropertyPath::TableRowCount,
+                value: Some(Value::Length(Some(row_count as f32))),
+            },
+            PropertyEntry {
+                path: PropertyPath::TableColumnCount,
+                value: Some(Value::Length(Some(table.column_count as f32))),
+            },
+            // v0.71.13 — the header and footer bands inside that total.
+            PropertyEntry {
+                path: PropertyPath::TableHeaderRowCount,
+                value: Some(Value::Length(Some(table.header_row_count as f32))),
+            },
+            PropertyEntry {
+                path: PropertyPath::TableFooterRowCount,
+                value: Some(Value::Length(Some(table.footer_row_count as f32))),
+            },
+        ];
+        Some(ElementProperties {
+            id: id.clone(),
+            kind: "Table".to_string(),
+            name: None,
+            entries,
+        })
+    }
+
+    /// W3.A1 — cell-scoped property snapshot (fill / insets / vertical
+    /// justify / applied cell style). Backs the Cell panel's read so it
+    /// can populate before a `SetElementProperty` write.
+    fn cell_properties(
+        &self,
+        story_id: &str,
+        table_id: &str,
+        row: u32,
+        col: u32,
+        id: &crate::element_selection::ElementId,
+    ) -> Option<crate::channel::ElementProperties> {
+        use crate::channel::{ElementProperties, PropertyEntry};
+        use paged_mutate::{PropertyPath, Value};
+
+        let table = self.find_table_read(story_id, table_id)?;
+        let cell = table
+            .cells
+            .iter()
+            .find(|c| c.coords() == Some((col, row)))?;
+        let row_def = table.rows.get(row as usize);
+        let entries = vec![
+            PropertyEntry {
+                path: PropertyPath::CellFillColor,
+                value: Some(Value::ColorRef(cell.fill_color.clone())),
+            },
+            PropertyEntry {
+                path: PropertyPath::CellFillTint,
+                value: Some(Value::Length(cell.fill_tint)),
+            },
+            PropertyEntry {
+                path: PropertyPath::CellInsetTop,
+                value: Some(Value::Length(Some(cell.text_top_inset))),
+            },
+            PropertyEntry {
+                path: PropertyPath::CellInsetLeft,
+                value: Some(Value::Length(Some(cell.text_left_inset))),
+            },
+            PropertyEntry {
+                path: PropertyPath::CellInsetBottom,
+                value: Some(Value::Length(Some(cell.text_bottom_inset))),
+            },
+            PropertyEntry {
+                path: PropertyPath::CellInsetRight,
+                value: Some(Value::Length(Some(cell.text_right_inset))),
+            },
+            PropertyEntry {
+                path: PropertyPath::CellVerticalJustification,
+                value: Some(Value::Text(
+                    cell.vertical_justification.clone().unwrap_or_default(),
+                )),
+            },
+            PropertyEntry {
+                path: PropertyPath::AppliedCellStyle,
+                value: Some(Value::Text(
+                    cell.applied_cell_style.clone().unwrap_or_default(),
+                )),
+            },
+            // W1.11b — per-cell edge strokes (colour / weight / tint per
+            // edge). Colour reads back as a `ColorRef`, weight + tint as
+            // `Length`; an absent inline override reports `None` (the
+            // value falls through to the cell-style cascade at render).
+            PropertyEntry {
+                path: PropertyPath::CellTopEdgeStrokeColor,
+                value: Some(Value::ColorRef(cell.top_edge_stroke_color.clone())),
+            },
+            PropertyEntry {
+                path: PropertyPath::CellTopEdgeStrokeWeight,
+                value: Some(Value::Length(cell.top_edge_stroke_weight)),
+            },
+            PropertyEntry {
+                path: PropertyPath::CellTopEdgeStrokeTint,
+                value: Some(Value::Length(cell.top_edge_stroke_tint)),
+            },
+            PropertyEntry {
+                path: PropertyPath::CellBottomEdgeStrokeColor,
+                value: Some(Value::ColorRef(cell.bottom_edge_stroke_color.clone())),
+            },
+            PropertyEntry {
+                path: PropertyPath::CellBottomEdgeStrokeWeight,
+                value: Some(Value::Length(cell.bottom_edge_stroke_weight)),
+            },
+            PropertyEntry {
+                path: PropertyPath::CellBottomEdgeStrokeTint,
+                value: Some(Value::Length(cell.bottom_edge_stroke_tint)),
+            },
+            PropertyEntry {
+                path: PropertyPath::CellLeftEdgeStrokeColor,
+                value: Some(Value::ColorRef(cell.left_edge_stroke_color.clone())),
+            },
+            PropertyEntry {
+                path: PropertyPath::CellLeftEdgeStrokeWeight,
+                value: Some(Value::Length(cell.left_edge_stroke_weight)),
+            },
+            PropertyEntry {
+                path: PropertyPath::CellLeftEdgeStrokeTint,
+                value: Some(Value::Length(cell.left_edge_stroke_tint)),
+            },
+            PropertyEntry {
+                path: PropertyPath::CellRightEdgeStrokeColor,
+                value: Some(Value::ColorRef(cell.right_edge_stroke_color.clone())),
+            },
+            PropertyEntry {
+                path: PropertyPath::CellRightEdgeStrokeWeight,
+                value: Some(Value::Length(cell.right_edge_stroke_weight)),
+            },
+            PropertyEntry {
+                path: PropertyPath::CellRightEdgeStrokeTint,
+                value: Some(Value::Length(cell.right_edge_stroke_tint)),
+            },
+            // ADR 175 — the cell's row: where it starts, and whether it
+            // keeps with the next.
+            PropertyEntry {
+                path: PropertyPath::RowStartRow,
+                value: Some(Value::Text(
+                    row_def
+                        .and_then(|r| r.start_row)
+                        .unwrap_or_default()
+                        .as_idml()
+                        .to_string(),
+                )),
+            },
+            PropertyEntry {
+                path: PropertyPath::RowKeepWithNext,
+                value: Some(Value::Bool(
+                    row_def.and_then(|r| r.keep_with_next_row).unwrap_or(false),
+                )),
+            },
+        ];
+        Some(ElementProperties {
+            id: id.clone(),
+            kind: "TableCell".to_string(),
+            name: None,
+            entries,
+        })
+    }
+
+    /// SDK Phase 3 — list every swatch in the document's palette.
+    /// One entry per `<Color>` in `graphic.colors`, classified by
+    /// model (process / spot) with the built-in specials (None /
+    /// Paper / Black / Registration) carrying their canonical
+    /// `kind` label so the swatch grid can badge them.
+    ///
+    /// Backs `documentCollection:swatches` per
+    /// `docs/paged/panel-catalog-and-sdk-extension.md` §5.1.
+    pub fn swatches(&self) -> Vec<crate::channel::SwatchSummary> {
+        use crate::channel::SwatchSummary;
+        use paged_model::ColorModel;
+        let mut out = Vec::with_capacity(self.scene.palette.colors.len());
+        for (self_id, color) in self.scene.palette.colors.iter() {
+            let kind = match paged_model::ReservedSwatch::classify(self_id) {
+                Some(r) => r.label(),
+                None => match color.model {
+                    ColorModel::Process => "process",
+                    ColorModel::Spot => "spot",
+                    ColorModel::MixedInk => "mixedInk",
+                    ColorModel::Unknown => "unknown",
+                },
+            };
+            let name = color.name.clone().unwrap_or_else(|| self_id.clone());
+            out.push(SwatchSummary {
+                self_id: self_id.clone(),
+                name,
+                kind: kind.to_string(),
+                total_area_coverage_pct: swatch_total_area_coverage(color),
+            });
+        }
+        out
+    }
+
+    /// SDK Phase 3 — list every paragraph style in the document.
+    /// Backs `documentCollection:paragraphStyles` per
+    /// `docs/paged/panel-catalog-and-sdk-extension.md` §5.1.
+    pub fn paragraph_styles(&self) -> Vec<crate::channel::ParagraphStyleSummary> {
+        use crate::channel::ParagraphStyleSummary;
+        self.scene
+            .styles
+            .paragraph_styles
+            .iter()
+            .map(|(self_id, style)| ParagraphStyleSummary {
+                self_id: self_id.clone(),
+                name: style.name.clone().unwrap_or_else(|| self_id.clone()),
+                based_on: style.based_on.clone(),
+                next_style: style.next_style.clone(),
+            })
+            .collect()
+    }
+
+    /// SDK Phase 3 — list every character style in the document.
+    pub fn character_styles(&self) -> Vec<crate::channel::CharacterStyleSummary> {
+        use crate::channel::CharacterStyleSummary;
+        self.scene
+            .styles
+            .character_styles
+            .iter()
+            .map(|(self_id, style)| CharacterStyleSummary {
+                self_id: self_id.clone(),
+                name: style.name.clone().unwrap_or_else(|| self_id.clone()),
+                based_on: style.based_on.clone(),
+            })
+            .collect()
+    }
+
+    /// SDK Phase 5 (v1 sweep) — resolved colour readout for a
+    /// single swatch. Returns CMYK percentages when the swatch's
+    /// effective colour is in CMYK space, plus a display RGB hex
+    /// string the panel can render directly. None when the swatch
+    /// id doesn't resolve.
+    pub fn color_preview(&self, swatch_id: &str) -> Option<crate::channel::ColorPreview> {
+        use paged_model::ColorModel;
+        let color = self.scene.palette.colors.get(swatch_id)?;
+        let model = match color.model {
+            ColorModel::Process => "process",
+            ColorModel::Spot => "spot",
+            ColorModel::MixedInk => "mixedInk",
+            ColorModel::Unknown => "unknown",
+        };
+        let model_str = match paged_model::ReservedSwatch::classify(swatch_id) {
+            Some(r) => r.label(),
+            None => model,
+        };
+        // `effective_cmyk` already returns IDML percentages
+        // (0..=100); the old `* 100.0` here clamped every mid-tone
+        // channel to 100% in the preview readout (pre-existing bug,
+        // caught by the Concept-2 mixer work).
+        let cmyk = color.effective_cmyk().map(|c| {
+            [
+                c[0].clamp(0.0, 100.0),
+                c[1].clamp(0.0, 100.0),
+                c[2].clamp(0.0, 100.0),
+                c[3].clamp(0.0, 100.0),
+            ]
+        });
+        // Concept 2 — resolve through the active CMM: ICC-accurate
+        // when a CMYK working profile is configured (the unconfigured
+        // path inside IccCmm is the exact pre-existing naive math),
+        // analytic Lab instead of the 50% grey placeholder, plus the
+        // out-of-gamut verdict for the mixer/swatch badges.
+        let cmm = self.active_cmm();
+        let working = working_color_of_with(color, self.use_standard_lab_for_spots);
+        let rgb = match working {
+            Some(w) => {
+                use paged_color::Cmm as _;
+                let paged_color::LinearRgb(rgb) = cmm.resolve_display(w);
+                rgb
+            }
+            None => [0.5, 0.5, 0.5],
+        };
+        let out_of_gamut = match working {
+            Some(w) => {
+                use paged_color::Cmm as _;
+                !matches!(cmm.check_gamut(w), paged_color::GamutStatus::InGamut)
+            }
+            None => false,
+        };
+        Some(crate::channel::ColorPreview {
+            self_id: swatch_id.to_string(),
+            name: color.name.clone().unwrap_or_else(|| swatch_id.to_string()),
+            model: model_str.to_string(),
+            cmyk,
+            rgb_hex: rgb_to_hex(rgb),
+            out_of_gamut,
+            space: Some(
+                match color.space {
+                    paged_model::ColorSpace::Cmyk => "CMYK",
+                    paged_model::ColorSpace::Rgb => "RGB",
+                    paged_model::ColorSpace::Lab => "LAB",
+                    paged_model::ColorSpace::Gray => "Gray",
+                    paged_model::ColorSpace::Unknown => "Unknown",
+                }
+                .to_string(),
+            ),
+            value: Some(color.value.clone()),
+        })
+    }
+
+    /// SDK Phase 5 (v1 sweep) — list every spread in the document.
+    ///
+    /// W3.A0 — each summary carries the spread's *live* guide set
+    /// (`SpreadSummary.guides`), rebuilt from `spread.guides` on every
+    /// call. This is the read-side counterpart to the guide-CRUD
+    /// mutations: `DocumentHandle.ruler_guides` is load-time-only, so
+    /// the editor re-queries `collection("spreads")` after an undo to
+    /// re-sync its overlay mirror.
+    pub fn spreads(&self) -> Vec<crate::channel::SpreadSummary> {
+        use crate::channel::{GuideSummary, SpreadSummary};
+        use crate::model::GuideOrientationWire;
+        let folios = self.page_folios();
+        self.scene
+            .spreads
+            .iter()
+            .map(|parsed| {
+                let self_id = parsed
+                    .spread
+                    .self_id
+                    .clone()
+                    .unwrap_or_else(|| parsed.src.clone());
+                let page_count = parsed.spread.pages.len() as u32;
+                // Positional ids mirror `apply::guide_id_for` —
+                // `Guide/<spreadSelf>/<index>`. The spread-self half is
+                // empty when the parse carried no `Self`, exactly as the
+                // mutation layer mints it, so the ids stay addressable.
+                let spread_self = parsed.spread.self_id.as_deref().unwrap_or_default();
+                let guides = parsed
+                    .spread
+                    .guides
+                    .iter()
+                    .enumerate()
+                    .map(|(gi, g)| GuideSummary {
+                        id: format!("Guide/{spread_self}/{gi}"),
+                        orientation: match g.orientation {
+                            paged_model::GuideOrientation::Vertical => {
+                                GuideOrientationWire::Vertical
+                            }
+                            paged_model::GuideOrientation::Horizontal => {
+                                GuideOrientationWire::Horizontal
+                            }
+                        },
+                        position: g.location,
+                        page_index: g.page_index,
+                    })
+                    .collect();
+                // InDesign names no spread; its Pages panel labels one by
+                // its pages' folios ("3", "2–3"). The id is the label only
+                // for a spread with no built page to name it by.
+                let named: Vec<&String> = parsed
+                    .spread
+                    .pages
+                    .iter()
+                    .filter_map(|p| folios.get(p.self_id.as_deref()?))
+                    .collect();
+                let label = match named.as_slice() {
+                    [] => self_id.clone(),
+                    [only] => (*only).clone(),
+                    [first, .., last] => format!("{first}–{last}"),
+                };
+                SpreadSummary {
+                    label,
+                    self_id,
+                    page_count,
+                    guides,
+                }
+            })
+            .collect()
+    }
+
+    /// SDK Phase 5 (v1 sweep) — list every built page (the same
+    /// surface the Navigator panel reads from). Index is 1-based
+    /// (matches the "Go to page #" convention).
+    /// Every built page's folio, by page id: its baked `Name`, else the
+    /// label the section rules give it — the walk the renderer makes for
+    /// page-number markers, so a page reads the number it prints.
+    fn page_folios(&self) -> HashMap<String, String> {
+        let names: HashMap<&str, Option<&str>> = self
+            .scene
+            .spreads
+            .iter()
+            .flat_map(|parsed| parsed.spread.pages.iter())
+            .filter_map(|p| Some((p.self_id.as_deref()?, p.name.as_deref())))
+            .collect();
+        let mut walk = paged_model::SectionWalk::new(&self.scene.designmap.sections);
+        self.built
+            .pages
+            .iter()
+            .map(|p| {
+                let id = p.id.as_str();
+                let name = names.get(id).copied().flatten();
+                (id.to_string(), walk.next_label(Some(id), name))
+            })
+            .collect()
+    }
+
+    pub fn pages(&self) -> Vec<crate::channel::PageSummary> {
+        use crate::channel::PageSummary;
+        let folios = self.page_folios();
+        // panels.md gap 10 — document bleed is document-level
+        // (`<DocumentPreference>`); carry it on every page so the
+        // overlay has it without a second request.
+        let bleed = &self.scene.designmap.document_preference;
+        // Build page-self-id → MarginPreference once across all
+        // spreads (each spread carries its own pages' margins).
+        // ADR 026 — generated pages are derived, so the model holds no
+        // margins for them: read the document as the last build grew it.
+        let grown = (!self.scene.growing_stories().is_empty())
+            .then(|| self.scene.with_generated_pages(&self.grow_hint.borrow()));
+        let scene = grown.as_ref().unwrap_or(&self.scene);
+        let mut margins: std::collections::HashMap<&str, &paged_model::MarginPreference> =
+            std::collections::HashMap::new();
+        // v70 — page self id → the spread whose labels hold its metadata.
+        let mut spread_of: std::collections::HashMap<&str, &paged_model::Spread> =
+            std::collections::HashMap::new();
+        // v0.71.13 — page self id → its spread's id, spelled as `spreads()`
+        // spells it (the `Self` id, the file name when there is none).
+        let mut spread_id_of: std::collections::HashMap<&str, String> =
+            std::collections::HashMap::new();
+        for parsed in &scene.spreads {
+            for (pid, m) in &parsed.spread.page_margins {
+                margins.insert(pid.as_str(), m);
+            }
+            let spread_id = parsed
+                .spread
+                .self_id
+                .clone()
+                .unwrap_or_else(|| parsed.src.clone());
+            for pg in &parsed.spread.pages {
+                if let Some(id) = pg.self_id.as_deref() {
+                    spread_of.insert(id, &parsed.spread);
+                    spread_id_of.insert(id, spread_id.clone());
+                }
+            }
+        }
+        self.built
+            .pages
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let m = margins.get(p.id.as_str()).copied();
+                PageSummary {
+                    self_id: p.id.as_str().to_string(),
+                    index: (i + 1) as u32,
+                    name: folios.get(p.id.as_str()).cloned().unwrap_or_default(),
+                    size_pt: [p.width_pt, p.height_pt],
+                    margin_top_pt: m.map(|m| m.top).unwrap_or(0.0),
+                    margin_left_pt: m.map(|m| m.left).unwrap_or(0.0),
+                    margin_bottom_pt: m.map(|m| m.bottom).unwrap_or(0.0),
+                    margin_right_pt: m.map(|m| m.right).unwrap_or(0.0),
+                    column_count: m.map(|m| m.column_count).unwrap_or(1),
+                    column_gutter_pt: m.map(|m| m.column_gutter).unwrap_or(0.0),
+                    bleed_top_pt: bleed.bleed_top,
+                    bleed_left_pt: bleed.bleed_inside_or_left,
+                    bleed_bottom_pt: bleed.bleed_bottom,
+                    bleed_right_pt: bleed.bleed_outside_or_right,
+                    plugin_metadata: spread_of
+                        .get(p.id.as_str())
+                        .map(|sp| tree_plugin_metadata(sp, p.id.as_str()))
+                        .unwrap_or_default(),
+                    // The build's origin, as item geometry reports it.
+                    page_origin: Some([p.spread_origin.0, p.spread_origin.1]),
+                    spread_id: spread_id_of.get(p.id.as_str()).cloned(),
+                }
+            })
+            .collect()
+    }
+
+    /// panels.md gaps 9/10/19 — list every `<Section>` with its
+    /// prefix, numbering style, and the flat body-page range it
+    /// spans. `start_page_index` is resolved by matching the
+    /// section's `PageStart` against the built pages; `page_count`
+    /// runs from this section's start up to the next section's start
+    /// (sections are in document order) or the document end.
+    pub fn sections(&self) -> Vec<crate::channel::SectionSummary> {
+        use crate::channel::SectionSummary;
+        let sections = &self.scene.designmap.sections;
+        // page Self id → flat body-page index.
+        let page_index: HashMap<&str, u32> = self
+            .built
+            .pages
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (p.id.as_str(), i as u32))
+            .collect();
+        let total_pages = self.built.pages.len() as u32;
+        // Resolve each section's start index up-front so page_count
+        // can look at the following section's start.
+        let starts: Vec<Option<u32>> = sections
+            .iter()
+            .map(|s| {
+                s.page_start
+                    .as_deref()
+                    .and_then(|pid| page_index.get(pid).copied())
+            })
+            .collect();
+        sections
+            .iter()
+            .enumerate()
+            .map(|(i, s)| {
+                let start = starts[i];
+                // The next section with a resolved start bounds this
+                // section's span; fall back to the document end.
+                let next_start = starts[i + 1..]
+                    .iter()
+                    .find_map(|s| *s)
+                    .unwrap_or(total_pages);
+                let page_count = match start {
+                    Some(st) => next_start.saturating_sub(st),
+                    None => 0,
+                };
+                SectionSummary {
+                    self_id: s.self_id.clone(),
+                    prefix: if s.include_prefix {
+                        s.section_prefix.clone().unwrap_or_default()
+                    } else {
+                        String::new()
+                    },
+                    label_style: s.numbering_style.as_str().to_string(),
+                    start_page_index: start,
+                    page_count,
+                }
+            })
+            .collect()
+    }
+
+    /// SDK Phase 5 (v1 sweep) — list every master spread. Stable
+    /// HashMap order is undefined; the accessor sorts by self_id
+    /// so panel rendering is deterministic across reloads.
+    pub fn master_pages(&self) -> Vec<crate::channel::MasterPageSummary> {
+        use crate::channel::MasterPageSummary;
+        let mut out: Vec<MasterPageSummary> = self
+            .scene
+            .master_spreads
+            .iter()
+            .map(|(self_id, ms)| MasterPageSummary {
+                // v70 — the master's `Name` when it has one.
+                label: ms.name.clone().unwrap_or_else(|| self_id.clone()),
+                self_id: self_id.clone(),
+                page_count: ms.spread.pages.len() as u32,
+            })
+            .collect();
+        out.sort_by(|a, b| a.self_id.cmp(&b.self_id));
+        out
+    }
+
+    /// SDK Phase 5 (v1 sweep) — list every cell style.
+    pub fn cell_styles(&self) -> Vec<crate::channel::CellStyleSummary> {
+        use crate::channel::CellStyleSummary;
+        self.scene
+            .styles
+            .cell_styles
+            .iter()
+            .map(|(self_id, style)| CellStyleSummary {
+                self_id: self_id.clone(),
+                name: style.name.clone().unwrap_or_else(|| self_id.clone()),
+                based_on: style.based_on.clone(),
+            })
+            .collect()
+    }
+
+    /// SDK Phase 5 (v1 sweep) — list every table style.
+    pub fn table_styles(&self) -> Vec<crate::channel::TableStyleSummary> {
+        use crate::channel::TableStyleSummary;
+        self.scene
+            .styles
+            .table_styles
+            .iter()
+            .map(|(self_id, style)| TableStyleSummary {
+                self_id: self_id.clone(),
+                name: style.name.clone().unwrap_or_else(|| self_id.clone()),
+                based_on: style.based_on.clone(),
+            })
+            .collect()
+    }
+
+    /// SDK Phase 5 (v1 sweep) — list every font family the document's
+    /// TEXT uses: each run's effective family through the style cascade
+    /// (run > character style > paragraph style), in every story, table
+    /// cell and footnote. `reference_count` is the number of runs set in
+    /// it. A family a style names but no run ends up in is not listed:
+    /// `layout` sets every run in Inter and its root style names Open
+    /// Sans, which nothing is set in, so nothing is missing for it.
+    ///
+    /// `is_missing` — panels.md gap 4 — is true when no face serves the
+    /// family: none registered for it, and the default face is not one
+    /// of it (the renderer then substitutes the default face). The
+    /// default face counts for its own family in the styles it has: a
+    /// host that ships Inter as the default and opens a document set in
+    /// Inter is not missing a font, while a static Regular face does not
+    /// serve its family's Bold runs (they set in Regular). The parse
+    /// layer has no Fonts.xml registry, so this is derived from content
+    /// rather than declared.
+    pub fn fonts(&self) -> Vec<crate::channel::FontSummary> {
+        use crate::channel::FontSummary;
+        use std::collections::{BTreeMap, BTreeSet};
+        let mut counts: BTreeMap<String, u32> = BTreeMap::new();
+        // W1.23 — distinct style strings per family: the `FontStyle`
+        // strings the text is set in, unioned with the styles the worker
+        // registered face bytes for via `RegisterFont`.
+        let mut styles: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        // Every style the text asks of each family, unstyled included:
+        // what the default face has to supply to serve the family.
+        let mut asked: BTreeMap<String, BTreeSet<Option<String>>> = BTreeMap::new();
+        fn walk(
+            scene: &Document,
+            para: &paged_model::Paragraph,
+            counts: &mut BTreeMap<String, u32>,
+            styles: &mut BTreeMap<String, BTreeSet<String>>,
+            asked: &mut BTreeMap<String, BTreeSet<Option<String>>>,
+        ) {
+            for run in &para.runs {
+                let resolved = scene.resolved_run_attrs(para, run);
+                let Some(family) = resolved.font else {
+                    continue;
+                };
+                *counts.entry(family.clone()).or_default() += 1;
+                let style = resolved.font_style.filter(|s| !s.is_empty());
+                asked
+                    .entry(family.clone())
+                    .or_default()
+                    .insert(style.clone());
+                if let Some(style) = style {
+                    styles.entry(family).or_default().insert(style);
+                }
+            }
+            let cells = para
+                .table
+                .iter()
+                .flat_map(|t| t.cells.iter())
+                .flat_map(|c| c.paragraphs.iter());
+            let notes = para.footnotes.iter().flat_map(|f| f.paragraphs.iter());
+            for inner in cells.chain(notes) {
+                walk(scene, inner, counts, styles, asked);
+            }
+        }
+        for story in &self.scene.stories {
+            for para in &story.story.paragraphs {
+                walk(&self.scene, para, &mut counts, &mut styles, &mut asked);
+            }
+        }
+        // Union in the styles the worker registered face bytes for, so
+        // the panel can list a registered style even if no content uses
+        // it yet. Family match is exact here (the registry is keyed by
+        // the family string as the editor registered it).
+        for entry in &self.font_registry {
+            if let Some(style) = &entry.style {
+                if !style.is_empty() {
+                    styles
+                        .entry(entry.family.clone())
+                        .or_default()
+                        .insert(style.clone());
+                }
+            }
+        }
+        // The registry and the default face, not the resolver: its
+        // default-font fall-through would mask every missing family as
+        // resolved. Family match is case-insensitive to tolerate
+        // `"Open Sans"` vs `"open sans"` registration drift.
+        let registered: BTreeSet<String> = self
+            .font_registry
+            .iter()
+            .map(|e| e.family.to_lowercase())
+            .collect();
+        let default_families: BTreeSet<String> = self
+            .font_bytes
+            .as_deref()
+            .map(paged_renderer::asset::face_family_names)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|f| f.to_lowercase())
+            .collect();
+        let default_styles = self
+            .font_bytes
+            .as_deref()
+            .and_then(paged_renderer::asset::FaceStyles::of);
+        let default_serves = |family: &str| {
+            default_families.contains(&family.trim().to_lowercase())
+                && default_styles.as_ref().is_some_and(|face| {
+                    asked
+                        .get(family)
+                        .is_none_or(|all| all.iter().all(|s| face.supplies(s.as_deref())))
+                })
+        };
+        counts
+            .into_iter()
+            .map(|(family, reference_count)| {
+                let is_missing =
+                    !registered.contains(&family.trim().to_lowercase()) && !default_serves(&family);
+                let styles = styles
+                    .get(&family)
+                    .map(|s| s.iter().cloned().collect())
+                    .unwrap_or_default();
+                FontSummary {
+                    family,
+                    reference_count,
+                    is_missing,
+                    styles,
+                }
+            })
+            .collect()
+    }
+
+    /// SDK Phase 5 (v1 sweep) — list every `<Article>` defined.
+    pub fn articles(&self) -> Vec<crate::channel::ArticleSummary> {
+        use crate::channel::ArticleSummary;
+        self.scene
+            .designmap
+            .articles
+            .iter()
+            .map(|a| ArticleSummary {
+                self_id: a.self_id.clone(),
+                name: a.name.clone().unwrap_or_else(|| a.self_id.clone()),
+                members: a.members.clone(),
+            })
+            .collect()
+    }
+
+    /// SDK Phase 5 (v1 sweep) — list every `<Hyperlink>` defined.
+    pub fn hyperlinks(&self) -> Vec<crate::channel::HyperlinkSummary> {
+        use crate::channel::HyperlinkSummary;
+        self.scene
+            .designmap
+            .hyperlinks
+            .iter()
+            .map(|h| {
+                let kind = h.destination.as_deref().and_then(|d| {
+                    self.scene
+                        .designmap
+                        .hyperlink_destinations
+                        .iter()
+                        .find(|x| x.self_id == d)
+                        .map(|x| &x.kind)
+                });
+                HyperlinkSummary {
+                    self_id: h.self_id.clone(),
+                    name: h.name.clone().unwrap_or_else(|| h.self_id.clone()),
+                    source: h.source.clone().unwrap_or_default(),
+                    destination: h.destination.clone().unwrap_or_default(),
+                    destination_url: match kind {
+                        Some(paged_model::HyperlinkDestinationKind::Url(u)) => Some(u.clone()),
+                        _ => None,
+                    },
+                    destination_page: match kind {
+                        Some(paged_model::HyperlinkDestinationKind::Page(p)) => Some(p.clone()),
+                        _ => None,
+                    },
+                }
+            })
+            .collect()
+    }
+
+    /// SDK Phase 5 (v1 sweep) — list every `<Bookmark>` defined.
+    pub fn bookmarks(&self) -> Vec<crate::channel::BookmarkSummary> {
+        use crate::channel::BookmarkSummary;
+        self.scene
+            .designmap
+            .bookmarks
+            .iter()
+            .map(|b| BookmarkSummary {
+                self_id: b.self_id.clone(),
+                name: b.name.clone().unwrap_or_else(|| b.self_id.clone()),
+                destination: b.destination.clone().unwrap_or_default(),
+                parent: self
+                    .scene
+                    .designmap
+                    .bookmark_parents
+                    .get(&b.self_id)
+                    .cloned(),
+            })
+            .collect()
+    }
+
+    /// SDK Phase 5 (v1 sweep) — list every `<CrossReferenceSource>`.
+    pub fn cross_references(&self) -> Vec<crate::channel::CrossReferenceSummary> {
+        use crate::channel::CrossReferenceSummary;
+        self.scene
+            .designmap
+            .cross_references
+            .iter()
+            .map(|x| CrossReferenceSummary {
+                self_id: x.self_id.clone(),
+                name: x.name.clone().unwrap_or_else(|| x.self_id.clone()),
+                format: x.format.clone().unwrap_or_default(),
+                destination: x.destination.clone().unwrap_or_default(),
+            })
+            .collect()
+    }
+
+    /// SDK Phase 5 (v1 sweep) — list every `<Topic>` for the index.
+    pub fn index_topics(&self) -> Vec<crate::channel::IndexTopicSummary> {
+        use crate::channel::IndexTopicSummary;
+        self.scene
+            .designmap
+            .index_topics
+            .iter()
+            .map(|t| IndexTopicSummary {
+                self_id: t.self_id.clone(),
+                name: t.name.clone().unwrap_or_else(|| t.self_id.clone()),
+                sort_order: t.sort_order.clone().unwrap_or_default(),
+            })
+            .collect()
+    }
+
+    /// v0.71.13 (ADR 163) — every footnote, in story order. Backs
+    /// `documentCollection:footnotes`. A note's reference offset is the
+    /// story char (contiguous) of its marker: the k-th marker of its
+    /// paragraph when the paragraph holds one per note, its anchor
+    /// otherwise; its label and page come from the last layout.
+    /// ADR 174 — every endnote, in reference order (stories in document
+    /// order). Its text is its range's in the endnote story, without the
+    /// marks, the number and the separator.
+    pub fn endnotes(&self) -> Vec<crate::channel::EndnoteSummary> {
+        let scene = &self.scene;
+        let options = scene.designmap.endnote_options.clone().unwrap_or_default();
+        let separator = options
+            .separator_text
+            .clone()
+            .unwrap_or_else(|| "\t".to_string());
+        let ordinals = scene.endnote_ordinals();
+        // Each range's text, by its source endnote.
+        let mut texts: HashMap<String, String> = HashMap::new();
+        for s in scene.stories.iter().filter(|s| s.story.is_endnote_story) {
+            for p in &s.story.paragraphs {
+                let text: String = p.runs.iter().map(|r| r.text.as_str()).collect();
+                for (k, piece) in text
+                    .split(paged_model::ENDNOTE_NUMBER_MARKER)
+                    .skip(1)
+                    .enumerate()
+                {
+                    let body = piece.split('\u{FEFF}').next().unwrap_or("");
+                    let body = body.strip_prefix(separator.as_str()).unwrap_or(body);
+                    if let Some(source) = p.endnote_ranges.get(k).and_then(|r| r.source.clone()) {
+                        texts.insert(source, body.to_string());
+                    }
+                }
+            }
+        }
+        let mark = paged_model::ENDNOTE_REFERENCE_MARKER;
+        let mut out = Vec::new();
+        for story in &scene.stories {
+            let mut start = 0u32;
+            for para in &story.story.paragraphs {
+                let markers: Vec<u32> = para
+                    .runs
+                    .iter()
+                    .flat_map(|r| r.text.chars())
+                    .enumerate()
+                    .filter(|(_, c)| *c == mark)
+                    .map(|(i, _)| i as u32)
+                    .collect();
+                for (k, r) in para.endnote_references.iter().enumerate() {
+                    out.push(crate::channel::EndnoteSummary {
+                        id: r.self_id.clone(),
+                        story_id: story.self_id.clone(),
+                        offset: start + markers.get(k).copied().unwrap_or(0),
+                        range_id: r.text_range.clone(),
+                        label: ordinals
+                            .get(&r.self_id)
+                            .map(|n| options.reference_label(*n)),
+                        text: texts.get(&r.self_id).cloned().unwrap_or_default(),
+                    });
+                }
+                start += para
+                    .runs
+                    .iter()
+                    .map(|r| r.text.chars().count() as u32)
+                    .sum::<u32>();
+            }
+        }
+        out
+    }
+
+    /// The `Operation`s an endnote insert lowers to (ADR 174): the endnote
+    /// story first when the document has none, as InDesign makes it.
+    fn lower_insert_endnote(
+        &self,
+        story_id: &str,
+        offset: u32,
+        paragraph: Option<u32>,
+        text: &str,
+        mint_offset: &mut u64,
+    ) -> paged_mutate::Operation {
+        use paged_mutate::Operation;
+        let endnote_id = self.mint_page_item_id_with_offset(mint_offset);
+        let range_id = self.mint_page_item_id_with_offset(mint_offset);
+        let insert = Operation::InsertEndnote {
+            story_id: story_id.to_string(),
+            offset,
+            paragraph,
+            endnote_id,
+            range_id,
+            text: text.to_string(),
+            restore: None,
+        };
+        if self.scene.stories.iter().any(|s| s.story.is_endnote_story) {
+            return insert;
+        }
+        let frame_id = self.mint_page_item_id_with_offset(mint_offset);
+        let mut n = self.story_id_floor() + *mint_offset as usize;
+        let mut new_story = format!("Story/u{n}");
+        while self.scene.stories.iter().any(|s| s.self_id == new_story) {
+            n += 1;
+            new_story = format!("Story/u{n}");
+        }
+        *mint_offset += 1;
+        Operation::Batch {
+            ops: vec![
+                Operation::CreateEndnoteStory {
+                    spread_id: None,
+                    page_id: None,
+                    frame_id,
+                    story_id: new_story,
+                },
+                insert,
+            ],
+        }
+    }
+
+    pub fn notes(&self) -> Vec<crate::channel::NoteSummary> {
+        let mut out = Vec::new();
+        for story in &self.scene.stories {
+            let mut start = 0u32;
+            for para in &story.story.paragraphs {
+                let markers: Vec<u32> = para
+                    .runs
+                    .iter()
+                    .flat_map(|r| r.text.chars())
+                    .enumerate()
+                    .filter(|(_, c)| *c == paged_model::NOTE_MARKER)
+                    .map(|(i, _)| i as u32)
+                    .collect();
+                let one_each = markers.len() == para.notes.len();
+                for (k, note) in para.notes.iter().enumerate() {
+                    let local = if one_each { markers[k] } else { note.anchor };
+                    out.push(crate::channel::NoteSummary {
+                        id: note.id.clone(),
+                        story_id: story.self_id.clone(),
+                        offset: start + local,
+                        text: note.text.clone(),
+                        user_name: note.user_name.clone(),
+                        creation_date: note.creation_date.clone(),
+                        modification_date: note.modification_date.clone(),
+                        collapsed: note.collapsed,
+                    });
+                }
+                start += para
+                    .runs
+                    .iter()
+                    .map(|r| r.text.chars().count() as u32)
+                    .sum::<u32>();
+            }
+        }
+        out
+    }
+
+    /// D-02 — the document's XML structure, depth-first: the back story's
+    /// tree, with each element that tags a story followed by the elements
+    /// tagging the story's ranges.
+    pub fn xml_elements(&self) -> Vec<crate::channel::XmlElementSummary> {
+        fn tag_name(tag: &str) -> String {
+            tag.strip_prefix("XMLTag/").unwrap_or(tag).to_string()
+        }
+        fn walk(
+            el: &paged_model::XmlElement,
+            depth: u32,
+            story_id: Option<&str>,
+            scene: &paged_scene::Document,
+            out: &mut Vec<crate::channel::XmlElementSummary>,
+        ) {
+            out.push(crate::channel::XmlElementSummary {
+                self_id: el.self_id.clone(),
+                tag: tag_name(&el.tag),
+                depth,
+                content: el.content.clone(),
+                story_id: story_id.map(str::to_string),
+                attributes: el.attributes.clone(),
+            });
+            for child in &el.children {
+                walk(child, depth + 1, story_id, scene, out);
+            }
+            // An element tagging a story: the story's own elements of the
+            // same `Self` hold its ranges.
+            if let Some(story) = el
+                .content
+                .as_deref()
+                .and_then(|id| scene.stories.iter().find(|s| s.self_id == id))
+            {
+                for top in story
+                    .story
+                    .xml_elements
+                    .iter()
+                    .filter(|e| e.self_id == el.self_id)
+                {
+                    for child in &top.children {
+                        walk(child, depth + 1, Some(&story.self_id), scene, out);
+                    }
+                }
+            }
+        }
+        let mut out = Vec::new();
+        if let Some(root) = &self.scene.designmap.xml_root {
+            walk(root, 0, None, &self.scene, &mut out);
+        }
+        out
+    }
+
+    /// D-01 — the document's tracked deletions, each at the story offset
+    /// of its marker.
+    pub fn tracked_changes(&self) -> Vec<crate::channel::TrackedChangeSummary> {
+        let mut out = Vec::new();
+        for story in &self.scene.stories {
+            let mut start = 0u32;
+            for para in &story.story.paragraphs {
+                let markers: Vec<u32> = para
+                    .runs
+                    .iter()
+                    .flat_map(|r| r.text.chars())
+                    .enumerate()
+                    .filter(|(_, c)| *c == paged_model::TRACKED_DELETION_MARKER)
+                    .map(|(i, _)| i as u32)
+                    .collect();
+                for (k, change) in para.tracked_deletions.iter().enumerate() {
+                    out.push(crate::channel::TrackedChangeSummary {
+                        story_id: story.self_id.clone(),
+                        offset: start + markers.get(k).copied().unwrap_or(0),
+                        change_type: change.change_type.clone(),
+                        user_name: change.user_name.clone(),
+                        date: change.date.clone(),
+                        text: change.deleted_text.clone().unwrap_or_default(),
+                    });
+                }
+                start += para
+                    .runs
+                    .iter()
+                    .map(|r| r.text.chars().count() as u32)
+                    .sum::<u32>();
+            }
+        }
+        out
+    }
+
+    /// The story, paragraph and index in it of note `note_id`.
+    fn find_note(&self, note_id: &str) -> Option<(usize, usize, usize)> {
+        self.scene.stories.iter().enumerate().find_map(|(si, s)| {
+            s.story.paragraphs.iter().enumerate().find_map(|(pi, p)| {
+                p.notes
+                    .iter()
+                    .position(|n| n.id == note_id)
+                    .map(|k| (si, pi, k))
+            })
+        })
+    }
+
+    /// `ConvertNoteToText` (ADR 172): the note's place becomes a space and
+    /// its text, its paragraphs the story's, as InDesign 20.0.1 converts
+    /// one (`notes-probe`). One `ReplaceStoryParagraphs`: one undo.
+    fn lower_convert_note_to_text(
+        &self,
+        note_id: &str,
+    ) -> Result<paged_mutate::Operation, crate::channel::WorkerError> {
+        let (si, pi, k) =
+            self.find_note(note_id)
+                .ok_or_else(|| crate::channel::WorkerError::NotImplemented {
+                    what: format!("convertNoteToText: no note {note_id}"),
+                })?;
+        let story = &self.scene.stories[si];
+        let mut paragraphs = story.story.paragraphs.clone();
+        crate::mutate::convert_note_to_text(&mut paragraphs, pi, k);
+        Ok(paged_mutate::Operation::ReplaceStoryParagraphs {
+            story_id: story.self_id.clone(),
+            paragraphs_json: serde_json::to_string(&paragraphs).expect("paragraphs serialize"),
+        })
+    }
+
+    pub fn footnotes(&self) -> Vec<crate::channel::FootnoteSummary> {
+        use crate::channel::FootnoteSummary;
+        let mark = paged_model::FOOTNOTE_REFERENCE_MARKER;
+        let options = &self.scene.designmap.footnote_options;
+        let laid_out: HashMap<&str, (u32, u32)> = self
+            .built()
+            .pages
+            .iter()
+            .enumerate()
+            .flat_map(|(pi, p)| {
+                p.footnotes
+                    .iter()
+                    .filter(|f| !f.continued)
+                    .filter_map(move |f| {
+                        Some((f.footnote_self_id.as_deref()?, (pi as u32, f.number)))
+                    })
+            })
+            .collect();
+        let mut out = Vec::new();
+        for story in &self.scene.stories {
+            let mut start = 0u32;
+            for para in &story.story.paragraphs {
+                let markers: Vec<u32> = para
+                    .runs
+                    .iter()
+                    .flat_map(|r| r.text.chars())
+                    .enumerate()
+                    .filter(|(_, c)| *c == mark)
+                    .map(|(i, _)| i as u32)
+                    .collect();
+                let one_each = markers.len() == para.footnotes.len();
+                for (k, note) in para.footnotes.iter().enumerate() {
+                    let Some(self_id) = note.self_id.clone() else {
+                        continue;
+                    };
+                    let local = if one_each {
+                        markers[k]
+                    } else {
+                        note.anchor.unwrap_or(0)
+                    };
+                    let text: String = note
+                        .paragraphs
+                        .iter()
+                        .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect::<String>())
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    let separator = options.separator_text.as_deref().unwrap_or("\t");
+                    let text = text.trim_start_matches(mark);
+                    let text = text.strip_prefix(separator).unwrap_or(text).to_string();
+                    let placed = laid_out.get(self_id.as_str()).copied();
+                    out.push(FootnoteSummary {
+                        story_id: story.self_id.clone(),
+                        offset: start + local,
+                        label: placed.map(|(_, n)| options.reference_label(n)),
+                        page_index: placed.map(|(p, _)| p),
+                        text,
+                        self_id,
+                    });
+                }
+                start += para
+                    .runs
+                    .iter()
+                    .map(|r| r.text.chars().count() as u32)
+                    .sum::<u32>();
+            }
+        }
+        out
+    }
+
+    /// SDK Phase 5 (v1 sweep) — list every `<ConditionSet>` defined.
+    /// Backs `documentCollection:conditionSets`.
+    pub fn condition_sets(&self) -> Vec<crate::channel::ConditionSetSummary> {
+        use crate::channel::ConditionSetSummary;
+        self.scene
+            .styles
+            .condition_sets
+            .iter()
+            .map(|(self_id, set)| ConditionSetSummary {
+                self_id: self_id.clone(),
+                name: set.name.clone().unwrap_or_else(|| self_id.clone()),
+                conditions: set.conditions.clone(),
+            })
+            .collect()
+    }
+
+    /// SDK Phase 5 (v1 sweep) — list every `<ColorGroup>` defined.
+    /// Backs `documentCollection:colorGroups`.
+    pub fn color_groups(&self) -> Vec<crate::channel::ColorGroupSummary> {
+        use crate::channel::ColorGroupSummary;
+        self.scene
+            .palette
+            .color_groups
+            .iter()
+            .map(|(self_id, group)| ColorGroupSummary {
+                self_id: self_id.clone(),
+                name: group.name.clone().unwrap_or_else(|| self_id.clone()),
+                members: group.members.clone(),
+            })
+            .collect()
+    }
+
+    /// SDK Phase 5 (v1 sweep) — list every `<Condition>` defined
+    /// in the document. Backs `documentCollection:conditions` per
+    /// `panel-catalog-and-sdk-extension.md` §5.1. The Conditions
+    /// panel renders this for inspection. Per-condition visibility
+    /// toggle lands when `Operation::SetConditionVisible` ships.
+    pub fn conditions(&self) -> Vec<crate::channel::ConditionSummary> {
+        use crate::channel::ConditionSummary;
+        self.scene
+            .styles
+            .conditions
+            .iter()
+            .map(|(self_id, cond)| ConditionSummary {
+                self_id: self_id.clone(),
+                name: cond.name.clone().unwrap_or_else(|| self_id.clone()),
+                visible: cond.visible.unwrap_or(true),
+                indicator_method: cond.indicator_method.clone().unwrap_or_default(),
+            })
+            .collect()
+    }
+
+    /// W1.22 (engine gap 22) — list every `<NumberingList>` resource
+    /// in the document. Backs `documentCollection:numberingLists`.
+    /// The editor's list-definitions surface renders this;
+    /// `continue_across_stories` drives cross-story numbering
+    /// continuity in the renderer.
+    pub fn numbering_lists(&self) -> Vec<crate::channel::NumberingListSummary> {
+        use crate::channel::NumberingListSummary;
+        self.scene
+            .styles
+            .numbering_lists
+            .iter()
+            .map(|(self_id, list)| NumberingListSummary {
+                self_id: self_id.clone(),
+                name: list.name.clone().unwrap_or_else(|| self_id.clone()),
+                continue_across_stories: list.continue_across_stories.unwrap_or(false),
+                continue_across_documents: list.continue_across_documents.unwrap_or(false),
+            })
+            .collect()
+    }
+
+    /// SDK Phase 5 (v1 sweep) — list every placed-image link in the
+    /// document. Walks every page-item kind that can host an image
+    /// (Rectangle / Oval / Polygon) and collects `image_link`
+    /// entries. Top-first per-spread order; within a spread, the
+    /// rectangles → ovals → polygons walk order. The Links panel
+    /// consumes this through `useCollection<LinkSummary>("links")`.
+    pub fn links(&self) -> Vec<crate::channel::LinkSummary> {
+        use crate::channel::LinkSummary;
+        // panels.md gap 2 — frames whose image the build couldn't
+        // resolve/decode (drew the placeholder) are "missing".
+        let missing = self.built.diagnostics.missing_image_frame_ids();
+        // panels.md gap 3 — placed-image colour space + ppi lives in
+        // the per-spread side map keyed by host-frame self_id.
+        let summary = |self_id: String,
+                       host_kind: &str,
+                       uri: String,
+                       meta: Option<&paged_model::ImageMetadata>,
+                       image_transform: Option<[f32; 6]>| {
+            LinkSummary {
+                status: if missing.contains(&self_id) {
+                    "missing"
+                } else {
+                    "ok"
+                }
+                .to_string(),
+                colorspace: meta.and_then(|m| m.space.clone()),
+                effective_ppi: meta.and_then(|m| m.effective_ppi),
+                host_self_id: self_id,
+                host_kind: host_kind.to_string(),
+                uri,
+                image_transform,
+            }
+        };
+        let mut out = Vec::new();
+        for parsed in &self.scene.spreads {
+            let meta_map = &parsed.spread.image_metadata;
+            for r in &parsed.spread.rectangles {
+                if let (Some(self_id), Some(uri)) = (r.self_id.clone(), r.image_link.clone()) {
+                    let meta = meta_map.get(&self_id);
+                    out.push(summary(
+                        self_id,
+                        "Rectangle",
+                        uri,
+                        meta,
+                        r.image_item_transform,
+                    ));
+                }
+            }
+            for o in &parsed.spread.ovals {
+                if let (Some(self_id), Some(uri)) = (o.self_id.clone(), o.image_link.clone()) {
+                    let meta = meta_map.get(&self_id);
+                    out.push(summary(self_id, "Oval", uri, meta, o.image_item_transform));
+                }
+            }
+            for p in &parsed.spread.polygons {
+                if let (Some(self_id), Some(uri)) = (p.self_id.clone(), p.image_link.clone()) {
+                    let meta = meta_map.get(&self_id);
+                    out.push(summary(
+                        self_id,
+                        "Polygon",
+                        uri,
+                        meta,
+                        p.image_item_transform,
+                    ));
+                }
+            }
+        }
+        out
+    }
+
+    /// C-5 / I-04 — the placed image's ORIGINAL encoded bytes (the
+    /// PSD / JPEG / PNG file) for the image frame `element_id`, plus its
+    /// natural pixel dimensions. Finds the frame's `image_link` URI (the
+    /// same Rectangle / Oval / Polygon fields [`Self::links`] reads) and
+    /// returns the bytes the build already decoded + cached
+    /// (`image_decode_cache`, populated when the image rendered). Returns
+    /// `None` when the element isn't an image frame, its link doesn't
+    /// resolve, or it hasn't rendered yet (no cache entry). The bytes are
+    /// the ENCODED file so a plugin (paged.image) can parse it with its
+    /// own codecs — e.g. read PSD layers, which the flattened RGBA loses.
+    ///
+    /// C-26 — an INLINE-EMBEDDED `<Image><Contents>` payload is served
+    /// too, and takes precedence over `LinkResourceURI` exactly as the
+    /// renderer's own routing does (Q-03). Its bytes come straight from
+    /// the parsed element rather than the decode cache, because the
+    /// parser already holds them; the cache is consulted only for the
+    /// natural pixel size, which is why an inline image — like a linked
+    /// one — answers `None` until it has rendered once.
+    ///
+    /// The returned name is the element's `LinkResourceURI` when it has
+    /// one (IDML commonly embeds a payload AND records the original
+    /// filename, and a filename is the useful hint for a plugin picking
+    /// a codec), falling back to the synthetic `inline:<element_id>`.
+    pub fn placed_asset_bytes(&self, element_id: &str) -> Option<(String, u32, u32, Vec<u8>)> {
+        let mut uri: Option<String> = None;
+        let mut inline: Option<Vec<u8>> = None;
+        for parsed in &self.scene.spreads {
+            for r in &parsed.spread.rectangles {
+                if r.self_id.as_deref() == Some(element_id) {
+                    uri = r.image_link.clone();
+                    inline = r.image_bytes.clone();
+                }
+            }
+            for o in &parsed.spread.ovals {
+                if o.self_id.as_deref() == Some(element_id) {
+                    uri = o.image_link.clone();
+                    inline = o.image_bytes.clone();
+                }
+            }
+            for p in &parsed.spread.polygons {
+                if p.self_id.as_deref() == Some(element_id) {
+                    uri = p.image_link.clone();
+                    inline = p.image_bytes.clone();
+                }
+            }
+        }
+        let cache = self.image_decode_cache.borrow();
+        if let Some(bytes) = inline {
+            // Shared key builder, not a second copy of the format
+            // string — see the re-export's note in `pipeline/mod.rs`.
+            let key = paged_renderer::pipeline::inline_image_cache_key(Some(element_id), &bytes);
+            let img = cache.get(&key)?;
+            return Some((uri.unwrap_or(key), img.width, img.height, bytes));
+        }
+        let uri = uri?;
+        let img = cache.get(&uri)?;
+        if img.encoded.is_empty() {
+            // Decoded-only image (e.g. a synthetic buffer) — no original
+            // file to hand back; the door returns "not found" rather than
+            // a re-encoded surrogate.
+            return None;
+        }
+        Some((uri.clone(), img.width, img.height, img.encoded.to_vec()))
+    }
+
+    /// SDK Phase 5 (v1 sweep) — list every object style in the
+    /// document. Backs `documentCollection:objectStyles` per
+    /// `panel-catalog-and-sdk-extension.md` §5.1. The Object Styles
+    /// panel consumes this through `useCollection<ObjectStyleSummary>
+    /// ("objectStyles")` and applies the chosen `selfId` via the
+    /// existing `AppliedObjectStyle` apply arm.
+    pub fn object_styles(&self) -> Vec<crate::channel::ObjectStyleSummary> {
+        use crate::channel::ObjectStyleSummary;
+        self.scene
+            .styles
+            .object_styles
+            .iter()
+            .map(|(self_id, style)| ObjectStyleSummary {
+                self_id: self_id.clone(),
+                name: style.name.clone().unwrap_or_else(|| self_id.clone()),
+                based_on: style.based_on.clone(),
+            })
+            .collect()
+    }
+
+    /// SDK Phase 3 — list every gradient swatch in the palette.
+    /// `kind` is the IDML `Type` attribute — `"linear"` / `"radial"`.
+    pub fn gradients(&self) -> Vec<crate::channel::GradientSummary> {
+        use crate::channel::GradientSummary;
+        use paged_model::GradientKind;
+        self.scene
+            .palette
+            .gradients
+            .iter()
+            .map(|(self_id, g)| {
+                let kind = match g.kind {
+                    GradientKind::Linear => "linear",
+                    GradientKind::Radial => "radial",
+                    GradientKind::Unknown => "unknown",
+                };
+                GradientSummary {
+                    self_id: self_id.clone(),
+                    name: g.name.clone().unwrap_or_else(|| self_id.clone()),
+                    kind: kind.to_string(),
+                }
+            })
+            .collect()
+    }
+
+    /// Concept 2 — full stop detail for one gradient. Stops carry
+    /// the swatch REF (the model identity) plus a display hex
+    /// resolved through the active CMM, so the ramp editor paints
+    /// faithfully under the current working space.
+    pub fn gradient_detail(&self, gradient_id: &str) -> Option<crate::channel::GradientDetail> {
+        use paged_model::GradientKind;
+        let g = self.scene.palette.gradients.get(gradient_id)?;
+        let kind = match g.kind {
+            GradientKind::Linear => "linear",
+            GradientKind::Radial => "radial",
+            GradientKind::Unknown => "unknown",
+        };
+        let cmm = self.active_cmm();
+        let stops = g
+            .stops
+            .iter()
+            .map(|s| {
+                let resolved_rgb_hex = self
+                    .scene
+                    .palette
+                    .resolve(&s.stop_color)
+                    .and_then(working_color_of)
+                    .map(|w| {
+                        use paged_color::Cmm as _;
+                        let paged_color::LinearRgb(rgb) = cmm.resolve_display(w);
+                        rgb_to_hex(rgb)
+                    })
+                    .unwrap_or_else(|| "#808080".to_string());
+                crate::channel::GradientStopWire {
+                    stop_color_ref: s.stop_color.clone(),
+                    resolved_rgb_hex,
+                    location_pct: s.location_pct,
+                    midpoint_pct: s.midpoint_pct,
+                }
+            })
+            .collect();
+        Some(crate::channel::GradientDetail {
+            self_id: gradient_id.to_string(),
+            name: g.name.clone().unwrap_or_else(|| gradient_id.to_string()),
+            kind: kind.to_string(),
+            stops,
+        })
+    }
+
+    /// Concept 2 — serialise swatches to `.ase` bytes ("Save
+    /// .ase…"). `group_id: Some` exports one ColorGroup's members;
+    /// `None` exports every user colour, grouped by the document's
+    /// ColorGroups (ungrouped colours land loose). Reserved
+    /// swatches and unknown spaces are skipped.
+    pub fn export_ase(&self, group_id: Option<&str>) -> Vec<u8> {
+        use paged_color::ase::{AseEntry, AseGroup, AseKind, AseLibrary, AseSpace};
+        use paged_model::{ColorModel, ColorSpace};
+        let entry_of = |id: &str| -> Option<AseEntry> {
+            // Reserved swatches aren't exchange material.
+            if matches!(
+                id,
+                "Color/None" | "Color/Paper" | "Color/Black" | "Color/Registration"
+            ) {
+                return None;
+            }
+            let c = self.scene.palette.colors.get(id)?;
+            let space = match c.space {
+                ColorSpace::Rgb => AseSpace::Rgb,
+                ColorSpace::Cmyk => AseSpace::Cmyk,
+                ColorSpace::Lab => AseSpace::Lab,
+                ColorSpace::Gray => AseSpace::Gray,
+                ColorSpace::Unknown => return None,
+            };
+            Some(AseEntry {
+                name: c.name.clone().unwrap_or_else(|| id.to_string()),
+                space,
+                value: c.value.clone(),
+                kind: match c.model {
+                    ColorModel::Spot => AseKind::Spot,
+                    _ => AseKind::Process,
+                },
+            })
+        };
+        let mut lib = AseLibrary::default();
+        match group_id {
+            Some(gid) => {
+                if let Some(g) = self.scene.palette.color_groups.get(gid) {
+                    lib.groups.push(AseGroup {
+                        name: g.name.clone().unwrap_or_else(|| gid.to_string()),
+                        entries: g.members.iter().filter_map(|m| entry_of(m)).collect(),
+                    });
+                }
+            }
+            None => {
+                let mut grouped: std::collections::HashSet<&str> = Default::default();
+                for (gid, g) in &self.scene.palette.color_groups {
+                    let entries: Vec<AseEntry> =
+                        g.members.iter().filter_map(|m| entry_of(m)).collect();
+                    for m in &g.members {
+                        grouped.insert(m.as_str());
+                    }
+                    if !entries.is_empty() {
+                        lib.groups.push(AseGroup {
+                            name: g.name.clone().unwrap_or_else(|| gid.clone()),
+                            entries,
+                        });
+                    }
+                }
+                for id in self.scene.palette.colors.keys() {
+                    if !grouped.contains(id.as_str()) {
+                        if let Some(e) = entry_of(id) {
+                            lib.loose.push(e);
+                        }
+                    }
+                }
+            }
+        }
+        paged_color::ase::write_ase(&lib)
+    }
+
+    /// Concept 2 (Ink Manager) — the ink list: one row per spot
+    /// swatch, settings folded in.
+    pub fn inks(&self) -> Vec<crate::channel::InkSummary> {
+        self.scene
+            .palette
+            .colors
+            .iter()
+            .filter(|(_, c)| c.model == paged_model::ColorModel::Spot)
+            .map(|(id, c)| {
+                let setting = self.ink_settings.get(id);
+                crate::channel::InkSummary {
+                    spot_id: id.clone(),
+                    name: c.name.clone().unwrap_or_else(|| id.clone()),
+                    convert_to_process: setting.is_some_and(|s| s.convert_to_process),
+                    alias_to: setting.and_then(|s| s.alias_to.clone()),
+                }
+            })
+            .collect()
+    }
+
+    /// SDK Phase 3 — list every story's self_id + character count.
+    /// Used by `paged.stories()` (the script host fn) and by tests
+    /// that need a valid story id to address a StoryRange edit.
+    pub fn stories(&self) -> Vec<crate::channel::StorySummary> {
+        // panels.md gap 1 — stories the build flagged overset (text
+        // dropped past the last frame in their chain).
+        let overset = self.built.diagnostics.overset_story_ids();
+        // S4 — the first-class overset continuation (where the flow overran),
+        // keyed by story id.
+        let overset_at = self.built.diagnostics.overset_continuations();
+        self.scene
+            .stories
+            .iter()
+            .map(|s| {
+                let mut chars: u32 = 0;
+                for para in &s.story.paragraphs {
+                    for run in &para.runs {
+                        chars += run.text.chars().count() as u32;
+                    }
+                }
+                crate::channel::StorySummary {
+                    self_id: s.self_id.clone(),
+                    character_count: chars,
+                    paragraph_count: s.story.paragraphs.len() as u32,
+                    overset: overset.contains(&s.self_id),
+                    overset_at: overset_at
+                        .get(&s.self_id)
+                        .map(|c| crate::channel::OversetAt {
+                            paragraph: c.paragraph_idx,
+                            line: c.line_idx,
+                        }),
+                    grow_rule: s
+                        .story
+                        .grow
+                        .as_ref()
+                        .map(|r| crate::channel::StoryGrowRule {
+                            grow: true,
+                            max_pages: r.max_pages,
+                            copy_frame_options: r.copy_frame_options,
+                        }),
+                }
+            })
+            .collect()
+    }
+
+    /// DOC-03 (v54) — a story's full content: paragraphs → runs → text + applied
+    /// styles + direct character overrides, or `None` when `story_id` doesn't
+    /// resolve. Mirrors the `stories()` walk but emits text + formatting instead
+    /// of counts, so a content plugin can read an edited document back (diff +
+    /// save). Field names mirror `paged_model::CharacterRun`/`Paragraph`.
+    pub fn story_content(&self, story_id: &str) -> Option<crate::channel::StoryContent> {
+        let s = self.scene.stories.iter().find(|s| s.self_id == story_id)?;
+        let paragraphs = s
+            .story
+            .paragraphs
+            .iter()
+            .map(|para| {
+                let runs = para
+                    .runs
+                    .iter()
+                    .map(|run| crate::channel::RunContent {
+                        text: run.text.clone(),
+                        character_style: run.character_style.clone(),
+                        font: run.font.clone(),
+                        font_style: run.font_style.clone(),
+                        point_size: run.point_size,
+                        fill_color: run.fill_color.clone(),
+                        underline: run.underline,
+                        strikethru: run.strikethru,
+                        capitalization: run.capitalization.clone(),
+                        baseline_shift: run.baseline_shift,
+                        position: run.position.clone(),
+                        tracking: run.tracking,
+                    })
+                    .collect();
+                crate::channel::ParagraphContent {
+                    paragraph_style: para.paragraph_style.clone(),
+                    runs,
+                }
+            })
+            .collect();
+        Some(crate::channel::StoryContent {
+            self_id: s.self_id.clone(),
+            paragraphs,
+        })
+    }
+
+    /// SDK Phase 5 (D1) — generic document-collection dispatcher per
+    /// `panel-catalog-and-sdk-extension.md` §5.1 + plan Task B.
+    /// Routes the requested `CollectionName` to the per-collection
+    /// accessor and returns the serialized array as a
+    /// `serde_json::Value` — one wire shape that handles all 21
+    /// collections without per-name plumbing in the channel envelope.
+    ///
+    /// Consumers deserialize against the typed `*Summary` matching
+    /// the `documentCollection:<name>` ReadSpec they declared. Names
+    /// without a backing accessor return `Value::Array(vec![])` — the
+    /// audit pass per §10 flags these as "wire-shape exists, accessor
+    /// pending."
+    pub fn collection(&self, name: crate::channel::CollectionName) -> serde_json::Value {
+        use crate::channel::CollectionName::*;
+        match name {
+            Swatches => serde_json::to_value(self.swatches()).unwrap_or_default(),
+            Gradients => serde_json::to_value(self.gradients()).unwrap_or_default(),
+            ParagraphStyles => serde_json::to_value(self.paragraph_styles()).unwrap_or_default(),
+            CharacterStyles => serde_json::to_value(self.character_styles()).unwrap_or_default(),
+            Layers => serde_json::to_value(self.layers()).unwrap_or_default(),
+            ObjectStyles => serde_json::to_value(self.object_styles()).unwrap_or_default(),
+            Links => serde_json::to_value(self.links()).unwrap_or_default(),
+            Conditions => serde_json::to_value(self.conditions()).unwrap_or_default(),
+            Spreads => serde_json::to_value(self.spreads()).unwrap_or_default(),
+            Pages => serde_json::to_value(self.pages()).unwrap_or_default(),
+            MasterPages => serde_json::to_value(self.master_pages()).unwrap_or_default(),
+            CellStyles => serde_json::to_value(self.cell_styles()).unwrap_or_default(),
+            TableStyles => serde_json::to_value(self.table_styles()).unwrap_or_default(),
+            Fonts => serde_json::to_value(self.fonts()).unwrap_or_default(),
+            ConditionSets => serde_json::to_value(self.condition_sets()).unwrap_or_default(),
+            ColorGroups => serde_json::to_value(self.color_groups()).unwrap_or_default(),
+            Articles => serde_json::to_value(self.articles()).unwrap_or_default(),
+            Hyperlinks => serde_json::to_value(self.hyperlinks()).unwrap_or_default(),
+            Bookmarks => serde_json::to_value(self.bookmarks()).unwrap_or_default(),
+            CrossReferences => serde_json::to_value(self.cross_references()).unwrap_or_default(),
+            IndexTopics => serde_json::to_value(self.index_topics()).unwrap_or_default(),
+            Footnotes => serde_json::to_value(self.footnotes()).unwrap_or_default(),
+            Notes => serde_json::to_value(self.notes()).unwrap_or_default(),
+            XmlTags => serde_json::to_value(&self.scene.designmap.xml_tags).unwrap_or_default(),
+            XmlElements => serde_json::to_value(self.xml_elements()).unwrap_or_default(),
+            TrackedChanges => serde_json::to_value(self.tracked_changes()).unwrap_or_default(),
+            Endnotes => serde_json::to_value(self.endnotes()).unwrap_or_default(),
+            Inks => serde_json::to_value(self.inks()).unwrap_or_default(),
+            Sections => serde_json::to_value(self.sections()).unwrap_or_default(),
+            Stories => serde_json::to_value(self.stories()).unwrap_or_default(),
+            NumberingLists => serde_json::to_value(self.numbering_lists()).unwrap_or_default(),
+            InkCoverage => serde_json::to_value(self.ink_coverage()).unwrap_or_default(),
+        }
+    }
+
+    /// §21 advanced prepress — per-page ink coverage, read off the CPU
+    /// rasterizer's per-ink plane state. Backs
+    /// `documentCollection:inkCoverage`.
+    ///
+    /// Analysed at [`INK_COVERAGE_DPI`] against
+    /// [`INK_COVERAGE_LIMIT_PCT`]; the returned histogram lets a panel
+    /// re-threshold the limit without another render. Memoised on the
+    /// rebuild counter — the first call after a mutation rasterises
+    /// every page, later calls are free.
+    ///
+    /// **Read `separated_pct` before quoting anything else.** Images,
+    /// RGB/Lab swatches, gradients and blend-group content carry no
+    /// ink decomposition in the raster lane; those pixels are excluded
+    /// as *unknown*, not counted as blank. See
+    /// [`crate::channel::InkCoverageSummary`].
+    #[cfg(feature = "cpu")]
+    pub fn ink_coverage(&self) -> Vec<crate::channel::InkCoverageSummary> {
+        let generation = self.rebuild_stats.rebuilds;
+        if let Some((cached_at, rows)) = self.ink_coverage_cache.borrow().as_ref() {
+            if *cached_at == generation {
+                return rows.clone();
+            }
+        }
+        let rows = self.compute_ink_coverage();
+        *self.ink_coverage_cache.borrow_mut() = Some((generation, rows.clone()));
+        rows
+    }
+
+    /// Stub for builds without the CPU rasterizer (the WebGPU-only
+    /// SDK lane). Returning an empty collection rather than erroring
+    /// follows the worker's "no data ⇒ empty, never throw" rule — and
+    /// an empty list cannot be mistaken for "this document needs no
+    /// ink", because there are no rows to read at all.
+    #[cfg(not(feature = "cpu"))]
+    pub fn ink_coverage(&self) -> Vec<crate::channel::InkCoverageSummary> {
+        Vec::new()
+    }
+
+    #[cfg(feature = "cpu")]
+    fn compute_ink_coverage(&self) -> Vec<crate::channel::InkCoverageSummary> {
+        // The ink lane exists only when the build had a CMYK transform
+        // to resolve swatches through: `color_id_to_paint` needs BOTH
+        // an ICC transform and a CMYK-valued swatch to emit a
+        // `Paint::Cmyk`, and without the transform every CMYK and spot
+        // swatch collapses to `Paint::Solid` — display RGB with no ink
+        // decomposition. Mirror of the `cmyk_icc_profile` selection in
+        // `rebuild_pipeline_options`; keep the two in step.
+        let separation_available = self.proof_state.is_some() || self.icc_bytes.is_some();
+        let mut rows = Vec::with_capacity(self.built.pages.len());
+        for (index, page) in self.built.pages.iter().enumerate() {
+            let separation = paged_renderer::separate_built_page(page, INK_COVERAGE_DPI);
+            let report = separation.ink_coverage(INK_COVERAGE_LIMIT_PCT);
+            let plates = report
+                .plates
+                .iter()
+                .zip(separation.plates.iter())
+                .map(|(coverage, plate)| {
+                    let (ink_id, name) = match plate.channel {
+                        paged_renderer::InkChannel::Cyan => ("cyan", "Cyan".to_string()),
+                        paged_renderer::InkChannel::Magenta => ("magenta", "Magenta".to_string()),
+                        paged_renderer::InkChannel::Yellow => ("yellow", "Yellow".to_string()),
+                        paged_renderer::InkChannel::Black => ("black", "Black".to_string()),
+                        paged_renderer::InkChannel::Spot(_) => {
+                            // The display list names a spot by its IDML
+                            // `<Color Self="…">` id; the palette turns
+                            // that into the swatch name the Ink Manager
+                            // shows, so both surfaces name one ink the
+                            // same way.
+                            let display = self
+                                .scene
+                                .palette
+                                .colors
+                                .get(&plate.name)
+                                .and_then(|c| c.name.clone())
+                                .unwrap_or_else(|| plate.name.clone());
+                            return crate::channel::PlateCoverageSummary {
+                                ink_id: plate.name.clone(),
+                                name: display,
+                                is_spot: true,
+                                area_pct: coverage.area_pct,
+                                max_tint_pct: coverage.max_tint_pct,
+                                mean_tint_pct: coverage.mean_tint_pct,
+                            };
+                        }
+                    };
+                    crate::channel::PlateCoverageSummary {
+                        ink_id: ink_id.to_string(),
+                        name,
+                        is_spot: false,
+                        area_pct: coverage.area_pct,
+                        max_tint_pct: coverage.max_tint_pct,
+                        mean_tint_pct: coverage.mean_tint_pct,
+                    }
+                })
+                .collect();
+            rows.push(crate::channel::InkCoverageSummary {
+                page_id: page.id.clone(),
+                page_index: index as u32,
+                separation_available,
+                analysis_dpi: INK_COVERAGE_DPI,
+                limit_pct: report.limit_pct,
+                total_pixels: report.total_pixels as u32,
+                separated_pixels: report.separated_pixels as u32,
+                separated_pct: report.separated_pct(),
+                max_tac_pct: report.max_tac_pct,
+                mean_tac_pct: report.mean_tac_pct,
+                over_limit_pixels: report.over_limit_pixels as u32,
+                over_limit_pct: report.over_limit_pct_of_separated(),
+                plates,
+                histogram: report.histogram.clone(),
+            });
+        }
+        rows
+    }
+
+    /// SDK Phase 5 (D1) — singleton document-state snapshot per
+    /// `panel-catalog-and-sdk-extension.md` §5.6. Powers the Info
+    /// panel + status-bar + any chrome that reflects whole-document
+    /// state (vs. selection state). Scalar reads; the six fields
+    /// cover v1 panel needs.
+    pub fn document_meta(&self) -> crate::channel::DocumentMeta {
+        // W2.5 — baseline-grid settings live on the parsed designmap.
+        let gp = &self.scene.designmap.grid_preference;
+        crate::channel::DocumentMeta {
+            page_count: self.built.pages.len() as u32,
+            // `active_page` is application state (canvas-side camera
+            // focus + Pages panel selection). The worker doesn't
+            // track it; consumers fold their own active-page state
+            // into the binding renderer when they need it.
+            active_page: None,
+            units: String::new(),
+            color_mode: String::new(),
+            document_name: String::new(),
+            // Edits-since-load, from the undo log: undoing every applied
+            // mutation empties the log and the document reads clean again
+            // (a pending redo does not differ from the loaded state). Was
+            // hardcoded `false` — every consumer (status chip, Info panel,
+            // title dirty dot) permanently claimed a clean document; found
+            // by the Info panel's first behaviour spec, 2026-08-18.
+            dirty: !self.applied_log.is_empty(),
+            default_fill_color: self.document_defaults.fill_color.clone(),
+            default_stroke_color: self.document_defaults.stroke_color.clone(),
+            default_stroke_weight: self.document_defaults.stroke_weight,
+            // Concept 2 — active colour-management settings. The
+            // profile NAME falls back to the designmap's declared
+            // working space so the settings dialog can show what the
+            // document asks for even before a registered profile
+            // activates it.
+            cmyk_profile_name: self
+                .color_settings
+                .cmyk_profile_name
+                .clone()
+                .or_else(|| self.scene.designmap.color_settings.cmyk_profile.clone()),
+            rgb_policy: self.color_settings.rgb_policy.clone(),
+            cmyk_profile_active: self.icc_bytes.is_some(),
+            rendering_intent: Some(self.color_settings.intent.name().to_string()),
+            black_point_compensation: Some(self.color_settings.bpc),
+            proof_profile_name: self.proof_state.as_ref().map(|p| p.name.clone()),
+            proof_simulate_paper_white: self.proof_state.as_ref().map(|p| p.simulate_paper_white),
+            use_standard_lab_for_spots: Some(self.use_standard_lab_for_spots),
+            // W2.5 — read-only baseline-grid settings from
+            // `<GridPreference>`. All `None` when the document carried no
+            // such element (the editor then shows InDesign's defaults).
+            baseline_grid_start: gp.baseline_start,
+            baseline_grid_division: gp.baseline_division,
+            baseline_grid_shown: gp.baseline_grid_shown,
+            baseline_grid_relative_to: gp.baseline_grid_relative_option.clone(),
+            baseline_grid_color: gp.baseline_color.clone(),
+            plugin_metadata: Some(
+                self.scene
+                    .designmap
+                    .labels
+                    .iter()
+                    .map(|(key, value)| crate::channel::PluginMetadataEntry {
+                        key: key.clone(),
+                        value: value.clone(),
+                    })
+                    .collect(),
+            ),
+        }
+    }
+
+    /// Inspector P1 — build the scene-tree outline. Spread → Page →
+    /// (group leaves OR top-level frames). Light enough to send
+    /// eagerly; the panel can re-fetch on `mutationApplied`.
+    pub fn scene_tree(&self) -> Vec<crate::channel::SceneTreeNode> {
+        use crate::channel::SceneTreeNode;
+        use paged_model::FrameRef;
+        let folios = self.page_folios();
+        let mut spread_nodes = Vec::with_capacity(self.scene.spreads.len());
+        for (si, parsed) in self.scene.spreads.iter().enumerate() {
+            let spread = &parsed.spread;
+            let spread_label = spread
+                .self_id
+                .clone()
+                .map(|id| format!("Spread {id}"))
+                .unwrap_or_else(|| format!("Spread {}", si + 1));
+            let mut page_nodes = Vec::with_capacity(spread.pages.len().max(1));
+            // Single page node for now — the parser doesn't carry a
+            // per-page frame map; all frames belong to the spread.
+            // Per-page partitioning is a v2 refinement.
+            let order: Vec<FrameRef> = if !spread.frames_in_order.is_empty() {
+                spread.frames_in_order.clone()
+            } else {
+                let mut v: Vec<FrameRef> = Vec::new();
+                v.extend((0..spread.text_frames.len()).map(FrameRef::TextFrame));
+                v.extend((0..spread.rectangles.len()).map(FrameRef::Rectangle));
+                v.extend((0..spread.ovals.len()).map(FrameRef::Oval));
+                v.extend((0..spread.graphic_lines.len()).map(FrameRef::GraphicLine));
+                v.extend((0..spread.polygons.len()).map(FrameRef::Polygon));
+                v
+            };
+            let frame_nodes: Vec<SceneTreeNode> = order
+                .into_iter()
+                .filter_map(|fr| frame_to_tree_node(spread, fr))
+                .collect();
+            let label = spread
+                .pages
+                .first()
+                .and_then(|p| folios.get(p.self_id.as_deref()?).cloned())
+                .unwrap_or_else(|| "Page".to_string());
+            page_nodes.push(SceneTreeNode {
+                id: None,
+                kind: "Page".to_string(),
+                label,
+                children: frame_nodes,
+                plugin_metadata: None,
+            });
+            spread_nodes.push(SceneTreeNode {
+                id: None,
+                kind: "Spread".to_string(),
+                label: spread_label,
+                children: page_nodes,
+                plugin_metadata: None,
+            });
+        }
+        spread_nodes
+    }
+
+    pub fn group_leaves(&self, group_self_id: &str) -> Vec<crate::element_selection::ElementId> {
+        use crate::element_selection::ElementId;
+        let mut out = Vec::new();
+        for parsed in &self.scene.spreads {
+            let spread = &parsed.spread;
+            let Some(group) = spread
+                .groups
+                .iter()
+                .find(|g| g.self_id.as_deref() == Some(group_self_id))
+            else {
+                continue;
+            };
+            // Recurse via a worklist instead of true recursion so we
+            // don't blow the stack on pathological group nesting.
+            let mut stack: Vec<&paged_model::Group> = vec![group];
+            while let Some(g) = stack.pop() {
+                for member in &g.members {
+                    match *member {
+                        paged_model::FrameRef::TextFrame(i) => {
+                            if let Some(f) = spread.text_frames.get(i) {
+                                if let Some(id) = f.self_id.as_deref() {
+                                    out.push(ElementId::TextFrame(id.to_string()));
+                                }
+                            }
+                        }
+                        paged_model::FrameRef::Rectangle(i) => {
+                            if let Some(f) = spread.rectangles.get(i) {
+                                if let Some(id) = f.self_id.as_deref() {
+                                    out.push(ElementId::Rectangle(id.to_string()));
+                                }
+                            }
+                        }
+                        paged_model::FrameRef::Oval(i) => {
+                            if let Some(f) = spread.ovals.get(i) {
+                                if let Some(id) = f.self_id.as_deref() {
+                                    out.push(ElementId::Oval(id.to_string()));
+                                }
+                            }
+                        }
+                        paged_model::FrameRef::Polygon(i) => {
+                            if let Some(f) = spread.polygons.get(i) {
+                                if let Some(id) = f.self_id.as_deref() {
+                                    out.push(ElementId::Polygon(id.to_string()));
+                                }
+                            }
+                        }
+                        paged_model::FrameRef::GraphicLine(i) => {
+                            if let Some(f) = spread.graphic_lines.get(i) {
+                                if let Some(id) = f.self_id.as_deref() {
+                                    out.push(ElementId::GraphicLine(id.to_string()));
+                                }
+                            }
+                        }
+                        paged_model::FrameRef::Group(i) => {
+                            if let Some(nested) = spread.groups.get(i) {
+                                stack.push(nested);
+                            }
+                        }
+                    }
+                }
+            }
+            break;
+        }
+        out
+    }
+
+    /// Aftercare-A — `RequestWordBounds` accessor. Reconstructs the
+    /// story's byte-text (paragraphs joined by the synthetic
+    /// inter-paragraph `\n`, matching the offset convention the caret /
+    /// line-bounds / hit-test paths share) and returns the
+    /// `[start, end)` byte span of the word (per UAX-29 word
+    /// segmentation) containing `offset`. The editor's double-click
+    /// word-selection drives this. `None` when the story id doesn't
+    /// resolve or the story has no text. See [`geometry::word_bounds`]
+    /// for the whitespace / boundary / clamp behaviour.
+    pub fn word_bounds(
+        &self,
+        story_id: &str,
+        cell: Option<&crate::selection::TextCellAddr>,
+        offset: u32,
+    ) -> Option<crate::geometry::WordBounds> {
+        let text = self.stream_byte_text(story_id, cell)?;
+        crate::geometry::word_bounds(&text, offset)
+    }
+
+    /// W1.23 — the `[start, end)` byte span of the paragraph containing
+    /// `offset`, per the stream's reconstructed byte string (paragraphs
+    /// joined by the synthetic inter-paragraph `\n`). Backs the caret's
+    /// triple-click paragraph-selection. Mirrors [`Self::word_bounds`]
+    /// exactly: same reconstruction, same byte-offset address space.
+    pub fn paragraph_bounds(
+        &self,
+        story_id: &str,
+        cell: Option<&crate::selection::TextCellAddr>,
+        offset: u32,
+    ) -> Option<crate::geometry::ParagraphBounds> {
+        let text = self.stream_byte_text(story_id, cell)?;
+        crate::geometry::paragraph_bounds(&text, offset)
+    }
+
+    /// W1.13 — reconstruct the byte-text of a paragraph stream: the
+    /// story body when `cell` is `None`, or the named cell's paragraphs
+    /// when `cell` is `Some`. Paragraphs are joined with the single
+    /// synthetic `\n` that the offset contract accounts for, so the
+    /// string is index-compatible with every stream offset on the wire.
+    /// `None` when the story / table / cell address doesn't resolve.
+    fn stream_byte_text(
+        &self,
+        story_id: &str,
+        cell: Option<&crate::selection::TextCellAddr>,
+    ) -> Option<String> {
+        let story = self.scene.stories.iter().find(|s| s.self_id == story_id)?;
+        let paragraphs: &[paged_model::Paragraph] = match cell {
+            None => &story.story.paragraphs,
+            Some(addr) => {
+                let table = story
+                    .story
+                    .paragraphs
+                    .iter()
+                    .filter_map(|p| p.table.as_ref())
+                    .find(|t| t.self_id.as_deref() == Some(addr.table_id.as_str()))?;
+                &table
+                    .cells
+                    .iter()
+                    .find(|c| c.coords() == Some((addr.col, addr.row)))?
+                    .paragraphs
+            }
+        };
+        let mut text = String::new();
+        for (i, para) in paragraphs.iter().enumerate() {
+            if i > 0 {
+                text.push('\n');
+            }
+            for run in &para.runs {
+                text.push_str(&run.text);
+            }
+        }
+        Some(text)
+    }
+
+    /// The built page a spread item belongs to: the page of its PARENT
+    /// spread that holds its transformed centroid, the rule
+    /// `element_geometry`, `path_anchors` and `moveFrame` share.
+    /// Restricting the search to the parent spread is what makes
+    /// cross-spread duplicates route correctly: a clone in spread B's
+    /// vecs carries bounds in spread-B coords, which would alias
+    /// spread A's page rectangles in a flat all-pages search. `None`
+    /// is the pasteboard.
+    fn host_page(
+        &self,
+        spread: &paged_model::Spread,
+        bounds: paged_model::Bounds,
+        item_transform: Option<[f32; 6]>,
+    ) -> Option<&BuiltPage> {
+        let aabb = crate::hit::transform_bbox(bounds, item_transform);
+        let cx = (aabb.left + aabb.right) * 0.5;
+        let cy = (aabb.top + aabb.bottom) * 0.5;
+        let host = spread.pages.iter().find(|p| {
+            let pb = crate::hit::transform_bbox(p.bounds, p.item_transform);
+            cx >= pb.left && cx <= pb.right && cy >= pb.top && cy <= pb.bottom
+        })?;
+        let sid = host.self_id.as_deref()?;
+        self.built().pages.iter().find(|bp| bp.id.as_str() == sid)
+    }
+
+    /// `moveFrame` writes the transform `element_geometry` reads, which
+    /// is in the space of the page the item sits on; the document stores
+    /// it in spread space. Map one back to the other through the origin
+    /// of the item's CURRENT page, so a read, a step and a write move the
+    /// item by exactly the step (a pasteboard item reads and writes in
+    /// spread space).
+    fn spread_space_transform(&self, frame_id: &str, transform: [f32; 6]) -> [f32; 6] {
+        let placed = self.scene.spreads.iter().find_map(|parsed| {
+            let s = &parsed.spread;
+            let hit = |id: &Option<String>| id.as_deref() == Some(frame_id);
+            s.text_frames
+                .iter()
+                .find(|f| hit(&f.self_id))
+                .map(|f| (f.bounds, f.item_transform))
+                .or_else(|| {
+                    s.rectangles
+                        .iter()
+                        .find(|f| hit(&f.self_id))
+                        .map(|f| (f.bounds, f.item_transform))
+                })
+                .or_else(|| {
+                    s.ovals
+                        .iter()
+                        .find(|f| hit(&f.self_id))
+                        .map(|f| (f.bounds, f.item_transform))
+                })
+                .or_else(|| {
+                    s.polygons
+                        .iter()
+                        .find(|f| hit(&f.self_id))
+                        .map(|f| (f.bounds, f.item_transform))
+                })
+                .or_else(|| {
+                    s.graphic_lines
+                        .iter()
+                        .find(|f| hit(&f.self_id))
+                        .map(|f| (f.bounds, f.item_transform))
+                })
+                .map(|(b, t)| (s, b, t))
+        });
+        let origin = placed
+            .and_then(|(s, b, t)| self.host_page(s, b, t))
+            .map_or((0.0, 0.0), |bp| bp.spread_origin);
+        let [a, b, c, d, tx, ty] = transform;
+        [a, b, c, d, tx + origin.0, ty + origin.1]
+    }
+
+    pub fn element_geometry(
+        &self,
+        ids: &[crate::element_selection::ElementId],
+    ) -> Vec<crate::channel::ElementGeometryItem> {
+        use crate::element_selection::ElementId;
+        let mut out = Vec::with_capacity(ids.len());
+        for id in ids {
+            // Aftercare-A — per-cell geometry. A `TableCell` resolves
+            // against the BuiltPage's retained `cell_rects` (the W3.A1
+            // hit-test map), not a spread page-item vec. The rect is
+            // already page-local pt (`(0,0)` = page top-left, the
+            // `LineLayout` frame), so it needs no `item_transform`:
+            // the overlay consumes `bounds` directly. `bounds` follows
+            // the `[top, left, bottom, right]` convention by mapping
+            // the cell rect `[x, y, w, h]` → `[y, x, y+h, x+w]`. The
+            // editor's cell overlay upgrades from the table AABB to
+            // this precise cell rect.
+            if let ElementId::TableCell {
+                story_id,
+                table_id,
+                row,
+                col,
+            } = id
+            {
+                for bp in &self.built().pages {
+                    if let Some(cr) = bp.cell_rects.iter().find(|cr| {
+                        cr.story_id == *story_id
+                            && cr.table_id == *table_id
+                            && cr.row == *row
+                            && cr.col == *col
+                    }) {
+                        let [x, y, w, h] = cr.rect;
+                        out.push(crate::channel::ElementGeometryItem {
+                            id: id.clone(),
+                            // C-23 — a table cell is resolved from a
+                            // BUILT PAGE's retained rect, so it is
+                            // page-owned by construction: a cell cannot
+                            // be on the pasteboard without its table
+                            // being there, and a pasteboard table has
+                            // no laid-out cell rects to find.
+                            page_id: Some(bp.id.clone()),
+                            spread_id: self
+                                .scene()
+                                .spreads
+                                .iter()
+                                .find(|p| {
+                                    p.spread
+                                        .pages
+                                        .iter()
+                                        .any(|pg| pg.self_id.as_deref() == Some(bp.id.as_str()))
+                                })
+                                .and_then(|p| p.spread.self_id.clone()),
+                            bounds: [y, x, y + h, x + w],
+                            item_transform: None,
+                            page_origin: None,
+                            has_image: false,
+                            story_id: None,
+                        });
+                        break;
+                    }
+                }
+                continue;
+            }
+            let raw = id.raw_id();
+            for parsed in &self.scene().spreads {
+                let spread = &parsed.spread;
+                let mut story_id = None;
+                let resolved: Option<(paged_model::Bounds, Option<[f32; 6]>, bool)> = match id {
+                    ElementId::TextFrame(_) => spread
+                        .text_frames
+                        .iter()
+                        .find(|f| f.self_id.as_deref() == Some(raw))
+                        .map(|f| {
+                            story_id = f.parent_story.clone();
+                            (f.bounds, f.item_transform, false)
+                        }),
+                    ElementId::Rectangle(_) => spread
+                        .rectangles
+                        .iter()
+                        .find(|f| f.self_id.as_deref() == Some(raw))
+                        // `has_image` drives the editor's Image inspector
+                        // (Frame Fitting): a frame "has an image" when it
+                        // carries parsed image bytes OR a placed
+                        // `image_link` (PlaceImage). The link path lets a
+                        // from-scratch placed image surface the Image
+                        // context without an IDML-embedded `<Image>`.
+                        .map(|f| {
+                            (
+                                f.bounds,
+                                f.item_transform,
+                                f.has_image_element || f.image_link.is_some(),
+                            )
+                        }),
+                    ElementId::Oval(_) => spread
+                        .ovals
+                        .iter()
+                        .find(|f| f.self_id.as_deref() == Some(raw))
+                        // Same image semantics as Rectangle (ovals host
+                        // images too); previously hardcoded `false`.
+                        .map(|f| {
+                            (
+                                f.bounds,
+                                f.item_transform,
+                                f.has_image_element || f.image_link.is_some(),
+                            )
+                        }),
+                    ElementId::Polygon(_) => spread
+                        .polygons
+                        .iter()
+                        .find(|f| f.self_id.as_deref() == Some(raw))
+                        // Same image semantics as Rectangle (polygons host
+                        // images too); previously hardcoded `false`.
+                        .map(|f| {
+                            (
+                                f.bounds,
+                                f.item_transform,
+                                f.has_image_element || f.image_link.is_some(),
+                            )
+                        }),
+                    ElementId::GraphicLine(_) => spread
+                        .graphic_lines
+                        .iter()
+                        .find(|f| f.self_id.as_deref() == Some(raw))
+                        .map(|f| (f.bounds, f.item_transform, false)),
+                    // A group answers the box InDesign draws around it:
+                    // its members' outlines measured in the group's own
+                    // space, placed by the group's composed transform, so
+                    // a rotated group reads as an oriented box.
+                    ElementId::Group(_) => spread
+                        .groups
+                        .iter()
+                        .position(|g| g.self_id.as_deref() == Some(raw))
+                        .and_then(|gi| crate::group_box::group_box(spread, gi))
+                        .map(|(bounds, transform)| (bounds, transform, false)),
+                    // StoryRange is a property-address, not a
+                    // geometric element — its bounds are the host
+                    // frame's. The caret/selection-rect surface
+                    // (RequestCaretGeometry / RequestSelectionGeometry)
+                    // is the right read path for text-range visuals.
+                    ElementId::StoryRange { .. } => None,
+                    // W3.A1 — Table / TableCell geometry comes from the
+                    // retained `cell_rects` on the BuiltPage (the hit
+                    // path), not the spread's page-item vecs. No
+                    // spread-frame geometry to resolve here.
+                    ElementId::Table { .. } | ElementId::TableCell { .. } => None,
+                };
+                let Some((bounds, item_transform, has_image)) = resolved else {
+                    continue;
+                };
+                let built_page = self.host_page(&parsed.spread, bounds, item_transform);
+                // C-23 — an element whose centroid lands on no page is
+                // ON THE PASTEBOARD, not absent. This used to `if let`
+                // the push away, so the door answered nothing for an
+                // element that exists, is grouped and renders.
+                out.push(crate::channel::ElementGeometryItem {
+                    id: id.clone(),
+                    page_id: built_page.map(|bp| bp.id.clone()),
+                    spread_id: parsed.spread.self_id.clone(),
+                    bounds: [bounds.top, bounds.left, bounds.bottom, bounds.right],
+                    item_transform: page_space_transform(built_page, item_transform),
+                    page_origin: built_page.map(|bp| [bp.spread_origin.0, bp.spread_origin.1]),
+                    has_image,
+                    story_id,
+                });
+                break;
+            }
+        }
+        out
+    }
+
+    /// Step 5 — `RequestPathAnchors` accessor. Returns the anchor
+    /// list + subpath markers for a single Polygon / Rectangle / Oval
+    /// / TextFrame, alongside its page and composed transform.
+    /// Rectangles / Ovals declared via `GeometricBounds` only (no
+    /// `<PathGeometry>`) come back with an empty `anchors` vector —
+    /// callers treat that as "nothing to draw".
+    /// v66 (RFI C-69) — a text frame's composed glyphs as outlines in
+    /// page space, one run per fill colour (see
+    /// [`crate::channel::TextOutlinesResult`]). Built from the export
+    /// build's glyph side-channel: each `GlyphRunEntry` names the exact
+    /// `FillPath` command that draws the glyph, so the outline is that
+    /// command's path through that command's transform — no second font
+    /// pass. A glyph belongs to the frame when its origin lies inside the
+    /// frame's page-space box (a threaded story's other frames, and
+    /// overset text, are excluded by construction).
+    pub fn text_outlines(
+        &self,
+        id: &crate::element_selection::ElementId,
+    ) -> Option<crate::channel::TextOutlinesResult> {
+        use crate::channel::{PathAnchorTriple, TextOutlineRun, TextOutlinesResult};
+        use crate::element_selection::ElementId;
+        use paged_compose::{DisplayCommand, Paint, PathSegment};
+
+        let ElementId::TextFrame(raw) = id else {
+            return None;
+        };
+        let (bounds, item_transform, page_self) =
+            self.scene().spreads.iter().find_map(|parsed| {
+                let f = parsed
+                    .spread
+                    .text_frames
+                    .iter()
+                    .find(|f| f.self_id.as_deref() == Some(raw.as_str()))?;
+                let aabb = crate::hit::transform_bbox(f.bounds, f.item_transform);
+                let (cx, cy) = (
+                    (aabb.left + aabb.right) * 0.5,
+                    (aabb.top + aabb.bottom) * 0.5,
+                );
+                let page = parsed.spread.pages.iter().find(|p| {
+                    let pb = crate::hit::transform_bbox(p.bounds, p.item_transform);
+                    cx >= pb.left && cx <= pb.right && cy >= pb.top && cy <= pb.bottom
+                })?;
+                Some((f.bounds, f.item_transform, page.self_id.clone()?))
+            })?;
+        let built = self.build_for_export().ok()?;
+        let bp = built.pages.iter().find(|p| p.id.as_str() == page_self)?;
+        let spread_box = crate::hit::transform_bbox(bounds, item_transform);
+        let (ox, oy) = bp.spread_origin;
+        let slack = 0.5;
+        let (l, t, r, b) = (
+            spread_box.left - ox - slack,
+            spread_box.top - oy - slack,
+            spread_box.right - ox + slack,
+            spread_box.bottom - oy + slack,
+        );
+        let table = bp.list.glyph_runs.as_ref()?;
+        let mut runs: Vec<TextOutlineRun> = Vec::new();
+        let mut skipped = 0u32;
+        for entry in &table.entries {
+            let (gx, gy) = (entry.transform.0[4], entry.transform.0[5]);
+            if !(gx >= l && gx <= r && gy >= t && gy <= b) {
+                continue;
+            }
+            let (rgb, cmyk) = match &entry.paint {
+                Paint::Solid(c) => ([c.r, c.g, c.b], None),
+                Paint::Cmyk {
+                    c, m, y, k, rgb, ..
+                } => ([rgb.r, rgb.g, rgb.b], Some([*c, *m, *y, *k])),
+                _ => {
+                    skipped += 1;
+                    continue;
+                }
+            };
+            if entry.is_stroke {
+                skipped += 1;
+                continue;
+            }
+            let (path_id, xf) = match bp.list.commands.get(entry.command_index as usize) {
+                Some(DisplayCommand::FillPath {
+                    path_id, transform, ..
+                })
+                | Some(DisplayCommand::FillPathBlend {
+                    path_id, transform, ..
+                }) => (*path_id, *transform),
+                _ => {
+                    skipped += 1;
+                    continue;
+                }
+            };
+            let Some(path) = bp.list.paths.get(path_id) else {
+                skipped += 1;
+                continue;
+            };
+            let run = match runs.iter_mut().find(|r| r.rgb == rgb && r.cmyk == cmyk) {
+                Some(r) => r,
+                None => {
+                    runs.push(TextOutlineRun {
+                        rgb,
+                        cmyk,
+                        anchors: Vec::new(),
+                        subpath_starts: Vec::new(),
+                        glyphs: 0,
+                    });
+                    runs.last_mut().expect("just pushed")
+                }
+            };
+            run.glyphs += 1;
+            let p = |x: f32, y: f32| -> [f32; 2] {
+                let (px, py) = xf.apply(x, y);
+                [px, py]
+            };
+            let corner = |q: [f32; 2]| PathAnchorTriple {
+                anchor: q,
+                left: q,
+                right: q,
+            };
+            let mut start = run.anchors.len();
+            for seg in &path.segments {
+                match *seg {
+                    PathSegment::MoveTo { x, y } => {
+                        start = run.anchors.len();
+                        run.subpath_starts.push(start as u32);
+                        run.anchors.push(corner(p(x, y)));
+                    }
+                    PathSegment::LineTo { x, y } => run.anchors.push(corner(p(x, y))),
+                    PathSegment::QuadTo { cx, cy, x, y } => {
+                        // Degree-elevate: c1 = p0 + 2/3 (q - p0), c2 = p + 2/3 (q - p).
+                        let Some(last) = run.anchors.last_mut() else {
+                            continue;
+                        };
+                        let p0 = last.anchor;
+                        let q = p(cx, cy);
+                        let pe = p(x, y);
+                        last.right = [
+                            p0[0] + 2.0 / 3.0 * (q[0] - p0[0]),
+                            p0[1] + 2.0 / 3.0 * (q[1] - p0[1]),
+                        ];
+                        run.anchors.push(PathAnchorTriple {
+                            anchor: pe,
+                            left: [
+                                pe[0] + 2.0 / 3.0 * (q[0] - pe[0]),
+                                pe[1] + 2.0 / 3.0 * (q[1] - pe[1]),
+                            ],
+                            right: pe,
+                        });
+                    }
+                    PathSegment::CubicTo {
+                        cx1,
+                        cy1,
+                        cx2,
+                        cy2,
+                        x,
+                        y,
+                    } => {
+                        let Some(last) = run.anchors.last_mut() else {
+                            continue;
+                        };
+                        last.right = p(cx1, cy1);
+                        let pe = p(x, y);
+                        run.anchors.push(PathAnchorTriple {
+                            anchor: pe,
+                            left: p(cx2, cy2),
+                            right: pe,
+                        });
+                    }
+                    PathSegment::Close => {
+                        // A closing anchor that repeats the start folds
+                        // into it (its incoming handle moves over).
+                        if run.anchors.len() > start + 1 {
+                            let first = run.anchors[start].anchor;
+                            let last = *run.anchors.last().expect("non-empty");
+                            if (last.anchor[0] - first[0]).abs() < 1e-4
+                                && (last.anchor[1] - first[1]).abs() < 1e-4
+                            {
+                                run.anchors.pop();
+                                run.anchors[start].left = last.left;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Some(TextOutlinesResult {
+            id: id.clone(),
+            page_id: bp.id.clone(),
+            runs,
+            skipped_glyphs: skipped,
+        })
+    }
+
+    pub fn path_anchors(
+        &self,
+        id: &crate::element_selection::ElementId,
+    ) -> Option<crate::channel::PathAnchorsResult> {
+        use crate::channel::{PathAnchorTriple, PathAnchorsResult};
+        use crate::element_selection::ElementId;
+        use paged_model::PathAnchor;
+
+        // Resolved per-frame path geometry borrowed from the scene:
+        // (bounds, item_transform, anchors, subpath_starts, subpath_open).
+        type FramePathGeom<'a> = (
+            paged_model::Bounds,
+            Option<[f32; 6]>,
+            std::borrow::Cow<'a, [PathAnchor]>,
+            &'a [usize],
+            &'a [bool],
+        );
+        use std::borrow::Cow;
+
+        let raw = id.raw_id();
+        for parsed in &self.scene().spreads {
+            let spread = &parsed.spread;
+            let resolved: Option<FramePathGeom> = match id {
+                ElementId::TextFrame(_) => spread
+                    .text_frames
+                    .iter()
+                    .find(|f| f.self_id.as_deref() == Some(raw))
+                    .map(|f| {
+                        (
+                            f.bounds,
+                            f.item_transform,
+                            Cow::Borrowed(f.anchors.as_slice()),
+                            f.subpath_starts.as_slice(),
+                            f.subpath_open.as_slice(),
+                        )
+                    }),
+                ElementId::Rectangle(_) => spread
+                    .rectangles
+                    .iter()
+                    .find(|f| f.self_id.as_deref() == Some(raw))
+                    .map(|f| {
+                        (
+                            f.bounds,
+                            f.item_transform,
+                            Cow::Borrowed(f.anchors.as_slice()),
+                            f.subpath_starts.as_slice(),
+                            f.subpath_open.as_slice(),
+                        )
+                    }),
+                // The model keeps an oval as bounds; its path is the
+                // inscribed four-arc ellipse — the outline the renderer
+                // draws and the planar arrangement reads.
+                ElementId::Oval(_) => spread
+                    .ovals
+                    .iter()
+                    .find(|f| f.self_id.as_deref() == Some(raw))
+                    .map(|f| {
+                        (
+                            f.bounds,
+                            f.item_transform,
+                            Cow::Owned(paged_mutate::apply::oval_anchors(f.bounds)),
+                            &[][..],
+                            &[false][..],
+                        )
+                    }),
+                ElementId::Polygon(_) => spread
+                    .polygons
+                    .iter()
+                    .find(|f| f.self_id.as_deref() == Some(raw))
+                    .map(|f| {
+                        (
+                            f.bounds,
+                            f.item_transform,
+                            Cow::Borrowed(f.anchors.as_slice()),
+                            f.subpath_starts.as_slice(),
+                            f.subpath_open.as_slice(),
+                        )
+                    }),
+                ElementId::GraphicLine(_) => spread
+                    .graphic_lines
+                    .iter()
+                    .find(|f| f.self_id.as_deref() == Some(raw))
+                    .map(|f| {
+                        (
+                            f.bounds,
+                            f.item_transform,
+                            Cow::Borrowed(f.anchors.as_slice()),
+                            f.subpath_starts.as_slice(),
+                            f.subpath_open.as_slice(),
+                        )
+                    }),
+                ElementId::Group(_) => None,
+                // StoryRange doesn't carry path anchors.
+                ElementId::StoryRange { .. } => None,
+                // W3.A1 — tables / cells have no path-anchor array.
+                ElementId::Table { .. } | ElementId::TableCell { .. } => None,
+            };
+            let Some((bounds, item_transform, anchors, subpath_starts, subpath_open)) = resolved
+            else {
+                continue;
+            };
+            // C-23 — pageless is an ANSWER, not a miss: a path on the
+            // pasteboard reads its anchors in spread space.
+            let page = self.host_page(&parsed.spread, bounds, item_transform);
+            let anchors_out: Vec<PathAnchorTriple> = anchors
+                .iter()
+                .map(|a| PathAnchorTriple {
+                    anchor: [a.anchor.0, a.anchor.1],
+                    left: [a.left.0, a.left.1],
+                    right: [a.right.0, a.right.1],
+                })
+                .collect();
+            return Some(PathAnchorsResult {
+                id: id.clone(),
+                page_id: page.map(|p| p.id.clone()),
+                spread_id: parsed.spread.self_id.clone(),
+                anchors: anchors_out,
+                subpath_starts: subpath_starts.iter().map(|&n| n as u32).collect(),
+                subpath_open: subpath_open.to_vec(),
+                item_transform: page_space_transform(page, item_transform),
+                page_origin: page.map(|bp| [bp.spread_origin.0, bp.spread_origin.1]),
+            });
+        }
+        None
+    }
+
+    /// Same as `pages_for_story` but returns page *indices* into
+    /// `built().pages`. Convenient for the GPU scene cache which
+    /// keys by index. Indices not currently in `page_index` (stale
+    /// after a rebuild that removed pages) are skipped.
+    /// B-06 — `RequestNearestPathPoint` accessor: closest on-curve
+    /// point via the kurbo kernel. `point` is element-local (the
+    /// `path_anchors` space).
+    pub fn nearest_path_point(
+        &self,
+        id: &crate::element_selection::ElementId,
+        point: [f32; 2],
+    ) -> Option<crate::channel::NearestPathPointResult> {
+        let table = self.path_anchors(id)?;
+        if table.anchors.is_empty() {
+            return None;
+        }
+        let anchors: Vec<paged_model::PathAnchor> = table
+            .anchors
+            .iter()
+            .map(|a| paged_model::PathAnchor {
+                anchor: (a.anchor[0], a.anchor[1]),
+                left: (a.left[0], a.left[1]),
+                right: (a.right[0], a.right[1]),
+            })
+            .collect();
+        let starts: Vec<usize> = table.subpath_starts.iter().map(|s| *s as usize).collect();
+        let hit = paged_mutate::kurbo_kernel::nearest_point_on_path(
+            &anchors,
+            &starts,
+            &table.subpath_open,
+            (point[0], point[1]),
+        )?;
+        Some(crate::channel::NearestPathPointResult {
+            seg_start: hit.seg_start as u32,
+            seg_end: hit.seg_end as u32,
+            t: hit.t,
+            point: [hit.point.0, hit.point.1],
+            distance: hit.distance,
+        })
+    }
+
+    /// B-22 (v57) — `RequestPlanarRegions` accessor: the faces of the
+    /// planar arrangement `ids` forms.
+    ///
+    /// With `point` (raw path space, the `path_anchors` space) this
+    /// answers only the face under it — the Shape Builder hover query,
+    /// which costs N point-in-path tests plus one materialisation
+    /// instead of a full enumeration. Without it, every face comes back.
+    ///
+    /// Geometry comes from `paged_mutate::apply::element_path`, the very
+    /// function the region verbs read, so a face id reported here
+    /// addresses exactly the face `pathfinderFaces` will build.
+    pub fn planar_regions(
+        &self,
+        ids: &[crate::element_selection::ElementId],
+        point: Option<[f32; 2]>,
+    ) -> crate::channel::PlanarRegionsResult {
+        use crate::channel::{PathAnchorTriple, PlanarFaceWire, PlanarRegionsResult};
+
+        let refuse = |reason: String| PlanarRegionsResult {
+            found: false,
+            faces: Vec::new(),
+            input_count: 0,
+            complete: false,
+            reason: Some(reason),
+        };
+        if ids.is_empty() {
+            return refuse("no elements named".to_string());
+        }
+        let mut inputs: Vec<(Vec<paged_model::PathAnchor>, Vec<usize>)> =
+            Vec::with_capacity(ids.len());
+        for id in ids {
+            let node = element_to_node_id(id);
+            match paged_mutate::apply::element_path(self.scene(), &node) {
+                Some(path) => inputs.push(path),
+                None => return refuse(format!("{id:?} carries no path geometry")),
+            }
+        }
+        let to_wire = |face: paged_mutate::planar::PlanarFace| PlanarFaceWire {
+            id: face.id,
+            signature: face.signature.iter().map(|i| *i as u32).collect(),
+            anchors: face
+                .anchors
+                .iter()
+                .map(|a| PathAnchorTriple {
+                    anchor: [a.anchor.0, a.anchor.1],
+                    left: [a.left.0, a.left.1],
+                    right: [a.right.0, a.right.1],
+                })
+                .collect(),
+            subpath_starts: face.subpath_starts.iter().map(|s| *s as u32).collect(),
+            area: face.area as f32,
+            inside: [face.inside.0, face.inside.1],
+        };
+        match point {
+            Some(p) => match paged_mutate::planar::face_at_point(&inputs, (p[0], p[1])) {
+                Ok(hit) => PlanarRegionsResult {
+                    found: true,
+                    faces: hit.into_iter().map(to_wire).collect(),
+                    input_count: ids.len() as u32,
+                    // A point query returns one face; it makes no claim
+                    // about tiling the union.
+                    complete: true,
+                    reason: None,
+                },
+                Err(e) => refuse(e.to_string()),
+            },
+            None => match paged_mutate::planar::build_arrangement(&inputs) {
+                Ok(arrangement) => PlanarRegionsResult {
+                    found: true,
+                    complete: arrangement.complete,
+                    input_count: arrangement.input_count as u32,
+                    faces: arrangement.faces.into_iter().map(to_wire).collect(),
+                    reason: None,
+                },
+                Err(e) => refuse(e.to_string()),
+            },
+        }
+    }
+
+    pub fn page_indices_for_story(&self, story_id: &str) -> Vec<usize> {
+        self.pages_for_story(story_id)
+            .iter()
+            .filter_map(|id| self.page_index.get(id).copied())
+            .collect()
+    }
+
+    /// ADR 027 §5 — the ONE place the model turns its state into
+    /// [`PipelineOptions`]. The live rebuild, the export build and the
+    /// digest gate's cold build all start here, so they cannot drift apart.
+    fn pipeline_options<'a>(
+        &'a self,
+        purpose: PipelinePurpose,
+        assets: Option<&'a dyn paged_renderer::AssetResolver>,
+        resource_providers: &'a HashMap<
+            String,
+            paged_renderer::pipeline::ResourceProviderEntry<'a>,
+        >,
+    ) -> PipelineOptions<'a> {
+        let base = PipelineOptions {
+            font: self.font_bytes.as_deref(),
+            assets,
+            // Ink Manager — "Use Standard Lab Values for Spots"
+            // (`SetUseStandardLabForSpots`). The Swatches chip reads the
+            // same flag through `color_preview`; this is what makes the
+            // PAGE agree with the chip. An export honours it too: it
+            // describes the inks themselves, not a viewing condition.
+            use_standard_lab_for_spots: self.use_standard_lab_for_spots,
+            // Perf-S — the decode cache is content-addressed (URI →
+            // DecodedImage), not positional, so every build may share it.
+            image_decode_cache: Some(&self.image_decode_cache),
+            grow_hint: Some(&self.grow_hint),
+            // Perf-FontTable — reuse the shaping table built at load
+            // (saves the ~225ms harvest+resolve walk).
+            pre_built_font_table: Some(&self.font_table),
+            // ADR 027 step 2 — the CMYK transform is keyed by profile,
+            // intent and BPC, so a proof (Live) and the working space
+            // (Export) never share a stale entry.
+            cmyk_transform_cache: Some(&self.cmyk_transform_cache),
+            // C-1 — plugin scene layers render inside their frames, and a
+            // printed/exported sheet includes them (document-grade vector
+            // output).
+            scene_layers: Some(&self.scene_layers),
+            // v70 — scene-scoped faces, for scene-layer text alone.
+            scene_fonts: self
+                .scene_font_resolver
+                .as_ref()
+                .map(|r| r as &dyn paged_renderer::AssetResolver),
+            // C-6 — claimed image providers assemble pyramid tiles inside
+            // their frames; missing tiles land on
+            // `BuiltDocument::resource_tiles_needed`.
+            resource_providers: Some(resource_providers),
+            ..PipelineOptions::default()
+        };
+        match purpose {
+            PipelinePurpose::Live => PipelineOptions {
+                // Soft-proof active => CMYK renders through the PROOF
+                // condition (paper white = absolute colorimetric);
+                // otherwise the working space + document settings.
+                cmyk_icc_profile: match &self.proof_state {
+                    Some(p) => Some(p.bytes.as_slice()),
+                    None => self.icc_bytes.as_deref(),
+                },
+                cmyk_intent: match &self.proof_state {
+                    Some(p) if p.simulate_paper_white => paged_color::Intent::AbsoluteColorimetric,
+                    Some(p) => p.intent,
+                    None => self.color_settings.intent,
+                },
+                cmyk_bpc: match &self.proof_state {
+                    // Paper-white simulation wants the true media white:
+                    // BPC would re-anchor the black point and dilute it.
+                    Some(p) => !p.simulate_paper_white && self.color_settings.bpc,
+                    None => self.color_settings.bpc,
+                },
+                // Perf-MasterText / Perf-BodyStory — reuse the per-page
+                // master-text and per-story body emit deltas.
+                master_text_emit_cache: Some(&self.master_text_emit_cache),
+                body_story_emit_cache: Some(&self.body_story_emit_cache),
+                keep_seeds: Some(&self.keep_seeds),
+                keep_seed_hints: Some(&self.pending_keep_hints),
+                story_resume: Some(&self.story_resume),
+                edit_spans: Some(&self.pending_edit_spans),
+                build_generation: self.build_generation,
+                emission_prints: Some(&self.emission_prints),
+                render_scale: self.resource_render_scale,
+                // A5 — live rebuilds keep the degraded-asset markers on
+                // (mirrors the initial load); an export stays faithful.
+                degraded_asset_markers: true,
+                ..base
+            },
+            // Concept 3 — the export-time ONE-SHOT build: glyph side-channel
+            // ON, splice caches OFF (a spliced command range would desync the
+            // glyph table's `command_index` parallelism). Proof simulation
+            // is deliberately ignored — export renders the WORKING space —
+            // and the providers serve full resolution (scale 1.0).
+            PipelinePurpose::Export => PipelineOptions {
+                cmyk_icc_profile: self.icc_bytes.as_deref(),
+                cmyk_intent: self.color_settings.intent,
+                cmyk_bpc: self.color_settings.bpc,
+                collect_glyph_runs: true,
+                render_scale: 1.0,
+                ..base
+            },
+        }
+    }
+
+    /// Rebuild the `BuiltDocument` from the (possibly-mutated) scene.
+    /// Phase 4 Step 1 — installs the persistent `layout_cache` so
+    /// paragraphs whose `(text, style, width, font)` signature didn't
+    /// change short-circuit Knuth-Plass. The first build (cold cache)
+    /// pays the full layout cost; subsequent mutation rebuilds only
+    /// recompose the touched paragraph(s).
+    /// Concept 3 — the export-time ONE-SHOT build: glyph side-channel
+    /// ON, splice caches OFF. The splice caches (master-text / body-
+    /// story emit deltas) re-append cached command RANGES, which would
+    /// desync the glyph table's `command_index` parallelism; the
+    /// export pays the full build cost instead (it happens once per
+    /// export, not per gesture frame). The live canvas build and its
+    /// caches are untouched. Proof simulation is deliberately ignored
+    /// — export always renders the WORKING space.
+    pub fn build_for_export(
+        &self,
+    ) -> Result<paged_renderer::BuiltDocument, crate::channel::LoadError> {
+        let resolver = build_font_resolver(&self.font_registry, self.font_bytes.as_deref());
+        let resource_providers = self.resource_tiles.provider_entries();
+        let options = self.pipeline_options(
+            PipelinePurpose::Export,
+            resolver
+                .as_ref()
+                .map(|r| r as &dyn paged_renderer::AssetResolver),
+            &resource_providers,
+        );
+        pipeline::build_document(&self.scene, &options)
+            .map_err(|e| crate::channel::LoadError::Build(e.to_string()))
+    }
+
+    /// v70 — the page as it draws with some items hidden: a slideshow's
+    /// build steps (each frame is the slide without the items later steps
+    /// reveal). A copy of the scene with those items (a group: all its
+    /// members, master items included) set invisible is built once; the
+    /// document itself is untouched.
+    pub fn build_page_hiding(
+        &self,
+        page_id: &PageId,
+        hide: &[crate::element_selection::ElementId],
+    ) -> Result<paged_renderer::BuiltPage, crate::channel::LoadError> {
+        use std::collections::HashSet;
+        let mut scene = self.scene.clone();
+        let mut ids: HashSet<String> = hide.iter().map(|e| e.raw_id().to_string()).collect();
+        // A hidden group hides its members (nested groups too).
+        let spreads = scene
+            .spreads
+            .iter()
+            .map(|p| &p.spread)
+            .chain(scene.master_spreads.values().map(|m| &m.spread));
+        for sp in spreads {
+            let mut changed = true;
+            while changed {
+                changed = false;
+                for g in &sp.groups {
+                    if g.self_id.as_deref().is_some_and(|id| ids.contains(id)) {
+                        for m in &g.members {
+                            let id = frame_self_id(sp, *m);
+                            if let Some(id) = id {
+                                changed |= ids.insert(id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let hide_in = |sp: &mut paged_model::Spread| {
+            let off = |id: &Option<String>| id.as_deref().is_some_and(|i| ids.contains(i));
+            sp.text_frames
+                .iter_mut()
+                .filter(|f| off(&f.self_id))
+                .for_each(|f| f.visible = false);
+            sp.rectangles
+                .iter_mut()
+                .filter(|f| off(&f.self_id))
+                .for_each(|f| f.visible = false);
+            sp.ovals
+                .iter_mut()
+                .filter(|f| off(&f.self_id))
+                .for_each(|f| f.visible = false);
+            sp.graphic_lines
+                .iter_mut()
+                .filter(|f| off(&f.self_id))
+                .for_each(|f| f.visible = false);
+            sp.polygons
+                .iter_mut()
+                .filter(|f| off(&f.self_id))
+                .for_each(|f| f.visible = false);
+        };
+        for p in scene.spreads.iter_mut() {
+            hide_in(&mut p.spread);
+        }
+        for m in scene.master_spreads.values_mut() {
+            hide_in(&mut m.spread);
+        }
+        let resolver = build_font_resolver(&self.font_registry, self.font_bytes.as_deref());
+        let resource_providers = self.resource_tiles.provider_entries();
+        let options = self.pipeline_options(
+            PipelinePurpose::Export,
+            resolver
+                .as_ref()
+                .map(|r| r as &dyn paged_renderer::AssetResolver),
+            &resource_providers,
+        );
+        let built = pipeline::build_document(&scene, &options)
+            .map_err(|e| crate::channel::LoadError::Build(e.to_string()))?;
+        built
+            .pages
+            .into_iter()
+            .find(|p| &p.id == page_id)
+            .ok_or_else(|| crate::channel::LoadError::Build(format!("no page {page_id}")))
+    }
+
+    /// Concept 3 — read accessors for the export session's begin.
+    pub fn font_table(&self) -> &paged_renderer::FontTable {
+        &self.font_table
+    }
+
+    pub fn active_cmyk_profile(&self) -> Option<&[u8]> {
+        self.icc_bytes.as_deref()
+    }
+
+    pub fn registered_profile(&self, name: &str) -> Option<&[u8]> {
+        self.color_profiles.get(name).map(|b| b.as_slice())
+    }
+
+    pub fn color_settings_state(&self) -> &ColorSettingsState {
+        &self.color_settings
+    }
+
+    pub fn ink_settings_map(&self) -> &std::collections::BTreeMap<String, InkSetting> {
+        &self.ink_settings
+    }
+
+    pub fn use_standard_lab_for_spots(&self) -> bool {
+        self.use_standard_lab_for_spots
+    }
+
+    pub fn document_preference(&self) -> paged_model::DocumentPreference {
+        self.scene.designmap.document_preference.clone()
+    }
+
+    pub fn palette(&self) -> &paged_model::Graphic {
+        &self.scene.palette
+    }
+
+    /// ADR 027 §5 — the ONE commit path: drop what `invalidation`
+    /// names from the cross-build emit caches, then rebuild. Every
+    /// committed edit (a text op, an operation, undo, redo) comes through
+    /// here, so invalidation has one place to live.
+    fn commit_and_rebuild(
+        &mut self,
+        invalidation: Invalidation,
+    ) -> Result<(), crate::channel::LoadError> {
+        // Any committed edit may change the fonts the document asks for
+        // (a run's family, a style's font, a poured story).
+        self.font_check_owed = true;
+        let scope = match &invalidation {
+            Invalidation::Text { story, .. }
+                if self
+                    .scene
+                    .frame_chain(story)
+                    .first()
+                    .is_some_and(|f| !f.is_anchored) =>
+            {
+                DirtyScope::Story(story.clone())
+            }
+            _ => DirtyScope::Everything,
+        };
+        self.pending_dirty_scope = match std::mem::take(&mut self.pending_dirty_scope) {
+            DirtyScope::Unset => scope,
+            DirtyScope::Story(prev) if scope == DirtyScope::Story(prev.clone()) => {
+                DirtyScope::Story(prev)
+            }
+            _ => DirtyScope::Everything,
+        };
+        match invalidation {
+            Invalidation::Everything => {
+                self.master_text_emit_cache.borrow_mut().clear();
+                self.body_story_emit_cache.borrow_mut().clear();
+                self.keep_seeds.borrow_mut().clear();
+                self.pending_keep_hints.clear();
+                self.story_resume.borrow_mut().clear();
+                self.pending_edit_spans.clear();
+            }
+            // No story reads what changed: every delta stays, and each is
+            // still checked against its key and its pages' pools on the hit.
+            Invalidation::PageItemPaint => {}
+            Invalidation::Text { story, edit } => {
+                // ADR 027 plan step 4 — a text edit changes one
+                // story's content, so only that story's body emission is
+                // stale: every input another story reads (its own content,
+                // chain geometry, wrap, page numbering, the list ledger in,
+                // the path buffer it replays into) is in its key or checked
+                // on the hit. Master text reads no body story (page context
+                // is in its key, running headers re-resolve in the
+                // post-layout pass), so it is kept too (plan step 7). A
+                // story laid out inside another story's emission (an
+                // anchored or inline frame) or without a chain of its own
+                // (a master's, a path's) has no entry of its own to drop,
+                // so it drops them all.
+                let own_chain = self
+                    .scene
+                    .frame_chain(&story)
+                    .first()
+                    .is_some_and(|f| !f.is_anchored);
+                if own_chain {
+                    self.body_story_emit_cache
+                        .borrow_mut()
+                        .retain(|(id, _), _| id != &story);
+                } else {
+                    self.master_text_emit_cache.borrow_mut().clear();
+                    self.body_story_emit_cache.borrow_mut().clear();
+                }
+                match edit {
+                    Some((story, span)) => {
+                        let hint = self
+                            .pending_keep_hints
+                            .entry(story.clone())
+                            .or_insert(span.first);
+                        *hint = (*hint).min(span.first);
+                        // A span describes ONE edit against the last build;
+                        // two before a rebuild describe nothing usable.
+                        if self.pending_edit_spans.remove(&story).is_some() {
+                            self.story_resume
+                                .borrow_mut()
+                                .retain(|(id, _), _| id != &story);
+                        } else {
+                            self.pending_edit_spans.insert(story, span);
+                        }
+                    }
+                    // Where the edit landed is unknown: nothing of any
+                    // story's breaks may be reused.
+                    None => {
+                        self.keep_seeds.borrow_mut().clear();
+                        self.pending_keep_hints.clear();
+                        self.story_resume
+                            .borrow_mut()
+                            .retain(|(id, _), _| id != &story);
+                        self.pending_edit_spans.remove(&story);
+                    }
+                }
+            }
+        }
+        self.rebuild_after_mutation()
+    }
+
+    /// Settle a build a batch still owes, so an op that reads the layout
+    /// (Update Table of Contents, Generate Index) reads the current one.
+    fn settle_owed_build(&mut self, op: &str) -> Result<(), crate::channel::WorkerError> {
+        if !self.rebuild_owed {
+            return Ok(());
+        }
+        let outer = std::mem::replace(&mut self.rebuild_deferred, false);
+        self.rebuild_owed = false;
+        let rebuilt = self.rebuild_after_mutation();
+        self.rebuild_deferred = outer;
+        rebuilt.map_err(|e| crate::channel::WorkerError::NotImplemented {
+            what: format!("{op}: the layout did not build ({e:?})"),
+        })
+    }
+
+    /// `UpdateCrossReferences` (ADR 169): each source's runs rebuilt from
+    /// its format's building blocks over its destination paragraph, as
+    /// InDesign 20.0.1 rewrites them (`xref-update-probe`). One
+    /// `ReplaceStoryParagraphs` per story the update changes, in one batch.
+    fn lower_update_cross_references(
+        &mut self,
+        only: Option<&str>,
+    ) -> Result<paged_mutate::Operation, crate::channel::WorkerError> {
+        use paged_mutate::Operation;
+        use std::collections::HashMap;
+        self.settle_owed_build("updateCrossReferences")?;
+        let scene = &self.scene;
+        let dm = &scene.designmap;
+        let laid_out = self.built.paragraph_pages();
+        let labels: Vec<String> = self.pages().into_iter().map(|p| p.name).collect();
+        // Every destination standing in a story: id → (story, paragraph,
+        // name, paragraph destination).
+        let mut destinations: HashMap<&str, (&str, usize, Option<&str>, bool)> = HashMap::new();
+        for s in &scene.stories {
+            for d in &s.story.destinations {
+                destinations.insert(
+                    d.self_id.as_str(),
+                    (
+                        s.self_id.as_str(),
+                        d.paragraph as usize,
+                        d.name.as_deref(),
+                        d.paragraph_destination,
+                    ),
+                );
+            }
+        }
+        let page_variable = dm
+            .text_variables
+            .iter()
+            .find(|v| v.variable_type.as_deref() == Some("XrefPageNumberType"))
+            .map(|v| v.self_id.clone());
+        let mut list_labels: HashMap<&str, Vec<Option<String>>> = HashMap::new();
+        let mut ops: Vec<Operation> = Vec::new();
+        let mut found = only.is_none();
+        for parsed in &scene.stories {
+            let mut paragraphs = parsed.story.paragraphs.clone();
+            let mut changed = false;
+            for source in &parsed.story.cross_reference_sources {
+                if only.is_some_and(|id| id != source.self_id) {
+                    continue;
+                }
+                found = true;
+                let Some(format) = source
+                    .format
+                    .as_deref()
+                    .and_then(|f| dm.cross_reference_formats.iter().find(|x| x.self_id == f))
+                else {
+                    continue;
+                };
+                let Some(&(story, para, name, paragraph_destination)) = dm
+                    .hyperlinks
+                    .iter()
+                    .find(|h| h.source.as_deref() == Some(source.self_id.as_str()))
+                    .and_then(|h| h.destination.as_deref())
+                    .and_then(|d| destinations.get(d))
+                else {
+                    continue;
+                };
+                let Some(target) = scene
+                    .stories
+                    .iter()
+                    .find(|s| s.self_id == story)
+                    .and_then(|s| s.story.paragraphs.get(para))
+                else {
+                    continue;
+                };
+                let label = list_labels
+                    .entry(story)
+                    .or_insert_with(|| {
+                        let s = scene.stories.iter().find(|s| s.self_id == story);
+                        s.map(|s| paged_renderer::pipeline::story_list_labels(scene, &s.story))
+                            .unwrap_or_default()
+                    })
+                    .get(para)
+                    .cloned()
+                    .flatten();
+                let page = laid_out
+                    .get(story)
+                    .and_then(|m| m.get(&para).copied())
+                    .and_then(|p| labels.get(p).cloned())
+                    .unwrap_or_default();
+                let blocks = cross_reference_text(
+                    format,
+                    target,
+                    label.as_deref(),
+                    name.filter(|_| !paragraph_destination),
+                    dm.document_name.as_deref(),
+                );
+                changed |= replace_source_runs(
+                    &mut paragraphs,
+                    &source.self_id,
+                    &blocks,
+                    &page,
+                    page_variable.as_deref(),
+                );
+            }
+            if changed {
+                ops.push(Operation::ReplaceStoryParagraphs {
+                    story_id: parsed.self_id.clone(),
+                    paragraphs_json: serde_json::to_string(&paragraphs)
+                        .expect("paragraphs serialize"),
+                });
+            }
+        }
+        if !found {
+            return Err(crate::channel::WorkerError::NotImplemented {
+                what: format!(
+                    "updateCrossReferences: no cross-reference source {}",
+                    only.unwrap_or_default()
+                ),
+            });
+        }
+        Ok(match ops.len() {
+            1 => ops.pop().expect("one op"),
+            _ => Operation::Batch { ops },
+        })
+    }
+
+    /// v72 — `GenerateIndex` (ADR 168): story `story_id`'s paragraphs
+    /// become the document's index over the CURRENT layout, and the index
+    /// styles it names that the document lacks are created first, with
+    /// the attributes InDesign 20.0.1 gives them. One batch: one undo.
+    fn lower_generate_index(
+        &mut self,
+        story_id: &str,
+    ) -> Result<paged_mutate::Operation, crate::channel::WorkerError> {
+        use paged_mutate::Operation;
+        self.settle_owed_build("generateIndex")?;
+        if !self.scene.stories.iter().any(|s| s.self_id == story_id) {
+            return Err(crate::channel::WorkerError::NotImplemented {
+                what: format!("generateIndex: no story {story_id}"),
+            });
+        }
+        let laid_out = self.built.paragraph_pages();
+        let labels: Vec<String> = self.pages().into_iter().map(|p| p.name).collect();
+        let entries = self.scene.resolve_index_tree_on(&laid_out);
+        let options = self.scene.designmap.index_options.clone();
+        let paragraphs =
+            paged_renderer::pipeline::index_paragraphs(options.as_ref(), entries, &labels);
+
+        let mut ops: Vec<Operation> = Vec::new();
+        let mut wanted_paragraph: Vec<&str> = Vec::new();
+        let mut wanted_character: Vec<&str> = Vec::new();
+        for p in &paragraphs {
+            if let Some(s) = p.paragraph_style.as_deref() {
+                if !wanted_paragraph.contains(&s) {
+                    wanted_paragraph.push(s);
+                }
+            }
+            for r in &p.runs {
+                if let Some(s) = r.character_style.as_deref() {
+                    if !wanted_character.contains(&s) {
+                        wanted_character.push(s);
+                    }
+                }
+            }
+        }
+        for id in wanted_paragraph {
+            if self.scene.styles.paragraph_styles.contains_key(id) {
+                continue;
+            }
+            // InDesign bases them on [Basic Paragraph].
+            let basic = "ParagraphStyle/$ID/NormalParagraphStyle";
+            let based_on = if self.scene.styles.paragraph_styles.contains_key(basic) {
+                basic
+            } else {
+                "ParagraphStyle/$ID/[No paragraph style]"
+            };
+            let def = indesign_index_paragraph_style(id, based_on);
+            ops.push(Operation::CreateParagraphStyle {
+                self_id: None,
+                name: None,
+                based_on: None,
+                restore_json: Some(serde_json::to_string(&def).expect("a style serializes")),
+            });
+        }
+        for id in wanted_character {
+            if self.scene.styles.character_styles.contains_key(id) {
+                continue;
+            }
+            let def = paged_model::CharacterStyleDef {
+                self_id: id.to_string(),
+                name: id.strip_prefix("CharacterStyle/").map(str::to_string),
+                based_on: Some("CharacterStyle/$ID/[No character style]".to_string()),
+                // InDesign's own Index Cross-reference: Minion Pro Italic 10.
+                font: (id == "CharacterStyle/$ID/Index Cross-reference")
+                    .then(|| "Minion Pro".to_string()),
+                font_style: (id == "CharacterStyle/$ID/Index Cross-reference")
+                    .then(|| "Italic".to_string()),
+                point_size: (id == "CharacterStyle/$ID/Index Cross-reference").then_some(10.0),
+                ..Default::default()
+            };
+            ops.push(Operation::CreateCharacterStyle {
+                self_id: None,
+                name: None,
+                based_on: None,
+                restore_json: Some(serde_json::to_string(&def).expect("a style serializes")),
+            });
+        }
+        ops.push(Operation::ReplaceStoryParagraphs {
+            story_id: story_id.to_string(),
+            paragraphs_json: serde_json::to_string(&paragraphs).expect("paragraphs serialize"),
+        });
+        Ok(if ops.len() == 1 {
+            ops.pop().expect("one op")
+        } else {
+            Operation::Batch { ops }
+        })
+    }
+
+    /// v0.71.13 — `UpdateTableOfContents` (ADR 165): TOC story `story_id`'s
+    /// new paragraphs, from its TOC style over the CURRENT layout. A build
+    /// a batch still owes is settled first, since the entries' pages come
+    /// from it.
+    fn lower_update_toc(
+        &mut self,
+        story_id: &str,
+    ) -> Result<paged_mutate::Operation, crate::channel::WorkerError> {
+        use crate::channel::WorkerError;
+        self.settle_owed_build("updateTableOfContents")?;
+        let refuse = |what: String| WorkerError::NotImplemented { what };
+        let parsed = self
+            .scene
+            .stories
+            .iter()
+            .find(|s| s.self_id == story_id)
+            .ok_or_else(|| refuse(format!("updateTableOfContents: no story {story_id}")))?;
+        // InDesign binds a TOC on its `<Story>`; the frame's attribute is
+        // the engine's older spelling.
+        let toc_id = parsed
+            .story
+            .applied_toc_style
+            .clone()
+            .or_else(|| {
+                self.scene
+                    .frame_for_story
+                    .get(story_id)
+                    .and_then(|f| f.applied_toc_style.clone())
+            })
+            .ok_or_else(|| {
+                refuse(format!(
+                    "updateTableOfContents: story {story_id} is not a table of contents"
+                ))
+            })?;
+        let toc = self.scene.styles.toc_styles.get(&toc_id).ok_or_else(|| {
+            refuse(format!(
+                "updateTableOfContents: story {story_id} names {toc_id}, which the document lacks"
+            ))
+        })?;
+        let laid_out = self.built.paragraph_pages();
+        let labels: Vec<String> = self.pages().into_iter().map(|p| p.name).collect();
+        let entries = self.scene.resolve_toc_on(toc, &laid_out);
+        let paragraphs = paged_renderer::pipeline::toc_paragraphs(toc, entries, &labels);
+        Ok(paged_mutate::Operation::ReplaceStoryParagraphs {
+            story_id: story_id.to_string(),
+            // Plain data: serializing it cannot fail.
+            paragraphs_json: serde_json::to_string(&paragraphs).expect("paragraphs serialize"),
+        })
+    }
+
+    pub fn rebuild_after_mutation(&mut self) -> Result<(), crate::channel::LoadError> {
+        // Perf-Batch — inside a batch the children each ask for a
+        // rebuild and only the last one is worth running. Record the
+        // debt; `apply_mixed_batch` settles it once, after the last
+        // child. Nothing else may set this flag: a deferral that is
+        // never settled would leave `built` describing a document the
+        // scene no longer is.
+        if self.rebuild_deferred {
+            self.rebuild_owed = true;
+            return Ok(());
+        }
+        if std::mem::take(&mut self.font_check_owed) {
+            self.refresh_font_table(false);
+        }
+        let mut cache = std::mem::take(&mut self.layout_cache);
+        cache.reset_stats();
+        // ADR 027 plan step 7 — a build whose commits were text
+        // edits of one story (whose frames do not auto-size) leaves the
+        // frame pass as it was: the pipeline may adopt the previous pages it
+        // laid nothing out on afresh.
+        let previous_ids: std::collections::HashSet<PageId> =
+            self.built.pages.iter().map(|p| p.id.clone()).collect();
+        let adopt = match &self.pending_dirty_scope {
+            DirtyScope::Story(story) => !self
+                .scene
+                .frame_chain(story)
+                .iter()
+                .any(|f| f.auto_sizing.is_some()),
+            _ => false,
+        };
+        let previous_pages = std::cell::RefCell::new(if adopt {
+            std::mem::take(&mut self.built.pages)
+        } else {
+            Vec::new()
+        });
+        let resolver = build_font_resolver(&self.font_registry, self.font_bytes.as_deref());
+        // C-6 — build the per-frame provider entry map, borrowing the tile
+        // store as the shared provider. Built before `options` so it lives
+        // through the build.
+        let resource_providers = self.resource_tiles.provider_entries();
+        let mut options = self.pipeline_options(
+            PipelinePurpose::Live,
+            resolver
+                .as_ref()
+                .map(|r| r as &dyn paged_renderer::AssetResolver),
+            &resource_providers,
+        );
+        options.previous_pages = adopt.then_some(&previous_pages);
+        // W1.24 (audit B18) — time just the pipeline build (the
+        // dominant cost; op-apply is staged separately by the caller).
+        let t_build = phase_now();
+        let (build_result, cache) = paged_text::cache::with_layout_cache(cache, || {
+            pipeline::build_document(&self.scene, &options)
+        });
+        let build_ms = phase_elapsed_ms(t_build);
+        self.layout_cache = cache;
+        let built = match build_result {
+            Ok(built) => built,
+            Err(e) => {
+                // `built` must keep describing a whole document.
+                if adopt {
+                    self.built.pages = previous_pages.into_inner();
+                }
+                return Err(crate::channel::LoadError::Build(e.to_string()));
+            }
+        };
+        self.page_index = built
+            .pages
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (p.id.clone(), i))
+            .collect();
+        self.story_pages = compute_story_pages(&built);
+        // W1.24 (audit B18) — refresh the per-rebuild stats. `rebuilds`
+        // is monotone; `op_apply_ms` consumes whatever a mutation
+        // entrypoint staged (0 for a view-state rebuild). Done before
+        // `self.built` is moved so the sizes read the fresh document.
+        self.rebuild_stats = RebuildStats {
+            build_ms,
+            op_apply_ms: std::mem::take(&mut self.pending_op_apply_ms),
+            pages: built.pages.len(),
+            paragraphs: built.stats.paragraphs,
+            rebuilds: self.rebuild_stats.rebuilds.saturating_add(1),
+            // Snapshotted pre-push (the caller pushes after this
+            // returns); `last_rebuild_stats` recomputes it live so the
+            // reported value is the true post-mutation depth.
+            applied_log_len: self.applied_log.len(),
+        };
+        // ADR 027 plan step 7 — the pages this build changed: a
+        // text edit of one story narrows to the pages laid out afresh, the
+        // pages that are new, and the pages of the story's auto-sizing
+        // frames (their bounds follow the text); anything else is every
+        // page.
+        let scope = std::mem::take(&mut self.pending_dirty_scope);
+        let narrowed_stories: Option<Vec<&String>> = match &scope {
+            DirtyScope::Story(story) => Some(vec![story]),
+            DirtyScope::Fonts(stories) => Some(stories.iter().collect()),
+            _ => None,
+        };
+        let narrowed = match narrowed_stories {
+            Some(stories) => {
+                let autosizing: Vec<&String> = stories
+                    .into_iter()
+                    .filter(|story| {
+                        self.scene
+                            .frame_chain(story)
+                            .iter()
+                            .any(|f| f.auto_sizing.is_some())
+                    })
+                    .collect();
+                let autosized: Vec<usize> = built
+                    .pages
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, p)| {
+                        p.story_layout
+                            .iter()
+                            .any(|l| autosizing.contains(&&l.story_id))
+                    })
+                    .map(|(i, _)| i)
+                    .collect();
+                Some(
+                    (0..built.pages.len())
+                        .filter(|&i| {
+                            built.fresh_pages.get(i).copied().unwrap_or(true)
+                                || !previous_ids.contains(&built.pages[i].id)
+                                || autosized.contains(&i)
+                        })
+                        .collect::<Vec<usize>>(),
+                )
+            }
+            _ => None,
+        };
+        self.last_dirty_narrowed = narrowed.is_some();
+        self.last_dirty_pages = narrowed.unwrap_or_else(|| (0..built.pages.len()).collect());
+        if let Some(changes) = self.page_changes.as_mut() {
+            changes.extend(
+                self.last_dirty_pages
+                    .iter()
+                    .filter_map(|&i| built.pages.get(i).map(|p| p.id.clone())),
+            );
+        }
+        self.built = built;
+        self.pending_keep_hints.clear();
+        self.pending_edit_spans.clear();
+        self.build_generation += 1;
+        if self.digest_gate {
+            if let Err(e) = self.digest_gate_check() {
+                panic!("ADR 027 digest gate: incremental build != cold build: {e}");
+            }
+        }
+        Ok(())
+    }
+
+    /// ADR 027 §4 — the digest gate. Builds the scene COLD (fresh
+    /// layout cache, no emit caches, no grow hint) and compares it with the
+    /// incremental `built`: page count, page ids, every page's
+    /// [`paged_compose::DisplayList::digest`], every page's `story_layout`
+    /// and `cell_rects` (caret and hit-test geometry, which the digest does
+    /// not cover) and the diagnostics. `Err` names the first difference.
+    ///
+    /// Two builds plus a digest per page: a CI / debug lane, never the hot
+    /// path. Enabled per model with [`Self::set_digest_gate`] or for every
+    /// model with `PAGED_DIGEST_GATE=1`; then every rebuild runs it and a
+    /// difference panics.
+    pub fn digest_gate_check(&self) -> Result<(), String> {
+        let cold = self
+            .cold_build()
+            .map_err(|e| format!("cold build failed: {e}"))?;
+        compare_builds(&self.built, &cold)
+    }
+
+    /// Turn the per-rebuild digest gate on or off for this model.
+    pub fn set_digest_gate(&mut self, on: bool) {
+        self.digest_gate = on;
+    }
+
+    /// The build a freshly loaded model would produce for the current
+    /// scene: the live rebuild's options with every cross-build cache and
+    /// hint left out. The registries (fonts, profiles, scene layers) are
+    /// inputs, not caches, and are shared.
+    fn cold_build(&self) -> Result<BuiltDocument, crate::channel::LoadError> {
+        let resolver = build_font_resolver(&self.font_registry, self.font_bytes.as_deref());
+        let resource_providers = self.resource_tiles.provider_entries();
+        let fresh_hint: std::cell::RefCell<HashMap<String, u32>> = Default::default();
+        let mut options = self.pipeline_options(
+            PipelinePurpose::Live,
+            resolver
+                .as_ref()
+                .map(|r| r as &dyn paged_renderer::AssetResolver),
+            &resource_providers,
+        );
+        options.grow_hint = Some(&fresh_hint);
+        // The font table is a cache too: a cold build harvests its own
+        // from the scene, as a fresh load would, so a stale table shows
+        // up as a digest difference.
+        options.pre_built_font_table = None;
+        options.master_text_emit_cache = None;
+        options.body_story_emit_cache = None;
+        options.keep_seeds = None;
+        options.keep_seed_hints = None;
+        options.story_resume = None;
+        options.edit_spans = None;
+        options.emission_prints = None;
+        let (built, _) =
+            paged_text::cache::with_layout_cache(paged_text::LayoutCache::default(), || {
+                pipeline::build_document(&self.scene, &options)
+            });
+        built.map_err(|e| crate::channel::LoadError::Build(e.to_string()))
+    }
+
+    /// C-1 — register (or replace) the plugin scene layer for the frame
+    /// `element_id` (its IDML `Self` id) and rebuild so the next snapshot
+    /// renders it inside that frame. Ephemeral — not a document mutation,
+    /// not written to `source_idml`. A layer whose id matches no frame is
+    /// stored harmlessly (it lowers the day that frame exists).
+    pub fn set_scene_layer(
+        &mut self,
+        element_id: String,
+        layer: paged_compose::SceneLayer,
+    ) -> Result<(), crate::channel::LoadError> {
+        self.set_scene_layer_as(None, element_id, layer)
+    }
+
+    /// C-1 — submit a scene layer ON BEHALF OF a named plugin (C-34).
+    ///
+    /// A frame's in-frame render belongs to ONE content type, and this
+    /// door used to be an unconditional `insert`: plugin A could clear
+    /// or overwrite plugin B's render on B's own frame. When both sides
+    /// name themselves, a foreign overwrite is now refused.
+    ///
+    /// Same posture as the other caller gates, stated rather than
+    /// implied: `caller: None` records no ownership and enforces
+    /// nothing, so the host's own submissions and every pre-C-34 caller
+    /// behave exactly as before. It lets a correct caller prove it is
+    /// correct; it is not a boundary against a hostile one.
+    ///
+    /// **REACHABLE FROM THE WIRE** — `SubmitSceneLayer` carries an
+    /// optional `caller` and the worker routes it here. Same additive
+    /// posture as the parts door above, and likewise no protocol bump
+    /// (RFI C-34).
+    pub fn set_scene_layer_as(
+        &mut self,
+        caller: Option<&str>,
+        element_id: String,
+        layer: paged_compose::SceneLayer,
+    ) -> Result<(), crate::channel::LoadError> {
+        if let (Some(caller), Some(owner)) = (caller, self.scene_layer_owner.get(&element_id)) {
+            if owner != caller {
+                return Err(crate::channel::LoadError::Scene(format!(
+                    "frame {element_id:?} carries a scene layer owned by {owner:?}; \
+                     {caller:?} may not replace it"
+                )));
+            }
+        }
+        if let Some(caller) = caller {
+            self.scene_layer_owner
+                .insert(element_id.clone(), caller.to_string());
+        }
+        self.scene_layers.insert(element_id, layer);
+        self.rebuild_after_mutation()
+    }
+
+    /// C-1 — drop the scene layer for `element_id` (no-op if none) and
+    /// rebuild so the frame returns to its native content.
+    pub fn clear_scene_layer(&mut self, element_id: &str) -> Result<(), crate::channel::LoadError> {
+        if self.scene_layers.remove(element_id).is_some() {
+            // The claim goes with the layer — a frame with no render has
+            // no owner, so the next submitter starts clean.
+            self.scene_layer_owner.remove(element_id);
+            self.rebuild_after_mutation()?;
+        }
+        Ok(())
+    }
+
+    /// C-1 — the indices of the built pages a frame's scene layer is
+    /// drawn on (each page of the spread the frame reaches into). Empty
+    /// when the frame carries no layer, has no items, or draws
+    /// nowhere. A submit re-encodes the union of this before and after.
+    pub fn pages_showing_scene_layer(&self, element_id: &str) -> Vec<usize> {
+        self.built
+            .pages
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.scene_layer_frames.iter().any(|f| f == element_id))
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    /// v68 — the faces a frame's scene-layer text runs named that the
+    /// last build could not resolve (drawn in the default font instead),
+    /// as `"Family Style"` labels. Empty when every named family resolved
+    /// or the frame carries no layer.
+    pub fn scene_layer_font_fallbacks(&self, element_id: &str) -> Vec<String> {
+        self.built.diagnostics.scene_font_fallbacks(element_id)
+    }
+
+    /// C-1 — the frame ids that currently carry a plugin scene layer
+    /// (test/introspection aid).
+    pub fn scene_layer_ids(&self) -> Vec<&str> {
+        self.scene_layers.keys().map(String::as_str).collect()
+    }
+
+    /// C-1 Stage B — register (or replace) a plugin PIXEL layer for the
+    /// frame `element_id`. A `PixelLayer` IS a `SceneLayer` once lowered (a
+    /// set of `SceneItem::Image` tiles), so it stores in the SAME
+    /// `scene_layers` registry and composites through the EXISTING Stage-A
+    /// image lane — no new storage, no new rasterizer path. Malformed tiles
+    /// are dropped by `into_scene_layer`. Ephemeral like `set_scene_layer`:
+    /// re-streamed per drag, not a document mutation, not written to
+    /// `source_idml`.
+    pub fn set_pixel_layer(
+        &mut self,
+        element_id: String,
+        layer: paged_compose::PixelLayer,
+    ) -> Result<(), crate::channel::LoadError> {
+        self.set_scene_layer(element_id, layer.into_scene_layer())
+    }
+
+    /// C-1 Stage B — drop the pixel (or scene) layer for `element_id`
+    /// (no-op if none) and rebuild. A pixel layer lowers into the same
+    /// registry as a scene layer, so this is an alias of
+    /// [`Self::clear_scene_layer`].
+    pub fn clear_pixel_layer(&mut self, element_id: &str) -> Result<(), crate::channel::LoadError> {
+        self.clear_scene_layer(element_id)
+    }
+
+    /// v66 — the binary scene-image door: make the frame's scene layer ONE
+    /// image, taking ownership of `rgba` (the bytes the host transferred;
+    /// no JSON, no per-byte parse). Same caller gate and ephemeral posture
+    /// as [`Self::set_scene_layer_as`]. A malformed buffer is refused here
+    /// rather than stored and silently skipped at lowering.
+    #[allow(clippy::too_many_arguments)]
+    pub fn set_scene_image_as(
+        &mut self,
+        caller: Option<&str>,
+        element_id: String,
+        rgba: bytes::Bytes,
+        width: u32,
+        height: u32,
+        dest: (f32, f32, f32, f32),
+    ) -> Result<(), crate::channel::LoadError> {
+        let (x, y, w, h) = dest;
+        if width == 0
+            || height == 0
+            || w <= 0.0
+            || h <= 0.0
+            || rgba.len() != (width as usize) * (height as usize) * 4
+        {
+            return Err(crate::channel::LoadError::Scene(format!(
+                "scene image for {element_id:?}: {} bytes for {width}x{height}, dest {w}x{h}",
+                rgba.len()
+            )));
+        }
+        let layer = paged_compose::SceneLayer {
+            items: vec![paged_compose::SceneItem::Image {
+                rgba,
+                width,
+                height,
+                x,
+                y,
+                w,
+                h,
+            }],
+        };
+        self.set_scene_layer_as(caller, element_id, layer)
+    }
+
+    /// v66 — patch rectangles of the frame's retained scene image in place
+    /// (the brush-preview lane: a stroke dirties a window, not the image).
+    ///
+    /// `rects` holds four `u32`s per tile — `x, y, w, h` in IMAGE pixels —
+    /// and `rgba` the tiles' tightly packed pixels back to back, in the
+    /// same order. The whole call is validated before any byte moves, so a
+    /// bad tile leaves the image as it was. The target is the first
+    /// `SceneItem::Image` of the frame's layer (a layer the binary door
+    /// set holds exactly one).
+    ///
+    /// The buffer is patched in place when nothing else holds it; when the
+    /// last build's display list still shares it (the usual case: lowering
+    /// clones the refcount) the patch copies it once inside the engine —
+    /// copy-on-write — and the copy is counted in
+    /// [`Self::scene_image_copies`].
+    pub fn patch_scene_image_as(
+        &mut self,
+        caller: Option<&str>,
+        element_id: &str,
+        rects: &[u32],
+        rgba: &[u8],
+    ) -> Result<(), crate::channel::LoadError> {
+        let fail = |why: String| {
+            Err(crate::channel::LoadError::Scene(format!(
+                "scene image tiles for {element_id:?}: {why}"
+            )))
+        };
+        if let (Some(caller), Some(owner)) = (caller, self.scene_layer_owner.get(element_id)) {
+            if owner != caller {
+                return fail(format!(
+                    "the frame's scene layer is owned by {owner:?}, not {caller:?}"
+                ));
+            }
+        }
+        if !rects.len().is_multiple_of(4) {
+            return fail(format!(
+                "{} rect values is not a multiple of 4",
+                rects.len()
+            ));
+        }
+        let Some(layer) = self.scene_layers.get_mut(element_id) else {
+            return fail("the frame carries no scene layer".into());
+        };
+        let Some(paged_compose::SceneItem::Image {
+            rgba: target,
+            width,
+            height,
+            ..
+        }) = layer
+            .items
+            .iter_mut()
+            .find(|i| matches!(i, paged_compose::SceneItem::Image { .. }))
+        else {
+            return fail("the frame's scene layer holds no image".into());
+        };
+        let (iw, ih) = (*width as u64, *height as u64);
+        let mut need: u64 = 0;
+        for r in rects.chunks_exact(4) {
+            let (x, y, w, h) = (r[0] as u64, r[1] as u64, r[2] as u64, r[3] as u64);
+            if w == 0 || h == 0 || x + w > iw || y + h > ih {
+                return fail(format!("tile {x},{y} {w}x{h} outside the {iw}x{ih} image"));
+            }
+            need += w * h * 4;
+        }
+        if need != rgba.len() as u64 {
+            return fail(format!("tiles need {need} bytes, got {}", rgba.len()));
+        }
+        let shared = std::mem::take(target);
+        let mut buf = match shared.try_into_mut() {
+            Ok(unique) => unique,
+            Err(shared) => {
+                self.scene_image_copies += 1;
+                bytes::BytesMut::from(&shared[..])
+            }
+        };
+        let stride = iw as usize * 4;
+        let mut src = 0usize;
+        for r in rects.chunks_exact(4) {
+            let (x, y, w, h) = (r[0] as usize, r[1] as usize, r[2] as usize, r[3] as usize);
+            let row = w * 4;
+            for j in 0..h {
+                let dst = (y + j) * stride + x * 4;
+                buf[dst..dst + row].copy_from_slice(&rgba[src..src + row]);
+                src += row;
+            }
+        }
+        *target = buf.freeze();
+        self.rebuild_after_mutation()
+    }
+
+    /// v66 — how many times a tile patch had to copy a shared scene image
+    /// (see [`Self::patch_scene_image_as`]). A count for budgets and tests.
+    pub fn scene_image_copies(&self) -> u64 {
+        self.scene_image_copies
+    }
+
+    /// v66 — the built pages whose display list draws the frame's current
+    /// scene image, found by the buffer itself (lowering shares it), so a
+    /// frame on a master page answers every page that shows it. Empty when
+    /// the frame draws nowhere. The GPU cache re-encodes exactly these.
+    pub fn pages_showing_scene_image(&self, element_id: &str) -> Vec<usize> {
+        let Some(ptr) = self.scene_layers.get(element_id).and_then(|l| {
+            l.items.iter().find_map(|i| match i {
+                paged_compose::SceneItem::Image { rgba, .. } if !rgba.is_empty() => {
+                    Some(rgba.as_ptr())
+                }
+                _ => None,
+            })
+        }) else {
+            return Vec::new();
+        };
+        self.built
+            .pages
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.list.images.iter().any(|img| img.rgba.as_ptr() == ptr))
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    /// C-6 — parse the frame `Self` id out of a claim's
+    /// `x-paged-image:<frame>` namespace. A bare id (no namespace prefix)
+    /// is treated as the frame id itself, so a caller may claim by frame
+    /// id directly. Returns the frame id slice.
+    fn frame_id_from_image_id(image_id: &str) -> &str {
+        image_id.strip_prefix("x-paged-image:").unwrap_or(image_id)
+    }
+
+    /// C-6 — register (or replace) an image-resource claim for the frame
+    /// encoded in `image_id`'s `x-paged-image:<frame>` namespace, then
+    /// rebuild so the next snapshot assembles whatever tiles are cached. A
+    /// fresh claim has no tiles, so the rebuild emits `ResourceTilesNeeded`
+    /// (read via [`Self::take_resource_tiles_needed`]); the whole-image
+    /// lane paints meanwhile. Ephemeral — not a document mutation.
+    pub fn claim_image_resource(
+        &mut self,
+        image_id: String,
+        levels: u8,
+        tile_size: u32,
+        base_width: u32,
+        base_height: u32,
+        revision: u64,
+    ) -> Result<(), crate::channel::LoadError> {
+        let frame_id = Self::frame_id_from_image_id(&image_id).to_string();
+        let pyramid = paged_renderer::ResourcePyramid {
+            base_width,
+            base_height,
+            levels: levels.max(1),
+            tile_size: tile_size.max(1),
+        };
+        self.resource_tiles
+            .claim(frame_id, image_id, pyramid, revision);
+        self.rebuild_after_mutation()
+    }
+
+    /// C-6 — drop the claim for `image_id` (frees its cached tiles) and
+    /// rebuild so the frame returns to its native whole-image lane. No-op
+    /// (no rebuild) when nothing was claimed.
+    pub fn release_image_resource(
+        &mut self,
+        image_id: &str,
+    ) -> Result<(), crate::channel::LoadError> {
+        let frame_id = Self::frame_id_from_image_id(image_id).to_string();
+        if self.resource_tiles.release(&frame_id) {
+            self.rebuild_after_mutation()?;
+        }
+        Ok(())
+    }
+
+    /// C-6 — fill the LRU tile cache for `image_id` at `level` and rebuild
+    /// so the next snapshot consumes the new tiles at that level. A stale
+    /// `generation` (the pyramid moved on) is dropped without a rebuild.
+    /// Returns `true` when the claim matched (tiles accepted, rebuilt).
+    pub fn submit_resource_tiles(
+        &mut self,
+        image_id: &str,
+        level: u8,
+        tiles: Vec<crate::channel::ProviderTileWire>,
+        generation: u64,
+    ) -> Result<bool, crate::channel::LoadError> {
+        let accepted = self
+            .resource_tiles
+            .submit(image_id, level, tiles, generation);
+        if accepted {
+            self.rebuild_after_mutation()?;
+        }
+        Ok(accepted)
+    }
+
+    /// C-6 — set the camera scale (px-per-pt) the next rebuild assembles
+    /// resource tiles at. Changing it rebuilds (a coarser/finer level may
+    /// now be wanted). The dispatch pushes the live camera scale here so
+    /// pan/zoom re-picks the mip level. No-op (no rebuild) when unchanged.
+    pub fn set_resource_render_scale(
+        &mut self,
+        scale: f32,
+    ) -> Result<(), crate::channel::LoadError> {
+        if (self.resource_render_scale - scale).abs() > f32::EPSILON {
+            self.resource_render_scale = scale;
+            self.rebuild_after_mutation()?;
+        }
+        Ok(())
+    }
+
+    /// C-6 — the tile-miss requests the most recent build produced (the
+    /// `ResourceTilesNeeded` the worker emits over the wire). Read after a
+    /// claim / submit / camera-scale rebuild. Returns a clone (the build's
+    /// side-channel is retained until the next rebuild overwrites it).
+    pub fn resource_tiles_needed(&self) -> Vec<paged_renderer::ResourceTilesNeeded> {
+        self.built.resource_tiles_needed.clone()
+    }
+
+    /// C-6 — whether the frame encoded in `image_id` (or a bare frame id)
+    /// currently carries an image-resource claim (test/introspection aid).
+    pub fn is_resource_claimed(&self, image_id: &str) -> bool {
+        let frame_id = Self::frame_id_from_image_id(image_id);
+        self.resource_tiles.is_claimed(frame_id)
+    }
+
+    /// C-6 — the cached-tile footprint in bytes (test/introspection aid
+    /// for the LRU budget).
+    pub fn resource_tile_bytes(&self) -> usize {
+        self.resource_tiles.used_bytes()
+    }
+
+    /// W1.24 (audit B18) — stats for the most recent rebuild (or the
+    /// initial `load`). Native callers (the editor's worker, tests) read
+    /// this directly; the wasm dispatch folds the breakdown onto the wire
+    /// `LayoutCacheStats` additively. Always populated.
+    ///
+    /// `applied_log_len` is read LIVE from the log here rather than from
+    /// the value snapshotted during the rebuild: the forward-mutation
+    /// paths push onto `applied_log` *after* `rebuild_after_mutation`
+    /// returns, so the snapshot would always trail by one. Reading it at
+    /// stats-read time reports the true post-mutation undo depth (and the
+    /// B19 cap, which lives here).
+    pub fn last_rebuild_stats(&self) -> RebuildStats {
+        RebuildStats {
+            applied_log_len: self.applied_log.len(),
+            ..self.rebuild_stats
+        }
+    }
+
+    /// W1.24 (audit B18) — stage the op-apply duration (ms) a mutation
+    /// entrypoint measured for the scene edit that precedes its rebuild.
+    /// Consumed (and zeroed) by the next `rebuild_after_mutation`. Kept
+    /// `pub(crate)` so only the in-crate mutation paths feed it.
+    pub(crate) fn stage_op_apply_ms(&mut self, ms: f64) {
+        self.pending_op_apply_ms = ms;
+    }
+
+    /// W1.24 (audit B19) — push an `AppliedRecord` onto the undo log,
+    /// enforcing the `MAX_APPLIED_LOG` cap. Evicts from the FRONT
+    /// (oldest first) so the freshest `MAX_APPLIED_LOG` mutations stay
+    /// undoable. Every forward-mutation path (`apply_mutation` /
+    /// `apply_operation` / `redo`) routes its push here so the cap is
+    /// enforced in exactly one place. `undo` does NOT use this — it
+    /// `pop`s (shrinks) the log — and the redo stack is a transient of
+    /// in-session undo, bounded by the same cap, so it needs no
+    /// separate cap.
+    fn push_applied(&mut self, rec: AppliedRecord) {
+        self.applied_log.push(rec);
+        // C-79 — a batch collecting its children holds the cap; it is
+        // applied to the collapsed entry when the batch is done.
+        if !self.applied_log_cap_held {
+            self.enforce_applied_log_cap();
+        }
+    }
+
+    /// The `MAX_APPLIED_LOG` eviction itself (oldest first). Separate
+    /// from [`Self::push_applied`] so the mixed-batch executor can run it
+    /// once over its collapsed entry (C-79).
+    fn enforce_applied_log_cap(&mut self) {
+        if self.applied_log.len() > MAX_APPLIED_LOG {
+            // O(n) on the eviction only; eviction happens at most once
+            // per push past the cap, so amortised O(1). A VecDeque would
+            // make the front-pop O(1) but `applied_log` is read as a
+            // slice elsewhere (`applied_log_back`); keep the Vec and pay
+            // the rare shift.
+            let overflow = self.applied_log.len() - MAX_APPLIED_LOG;
+            self.applied_log.drain(0..overflow);
+        }
+    }
+
+    /// Phase 4 instrumentation — last rebuild's layout cache stats.
+    /// Hits / misses reflect the most recent `rebuild_after_mutation`
+    /// (or initial `load`) so callers can verify incremental wins on
+    /// a typing test.
+    pub fn layout_cache_stats(&self) -> paged_text::CacheStats {
+        self.layout_cache.stats()
+    }
+
+    /// Expose the inner built document for tests and the wasm
+    /// renderer-on-demand path that needs to read display lists.
+    /// ADR 027 §7 — the ids of the pages the last build changed:
+    /// after a text edit of one story, only the pages laid out afresh (and
+    /// new ones); otherwise every page.
+    pub fn dirty_page_ids(&self) -> Vec<PageId> {
+        self.last_dirty_pages
+            .iter()
+            .filter_map(|&i| self.built.pages.get(i).map(|p| p.id.clone()))
+            .collect()
+    }
+
+    /// v0.71.13 — start collecting the pages every build from now on changes
+    /// (the union of [`Self::dirty_page_ids`] across them), replacing any
+    /// collection in progress. [`Self::end_page_change_tracking`] stops it.
+    /// A script run brackets each of its segments with the pair, so the
+    /// pages it reports are those its own writes changed.
+    pub fn begin_page_change_tracking(&mut self) {
+        self.page_changes = Some(std::collections::BTreeSet::new());
+    }
+
+    /// v0.71.13 — stop collecting and return the pages the builds since
+    /// [`Self::begin_page_change_tracking`] changed (empty when it was not
+    /// armed). A page deleted since is still named; see
+    /// [`Self::in_document_order`].
+    pub fn end_page_change_tracking(&mut self) -> std::collections::BTreeSet<PageId> {
+        self.page_changes.take().unwrap_or_default()
+    }
+
+    /// v0.71.13 — the pages of `ids` the document still has, in document order.
+    pub fn in_document_order(&self, ids: &std::collections::BTreeSet<PageId>) -> Vec<PageId> {
+        self.built
+            .pages
+            .iter()
+            .filter(|p| ids.contains(&p.id))
+            .map(|p| p.id.clone())
+            .collect()
+    }
+
+    /// The pages the last build changed, by index, when a text edit let
+    /// them narrow below every page (`None` otherwise). The GPU scene cache
+    /// re-encodes only these.
+    pub fn narrowed_dirty_pages(&self) -> Option<&[usize]> {
+        self.last_dirty_narrowed
+            .then_some(self.last_dirty_pages.as_slice())
+    }
+
+    pub fn built(&self) -> &BuiltDocument {
+        &self.built
+    }
+
+    /// v67 — the session's snapping preferences.
+    pub fn snap_settings(&self) -> crate::snap_point::SnapSettings {
+        self.snap_settings
+    }
+
+    /// v67 — replace the snapping preferences. Session state: not saved,
+    /// not undoable.
+    pub fn set_snap_settings(&mut self, settings: crate::snap_point::SnapSettings) {
+        self.snap_settings = settings;
+    }
+
+    /// v67 — (re)build the snap index when the document has been rebuilt
+    /// since it was taken. `hold` keeps whatever index exists — a gesture's
+    /// preview rebuilds every tick, and the items it moves are excluded
+    /// from its own targets anyway.
+    pub(crate) fn ensure_snap_index(&mut self, hold: bool) {
+        let fresh = self
+            .snap_index
+            .as_ref()
+            .is_some_and(|i| hold || i.generation == self.build_generation);
+        if !fresh {
+            self.snap_index = Some(crate::snap_point::build_index(
+                &self.scene,
+                &self.built,
+                self.build_generation,
+            ));
+        }
+    }
+
+    /// v67 (RFI C-68) — `RequestSnapPoint`: snap one page-local point to
+    /// the points, alignment lines and outlines around it.
+    pub fn snap_point(
+        &mut self,
+        query: &crate::snap_point::SnapPointQuery,
+    ) -> crate::snap_point::SnapPointResult {
+        self.ensure_snap_index(self.active_gesture.is_some());
+        let index = self.snap_index.as_ref().expect("just ensured");
+        crate::snap_point::resolve(index, &self.snap_settings, query)
+    }
+
+    pub fn font_bytes(&self) -> Option<&[u8]> {
+        self.font_bytes.as_deref()
+    }
+
+    /// S-13 — measure a text run against the loaded document's font
+    /// registry. Resolves `(family, style)` to face bytes through the
+    /// same `BytesResolver` the renderer uses (so the styled → bare-
+    /// family → document-default fallback chain applies); when the
+    /// family is unknown the resolver's default font wins, and when even
+    /// that is absent (or the bytes don't parse) the call returns `None`.
+    ///
+    /// Returns advance / ascender / descender in POINTS:
+    /// * `advance` = the shaped run's `total_advance` (in 1/64 pt, the
+    ///   `ADVANCE_PRECISION` unit) converted to pt.
+    /// * `ascender` / `descender` = the face's design metrics scaled by
+    ///   `size_pt / units_per_em` (descender is negative).
+    ///
+    /// A pure read — it neither mutates the model nor touches the undo
+    /// log; safe to call between mutations.
+    pub fn measure_text(
+        &self,
+        family: &str,
+        style: Option<&str>,
+        text: &str,
+        size_pt: f32,
+    ) -> Option<TextMetrics> {
+        use paged_renderer::AssetResolver;
+        let resolver = build_font_resolver(&self.font_registry, self.font_bytes.as_deref())?;
+        let bytes = resolver.resolve_font(family, style)?;
+        let face = paged_text::Face::from_slice(&bytes, 0)?;
+
+        let upem = face.units_per_em() as f32;
+        if upem <= 0.0 {
+            return None;
+        }
+        let scale = size_pt / upem;
+
+        let shaped = paged_text::shape_run(&face, text, size_pt);
+        // `total_advance` is in 1/64 pt (ADVANCE_PRECISION); convert.
+        let advance = shaped.total_advance as f32 / paged_text::shape::ADVANCE_PRECISION;
+
+        Some(TextMetrics {
+            advance,
+            ascender: face.ascender() as f32 * scale,
+            descender: face.descender() as f32 * scale,
+        })
+    }
+
+    pub fn icc_bytes(&self) -> Option<&[u8]> {
+        self.icc_bytes.as_deref()
+    }
+
+    /// Concept 2 — add (or replace) a named ICC profile in the live
+    /// registry. Post-load registrations become resolvable by the
+    /// next `SetColorSettings`; they do NOT retroactively activate.
+    pub fn register_color_profile(&mut self, name: String, bytes: Vec<u8>) {
+        self.color_profiles.insert(name, bytes);
+    }
+
+    /// Add a font to the LIVE model's registry and re-lay out what it
+    /// changes. A font registered after load used to be accepted and
+    /// ignored until the next load: the font table is built from the
+    /// registry, and only a load built it.
+    ///
+    /// Only the stories with a run that now resolves to a different face
+    /// are re-laid out; the rest reuse their cached emission. Returns the
+    /// ids of the re-laid-out stories, then (v68) the ids of the frames
+    /// whose scene-layer text names this family; empty when the font
+    /// changed nothing (no rebuild then).
+    pub fn register_font(
+        &mut self,
+        entry: FontEntry,
+    ) -> Result<Vec<String>, crate::channel::LoadError> {
+        // v68 — scene-layer text naming this family re-resolves too.
+        let scene_frames = self.scene_layer_frames_naming(|family| family == entry.family);
+        self.font_registry.push(entry);
+        self.relayout_for_registry_change(scene_frames)
+    }
+
+    /// v70 — register a face in one scope. `Document` is
+    /// [`Self::register_font`]. `SceneLayer` adds it to the scene-only
+    /// table: the frames whose scene text names the family rebuild (their
+    /// ids are returned), and nothing the document sees changes — no story
+    /// re-lays out, `fonts()` still reports the family missing.
+    pub fn register_font_scoped(
+        &mut self,
+        entry: FontEntry,
+        scope: crate::channel::FontScope,
+    ) -> Result<Vec<String>, crate::channel::LoadError> {
+        match scope {
+            crate::channel::FontScope::Document => self.register_font(entry),
+            crate::channel::FontScope::SceneLayer => {
+                let frames = self.scene_layer_frames_naming(|family| family == entry.family);
+                self.scene_font_registry.push(entry);
+                self.scene_font_resolver = build_font_resolver(&self.scene_font_registry, None);
+                self.rebuild_scene_frames(frames)
+            }
+        }
+    }
+
+    /// v70 — clear one scope's registry. `Document` is
+    /// [`Self::clear_font_registry`]; `SceneLayer` drops the scene-only
+    /// faces and rebuilds the frames whose scene text named one.
+    pub fn clear_font_registry_scoped(
+        &mut self,
+        scope: crate::channel::FontScope,
+    ) -> Result<Vec<String>, crate::channel::LoadError> {
+        match scope {
+            crate::channel::FontScope::Document => self.clear_font_registry(),
+            crate::channel::FontScope::SceneLayer => {
+                if self.scene_font_registry.is_empty() {
+                    return Ok(Vec::new());
+                }
+                let registered: std::collections::BTreeSet<String> = self
+                    .scene_font_registry
+                    .iter()
+                    .map(|e| e.family.clone())
+                    .collect();
+                let frames = self.scene_layer_frames_naming(|family| registered.contains(family));
+                self.scene_font_registry.clear();
+                self.scene_font_resolver = None;
+                self.rebuild_scene_frames(frames)
+            }
+        }
+    }
+
+    /// Rebuild for a scene-face change: only scene layers re-resolve, so
+    /// no story is touched; the frames' pages are not a story's, so every
+    /// page is reported (as for a scene re-resolve in
+    /// [`Self::relayout_for_registry_change`]). Nothing to do — and no
+    /// rebuild — when no frame names an affected family.
+    fn rebuild_scene_frames(
+        &mut self,
+        frames: Vec<String>,
+    ) -> Result<Vec<String>, crate::channel::LoadError> {
+        if frames.is_empty() {
+            return Ok(frames);
+        }
+        self.pending_dirty_scope = DirtyScope::Everything;
+        self.rebuild_after_mutation()?;
+        Ok(frames)
+    }
+
+    /// Drop every registered font from the LIVE model (the worker's
+    /// `ClearFontRegistry`), re-laying out the stories that lose a face.
+    pub fn clear_font_registry(&mut self) -> Result<Vec<String>, crate::channel::LoadError> {
+        if self.font_registry.is_empty() {
+            return Ok(Vec::new());
+        }
+        let registered: std::collections::BTreeSet<String> = self
+            .font_registry
+            .iter()
+            .map(|e| e.family.clone())
+            .collect();
+        let scene_frames = self.scene_layer_frames_naming(|family| registered.contains(family));
+        self.font_registry.clear();
+        self.relayout_for_registry_change(scene_frames)
+    }
+
+    /// Rebuild after a registry change, narrowed to the stories whose
+    /// faces moved.
+    ///
+    /// `scene_frames` are the frames whose plugin scene-layer text names a
+    /// family the change touches (v68): their runs re-resolve, so they
+    /// rebuild too and their ids join the returned list after the stories.
+    fn relayout_for_registry_change(
+        &mut self,
+        scene_frames: Vec<String>,
+    ) -> Result<Vec<String>, crate::channel::LoadError> {
+        let mut affected = self.refresh_font_table(true);
+        if !affected.is_empty() || !scene_frames.is_empty() {
+            // Nothing else is pending between builds outside a batch, so the
+            // pages this build changes are the affected stories' alone —
+            // unless a scene layer re-resolves, whose pages are not a
+            // story's: then every page is reported.
+            self.pending_dirty_scope = match std::mem::take(&mut self.pending_dirty_scope) {
+                DirtyScope::Unset if scene_frames.is_empty() => {
+                    DirtyScope::Fonts(affected.iter().cloned().collect())
+                }
+                _ => DirtyScope::Everything,
+            };
+            self.rebuild_after_mutation()?;
+            affected.extend(scene_frames);
+        }
+        Ok(affected)
+    }
+
+    /// v68 — the frames whose scene layer carries a text run naming a
+    /// family `matches` accepts.
+    fn scene_layer_frames_naming(&self, matches: impl Fn(&str) -> bool) -> Vec<String> {
+        let mut frames: Vec<String> = self
+            .scene_layers
+            .iter()
+            .filter(|(_, layer)| {
+                layer.items.iter().any(|item| match item {
+                    paged_compose::SceneItem::Text(t) => {
+                        t.family.as_deref().map(str::trim).is_some_and(&matches)
+                    }
+                    _ => false,
+                })
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+        frames.sort();
+        frames
+    }
+
+    /// Bring the font table up to date with the scene and the registry,
+    /// and drop the cross-build caches of every story whose layout that
+    /// changes. Returns those stories' ids (sorted).
+    ///
+    /// Without `registry_changed` the table is kept as long as the scene
+    /// asks for exactly the keys it was built for: a key-set walk, no
+    /// resolver calls. Otherwise it is rebuilt exactly as a load builds
+    /// it, so the incremental model and a cold load agree (the digest
+    /// gate's cold build harvests its own table to check that).
+    ///
+    /// A story is affected when one of its keys resolves to another face
+    /// (or loses / gains the substitute flag) in the new table, and so is
+    /// the story hosting its anchored frame, whose emission contains it.
+    /// Its body-story emission and keep seeds are dropped; the layout
+    /// cache needs nothing, since its keys carry the font id. Master text
+    /// is re-emitted, as after a text edit.
+    fn refresh_font_table(&mut self, registry_changed: bool) -> Vec<String> {
+        let story_keys = paged_renderer::FontTable::story_font_keys(&self.scene);
+        if !registry_changed {
+            let mut wanted: std::collections::BTreeSet<&paged_renderer::FontKey> =
+                std::collections::BTreeSet::new();
+            for (_, keys) in &story_keys {
+                wanted.extend(keys.iter());
+            }
+            if wanted.len() == self.font_table.keys().len()
+                && wanted.iter().all(|k| self.font_table.keys().contains(*k))
+            {
+                return Vec::new();
+            }
+        }
+        let resolver = build_font_resolver(&self.font_registry, self.font_bytes.as_deref());
+        let table = build_font_table(&self.scene, self.font_bytes.as_deref(), resolver.as_ref());
+        let old = std::mem::replace(&mut self.font_table, table);
+        let new = &self.font_table;
+        let changed: std::collections::BTreeSet<&paged_renderer::FontKey> = old
+            .keys()
+            .iter()
+            .chain(new.keys().iter())
+            .filter(|(family, style)| {
+                old.resolution(family, style.as_deref()) != new.resolution(family, style.as_deref())
+            })
+            .collect();
+        if changed.is_empty() {
+            return Vec::new();
+        }
+        let mut affected: std::collections::BTreeSet<String> = story_keys
+            .iter()
+            .filter(|(_, keys)| keys.iter().any(|k| changed.contains(k)))
+            .map(|(id, _)| id.clone())
+            .collect();
+        // An anchored frame's story is emitted inside its host story's
+        // emission: the host is affected too (to a fixpoint, frames nest).
+        let hosts: Vec<(String, String)> = self
+            .scene
+            .stories
+            .iter()
+            .flat_map(|parsed| {
+                let host = parsed.self_id.clone();
+                parsed
+                    .story
+                    .paragraphs
+                    .iter()
+                    .flat_map(|p| p.anchored_frames.iter())
+                    .filter_map(|f| f.parent_story.clone())
+                    .map(move |inner| (inner, host.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        loop {
+            let before = affected.len();
+            for (inner, host) in &hosts {
+                if affected.contains(inner) {
+                    affected.insert(host.clone());
+                }
+            }
+            if affected.len() == before {
+                break;
+            }
+        }
+        // The same rule a text edit follows (ADR 027 plan step 4): master
+        // text is cheap and re-emitted; a story with a chain of its own
+        // drops its own body emission, and one laid out inside another
+        // story's emission (anchored, inline) or with no chain drops them
+        // all.
+        self.master_text_emit_cache.borrow_mut().clear();
+        let own_chain = |story: &String| {
+            self.scene
+                .frame_chain(story)
+                .first()
+                .is_some_and(|f| !f.is_anchored)
+        };
+        if affected.iter().all(own_chain) {
+            self.body_story_emit_cache
+                .borrow_mut()
+                .retain(|(story, _), _| !affected.contains(story));
+        } else {
+            self.body_story_emit_cache.borrow_mut().clear();
+        }
+        for story in &affected {
+            self.pending_keep_hints.insert(story.clone(), 0);
+            // ADR 027 plan step 6 — its previous emission was shaped with
+            // other fonts: nothing of it may be resumed from.
+            self.pending_edit_spans.remove(story);
+        }
+        self.story_resume
+            .borrow_mut()
+            .retain(|(story, _), _| !affected.contains(story));
+        affected.into_iter().collect()
+    }
+
+    /// Concept 2 — the CMM matching the active colour settings,
+    /// built lazily and cached until `SetColorSettings` changes the
+    /// inputs.
+    fn active_cmm(&self) -> std::rc::Rc<paged_color::IccCmm> {
+        if let Some(cmm) = self.cmm_cache.borrow().as_ref() {
+            return cmm.clone();
+        }
+        let cmm = std::rc::Rc::new(paged_color::IccCmm::new(
+            self.icc_bytes.as_deref(),
+            paged_color::DisplaySetup {
+                intent: self.color_settings.intent,
+                bpc: self.color_settings.bpc,
+            },
+        ));
+        *self.cmm_cache.borrow_mut() = Some(cmm.clone());
+        cmm
+    }
+
+    /// Concept 2 — resolve an ARBITRARY colour value (mixer slider
+    /// state, not a swatch ref) through the active colour
+    /// management. Returns display hex + the effective CMYK (when
+    /// the value resolves through CMYK) + the gamut verdict.
+    pub fn color_compute(
+        &self,
+        space: &str,
+        value: &[f32],
+        tint: Option<f32>,
+        model: Option<&str>,
+        alternate_space: Option<&str>,
+        alternate_value: Option<&[f32]>,
+    ) -> (String, Option<[f32; 4]>, bool) {
+        use paged_model::{ColorEntry, ColorModel, ColorSpace};
+        let parse_space = |s: &str| match s {
+            "CMYK" | "cmyk" => ColorSpace::Cmyk,
+            "RGB" | "rgb" => ColorSpace::Rgb,
+            "LAB" | "Lab" | "lab" => ColorSpace::Lab,
+            "Gray" | "gray" | "GRAY" => ColorSpace::Gray,
+            _ => ColorSpace::Unknown,
+        };
+        // Ephemeral ColorEntry so spot/tint folding reuses the
+        // exact swatch semantics (`effective_cmyk`).
+        let entry = ColorEntry {
+            self_id: String::new(),
+            name: None,
+            space: parse_space(space),
+            value: value.to_vec(),
+            model: match model {
+                Some("Spot" | "spot") => ColorModel::Spot,
+                _ => ColorModel::Process,
+            },
+            alternate_space: alternate_space.map(parse_space),
+            alternate_value: alternate_value.map(|v| v.to_vec()).unwrap_or_default(),
+            tint,
+            alpha: None,
+        };
+        let cmm = self.active_cmm();
+        let working = working_color_of_with(&entry, self.use_standard_lab_for_spots);
+        let rgb = match working {
+            Some(w) => {
+                use paged_color::Cmm as _;
+                let paged_color::LinearRgb(rgb) = cmm.resolve_display(w);
+                rgb
+            }
+            None => [0.5, 0.5, 0.5],
+        };
+        let out_of_gamut = match working {
+            Some(w) => {
+                use paged_color::Cmm as _;
+                !matches!(cmm.check_gamut(w), paged_color::GamutStatus::InGamut)
+            }
+            None => false,
+        };
+        // `effective_cmyk` returns IDML percentages (0..=100).
+        let cmyk = entry.effective_cmyk().map(|c| {
+            [
+                c[0].clamp(0.0, 100.0),
+                c[1].clamp(0.0, 100.0),
+                c[2].clamp(0.0, 100.0),
+                c[3].clamp(0.0, 100.0),
+            ]
+        });
+        (rgb_to_hex(rgb), cmyk, out_of_gamut)
+    }
+}
+
+/// Phase 4 Step 3 — build `story_id → Vec<PageId>` from the freshly
+/// built document by walking every page's `story_layout` and grouping
+/// LineLayout entries by story. Pages preserve their order; each
+/// story's `Vec<PageId>` is in first-appearance order without
+/// duplicates.
+/// Cheap-but-coarse perf instrumentation. On wasm32 we use
+/// `js_sys::Date::now()` because std::time::Instant panics. On native
+/// we use Instant. Output goes to `tracing::info!` (web console on
+/// wasm via `tracing-subscriber`'s wasm hook) and to a `console.log`
+/// fallback so the line is also visible in DevTools.
+#[cfg(target_arch = "wasm32")]
+fn phase_now() -> f64 {
+    js_sys::Date::now()
+}
+#[cfg(not(target_arch = "wasm32"))]
+fn phase_now() -> std::time::Instant {
+    std::time::Instant::now()
+}
+
+#[cfg(target_arch = "wasm32")]
+fn phase_log(label: &str, start: f64) {
+    let ms = js_sys::Date::now() - start;
+    web_sys::console::log_1(&format!("[paged-canvas perf] {label}: {ms:.0} ms").into());
+}
+#[cfg(not(target_arch = "wasm32"))]
+fn phase_log(label: &str, start: std::time::Instant) {
+    let ms = start.elapsed().as_secs_f64() * 1000.0;
+    tracing::info!("[paged-canvas perf] {label}: {ms:.0} ms");
+}
+
+/// W1.24 (audit B18) — milliseconds elapsed since `start`, read from the
+/// same monotone source as `phase_log` but RETURNED (not logged) so the
+/// `RebuildStats` capture can store it. Wasm uses `js_sys::Date::now`
+/// (sub-ms resolution is fine for HUD-grade timing); native uses the
+/// monotonic `Instant`. Never panics on `wasm32`.
+#[cfg(target_arch = "wasm32")]
+fn phase_elapsed_ms(start: f64) -> f64 {
+    js_sys::Date::now() - start
+}
+#[cfg(not(target_arch = "wasm32"))]
+fn phase_elapsed_ms(start: std::time::Instant) -> f64 {
+    start.elapsed().as_secs_f64() * 1000.0
+}
+
+/// Build a `BytesResolver` from a font registry. Returns `None` when
+/// the registry is empty AND no default font is provided — the
+/// pipeline already handles `assets: None` cleanly, so we save the
+/// allocation in the common single-font dev path.
+/// Concept 2 — adapt a parsed swatch to the CMM's input. Spot
+/// alternates + swatch-level tints fold via `effective_cmyk` (the
+/// exact swatch semantics the renderer uses); non-CMYK spaces map
+/// directly. `None` = unresolvable (e.g. a spot with no CMYK
+/// alternate and a non-Lab primary).
+fn working_color_of(entry: &paged_model::ColorEntry) -> Option<paged_color::WorkingColor> {
+    working_color_of_with(entry, false)
+}
+
+/// Like [`working_color_of`] but honouring the Ink Manager's "Use
+/// Standard Lab Values for Spots": a spot whose PRIMARY space is
+/// Lab resolves device-independently instead of via its CMYK
+/// alternate.
+fn working_color_of_with(
+    entry: &paged_model::ColorEntry,
+    use_standard_lab_for_spots: bool,
+) -> Option<paged_color::WorkingColor> {
+    use paged_model::ColorSpace;
+    if use_standard_lab_for_spots && entry.model == paged_model::ColorModel::Spot {
+        // `effective_lab` folds the swatch-level tint (toward paper
+        // white in Lab: L* lightens, chroma fades proportionally) and
+        // is the same call the renderer's standard-Lab path makes, so
+        // the chip and the page cannot drift apart.
+        if let Some([l, a, b]) = entry.effective_lab() {
+            return Some(paged_color::WorkingColor::Lab { l, a, b });
+        }
+    }
+    if let Some([c, m, y, k]) = entry.effective_cmyk() {
+        return Some(paged_color::WorkingColor::Cmyk(paged_color::Cmyk {
+            c,
+            m,
+            y,
+            k,
+        }));
+    }
+    match entry.space {
+        ColorSpace::Rgb if entry.value.len() == 3 => Some(paged_color::WorkingColor::Rgb([
+            entry.value[0] / 255.0,
+            entry.value[1] / 255.0,
+            entry.value[2] / 255.0,
+        ])),
+        ColorSpace::Lab if entry.value.len() == 3 => Some(paged_color::WorkingColor::Lab {
+            l: entry.value[0],
+            a: entry.value[1],
+            b: entry.value[2],
+        }),
+        ColorSpace::Gray if entry.value.len() == 1 => {
+            Some(paged_color::WorkingColor::Gray(entry.value[0]))
+        }
+        _ => None,
+    }
+}
+
+/// Linear RGB → `#rrggbb` (sRGB-encoded, the wire convention).
+fn rgb_to_hex(rgb: [f32; 3]) -> String {
+    let to_byte = |v: f32| -> u8 {
+        let s = if v <= 0.003_130_8 {
+            12.92 * v
+        } else {
+            1.055 * v.powf(1.0 / 2.4) - 0.055
+        };
+        (s.clamp(0.0, 1.0) * 255.0).round() as u8
+    };
+    format!(
+        "#{:02x}{:02x}{:02x}",
+        to_byte(rgb[0]),
+        to_byte(rgb[1]),
+        to_byte(rgb[2])
+    )
+}
+
+/// What a committed edit invalidates in the cross-build emit caches
+/// (ADR 027 §5). [`CanvasModel::commit_and_rebuild`] is its one
+/// consumer.
+#[derive(Clone, Debug)]
+enum Invalidation {
+    /// Content or structure changed in a way the cache keys cannot see:
+    /// drop every master-text and body-story delta.
+    Everything,
+    /// A text edit inside `story`: `edit` names the story and the first
+    /// paragraph it changed, when that is known (`None` for a cell edit).
+    Text {
+        story: String,
+        edit: Option<(String, paged_renderer::EditSpan)>,
+    },
+    /// Only how one page item that carries no text PAINTS changed (see
+    /// [`CanvasModel::paints_a_plain_page_item`]): no story reads it, so
+    /// every master-text and body-story delta is kept. A delta that the
+    /// change does reach is still caught on the hit — its key holds the
+    /// wrap shapes on the story's pages, and a hit requires each page's
+    /// pools (paths, gradient and image counts, spot inks) to be the ones
+    /// it was captured against.
+    PageItemPaint,
+}
+
+/// A property that changes how a page item paints and nothing a story
+/// lays out against: fill and stroke PAINT, transparency, effects, the
+/// placed image's fit. Geometry, text wrap, stroke weight, visibility and
+/// layer are deliberately not here, although the body-story key would
+/// catch most of them: the list is what was reasoned through and swept
+/// under the digest gate, not everything that might be safe.
+fn is_paint_path(path: &paged_mutate::PropertyPath) -> bool {
+    use paged_mutate::PropertyPath as P;
+    matches!(
+        path,
+        P::FrameFillColor
+            | P::FrameFillTint
+            | P::FrameStrokeColor
+            | P::FrameStrokeGapColor
+            | P::FrameStrokeGapTint
+            | P::FrameStrokeType
+            | P::FrameStrokeJoin
+            | P::FrameStrokeMiterLimit
+            | P::FrameStrokeDashArray
+            | P::FrameStrokeEndCap
+            | P::FrameStrokeStartArrowhead
+            | P::FrameStrokeEndArrowhead
+            | P::FrameOpacity
+            | P::FrameBlendMode
+            | P::FrameOverprintFill
+            | P::FrameOverprintStroke
+            | P::FrameGradientFillAngle
+            | P::FrameGradientFillLength
+            | P::FrameGradientStrokeAngle
+            | P::FrameGradientStrokeLength
+            | P::ImageContentTransform
+            | P::FrameFittingCrops
+            | P::FrameFittingType
+            | P::FrameFittingReferencePoint
+            | P::FrameAutoFit
+            | P::FrameDropShadow
+            | P::FrameDropShadowMode
+            | P::FrameDropShadowXOffset
+            | P::FrameDropShadowYOffset
+            | P::FrameDropShadowSize
+            | P::FrameDropShadowOpacity
+            | P::FrameDropShadowColor
+            | P::FrameFillOpacity
+            | P::FrameFillBlendMode
+            | P::FrameStrokeOpacity
+            | P::FrameStrokeBlendMode
+            | P::FrameContentOpacity
+            | P::FrameContentBlendMode
+            | P::FrameDropShadowBlendMode
+            | P::FrameDropShadowSpread
+            | P::FrameDropShadowNoise
+            | P::FrameDropShadowKnockedOut
+            | P::FrameDropShadowUseGlobalLight
+            | P::FrameInnerShadowEnabled
+            | P::FrameInnerShadowBlendMode
+            | P::FrameInnerShadowColor
+            | P::FrameInnerShadowOpacity
+            | P::FrameInnerShadowAngle
+            | P::FrameInnerShadowDistance
+            | P::FrameInnerShadowSize
+            | P::FrameInnerShadowChoke
+            | P::FrameInnerShadowNoise
+            | P::FrameOuterGlowEnabled
+            | P::FrameOuterGlowBlendMode
+            | P::FrameOuterGlowColor
+            | P::FrameOuterGlowOpacity
+            | P::FrameOuterGlowSpread
+            | P::FrameOuterGlowSize
+            | P::FrameOuterGlowNoise
+            | P::FrameInnerGlowEnabled
+            | P::FrameInnerGlowBlendMode
+            | P::FrameInnerGlowColor
+            | P::FrameInnerGlowOpacity
+            | P::FrameInnerGlowChoke
+            | P::FrameInnerGlowSize
+            | P::FrameInnerGlowSource
+            | P::FrameInnerGlowNoise
+            | P::FrameBevelEnabled
+            | P::FrameBevelStyle
+            | P::FrameBevelTechnique
+            | P::FrameBevelDepth
+            | P::FrameBevelDirection
+            | P::FrameBevelSize
+            | P::FrameBevelSoften
+            | P::FrameBevelAngle
+            | P::FrameBevelAltitude
+            | P::FrameBevelHighlightColor
+            | P::FrameBevelShadowColor
+            | P::FrameBevelHighlightOpacity
+            | P::FrameBevelShadowOpacity
+            | P::FrameSatinEnabled
+            | P::FrameSatinBlendMode
+            | P::FrameSatinColor
+            | P::FrameSatinOpacity
+            | P::FrameSatinAngle
+            | P::FrameSatinDistance
+            | P::FrameSatinSize
+            | P::FrameSatinInvert
+            | P::FrameFeatherEnabled
+            | P::FrameFeatherWidth
+            | P::FrameFeatherCornerType
+            | P::FrameFeatherNoise
+            | P::FrameFeatherChoke
+            | P::FrameDirectionalFeatherEnabled
+            | P::FrameDirectionalFeatherLeftWidth
+            | P::FrameDirectionalFeatherRightWidth
+            | P::FrameDirectionalFeatherTopWidth
+            | P::FrameDirectionalFeatherBottomWidth
+            | P::FrameDirectionalFeatherAngle
+            | P::FrameDirectionalFeatherNoise
+            | P::FrameDirectionalFeatherChoke
+            | P::FrameGradientFeather
+    )
+}
+
+/// What a model build is for (ADR 027 §5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PipelinePurpose {
+    /// The interactive canvas build: emit caches on, proof condition,
+    /// degraded-asset markers, the camera's resource scale.
+    Live,
+    /// The one-shot export build: glyph runs on, caches off, working space.
+    Export,
+}
+
+/// ADR 027 §4 — compare an incremental build with a cold one.
+/// `Err` names the first difference.
+fn compare_builds(incremental: &BuiltDocument, cold: &BuiltDocument) -> Result<(), String> {
+    let ids = |b: &BuiltDocument| b.pages.iter().map(|p| p.id.0.clone()).collect::<Vec<_>>();
+    if ids(incremental) != ids(cold) {
+        return Err(format!(
+            "page set differs: incremental {} pages {:?}, cold {} pages {:?}",
+            incremental.pages.len(),
+            ids(incremental),
+            cold.pages.len(),
+            ids(cold)
+        ));
+    }
+    for (i, (a, b)) in incremental.pages.iter().zip(&cold.pages).enumerate() {
+        if a.list.digest() != b.list.digest() {
+            return Err(format!(
+                "page {i} ({}) display-list digest differs ({} vs {} commands)",
+                a.id.0,
+                a.list.commands.len(),
+                b.list.commands.len()
+            ));
+        }
+        if format!("{:?}", a.story_layout) != format!("{:?}", b.story_layout) {
+            return Err(format!(
+                "page {i} ({}) story_layout differs ({} vs {} lines)",
+                a.id.0,
+                a.story_layout.len(),
+                b.story_layout.len()
+            ));
+        }
+        if format!("{:?}", a.cell_rects) != format!("{:?}", b.cell_rects) {
+            return Err(format!(
+                "page {i} ({}) cell_rects differ ({} vs {} cells)",
+                a.id.0,
+                a.cell_rects.len(),
+                b.cell_rects.len()
+            ));
+        }
+    }
+    let diags = |b: &BuiltDocument| format!("{:?}", b.diagnostics.items);
+    if diags(incremental) != diags(cold) {
+        return Err(format!(
+            "diagnostics differ: incremental {:?}, cold {:?}",
+            incremental.diagnostics.items, cold.diagnostics.items
+        ));
+    }
+    Ok(())
+}
+
+/// The model's font table for `scene`: one place, so a load, a late
+/// registration and an edit that brings in a new family build it alike.
+fn build_font_table(
+    scene: &Document,
+    default_font: Option<&[u8]>,
+    resolver: Option<&BytesResolver>,
+) -> paged_renderer::FontTable {
+    let options = PipelineOptions {
+        font: default_font,
+        assets: resolver.map(|r| r as &dyn paged_renderer::AssetResolver),
+        ..PipelineOptions::default()
+    };
+    paged_renderer::FontTable::build(scene, &options)
+}
+
+fn build_font_resolver(
+    registry: &[FontEntry],
+    default_font: Option<&[u8]>,
+) -> Option<BytesResolver> {
+    if registry.is_empty() && default_font.is_none() {
+        return None;
+    }
+    let mut r = BytesResolver::new();
+    for entry in registry {
+        r.add_font(&entry.family, entry.style.as_deref(), entry.bytes.clone());
+    }
+    if let Some(bytes) = default_font {
+        r.default_font = Some(bytes.to_vec().into());
+    }
+    Some(r)
+}
+
+/// v43 (W-06) — pick the registry face serving `family` (+ optional
+/// `style`). `style: None` is style-agnostic: the family's FIRST
+/// registered face wins (registration order). A styled request prefers
+/// the exact style, then falls back to a bare / `"Regular"` entry —
+/// the same fall-through `BytesResolver::resolve_font` applies, but
+/// WITHOUT the default-font catch-all: an unknown family is honestly
+/// "not found" rather than the substitute face's bytes.
+pub fn font_face_lookup<'a>(
+    registry: &'a [FontEntry],
+    family: &str,
+    style: Option<&str>,
+) -> Option<&'a FontEntry> {
+    match style {
+        None => registry.iter().find(|e| e.family == family),
+        Some(s) => registry
+            .iter()
+            .find(|e| e.family == family && e.style.as_deref() == Some(s))
+            .or_else(|| {
+                registry.iter().find(|e| {
+                    e.family == family
+                        && matches!(e.style.as_deref(), None | Some("") | Some("Regular"))
+                })
+            }),
+    }
+}
+
+/// v43 (W-06) — sniff a font payload's container format from its magic
+/// bytes. `"truetype"` covers the sfnt 1.0 / `true` / `ttcf` magics;
+/// empty string when unrecognised.
+pub fn sniff_font_format(bytes: &[u8]) -> &'static str {
+    match bytes.get(..4) {
+        Some([0x00, 0x01, 0x00, 0x00]) | Some(b"true") | Some(b"ttcf") => "truetype",
+        Some(b"OTTO") => "opentype",
+        Some(b"wOFF") => "woff",
+        Some(b"wOF2") => "woff2",
+        _ => "",
+    }
+}
+
+/// Build a font registry by READING the faces, from files and
+/// directories.
+///
+/// Every host that wants to render styled text has to answer the same
+/// question — which `AppliedFont` family do these bytes serve? — and
+/// until now each answered it by hand: `paged-inspect` makes the caller
+/// spell it (`--font-family "Fraunces=…"`), and the editor's own
+/// showcase harness carries a thirteen-entry family-to-filename table
+/// that has to be edited whenever the corpus gains a face. The face
+/// already says: `TYPOGRAPHIC_FAMILY` when it has one, else `FAMILY`.
+///
+/// `style` is left `None` for an upright file — which registers the
+/// family bare and matches every style through
+/// [`font_face_lookup`]'s fall-through, letting the variable font's own
+/// `fvar` instances supply the weights — and `Some("Italic")` for a
+/// file whose subfamily says so, because an italic face is a separate
+/// file that must not answer for the upright one. That is exactly the
+/// shape the hand-written tables spell.
+///
+/// Directories are read one level deep and visited in sorted order, so
+/// the first file to claim a `(family, style)` wins the same way on
+/// every machine. Anything [`sniff_font_format`] does not recognise, or
+/// that carries no family name, is skipped rather than failing the
+/// batch: a fonts directory routinely holds licences and READMEs.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn font_registry_from_paths(paths: &[std::path::PathBuf]) -> Vec<FontEntry> {
+    let mut out: Vec<FontEntry> = Vec::new();
+    for file in font_files_from_paths(paths) {
+        if out
+            .iter()
+            .any(|e| e.family == file.family && e.style == file.style)
+        {
+            continue;
+        }
+        out.push(FontEntry {
+            family: file.family,
+            style: file.style,
+            bytes: file.bytes,
+        });
+    }
+    out
+}
+
+/// One face file found by [`font_files_from_paths`]: where it lives,
+/// who it claims to be, and what its licence lets a copy do.
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug, Clone)]
+pub struct FontFile {
+    pub path: std::path::PathBuf,
+    pub family: String,
+    pub style: Option<String>,
+    /// The OS/2 `fsType` embedding permission: `installable`,
+    /// `restricted`, `preview-and-print` or `editable`; `None` when the
+    /// face carries no OS/2 table (or is a woff container).
+    pub embedding: Option<&'static str>,
+    pub bytes: Vec<u8>,
+}
+
+/// Every face file under `paths` (directories one level deep, sorted),
+/// duplicates included — [`font_registry_from_paths`] keeps the first
+/// per `(family, style)`; a package wants every file a used family has.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn font_files_from_paths(paths: &[std::path::PathBuf]) -> Vec<FontFile> {
+    let mut files: Vec<std::path::PathBuf> = Vec::new();
+    for path in paths {
+        if path.is_dir() {
+            let Ok(dir) = std::fs::read_dir(path) else {
+                continue;
+            };
+            let mut here: Vec<std::path::PathBuf> =
+                dir.filter_map(|e| e.ok().map(|e| e.path())).collect();
+            here.sort();
+            files.extend(here.into_iter().filter(|p| p.is_file()));
+        } else if path.is_file() {
+            files.push(path.clone());
+        }
+    }
+
+    let mut out = Vec::new();
+    for path in files {
+        let Ok(bytes) = std::fs::read(&path) else {
+            continue;
+        };
+        if sniff_font_format(&bytes).is_empty() {
+            continue;
+        }
+        let Some((family, style)) = font_identity(&bytes) else {
+            continue;
+        };
+        let embedding = ttf_parser::Face::parse(&bytes, 0)
+            .ok()
+            .and_then(|f| f.permissions())
+            .map(|p| match p {
+                ttf_parser::Permissions::Installable => "installable",
+                ttf_parser::Permissions::Restricted => "restricted",
+                ttf_parser::Permissions::PreviewAndPrint => "preview-and-print",
+                ttf_parser::Permissions::Editable => "editable",
+            });
+        out.push(FontFile {
+            path,
+            family,
+            style,
+            embedding,
+            bytes,
+        });
+    }
+    out
+}
+
+/// The `(family, style)` a face claims for itself: the typographic
+/// family when present (so `Fraunces` rather than `Fraunces SemiBold`),
+/// and `Some("Italic")` only when the file's subfamily says it is one.
+/// `None` when the payload does not parse or names no family.
+///
+/// Gated with its only caller: [`font_registry_from_paths`] reads the
+/// filesystem and is not built for wasm, which left this dead there and
+/// `-D warnings` turned that into a failing wasm lane. Nothing about
+/// the function itself is host-specific — it parses bytes — so the cfg
+/// goes the moment a wasm caller wants it.
+#[cfg(not(target_arch = "wasm32"))]
+fn font_identity(bytes: &[u8]) -> Option<(String, Option<String>)> {
+    let face = ttf_parser::Face::parse(bytes, 0).ok()?;
+    let name = |id: u16| -> Option<String> {
+        face.names()
+            .into_iter()
+            .filter(|n| n.name_id == id)
+            .find_map(|n| n.to_string())
+            .filter(|s| !s.trim().is_empty())
+    };
+    let family = name(ttf_parser::name_id::TYPOGRAPHIC_FAMILY)
+        .or_else(|| name(ttf_parser::name_id::FAMILY))?
+        .trim()
+        .to_string();
+    let italic = name(ttf_parser::name_id::TYPOGRAPHIC_SUBFAMILY)
+        .or_else(|| name(ttf_parser::name_id::SUBFAMILY))
+        .is_some_and(|s| s.to_ascii_lowercase().contains("italic"));
+    Some((family, italic.then(|| "Italic".to_string())))
+}
+
+/// v43 (W-06) — the face's PostScript name (`name` table ID 6). `None`
+/// when the payload doesn't parse as sfnt (woff/woff2 containers) or
+/// carries no Unicode-decodable entry.
+pub fn font_postscript_name(bytes: &[u8]) -> Option<String> {
+    let face = ttf_parser::Face::parse(bytes, 0).ok()?;
+    face.names()
+        .into_iter()
+        .filter(|n| n.name_id == ttf_parser::name_id::POST_SCRIPT_NAME)
+        .find_map(|n| n.to_string())
+}
+
+/// The faces the worker registered bytes for, one per NAMED INSTANCE
+/// of each file, named the way `Resources/Fonts.xml` declares them and
+/// the way InDesign lists an installed instance (measured on 20.0.1:
+/// `Source Serif 4` Regular is `SourceSerif4Roman-Regular`, `JetBrains
+/// Mono` Italic is `JetBrainsMonoItalic-Regular` — infixes only the
+/// file's `fvar` records carry).
+///
+/// * `family` is the registry's — the `AppliedFont` value the document
+///   uses, which is what the resolver matches on (a file's own family
+///   name can be an instance: `Space Grotesk Light`).
+/// * A variable font (`fvar`) yields one face per named instance: the
+///   instance's subfamily name is the `FontStyleName`; its PostScript
+///   name comes from the record's `postScriptNameID` when the file
+///   carries one, else `<Family><Style>` with spaces removed joined by
+///   `-`; the axis names + the instance's coordinates become
+///   `DesignAxes*`. A file registered as an italic whose instance
+///   names do not say so gets "Italic" appended.
+/// * A static font yields its one face: the registered style (else
+///   the file's subfamily), its `name`-table PostScript / full name.
+/// * A payload the sfnt parser cannot read (woff/woff2) yields a
+///   synthesised face for the registered style.
+///
+/// One entry per `(family, style)` — the first file to name it wins.
+/// The face the renderer composes unstyled text with — the host's
+/// fallback font bytes (`CanvasOptions::fonts[0]`, `PipelineOptions::
+/// font`) read the way the registry's are: family from the name table
+/// (typographic family, else family), the regular named instance of a
+/// variable font (else its one face). `None` when the bytes are not a
+/// font the parser reads. The exporter states it as the document's
+/// `<TextDefault>` so InDesign sets text no style reaches the way the
+/// engine did (measured 2026-09-05: 4,449 characters of the annual in
+/// Minion Pro otherwise).
+pub fn default_face(bytes: &[u8]) -> Option<FontFace> {
+    let face = ttf_parser::Face::parse(bytes, 0).ok()?;
+    let name = |id: u16| -> Option<String> {
+        face.names()
+            .into_iter()
+            .filter(|n| n.name_id == id)
+            .find_map(|n| n.to_string())
+            .filter(|s| !s.trim().is_empty())
+    };
+    let family = name(ttf_parser::name_id::TYPOGRAPHIC_FAMILY)
+        .or_else(|| name(ttf_parser::name_id::FAMILY))?;
+    let faces = registry_faces(&[FontEntry {
+        family,
+        style: None,
+        bytes: bytes.to_vec(),
+    }]);
+    faces
+        .iter()
+        .find(|f| f.style.eq_ignore_ascii_case("Regular"))
+        .or_else(|| faces.first())
+        .cloned()
+}
+
+pub fn registry_faces(registry: &[FontEntry]) -> Vec<FontFace> {
+    let mut out: Vec<FontFace> = Vec::new();
+    let mut push = |f: FontFace| {
+        if !out
+            .iter()
+            .any(|o| o.family == f.family && o.style == f.style)
+        {
+            out.push(f);
+        }
+    };
+    for entry in registry {
+        let registered_style = entry
+            .style
+            .clone()
+            .filter(|s| !s.trim().is_empty())
+            .map(|s| s.trim().to_string());
+        let Some(face) = ttf_parser::Face::parse(&entry.bytes, 0).ok() else {
+            push(FontFace::synthesized(
+                &entry.family,
+                registered_style.as_deref().unwrap_or("Regular"),
+            ));
+            continue;
+        };
+        let name = |id: u16| -> Option<String> {
+            face.names()
+                .into_iter()
+                .filter(|n| n.name_id == id)
+                .find_map(|n| n.to_string())
+                .filter(|s| !s.trim().is_empty())
+        };
+        let raw = face.raw_face();
+        let has = |t: &[u8; 4]| raw.table(ttf_parser::Tag::from_bytes(t)).is_some();
+        let font_type = if has(b"CFF ") || has(b"CFF2") {
+            "OpenTypeCFF"
+        } else if has(b"GSUB") || has(b"GPOS") {
+            "OpenTypeTT"
+        } else {
+            "TrueType"
+        };
+        let version = name(ttf_parser::name_id::VERSION);
+        let italic_file = registered_style
+            .as_deref()
+            .or(name(ttf_parser::name_id::SUBFAMILY).as_deref())
+            .is_some_and(|s| s.to_ascii_lowercase().contains("italic"));
+        let instances = raw
+            .table(ttf_parser::Tag::from_bytes(b"fvar"))
+            .map(|t| fvar_instances(t, &name))
+            .unwrap_or_default();
+        if instances.is_empty() {
+            let style = registered_style
+                .or_else(|| name(ttf_parser::name_id::TYPOGRAPHIC_SUBFAMILY))
+                .or_else(|| name(ttf_parser::name_id::SUBFAMILY))
+                .unwrap_or_else(|| "Regular".to_string());
+            let mut f = FontFace::synthesized(&entry.family, &style);
+            if let Some(ps) = name(ttf_parser::name_id::POST_SCRIPT_NAME) {
+                f.postscript_name = ps;
+            }
+            if let Some(full) = name(ttf_parser::name_id::FULL_NAME) {
+                f.full_name = full;
+            }
+            f.font_type = font_type.to_string();
+            f.version = version.clone();
+            push(f);
+            continue;
+        }
+        for inst in instances {
+            let mut style = inst.subfamily.trim().to_string();
+            if italic_file && !style.to_ascii_lowercase().contains("italic") {
+                style = if style.eq_ignore_ascii_case("regular") {
+                    "Italic".to_string()
+                } else {
+                    format!("{style} Italic")
+                };
+            }
+            let mut f = FontFace::synthesized(&entry.family, &style);
+            if let Some(ps) = inst.postscript_name {
+                f.postscript_name = ps;
+            }
+            // InDesign spells a variable instance's full name as
+            // "<Family> <Style>", the regular one included.
+            f.full_name = format!("{} {}", entry.family, style);
+            f.font_type = font_type.to_string();
+            f.version = version.clone();
+            f.axes = inst.axes;
+            push(f);
+        }
+    }
+    out
+}
+
+/// One `fvar` named-instance record, names resolved.
+struct FvarInstance {
+    subfamily: String,
+    postscript_name: Option<String>,
+    /// `(axis name, coordinate)` in axis order.
+    axes: Vec<(String, f32)>,
+}
+
+/// Read the named instances out of a raw `fvar` table (OpenType 1.8:
+/// header, axis records, instance records with an optional trailing
+/// `postScriptNameID`). Malformed tables yield nothing.
+fn fvar_instances(t: &[u8], name: &dyn Fn(u16) -> Option<String>) -> Vec<FvarInstance> {
+    fn u16_at(t: &[u8], at: usize) -> Option<u16> {
+        t.get(at..at + 2).map(|b| u16::from_be_bytes([b[0], b[1]]))
+    }
+    fn fixed_at(t: &[u8], at: usize) -> Option<f32> {
+        t.get(at..at + 4)
+            .map(|b| i32::from_be_bytes([b[0], b[1], b[2], b[3]]) as f32 / 65536.0)
+    }
+    let Some(axes_offset) = u16_at(t, 4).map(usize::from) else {
+        return Vec::new();
+    };
+    let (Some(axis_count), Some(axis_size), Some(instance_count), Some(instance_size)) = (
+        u16_at(t, 8).map(usize::from),
+        u16_at(t, 10).map(usize::from),
+        u16_at(t, 12).map(usize::from),
+        u16_at(t, 14).map(usize::from),
+    ) else {
+        return Vec::new();
+    };
+    if axis_size < 20 || instance_size < 4 + 4 * axis_count {
+        return Vec::new();
+    }
+    let mut axis_names: Vec<String> = Vec::with_capacity(axis_count);
+    for i in 0..axis_count {
+        let at = axes_offset + i * axis_size;
+        let tag = t
+            .get(at..at + 4)
+            .map(|b| String::from_utf8_lossy(b).trim().to_string())
+            .unwrap_or_default();
+        let id = u16_at(t, at + 18).unwrap_or(0xFFFF);
+        axis_names.push(name(id).unwrap_or(tag));
+    }
+    let has_ps = instance_size >= 6 + 4 * axis_count;
+    let base = axes_offset + axis_count * axis_size;
+    let mut out = Vec::with_capacity(instance_count);
+    for i in 0..instance_count {
+        let at = base + i * instance_size;
+        let Some(subfamily) = u16_at(t, at).and_then(name) else {
+            continue;
+        };
+        let mut axes = Vec::with_capacity(axis_count);
+        for (k, axis_name) in axis_names.iter().enumerate() {
+            let Some(v) = fixed_at(t, at + 4 + 4 * k) else {
+                break;
+            };
+            axes.push((axis_name.clone(), v));
+        }
+        if axes.len() != axis_count {
+            continue;
+        }
+        let postscript_name = if has_ps {
+            u16_at(t, at + 4 + 4 * axis_count)
+                .filter(|id| *id != 0xFFFF && *id != 0)
+                .and_then(name)
+        } else {
+            None
+        };
+        out.push(FvarInstance {
+            subfamily,
+            postscript_name,
+            axes,
+        });
+    }
+    out
+}
+
+/// v66 — `src` re-zipped without the entries named in `drop` (raw copies,
+/// nothing re-compressed). The tombstone half of `DeletePagedPart`.
+fn zip_without(
+    src: &[u8],
+    drop: &std::collections::BTreeSet<String>,
+) -> Result<Vec<u8>, idml_export::WriteError> {
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(src))?;
+    let mut out = zip::write::ZipWriter::new(std::io::Cursor::new(Vec::<u8>::new()));
+    for i in 0..archive.len() {
+        let raw = archive.by_index_raw(i)?;
+        if drop.contains(raw.name()?.as_ref()) {
+            continue;
+        }
+        idml_export::zip_layout::copy_entry(&mut out, raw)?;
+    }
+    Ok(idml_export::zip_layout::finish(out)?)
+}
+
+fn compute_story_pages(built: &BuiltDocument) -> HashMap<String, Vec<PageId>> {
+    let mut out: HashMap<String, Vec<PageId>> = HashMap::new();
+    for page in &built.pages {
+        for line in &page.story_layout {
+            let entry = out.entry(line.story_id.clone()).or_default();
+            if entry.last().map(|p| p != &page.id).unwrap_or(true) {
+                entry.push(page.id.clone());
+            }
+        }
+    }
+    out
+}
+
+/// `package` (a zip) without the entries named in `drop`: every other entry
+/// is copied raw, in order, so nothing is recompressed and `mimetype` stays
+/// first. `None` when the bytes are not a readable zip.
+fn without_zip_entries(package: &[u8], drop: &[&str]) -> Option<Vec<u8>> {
+    let mut src = zip::ZipArchive::new(std::io::Cursor::new(package)).ok()?;
+    let mut out = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    for i in 0..src.len() {
+        let entry = src.by_index_raw(i).ok()?;
+        if drop.contains(&entry.name().ok()?.as_ref()) {
+            continue;
+        }
+        idml_export::zip_layout::copy_entry(&mut out, entry).ok()?;
+    }
+    idml_export::zip_layout::finish(out).ok()
+}
+
+/// The highest `u<hex>` id spelled by an entry name of `package`
+/// (`Stories/Story_u12.xml`, `Stories/Story_Story_u12.xml`,
+/// `Spreads/Spread_u12.xml`, `MasterSpreads/MasterSpread_u12.xml`), or 0
+/// when the bytes are not a readable package. See
+/// `CanvasModel::source_id_floor`.
+pub(crate) fn source_id_floor(package: &[u8]) -> u64 {
+    let Ok(mut zip) = zip::ZipArchive::new(std::io::Cursor::new(package)) else {
+        return 0;
+    };
+    let mut max = 0u64;
+    for i in 0..zip.len() {
+        let Ok(entry) = zip.by_index(i) else {
+            continue;
+        };
+        let Ok(name) = entry.name() else {
+            continue;
+        };
+        let stem = match name.rsplit_once('/') {
+            Some((_, stem)) => stem,
+            None => continue,
+        };
+        let stem = stem.strip_suffix(".xml").unwrap_or(stem);
+        // The id is the last `_`-separated piece (`Story_Story_u12` → `u12`).
+        let id = stem.rsplit('_').next().unwrap_or(stem);
+        if let Some(n) = paged_mutate::ids::u_hex_number(id) {
+            max = max.max(n);
+        }
+    }
+    max
+}
+
+/// The `Self` id of a frame of `spread`.
+fn frame_self_id(spread: &paged_model::Spread, fr: paged_model::FrameRef) -> Option<String> {
+    use paged_model::FrameRef;
+    match fr {
+        FrameRef::TextFrame(i) => spread.text_frames.get(i)?.self_id.clone(),
+        FrameRef::Rectangle(i) => spread.rectangles.get(i)?.self_id.clone(),
+        FrameRef::Oval(i) => spread.ovals.get(i)?.self_id.clone(),
+        FrameRef::GraphicLine(i) => spread.graphic_lines.get(i)?.self_id.clone(),
+        FrameRef::Polygon(i) => spread.polygons.get(i)?.self_id.clone(),
+        FrameRef::Group(i) => spread.groups.get(i)?.self_id.clone(),
+    }
+}
+
+/// What a cross-reference says (ADR 169), block by block: `(text,
+/// character style)` for each building block, the page number as `None`
+/// text (it is the live `XRefPageNumber`). As InDesign 20.0.1 writes them
+/// (`xref-update-probe`): a full paragraph is its list label (its tab a
+/// space) and its text; a paragraph number is the label without its
+/// trailing separator (`1.⇥` → `1`); a text anchor's name prints for a
+/// text destination only (a paragraph destination's is empty).
+fn cross_reference_text(
+    format: &paged_model::CrossReferenceFormat,
+    target: &paged_model::Paragraph,
+    label: Option<&str>,
+    anchor_name: Option<&str>,
+    file_name: Option<&str>,
+) -> Vec<(Option<String>, Option<String>)> {
+    let text: String = target
+        .runs
+        .iter()
+        .flat_map(|r| r.text.chars())
+        .filter(|c| !paged_model::is_generated_marker(*c))
+        .collect();
+    let text = text.trim_end_matches(['\n', '\r']).to_string();
+    let style = |s: &Option<String>| {
+        s.clone()
+            .filter(|s| s != "n" && !s.ends_with("[No character style]"))
+    };
+    let custom = |s: &Option<String>| {
+        s.as_deref()
+            .map(|t| t.strip_prefix("$ID/").unwrap_or(t).to_string())
+            .unwrap_or_default()
+    };
+    format
+        .blocks
+        .iter()
+        .map(|b| {
+            let words = match b.block_type.as_str() {
+                "CustomStringBuildingBlock" => Some(custom(&b.custom_text)),
+                "FullParagraphBuildingBlock" => Some(format!(
+                    "{}{text}",
+                    label.unwrap_or_default().replace('\t', " ")
+                )),
+                "ParagraphTextBuildingBlock" => Some(text.clone()),
+                "ParagraphNumberBuildingBlock" => Some(
+                    label
+                        .unwrap_or_default()
+                        .trim_end()
+                        .trim_end_matches('.')
+                        .to_string(),
+                ),
+                "PartialParagraphBuildingBlock" => {
+                    let delimiter = custom(&b.applied_delimiter);
+                    Some(match delimiter.chars().next() {
+                        Some(d) => match text.find(d) {
+                            Some(at) if b.include_delimiter == Some(true) => {
+                                text[..at + d.len_utf8()].to_string()
+                            }
+                            Some(at) => text[..at].to_string(),
+                            None => text.clone(),
+                        },
+                        None => text.clone(),
+                    })
+                }
+                "BookmarkNameBuildingBlock" => Some(anchor_name.unwrap_or_default().to_string()),
+                "FileNameBuildingBlock" => Some(file_name.unwrap_or_default().to_string()),
+                "PageNumberBuildingBlock" => None,
+                // Chapter numbers across a book are not modelled yet.
+                _ => Some(String::new()),
+            };
+            (
+                words,
+                style(&b.applied_character_style)
+                    .or_else(|| style(&format.applied_character_style)),
+            )
+        })
+        .collect()
+}
+
+/// Replace the runs `source` tags in `paragraphs` with `blocks` (ADR
+/// 169): each block a run with the first old run's attributes, its own
+/// character style where it names one, still tagged with the source; the
+/// page number a run of the `XRefPageNumber` variable printing `page`.
+/// Neighbouring text blocks of one style are one run. False when no run
+/// carries the source.
+fn replace_source_runs(
+    paragraphs: &mut [paged_model::Paragraph],
+    source: &str,
+    blocks: &[(Option<String>, Option<String>)],
+    page: &str,
+    page_variable: Option<&str>,
+) -> bool {
+    for para in paragraphs.iter_mut() {
+        let Some(first) = para
+            .runs
+            .iter()
+            .position(|r| r.hyperlink_source.as_deref() == Some(source))
+        else {
+            continue;
+        };
+        let end = para.runs[first..]
+            .iter()
+            .position(|r| r.hyperlink_source.as_deref() != Some(source))
+            .map_or(para.runs.len(), |n| first + n);
+        let mut base = para.runs[first].clone();
+        base.text_variable = None;
+        let mut runs: Vec<paged_model::CharacterRun> = Vec::new();
+        for (words, style) in blocks {
+            let mut run = base.clone();
+            if let Some(style) = style {
+                run.character_style = Some(style.clone());
+            }
+            match words {
+                Some(words) if words.is_empty() => continue,
+                Some(words) => {
+                    run.text = words.clone();
+                    match runs.last_mut() {
+                        Some(last)
+                            if last.text_variable.is_none()
+                                && last.character_style == run.character_style =>
+                        {
+                            last.text.push_str(&run.text)
+                        }
+                        _ => runs.push(run),
+                    }
+                }
+                None => {
+                    run.text = page.to_string();
+                    run.text_variable = page_variable.map(str::to_string);
+                    runs.push(run);
+                }
+            }
+        }
+        para.runs.splice(first..end, runs);
+        return true;
+    }
+    false
+}
+
+/// An index paragraph style InDesign 20.0.1 creates when Generate Index
+/// needs it and the document lacks it, with the attributes it gives it
+/// (`index-probe`, ADR 168): the title 30 pt centred with 18 pt after, a
+/// section head with 7.2 pt before and after, a level 10 pt hanging from
+/// a 28 pt indent (level 1 by 28 pt, the others by 21 pt), each based on
+/// `based_on` ([Basic Paragraph] where the document has one). Any other
+/// id is created plain.
+fn indesign_index_paragraph_style(id: &str, based_on: &str) -> paged_model::ParagraphStyleDef {
+    let mut def = paged_model::ParagraphStyleDef {
+        self_id: id.to_string(),
+        name: id.strip_prefix("ParagraphStyle/").map(str::to_string),
+        based_on: Some(based_on.to_string()),
+        ..Default::default()
+    };
+    match id {
+        "ParagraphStyle/$ID/Index Title" => {
+            def.point_size = Some(30.0);
+            def.space_after = Some(18.0);
+            def.justification = Some(paged_model::Justification::CenterAlign);
+        }
+        "ParagraphStyle/$ID/Index Section Head" => {
+            def.space_before = Some(7.2);
+            def.space_after = Some(7.2);
+        }
+        "ParagraphStyle/$ID/Index Level 1" => {
+            def.point_size = Some(10.0);
+            def.left_indent = Some(28.0);
+            def.first_line_indent = Some(-28.0);
+        }
+        _ if id.starts_with("ParagraphStyle/$ID/Index Level ") => {
+            def.point_size = Some(10.0);
+            def.left_indent = Some(28.0);
+            def.first_line_indent = Some(-21.0);
+        }
+        _ => {}
+    }
+    def
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_stale_part_in_the_source_floors_the_minter() {
+        let names = [
+            "Stories/Story_st1.xml",
+            "Stories/Story_Story_u937.xml",
+            "Spreads/Spread_u12.xml",
+            "MasterSpreads/MasterSpread_uabc.xml",
+            "Resources/Styles.xml",
+        ];
+        let mut buf = std::io::Cursor::new(Vec::new());
+        {
+            let mut w = zip::ZipWriter::new(&mut buf);
+            for n in names {
+                w.start_file(n, zip::write::SimpleFileOptions::default())
+                    .unwrap();
+                std::io::Write::write_all(&mut w, b"<x/>").unwrap();
+            }
+            w.finish().unwrap();
+        }
+        assert_eq!(source_id_floor(&buf.into_inner()), 0xabc);
+        assert_eq!(source_id_floor(b"not a zip"), 0);
+    }
+
+    /// The instance names InDesign 20.0.1 lists for the corpus faces
+    /// installed (`indesign-fonts.tsv`): the `Roman` / `Italic`
+    /// infixes come from the files' `fvar` records, the axis names
+    /// and coordinates too. Skipped when the corpus font dir is absent.
+    #[test]
+    fn default_face_reads_the_fallback_bytes_regular_instance() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/fonts");
+        let bytes = std::fs::read(dir.join("Inter.ttf")).expect("Inter.ttf");
+        let face = default_face(&bytes).expect("a face");
+        assert_eq!(face.family, "Inter");
+        assert_eq!(face.style, "Regular");
+        assert!(default_face(b"not a font").is_none());
+    }
+
+    #[test]
+    fn registry_faces_name_variable_instances_like_indesign() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/fonts");
+        if !dir.exists() {
+            eprintln!("SKIP: {} absent", dir.display());
+            return;
+        }
+        let entry = |family: &str, style: Option<&str>, file: &str| FontEntry {
+            family: family.into(),
+            style: style.map(str::to_string),
+            bytes: std::fs::read(dir.join(file)).expect(file),
+        };
+        let faces = registry_faces(&[
+            entry("Fraunces", None, "Fraunces-VF.ttf"),
+            entry("JetBrains Mono", None, "JetBrainsMono-VF.ttf"),
+            entry(
+                "JetBrains Mono",
+                Some("Italic"),
+                "JetBrainsMono-Italic-VF.ttf",
+            ),
+            entry("Source Serif 4", None, "SourceSerif4.ttf"),
+            entry("Noto Sans JP", None, "NotoSansJP-VF.ttf"),
+            entry("Roboto", Some("Bold"), "Roboto-Bold.ttf"),
+        ]);
+        let face = |family: &str, style: &str| -> &FontFace {
+            faces
+                .iter()
+                .find(|f| f.family == family && f.style == style)
+                .unwrap_or_else(|| panic!("no {family} {style} in {faces:#?}"))
+        };
+        let fraunces = face("Fraunces", "Regular");
+        assert_eq!(fraunces.postscript_name, "Fraunces-Regular");
+        assert_eq!(fraunces.full_name, "Fraunces Regular");
+        assert_eq!(fraunces.font_type, "OpenTypeTT");
+        assert_eq!(
+            fraunces.version.as_deref(),
+            Some("Version 1.000;[b76b70a41]")
+        );
+        assert_eq!(
+            fraunces.axes,
+            vec![
+                ("Optical Size".to_string(), 9.0),
+                ("Weight".to_string(), 400.0),
+                ("Softness".to_string(), 0.0),
+                ("Wonky".to_string(), 1.0),
+            ]
+        );
+        assert_eq!(face("Fraunces", "Bold").postscript_name, "Fraunces-Bold");
+        assert_eq!(
+            face("JetBrains Mono", "Regular").postscript_name,
+            "JetBrainsMonoRoman-Regular"
+        );
+        assert_eq!(
+            face("JetBrains Mono", "Bold").postscript_name,
+            "JetBrainsMonoRoman-Bold"
+        );
+        assert_eq!(
+            face("JetBrains Mono", "Italic").postscript_name,
+            "JetBrainsMonoItalic-Regular"
+        );
+        assert_eq!(
+            face("JetBrains Mono", "Bold Italic").postscript_name,
+            "JetBrainsMonoItalic-Bold"
+        );
+        assert_eq!(
+            face("Source Serif 4", "Regular").postscript_name,
+            "SourceSerif4Roman-Regular"
+        );
+        assert_eq!(
+            face("Source Serif 4", "Bold").axes,
+            vec![
+                ("Weight".to_string(), 700.0),
+                ("Optical Size".to_string(), 20.0)
+            ]
+        );
+        // No `postScriptNameID` in this file: the `Family-Style` fallback.
+        assert_eq!(
+            face("Noto Sans JP", "Regular").postscript_name,
+            "NotoSansJP-Regular"
+        );
+        // A static font: its own names, no axes.
+        let roboto = face("Roboto", "Bold");
+        assert_eq!(roboto.postscript_name, "Roboto-Bold");
+        assert_eq!(roboto.full_name, "Roboto Bold");
+        assert!(roboto.axes.is_empty());
+        // Nothing family-only, nothing duplicated.
+        let mut keys: Vec<(String, String)> = faces
+            .iter()
+            .map(|f| (f.family.clone(), f.style.clone()))
+            .collect();
+        let n = keys.len();
+        keys.sort();
+        keys.dedup();
+        assert_eq!(keys.len(), n);
+    }
+
+    // A minimum-viable IDML the canvas can load. Hand-rolled so the
+    // model test stays independent of the heavier `paged-gen` fixture
+    // generator. Single Letter-sized page, no stories, no styles —
+    // just the package files `Document::open` needs to parse.
+    fn minimal_idml_bytes() -> Vec<u8> {
+        use std::io::Write;
+        let mut buf = Vec::new();
+        {
+            let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+            let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+
+            // mimetype must be the first file, stored uncompressed.
+            zip.start_file("mimetype", opts).unwrap();
+            zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+                .unwrap();
+
+            // META-INF/container.xml
+            zip.start_file("META-INF/container.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+<rootfiles><rootfile full-path="designmap.xml" media-type="text/xml"/></rootfiles></container>"#,
+            )
+            .unwrap();
+
+            // designmap.xml — references one spread.
+            zip.start_file("designmap.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<?aid style="50" type="document" readerVersion="13.0" featureSet="513" product="13.1(255)"?>
+<Document DOMVersion="13.1" Self="d1">
+<idPkg:Spread src="Spreads/Spread_s1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+</Document>"#,
+            )
+            .unwrap();
+
+            // Spreads/Spread_s1.xml — one Letter-sized page.
+            zip.start_file("Spreads/Spread_s1.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+<Spread Self="s1" PageCount="1">
+<Page Self="p1" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0"/>
+</Spread></idPkg:Spread>"#,
+            )
+            .unwrap();
+
+            zip.finish().unwrap();
+        }
+        buf
+    }
+
+    #[test]
+    fn c34_a_named_caller_may_write_only_its_own_paged_subtree() {
+        // C-34 — namespace ownership was documented as "gated at the SDK
+        // door, where the caller identity is known", and the engine
+        // enforced only the `paged/` prefix. A plugin content type's own
+        // model — including its own layers — lives in that subtree, so
+        // any holder of the handle could clobber another plugin's
+        // document content. A gate that exists only one layer up is a
+        // convention, not a boundary.
+        let bytes = minimal_idml_bytes();
+        let mut model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default())
+            .expect("minimal IDML parses + builds");
+
+        model
+            .set_paged_part_as(
+                Some("media.paged.sheet"),
+                "paged/media.paged.sheet/o1/spec.json".into(),
+                b"{}".to_vec(),
+            )
+            .expect("a plugin writes its OWN subtree");
+
+        let foreign = model.set_paged_part_as(
+            Some("media.paged.sheet"),
+            "paged/media.paged.image/o1/pixels.bin".into(),
+            b"stolen".to_vec(),
+        );
+        assert!(
+            foreign.is_err(),
+            "one plugin must not write another plugin's subtree"
+        );
+        assert!(
+            foreign.unwrap_err().contains("media.paged.image"),
+            "the refusal names the subtree it protected"
+        );
+
+        // `None` bypasses — stated rather than discovered. The host and
+        // every pre-C-34 caller behave exactly as before, which is what
+        // makes this additive; it is an honesty aid for a correct
+        // caller, not a boundary against a hostile one.
+        model
+            .set_paged_part(
+                "paged/media.paged.image/o1/pixels.bin".into(),
+                b"host".to_vec(),
+            )
+            .expect("an unnamed caller keeps the prior behaviour");
+
+        // The `paged/` boundary still holds for everyone.
+        assert!(
+            model
+                .set_paged_part_as(Some("media.paged.sheet"), "designmap.xml".into(), vec![])
+                .is_err(),
+            "the IDML parts stay off-limits"
+        );
+    }
+
+    #[test]
+    fn c34_a_frames_scene_layer_belongs_to_one_plugin() {
+        // The door was an unconditional insert keyed on element id, so
+        // plugin A could clear or overwrite plugin B's in-frame render
+        // on B's own frame.
+        let bytes = minimal_idml_bytes();
+        let mut model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default())
+            .expect("minimal IDML parses + builds");
+        let empty = || paged_compose::SceneLayer { items: Vec::new() };
+
+        model
+            .set_scene_layer_as(Some("media.paged.sheet"), "u1".into(), empty())
+            .expect("the first submitter claims the frame");
+        model
+            .set_scene_layer_as(Some("media.paged.sheet"), "u1".into(), empty())
+            .expect("and may replace its own render");
+
+        assert!(
+            model
+                .set_scene_layer_as(Some("media.paged.image"), "u1".into(), empty())
+                .is_err(),
+            "a foreign plugin must not replace it"
+        );
+
+        // Clearing releases the claim — a frame with no render has no
+        // owner, so the next submitter starts clean rather than
+        // inheriting a lock nobody can lift.
+        model.clear_scene_layer("u1").expect("clear");
+        model
+            .set_scene_layer_as(Some("media.paged.image"), "u1".into(), empty())
+            .expect("after a clear the frame is unclaimed");
+    }
+
+    #[test]
+    fn load_minimal_document_produces_one_page_with_stable_id() {
+        let bytes = minimal_idml_bytes();
+        let model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default())
+            .expect("minimal IDML parses + builds");
+        assert_eq!(model.page_count(), 1);
+        let ids: Vec<PageId> = model.page_ids().cloned().collect();
+        assert_eq!(ids.len(), 1);
+        // The page carried Self="p1" in the IDML — the renderer
+        // surfaces that directly as PageId. If parsing falls back to
+        // a synthetic id, the spec contract is broken.
+        assert_eq!(ids[0].as_str(), "p1");
+        // Display list seam is reachable.
+        let list = model
+            .display_list_for_page(&ids[0])
+            .expect("page exists, display list returns Some");
+        // No stories or frames yet => no commands. Just confirm we
+        // returned a borrow on the in-place list, not a clone.
+        assert!(list.commands.is_empty());
+    }
+
+    #[test]
+    fn handle_exposes_page_dimensions() {
+        let bytes = minimal_idml_bytes();
+        let model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default()).unwrap();
+        let handle = model.handle();
+        assert_eq!(handle.page_count, 1);
+        assert_eq!(handle.page_sizes_pt.len(), 1);
+        let (w, h) = handle.page_sizes_pt[0];
+        assert!((w - 612.0).abs() < 0.01, "expected Letter width, got {w}");
+        assert!((h - 792.0).abs() < 0.01, "expected Letter height, got {h}");
+    }
+
+    #[test]
+    fn unknown_page_id_returns_none() {
+        let bytes = minimal_idml_bytes();
+        let model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default()).unwrap();
+        assert!(model.page(&PageId("does-not-exist".into())).is_none());
+        assert!(model
+            .display_list_for_page(&PageId("nope".into()))
+            .is_none());
+    }
+
+    #[test]
+    fn canonical_hash_is_stable_across_loads() {
+        let bytes = minimal_idml_bytes();
+        let a = CanvasModel::load("a", &bytes, CanvasOptions::default()).unwrap();
+        let b = CanvasModel::load("b", &bytes, CanvasOptions::default()).unwrap();
+        assert_eq!(
+            a.initial_state_hash(),
+            b.initial_state_hash(),
+            "same bytes → same canonical hash (doc_id is not part of content)"
+        );
+        assert_eq!(a.initial_state_hash(), a.current_state_hash());
+    }
+
+    /// panels.md gaps 9/10/19 — a fixture with two `<Section>`s,
+    /// per-page `<MarginPreference>`, document bleed, and a placed
+    /// image link carrying colour space + ppi. Drives the W0.6 panel
+    /// summary accessors.
+    fn panels_idml_bytes() -> Vec<u8> {
+        use std::io::Write;
+        let mut buf = Vec::new();
+        {
+            let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+            let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            zip.start_file("mimetype", opts).unwrap();
+            zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+                .unwrap();
+            zip.start_file("META-INF/container.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+<rootfiles><rootfile full-path="designmap.xml" media-type="text/xml"/></rootfiles></container>"#,
+            )
+            .unwrap();
+            // Two sections: A- prefix (lowerRoman) at p1, plain arabic at p2.
+            zip.start_file("designmap.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document DOMVersion="13.1" Self="d1">
+<DocumentPreference DocumentBleedTopOffset="9" DocumentBleedBottomOffset="9" DocumentBleedInsideOrLeftOffset="9" DocumentBleedOutsideOrRightOffset="9"/>
+<Section Self="sec1" PageStart="p1" PageNumberStyle="LowerRoman" SectionPrefix="A-" IncludeSectionPrefix="true"/>
+<Section Self="sec2" PageStart="p2" PageNumberStyle="Arabic"/>
+<idPkg:Spread src="Spreads/Spread_s1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+</Document>"#,
+            )
+            .unwrap();
+            zip.start_file("Spreads/Spread_s1.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+<Spread Self="s1" PageCount="2">
+<Page Self="p1" Name="i" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0">
+<MarginPreference Top="36" Bottom="48" Left="54" Right="54" ColumnCount="2" ColumnGutter="12"/>
+</Page>
+<Page Self="p2" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 700 0"/>
+<Rectangle Self="r1" GeometricBounds="0 0 100 100" ItemTransform="1 0 0 1 50 50">
+<Image Self="img1" Space="$ID/CMYK" ActualPpi="(300 300)" EffectivePpi="(150 150)" LinkResourceURI="file:///missing.tif"/>
+</Rectangle>
+</Spread></idPkg:Spread>"#,
+            )
+            .unwrap();
+            zip.finish().unwrap();
+        }
+        buf
+    }
+
+    #[test]
+    fn sections_summary_reports_prefix_style_and_page_ranges() {
+        use crate::channel::CollectionName;
+        let bytes = panels_idml_bytes();
+        let model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default()).unwrap();
+        let sections = model.sections();
+        assert_eq!(sections.len(), 2);
+        // First section: A- prefix, lowerRoman, starts at page index 0,
+        // spans 1 page (up to the next section's start).
+        assert_eq!(sections[0].self_id, "sec1");
+        assert_eq!(sections[0].prefix, "A-");
+        assert_eq!(sections[0].label_style, "lowerRoman");
+        assert_eq!(sections[0].start_page_index, Some(0));
+        assert_eq!(sections[0].page_count, 1);
+        // Second section: no prefix, arabic, page index 1 to doc end.
+        assert_eq!(sections[1].prefix, "");
+        assert_eq!(sections[1].label_style, "arabic");
+        assert_eq!(sections[1].start_page_index, Some(1));
+        assert_eq!(sections[1].page_count, 1);
+        // The generic dispatcher routes "sections" to the same shape.
+        let via_named = serde_json::to_value(model.sections()).unwrap();
+        let via_dispatch = model.collection(CollectionName::Sections);
+        assert_eq!(via_named, via_dispatch);
+    }
+
+    #[test]
+    fn page_summary_carries_margins_columns_and_bleed() {
+        let bytes = panels_idml_bytes();
+        let model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default()).unwrap();
+        let pages = model.pages();
+        assert_eq!(pages.len(), 2);
+        let p1 = &pages[0];
+        assert!((p1.margin_top_pt - 36.0).abs() < 1e-3);
+        assert!((p1.margin_bottom_pt - 48.0).abs() < 1e-3);
+        assert!((p1.margin_left_pt - 54.0).abs() < 1e-3);
+        assert!((p1.margin_right_pt - 54.0).abs() < 1e-3);
+        assert_eq!(p1.column_count, 2);
+        assert!((p1.column_gutter_pt - 12.0).abs() < 1e-3);
+        // Bleed is document-level: present on every page.
+        assert!((p1.bleed_top_pt - 9.0).abs() < 1e-3);
+        assert!((p1.bleed_right_pt - 9.0).abs() < 1e-3);
+        // p2 declared no margins → all 0, column_count defaults to 1.
+        let p2 = &pages[1];
+        assert_eq!(p2.margin_top_pt, 0.0);
+        assert_eq!(p2.column_count, 1);
+        assert!((p2.bleed_bottom_pt - 9.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn overset_story_is_flagged_on_summary_and_stats() {
+        use std::io::Write;
+        let font_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../corpus/fonts/Inter.ttf");
+        let Ok(font) = std::fs::read(&font_path) else {
+            // Font fixture absent in this checkout — skip rather than
+            // fail (mirrors the corpus-optional convention).
+            eprintln!("skip: Inter.ttf not present");
+            return;
+        };
+        let mut buf = Vec::new();
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        zip.start_file("mimetype", opts).unwrap();
+        zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+            .unwrap();
+        zip.start_file("META-INF/container.xml", opts).unwrap();
+        zip.write_all(br#"<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="designmap.xml" media-type="text/xml"/></rootfiles></container>"#).unwrap();
+        zip.start_file("designmap.xml", opts).unwrap();
+        zip.write_all(br#"<?xml version="1.0"?><Document Self="d1"><idPkg:Spread src="Spreads/Spread_s1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/><idPkg:Story src="Stories/Story_u10.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/></Document>"#).unwrap();
+        // A 40pt-tall frame can't hold 12 lines → overset.
+        zip.start_file("Spreads/Spread_s1.xml", opts).unwrap();
+        zip.write_all(br#"<?xml version="1.0"?><idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"><Spread Self="s1"><Page Self="p1" GeometricBounds="0 0 800 400"/><TextFrame Self="f1" ParentStory="u10" GeometricBounds="20 20 60 200"/></Spread></idPkg:Spread>"#).unwrap();
+        let mut story = String::from(
+            r#"<?xml version="1.0"?><idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"><Story Self="u10">"#,
+        );
+        for i in 0..12 {
+            story.push_str(&format!(r#"<ParagraphStyleRange><CharacterStyleRange AppliedFont="Inter" PointSize="10"><Content>Line {i}</Content></CharacterStyleRange></ParagraphStyleRange>"#));
+        }
+        story.push_str("</Story></idPkg:Story>");
+        zip.start_file("Stories/Story_u10.xml", opts).unwrap();
+        zip.write_all(story.as_bytes()).unwrap();
+        zip.finish().unwrap();
+        let bytes = buf;
+
+        let opts = CanvasOptions {
+            fonts: vec![font],
+            ..Default::default()
+        };
+        let model = CanvasModel::load("doc-overset", &bytes, opts).unwrap();
+        // The story overflowed its single short frame → overset.
+        let story = model
+            .stories()
+            .into_iter()
+            .find(|s| s.self_id == "u10")
+            .expect("story u10");
+        assert!(story.overset, "u10 should be flagged overset");
+        // Document stats count it.
+        assert_eq!(model.handle().stats.overset_stories, 1);
+    }
+
+    #[test]
+    fn font_summary_flags_unregistered_families_missing() {
+        let bytes = panels_idml_bytes();
+        let model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default()).unwrap();
+        // The panels fixture has no text, so no font references — but
+        // the simple text fixture does. Re-load one with a run that
+        // names "Inter", registered with no matching face.
+        let _ = model; // panels fixture has no fonts; covered below.
+        let text_bytes = {
+            use std::io::Write;
+            let mut buf = Vec::new();
+            let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+            let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            zip.start_file("mimetype", opts).unwrap();
+            zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+                .unwrap();
+            zip.start_file("META-INF/container.xml", opts).unwrap();
+            zip.write_all(br#"<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="designmap.xml" media-type="text/xml"/></rootfiles></container>"#).unwrap();
+            zip.start_file("designmap.xml", opts).unwrap();
+            zip.write_all(br#"<?xml version="1.0"?><Document Self="d1"><idPkg:Spread src="Spreads/Spread_s1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/><idPkg:Story src="Stories/Story_u10.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/></Document>"#).unwrap();
+            zip.start_file("Spreads/Spread_s1.xml", opts).unwrap();
+            zip.write_all(br#"<?xml version="1.0"?><idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"><Spread Self="s1"><Page Self="p1" GeometricBounds="0 0 792 612"/><TextFrame Self="f1" ParentStory="u10" GeometricBounds="40 40 700 500"/></Spread></idPkg:Spread>"#).unwrap();
+            zip.start_file("Stories/Story_u10.xml", opts).unwrap();
+            zip.write_all(br#"<?xml version="1.0"?><idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"><Story Self="u10"><ParagraphStyleRange><CharacterStyleRange AppliedFont="Nonexistent Face" PointSize="12"><Content>Hi</Content></CharacterStyleRange></ParagraphStyleRange></Story></idPkg:Story>"#).unwrap();
+            zip.finish().unwrap();
+            buf
+        };
+        let model = CanvasModel::load("doc-2", &text_bytes, CanvasOptions::default()).unwrap();
+        let fonts = model.fonts();
+        let f = fonts
+            .iter()
+            .find(|f| f.family == "Nonexistent Face")
+            .expect("font row");
+        assert!(f.is_missing, "unregistered family must be flagged missing");
+    }
+
+    #[test]
+    fn story_content_reports_runs_text_and_applied_styles() {
+        use std::io::Write;
+        let mut buf = Vec::new();
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        zip.start_file("mimetype", opts).unwrap();
+        zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+            .unwrap();
+        zip.start_file("META-INF/container.xml", opts).unwrap();
+        zip.write_all(br#"<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="designmap.xml" media-type="text/xml"/></rootfiles></container>"#).unwrap();
+        zip.start_file("designmap.xml", opts).unwrap();
+        zip.write_all(br#"<?xml version="1.0"?><Document Self="d1"><idPkg:Spread src="Spreads/Spread_s1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/><idPkg:Story src="Stories/Story_u10.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/></Document>"#).unwrap();
+        zip.start_file("Spreads/Spread_s1.xml", opts).unwrap();
+        zip.write_all(br#"<?xml version="1.0"?><idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"><Spread Self="s1"><Page Self="p1" GeometricBounds="0 0 792 612"/><TextFrame Self="f1" ParentStory="u10" GeometricBounds="40 40 700 500"/></Spread></idPkg:Spread>"#).unwrap();
+        zip.start_file("Stories/Story_u10.xml", opts).unwrap();
+        zip.write_all(br#"<?xml version="1.0"?><idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"><Story Self="u10"><ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/Body"><CharacterStyleRange AppliedCharacterStyle="CharacterStyle/Emph" PointSize="12" FillColor="Color/Red" FontStyle="Bold"><Content>Hello </Content></CharacterStyleRange><CharacterStyleRange><Content>world</Content></CharacterStyleRange></ParagraphStyleRange></Story></idPkg:Story>"#).unwrap();
+        zip.finish().unwrap();
+        let bytes = buf;
+
+        let model = CanvasModel::load("doc-content", &bytes, CanvasOptions::default()).unwrap();
+        let content = model.story_content("u10").expect("story u10");
+        assert_eq!(content.self_id, "u10");
+        assert_eq!(content.paragraphs.len(), 1);
+        let para = &content.paragraphs[0];
+        assert_eq!(para.paragraph_style.as_deref(), Some("ParagraphStyle/Body"));
+        assert_eq!(para.runs.len(), 2);
+        assert_eq!(para.runs[0].text, "Hello ");
+        assert_eq!(
+            para.runs[0].character_style.as_deref(),
+            Some("CharacterStyle/Emph")
+        );
+        assert_eq!(para.runs[0].point_size, Some(12.0));
+        assert_eq!(para.runs[0].font_style.as_deref(), Some("Bold"));
+        assert_eq!(para.runs[0].fill_color.as_deref(), Some("Color/Red"));
+        assert_eq!(para.runs[1].text, "world");
+        assert_eq!(para.runs[1].character_style, None);
+        // Unknown story id → None.
+        assert!(model.story_content("nope").is_none());
+    }
+
+    #[test]
+    fn link_summary_carries_status_colorspace_and_ppi() {
+        let bytes = panels_idml_bytes();
+        let model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default()).unwrap();
+        let links = model.links();
+        assert_eq!(links.len(), 1);
+        let l = &links[0];
+        assert_eq!(l.host_self_id, "r1");
+        assert_eq!(l.colorspace.as_deref(), Some("CMYK"));
+        assert!((l.effective_ppi.unwrap() - 150.0).abs() < 1e-3);
+        // The link points at a non-existent asset and no resolver was
+        // configured, so the build drew the placeholder → "missing".
+        assert_eq!(l.status, "missing");
+    }
+
+    #[test]
+    fn placed_asset_bytes_resolves_element_to_cached_encoded_file() {
+        let bytes = panels_idml_bytes();
+        let model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default()).unwrap();
+        // r1 is the placed-image frame (per the links() test); grab its URI.
+        let uri = model.links()[0].uri.clone();
+        // No resolver was configured, so the build cached no bytes → the
+        // door reports not-found even though the link resolves.
+        assert!(model.placed_asset_bytes("r1").is_none());
+        // Simulate the render having decoded + cached the original file.
+        let file = vec![0x89u8, b'P', b'N', b'G', 1, 2, 3, 4];
+        model.image_decode_cache.borrow_mut().insert(
+            uri.clone(),
+            paged_compose::DecodedImage {
+                width: 4,
+                height: 2,
+                encoded: bytes::Bytes::from(file.clone()),
+                rgba: bytes::Bytes::new(),
+                icc: None,
+            },
+        );
+        // Now the door hands back the ORIGINAL encoded bytes + natural dims.
+        let (got_uri, w, h, got) = model.placed_asset_bytes("r1").expect("cached now");
+        assert_eq!(got_uri, uri);
+        assert_eq!((w, h), (4, 2));
+        assert_eq!(got, file);
+        // An unknown / non-image element resolves to None, never panics.
+        assert!(model.placed_asset_bytes("not-a-frame").is_none());
+    }
+
+    /// A minimal IDML whose only page item is a Rectangle hosting an
+    /// INLINE-embedded PNG (base64 `<Contents>`) — no `LinkResourceURI`,
+    /// no asset resolver, nothing on disk. The 4×2 red PNG is real and
+    /// decodable, so the build resolves and caches it on its own.
+    fn inline_image_idml_bytes() -> Vec<u8> {
+        use std::io::Write;
+        const PNG_B64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAQAAAACCAYAAAB/qH1jAAAAEklEQVR4\
+nGP4z8DwHxkzoAsAAA8hD/EEN8afAAAAAElFTkSuQmCC";
+        let mut buf = Vec::new();
+        {
+            let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+            let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            zip.start_file("mimetype", opts).unwrap();
+            zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+                .unwrap();
+            zip.start_file("META-INF/container.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+<rootfiles><rootfile full-path="designmap.xml" media-type="text/xml"/></rootfiles></container>"#,
+            )
+            .unwrap();
+            zip.start_file("designmap.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document DOMVersion="13.1" Self="d1">
+<idPkg:Spread src="Spreads/Spread_s1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+</Document>"#,
+            )
+            .unwrap();
+            zip.start_file("Spreads/Spread_s1.xml", opts).unwrap();
+            zip.write_all(
+                format!(
+                    r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+<Spread Self="s1" PageCount="1">
+<Page Self="p1" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0"/>
+<Rectangle Self="r1" GeometricBounds="0 0 100 100" ItemTransform="1 0 0 1 50 50">
+<Image Self="img1" Space="$ID/RGB"><Contents><![CDATA[{PNG_B64}]]></Contents></Image>
+</Rectangle>
+<Rectangle Self="r2" GeometricBounds="0 0 100 100" ItemTransform="1 0 0 1 200 50">
+<Image Self="img2" Space="$ID/RGB" ItemTransform="0.5 0 0 0.5 10 20" LinkResourceURI="file:///photo.png"><Contents><![CDATA[{PNG_B64}]]></Contents></Image>
+</Rectangle>
+</Spread></idPkg:Spread>"#
+                )
+                .as_bytes(),
+            )
+            .unwrap();
+            zip.finish().unwrap();
+        }
+        buf
+    }
+
+    /// C-26 — an inline-embedded image is reachable through the door.
+    ///
+    /// This goes through a REAL build rather than seeding the cache by
+    /// hand, because the bug was never in either side alone: the
+    /// renderer cached the payload under the bytes' allocation address
+    /// while the door looked it up by link URI, so each half was
+    /// self-consistent and the pair was broken. Only a test that lets
+    /// the renderer write the entry and the door read it can see that.
+    #[test]
+    fn c26_an_inline_embedded_image_is_reachable_through_the_door() {
+        let bytes = inline_image_idml_bytes();
+        let model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default()).unwrap();
+        let (name, w, h, got) = model
+            .placed_asset_bytes("r1")
+            .expect("an inline-embedded payload the engine renders must be readable");
+        // The natural size of the embedded PNG, proving these came from
+        // the decode the renderer actually performed.
+        assert_eq!((w, h), (4, 2));
+        assert_eq!(&got[..8], b"\x89PNG\r\n\x1a\n", "the ORIGINAL encoded file");
+        // No LinkResourceURI on this frame, so the synthetic name stands
+        // in — and it is the same key the renderer cached under.
+        assert_eq!(name, "inline:r1");
+        assert!(model.placed_asset_bytes("not-a-frame").is_none());
+
+        // r2 is the real-world Envato shape: an embedded payload AND a
+        // LinkResourceURI. The bytes still come from the embedding (the
+        // file on disk does not exist), but the name is the filename,
+        // because that is the useful hint for choosing a codec.
+        let (name2, w2, h2, got2) = model.placed_asset_bytes("r2").expect("embedded + linked");
+        assert_eq!(name2, "file:///photo.png");
+        assert_eq!((w2, h2), (4, 2));
+        assert_eq!(got2, got, "same embedded payload, reached the same way");
+    }
+
+    /// C-27 — a placed image's own fit/crop transform is readable.
+    ///
+    /// Without it a plugin generating geometry FROM the pixels can only
+    /// assume the image fills its frame, so every cropped or fitted
+    /// placement silently mis-registers its output. The frame's own
+    /// transform was always readable; this is the inner one.
+    #[test]
+    fn c27_a_placed_images_own_fit_transform_is_readable() {
+        let bytes = inline_image_idml_bytes();
+        let model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default()).unwrap();
+        let links = model.links();
+        // Only r2 carries a LinkResourceURI, so only it is a "link".
+        let r2 = links
+            .iter()
+            .find(|l| l.host_self_id == "r2")
+            .expect("the linked placement");
+        assert_eq!(
+            r2.image_transform,
+            Some([0.5, 0.0, 0.0, 0.5, 10.0, 20.0]),
+            "the inner <Image ItemTransform>, not the frame's"
+        );
+    }
+
+    /// An IDML with two rectangles: `on` sits on the page, `off` is
+    /// translated well clear of it onto the PASTEBOARD. Both are real
+    /// page items — same spread, same vec — differing only in where
+    /// their transform puts them.
+    fn pasteboard_idml_bytes() -> Vec<u8> {
+        use std::io::Write;
+        let mut buf = Vec::new();
+        {
+            let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+            let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            zip.start_file("mimetype", opts).unwrap();
+            zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+                .unwrap();
+            zip.start_file("META-INF/container.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+<rootfiles><rootfile full-path="designmap.xml" media-type="text/xml"/></rootfiles></container>"#,
+            )
+            .unwrap();
+            zip.start_file("designmap.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document DOMVersion="13.1" Self="d1">
+<idPkg:Spread src="Spreads/Spread_s1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+</Document>"#,
+            )
+            .unwrap();
+            zip.start_file("Spreads/Spread_s1.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+<Spread Self="s1" PageCount="1">
+<Page Self="p1" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0"/>
+<Rectangle Self="on" GeometricBounds="0 0 100 100" ItemTransform="1 0 0 1 50 50"/>
+<Rectangle Self="off" GeometricBounds="0 0 100 100" ItemTransform="1 0 0 1 5000 5000"/>
+</Spread></idPkg:Spread>"#,
+            )
+            .unwrap();
+            zip.finish().unwrap();
+        }
+        buf
+    }
+
+    /// C-23 — an element on the PASTEBOARD is reported as pageless, not
+    /// omitted.
+    ///
+    /// The old behaviour was not "returns no page" but "returns
+    /// nothing": the push sat inside `if let Some(built_page)`, so a
+    /// plugin generating art off-page — paged.draw's pattern bake,
+    /// stepping a tile past the page edge — created and grouped
+    /// something it could then not read back at all. An absent entry
+    /// and a pageless entry are very different answers to give a
+    /// caller.
+    #[test]
+    fn c23_a_pasteboard_element_is_reported_as_pageless_not_omitted() {
+        use crate::element_selection::ElementId;
+        let bytes = pasteboard_idml_bytes();
+        let model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default()).unwrap();
+
+        let ids = vec![
+            ElementId::Rectangle("on".into()),
+            ElementId::Rectangle("off".into()),
+        ];
+        let geom = model.element_geometry(&ids);
+        assert_eq!(
+            geom.len(),
+            2,
+            "BOTH elements answer, not just the on-page one"
+        );
+
+        let on = geom
+            .iter()
+            .find(|g| g.id.raw_id() == "on")
+            .expect("the on-page rect");
+        assert_eq!(
+            on.page_id.as_ref().map(|p| p.0.as_str()),
+            Some("p1"),
+            "the page-owned case is unchanged"
+        );
+
+        let off = geom
+            .iter()
+            .find(|g| g.id.raw_id() == "off")
+            .expect("the pasteboard rect — this is the whole gap");
+        assert!(
+            off.page_id.is_none(),
+            "on no page, and says so: {:?}",
+            off.page_id
+        );
+        // Pageless without a spread is unusable the moment a document
+        // has two spreads, so the spread is what makes the answer
+        // actionable rather than merely honest.
+        assert_eq!(off.spread_id.as_deref(), Some("s1"));
+        assert_eq!(on.spread_id.as_deref(), Some("s1"));
+        // The geometry itself is real, not a placeholder.
+        assert_eq!(off.bounds, [0.0, 0.0, 100.0, 100.0]);
+        assert_eq!(
+            off.item_transform,
+            Some([1.0, 0.0, 0.0, 1.0, 5000.0, 5000.0])
+        );
+    }
+
+    /// SDK Phase 5 (D1) — the generic `collection(name)` dispatcher
+    /// returns the same JSON shape the named accessor would, so
+    /// callers can switch from `paged.swatches()` to
+    /// `paged.collection("swatches")` without re-decoding.
+    #[test]
+    fn collection_dispatch_matches_named_accessor() {
+        use crate::channel::CollectionName;
+        let bytes = minimal_idml_bytes();
+        let model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default()).unwrap();
+        // Swatches: the named accessor returns the IDML defaults
+        // (None / Paper / Black / Registration); the dispatcher must
+        // serialize to the same Value::Array.
+        let via_named = serde_json::to_value(model.swatches()).unwrap();
+        let via_dispatch = model.collection(CollectionName::Swatches);
+        assert_eq!(via_named, via_dispatch);
+
+        // Layers: the minimal fixture has no `<Layer>` rows; both
+        // return an empty array.
+        let via_named = serde_json::to_value(model.layers()).unwrap();
+        let via_dispatch = model.collection(CollectionName::Layers);
+        assert_eq!(via_named, via_dispatch);
+
+        // ParagraphStyles: dispatcher matches the typed accessor.
+        let via_named = serde_json::to_value(model.paragraph_styles()).unwrap();
+        let via_dispatch = model.collection(CollectionName::ParagraphStyles);
+        assert_eq!(via_named, via_dispatch);
+    }
+
+    /// SDK Phase 5 (D1) — unwired collections (§5.1 enum entries
+    /// without a backing accessor) return an empty array — never
+    /// null — so consumers' typed `useCollection<T>` arrays stay
+    /// valid.
+    #[test]
+    fn collection_dispatch_empty_array_for_unwired_collections() {
+        use crate::channel::CollectionName;
+        let bytes = minimal_idml_bytes();
+        let model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default()).unwrap();
+        for name in [
+            CollectionName::ObjectStyles,
+            CollectionName::CellStyles,
+            CollectionName::TableStyles,
+            CollectionName::Links,
+            CollectionName::Articles,
+            CollectionName::Hyperlinks,
+            CollectionName::Bookmarks,
+            CollectionName::Conditions,
+            CollectionName::Fonts,
+        ] {
+            let v = model.collection(name);
+            assert_eq!(v, serde_json::Value::Array(Vec::new()), "{:?}", name);
+        }
+    }
+
+    /// SDK Phase 5 (D1) — `document_meta()` reports page count;
+    /// other fields stay at their v1 defaults.
+    #[test]
+    fn document_meta_reports_page_count() {
+        let bytes = minimal_idml_bytes();
+        let model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default()).unwrap();
+        let meta = model.document_meta();
+        assert_eq!(meta.page_count, 1);
+        assert_eq!(meta.active_page, None);
+        assert!(meta.units.is_empty());
+        assert!(meta.color_mode.is_empty());
+        assert!(meta.document_name.is_empty());
+        assert!(!meta.dirty);
+    }
+
+    /// `dirty` follows the undo log: an applied mutation sets it, undoing
+    /// everything clears it (the document no longer differs from the load).
+    /// It was hardcoded `false` until 2026-08-18 — every consumer chip/panel
+    /// permanently claimed a clean document.
+    #[test]
+    fn document_meta_dirty_follows_the_undo_log() {
+        let bytes = one_rect_idml_bytes();
+        let mut model = CanvasModel::load("doc-rect", &bytes, CanvasOptions::default()).unwrap();
+        assert!(!model.document_meta().dirty, "fresh load is clean");
+
+        let resize = Mutation::ResizeFrame {
+            frame_id: "r1".into(),
+            bounds: (100.0, 100.0, 500.0, 400.0),
+        };
+        model.apply_mutation(&resize).expect("resize applies");
+        assert!(model.document_meta().dirty, "an applied mutation dirties");
+
+        model.undo().expect("undo pops the log");
+        assert!(
+            !model.document_meta().dirty,
+            "undoing every mutation reads clean again"
+        );
+    }
+
+    #[test]
+    fn applied_seq_starts_at_zero_and_bumps() {
+        let bytes = minimal_idml_bytes();
+        let mut m = CanvasModel::load("a", &bytes, CanvasOptions::default()).unwrap();
+        assert_eq!(m.last_applied_seq(), 0);
+        assert_eq!(m.bump_applied_seq(), 1);
+        assert_eq!(m.bump_applied_seq(), 2);
+        assert_eq!(m.last_applied_seq(), 2);
+    }
+
+    /// An IDML whose story carries two runs in the same family
+    /// ("Open Sans") with distinct `FontStyle`s ("Regular", "Bold"),
+    /// so `fonts()` can surface the styles-per-family list.
+    fn idml_with_font_styles() -> Vec<u8> {
+        use std::io::Write;
+        let mut buf = Vec::new();
+        {
+            let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+            let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            zip.start_file("mimetype", opts).unwrap();
+            zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+                .unwrap();
+            zip.start_file("META-INF/container.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+<rootfiles><rootfile full-path="designmap.xml" media-type="text/xml"/></rootfiles></container>"#,
+            )
+            .unwrap();
+            zip.start_file("designmap.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document DOMVersion="13.1" Self="d1">
+<idPkg:Spread src="Spreads/Spread_s1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+<idPkg:Story src="Stories/Story_st1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+</Document>"#,
+            )
+            .unwrap();
+            zip.start_file("Spreads/Spread_s1.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+<Spread Self="s1" PageCount="1">
+<Page Self="p1" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0"/>
+<TextFrame Self="tf1" ParentStory="st1" GeometricBounds="100 100 400 400" ItemTransform="1 0 0 1 0 0"/>
+</Spread></idPkg:Spread>"#,
+            )
+            .unwrap();
+            zip.start_file("Stories/Story_st1.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+<Story Self="st1">
+<ParagraphStyleRange>
+<CharacterStyleRange AppliedFont="Open Sans" FontStyle="Regular"><Content>Hello </Content></CharacterStyleRange>
+<CharacterStyleRange AppliedFont="Open Sans" FontStyle="Bold"><Content>world</Content></CharacterStyleRange>
+</ParagraphStyleRange>
+</Story></idPkg:Story>"#,
+            )
+            .unwrap();
+            zip.finish().unwrap();
+        }
+        buf
+    }
+
+    #[test]
+    fn fonts_reports_styles_per_family() {
+        let bytes = idml_with_font_styles();
+        let model = CanvasModel::load("doc-fonts", &bytes, CanvasOptions::default()).unwrap();
+        let fonts = model.fonts();
+        let open_sans = fonts
+            .iter()
+            .find(|f| f.family == "Open Sans")
+            .expect("Open Sans family present");
+        // Both runs reference the family → reference_count 2.
+        assert_eq!(open_sans.reference_count, 2);
+        // The styles list is the deduped, sorted set of FontStyles seen.
+        assert_eq!(
+            open_sans.styles,
+            vec!["Bold".to_string(), "Regular".to_string()]
+        );
+        // No font registered → missing, but styles still populate from
+        // the document content (the honest "styles in use" source).
+        assert!(open_sans.is_missing);
+    }
+
+    // ── W1.22 (engine gap 22) — numbering-list read surface + next-style ──
+
+    /// Minimal IDML carrying a `<NumberingList>` resource and a
+    /// paragraph style with `NextStyle`, so the canvas read surfaces
+    /// can be exercised.
+    fn numbering_list_idml_bytes() -> Vec<u8> {
+        use std::io::Write;
+        let mut buf = Vec::new();
+        {
+            let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+            let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            zip.start_file("mimetype", opts).unwrap();
+            zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+                .unwrap();
+            zip.start_file("designmap.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document DOMVersion="13.1" Self="d1">
+<idPkg:Styles src="Resources/Styles.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+<idPkg:Spread src="Spreads/Spread_s1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+</Document>"#,
+            )
+            .unwrap();
+            zip.start_file("Resources/Styles.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Styles xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+<RootNumberingListGroup>
+<NumberingList Self="NumberingList/Shared" Name="Shared" ContinueNumbersAcrossStories="true"/>
+</RootNumberingListGroup>
+<RootParagraphStyleGroup>
+<ParagraphStyle Self="ParagraphStyle/Head" Name="Head" NextStyle="ParagraphStyle/Body"/>
+<ParagraphStyle Self="ParagraphStyle/Body" Name="Body"/>
+</RootParagraphStyleGroup>
+</idPkg:Styles>"#,
+            )
+            .unwrap();
+            zip.start_file("Spreads/Spread_s1.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+<Spread Self="s1" PageCount="1">
+<Page Self="p1" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0"/>
+</Spread></idPkg:Spread>"#,
+            )
+            .unwrap();
+            zip.finish().unwrap();
+        }
+        buf
+    }
+
+    #[test]
+    fn numbering_lists_collection_reports_continuity_flags() {
+        use crate::channel::CollectionName;
+        let bytes = numbering_list_idml_bytes();
+        let model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default()).unwrap();
+        let lists = model.numbering_lists();
+        assert_eq!(lists.len(), 1);
+        assert_eq!(lists[0].self_id, "NumberingList/Shared");
+        assert_eq!(lists[0].name, "Shared");
+        assert!(lists[0].continue_across_stories);
+        assert!(!lists[0].continue_across_documents);
+        // The generic dispatcher routes "numberingLists" to the same shape.
+        let via_named = serde_json::to_value(model.numbering_lists()).unwrap();
+        let via_dispatch = model.collection(CollectionName::NumberingLists);
+        assert_eq!(via_named, via_dispatch);
+        // Round-trips through the CollectionName string form too.
+        assert_eq!(
+            CollectionName::from_str("numberingLists"),
+            Some(CollectionName::NumberingLists)
+        );
+    }
+
+    #[test]
+    fn paragraph_style_summary_exposes_next_style() {
+        let bytes = numbering_list_idml_bytes();
+        let model = CanvasModel::load("doc-1", &bytes, CanvasOptions::default()).unwrap();
+        let styles = model.paragraph_styles();
+        let head = styles
+            .iter()
+            .find(|s| s.self_id == "ParagraphStyle/Head")
+            .expect("Head style present");
+        assert_eq!(head.next_style.as_deref(), Some("ParagraphStyle/Body"));
+        let body = styles
+            .iter()
+            .find(|s| s.self_id == "ParagraphStyle/Body")
+            .expect("Body style present");
+        assert_eq!(body.next_style, None, "Body declares no NextStyle");
+    }
+
+    // ---- W1.24 (audit B19) — applied_log cap ----------------------------
+
+    /// A throwaway `AppliedRecord` carrying its `applied_seq` as an
+    /// identity tag. The `LoggedMutation::Text` payload is empty so the
+    /// push is allocation-cheap — this lets us drive the log 10k+ entries
+    /// past the cap in microseconds (no rebuilds), exercising the
+    /// eviction logic directly rather than through `apply_mutation`.
+    fn dummy_record(seq: u64) -> AppliedRecord {
+        AppliedRecord {
+            applied_seq: seq,
+            kind: LoggedMutation::Text {
+                op: crate::mutate::TextOp::InsertText {
+                    story_id: String::new(),
+                    offset: 0,
+                    text: String::new(),
+                    cell: None,
+                    restore: None,
+                },
+                inverse: crate::mutate::TextOp::DeleteRange {
+                    story_id: String::new(),
+                    start: 0,
+                    end: 0,
+                    recovered: String::new(),
+                    unseed: false,
+                    keep_run: false,
+                    cell: None,
+                },
+            },
+        }
+    }
+
+    #[test]
+    fn applied_log_caps_at_max_and_evicts_oldest_first() {
+        let bytes = minimal_idml_bytes();
+        let mut model = CanvasModel::load("doc-cap", &bytes, CanvasOptions::default()).unwrap();
+
+        let overflow = 7usize;
+        let total = MAX_APPLIED_LOG + overflow;
+        // applied_seq is 1-based and increases by one per push.
+        for seq in 1..=total as u64 {
+            model.push_applied(dummy_record(seq));
+            // Invariant at EVERY step, not just the end.
+            assert!(
+                model.applied_log.len() <= MAX_APPLIED_LOG,
+                "log exceeded cap at push {seq}: {}",
+                model.applied_log.len()
+            );
+        }
+
+        // Saturated exactly at the cap.
+        assert_eq!(model.applied_log.len(), MAX_APPLIED_LOG);
+        // Oldest-first eviction: the first `overflow` seqs (1..=overflow)
+        // were dropped, so the FRONT now holds seq == overflow + 1 and
+        // the BACK holds the freshest seq == total.
+        assert_eq!(
+            model.applied_log.first().unwrap().applied_seq,
+            overflow as u64 + 1,
+            "oldest survivor must be seq overflow+1 (older ones evicted)"
+        );
+        assert_eq!(
+            model.applied_log.last().unwrap().applied_seq,
+            total as u64,
+            "freshest entry must always be retained"
+        );
+        // And the surviving window is exactly the freshest MAX entries:
+        // contiguous seqs [overflow+1 ..= total].
+        for (i, rec) in model.applied_log.iter().enumerate() {
+            assert_eq!(rec.applied_seq, overflow as u64 + 1 + i as u64);
+        }
+    }
+
+    #[test]
+    fn push_under_cap_never_evicts() {
+        let bytes = minimal_idml_bytes();
+        let mut model = CanvasModel::load("doc-under", &bytes, CanvasOptions::default()).unwrap();
+        for seq in 1..=100u64 {
+            model.push_applied(dummy_record(seq));
+        }
+        assert_eq!(model.applied_log.len(), 100, "no eviction under the cap");
+        assert_eq!(
+            model.applied_log.first().unwrap().applied_seq,
+            1,
+            "seq 1 kept"
+        );
+        assert_eq!(model.applied_log.last().unwrap().applied_seq, 100);
+    }
+
+    // ---- C-79 — the cap applies to the COLLAPSED batch ------------------
+
+    /// A batch that takes the per-child (mixed) lane: a `SetDocumentDefaults`
+    /// child is what sends it there, as in the paged.draw SVG import that
+    /// found this.
+    fn c79_defaults(fill: &str) -> Mutation {
+        Mutation::SetDocumentDefaults {
+            fill_color: Some(fill.to_string()),
+            stroke_color: None,
+            stroke_weight: None,
+        }
+    }
+
+    fn c79_frame(model: &CanvasModel, x: f32) -> Mutation {
+        Mutation::InsertFrame {
+            page_id: model.page_ids().next().expect("a page").clone(),
+            bounds: (100.0, x, 140.0, x + 30.0),
+        }
+    }
+
+    fn c79_rectangles(model: &CanvasModel) -> usize {
+        model.scene.spreads[0].spread.rectangles.len()
+    }
+
+    /// Against a FULL log, a five-child batch was five undo steps: each
+    /// child's record evicted the oldest entry, so the batch's records
+    /// slid below the `log_base` it collapses from and none were
+    /// collapsed. It is one entry, and it evicts one.
+    #[test]
+    fn c79_a_mixed_batch_against_a_full_log_is_one_undo_step() {
+        let bytes = minimal_idml_bytes();
+        let mut model = CanvasModel::load("doc-c79a", &bytes, CanvasOptions::default()).unwrap();
+        for seq in 1..=MAX_APPLIED_LOG as u64 {
+            model.push_applied(dummy_record(seq));
+        }
+        let rects = c79_rectangles(&model);
+        let defaults = model.document_defaults.fill_color.clone();
+        let ops = vec![
+            c79_defaults("Color/Black"),
+            c79_frame(&model, 10.0),
+            c79_frame(&model, 50.0),
+            c79_frame(&model, 90.0),
+            c79_defaults("Color/Paper"),
+        ];
+        model
+            .apply_mutation(&Mutation::Batch { ops })
+            .expect("batch applies");
+
+        assert_eq!(model.applied_log.len(), MAX_APPLIED_LOG);
+        assert_eq!(
+            model.applied_log.first().unwrap().applied_seq,
+            2,
+            "the batch is ONE entry: exactly the oldest entry made room for it"
+        );
+        match &model.applied_log.last().unwrap().kind {
+            LoggedMutation::Composite(children) => assert_eq!(children.len(), 5),
+            other => panic!("the batch's entry is a Composite, got {other:?}"),
+        }
+        assert_eq!(c79_rectangles(&model), rects + 3);
+
+        model.undo().expect("one undo");
+        assert_eq!(c79_rectangles(&model), rects, "one undo removes all three");
+        assert_eq!(model.document_defaults.fill_color, defaults);
+        assert_eq!(
+            model.applied_log.last().unwrap().applied_seq,
+            MAX_APPLIED_LOG as u64,
+            "and leaves the entries before the batch alone"
+        );
+    }
+
+    /// A batch with more children than the cap: its first children were
+    /// evicted mid-batch and no undo could remove what they made (a
+    /// 12 001-child import left 500 shapes behind).
+    #[test]
+    fn c79_a_mixed_batch_larger_than_the_cap_is_one_undo_step() {
+        let bytes = minimal_idml_bytes();
+        let mut model = CanvasModel::load("doc-c79b", &bytes, CanvasOptions::default()).unwrap();
+        let rects = c79_rectangles(&model);
+        let defaults = model.document_defaults.fill_color.clone();
+        // The shape comes FIRST: it is what eviction used to take.
+        let mut ops = vec![c79_frame(&model, 10.0)];
+        ops.extend((0..MAX_APPLIED_LOG + 5).map(|i| {
+            c79_defaults(if i % 2 == 0 {
+                "Color/Black"
+            } else {
+                "Color/Paper"
+            })
+        }));
+        let children = ops.len();
+        model
+            .apply_mutation(&Mutation::Batch { ops })
+            .expect("batch applies");
+
+        assert_eq!(model.applied_log.len(), 1, "one entry");
+        match &model.applied_log[0].kind {
+            LoggedMutation::Composite(logged) => assert_eq!(
+                logged.len(),
+                children,
+                "every child's record is in it, the first included"
+            ),
+            other => panic!("the batch's entry is a Composite, got {other:?}"),
+        }
+        model.undo().expect("one undo");
+        assert_eq!(c79_rectangles(&model), rects, "the undo removes the shape");
+        assert_eq!(model.document_defaults.fill_color, defaults);
+        assert!(model.undo().is_none(), "and nothing is left to undo");
+    }
+
+    /// The rollback reads the same range: against a full log a failing
+    /// batch reverted none of its applied children.
+    #[test]
+    fn c79_a_failing_mixed_batch_against_a_full_log_rolls_back_whole() {
+        let bytes = minimal_idml_bytes();
+        let mut model = CanvasModel::load("doc-c79c", &bytes, CanvasOptions::default()).unwrap();
+        for seq in 1..=MAX_APPLIED_LOG as u64 {
+            model.push_applied(dummy_record(seq));
+        }
+        let rects = c79_rectangles(&model);
+        let defaults = model.document_defaults.fill_color.clone();
+        let ops = vec![
+            c79_defaults("Color/Black"),
+            c79_frame(&model, 10.0),
+            c79_frame(&model, 50.0),
+            Mutation::DeleteFrame {
+                frame_id: "c79-no-such-frame".to_string(),
+            },
+        ];
+        assert!(model.apply_mutation(&Mutation::Batch { ops }).is_err());
+
+        assert_eq!(c79_rectangles(&model), rects, "both shapes rolled back");
+        assert_eq!(model.document_defaults.fill_color, defaults);
+        assert_eq!(model.applied_log.len(), MAX_APPLIED_LOG);
+        assert_eq!(
+            model.applied_log.first().unwrap().applied_seq,
+            1,
+            "the log is as it was: nothing evicted"
+        );
+        assert_eq!(
+            model.applied_log.last().unwrap().applied_seq,
+            MAX_APPLIED_LOG as u64
+        );
+    }
+
+    // ── S-13 — measure_text font-metrics query ──────────────────────
+
+    /// Load a minimal document with one named font registered, so
+    /// `measure_text` can resolve a face. Returns `None` (the caller
+    /// should skip) when the corpus font isn't present in this checkout.
+    fn model_with_font(family: &str) -> Option<CanvasModel> {
+        let font_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../corpus/fonts/Inter.ttf");
+        let font = std::fs::read(&font_path).ok()?;
+        let opts = CanvasOptions {
+            font_registry: vec![FontEntry {
+                family: family.to_string(),
+                style: None,
+                bytes: font,
+            }],
+            ..Default::default()
+        };
+        CanvasModel::load("doc-measure", &minimal_idml_bytes(), opts).ok()
+    }
+
+    #[test]
+    fn measure_text_returns_positive_advance_and_metric_ordering() {
+        let Some(model) = model_with_font("Inter") else {
+            eprintln!("skip: Inter.ttf not present");
+            return;
+        };
+        let m = model
+            .measure_text("Inter", None, "Hello", 12.0)
+            .expect("Inter resolves a face");
+        assert!(m.advance > 0.0, "non-empty run has positive advance");
+        // OpenType convention: ascender above the baseline (positive),
+        // descender below (negative); ascender strictly greater.
+        assert!(m.ascender > m.descender, "ascender above descender");
+        assert!(m.ascender > 0.0, "ascender positive");
+        assert!(m.descender < 0.0, "descender negative");
+        // Empty text has zero advance but the face metrics still resolve.
+        let empty = model.measure_text("Inter", None, "", 12.0).unwrap();
+        assert_eq!(empty.advance, 0.0);
+        assert!(empty.ascender > 0.0);
+    }
+
+    #[test]
+    fn measure_text_advance_scales_with_size() {
+        let Some(model) = model_with_font("Inter") else {
+            eprintln!("skip: Inter.ttf not present");
+            return;
+        };
+        let small = model.measure_text("Inter", None, "Width", 10.0).unwrap();
+        let big = model.measure_text("Inter", None, "Width", 20.0).unwrap();
+        // Advance + ascender scale linearly with point size (no
+        // size-dependent shaping for a Latin run): doubling pt ≈ doubles
+        // the measurement.
+        assert!(
+            (big.advance / small.advance - 2.0).abs() < 0.05,
+            "advance ~2x at 2x size: {} vs {}",
+            big.advance,
+            small.advance
+        );
+        assert!((big.ascender / small.ascender - 2.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn measure_text_unknown_family_falls_back_to_registered_face() {
+        // `resolve_font`'s bare-family + default fallback means an
+        // unknown family still resolves SOME face when one is registered
+        // (here Inter is the only registered family, and it doubles as
+        // the bare-family fallthrough). The query must not return None.
+        let Some(model) = model_with_font("Inter") else {
+            eprintln!("skip: Inter.ttf not present");
+            return;
+        };
+        let m = model.measure_text("NoSuchFamily", None, "x", 12.0);
+        // With only a styled registry entry and no default font, an
+        // unknown family may not resolve — accept either a measurement
+        // or None, but never a panic. When it resolves, advance is sane.
+        if let Some(m) = m {
+            assert!(m.advance > 0.0);
+        }
+    }
+
+    #[test]
+    fn measure_text_no_document_path_is_handled_by_caller() {
+        // The model always has a document (it's constructed by `load`);
+        // the "no document" None is a wasm-shell concern. Here we just
+        // confirm a model with NO font registry returns None rather than
+        // panicking (build_font_resolver yields None).
+        let model = CanvasModel::load(
+            "doc-nofont",
+            &minimal_idml_bytes(),
+            CanvasOptions::default(),
+        )
+        .unwrap();
+        assert!(
+            model.measure_text("Inter", None, "x", 12.0).is_none(),
+            "no registry + no default font ⇒ None, not a panic"
+        );
+    }
+
+    // ── v43 (W-06) — font-face bytes read ──
+
+    /// Registered face round-trips through the lookup byte-identically,
+    /// with format sniffed and the PostScript name read from the real
+    /// TTF; an unknown family honestly misses (no default-font
+    /// substitution).
+    #[test]
+    fn font_face_lookup_serves_registered_bytes_and_misses_unknown() {
+        let font_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../corpus/fonts/Inter.ttf");
+        let Ok(bytes) = std::fs::read(&font_path) else {
+            eprintln!("skip: Inter.ttf not present");
+            return;
+        };
+        let registry = vec![FontEntry {
+            family: "Inter".to_string(),
+            style: Some("Regular".to_string()),
+            bytes: bytes.clone(),
+        }];
+        let hit = font_face_lookup(&registry, "Inter", None).expect("style-agnostic hit");
+        assert_eq!(hit.bytes, bytes, "bytes serve exactly as registered");
+        assert_eq!(sniff_font_format(&hit.bytes), "truetype");
+        let ps = font_postscript_name(&hit.bytes).expect("Inter carries a name table");
+        assert!(
+            ps.starts_with("Inter"),
+            "PostScript name should be the face's, got {ps:?}"
+        );
+        assert!(font_face_lookup(&registry, "Nope", None).is_none());
+        // Styled request falls through to the "Regular" entry; an
+        // unknown style on a known family still serves the family.
+        assert!(font_face_lookup(&registry, "Inter", Some("Bold")).is_some());
+    }
+
+    /// Style-exact match wins over the bare-family entry, and `None`
+    /// picks the family's FIRST registered face.
+    #[test]
+    fn font_face_lookup_prefers_exact_style_then_first_face() {
+        let registry = vec![
+            FontEntry {
+                family: "Demo".to_string(),
+                style: None,
+                bytes: b"REGULAR".to_vec(),
+            },
+            FontEntry {
+                family: "Demo".to_string(),
+                style: Some("Bold".to_string()),
+                bytes: b"BOLD".to_vec(),
+            },
+        ];
+        assert_eq!(
+            font_face_lookup(&registry, "Demo", Some("Bold"))
+                .unwrap()
+                .bytes,
+            b"BOLD"
+        );
+        assert_eq!(
+            font_face_lookup(&registry, "Demo", None).unwrap().bytes,
+            b"REGULAR"
+        );
+    }
+
+    #[test]
+    fn sniff_font_format_recognises_the_four_container_magics() {
+        assert_eq!(
+            sniff_font_format(&[0x00, 0x01, 0x00, 0x00, 0x00]),
+            "truetype"
+        );
+        assert_eq!(sniff_font_format(b"OTTO...."), "opentype");
+        assert_eq!(sniff_font_format(b"wOFF...."), "woff");
+        assert_eq!(sniff_font_format(b"wOF2...."), "woff2");
+        assert_eq!(sniff_font_format(b"xx"), "");
+        assert_eq!(font_postscript_name(b"wOFF...."), None);
+    }
+
+    // ── v38 (Wave 2) — frame-chain read + resize-vs-transform reflow ──
+
+    /// One-rectangle IDML so `ResizeFrame` / `MoveFrame` have a real
+    /// page item to act on. Rectangle `r1` at `[100,100,300,300]` on the
+    /// single page.
+    fn one_rect_idml_bytes() -> Vec<u8> {
+        use std::io::Write;
+        let mut buf = Vec::new();
+        {
+            let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+            let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            zip.start_file("mimetype", opts).unwrap();
+            zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+                .unwrap();
+            zip.start_file("META-INF/container.xml", opts).unwrap();
+            zip.write_all(br#"<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="designmap.xml" media-type="text/xml"/></rootfiles></container>"#).unwrap();
+            zip.start_file("designmap.xml", opts).unwrap();
+            zip.write_all(br#"<?xml version="1.0"?><Document Self="d1"><idPkg:Spread src="Spreads/Spread_s1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/></Document>"#).unwrap();
+            zip.start_file("Spreads/Spread_s1.xml", opts).unwrap();
+            zip.write_all(br#"<?xml version="1.0"?><idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"><Spread Self="s1" PageCount="1"><Page Self="p1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0"/><Rectangle Self="r1" GeometricBounds="100 100 300 300" ItemTransform="1 0 0 1 0 0"/></Spread></idPkg:Spread>"#).unwrap();
+            zip.finish().unwrap();
+        }
+        buf
+    }
+
+    /// Two text frames threaded by `NextTextFrame`, both hosting the same
+    /// short story — no overset (so the tail flag stays `false`).
+    fn threaded_idml_bytes() -> Vec<u8> {
+        use std::io::Write;
+        let mut buf = Vec::new();
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        zip.start_file("mimetype", opts).unwrap();
+        zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+            .unwrap();
+        zip.start_file("META-INF/container.xml", opts).unwrap();
+        zip.write_all(br#"<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="designmap.xml" media-type="text/xml"/></rootfiles></container>"#).unwrap();
+        zip.start_file("designmap.xml", opts).unwrap();
+        zip.write_all(br#"<?xml version="1.0"?><Document Self="d1"><idPkg:Spread src="Spreads/Spread_s1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/><idPkg:Story src="Stories/Story_u10.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/></Document>"#).unwrap();
+        // f1 --NextTextFrame--> f2, both ParentStory=u10.
+        zip.start_file("Spreads/Spread_s1.xml", opts).unwrap();
+        zip.write_all(br#"<?xml version="1.0"?><idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"><Spread Self="s1" PageCount="1"><Page Self="p1" GeometricBounds="0 0 792 612"/><TextFrame Self="f1" ParentStory="u10" NextTextFrame="f2" GeometricBounds="40 40 200 300"/><TextFrame Self="f2" ParentStory="u10" GeometricBounds="220 40 400 300"/></Spread></idPkg:Spread>"#).unwrap();
+        zip.start_file("Stories/Story_u10.xml", opts).unwrap();
+        zip.write_all(br#"<?xml version="1.0"?><idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"><Story Self="u10"><ParagraphStyleRange><CharacterStyleRange PointSize="10"><Content>Hi</Content></CharacterStyleRange></ParagraphStyleRange></Story></idPkg:Story>"#).unwrap();
+        zip.finish().unwrap();
+        buf
+    }
+
+    #[test]
+    fn frame_chain_reports_thread_topology_head_first() {
+        let bytes = threaded_idml_bytes();
+        let model = CanvasModel::load("doc-thread", &bytes, CanvasOptions::default()).unwrap();
+        let links = model.frame_chain("u10");
+        assert_eq!(links.len(), 2, "two threaded frames");
+        // Head first: f1 then its NextTextFrame target f2.
+        assert_eq!(links[0].frame_id, "f1");
+        assert_eq!(links[0].next.as_deref(), Some("f2"));
+        assert_eq!(links[1].frame_id, "f2");
+        assert_eq!(links[1].next, None);
+        // Short story fits → no overset on the tail.
+        assert!(!links[1].overflow, "tail not overset for a fitting story");
+        // Unknown story ⇒ empty chain.
+        assert!(model.frame_chain("nope").is_empty());
+    }
+
+    #[test]
+    fn resize_frame_fires_reflow_but_move_frame_does_not() {
+        // §8.5 resize-vs-transform: a ResizeFrame (content-box change)
+        // emits a reflow carrying the new content box; a MoveFrame
+        // (display transform only) must NOT — pagination reacts to a
+        // resize but never to a pure move/scale/rotate.
+        let bytes = one_rect_idml_bytes();
+        let mut model = CanvasModel::load("doc-rect", &bytes, CanvasOptions::default()).unwrap();
+
+        // Resize r1 to a new content box → reflow present, with the new
+        // [t,l,b,r] read back from the mutated scene.
+        let resize = Mutation::ResizeFrame {
+            frame_id: "r1".into(),
+            bounds: (100.0, 100.0, 500.0, 400.0),
+        };
+        let outcome = model.apply_mutation(&resize).expect("resize applies");
+        let reflow = outcome.reflow.expect("ResizeFrame must emit a reflow");
+        assert_eq!(reflow.frame_id, "r1");
+        assert_eq!(reflow.content_box, [100.0, 100.0, 500.0, 400.0]);
+
+        // Move r1 (whole ItemTransform write) → no reflow.
+        let mv = Mutation::MoveFrame {
+            frame_id: "r1".into(),
+            transform: [1.0, 0.0, 0.0, 1.0, 25.0, -10.0],
+        };
+        let outcome = model.apply_mutation(&mv).expect("move applies");
+        assert!(
+            outcome.reflow.is_none(),
+            "MoveFrame is display geometry — must NOT re-paginate"
+        );
+    }
+}

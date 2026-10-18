@@ -1,0 +1,901 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Hyphenation via Liang patterns.
+//!
+//! Two pattern sources, because they are not equivalent and the
+//! difference is measurable. Where the licence lets us, the language's
+//! `hyph_*.dic` from LibreOffice is vendored (`../patterns/`) and read
+//! by [`crate::libhyphen`] — that is the same FORMAT Adobe hyphenates
+//! with, and running it over Adobe's own `hyph_en_US.dic` reproduces
+//! InDesign's measured breaks exactly. Everywhere else `hypher`
+//! (typst's pattern-trie crate) stands in.
+//!
+//! The two differ by more than packaging: on 25 English words swept in
+//! InDesign, the vendored `hyph_en_US.dic` agrees on 24 and hypher's
+//! trie on 16, because the LibreOffice file folds in the TUGboat
+//! hyphenation-exception log and the trie carries only the base
+//! patterns. `hypher` also collapses English into one dictionary; the
+//! vendored files keep US and GB apart, which they are.
+//!
+//! The composer uses this to insert flagged penalty break
+//! opportunities mid-word; whether to take them is decided by
+//! `paragraph_breaker` against the configured tolerance.
+
+use std::sync::OnceLock;
+
+use hypher::Lang;
+
+use crate::libhyphen::{self, Patterns};
+
+/// Supported hyphenation languages. Maps to `hypher::Lang` without
+/// exposing that crate's whole enum publicly — keeps the API stable
+/// as the dictionary list grows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Language {
+    EnglishUS,
+    EnglishGB,
+    German1996,
+    French,
+    Spanish,
+    Italian,
+    Dutch,
+    Portuguese,
+}
+
+impl Language {
+    /// Every language, ordered so that `ALL[id() - 1] == self`.
+    pub const ALL: [Language; Self::COUNT] = [
+        Language::EnglishUS,
+        Language::German1996,
+        Language::French,
+        Language::Spanish,
+        Language::Italian,
+        Language::Dutch,
+        Language::Portuguese,
+        Language::EnglishGB,
+    ];
+    pub const COUNT: usize = 8;
+
+    fn to_hypher(self) -> Lang {
+        match self {
+            // hypher doesn't split English by region — both US/GB land
+            // on the same shared dictionary. The vendored files do
+            // split them, so this only matters as the fallback.
+            Language::EnglishUS | Language::EnglishGB => Lang::English,
+            Language::German1996 => Lang::German,
+            Language::French => Lang::French,
+            Language::Spanish => Lang::Spanish,
+            Language::Italian => Lang::Italian,
+            Language::Dutch => Lang::Dutch,
+            Language::Portuguese => Lang::Portuguese,
+        }
+    }
+
+    /// The vendored `hyph_*.dic` for this language, or `None` when its
+    /// upstream licence keeps it out of this repo (German, French,
+    /// Italian and Portuguese are LGPL or GPL — see
+    /// `../patterns/README.md`).
+    fn vendored(self) -> Option<&'static Patterns> {
+        macro_rules! vendored {
+            ($cell:ident, $file:literal) => {{
+                static $cell: OnceLock<Patterns> = OnceLock::new();
+                Some($cell.get_or_init(|| {
+                    Patterns::parse(&libhyphen::decode(include_bytes!(concat!(
+                        "../patterns/",
+                        $file
+                    ))))
+                }))
+            }};
+        }
+        match self {
+            Language::EnglishUS => vendored!(EN_US, "hyph_en_US.dic"),
+            Language::EnglishGB => vendored!(EN_GB, "hyph_en_GB.dic"),
+            Language::Spanish => vendored!(ES, "hyph_es.dic"),
+            Language::Dutch => vendored!(NL, "hyph_nl_NL.dic"),
+            Language::German1996 | Language::French | Language::Italian | Language::Portuguese => {
+                None
+            }
+        }
+    }
+
+    /// The language an IDML `AppliedLanguage` names, or `None` when it
+    /// is one we hold no patterns for.
+    ///
+    /// InDesign spells these `$ID/English: USA`, and a document may
+    /// point at a `<Language>` resource instead
+    /// (`Language/$ID/English%3a USA`); both forms arrive here, along
+    /// with the locale-code names some documents carry (`de_DE_2006`,
+    /// `nl_NL_2005`). Every spelling below was counted in the corpus's
+    /// 305 real-world packages — `English: UK` leads with 1,014
+    /// occurrences, ahead of `English: USA`'s 745.
+    ///
+    /// `None` means DO NOT HYPHENATE, and that is the point: before
+    /// this, every document hyphenated as American English, so a Polish
+    /// or Czech paragraph was broken by English patterns. Returning
+    /// nothing for a language we cannot spell is the honest answer.
+    pub fn from_idml(name: &str) -> Option<Self> {
+        // `Language/$ID/English%3a USA` → `English: USA`.
+        let name = name.rsplit('/').next().unwrap_or(name);
+        let name = name.replace("%3a", ":");
+        let name = name.trim();
+        if name.is_empty() || name.eq_ignore_ascii_case("[No Language]") {
+            return None;
+        }
+        let lower = name.to_ascii_lowercase();
+        // Locale codes, as some documents spell them.
+        if let Some(code) = lower.split('_').next() {
+            if lower.contains('_') {
+                return match code {
+                    "en" => Some(if lower.contains("gb") || lower.contains("uk") {
+                        Language::EnglishGB
+                    } else {
+                        Language::EnglishUS
+                    }),
+                    "de" => Some(Language::German1996),
+                    "fr" => Some(Language::French),
+                    "es" => Some(Language::Spanish),
+                    "it" => Some(Language::Italian),
+                    "nl" => Some(Language::Dutch),
+                    "pt" => Some(Language::Portuguese),
+                    _ => None,
+                };
+            }
+        }
+        if lower.starts_with("english") {
+            // InDesign's own default is USA; only the UK dictionary is
+            // a different book. Canadian is closer to British in
+            // spelling, but its hyphenation is its own dictionary and
+            // we ship neither — it takes the app default.
+            return Some(if lower.contains("uk") {
+                Language::EnglishGB
+            } else {
+                Language::EnglishUS
+            });
+        }
+        // German: Reformed / Swiss / Austrian / Traditional all resolve
+        // to the one German dictionary we have.
+        if lower.starts_with("german") {
+            return Some(Language::German1996);
+        }
+        if lower.starts_with("french") {
+            return Some(Language::French);
+        }
+        if lower.starts_with("spanish") {
+            return Some(Language::Spanish);
+        }
+        if lower.starts_with("italian") {
+            return Some(Language::Italian);
+        }
+        if lower.starts_with("dutch") {
+            return Some(Language::Dutch);
+        }
+        if lower.starts_with("portuguese") {
+            return Some(Language::Portuguese);
+        }
+        None
+    }
+
+    /// Stable byte id, distinct per language. The layout cache keys on
+    /// it, so US and GB English must not share one now that they read
+    /// different patterns.
+    fn id(self) -> u8 {
+        match self {
+            Language::EnglishUS => 1,
+            Language::German1996 => 2,
+            Language::French => 3,
+            Language::Spanish => 4,
+            Language::Italian => 5,
+            Language::Dutch => 6,
+            Language::Portuguese => 7,
+            Language::EnglishGB => 8,
+        }
+    }
+}
+
+/// Hyphenation engine for a single language. Cheap to clone (both
+/// variants are `Copy`).
+#[derive(Debug, Clone, Copy)]
+pub struct Hyphenator {
+    language: Language,
+    lang: Lang,
+}
+
+impl Hyphenator {
+    /// Pick the pattern source for `lang` — the vendored `hyph_*.dic`
+    /// where there is one, else hypher's embedded trie.
+    ///
+    /// Constructing one is free: the vendored file is parsed on first
+    /// USE, so a renderer can hold a hyphenator for every language it
+    /// knows and pay only for the ones a document actually asks for.
+    pub fn for_language(lang: Language) -> Self {
+        Self {
+            language: lang,
+            lang: lang.to_hypher(),
+        }
+    }
+
+    /// The language this hyphenator was built for.
+    pub fn language(&self) -> Language {
+        self.language
+    }
+
+    /// Stable byte id of the language. Used by the layout cache to fold
+    /// the hyphenator's contribution into a cache key without
+    /// depending on Debug-format stability.
+    pub fn lang_id(&self) -> u8 {
+        self.language.id()
+    }
+
+    /// Return a list of byte indices inside `word` where a hyphen
+    /// could be inserted, under InDesign's default hyphenation limits
+    /// (see [`Self::opportunities_with`]). Indices are relative to the
+    /// slice — so for "computer" the result is [3, 6] (com-put-er). The
+    /// list never contains 0 or `word.len()` (those aren't hyphenation
+    /// breaks).
+    pub fn opportunities(&self, word: &str) -> Vec<usize> {
+        self.opportunities_with(word, AFTER_FIRST, BEFORE_LAST, WORDS_LONGER_THAN)
+    }
+
+    /// Break opportunities under a paragraph's own hyphenation
+    /// settings. `is_last_word` says whether this token ends the
+    /// paragraph, which `HyphenateLastWord="false"` protects.
+    ///
+    /// A word carrying a SOFT HYPHEN breaks only there — the author
+    /// placed a discretionary hyphen, and InDesign takes that as the
+    /// whole answer for the word (see [`soft_hyphen_opportunities`] for
+    /// which of its soft hyphens the limits still allow).
+    pub fn opportunities_for(
+        &self,
+        word: &str,
+        limits: &HyphenationLimits,
+        is_last_word: bool,
+    ) -> Vec<usize> {
+        if word.contains(SOFT_HYPHEN) {
+            return soft_hyphen_opportunities(word, limits, is_last_word);
+        }
+        if is_last_word && !limits.last_word {
+            return Vec::new();
+        }
+        if !limits.capitalized_words
+            && word
+                .chars()
+                .find(|c| c.is_alphabetic())
+                .is_some_and(char::is_uppercase)
+        {
+            return Vec::new();
+        }
+        self.opportunities_with(
+            word,
+            limits.after_first,
+            limits.before_last,
+            limits.words_longer_than,
+        )
+    }
+
+    /// Break opportunities inside `word` limited the way InDesign's
+    /// paragraph hyphenation settings limit them: only the alphabetic
+    /// core of the token is hyphenated (a leading "(" or a trailing ","
+    /// is not a letter — measured 2026-09-06: InDesign set "(overset)"
+    /// whole where the unlimited patterns broke it "(o-verset)"), the
+    /// core must have more than `words_longer_than` letters, and a break
+    /// must leave at least `after_first` letters before the hyphen and
+    /// `before_last` letters after it. Indices are byte offsets into the
+    /// full token.
+    pub fn opportunities_with(
+        &self,
+        word: &str,
+        after_first: usize,
+        before_last: usize,
+        words_longer_than: usize,
+    ) -> Vec<usize> {
+        // The alphabetic core: skip leading / trailing non-letters.
+        let head = word
+            .char_indices()
+            .find(|(_, c)| c.is_alphabetic())
+            .map(|(i, _)| i);
+        let Some(head) = head else {
+            return Vec::new();
+        };
+        let tail = word
+            .char_indices()
+            .rev()
+            .find(|(_, c)| c.is_alphabetic())
+            .map(|(i, c)| i + c.len_utf8())
+            .unwrap_or(word.len());
+        let core = &word[head..tail];
+        let letters = core.chars().count();
+        if letters < words_longer_than {
+            return Vec::new();
+        }
+        // The vendored `hyph_*.dic` is matched with the PARAGRAPH's
+        // limits, because that is what InDesign does: its factory
+        // `HyphenateBeforeLast` is 2 and it really takes those breaks —
+        // `com-put-er`, `de-sign-er`, `pub-lish-er`, `print-er`,
+        // `print-ed`, `start-ed`, all measured on InDesign 20.0.1 by
+        // sweeping each word's frame width. The file's own
+        // `RIGHTHYPHENMIN 3` is read and deliberately not applied;
+        // running Liang over Adobe's own `hyph_en_US.dic` with the
+        // paragraph's 2 reproduces all 25 measured words exactly, and
+        // with the file's 3 it reproduces 19.
+        if let Some(patterns) = self.language.vendored() {
+            return patterns
+                .breaks(core, after_first, before_last)
+                .into_iter()
+                .map(|o| head + o)
+                .collect();
+        }
+        // hypher's trie carries no such declaration to consult, so its
+        // language bounds stand and the paragraph's limits below can
+        // only tighten them. Loosening THEM was measured and rejected:
+        // the trie lacks the exception half of the dictionary, so a
+        // looser bound bought six English words and cost the corpus
+        // (`text-wrap` 0.639 → 0.823 mean ΔE, `text-in-shape`'s donut
+        // 2.000 → 2.239) by unlocking breaks Adobe refuses. This path
+        // is now only the four languages whose patterns are LGPL or GPL
+        // and so are not vendored here.
+        let mut breaks = Vec::new();
+        let mut offset = 0usize;
+        let mut iter = hypher::hyphenate(core, self.lang);
+        // The first syllable doesn't produce a break — skip it.
+        if let Some(first) = iter.next() {
+            offset += first.len();
+        }
+        for syllable in iter {
+            // Successive iterations: the break sits at the boundary
+            // between the previous syllable and this one.
+            if offset > 0 && offset < core.len() {
+                let before = core[..offset].chars().count();
+                let after = letters - before;
+                if before >= after_first && after >= before_last {
+                    breaks.push(head + offset);
+                }
+            }
+            offset += syllable.len();
+        }
+        breaks
+    }
+}
+
+/// Every hyphenator a render might need, so a paragraph can be given
+/// the dictionary its own `AppliedLanguage` asks for.
+///
+/// Before this the renderer built ONE hyphenator, American English, and
+/// used it for every paragraph in every document — while the parser
+/// read, cascaded and stored `AppliedLanguage` all the way to
+/// `ResolvedParagraphAttrs`, where nothing looked at it. Now that the
+/// dictionaries genuinely differ (`cap-i-tal` in the US book,
+/// `cap-it-al` in the British one, and the British is the commoner
+/// declaration in the corpus by a third), that had to stop.
+///
+/// Holding all of them costs nothing — a [`Hyphenator`] is two enum
+/// values and its pattern file is parsed on first use.
+#[derive(Debug, Clone, Copy)]
+pub struct Hyphenators {
+    /// One per [`Language`], indexed by [`Language::id`] minus one.
+    all: [Hyphenator; Language::COUNT],
+}
+
+impl Default for Hyphenators {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Hyphenators {
+    pub fn new() -> Self {
+        Self {
+            all: Language::ALL.map(Hyphenator::for_language),
+        }
+    }
+
+    /// The hyphenator for a paragraph whose resolved `AppliedLanguage`
+    /// is `applied`. `None` means the paragraph must not be
+    /// hyphenated: either it says `[No Language]`, or it names one we
+    /// hold no patterns for and guessing with English ones would be
+    /// worse than leaving its words whole.
+    ///
+    /// A paragraph naming NO language keeps American English — the
+    /// application default, and what every document got before. A
+    /// document whose `<TextDefault>` names one has already had it
+    /// cascaded onto the paragraph by the time we are asked.
+    pub fn resolve(&self, applied: Option<&str>) -> Option<&Hyphenator> {
+        let lang = match applied {
+            None => Language::EnglishUS,
+            Some(name) => Language::from_idml(name)?,
+        };
+        self.all.get(lang.id() as usize - 1)
+    }
+}
+
+/// InDesign's default "Hyphenate: After First _ letters".
+const AFTER_FIRST: usize = 2;
+/// InDesign's default "Hyphenate: Before Last _ letters".
+const BEFORE_LAST: usize = 2;
+/// InDesign's default "Words with at Least _ letters" (5).
+const WORDS_LONGER_THAN: usize = 5;
+
+/// U+00AD SOFT HYPHEN — InDesign's "discretionary hyphen". A word that
+/// carries one hyphenates ONLY there: the author has said where the
+/// break belongs, and the dictionary does not get a second opinion.
+pub const SOFT_HYPHEN: char = '\u{00ad}';
+
+/// The breaks a word's discretionary hyphens offer, under the
+/// paragraph's hyphenation settings. Byte offsets just past each usable
+/// U+00AD, so the hyphen-to-be stays on the line before the break.
+///
+/// This is InDesign's rule, and it holds with `Hyphenation="false"` as
+/// much as with `true` — asked 2026-10-02 (`soft-hyphens` fixture,
+/// InDesign 20.0.1): turning hyphenation off stops the DICTIONARY, not
+/// the author's soft hyphens, which still break and still print a
+/// hyphen (Word agrees: its hyphenation is off by default and
+/// `Donaudampf-` / `schifffahrtsgesell-` / `schaft` breaks there). The
+/// rest of the paragraph's settings keep governing them, on or off:
+/// `HyphenateAfterFirst` / `HyphenateBeforeLast` refuse a soft hyphen
+/// too few letters from either end ("ab-solutely" with 6 / 6),
+/// `HyphenateWordsLongerThan` refuses a short word, `HyphenateLastWord
+/// ="false"` protects the last word, and the ladder limit and the zone
+/// count them like any other hyphen (both applied by the composers).
+/// The one exception is `HyphenateCapitalizedWords="false"`: a capital
+/// word still breaks at its soft hyphen ("Ab-solutely"). A soft hyphen
+/// before the first letter therefore offers nothing, which is how an
+/// author keeps a word from hyphenating at all.
+/// The hyphens a text already has that a line may break after: U+002D and
+/// U+2010 standing between two letters or digits.
+///
+/// Asked of InDesign with the `hard-hyphen` paged-gen fixture (InDesign
+/// 20.0.1): `The two-way street` breaks `The two-` / `way street` with
+/// hyphenation off as well as on, in both composers, and justified;
+/// `state-of-the-art` breaks after any of its hyphens. An en dash and an
+/// em dash offered no break in any width tried (`10–20`, `so—on`). The
+/// Single-line Composer weighs such a break like a hyphenation point (its
+/// zone applies: at 50 pt it sets `The` / `two-way` / `street`). Word breaks
+/// the same way. The break adds no hyphen: the text ends in one.
+pub fn hard_hyphen_opportunities(word: &str) -> Vec<usize> {
+    let mut out = Vec::new();
+    let mut prev: Option<char> = None;
+    let mut chars = word.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        if is_hard_hyphen(c)
+            && prev.is_some_and(char::is_alphanumeric)
+            && chars.peek().is_some_and(|(_, n)| n.is_alphanumeric())
+        {
+            out.push(i + c.len_utf8());
+        }
+        prev = Some(c);
+    }
+    out
+}
+
+fn is_hard_hyphen(c: char) -> bool {
+    c == '-' || c == '\u{2010}'
+}
+
+/// True when the break at byte `offset` of `text` follows a hyphen the text
+/// already has, so the line needs no synthetic one.
+pub fn breaks_after_hard_hyphen(text: &str, offset: usize) -> bool {
+    text.get(..offset)
+        .and_then(|head| head.chars().next_back())
+        .is_some_and(is_hard_hyphen)
+}
+
+/// Two sorted break lists as one, without duplicates.
+pub fn merge_opportunities(mut a: Vec<usize>, b: Vec<usize>) -> Vec<usize> {
+    a.extend(b);
+    a.sort_unstable();
+    a.dedup();
+    a
+}
+
+pub fn soft_hyphen_opportunities(
+    word: &str,
+    limits: &HyphenationLimits,
+    is_last_word: bool,
+) -> Vec<usize> {
+    if !word.contains(SOFT_HYPHEN) || (is_last_word && !limits.last_word) {
+        return Vec::new();
+    }
+    let letters = word.chars().filter(|c| c.is_alphabetic()).count();
+    if letters < limits.words_longer_than {
+        return Vec::new();
+    }
+    let mut before = 0usize;
+    let mut out = Vec::new();
+    for (i, c) in word.char_indices() {
+        if c == SOFT_HYPHEN {
+            let after = letters - before;
+            if before >= limits.after_first.max(1) && after >= limits.before_last.max(1) {
+                out.push(i + c.len_utf8());
+            }
+        } else if c.is_alphabetic() {
+            before += 1;
+        }
+    }
+    out
+}
+
+/// A paragraph's hyphenation settings, the seven IDML attributes that
+/// gate where a word may break.
+///
+/// The composer used to hard-code InDesign's factory 2 / 2 / 5 and
+/// ignore the rest, so a paragraph that turned capitalised-word
+/// hyphenation off, or asked for four letters before the hyphen, got
+/// the defaults anyway.
+///
+/// Absent attributes keep today's behaviour rather than InDesign's
+/// factory value where the two differ: `ladder_limit` defaults to
+/// "unlimited" because our composer has never enforced one and
+/// adopting InDesign's 3 unmeasured would move every justified
+/// paragraph in every document at once.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HyphenationLimits {
+    /// `HyphenateAfterFirst` — letters that must precede the hyphen.
+    pub after_first: usize,
+    /// `HyphenateBeforeLast` — letters that must follow it.
+    pub before_last: usize,
+    /// `HyphenateWordsLongerThan` — shorter words are never broken.
+    pub words_longer_than: usize,
+    /// `HyphenateCapitalizedWords`. `false` leaves a word whose first
+    /// letter is a capital whole (hypher lowercases internally, so
+    /// this test has to be ours).
+    pub capitalized_words: bool,
+    /// `HyphenateLastWord`. `false` leaves the paragraph's final word
+    /// whole, so the last line never ends in a hyphen.
+    pub last_word: bool,
+    /// `HyphenateLadderLimit` — the most consecutive lines that may
+    /// end in a hyphen. `0` means unlimited.
+    pub ladder_limit: usize,
+}
+
+impl Default for HyphenationLimits {
+    fn default() -> Self {
+        Self {
+            after_first: AFTER_FIRST,
+            before_last: BEFORE_LAST,
+            words_longer_than: WORDS_LONGER_THAN,
+            capitalized_words: true,
+            last_word: true,
+            ladder_limit: 0,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// The paragraph's `HyphenateBeforeLast` wins over the pattern
+    /// file's own `RIGHTHYPHENMIN 3`, which is what InDesign does:
+    /// these six all leave exactly two letters after the hyphen, and
+    /// InDesign takes every one (20.0.1, English: USA, each word swept
+    /// by frame width to enumerate its breaks).
+    #[test]
+    fn the_paragraphs_limit_wins_over_the_files_declared_minimum() {
+        let h = Hyphenator::for_language(Language::EnglishUS);
+        for (word, want) in [
+            ("computer", vec![3usize, 6]),
+            ("designer", vec![2, 6]),
+            ("publisher", vec![3, 7]),
+            ("printer", vec![5]),
+            ("printed", vec![5]),
+            ("started", vec![5]),
+        ] {
+            assert_eq!(h.opportunities(word), want, "{word}");
+        }
+    }
+
+    /// A paragraph may ask for MORE than the patterns' minimum, and
+    /// that is honoured — the limits tighten, they never loosen.
+    #[test]
+    fn a_paragraph_can_tighten_the_patterns_minimum() {
+        let h = Hyphenator::for_language(Language::EnglishUS);
+        assert_eq!(h.opportunities("typography"), vec![2, 5, 7]);
+        // "Before last 4" drops typogra-phy: only three letters follow.
+        assert_eq!(h.opportunities_with("typography", 2, 4, 5), vec![2, 5]);
+        // "After first 3" drops ty-pography: only two letters precede.
+        assert_eq!(h.opportunities_with("typography", 3, 3, 5), vec![5, 7]);
+    }
+
+    /// The same sweep's words where we already agreed — pinned so the
+    /// looser bound does not start inventing breaks InDesign refuses.
+    #[test]
+    fn the_measured_breaks_indesign_takes_are_the_ones_we_offer() {
+        let h = Hyphenator::for_language(Language::EnglishUS);
+        for (word, want) in [
+            ("walked", vec![]),
+            ("sentence", vec![3usize]),
+            ("yesterday", vec![3, 6]),
+            ("paragraph", vec![4]),
+            ("hyphenation", vec![2, 6]),
+            ("typography", vec![2, 5, 7]),
+            ("background", vec![4]),
+            ("something", vec![4]),
+            ("understand", vec![2, 5]),
+            ("information", vec![2, 5, 7]),
+            ("development", vec![2, 5, 7]),
+            ("rendered", vec![3]),
+            ("modern", vec![3]),
+            ("capital", vec![3, 4]),
+            ("layouts", vec![3]),
+            ("broken", vec![3]),
+        ] {
+            assert_eq!(h.opportunities(word), want, "{word}");
+        }
+    }
+
+    /// The one word of the measured 25 still left to Adobe's own,
+    /// proprietary pattern file. `spell-ing` and `ev-ery-thing` used to
+    /// be here too and are now right — they came with the TUGboat
+    /// exception log the vendored file carries.
+    #[test]
+    fn the_one_word_adobes_own_dictionary_still_wins() {
+        let h = Hyphenator::for_language(Language::EnglishUS);
+        // InDesign: win-dow-sill. The open patterns offer win-dowsill.
+        assert_eq!(h.opportunities("windowsill"), vec![3]);
+        assert_eq!(h.opportunities("spelling"), vec![5]);
+        assert_eq!(h.opportunities("everything"), vec![2, 5]);
+    }
+
+    /// Every vendored file loads and parses to a plausible size — the
+    /// guard against a data file that went missing, got truncated, or
+    /// was read in the wrong encoding and produced nothing.
+    #[test]
+    fn every_vendored_pattern_file_loads() {
+        for (lang, least) in [
+            (Language::EnglishUS, 10_000),
+            (Language::EnglishGB, 12_000),
+            (Language::Spanish, 5_000),
+            (Language::Dutch, 14_000),
+        ] {
+            let p = lang
+                .vendored()
+                .unwrap_or_else(|| panic!("{lang:?} is vendored"));
+            assert!(
+                p.len() >= least,
+                "{lang:?} parsed only {} patterns",
+                p.len()
+            );
+        }
+        // The four whose upstream licence keeps them out of this repo
+        // fall back to hypher rather than to nothing.
+        for lang in [
+            Language::German1996,
+            Language::French,
+            Language::Italian,
+            Language::Portuguese,
+        ] {
+            assert!(lang.vendored().is_none(), "{lang:?} is not vendored");
+            assert!(
+                !Hyphenator::for_language(lang)
+                    .opportunities("Silbentrennung")
+                    .is_empty()
+                    || lang != Language::German1996,
+                "the fallback still hyphenates"
+            );
+        }
+    }
+
+    /// Every spelling counted in the corpus's 305 real-world packages.
+    #[test]
+    fn the_language_names_indesign_actually_writes() {
+        use Language::*;
+        for (name, want) in [
+            ("$ID/English: USA", Some(EnglishUS)),
+            ("$ID/English: UK", Some(EnglishGB)),
+            ("$ID/English: Canadian", Some(EnglishUS)),
+            ("$ID/English: USA Legal", Some(EnglishUS)),
+            ("Language/$ID/English%3a USA", Some(EnglishUS)),
+            ("$ID/German: Reformed", Some(German1996)),
+            ("$ID/German: Swiss", Some(German1996)),
+            ("$ID/de_DE_2006", Some(German1996)),
+            ("$ID/de_CH_2006", Some(German1996)),
+            ("$ID/French", Some(French)),
+            ("$ID/French: Canadian", Some(French)),
+            ("$ID/Spanish: Castilian", Some(Spanish)),
+            ("$ID/Italian", Some(Italian)),
+            ("$ID/Dutch", Some(Dutch)),
+            ("$ID/nl_NL_2005", Some(Dutch)),
+            ("$ID/Portuguese: Brazilian", Some(Portuguese)),
+            // No patterns of ours — hyphenating these with English
+            // ones is what we are stopping.
+            ("$ID/Russian", None),
+            ("$ID/Polish", None),
+            ("$ID/Arabic", None),
+            ("$ID/Thai", None),
+            ("$ID/hi_IN", None),
+            ("$ID/[No Language]", None),
+            ("", None),
+        ] {
+            assert_eq!(Language::from_idml(name), want, "{name}");
+        }
+    }
+
+    /// A paragraph that names no language keeps American English — the
+    /// application default, and what every document got before.
+    #[test]
+    fn an_unnamed_language_falls_back_and_an_unknown_one_does_not() {
+        let hs = Hyphenators::new();
+        assert_eq!(
+            hs.resolve(None).map(Hyphenator::language),
+            Some(Language::EnglishUS)
+        );
+        assert_eq!(
+            hs.resolve(Some("$ID/English: UK"))
+                .map(Hyphenator::language),
+            Some(Language::EnglishGB)
+        );
+        // Every language resolves to its own entry, so the array index
+        // and `id()` cannot drift apart.
+        for lang in Language::ALL {
+            assert_eq!(hs.all[lang.id() as usize - 1].language(), lang);
+        }
+        assert!(
+            hs.resolve(Some("$ID/Russian")).is_none(),
+            "no patterns is not a licence to use English ones"
+        );
+    }
+
+    /// US and GB English are different dictionaries now, so they must
+    /// not share a layout-cache key.
+    #[test]
+    fn the_two_englishes_are_told_apart() {
+        let us = Hyphenator::for_language(Language::EnglishUS);
+        let gb = Hyphenator::for_language(Language::EnglishGB);
+        assert_ne!(us.lang_id(), gb.lang_id());
+        // `capital`: cap-i-tal in American English, cap-it-al in
+        // British — the two files really do disagree.
+        assert_eq!(us.opportunities("capital"), vec![3, 4]);
+        assert_eq!(gb.opportunities("capital"), vec![3, 5]);
+    }
+
+    use super::*;
+
+    #[test]
+    fn english_word_has_break_opportunities() {
+        let h = Hyphenator::for_language(Language::EnglishUS);
+        let breaks = h.opportunities("computer");
+        assert!(!breaks.is_empty(), "expected breaks in 'computer'");
+        // Every break sits strictly inside the word.
+        for &b in &breaks {
+            assert!(b > 0 && b < "computer".len());
+        }
+    }
+
+    #[test]
+    fn short_word_has_no_breaks() {
+        let h = Hyphenator::for_language(Language::EnglishUS);
+        assert!(h.opportunities("a").is_empty());
+        assert!(h.opportunities("the").is_empty());
+        // Four letters: under InDesign's "words with at least 5 letters".
+        assert!(h.opportunities("open").is_empty());
+    }
+
+    #[test]
+    fn a_paragraph_can_protect_capitalised_words_and_its_last_one() {
+        let h = Hyphenator::for_language(Language::EnglishUS);
+        let defaults = HyphenationLimits::default();
+        assert!(!h.opportunities_for("computer", &defaults, false).is_empty());
+        assert!(
+            !h.opportunities_for("Computer", &defaults, false).is_empty(),
+            "capitalised words hyphenate by default"
+        );
+
+        let no_caps = HyphenationLimits {
+            capitalized_words: false,
+            ..defaults
+        };
+        assert!(h.opportunities_for("Computer", &no_caps, false).is_empty());
+        assert!(
+            !h.opportunities_for("computer", &no_caps, false).is_empty(),
+            "the rule is about the capital, not the word"
+        );
+
+        let no_last = HyphenationLimits {
+            last_word: false,
+            ..defaults
+        };
+        assert!(h.opportunities_for("computer", &no_last, true).is_empty());
+        assert!(!h.opportunities_for("computer", &no_last, false).is_empty());
+    }
+
+    #[test]
+    fn a_soft_hyphen_is_the_only_break_the_word_gets() {
+        // A discretionary hyphen is the author saying where the word
+        // breaks; the dictionary does not get a second opinion.
+        let h = Hyphenator::for_language(Language::EnglishUS);
+        let limits = HyphenationLimits::default();
+        let word = "compu\u{00ad}ter";
+        let breaks = h.opportunities_for(word, &limits, false);
+        assert_eq!(breaks.len(), 1, "one soft hyphen, one opportunity");
+        assert_eq!(&word[..breaks[0]], "compu\u{00ad}");
+        // And it wins even where the automatic patterns would say more.
+        assert!(!h.opportunities("computer").is_empty());
+    }
+
+    #[test]
+    fn the_paragraph_limits_govern_soft_hyphens_except_for_capitals() {
+        // InDesign 20.0.1, `soft-hyphens` fixture: the same limits hold
+        // whether the paragraph hyphenates or not.
+        let d = HyphenationLimits::default();
+        let at = |w: &str, l: &HyphenationLimits, last| -> Vec<String> {
+            soft_hyphen_opportunities(w, l, last)
+                .into_iter()
+                .map(|i| w[..i].replace(SOFT_HYPHEN, ""))
+                .collect()
+        };
+        assert_eq!(at("ab\u{ad}solutely", &d, false), ["ab"]);
+        let six = HyphenationLimits {
+            after_first: 6,
+            before_last: 6,
+            ..d
+        };
+        assert!(at("ab\u{ad}solutely", &six, false).is_empty());
+        assert_eq!(
+            at("abso\u{ad}lute\u{ad}ly\u{ad}ness", &six, false),
+            ["absolute"]
+        );
+        let long = HyphenationLimits {
+            words_longer_than: 25,
+            ..d
+        };
+        assert!(at("ab\u{ad}solutely", &long, false).is_empty());
+        let no_last = HyphenationLimits {
+            last_word: false,
+            ..d
+        };
+        assert!(at("in\u{ad}formation", &no_last, true).is_empty());
+        assert_eq!(at("in\u{ad}formation", &no_last, false), ["in"]);
+        // Capitalised words keep their soft hyphens ("Ab-solutely").
+        let no_caps = HyphenationLimits {
+            capitalized_words: false,
+            ..d
+        };
+        assert_eq!(at("Ab\u{ad}solutely", &no_caps, false), ["Ab"]);
+        // A soft hyphen ahead of the first letter guards the word.
+        assert!(at("\u{ad}typesetting", &d, false).is_empty());
+        assert!(at("(\u{ad}typesetting)", &d, false).is_empty());
+    }
+
+    #[test]
+    fn the_letter_limits_come_from_the_paragraph() {
+        let h = Hyphenator::for_language(Language::EnglishUS);
+        let strict = HyphenationLimits {
+            after_first: 5,
+            before_last: 5,
+            ..HyphenationLimits::default()
+        };
+        assert!(h.opportunities_for("computer", &strict, false).is_empty());
+        let long_only = HyphenationLimits {
+            words_longer_than: 20,
+            ..HyphenationLimits::default()
+        };
+        assert!(h
+            .opportunities_for("computer", &long_only, false)
+            .is_empty());
+    }
+
+    #[test]
+    fn punctuation_is_not_a_letter_and_the_edge_limits_hold() {
+        let h = Hyphenator::for_language(Language::EnglishUS);
+        // "(o-ver-set)": the "o" alone before a hyphen is under the
+        // after-first-2 limit, so only "(over|set)" survives — and the
+        // offset counts the "(" the patterns never saw.
+        assert_eq!(h.opportunities("(overset)"), vec![5]);
+        assert_eq!(h.opportunities("overset"), vec![4]);
+        // A trailing comma is not a letter either: the patterns see
+        // "computer" (com-puter), not "computer," (com-put-er,).
+        assert_eq!(h.opportunities("computer,"), h.opportunities("computer"));
+        // The limits are what gate the edges: "over-set" needs at least
+        // four letters before the hyphen when the paragraph asks for it.
+        assert!(h.opportunities_with("(overset)", 5, 2, 5).is_empty());
+    }
+}

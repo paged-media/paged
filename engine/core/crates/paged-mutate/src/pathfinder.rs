@@ -1,0 +1,340 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! SDK Phase 5 (v1 sweep) — curve-preserving Bezier CSG.
+//!
+//! Built on `flo_curves`'s `path_add` / `path_sub` /
+//! `path_intersect` / `path_xor` (0.8.0). Operates on idml's
+//! `PathAnchor` representation via the conversion helpers in
+//! [`crate::bezier_conv`]. Output paths are exact Bezier curves
+//! (no polyline flattening) — matches InDesign's Pathfinder
+//! behavior for ovals, rounded rects, and other curved shapes.
+//!
+//! The `accuracy` parameter passed to flo_curves controls how
+//! close two curves must be before they're considered
+//! intersecting at the subdivision level; 1/64 pt is well below any
+//! visible threshold and keeps subdivision depth bounded. It is
+//! ALSO the grid every input is snapped onto — see the C-21 section
+//! in [`crate::bezier_conv`] for why that is a crash-safety
+//! requirement rather than a tuning choice.
+
+use flo_curves::bezier::path::{path_add, path_intersect, path_sub, SimpleBezierPath};
+use paged_model::PathAnchor;
+
+use crate::bezier_conv::{
+    flo_to_idml_path, idml_path_to_flo_on_grid, snap_paths_to_grid, BOOLEAN_GRID,
+};
+
+/// Pathfinder operation kinds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PathfinderKind {
+    /// Combine all paths into one (Boolean OR).
+    Union,
+    /// Keep only the region where all paths overlap (Boolean AND).
+    Intersect,
+    /// Top minus the union of the rest (top \ ⋃rest).
+    Subtract,
+    /// Symmetric difference (Boolean XOR).
+    Exclude,
+}
+
+/// Accuracy used for flo_curves's subdivision-based intersection
+/// math, AND the grid every input path is snapped onto first.
+///
+/// **C-21 — load-bearing for crash-safety; do not lower it.** It has to
+/// stay strictly above `flo_curves` 0.8.0's hardcoded 0.01 sort epsilon,
+/// because that is what makes the point sort inside `exterior_paths` a
+/// strict weak ordering; below it, Rust's driftsort detects the broken
+/// comparator and PANICS (`panic = abort` in the wasm worker, so it is an
+/// unrecoverable abort, not a bad result). A power of two is what makes
+/// the separation exact in f64 — `1/64` is the finest one above 0.01.
+/// Full derivation, and the residuals this does not cover, in the C-21
+/// section of [`crate::bezier_conv`]. Pinned by
+/// `pathfinder_accuracy_grid_separates_above_the_flo_curves_sort_epsilon`.
+const PATHFINDER_ACCURACY: f64 = BOOLEAN_GRID;
+
+// C-21 — compile-time guard, so a lowered value breaks the BUILD rather
+// than waiting for a test run. The f64-arithmetic half of the invariant
+// is in the test named below.
+const _: () = assert!(
+    PATHFINDER_ACCURACY > crate::bezier_conv::FLO_SORT_EPSILON,
+    "C-21: PATHFINDER_ACCURACY must stay strictly above flo_curves' 0.01 sort epsilon"
+);
+
+/// Run a Pathfinder boolean over N input paths (each a flat anchor
+/// list + subpath_starts). The first input is the "top" path —
+/// the only one that's special for Subtract (top minus rest);
+/// Union / Intersect / Exclude are symmetric over their inputs.
+///
+/// Returns the result as `(anchors, subpath_starts)` matching
+/// idml's path representation. The result is **closed** — every
+/// subpath terminates back at its start point. An empty result
+/// (e.g. Intersect of two non-overlapping paths) returns
+/// `(vec![], vec![])`.
+pub fn pathfinder_boolean(
+    inputs: &[(Vec<PathAnchor>, Vec<usize>)],
+    kind: PathfinderKind,
+) -> (Vec<PathAnchor>, Vec<usize>) {
+    if inputs.is_empty() {
+        return (Vec::new(), Vec::new());
+    }
+    // C-21: snapped on the way in — an unsnapped path reaching
+    // `exterior_paths` can abort the process, not just skew a result.
+    let flo_inputs: Vec<Vec<SimpleBezierPath>> = inputs
+        .iter()
+        .map(|(anchors, starts)| idml_path_to_flo_on_grid(anchors, starts, PATHFINDER_ACCURACY))
+        .collect();
+    if flo_inputs.iter().all(|p| p.is_empty()) {
+        return (Vec::new(), Vec::new());
+    }
+    let result: Vec<SimpleBezierPath> = match kind {
+        PathfinderKind::Union => {
+            let mut acc: Vec<SimpleBezierPath> = flo_inputs[0].clone();
+            for other in &flo_inputs[1..] {
+                acc = path_add::<SimpleBezierPath>(&acc, other, PATHFINDER_ACCURACY);
+            }
+            acc
+        }
+        PathfinderKind::Intersect => {
+            let mut acc: Vec<SimpleBezierPath> = flo_inputs[0].clone();
+            for other in &flo_inputs[1..] {
+                acc = path_intersect::<SimpleBezierPath>(&acc, other, PATHFINDER_ACCURACY);
+            }
+            acc
+        }
+        PathfinderKind::Subtract => {
+            // top \ ⋃(rest). Collapse `rest` into a union path
+            // first so a single `path_sub` call handles the full
+            // subtraction.
+            let mut rest: Vec<SimpleBezierPath> = Vec::new();
+            for other in &flo_inputs[1..] {
+                if rest.is_empty() {
+                    rest = other.clone();
+                } else {
+                    rest = path_add::<SimpleBezierPath>(&rest, other, PATHFINDER_ACCURACY);
+                }
+            }
+            if rest.is_empty() {
+                flo_inputs[0].clone()
+            } else {
+                path_sub::<SimpleBezierPath>(&flo_inputs[0], &rest, PATHFINDER_ACCURACY)
+            }
+        }
+        PathfinderKind::Exclude => {
+            // XOR, folded pairwise: X ⊕ Y = (X − Y) ∪ (Y − X). The two
+            // differences have disjoint interiors, so their contours are
+            // simply listed together — no union, which could pinch two
+            // L shapes that meet at a corner into one contour.
+            //
+            // C-81 — this used to be `(A ∪ B) − (A ∩ B)`, and `path_sub`
+            // can answer that with two whole OVERLAPPING rectangles that
+            // describe the XOR only through opposite windings: fill-
+            // correct by accident of direction, and a result whose
+            // meaning lives in its direction cannot be given one. The
+            // fold answers disjoint regions — what Illustrator answers
+            // (two L shapes for two crossing rectangles, 6800 + 6000
+            // pt²), which can then be oriented like every other result.
+            let mut acc: Vec<SimpleBezierPath> = flo_inputs[0].clone();
+            for other in &flo_inputs[1..] {
+                if acc.is_empty() {
+                    acc = other.clone();
+                    continue;
+                }
+                let mut left = path_sub::<SimpleBezierPath>(&acc, other, PATHFINDER_ACCURACY);
+                let right = path_sub::<SimpleBezierPath>(other, &acc, PATHFINDER_ACCURACY);
+                left.extend(right);
+                // Back onto the boolean grid before the next fold (C-21):
+                // difference outputs carry crossing points off it.
+                snap_paths_to_grid(&mut left, BOOLEAN_GRID);
+                acc = left;
+            }
+            acc
+        }
+    };
+    let (mut anchors, starts) = flo_to_idml_path(&result);
+    // C-81 — every Pathfinder result comes back counter-clockwise on the
+    // page (Illustrator 30.1, all recorded cases), holes the other way.
+    let closed = vec![false; starts.len()];
+    crate::orientation::orient_contours(
+        &mut anchors,
+        &starts,
+        &closed,
+        crate::orientation::Turn::CounterClockwise,
+    );
+    (anchors, starts)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bezier_conv::FLO_SORT_EPSILON;
+
+    fn rect(left: f32, top: f32, right: f32, bottom: f32) -> Vec<PathAnchor> {
+        let p = |x: f32, y: f32| (x, y);
+        vec![
+            PathAnchor {
+                anchor: p(left, top),
+                left: p(left, top),
+                right: p(left, top),
+            },
+            PathAnchor {
+                anchor: p(right, top),
+                left: p(right, top),
+                right: p(right, top),
+            },
+            PathAnchor {
+                anchor: p(right, bottom),
+                left: p(right, bottom),
+                right: p(right, bottom),
+            },
+            PathAnchor {
+                anchor: p(left, bottom),
+                left: p(left, bottom),
+                right: p(left, bottom),
+            },
+        ]
+    }
+
+    #[test]
+    fn union_of_two_disjoint_rects_keeps_both() {
+        let a = rect(0.0, 0.0, 10.0, 10.0);
+        let b = rect(20.0, 20.0, 30.0, 30.0);
+        let (anchors, starts) =
+            pathfinder_boolean(&[(a, vec![]), (b, vec![])], PathfinderKind::Union);
+        // Two subpaths: one per disjoint rect.
+        assert_eq!(starts.len(), 2);
+        // 4 corners per rect = 8 anchors total.
+        assert_eq!(anchors.len(), 8);
+    }
+
+    #[test]
+    fn intersect_of_non_overlapping_rects_is_empty() {
+        let a = rect(0.0, 0.0, 10.0, 10.0);
+        let b = rect(20.0, 20.0, 30.0, 30.0);
+        let (anchors, _) =
+            pathfinder_boolean(&[(a, vec![]), (b, vec![])], PathfinderKind::Intersect);
+        assert!(anchors.is_empty());
+    }
+
+    #[test]
+    fn intersect_of_overlapping_rects_is_overlap() {
+        // A = [0..20, 0..20], B = [10..30, 10..30] → intersect = [10..20, 10..20].
+        let a = rect(0.0, 0.0, 20.0, 20.0);
+        let b = rect(10.0, 10.0, 30.0, 30.0);
+        let (anchors, starts) =
+            pathfinder_boolean(&[(a, vec![]), (b, vec![])], PathfinderKind::Intersect);
+        assert_eq!(starts.len(), 1);
+        assert_eq!(anchors.len(), 4);
+        let xs: Vec<f32> = anchors.iter().map(|a| a.anchor.0).collect();
+        let ys: Vec<f32> = anchors.iter().map(|a| a.anchor.1).collect();
+        let min_x = xs.iter().cloned().fold(f32::INFINITY, f32::min);
+        let max_x = xs.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        let min_y = ys.iter().cloned().fold(f32::INFINITY, f32::min);
+        let max_y = ys.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        assert!((min_x - 10.0).abs() < 1e-3);
+        assert!((max_x - 20.0).abs() < 1e-3);
+        assert!((min_y - 10.0).abs() < 1e-3);
+        assert!((max_y - 20.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn subtract_overlapping_punches_hole_or_l_shape() {
+        // A = [0..20, 0..20], B = [10..30, 10..30] → A \ B = L-shape.
+        let a = rect(0.0, 0.0, 20.0, 20.0);
+        let b = rect(10.0, 10.0, 30.0, 30.0);
+        let (anchors, starts) =
+            pathfinder_boolean(&[(a, vec![]), (b, vec![])], PathfinderKind::Subtract);
+        assert!(!anchors.is_empty(), "L-shape should be non-empty");
+        assert_eq!(starts.len(), 1, "L-shape is one subpath");
+        // An L-shape from this subtraction has 6 corner vertices.
+        assert_eq!(anchors.len(), 6, "L-shape has 6 corners");
+    }
+
+    /// C-21 GUARD — do not lower [`PATHFINDER_ACCURACY`].
+    ///
+    /// It is the grid every Pathfinder input is snapped onto, and the
+    /// grid is what keeps `flo_curves`' `exterior_paths` point sort a
+    /// strict weak ordering. A violated ordering is an abort, not a
+    /// wrong pixel. Two properties: the step must exceed the
+    /// comparator's hardcoded epsilon, and it must exceed it in f64
+    /// ARITHMETIC at every reachable magnitude — a nominal 0.01 grid
+    /// (this constant's previous value) fails the second test.
+    #[test]
+    fn pathfinder_accuracy_grid_separates_above_the_flo_curves_sort_epsilon() {
+        // `accuracy > FLO_SORT_EPSILON` is asserted at COMPILE time next
+        // to the constant; the m = 0 step below re-checks it, and the rest
+        // of the loop checks what a const assert cannot — that the
+        // separation survives f64 arithmetic at every reachable magnitude.
+        assert_eq!(
+            PATHFINDER_ACCURACY.log2(),
+            PATHFINDER_ACCURACY.log2().round(),
+            "accuracy must be a power of two so the grid is exact in f64"
+        );
+        for m in -200_000_i64..=200_000 {
+            let lo = (m as f64) * PATHFINDER_ACCURACY;
+            let hi = ((m + 1) as f64) * PATHFINDER_ACCURACY;
+            assert!(
+                hi - lo > FLO_SORT_EPSILON,
+                "grid step collapses under f64 at m={m}: {lo} → {hi}"
+            );
+        }
+    }
+
+    /// C-21 REGRESSION — this geometry ABORTED the process before the
+    /// fix. A staircase of near-aligned anchors (x rising 0.006 pt per
+    /// step while y falls) makes every consecutive triple non-transitive
+    /// under `exterior_paths`' comparator, and driftsort catches it. The
+    /// steps are far finer than the grid, so snapping folds them into
+    /// shared columns and the comparator degenerates to lexicographic.
+    ///
+    /// Raising the `accuracy` ARGUMENT alone does not fix this — verified
+    /// against flo_curves 0.8.0 directly, because `GraphPath::round` is a
+    /// no-op there (see [`crate::bezier_conv`]). Only the snap does.
+    #[test]
+    fn dense_near_aligned_anchors_do_not_abort_the_boolean() {
+        let p = |x: f32, y: f32| PathAnchor {
+            anchor: (x, y),
+            left: (x, y),
+            right: (x, y),
+        };
+        let mut comb = vec![p(0.0, 0.0)];
+        for k in 1..40 {
+            let x = k as f32 * 0.006;
+            let y = -(k as f32);
+            comb.push(p(x, y - 0.5));
+            comb.push(p(x, y));
+        }
+        comb.extend([p(100.0, -40.0), p(100.0, 5.0), p(-5.0, 5.0)]);
+        let bar = rect(-2.0, -2.0, 50.0, 2.0);
+        let (anchors, _) =
+            pathfinder_boolean(&[(comb, vec![]), (bar, vec![])], PathfinderKind::Union);
+        assert!(
+            !anchors.is_empty(),
+            "union of overlapping shapes is non-empty"
+        );
+    }
+
+    #[test]
+    fn exclude_overlapping_yields_two_l_shapes() {
+        // Symmetric difference of two overlapping rects = two
+        // L-shapes (one per input minus the overlap).
+        let a = rect(0.0, 0.0, 20.0, 20.0);
+        let b = rect(10.0, 10.0, 30.0, 30.0);
+        let (anchors, starts) =
+            pathfinder_boolean(&[(a, vec![]), (b, vec![])], PathfinderKind::Exclude);
+        assert!(!anchors.is_empty());
+        // Two disjoint L-shapes = 2 subpaths.
+        assert_eq!(starts.len(), 2);
+    }
+}

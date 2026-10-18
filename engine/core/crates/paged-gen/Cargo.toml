@@ -1,0 +1,31 @@
+[package]
+name = "paged-gen"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Test-corpus generator. Emits multi-page mega-files where each page exercises one renderable feature variant; pairs with the InDesign-exported PDF reference + paged-fidelity diff harness."
+
+[lints]
+workspace = true
+
+[dependencies]
+zip = { workspace = true }
+flate2 = { workspace = true }
+quick-xml = { workspace = true }
+anyhow = { workspace = true }
+base64 = { workspace = true }
+blake3 = "1"
+clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+idml-import = { git = "https://github.com/paged-media/plugin-publish", rev = "05c57195d9a7514357cede90d89d987141bf01d8" }
+paged-scene = { path = "../paged-scene" }
+paged-renderer = { path = "../paged-renderer" }
+paged-compose = { path = "../paged-compose" }
+sha2 = "0.10"
+
+[[bin]]
+name = "paged-gen"
+path = "src/bin/paged-gen.rs"

@@ -1,0 +1,217 @@
+#!/usr/bin/env bash
+# corpus/generated/export-diff.sh
+#
+# PDF-export SELF-CONSISTENCY loop (Concept 3, M9): the exported PDF,
+# rasterised by poppler, must match our own CPU renderer on the same
+# scene. This is not the InDesign fidelity gate (diff.sh) — it pins
+# the EXPORTER against the renderer so a regression in either path
+# (text-as-text placement, colour encoding, transparency groups,
+# image flip) shows up as pixels.
+#
+# Pipeline per fixture:
+#   1. cargo run -p paged-export-pdf --features cli --bin paged-export
+#      → <name>.pdf (PDF 1.7, no profile — pure geometry/colour pin).
+#   2. pdftoppm -r 144 → pdf-NNN.png.
+#   3. paged-inspect --render (CPU, 144 dpi) → native-NNN.png.
+#   4. paged-diff per page; fail when mean ΔE > 1.5 or SSIM < 0.93
+#      (text AA differs between poppler and tiny-skia; geometry or
+#      colour bugs blow past these immediately). A few fixtures carry
+#      their own measured budget — max_mean_for / min_ssim_for below,
+#      each with its evidence.
+#
+# Usage:
+#   ./corpus/generated/export-diff.sh                # all fixtures
+#   ./corpus/generated/export-diff.sh geometry       # one fixture
+#   IDML_EXPORT_DIFF_GATE=advisory ./export-diff.sh  # never fail
+#
+# Requires pdftoppm (poppler). Fixture IDMLs must exist (run
+# diff.sh / paged-gen first).
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+TARGET="${CARGO_TARGET_DIR:-$ROOT/target}"
+GENERATED_DIR="$ROOT/corpus/generated"
+OUT="${IDML_EXPORT_DIFF_OUT:-/tmp/paged-export-diff}"
+GATE="${IDML_EXPORT_DIFF_GATE:-hard}"
+MAX_MEAN_DE=1.5
+MIN_SSIM=0.93
+FALLBACK_FONT="$ROOT/corpus/fonts/Inter.ttf"
+
+# v1 exporter gap, documented: gradient shadings interpolate sRGB
+# stops in DeviceRGB while the renderer interpolates in CMYK space
+# (pdftoppm-calibrated) — mid-tones drift ~ΔE 1.8 on gradient-heavy
+# pages. Native CMYK/Lab shadings are the v2 fix; until then the
+# gradients fixture gets its own ceiling.
+max_mean_for() {
+  case "$1" in
+    gradients) echo 2.2 ;;
+    # See min_ssim_for below for the evidence and the sizing rule.
+    list-markers) echo 0.82 ;;
+    list-overrides) echo 1.07 ;;
+    list-marker-styles) echo 1.06 ;;
+    # Hinted text, see the note below min_ssim_for's header: 1.504 measured.
+    effects-attrs) echo 1.81 ;;
+    # Hinted text again: since 2026-10-13 the sample sets 44 lines of 12 pt
+    # a page (it set 11). The exported page and the renderer's align best
+    # unshifted and carry the same ink (19.71 vs 19.44 grey on page 6); poppler's
+    # hinted stems are the difference. 1.670 measured; worst * 1.20.
+    text-wrap) echo 2.0 ;;
+    # Hinted text and flat CMYK tints (2026-10-14): twelve frames of 8 pt
+    # text, each on a 15 % yellow tint, with 45 % cyan boxes. Placement
+    # agrees (the only one-sided pixels are the anti-aliased column at a
+    # frame's fractional left edge, x = 312.276 pt); the differences are
+    # poppler's hinted 8 pt stems and the cyan converted through its
+    # profile (126,211,247 rendered, 143,217,247 exported). 1.644 measured;
+    # worst * 1.20.
+    object-style-options) echo 1.98 ;;
+    # Hinted text, densest yet (2026-10-15, ADR 155): nine frames of 8 pt
+    # on 10 pt, about 330 lines set in the lane's fallback face. The same
+    # IDML through main's engine, which drew no column rules, measures
+    # 2.698 / 0.8085, so the rules add 0.014. The exported baselines are
+    # the renderer's (pdftotext: "Column" box 70.656..80.336 pt); aligning
+    # the two rasters by one whole pixel cuts their mean pixel difference
+    # from 8.57 to 3.02, which is poppler's hinted 8 pt glyphs snapping to
+    # whole pixels at 144 dpi. 2.713 measured; worst * 1.20.
+    column-rules) echo 3.26 ;;
+    *) echo "$MAX_MEAN_DE" ;;
+  esac
+}
+
+# Hairline frame strokes: a measurement convention, not an exporter gap.
+# The list fixtures (list-markers / list-overrides / list-marker-styles,
+# 2026-10-01) put 14-22 small text frames on one page, each with a
+# 0.25 pt frame stroke = 0.5 device px at 144 dpi. The CPU renderer
+# paints that at its true coverage (two rows at grey 199); poppler's
+# Splash rasteriser applies stroke adjustment and snaps any stroke
+# thinner than a pixel to ONE full-ink device pixel (grey 30) — it
+# ignores the PDF /SA flag, pdftoppm has no switch for it, and
+# pdftocairo does the same. Measured (GS SWOP profile, same as CI;
+# local numbers equal the CI run 36916496128 to 3 digits):
+#   fixture              as gated          strokes masked out
+#   list-markers         0.687 / 0.9201    0.126 / 0.9985
+#   list-overrides       0.888 / 0.9118    0.178 / 0.9976
+#   list-marker-styles   0.881 / 0.9117    0.172 / 0.9978
+# (mean dE / SSIM; "masked" copies the renderer's pixels over the
+# pdftoppm stroke rows/columns and nothing else). With the strokes out
+# of the picture the exported text matches the renderer better than
+# most fixtures do (typical 0.12 / 0.987), so the exporter places the
+# markers, tabs and marker character styles exactly as the renderer.
+# The same residue is documented for these fixtures in the raster lane
+# (fidelity-thresholds.json: "0.25 pt frame strokes the CPU rasteriser
+# paints lighter"). Sized by that lane's rule: mean = worst * 1.20,
+# SSIM = worst - 0.005. Any other fixture keeps the global budget.
+# Text as text (core PR #51, 2026-10-12): the exporter now embeds the face
+# instead of drawing every glyph as an outline, and poppler draws embedded
+# glyphs through FreeType's hinted rasteriser rather than filling paths.
+# Placement is unchanged (reflow p1: best horizontal shift between the
+# outline-era and the text-era raster is 0 px; ink 11.32 → 10.82 against
+# the renderer's 10.64, i.e. CLOSER), but hinted stems move SSIM on the
+# densest text pages: reflow 0.9525 → 0.9125, list-overrides 0.9118 →
+# 0.9058, list-marker-styles 0.9117 → 0.9048 (mean ΔE stays inside its
+# budget). Same sizing rule as above, SSIM = worst - 0.005.
+# effects-attrs (core PR #70, 2026-10-13): the default face is now set at
+# its own ascender, as InDesign sets it (0.96875 em for Inter, was the
+# 0.8 em substitute heuristic), so page 2's 31 labels move down 1.27 pt.
+# The exported PDF moves them exactly that far (pdftotext -bbox: yMin
+# 64.73 -> 66.00 pt, i.e. 2.53 px at 144 dpi) and the renderer's ink moves
+# 2.46 px, but poppler's hinted raster moves 1.97 px: FreeType snaps the
+# baseline to a whole pixel. Native-vs-PDF ink on the labels went from
+# 0.09 to 0.59 px apart and the page's mean dE from 1.424 to 1.504 with
+# placement unchanged between the two lanes. Mean = worst * 1.20.
+min_ssim_for() {
+  case "$1" in
+    list-markers) echo 0.915 ;;
+    list-overrides) echo 0.900 ;;
+    list-marker-styles) echo 0.899 ;;
+    reflow) echo 0.907 ;;
+    # Hinted 8 pt text, see max_mean_for: 0.8073 measured; worst - 0.005.
+    column-rules) echo 0.802 ;;
+    *) echo "$MIN_SSIM" ;;
+  esac
+}
+
+# Use ONE CMYK profile on BOTH sides: the exporter tags CMYK content
+# ICCBased(N4) so poppler converts through the same profile the
+# native render uses — otherwise poppler's naive DeviceCMYK black
+# (#000) diverges from the renderer's profile black (~#1a1a1a).
+find_profile() {
+  if [ -n "${PAGED_CMYK_PROFILE:-}" ] && [ -f "$PAGED_CMYK_PROFILE" ]; then
+    echo "$PAGED_CMYK_PROFILE"; return
+  fi
+  for f in "$ROOT"/corpus/profiles/*.icc; do
+    [ -f "$f" ] && { echo "$f"; return; }
+  done
+  local adobe="/Library/Application Support/Adobe/Color/Profiles/Recommended/CoatedFOGRA39.icc"
+  [ -f "$adobe" ] && { echo "$adobe"; return; }
+  echo ""
+}
+PROFILE="$(find_profile)"
+[ -n "$PROFILE" ] || echo "note: no CMYK profile found — K-blacks will diverge (poppler naive vs renderer)"
+
+command -v pdftoppm >/dev/null || { echo "pdftoppm not found (brew install poppler)"; exit 1; }
+
+fixtures=()
+if [ "$#" -gt 0 ]; then
+  for n in "$@"; do fixtures+=("$GENERATED_DIR/$n.idml"); done
+else
+  for f in "$GENERATED_DIR"/*.idml; do fixtures+=("$f"); done
+fi
+
+cd "$ROOT"
+cargo build -q --release -p paged-export-pdf --features cli --bin paged-export
+cargo build -q --release --bin paged-inspect
+cargo build -q --release -p paged-fidelity --bin paged-diff
+EXPORT="$TARGET/release/paged-export"
+INSPECT="$TARGET/release/paged-inspect"
+DIFF="$TARGET/release/paged-diff"
+
+fail=0
+for idml in "${fixtures[@]}"; do
+  name="$(basename "$idml" .idml)"
+  [ -f "$idml" ] || { echo "missing fixture: $idml (run diff.sh first)"; exit 1; }
+  dir="$OUT/$name"
+  rm -rf "$dir"; mkdir -p "$dir"
+
+  export_args=("$idml" "$dir/$name.pdf" --font "$FALLBACK_FONT")
+  inspect_args=(--render "$dir/native.png" --default-font "$FALLBACK_FONT")
+  if [ -n "$PROFILE" ]; then
+    export_args+=(--profile "$PROFILE")
+    inspect_args+=(--cmyk-profile "$PROFILE")
+  fi
+  "$EXPORT" "${export_args[@]}" >/dev/null 2>&1
+  pdftoppm -png -r 144 "$dir/$name.pdf" "$dir/pdf"
+  "$INSPECT" "${inspect_args[@]}" "$idml" >/dev/null 2>&1
+  max_mean="$(max_mean_for "$name")"
+  min_ssim="$(min_ssim_for "$name")"
+
+  page=1
+  for native in "$dir"/native*.png; do
+    # pdftoppm zero-pads the page number to the WIDTH OF THE TOTAL
+    # PAGE COUNT — `pdf-1.png` for a 9-page document, `pdf-001.png` for
+    # a 134-page one. Probing only widths 1 and 2 therefore worked for
+    # every fixture until a long one arrived: `annual-base` has 134
+    # pages, so pages 1-99 were reported "missing pdf raster" while
+    # 100-134 matched by accident (no padding needed at three digits)
+    # and compared green. Probe every plausible width instead.
+    pdfpage=""
+    for w in 1 2 3 4 5; do
+      cand=$(printf "%s/pdf-%0*d.png" "$dir" "$w" "$page")
+      if [ -f "$cand" ]; then pdfpage="$cand"; break; fi
+    done
+    [ -n "$pdfpage" ] || { echo "$name p$page: missing pdf raster"; fail=1; page=$((page+1)); continue; }
+    # paged-diff exits non-zero when its own default threshold trips
+    # — we gate on OUR thresholds below, so tolerate the status.
+    json="$("$DIFF" --json "$native" "$pdfpage" || true)"
+    mean=$(echo "$json" | python3 -c "import json,sys; print(json.load(sys.stdin)['mean_de'])")
+    ssim=$(echo "$json" | python3 -c "import json,sys; print(json.load(sys.stdin)['ssim'])")
+    ok=$(python3 -c "print(int($mean <= $max_mean and $ssim >= $min_ssim))")
+    status="ok"
+    if [ "$ok" != "1" ]; then status="FAIL"; fail=1; fi
+    echo "$name p$page: mean_de=$mean ssim=$ssim [$status]"
+    page=$((page+1))
+  done
+done
+
+if [ "$GATE" = "advisory" ]; then exit 0; fi
+exit $fail

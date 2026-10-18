@@ -1,0 +1,459 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Minimum-raggedness line breaking — how InDesign's composer breaks
+//! ragged (left / right / centred) text whose lines have DIFFERENT
+//! measures, as a shaped frame gives them.
+//!
+//! Knuth–Plass prices a ragged line by how far its word spaces would
+//! have to stretch, so a line with few spaces is dear whatever its slack:
+//! in a triangle it fills the narrow top lines greedily and then sets
+//! short lines further down. InDesign does the opposite. Measured on
+//! InDesign 20.0.1 (`shaped-bands`: circles, triangles, a donut, a
+//! narrow ellipse; Inter 10/12, hyphenation off), it chose
+//! `delta | echo foxtrot | golf hotel india | juliet kilo lima mike` in a
+//! triangle where greedy filling and the engine's breaker both set
+//! `delta echo | foxtrot golf | hotel india juliet | kilo lima mike` — a
+//! nearly empty line traded for four full ones. Minimising the sum of
+//! the squared space every line leaves at the end of its band reproduces
+//! every break of the fixture's seventeen ragged frames (and of
+//! `text-in-shape`'s oval and donut); minimising it relative to the
+//! band's width, or the cube of the slack per stretchable space as the
+//! breaker does, does not.
+
+use paragraph_breaker::{Breakpoint, Item, INFINITE_PENALTY};
+
+/// A line that cannot be set inside its measure (a word wider than the
+/// band) is taken only when nothing fits, at this cost per point over.
+const OVERFULL_COST: f64 = 1.0e9;
+
+/// What a paragraph's lines are, beyond their measures.
+pub(crate) struct RaggedLines<'a> {
+    /// Lines from this index on cost nothing (overset, past the frame).
+    pub free_after: usize,
+    /// `joined[i]`: line `i` is the far part of the row line `i − 1`
+    /// starts — a hole splits the row.
+    pub joined: &'a [bool],
+    /// The paragraph's hyphenation penalty.
+    pub hyphen_penalty: i32,
+    /// How far a word space may shrink, as a fraction of its width
+    /// (`1 − MinimumWordSpacing`).
+    pub space_shrink: f32,
+    /// In a plain frame, the paragraph's size (pt): a line may then overrun
+    /// its measure by InDesign's allowance for its last word
+    /// (`overrun_allowance`), its spaces squeezed onto it, at no cost.
+    /// `None`: the spaces may shrink by `space_shrink`, at `SQUEEZE_WEIGHT`
+    /// (a shaped or wrapped frame's measured squeeze).
+    pub overrun_size: Option<f32>,
+    /// `Some(n)`: balance the paragraph's ragged lines
+    /// (`BalanceRaggedLines`, `FullyBalanced`) — set it in exactly `n`
+    /// lines, pricing the last line's slack like the others, so the
+    /// lines come out as even as the words allow. Asked of InDesign
+    /// 20.0.1 (`paragraph-attrs` D, ADR 153): it keeps the line count
+    /// and evens the lines, the last included.
+    pub balance_lines: Option<usize>,
+}
+
+/// What squeezing a line costs per pt² it is over its measure, against
+/// one pt² per point of slack. InDesign squeezes a ragged line's word
+/// spaces (down to `MinimumWordSpacing`) to keep a word, but only where
+/// it must: `text-in-shape`'s donut sets `day long the quick` — 93.18 pt
+/// at natural spacing — in a 93 pt band with its spaces 2.3 % narrow,
+/// and `shaped-bands` never squeezes at all. Both come out as InDesign's
+/// from 10 000 (5 000 squeezes `shaped-bands`' stroked donut, 30 000
+/// refuses `text-in-shape`'s).
+const SQUEEZE_WEIGHT: f64 = 10_000.0;
+
+/// What a hyphenated break costs per point of hyphenation penalty, in
+/// pt² of slack: the default penalty of 50 weighs like nineteen points of
+/// slack on one line. Fitted on `text-in-shape` (InDesign hyphenates its
+/// oval's `win-dow` twice and its donut never): anything from 4 to 24 sets
+/// both as InDesign does, 2 hyphenates the donut, 30 loses the oval's
+/// hyphens. Since every ragged paragraph breaks this way (ADR 142) two more
+/// fixtures narrow it to 6 to 8: the `tints` labels hyphenate "Ma-genta" and
+/// "Yel-low" in their one-line frames as InDesign does up to 8 (not at
+/// 10), and `text-letterspacing` keeps "Trebek" whole as InDesign does from
+/// 6 (not at 4). The `footnotes` fixture's long third note narrows it to
+/// 7.46 to 8: InDesign sets it with no hyphen, where two would save 746 pt²
+/// of slack.
+const HYPHEN_WEIGHT: f64 = 7.75;
+
+/// How far (1/64 pt) InDesign lets a plain frame's ragged line overrun its
+/// measure to keep its last word, `word` wide after `before` of the line
+/// (both 1/64 pt), at `size` pt: a 99th of the word, and a little more the
+/// more the line holds before it. Fitted on 45 lines at 8, 12 and 18 pt
+/// (`tools/indesign-export/ragged-squeeze-probe.*`), every one within
+/// 0.12 pt. InDesign takes the overrun from the word spaces, evenly and
+/// past `MinimumWordSpacing` (1.4 pt from one 3.1 pt space).
+fn overrun_allowance(size: f32, word: i64, before: i64) -> i64 {
+    if word <= 0 {
+        return 0;
+    }
+    let (w, p) = (word as f64, before.max(0) as f64);
+    (w / 99.0 + 64.0 * f64::from(size) / 320.0 * (1.0 + p / w).ln()).floor() as i64
+}
+
+/// Break `items` so the sum over lines of `slack²` (in pt) is smallest.
+///
+/// Every composer line is priced on its own, the parts of a row a hole
+/// splits included: `shaped-bands`' donuts measured that against pricing
+/// the row's total slack, and only the per-part sum reproduces both. The
+/// last line of the paragraph, a line ended by a forced break, and every
+/// line from `free_after` on cost nothing. Where that starts was measured
+/// too: charging every overset line moves `shaped-bands`' stroked donut
+/// off InDesign's breaks, charging none moves `text-in-shape`'s oval off
+/// its last three — charging exactly the first line past the frame (the
+/// one InDesign sets to find it does not fit) holds both. A row is ONE
+/// line to InDesign,
+/// so no word is hyphenated across the hole that splits it.
+pub(crate) fn min_ragged_breaks<T>(
+    items: &[Item<T>],
+    lengths: &[i32],
+    lines: &RaggedLines<'_>,
+) -> Vec<Breakpoint> {
+    let free_after = lines.free_after;
+    let joined = |l: usize| lines.joined.get(l).copied().unwrap_or(false);
+    if items.is_empty() || lengths.is_empty() {
+        return Vec::new();
+    }
+    let n = items.len();
+    // prefix[i] = width of items[..i] (boxes and glue; penalties only
+    // count when a line breaks at them).
+    let mut prefix = vec![0i64; n + 1];
+    // glue[i] = width of the glue in items[..i] — what may shrink.
+    let mut glue = vec![0i64; n + 1];
+    for (i, it) in items.iter().enumerate() {
+        prefix[i + 1] = prefix[i]
+            + match it {
+                Item::Box { width, .. } | Item::Glue { width, .. } => *width as i64,
+                Item::Penalty { .. } => 0,
+            };
+        glue[i + 1] = glue[i]
+            + match it {
+                Item::Glue { width, .. } => *width as i64,
+                _ => 0,
+            };
+    }
+    // word_at[i] = where the last word in items[..i] starts: the box
+    // after the last glue that a box follows.
+    let mut word_at = vec![0usize; n + 1];
+    for (i, it) in items.iter().enumerate() {
+        let starts_word =
+            matches!(it, Item::Box { .. }) && (i == 0 || matches!(items[i - 1], Item::Glue { .. }));
+        word_at[i + 1] = if starts_word { i } else { word_at[i] };
+    }
+    let shrink = lines.space_shrink.clamp(0.0, 1.0) as f64;
+    let forced = |i: usize| matches!(items[i], Item::Penalty { penalty, .. } if penalty <= -INFINITE_PENALTY);
+    // box_after[i]: a box follows item `i` before the paragraph ends.
+    let mut box_after = vec![false; n + 1];
+    for i in (0..n).rev() {
+        box_after[i] = match items[i] {
+            Item::Box { .. } => true,
+            _ if forced(i) => false,
+            _ => box_after[i + 1],
+        };
+    }
+    // Legal breaks, in item order: a glue between two boxes (the one
+    // that closes the paragraph would leave an empty line), any penalty
+    // short of +infinity.
+    let candidates: Vec<usize> = (0..n)
+        .filter(|&i| match &items[i] {
+            Item::Glue { .. } => {
+                i > 0 && matches!(items[i - 1], Item::Box { .. }) && box_after[i + 1]
+            }
+            Item::Penalty { penalty, .. } => *penalty < INFINITE_PENALTY,
+            Item::Box { .. } => false,
+        })
+        .collect();
+    let Some(last_c) = candidates.iter().rposition(|&j| forced(j)) else {
+        return Vec::new();
+    };
+    // Where a line after a break at item `b` starts: the first box past
+    // it (glue and penalties at a line's start are discarded).
+    let start_after = |b: Option<usize>| -> usize {
+        let mut s = b.map_or(0, |b| b + 1);
+        while s < n && !matches!(items[s], Item::Box { .. }) && !forced(s) {
+            s += 1;
+        }
+        s
+    };
+    // A line index only matters while it can change the measure or the
+    // price: past both ends every line is alike.
+    let horizon = match lines.balance_lines {
+        Some(n) => n,
+        None if free_after == usize::MAX => lengths.len(),
+        None => lengths.len().max(free_after),
+    };
+    let balance = lines.balance_lines.is_some();
+    let measure = |l: usize| lengths[l.min(lengths.len() - 1)] as i64;
+
+    // dp[c][l]: the cheapest way to end a line at candidate `c` with
+    // line `l` (capped at `horizon`) next: (cost, previous node, width).
+    type Node = (f64, Option<(usize, usize)>, i64);
+    let mut dp: Vec<Vec<Option<Node>>> = vec![vec![None; horizon + 1]; candidates.len()];
+    let expand =
+        |dp: &mut Vec<Vec<Option<Node>>>, from: Option<(usize, usize)>, base: f64, line: usize| {
+            let s = start_after(from.map(|(c, _)| candidates[c]));
+            let m = measure(line);
+            let first_c = from.map_or(0, |(c, _)| c + 1);
+            let mut first = true;
+            for (c, &j) in candidates.iter().enumerate().skip(first_c) {
+                if j < s {
+                    continue;
+                }
+                let pen_w = match &items[j] {
+                    Item::Penalty { width, .. } => *width as i64,
+                    _ => 0,
+                };
+                let hyphen = matches!(items[j], Item::Penalty { flagged: true, .. }) && !forced(j);
+                if hyphen && joined(line + 1) {
+                    continue;
+                }
+                let w = prefix[j] - prefix[s] + pen_w;
+                // The narrowest the line can be set: its spaces squeezed.
+                let tightest = match lines.overrun_size {
+                    Some(size) => {
+                        let ws = word_at[j].max(s);
+                        w - overrun_allowance(
+                            size,
+                            prefix[j] - prefix[ws] + pen_w,
+                            prefix[ws] - prefix[s],
+                        )
+                    }
+                    None => w - ((glue[j] - glue[s]) as f64 * shrink).floor() as i64,
+                };
+                if tightest > m && !first {
+                    break;
+                }
+                first = false;
+                let cost = if tightest > m {
+                    OVERFULL_COST * (1.0 + (tightest - m) as f64 / 64.0)
+                } else if forced(j) && w <= m && !balance || line >= free_after {
+                    0.0
+                } else if w > m {
+                    if lines.overrun_size.is_some() {
+                        0.0
+                    } else {
+                        let over = (w - m) as f64 / 64.0;
+                        SQUEEZE_WEIGHT * over * over
+                    }
+                } else {
+                    let slack = (m - w) as f64 / 64.0;
+                    let hyphen_cost = if hyphen {
+                        lines.hyphen_penalty.max(0) as f64 * HYPHEN_WEIGHT
+                    } else {
+                        0.0
+                    };
+                    slack * slack + hyphen_cost
+                };
+                // Balanced lines count exactly; a line past the count
+                // is no solution.
+                if balance && line + 1 > horizon {
+                    break;
+                }
+                let next = (line + 1).min(horizon);
+                let node = (base + cost, from, w);
+                let slot = &mut dp[c][next];
+                if slot.is_none_or(|old| node.0 < old.0) {
+                    *slot = Some(node);
+                }
+                if forced(j) || tightest > m {
+                    break;
+                }
+            }
+        };
+    expand(&mut dp, None, 0.0, 0);
+    for c in 0..last_c {
+        for l in 0..=horizon {
+            if let Some((cost, _, _)) = dp[c][l] {
+                expand(&mut dp, Some((c, l)), cost, l);
+            }
+        }
+    }
+    let Some(best_l) = (0..=horizon)
+        .filter(|&l| !balance || l == horizon)
+        .filter_map(|l| dp[last_c][l].map(|n| (l, n.0)))
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(l, _)| l)
+    else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut at = Some((last_c, best_l));
+    while let Some((c, l)) = at {
+        let (_, prev, w) = dp[c][l].expect("reached node");
+        out.push(Breakpoint {
+            index: candidates[c],
+            ratio: 0.0,
+            width: w as i32,
+        });
+        at = prev;
+    }
+    out.reverse();
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn words(widths: &[i32]) -> Vec<Item<()>> {
+        let mut items: Vec<Item<()>> = Vec::new();
+        for (i, w) in widths.iter().enumerate() {
+            if i > 0 {
+                items.push(Item::Glue {
+                    width: 64,
+                    stretch: 0,
+                    shrink: 0,
+                });
+            }
+            items.push(Item::Box {
+                width: *w,
+                data: (),
+            });
+        }
+        items.push(Item::Glue {
+            width: 0,
+            stretch: i32::MAX / 4,
+            shrink: 0,
+        });
+        items.push(Item::Penalty {
+            width: 0,
+            penalty: -INFINITE_PENALTY,
+            flagged: true,
+        });
+        items
+    }
+
+    fn lines(free_after: usize) -> RaggedLines<'static> {
+        RaggedLines {
+            free_after,
+            joined: &[],
+            hyphen_penalty: 50,
+            space_shrink: 0.0,
+            overrun_size: None,
+            balance_lines: None,
+        }
+    }
+
+    fn line_words(items: &[Item<()>], breaks: &[Breakpoint]) -> Vec<usize> {
+        let mut out = Vec::new();
+        let mut from = 0;
+        for b in breaks {
+            out.push(
+                items[from..b.index]
+                    .iter()
+                    .filter(|i| matches!(i, Item::Box { .. }))
+                    .count(),
+            );
+            from = b.index;
+        }
+        out
+    }
+
+    /// Balanced ragged lines (`paragraph-attrs` D, ADR 153): as many
+    /// lines, the last priced too. Measure 1000; words 450, 450, 100, 100
+    /// with 64-wide spaces: minimum raggedness sets [450 450 | 100 100]
+    /// (the last line free), balancing [450 | 450 100 100].
+    #[test]
+    fn balanced_lines_keep_their_count_and_even_out() {
+        let items = words(&[450, 450, 100, 100]);
+        let plain = min_ragged_breaks(&items, &[1000], &lines(usize::MAX));
+        assert_eq!(line_words(&items, &plain), vec![2, 2]);
+        let even = min_ragged_breaks(
+            &items,
+            &[1000],
+            &RaggedLines {
+                balance_lines: Some(2),
+                ..lines(usize::MAX)
+            },
+        );
+        assert_eq!(line_words(&items, &even), vec![1, 3]);
+    }
+
+    #[test]
+    fn a_short_line_buys_fuller_ones() {
+        // Measure 6 pt; words 3, 2, 2, 5 pt with 1 pt spaces. Greedy:
+        // [3 2] (slack 0) | [2] (4) | [5] -> 16. Better: [3] (3) |
+        // [2 2] (1) | [5] -> 10.
+        let items = words(&[3 * 64, 2 * 64, 2 * 64, 5 * 64]);
+        let breaks = min_ragged_breaks(&items, &[6 * 64], &lines(usize::MAX));
+        assert_eq!(line_words(&items, &breaks), vec![1, 2, 1]);
+    }
+
+    #[test]
+    fn a_word_wider_than_its_band_still_gets_a_line() {
+        let items = words(&[20 * 64, 3 * 64]);
+        let breaks = min_ragged_breaks(&items, &[640], &lines(usize::MAX));
+        assert_eq!(line_words(&items, &breaks), vec![1, 1]);
+    }
+
+    #[test]
+    fn the_last_line_costs_nothing() {
+        // One measure of 10: [4 4] then [4] — the short last line is free.
+        let items = words(&[4 * 64, 4 * 64, 4 * 64]);
+        let breaks = min_ragged_breaks(&items, &[640], &lines(usize::MAX));
+        assert_eq!(line_words(&items, &breaks), vec![2, 1]);
+    }
+
+    #[test]
+    fn overset_lines_cost_nothing() {
+        // Measure 6 pt, but only the first line is in the frame: fill it.
+        let items = words(&[3 * 64, 2 * 64, 2 * 64, 5 * 64]);
+        let breaks = min_ragged_breaks(&items, &[6 * 64], &lines(1));
+        assert_eq!(line_words(&items, &breaks), vec![2, 1, 1]);
+    }
+
+    #[test]
+    fn the_overrun_allowance_follows_the_last_word() {
+        // InDesign 20.0.1, Open Sans 12 pt (`ragged-squeeze-probe.json`):
+        // the allowance it measured, against the fit, in pt.
+        let pt = |word: f64, before: f64| {
+            overrun_allowance(12.0, (word * 64.0) as i64, (before * 64.0) as i64) as f64 / 64.0
+        };
+        for (word, before, measured) in [
+            (152.0098, 34.8515, 1.5370),
+            (34.6758, 126.6855, 0.3973),
+            (11.1094, 126.6855, 0.2673),
+            (22.2188, 294.2695, 0.3433),
+        ] {
+            let fit = pt(word, before);
+            assert!(
+                (fit - measured).abs() < 0.12,
+                "{word}/{before}: {fit} vs {measured}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_plain_frame_keeps_a_word_inside_its_allowance() {
+        // Two 34.7 pt words, as "never shrink" at 12 pt, whose last word
+        // InDesign keeps while the line overruns by 0.3755 pt: kept at
+        // 0.31 pt over, broken off at 0.63 pt.
+        let items = words(&[2223, 2219]);
+        let keep = RaggedLines {
+            overrun_size: Some(12.0),
+            ..lines(usize::MAX)
+        };
+        let natural = 2223 + 64 + 2219;
+        let one = min_ragged_breaks(&items, &[natural - 20], &keep);
+        assert_eq!(line_words(&items, &one), vec![2]);
+        let two = min_ragged_breaks(&items, &[natural - 40], &keep);
+        assert_eq!(line_words(&items, &two), vec![1, 1]);
+        // A shaped frame's squeeze prices the overrun instead: no
+        // shrinkable space, no overrun.
+        let shaped = min_ragged_breaks(&items, &[natural - 20], &lines(usize::MAX));
+        assert_eq!(line_words(&items, &shaped), vec![1, 1]);
+    }
+}

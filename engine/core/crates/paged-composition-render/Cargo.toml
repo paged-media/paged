@@ -1,0 +1,23 @@
+[package]
+name = "paged-composition-render"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Drive the compositor from a Composition (document.pgd) — regions -> SceneLayers -> raster. Format-neutral."
+
+[lints]
+workspace = true
+
+[dependencies]
+paged-composition = { path = "../paged-composition" }
+paged-flow = { path = "../paged-flow" }
+paged-compose = { path = "../paged-compose" }
+paged-gpu = { path = "../paged-gpu", features = ["cpu"] }
+image = { workspace = true }
+
+[dev-dependencies]
+# S7 — prove a composition survives the on-disk `document.pgd` JSON form and
+# renders identically after the round-trip.
+serde_json = "1"

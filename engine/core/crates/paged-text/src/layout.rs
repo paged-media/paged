@@ -1,0 +1,3683 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Positioned glyphs — the handoff format to the GPU rasterizer.
+//!
+//! Composes a paragraph into lines, shapes each line, and walks the
+//! glyphs to turn per-glyph advances into absolute (x, y) coordinates
+//! in 1/64 pt, frame-origin-relative.
+//!
+//! Alignment is a post-shape pass. Left/right/center shift each line's
+//! glyphs by a constant. Justify distributes the leftover width across
+//! the line's inter-word glue (glyphs whose cluster points at a
+//! whitespace byte in the source paragraph).
+
+use std::ops::Range;
+
+use paragraph_breaker::{Breakpoint, Item};
+
+use crate::compose::{compose_paragraph, ComposeOptions, TextShaper};
+use crate::shape::{
+    apply_tracking, shape_run, shape_run_with_features_at, Face, ShapedRun, ADVANCE_PRECISION,
+};
+
+/// Stretch of the finishing glue that ends every paragraph. Knuth–Plass
+/// gives the last line INFINITE stretch, so however short it is its
+/// adjustment ratio is 0 and it costs nothing. `paragraph_breaker`
+/// treats its `INFINITE_PENALTY` (10 000) as an ordinary stretch of
+/// 156 pt when it computes a ratio, so a short last line was scored
+/// like a badly loose one and the breaker preferred to lengthen it —
+/// hyphenating "car-ries" a line above where InDesign set "carries"
+/// whole (the annual's page 124 caption, 2026-09-06). A quarter of the
+/// `i32` range keeps the running stretch sum clear of overflow.
+pub(crate) const FINISHING_STRETCH: i32 = i32::MAX / 4;
+
+/// A glyph positioned in frame space, ready for rasterization.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PositionedGlyph {
+    pub glyph_id: u32,
+    /// Byte offset within the source paragraph.
+    pub cluster: u32,
+    /// Frame-origin-relative x, 1/64 pt.
+    pub x: i32,
+    /// Frame-origin-relative y (baseline + per-glyph y_offset), 1/64 pt.
+    pub y: i32,
+    /// Per-glyph horizontal advance, 1/64 pt. Carried so emission
+    /// can compute the right-edge of contiguous decoration runs
+    /// (underline / strikethrough) without re-shaping.
+    pub x_advance: i32,
+    /// Font id this glyph was shaped with. Single-font layouts
+    /// (`layout_paragraph`) leave this 0; multi-font layouts
+    /// (`layout_runs`) set it per run so the rasterizer can route
+    /// glyph outlining through the right face.
+    pub font_id: u32,
+    /// Point size this glyph was shaped at. Single-font layouts
+    /// leave this 0.0; multi-font layouts set it per run so emission
+    /// can scale outlines with the correct em ratio.
+    pub point_size: f32,
+    /// Underline / strikethrough flags lifted from the run.
+    /// Multi-font layouts (`layout_runs`) populate these from the
+    /// originating `StyledRun`. Single-font `layout_paragraph` leaves
+    /// them false.
+    pub underline: bool,
+    pub strikethru: bool,
+    /// The glyph was shaped with a *substituted* font — the resolver
+    /// couldn't serve the run's requested (family, style) and a
+    /// stand-in face was used. Flows from `StyledRun::substituted`
+    /// the same way `underline` does; leaders / synthetic glyphs stay
+    /// `false`. Drives the renderer's degraded-asset pink highlight.
+    pub substituted: bool,
+    /// IDML `HorizontalScale` as a multiplier (1.0 = identity). Drives
+    /// the glyph-emit affine x-scale so painted glyphs are stretched
+    /// to match the breaker's advance (P-08).
+    pub x_scale: f32,
+    /// IDML `VerticalScale` as a multiplier (1.0 = identity). Drives the
+    /// glyph-emit affine y-scale (twin of `x_scale`); scales glyph
+    /// height without changing the line's advance or leading.
+    pub y_scale: f32,
+    /// IDML `Skew` (false-italic shear) in degrees. Positive leans the
+    /// glyph tops to the right. Folded into the glyph-emit affine's `c`
+    /// (x-shear) term at paint time; 0.0 = upright. Like `y_scale` it
+    /// does not alter the advance or leading — pure paint-space shear.
+    pub skew_deg: f32,
+    /// Concept 3 (PDF export) — the source character at `cluster`,
+    /// captured at layout time (the only place the text is in
+    /// scope). Feeds the exporter's `/ToUnicode` CMap; rasterizers
+    /// ignore it. `None` for synthetic glyphs.
+    pub ch: Option<char>,
+    /// Set upright in vertical text: where its outline is drawn from,
+    /// relative to its vertical pen (see [`crate::shape::Upright`]). The
+    /// renderer turns the story's lines into columns; such a glyph is
+    /// drawn already turned back, so it stands upright in them.
+    pub upright: Option<crate::shape::Upright>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LaidOutLine {
+    pub byte_range: Range<usize>,
+    /// Baseline y, 1/64 pt, frame-origin-relative.
+    pub baseline_y: i32,
+    /// `baseline_y` before rounding: the exact sum of the leadings above
+    /// the line (see [`LayoutOptions::leading_override_exact`]).
+    pub baseline_exact: f64,
+    /// Natural (unjustified) width of the line, 1/64 pt.
+    pub width: i32,
+    /// Paragraph-breaker ratio. 0 = natural, >0 = stretched (would be
+    /// justified), <0 = shrunk.
+    pub ratio: f32,
+    pub glyphs: Vec<PositionedGlyph>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LaidOutParagraph {
+    pub lines: Vec<LaidOutLine>,
+}
+
+/// Paragraph-level horizontal alignment.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum Alignment {
+    #[default]
+    Left,
+    Right,
+    Center,
+    /// Justified — every line but the last distributes its extra width
+    /// across its word spaces; the last line is set by
+    /// [`LayoutOptions::last_line_alignment`].
+    Justify,
+}
+
+/// Phase 7 — paragraph base writing direction. Drives the Unicode
+/// Bidirectional Algorithm (UAX #9). `Auto` lets `unicode-bidi`
+/// infer from the first strong character; `Ltr` / `Rtl` force a
+/// base direction even when the text has no strong characters.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum BidiDirection {
+    /// Force left-to-right base direction. Today's pre-BiDi
+    /// implicit behaviour.
+    #[default]
+    Ltr,
+    /// Force right-to-left base direction. Paragraph-level RTL
+    /// mark; glyphs flip their visual order on each line.
+    Rtl,
+    /// Infer from the first strong character (LRE / RLE per UAX #9).
+    Auto,
+}
+
+#[derive(Debug, Clone)]
+pub struct LayoutOptions<'a> {
+    pub compose: ComposeOptions<'a>,
+    /// Distance between baselines, 1/64 pt.
+    pub line_height: i32,
+    /// Offset of the first baseline from the top of the paragraph box,
+    /// 1/64 pt.
+    pub first_baseline: i32,
+    /// Horizontal alignment. Left by default.
+    pub alignment: Alignment,
+    /// When `Some`, every line's height is forced to this value
+    /// (1/64 pt) instead of being computed from glyph point sizes
+    /// (auto leading). Mirrors IDML's explicit `Leading` attribute on
+    /// the leading run of a paragraph.
+    pub leading_override: Option<i32>,
+    /// `leading_override` before it was rounded to 1/64 pt. A line's
+    /// baseline is the exact sum of the leadings above it, rounded once:
+    /// InDesign steps 12 pt auto-leaded lines 14.4 pt apart, and summing
+    /// `round(14.4 x 64)` = 14.40625 drifted them 0.3 pt down a page.
+    /// `None`: `leading_override` is exact as it stands. Auto leading
+    /// (1.2 x a size) is always taken exactly.
+    pub leading_override_exact: Option<f64>,
+    /// `line_height` before it was rounded, 1/64 pt (1.2 x the size from
+    /// [`LayoutOptions::new`]). Ignored unless it rounds to `line_height`.
+    pub line_height_exact: Option<f64>,
+    /// `first_baseline` before it was rounded, 1/64 pt, so a paragraph
+    /// continues the exact baseline sum of the ones above it. Ignored
+    /// unless it rounds to `first_baseline`.
+    pub first_baseline_exact: Option<f64>,
+    /// The leading each run asks for, when the paragraph's runs do NOT
+    /// agree: `(the run's first byte in the paragraph text, its explicit
+    /// leading in 1/64 pt)`, in text order; `None` is auto leading
+    /// (1.2 x the size). A line then takes the LARGEST leading among its
+    /// characters ([`line_leading`]), as InDesign sets it (measured,
+    /// `mixed-leading`). Empty when every run agrees: `leading_override`
+    /// (or auto leading) then covers every line.
+    pub run_leadings: Vec<(u32, Option<i32>)>,
+    /// Auto leading ignores glyphs whose cluster lies before this byte.
+    /// A list marker is shaped as the paragraph's first bytes, and
+    /// InDesign does not let it raise the line: a 20 pt marker on 10 pt
+    /// auto-leaded text keeps the 12 pt leading (`list-marker-styles`
+    /// m14/m15). `0` lets every glyph count.
+    pub auto_leading_from_byte: u32,
+    /// Byte ranges of the paragraph text set with `NoBreak`: no line
+    /// breaks inside one, at a space or a hyphenation point
+    /// (`paragraph-attrs` E, ADR 153).
+    pub no_break: Vec<std::ops::Range<u32>>,
+    /// Auto leading as a multiple of a line's largest size: the
+    /// paragraph's `AutoLeading` over 100 (InDesign's 120 % ⇒ 1.2; a
+    /// 14 pt word on a 175 % paragraph leads its line 24.5 pt,
+    /// `paragraph-attrs` A4, ADR 153).
+    pub auto_leading: f32,
+    /// Justify the LAST line too, under [`Alignment::Justify`]. InDesign
+    /// does for a line ending in a forced line break (U+2028): it ends
+    /// the line, not the paragraph, so the line keeps full measure.
+    pub justify_last_line: bool,
+    /// How a justified paragraph ([`Alignment::Justify`]) sets its LAST
+    /// line; ragged alignments ignore it. InDesign 20.0.1
+    /// (`justification`): Left-, Center- and RightJustified break alike
+    /// and set the last line at natural spacing, flush left, centred or
+    /// flush right — `Left`, `Center`, `Right`; FullyJustified stretches
+    /// it to the measure as well — `Justify` — letter-spacing it when it
+    /// is one word.
+    pub last_line_alignment: Alignment,
+    /// How a justified paragraph sets a line other than its last that
+    /// holds one word, with no space to stretch
+    /// (`SingleWordJustification`): `Justify` letter-spaces it to the
+    /// measure, InDesign's default; the others place it ragged
+    /// (`paragraph-attrs` B, ADR 153).
+    pub single_word_alignment: Alignment,
+    /// The paragraph's tab stops, when the composer should measure each
+    /// tab at the width it takes on its line (see [`TabLayout`]). `None`
+    /// measures a tab as its glyph's own advance and leaves the snapping
+    /// to a later [`apply_tab_stops`] pass.
+    pub tabs: Option<TabLayout>,
+    /// The advance (1/64 pt) of each [`OBJECT_REPLACEMENT`] character in
+    /// the paragraph's text, in text order: the width an inline anchored
+    /// object takes in its line, where InDesign sets it like a glyph.
+    /// Replacement characters past the list keep their shaped advance.
+    pub object_advances: Vec<i32>,
+    /// Ruby bases spaced out to a ruby wider than they are: the space set
+    /// before and after each base character (see [`RubyAki`]).
+    pub ruby_aki: Vec<RubyAki>,
+    /// The paragraph is set vertically: its characters that stand upright
+    /// are shaped top to bottom ([`crate::shape::shape_run_vertical_at`]),
+    /// and the renderer turns its lines into columns.
+    pub vertical: bool,
+}
+
+/// How a ruby base is spaced out to a ruby wider than it is, as the
+/// renderer worked it out from the ruby's settings (`pipeline::ruby`):
+/// the space before and after each base character, 1/64 pt. InDesign
+/// spaces a base differently where it starts or ends a line, which the
+/// breaker cannot know ahead, so there are four variants — mid-line,
+/// starting a line, ending one, and both ([`ruby_edge`] picks one). The
+/// breaker measures the mid-line one; each line then takes its own.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RubyAki {
+    /// The base characters' bytes in the paragraph's text, in order.
+    pub chars: Vec<std::ops::Range<u32>>,
+    /// `(before, after)` per base character, for the base mid-line, at a
+    /// line's start, at its end, and alone on its line.
+    pub variants: [Vec<(i32, i32)>; 4],
+}
+
+impl RubyAki {
+    fn space_of(&self, variant: usize, byte: u32) -> Option<(i32, i32)> {
+        let i = self.chars.iter().position(|r| r.contains(&byte))?;
+        self.variants[variant].get(i).copied()
+    }
+}
+
+/// Which of [`RubyAki::variants`] a ruby base on a line takes: 1 when its
+/// first character starts the line (`line_start`, the line's first byte
+/// after leading spaces), 2 when its last ends it (`content_end`, past the
+/// line's last byte before trailing spaces and breaks), 3 for both, 0
+/// otherwise.
+pub fn ruby_edge(chars: &[std::ops::Range<u32>], line_start: u32, content_end: u32) -> usize {
+    let starts = chars.first().is_some_and(|r| r.start == line_start);
+    let ends = chars.last().is_some_and(|r| r.end == content_end);
+    usize::from(starts) + 2 * usize::from(ends)
+}
+
+/// Past a line's last byte that is not a space, a tab or a line or
+/// paragraph break.
+pub fn line_content_end(text: &str, range: std::ops::Range<usize>) -> usize {
+    let line = text.get(range.clone()).unwrap_or("");
+    let kept = line
+        .trim_end_matches(|c: char| c.is_ascii_whitespace() || c == '\u{2028}' || c == '\u{2029}');
+    range.start + kept.len()
+}
+
+/// U+FFFC OBJECT REPLACEMENT CHARACTER: the character an inline anchored
+/// object occupies in its line ([`LayoutOptions::object_advances`]).
+pub const OBJECT_REPLACEMENT: char = '\u{FFFC}';
+
+/// What the composer needs to set a tab where it will actually land:
+/// the stops, the default-stop grid, and where each line starts.
+///
+/// A tab's width depends on the pen position, so it is line-local — the
+/// break decision of a line holding a tab depends on where the line
+/// starts. Positions are in the same frame-relative space the stops are
+/// (`TabStopSpec::position_pt`), so `line_starts_64[i]` is the x the
+/// renderer will shift line `i` to after composing (left indent, the
+/// first line's indent, a drop cap's carve, a wrap's shift).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TabLayout {
+    pub stops: Vec<TabStopSpec>,
+    pub default_stop_pt: f32,
+    /// x of each line's start, 1/64 pt; the last entry repeats.
+    pub line_starts_64: Vec<i32>,
+}
+
+impl TabLayout {
+    fn line_start(&self, line: usize) -> i32 {
+        self.line_starts_64
+            .get(line)
+            .or(self.line_starts_64.last())
+            .copied()
+            .unwrap_or(0)
+    }
+}
+
+impl LayoutOptions<'_> {
+    /// Convenience constructor from point-unit inputs. Uses 1.2×
+    /// point_size as the default line height (common InDesign default
+    /// for Auto leading) and `0.8 × point_size` for the first baseline.
+    pub fn new(column_width_pt: f32, point_size: f32) -> Self {
+        let line_height = (point_size * 1.2 * ADVANCE_PRECISION).round() as i32;
+        let first_baseline = (point_size * 0.8 * ADVANCE_PRECISION).round() as i32;
+        Self {
+            compose: ComposeOptions::new(column_width_pt),
+            line_height,
+            first_baseline,
+            leading_override: None,
+            leading_override_exact: None,
+            line_height_exact: Some(point_size as f64 * 1.2 * ADVANCE_PRECISION as f64),
+            first_baseline_exact: None,
+            run_leadings: Vec::new(),
+            auto_leading_from_byte: 0,
+            no_break: Vec::new(),
+            auto_leading: 1.2,
+            alignment: Alignment::Left,
+            justify_last_line: false,
+            last_line_alignment: Alignment::Left,
+            single_word_alignment: Alignment::Justify,
+            tabs: None,
+            object_advances: Vec::new(),
+            ruby_aki: Vec::new(),
+            vertical: false,
+        }
+    }
+}
+
+/// Lay out `text` through `shaper` (which provides both widths for the
+/// composer and glyph outlines for positioning).
+pub fn layout_paragraph<S: TextShaper>(
+    text: &str,
+    shaper: &S,
+    options: &LayoutOptions,
+) -> LaidOutParagraph {
+    let composed = compose_paragraph(text, shaper, &options.compose);
+    let last_index = composed.len().saturating_sub(1);
+    let mut lines = Vec::with_capacity(composed.len());
+    let mut baseline = options.first_baseline;
+    let mut exact = options.first_baseline_exact();
+
+    for (i, line) in composed.iter().enumerate() {
+        let slice = &text[line.byte_range.clone()];
+        // For hyphenated lines we shape `slice + "-"` so the trailing
+        // hyphen sits in the same shaping context as the word part
+        // (some fonts apply contextual kerning to "-"). The hyphen
+        // glyph carries the `cluster` of the line's last byte so
+        // run-paint pickers attribute it to the word, not the next.
+        let owned;
+        let to_shape: &str = if line.ends_with_hyphen {
+            owned = format!("{slice}-");
+            &owned
+        } else {
+            slice
+        };
+        let shaped = shaper.shape(to_shape);
+        let mut glyphs = position_line(&shaped, 0, baseline, line.byte_range.start as u32);
+        if line.ends_with_hyphen {
+            // The last glyph corresponds to the synthetic "-" — pin
+            // its cluster to the line's last source byte so it picks
+            // up the right run paint and doesn't claim a cluster
+            // beyond the line's byte range.
+            if let Some(last) = glyphs.last_mut() {
+                last.cluster = line.byte_range.end.saturating_sub(1) as u32;
+            }
+        }
+        apply_alignment(
+            &mut glyphs,
+            shaped.total_advance,
+            options.column_width(),
+            options.alignment,
+            options.last_line_setting(i == last_index),
+            options.single_word_alignment,
+            text.as_bytes(),
+            false,
+            options.compose.single_line.is_some(),
+            false,
+        );
+        lines.push(LaidOutLine {
+            byte_range: line.byte_range.clone(),
+            baseline_y: baseline,
+            baseline_exact: exact,
+            width: shaped.total_advance,
+            ratio: line.ratio,
+            glyphs,
+        });
+        exact += options.line_height as f64;
+        baseline = exact.round() as i32;
+    }
+
+    LaidOutParagraph { lines }
+}
+
+impl LayoutOptions<'_> {
+    /// The first baseline, exactly when the caller gave it exactly
+    /// ([`Self::first_baseline_exact`]), in 1/64 pt.
+    pub fn first_baseline_exact(&self) -> f64 {
+        self.first_baseline_exact
+            .filter(|e| e.round() as i32 == self.first_baseline)
+            .unwrap_or(self.first_baseline as f64)
+    }
+
+    /// The paragraph's leading, exactly: the override when there is one,
+    /// else `line_height`, in 1/64 pt.
+    pub fn paragraph_leading_exact(&self) -> f64 {
+        match self.leading_override {
+            Some(l) => self
+                .leading_override_exact
+                .filter(|e| e.round() as i32 == l)
+                .unwrap_or(l as f64),
+            None => self
+                .line_height_exact
+                .filter(|e| e.round() as i32 == self.line_height)
+                .unwrap_or(self.line_height as f64),
+        }
+    }
+
+    /// Column width in 1/64 pt (convenience for layout passes).
+    pub fn column_width(&self) -> i32 {
+        self.compose.column_width
+    }
+
+    /// How a justified paragraph sets this line when it is its last
+    /// (`None` for any other line, and for the line a forced line break
+    /// ends, which keeps full measure).
+    fn last_line_setting(&self, is_last: bool) -> Option<Alignment> {
+        (is_last && !self.justify_last_line).then_some(self.last_line_alignment)
+    }
+}
+
+/// Walk a `ShapedRun`'s advances and turn them into absolute positions.
+///
+/// `start_x` and `baseline_y` are in 1/64 pt, frame-origin-relative.
+/// `cluster_base` is added to each glyph's intra-slice cluster so the
+/// output carries byte offsets back into the source paragraph.
+pub fn position_line(
+    shaped: &ShapedRun,
+    start_x: i32,
+    baseline_y: i32,
+    cluster_base: u32,
+) -> Vec<PositionedGlyph> {
+    let mut out = Vec::with_capacity(shaped.glyphs.len());
+    let mut pen_x = start_x;
+    for g in &shaped.glyphs {
+        out.push(PositionedGlyph {
+            glyph_id: g.glyph_id,
+            cluster: cluster_base + g.cluster,
+            x: pen_x + g.x_offset,
+            y: baseline_y + g.y_offset,
+            x_advance: g.x_advance,
+            ch: None,
+            font_id: 0,
+            point_size: 0.0,
+            underline: false,
+            strikethru: false,
+            substituted: false,
+            x_scale: 1.0,
+            y_scale: 1.0,
+            skew_deg: 0.0,
+            upright: None,
+        });
+        pen_x += g.x_advance;
+    }
+    out
+}
+
+/// Shift / justify a line's glyphs in-place.
+///
+/// `natural_width` is the sum of advances (= `ShapedRun::total_advance`).
+/// `column_width` is the target column width. Both in 1/64 pt.
+///
+/// For `Justify`, `last_line` carries how the paragraph sets the line
+/// when it is its last ([`LayoutOptions::last_line_alignment`]); `None`
+/// stretches it like any other.
+///
+/// `tabs_set`: the line's tabs already stand at their stops
+/// ([`LayoutOptions::tabs`]), so a flush-right or centred line moves only
+/// the text after its last tab (`shift_ragged`).
+#[allow(clippy::too_many_arguments)]
+fn apply_alignment(
+    glyphs: &mut [PositionedGlyph],
+    natural_width: i32,
+    column_width: i32,
+    alignment: Alignment,
+    last_line: Option<Alignment>,
+    single_word: Alignment,
+    paragraph_bytes: &[u8],
+    squeeze_ragged: bool,
+    squeeze_justified: bool,
+    tabs_set: bool,
+) {
+    if glyphs.is_empty() || column_width <= 0 {
+        return;
+    }
+    let mut extra = column_width - natural_width;
+    // A justified line the Single-line Composer set over its measure was
+    // chosen for its compressed spacing: squeeze its spaces onto it, the
+    // last line too (`single_line.rs`).
+    if squeeze_justified && alignment == Alignment::Justify && extra < 0 {
+        spread_spaces(glyphs, extra, paragraph_bytes);
+        return;
+    }
+    // A ragged line the minimum-raggedness breaker chose to set over its
+    // measure has its word spaces squeezed onto it (`ragged.rs`).
+    if squeeze_ragged && alignment != Alignment::Justify && extra < 0 {
+        spread_spaces(glyphs, extra, paragraph_bytes);
+        extra = 0;
+    }
+    match (alignment, last_line) {
+        (Alignment::Justify, Some(Alignment::Justify)) => {
+            // FullyJustified: the last line reaches the measure too, a
+            // one-word line by its letters (InDesign 20.0.1,
+            // `justification` 1.26 / 1.28: "extraordinarily" 4.57 pt and
+            // "Typography" 8.47 pt between letters).
+            if extra > 0 && !spread_spaces(glyphs, extra, paragraph_bytes) {
+                spread_letters(glyphs, extra);
+            }
+        }
+        (Alignment::Justify, Some(last)) => {
+            shift_ragged(glyphs, extra, last, paragraph_bytes, tabs_set)
+        }
+        (Alignment::Justify, None) => {
+            if extra > 0 && !spread_spaces(glyphs, extra, paragraph_bytes) {
+                match single_word {
+                    Alignment::Justify => spread_letters(glyphs, extra),
+                    ragged => shift_ragged(glyphs, extra, ragged, paragraph_bytes, tabs_set),
+                }
+            }
+        }
+        (ragged, _) => shift_ragged(glyphs, extra, ragged, paragraph_bytes, tabs_set),
+    }
+}
+
+/// Place a line that does not fill its measure: flush left, flush right
+/// (`extra` to the right) or centred (half of it).
+///
+/// With its tabs set at their stops (`tabs_set`), only the text after the
+/// line's last tab moves; what comes before stays where its tabs put it.
+/// InDesign 20.0.1 (`tools/indesign-export/footnote-paragraphs-probe`,
+/// `right` and `center`: "1", a tab, then text): the number stays at the
+/// line's start and the text after the tab ends at the measure, or is
+/// centred between its stop and the measure's end.
+fn shift_ragged(
+    glyphs: &mut [PositionedGlyph],
+    extra: i32,
+    alignment: Alignment,
+    paragraph_bytes: &[u8],
+    tabs_set: bool,
+) {
+    let shift = match alignment {
+        Alignment::Left | Alignment::Justify => return,
+        Alignment::Right => extra,
+        Alignment::Center => extra / 2,
+    };
+    let first = if tabs_set {
+        glyphs
+            .iter()
+            .rposition(|g| paragraph_bytes.get(g.cluster as usize) == Some(&b'\t'))
+            .map_or(0, |t| t + 1)
+    } else {
+        0
+    };
+    for g in glyphs[first..].iter_mut() {
+        g.x += shift;
+    }
+}
+
+/// Spread `extra` (1/64 pt) over the gaps between the line's characters,
+/// so its last glyph moves by exactly `extra`: a glyph that starts a new
+/// cluster opens a gap, so a mark stays on its base.
+fn spread_letters(glyphs: &mut [PositionedGlyph], extra: i32) {
+    let gaps = glyphs
+        .windows(2)
+        .filter(|w| w[1].cluster != w[0].cluster)
+        .count() as i32;
+    if gaps == 0 {
+        return;
+    }
+    let per_gap = extra / gaps;
+    let remainder = extra - per_gap * gaps;
+    let mut shift = 0i32;
+    let mut seen = 0i32;
+    for i in 1..glyphs.len() {
+        if glyphs[i].cluster != glyphs[i - 1].cluster {
+            shift += per_gap + i32::from(seen < remainder.abs()) * remainder.signum();
+            seen += 1;
+        }
+        glyphs[i].x += shift;
+    }
+}
+
+/// Spread `extra` (1/64 pt; negative squeezes) over the line's word
+/// spaces, so its last glyph moves by exactly `extra`. `false` when the
+/// line has no word space to spread it over.
+fn spread_spaces(glyphs: &mut [PositionedGlyph], extra: i32, paragraph_bytes: &[u8]) -> bool {
+    // Only the glue after the line's last tab stretches: what
+    // precedes it is pinned by the stop (measured on `tab-breaks`
+    // c09/c10, InDesign 20.0.1: the spaces before the tab keep
+    // their natural width, those after it fill the line).
+    let first = glyphs
+        .iter()
+        .rposition(|g| paragraph_bytes.get(g.cluster as usize) == Some(&b'\t'))
+        .map_or(1, |t| t + 1);
+    // Count glyphs whose cluster points at a whitespace byte
+    // (skipping the first glyph so we don't indent the line).
+    let space_count = glyphs
+        .iter()
+        .skip(first)
+        .filter(|g| is_ws_at(paragraph_bytes, g.cluster as usize))
+        .count() as i32;
+    if space_count == 0 {
+        return false;
+    }
+    let per_space = extra / space_count;
+    let remainder = extra - per_space * space_count;
+    // Walk glyphs left-to-right, accumulating a shift as each
+    // space is encountered. Integer division leaves a small
+    // remainder which we bleed into the first few spaces so
+    // the last glyph lands exactly on the column edge.
+    let mut shift = 0i32;
+    let mut spaces_seen = 0i32;
+    for (i, g) in glyphs.iter_mut().enumerate() {
+        if i >= first && is_ws_at(paragraph_bytes, g.cluster as usize) {
+            let bleed = if spaces_seen < remainder.abs() {
+                remainder.signum()
+            } else {
+                0
+            };
+            shift += per_space + bleed;
+            spaces_seen += 1;
+        }
+        g.x += shift;
+    }
+    true
+}
+
+fn is_ws_at(bytes: &[u8], i: usize) -> bool {
+    matches!(
+        bytes.get(i),
+        Some(b' ') | Some(b'\t') | Some(b'\n') | Some(b'\r')
+    )
+}
+
+/// One styled run inside a paragraph. The pipeline assembles a
+/// `Vec<StyledRun>` per paragraph; `layout_runs` shapes each run
+/// with its own face, drives the line breaker against the
+/// concatenated advances, and tags every output glyph with
+/// the run's `font_id` and `point_size` so emission can route
+/// outlining through the right face.
+pub struct StyledRun<'a> {
+    pub text: &'a str,
+    pub face: &'a Face<'a>,
+    pub point_size: f32,
+    pub tracking: Option<f32>,
+    pub font_id: u32,
+    pub underline: bool,
+    pub strikethru: bool,
+    /// The run's font is a substitute for its requested (family,
+    /// style) — traced from the asset-resolver seam. Copied onto every
+    /// output glyph (`PositionedGlyph::substituted`), mirroring how
+    /// `underline` flows.
+    pub substituted: bool,
+    /// IDML `BaselineShift` in pt. Positive lifts glyphs above the
+    /// baseline; negative drops them. Applied per-glyph after layout
+    /// so the line height (computed from font metrics + leading)
+    /// stays unchanged.
+    pub baseline_shift_pt: f32,
+    /// IDML `HorizontalScale` percentage (100 = identity). Folded
+    /// into the shaped glyph x-advances so the breaker sees the
+    /// requested glyph width (P-08).
+    pub horizontal_scale_pct: f32,
+    /// IDML `VerticalScale` percentage (100 = identity). Twin of
+    /// `horizontal_scale_pct`, but vertical scale does **not** change
+    /// the advance/leading, so it is carried straight through to the
+    /// per-glyph emit affine as `y_scale` rather than folded into
+    /// shaping.
+    pub vertical_scale_pct: f32,
+    /// IDML `Skew` (false-italic shear) in degrees. Carried straight
+    /// through to each glyph's `skew_deg`; folded into the emit affine's
+    /// x-shear at paint time. Like vertical scale it does not affect
+    /// shaping/advance, so it never reaches the breaker.
+    pub skew_deg: f32,
+    /// Per-cluster glyph-fallback faces. When `face` shapes a cluster
+    /// to `.notdef` (glyph id 0), the composer retries that cluster
+    /// against each face in this slice in order, taking the first
+    /// shape whose glyphs are all non-notdef (P-20). Empty slice =
+    /// no per-cluster fallback (the legacy behaviour).
+    pub fallback_faces: &'a [&'a Face<'a>],
+    /// Phase 4 typography — OpenType feature toggles. Default
+    /// (`ShapingFeatures::default()`) means the shaper's standard
+    /// behaviour (kern + liga on). When the IDML carries
+    /// `LigaturesOn="false"` or `KerningMethod="None"`, callers set
+    /// the relevant fields so `shape_run` opts out of those features.
+    pub shaping_features: crate::shape::ShapingFeatures,
+}
+
+/// Multi-font flavour of [`layout_paragraph`].
+///
+/// Pre-shapes each run with its own face (so advances reflect the
+/// run's font + size), runs paragraph-breaker on the concatenated
+/// item stream, and slices the resulting glyphs back per line. Every
+/// `PositionedGlyph` carries the originating run's `font_id` and
+/// `point_size`.
+///
+/// Hyphenation is intentionally not threaded through here yet —
+/// `layout_paragraph` keeps that path while this batch lands.
+/// Shape `text` against `primary`; for any cluster the primary
+/// shapes to `.notdef` (glyph id 0), retry that cluster's source
+/// substring against each fallback face in order, taking the first
+/// shape whose glyphs are all non-notdef. Used by `layout_runs` when
+/// `StyledRun::fallback_faces` is non-empty (P-20).
+fn shape_with_per_cluster_fallback(
+    primary: &Face,
+    fallbacks: &[&Face],
+    text: &str,
+    point_size: f32,
+    mut pen: f64,
+) -> ShapedRun {
+    let primary_shape = shape_run_with_features_at(
+        primary,
+        text,
+        point_size,
+        crate::shape::ShapingFeatures::default(),
+        &mut pen,
+    );
+    if primary_shape.glyphs.iter().all(|g| g.glyph_id != 0) {
+        return primary_shape;
+    }
+    // Group glyphs by cluster; for each cluster, decide whether to
+    // keep the primary's glyphs or substitute a fallback's glyphs.
+    // Walk clusters in declaration order; cluster ranges are the
+    // monotonic spans between consecutive distinct `cluster` values.
+    let bytes = text.as_bytes();
+    // Build a list of (cluster, end_cluster) for each contiguous
+    // glyph group. End is exclusive — the byte range fed to the
+    // fallback shaper.
+    let mut groups: Vec<(usize, usize, Vec<usize>)> = Vec::new();
+    let mut i = 0usize;
+    while i < primary_shape.glyphs.len() {
+        let start_cluster = primary_shape.glyphs[i].cluster as usize;
+        let mut j = i;
+        while j < primary_shape.glyphs.len()
+            && (primary_shape.glyphs[j].cluster as usize) == start_cluster
+        {
+            j += 1;
+        }
+        let next_cluster = if j < primary_shape.glyphs.len() {
+            primary_shape.glyphs[j].cluster as usize
+        } else {
+            bytes.len()
+        };
+        groups.push((start_cluster, next_cluster, (i..j).collect()));
+        i = j;
+    }
+    let mut out_glyphs: Vec<crate::shape::ShapedGlyph> =
+        Vec::with_capacity(primary_shape.glyphs.len());
+    let mut total: i32 = 0;
+    for (start, end, idxs) in groups {
+        let group_has_notdef = idxs.iter().any(|&i| primary_shape.glyphs[i].glyph_id == 0);
+        if !group_has_notdef || start >= end || end > bytes.len() {
+            for k in &idxs {
+                let g = primary_shape.glyphs[*k];
+                total = total.saturating_add(g.x_advance);
+                out_glyphs.push(g);
+            }
+            continue;
+        }
+        let sub = &text[start..end];
+        let mut chosen = None;
+        for fb in fallbacks {
+            let fb_shape = shape_run(fb, sub, point_size);
+            if fb_shape.glyphs.iter().all(|g| g.glyph_id != 0) {
+                chosen = Some(fb_shape);
+                break;
+            }
+        }
+        match chosen {
+            Some(fb_shape) => {
+                for g in fb_shape.glyphs {
+                    // Re-anchor the cluster offset to the primary's
+                    // source space so downstream byte-range logic
+                    // (line splitting, hyphenation) lines up.
+                    let rebased = crate::shape::ShapedGlyph {
+                        cluster: g.cluster + start as u32,
+                        ..g
+                    };
+                    total = total.saturating_add(rebased.x_advance);
+                    out_glyphs.push(rebased);
+                }
+            }
+            None => {
+                for k in &idxs {
+                    let g = primary_shape.glyphs[*k];
+                    total = total.saturating_add(g.x_advance);
+                    out_glyphs.push(g);
+                }
+            }
+        }
+    }
+    ShapedRun {
+        glyphs: out_glyphs,
+        total_advance: total,
+    }
+}
+
+/// Phase 7 — Mojikumi half-width pass. Halves the `x_advance` of
+/// shaped glyphs whose source cluster lies on a CJK punctuation
+/// character (opening / closing brackets, comma, period, ideographic
+/// space). Updates `total_advance` to keep the run's running width
+/// consistent.
+///
+/// The MVP applies a single uniform "trim to half" rule rather than
+/// implementing InDesign's full Mojikumi table machinery (per-
+/// adjacency rules across ~20 character classes). It produces
+/// visibly tighter CJK composition that doesn't regress for
+/// non-CJK text (the rule only fires on the explicit punctuation
+/// set below).
+pub fn apply_mojikumi_half_width(shape: &mut ShapedRun, text: &str) {
+    use crate::compose::kinsoku;
+    let bytes = text.as_bytes();
+    let mut total: i32 = 0;
+    for g in shape.glyphs.iter_mut() {
+        let cluster = g.cluster as usize;
+        // Resolve the leading char at this cluster's byte offset.
+        let ch = bytes
+            .get(cluster..)
+            .and_then(|s| std::str::from_utf8(s).ok())
+            .and_then(|s| s.chars().next());
+        if let Some(c) = ch {
+            // Halve when char is either a no-start (closing) or
+            // no-end (opening) CJK punctuation. The kinsoku tables
+            // already enumerate the JIS-derived set we want; reuse
+            // them so the same characters drive both kinsoku break
+            // suppression and mojikumi width tightening.
+            if kinsoku::is_no_start(c) || kinsoku::is_no_end(c) {
+                g.x_advance /= 2;
+            }
+        }
+        total = total.saturating_add(g.x_advance);
+    }
+    shape.total_advance = total;
+}
+
+/// The font's kerning between the last character of run `a` and the first
+/// of `b` (1/64 pt, unrounded), where the two differ in nothing the shaper
+/// sees: shaped together, the pair sets this much tighter (or looser) than
+/// its two characters shaped apart.
+fn boundary_kern(a: &StyledRun, b: &StyledRun, vertical: bool) -> Option<f64> {
+    if a.font_id != b.font_id
+        || !std::ptr::eq(a.face, b.face)
+        || a.point_size != b.point_size
+        || a.shaping_features != b.shaping_features
+        || a.horizontal_scale_pct != b.horizontal_scale_pct
+    {
+        return None;
+    }
+    let last = a.text.chars().next_back()?;
+    let first = b.text.chars().next()?;
+    if [last, first]
+        .iter()
+        .any(|c| c.is_control() || matches!(c, '\u{2028}' | '\u{2029}'))
+    {
+        return None;
+    }
+    let exact = |text: &str| {
+        let mut pen = 0.0;
+        if vertical {
+            crate::shape::shape_run_vertical_at(
+                a.face,
+                text,
+                a.point_size,
+                a.shaping_features,
+                &mut pen,
+            );
+        } else {
+            shape_run_with_features_at(a.face, text, a.point_size, a.shaping_features, &mut pen);
+        }
+        pen
+    };
+    let pair: String = [last, first].iter().collect();
+    let kern =
+        exact(&pair) - exact(last.encode_utf8(&mut [0; 4])) - exact(first.encode_utf8(&mut [0; 4]));
+    (kern.abs() > 1e-3).then_some(kern)
+}
+
+pub fn layout_runs(runs: &[StyledRun], options: &LayoutOptions) -> LaidOutParagraph {
+    if runs.is_empty() {
+        return LaidOutParagraph { lines: Vec::new() };
+    }
+
+    // 1. Concatenate run text and remember the byte offset where
+    // each run starts. Then shape every run with its face so the
+    // glyph advances reflect that run's font.
+    let mut paragraph_text = String::new();
+    let mut run_starts = Vec::with_capacity(runs.len());
+    let mut run_shapes: Vec<ShapedRun> = Vec::with_capacity(runs.len());
+    // Per run, per glyph: the space tracking and letter spacing add after
+    // the glyph (1/64 pt, already in its advance). InDesign adds neither
+    // after a line's last character, so the breaker and the line
+    // assembly below take it back there.
+    let mut run_spacing: Vec<Vec<i32>> = Vec::with_capacity(runs.len());
+    // The paragraph's exact pen across its runs: each run's advances are
+    // rounded against it (`shape_run_with_features_at`), so two adjacent
+    // runs that differ in nothing the shaper sees set as one run would.
+    let mut pen = 0.0_f64;
+    for (i, r) in runs.iter().enumerate() {
+        run_starts.push(paragraph_text.len());
+        paragraph_text.push_str(r.text);
+        // Two such runs also kern across their boundary as one run would:
+        // InDesign 20.0.1 kerns す。 1.4 pt closer where each character
+        // carries an emphasis mark of its own
+        // (tools/indesign-export/vertical-text-probe, `kenten-shapes`).
+        if let Some(kern) = i
+            .checked_sub(1)
+            .and_then(|p| boundary_kern(&runs[p], r, options.vertical))
+        {
+            if let Some(last) = run_shapes.last_mut() {
+                let factor = r.horizontal_scale_pct as f64 / 100.0;
+                let before = pen.round() as i32;
+                pen += kern;
+                let delta = if (factor - 1.0).abs() > 0.0005 {
+                    (kern * factor).round() as i32
+                } else {
+                    pen.round() as i32 - before
+                };
+                if let Some(g) = last.glyphs.last_mut() {
+                    g.x_advance += delta;
+                    last.total_advance += delta;
+                }
+            }
+        }
+        let run_pen = pen;
+        let mut s = if options.vertical {
+            crate::shape::shape_run_vertical_at(
+                r.face,
+                r.text,
+                r.point_size,
+                r.shaping_features,
+                &mut pen,
+            )
+        } else {
+            shape_run_with_features_at(r.face, r.text, r.point_size, r.shaping_features, &mut pen)
+        };
+        // P-20: per-cluster glyph fallback. When the primary face
+        // shapes a cluster to `.notdef` (glyph id 0), retry that
+        // cluster's source bytes against each fallback face in turn
+        // and substitute the first all-non-notdef result. The
+        // run-level fallback only covers "primary face missing"; this
+        // covers "primary face present but glyph missing".
+        if !r.fallback_faces.is_empty() && s.glyphs.iter().any(|g| g.glyph_id == 0) {
+            s = shape_with_per_cluster_fallback(
+                r.face,
+                r.fallback_faces,
+                r.text,
+                r.point_size,
+                run_pen,
+            );
+        }
+        let natural: Vec<i32> = s.glyphs.iter().map(|g| g.x_advance).collect();
+        if let Some(t) = r.tracking {
+            apply_tracking(&mut s, t, r.point_size);
+        }
+        // `DesiredLetterSpacing` is a percentage of the run's own space
+        // width (InDesign 20.0.1: 50 at 20 pt Open Sans adds 2.598 pt, half
+        // its 5.195 pt space), added like tracking.
+        let letter_spacing = if options.compose.letter_spacing_pct != 0.0 {
+            let space = shape_run(r.face, " ", r.point_size).total_advance;
+            space as f64 * options.compose.letter_spacing_pct as f64 / 100.0
+        } else {
+            0.0
+        };
+        // HorizontalScale folds into the per-glyph x_advance so the
+        // breaker sees the requested width directly (P-08). The
+        // glyph-emit affine also needs a matching x-scale so painted
+        // glyphs land where the breaker placed them. The letter spacing
+        // scales with the glyph (InDesign: 10 % at 90 % glyph scaling adds
+        // 0.2335 pt after every 10 pt Open Sans glyph, 10 % of the scaled
+        // space). Each advance is rounded against the run's exact pen:
+        // rounded glyph by glyph, the spacing and the scale each gained up
+        // to 1/128 pt a glyph, 0.5 pt over a 340 pt line
+        // (tools/indesign-export/footnote-paragraphs-probe, `spacing`).
+        let hs_pct = r.horizontal_scale_pct;
+        let factor = if (hs_pct - 100.0).abs() > 0.05 {
+            hs_pct / 100.0
+        } else {
+            1.0
+        };
+        if letter_spacing != 0.0 || factor != 1.0 {
+            let mut exact = 0.0_f64;
+            let mut placed = 0_i32;
+            for g in s.glyphs.iter_mut() {
+                exact += (g.x_advance as f64 + letter_spacing) * factor as f64;
+                let next = exact.round() as i32;
+                g.x_advance = next - placed;
+                placed = next;
+                g.x_offset = (g.x_offset as f32 * factor).round() as i32;
+            }
+            s.total_advance = placed;
+        }
+        run_spacing.push(
+            s.glyphs
+                .iter()
+                .zip(&natural)
+                .map(|(g, &n)| g.x_advance - (n as f32 * factor).round() as i32)
+                .collect(),
+        );
+        // A ruby base spaced out to its ruby (`LayoutOptions::ruby_aki`),
+        // mid-line; a line the base starts or ends adjusts it below.
+        if !options.ruby_aki.is_empty() {
+            let at = run_starts[run_starts.len() - 1] as u32;
+            for g in s.glyphs.iter_mut() {
+                let byte = at + g.cluster;
+                if let Some((before, after)) =
+                    options.ruby_aki.iter().find_map(|a| a.space_of(0, byte))
+                {
+                    g.x_offset += before;
+                    g.x_advance += before + after;
+                }
+            }
+            s.total_advance = s.glyphs.iter().map(|g| g.x_advance).sum();
+        }
+        run_shapes.push(s);
+    }
+
+    // Phase 7 — Mojikumi half-width. When the composer is asked to
+    // apply mojikumi, halve the x_advance of CJK opening / closing
+    // punctuation glyphs in each shaped run. The narrowing
+    // propagates through paragraph-breaker and into the laid-out
+    // line widths automatically.
+    if options.compose.mojikumi_half_width {
+        for (run_i, shape) in run_shapes.iter_mut().enumerate() {
+            apply_mojikumi_half_width(shape, runs[run_i].text);
+        }
+    }
+
+    // 2. Build a flat array of (paragraph-cluster, run_index, glyph)
+    // entries sorted by cluster. paragraph-breaker only needs widths
+    // grouped by word; rendering needs the original glyph data
+    // sliced by line. Both pull off this single source of truth.
+    let mut flat: Vec<FlatGlyph> = Vec::new();
+    let mut objects = options.object_advances.iter();
+    let mut object_cluster: Option<u32> = None;
+    for (run_i, shape) in run_shapes.iter().enumerate() {
+        let base = run_starts[run_i] as u32;
+        for (gi, g) in shape.glyphs.iter().enumerate() {
+            let cluster = base + g.cluster;
+            let object = !options.object_advances.is_empty()
+                && paragraph_text
+                    .get(cluster as usize..)
+                    .is_some_and(|t| t.starts_with(OBJECT_REPLACEMENT));
+            // One advance per character: a second glyph of the same
+            // cluster takes none.
+            let object_advance = match (object, object_cluster == Some(cluster)) {
+                (false, _) => None,
+                (true, true) => Some(0),
+                (true, false) => {
+                    object_cluster = Some(cluster);
+                    objects.next().copied()
+                }
+            };
+            flat.push(FlatGlyph {
+                cluster,
+                run_idx: run_i,
+                x_advance: object_advance.unwrap_or(g.x_advance),
+                x_offset: if object_advance.is_some() {
+                    0
+                } else {
+                    g.x_offset
+                },
+                y_offset: if object_advance.is_some() {
+                    0
+                } else {
+                    g.y_offset
+                },
+                glyph_id: g.glyph_id,
+                // An inline object's advance is its own width, nothing added.
+                spacing: if object_advance.is_some() {
+                    0
+                } else {
+                    run_spacing[run_i].get(gi).copied().unwrap_or(0)
+                },
+                upright: if object_advance.is_some() {
+                    None
+                } else {
+                    g.upright
+                },
+            });
+        }
+    }
+    // Each run's pre-shape emits glyphs in cluster order, and runs
+    // append in run order with monotonically-increasing `base`
+    // cluster offsets — so `flat` is already globally sorted by
+    // cluster. The invariant matters because `run_index_for_word`
+    // and `sum_advances_in` walk it in order.
+    // A right-to-left run's glyphs arrive in visual order, clusters
+    // descending within the run (the annual's Arabic and Hebrew
+    // exhibits trip a global ascending check in every debug build),
+    // and both walkers filter by cluster range rather than rely on
+    // order — so the invariant is per run, monotone either way, with
+    // run bases ascending.
+    debug_assert!(
+        run_shapes.iter().enumerate().all(|(run_i, shape)| {
+            let cl: Vec<u32> = shape.glyphs.iter().map(|g| g.cluster).collect();
+            cl.windows(2).all(|w| w[0] <= w[1])
+                || cl.windows(2).all(|w| w[0] >= w[1])
+                || run_i == usize::MAX
+        }) && run_starts.windows(2).all(|w| w[0] <= w[1]),
+        "FlatGlyph cluster ordering invariant violated"
+    );
+
+    // 3. Build paragraph-breaker items: one Box per word (sum of
+    // advances of glyphs whose cluster is within the word range),
+    // glue between words, infinite-stretch glue + forced break at
+    // the end. Track byte_end alongside each item so we can map
+    // breakpoint indices back to source byte offsets.
+    let words = segment_paragraph(&paragraph_text);
+    if words.is_empty() {
+        return LaidOutParagraph { lines: Vec::new() };
+    }
+    let opts = &options.compose;
+    // Use the first run's space width as the glue width — IDML
+    // doesn't change inter-word spacing across runs, and pulling a
+    // per-word space face would require a synthetic face index. Fold
+    // the first run's HorizontalScale into the natural width so the
+    // breaker's glue matches the scaled glyph advances (P-08).
+    let raw_space = shape_run(runs[0].face, " ", runs[0].point_size).total_advance;
+    let hs_factor = (runs[0].horizontal_scale_pct / 100.0).max(0.0);
+    let natural_space = (raw_space as f32 * hs_factor).round() as i32;
+    let space_width = (natural_space as f32 * opts.desired_space_ratio.max(0.0)).round() as i32;
+    let stretch = (natural_space as f32 * opts.stretch_ratio).round() as i32;
+    // Word-spacing minimum applies to JUSTIFIED text only: InDesign sets
+    // a ragged line's spaces at their natural width and wraps a word
+    // that does not fit, however little it is over. Shrinking ragged
+    // lines kept 12 of the annual's 6.5 pt labels — 0.9 to 4 pt over
+    // their measure with tracking — on one line where InDesign broke
+    // them onto two (measured 2026-09-05).
+    let shrink = if options.alignment == Alignment::Justify {
+        (natural_space as f32 * opts.shrink_ratio).round() as i32
+    } else {
+        0
+    };
+
+    // The Single-line Composer resolved for this paragraph, and — when
+    // its letters may compress — how many characters precede each item.
+    let single_line = opts.single_line.as_ref().map(|o| {
+        crate::single_line::SingleLineParams::new(
+            o,
+            options.alignment == Alignment::Justify,
+            runs[0].point_size,
+            natural_space,
+        )
+    });
+
+    // Hyphenation-zone gate (W1.17). A word whose start falls within
+    // `zone` of the right margin is kept whole rather than hyphenated,
+    // trading a more ragged right edge for fewer hyphens — InDesign's
+    // "hyphenation zone". This mirrors the gate in `compose_paragraph`
+    // (the single-run path) so the renderer's multi-run path honours
+    // the zone too. We don't know the breaker's chosen line starts a
+    // priori, so we estimate each word's within-line offset as its
+    // cumulative natural x modulo the reference column width.
+    //
+    // The zone is a RAGGED-edge feature only. Adobe: "The Hyphenation
+    // Zone … applies only when you're using the Single-line Composer
+    // with nonjustified text." (helpx.adobe.com/indesign/using/text-
+    // composition.html — "Compose and hyphenate text".) A justified
+    // paragraph has no rag, so the zone has nothing to bound and
+    // InDesign ignores it. We zero the zone for justified paragraphs:
+    // their hyphenation is driven purely by the breaker's geometric
+    // fit, exactly as InDesign's justified composer does. (W1.3 landed
+    // the ragged gate in `compose_paragraph`; W1.17 extends it to the
+    // renderer path and pins the justified no-op.)
+    let zone = if options.alignment == Alignment::Justify || single_line.is_some() {
+        0
+    } else {
+        opts.hyphenation_zone.max(0)
+    };
+    // The widest measure this paragraph composes into — the stretch a
+    // ragged line's glue is given (see the glue below).
+    let ragged_stretch: i32 = opts
+        .column_widths
+        .as_deref()
+        .and_then(|w| w.iter().copied().max())
+        .unwrap_or(options.column_width())
+        .max(0);
+    let zone_ref_width = opts.column_width.max(1);
+    let zone_threshold = (zone_ref_width - zone).max(0);
+    let mut zone_natural_x: i64 = 0;
+
+    let mut items: Vec<Item<()>> = Vec::with_capacity(words.len() * 4 + 2);
+    let mut byte_ends: Vec<usize> = Vec::with_capacity(items.capacity());
+    let mut is_hyphen: Vec<bool> = Vec::with_capacity(items.capacity());
+    // Whether a break between bytes `before` and `after` (a gap's two
+    // ends, or one hyphenation point) would split a `NoBreak` span.
+    let held = |before: usize, after: usize| {
+        options
+            .no_break
+            .iter()
+            .any(|r| (r.start as usize) < before && after < r.end as usize)
+    };
+    for (i, w) in words.iter().enumerate() {
+        let word_width = sum_advances_in(&flat, w.start as u32..w.end as u32);
+        // A word is hyphenation-eligible only when its start falls
+        // before the zone threshold. With `zone == 0` (no zone, or a
+        // justified paragraph) the threshold is the full column width,
+        // so every word stays eligible.
+        let zone_offset = (zone_natural_x % zone_ref_width as i64) as i32;
+        let zone_allows_hyphenation = zone == 0 || zone_offset < zone_threshold;
+        // Advance the zone cursor past this word + its trailing space so
+        // the next word's gate sees its correct within-line offset. The
+        // zone is a geometric distance, independent of the breaker's
+        // per-line word-spacing scale, so use the natural widths.
+        if zone > 0 {
+            zone_natural_x += word_width as i64;
+            if i + 1 < words.len() {
+                zone_natural_x += natural_space as i64;
+            }
+        }
+        // Hyphenate iff the word is entirely within one run AND a
+        // hyphenator is configured AND the zone permits it. Multi-run
+        // words (rare — usually a bold "hold" + italic "ing") fall
+        // through to a single Box; they still break at glue boundaries.
+        let single_run = run_index_for_word(&flat, w.start as u32, w.end as u32);
+        // With hyphenation off (no hyphenator) the word still breaks at
+        // its discretionary hyphens, under the same limits and zone —
+        // InDesign's rule, see `soft_hyphen_opportunities`.
+        // Japanese and Chinese break between any two characters, one of
+        // them CJK, whatever the hyphenation (InDesign 20.0.1, with no
+        // kinsoku set and hyphenation on: vertical-text-probe); a kinsoku
+        // set takes away the positions before a no-start character and
+        // after a no-end one. Such a word is not hyphenated, and a Latin
+        // stretch in it stays whole.
+        let cjk_breaks: Vec<usize> = {
+            use crate::compose::kinsoku;
+            let word_text = &paragraph_text[w.start..w.end];
+            let chars: Vec<(usize, char)> = word_text.char_indices().collect();
+            if chars.iter().any(|&(_, c)| kinsoku::is_breakable_cjk(c)) {
+                chars
+                    .windows(2)
+                    .filter(|p| {
+                        let (a, b) = (p[0].1, p[1].1);
+                        (kinsoku::is_breakable_cjk(a) || kinsoku::is_breakable_cjk(b))
+                            && !(opts.kinsoku_enforce
+                                && (kinsoku::is_no_start(b) || kinsoku::is_no_end(a)))
+                    })
+                    .map(|p| w.start + p[1].0)
+                    .filter(|&b| !held(b, b))
+                    .collect()
+            } else {
+                Vec::new()
+            }
+        };
+        let breaks: Vec<usize> = match single_run {
+            _ if !cjk_breaks.is_empty() => Vec::new(),
+            Some(_) => {
+                let word_text = &paragraph_text[w.start..w.end];
+                let is_last_word = i + 1 == words.len();
+                // The zone keeps hyphenation (and discretionary hyphens)
+                // out of a word that starts inside it.
+                let points = if !zone_allows_hyphenation {
+                    Vec::new()
+                } else {
+                    match opts.hyphenator {
+                        Some(h) => {
+                            h.opportunities_for(word_text, &opts.hyphenation_limits, is_last_word)
+                        }
+                        None => crate::hyphenate::soft_hyphen_opportunities(
+                            word_text,
+                            &opts.hyphenation_limits,
+                            is_last_word,
+                        ),
+                    }
+                };
+                // A hyphen the word already has is a break too (InDesign
+                // and Word: `two-` / `way`), hyphenation on or off and
+                // whatever the zone: breaking there hyphenates nothing.
+                crate::hyphenate::merge_opportunities(
+                    points,
+                    crate::hyphenate::hard_hyphen_opportunities(word_text),
+                )
+                .into_iter()
+                .filter(|&b| b > 0 && b < word_text.len())
+                .map(|b| w.start + b)
+                .filter(|&b| !held(b, b))
+                .collect()
+            }
+            None => Vec::new(),
+        };
+        let hyphen_width = if !breaks.is_empty() {
+            let r = &runs[single_run.unwrap()];
+            shape_run(r.face, "-", r.point_size).total_advance
+        } else {
+            0
+        };
+        let mut seg_start = w.start;
+        for offset in &breaks {
+            let seg_width = sum_advances_in(&flat, seg_start as u32..*offset as u32);
+            items.push(Item::Box {
+                width: seg_width,
+                data: (),
+            });
+            byte_ends.push(*offset);
+            is_hyphen.push(false);
+            // After a hyphen the text already has, the line gains no
+            // hyphen glyph and no width.
+            let hard = crate::hyphenate::breaks_after_hard_hyphen(&paragraph_text, *offset);
+            items.push(Item::Penalty {
+                width: if hard { 0 } else { hyphen_width },
+                penalty: opts.hyphen_penalty,
+                flagged: true,
+            });
+            byte_ends.push(*offset);
+            is_hyphen.push(!hard);
+            seg_start = *offset;
+        }
+        for offset in &cjk_breaks {
+            items.push(Item::Box {
+                width: sum_advances_in(&flat, seg_start as u32..*offset as u32),
+                data: (),
+            });
+            byte_ends.push(*offset);
+            is_hyphen.push(false);
+            items.push(Item::Glue {
+                width: 0,
+                stretch,
+                shrink: 0,
+            });
+            byte_ends.push(*offset);
+            is_hyphen.push(false);
+            seg_start = *offset;
+        }
+        let final_width = sum_advances_in(&flat, seg_start as u32..w.end as u32);
+        // A zero-width object (an above-line anchor) stays on the line of
+        // the word before it: InDesign hangs it, and the space before
+        // it, at the end of a full line rather than breaking ahead of it
+        // (measured, `inline-objects` page 6: the anchor after a line's
+        // last word sits at the frame's right edge on that line). No
+        // glue between the two, so no break and no width for the space.
+        let next_is_zero_object = words.get(i + 1).is_some_and(|n| {
+            paragraph_text[n.start..n.end]
+                .chars()
+                .all(|c| c == OBJECT_REPLACEMENT)
+                && sum_advances_in(&flat, n.start as u32..n.end as u32) == 0
+        });
+        let glue_follows = i + 1 < words.len() && !next_is_zero_object;
+        // The space tracking and letter spacing put after the word's last
+        // character belongs to the gap that follows it: a line that ends
+        // on the word drops it with the gap, and the paragraph's last word
+        // never has it. InDesign 20.0.1 sets a line's last character at its
+        // bare advance (right-aligned lines at +50 letter spacing and at
+        // +100 tracking both end exactly on the measure).
+        let trail = if glue_follows || i + 1 == words.len() {
+            trailing_spacing_in(&flat, w.start as u32..w.end as u32)
+        } else {
+            0
+        };
+        items.push(Item::Box {
+            width: final_width - trail,
+            data: (),
+        });
+        byte_ends.push(w.end);
+        is_hyphen.push(false);
+        if glue_follows && held(w.end, words[i + 1].start) {
+            // A `NoBreak` span runs over this gap: no break at its glue.
+            items.push(Item::Penalty {
+                width: 0,
+                penalty: paragraph_breaker::INFINITE_PENALTY,
+                flagged: false,
+            });
+            byte_ends.push(w.end);
+            is_hyphen.push(false);
+        }
+        if glue_follows {
+            // The hyphenation zone decides only which words may be
+            // hyphenated (above). It once also widened every gap's stretch
+            // to the zone, which let the breaker prefer short, balanced
+            // ragged lines: 14 + 12 words where InDesign fills 18 + 8
+            // (`inline-objects`), in every document that states its zone —
+            // all of InDesign's do (ADR 141).
+            let glue_stretch = stretch;
+            // The gap's glue is as wide as the whitespace actually in it:
+            // a double space (or a tab-less run of spaces) is two glyphs
+            // wide in the line the reader sees, and a breaker that
+            // modelled every gap as one space believed a 447 pt label
+            // measured 421 pt and set it on one line, 15 pt over its
+            // measure (measured 2026-09-06 on the annual's spec labels).
+            // Stretch and shrink scale with the gap so its band keeps
+            // the configured proportions.
+            let gap_natural = sum_advances_in(&flat, w.end as u32..words[i + 1].start as u32);
+            let (gap_width, gap_stretch, gap_shrink) = if gap_natural > 0 && natural_space > 0 {
+                let k = gap_natural as f32 / natural_space as f32;
+                (
+                    (space_width as f32 * k).round() as i32,
+                    (glue_stretch as f32 * k).round() as i32,
+                    (shrink as f32 * k).round() as i32,
+                )
+            } else {
+                (space_width, glue_stretch, shrink)
+            };
+            items.push(Item::Glue {
+                width: gap_width + trail,
+                stretch: gap_stretch,
+                shrink: gap_shrink,
+            });
+            byte_ends.push(w.end);
+            is_hyphen.push(false);
+        }
+    }
+    // The last line's right indent, as room its content takes
+    // (`ComposeOptions::last_line_indent`).
+    if options.compose.last_line_indent > 0 {
+        items.push(Item::Box {
+            width: options.compose.last_line_indent,
+            data: (),
+        });
+        byte_ends.push(paragraph_text.len());
+        is_hyphen.push(false);
+    }
+    items.push(Item::Glue {
+        width: 0,
+        stretch: FINISHING_STRETCH,
+        shrink: 0,
+    });
+    byte_ends.push(paragraph_text.len());
+    is_hyphen.push(false);
+    items.push(Item::Penalty {
+        width: 0,
+        penalty: -paragraph_breaker::INFINITE_PENALTY,
+        flagged: true,
+    });
+    byte_ends.push(paragraph_text.len());
+    is_hyphen.push(false);
+
+    let char_counts: Vec<u32> = match &single_line {
+        Some(p) if p.letter_shrink > 0 => {
+            let mut at_byte = vec![0u32; paragraph_text.len() + 1];
+            let mut n = 0u32;
+            for (b, c) in paragraph_text.char_indices() {
+                at_byte[b] = n;
+                n += 1;
+                for k in 1..c.len_utf8() {
+                    at_byte[b + k] = n;
+                }
+            }
+            at_byte[paragraph_text.len()] = n;
+            byte_ends
+                .iter()
+                .map(|&e| at_byte[e.min(paragraph_text.len())])
+                .collect()
+        }
+        _ => Vec::new(),
+    };
+    let single = single_line.as_ref().map(|p| (p, char_counts.as_slice()));
+    let single_width = [opts.column_width];
+    let lengths: &[i32] = opts
+        .column_widths
+        .as_deref()
+        .filter(|v| !v.is_empty())
+        .unwrap_or(&single_width);
+    let tab_layout = options
+        .tabs
+        .as_ref()
+        .filter(|_| paragraph_text.contains('\t'));
+    let breaks: Vec<Breakpoint> = match tab_layout {
+        Some(tabs) => {
+            let input = TabBreakInput {
+                items: &items,
+                byte_ends: &byte_ends,
+                flat: &flat,
+                text: &paragraph_text,
+                lengths,
+                tabs,
+            };
+            match lead_tab_glue(&input, &words) {
+                Some((k, glue)) => {
+                    let mut pinned = items.clone();
+                    pinned[k] = glue;
+                    knuth_plass_breaks(
+                        &pinned,
+                        lengths,
+                        opts,
+                        options.alignment,
+                        ragged_stretch,
+                        single,
+                    )
+                }
+                None => tab_aware_breaks(&input, |items, lengths| {
+                    knuth_plass_breaks(
+                        items,
+                        lengths,
+                        opts,
+                        options.alignment,
+                        ragged_stretch,
+                        single,
+                    )
+                }),
+            }
+        }
+        None => knuth_plass_breaks(
+            &items,
+            lengths,
+            opts,
+            options.alignment,
+            ragged_stretch,
+            single,
+        ),
+    };
+
+    // 4. For each chosen line, walk `flat` in cluster order and pull
+    // glyphs whose cluster is in the line's byte range. Position
+    // them with a running pen and tag with the run's font_id +
+    // point_size so emission can route outlining.
+    let mut lines = Vec::with_capacity(breaks.len());
+    let mut byte_cursor = 0usize;
+    let mut baseline = options.first_baseline;
+    let mut exact_baseline = options.first_baseline_exact();
+    let last_break = breaks.len().saturating_sub(1);
+    let bytes = paragraph_text.as_bytes();
+    // Per-line widths drive both Knuth-Plass and post-layout
+    // alignment: when an obstacle carves a line down to ~half-column
+    // width, the right/center/justify alignments should snap glyphs
+    // against THAT width, not the original scalar column. Defaults
+    // to the scalar width when no per-line override is configured.
+    let per_line_widths: Option<&[i32]> = opts.column_widths.as_deref().filter(|v| !v.is_empty());
+    for (i, bp) in breaks.iter().enumerate() {
+        let Some(&end) = byte_ends.get(bp.index) else {
+            continue;
+        };
+        let hyphenated = is_hyphen.get(bp.index).copied().unwrap_or(false);
+        let mut start = byte_cursor;
+        while start < end && bytes[start].is_ascii_whitespace() {
+            start += 1;
+        }
+        if start >= end {
+            continue;
+        }
+        let mut glyphs: Vec<PositionedGlyph> = Vec::new();
+        let mut pen_x: i32 = 0;
+        let mut last_run_idx: Option<usize> = None;
+        // A ruby base starting or ending this line is spaced as InDesign
+        // spaces it there, not as the breaker measured it mid-line.
+        let content_end = line_content_end(&paragraph_text, start..end) as u32;
+        let edge_aki: Vec<(&RubyAki, usize)> = options
+            .ruby_aki
+            .iter()
+            .map(|a| (a, ruby_edge(&a.chars, start as u32, content_end)))
+            .filter(|(_, v)| *v != 0)
+            .collect();
+        for fg in &flat {
+            if fg.cluster < start as u32 || fg.cluster >= end as u32 {
+                continue;
+            }
+            let (edge_dx, edge_dw) = edge_aki
+                .iter()
+                .find_map(|(a, v)| Some((a.space_of(*v, fg.cluster)?, a.space_of(0, fg.cluster)?)))
+                .map_or((0, 0), |((b, a), (mb, ma))| (b - mb, b + a - mb - ma));
+            let run = &runs[fg.run_idx];
+            // IDML BaselineShift is positive-up; layout y grows down,
+            // so subtract.
+            let baseline_shift_64 = (run.baseline_shift_pt * ADVANCE_PRECISION).round() as i32;
+            glyphs.push(PositionedGlyph {
+                glyph_id: fg.glyph_id,
+                cluster: fg.cluster,
+                x: pen_x + fg.x_offset + edge_dx,
+                y: baseline + fg.y_offset - baseline_shift_64,
+                x_advance: fg.x_advance + edge_dw,
+                font_id: run.font_id,
+                point_size: run.point_size,
+                underline: run.underline,
+                strikethru: run.strikethru,
+                substituted: run.substituted,
+                x_scale: (run.horizontal_scale_pct / 100.0).max(0.0),
+                y_scale: (run.vertical_scale_pct / 100.0).max(0.0),
+                skew_deg: run.skew_deg,
+                // Concept 3 — the source character, for /ToUnicode.
+                ch: paragraph_text
+                    .get(fg.cluster as usize..)
+                    .and_then(|s| s.chars().next()),
+                upright: fg.upright,
+            });
+            pen_x += fg.x_advance + edge_dw;
+            last_run_idx = Some(fg.run_idx);
+        }
+        // The line's last character carries no tracking or letter spacing
+        // (the breaker's `trail` above): its advance gives it back, so a
+        // right-aligned, centred or justified line measures its ink. A
+        // hyphenated line ends on the synthetic hyphen, which has none.
+        if !hyphenated {
+            let trail = trailing_spacing_in(&flat, start as u32..end as u32);
+            if trail != 0 {
+                if let Some(g) = glyphs.last_mut() {
+                    g.x_advance -= trail;
+                }
+                pen_x -= trail;
+            }
+        }
+        // Append a synthetic hyphen glyph for hyphenated breaks,
+        // shaped with the run that owns the line's last glyph. The
+        // hyphen carries the line's last source byte as its cluster
+        // so per-cluster paint pickers attribute it to the same run.
+        if hyphenated {
+            if let Some(idx) = last_run_idx {
+                let r = &runs[idx];
+                let baseline_shift_64 = (r.baseline_shift_pt * ADVANCE_PRECISION).round() as i32;
+                let hyphen_shape = shape_run(r.face, "-", r.point_size);
+                for g in &hyphen_shape.glyphs {
+                    glyphs.push(PositionedGlyph {
+                        glyph_id: g.glyph_id,
+                        cluster: end.saturating_sub(1) as u32,
+                        x: pen_x + g.x_offset,
+                        y: baseline + g.y_offset - baseline_shift_64,
+                        x_advance: g.x_advance,
+                        ch: Some('-'),
+                        font_id: r.font_id,
+                        point_size: r.point_size,
+                        underline: r.underline,
+                        strikethru: r.strikethru,
+                        // The synthetic hyphen shapes with the owning
+                        // run's face, so it shares that run's flag.
+                        substituted: r.substituted,
+                        x_scale: (r.horizontal_scale_pct / 100.0).max(0.0),
+                        y_scale: (r.vertical_scale_pct / 100.0).max(0.0),
+                        skew_deg: r.skew_deg,
+                        upright: None,
+                    });
+                    pen_x += g.x_advance;
+                }
+            }
+        }
+        let mut natural_width = pen_x;
+        // Set each tab at its stop BEFORE aligning, at the x the line
+        // will start at, so a justified line stretches what follows its
+        // last tab against the measure the breaker filled.
+        if let Some(tabs) = tab_layout {
+            let x0 = tabs.line_start(i);
+            let mut snapped = LaidOutLine {
+                byte_range: start..end,
+                baseline_y: baseline,
+                baseline_exact: baseline as f64,
+                width: natural_width,
+                ratio: bp.ratio,
+                glyphs,
+            };
+            for g in &mut snapped.glyphs {
+                g.x += x0;
+            }
+            apply_tab_stops(
+                &mut snapped,
+                &paragraph_text,
+                &tabs.stops,
+                tabs.default_stop_pt,
+            );
+            for g in &mut snapped.glyphs {
+                g.x -= x0;
+            }
+            natural_width = snapped.width;
+            glyphs = snapped.glyphs;
+        }
+        // The breaker measured each word space at its DESIRED width
+        // (`DesiredWordSpacing`); set it there too, or a ragged line at
+        // 80 % runs its spaces' 20 % past the measure. InDesign sets a
+        // ragged line's spaces at the desired width under either composer
+        // (20.0.1, spelling-and-spacing-probe `localspacing`: 110 % opens a
+        // left-aligned space by a tenth). A justified line takes its
+        // spaces from its measure instead, so only lines set ragged move.
+        let ragged_line = !matches!(
+            (
+                options.alignment,
+                options.last_line_setting(i == last_break)
+            ),
+            (Alignment::Justify, None | Some(Alignment::Justify))
+        );
+        if (single_line.is_some() || ragged_line) && space_width != natural_space {
+            let first = glyphs
+                .iter()
+                .rposition(|g| bytes.get(g.cluster as usize) == Some(&b'\t'))
+                .map_or(1, |t| t + 1);
+            let gaps = glyphs
+                .iter()
+                .skip(first)
+                .filter(|g| is_ws_at(bytes, g.cluster as usize))
+                .count() as i32;
+            let delta = (space_width - natural_space) * gaps;
+            if delta != 0 {
+                spread_spaces(&mut glyphs, delta, bytes);
+                natural_width += delta;
+            }
+        }
+        // When `column_widths` is configured, use the matching slot
+        // for this line's alignment column (clamping at the slice
+        // tail mirrors paragraph-breaker's own fallback). Right /
+        // center / justify therefore align against the line's
+        // *available* width, which is what the wrap-around-objects
+        // pass needs.
+        let line_column = per_line_widths
+            .map(|w| w[i.min(w.len() - 1)])
+            .unwrap_or_else(|| options.column_width());
+        apply_alignment(
+            &mut glyphs,
+            natural_width,
+            line_column,
+            options.alignment,
+            options.last_line_setting(i == last_break),
+            options.single_word_alignment,
+            bytes,
+            opts.minimum_raggedness,
+            single_line.is_some() || !opts.minimum_raggedness,
+            options.tabs.is_some(),
+        );
+        // A line sits ITS OWN leading below the line before it (the
+        // first one at `first_baseline`): the largest leading among its
+        // characters, see [`line_leading`]. InDesign, `mixed-leading`: a
+        // line with a 20 pt-leaded word after 12 pt-leaded lines steps
+        // 20, and the next line steps 12 again.
+        if !lines.is_empty() {
+            let step = line_leading_exact(&glyphs, options).unwrap_or(options.line_height as f64);
+            exact_baseline += step;
+            let next = exact_baseline.round() as i32;
+            let dy = next - baseline;
+            baseline = next;
+            for g in &mut glyphs {
+                g.y += dy;
+            }
+        }
+        lines.push(LaidOutLine {
+            byte_range: start..end,
+            baseline_y: baseline,
+            baseline_exact: exact_baseline,
+            width: natural_width,
+            ratio: bp.ratio,
+            glyphs,
+        });
+        byte_cursor = end;
+    }
+    // Phase 7 — opportunistic BiDi reorder. When the paragraph
+    // contains any RTL character, run unicode-bidi over each laid-
+    // out line to put glyphs in visual order. Pure-LTR paragraphs
+    // skip via the fast-path inside `apply_bidi_reorder` (a single
+    // `BidiInfo::has_rtl()` check).
+    if paragraph_text.chars().any(|c| {
+        // Hebrew, Arabic, Syriac, Thaana, NKo, Samaritan, Mandaic
+        // — quick "has any RTL char" pre-check that avoids
+        // building a BidiInfo for pure-LTR paragraphs (the common
+        // case). The full unicode-bidi pass runs anyway when this
+        // returns true; this is just a fast bail.
+        matches!(
+            c as u32,
+            0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF
+        )
+    }) {
+        for line in lines.iter_mut() {
+            apply_bidi_reorder(line, &paragraph_text, BidiDirection::Auto);
+        }
+    }
+    LaidOutParagraph { lines }
+}
+
+/// Choose the breaks of `items` with Knuth–Plass, loosening the
+/// tolerance, then filling ragged glue, then falling back to greedy
+/// first-fit when no feasible set exists.
+fn knuth_plass_breaks(
+    items: &[Item<()>],
+    lengths: &[i32],
+    opts: &ComposeOptions,
+    alignment: Alignment,
+    ragged_stretch: i32,
+    single: Option<(&crate::single_line::SingleLineParams, &[u32])>,
+) -> Vec<Breakpoint> {
+    if let Some((params, chars)) = single {
+        // A tab pass hands in a suffix of the paragraph's items; the
+        // character counts run over the whole paragraph.
+        let chars = &chars[chars.len().saturating_sub(items.len()).min(chars.len())..];
+        return crate::single_line::single_line_breaks(items, lengths, chars, params);
+    }
+    let ragged_lines = |balance_lines: Option<usize>| crate::ragged::RaggedLines {
+        free_after: opts
+            .visible_lines
+            .map_or(usize::MAX, |v| v.saturating_add(1)),
+        joined: opts.joined_lines.as_deref().unwrap_or(&[]),
+        hyphen_penalty: opts.hyphen_penalty,
+        space_shrink: opts.shrink_ratio,
+        overrun_size: opts.overrun_size,
+        balance_lines,
+    };
+    // Balanced ragged lines: break as usual, then again in as many lines,
+    // as even as the words allow (ADR 153).
+    let balanced = |breaks: Vec<Breakpoint>| -> Vec<Breakpoint> {
+        if !opts.balance_ragged || alignment == Alignment::Justify || breaks.len() < 2 {
+            return breaks;
+        }
+        let even =
+            crate::ragged::min_ragged_breaks(items, lengths, &ragged_lines(Some(breaks.len())));
+        if even.is_empty() {
+            breaks
+        } else {
+            even
+        }
+    };
+    if opts.minimum_raggedness && alignment != Alignment::Justify {
+        let breaks = crate::ragged::min_ragged_breaks(items, lengths, &ragged_lines(None));
+        if !breaks.is_empty() {
+            return balanced(breaks);
+        }
+    }
+    // Justified text breaks the way InDesign's Paragraph Composer was
+    // measured to break it: over-shrunk lines priced, not infeasible, and
+    // against the true measure (ADR 144). Shaped and wrapped frames keep
+    // Knuth–Plass, whose joined rows and overset lines it does not model.
+    if alignment == Alignment::Justify && !opts.minimum_raggedness {
+        let breaks = crate::justified::justified_breaks(items, lengths);
+        if !breaks.is_empty() {
+            return breaks;
+        }
+    }
+    // InDesign lets a line run a sliver past its measure before it
+    // breaks it (`ComposeOptions::fit_tolerance`).
+    let widened: Vec<i32>;
+    let lengths: &[i32] = if opts.fit_tolerance > 0 {
+        widened = lengths.iter().map(|l| l + opts.fit_tolerance).collect();
+        &widened
+    } else {
+        lengths
+    };
+    // paragraph_breaker returns an empty break list when no feasible
+    // fit exists at the configured tolerance. Real-world body copy
+    // that interleaves many run-color-switch boxes or runs past the
+    // configured per-line `column_widths` slice can trip this. Retry
+    // at progressively looser tolerance so the breaker still produces
+    // lines instead of dropping the paragraph entirely — the
+    // resulting lines won't be perfectly tight, but a slightly looser
+    // break beats no break at all.
+    let mut breaks: Vec<Breakpoint> =
+        paragraph_breaker::total_fit(items, lengths, opts.tolerance, opts.looseness);
+    if breaks.is_empty() && !items.is_empty() {
+        for fallback_tol in [opts.tolerance * 4.0, opts.tolerance * 16.0, 1_000.0] {
+            breaks = paragraph_breaker::total_fit(items, lengths, fallback_tol, opts.looseness);
+            if !breaks.is_empty() {
+                break;
+            }
+        }
+    }
+    // A ragged paragraph that still has no fit — every candidate line
+    // ends too far short of the margin for its glue to stretch — is
+    // set with fill glue: every gap may stretch as far as the measure,
+    // so any line that ends before the margin is feasible and the
+    // breaker chooses among REAL breaks instead of degrading to one
+    // word per line below. The ratio is discarded at glyph-emit for
+    // ragged text (left-flush), so this only decides WHERE the lines
+    // break — the way InDesign's composer breaks a ragged line it
+    // cannot fill (measured 2026-09-06 on the annual's spec labels).
+    if breaks.is_empty() && !items.is_empty() && alignment != Alignment::Justify {
+        let filled: Vec<Item<()>> = items
+            .iter()
+            .map(|it| match it {
+                Item::Glue {
+                    width,
+                    stretch,
+                    shrink,
+                } if *stretch != FINISHING_STRETCH => Item::Glue {
+                    width: *width,
+                    stretch: (*stretch).max(ragged_stretch),
+                    shrink: *shrink,
+                },
+                other => *other,
+            })
+            .collect();
+        breaks = paragraph_breaker::total_fit(&filled, lengths, 1_000.0, opts.looseness);
+    }
+    // When even the loosest tolerance finds no feasible set of breaks
+    // — a single token wider than the measure, which is exactly what an
+    // auto-sizing fit bisects toward — fall back to greedy first-fit.
+    // It packs what fits and splits a word only when the word alone
+    // does not fit, which is what InDesign's composer does; the older
+    // fallback put every Box on its own line, so a HeightAndWidth frame
+    // came out 44 fragment lines against InDesign's 35.
+    if breaks.is_empty() && !items.is_empty() {
+        breaks = crate::first_fit::first_fit_breaks(items, lengths);
+    }
+    balanced(breaks)
+}
+
+/// The paragraph a tab-aware break pass works over: the breaker items
+/// with the source byte each one ends at, the shaped glyphs, and where
+/// the tabs go.
+struct TabBreakInput<'a> {
+    items: &'a [Item<()>],
+    byte_ends: &'a [usize],
+    flat: &'a [FlatGlyph],
+    text: &'a str,
+    lengths: &'a [i32],
+    tabs: &'a TabLayout,
+}
+
+impl TabBreakInput<'_> {
+    fn measure(&self, line: usize) -> i32 {
+        self.lengths[line.min(self.lengths.len() - 1)]
+    }
+
+    /// How wide the text `start..end` sets on `line` once every tab in it
+    /// is snapped to its stop — `extra` is a trailing hyphen's width. The
+    /// pen starts at the line's own x, because a tab's width depends on
+    /// where it sits in the frame, not in the line.
+    fn set_width(&self, line: usize, start: usize, end: usize, extra: i32) -> i32 {
+        let x0 = self.tabs.line_start(line);
+        let mut pen = x0;
+        let mut glyphs: Vec<PositionedGlyph> = Vec::new();
+        for fg in self.flat {
+            if fg.cluster < start as u32 || fg.cluster >= end as u32 {
+                continue;
+            }
+            glyphs.push(PositionedGlyph {
+                glyph_id: fg.glyph_id,
+                cluster: fg.cluster,
+                x: pen + fg.x_offset,
+                y: 0,
+                x_advance: fg.x_advance,
+                ch: None,
+                font_id: 0,
+                point_size: 0.0,
+                underline: false,
+                strikethru: false,
+                substituted: false,
+                x_scale: 1.0,
+                y_scale: 1.0,
+                skew_deg: 0.0,
+                upright: None,
+            });
+            pen += fg.x_advance;
+        }
+        let mut line_glyphs = LaidOutLine {
+            byte_range: start..end,
+            baseline_y: 0,
+            baseline_exact: 0.0,
+            width: pen - x0,
+            ratio: 0.0,
+            glyphs,
+        };
+        apply_tab_stops(
+            &mut line_glyphs,
+            self.text,
+            &self.tabs.stops,
+            self.tabs.default_stop_pt,
+        );
+        line_glyphs.width + extra
+    }
+}
+
+/// A paragraph whose only tab sits in its FIRST gap — a list marker's
+/// tab, a "Term\tdefinition" hanging paragraph — needs no greedy pass:
+/// that gap can only ever sit on the first line, so its width is known
+/// before breaking (the pen is the line's start plus the first word),
+/// and Knuth–Plass can take it as a fixed glue. Only for a Left stop;
+/// a Right/Center/Decimal tab's width depends on where the line ends.
+fn lead_tab_glue(input: &TabBreakInput<'_>, words: &[WordSpan]) -> Option<(usize, Item<()>)> {
+    let bytes = input.text.as_bytes();
+    let (first, second) = (words.first()?, words.get(1)?);
+    let tab = bytes.iter().position(|&b| b == b'\t')?;
+    if tab < first.end || tab >= second.start || bytes[second.start..].contains(&b'\t') {
+        return None;
+    }
+    let pen = input.tabs.line_start(0) + input.set_width(0, 0, tab, 0);
+    let default_64 = (input.tabs.default_stop_pt * ADVANCE_PRECISION).round() as i32;
+    let (_, alignment, _, _) = next_tab_stop_at(pen, &input.tabs.stops, default_64);
+    if alignment != TabAlignment::Left {
+        return None;
+    }
+    let k = input
+        .items
+        .iter()
+        .position(|it| matches!(it, Item::Glue { stretch, .. } if *stretch != FINISHING_STRETCH))?;
+    let width = input.set_width(0, 0, second.start, 0) - input.set_width(0, 0, first.end, 0);
+    Some((
+        k,
+        Item::Glue {
+            width,
+            stretch: 0,
+            shrink: 0,
+        },
+    ))
+}
+
+/// Break a paragraph that holds tabs, measuring every tab at the width
+/// it takes on its line.
+///
+/// Knuth–Plass sums fixed item widths from the line's start, and a tab
+/// has no fixed width: after a Left tab the pen is AT the stop, wherever
+/// the line began, so the tab is as wide as the gap the text before it
+/// leaves. So while a tab remains ahead, lines are set greedily — each
+/// takes the most text that fits once its tabs are snapped — and the
+/// tab-free remainder goes back to `rest` (Knuth–Plass).
+///
+/// Measured on `tab-breaks` (InDesign 20.0.1): the line breaks where the
+/// SNAPPED text stops fitting (a word after a tab to 150 that the tab
+/// glyph's own width would have let stay); a tab is a break opportunity
+/// like a space, it ends its line and the next line starts with the text
+/// after it at the line's start, not at a stop (a stop at 185 the next
+/// word cannot fit after, at 250 beyond the frame, a default stop at
+/// 216, a space before the tab); a Right, Center or Decimal tab fits
+/// while its segment ENDS inside the measure (right stop at 200.0 in a
+/// 200 pt frame fits, 200.1 wraps). A justified line keeps the spaces
+/// before its last tab natural, so only the glue after it may shrink.
+fn tab_aware_breaks(
+    input: &TabBreakInput<'_>,
+    rest: impl Fn(&[Item<()>], &[i32]) -> Vec<Breakpoint>,
+) -> Vec<Breakpoint> {
+    let TabBreakInput {
+        items,
+        byte_ends,
+        text,
+        lengths,
+        ..
+    } = *input;
+    let bytes = text.as_bytes();
+    let gap_has_tab = |from: usize| {
+        bytes[from..]
+            .iter()
+            .take_while(|b| b.is_ascii_whitespace())
+            .any(|&b| b == b'\t')
+    };
+    let mut breaks: Vec<Breakpoint> = Vec::new();
+    let mut first_item = 0usize;
+    let mut line = 0usize;
+    let mut line_start_byte = 0usize;
+    while first_item < items.len() {
+        while line_start_byte < bytes.len() && bytes[line_start_byte].is_ascii_whitespace() {
+            line_start_byte += 1;
+        }
+        if !bytes[line_start_byte..].contains(&b'\t') {
+            let from = line.min(lengths.len() - 1);
+            breaks.extend(
+                rest(&items[first_item..], &lengths[from..])
+                    .into_iter()
+                    .map(|bp| Breakpoint {
+                        index: bp.index + first_item,
+                        ..bp
+                    }),
+            );
+            return breaks;
+        }
+        let measure = input.measure(line);
+        // The last break that fits, and the first that does not (taken
+        // when nothing fits: a word wider than the measure overflows).
+        let mut best: Option<(usize, i32)> = None;
+        let mut first_over: Option<(usize, i32)> = None;
+        let mut shrink_after_tab = 0i32;
+        for (k, item) in items.iter().enumerate().skip(first_item) {
+            let (extra, is_end, is_glue) = match *item {
+                Item::Glue { stretch, .. } if stretch == FINISHING_STRETCH => continue,
+                Item::Glue { .. } => (0, false, true),
+                Item::Penalty { penalty, .. }
+                    if penalty <= -paragraph_breaker::INFINITE_PENALTY =>
+                {
+                    (0, true, false)
+                }
+                Item::Penalty { width, penalty, .. }
+                    if penalty < paragraph_breaker::INFINITE_PENALTY =>
+                {
+                    (width, false, false)
+                }
+                _ => continue,
+            };
+            let end = byte_ends[k];
+            if end <= line_start_byte {
+                continue;
+            }
+            let width = input.set_width(line, line_start_byte, end, extra);
+            if width - shrink_after_tab <= measure {
+                best = Some((k, width));
+            } else if is_glue || is_end {
+                first_over.get_or_insert((k, width));
+                break;
+            }
+            if is_end {
+                break;
+            }
+            if let Item::Glue { shrink, .. } = *item {
+                if gap_has_tab(end) {
+                    shrink_after_tab = 0;
+                } else {
+                    shrink_after_tab += shrink;
+                }
+            }
+        }
+        let Some((k, width)) = best.or(first_over) else {
+            break;
+        };
+        breaks.push(Breakpoint {
+            index: k,
+            ratio: 0.0,
+            width,
+        });
+        if matches!(items[k], Item::Penalty { penalty, .. } if penalty <= -paragraph_breaker::INFINITE_PENALTY)
+        {
+            return breaks;
+        }
+        line_start_byte = byte_ends[k];
+        first_item = k + 1;
+        line += 1;
+    }
+    breaks
+}
+
+/// Auto-leading line height for a line of glyphs, in 1/64 pt:
+/// `max(glyph.point_size) * 1.2 * 64`. Returns `None` for an empty
+/// line so callers can fall back to a default.
+pub fn max_line_height_for_glyphs(glyphs: &[PositionedGlyph]) -> Option<i32> {
+    glyphs
+        .iter()
+        .map(|g| g.point_size)
+        .fold(None, |acc: Option<f32>, ps| {
+            Some(acc.map(|a| a.max(ps)).unwrap_or(ps))
+        })
+        .map(|max_pt| (max_pt * 1.2 * ADVANCE_PRECISION).round() as i32)
+}
+
+/// [`max_line_height_for_glyphs`] over the glyphs at or after byte
+/// `from_byte` (see [`LayoutOptions::auto_leading_from_byte`]); a line
+/// with none of those falls back to all of its glyphs.
+pub fn auto_line_height(glyphs: &[PositionedGlyph], from_byte: u32) -> Option<i32> {
+    auto_line_height_at(glyphs, from_byte, 1.2)
+}
+
+/// [`auto_line_height`] at `ratio` × the largest size, not 1.2 ×.
+pub fn auto_line_height_at(glyphs: &[PositionedGlyph], from_byte: u32, ratio: f32) -> Option<i32> {
+    let largest = |from: u32| {
+        glyphs
+            .iter()
+            .filter(|g| g.cluster >= from)
+            .map(|g| g.point_size)
+            .reduce(f32::max)
+    };
+    largest(from_byte)
+        .or_else(|| largest(0))
+        .map(|max_pt| (max_pt * ratio * ADVANCE_PRECISION).round() as i32)
+}
+
+/// The leading of a line holding `glyphs`: how far it sits below the line
+/// before it.
+///
+/// With one leading for the whole paragraph (`run_leadings` empty) that
+/// is `leading_override`, else auto leading from the line's largest
+/// glyph. With runs that disagree it is the largest leading among the
+/// line's characters, each its run's explicit leading or, for a run with
+/// none, 1.2 x its own size. A list marker (`auto_leading_from_byte`)
+/// does not count. `None` for a line with no glyph to ask.
+pub fn line_leading(glyphs: &[PositionedGlyph], options: &LayoutOptions) -> Option<i32> {
+    if options.run_leadings.is_empty() {
+        return options.leading_override.or_else(|| {
+            auto_line_height_at(glyphs, options.auto_leading_from_byte, options.auto_leading)
+        });
+    }
+    let auto = |pt: f32| (pt * options.auto_leading * ADVANCE_PRECISION).round() as i32;
+    glyphs
+        .iter()
+        .filter(|g| g.cluster >= options.auto_leading_from_byte)
+        .map(|g| {
+            let after = options
+                .run_leadings
+                .partition_point(|(start, _)| *start <= g.cluster);
+            after
+                .checked_sub(1)
+                .and_then(|i| options.run_leadings[i].1)
+                .unwrap_or_else(|| auto(g.point_size))
+        })
+        .reduce(i32::max)
+        .or(options.leading_override)
+        .or_else(|| auto_line_height_at(glyphs, 0, options.auto_leading))
+}
+
+/// [`line_leading`] before it is rounded to 1/64 pt: auto leading is
+/// 1.2 x the size exactly, an override its
+/// [`LayoutOptions::leading_override_exact`]. Runs that disagree keep
+/// their rounded leadings.
+pub fn line_leading_exact(glyphs: &[PositionedGlyph], options: &LayoutOptions) -> Option<f64> {
+    if !options.run_leadings.is_empty() {
+        return line_leading(glyphs, options).map(f64::from);
+    }
+    if let Some(l) = options.leading_override {
+        return Some(
+            options
+                .leading_override_exact
+                .filter(|e| e.round() as i32 == l)
+                .unwrap_or(l as f64),
+        );
+    }
+    let size = |from: u32| {
+        glyphs
+            .iter()
+            .filter(|g| g.cluster >= from)
+            .map(|g| g.point_size)
+            .reduce(f32::max)
+    };
+    size(options.auto_leading_from_byte)
+        .or_else(|| size(0))
+        .map(|pt| pt as f64 * options.auto_leading as f64 * ADVANCE_PRECISION as f64)
+}
+
+/// In-cell alignment for a tab stop. IDML's `Alignment` attribute on
+/// `<TabStop>` distinguishes how text following the tab snaps
+/// against `Position`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TabAlignment {
+    /// Default. Text after the tab starts AT the stop.
+    Left,
+    /// Text after the tab ends AT the stop.
+    Right,
+    /// Text after the tab is centred ON the stop.
+    Center,
+    /// `CharacterAlign` — the alignment character (typically `.`)
+    /// in the segment lands AT the stop. Segments without the
+    /// character fall through to Left.
+    Decimal,
+}
+
+/// One tab stop spec with position, alignment, and (for Decimal)
+/// the character to align on.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TabStopSpec {
+    pub position_pt: f32,
+    pub alignment: TabAlignment,
+    /// Character the segment aligns on for `Decimal` stops.
+    /// IDML defaults to `.` when `<TabStop AlignmentCharacter>` is
+    /// absent. Ignored for the other alignments.
+    pub alignment_character: char,
+    /// Leader string tiled across the widened tab gap.
+    /// IDML's `<TabStop Leader="..." />` is typically `"."` (TOC dot
+    /// leaders), `". "` (dot + space pattern), or empty. `None` /
+    /// empty ⇒ no leader. The renderer's `apply_tab_stops_with_leaders`
+    /// shapes the leader with the run owning the `\t` and tiles whole
+    /// copies across the gap; partial trailing copies are dropped to
+    /// keep the leader visually uniform (matches InDesign behaviour
+    /// where a leader wider than the gap emits nothing rather than
+    /// overflowing into the snapped text).
+    pub leader: Option<String>,
+}
+
+impl TabStopSpec {
+    /// Convenience: a Left-aligned stop at `position_pt`. The
+    /// `alignment_character` defaults to `.` so future Decimal
+    /// stops in the same array don't have to be initialised
+    /// specially.
+    pub fn left(position_pt: f32) -> Self {
+        Self {
+            position_pt,
+            alignment: TabAlignment::Left,
+            alignment_character: '.',
+            leader: None,
+        }
+    }
+}
+
+/// Snap each `\t` glyph in `line` to the next tab stop. Widens the
+/// tab's `x_advance` and pushes every following glyph right by the
+/// resulting delta so the segment after the tab lands per the
+/// stop's alignment:
+///
+///  - `Left`: segment starts at the stop.
+///  - `Right`: segment ends at the stop.
+///  - `Center`: segment is centred on the stop.
+///  - `Decimal`: the segment's first occurrence of
+///    `alignment_character` (typically `.`) lands at the stop.
+///    Segments without the character fall through to Left.
+///
+/// When the stop's alignment can't be honoured (Right / Center /
+/// Decimal with a segment that would have to start behind the pen),
+/// the segment starts AT the pen: the tab takes zero width and the
+/// segment overruns its stop, which is what InDesign does (measured on
+/// `tab-breaks`). No alignment gives a tab a minimum width.
+///
+/// `tab_stops` is sorted by position (pt). Falls back to a
+/// `default_stop_pt` grid (IDML default: 36 pt) when no explicit
+/// stop sits past the current pen.
+pub fn apply_tab_stops(
+    line: &mut LaidOutLine,
+    paragraph_text: &str,
+    tab_stops: &[TabStopSpec],
+    default_stop_pt: f32,
+) {
+    apply_tab_stops_with_leaders(line, paragraph_text, tab_stops, default_stop_pt, None);
+}
+
+/// Like [`apply_tab_stops`] but with optional leader-character
+/// emission for stops whose `<TabStop Leader="...">` carries a
+/// non-empty string. When `leader_ctx` is `Some`, each snapped tab
+/// whose stop has a leader gets the leader string shaped (using the
+/// run that owns the tab's `\t` cluster) and tiled across the gap;
+/// the synthesised leader glyphs are inserted into `line.glyphs`
+/// between the tab and the following segment.
+///
+/// Tiling strategy: whole copies only. The number of full leader
+/// copies that fit is `floor(gap / leader_width)`; any partial
+/// trailing space is left empty so the leader stays visually uniform
+/// and never collides with the snapped text. A leader strictly wider
+/// than the gap emits zero copies (matches InDesign's behaviour of
+/// dropping the leader when there isn't room for one whole repeat).
+///
+/// The shaped leader glyphs are placed with absolute `x` values
+/// inside the already-widened tab's span, so they do not contribute
+/// further advance to subsequent glyphs (positions are absolute by
+/// this stage of the pipeline). The leader inherits the font /
+/// point_size / paint of the run that owns the `\t`; IDML doesn't
+/// expose a separate style for the leader characters.
+///
+/// Returns the leaders drawn, in line order: what each tab prints
+/// that the paragraph's text does not hold.
+pub fn apply_tab_stops_with_leaders(
+    line: &mut LaidOutLine,
+    paragraph_text: &str,
+    tab_stops: &[TabStopSpec],
+    default_stop_pt: f32,
+    leader_ctx: Option<&LeaderContext<'_, '_>>,
+) -> Vec<DrawnLeader> {
+    let mut drawn = Vec::new();
+    let bytes = paragraph_text.as_bytes();
+    let default_stop_64 = (default_stop_pt * ADVANCE_PRECISION).round() as i32;
+    if default_stop_64 <= 0 && tab_stops.is_empty() {
+        return drawn;
+    }
+    let mut i = 0;
+    while i < line.glyphs.len() {
+        let cluster = line.glyphs[i].cluster as usize;
+        if cluster >= bytes.len() || bytes[cluster] != b'\t' {
+            i += 1;
+            continue;
+        }
+        let current_x = line.glyphs[i].x;
+        let (next_stop_64, alignment, decimal_char, leader_str) =
+            next_tab_stop_at(current_x, tab_stops, default_stop_64);
+        if next_stop_64 <= current_x {
+            i += 1;
+            continue;
+        }
+        let segment_end = next_tab_or_end(&line.glyphs, i, bytes);
+        let target_segment_left = match alignment {
+            TabAlignment::Right => {
+                let segment_width = segment_natural_width(&line.glyphs, i + 1, segment_end);
+                next_stop_64 - segment_width
+            }
+            TabAlignment::Center => {
+                let segment_width = segment_natural_width(&line.glyphs, i + 1, segment_end);
+                next_stop_64 - segment_width / 2
+            }
+            TabAlignment::Decimal => {
+                // Find the alignment character's natural offset
+                // inside the segment (0 = right at segment start)
+                // and back the segment up so it lands on the stop.
+                // Falls through to Left when the char is missing.
+                match decimal_offset(
+                    &line.glyphs,
+                    i + 1,
+                    segment_end,
+                    paragraph_text,
+                    decimal_char,
+                ) {
+                    Some(off) => next_stop_64 - off,
+                    None => next_stop_64,
+                }
+            }
+            TabAlignment::Left => next_stop_64,
+        };
+        let original_advance = line.glyphs[i].x_advance;
+        let new_advance = tab_advance(current_x, target_segment_left);
+        let delta = new_advance - original_advance;
+        if delta != 0 {
+            for g in &mut line.glyphs[(i + 1)..] {
+                g.x += delta;
+            }
+            line.glyphs[i].x_advance = new_advance;
+            line.width += delta;
+        }
+        // Leader emission: after the tab has been widened, tile the
+        // leader string across [current_x .. target_segment_left]
+        // using the run that owns this tab's `\t` cluster.
+        let (leader_glyphs, copies) = leader_ctx
+            .zip(leader_str)
+            .filter(|(_, s)| !s.is_empty())
+            .and_then(|(ctx, leader)| {
+                let gap_64 = target_segment_left - current_x;
+                if gap_64 <= 0 {
+                    return None;
+                }
+                ctx.shape_leader_for_tab(line.glyphs[i].cluster, leader, gap_64, line.glyphs[i].y)
+            })
+            .unwrap_or_default();
+        if !leader_glyphs.is_empty() {
+            drawn.push(DrawnLeader {
+                cluster: line.glyphs[i].cluster,
+                text: leader_str.unwrap_or_default().repeat(copies),
+            });
+            let n = leader_glyphs.len();
+            let insert_at = i + 1;
+            // Shift positioned glyphs to absolute x within the tab's
+            // widened span. shape_leader_for_tab returns glyphs whose
+            // x is relative to current_x.
+            let mut adjusted: Vec<PositionedGlyph> = leader_glyphs;
+            for g in &mut adjusted {
+                g.x += current_x;
+            }
+            line.glyphs.splice(insert_at..insert_at, adjusted);
+            // Skip past the inserted leader glyphs — they don't carry
+            // tabs and shouldn't trigger another snap.
+            i += n;
+        }
+        i += 1;
+    }
+    drawn
+}
+
+/// A tab leader [`apply_tab_stops_with_leaders`] drew.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DrawnLeader {
+    /// The tab's cluster: its byte in the paragraph text.
+    pub cluster: u32,
+    /// The leader string, repeated as many whole times as it was drawn.
+    pub text: String,
+}
+
+/// The advance a tab takes from `pen` when the segment after it should
+/// start at `target_left`: whatever reaches it, however small, and zero
+/// when the segment would have to start behind the pen.
+///
+/// Measured on `tab-breaks` (InDesign 20.0.1): no alignment gives a tab
+/// a minimum width. A Left stop 0.18 pt past the pen puts the text 0.18
+/// pt on (`list-markers` c10 found the same for a stop 1.03 pt away); a
+/// Right, Center or Decimal stop whose segment would start before the
+/// pen sets the segment AT the pen — the tab collapses and the segment
+/// overruns its stop — rather than moving on to the next stop.
+fn tab_advance(pen: i32, target_left: i32) -> i32 {
+    (target_left - pen).max(0)
+}
+
+fn next_tab_stop_at(
+    current_x_64: i32,
+    stops: &[TabStopSpec],
+    default_stop_64: i32,
+) -> (i32, TabAlignment, char, Option<&str>) {
+    for spec in stops {
+        let stop_64 = (spec.position_pt * ADVANCE_PRECISION).round() as i32;
+        if stop_64 > current_x_64 {
+            return (
+                stop_64,
+                spec.alignment,
+                spec.alignment_character,
+                spec.leader.as_deref(),
+            );
+        }
+    }
+    if default_stop_64 <= 0 {
+        return (current_x_64, TabAlignment::Left, '.', None);
+    }
+    let n = current_x_64 / default_stop_64 + 1;
+    (n * default_stop_64, TabAlignment::Left, '.', None)
+}
+
+/// Per-paragraph context the leader-aware tab pass needs to shape
+/// `<TabStop Leader="...">` characters with the right font + size.
+/// Wraps the styled run slice the paragraph was laid out with so
+/// `apply_tab_stops_with_leaders` can look up which run owns a given
+/// `\t` cluster and reuse its `Face` for the leader glyphs.
+pub struct LeaderContext<'a, 'b> {
+    pub runs: &'a [StyledRun<'b>],
+    /// `runs[i].text` starts at byte `run_starts[i]` in the
+    /// concatenated paragraph text the layout pass saw. Used to map a
+    /// glyph cluster back to its originating run.
+    pub run_starts: Vec<usize>,
+}
+
+impl<'a, 'b> LeaderContext<'a, 'b> {
+    /// Build a context from a styled-run slice. `run_starts` is
+    /// derived by accumulating each run's byte length.
+    pub fn new(runs: &'a [StyledRun<'b>]) -> Self {
+        let mut starts = Vec::with_capacity(runs.len());
+        let mut acc = 0usize;
+        for r in runs {
+            starts.push(acc);
+            acc += r.text.len();
+        }
+        Self {
+            runs,
+            run_starts: starts,
+        }
+    }
+
+    fn run_for_cluster(&self, cluster: u32) -> Option<&StyledRun<'b>> {
+        let cl = cluster as usize;
+        let mut owner: Option<usize> = None;
+        for (i, &s) in self.run_starts.iter().enumerate() {
+            if s <= cl {
+                owner = Some(i);
+            } else {
+                break;
+            }
+        }
+        owner.and_then(|i| self.runs.get(i))
+    }
+
+    /// Shape `leader_str` with the run owning `tab_cluster` and tile
+    /// whole copies across `gap_64` 1/64 pt. Returns positioned
+    /// glyphs with `x` relative to the gap's left edge (caller adds
+    /// the absolute offset) and how many copies they are. `y` is the
+    /// baseline carried in from the tab glyph (so leader sits on the
+    /// same baseline as the line).
+    fn shape_leader_for_tab(
+        &self,
+        tab_cluster: u32,
+        leader_str: &str,
+        gap_64: i32,
+        baseline_y: i32,
+    ) -> Option<(Vec<PositionedGlyph>, usize)> {
+        let run = self.run_for_cluster(tab_cluster)?;
+        let shape = shape_run(run.face, leader_str, run.point_size);
+        if shape.glyphs.is_empty() || shape.total_advance <= 0 {
+            return None;
+        }
+        let leader_w = shape.total_advance;
+        let copies = (gap_64 / leader_w) as usize;
+        if copies == 0 {
+            return None;
+        }
+        let baseline_shift_64 = (run.baseline_shift_pt * ADVANCE_PRECISION).round() as i32;
+        let mut out: Vec<PositionedGlyph> = Vec::with_capacity(shape.glyphs.len() * copies);
+        let mut pen_x: i32 = 0;
+        for _ in 0..copies {
+            for g in &shape.glyphs {
+                out.push(PositionedGlyph {
+                    glyph_id: g.glyph_id,
+                    // Carry the tab's cluster so per-cluster paint
+                    // pickers attribute the leader to the same run.
+                    cluster: tab_cluster,
+                    x: pen_x + g.x_offset,
+                    y: baseline_y + g.y_offset - baseline_shift_64,
+                    x_advance: g.x_advance,
+                    ch: leader_str.chars().next(),
+                    font_id: run.font_id,
+                    point_size: run.point_size,
+                    // Leaders don't carry underline / strikethrough /
+                    // the substituted flag — those belong to the
+                    // visible content runs, not the synthesised tab
+                    // fill.
+                    underline: false,
+                    strikethru: false,
+                    substituted: false,
+                    x_scale: (run.horizontal_scale_pct / 100.0).max(0.0),
+                    y_scale: (run.vertical_scale_pct / 100.0).max(0.0),
+                    skew_deg: run.skew_deg,
+                    upright: None,
+                });
+                pen_x += g.x_advance;
+            }
+        }
+        Some((out, copies))
+    }
+}
+
+/// Find the first byte offset of `target_char` in
+/// `paragraph_text[clusters[start..end]]`, then return the natural
+/// x position of that glyph relative to the segment's start.
+/// `None` when the character isn't in the segment.
+fn decimal_offset(
+    glyphs: &[PositionedGlyph],
+    start: usize,
+    end: usize,
+    paragraph_text: &str,
+    target_char: char,
+) -> Option<i32> {
+    if start >= end || end > glyphs.len() {
+        return None;
+    }
+    let segment_start_byte = glyphs[start].cluster as usize;
+    let segment_end_byte = glyphs[end - 1].cluster as usize + 1;
+    let bytes = paragraph_text.as_bytes();
+    if segment_end_byte > bytes.len() {
+        return None;
+    }
+    let mut buf = [0u8; 4];
+    let needle = target_char.encode_utf8(&mut buf).as_bytes();
+    let segment_bytes = &bytes[segment_start_byte..segment_end_byte];
+    let pos = segment_bytes
+        .windows(needle.len())
+        .position(|w| w == needle)?;
+    let target_cluster = (segment_start_byte + pos) as u32;
+    let target_glyph = glyphs[start..end]
+        .iter()
+        .find(|g| g.cluster == target_cluster)?;
+    Some(target_glyph.x - glyphs[start].x)
+}
+
+fn next_tab_or_end(glyphs: &[PositionedGlyph], from: usize, bytes: &[u8]) -> usize {
+    for (j, g) in glyphs.iter().enumerate().skip(from + 1) {
+        let cluster = g.cluster as usize;
+        if cluster < bytes.len() && bytes[cluster] == b'\t' {
+            return j;
+        }
+    }
+    glyphs.len()
+}
+
+fn segment_natural_width(glyphs: &[PositionedGlyph], start: usize, end: usize) -> i32 {
+    if start >= end || end > glyphs.len() {
+        return 0;
+    }
+    let last = &glyphs[end - 1];
+    let first_x = glyphs[start].x;
+    last.x + last.x_advance - first_x
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FlatGlyph {
+    cluster: u32,
+    run_idx: usize,
+    x_advance: i32,
+    x_offset: i32,
+    y_offset: i32,
+    glyph_id: u32,
+    /// Tracking and letter spacing inside `x_advance` (1/64 pt): the
+    /// space after the glyph, which a line's last character does not get.
+    spacing: i32,
+    upright: Option<crate::shape::Upright>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct WordSpan {
+    start: usize,
+    end: usize,
+}
+
+fn segment_paragraph(text: &str) -> Vec<WordSpan> {
+    let bytes = text.as_bytes();
+    let mut out = Vec::new();
+    let mut cursor = 0;
+    while cursor < bytes.len() {
+        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+            cursor += 1;
+        }
+        let start = cursor;
+        while cursor < bytes.len() && !bytes[cursor].is_ascii_whitespace() {
+            cursor += 1;
+        }
+        if cursor > start {
+            out.push(WordSpan { start, end: cursor });
+        }
+    }
+    out
+}
+
+/// The space tracking and letter spacing add after the last character of
+/// `range` (its glyphs, when a mark shares its cluster): what InDesign
+/// leaves off when that character ends a line.
+fn trailing_spacing_in(flat: &[FlatGlyph], range: Range<u32>) -> i32 {
+    let last = flat
+        .iter()
+        .filter(|g| g.cluster >= range.start && g.cluster < range.end)
+        .map(|g| g.cluster)
+        .max();
+    match last {
+        Some(c) => flat
+            .iter()
+            .filter(|g| g.cluster == c)
+            .map(|g| g.spacing)
+            .sum(),
+        None => 0,
+    }
+}
+
+fn sum_advances_in(flat: &[FlatGlyph], range: Range<u32>) -> i32 {
+    flat.iter()
+        .filter(|g| g.cluster >= range.start && g.cluster < range.end)
+        .map(|g| g.x_advance)
+        .sum()
+}
+
+/// Returns `Some(run_idx)` when every glyph whose cluster falls in
+/// `[start, end)` belongs to the same run, else `None`. Used to
+/// gate hyphenation: a word that crosses a run boundary is rare and
+/// needs per-segment hyphen widths we don't model yet.
+fn run_index_for_word(flat: &[FlatGlyph], start: u32, end: u32) -> Option<usize> {
+    let mut run: Option<usize> = None;
+    for g in flat {
+        if g.cluster < start || g.cluster >= end {
+            continue;
+        }
+        match run {
+            None => run = Some(g.run_idx),
+            Some(r) if r != g.run_idx => return None,
+            _ => {}
+        }
+    }
+    run
+}
+
+/// Phase 7 — apply the Unicode Bidirectional Algorithm (UAX #9) to
+/// a laid-out line, reordering its glyphs to visual order.
+///
+/// `text` is the original (logical-order) source paragraph text;
+/// glyphs in `line.glyphs` carry `cluster` byte offsets into it.
+/// `base` selects the paragraph's base direction.
+///
+/// Algorithm:
+/// 1. Run `unicode_bidi::BidiInfo` over `text`.
+/// 2. For each glyph cluster in the line, look up its BiDi level.
+/// 3. Use `unicode_bidi::ParagraphInfo::visual_runs` to get the
+///    visual ordering of byte-runs.
+/// 4. Rebuild `line.glyphs` in visual order. Within each visual
+///    run, glyphs keep their original sequence; RTL runs have their
+///    cluster order reversed.
+/// 5. Recompute glyph `x` positions: walk visual-order glyphs and
+///    accumulate `x_advance`, starting from the line's original
+///    leftmost x.
+///
+/// No-op when `base = Ltr` and `text` has no RTL characters
+/// (cheap fast path for the typical case).
+pub fn apply_bidi_reorder(line: &mut LaidOutLine, text: &str, base: BidiDirection) {
+    let default_level = match base {
+        BidiDirection::Ltr => Some(unicode_bidi::Level::ltr()),
+        BidiDirection::Rtl => Some(unicode_bidi::Level::rtl()),
+        BidiDirection::Auto => None,
+    };
+    let bidi = unicode_bidi::BidiInfo::new(text, default_level);
+    // Fast path — no RTL anywhere in the paragraph; nothing to do.
+    if !bidi.has_rtl() && matches!(base, BidiDirection::Ltr | BidiDirection::Auto) {
+        return;
+    }
+    // Locate the paragraph containing this line's first cluster.
+    let line_start = line.byte_range.start;
+    let line_end = line.byte_range.end.min(text.len());
+    if line_start >= line_end {
+        return;
+    }
+    let Some(para_info) = bidi
+        .paragraphs
+        .iter()
+        .find(|p| p.range.start <= line_start && p.range.end >= line_end)
+    else {
+        return;
+    };
+    // visual_runs returns (per-char levels, runs in visual order).
+    let line_range = line_start..line_end;
+    let (_levels, visual_runs) = bidi.visual_runs(para_info, line_range);
+
+    // Group glyphs by their source-byte run. For each visual run,
+    // pull the glyphs whose clusters fall inside the run's byte
+    // range, sort by cluster within the run (RTL runs already have
+    // their bytes in visual order via visual_runs; we just walk
+    // glyphs by ascending cluster and reverse for odd levels).
+    let mut new_glyphs: Vec<PositionedGlyph> = Vec::with_capacity(line.glyphs.len());
+    for run in &visual_runs {
+        let run_level = bidi
+            .levels
+            .get(run.start)
+            .copied()
+            .unwrap_or(para_info.level);
+        // Collect this run's glyphs in source order (ascending cluster).
+        let mut run_glyphs: Vec<PositionedGlyph> = line
+            .glyphs
+            .iter()
+            .copied()
+            .filter(|g| {
+                let c = g.cluster as usize;
+                c >= run.start && c < run.end
+            })
+            .collect();
+        // Stable-sort by cluster to put them in source order.
+        run_glyphs.sort_by_key(|g| g.cluster);
+        // RTL run: reverse cluster groups (preserving intra-cluster
+        // glyph order, which shapers produce in mark order).
+        if run_level.is_rtl() {
+            // Group consecutive same-cluster glyphs, reverse the
+            // group order, keep within-group order intact.
+            let mut groups: Vec<Vec<PositionedGlyph>> = Vec::new();
+            for g in run_glyphs {
+                match groups.last_mut() {
+                    Some(last) if last.first().map(|h| h.cluster) == Some(g.cluster) => {
+                        last.push(g);
+                    }
+                    _ => groups.push(vec![g]),
+                }
+            }
+            groups.reverse();
+            run_glyphs = groups.into_iter().flatten().collect();
+        }
+        new_glyphs.extend(run_glyphs);
+    }
+    // Recompute x positions by walking visual-order glyphs from
+    // the line's original leftmost x. Each glyph's advance is the
+    // same as before; only the order changes.
+    let mut cursor_x = line.glyphs.first().map(|g| g.x).unwrap_or(0);
+    for g in &mut new_glyphs {
+        g.x = cursor_x;
+        cursor_x = cursor_x.saturating_add(g.x_advance);
+    }
+    line.glyphs = new_glyphs;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::compose::MonospaceMeasurer;
+    use crate::shape::ShapedGlyph;
+
+    fn fake_run(advances: &[i32]) -> ShapedRun {
+        let glyphs: Vec<ShapedGlyph> = advances
+            .iter()
+            .enumerate()
+            .map(|(i, &adv)| ShapedGlyph {
+                glyph_id: 100 + i as u32,
+                cluster: i as u32,
+                x_advance: adv,
+                y_offset: 0,
+                x_offset: 0,
+                upright: None,
+            })
+            .collect();
+        ShapedRun {
+            glyphs,
+            total_advance: advances.iter().sum(),
+        }
+    }
+
+    fn opts(column_chars: i32, alignment: Alignment) -> LayoutOptions<'static> {
+        LayoutOptions {
+            compose: ComposeOptions {
+                column_width: column_chars * 10,
+                column_widths: None,
+                tolerance: 10.0,
+                stretch_ratio: 1.0,
+                shrink_ratio: 0.5,
+                desired_space_ratio: 1.0,
+                letter_spacing_pct: 0.0,
+                looseness: 0,
+                hyphenator: None,
+                hyphen_penalty: 50,
+                hyphenation_limits: crate::hyphenate::HyphenationLimits::default(),
+                hyphenation_zone: 0,
+                kinsoku_enforce: false,
+                mojikumi_half_width: false,
+                minimum_raggedness: false,
+                last_line_indent: 0,
+                balance_ragged: false,
+                visible_lines: None,
+                joined_lines: None,
+                fit_tolerance: 0,
+                overrun_size: None,
+                single_line: None,
+            },
+            line_height: 20,
+            first_baseline: 15,
+            alignment,
+            leading_override: None,
+            leading_override_exact: None,
+            line_height_exact: None,
+            first_baseline_exact: None,
+            run_leadings: Vec::new(),
+            auto_leading_from_byte: 0,
+            no_break: Vec::new(),
+            auto_leading: 1.2,
+            justify_last_line: false,
+            last_line_alignment: Alignment::Left,
+            single_word_alignment: Alignment::Justify,
+            tabs: None,
+            object_advances: Vec::new(),
+            ruby_aki: Vec::new(),
+            vertical: false,
+        }
+    }
+
+    /// Two runs that differ in nothing the shaper sees (here only the
+    /// underline) set exactly as one run would, the font's kerning across
+    /// their boundary included; a run at another size does not kern with
+    /// its neighbour.
+    #[test]
+    fn matching_runs_kern_across_their_boundary() {
+        let bytes = std::fs::read(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../corpus/fonts/Inter.ttf"),
+        )
+        .expect("Inter.ttf fixture");
+        let face = crate::shape::Face::from_slice(&bytes, 0).expect("parse Inter");
+        let run = |text, point_size, underline| StyledRun {
+            text,
+            face: &face,
+            point_size,
+            tracking: None,
+            font_id: 1,
+            underline,
+            strikethru: false,
+            substituted: false,
+            baseline_shift_pt: 0.0,
+            horizontal_scale_pct: 100.0,
+            vertical_scale_pct: 100.0,
+            skew_deg: 0.0,
+            fallback_faces: &[],
+            shaping_features: crate::shape::ShapingFeatures::default(),
+        };
+        let xs = |runs: &[StyledRun]| -> Vec<i32> {
+            layout_runs(runs, &LayoutOptions::new(400.0, 24.0)).lines[0]
+                .glyphs
+                .iter()
+                .map(|g| g.x)
+                .collect()
+        };
+        let whole = xs(&[run("AVA", 24.0, false)]);
+        assert_eq!(
+            xs(&[run("A", 24.0, false), run("VA", 24.0, true)]),
+            whole,
+            "split between A and V"
+        );
+        // Inter kerns AV: the split without it would set V later.
+        let a = shape_run(&face, "A", 24.0).total_advance;
+        assert!(whole[1] < whole[0] + a, "AV kerned: {whole:?}, A {a}");
+        let mixed = xs(&[run("A", 24.0, false), run("VA", 23.0, false)]);
+        assert_eq!(mixed[1], whole[0] + a, "no kerning across sizes");
+    }
+
+    #[test]
+    fn position_line_accumulates_advances() {
+        let run = fake_run(&[100, 80, 120]);
+        let out = position_line(&run, 50, 200, 0);
+        assert_eq!(out.len(), 3);
+        assert_eq!(out[0].x, 50);
+        assert_eq!(out[1].x, 150);
+        assert_eq!(out[2].x, 230);
+        for g in &out {
+            assert_eq!(g.y, 200);
+        }
+    }
+
+    #[test]
+    fn position_line_applies_offsets() {
+        let run = ShapedRun {
+            glyphs: vec![ShapedGlyph {
+                glyph_id: 1,
+                cluster: 0,
+                x_advance: 100,
+                x_offset: 5,
+                y_offset: -7,
+                upright: None,
+            }],
+            total_advance: 100,
+        };
+        let out = position_line(&run, 10, 50, 0);
+        assert_eq!(out[0].x, 15); // 10 + x_offset 5
+        assert_eq!(out[0].y, 43); // 50 + y_offset -7
+    }
+
+    #[test]
+    fn position_line_offsets_cluster_by_base() {
+        let run = fake_run(&[10, 10]);
+        let out = position_line(&run, 0, 0, 42);
+        assert_eq!(out[0].cluster, 42);
+        assert_eq!(out[1].cluster, 43);
+    }
+
+    #[test]
+    fn left_alignment_leaves_glyphs_at_zero() {
+        let shaper = MonospaceMeasurer::new(10, 10);
+        let out = layout_paragraph("ab", &shaper, &opts(20, Alignment::Left));
+        let first = &out.lines[0].glyphs[0];
+        assert_eq!(first.x, 0);
+    }
+
+    #[test]
+    fn right_alignment_pushes_line_to_column_edge() {
+        let shaper = MonospaceMeasurer::new(10, 10);
+        // "ab" = 20 units, column = 200, expected shift = 180.
+        let out = layout_paragraph("ab", &shaper, &opts(20, Alignment::Right));
+        let first = &out.lines[0].glyphs[0];
+        assert_eq!(first.x, 180);
+    }
+
+    #[test]
+    fn center_alignment_halves_the_gap() {
+        let shaper = MonospaceMeasurer::new(10, 10);
+        // "ab" = 20, column = 200, gap = 180, shift = 90.
+        let out = layout_paragraph("ab", &shaper, &opts(20, Alignment::Center));
+        let first = &out.lines[0].glyphs[0];
+        assert_eq!(first.x, 90);
+    }
+
+    #[test]
+    fn justify_last_line_stays_left_aligned() {
+        let shaper = MonospaceMeasurer::new(10, 10);
+        // Only one line — it IS the last — so justify stays at 0.
+        let out = layout_paragraph("ab cd", &shaper, &opts(20, Alignment::Justify));
+        let first = &out.lines[0].glyphs[0];
+        assert_eq!(first.x, 0);
+    }
+
+    /// A justified line that holds one word, before the last
+    /// (`SingleWordJustification`, `paragraph-attrs` B, ADR 153): letter-
+    /// spaced to the measure by default, centred when asked.
+    #[test]
+    fn a_single_word_line_is_letter_spaced_or_placed() {
+        let shaper = MonospaceMeasurer::new(10, 10);
+        let text = "abcdefg hijklmn op";
+        let out = layout_paragraph(text, &shaper, &opts(8, Alignment::Justify));
+        assert!(out.lines.len() >= 3, "{:?}", out.lines.len());
+        assert_eq!(
+            right_edge(&out.lines[0]),
+            80,
+            "letter-spaced to the measure"
+        );
+        let centred = LayoutOptions {
+            single_word_alignment: Alignment::Center,
+            ..opts(8, Alignment::Justify)
+        };
+        let out = layout_paragraph(text, &shaper, &centred);
+        assert_eq!(out.lines[0].glyphs[0].x, 5, "centred at natural width");
+    }
+
+    /// `LastLineIndent` (`paragraph-attrs` C, ADR 153): the last line
+    /// breaks at the measure less the indent.
+    #[test]
+    fn the_last_line_breaks_short_of_its_indent() {
+        let shaper = MonospaceMeasurer::new(10, 10);
+        let out = layout_paragraph("ab cd ef", &shaper, &opts(8, Alignment::Left));
+        assert_eq!(out.lines.len(), 1);
+        let mut indented = opts(8, Alignment::Left);
+        indented.compose.last_line_indent = 20;
+        let out = layout_paragraph("ab cd ef", &shaper, &indented);
+        assert_eq!(out.lines.len(), 2, "ef goes down a line");
+    }
+
+    fn justified(column_chars: i32, last: Alignment) -> LayoutOptions<'static> {
+        LayoutOptions {
+            last_line_alignment: last,
+            ..opts(column_chars, Alignment::Justify)
+        }
+    }
+
+    /// Where a line's ink ends: its last glyph's right edge.
+    fn right_edge(line: &LaidOutLine) -> i32 {
+        line.glyphs.last().map_or(0, |g| g.x + g.x_advance)
+    }
+
+    /// CenterJustified (InDesign 20.0.1, `justification` 1.17): the
+    /// lines before the last reach the measure, the last is centred at
+    /// natural spacing.
+    #[test]
+    fn center_justified_last_line_centred() {
+        let shaper = MonospaceMeasurer::new(10, 10);
+        let text = "ab cd ef gh ij kl";
+        let out = layout_paragraph(text, &shaper, &justified(8, Alignment::Center));
+        assert!(out.lines.len() >= 2, "need a line before the last");
+        let (last, body) = out.lines.split_last().unwrap();
+        for line in body {
+            assert_eq!(right_edge(line), 80, "a body line reaches the measure");
+        }
+        let left = last.glyphs[0].x;
+        assert_eq!(left, (80 - last.width) / 2, "the last line is centred");
+        assert_eq!(right_edge(last) - left, last.width, "at natural spacing");
+    }
+
+    /// RightJustified (`justification` 1.21): the last line sits flush
+    /// right at natural spacing.
+    #[test]
+    fn right_justified_last_line_flush_right() {
+        let shaper = MonospaceMeasurer::new(10, 10);
+        let out = layout_paragraph(
+            "ab cd ef gh ij kl",
+            &shaper,
+            &justified(8, Alignment::Right),
+        );
+        let last = out.lines.last().unwrap();
+        assert_eq!(right_edge(last), 80);
+        assert_eq!(last.glyphs[0].x, 80 - last.width);
+    }
+
+    /// FullyJustified (`justification` 1.25): the last line reaches the
+    /// measure like the others, its word spaces stretched.
+    #[test]
+    fn fully_justified_last_line_spread() {
+        let shaper = MonospaceMeasurer::new(10, 10);
+        let out = layout_paragraph(
+            "ab cd ef gh ij kl",
+            &shaper,
+            &justified(8, Alignment::Justify),
+        );
+        assert!(out.lines.len() >= 2);
+        for line in &out.lines {
+            assert_eq!(right_edge(line), 80, "every line reaches the measure");
+        }
+        let last = out.lines.last().unwrap();
+        assert_eq!(last.glyphs[0].x, 0, "and starts at the left edge");
+    }
+
+    /// FullyJustified with a one-word last line (`justification` 1.28,
+    /// "Typography" 8.47 pt between letters): the letters spread, the
+    /// last one ending at the measure.
+    #[test]
+    fn fully_justified_one_word_is_letter_spaced() {
+        let shaper = MonospaceMeasurer::new(10, 10);
+        let out = layout_paragraph("abcd", &shaper, &justified(8, Alignment::Justify));
+        let xs: Vec<i32> = out.lines[0].glyphs.iter().map(|g| g.x).collect();
+        // 40 of slack over 3 gaps: 14 + 13 + 13.
+        assert_eq!(xs, [0, 24, 47, 70]);
+    }
+
+    /// A line a forced line break ends keeps full measure in every
+    /// justified mode (`justification` 1.15 / 1.19 / 1.23).
+    #[test]
+    fn forced_break_line_justified_whatever_the_last_line_does() {
+        let shaper = MonospaceMeasurer::new(10, 10);
+        let opts = LayoutOptions {
+            justify_last_line: true,
+            ..justified(8, Alignment::Center)
+        };
+        let out = layout_paragraph("ab cd", &shaper, &opts);
+        assert_eq!(right_edge(&out.lines[0]), 80);
+    }
+
+    #[test]
+    fn justify_stretches_intermediate_lines_to_column() {
+        let shaper = MonospaceMeasurer::new(10, 10);
+        // Column = 80, paragraph "ab cd ef gh ij kl" → multiple lines.
+        // Intermediate lines should land the last glyph exactly on the
+        // right column edge.
+        let out = layout_paragraph("ab cd ef gh ij kl", &shaper, &opts(8, Alignment::Justify));
+        assert!(out.lines.len() >= 2, "need ≥ 2 lines to exercise justify");
+        let non_last: Vec<_> = out.lines.iter().take(out.lines.len() - 1).collect();
+        for line in non_last {
+            let last_glyph = line.glyphs.last().unwrap();
+            // Last glyph sits at column_edge - last_glyph_advance.
+            // advance = 10, column = 80 → last glyph x ≥ 70.
+            assert!(
+                last_glyph.x >= 70 - 2 && last_glyph.x <= 70 + 2,
+                "expected last glyph near 70, got {}",
+                last_glyph.x
+            );
+        }
+    }
+
+    #[test]
+    fn zero_stretch_budget_does_not_collapse_wrap_to_one_word_per_line() {
+        // Reproduces Q-15: an IDML paragraph with
+        // MinimumWordSpacing=90 MaximumWordSpacing=100 lands at the
+        // composer with stretch_ratio=0.0, shrink_ratio=0.1. With zero
+        // stretch budget on a wide column the breaker has no slack and
+        // either drops the paragraph or collapses wrap to one word per
+        // line. The pipeline floors stretch_ratio (currently 0.1) at
+        // the IDML boundary so the breaker always sees some headroom.
+        // This test verifies the floored input produces healthy wrap
+        // (1-3 lines, not 12) and documents that the raw zero-stretch
+        // input degrades — justifying the floor.
+        let shaper = MonospaceMeasurer::new(10, 10);
+        let text = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu";
+        assert_eq!(text.split_whitespace().count(), 12);
+
+        // Failure-case inputs as they arrive at the composer after the
+        // pipeline floor (stretch lifted from 0.0 to 0.1).
+        let mut floored = opts(40, Alignment::Left);
+        floored.compose.desired_space_ratio = 1.0;
+        floored.compose.stretch_ratio = 0.1;
+        floored.compose.shrink_ratio = 0.1;
+        let out_floored = layout_paragraph(text, &shaper, &floored);
+        assert!(
+            !out_floored.lines.is_empty() && out_floored.lines.len() <= 3,
+            "floored stretch wrap should produce 1-3 lines, got {}",
+            out_floored.lines.len()
+        );
+
+        // Raw failure case: with stretch = 0 the breaker finds no
+        // feasible set of breaks at any tolerance. It used to drop the
+        // paragraph or collapse it to one word per line — the reason
+        // the pipeline floors the ratio. Greedy first-fit now catches
+        // that fall (W5), so the raw input degrades GRACEFULLY: the
+        // same healthy wrap, just chosen greedily rather than
+        // optimally. The floor still earns its place — it keeps the
+        // total-fit path in play, and first-fit is a last resort, not
+        // a line-breaking policy.
+        let mut raw = opts(40, Alignment::Left);
+        raw.compose.desired_space_ratio = 1.0;
+        raw.compose.stretch_ratio = 0.0;
+        raw.compose.shrink_ratio = 0.1;
+        let out_raw = layout_paragraph(text, &shaper, &raw);
+        assert!(
+            !out_raw.lines.is_empty() && out_raw.lines.len() <= 4,
+            "the greedy fallback should keep zero-stretch wrap healthy, got {} lines",
+            out_raw.lines.len()
+        );
+    }
+
+    #[test]
+    fn layout_paragraph_uses_monospace_shaper_end_to_end() {
+        let shaper = MonospaceMeasurer::new(10, 10);
+        let o = opts(12, Alignment::Left);
+        let out = layout_paragraph("lorem ipsum dolor sit amet", &shaper, &o);
+
+        assert!(!out.lines.is_empty(), "no lines emitted");
+        for w in out.lines.windows(2) {
+            assert_eq!(w[1].baseline_y - w[0].baseline_y, 20);
+        }
+        assert_eq!(out.lines[0].baseline_y, 15);
+        let line0 = &out.lines[0];
+        for pair in line0.glyphs.windows(2) {
+            assert!(pair[0].x <= pair[1].x);
+        }
+        let expected_width: i32 = line0.glyphs.iter().map(|_| 10).sum::<i32>();
+        assert_eq!(line0.width, expected_width);
+    }
+
+    fn pg(point_size: f32) -> PositionedGlyph {
+        PositionedGlyph {
+            glyph_id: 0,
+            cluster: 0,
+            x: 0,
+            y: 0,
+            x_advance: 0,
+            font_id: 0,
+            point_size,
+            underline: false,
+            strikethru: false,
+            substituted: false,
+            x_scale: 1.0,
+            y_scale: 1.0,
+            skew_deg: 0.0,
+            ch: None,
+            upright: None,
+        }
+    }
+
+    #[test]
+    fn auto_leading_picks_largest_run_size() {
+        let glyphs = vec![pg(11.0), pg(22.0), pg(11.0)];
+        // 22 * 1.2 * 64 = 1689.6 → 1690.
+        assert_eq!(max_line_height_for_glyphs(&glyphs), Some(1690));
+    }
+
+    #[test]
+    fn auto_leading_skips_a_leading_marker() {
+        // A 20 pt marker (bytes 0..2) before 10 pt text: 10 * 1.2 * 64.
+        let at = |cluster, size| PositionedGlyph {
+            cluster,
+            ..pg(size)
+        };
+        let glyphs = vec![at(0, 20.0), at(1, 20.0), at(2, 10.0), at(3, 10.0)];
+        assert_eq!(auto_line_height(&glyphs, 2), Some(768));
+        assert_eq!(auto_line_height(&glyphs, 0), Some(1536));
+        // A line holding nothing past the marker still gets a height.
+        assert_eq!(auto_line_height(&glyphs[..2], 2), Some(1536));
+    }
+
+    #[test]
+    fn auto_leading_returns_none_for_empty_line() {
+        assert_eq!(max_line_height_for_glyphs(&[]), None);
+    }
+
+    fn line_with_tab(text: &str) -> LaidOutLine {
+        // Build a synthetic line whose glyphs have monotonic x +
+        // small advances. Tab byte is at index 1.
+        let bytes = text.as_bytes();
+        let mut glyphs = Vec::new();
+        let mut pen = 0;
+        for (i, &b) in bytes.iter().enumerate() {
+            let adv = if b == b'\t' { 640 } else { 320 }; // 10 / 5 pt
+            glyphs.push(PositionedGlyph {
+                glyph_id: 0,
+                cluster: i as u32,
+                x: pen,
+                y: 0,
+                x_advance: adv,
+                font_id: 0,
+                point_size: 12.0,
+                underline: false,
+                strikethru: false,
+                substituted: false,
+                x_scale: 1.0,
+                y_scale: 1.0,
+                skew_deg: 0.0,
+                ch: None,
+                upright: None,
+            });
+            pen += adv;
+        }
+        LaidOutLine {
+            byte_range: 0..bytes.len(),
+            baseline_y: 0,
+            baseline_exact: 0.0,
+            width: pen,
+            ratio: 0.0,
+            glyphs,
+        }
+    }
+
+    #[test]
+    fn apply_tab_stops_snaps_to_next_explicit_stop() {
+        let text = "a\tb";
+        let mut line = line_with_tab(text);
+        // 'a' at x=0 (advance 320); '\t' at x=320; 'b' at x=960.
+        // With a stop at 36 pt = 2304 1/64pt, the tab widens to
+        // (2304 - 320) = 1984; 'b' shifts to 2304.
+        apply_tab_stops(
+            &mut line,
+            text,
+            &[TabStopSpec {
+                position_pt: 36.0,
+                alignment: TabAlignment::Left,
+                alignment_character: '.',
+                leader: None,
+            }],
+            0.0,
+        );
+        assert_eq!(line.glyphs[0].x, 0);
+        assert_eq!(line.glyphs[1].x, 320);
+        assert_eq!(line.glyphs[1].x_advance, 1984);
+        assert_eq!(line.glyphs[2].x, 2304);
+    }
+
+    #[test]
+    fn apply_tab_stops_falls_back_to_default_grid() {
+        let text = "a\tb";
+        let mut line = line_with_tab(text);
+        apply_tab_stops(&mut line, text, &[], 36.0);
+        assert_eq!(line.glyphs[2].x, 2304);
+    }
+
+    #[test]
+    fn apply_tab_stops_skips_when_pen_past_all_stops() {
+        let text = "abc\tx";
+        let mut line = line_with_tab(text);
+        let before_x = line.glyphs[4].x;
+        apply_tab_stops(
+            &mut line,
+            text,
+            &[TabStopSpec {
+                position_pt: 1.0,
+                alignment: TabAlignment::Left,
+                alignment_character: '.',
+                leader: None,
+            }],
+            0.0,
+        );
+        assert_eq!(line.glyphs[4].x, before_x);
+    }
+
+    #[test]
+    fn right_align_pulls_segment_right_edge_to_stop() {
+        // "a\tbc" — 'a' at 0..320, '\t' at 320..960, 'b' 960..1280,
+        // 'c' 1280..1600. Right-align stop at 36 pt = 2304 1/64pt.
+        // Segment after tab is "bc" (2 glyphs * 320 = 640 wide), so
+        // the segment should start at 2304 - 640 = 1664; tab takes
+        // (1664 - 320) = 1344 1/64pt of advance.
+        let text = "a\tbc";
+        let mut line = line_with_tab(text);
+        apply_tab_stops(
+            &mut line,
+            text,
+            &[TabStopSpec {
+                position_pt: 36.0,
+                alignment: TabAlignment::Right,
+                alignment_character: '.',
+                leader: None,
+            }],
+            0.0,
+        );
+        assert_eq!(line.glyphs[1].x_advance, 1344);
+        assert_eq!(line.glyphs[2].x, 1664, "'b' should start at 1664");
+        assert_eq!(line.glyphs[3].x, 1984, "'c' should start at 1984");
+        // Right edge of last glyph at the stop.
+        assert_eq!(line.glyphs[3].x + line.glyphs[3].x_advance, 2304);
+    }
+
+    #[test]
+    fn center_align_centres_segment_on_stop() {
+        let text = "a\tbc";
+        let mut line = line_with_tab(text);
+        // Center stop at 36 pt = 2304; segment is 640 wide; centre
+        // at 2304 means segment starts at 2304 - 320 = 1984.
+        apply_tab_stops(
+            &mut line,
+            text,
+            &[TabStopSpec {
+                position_pt: 36.0,
+                alignment: TabAlignment::Center,
+                alignment_character: '.',
+                leader: None,
+            }],
+            0.0,
+        );
+        assert_eq!(line.glyphs[2].x, 1984);
+        // Last glyph right edge at 1984 + 640 = 2624.
+        assert_eq!(line.glyphs[3].x + line.glyphs[3].x_advance, 2624);
+    }
+
+    #[test]
+    fn right_align_collapses_the_tab_when_the_segment_overruns() {
+        // Stop at 8 pt = 512 (just past the tab's x of 320), segment
+        // width 640 → Right would want the segment to start at -128,
+        // behind the pen. InDesign (measured on `tab-breaks`) sets the
+        // segment AT the pen: the tab collapses to zero width and the
+        // segment overruns the stop — it does not move on to a later
+        // stop or keep the tab glyph's advance.
+        let text = "a\tbc";
+        let mut line = line_with_tab(text);
+        apply_tab_stops(
+            &mut line,
+            text,
+            &[TabStopSpec {
+                position_pt: 8.0,
+                alignment: TabAlignment::Right,
+                alignment_character: '.',
+                leader: None,
+            }],
+            0.0,
+        );
+        assert_eq!(line.glyphs[1].x_advance, 0, "tab collapses");
+        assert_eq!(line.glyphs[2].x, 320, "'b' starts at the pen");
+    }
+
+    #[test]
+    fn decimal_align_snaps_dot_onto_stop() {
+        // "a\t1.5" — 'a' 0..320, '\t' 320..960, '1' 960..1280,
+        // '.' 1280..1600, '5' 1600..1920. Decimal stop at
+        // 36 pt = 2304: '.' should land at 2304.
+        // segment_start_x = 960; '.' is at 1280 → offset 320.
+        // target_segment_left = 2304 - 320 = 1984.
+        // tab advance widens to 1984 - 320 = 1664.
+        let text = "a\t1.5";
+        let mut line = line_with_tab(text);
+        apply_tab_stops(
+            &mut line,
+            text,
+            &[TabStopSpec {
+                position_pt: 36.0,
+                alignment: TabAlignment::Decimal,
+                alignment_character: '.',
+                leader: None,
+            }],
+            0.0,
+        );
+        assert_eq!(line.glyphs[1].x_advance, 1664);
+        assert_eq!(line.glyphs[2].x, 1984, "'1' starts at 1984");
+        assert_eq!(line.glyphs[3].x, 2304, "'.' lands at the stop");
+        assert_eq!(line.glyphs[4].x, 2624, "'5' starts after the dot");
+    }
+
+    #[test]
+    fn decimal_align_falls_back_to_left_when_char_missing() {
+        // No '.' in segment — should fall through to Left.
+        let text = "a\tbc";
+        let mut line = line_with_tab(text);
+        apply_tab_stops(
+            &mut line,
+            text,
+            &[TabStopSpec {
+                position_pt: 36.0,
+                alignment: TabAlignment::Decimal,
+                alignment_character: '.',
+                leader: None,
+            }],
+            0.0,
+        );
+        // Same outcome as Left at 36pt: tab widens so 'b' starts at 2304.
+        assert_eq!(line.glyphs[2].x, 2304);
+    }
+
+    // ── Phase 7 BiDi reorder ───────────────────────────────────────
+
+    /// Build a `LaidOutLine` from manually-positioned monospace
+    /// glyphs covering `text[byte_range]`. Each char is one cluster.
+    /// Glyphs are LTR-positioned (ascending x in cluster order).
+    fn line_for_bidi(text: &str, glyphs_for: &str) -> LaidOutLine {
+        let mut glyphs = Vec::new();
+        let mut x = 0i32;
+        let advance = 100i32;
+        for (i, c) in glyphs_for.char_indices() {
+            // Map glyphs_for byte-i back into text's byte offset by
+            // assuming they correspond 1:1. Caller passes
+            // glyphs_for = &text[start..end] which preserves offsets.
+            let cluster = (text.find(glyphs_for).unwrap_or(0) + i) as u32;
+            glyphs.push(PositionedGlyph {
+                glyph_id: c as u32,
+                cluster,
+                x,
+                y: 0,
+                x_advance: advance,
+                font_id: 0,
+                point_size: 12.0,
+                underline: false,
+                strikethru: false,
+                substituted: false,
+                x_scale: 1.0,
+                y_scale: 1.0,
+                skew_deg: 0.0,
+                ch: None,
+                upright: None,
+            });
+            x += advance;
+        }
+        let start = text.find(glyphs_for).unwrap_or(0);
+        let end = start + glyphs_for.len();
+        LaidOutLine {
+            byte_range: start..end,
+            baseline_y: 0,
+            baseline_exact: 0.0,
+            width: x,
+            ratio: 0.0,
+            glyphs,
+        }
+    }
+
+    // ── Phase 7 Mojikumi half-width ────────────────────────────────
+
+    #[test]
+    fn mojikumi_halves_cjk_punctuation_advances() {
+        // Build a ShapedRun by hand carrying three glyphs:
+        //   '本' (CJK ideograph — not punctuation, unaffected)
+        //   '、' (ideographic comma — halved)
+        //   '本' (unaffected)
+        // Verify the punctuation glyph's advance halves but the
+        // ideographs stay unchanged.
+        use crate::shape::ShapedGlyph;
+        let text = "本、本";
+        let mut shape = ShapedRun {
+            glyphs: vec![
+                ShapedGlyph {
+                    glyph_id: 1,
+                    cluster: 0,
+                    x_advance: 100,
+                    y_offset: 0,
+                    x_offset: 0,
+                    upright: None,
+                },
+                ShapedGlyph {
+                    glyph_id: 2,
+                    // U+3001 is at byte offset 3 in "本、本"
+                    // ('本' is 3 bytes in UTF-8).
+                    cluster: 3,
+                    x_advance: 100,
+                    y_offset: 0,
+                    x_offset: 0,
+                    upright: None,
+                },
+                ShapedGlyph {
+                    glyph_id: 3,
+                    cluster: 6,
+                    x_advance: 100,
+                    y_offset: 0,
+                    x_offset: 0,
+                    upright: None,
+                },
+            ],
+            total_advance: 300,
+        };
+        apply_mojikumi_half_width(&mut shape, text);
+        assert_eq!(shape.glyphs[0].x_advance, 100, "ideograph unchanged");
+        assert_eq!(shape.glyphs[1].x_advance, 50, "comma halved");
+        assert_eq!(shape.glyphs[2].x_advance, 100, "ideograph unchanged");
+        assert_eq!(shape.total_advance, 250, "total updated");
+    }
+
+    #[test]
+    fn mojikumi_no_op_on_pure_ascii() {
+        use crate::shape::ShapedGlyph;
+        let text = "abc";
+        let mut shape = ShapedRun {
+            glyphs: vec![
+                ShapedGlyph {
+                    glyph_id: 1,
+                    cluster: 0,
+                    x_advance: 100,
+                    y_offset: 0,
+                    x_offset: 0,
+                    upright: None,
+                },
+                ShapedGlyph {
+                    glyph_id: 2,
+                    cluster: 1,
+                    x_advance: 100,
+                    y_offset: 0,
+                    x_offset: 0,
+                    upright: None,
+                },
+                ShapedGlyph {
+                    glyph_id: 3,
+                    cluster: 2,
+                    x_advance: 100,
+                    y_offset: 0,
+                    x_offset: 0,
+                    upright: None,
+                },
+            ],
+            total_advance: 300,
+        };
+        apply_mojikumi_half_width(&mut shape, text);
+        assert_eq!(
+            shape.glyphs.iter().map(|g| g.x_advance).collect::<Vec<_>>(),
+            vec![100, 100, 100]
+        );
+        assert_eq!(shape.total_advance, 300);
+    }
+
+    #[test]
+    fn bidi_reorder_pure_ltr_is_noop() {
+        let text = "hello";
+        let mut line = line_for_bidi(text, text);
+        let before: Vec<u32> = line.glyphs.iter().map(|g| g.glyph_id).collect();
+        apply_bidi_reorder(&mut line, text, BidiDirection::Ltr);
+        let after: Vec<u32> = line.glyphs.iter().map(|g| g.glyph_id).collect();
+        assert_eq!(before, after, "LTR text must not be reordered");
+    }
+
+    #[test]
+    fn bidi_reorder_pure_rtl_reverses_glyphs() {
+        // U+05D0..U+05D5 = Hebrew letters Alef..Vav.
+        let text = "\u{5D0}\u{5D1}\u{5D2}";
+        let mut line = line_for_bidi(text, text);
+        let logical: Vec<u32> = line.glyphs.iter().map(|g| g.glyph_id).collect();
+        apply_bidi_reorder(&mut line, text, BidiDirection::Rtl);
+        let visual: Vec<u32> = line.glyphs.iter().map(|g| g.glyph_id).collect();
+        let mut want: Vec<u32> = logical.clone();
+        want.reverse();
+        assert_eq!(visual, want, "RTL paragraph glyphs reverse visually");
+        // X positions still increase left-to-right.
+        for w in line.glyphs.windows(2) {
+            assert!(w[0].x < w[1].x);
+        }
+    }
+
+    #[test]
+    fn bidi_reorder_mixed_ltr_rtl_segments() {
+        // English "AB" then Hebrew "אב" (Alef-Bet) then English "CD".
+        // Visual order in an LTR paragraph: "AB" + "בא" + "CD".
+        let text = "AB\u{5D0}\u{5D1}CD";
+        let mut line = line_for_bidi(text, text);
+        apply_bidi_reorder(&mut line, text, BidiDirection::Ltr);
+        let visual: Vec<char> = line
+            .glyphs
+            .iter()
+            .map(|g| g.glyph_id as u8 as char)
+            .collect();
+        // First two glyphs are A, B (LTR).
+        assert_eq!(visual[0], 'A');
+        assert_eq!(visual[1], 'B');
+        // Then Bet, Alef (RTL reversed) — but glyph_id was set from
+        // the char codepoint, so we compare codepoints directly.
+        assert_eq!(line.glyphs[2].glyph_id, 0x5D1); // Bet first
+        assert_eq!(line.glyphs[3].glyph_id, 0x5D0); // Alef second
+                                                    // Then C, D (LTR).
+        assert_eq!(line.glyphs[4].glyph_id, 'C' as u32);
+        assert_eq!(line.glyphs[5].glyph_id, 'D' as u32);
+    }
+
+    #[test]
+    fn decimal_align_with_custom_character() {
+        // Use ',' as the decimal character (European convention).
+        let text = "a\t1,5";
+        let mut line = line_with_tab(text);
+        apply_tab_stops(
+            &mut line,
+            text,
+            &[TabStopSpec {
+                position_pt: 36.0,
+                alignment: TabAlignment::Decimal,
+                alignment_character: ',',
+                leader: None,
+            }],
+            0.0,
+        );
+        assert_eq!(line.glyphs[3].x, 2304, "',' lands at the stop");
+    }
+}

@@ -1,0 +1,225 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! `corners.idml` — the five IDML corner options.
+//!
+//! One A4-portrait page per `CornerOption` (Rounded, Inverse Rounded,
+//! Bevel, Inset, Fancy), each carrying:
+//!
+//! * a filled+stroked **rectangle** whose `CornerOption` +
+//!   `CornerRadius` exercise the rect corner-path emitter, and
+//! * a filled **polygon** (a right triangle: one 90° and two 45°
+//!   corners) carrying `TopLeftCornerOption` + `TopLeftCornerRadius`,
+//!   which exercises B-23's generalised corner emitter at NON-right
+//!   angles. Real IDML writes the identical corner vocabulary on
+//!   `<Polygon>`; the four names are rect-shaped addressing, so the
+//!   `TopLeft` slot drives the whole polygon uniformly.
+//!
+//! The page label names the option so a per-page diff reads
+//! "corners · inset" on failure.
+//!
+//! Gated against InDesign's PDF (`corners.pdf`) like every fixture in
+//! `fidelity-thresholds.json`.
+
+use crate::builders::{
+    designmap::{write_designmap, DesignMap},
+    master::{write_master, Master},
+    page_item::{Polygon, PolygonSubPath, Rect},
+    resources::{container_xml, fonts_xml, graphic_xml, preferences_xml, styles_xml},
+    spread::{write_spread, Spread},
+    xml_folder::{backing_story_xml, mapping_xml, tags_xml},
+};
+use crate::geometry::translate;
+use crate::ids::self_id;
+use crate::package::Sample;
+
+const SAMPLE: &str = "corners";
+const PAGE_W_PT: f32 = 595.276; // A4 portrait
+const PAGE_H_PT: f32 = 841.890;
+const DEMO_W_PT: f32 = 320.0;
+const DEMO_H_PT: f32 = 220.0;
+const CORNER_RADIUS_PT: f32 = 48.0;
+
+/// B-23 polygon demo — a right triangle placed above the rectangle.
+/// Legs of 200 pt meeting at a 90° corner, hypotenuse closing two 45°
+/// corners, so one fixture covers both the right-angle case (identical
+/// math to a rect corner) and the acute case (where the generalised
+/// tangent-circle construction is what makes the arc circular).
+const POLY_ORIGIN_X_PT: f32 = 150.0;
+const POLY_ORIGIN_Y_PT: f32 = 60.0;
+const POLY_LEG_PT: f32 = 200.0;
+/// Deliberately smaller than the rect's radius: at the 45° corners the
+/// tangent distance is `r / tan(22.5°) ≈ 2.41·r`, so 20 pt keeps both
+/// acute corners well inside the half-edge clamp and the effect stays
+/// legible rather than swallowing the triangle.
+const POLY_CORNER_RADIUS_PT: f32 = 20.0;
+
+/// `(label, IDML CornerOption enum value)` per page, in InDesign's
+/// tokens: a bare `Rounded` or `Inset` is no option to InDesign (ADR 149).
+fn variants() -> Vec<(&'static str, &'static str)> {
+    vec![
+        ("corners · rounded", "RoundedCorner"),
+        ("corners · inverse-rounded", "InverseRoundedCorner"),
+        ("corners · bevel", "BevelCorner"),
+        ("corners · inset", "InsetCorner"),
+        ("corners · fancy", "FancyCorner"),
+    ]
+}
+
+/// Build the full `Sample` ready for `write_idml`.
+pub fn build() -> Sample {
+    let variants = variants();
+
+    let mut master_spreads = Vec::with_capacity(variants.len());
+    let mut spreads = Vec::with_capacity(variants.len());
+    let mut master_refs = Vec::with_capacity(variants.len());
+    let mut spread_refs = Vec::with_capacity(variants.len());
+
+    for (i, (name, corner_option)) in variants.iter().enumerate() {
+        let seq = i as u32;
+        let master_id = self_id(SAMPLE, "MasterSpread", seq);
+        let master_page_id = self_id(SAMPLE, "MasterPage", seq);
+        let spread_id = self_id(SAMPLE, "Spread", seq);
+        let page_id = self_id(SAMPLE, "Page", seq);
+        let rect_id = self_id(SAMPLE, "Rectangle", seq);
+
+        master_spreads.push((
+            master_id.clone(),
+            write_master(&Master {
+                self_id: format!("MasterSpread/{master_id}"),
+                page_self_id: master_page_id.clone(),
+                page_width_pt: PAGE_W_PT,
+                page_height_pt: PAGE_H_PT,
+                page_items: Vec::new(),
+            }),
+        ));
+        master_refs.push(master_id.clone());
+
+        // One filled + stroked rectangle centred on the page, carrying
+        // the page's `CornerOption` + a uniform `CornerRadius`. The
+        // stroke makes the corner shape legible against the fill.
+        let demo = Rect {
+            self_id: rect_id,
+            width_pt: DEMO_W_PT,
+            height_pt: DEMO_H_PT,
+            item_transform: translate((PAGE_W_PT - DEMO_W_PT) * 0.5, (PAGE_H_PT - DEMO_H_PT) * 0.5),
+            fill_color: Some("Color/Paper".into()),
+            stroke_color: Some("Color/Black".into()),
+            stroke_weight_pt: Some(3.0),
+            parent_story: None,
+            next_text_frame: None,
+            previous_text_frame: None,
+            // As InDesign writes a frame's corners: the item-level pair
+            // AND the four per-corner attributes, which are the ones it
+            // reads (ADR 149).
+            extra_attrs: std::iter::once((
+                "CornerOption".to_string(),
+                (*corner_option).to_string(),
+            ))
+            .chain(std::iter::once((
+                "CornerRadius".to_string(),
+                CORNER_RADIUS_PT.to_string(),
+            )))
+            .chain(
+                ["TopLeft", "TopRight", "BottomLeft", "BottomRight"]
+                    .into_iter()
+                    .flat_map(|c| {
+                        [
+                            (format!("{c}CornerOption"), (*corner_option).to_string()),
+                            (format!("{c}CornerRadius"), CORNER_RADIUS_PT.to_string()),
+                        ]
+                    }),
+            )
+            .collect(),
+            blending: None,
+            drop_shadow: None,
+            placed_image: None,
+            text_wrap: None,
+            anchored_setting: None,
+            frame_effects: Vec::new(),
+            text_frame_pref: None,
+            custom_subpaths: None,
+        };
+
+        // B-23 — the same corner option on a POLYGON. Addressed through
+        // the `TopLeft` slot (the driver for polygons; the other three
+        // names are rect-only addressing) plus the legacy global
+        // `CornerRadius`, exactly the shape real InDesign exports carry.
+        let poly = Polygon {
+            self_id: self_id(SAMPLE, "Polygon", seq),
+            item_transform: translate(POLY_ORIGIN_X_PT, POLY_ORIGIN_Y_PT),
+            fill_color: Some("Color/Black".into()),
+            stroke_color: None,
+            stroke_weight_pt: None,
+            extra_attrs: vec![
+                (
+                    "TopLeftCornerOption".to_string(),
+                    (*corner_option).to_string(),
+                ),
+                (
+                    "TopLeftCornerRadius".to_string(),
+                    POLY_CORNER_RADIUS_PT.to_string(),
+                ),
+                (
+                    "CornerRadius".to_string(),
+                    POLY_CORNER_RADIUS_PT.to_string(),
+                ),
+            ],
+            subpaths: vec![PolygonSubPath::corners(
+                [(0.0, 0.0), (POLY_LEG_PT, 0.0), (0.0, POLY_LEG_PT)],
+                true,
+            )],
+            text_path: None,
+        };
+
+        spreads.push((
+            spread_id.clone(),
+            write_spread(&Spread {
+                self_id: spread_id.clone(),
+                page_self_id: page_id,
+                page_name: name.to_string(),
+                applied_master: format!("MasterSpread/{master_id}"),
+                page_width_pt: PAGE_W_PT,
+                page_height_pt: PAGE_H_PT,
+                page_items: vec![demo.into(), poly.into()],
+                override_list: Vec::new(),
+                margins: None,
+                item_transform: None,
+            }),
+        ));
+        spread_refs.push(spread_id);
+    }
+
+    let designmap = write_designmap(&DesignMap {
+        self_id: "d".to_string(),
+        master_spreads: master_refs,
+        spreads: spread_refs,
+        stories: Vec::new(),
+    });
+
+    Sample {
+        container_xml: container_xml(),
+        designmap_xml: designmap,
+        graphic_xml: graphic_xml(),
+        fonts_xml: fonts_xml(),
+        styles_xml: styles_xml(),
+        preferences_xml: preferences_xml(),
+        backing_story_xml: backing_story_xml(),
+        tags_xml: tags_xml(),
+        mapping_xml: mapping_xml(),
+        master_spreads,
+        spreads,
+        stories: Vec::new(),
+    }
+}

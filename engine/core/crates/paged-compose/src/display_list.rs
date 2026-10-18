@@ -1,0 +1,1834 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Display-list primitives.
+//!
+//! A flat command stream plus a path buffer. The command stream is the
+//! handoff format between the CPU-side compositor and the GPU backend;
+//! the path buffer lets repeated shapes (especially glyphs) share
+//! tessellated data.
+
+use std::hash::{Hash, Hasher};
+
+/// Linear-RGB colour. All compositing happens in linear light; gamma
+/// conversion is the GPU backend's responsibility.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Color {
+    pub r: f32,
+    pub g: f32,
+    pub b: f32,
+    pub a: f32,
+}
+
+impl Color {
+    pub const BLACK: Color = Color {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0,
+    };
+    pub const WHITE: Color = Color {
+        r: 1.0,
+        g: 1.0,
+        b: 1.0,
+        a: 1.0,
+    };
+
+    pub const fn rgba(r: f32, g: f32, b: f32, a: f32) -> Self {
+        Self { r, g, b, a }
+    }
+}
+
+/// Paint describes how a path is filled. Solid colour and linear
+/// gradient cover most IDML fills today; radial / image / pattern
+/// fills land with §10.3.
+///
+/// `Paint` is `Copy`, so gradients are stored once in
+/// `DisplayList::gradients` and referenced by id rather than embedded.
+///
+/// `Cmyk` carries native CMYK channels (0.0..=1.0 each) all the way
+/// through to the rasterizer — necessary for true per-channel CMYK
+/// overprint compositing (Phase 3 Tier 3 #14 Stage A). For ordinary
+/// draws the rasterizer uses the `rgb` cached field (the compose stage
+/// pre-baked the ICC-converted display colour) so the visible result
+/// stays bit-identical to a `Paint::Solid` of the same swatch. Only
+/// the overprint path consumes the C/M/Y/K channels separately.
+///
+/// Stage C: a `Cmyk` paint can optionally carry a [`SpotInkId`] that
+/// identifies a named-ink swatch (e.g. PANTONE 286). The rasterizer
+/// routes spot draws to a dedicated per-spot-ink plane in addition to
+/// painting the cached `rgb` into the framebuffer; overprint of two
+/// runs of the SAME spot ink composes via per-pixel `max(top, bot)`
+/// in the spot plane. Different-named spots overprint as independent
+/// inks. The CMYK channels on the paint carry the spot's CMYK alternate
+/// (with any swatch-level `TintValue` already folded in by the parser
+/// via `ColorEntry::effective_cmyk`) — preserved so the legacy CMYK
+/// overprint composite can still operate when a spot overprints over
+/// a non-spot CMYK ink.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Paint {
+    Solid(Color),
+    LinearGradient(GradientId),
+    /// Radial gradient — `center → center + radius` in unit-rect
+    /// coords. Same id-space as linear gradients but resolved against
+    /// `DisplayList::radial_gradients` instead of `gradients`.
+    RadialGradient(GradientId),
+    /// Sweep (conic) gradient — colours ramp by polar angle around
+    /// `center`, starting at `start_angle`. Same id-space as the other
+    /// gradients but resolved against `DisplayList::sweep_gradients`.
+    SweepGradient(GradientId),
+    /// Native CMYK paint preserved end to end. Channels are 0.0..=1.0
+    /// (NOT percentages — the renderer scales IDML's 0..100 percent
+    /// values to the unit range at compose time). `rgb` is the
+    /// already-ICC-resolved linear-RGB colour the rasterizer would
+    /// have used pre-Stage-A — keeping it on the paint lets ordinary
+    /// (non-overprint) draws render bit-identically to the prior
+    /// `Paint::Solid` path without re-running ICC at raster time.
+    ///
+    /// `spot = Some(id)` marks the paint as a named-ink spot colour
+    /// resolved via the `DisplayList::spot_inks` table. The CMYK
+    /// channels remain populated with the spot's CMYK alternate; the
+    /// `id` lets the rasterizer route the per-pixel ink into a
+    /// dedicated spot plane rather than collapsing immediately into
+    /// the C/M/Y/K planes. `spot = None` is a plain process CMYK.
+    Cmyk {
+        c: f32,
+        m: f32,
+        y: f32,
+        k: f32,
+        rgb: Color,
+        spot: Option<SpotInkId>,
+    },
+}
+
+/// Index into `DisplayList::gradients`, `DisplayList::radial_gradients`,
+/// *or* `DisplayList::sweep_gradients`, depending on the [`Paint`]
+/// variant carrying it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GradientId(pub u32);
+
+/// Index into `DisplayList::spot_inks`. Identifies a named spot ink
+/// (e.g. PANTONE 286 C) so the rasterizer can track per-pixel tints
+/// for that ink on its own plane and composite spot-on-same-spot
+/// overprints correctly. Stage C of the CMYK pipeline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SpotInkId(pub u32);
+
+/// A named-ink spot colour registered on the display list. `name` is
+/// the IDML `<Color Self="...">` id (e.g. `"Color/Pantone286"`) —
+/// stable across draws so two paints with the same ink intern to the
+/// same `SpotInkId`. `cmyk_alternate` holds the spot's CMYK alternate
+/// in 8-bit space (0..=255 per channel) with the swatch-level `TintValue`
+/// already folded in — that's what the final flush composites into the
+/// CMYK planes for spot-over-spot or spot-over-CMYK pixels where the
+/// late-bound preview needs to converge to a single visible colour.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpotInk {
+    pub name: String,
+    pub cmyk_alternate: [u8; 4],
+}
+
+/// One stop in a gradient: a colour at a normalised offset (0..=1).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GradientStop {
+    pub offset: f32,
+    pub color: Color,
+}
+
+/// Linear gradient definition. Endpoints are unit coordinates
+/// (`(0, 0)..(1, 0)` is left → right; `(0, 0)..(0, 1)` is
+/// top → bottom). The path's transform maps the unit square to its
+/// final geometry, so the same gradient reused on N rectangles
+/// renders correctly on each.
+#[derive(Debug, Clone)]
+pub struct LinearGradient {
+    pub start: (f32, f32),
+    pub end: (f32, f32),
+    pub stops: Vec<GradientStop>,
+}
+
+/// Radial gradient definition. `center` is in unit-rect coords
+/// (`(0.5, 0.5)` is the centre of the path's local rect); `radius`
+/// is in the same coord space (`0.5` covers half the unit rect).
+/// IDML's `GradientFillStart` + `GradientFillLength` translate to
+/// page-space center + half-length, but the renderer currently
+/// places the radial gradient at the unit-rect centre with full
+/// radius — that matches the common case (Oval-with-radial fills).
+#[derive(Debug, Clone)]
+pub struct RadialGradient {
+    pub center: (f32, f32),
+    pub radius: f32,
+    pub stops: Vec<GradientStop>,
+}
+
+/// Sweep (conic) gradient definition. Colours ramp by polar angle
+/// around `center`, beginning at `start_angle` (radians, measured from
+/// the +x axis and turning clockwise in our y-down space) and wrapping
+/// once around the full turn. `center` is in the path's local
+/// coordinates — the fill's `transform` maps it into page space, so
+/// the same gradient reused on N paths places correctly on each, like
+/// [`LinearGradient`] / [`RadialGradient`]. This is the third gradient
+/// pool; the rasterizers map it to `tiny_skia::SweepGradient` (CPU,
+/// degrees) and `peniko::Gradient::new_sweep` (GPU, radians).
+#[derive(Debug, Clone)]
+pub struct SweepGradient {
+    pub center: (f32, f32),
+    pub start_angle: f32,
+    pub stops: Vec<GradientStop>,
+}
+
+/// 2×3 affine transform stored as `[a b c d tx ty]` —
+/// `x' = a·x + c·y + tx`, `y' = b·x + d·y + ty`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Transform(pub [f32; 6]);
+
+impl Transform {
+    pub const IDENTITY: Transform = Transform([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+
+    pub fn translate(tx: f32, ty: f32) -> Self {
+        Transform([1.0, 0.0, 0.0, 1.0, tx, ty])
+    }
+
+    pub fn scale(sx: f32, sy: f32) -> Self {
+        Transform([sx, 0.0, 0.0, sy, 0.0, 0.0])
+    }
+
+    /// Rotation by `deg` degrees clockwise about the origin (y grows
+    /// downward, so a positive angle turns clockwise on screen).
+    pub fn rotate_deg(deg: f32) -> Self {
+        let r = deg.to_radians();
+        let (s, c) = r.sin_cos();
+        Transform([c, s, -s, c, 0.0, 0.0])
+    }
+
+    /// Apply to a point.
+    pub fn apply(&self, x: f32, y: f32) -> (f32, f32) {
+        let [a, b, c, d, tx, ty] = self.0;
+        (a * x + c * y + tx, b * x + d * y + ty)
+    }
+
+    /// Build the transform that maps the unit rect `[0,0,1,1]` onto
+    /// `rect` in some local space, with `outer` applied on top:
+    /// `result = outer ∘ scale(rect.w, rect.h) ∘ translate(rect.x, rect.y)`.
+    /// Centralises the unit-rect-to-page mapping shared by every
+    /// `emit_*_transformed` helper in `primitives` and the image
+    /// emitter — keeps that math in one place.
+    pub fn for_rect_in(rect: Rect, outer: Transform) -> Transform {
+        outer.compose(&Transform([rect.w, 0.0, 0.0, rect.h, rect.x, rect.y]))
+    }
+
+    /// Compose `self` with `inner`: the result applies `inner` first,
+    /// then `self`. I.e. `self.compose(inner).apply(p) == self.apply(inner.apply(p))`.
+    pub fn compose(&self, inner: &Transform) -> Transform {
+        let [a1, b1, c1, d1, tx1, ty1] = self.0;
+        let [a2, b2, c2, d2, tx2, ty2] = inner.0;
+        Transform([
+            a1 * a2 + c1 * b2,
+            b1 * a2 + d1 * b2,
+            a1 * c2 + c1 * d2,
+            b1 * c2 + d1 * d2,
+            a1 * tx2 + c1 * ty2 + tx1,
+            b1 * tx2 + d1 * ty2 + ty1,
+        ])
+    }
+
+    /// Inverse of this affine, or `None` when the 2×2 linear block is
+    /// singular (determinant ≈ 0). `m.inverse().unwrap().apply(m.apply(p))
+    /// == p`. Used by the canvas hit-tester to undo the spread-level
+    /// rotation/scale a page's `frame_outer_transform` applied (W1.9).
+    pub fn inverse(&self) -> Option<Transform> {
+        let [a, b, c, d, tx, ty] = self.0;
+        let det = a * d - b * c;
+        if det.abs() < 1e-12 {
+            return None;
+        }
+        let inv_det = 1.0 / det;
+        // Inverse linear block.
+        let ia = d * inv_det;
+        let ib = -b * inv_det;
+        let ic = -c * inv_det;
+        let id = a * inv_det;
+        // Inverse translation: -(Linv · t).
+        let itx = -(ia * tx + ic * ty);
+        let ity = -(ib * tx + id * ty);
+        Some(Transform([ia, ib, ic, id, itx, ity]))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Rect {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+}
+
+/// One segment of a bezier path in local path coordinates.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PathSegment {
+    MoveTo {
+        x: f32,
+        y: f32,
+    },
+    LineTo {
+        x: f32,
+        y: f32,
+    },
+    QuadTo {
+        cx: f32,
+        cy: f32,
+        x: f32,
+        y: f32,
+    },
+    CubicTo {
+        cx1: f32,
+        cy1: f32,
+        cx2: f32,
+        cy2: f32,
+        x: f32,
+        y: f32,
+    },
+    Close,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PathData {
+    pub segments: Vec<PathSegment>,
+}
+
+impl PathData {
+    pub fn is_empty(&self) -> bool {
+        self.segments.is_empty()
+    }
+}
+
+/// Opaque index into a [`PathBuffer`]. Stable within a [`DisplayList`]
+/// but not across lists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PathId(pub u32);
+
+/// Owns all path-segment data and hands out `PathId`s. Uses a caller-
+/// supplied cache key for interning, so (glyph_id, font_id, size)
+/// combinations share outlines across the command stream.
+#[derive(Debug, Default)]
+pub struct PathBuffer {
+    paths: Vec<PathData>,
+    /// Cache key → PathId. Callers are responsible for making the key
+    /// unique for their domain (glyph caches use `GlyphCacheKey`).
+    cache: std::collections::HashMap<u64, PathId>,
+    /// The intern key each path was stored under (`None` for an
+    /// anonymous push), parallel to `paths`. A cached emission records
+    /// these so its replay re-registers the keys, exactly as the emit it
+    /// stands in for would have (ADR 027).
+    keys: Vec<Option<u64>>,
+    /// Running fingerprint of `keys` after each path, parallel to
+    /// `paths`. Two buffers with equal fingerprints hand out the same
+    /// ids for the same keys, which is what a cached emission's path
+    /// ids assume of the buffer it is replayed into.
+    prints: Vec<u64>,
+}
+
+/// Fingerprint of an empty [`PathBuffer`].
+const PATH_PRINT_SEED: u64 = 0xcbf2_9ce4_8422_2325;
+/// What an anonymous path contributes to the fingerprint.
+const PATH_PRINT_ANON: u64 = 0x9e37_79b9_7f4a_7c15;
+
+impl PathBuffer {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Intern `path` under `key`. Returns the existing id if `key` has
+    /// been seen before; otherwise stores `path` and returns a fresh
+    /// id. The second return value is true when the path was freshly
+    /// stored.
+    pub fn intern(&mut self, key: u64, path: PathData) -> (PathId, bool) {
+        if let Some(id) = self.cache.get(&key) {
+            return (*id, false);
+        }
+        let id = PathId(self.paths.len() as u32);
+        self.store(Some(key), path);
+        self.cache.insert(key, id);
+        (id, true)
+    }
+
+    fn store(&mut self, key: Option<u64>, path: PathData) {
+        let prev = self.fingerprint();
+        let mixed = (prev ^ key.unwrap_or(PATH_PRINT_ANON)).wrapping_mul(0x0000_0100_0000_01b3);
+        self.paths.push(path);
+        self.keys.push(key);
+        self.prints.push(mixed.rotate_left(17));
+    }
+
+    /// Fingerprint of the keys stored so far, in order (see `prints`).
+    pub fn fingerprint(&self) -> u64 {
+        self.prints.last().copied().unwrap_or(PATH_PRINT_SEED)
+    }
+
+    /// The intern keys of paths `[start, end)` (`None` = anonymous).
+    pub fn keys(&self, start: usize, end: usize) -> &[Option<u64>] {
+        &self.keys[start.min(self.keys.len())..end.min(self.keys.len())]
+    }
+
+    /// Replay one path of a cached emission: intern it under `key` when
+    /// it had one, else push it anonymously. On a buffer whose
+    /// fingerprint equals the one the emission started from, this hands
+    /// out the id the emission's own `intern` / `push_anon` did.
+    pub fn replay(&mut self, key: Option<u64>, path: PathData) -> PathId {
+        match key {
+            Some(k) => self.intern(k, path).0,
+            None => self.push_anon(path),
+        }
+    }
+
+    /// Probe for an existing interned id without inserting. Useful
+    /// when producing the `PathData` is expensive and should be
+    /// skipped on a cache hit.
+    pub fn find_by_key(&self, key: u64) -> Option<PathId> {
+        self.cache.get(&key).copied()
+    }
+
+    /// Store `path` without interning. Useful for one-off shapes.
+    pub fn push_anon(&mut self, path: PathData) -> PathId {
+        let id = PathId(self.paths.len() as u32);
+        self.store(None, path);
+        id
+    }
+
+    pub fn get(&self, id: PathId) -> Option<&PathData> {
+        self.paths.get(id.0 as usize)
+    }
+
+    /// Extract a slice of the underlying path vec for caching /
+    /// snapshotting (Perf-MasterText). Returns the path-buffer's
+    /// raw storage between `[start, end)`. Read-only access; the
+    /// caller is responsible for not feeding stale indices.
+    pub fn slice(&self, start: usize, end: usize) -> &[PathData] {
+        &self.paths[start.min(self.paths.len())..end.min(self.paths.len())]
+    }
+
+    pub fn len(&self) -> usize {
+        self.paths.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.paths.is_empty()
+    }
+
+    /// Roll the buffer back to `len` paths, dropping every later path
+    /// AND evicting any intern-cache entry that pointed at a now-gone
+    /// id. Used by the footnote space-reservation pass, which re-emits
+    /// a story's body text after truncating the page's display list
+    /// back to a pre-story snapshot: without the cache eviction a
+    /// glyph interned during the discarded pass would resolve to a
+    /// `PathId` past the end of `paths` on the re-emit, silently
+    /// painting the wrong (or no) outline. No-op when `len` already
+    /// covers the whole buffer.
+    pub fn truncate_to(&mut self, len: usize) {
+        if len >= self.paths.len() {
+            return;
+        }
+        self.paths.truncate(len);
+        self.keys.truncate(len);
+        self.prints.truncate(len);
+        let cutoff = len as u32;
+        self.cache.retain(|_, id| id.0 < cutoff);
+    }
+}
+
+/// Cache key for a glyph outline. Hashed to give `PathBuffer::intern`
+/// a `u64`. Designers note: `font_id` is a user-space integer; callers
+/// are responsible for making it stable across a render.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GlyphCacheKey {
+    pub font_id: u32,
+    pub glyph_id: u32,
+}
+
+impl GlyphCacheKey {
+    pub fn to_u64(self) -> u64 {
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        self.hash(&mut h);
+        h.finish()
+    }
+}
+
+/// Drop-shadow parameters. All measurements are in pt; `color` is
+/// linear RGB; `opacity` is multiplied into the shadow alpha.
+///
+/// `blur_radius` is honoured by the CPU rasterizer as σ in pt for a
+/// separable Gaussian convolution over a padded offscreen stamp.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DropShadow {
+    pub offset_x: f32,
+    pub offset_y: f32,
+    pub blur_radius: f32,
+    pub color: Color,
+    pub opacity: f32,
+    /// R-11 — how the shadow composites onto what lies under it (IDML
+    /// `BlendMode`, InDesign's default `Multiply`). The rasterisers draw
+    /// the stamp itself `Normal`; the EMITTER brackets a shadow whose
+    /// mode changes the result in a transparency group of that mode, so
+    /// the group's paper-backdrop rule applies (a `Screen` shadow shows on
+    /// paper, `effects-attrs` case 3).
+    pub blend_mode: BlendMode,
+    /// R-11 — IDML `Spread` as 0..1: how much of the blur band is solid
+    /// before it fades, applied as a choke on the blurred alpha
+    /// (`α' = min(1, α / (1 − spread))`).
+    pub spread: f32,
+    /// R-11 — IDML `Noise` as 0..1: hashed grain mixed into the shadow's
+    /// alpha.
+    pub noise: f32,
+}
+
+impl DropShadow {
+    /// Sensible default: 4 pt offset down-right, 4 pt blur radius
+    /// (currently ignored), 30% black.
+    pub fn default_soft() -> Self {
+        Self {
+            offset_x: 4.0,
+            offset_y: 4.0,
+            blur_radius: 4.0,
+            color: Color::rgba(0.0, 0.0, 0.0, 1.0),
+            opacity: 0.3,
+            blend_mode: BlendMode::Normal,
+            spread: 0.0,
+            noise: 0.0,
+        }
+    }
+}
+
+/// Inner-shadow parameters. Same units as [`DropShadow`] (pt, linear
+/// RGB, 0..1 opacity), but the rasterizer paints the soft stamp on
+/// the *inside* of the path: the path's interior is darkened where
+/// the offset/blurred shadow stamp falls inside it. `choke` is in pt
+/// — it expands the shadow's hard edge before blurring (mapped to a
+/// dilation in the rasterizer's stamp pass; `0.0` is the common case).
+/// `blend_mode` is reserved for future fidelity work (most IDML inner
+/// shadows use `Multiply`); the rasterizer renders the stamp with
+/// straight alpha-over today.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct InnerShadow {
+    pub offset_x: f32,
+    pub offset_y: f32,
+    pub blur_radius: f32,
+    pub color: Color,
+    pub opacity: f32,
+    pub choke: f32,
+    pub blend_mode: BlendMode,
+}
+
+impl InnerShadow {
+    /// Sensible default: 3 pt offset down-right, 6 pt blur, 50%
+    /// black, no choke, Multiply.
+    pub fn default_soft() -> Self {
+        Self {
+            offset_x: 3.0,
+            offset_y: 3.0,
+            blur_radius: 6.0,
+            color: Color::rgba(0.0, 0.0, 0.0, 1.0),
+            opacity: 0.5,
+            choke: 0.0,
+            blend_mode: BlendMode::Multiply,
+        }
+    }
+}
+
+/// Outer-glow parameters. The rasterizer paints a soft halo *outside*
+/// the path's interior: blur the filled stamp, then composite it
+/// behind / around the path. `spread` is in pt — it grows the hard
+/// stamp before blurring so glows can extend beyond a thin path.
+/// `blend_mode` is most commonly `Screen` for InDesign-style glows.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct OuterGlow {
+    pub blur_radius: f32,
+    pub color: Color,
+    pub opacity: f32,
+    pub blend_mode: BlendMode,
+    pub spread: f32,
+}
+
+impl OuterGlow {
+    pub fn default_soft() -> Self {
+        Self {
+            blur_radius: 6.0,
+            color: Color::rgba(1.0, 1.0, 0.5, 1.0),
+            opacity: 0.75,
+            blend_mode: BlendMode::Screen,
+            spread: 0.0,
+        }
+    }
+}
+
+/// Inner-glow parameters. Same shape as [`InnerShadow`] without the
+/// directional offset: paint a soft glow on the *inside* of the
+/// path's interior. `choke` is in pt (same dilation knob as
+/// `InnerShadow::choke`). InDesign's default uses `Screen` blend.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct InnerGlow {
+    pub blur_radius: f32,
+    pub color: Color,
+    pub opacity: f32,
+    pub blend_mode: BlendMode,
+    pub choke: f32,
+}
+
+impl InnerGlow {
+    pub fn default_soft() -> Self {
+        Self {
+            blur_radius: 6.0,
+            color: Color::rgba(1.0, 1.0, 0.5, 1.0),
+            opacity: 0.75,
+            blend_mode: BlendMode::Screen,
+            choke: 0.0,
+        }
+    }
+}
+
+/// Bevel-and-emboss *style* — IDML's `<BevelAndEmbossSetting Style="…">`.
+/// Selects where the lit/shaded ramp sits relative to the path edge:
+///
+/// * `InnerBevel` — the bevel lives just *inside* the edge (the
+///   classic raised-button look). This is the rasterizer's baseline.
+/// * `OuterBevel` — the bevel lives just *outside* the edge: the
+///   height field is inverted (the path interior is the "valley", the
+///   surround is the "plateau") so highlight/shadow swap sides versus
+///   the inner bevel.
+/// * `Emboss` — both an inner and outer bevel at half depth, giving a
+///   stamped-into-the-page look (symmetric ramp across the edge).
+/// * `PillowEmboss` — like `Emboss` but the inner ramp is inverted, so
+///   the interior looks pressed *in* while the edge bulges (a pillow).
+/// * `StrokeEmboss` — InDesign confines the bevel to the stroke band;
+///   without a separate stroke geometry here we treat it like
+///   `InnerBevel` (closest visual), noted for renderer-gaps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BevelStyle {
+    #[default]
+    InnerBevel,
+    OuterBevel,
+    Emboss,
+    PillowEmboss,
+    StrokeEmboss,
+}
+
+/// Bevel-and-emboss *direction* — IDML's `Direction="Up"|"Down"`. `Up`
+/// raises the surface toward the viewer (the default, light hits the
+/// near edge); `Down` presses it away, which is equivalent to flipping
+/// the light's elevation sign so highlight and shadow swap sides.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BevelDirection {
+    #[default]
+    Up,
+    Down,
+}
+
+/// Bevel-and-emboss *technique* — IDML's `Technique` enum controls how
+/// hard the edge transition is. `Smooth` rounds the ramp (the default,
+/// a soft Gaussian height field); `ChiselHard` / `ChiselSoft` keep the
+/// ramp linear/sharp so the bevel reads as a cut facet. The rasterizer
+/// scales the height-field blur by this: chisel reduces the smoothing
+/// so the normal turns over a narrower band.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BevelTechnique {
+    #[default]
+    Smooth,
+    ChiselHard,
+    ChiselSoft,
+}
+
+/// Bevel-and-emboss parameters. `depth` is the relative bump
+/// strength (0..=1; 1.0 is "100% depth" in InDesign's slider);
+/// `size` is the bevel width in pt. `angle_deg` is the light's
+/// azimuth in screen space (0° = light from the right, 90° = light
+/// from below); `altitude_deg` is the light's elevation (0 =
+/// grazing, 90 = top-down). Highlight + shadow colour separately so
+/// a coloured bevel can be expressed.
+///
+/// `style` / `direction` / `technique` / `soften` mirror the IDML
+/// `<BevelAndEmbossSetting>` knobs and steer the height-field shading
+/// (W1.4 parity): `style` flips/duplicates the ramp across the edge,
+/// `direction` flips the light's elevation sign (Down presses the
+/// surface in), `technique` controls the ramp hardness, and `soften`
+/// (pt) adds an extra Gaussian over the lit/shaded result.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BevelEmboss {
+    pub depth: f32,
+    pub size: f32,
+    pub angle_deg: f32,
+    pub altitude_deg: f32,
+    pub highlight_color: Color,
+    pub shadow_color: Color,
+    pub highlight_opacity: f32,
+    pub shadow_opacity: f32,
+    pub style: BevelStyle,
+    pub direction: BevelDirection,
+    pub technique: BevelTechnique,
+    /// Extra soften in pt applied to the shaded bevel layer.
+    pub soften: f32,
+    /// How the highlight and the shadow composite (InDesign's defaults
+    /// are Screen and Multiply; its `HighlightBlendMode` and
+    /// `ShadowBlendMode` change them).
+    pub highlight_blend: BlendMode,
+    pub shadow_blend: BlendMode,
+}
+
+impl BevelEmboss {
+    pub fn default_soft() -> Self {
+        Self {
+            depth: 1.0,
+            size: 5.0,
+            angle_deg: 120.0,
+            altitude_deg: 30.0,
+            highlight_color: Color::rgba(1.0, 1.0, 1.0, 1.0),
+            shadow_color: Color::rgba(0.0, 0.0, 0.0, 1.0),
+            highlight_opacity: 0.75,
+            shadow_opacity: 0.75,
+            style: BevelStyle::InnerBevel,
+            direction: BevelDirection::Up,
+            technique: BevelTechnique::Smooth,
+            soften: 0.0,
+            highlight_blend: BlendMode::Screen,
+            shadow_blend: BlendMode::Multiply,
+        }
+    }
+}
+
+/// Satin parameters. The rasterizer offsets two blurred path stamps
+/// in opposite directions (along `angle_deg`, separated by `distance`
+/// pt) and uses their difference as a "wave" mask painted onto the
+/// path's interior. `blend_mode` is most commonly `Multiply` for
+/// dark satin and `Screen` for bright satin.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Satin {
+    pub blur_radius: f32,
+    pub angle_deg: f32,
+    pub distance: f32,
+    pub color: Color,
+    pub opacity: f32,
+    pub blend_mode: BlendMode,
+    /// IDML `<SatinSetting Invert="true">`. The wave mask is the
+    /// absolute difference of two offset blurred stamps (`|am - bm|`),
+    /// which peaks bright at the edges. `invert = true` flips that to
+    /// `1 - |am - bm|`, so the contour band goes dark in the centre
+    /// and bright at the edges — InDesign's "Invert" checkbox.
+    pub invert: bool,
+}
+
+impl Satin {
+    pub fn default_soft() -> Self {
+        Self {
+            blur_radius: 7.0,
+            angle_deg: 19.0,
+            distance: 11.0,
+            color: Color::rgba(0.0, 0.0, 0.0, 1.0),
+            opacity: 0.5,
+            blend_mode: BlendMode::Multiply,
+            invert: false,
+        }
+    }
+}
+
+/// Feather corner shape. IDML's `<FeatherSetting CornerType="...">`
+/// selects between three options; the rasterizer uses this to pick a
+/// distance-field shape for the feather edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FeatherCornerType {
+    /// Sharp 90° corners — feather follows the path's outline
+    /// faithfully.
+    #[default]
+    Sharp,
+    /// Rounded corners — slight softening of sharp turns; default
+    /// in InDesign.
+    Rounded,
+    /// Diffusion (noise-modulated alpha falloff). The rasterizer
+    /// approximates this with a slightly randomised falloff weight.
+    Diffusion,
+}
+
+/// Feather parameters. `width` is the soft-edge width in pt; `noise`
+/// (0..=1) modulates the alpha falloff for the diffusion variant
+/// (and is roughly ignored for `Sharp` / `Rounded`). `choke`
+/// (0..=1) shifts the half-alpha point inward (0.0 centred on the
+/// path edge, positive choke pulls the feather inward).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Feather {
+    pub width: f32,
+    pub corner_type: FeatherCornerType,
+    pub noise: f32,
+    pub choke: f32,
+}
+
+impl Feather {
+    pub fn default_soft() -> Self {
+        Self {
+            width: 9.0,
+            corner_type: FeatherCornerType::Sharp,
+            noise: 0.0,
+            choke: 0.0,
+        }
+    }
+}
+
+/// Directional feather parameters. Mirrors IDML's
+/// `<DirectionalFeatherSetting>` — each side of the path gets its
+/// own soft-edge width in pt; `angle_deg` rotates the per-edge
+/// directions. `noise` / `choke` and `corner_type` mirror the plain
+/// [`Feather`] semantics.
+///
+/// The CPU rasterizer modulates alpha per side (left / right / top /
+/// bottom) using the path's page-pt bounding box. The IDML `Angle`
+/// attribute is captured so the rasterizer can lift to the rotated
+/// per-side path later without a parser/compose round-trip; today
+/// it's unused.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DirectionalFeather {
+    pub left_width: f32,
+    pub right_width: f32,
+    pub top_width: f32,
+    pub bottom_width: f32,
+    pub angle_deg: f32,
+    pub noise: f32,
+    pub choke: f32,
+    pub corner_type: FeatherCornerType,
+}
+
+/// Gradient feather kind — mirrors IDML's `Type` attribute. `Linear`
+/// projects each pixel onto the `(start, end)` axis to derive the
+/// alpha; `Radial` uses `distance / radius` from the start point.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GradientFeatherKind {
+    #[default]
+    Linear,
+    Radial,
+}
+
+/// One stop of a [`GradientFeather`]'s alpha gradient. `location`
+/// is in `[0, 1]` (0 = start, 1 = end); `alpha` is the opacity at
+/// that location, also `[0, 1]`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GradientFeatherStop {
+    pub location: f32,
+    pub alpha: f32,
+}
+
+/// Gradient feather parameters. The path's interior alpha is
+/// modulated by a 1-D gradient defined by `stops` (sorted by
+/// location); the gradient runs along
+/// `(start_x, start_y) → (end_x, end_y)` for `Linear` and radially
+/// out from `start` for `Radial` (`end` defines the radius). All
+/// coords are in the path's local space — same coords as the
+/// `Transform` that places the path.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GradientFeather {
+    pub kind: GradientFeatherKind,
+    pub start_x: f32,
+    pub start_y: f32,
+    pub end_x: f32,
+    pub end_y: f32,
+    pub stops: Vec<GradientFeatherStop>,
+    /// A `Radial` feather's radius across the path's local y axis over
+    /// its radius along the local x axis (`start → end` sets the
+    /// latter, in page space). `1.0` is a circle; anything else is an
+    /// ellipse aligned with the path's own axes, as InDesign draws its
+    /// default radial feather on a frame taller than it is wide. Ignored
+    /// by `Linear`.
+    pub radial_aspect: f32,
+}
+
+/// Pixel-space transform applied to an offscreen layer after the
+/// commands inside it have rasterised, before it composites back onto
+/// the parent target. The blur variant runs a separable Gaussian over
+/// the layer's premultiplied RGBA buffer; `None` is a pure
+/// transparency group (semantically identical to a `BeginBlendGroup`
+/// pair, but emitted through the generic `PushLayer`/`PopLayer`
+/// plumbing that future per-layer effects will share).
+///
+/// `GaussianBlur::sigma_pt` is in page-space pt — the CPU rasterizer
+/// scales by `dpi / 72` to derive pixel σ, matching the existing
+/// `DropShadow::blur_radius` semantic. The pipeline can build a
+/// blur-only soft drop shadow with
+/// `PushLayer { effect: LayerEffect::GaussianBlur { sigma_pt } } +
+/// FillPath(shadow stamp) + PopLayer`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LayerEffect {
+    /// No post-effect — equivalent to a plain transparency group.
+    /// Carries `opacity` so a single command can express both grouping
+    /// + a uniform fade (matching `BeginBlendGroup` semantics).
+    None,
+    /// Convolve the layer with a separable Gaussian of radius σ
+    /// (in pt) before compositing. Edges clamp to transparent (the
+    /// layer's bounds are padded by 3σ at composite time).
+    GaussianBlur { sigma_pt: f32 },
+}
+
+impl LayerEffect {
+    /// Effective σ in pt — `0.0` for non-blur variants. Lets callers
+    /// pad the layer bounds uniformly.
+    pub fn sigma_pt(&self) -> f32 {
+        match self {
+            LayerEffect::None => 0.0,
+            LayerEffect::GaussianBlur { sigma_pt } => sigma_pt.max(0.0),
+        }
+    }
+}
+
+/// IDML compositing blend mode. `Normal` (the default, source-over
+/// alpha composite) keeps the existing fast path; everything else
+/// requires the rasterizer to render the fill into an offscreen
+/// pixmap and composite onto the page with the named blend mode.
+/// Names match Adobe / Skia conventions; map straight to
+/// `tiny_skia::BlendMode` in the rasterizer.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum BlendMode {
+    #[default]
+    Normal,
+    Multiply,
+    Screen,
+    Overlay,
+    Darken,
+    Lighten,
+    ColorDodge,
+    ColorBurn,
+    HardLight,
+    SoftLight,
+    Difference,
+    Exclusion,
+    Hue,
+    Saturation,
+    Color,
+    Luminosity,
+}
+
+/// One command in the display list.
+#[derive(Debug, Clone)]
+pub enum DisplayCommand {
+    /// Fill a path with a paint, positioned by `transform`.
+    FillPath {
+        path_id: PathId,
+        paint: Paint,
+        transform: Transform,
+    },
+    /// Same as `FillPath` but composites onto the page with a
+    /// non-Normal blend mode. Rasterizer routes this through an
+    /// offscreen pixmap so the blend reads the page contents below.
+    /// The fast `FillPath` path stays untouched for the common
+    /// Normal case.
+    FillPathBlend {
+        path_id: PathId,
+        paint: Paint,
+        transform: Transform,
+        blend_mode: BlendMode,
+    },
+    /// Stroke a path with a paint + stroke parameters, positioned by
+    /// `transform`. Stroke width is in pt, *after* `transform` is
+    /// applied — rasterizers pick up the document-space width from
+    /// `stroke.width` rather than a scaled derivation of the path
+    /// points.
+    StrokePath {
+        path_id: PathId,
+        paint: Paint,
+        stroke: Stroke,
+        transform: Transform,
+    },
+    /// Drop-shadow stamp: render the path filled with `shadow.color`
+    /// at `(offset_x, offset_y)` from the path's natural position.
+    /// Conventionally emitted *before* the matching FillPath/StrokePath
+    /// so the shadow lands behind the painted shape.
+    DropShadow {
+        path_id: PathId,
+        transform: Transform,
+        shadow: DropShadow,
+    },
+    /// Glyph- / arbitrary-path shadow stamp. Identical render
+    /// semantics to [`DisplayCommand::DropShadow`] (fill `path_id`
+    /// at `(offset_x, offset_y)` with a soft Gaussian-blurred
+    /// stamp), separated as its own variant so the glyph-shadow
+    /// post-pass can splice these in front of glyph `FillPath`
+    /// commands without disturbing the rect-stamp variant emitted
+    /// at frame-body time. The `transform` is the glyph's natural
+    /// page-space transform — the rasterizer adds `shadow.offset_*`
+    /// internally.
+    PathShadow {
+        path_id: PathId,
+        transform: Transform,
+        shadow: DropShadow,
+    },
+    /// Place a decoded RGBA8 image. The unit-rect at the source
+    /// pixmap's pixel grid maps to page coordinates via `transform` —
+    /// `(0, 0)` of the source pixmap lands at `transform.apply(0, 0)`,
+    /// `(width, height)` lands at `transform.apply(width, height)`.
+    /// Subsampling, filtering, and alpha blending live in the
+    /// rasterizer.
+    Image {
+        image_id: ImageId,
+        transform: Transform,
+    },
+    /// Push a clip path onto the rasterizer's clip stack. Subsequent
+    /// drawing commands are masked to the *intersection* of every
+    /// pushed clip until a matching `PopClip` lands. Paths are filled
+    /// with `FillRule::NonZero` (matching IDML's path-geometry
+    /// convention); the clip is anti-aliased.
+    ///
+    /// The transform maps `path_id` from its local space into page
+    /// coordinates, exactly like `FillPath::transform`. The
+    /// rasterizer multiplies in its page-to-pixel scale on top.
+    ///
+    /// Both back ends enforce clips: the CPU rasterizer intersects a
+    /// `tiny_skia::Mask` per push, and Vello encodes each push as a
+    /// `push_layer` clip layer. (This doc used to claim Vello no-ops
+    /// clips; that stopped being true when the Vello clip layers
+    /// landed and the comment was not updated — corrected with C-28,
+    /// which had to know the real precedent.)
+    PushClip {
+        path_id: PathId,
+        transform: Transform,
+    },
+    /// Pop the most-recently-pushed clip. Mismatched Push/Pop pairs
+    /// are tolerated — a stray `PopClip` drops back to the base
+    /// (un-clipped) state. The contained transform is unused; it
+    /// only exists so [`DisplayCommand::transform_mut`] can keep
+    /// returning `&mut Transform` for every variant. Existing
+    /// callers (vertical-justification etc.) walk command ranges
+    /// that never include clip pairs.
+    PopClip(Transform),
+    /// Begin a transparency group. Subsequent drawing commands emit
+    /// into an offscreen buffer instead of onto the page; a matching
+    /// `EndBlendGroup` composites the buffer back onto the page (or the
+    /// next-outer group) using `blend_mode` and `opacity`. This is the
+    /// structurally correct PDF transparency-group semantic —
+    /// non-Normal blend / partial opacity gets applied at the group
+    /// composite, not per fill.
+    ///
+    /// **`bounds` (page coords) is a CLIP, not an allocation hint.**
+    /// Both back ends cut the group's contents at that rect — the CPU
+    /// through `group_bounds_mask`, Vello by handing it to
+    /// `push_layer` — so anything the group paints outside `bounds` is
+    /// simply gone, with a hard edge where the rect ends. (The CPU's
+    /// buffer is deliberately a little larger than `bounds`, for
+    /// outward pixel snapping and antialiasing slack; that is
+    /// allocation, and it is NOT the group's extent. Letting the buffer
+    /// edge be the clip made one document enclose different content at
+    /// 72 dpi than at 300 — see 7751cda.)
+    ///
+    /// Emitters size `bounds` from the geometry they have to hand, which
+    /// is routinely smaller than what lands inside: a drop shadow, a
+    /// wide stroke, an outer glow and the feather family all reach
+    /// further. [`crate::extent::fit_transparency_group_bounds`] is the
+    /// pass that reconciles the two, and it runs on the finished list —
+    /// a `BeginBlendGroup` spliced in after it will be clipped short.
+    ///
+    /// `transform` is a stub (mirrors `PopClip`'s scheme) so
+    /// [`DisplayCommand::transform_mut`] keeps returning a non-None
+    /// reference. The field is initialised to identity by emitters
+    /// and not consumed by the rasterizer.
+    BeginBlendGroup {
+        bounds: Rect,
+        blend_mode: BlendMode,
+        opacity: f32,
+        /// IDML `IsolateBlending`: the group's contents blend with each
+        /// other only, never with what lies under the group. `false` is
+        /// InDesign's default — a non-isolated group, whose contents see
+        /// the backdrop (a `Multiply` fill inside a frame at 50 %
+        /// multiplies with the page, `transparency-targets` case 37).
+        isolated: bool,
+        /// IDML `KnockoutGroup`: each element of the group composites
+        /// with the group's initial backdrop instead of with the elements
+        /// before it, so a later element replaces an earlier one where it
+        /// covers it (cases 43, 44). An "element" is a nested group; the
+        /// emitter brackets every member of a knockout group.
+        knockout: bool,
+        transform: Transform,
+    },
+    /// End the most-recently-pushed transparency group. Mismatched
+    /// pairs are tolerated — a stray `EndBlendGroup` is a no-op.
+    /// The contained transform is unused; same rationale as
+    /// [`DisplayCommand::PopClip`].
+    EndBlendGroup(Transform),
+    /// Inner-shadow stamp. Paints a soft, offset shadow on the
+    /// *inside* of the path: blur the offset path's complement, mask
+    /// to the path interior, composite over the page. Conventionally
+    /// emitted *after* the matching FillPath so it sits on top of the
+    /// fill (mirrors Photoshop's layer-effect order).
+    InnerShadow {
+        path_id: PathId,
+        transform: Transform,
+        params: InnerShadow,
+    },
+    /// Outer-glow stamp. Like a centred [`DisplayCommand::DropShadow`]
+    /// (no offset) carved against the path's exterior. Conventionally
+    /// emitted *before* the matching FillPath so the halo lands behind
+    /// the fill.
+    OuterGlow {
+        path_id: PathId,
+        transform: Transform,
+        params: OuterGlow,
+    },
+    /// Inner-glow stamp. Same shape as [`DisplayCommand::InnerShadow`]
+    /// but with no offset and a glow colour. Conventionally emitted
+    /// *after* the matching FillPath.
+    InnerGlow {
+        path_id: PathId,
+        transform: Transform,
+        params: InnerGlow,
+    },
+    /// Bevel / emboss stamp. The rasterizer builds a height map from
+    /// the path's alpha mask, derives a normal field, and composites
+    /// per-pixel highlight + shadow tints onto the path's interior.
+    /// Conventionally emitted *after* the matching FillPath.
+    BevelEmboss {
+        path_id: PathId,
+        transform: Transform,
+        params: BevelEmboss,
+    },
+    /// Satin stamp. Two offset blurred path stamps subtracted to
+    /// produce a "wave" mask, tinted with `params.color` and
+    /// composited onto the path's interior. Conventionally emitted
+    /// *after* the matching FillPath.
+    Satin {
+        path_id: PathId,
+        transform: Transform,
+        params: Satin,
+    },
+    /// Feather stamp. Replaces the path's hard edge with a soft alpha
+    /// falloff `params.width` pt wide. Conventionally emitted *in
+    /// place of* the matching FillPath (the feather pass is the
+    /// fill); a dedicated variant lets the rasterizer skip the
+    /// expensive distance-field pass when no feathering is requested.
+    Feather {
+        path_id: PathId,
+        transform: Transform,
+        params: Feather,
+    },
+    /// Directional feather stamp. Same render contract as
+    /// [`DisplayCommand::Feather`] but with per-edge widths instead
+    /// of a uniform width — the rasterizer modulates alpha by the
+    /// distance to each side independently.
+    DirectionalFeather {
+        path_id: PathId,
+        transform: Transform,
+        params: DirectionalFeather,
+    },
+    /// Gradient feather stamp. Same render contract as
+    /// [`DisplayCommand::Feather`] but the alpha falloff comes from
+    /// a 1-D gradient (`Linear` or `Radial`) sampled along
+    /// `(start, end)` in the path's local space.
+    GradientFeather {
+        path_id: PathId,
+        transform: Transform,
+        params: GradientFeather,
+    },
+    /// Push a generic transparency / effect layer. Subsequent drawing
+    /// commands emit into an offscreen buffer sized to `bounds` (page
+    /// coords, padded internally by `3σ + 1px` so a Gaussian-blur
+    /// kernel doesn't clip its tails); the matching [`PopLayer`]
+    /// applies `effect` to the buffer and composites it onto the
+    /// parent target with `blend_mode` and `opacity`.
+    ///
+    /// `PushLayer` is the structural successor to
+    /// [`BeginBlendGroup`](DisplayCommand::BeginBlendGroup): the
+    /// blend-group variant predates `LayerEffect` and is kept for the
+    /// per-frame paper-backdrop-bypass path that the orchestrator
+    /// already relies on. `PushLayer` is the right primitive for
+    /// effect-driven layers (soft drop shadows, future glow refactors)
+    /// because the effect runs *after* the contents are buffered, so
+    /// the blur kernel sees the layer's full alpha (overlapping
+    /// stamps included) instead of the parent target's alpha.
+    ///
+    /// `transform` is a stub (matches `BeginBlendGroup`'s scheme) so
+    /// [`DisplayCommand::transform_mut`] keeps returning a non-None
+    /// reference. Emitters initialise it to identity; the rasterizer
+    /// never consumes it.
+    PushLayer {
+        bounds: Rect,
+        effect: LayerEffect,
+        blend_mode: BlendMode,
+        opacity: f32,
+        transform: Transform,
+    },
+    /// Pop the most-recently-pushed [`PushLayer`]. Mismatched pairs
+    /// are tolerated (a stray `PopLayer` is a no-op), matching the
+    /// `BeginBlendGroup` / `EndBlendGroup` policy. The contained
+    /// transform is unused; same rationale as
+    /// [`DisplayCommand::PopClip`].
+    PopLayer(Transform),
+    /// Fill a path with overprint semantics. Identical wire-format to
+    /// [`DisplayCommand::FillPath`] (path / paint / transform), but the
+    /// rasterizer composites the result with a per-channel
+    /// `min(top, bottom)` darken instead of standard alpha blending.
+    /// This is a CMYK-overprint *approximation* done in RGB: it's
+    /// visibly correct for dark ink on lighter background and
+    /// black-on-tints (the common real-world overprint cases) but not
+    /// a true per-channel CMYK composite — that's deferred until the
+    /// rasterizer carries separations end to end (see Phase 3 Tier 3
+    /// #14, Stage 4).
+    ///
+    /// Lifted to a distinct variant rather than a flag on `FillPath`
+    /// so the common knock-out path stays one variant + one rasterizer
+    /// arm with no per-command branch, and so existing construction
+    /// sites for `FillPath` need no churn.
+    FillPathOverprint {
+        path_id: PathId,
+        paint: Paint,
+        transform: Transform,
+    },
+    /// Stroke a path with overprint semantics. See
+    /// [`DisplayCommand::FillPathOverprint`] for the rasterizer
+    /// approximation.
+    StrokePathOverprint {
+        path_id: PathId,
+        paint: Paint,
+        stroke: Stroke,
+        transform: Transform,
+    },
+    /// C-28 opacity mask — open a soft-mask bracket. Unlike
+    /// [`PushClip`](DisplayCommand::PushClip) (a hard binary NonZero
+    /// clip) this carries **per-pixel coverage**: the mask artwork's
+    /// luminosity or alpha modulates the masked content's alpha
+    /// continuously, so a black→white gradient fades the content
+    /// out.
+    ///
+    /// # Why three markers and not a `SoftMaskId` pool
+    ///
+    /// The bracket is a THREE-marker sequence, in emission order:
+    ///
+    /// ```text
+    /// BeginSoftMask { .. }     ← mask ARTWORK commands start here
+    ///   …artwork…
+    /// BeginMaskedContent(..)   ← artwork ends, MASKED content starts
+    ///   …masked content…
+    /// EndSoftMask(..)          ← masked content ends
+    /// ```
+    ///
+    /// The obvious alternative — a `soft_masks: Vec<SoftMaskDef>`
+    /// pool holding the artwork as a nested command vec, referenced
+    /// by a 2-marker `PushSoftMask { mask_id }` / `PopSoftMask` pair
+    /// — was rejected because the artwork's paths/gradients/images
+    /// would then live in a *second* set of pools. Every pass that
+    /// walks this list by **flat command range** (vertical
+    /// justification, `frame_cmd_ranges`, the master-text delta cache
+    /// and its `rebase_path_ids`, the PDF exporter's `walk(range)`,
+    /// the scene-layer splicer) would need a parallel recursive form.
+    /// Keeping the artwork inline in the same stream means all of
+    /// that machinery keeps working untouched — the only cost is one
+    /// extra marker variant.
+    ///
+    /// It also maps 1:1 onto PDF: the artwork becomes a luminosity /
+    /// alpha group Form XObject, `BeginMaskedContent` becomes
+    /// `q` + `gs` with that `/SMask`, and `EndSoftMask` becomes `Q`.
+    ///
+    /// Unpainted mask area means **hidden** for both mask types
+    /// (luminosity: unpainted = black = 0; alpha: unpainted = α 0),
+    /// matching PDF's default black backdrop. `invert` flips that.
+    ///
+    /// `transform` is a stub (matches `BeginBlendGroup`'s scheme) so
+    /// [`DisplayCommand::transform_mut`] keeps returning a non-None
+    /// reference; emitters initialise it to identity and no
+    /// rasterizer consumes it — the artwork commands already carry
+    /// their own page-space transforms.
+    BeginSoftMask {
+        mask_type: SoftMaskType,
+        /// Invert the resolved coverage (`1 − c`). Illustrator's
+        /// "Invert Mask" checkbox.
+        invert: bool,
+        transform: Transform,
+    },
+    /// C-28 — close the mask ARTWORK and open the masked content.
+    /// See [`DisplayCommand::BeginSoftMask`]. Mismatched markers are
+    /// tolerated (a stray one is a no-op), matching the
+    /// `PopClip` / `EndBlendGroup` policy. The contained transform is
+    /// unused; same rationale as [`DisplayCommand::PopClip`].
+    BeginMaskedContent(Transform),
+    /// C-28 — close the masked content, dropping the soft mask. See
+    /// [`DisplayCommand::BeginSoftMask`].
+    EndSoftMask(Transform),
+}
+
+/// C-28 — how a soft mask's artwork resolves to per-pixel coverage.
+///
+/// Named after PDF's `/S` soft-mask subtypes (and matching
+/// `tiny_skia::MaskType`), because both back ends resolve it that
+/// way: `Luminosity` reads the artwork's *colour* (a white shape
+/// shows the content, black hides it — Illustrator's default, and
+/// what a black→white gradient swatch means to a designer),
+/// `Alpha` reads the artwork's *opacity* and ignores its colour.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum SoftMaskType {
+    #[default]
+    Luminosity,
+    Alpha,
+}
+
+impl DisplayCommand {
+    /// Mutable accessor for the command's placement transform.
+    /// Used by post-emit passes (vertical justification, future
+    /// layered effects) that need to translate / re-anchor a range
+    /// of commands without inspecting variants individually.
+    pub fn transform_mut(&mut self) -> &mut Transform {
+        match self {
+            DisplayCommand::FillPath { transform, .. }
+            | DisplayCommand::FillPathBlend { transform, .. }
+            | DisplayCommand::StrokePath { transform, .. }
+            | DisplayCommand::DropShadow { transform, .. }
+            | DisplayCommand::PathShadow { transform, .. }
+            | DisplayCommand::Image { transform, .. }
+            | DisplayCommand::PushClip { transform, .. }
+            | DisplayCommand::PopClip(transform)
+            | DisplayCommand::BeginBlendGroup { transform, .. }
+            | DisplayCommand::EndBlendGroup(transform)
+            | DisplayCommand::InnerShadow { transform, .. }
+            | DisplayCommand::OuterGlow { transform, .. }
+            | DisplayCommand::InnerGlow { transform, .. }
+            | DisplayCommand::BevelEmboss { transform, .. }
+            | DisplayCommand::Satin { transform, .. }
+            | DisplayCommand::Feather { transform, .. }
+            | DisplayCommand::DirectionalFeather { transform, .. }
+            | DisplayCommand::GradientFeather { transform, .. }
+            | DisplayCommand::PushLayer { transform, .. }
+            | DisplayCommand::PopLayer(transform)
+            | DisplayCommand::FillPathOverprint { transform, .. }
+            | DisplayCommand::StrokePathOverprint { transform, .. }
+            | DisplayCommand::BeginSoftMask { transform, .. }
+            | DisplayCommand::BeginMaskedContent(transform)
+            | DisplayCommand::EndSoftMask(transform) => transform,
+        }
+    }
+}
+
+/// Index into [`DisplayList::images`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ImageId(pub u32);
+
+/// One placed image's decoded RGBA8 pixels. The pipeline decodes
+/// once per (uri, dpi) and stores the result here so repeat
+/// placements share the buffer.
+///
+/// Cloning is cheap (both `encoded` and `rgba` are `Bytes` — refcount
+/// bumps, not memcpys), so the renderer can dedup an image across
+/// many `Image` commands without bloating the heap.
+///
+/// Lazy decoding: when `rgba.is_empty()` the rasterizer must decode
+/// `encoded` on demand and discard the result after composition. This
+/// is the path the wasm32 build takes for envato megapacks (~50MB
+/// embedded images) where decoded RGBA would blow the 4GB
+/// address-space cap. `encoded` may be empty for synthetic images
+/// built directly from RGBA — in that case the rasterizer falls
+/// through to the pre-decoded `rgba`.
+#[derive(Debug, Clone)]
+pub struct DecodedImage {
+    pub width: u32,
+    pub height: u32,
+    /// Original encoded bytes (PNG / JPEG / WebP / …). Held so a
+    /// lazy rasterizer can decode + drop on demand. Empty when the
+    /// image was constructed directly from a pre-decoded RGBA8 buffer
+    /// (e.g. synthetic placeholders, tests).
+    pub encoded: bytes::Bytes,
+    /// Tightly packed RGBA8 (4 bytes per pixel, row-major). Length
+    /// must equal `width * height * 4` when populated. Empty when
+    /// the rasterizer is expected to decode `encoded` lazily.
+    pub rgba: bytes::Bytes,
+    /// Concept 3 — the image's embedded ICC profile (JPEG APP2 /
+    /// PNG iCCP) when the decoder retained it. The PDF exporter
+    /// tags the image XObject with it so placed assets keep their
+    /// colour space (concept E7); rasterizers ignore it. `None`
+    /// default — every existing constructor stays valid.
+    pub icc: Option<bytes::Bytes>,
+}
+
+/// Stroke parameters. Widths are in pt.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Stroke {
+    pub width: f32,
+    pub cap: LineCap,
+    pub join: LineJoin,
+    pub miter_limit: f32,
+    /// Optional dash pattern in pt: alternating on/off lengths. Empty
+    /// means solid. The rasterizer is responsible for cycling through
+    /// the array per stroked path.
+    pub dash: DashPattern,
+}
+
+/// Up to four on/off pairs (eight slots) cover IDML's preset stroke
+/// styles (Solid, Dashed, Dotted, Dashed3-2, etc.) without
+/// allocating. Anything richer falls back to `Solid` until the
+/// parser learns custom `<StrokeStyle>` definitions.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct DashPattern {
+    /// Number of valid entries in `pattern`.
+    pub len: u8,
+    /// Up to 8 entries; only `pattern[..len]` is meaningful. An empty
+    /// pattern means solid.
+    pub pattern: [f32; 8],
+    /// A stroke style drawn as repeated marks instead of dashes.
+    /// `dash_fit::push_stroke` lays the marks out; a stroke that never
+    /// reaches it draws solid, as `len == 0` says.
+    pub marks: StrokeMarks,
+}
+
+/// InDesign's built-in stroke styles that are marks along the path, not
+/// dashes of it (`crate::stroke_marks`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StrokeMarks {
+    #[default]
+    None,
+    LeftSlantHash,
+    RightSlantHash,
+    StraightHash,
+    WhiteDiamond,
+}
+
+impl DashPattern {
+    pub fn from_slice(values: &[f32]) -> Self {
+        let mut out = Self::default();
+        for (slot, v) in out.pattern.iter_mut().zip(values.iter()) {
+            *slot = *v;
+        }
+        out.len = values.len().min(8) as u8;
+        out
+    }
+
+    pub fn is_solid(&self) -> bool {
+        self.len == 0
+    }
+
+    pub fn as_slice(&self) -> &[f32] {
+        &self.pattern[..self.len as usize]
+    }
+}
+
+impl Stroke {
+    /// Minimal defaults: `width` set by caller, butt caps, miter
+    /// joins, miter_limit=4.0 (PDF default), solid dash.
+    pub fn new(width: f32) -> Self {
+        Self {
+            width,
+            cap: LineCap::Butt,
+            join: LineJoin::Miter,
+            miter_limit: 4.0,
+            dash: DashPattern::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LineCap {
+    Butt,
+    Round,
+    Square,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LineJoin {
+    Miter,
+    Round,
+    Bevel,
+}
+
+/// Concept 3 (PDF export) — one captured glyph: the side-channel
+/// record paralleling the outline `FillPath`/`StrokePath` command at
+/// `command_index`. Captured ONLY when
+/// `PipelineOptions::collect_glyph_runs` is set (the canvas default
+/// is off — the live render path never pays for this); the PDF
+/// backend skips the outline command and emits real text (`Tf`/`Tm`/
+/// `TJ`) instead, with the unicode codepoint feeding `/ToUnicode`.
+#[derive(Debug, Clone)]
+pub struct GlyphRunEntry {
+    /// Index of the parallel outline command in
+    /// `DisplayList::commands`.
+    pub command_index: u32,
+    /// The glyph-outline cache id — `fnv(face bytes) ^ wght_bits`.
+    /// Groups glyphs that share an outline set, which is what the PDF
+    /// exporter keys one embedded font on.
+    ///
+    /// It does NOT resolve to face bytes. It used to claim it did, and
+    /// the exporter believed it: every lookup missed, so every PDF this
+    /// engine produced had its text drawn as outlines with no text
+    /// layer at all. Use [`Self::face_id`] for bytes.
+    pub font_id: u32,
+    /// The id that DOES resolve to face bytes (`fnv(face bytes)`), or
+    /// `None` when these outlines came from a baked `wght` variation —
+    /// where the bytes alone would render the wrong weight, so the
+    /// exporter must keep drawing outlines.
+    pub face_id: Option<u32>,
+    pub glyph_id: u32,
+    pub font_size: f32,
+    /// The EXACT affine the outline command received — reused
+    /// verbatim as the PDF text matrix so text lands
+    /// pixel-identical to the outline it replaces.
+    pub transform: Transform,
+    pub paint: Paint,
+    /// The character(s) this glyph represents, for `/ToUnicode`.
+    /// Single char covers the common case; ligatures carry the
+    /// first char v1 (multi-char mapping is a refinement).
+    pub unicode: Option<char>,
+    pub is_stroke: bool,
+    /// The paragraph this glyph is text of, for a tagged PDF's logical
+    /// structure (ADR 182): the producer's [`GlyphRunTable::current`]
+    /// when the glyph was captured. `None` for text no paragraph owns.
+    pub structure: Option<StructKey>,
+}
+
+/// A paragraph of the document's logical structure (ADR 182): its
+/// story's ordinal in document order and its index in that story. A
+/// tagged PDF sets each key's text in one paragraph element, the keys in
+/// order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct StructKey {
+    pub story: u32,
+    pub paragraph: u32,
+    /// Which paragraph of a model paragraph that holds several (its text
+    /// split at paragraph marks): InDesign sets each as its own element.
+    pub sub: u32,
+    /// A table cell's paragraph in the table that paragraph holds (ADR 182
+    /// amended): a tagged PDF sets it as `Table` > `TR` > `TH`/`TD` > `P`
+    /// under the paragraph's element. `None` for the paragraph's own text.
+    pub cell: Option<CellKey>,
+}
+
+/// Where a table cell's paragraph stands: its row and column, the
+/// paragraph's index in the cell, and whether the row is a header row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct CellKey {
+    pub row: u32,
+    pub col: u32,
+    pub paragraph: u32,
+    pub header: bool,
+}
+
+/// Concept 3 — the per-list glyph capture (see [`GlyphRunEntry`]).
+#[derive(Debug, Default)]
+pub struct GlyphRunTable {
+    pub entries: Vec<GlyphRunEntry>,
+    /// The paragraph the producer is emitting now (ADR 182): every entry
+    /// pushed while it is set carries it as [`GlyphRunEntry::structure`].
+    pub current: Option<StructKey>,
+}
+
+impl GlyphRunTable {
+    pub fn push(&mut self, entry: GlyphRunEntry) {
+        self.entries.push(entry);
+    }
+}
+
+/// W1.4 — where a clickable link region points. Sourced from an IDML
+/// `<Hyperlink>` (or `<CrossReferenceSource>`) span resolved against
+/// the document's destination table at render time.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LinkTarget {
+    /// External URL — becomes a PDF `/URI` action.
+    Url(String),
+    /// In-document page (0-based flat body-page index) — becomes a PDF
+    /// `/GoTo` action with a `/Fit` page destination.
+    PageIndex(u32),
+    /// A source span whose destination could not be resolved (missing
+    /// or dangling ref). Kept so tooling can surface the dangling link;
+    /// the PDF backend skips it (no annotation for an unresolved
+    /// target). Carries the unresolved destination/source id for
+    /// diagnostics.
+    Unresolved(String),
+}
+
+/// W1.4 — one clickable region in PAGE-LOCAL pt space (origin at the
+/// page's top-left, y growing downward — the same space the display
+/// list's glyph commands live in). The PDF exporter flips it into
+/// y-up media coords when it writes the `/Annots` Link annotation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinkRegion {
+    pub rect: Rect,
+    pub target: LinkTarget,
+}
+
+/// W1.4 — the per-list link-region side-channel, paralleling
+/// [`GlyphRunTable`]. Populated during emit only when
+/// `PipelineOptions::collect_link_regions` is set (the live canvas
+/// build never pays for it); rasterizers never read it — only the PDF
+/// exporter consumes it to emit `/Annots` Link annotations.
+#[derive(Debug, Default, Clone)]
+pub struct LinkRegionTable {
+    pub regions: Vec<LinkRegion>,
+}
+
+impl LinkRegionTable {
+    pub fn push(&mut self, region: LinkRegion) {
+        self.regions.push(region);
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct DisplayList {
+    pub paths: PathBuffer,
+    pub commands: Vec<DisplayCommand>,
+    pub gradients: Vec<LinearGradient>,
+    pub radial_gradients: Vec<RadialGradient>,
+    pub sweep_gradients: Vec<SweepGradient>,
+    pub images: Vec<DecodedImage>,
+    /// Named spot inks the document references. Indexed by
+    /// [`SpotInkId`]. Two `Paint::Cmyk` paints carrying the same spot
+    /// name intern to the same id so the rasterizer can identify
+    /// spot-on-same-spot overprints (which compose per-pixel `max`) vs.
+    /// different-named-ink overprints (which accumulate independently).
+    pub spot_inks: Vec<SpotInk>,
+    /// Concept 3 — glyph-run side-channel for the PDF exporter.
+    /// `None` unless the build ran with
+    /// `PipelineOptions::collect_glyph_runs`; rasterizers never read
+    /// it.
+    pub glyph_runs: Option<GlyphRunTable>,
+    /// W1.4 — link-region side-channel for the PDF exporter's
+    /// `/Annots`. `None` unless the build ran with
+    /// `PipelineOptions::collect_link_regions`; rasterizers never read
+    /// it.
+    pub link_regions: Option<LinkRegionTable>,
+}
+
+impl DisplayList {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn push(&mut self, cmd: DisplayCommand) {
+        self.commands.push(cmd);
+    }
+
+    /// Insert `cmd` at `at`, keeping the glyph-run side channel in step.
+    ///
+    /// `GlyphRunEntry::command_index` is the one place a command is
+    /// addressed by POSITION, so every post-emit splice — the group
+    /// bracket, the clip pairs, the glyph-shadow wrapper — silently
+    /// mis-addresses it unless the entries move too. Use this rather
+    /// than `commands.insert` wherever the list may carry glyph runs.
+    /// The scan is skipped entirely when it does not (the interactive
+    /// canvas never collects them).
+    pub fn insert_command(&mut self, at: usize, cmd: DisplayCommand) {
+        self.commands.insert(at, cmd);
+        if let Some(table) = self.glyph_runs.as_mut() {
+            for entry in table.entries.iter_mut() {
+                if entry.command_index as usize >= at {
+                    entry.command_index += 1;
+                }
+            }
+        }
+    }
+
+    /// Apply `f` to the transform of every command in `range`, and of every
+    /// glyph-run entry that belongs to one of them.
+    ///
+    /// An entry keeps its own copy of its outline command's transform (the
+    /// PDF writer sets its text matrix from it), so a post-emit pass that
+    /// moves commands — vertical justification, a rotated frame, a rotated
+    /// cell — must move the entries too, or the exported text stays where
+    /// the outlines were before the move. Use this rather than editing
+    /// `commands[..].transform_mut()` wherever the list may carry glyph
+    /// runs.
+    pub fn map_transforms(
+        &mut self,
+        range: std::ops::Range<usize>,
+        mut f: impl FnMut(&mut Transform),
+    ) {
+        let end = range.end.min(self.commands.len());
+        let start = range.start.min(end);
+        for cmd in &mut self.commands[start..end] {
+            f(cmd.transform_mut());
+        }
+        if let Some(table) = self.glyph_runs.as_mut() {
+            for entry in table.entries.iter_mut() {
+                if (start..end).contains(&(entry.command_index as usize)) {
+                    f(&mut entry.transform);
+                }
+            }
+        }
+    }
+
+    /// Append a linear gradient and return its id.
+    pub fn push_linear_gradient(&mut self, g: LinearGradient) -> GradientId {
+        let id = GradientId(self.gradients.len() as u32);
+        self.gradients.push(g);
+        id
+    }
+
+    pub fn linear_gradient(&self, id: GradientId) -> Option<&LinearGradient> {
+        self.gradients.get(id.0 as usize)
+    }
+
+    /// Append a radial gradient and return its id.
+    pub fn push_radial_gradient(&mut self, g: RadialGradient) -> GradientId {
+        let id = GradientId(self.radial_gradients.len() as u32);
+        self.radial_gradients.push(g);
+        id
+    }
+
+    pub fn radial_gradient(&self, id: GradientId) -> Option<&RadialGradient> {
+        self.radial_gradients.get(id.0 as usize)
+    }
+
+    /// Append a sweep gradient and return its id.
+    pub fn push_sweep_gradient(&mut self, g: SweepGradient) -> GradientId {
+        let id = GradientId(self.sweep_gradients.len() as u32);
+        self.sweep_gradients.push(g);
+        id
+    }
+
+    pub fn sweep_gradient(&self, id: GradientId) -> Option<&SweepGradient> {
+        self.sweep_gradients.get(id.0 as usize)
+    }
+
+    /// Append a decoded image and return its id. Callers are expected
+    /// to dedupe before calling — the buffer is a Vec, not a hash
+    /// map, since image bytes don't have a cheap hash.
+    pub fn push_image(&mut self, img: DecodedImage) -> ImageId {
+        let id = ImageId(self.images.len() as u32);
+        self.images.push(img);
+        id
+    }
+
+    pub fn image(&self, id: ImageId) -> Option<&DecodedImage> {
+        self.images.get(id.0 as usize)
+    }
+
+    /// Intern a spot ink name. Returns the existing id if the document
+    /// already registered an ink with that `name`; otherwise pushes the
+    /// `ink` and returns the freshly minted id. Dedup keeps the spot
+    /// plane count proportional to the document's distinct named inks
+    /// rather than to the number of `Paint::Cmyk` constructions.
+    pub fn push_spot_ink(&mut self, ink: SpotInk) -> SpotInkId {
+        if let Some((i, _)) = self
+            .spot_inks
+            .iter()
+            .enumerate()
+            .find(|(_, e)| e.name == ink.name)
+        {
+            return SpotInkId(i as u32);
+        }
+        let id = SpotInkId(self.spot_inks.len() as u32);
+        self.spot_inks.push(ink);
+        id
+    }
+
+    pub fn spot_ink(&self, id: SpotInkId) -> Option<&SpotInk> {
+        self.spot_inks.get(id.0 as usize)
+    }
+
+    /// Stable structural digest of the full visual content: commands,
+    /// interned path data, gradient/spot pools, and image pixels.
+    /// FNV-1a 64 over the `Debug` representation (plus raw bytes for
+    /// images). Rust's float `Debug` is the exact shortest round-trip
+    /// form, so identical streams hash equal across targets — wasm and
+    /// native agree for the same crate version.
+    ///
+    /// This is the viewer's "same code, same scene" tripwire: the
+    /// `paged-sdk` load path must produce the same digest as a direct
+    /// `pipeline::build_document` (asserted in `paged-sdk`'s native
+    /// equivalence test). NOT a persistent format — don't store
+    /// digests across engine versions.
+    pub fn digest(&self) -> u64 {
+        use std::fmt::Write as _;
+
+        /// FNV-1a 64 fed through `fmt::Write` so Debug formatting
+        /// streams straight into the hash without building strings.
+        struct Fnv(u64);
+        impl Fnv {
+            fn bytes(&mut self, bytes: &[u8]) {
+                for b in bytes {
+                    self.0 ^= u64::from(*b);
+                    self.0 = self.0.wrapping_mul(0x0000_0100_0000_01b3);
+                }
+            }
+        }
+        impl std::fmt::Write for Fnv {
+            fn write_str(&mut self, s: &str) -> std::fmt::Result {
+                self.bytes(s.as_bytes());
+                Ok(())
+            }
+        }
+
+        let mut h = Fnv(0xcbf2_9ce4_8422_2325);
+        for cmd in &self.commands {
+            let _ = write!(h, "c{cmd:?}");
+        }
+        for i in 0..self.paths.len() {
+            if let Some(p) = self.paths.get(PathId(i as u32)) {
+                let _ = write!(h, "p{p:?}");
+            }
+        }
+        let _ = write!(
+            h,
+            "g{:?}r{:?}w{:?}s{:?}",
+            self.gradients, self.radial_gradients, self.sweep_gradients, self.spot_inks
+        );
+        for img in &self.images {
+            let _ = write!(h, "i{}x{}", img.width, img.height);
+            h.bytes(&img.encoded);
+            h.bytes(&img.rgba);
+        }
+        h.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transform_translate_applied_to_point() {
+        let t = Transform::translate(3.0, 4.0);
+        assert_eq!(t.apply(1.0, 2.0), (4.0, 6.0));
+    }
+
+    #[test]
+    fn transform_scale_applied_to_point() {
+        let t = Transform::scale(2.0, 3.0);
+        assert_eq!(t.apply(5.0, 7.0), (10.0, 21.0));
+    }
+
+    #[test]
+    fn transform_compose_applies_outer_after_inner() {
+        // inner first scales by 2x, outer translates by (10, 20).
+        let inner = Transform::scale(2.0, 2.0);
+        let outer = Transform::translate(10.0, 20.0);
+        let composed = outer.compose(&inner);
+        // Point (3, 4) → inner → (6, 8) → outer → (16, 28).
+        assert_eq!(composed.apply(3.0, 4.0), (16.0, 28.0));
+    }
+
+    #[test]
+    fn transform_compose_with_identity_is_a_noop() {
+        let t = Transform([2.0, 0.5, -0.5, 2.0, 7.0, 11.0]);
+        assert_eq!(Transform::IDENTITY.compose(&t).0, t.0);
+        assert_eq!(t.compose(&Transform::IDENTITY).0, t.0);
+    }
+
+    #[test]
+    fn path_buffer_interns_by_key() {
+        let mut pb = PathBuffer::new();
+        let key = 42u64;
+        let (id1, fresh1) = pb.intern(
+            key,
+            PathData {
+                segments: vec![PathSegment::MoveTo { x: 0.0, y: 0.0 }],
+            },
+        );
+        assert!(fresh1);
+        let (id2, fresh2) = pb.intern(key, PathData::default());
+        assert!(!fresh2, "second intern under same key should not store");
+        assert_eq!(id1, id2);
+        assert_eq!(pb.len(), 1);
+    }
+
+    #[test]
+    fn path_buffer_anon_does_not_collide() {
+        let mut pb = PathBuffer::new();
+        let a = pb.push_anon(PathData::default());
+        let b = pb.push_anon(PathData::default());
+        assert_ne!(a, b);
+        assert_eq!(pb.len(), 2);
+    }
+}

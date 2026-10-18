@@ -1,0 +1,5592 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+use super::*;
+
+#[test]
+fn default_options_do_not_collect_glyph_runs() {
+    // Load-bearing invariant: the glyph side-channel is opt-in.
+    // With the default options every capture site no-ops, so the
+    // canvas/CI command stream stays byte-identical to before the
+    // PDF exporter existed. Flipping this default would silently
+    // change every consumer — do it only on purpose.
+    assert!(!PipelineOptions::default().collect_glyph_runs);
+}
+
+#[test]
+fn position_metrics_super_sub_and_normal() {
+    // Superscript lifts (positive offset), subscript drops (negative);
+    // both shrink to 58.3 %.
+    assert_eq!(position_metrics(Some("Superscript")), (0.583, 0.333));
+    assert_eq!(position_metrics(Some("Subscript")), (0.583, -0.333));
+    // The OpenType positions are glyph substitutions, never scaled or
+    // shifted (InDesign 20.0.1, `opentype` o02/o04/o05/o08: Inter's
+    // `two.sups` at full size on the baseline; Roboto, which has no
+    // `sups`, prints a plain "2").
+    for ot in [
+        "OTSuperscript",
+        "OTSubscript",
+        "OTNumerator",
+        "OTDenominator",
+    ] {
+        assert_eq!(position_metrics(Some(ot)), (1.0, 0.0), "{ot}");
+    }
+    // Normal / absent / unknown ⇒ identity (no scale, no shift).
+    assert_eq!(position_metrics(Some("Normal")), (1.0, 0.0));
+    assert_eq!(position_metrics(None), (1.0, 0.0));
+}
+
+#[test]
+fn position_adjusted_metrics_super_sub_and_normal() {
+    // Base 12pt, no explicit baseline shift.
+    // Superscript: 12 * 0.583 = 6.996 pt, +12 * 0.333 = +3.996 pt.
+    let (sz, sh) = position_adjusted_metrics(12.0, None, Some("Superscript"));
+    assert!((sz - 6.996).abs() < 1e-3, "super size {sz}");
+    assert!((sh - 3.996).abs() < 1e-3, "super shift {sh}");
+    // Subscript drops (negative shift), same shrink.
+    let (sz, sh) = position_adjusted_metrics(12.0, None, Some("Subscript"));
+    assert!((sz - 6.996).abs() < 1e-3, "sub size {sz}");
+    assert!((sh + 3.996).abs() < 1e-3, "sub shift {sh}");
+    // Normal: untouched size, zero shift.
+    assert_eq!(
+        position_adjusted_metrics(12.0, None, Some("Normal")),
+        (12.0, 0.0)
+    );
+    assert_eq!(position_adjusted_metrics(12.0, None, None), (12.0, 0.0));
+}
+
+#[test]
+fn position_adjusted_metrics_composes_explicit_baseline_shift() {
+    // An explicit BaselineShift adds on top of the Position offset.
+    // Base 10pt, explicit +2pt, superscript ⇒ shift = 2 + 10*0.333.
+    let (sz, sh) = position_adjusted_metrics(10.0, Some(2.0), Some("Superscript"));
+    assert!((sz - 5.83).abs() < 1e-3, "size {sz}");
+    assert!((sh - (2.0 + 3.33)).abs() < 1e-3, "shift {sh}");
+    // Explicit shift with Normal position is passed through verbatim
+    // (no size change, no Position offset).
+    let (sz, sh) = position_adjusted_metrics(10.0, Some(-1.5), None);
+    assert_eq!(sz, 10.0);
+    assert!((sh + 1.5).abs() < 1e-6, "shift {sh}");
+}
+
+#[test]
+fn stroke_for_custom_styles_dashed_dotted_striped_wavy() {
+    use paged_model::{StrokeStyleDef, StrokeStyleKind as K};
+    let mk = |kind, pattern: &[f32]| {
+        let mut m = std::collections::BTreeMap::new();
+        m.insert(
+            "S".to_string(),
+            StrokeStyleDef {
+                self_id: "S".to_string(),
+                name: None,
+                kind,
+                pattern: pattern.to_vec(),
+                stripes: Vec::new(),
+                wave_width: None,
+                wave_length: None,
+                gap_color: None,
+                gap_tint: None,
+            },
+        );
+        m
+    };
+    let go = |kind, pat: &[f32]| {
+        let m = mk(kind, pat);
+        stroke_for(Some("S"), 2.0, None, None, None, Some(&m), &[])
+    };
+    // Custom Dashed + Dotted patterns are consumed (a real dash).
+    assert!(!go(K::Dashed, &[3.0, 2.0]).dash.is_solid(), "dashed");
+    assert!(!go(K::Dotted, &[0.0, 2.0]).dash.is_solid(), "dotted");
+    // `stroke_for` is the low-level *single*-stroke builder; Striped
+    // / Wavy can't be expressed as one dash, so it returns a solid
+    // base. The multi-rule / sine geometry for those is produced at
+    // the emit site by `classify_stroke_style` + `emit_styled_stroke`
+    // (W1.2), not here.
+    assert!(go(K::Striped, &[]).dash.is_solid(), "striped base → solid");
+    assert!(go(K::Wavy, &[]).dash.is_solid(), "wavy base → solid");
+}
+
+/// W1.1 — a per-frame `StrokeDashAndGap` override takes PRECEDENCE
+/// over the `StrokeStyleDef` pattern (and over the built-in name
+/// table): the override feeds the dash slot verbatim regardless of
+/// the named style. An empty override falls back to the style.
+#[test]
+fn stroke_for_instance_dash_override_wins_over_style_pattern() {
+    use paged_model::{StrokeStyleDef, StrokeStyleKind as K};
+    let mut styles = std::collections::BTreeMap::new();
+    styles.insert(
+        "S".to_string(),
+        StrokeStyleDef {
+            self_id: "S".to_string(),
+            name: None,
+            kind: K::Dashed,
+            pattern: vec![3.0, 2.0],
+            stripes: Vec::new(),
+            wave_width: None,
+            wave_length: None,
+            gap_color: None,
+            gap_tint: None,
+        },
+    );
+    // Instance override [9, 4] beats the style's [3, 2].
+    let overridden = stroke_for(Some("S"), 2.0, None, None, None, Some(&styles), &[9.0, 4.0]);
+    assert_eq!(overridden.dash.as_slice(), &[9.0, 4.0]);
+    // Override wins even against a SOLID built-in name (no style def).
+    let on_solid = stroke_for(
+        Some("StrokeStyle/$ID/Solid"),
+        2.0,
+        None,
+        None,
+        None,
+        None,
+        &[7.0, 1.0],
+    );
+    assert_eq!(on_solid.dash.as_slice(), &[7.0, 1.0]);
+    // Empty override → fall back to the style's [3, 2] pattern.
+    let fallback = stroke_for(Some("S"), 2.0, None, None, None, Some(&styles), &[]);
+    assert_eq!(fallback.dash.as_slice(), &[3.0, 2.0]);
+}
+
+#[test]
+fn compose_outer_matrix_identity_mpt_is_origin_shift() {
+    // Identity MasterPageTransform: outer collapses to
+    // translate(target - master_origin), matching the legacy
+    // translation-only stamp. master_origin (10,20), target (100,50).
+    let outer = Transform::translate(100.0, 50.0)
+        .compose(&Transform::IDENTITY)
+        .compose(&Transform::translate(-10.0, -20.0));
+    // Master item sitting at inner translate(3, 4).
+    let m = compose_outer_matrix(outer, Some([1.0, 0.0, 0.0, 1.0, 3.0, 4.0]));
+    assert_eq!(
+        [m[0], m[1], m[2], m[3]],
+        [1.0, 0.0, 0.0, 1.0],
+        "linear part untouched"
+    );
+    assert!((m[4] - 93.0).abs() < 1e-4, "tx={} (100-10+3)", m[4]);
+    assert!((m[5] - 34.0).abs() < 1e-4, "ty={} (50-20+4)", m[5]);
+}
+
+#[test]
+fn compose_outer_matrix_applies_mpt_scale() {
+    // A 2× MasterPageTransform about a master origin at (0,0) scales
+    // the stamped item's linear part *and* its offset — the part the
+    // old translation-only stamp silently dropped.
+    let outer = Transform::translate(0.0, 0.0)
+        .compose(&Transform([2.0, 0.0, 0.0, 2.0, 0.0, 0.0]))
+        .compose(&Transform::translate(0.0, 0.0));
+    let m = compose_outer_matrix(outer, Some([1.0, 0.0, 0.0, 1.0, 5.0, 7.0]));
+    assert!(
+        (m[0] - 2.0).abs() < 1e-4 && (m[3] - 2.0).abs() < 1e-4,
+        "linear scaled"
+    );
+    assert!((m[4] - 10.0).abs() < 1e-4, "tx={} (5×2)", m[4]);
+    assert!((m[5] - 14.0).abs() < 1e-4, "ty={} (7×2)", m[5]);
+}
+
+// ---- W1.9 spread-level ItemTransform rotation/scale ----
+
+#[test]
+fn spread_linear_transform_identity_and_translation_collapse() {
+    // Absent → identity.
+    assert_eq!(spread_linear_transform(None), Transform::IDENTITY);
+    // Pure translation → identity (translation cancels against the
+    // spread origin, so only the linear part rides the field).
+    assert_eq!(
+        spread_linear_transform(Some([1.0, 0.0, 0.0, 1.0, 40.0, -12.0])),
+        Transform::IDENTITY
+    );
+}
+
+#[test]
+fn spread_linear_transform_keeps_rotation_drops_translation() {
+    // 90° CW rotation (a=0,b=1,c=-1,d=0) with a translation → the
+    // linear block is kept, the translation dropped.
+    let lin = spread_linear_transform(Some([0.0, 1.0, -1.0, 0.0, 100.0, 200.0]));
+    assert_eq!(lin.0, [0.0, 1.0, -1.0, 0.0, 0.0, 0.0]);
+}
+
+#[test]
+fn frame_outer_transform_identity_spread_is_unchanged() {
+    // With an identity spread_transform the outer is byte-identical
+    // to the historical translate(-origin) ∘ item_transform.
+    let page = BuiltPage {
+        id: PageId::synthetic(0, 0),
+        width_pt: 100.0,
+        height_pt: 100.0,
+        spread_origin: (10.0, 20.0),
+        spread_transform: Transform::IDENTITY,
+        list: DisplayList::new(),
+        layout_generation: 0,
+        numbering_generation: 0,
+        stats: PipelineStats::default(),
+        story_layout: Vec::new(),
+        footnotes: Vec::new(),
+        diagnostics: Vec::new(),
+        cell_rects: Vec::new(),
+        resource_tiles_needed: Vec::new(),
+        scene_layer_frames: Vec::new(),
+    };
+    let outer = frame_outer_transform(&page, Some([1.0, 0.0, 0.0, 1.0, 5.0, 6.0]));
+    // translate(-10,-20) ∘ translate(5,6) = translate(-5,-14).
+    assert_eq!(outer.0, [1.0, 0.0, 0.0, 1.0, -5.0, -14.0]);
+}
+
+#[test]
+fn frame_outer_transform_rotated_spread_rotates_about_page_origin() {
+    // 90° CW spread rotation. A point at the page origin (spread
+    // origin) stays put; a frame offset from the origin rotates
+    // about it. spread_origin=(0,0) keeps the math clean.
+    let page = BuiltPage {
+        id: PageId::synthetic(0, 0),
+        width_pt: 100.0,
+        height_pt: 100.0,
+        spread_origin: (0.0, 0.0),
+        spread_transform: Transform([0.0, 1.0, -1.0, 0.0, 0.0, 0.0]),
+        list: DisplayList::new(),
+        layout_generation: 0,
+        numbering_generation: 0,
+        stats: PipelineStats::default(),
+        story_layout: Vec::new(),
+        footnotes: Vec::new(),
+        diagnostics: Vec::new(),
+        cell_rects: Vec::new(),
+        resource_tiles_needed: Vec::new(),
+        scene_layer_frames: Vec::new(),
+    };
+    // Frame at inner origin translated to (30, 0). Under 90° CW
+    // (x' = -y, y' = x), the frame's translation (30,0) maps to
+    // (0, 30). outer = spread ∘ translate(0,0) ∘ translate(30,0).
+    let outer = frame_outer_transform(&page, Some([1.0, 0.0, 0.0, 1.0, 30.0, 0.0]));
+    let (x, y) = outer.apply(0.0, 0.0);
+    assert!((x - 0.0).abs() < 1e-4, "x={x}");
+    assert!((y - 30.0).abs() < 1e-4, "y={y}");
+    // The linear block is the spread rotation composed with identity.
+    assert!((outer.0[0]).abs() < 1e-4 && (outer.0[1] - 1.0).abs() < 1e-4);
+}
+
+#[test]
+fn spread_transform_inverse_round_trips() {
+    // The hit-tester inverts the same spread_transform the renderer
+    // applied; a 90° rotation + 2× scale must round-trip.
+    let s = Transform([0.0, 2.0, -2.0, 0.0, 0.0, 0.0]);
+    let inv = s.inverse().expect("invertible");
+    let p = (12.0, -5.0);
+    let (fx, fy) = s.apply(p.0, p.1);
+    let (bx, by) = inv.apply(fx, fy);
+    assert!(
+        (bx - p.0).abs() < 1e-4 && (by - p.1).abs() < 1e-4,
+        "({bx},{by})"
+    );
+}
+
+fn attrs(
+    list_type: Option<&str>,
+    ch: Option<u32>,
+    after: Option<&str>,
+) -> paged_scene::ResolvedParagraphAttrs {
+    paged_scene::ResolvedParagraphAttrs {
+        bullets_list_type: list_type.map(str::to_string),
+        bullet_character: ch,
+        bullets_text_after: after.map(str::to_string),
+        ..Default::default()
+    }
+}
+
+/// A paragraph on the `numbering-multilevel` list: its level, format,
+/// expression and whether its restart policy applies.
+fn level_attrs(
+    level: u32,
+    format: &str,
+    expr: &str,
+    restart: bool,
+) -> paged_scene::ResolvedParagraphAttrs {
+    paged_scene::ResolvedParagraphAttrs {
+        bullets_list_type: Some("NumberedList".to_string()),
+        numbering_format: Some(format.to_string()),
+        numbering_expression: Some(expr.to_string()),
+        numbering_continue: Some(true),
+        list_level: paged_model::ListLevel {
+            level: Some(level),
+            apply_restart: Some(restart),
+            restart_policy: (level > 1).then_some(paged_model::RestartPolicy {
+                kind: paged_model::RestartPolicyKind::AnyPreviousLevel,
+                lower: 0,
+                upper: 0,
+            }),
+        },
+        ..Default::default()
+    }
+}
+
+/// `numbering-multilevel`, as InDesign 20.0.1 numbered it (L-07,
+/// ADR 158): a level starts again only when a higher level came after
+/// its own last paragraph, a higher level never resets the lower ones
+/// (the point under chapter two prints the old section's `c`), `^n`
+/// prints level n in the format of its last paragraph, and a level whose
+/// restart policy is off goes on counting.
+#[test]
+fn multilevel_list_numbers_as_indesign_does() {
+    let l1 = level_attrs(1, "1, 2, 3, 4...", "^1.^t", true);
+    let l2 = level_attrs(2, "a, b, c, d...", "^1.^2.^t", true);
+    let l3 = level_attrs(3, "i, ii, iii, iv...", "^1.^2.^3.^t", true);
+    let keep = level_attrs(2, "1, 2, 3, 4...", "^1-^2^t", false);
+    let paragraphs = [
+        (&l1, "1."),
+        (&l2, "1.a."),
+        (&l2, "1.b."),
+        (&l3, "1.b.i."),
+        (&l3, "1.b.ii."),
+        (&l2, "1.c."),
+        (&l3, "1.c.i."),
+        (&l1, "2."),
+        (&l3, "2.c.i."),
+        (&l2, "2.a."),
+        (&l1, "3."),
+        (&keep, "3-2"),
+        (&keep, "3-3"),
+        (&l1, "4."),
+        (&keep, "4-4"),
+        (&l2, "4.e."),
+    ];
+    let (mut counter, mut prev, mut levels) = (0, false, numbering::ListLevels::default());
+    let got: Vec<String> = paragraphs
+        .iter()
+        .map(|(attrs, _)| {
+            list_prefix_with_levels(attrs, &mut counter, &mut prev, None, &mut levels)
+                .unwrap()
+                .trim_end_matches('\t')
+                .to_string()
+        })
+        .collect();
+    let want: Vec<&str> = paragraphs.iter().map(|(_, n)| *n).collect();
+    assert_eq!(got, want);
+}
+
+#[test]
+fn list_prefix_builds_bullet_plus_separator() {
+    let mut counter = 0;
+    let mut prev_numbered = false;
+    let p = list_prefix(
+        &attrs(Some("BulletList"), Some(0x2022), Some(" ")),
+        &mut counter,
+        &mut prev_numbered,
+        None,
+    )
+    .unwrap();
+    assert_eq!(p, "\u{2022} ");
+    assert!(!prev_numbered, "BulletList clears prev_numbered");
+}
+
+#[test]
+fn list_prefix_expands_caret_t_to_tab() {
+    let mut counter = 0;
+    let mut prev_numbered = false;
+    let p = list_prefix(
+        &attrs(Some("BulletList"), Some(0x2022), Some("^t")),
+        &mut counter,
+        &mut prev_numbered,
+        None,
+    )
+    .unwrap();
+    assert_eq!(p, "\u{2022}\t");
+}
+
+#[test]
+fn list_prefix_none_for_nolist_clears_prev_numbered() {
+    let mut counter = 5;
+    let mut prev_numbered = true;
+    assert!(list_prefix(
+        &attrs(Some("NoList"), None, None),
+        &mut counter,
+        &mut prev_numbered,
+        None
+    )
+    .is_none());
+    // NoList shouldn't damage a sticky counter — a follow-on
+    // NumberedList with `NumberingContinue` may resume.
+    assert_eq!(counter, 5);
+    assert!(!prev_numbered);
+}
+
+#[test]
+fn list_prefix_numbered_increments_across_paragraphs() {
+    let mut counter = 0;
+    let mut prev_numbered = false;
+    let attrs = attrs(Some("NumberedList"), None, None);
+    // Default expression `^#.^t` ⇒ "<n>.\t".
+    assert_eq!(
+        list_prefix(&attrs, &mut counter, &mut prev_numbered, None).as_deref(),
+        Some("1.\t")
+    );
+    assert_eq!(
+        list_prefix(&attrs, &mut counter, &mut prev_numbered, None).as_deref(),
+        Some("2.\t")
+    );
+    assert_eq!(
+        list_prefix(&attrs, &mut counter, &mut prev_numbered, None).as_deref(),
+        Some("3.\t")
+    );
+    assert_eq!(counter, 3);
+    assert!(prev_numbered);
+}
+
+#[test]
+fn list_prefix_numbered_resets_after_non_numbered() {
+    let mut counter = 0;
+    let mut prev_numbered = false;
+    let n = attrs(Some("NumberedList"), None, None);
+    let none = attrs(None, None, None);
+    list_prefix(&n, &mut counter, &mut prev_numbered, None); // 1.
+    list_prefix(&n, &mut counter, &mut prev_numbered, None); // 2.
+    list_prefix(&none, &mut counter, &mut prev_numbered, None); // clears prev_numbered, counter sticky
+    assert!(!prev_numbered);
+    assert_eq!(
+        list_prefix(&n, &mut counter, &mut prev_numbered, None).as_deref(),
+        Some("1.\t"),
+        "default behaviour: counter resets when prev wasn't numbered"
+    );
+}
+
+#[test]
+fn list_prefix_bullet_to_numbered_resets() {
+    // Mixing list types in a row resets by default — each
+    // list_type change starts a fresh sequence unless
+    // NumberingContinue is set.
+    let mut counter = 0;
+    let mut prev_numbered = false;
+    list_prefix(
+        &attrs(Some("BulletList"), Some(0x2022), Some(" ")),
+        &mut counter,
+        &mut prev_numbered,
+        None,
+    );
+    assert!(!prev_numbered);
+    let n = attrs(Some("NumberedList"), None, None);
+    assert_eq!(
+        list_prefix(&n, &mut counter, &mut prev_numbered, None).as_deref(),
+        Some("1.\t")
+    );
+}
+
+#[test]
+fn list_prefix_bullet_falls_back_to_default_when_codepoint_missing() {
+    // BulletList without an explicit BulletChar still emits the
+    // U+2022 default — matches InDesign's behaviour and lets
+    // real-export IDMLs render visible bullets.
+    let mut counter = 0;
+    let mut prev_numbered = false;
+    let prefix = list_prefix(
+        &attrs(Some("BulletList"), None, Some(" ")),
+        &mut counter,
+        &mut prev_numbered,
+        None,
+    );
+    assert_eq!(prefix.as_deref(), Some("\u{2022} "));
+}
+
+#[test]
+fn list_prefix_a_declared_start_and_continue_count_on() {
+    // InDesign's `[No paragraph style]` carries NumberingStartAt="1"
+    // NumberingContinue="true"; every paragraph inherits both, and the
+    // list still counts 1, 2, 3 (`list-overrides` o19).
+    let mut counter = 0;
+    let mut prev_numbered = false;
+    let mut a = attrs(Some("NumberedList"), None, None);
+    a.numbering_start_at = Some(1);
+    a.numbering_continue = Some(true);
+    for want in ["1.\t", "2.\t", "3.\t"] {
+        assert_eq!(
+            list_prefix(&a, &mut counter, &mut prev_numbered, None).as_deref(),
+            Some(want)
+        );
+    }
+}
+
+#[test]
+fn list_prefix_numbering_start_at_jumps_counter() {
+    // StartAt = 5 ⇒ first emission is "5.\t", then 6, 7, ...
+    let mut counter = 0;
+    let mut prev_numbered = false;
+    let mut a = attrs(Some("NumberedList"), None, None);
+    a.numbering_start_at = Some(5);
+    assert_eq!(
+        list_prefix(&a, &mut counter, &mut prev_numbered, None).as_deref(),
+        Some("5.\t")
+    );
+    // StartAt only fires on paragraph entry; once it's been
+    // applied, drop it for the next paragraph.
+    a.numbering_start_at = None;
+    assert_eq!(
+        list_prefix(&a, &mut counter, &mut prev_numbered, None).as_deref(),
+        Some("6.\t")
+    );
+    assert_eq!(
+        list_prefix(&a, &mut counter, &mut prev_numbered, None).as_deref(),
+        Some("7.\t")
+    );
+}
+
+#[test]
+fn list_prefix_numbering_start_at_mid_list_resets() {
+    // Mid-list, NumberingStartAt alone is ignored (InDesign 20.0.1,
+    // `list-overrides` o21: "2."); with NumberingContinue="false" it
+    // restarts the count there (o09).
+    let mut counter = 0;
+    let mut prev_numbered = false;
+    let plain = attrs(Some("NumberedList"), None, None);
+    list_prefix(&plain, &mut counter, &mut prev_numbered, None); // 1.
+    list_prefix(&plain, &mut counter, &mut prev_numbered, None); // 2.
+    let mut ignored = attrs(Some("NumberedList"), None, None);
+    ignored.numbering_start_at = Some(10);
+    assert_eq!(
+        list_prefix(&ignored, &mut counter, &mut prev_numbered, None).as_deref(),
+        Some("3.\t")
+    );
+    let mut jumped = ignored.clone();
+    jumped.numbering_continue = Some(false);
+    assert_eq!(
+        list_prefix(&jumped, &mut counter, &mut prev_numbered, None).as_deref(),
+        Some("10.\t")
+    );
+    // Subsequent plain paragraphs continue off the jump.
+    assert_eq!(
+        list_prefix(&plain, &mut counter, &mut prev_numbered, None).as_deref(),
+        Some("11.\t")
+    );
+}
+
+#[test]
+fn list_prefix_numbering_continue_persists_across_style_boundary() {
+    // Numbered → BulletList → Numbered with `NumberingContinue`
+    // resumes the count off the prior numbered run instead of
+    // resetting to 1.
+    let mut counter = 0;
+    let mut prev_numbered = false;
+    let plain = attrs(Some("NumberedList"), None, None);
+    list_prefix(&plain, &mut counter, &mut prev_numbered, None); // 1.
+    list_prefix(&plain, &mut counter, &mut prev_numbered, None); // 2.
+    list_prefix(
+        &attrs(Some("BulletList"), Some(0x2022), Some(" ")),
+        &mut counter,
+        &mut prev_numbered,
+        None,
+    );
+    let mut cont = attrs(Some("NumberedList"), None, None);
+    cont.numbering_continue = Some(true);
+    assert_eq!(
+        list_prefix(&cont, &mut counter, &mut prev_numbered, None).as_deref(),
+        Some("3.\t"),
+        "NumberingContinue suppresses the implicit reset"
+    );
+    // Compare against the default-reset path: without Continue,
+    // the same scenario would have restarted at 1.
+    let mut counter2 = 0;
+    let mut prev2 = false;
+    list_prefix(&plain, &mut counter2, &mut prev2, None); // 1.
+    list_prefix(&plain, &mut counter2, &mut prev2, None); // 2.
+    list_prefix(
+        &attrs(Some("BulletList"), Some(0x2022), Some(" ")),
+        &mut counter2,
+        &mut prev2,
+        None,
+    );
+    assert_eq!(
+        list_prefix(&plain, &mut counter2, &mut prev2, None).as_deref(),
+        Some("1.\t"),
+        "without NumberingContinue the count resets"
+    );
+}
+
+#[test]
+fn list_prefix_uses_custom_numbering_expression() {
+    // `Step ^# of 5^t` ⇒ "Step 1 of 5\t", "Step 2 of 5\t", ...
+    let mut counter = 0;
+    let mut prev_numbered = false;
+    let mut a = attrs(Some("NumberedList"), None, None);
+    a.numbering_expression = Some("Step ^# of 5^t".to_string());
+    assert_eq!(
+        list_prefix(&a, &mut counter, &mut prev_numbered, None).as_deref(),
+        Some("Step 1 of 5\t")
+    );
+    assert_eq!(
+        list_prefix(&a, &mut counter, &mut prev_numbered, None).as_deref(),
+        Some("Step 2 of 5\t")
+    );
+}
+
+#[test]
+fn list_prefix_cross_story_seed_continues_and_suppresses_reset() {
+    // W1.22 — a ContinueNumbersAcrossStories list. The first
+    // numbered paragraph of a fresh story emitter has
+    // prev_was_numbered=false (no neighbour), which WITHOUT the
+    // seed would reset to "1". With `cross_story_seed = Some(2)`
+    // (the ledger's last value) it must continue at "3".
+    let n = attrs(Some("NumberedList"), None, None);
+    let mut counter = 0; // fresh per-story emitter
+    let mut prev_numbered = false; // story start
+    assert_eq!(
+        list_prefix(&n, &mut counter, &mut prev_numbered, Some(2)).as_deref(),
+        Some("3.\t"),
+        "cross-story seed of 2 must continue at 3, not reset to 1",
+    );
+    assert_eq!(counter, 3, "counter advances off the seed");
+    // NumberingContinue="false" still wins over the seed (explicit
+    // restart); a bare NumberingStartAt does not — InDesign's own
+    // `[No paragraph style]` declares `NumberingStartAt="1"` on every
+    // style, and a continued list must not restart on it.
+    let mut declared = attrs(Some("NumberedList"), None, None);
+    declared.numbering_start_at = Some(1);
+    declared.numbering_continue = Some(true);
+    let (mut c, mut prev) = (0, false);
+    assert_eq!(
+        list_prefix(&declared, &mut c, &mut prev, Some(5)).as_deref(),
+        Some("6.\t"),
+    );
+    let mut started = attrs(Some("NumberedList"), None, None);
+    started.numbering_start_at = Some(10);
+    started.numbering_continue = Some(false);
+    let mut counter2 = 0;
+    let mut prev2 = false;
+    assert_eq!(
+        list_prefix(&started, &mut counter2, &mut prev2, Some(5)).as_deref(),
+        Some("10.\t"),
+        "explicit NumberingStartAt overrides the cross-story seed",
+    );
+}
+
+#[test]
+fn substitute_numbering_expression_passes_literals_and_decodes_caret_escape() {
+    // `^^` decodes to a literal caret; unknown `^x` sequences
+    // pass through verbatim (no surprise glyph loss).
+    assert_eq!(substitute_numbering_expression("^^#^t", "1"), "^#\t");
+    assert_eq!(substitute_numbering_expression("(^#)^t", "42"), "(42)\t");
+    assert_eq!(substitute_numbering_expression("^?", "1"), "^?");
+    // Trailing lone caret passes through.
+    assert_eq!(substitute_numbering_expression("^# ^", "5"), "5 ^");
+}
+
+#[test]
+fn format_number_arabic_default() {
+    assert_eq!(format_number(1, None), "1");
+    assert_eq!(format_number(42, None), "42");
+    assert_eq!(format_number(7, Some("1, 2, 3, 4...")), "7");
+}
+
+#[test]
+fn format_number_zero_padded() {
+    assert_eq!(format_number(1, Some("01, 02, 03, 04...")), "01");
+    assert_eq!(format_number(42, Some("01, 02, 03...")), "42");
+    assert_eq!(format_number(7, Some("001, 002, 003...")), "007");
+}
+
+#[test]
+fn format_number_roman_upper_lower() {
+    assert_eq!(format_number(1, Some("I, II, III, IV...")), "I");
+    assert_eq!(format_number(4, Some("I, II, III, IV...")), "IV");
+    assert_eq!(format_number(9, Some("I, II, III...")), "IX");
+    assert_eq!(format_number(40, Some("I, II, III...")), "XL");
+    assert_eq!(format_number(1994, Some("I, II, III...")), "MCMXCIV");
+    assert_eq!(format_number(4, Some("i, ii, iii, iv...")), "iv");
+}
+
+#[test]
+fn format_number_alpha_upper_lower() {
+    assert_eq!(format_number(1, Some("A, B, C, D...")), "A");
+    assert_eq!(format_number(26, Some("A, B, C...")), "Z");
+    assert_eq!(format_number(27, Some("A, B, C...")), "AA");
+    assert_eq!(format_number(28, Some("A, B, C...")), "AB");
+    assert_eq!(format_number(703, Some("A, B, C...")), "AAA");
+    assert_eq!(format_number(2, Some("a, b, c...")), "b");
+}
+
+#[test]
+fn format_number_unknown_falls_back_to_arabic() {
+    assert_eq!(format_number(5, Some("Q, R, S, ...")), "5");
+    assert_eq!(format_number(5, Some("not a format")), "5");
+}
+
+#[test]
+fn format_number_hanzi_everyday() {
+    let f = |n| format_number(n, Some("一, 二, 三..."));
+    assert_eq!(f(1), "一");
+    assert_eq!(f(5), "五");
+    assert_eq!(f(9), "九");
+    // 10..=19: leading 十 without 一 prefix.
+    assert_eq!(f(10), "十");
+    assert_eq!(f(11), "十一");
+    assert_eq!(f(15), "十五");
+    // 20..=99: digit + 十 + units.
+    assert_eq!(f(20), "二十");
+    assert_eq!(f(25), "二十五");
+    assert_eq!(f(99), "九十九");
+    // 100..=999: hundreds digit + 百 + tens + units.
+    assert_eq!(f(100), "一百");
+    // 零 gap-marker when tens=0 but units>0 (e.g. 101 = 一百零一).
+    assert_eq!(f(101), "一百零一");
+    // 110 = hundreds + 一 + 十 (no 零, tens is non-zero).
+    assert_eq!(f(110), "一百一十");
+    assert_eq!(f(125), "一百二十五");
+    assert_eq!(f(999), "九百九十九");
+    // ≥ 1000: fallback to Arabic.
+    assert_eq!(f(1000), "1000");
+}
+
+#[test]
+fn format_number_hanzi_formal() {
+    let f = |n| format_number(n, Some("壹, 貳, 參..."));
+    // Formal/financial digit set.
+    assert_eq!(f(1), "壹");
+    assert_eq!(f(5), "伍");
+    assert_eq!(f(9), "玖");
+    // 10..=19: formal keeps 壹十 prefix (unlike everyday).
+    assert_eq!(f(11), "壹十壹");
+}
+
+#[test]
+fn list_prefix_uses_numbering_format() {
+    let mut counter = 0;
+    let mut prev_numbered = false;
+    let mut a = attrs(Some("NumberedList"), None, None);
+    a.numbering_format = Some("I, II, III, IV...".to_string());
+    assert_eq!(
+        list_prefix(&a, &mut counter, &mut prev_numbered, None).as_deref(),
+        Some("I.\t")
+    );
+    assert_eq!(
+        list_prefix(&a, &mut counter, &mut prev_numbered, None).as_deref(),
+        Some("II.\t")
+    );
+    assert_eq!(
+        list_prefix(&a, &mut counter, &mut prev_numbered, None).as_deref(),
+        Some("III.\t")
+    );
+}
+
+fn approx(a: (f32, f32), b: (f32, f32)) {
+    let eps = 1e-5;
+    assert!(
+        (a.0 - b.0).abs() < eps && (a.1 - b.1).abs() < eps,
+        "expected {b:?}, got {a:?}",
+    );
+}
+
+#[test]
+fn gradient_endpoints_zero_degrees_horizontal() {
+    // 0° runs left → right along the bottom edge, as long as the box is
+    // wide (gradient-geometry cases 1–2: InDesign writes back
+    // `GradientFillStart="0 h"`, `GradientFillLength="w"`).
+    let (s, e) = linear_gradient_endpoints(None, None, None);
+    approx(s, (0.0, 1.0));
+    approx(e, (1.0, 1.0));
+    // Some(0.0) must match None — both are the spec default.
+    let (s, e) = linear_gradient_endpoints(Some(0.0), None, None);
+    approx(s, (0.0, 1.0));
+    approx(e, (1.0, 1.0));
+}
+
+/// The angle turns counter-clockwise ON THE PAGE: 90° runs from the
+/// bottom edge to the top. Asked of InDesign (gradient-geometry case 7):
+/// its PDF axis for an 80 × 80 square at 90° starts at the bottom-left
+/// corner and ends 80 pt above it. This test used to pin the opposite —
+/// 90° top → bottom, "IDML's y-down convention" — which put every
+/// vertical gradient's first stop at the wrong end of the frame.
+#[test]
+fn gradient_endpoints_ninety_degrees_runs_bottom_to_top() {
+    let (s, e) = linear_gradient_endpoints(Some(90.0), None, None);
+    approx(s, (0.0, 1.0));
+    approx(e, (0.0, 0.0));
+    assert!(e.1 < s.1, "the first stop is at the BOTTOM");
+}
+
+#[test]
+fn gradient_endpoints_forty_five_degrees() {
+    // 45° points up and to the right from the bottom-left corner, as
+    // long as the box is wide (gradient-geometry case 4: start (150,
+    // 285), end (206.57, 228.43) on an 80 × 80 square at (150, 205)).
+    let (s, e) = linear_gradient_endpoints(Some(45.0), None, None);
+    let r = std::f32::consts::FRAC_1_SQRT_2;
+    approx(s, (0.0, 1.0));
+    approx(e, (r, 1.0 - r));
+}
+
+#[test]
+fn gradient_endpoints_negative_angle_matches_supplement() {
+    // -45° (= 315°) points down and to the right: cos is symmetric,
+    // sin flips sign.
+    let (s_neg, e_neg) = linear_gradient_endpoints(Some(-45.0), None, None);
+    let (s_pos, e_pos) = linear_gradient_endpoints(Some(315.0), None, None);
+    approx(s_neg, s_pos);
+    approx(e_neg, e_pos);
+    let r = std::f32::consts::FRAC_1_SQRT_2;
+    approx(s_neg, (0.0, 1.0));
+    approx(e_neg, (r, 1.0 + r));
+}
+
+#[test]
+fn gradient_endpoints_explicit_length_compresses_line() {
+    // GradientFillLength in pt converts to a unit-rect step of
+    // `(cos θ · L / w, −sin θ · L / h)`. A 200 × 100 rect at 0° with
+    // L = 100 pt ramps over its left half.
+    let (s, e) = linear_gradient_endpoints(Some(0.0), Some(100.0), Some((200.0, 100.0)));
+    approx(s, (0.0, 1.0));
+    approx(e, (0.5, 1.0));
+    // 90° on the same rect with L = 100 spans the short axis bottom → top.
+    let (s, e) = linear_gradient_endpoints(Some(90.0), Some(100.0), Some((200.0, 100.0)));
+    approx(s, (0.0, 1.0));
+    approx(e, (0.0, 0.0));
+}
+
+/// Without a length the axis is as long as the box is WIDE, whatever
+/// the angle: InDesign's 120 × 60 rectangle at 90° ramps over 120 pt
+/// from its bottom edge, so the frame shows only the first half
+/// (gradient-geometry case 8).
+#[test]
+fn gradient_endpoints_default_length_is_the_width() {
+    let (s, e) = linear_gradient_endpoints(Some(90.0), None, Some((120.0, 60.0)));
+    approx(s, (0.0, 1.0));
+    approx(e, (0.0, -1.0));
+    // A zero length — the corpus' `GradientFillLength="0"` — is no length.
+    let (_, e0) = linear_gradient_endpoints(Some(90.0), Some(0.0), Some((120.0, 60.0)));
+    approx(e0, e);
+}
+
+#[test]
+fn gradient_endpoints_length_without_dims_falls_through_to_default() {
+    // Without bbox dimensions we can't convert pt to unit-rect
+    // coords; helper falls back to the unit-vector default so
+    // callers that lack geometry (e.g. legacy text-frame strokes
+    // that don't track a bbox) still produce a sensible line.
+    let (s, e) = linear_gradient_endpoints(Some(0.0), Some(100.0), None);
+    approx(s, (0.0, 1.0));
+    approx(e, (1.0, 1.0));
+}
+
+/// A stop's `Midpoint` bends the segment that ENDS at it. Asked of
+/// InDesign (gradient-geometry cases 23 and 24): black · paper · black
+/// with `Midpoint="20"` on stop 1 exports segment 0 as
+/// `f = 1 − (1 − t)^3.10628` (half-way at 20 % of the segment) and
+/// segment 1 linear; `Midpoint="80"` on stop 2 bends segment 1. This
+/// used to read the midpoint of the stop BEFORE the segment, which bent
+/// the wrong half of the ramp.
+#[test]
+fn midpoint_governs_segment_before_its_stop() {
+    use paged_model::{GradientEntry, GradientKind, GradientStopRef};
+    let mut palette = paged_model::Graphic::default();
+    for (id, k) in [("Color/K", 100.0), ("Color/P", 0.0)] {
+        palette.colors.insert(
+            id.into(),
+            paged_model::ColorEntry {
+                self_id: id.into(),
+                name: None,
+                space: paged_model::ColorSpace::Cmyk,
+                value: vec![0.0, 0.0, 0.0, k],
+                model: paged_model::ColorModel::Process,
+                alternate_space: None,
+                alternate_value: vec![],
+                tint: None,
+                alpha: None,
+            },
+        );
+    }
+    let stop = |c: &str, loc: f32, mid: Option<f32>| GradientStopRef {
+        stop_color: c.into(),
+        location_pct: loc,
+        midpoint_pct: mid,
+    };
+    palette.gradients.insert(
+        "Gradient/G".into(),
+        GradientEntry {
+            self_id: "Gradient/G".into(),
+            name: None,
+            kind: GradientKind::Linear,
+            stops: vec![
+                stop("Color/K", 0.0, None),
+                stop("Color/P", 50.0, Some(20.0)),
+                stop("Color/K", 100.0, None),
+            ],
+        },
+    );
+    let mut list = paged_compose::DisplayList::new();
+    let Some(Paint::LinearGradient(gid)) = color_id_to_paint_with_list_dir(
+        "Gradient/G",
+        &palette,
+        ColorCtx::default(),
+        &mut list,
+        None,
+        None,
+        Some((360.0, 40.0)),
+    ) else {
+        panic!("a linear gradient");
+    };
+    let g = list.linear_gradient(gid).expect("gradient");
+    let k = |off: f32| {
+        g.stops
+            .iter()
+            .find(|s| (s.offset - off).abs() < 1e-4)
+            .unwrap_or_else(|| panic!("a sub-stop at {off}"))
+            .color
+            .r
+    };
+    let (black, paper) = (k(0.0), k(0.5));
+    let half = |c: f32| (c - black) / (paper - black);
+    // Segment 0 (black → paper, 0..0.5) is bent: at t = 0.25 of the
+    // segment InDesign's curve is already 1 − 0.75^3.10628 = 0.59 of
+    // the way to paper. The old reading (stop 0's default midpoint)
+    // kept it linear at 0.25.
+    let f = half(k(0.125));
+    assert!((f - 0.590).abs() < 0.01, "segment 0 at t=0.25: {f}");
+    // Segment 1 (paper → black, 0.5..1) is linear: the midpoint on
+    // stop 1 does not reach it. The old reading bent THIS one.
+    let f = (k(0.75) - paper) / (black - paper);
+    assert!((f - 0.5).abs() < 0.01, "segment 1 at t=0.5: {f}");
+}
+
+/// The measured curve itself: half-way exactly at the midpoint, and
+/// the two mirrored forms InDesign exports (cases 23 and 24).
+#[test]
+fn midpoint_blend_is_indesigns_exponential() {
+    assert!((midpoint_blend(0.2, 0.2) - 0.5).abs() < 1e-5);
+    assert!((midpoint_blend(0.8, 0.8) - 0.5).abs() < 1e-5);
+    // Midpoint 80: f = t^3.10628.
+    assert!((midpoint_blend(0.5, 0.8) - 0.5f32.powf(3.10628)).abs() < 1e-4);
+    // Midpoint 20: f = 1 − (1 − t)^3.10628.
+    assert!((midpoint_blend(0.5, 0.2) - (1.0 - 0.5f32.powf(3.10628))).abs() < 1e-4);
+    assert_eq!(midpoint_blend(0.3, 0.5), 0.3);
+}
+
+fn anchor_at(x: f32, y: f32) -> paged_model::PathAnchor {
+    paged_model::PathAnchor {
+        anchor: (x, y),
+        left: (x, y),
+        right: (x, y),
+    }
+}
+
+/// `polygon_path_from_anchors` collapses to a single MoveTo/Close
+/// when given no subpath markers — the legacy serialisation that
+/// every InDesign-export polygon uses.
+#[test]
+fn polygon_path_from_anchors_single_contour_emits_one_subpath() {
+    let anchors = vec![
+        anchor_at(0.0, 0.0),
+        anchor_at(10.0, 0.0),
+        anchor_at(10.0, 10.0),
+        anchor_at(0.0, 10.0),
+    ];
+    let path = polygon_path_from_anchors(&anchors, &[]);
+    let move_count = path
+        .segments
+        .iter()
+        .filter(|s| matches!(s, PathSegment::MoveTo { .. }))
+        .count();
+    let close_count = path
+        .segments
+        .iter()
+        .filter(|s| matches!(s, PathSegment::Close))
+        .count();
+    assert_eq!(move_count, 1, "legacy single-contour input → one MoveTo");
+    assert_eq!(close_count, 1, "legacy single-contour input → one Close");
+}
+
+/// Compound-path input (square with hole — two `<GeometryPathType>`
+/// contours in the source IDML) emits one MoveTo/Close per
+/// contour. Without this, the renderer would draw a stray segment
+/// from the outer contour's last anchor to the inner contour's
+/// first anchor and silently mis-render the hole as a triangle
+/// notch in the outer outline.
+#[test]
+fn polygon_path_from_anchors_compound_emits_one_subpath_per_contour() {
+    let anchors = vec![
+        // outer
+        anchor_at(0.0, 0.0),
+        anchor_at(200.0, 0.0),
+        anchor_at(200.0, 200.0),
+        anchor_at(0.0, 200.0),
+        // inner
+        anchor_at(60.0, 60.0),
+        anchor_at(60.0, 140.0),
+        anchor_at(140.0, 140.0),
+        anchor_at(140.0, 60.0),
+    ];
+    let subpath_starts = vec![0, 4];
+    let path = polygon_path_from_anchors(&anchors, &subpath_starts);
+    let moves: Vec<&PathSegment> = path
+        .segments
+        .iter()
+        .filter(|s| matches!(s, PathSegment::MoveTo { .. }))
+        .collect();
+    let closes = path
+        .segments
+        .iter()
+        .filter(|s| matches!(s, PathSegment::Close))
+        .count();
+    assert_eq!(moves.len(), 2, "two contours → two MoveTo segments");
+    assert_eq!(closes, 2, "two contours → two Close segments");
+    // The two MoveTos should land on the first anchor of each
+    // contour — guards against a silent off-by-one in the range
+    // construction that would otherwise still emit two contours
+    // but join them at the wrong points.
+    match moves[0] {
+        PathSegment::MoveTo { x, y } => {
+            assert!((*x - 0.0).abs() < 1e-6 && (*y - 0.0).abs() < 1e-6)
+        }
+        _ => unreachable!(),
+    }
+    match moves[1] {
+        PathSegment::MoveTo { x, y } => {
+            assert!((*x - 60.0).abs() < 1e-6 && (*y - 60.0).abs() < 1e-6)
+        }
+        _ => unreachable!(),
+    }
+}
+
+/// Defensive: subpath markers that point past the end of the
+/// anchor list, or that duplicate the implicit "starts at 0"
+/// boundary, must not produce empty contours or panic.
+#[test]
+fn polygon_path_from_anchors_filters_bogus_markers() {
+    let anchors = vec![
+        anchor_at(0.0, 0.0),
+        anchor_at(10.0, 0.0),
+        anchor_at(10.0, 10.0),
+    ];
+    let path = polygon_path_from_anchors(&anchors, &[0, 99, 0]);
+    let moves = path
+        .segments
+        .iter()
+        .filter(|s| matches!(s, PathSegment::MoveTo { .. }))
+        .count();
+    let closes = path
+        .segments
+        .iter()
+        .filter(|s| matches!(s, PathSegment::Close))
+        .count();
+    assert_eq!(
+        moves, 1,
+        "out-of-range / duplicate markers collapse to one contour"
+    );
+    assert_eq!(closes, 1);
+}
+
+/// P-15: open contours skip the closing CubicTo + Close so a
+/// `<GeometryPathType PathOpen="true">` polygon doesn't get
+/// auto-filled.
+#[test]
+fn polygon_path_from_anchors_with_open_skips_close_for_open_contour() {
+    let anchors = vec![
+        anchor_at(0.0, 0.0),
+        anchor_at(40.0, 0.0),
+        anchor_at(20.0, 40.0),
+    ];
+    let path = polygon_path_from_anchors_with_open(&anchors, &[], &[true]);
+    let moves = path
+        .segments
+        .iter()
+        .filter(|s| matches!(s, PathSegment::MoveTo { .. }))
+        .count();
+    let closes = path
+        .segments
+        .iter()
+        .filter(|s| matches!(s, PathSegment::Close))
+        .count();
+    let cubics = path
+        .segments
+        .iter()
+        .filter(|s| matches!(s, PathSegment::CubicTo { .. }))
+        .count();
+    assert_eq!(moves, 1, "single contour → one MoveTo");
+    assert_eq!(closes, 0, "open contour skips the Close");
+    // 3 anchors → 2 inter-anchor CubicTos; the closing back-to-first
+    // cubic must NOT fire (so 2, not 3).
+    assert_eq!(cubics, 2, "open contour skips the closing CubicTo");
+}
+
+/// W1.1: when an anchor's Bezier handles coincide with its anchor
+/// point — the IDML serialisation for a straight corner — the
+/// emitted CubicTo's control points land exactly on the segment's
+/// endpoints, so the cubic reduces to a straight line in both
+/// rasterizers (tiny-skia / Vello flatten a degenerate cubic to a
+/// LineTo). Locks the "handle == anchor ⇒ line" contract.
+#[test]
+fn polygon_path_from_anchors_straight_segment_cubic_collapses_to_line() {
+    let anchors = vec![anchor_at(0.0, 0.0), anchor_at(10.0, 0.0)];
+    let path = polygon_path_from_anchors(&anchors, &[]);
+    // First CubicTo is the forward segment 0→1; its controls must be
+    // the two anchors (no bow).
+    let cubic = path
+        .segments
+        .iter()
+        .find_map(|s| match s {
+            PathSegment::CubicTo {
+                cx1,
+                cy1,
+                cx2,
+                cy2,
+                x,
+                y,
+            } => Some((*cx1, *cy1, *cx2, *cy2, *x, *y)),
+            _ => None,
+        })
+        .expect("a forward CubicTo is emitted between the two anchors");
+    let (cx1, cy1, cx2, cy2, x, y) = cubic;
+    // cx1/cy1 == from.right == anchor 0; cx2/cy2 == to.left == anchor 1.
+    assert!((cx1 - 0.0).abs() < 1e-6 && (cy1 - 0.0).abs() < 1e-6);
+    assert!((cx2 - 10.0).abs() < 1e-6 && (cy2 - 0.0).abs() < 1e-6);
+    assert!((x - 10.0).abs() < 1e-6 && (y - 0.0).abs() < 1e-6);
+}
+
+fn font_table_with(cache: &[(&str, Option<&str>, &[u8])], fallback: Option<&[u8]>) -> FontTable {
+    let mut hm: HashMap<(String, Option<String>), Bytes> = HashMap::new();
+    for (family, style, b) in cache {
+        hm.insert(
+            (family.to_string(), style.map(str::to_string)),
+            Bytes::copy_from_slice(b),
+        );
+    }
+    FontTable {
+        faces: HashMap::new(),
+        outline_to_bytes: HashMap::new(),
+        face_bytes: HashMap::new(),
+        keys: hm.keys().cloned().collect(),
+        cache: hm,
+        substituted: Default::default(),
+        fallback: fallback.map(Bytes::copy_from_slice),
+        fallback_families: Vec::new(),
+        fallback_styles: None,
+        face_families: HashMap::new(),
+        metrics: HashMap::new(),
+        family_metrics: HashMap::new(),
+    }
+}
+
+fn run_attrs(family: Option<&str>, style: Option<&str>) -> paged_scene::ResolvedRunAttrs {
+    paged_scene::ResolvedRunAttrs {
+        font: family.map(str::to_string),
+        font_style: style.map(str::to_string),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn resolve_paragraph_bytes_falls_back_per_run_to_sibling_font() {
+    // Mixed paragraph: one run references a registered family,
+    // another references something the cache doesn't know AND no
+    // document-wide fallback is configured. The unknown run
+    // inherits the resolved sibling's bytes instead of dropping
+    // the whole paragraph.
+    let table = font_table_with(&[("Inter", None, b"INTER")], None);
+    let runs = vec![
+        run_attrs(Some("Inter"), None),
+        run_attrs(Some("Limon Script"), None),
+        run_attrs(Some("Inter"), None),
+    ];
+    let pool = table
+        .resolve_paragraph_bytes(&runs)
+        .expect("paragraph kept");
+    assert_eq!(pool.len(), 3);
+    assert_eq!(&pool[0].0[..], b"INTER");
+    assert_eq!(&pool[1].0[..], b"INTER", "missing run inherits sibling");
+    assert_eq!(&pool[2].0[..], b"INTER");
+    // A1 — resolved runs are unflagged; the sibling-style fill counts
+    // as a substitution (the run asked for Limon Script, got Inter).
+    assert!(!pool[0].1);
+    assert!(pool[1].1, "sibling-filled run must flag substituted");
+    assert!(!pool[2].1);
+}
+
+#[test]
+fn resolve_paragraph_bytes_prefers_table_fallback_when_no_run_resolves() {
+    // All runs reference unknown families but the renderer was
+    // given a document-wide default font — every slot picks it up.
+    let table = font_table_with(&[], Some(b"DEFAULT"));
+    let runs = vec![
+        run_attrs(Some("Unknown A"), None),
+        run_attrs(Some("Unknown B"), Some("Bold")),
+    ];
+    let pool = table
+        .resolve_paragraph_bytes(&runs)
+        .expect("paragraph kept");
+    assert_eq!(pool.len(), 2);
+    assert_eq!(&pool[0].0[..], b"DEFAULT");
+    assert_eq!(&pool[1].0[..], b"DEFAULT");
+    // A1 — the renderer-wide default standing in for named families
+    // that resolved nowhere is a substitution on every slot.
+    assert!(pool[0].1 && pool[1].1);
+}
+
+#[test]
+fn resolve_paragraph_bytes_returns_none_when_nothing_resolves() {
+    // No registered family, no fallback — caller still has to
+    // skip the paragraph because there's literally no shaping
+    // input.
+    let table = font_table_with(&[], None);
+    let runs = vec![run_attrs(Some("Unknown"), None)];
+    assert!(table.resolve_paragraph_bytes(&runs).is_none());
+}
+
+#[test]
+fn resolve_paragraph_bytes_carries_resolver_substitution_flag() {
+    // A1 — a cache key the RESOLVER itself served via its catch-all
+    // default font (traced by `resolve_font_traced`) keeps its
+    // substituted flag through the per-run resolution.
+    let mut table = font_table_with(&[("Ghost", None, b"STANDIN")], None);
+    table.substituted.insert(("Ghost".to_string(), None));
+    let runs = vec![run_attrs(Some("Ghost"), None)];
+    let pool = table
+        .resolve_paragraph_bytes(&runs)
+        .expect("paragraph kept");
+    assert_eq!(&pool[0].0[..], b"STANDIN");
+    assert!(pool[0].1, "resolver-substituted key must stay flagged");
+}
+
+#[test]
+fn the_default_face_is_its_own_family_only_in_the_styles_it_has() {
+    // No resolver: the renderer-wide default font is the only face. A
+    // static Regular serves its family's unstyled and Regular runs; a Bold
+    // run it sets in Regular, which is a substitution like any other. A
+    // variable face covers its whole `wght` axis.
+    let read = |name: &str| {
+        std::fs::read(
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../corpus/fonts")
+                .join(name),
+        )
+        .expect("font fixture")
+    };
+    let doc = Document::default();
+    let roboto = read("Roboto-Regular.ttf");
+    let table = FontTable::build(
+        &doc,
+        &PipelineOptions {
+            font: Some(&roboto),
+            ..PipelineOptions::default()
+        },
+    );
+    assert_eq!(table.resolution("Roboto", None).map(|r| r.1), Some(false));
+    assert_eq!(
+        table.resolution("Roboto", Some("Regular")).map(|r| r.1),
+        Some(false)
+    );
+    assert_eq!(
+        table.resolution("Roboto", Some("Bold")).map(|r| r.1),
+        Some(true)
+    );
+    let inter = inter_font_bytes();
+    let table = FontTable::build(
+        &doc,
+        &PipelineOptions {
+            font: Some(&inter),
+            ..PipelineOptions::default()
+        },
+    );
+    for style in [None, Some("Bold"), Some("Light")] {
+        assert_eq!(
+            table.resolution("Inter", style).map(|r| r.1),
+            Some(false),
+            "{style:?}"
+        );
+    }
+}
+
+#[test]
+fn resolve_paragraph_bytes_unnamed_family_on_fallback_is_not_substituted() {
+    // A run with no requested family shaping through the configured
+    // default font is NOT a substitution — the default IS its font.
+    let table = font_table_with(&[], Some(b"DEFAULT"));
+    let runs = vec![run_attrs(None, None)];
+    let pool = table
+        .resolve_paragraph_bytes(&runs)
+        .expect("paragraph kept");
+    assert_eq!(&pool[0].0[..], b"DEFAULT");
+    assert!(!pool[0].1);
+}
+
+// P-22: lock the stroke-alignment inset math. `tiny_skia` strokes
+// centered on the path, so Inside alignment needs the path inset
+// by +stroke/2 inward (i.e. shrink the rect), Outside by
+// -stroke/2 (grow the rect), Center / None ⇒ 0. Regressions in
+// this math show up as ½-px nudges on line-art-dense pages.
+#[test]
+fn stroke_alignment_offset_inside_returns_positive_half_weight() {
+    assert!((stroke_alignment_offset(Some("InsideAlignment"), 2.0) - 1.0).abs() < 1e-6);
+    assert!((stroke_alignment_offset(Some("InsideAlignment"), 0.5) - 0.25).abs() < 1e-6);
+}
+
+#[test]
+fn stroke_alignment_offset_outside_returns_negative_half_weight() {
+    assert!((stroke_alignment_offset(Some("OutsideAlignment"), 2.0) + 1.0).abs() < 1e-6);
+}
+
+// The text inset a text frame's stroke adds, per alignment, as
+// InDesign 20.0.1 measured it on `stroke-inset` (0.25 / 1 / 6 / 12 pt).
+#[test]
+fn stroke_inset_share_is_half_inside_all_outside_none() {
+    for w in [0.25_f32, 1.0, 6.0, 12.0] {
+        assert_eq!(stroke_inset_share(None, w), w / 2.0);
+        assert_eq!(stroke_inset_share(Some("CenterAlignment"), w), w / 2.0);
+        assert_eq!(stroke_inset_share(Some("InsideAlignment"), w), w);
+        assert_eq!(stroke_inset_share(Some("OutsideAlignment"), w), 0.0);
+    }
+}
+
+#[test]
+fn stroke_alignment_offset_center_and_none_return_zero() {
+    assert_eq!(stroke_alignment_offset(Some("CenterAlignment"), 2.0), 0.0);
+    assert_eq!(stroke_alignment_offset(None, 2.0), 0.0);
+}
+
+// P-25 regression: a paragraph ending with a trailing `\n` (the
+// `<Br/>` after the final visible content) must NOT produce a
+// phantom empty sub-paragraph. A NumberedList paragraph would
+// otherwise increment its counter twice and emit two "01" /
+// "02" markers per visible line.
+#[test]
+fn split_paragraph_at_breaks_drops_trailing_newline_only_sub_paragraph() {
+    let run = paged_model::CharacterRun {
+        text: "01\n".to_string(),
+        ..paged_model::CharacterRun::default()
+    };
+    let paragraph = paged_model::Paragraph {
+        runs: vec![run],
+        ..paged_model::Paragraph::default()
+    };
+    let subs = split_paragraph_at_breaks(&paragraph);
+    assert_eq!(
+        subs.len(),
+        1,
+        "trailing \\n must not produce a phantom sub-paragraph"
+    );
+    assert_eq!(subs[0].runs.len(), 1);
+    assert_eq!(subs[0].runs[0].text, "01");
+}
+
+// Belt + braces: pathological case where the splitter's hint
+// path seeds an all-`\n` trailing run. The post-loop guard at
+// the tail of `split_paragraph_at_breaks` must collapse it.
+#[test]
+fn split_paragraph_at_breaks_drops_trailing_all_newline_run_after_visible() {
+    let visible = paged_model::CharacterRun {
+        text: "01".to_string(),
+        ..paged_model::CharacterRun::default()
+    };
+    let nl_only = paged_model::CharacterRun {
+        text: "\n\n".to_string(),
+        ..paged_model::CharacterRun::default()
+    };
+    let paragraph = paged_model::Paragraph {
+        runs: vec![visible, nl_only],
+        ..paged_model::Paragraph::default()
+    };
+    let subs = split_paragraph_at_breaks(&paragraph);
+    // Two `\n` after visible content used to seed two empty
+    // hint-only subs after the "01" one (= 3 total). The guard
+    // collapses the trailing newline-only subs so a numbered
+    // list emits its marker once, not three times.
+    assert_eq!(
+        subs.len(),
+        1,
+        "trailing-only-newline tail subs must collapse"
+    );
+    assert_eq!(subs[0].runs.len(), 1);
+    assert_eq!(subs[0].runs[0].text, "01");
+}
+
+// Composed: inset_rect applied at the stroke offset must shrink
+// (Inside) or grow (Outside) the rect by exactly the stroke width
+// along each axis. A 100×100 rect with a 2-pt Inside stroke ends
+// up 98×98, drawn so the centered stroke lands fully inside.
+#[test]
+fn stroke_alignment_inside_shrinks_rect_by_stroke_width() {
+    let r = Rect {
+        x: 0.0,
+        y: 0.0,
+        w: 100.0,
+        h: 100.0,
+    };
+    let off = stroke_alignment_offset(Some("InsideAlignment"), 2.0);
+    let inset = inset_rect(r, off);
+    assert!((inset.x - 1.0).abs() < 1e-6);
+    assert!((inset.y - 1.0).abs() < 1e-6);
+    assert!((inset.w - 98.0).abs() < 1e-6);
+    assert!((inset.h - 98.0).abs() < 1e-6);
+}
+
+#[test]
+// Deliberately asserts on source constants: this test pins the
+// placeholder calibration values so an accidental edit trips CI.
+#[allow(clippy::assertions_on_constants)]
+fn q22_missing_image_placeholder_calibration_pinned() {
+    assert!(
+        (PLACEHOLDER_FILL_RGB - 0.5).abs() < 1e-6,
+        "placeholder fill should target ~50% grey",
+    );
+    assert!(
+        (PLACEHOLDER_X_STROKE_PT - 1.5).abs() < 1e-6,
+        "placeholder X stroke should be 1.5pt",
+    );
+    assert!(
+        PLACEHOLDER_X_RGB < 0.05,
+        "placeholder X should read as near-black against the grey fill",
+    );
+}
+
+#[test]
+// A3 — pins the substituted-font highlight calibration (linear-RGB
+// InDesign pink) the same way q22 pins the placeholder greys.
+#[allow(clippy::assertions_on_constants)]
+fn a3_substituted_highlight_calibration_pinned() {
+    assert!(
+        (SUBSTITUTED_HIGHLIGHT_R - 1.0).abs() < 1e-6,
+        "highlight red channel should be full",
+    );
+    assert!(
+        (SUBSTITUTED_HIGHLIGHT_G - 0.522).abs() < 1e-6,
+        "highlight green channel drifted from the calibrated pink",
+    );
+    assert!(
+        (SUBSTITUTED_HIGHLIGHT_B - 0.604).abs() < 1e-6,
+        "highlight blue channel drifted from the calibrated pink",
+    );
+    // It must read as pink: red dominant, blue above green.
+    assert!(SUBSTITUTED_HIGHLIGHT_R > SUBSTITUTED_HIGHLIGHT_B);
+    assert!(SUBSTITUTED_HIGHLIGHT_B > SUBSTITUTED_HIGHLIGHT_G);
+}
+
+/// A3/A4 — fixture: one TextFrame whose story asks for an
+/// unresolvable "Ghost Family" (served by the resolver's default-font
+/// catch-all → substituted) plus one Rectangle carrying an inline
+/// `<PDF/>` with no link (the deliberate render-the-fill fall-through).
+fn degraded_asset_fixture_idml() -> Vec<u8> {
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+    let buf = std::io::Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(buf);
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+    zip.start_file("mimetype", stored).unwrap();
+    zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+        .unwrap();
+    zip.start_file("designmap.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+  <idPkg:Story src="Stories/Story_s1.xml"/>
+</Document>"#,
+    )
+    .unwrap();
+    zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 400 400"/>
+    <TextFrame Self="frameA" ParentStory="s1" GeometricBounds="20 20 120 380"/>
+    <Rectangle Self="r1" GeometricBounds="150 20 250 120">
+      <PDF/>
+    </Rectangle>
+  </Spread>
+</idPkg:Spread>"#,
+    )
+    .unwrap();
+    zip.start_file("Stories/Story_s1.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Story Self="s1">
+    <ParagraphStyleRange>
+      <CharacterStyleRange AppliedFont="Ghost Family" PointSize="12">
+        <Content>Missing font text</Content>
+      </CharacterStyleRange>
+    </ParagraphStyleRange>
+  </Story>
+</idPkg:Story>"#,
+    )
+    .unwrap();
+    zip.finish().unwrap().into_inner()
+}
+
+fn is_substituted_highlight_fill(cmd: &paged_compose::DisplayCommand) -> bool {
+    matches!(
+        cmd,
+        paged_compose::DisplayCommand::FillPath {
+            paint: Paint::Solid(c),
+            ..
+        } if (c.r - SUBSTITUTED_HIGHLIGHT_R).abs() < 1e-6
+            && (c.g - SUBSTITUTED_HIGHLIGHT_G).abs() < 1e-6
+            && (c.b - SUBSTITUTED_HIGHLIGHT_B).abs() < 1e-6
+    )
+}
+
+fn is_ghost_cross_stroke(cmd: &paged_compose::DisplayCommand) -> bool {
+    matches!(
+        cmd,
+        paged_compose::DisplayCommand::StrokePath { stroke, .. }
+            if (stroke.width - PLACEHOLDER_X_STROKE_PT).abs() < 1e-6
+    )
+}
+
+#[test]
+fn degraded_asset_markers_off_emits_no_marker_commands() {
+    // Mirrors q22's calibration intent for A3/A4: with the option at
+    // its default `false`, a degraded document (substituted font +
+    // unrenderable inline PDF) must emit NO pink highlight and NO
+    // ghost-cross — export output stays byte-identical to pre-A3.
+    let bytes = degraded_asset_fixture_idml();
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+    let inter = inter_font_bytes();
+    let resolver = crate::BytesResolver::new().with_default_font(inter.clone());
+    let options = PipelineOptions {
+        assets: Some(&resolver),
+        ..PipelineOptions::default()
+    };
+    let built = build_document(&doc, &options).expect("build");
+    let cmds: Vec<_> = built
+        .pages
+        .iter()
+        .flat_map(|p| p.list.commands.iter())
+        .collect();
+    assert!(
+        cmds.iter()
+            .any(|c| matches!(c, paged_compose::DisplayCommand::FillPath { .. })),
+        "sanity: the substituted text still renders glyph fills"
+    );
+    assert!(
+        !cmds.iter().any(|c| is_substituted_highlight_fill(c)),
+        "no pink highlight when degraded_asset_markers is off"
+    );
+    assert!(
+        !cmds.iter().any(|c| is_ghost_cross_stroke(c)),
+        "no ghost-cross strokes when degraded_asset_markers is off"
+    );
+    // The substitution FACT is still reported (diagnostics are not
+    // gated by the visual-marker option), once per (family, style).
+    let subst: Vec<_> = built
+        .diagnostics
+        .items
+        .iter()
+        .filter(|d| d.code == crate::diagnostics::DiagnosticCode::FontSubstituted)
+        .collect();
+    assert_eq!(subst.len(), 1, "one FontSubstituted per (family, style)");
+    assert!(subst[0].message.contains("Ghost Family"));
+}
+
+#[test]
+fn degraded_asset_markers_on_emits_pink_rect_and_ghost_cross() {
+    let bytes = degraded_asset_fixture_idml();
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+    let inter = inter_font_bytes();
+    let resolver = crate::BytesResolver::new().with_default_font(inter.clone());
+    let options = PipelineOptions {
+        assets: Some(&resolver),
+        degraded_asset_markers: true,
+        ..PipelineOptions::default()
+    };
+    let built = build_document(&doc, &options).expect("build");
+    let cmds: Vec<_> = built
+        .pages
+        .iter()
+        .flat_map(|p| p.list.commands.iter())
+        .collect();
+    assert!(
+        cmds.iter().any(|c| is_substituted_highlight_fill(c)),
+        "substituted-font text must paint the pink highlight rect"
+    );
+    let crosses = cmds.iter().filter(|c| is_ghost_cross_stroke(c)).count();
+    assert_eq!(
+        crosses, 2,
+        "inline-PDF missing-link frame must paint exactly the two \
+         ghost-cross diagonals (stroke-only, no grey fill)"
+    );
+    // Stroke-only: the ghost-cross must NOT bring the placeholder's
+    // 50% grey fill with it (that is the real missing-image visual).
+    let grey_fills = cmds
+        .iter()
+        .filter(|c| {
+            matches!(
+                c,
+                paged_compose::DisplayCommand::FillPath {
+                    paint: Paint::Solid(col),
+                    ..
+                } if (col.r - PLACEHOLDER_FILL_RGB).abs() < 1e-6
+                    && (col.g - PLACEHOLDER_FILL_RGB).abs() < 1e-6
+                    && (col.b - PLACEHOLDER_FILL_RGB).abs() < 1e-6
+            )
+        })
+        .count();
+    assert_eq!(grey_fills, 0, "ghost-cross must not add a grey fill");
+    // The pink paints BEFORE (behind) the first glyph fill of the
+    // substituted text on its page.
+    let page0 = &built.pages[0].list.commands;
+    let pink_idx = page0
+        .iter()
+        .position(is_substituted_highlight_fill)
+        .expect("pink highlight on page 0");
+    let later_fill = page0[pink_idx + 1..].iter().any(|c| {
+        matches!(c, paged_compose::DisplayCommand::FillPath { paint: Paint::Solid(col), .. }
+            if (col.r - SUBSTITUTED_HIGHLIGHT_R).abs() > 1e-6)
+    });
+    assert!(later_fill, "glyph fills must follow (paint over) the pink");
+    let unrenderable: Vec<_> = built
+        .diagnostics
+        .items
+        .iter()
+        .filter(|d| d.code == crate::diagnostics::DiagnosticCode::ImageContentUnrenderable)
+        .collect();
+    assert_eq!(unrenderable.len(), 1);
+    assert_eq!(unrenderable[0].frame_id.as_deref(), Some("r1"));
+}
+
+/// Q-08 (hypothesis check, rect / oval path): for a rotated
+/// rect / oval the `linear_gradient_endpoints` projection
+/// (unit-rect coords) is fed through `Transform::for_rect_in(rect,
+/// outer)` where `outer` already incorporates the shape's
+/// `ItemTransform`. The composed transform IS what the rasterizer
+/// uses to push the unit-rect endpoints into page space (see
+/// `paged_gpu::cpu::build_linear_gradient_shader`), so a 90°
+/// (bottom → top) gradient on a 90°-rotated frame should produce a
+/// horizontal page-space gradient line — InDesign keeps the angle in
+/// the frame's inner coordinates (gradient-geometry column 3: a 0°
+/// gradient on a frame rotated 30° runs at 30° on the page). Asserts that — guards
+/// against a regression that would re-introduce the protocol's
+/// hypothesised bug (ItemTransform ignored on gradient projection).
+#[test]
+fn q08_gradient_endpoints_rotate_with_item_transform() {
+    let rect = paged_compose::Rect {
+        x: 0.0,
+        y: 0.0,
+        w: 100.0,
+        h: 100.0,
+    };
+    let (s_unit, e_unit) = linear_gradient_endpoints(Some(90.0), None, None);
+    approx(s_unit, (0.0, 1.0));
+    approx(e_unit, (0.0, 0.0));
+    // Identity baseline: local vertical = page vertical, bottom → top.
+    let xf_id = Transform::for_rect_in(rect, Transform::IDENTITY);
+    approx(xf_id.apply(s_unit.0, s_unit.1), (0.0, 100.0));
+    approx(xf_id.apply(e_unit.0, e_unit.1), (0.0, 0.0));
+    // ItemTransform `0 1 -1 0 200 0` packs to `[a, b, c, d, tx,
+    // ty] = [0, 1, -1, 0, 200, 0]` — a 90° rotation about the
+    // origin plus translate(+200, 0). Maps frame-local (x, y) to
+    // page (200 - y, x).
+    let outer_rot = Transform([0.0, 1.0, -1.0, 0.0, 200.0, 0.0]);
+    let xf_rot = Transform::for_rect_in(rect, outer_rot);
+    approx(xf_rot.apply(s_unit.0, s_unit.1), (100.0, 0.0));
+    approx(xf_rot.apply(e_unit.0, e_unit.1), (200.0, 0.0));
+}
+
+/// Q-08 polygon fix: a Polygon fill emits `FillPath` whose
+/// rasterizer path_transform IS `outer` directly (the path lives
+/// in inner-anchor coords). The fill module rewrites the
+/// gradient's unit-rect endpoints to bbox-local inner coords so
+/// the rasterizer's subsequent `outer.apply(...)` lands them in
+/// the polygon's actual page span. Without that step a 90° fill
+/// on the brochure's full-page background polygon collapses to a
+/// ~1pt gradient line near the spread origin and renders flat.
+/// Asserts the inner-coord math the fill module bakes in.
+#[test]
+fn q08_polygon_gradient_rebases_to_bbox() {
+    // Brochure page-bg polygon dimensions (approx).
+    let bbox = paged_compose::Rect {
+        x: -8.5,
+        y: -479.0,
+        w: 612.3,
+        h: 672.4,
+    };
+    let (s_unit, e_unit) =
+        linear_gradient_endpoints(Some(90.0), Some(577.7332), Some((bbox.w, bbox.h)));
+    // `rebase_gradient_to_bbox` applies this mapping.
+    let start = (bbox.x + s_unit.0 * bbox.w, bbox.y + s_unit.1 * bbox.h);
+    let end = (bbox.x + e_unit.0 * bbox.w, bbox.y + e_unit.1 * bbox.h);
+    // Vertical line up from the bbox's bottom-left corner; length
+    // equals the input `length_pt`. Without the rebase the
+    // rasterizer would see unit coordinates directly (sub-pt line
+    // near the spread origin → flat polygon).
+    approx(start, (bbox.x, bbox.y + bbox.h));
+    assert!((end.0 - bbox.x).abs() < 1e-3);
+    assert!(
+        ((start.1 - end.1) - 577.7332).abs() < 1e-3,
+        "{start:?} → {end:?}"
+    );
+}
+
+/// Track 1a: oversized JPEGs go through `jpeg-decoder`'s
+/// DCT-scaling path instead of materialising the full RGBA8
+/// buffer via `image::load_from_memory`. Annual-report-template's
+/// 5760×9000 cover would otherwise allocate ~198MB in one shot;
+/// here we use a 4000×4000 synthetic JPEG with a 1024px cap and
+/// assert the result lands at the largest DCT scale that still
+/// fits the cap (1/4 → 1000×1000).
+#[test]
+fn track_1a_oversized_jpeg_routes_through_streaming_decoder() {
+    use image::{ImageBuffer, ImageFormat, Rgb};
+    use std::io::Cursor;
+    let src: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_fn(4000, 4000, |x, y| {
+        Rgb([(x & 0xFF) as u8, (y & 0xFF) as u8, ((x ^ y) & 0xFF) as u8])
+    });
+    let mut buf: Vec<u8> = Vec::new();
+    src.write_to(&mut Cursor::new(&mut buf), ImageFormat::Jpeg)
+        .expect("encode JPEG");
+
+    let decoded = decode_image_bytes_with_target_max(&buf, 1024).expect("streaming JPEG decode");
+    // 4000 * 2/8 = 1000 ≤ 1024 fits; 4000 * 3/8 = 1500 doesn't.
+    assert_eq!(decoded.width, 1000);
+    assert_eq!(decoded.height, 1000);
+    assert_eq!(
+        decoded.rgba.len(),
+        (decoded.width as usize) * (decoded.height as usize) * 4
+    );
+    // Alpha channel filled to opaque — JPEGs carry no alpha.
+    assert!(decoded.rgba.chunks_exact(4).all(|p| p[3] == 255));
+}
+
+// Track 1a: small JPEGs (longest edge ≤ cap) skip the streaming
+// ── Nested styles — the overlay walker and the run layering ──────
+//
+// The `indesign_*` tests pin what InDesign 20.0.1 set, character by
+// character, for one nested style on the text shown (asked 2026-10-12
+// through its DOM; see `pipeline/nested_styles.rs`).
+
+fn ns(
+    style: &str,
+    delim: paged_model::NestedDelimiter,
+    rep: i32,
+    inc: bool,
+) -> paged_model::NestedStyle {
+    paged_model::NestedStyle {
+        applied_character_style: style.into(),
+        delimiter: delim,
+        repetition: rep,
+        inclusive: inc,
+    }
+}
+
+/// The text each range covers, with its style, in order.
+fn overlay_slices<'t>(
+    text: &'t str,
+    list: &[paged_model::NestedStyle],
+    drop_cap: u32,
+) -> Vec<(&'t str, String)> {
+    compute_nested_style_overlay(text, list, drop_cap)
+        .into_iter()
+        .map(|a| (&text[a.byte_range], a.applied_character_style))
+        .collect()
+}
+
+/// What one nested style (style "R") covers of `text`.
+fn styled(text: &str, delim: paged_model::NestedDelimiter, rep: i32, inc: bool) -> &str {
+    let ov = compute_nested_style_overlay(text, &[ns("R", delim, rep, inc)], 0);
+    assert!(ov.len() <= 1);
+    ov.first().map_or("", |a| &text[a.byte_range.clone()])
+}
+
+#[test]
+fn nested_overlay_empty_when_no_entries() {
+    assert!(compute_nested_style_overlay("hello world", &[], 0).is_empty());
+}
+
+#[test]
+fn nested_overlay_chained_entries_consume_in_order() {
+    // First entry: 3 chars styled S/A. Second entry: 5 chars
+    // starting where the first ended.
+    let ov = compute_nested_style_overlay(
+        "abcdefghijk",
+        &[
+            ns("S/A", paged_model::NestedDelimiter::Characters, 3, true),
+            ns("S/B", paged_model::NestedDelimiter::Characters, 5, true),
+        ],
+        0,
+    );
+    assert_eq!(ov.len(), 2);
+    assert_eq!(ov[0].byte_range, 0..3);
+    assert_eq!(ov[0].applied_character_style, "S/A");
+    assert_eq!(ov[1].byte_range, 3..8);
+    assert_eq!(ov[1].applied_character_style, "S/B");
+}
+
+#[test]
+fn nested_overlay_stops_at_end_of_text() {
+    // Repetition exceeds text length → range extends to end.
+    let ov = compute_nested_style_overlay(
+        "abc",
+        &[ns(
+            "S/X",
+            paged_model::NestedDelimiter::Characters,
+            100,
+            true,
+        )],
+        0,
+    );
+    assert_eq!(ov.len(), 1);
+    assert_eq!(ov[0].byte_range, 0..3);
+}
+
+#[test]
+fn nested_overlay_skips_unknown_delimiter() {
+    // An unknown delimiter matches nothing: no range, no cursor advance.
+    let ov = compute_nested_style_overlay(
+        "hello",
+        &[ns("S/X", paged_model::NestedDelimiter::Unknown, 1, true)],
+        0,
+    );
+    assert!(ov.is_empty());
+}
+
+#[test]
+fn nested_overlay_zero_repetition_is_noop() {
+    let ov = compute_nested_style_overlay(
+        "hello world",
+        &[ns("S/X", paged_model::NestedDelimiter::Words, 0, true)],
+        0,
+    );
+    assert!(ov.is_empty());
+}
+
+#[test]
+fn nested_overlay_digit_class() {
+    assert_eq!(
+        styled("a1b2c3d4", paged_model::NestedDelimiter::AnyDigit, 3, true),
+        "a1b2c3"
+    );
+}
+
+#[test]
+fn indesign_words_take_the_white_space_run_through_and_stop_up_to() {
+    use paged_model::NestedDelimiter::Words;
+    assert_eq!(
+        styled("Alpha, beta  gamma delta", Words, 1, true),
+        "Alpha, "
+    );
+    assert_eq!(
+        styled("Alpha, beta  gamma delta", Words, 1, false),
+        "Alpha,"
+    );
+    assert_eq!(
+        styled("Alpha  beta  gamma delta", Words, 2, true),
+        "Alpha  beta  "
+    );
+    assert_eq!(
+        styled("Alpha  beta  gamma delta", Words, 2, false),
+        "Alpha  beta"
+    );
+    // White space before the first word belongs to it.
+    assert_eq!(styled("  Lead space word", Words, 1, true), "  Lead ");
+    // A hyphen joins.
+    assert_eq!(
+        styled("Well-known x-ray tests", Words, 2, true),
+        "Well-known x-ray "
+    );
+}
+
+#[test]
+fn indesign_word_separators_are_white_space_but_the_no_break_spaces() {
+    use paged_model::NestedDelimiter::Words;
+    assert_eq!(styled("One\ttwo three", Words, 1, true), "One\t");
+    assert_eq!(styled("One\ttwo three", Words, 1, false), "One");
+    assert_eq!(
+        styled("One\u{2009}two three", Words, 1, true),
+        "One\u{2009}"
+    );
+    assert_eq!(
+        styled("One\u{2003}two three", Words, 1, true),
+        "One\u{2003}"
+    );
+    assert_eq!(
+        styled("One\u{2028}two three", Words, 1, true),
+        "One\u{2028}"
+    );
+    // A no-break space and an em dash join two words.
+    assert_eq!(
+        styled("One\u{a0}two three", Words, 1, true),
+        "One\u{a0}two "
+    );
+    assert_eq!(
+        styled("one\u{2014}two three", Words, 1, true),
+        "one\u{2014}two "
+    );
+}
+
+#[test]
+fn indesign_up_to_n_characters_stops_before_the_nth() {
+    use paged_model::NestedDelimiter::Characters;
+    assert_eq!(styled("Alpha beta", Characters, 3, true), "Alp");
+    assert_eq!(styled("Alpha beta", Characters, 3, false), "Al");
+    assert_eq!(styled("Alpha beta", Characters, 1, true), "A");
+    assert_eq!(styled("Alpha beta", Characters, 1, false), "");
+    // Spaces are characters.
+    assert_eq!(styled("a b c d e", Characters, 4, true), "a b ");
+}
+
+#[test]
+fn indesign_letters_digits_tabs_and_literal_characters() {
+    use paged_model::NestedDelimiter as D;
+    assert_eq!(styled("12ab cd", D::AnyLetter, 2, true), "12ab");
+    assert_eq!(styled("12ab cd", D::AnyLetter, 2, false), "12a");
+    assert_eq!(styled("12\u{e9}b cd", D::AnyLetter, 2, true), "12\u{e9}b");
+    assert_eq!(styled("a b c d", D::AnyLetter, 3, false), "a b ");
+    assert_eq!(styled("ab12 3", D::AnyDigit, 2, true), "ab12");
+    assert_eq!(styled("ab12 3", D::AnyDigit, 2, false), "ab1");
+    assert_eq!(styled("ab12 3", D::AnyDigit, 1, false), "ab");
+    assert_eq!(styled("a\tb\tc\td", D::Tab, 2, true), "a\tb\t");
+    assert_eq!(styled("a\tb\tc\td", D::Tab, 2, false), "a\tb");
+    assert_eq!(styled("\tlead tab", D::Tab, 1, false), "");
+    assert_eq!(styled("Key: value: more", D::Char(':'), 1, true), "Key:");
+    assert_eq!(styled("Key: value: more", D::Char(':'), 1, false), "Key");
+    assert_eq!(
+        styled("Key: value: more", D::Char(':'), 2, true),
+        "Key: value:"
+    );
+    assert_eq!(styled(":lead colon", D::Char(':'), 1, false), "");
+    // Several literal characters: any one of them ends a repetition.
+    assert_eq!(
+        styled("One, two. three", D::AnyOf(".,".into()), 1, true),
+        "One,"
+    );
+    assert_eq!(
+        styled("One, two. three", D::AnyOf(".,".into()), 2, true),
+        "One, two."
+    );
+    assert_eq!(
+        styled("aa\u{2003}bb\u{2003}cc", D::EmSpace, 1, true),
+        "aa\u{2003}"
+    );
+    assert_eq!(
+        styled("aa\u{2002}bb\u{2002}cc", D::EnSpace, 1, true),
+        "aa\u{2002}"
+    );
+    assert_eq!(
+        styled("aa\u{a0}bb\u{a0}cc", D::NonbreakingSpace, 1, true),
+        "aa\u{a0}"
+    );
+    assert_eq!(
+        styled("line one\u{2028}line two", D::ForcedLineBreak, 1, true),
+        "line one\u{2028}"
+    );
+    assert_eq!(
+        styled("line one\u{2028}line two", D::ForcedLineBreak, 1, false),
+        "line one"
+    );
+    // End Nested Style Here is styled with the range either way.
+    assert_eq!(
+        styled("Styled\u{3}rest of it", D::EndNestedStyle, 1, true),
+        "Styled\u{3}"
+    );
+    assert_eq!(
+        styled("Styled\u{3}rest of it", D::EndNestedStyle, 1, false),
+        "Styled\u{3}"
+    );
+}
+
+#[test]
+fn indesign_a_sentence_ends_at_punctuation_followed_by_white_space() {
+    use paged_model::NestedDelimiter::Sentences;
+    assert_eq!(
+        styled("One two. Three four.", Sentences, 1, true),
+        "One two. "
+    );
+    // Up to keeps the full stop.
+    assert_eq!(
+        styled("One two. Three four.", Sentences, 1, false),
+        "One two."
+    );
+    assert_eq!(styled("Wow! Next? Yes.", Sentences, 2, true), "Wow! Next? ");
+    assert_eq!(
+        styled("Dr. Who said 3.5 is fine. Next.", Sentences, 1, true),
+        "Dr. "
+    );
+    // A full stop before a digit or a letter ends nothing.
+    assert_eq!(
+        styled("Pi is 3.14 ok. Next.", Sentences, 1, true),
+        "Pi is 3.14 ok. "
+    );
+    assert_eq!(
+        styled("Pi is 3.14 ok. Next.", Sentences, 1, false),
+        "Pi is 3.14 ok."
+    );
+    assert_eq!(
+        styled("Ends with dot.Next word. Last", Sentences, 1, true),
+        "Ends with dot.Next word. "
+    );
+    // Closing quotes stay with their sentence.
+    assert_eq!(
+        styled(
+            "He said \u{201c}stop.\u{201d} Next one.",
+            Sentences,
+            1,
+            true
+        ),
+        "He said \u{201c}stop.\u{201d} "
+    );
+    assert_eq!(
+        styled(
+            "He said \u{201c}stop.\u{201d} Next one.",
+            Sentences,
+            1,
+            false
+        ),
+        "He said \u{201c}stop.\u{201d}"
+    );
+    assert_eq!(
+        styled("Wait... more. Done.", Sentences, 1, true),
+        "Wait... "
+    );
+    assert_eq!(styled("One.  Two.", Sentences, 1, true), "One.  ");
+    assert_eq!(styled("No end here", Sentences, 1, true), "No end here");
+}
+
+#[test]
+fn indesign_repeat_loops_the_entries_before_it() {
+    use paged_model::NestedDelimiter::{Repeat, Words};
+    let text = "one two three four five six";
+    let two = overlay_slices(
+        text,
+        &[
+            ns("R", Words, 1, true),
+            ns("B", Words, 1, true),
+            ns("-", Repeat, 2, true),
+        ],
+        0,
+    );
+    let got: Vec<(&str, &str)> = two.iter().map(|(t, s)| (*t, s.as_str())).collect();
+    assert_eq!(
+        got,
+        [
+            ("one ", "R"),
+            ("two ", "B"),
+            ("three ", "R"),
+            ("four ", "B"),
+            ("five ", "R"),
+            ("six", "B")
+        ]
+    );
+    // Repeat 1 loops only the last entry: every word after the first.
+    let one = overlay_slices(
+        text,
+        &[
+            ns("R", Words, 1, true),
+            ns("B", Words, 1, true),
+            ns("-", Repeat, 1, true),
+        ],
+        0,
+    );
+    assert_eq!(one[0], ("one ", "R".to_string()));
+    assert!(one[1..].iter().all(|(_, s)| s == "B"));
+    assert_eq!(one.last().unwrap().0, "six");
+}
+
+#[test]
+fn indesign_a_delimiter_that_never_comes_ends_the_list() {
+    use paged_model::NestedDelimiter::{Char, Words};
+    let got = overlay_slices(
+        "No colon here at all",
+        &[ns("R", Char(':'), 1, true), ns("B", Words, 1, true)],
+        0,
+    );
+    assert_eq!(got, [("No colon here at all", "R".to_string())]);
+}
+
+#[test]
+fn indesign_dropcap_covers_the_cap_and_the_next_style_follows_it() {
+    use paged_model::NestedDelimiter::{Characters, Dropcap};
+    let got = overlay_slices(
+        "DropStyled characters here",
+        &[ns("M", Dropcap, 1, true), ns("R", Characters, 3, true)],
+        2,
+    );
+    assert_eq!(got, [("Dr", "M".to_string()), ("opS", "R".to_string())]);
+    // Without a Dropcap entry the first style counts from the first
+    // character, the cap included.
+    let got = overlay_slices(
+        "DropTwo characters here",
+        &[ns("R", Characters, 3, true)],
+        2,
+    );
+    assert_eq!(got, [("Dro", "R".to_string())]);
+}
+
+fn mk_run(text: &str, style: Option<&str>) -> paged_model::CharacterRun {
+    paged_model::CharacterRun {
+        character_style: style.map(String::from),
+        text: text.into(),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn split_runs_no_overlay_passes_through() {
+    let runs = vec![mk_run("hello", None), mk_run(" world", Some("S/Base"))];
+    let out = split_runs_for_nested_styles(&runs, &[]);
+    assert_eq!(out.len(), 2);
+    assert_eq!(out[0].text, "hello");
+    assert_eq!(out[1].text, " world");
+    assert_eq!(out[1].character_style.as_deref(), Some("S/Base"));
+}
+
+#[test]
+fn split_runs_overlay_inside_single_run_splits_into_three() {
+    // Run "the quick brown" (15 bytes). Overlay [4..9) = "quick".
+    let runs = vec![mk_run("the quick brown", None)];
+    let overlay = vec![NestedStyleApplication {
+        byte_range: 4..9,
+        applied_character_style: "S/Bold".into(),
+    }];
+    let out = split_runs_for_nested_styles(&runs, &overlay);
+    assert_eq!(out.len(), 3);
+    assert_eq!(out[0].text, "the ");
+    assert_eq!(out[0].nested_character_style, None);
+    assert_eq!(out[1].text, "quick");
+    assert_eq!(out[1].nested_character_style.as_deref(), Some("S/Bold"));
+    assert_eq!(out[2].text, " brown");
+    assert_eq!(out[2].nested_character_style, None);
+}
+
+#[test]
+fn split_runs_overlay_at_run_start_no_pre_fragment() {
+    // Run "Heading text", overlay [0..7) = "Heading".
+    let runs = vec![mk_run("Heading text", None)];
+    let overlay = vec![NestedStyleApplication {
+        byte_range: 0..7,
+        applied_character_style: "S/H".into(),
+    }];
+    let out = split_runs_for_nested_styles(&runs, &overlay);
+    assert_eq!(out.len(), 2);
+    assert_eq!(out[0].text, "Heading");
+    assert_eq!(out[0].nested_character_style.as_deref(), Some("S/H"));
+    assert_eq!(out[1].text, " text");
+    assert_eq!(out[1].nested_character_style, None);
+}
+
+/// A nested style is layered UNDER a character style applied by hand:
+/// the run keeps its own style, and carries the nested one beside it
+/// (InDesign 20.0.1: a hand-applied underline-only style inside a nested
+/// 20 pt red range printed 20 pt red AND underlined; a hand-applied
+/// blue-only style printed blue at 20 pt).
+#[test]
+fn split_runs_layer_the_nested_style_under_a_hand_applied_one() {
+    // Runs: "abc" + "defgh" (paragraph bytes 0..8). Overlay [2..6) =
+    // "cdef" — covers tail of run0 and head of run1.
+    let runs = vec![mk_run("abc", None), mk_run("defgh", Some("S/Base"))];
+    let overlay = vec![NestedStyleApplication {
+        byte_range: 2..6,
+        applied_character_style: "S/Lead".into(),
+    }];
+    let out = split_runs_for_nested_styles(&runs, &overlay);
+    let got: Vec<(&str, Option<&str>, Option<&str>)> = out
+        .iter()
+        .map(|r| {
+            (
+                r.text.as_str(),
+                r.character_style.as_deref(),
+                r.nested_character_style.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("ab", None, None),
+            ("c", None, Some("S/Lead")),
+            ("def", Some("S/Base"), Some("S/Lead")),
+            ("gh", Some("S/Base"), None),
+        ]
+    );
+}
+
+// ── Phase 5 — conditional text filter ─────────────────────────
+//
+// The rule is InDesign's (`conditions::run_prints`, the `conditions`
+// fixture): a run prints while ANY condition it names is visible, and an
+// undeclared condition counts as a visible one.
+
+fn cond_run(text: &str, conditions: &[&str]) -> paged_model::CharacterRun {
+    paged_model::CharacterRun {
+        text: text.into(),
+        applied_conditions: conditions.iter().map(|s| s.to_string()).collect(),
+        ..Default::default()
+    }
+}
+
+fn cond(id: &str, visible: bool) -> paged_model::ConditionDef {
+    paged_model::ConditionDef {
+        self_id: id.into(),
+        visible: Some(visible),
+        ..Default::default()
+    }
+}
+
+/// The run texts the renderer's own filter leaves standing.
+fn shown_runs(
+    runs: Vec<paged_model::CharacterRun>,
+    table: &std::collections::BTreeMap<String, paged_model::ConditionDef>,
+) -> Vec<String> {
+    let paragraph = paged_model::Paragraph {
+        runs,
+        ..Default::default()
+    };
+    let shown = super::conditions::without_hidden_runs(&paragraph, table);
+    shown
+        .as_ref()
+        .unwrap_or(&paragraph)
+        .runs
+        .iter()
+        .map(|r| r.text.clone())
+        .collect()
+}
+
+#[test]
+fn conditions_no_applied_keeps_run() {
+    let table = std::collections::BTreeMap::new();
+    assert_eq!(shown_runs(vec![cond_run("body", &[])], &table), ["body"]);
+}
+
+#[test]
+fn conditions_visible_keeps_run() {
+    let mut table = std::collections::BTreeMap::new();
+    table.insert("Condition/Draft".to_string(), cond("Condition/Draft", true));
+    let runs = vec![cond_run("draft text", &["Condition/Draft"])];
+    assert_eq!(shown_runs(runs, &table), ["draft text"]);
+}
+
+#[test]
+fn conditions_invisible_drops_run() {
+    let mut table = std::collections::BTreeMap::new();
+    table.insert(
+        "Condition/Draft".to_string(),
+        cond("Condition/Draft", false),
+    );
+    let runs = vec![
+        cond_run("keep", &[]),
+        cond_run("hide", &["Condition/Draft"]),
+    ];
+    assert_eq!(shown_runs(runs, &table), ["keep"]);
+}
+
+#[test]
+fn conditions_unknown_id_treated_as_visible() {
+    // InDesign drops the whole `AppliedConditions` list of a run that
+    // names a condition the document does not declare, so the run prints —
+    // alone or beside a hidden condition.
+    let mut table = std::collections::BTreeMap::new();
+    table.insert("Condition/H".to_string(), cond("Condition/H", false));
+    let runs = vec![
+        cond_run("orphan", &["Condition/Missing"]),
+        cond_run("beside", &["Condition/H", "Condition/Missing"]),
+    ];
+    assert_eq!(shown_runs(runs, &table), ["orphan", "beside"]);
+}
+
+/// Every glyph's character on page 1 of the `conditions` sample in its
+/// inline spelling (no `<HiddenText>`: the flags alone say what is
+/// hidden), as built by the pipeline.
+fn conditions_inline_printed_text() -> String {
+    let bytes = paged_gen::write_idml(&paged_gen::samples::conditions::build_inline()).unwrap();
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+    let font = std::fs::read(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../corpus/fonts/OpenSans.ttf"),
+    )
+    .expect("OpenSans.ttf fixture");
+    let options = PipelineOptions {
+        font: Some(&font),
+        collect_glyph_runs: true,
+        ..PipelineOptions::default()
+    };
+    let built = build_document(&doc, &options).expect("build");
+    let table = built.pages[0].list.glyph_runs.as_ref().expect("glyph runs");
+    let mut entries: Vec<_> = table.entries.iter().collect();
+    entries.sort_by_key(|e| e.command_index);
+    entries.iter().filter_map(|e| e.unicode).collect()
+}
+
+#[test]
+fn multiple_conditions_any_visible_keeps() {
+    // InDesign 20.0.1 prints a run under a visible AND a hidden
+    // condition, in either order — in body text, in a table cell and on
+    // an anchored object's marker. Built through the whole pipeline.
+    let text = conditions_inline_printed_text();
+    for word in ["DELTA", "ECHO", "JULIETT", "LIMA"] {
+        assert!(text.contains(word), "{word} must print; got {text:?}");
+    }
+    for word in ["CHARLIE", "FOXTROT", "INDIA", "KILO", "MIKE", "NOVEMBER"] {
+        assert!(!text.contains(word), "{word} must not print; got {text:?}");
+    }
+}
+
+// ── Phase 5 renderer — index paragraph builder ────────────────
+
+#[test]
+fn nested_table_inside_cell_prints_its_cells() {
+    // Outer 1×1 table whose single cell hosts a nested 2×2 table. A
+    // build that skipped the nested table would print neither inner
+    // cell's text; the table emitter draws it (ADR 176), so both do.
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+
+    let buf = std::io::Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(buf);
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+
+    zip.start_file("mimetype", stored).unwrap();
+    zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+        .unwrap();
+    zip.start_file("designmap.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+  <idPkg:Story src="Stories/Story_s1.xml"/>
+</Document>"#,
+    )
+    .unwrap();
+    zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 600 600"/>
+    <TextFrame Self="frameA" ParentStory="s1" GeometricBounds="10 10 590 590"/>
+  </Spread>
+</idPkg:Spread>"#,
+    )
+    .unwrap();
+    zip.start_file("Stories/Story_s1.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Story Self="s1">
+    <ParagraphStyleRange>
+      <CharacterStyleRange AppliedFont="Inter" PointSize="10">
+        <Table Self="t-outer" HeaderRowCount="0" FooterRowCount="0"
+               BodyRowCount="1" ColumnCount="1">
+          <Row Self="or0" Name="0" SingleRowHeight="100"/>
+          <Column Self="oc0" Name="0" SingleColumnWidth="400"/>
+          <Cell Self="oc0r0" Name="0:0" RowSpan="1" ColumnSpan="1">
+            <ParagraphStyleRange>
+              <CharacterStyleRange AppliedFont="Inter" PointSize="10">
+                <Table Self="t-inner" HeaderRowCount="0" FooterRowCount="0"
+                       BodyRowCount="2" ColumnCount="2">
+                  <Row Self="ir0" Name="0" SingleRowHeight="30"/>
+                  <Row Self="ir1" Name="1" SingleRowHeight="30"/>
+                  <Column Self="ic0" Name="0" SingleColumnWidth="150"/>
+                  <Column Self="ic1" Name="1" SingleColumnWidth="150"/>
+                  <Cell Self="i00" Name="0:0">
+                    <ParagraphStyleRange>
+                      <CharacterStyleRange AppliedFont="Inter" PointSize="10">
+                        <Content>INNER-A</Content>
+                      </CharacterStyleRange>
+                    </ParagraphStyleRange>
+                  </Cell>
+                  <Cell Self="i11" Name="1:1">
+                    <ParagraphStyleRange>
+                      <CharacterStyleRange AppliedFont="Inter" PointSize="10">
+                        <Content>INNER-B</Content>
+                      </CharacterStyleRange>
+                    </ParagraphStyleRange>
+                  </Cell>
+                </Table>
+              </CharacterStyleRange>
+            </ParagraphStyleRange>
+          </Cell>
+        </Table>
+      </CharacterStyleRange>
+    </ParagraphStyleRange>
+  </Story>
+</idPkg:Story>"#,
+    )
+    .unwrap();
+    let bytes = zip.finish().unwrap().into_inner();
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+
+    let font_bytes = std::fs::read(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../corpus/fonts/Inter.ttf"),
+    )
+    .expect("Inter.ttf fixture");
+    let options = PipelineOptions {
+        font: Some(&font_bytes),
+        collect_glyph_runs: true,
+        ..PipelineOptions::default()
+    };
+    let built = build_document(&doc, &options).expect("build");
+    let runs = built.pages[0].list.glyph_runs.as_ref().expect("glyph runs");
+    let mut entries: Vec<_> = runs.entries.iter().collect();
+    entries.sort_by_key(|e| e.command_index);
+    let text: String = entries.iter().filter_map(|e| e.unicode).collect();
+    for cell in ["INNER-A", "INNER-B"] {
+        assert!(text.contains(cell), "{cell} must print; got {text:?}");
+    }
+}
+
+#[test]
+fn missing_image_link_emits_diagnostic() {
+    // A Rectangle hosting an <Image> whose LinkResourceURI can't be
+    // resolved (no AssetResolver wired) should render a placeholder
+    // AND surface exactly one ImageLinkMissing diagnostic with the
+    // URI attached — previously this was a silent tracing::warn!.
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+
+    let buf = std::io::Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(buf);
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+
+    zip.start_file("mimetype", stored).unwrap();
+    zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+        .unwrap();
+    zip.start_file("designmap.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+</Document>"#,
+    )
+    .unwrap();
+    zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 200 200"/>
+    <Rectangle Self="r1" GeometricBounds="20 20 120 120">
+      <Image LinkResourceURI="file:///nonexistent/photo.jpg"/>
+    </Rectangle>
+  </Spread>
+</idPkg:Spread>"#,
+    )
+    .unwrap();
+    let bytes = zip.finish().unwrap().into_inner();
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+
+    let built = build_document(&doc, &PipelineOptions::default()).expect("build");
+    let missing: Vec<_> = built
+        .diagnostics
+        .items
+        .iter()
+        .filter(|d| d.code == crate::diagnostics::DiagnosticCode::ImageLinkMissing)
+        .collect();
+    assert_eq!(
+        missing.len(),
+        1,
+        "expected one ImageLinkMissing diagnostic, got {:?}",
+        built.diagnostics.items
+    );
+    assert_eq!(missing[0].page_index, Some(0));
+    assert_eq!(
+        missing[0].uri.as_deref(),
+        Some("file:///nonexistent/photo.jpg")
+    );
+}
+
+fn test_section(
+    self_id: &str,
+    page_start: &str,
+    style: paged_model::NumberingStyle,
+    start_at: u32,
+) -> paged_model::Section {
+    paged_model::Section {
+        self_id: self_id.to_string(),
+        page_start: Some(page_start.to_string()),
+        continue_numbering: false,
+        start_at: Some(start_at),
+        numbering_style: style,
+        section_prefix: None,
+        marker: None,
+        include_prefix: false,
+    }
+}
+
+#[test]
+fn section_walk_computes_roman_then_arabic_labels() {
+    use paged_model::NumberingStyle;
+    let sections = vec![
+        test_section("sec1", "p1", NumberingStyle::LowerRoman, 1),
+        test_section("sec2", "p3", NumberingStyle::Arabic, 1),
+    ];
+    let mut w = SectionWalk::new(&sections);
+    // 4 Name-less pages: roman section p1..p2, then arabic from p3.
+    let labels: Vec<String> = ["p1", "p2", "p3", "p4"]
+        .iter()
+        .map(|id| w.next_label(Some(id), None))
+        .collect();
+    assert_eq!(labels, vec!["i", "ii", "1", "2"]);
+    assert!(w.used_fallback());
+}
+
+#[test]
+fn section_walk_name_is_authoritative() {
+    // No sections: a baked Name wins; a Name-less page uses the
+    // 1-based fallback that matches the historical behaviour.
+    let mut w = SectionWalk::new(&[]);
+    assert_eq!(w.next_label(Some("p1"), Some("iii")), "iii");
+    assert_eq!(w.next_label(Some("p2"), None), "2");
+}
+
+/// Build a one-page IDML with a single 1-row × 3-col table in a
+/// text frame, interpolating `table_attrs` onto `<Table>` and
+/// `cell_attrs` onto each `<Cell>`. Shared by the column-divider
+/// and cell-rotation tests.
+fn build_single_table_idml(table_attrs: &str, cell_attrs: &str) -> Vec<u8> {
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+    let buf = std::io::Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(buf);
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+    zip.start_file("mimetype", stored).unwrap();
+    zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+        .unwrap();
+    zip.start_file("designmap.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+  <idPkg:Story src="Stories/Story_s1.xml"/>
+</Document>"#,
+    )
+    .unwrap();
+    zip.start_file("Resources/Graphic.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Graphic xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Color Self="Color/Black" Space="CMYK" ColorValue="0 0 0 100"/>
+</idPkg:Graphic>"#,
+    )
+    .unwrap();
+    zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 400 400"/>
+    <TextFrame Self="frameA" ParentStory="s1" GeometricBounds="10 10 390 390"/>
+  </Spread>
+</idPkg:Spread>"#,
+    )
+    .unwrap();
+    let cell = |name: &str, content: &str| {
+        format!(
+            r#"<Cell Self="{name}" Name="{name}"{cell_attrs}><ParagraphStyleRange><CharacterStyleRange AppliedFont="Inter" PointSize="10"><Content>{content}</Content></CharacterStyleRange></ParagraphStyleRange></Cell>"#
+        )
+    };
+    let story = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Story Self="s1">
+    <ParagraphStyleRange>
+      <CharacterStyleRange AppliedFont="Inter" PointSize="10">
+        <Table Self="t" HeaderRowCount="0" FooterRowCount="0" BodyRowCount="1" ColumnCount="3"{table_attrs}>
+          <Row Self="r0" Name="0" SingleRowHeight="40"/>
+          <Column Self="cc0" Name="0" SingleColumnWidth="100"/>
+          <Column Self="cc1" Name="1" SingleColumnWidth="100"/>
+          <Column Self="cc2" Name="2" SingleColumnWidth="100"/>
+          {c0}{c1}{c2}
+        </Table>
+      </CharacterStyleRange>
+    </ParagraphStyleRange>
+  </Story>
+</idPkg:Story>"#,
+        c0 = cell("0:0", "A"),
+        c1 = cell("1:0", "B"),
+        c2 = cell("2:0", "C"),
+    );
+    zip.start_file("Stories/Story_s1.xml", deflated).unwrap();
+    zip.write_all(story.as_bytes()).unwrap();
+    zip.finish().unwrap().into_inner()
+}
+
+fn inter_font_bytes() -> Vec<u8> {
+    std::fs::read(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../corpus/fonts/Inter.ttf"),
+    )
+    .expect("Inter.ttf fixture")
+}
+
+#[test]
+fn table_column_dividers_emit_extra_edges() {
+    // A table-style column-stroke decl must draw interior column
+    // dividers — previously nothing rendered for it. Differential:
+    // the same table with the decl emits more commands than without.
+    let font = inter_font_bytes();
+    let count = |table_attrs: &str| -> usize {
+        let bytes = build_single_table_idml(table_attrs, "");
+        let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+        let options = PipelineOptions {
+            font: Some(&font),
+            ..PipelineOptions::default()
+        };
+        let built = build_document(&doc, &options).expect("build");
+        built.pages[0].list.commands.len()
+    };
+    let with = count(
+        r#" StartColumnStrokeColor="Color/Black" StartColumnStrokeType="Solid" StartColumnStrokeWeight="1""#,
+    );
+    let without = count("");
+    // Two interior dividers (3 columns) → at least two extra edges.
+    assert!(
+        with >= without + 2,
+        "column dividers should add ≥2 edge commands: with={with} without={without}",
+    );
+}
+
+/// A table in a frame too short for it draws only the rows that fit —
+/// and if no BODY row fits, nothing at all.
+///
+/// Measured against InDesign 20.0.1's own export of `tables-overset`
+/// (2026-09-07): four 28 pt rows in a 20 pt frame, and a header plus
+/// three 28 pt rows in a 20 pt or 30 pt frame, are all ZERO ink there.
+/// This renderer drew one row in each case — the last-frame overset
+/// test carried a `placed_in_frame > 0` guard that belongs only to the
+/// frame-advance path, and header rows were emitted unconditionally.
+/// A header is a label for rows; with no rows to label InDesign does
+/// not place it.
+fn build_short_frame_table_idml(frame_h_pt: f32, header_rows: usize, body_rows: usize) -> Vec<u8> {
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+    let total = header_rows + body_rows;
+    let rows: String = (0..total)
+        .map(|r| {
+            format!(
+                r#"<Row Self="r{r}" Name="{r}" SingleRowHeight="28" MinimumHeight="28" AutoGrow="true"/>"#
+            )
+        })
+        .collect();
+    let cells: String = (0..total)
+        .map(|r| {
+            format!(
+                r#"<Cell Self="0:{r}" Name="0:{r}" RowSpan="1" ColumnSpan="1"><ParagraphStyleRange><CharacterStyleRange AppliedFont="Inter" PointSize="10"><Content>R{r}</Content></CharacterStyleRange></ParagraphStyleRange></Cell>"#
+            )
+        })
+        .collect();
+    let story = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Story Self="s1"><ParagraphStyleRange><CharacterStyleRange AppliedFont="Inter" PointSize="10">
+    <Table Self="t" HeaderRowCount="{header_rows}" FooterRowCount="0" BodyRowCount="{body_rows}" ColumnCount="1">
+      {rows}<Column Self="cc0" Name="0" SingleColumnWidth="100"/>{cells}
+    </Table>
+  </CharacterStyleRange></ParagraphStyleRange></Story>
+</idPkg:Story>"#
+    );
+    let spread = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 400 400"/>
+    <TextFrame Self="frameA" ParentStory="s1" GeometricBounds="10 10 {bottom} 300"/>
+  </Spread>
+</idPkg:Spread>"#,
+        bottom = 10.0 + frame_h_pt
+    );
+    let buf = std::io::Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(buf);
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+    zip.start_file("mimetype", stored).unwrap();
+    zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+        .unwrap();
+    zip.start_file("designmap.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+  <idPkg:Story src="Stories/Story_s1.xml"/>
+</Document>"#,
+    )
+    .unwrap();
+    zip.start_file("Resources/Graphic.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Graphic xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Color Self="Color/Black" Space="CMYK" ColorValue="0 0 0 100"/>
+</idPkg:Graphic>"#,
+    )
+    .unwrap();
+    zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+    zip.write_all(spread.as_bytes()).unwrap();
+    zip.start_file("Stories/Story_s1.xml", deflated).unwrap();
+    zip.write_all(story.as_bytes()).unwrap();
+    zip.finish().unwrap().into_inner()
+}
+
+#[test]
+fn a_table_draws_only_the_rows_its_frame_can_hold() {
+    let font = inter_font_bytes();
+    let commands = |frame_h_pt: f32, header: usize, body: usize| -> usize {
+        let bytes = build_short_frame_table_idml(frame_h_pt, header, body);
+        let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+        let options = PipelineOptions {
+            font: Some(&font),
+            ..PipelineOptions::default()
+        };
+        let built = build_document(&doc, &options).expect("build");
+        built.pages[0].list.commands.len()
+    };
+
+    // The control: a frame that holds everything draws everything.
+    let roomy = commands(200.0, 0, 4);
+    assert!(roomy > 0, "a table that fits must draw something");
+
+    // Not even the first body row fits.
+    assert_eq!(
+        commands(20.0, 0, 4),
+        0,
+        "a table whose first row overflows its only frame is overset entirely"
+    );
+
+    // The header alone is taller than the frame.
+    assert_eq!(
+        commands(20.0, 1, 3),
+        0,
+        "a header row taller than the frame is overset with the rest"
+    );
+
+    // The header fits but no body row does — InDesign still draws
+    // nothing, and this is the case the old code got most wrong,
+    // because headers never consulted the frame at all.
+    assert_eq!(
+        commands(30.0, 1, 3),
+        0,
+        "a header with no body row to label is not placed"
+    );
+
+    // A frame that holds some rows still draws those.
+    let partial = commands(62.0, 0, 4);
+    assert!(
+        partial > 0 && partial < roomy,
+        "a frame holding 2 of 4 rows draws fewer commands than one holding all \
+         four, and more than none: partial={partial} roomy={roomy}"
+    );
+}
+
+#[test]
+fn cell_rotation_rotates_content() {
+    // A cell with RotationAngle="90" rotates its content: at least
+    // one emitted command's transform gains a non-zero `b` term
+    // (sin 90° = 1). Without rotation, content stays axis-aligned.
+    let font = inter_font_bytes();
+    let max_b = |cell_attrs: &str| -> f32 {
+        let bytes = build_single_table_idml("", cell_attrs);
+        let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+        let options = PipelineOptions {
+            font: Some(&font),
+            ..PipelineOptions::default()
+        };
+        let mut built = build_document(&doc, &options).expect("build");
+        built.pages[0]
+            .list
+            .commands
+            .iter_mut()
+            .map(|c| c.transform_mut().0[1].abs())
+            .fold(0.0f32, f32::max)
+    };
+    // Glyph command transforms carry the font scale on the
+    // diagonal (a/d ≈ 1/units_per_em·size); a 90° rotation moves
+    // that scale onto the off-diagonal (b). So rotated |b| ≈ the
+    // glyph scale (clearly > 0), while upright |b| ≈ 0.
+    let rotated = max_b(r#" RotationAngle="90""#);
+    let upright = max_b("");
+    assert!(
+        upright < 1e-4,
+        "unrotated cell content should be axis-aligned, got |b|={upright}"
+    );
+    assert!(
+        rotated > 1e-3 && rotated > upright * 100.0,
+        "RotationAngle=90 should rotate content (|b| ≈ glyph scale), got |b|={rotated}"
+    );
+}
+
+#[test]
+fn autosize_height_prevents_overset_drop() {
+    // A short frame with lots of text drops overset lines. The same
+    // frame with AutoSizingType="HeightOnly" grows to fit instead —
+    // no lines dropped, more lines rendered.
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+    let font = inter_font_bytes();
+    let build = |auto: &str| -> (usize, usize) {
+        let buf = std::io::Cursor::new(Vec::new());
+        let mut zip = ZipWriter::new(buf);
+        let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        zip.start_file("mimetype", stored).unwrap();
+        zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+            .unwrap();
+        zip.start_file("designmap.xml", deflated).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+  <idPkg:Story src="Stories/Story_s1.xml"/>
+</Document>"#,
+        )
+        .unwrap();
+        let spread = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 800 400"/>
+    <TextFrame Self="frameA" ParentStory="s1" GeometricBounds="20 20 60 200">
+      <Properties/>
+      <TextFramePreference{auto}/>
+    </TextFrame>
+  </Spread>
+</idPkg:Spread>"#
+        );
+        zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+        zip.write_all(spread.as_bytes()).unwrap();
+        // Many short paragraphs so the 40pt-tall frame overflows.
+        let mut story = String::from(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Story Self="s1">"#,
+        );
+        for i in 0..12 {
+            story.push_str(&format!(
+                    r#"<ParagraphStyleRange><CharacterStyleRange AppliedFont="Inter" PointSize="10"><Content>Line {i}</Content></CharacterStyleRange></ParagraphStyleRange>"#
+                ));
+        }
+        story.push_str("</Story></idPkg:Story>");
+        zip.start_file("Stories/Story_s1.xml", deflated).unwrap();
+        zip.write_all(story.as_bytes()).unwrap();
+        let bytes = zip.finish().unwrap().into_inner();
+        let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+        let options = PipelineOptions {
+            font: Some(&font),
+            ..PipelineOptions::default()
+        };
+        let built = build_document(&doc, &options).expect("build");
+        (built.stats.lines, built.stats.dropped_overflow_lines)
+    };
+    let (plain_lines, plain_dropped) = build("");
+    let (grown_lines, grown_dropped) =
+        build(r#" AutoSizingType="HeightOnly" AutoSizingReferencePoint="TopLeftPoint""#);
+    assert!(
+        plain_dropped > 0,
+        "the undersized frame should overset without autosizing"
+    );
+    assert_eq!(
+        grown_dropped, 0,
+        "HeightOnly autosizing should drop nothing (frame grows)"
+    );
+    assert!(
+        grown_lines > plain_lines,
+        "autosized frame should render more lines: grown={grown_lines} plain={plain_lines}"
+    );
+}
+
+#[test]
+fn hyphenation_zone_is_noop_for_justified_but_active_for_ragged() {
+    // W1.17: the Hyphenation Zone is a RAGGED-edge feature. Adobe:
+    // "The Hyphenation Zone … applies only when you're using the
+    // Single-line Composer with nonjustified text." (Adobe, "Compose
+    // and hyphenate text in InDesign",
+    // helpx.adobe.com/indesign/using/text-composition.html). A
+    // justified paragraph has no rag — every line is flushed to the
+    // column — so the zone has nothing to bound and InDesign ignores
+    // it. We mirror that exactly: `layout_runs` zeroes the zone for
+    // justified paragraphs, so the line breaks are IDENTICAL with or
+    // without a HyphenationZone. For a ragged (Left-aligned)
+    // paragraph the same zone DOES suppress a hyphen near the right
+    // margin and end the line short — proving the fixture is
+    // sensitive and the justified equality is a real no-op, not an
+    // inert column. (W1.3 landed the zone gate in `compose_paragraph`;
+    // W1.17 extends it to the renderer's multi-run path and pins the
+    // justified case.)
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+    let font = inter_font_bytes();
+    // (justification token, HyphenationZone pt) → per-line source
+    // text. The zone is carried on an applied ParagraphStyle because
+    // an inline `HyphenationZone` on a `<ParagraphStyleRange>` is not
+    // captured by the scene cascade (only the applied style is) —
+    // Justification, by contrast, IS read inline.
+    let breaks_for = |justification: &str, zone_pt: &str| -> Vec<String> {
+        let buf = std::io::Cursor::new(Vec::new());
+        let mut zip = ZipWriter::new(buf);
+        let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        zip.start_file("mimetype", stored).unwrap();
+        zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+            .unwrap();
+        zip.start_file("designmap.xml", deflated).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Styles src="Resources/Styles.xml"/>
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+  <idPkg:Story src="Stories/Story_s1.xml"/>
+</Document>"#,
+        )
+        .unwrap();
+        zip.start_file("Resources/Styles.xml", deflated).unwrap();
+        let styles = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Styles xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <RootParagraphStyleGroup>
+    <ParagraphStyle Self="ParagraphStyle/Z" Hyphenation="true" HyphenationZone="{zone_pt}"/>
+  </RootParagraphStyleGroup>
+</idPkg:Styles>"#
+        );
+        zip.write_all(styles.as_bytes()).unwrap();
+        // Narrow column (frame width 140pt) so the long hyphenatable
+        // word "communication" lands near the right margin and the
+        // zone has something to gate. Tall enough that nothing
+        // oversets.
+        zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 800 400"/>
+    <TextFrame Self="frameA" ParentStory="s1" GeometricBounds="20 20 400 160"/>
+  </Spread>
+</idPkg:Spread>"#,
+        )
+        .unwrap();
+        let story = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Story Self="s1">
+    <ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/Z" Justification="{justification}">
+      <CharacterStyleRange AppliedFont="Inter" PointSize="11"><Content>the quick brown communication network protocol gateway</Content></CharacterStyleRange>
+    </ParagraphStyleRange>
+  </Story>
+</idPkg:Story>"#
+        );
+        zip.start_file("Stories/Story_s1.xml", deflated).unwrap();
+        zip.write_all(story.as_bytes()).unwrap();
+        let bytes = zip.finish().unwrap().into_inner();
+        let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+        let options = PipelineOptions {
+            font: Some(&font),
+            collect_breaks: true,
+            ..PipelineOptions::default()
+        };
+        let built = build_document(&doc, &options).expect("build");
+        built
+            .breaks
+            .iter()
+            .map(|b| b.source_text.trim().to_string())
+            .collect()
+    };
+
+    // Justified: a non-zero zone must NOT change the breaks — the
+    // zone is a documented no-op for justified text.
+    let just_no_zone = breaks_for("FullyJustified", "0");
+    let just_zone = breaks_for("FullyJustified", "36");
+    assert!(
+        just_no_zone.len() >= 2,
+        "need a wrap to exercise the zone, got {just_no_zone:?}"
+    );
+    assert_eq!(
+        just_no_zone, just_zone,
+        "HyphenationZone must be ignored for justified text: \
+             zone-0={just_no_zone:?} vs zone-36={just_zone:?}"
+    );
+    // The justified control actually hyphenates (so the equality
+    // above is meaningful: the zone would have suppressed it if it
+    // applied). "communication" splits as "commu-/nication".
+    assert!(
+        just_no_zone.iter().any(|l| l.ends_with("commu")),
+        "justified control should hyphenate near the margin: {just_no_zone:?}"
+    );
+
+    // Ragged (Left): the SAME zone DOES move a break — it suppresses
+    // the "commu-" hyphen and pushes "communication" whole to the
+    // next line, ending line 1 short (the hyphenation-zone trade).
+    // "communication" starts ~88 pt into the 140 pt measure — 52 pt
+    // from the right margin. A 36 pt zone leaves it outside (it may
+    // hyphenate); a 72 pt zone takes it in and keeps it whole. (The
+    // old fixture's zone-36 difference came from the breaker scoring
+    // a short LAST line as loose — fixed 2026-09-06 — not from the
+    // zone itself.)
+    let rag_no_zone = breaks_for("LeftAlign", "0");
+    let rag_zone = breaks_for("LeftAlign", "72");
+    assert_ne!(
+        rag_no_zone, rag_zone,
+        "HyphenationZone must change ragged breaks: \
+             zone-0={rag_no_zone:?} vs zone-72={rag_zone:?}"
+    );
+    assert!(
+        rag_no_zone.iter().any(|l| l.ends_with("commu")),
+        "ragged zone-0 should still hyphenate: {rag_no_zone:?}"
+    );
+    assert!(
+        rag_zone.iter().all(|l| !l.ends_with("commu")),
+        "ragged zone-72 should suppress the commu- hyphen: {rag_zone:?}"
+    );
+}
+
+#[test]
+fn autosize_phase_b_grows_box_and_shifts_neighbour_wrap() {
+    // W1.7 Phase B. Frame A is an AutoSizingType="HeightOnly" frame
+    // authored undersized (40pt tall) with a fill, a stroke, and an
+    // active TextWrap, holding many short paragraphs so it grows to
+    // ~10× its authored height. Frame B is a plain neighbour text
+    // frame that overlaps A's GROWN vertical band.
+    //
+    // Two visible Phase-B effects are asserted differentially against
+    // a no-autosize control (AutoSizingType absent):
+    //   (1) A's painted fill box stretches to the grown extent — the
+    //       `FillPath` for A's box is much taller with autosizing.
+    //   (2) B's text wraps around A's GROWN box, not its authored
+    //       rect — B's line breaks shift vs the control.
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+    let font = inter_font_bytes();
+    // Returns (A's painted-box height in pt, B's per-line texts).
+    let build = |auto: &str| -> (f32, Vec<String>) {
+        let buf = std::io::Cursor::new(Vec::new());
+        let mut zip = ZipWriter::new(buf);
+        let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        zip.start_file("mimetype", stored).unwrap();
+        zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+            .unwrap();
+        zip.start_file("designmap.xml", deflated).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+  <idPkg:Story src="Stories/Story_a.xml"/>
+  <idPkg:Story src="Stories/Story_b.xml"/>
+</Document>"#,
+        )
+        .unwrap();
+        // Page origin (0,0) so the page-outer transform is identity
+        // and a box `FillPath`'s transform `d` component is exactly
+        // the painted box height in pt.
+        //
+        // Frame A: authored 40pt tall (top 20, bottom 60), 180 wide,
+        // fill Black, with a BoundingBox TextWrap (no offsets). Frame
+        // B: a tall neighbour starting at y=80 that overlaps A's
+        // grown band (A grows well past y=80). B has no fill, so the
+        // only frame `FillPath` is A's box.
+        let spread = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 800 600"/>
+    <TextFrame Self="frameA" ParentStory="a" GeometricBounds="20 20 60 200" FillColor="Color/Black">
+      <Properties/>
+      <TextFramePreference{auto}/>
+      <TextWrapPreference Inverse="false" TextWrapMode="BoundingBoxTextWrap">
+        <Properties>
+          <TextWrapOffset Top="0" Left="0" Bottom="0" Right="0"/>
+        </Properties>
+      </TextWrapPreference>
+    </TextFrame>
+    <TextFrame Self="frameB" ParentStory="b" GeometricBounds="80 20 600 400"/>
+  </Spread>
+</idPkg:Spread>"#
+        );
+        zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+        zip.write_all(spread.as_bytes()).unwrap();
+        // Story A: many short paragraphs so the 40pt frame grows tall.
+        let mut story_a = String::from(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Story Self="a">"#,
+        );
+        for i in 0..14 {
+            story_a.push_str(&format!(
+                    r#"<ParagraphStyleRange><CharacterStyleRange AppliedFont="Inter" PointSize="10"><Content>Headline line {i}</Content></CharacterStyleRange></ParagraphStyleRange>"#
+                ));
+        }
+        story_a.push_str("</Story></idPkg:Story>");
+        zip.start_file("Stories/Story_a.xml", deflated).unwrap();
+        zip.write_all(story_a.as_bytes()).unwrap();
+        // Story B: one long paragraph that wraps; its lines that fall
+        // in A's grown band get carved on the left, shifting breaks.
+        let story_b = r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Story Self="b">
+    <ParagraphStyleRange Justification="LeftAlign">
+      <CharacterStyleRange AppliedFont="Inter" PointSize="11"><Content>alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega</Content></CharacterStyleRange>
+    </ParagraphStyleRange>
+  </Story>
+</idPkg:Story>"#;
+        zip.start_file("Stories/Story_b.xml", deflated).unwrap();
+        zip.write_all(story_b.as_bytes()).unwrap();
+        let bytes = zip.finish().unwrap().into_inner();
+        let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+        let options = PipelineOptions {
+            font: Some(&font),
+            collect_breaks: true,
+            ..PipelineOptions::default()
+        };
+        let built = build_document(&doc, &options).expect("build");
+        // A's painted box: the page-outer transform is identity, so
+        // the box `FillPath`'s transform is for_rect_in(rect, I) =
+        // [w, 0, 0, h, x, y]. `d` (index 3) is the box height. B has
+        // no fill, so the single frame-box FillPath is A's.
+        let box_h = built.pages[0]
+            .list
+            .commands
+            .iter()
+            .find_map(|c| match c {
+                paged_compose::DisplayCommand::FillPath { transform, .. } => Some(transform.0[3]),
+                _ => None,
+            })
+            .expect("frame A should emit a fill box");
+        // B's per-line source texts (story "b").
+        let b_lines: Vec<String> = built
+            .breaks
+            .iter()
+            .filter(|r| r.story_id == "b")
+            .map(|r| r.source_text.trim().to_string())
+            .collect();
+        (box_h, b_lines)
+    };
+
+    let (plain_box_h, plain_b_lines) = build("");
+    let (grown_box_h, grown_b_lines) =
+        build(r#" AutoSizingType="HeightOnly" AutoSizingReferencePoint="TopLeftPoint""#);
+
+    // (1) The painted box stretches to the auto-sized extent. The
+    // authored box is 40pt; with 14 lines at ~12pt leading it grows
+    // several-fold. Allow generous slack — the exact grown height is
+    // an estimate, the contract is "much taller than authored".
+    assert!(
+        (plain_box_h - 40.0).abs() < 1.0,
+        "control box should stay at its authored 40pt height, got {plain_box_h}"
+    );
+    assert!(
+        grown_box_h > plain_box_h * 2.0,
+        "autosized box should stretch well past authored: grown={grown_box_h} plain={plain_box_h}"
+    );
+
+    // (2) Neighbour text-wrap derives from the GROWN box: B's line
+    // breaks shift vs the no-autosize control. (With the control, A
+    // is only 40pt tall and ends at y=60, above B's first line at
+    // y≈80, so A's authored box barely carves B; the grown box
+    // reaches deep into B's column and re-wraps it.)
+    assert!(
+        !plain_b_lines.is_empty() && !grown_b_lines.is_empty(),
+        "both runs should lay out neighbour text"
+    );
+    assert_ne!(
+        grown_b_lines, plain_b_lines,
+        "neighbour wrap must shift with the grown box: \
+             grown={grown_b_lines:?} plain={plain_b_lines:?}"
+    );
+}
+
+#[test]
+fn autosize_phase_b_reference_point_anchors_box_growth() {
+    // W1.7 Phase B reference-point anchoring. The same growing
+    // headline frame is auto-sized under three AutoSizingReferencePoint
+    // values; the painted box's top-left (`x`,`y` baked into the box
+    // FillPath transform) moves per the pinned point:
+    //   - TopLeftPoint   → top-left pinned: x,y stay at authored.
+    //   - CenterPoint    → centre pinned: box extends up AND left.
+    //   - BottomRightPoint → bottom-right pinned: box extends up+left
+    //     by the full delta (top-left moves the most).
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+    let font = inter_font_bytes();
+    // Returns the painted box rect (x, y, w, h) for frame A.
+    let box_rect = |auto: &str| -> (f32, f32, f32, f32) {
+        let buf = std::io::Cursor::new(Vec::new());
+        let mut zip = ZipWriter::new(buf);
+        let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        zip.start_file("mimetype", stored).unwrap();
+        zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+            .unwrap();
+        zip.start_file("designmap.xml", deflated).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+  <idPkg:Story src="Stories/Story_a.xml"/>
+</Document>"#,
+        )
+        .unwrap();
+        // Authored box: 200..240 in y (40pt tall), 100..280 in x
+        // (180 wide), centred in a large page so growth in any
+        // direction stays on-page. Page origin (0,0) ⇒ identity outer.
+        let spread = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 800 600"/>
+    <TextFrame Self="frameA" ParentStory="a" GeometricBounds="200 100 240 280" FillColor="Color/Black">
+      <Properties/>
+      <TextFramePreference{auto}/>
+    </TextFrame>
+  </Spread>
+</idPkg:Spread>"#
+        );
+        zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+        zip.write_all(spread.as_bytes()).unwrap();
+        let mut story_a = String::from(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Story Self="a">"#,
+        );
+        for i in 0..12 {
+            // Each line is long enough that the longest-line width
+            // estimate exceeds the authored 180pt width, so a
+            // HeightAndWidth frame grows on BOTH axes (exercising the
+            // horizontal AND vertical reference-point split).
+            story_a.push_str(&format!(
+                    r#"<ParagraphStyleRange><CharacterStyleRange AppliedFont="Inter" PointSize="10"><Content>Supercalifragilistic headline number {i}</Content></CharacterStyleRange></ParagraphStyleRange>"#
+                ));
+        }
+        story_a.push_str("</Story></idPkg:Story>");
+        zip.start_file("Stories/Story_a.xml", deflated).unwrap();
+        zip.write_all(story_a.as_bytes()).unwrap();
+        let bytes = zip.finish().unwrap().into_inner();
+        let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+        let options = PipelineOptions {
+            font: Some(&font),
+            ..PipelineOptions::default()
+        };
+        let built = build_document(&doc, &options).expect("build");
+        built.pages[0]
+            .list
+            .commands
+            .iter()
+            .find_map(|c| match c {
+                paged_compose::DisplayCommand::FillPath { transform, .. } => {
+                    let t = transform.0;
+                    // for_rect_in(rect, I) = [w, 0, 0, h, x, y].
+                    Some((t[4], t[5], t[0], t[3]))
+                }
+                _ => None,
+            })
+            .expect("frame A should emit a fill box")
+    };
+
+    let top_left =
+        box_rect(r#" AutoSizingType="HeightAndWidth" AutoSizingReferencePoint="TopLeftPoint""#);
+    let center =
+        box_rect(r#" AutoSizingType="HeightAndWidth" AutoSizingReferencePoint="CenterPoint""#);
+    let bottom_right =
+        box_rect(r#" AutoSizingType="HeightAndWidth" AutoSizingReferencePoint="BottomRightPoint""#);
+
+    // All three fit to the SAME size (same content), differing only
+    // in where the box lands. InDesign's HeightAndWidth fit is the
+    // narrowest column no line overflows (measured 2026-09-06: every
+    // line one unbreakable fragment), so the 180 pt authored box gets
+    // NARROWER and much taller.
+    let eq = |a: f32, b: f32| (a - b).abs() < 0.01;
+    assert!(
+        eq(top_left.2, center.2) && eq(center.2, bottom_right.2),
+        "width should be identical across reference points"
+    );
+    assert!(
+        eq(top_left.3, center.3) && eq(center.3, bottom_right.3),
+        "height should be identical across reference points"
+    );
+    assert!(
+        top_left.2 < 180.0 && top_left.3 > 40.0,
+        "HeightAndWidth fits a narrow, tall column, got {}×{}",
+        top_left.2,
+        top_left.3
+    );
+
+    // TopLeft: top-left pinned at the authored (100, 200).
+    assert!(
+        eq(top_left.0, 100.0) && eq(top_left.1, 200.0),
+        "TopLeftPoint must pin the authored top-left, got ({}, {})",
+        top_left.0,
+        top_left.1
+    );
+
+    // Centre pinned ⇒ the narrower box moves right by half the width
+    // loss and the taller box extends up by half the height gain.
+    assert!(
+        eq(center.0, 190.0 - center.2 * 0.5) && eq(center.1, 220.0 - center.3 * 0.5),
+        "CenterPoint must keep the authored centre (190, 220), got ({}, {}) {}×{}",
+        center.0,
+        center.1,
+        center.2,
+        center.3
+    );
+    // The bottom-right corner stays pinned at the authored (280, 240)
+    // for the BottomRight case.
+    assert!(
+        eq(bottom_right.0 + bottom_right.2, 280.0) && eq(bottom_right.1 + bottom_right.3, 240.0),
+        "BottomRightPoint must pin the authored bottom-right corner, got ({}, {})",
+        bottom_right.0 + bottom_right.2,
+        bottom_right.1 + bottom_right.3
+    );
+}
+
+#[test]
+fn graphic_line_arrowhead_emits_fill() {
+    // A GraphicLine with a RightLineEnd arrowhead emits an extra
+    // FillPath (the arrowhead) on top of the stroked line.
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+    let count_fills = |right_line_end: &str| -> usize {
+        let buf = std::io::Cursor::new(Vec::new());
+        let mut zip = ZipWriter::new(buf);
+        let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        zip.start_file("mimetype", stored).unwrap();
+        zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+            .unwrap();
+        zip.start_file("designmap.xml", deflated).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+</Document>"#,
+        )
+        .unwrap();
+        zip.start_file("Resources/Graphic.xml", deflated).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Graphic xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Color Self="Color/Black" Space="CMYK" ColorValue="0 0 0 100"/>
+</idPkg:Graphic>"#,
+        )
+        .unwrap();
+        let spread = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 200 200"/>
+    <GraphicLine Self="gl" GeometricBounds="20 20 180 180" StrokeColor="Color/Black" StrokeWeight="3"{right_line_end}/>
+  </Spread>
+</idPkg:Spread>"#
+        );
+        zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+        zip.write_all(spread.as_bytes()).unwrap();
+        let bytes = zip.finish().unwrap().into_inner();
+        let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+        let built = build_document(&doc, &PipelineOptions::default()).expect("build");
+        built.pages[0]
+            .list
+            .commands
+            .iter()
+            .filter(|c| matches!(c, paged_compose::DisplayCommand::FillPath { .. }))
+            .count()
+    };
+    let with_arrow = count_fills(r#" RightLineEnd="TriangleHead""#);
+    let without = count_fills("");
+    assert_eq!(without, 0, "plain line draws no fill");
+    assert_eq!(with_arrow, 1, "arrowhead should add one FillPath");
+    // v43 — the canonical InDesign enumeration tokens parse and
+    // draw too, including the hollow kinds (one FillPath each: the
+    // ring is two contours in one path) and one marker per end.
+    assert_eq!(count_fills(r#" RightLineEnd="TriangleArrowHead""#), 1);
+    assert_eq!(count_fills(r#" RightLineEnd="CircleArrowHead""#), 1);
+    assert_eq!(
+        count_fills(r#" LeftLineEnd="BarbedArrowHead" RightLineEnd="SquareSolidArrowHead""#),
+        2,
+        "one marker per line end"
+    );
+}
+
+/// Build one page from `items` (spread XML for its page items) and hand
+/// back the page's display commands.
+fn c62_page_commands(items: &str) -> Vec<paged_compose::DisplayCommand> {
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+    let mut zip = ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+    zip.start_file("mimetype", stored).unwrap();
+    zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+        .unwrap();
+    zip.start_file("designmap.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+</Document>"#,
+    )
+    .unwrap();
+    zip.start_file("Resources/Graphic.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Graphic xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Color Self="Color/Black" Space="CMYK" ColorValue="0 0 0 100"/>
+</idPkg:Graphic>"#,
+    )
+    .unwrap();
+    let spread = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 400 400"/>
+    {items}
+  </Spread>
+</idPkg:Spread>"#
+    );
+    zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+    zip.write_all(spread.as_bytes()).unwrap();
+    let bytes = zip.finish().unwrap().into_inner();
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+    let built = build_document(&doc, &PipelineOptions::default()).expect("build");
+    built.pages[0].list.commands.clone()
+}
+
+/// A polygon whose `<PathGeometry>` holds `contours` — each a list of
+/// straight anchors and whether it is open.
+fn c62_polygon(attrs: &str, contours: &[(&[(f32, f32)], bool)]) -> String {
+    let mut geom = String::new();
+    for (pts, open) in contours {
+        geom.push_str(&format!(
+            r#"<GeometryPathType PathOpen="{open}"><PathPointArray>"#
+        ));
+        for (x, y) in pts.iter() {
+            geom.push_str(&format!(
+                r#"<PathPointType Anchor="{x} {y}" LeftDirection="{x} {y}" RightDirection="{x} {y}"/>"#
+            ));
+        }
+        geom.push_str("</PathPointArray></GeometryPathType>");
+    }
+    format!(
+        r#"<Polygon Self="pen" ItemTransform="1 0 0 1 0 0" FillColor="Swatch/None" StrokeColor="Color/Black" StrokeWeight="4"{attrs}><Properties><PathGeometry>{geom}</PathGeometry></Properties></Polygon>"#
+    )
+}
+
+fn c62_fills(cmds: &[paged_compose::DisplayCommand]) -> usize {
+    cmds.iter()
+        .filter(|c| matches!(c, paged_compose::DisplayCommand::FillPath { .. }))
+        .count()
+}
+
+fn c62_stroke_caps(cmds: &[paged_compose::DisplayCommand]) -> Vec<paged_compose::LineCap> {
+    cmds.iter()
+        .filter_map(|c| match c {
+            paged_compose::DisplayCommand::StrokePath { stroke, .. } => Some(stroke.cap),
+            _ => None,
+        })
+        .collect()
+}
+
+/// C-62 — a pen path (an open `<Polygon>`) draws its line ends the way
+/// a `<GraphicLine>` does: one marker per end per OPEN contour, none on
+/// a closed one.
+#[test]
+fn c62_a_pen_path_draws_its_line_ends_on_open_contours() {
+    const OPEN: &[(f32, f32)] = &[(20.0, 20.0), (100.0, 80.0), (180.0, 20.0)];
+    const OPEN_2: &[(f32, f32)] = &[(20.0, 200.0), (180.0, 200.0)];
+    const ENDS: &str = r#" LeftLineEnd="CircleSolidArrowHead" RightLineEnd="TriangleArrowHead""#;
+    let open_plain = c62_fills(&c62_page_commands(&c62_polygon("", &[(OPEN, true)])));
+    let open_ends = c62_fills(&c62_page_commands(&c62_polygon(ENDS, &[(OPEN, true)])));
+    assert_eq!(open_ends, open_plain + 2, "one marker per end");
+    let one_end = c62_fills(&c62_page_commands(&c62_polygon(
+        r#" RightLineEnd="BarbedArrowHead""#,
+        &[(OPEN, true)],
+    )));
+    assert_eq!(one_end, open_plain + 1);
+    let closed_ends = c62_fills(&c62_page_commands(&c62_polygon(ENDS, &[(OPEN, false)])));
+    let closed_plain = c62_fills(&c62_page_commands(&c62_polygon("", &[(OPEN, false)])));
+    assert_eq!(closed_ends, closed_plain, "a closed contour has no ends");
+    let compound = c62_fills(&c62_page_commands(&c62_polygon(
+        ENDS,
+        &[(OPEN, true), (OPEN_2, true)],
+    )));
+    assert_eq!(compound, open_plain + 4, "each open contour takes both");
+    // An explicit InDesign "None" draws nothing.
+    let none = c62_fills(&c62_page_commands(&c62_polygon(
+        r#" LeftLineEnd="None" RightLineEnd="None""#,
+        &[(OPEN, true)],
+    )));
+    assert_eq!(none, open_plain);
+}
+
+/// C-62 — `EndCap` reaches the stroke on a pen path, a line and an
+/// ellipse (where it shapes the dash ends); absent it is the butt cap.
+#[test]
+fn c62_end_cap_reaches_the_stroke_on_every_path_kind() {
+    use paged_compose::LineCap;
+    const OPEN: &[(f32, f32)] = &[(20.0, 20.0), (100.0, 80.0), (180.0, 20.0)];
+    let caps = |items: String| c62_stroke_caps(&c62_page_commands(&items));
+    assert_eq!(
+        caps(c62_polygon(r#" EndCap="RoundEndCap""#, &[(OPEN, true)])),
+        vec![LineCap::Round]
+    );
+    assert_eq!(
+        caps(c62_polygon(
+            r#" EndCap="ProjectingEndCap""#,
+            &[(OPEN, true)]
+        )),
+        vec![LineCap::Square]
+    );
+    assert_eq!(caps(c62_polygon("", &[(OPEN, true)])), vec![LineCap::Butt]);
+    assert_eq!(
+        caps(
+            r#"<GraphicLine Self="gl" GeometricBounds="20 20 180 180" StrokeColor="Color/Black" StrokeWeight="3" EndCap="RoundEndCap"/>"#
+                .to_string()
+        ),
+        vec![LineCap::Round]
+    );
+    // A dashed outline is drawn as its fitted pieces (corners and side
+    // dashes, `paged_compose::dash_fit`); the cap shapes every one.
+    let oval = caps(
+        r#"<Oval Self="ov" ItemTransform="1 0 0 1 0 0" GeometricBounds="20 20 180 180" FillColor="Swatch/None" StrokeColor="Color/Black" StrokeWeight="3" StrokeType="StrokeStyle/$ID/Dashed" EndCap="RoundEndCap"/>"#
+            .to_string(),
+    );
+    assert!(
+        !oval.is_empty() && oval.iter().all(|c| *c == LineCap::Round),
+        "{oval:?}"
+    );
+    assert_eq!(oval.len(), 2, "corners and dashes");
+}
+
+#[test]
+fn corner_rect_path_shapes_per_kind() {
+    use paged_compose::PathSegment::{CubicTo, LineTo};
+    use paged_model::CornerOption;
+    let rect = paged_compose::Rect {
+        x: 0.0,
+        y: 0.0,
+        w: 100.0,
+        h: 100.0,
+    };
+    let radii = [Some(20.0); 4];
+    let segs = |kind| corner_rect_path(rect, radii, [kind; 4]).segments;
+    let cubics = |kind| {
+        segs(kind)
+            .iter()
+            .filter(|s| matches!(s, CubicTo { .. }))
+            .count()
+    };
+    let lines = |kind| {
+        segs(kind)
+            .iter()
+            .filter(|s| matches!(s, LineTo { .. }))
+            .count()
+    };
+    // Rounded / Inverse: one quarter-arc cubic per corner. Inverse
+    // is the smooth concave indentation (distinct from Inset's
+    // sharp fold-in below).
+    assert_eq!(cubics(CornerOption::Rounded), 4);
+    assert_eq!(cubics(CornerOption::Inverse), 4);
+    // Bevel: straight chamfers — no cubics. Four corners + four
+    // edges ⇒ 8 LineTos.
+    assert_eq!(cubics(CornerOption::Bevel), 0);
+    assert_eq!(lines(CornerOption::Bevel), 8);
+    // Inset: InDesign's sharp "fold-in" notch — no cubics, two
+    // LineTos per corner (in to `m`, back out) ⇒ strictly more line
+    // segments than Bevel's single chamfer per corner. Distinct
+    // from Inverse (calibrated + verified distinct in W1.8).
+    assert_eq!(cubics(CornerOption::Inset), 0);
+    assert!(
+        lines(CornerOption::Inset) > lines(CornerOption::Bevel),
+        "inset fold-in adds an extra line segment per corner vs bevel"
+    );
+    // Fancy: the ornamental three-arc scallop — three cubics per
+    // corner (calibrated; was a two-cubic ogee before W1.8).
+    assert_eq!(cubics(CornerOption::Fancy), 12);
+    // None / zero radius: sharp corners, no cubics.
+    assert_eq!(cubics(CornerOption::None), 0);
+}
+
+#[test]
+fn inset_and_inverse_corners_are_distinct_geometry() {
+    // W1.8 regression guard: InDesign's Inset (sharp fold-in) and
+    // Inverse Rounded (smooth concave arc) must NOT collapse onto
+    // the same path. A naive "Inset = quarter-circle cut inward"
+    // implementation made them byte-identical.
+    use paged_model::CornerOption;
+    let rect = paged_compose::Rect {
+        x: 0.0,
+        y: 0.0,
+        w: 80.0,
+        h: 60.0,
+    };
+    let inverse = corner_rect_path(rect, [Some(15.0); 4], [CornerOption::Inverse; 4]);
+    let inset = corner_rect_path(rect, [Some(15.0); 4], [CornerOption::Inset; 4]);
+    assert_ne!(
+        inverse.segments, inset.segments,
+        "Inset and Inverse Rounded must render as distinct shapes"
+    );
+}
+
+#[test]
+fn corner_rect_path_every_option_emits_closed_continuous_geometry() {
+    // W1.8: all five IDML corner options must emit geometry (a
+    // non-degenerate, closed, continuous contour). Verifies segment
+    // counts AND that the path's drawn vertices stay inside the
+    // rect's bounds with no NaNs — the regression guard for the
+    // Inset / Fancy calibration.
+    use paged_compose::PathSegment;
+    use paged_model::CornerOption;
+    let rect = paged_compose::Rect {
+        x: 10.0,
+        y: 20.0,
+        w: 120.0,
+        h: 80.0,
+    };
+    let r = 18.0_f32;
+    for kind in [
+        CornerOption::Rounded,
+        CornerOption::Inverse,
+        CornerOption::Bevel,
+        CornerOption::Inset,
+        CornerOption::Fancy,
+    ] {
+        let path = corner_rect_path(rect, [Some(r); 4], [kind; 4]);
+        let segs = &path.segments;
+        // Starts with a MoveTo, ends with a Close.
+        assert!(
+            matches!(segs.first(), Some(PathSegment::MoveTo { .. })),
+            "{kind:?}: must open with MoveTo"
+        );
+        assert!(
+            matches!(segs.last(), Some(PathSegment::Close)),
+            "{kind:?}: must end Close"
+        );
+        // Walk the contour tracking the current point; every drawn
+        // endpoint and control point must be finite and inside the
+        // rect's AABB (corner effects only ever cut *inward*, never
+        // outside the bounding box). A square notch / scallop / arc
+        // that escaped the box would signal a miscomputed corner.
+        let inside = |x: f32, y: f32| -> bool {
+            x.is_finite()
+                && y.is_finite()
+                && x >= rect.x - 0.01
+                && x <= rect.x + rect.w + 0.01
+                && y >= rect.y - 0.01
+                && y <= rect.y + rect.h + 0.01
+        };
+        let mut start: Option<(f32, f32)> = None;
+        let mut cur = (0.0_f32, 0.0_f32);
+        for s in segs {
+            match s {
+                PathSegment::MoveTo { x, y } => {
+                    assert!(inside(*x, *y), "{kind:?}: MoveTo escapes box");
+                    start = Some((*x, *y));
+                    cur = (*x, *y);
+                }
+                PathSegment::LineTo { x, y } => {
+                    assert!(inside(*x, *y), "{kind:?}: LineTo escapes box");
+                    cur = (*x, *y);
+                }
+                PathSegment::CubicTo {
+                    cx1,
+                    cy1,
+                    cx2,
+                    cy2,
+                    x,
+                    y,
+                } => {
+                    for (px, py) in [(*cx1, *cy1), (*cx2, *cy2), (*x, *y)] {
+                        assert!(inside(px, py), "{kind:?}: cubic point escapes box");
+                    }
+                    cur = (*x, *y);
+                }
+                PathSegment::QuadTo { cx, cy, x, y } => {
+                    for (px, py) in [(*cx, *cy), (*x, *y)] {
+                        assert!(inside(px, py), "{kind:?}: quad point escapes box");
+                    }
+                    cur = (*x, *y);
+                }
+                PathSegment::Close => {
+                    // Closing back to the contour start; the current
+                    // point should already be (approximately) the
+                    // start of the top edge's outgoing point.
+                    if let Some(s0) = start {
+                        let d = (cur.0 - s0.0).hypot(cur.1 - s0.1);
+                        // The walk ends at TL's p_out, which is the
+                        // very point MoveTo emitted — continuity.
+                        assert!(d < 1e-3, "{kind:?}: contour not continuous (gap {d})");
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn inset_corner_folds_in_to_the_rounding_centre() {
+    // W1.8 Inset shape: each corner steps in to the inner rounding
+    // centre `m` (the "fold-in" apex) then back out to the outgoing
+    // edge. We check the top-left corner of a square: its apex must
+    // land at `m = (r, r)` and the segment endpoints on the edges at
+    // `(0, r)` (incoming) and `(r, 0)` (outgoing).
+    use paged_compose::PathSegment::LineTo;
+    use paged_model::CornerOption;
+    let rect = paged_compose::Rect {
+        x: 0.0,
+        y: 0.0,
+        w: 100.0,
+        h: 100.0,
+    };
+    let r = 25.0_f32;
+    let path = corner_rect_path(rect, [Some(r); 4], [CornerOption::Inset; 4]);
+    // The contour walks TR, BR, BL, then TL last. The final two
+    // LineTos belong to TL: the fold-in apex `m = (r, r)` then the
+    // outgoing point `p_out = (r, 0)` on the top edge.
+    let line_pts: Vec<(f32, f32)> = path
+        .segments
+        .iter()
+        .filter_map(|s| match s {
+            LineTo { x, y } => Some((*x, *y)),
+            _ => None,
+        })
+        .collect();
+    let n = line_pts.len();
+    assert!(n >= 2, "inset emits fold-in LineTos");
+    // Last LineTo = TL p_out on the top edge at (r, 0).
+    let p_out = line_pts[n - 1];
+    assert!(
+        (p_out.0 - r).abs() < 1e-3 && p_out.1.abs() < 1e-3,
+        "TL p_out at {p_out:?}"
+    );
+    // Second-to-last = the fold-in apex at m = (r, r).
+    let apex = line_pts[n - 2];
+    assert!(
+        (apex.0 - r).abs() < 1e-3 && (apex.1 - r).abs() < 1e-3,
+        "TL fold-in apex at {apex:?}, expected ({r}, {r})"
+    );
+}
+
+#[test]
+fn midpoint_blend_curve() {
+    // Default midpoint is exactly linear.
+    assert!((midpoint_blend(0.3, 0.5) - 0.3).abs() < 1e-6);
+    // At t == mid, the colour-blend fraction is exactly 0.5.
+    assert!((midpoint_blend(0.25, 0.25) - 0.5).abs() < 1e-4);
+    assert!((midpoint_blend(0.75, 0.75) - 0.5).abs() < 1e-4);
+    // A 0.25 midpoint pushes the colour past halfway by the time
+    // geometry reaches t == 0.5.
+    assert!(midpoint_blend(0.5, 0.25) > 0.5);
+    // Endpoints are fixed regardless of midpoint.
+    assert!((midpoint_blend(0.0, 0.25)).abs() < 1e-6);
+    assert!((midpoint_blend(1.0, 0.25) - 1.0).abs() < 1e-6);
+}
+
+#[test]
+fn color_lerp_midpoint_is_average() {
+    let black = paged_compose::Color::rgba(0.0, 0.0, 0.0, 1.0);
+    let white = paged_compose::Color::rgba(1.0, 1.0, 1.0, 1.0);
+    let mid = color_lerp(black, white, 0.5);
+    assert!((mid.r - 0.5).abs() < 1e-6 && (mid.g - 0.5).abs() < 1e-6);
+}
+
+#[test]
+fn section_walk_applies_prefix() {
+    use paged_model::{NumberingStyle, Section};
+    let sections = vec![Section {
+        self_id: "sec".into(),
+        page_start: Some("p1".into()),
+        continue_numbering: false,
+        start_at: Some(1),
+        numbering_style: NumberingStyle::Arabic,
+        section_prefix: Some("A-".into()),
+        marker: None,
+        include_prefix: true,
+    }];
+    let mut w = SectionWalk::new(&sections);
+    assert_eq!(w.next_label(Some("p1"), None), "A-1");
+    assert_eq!(w.next_label(Some("p2"), None), "A-2");
+}
+
+#[test]
+fn vertical_writing_rotates_emitted_commands() {
+    // Build a story with StoryDirection="VerticalWritingDirection".
+    // After build, every command that landed on the host page
+    // should have a rotated transform (90° CW). We detect this
+    // by checking the `b` and `c` cells of the transform — for
+    // upright transforms b=0; after a 90° CW rotation b=1 (the
+    // first column becomes [0, 1]). Identity → rotated proves
+    // the post-pass fired.
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+
+    let buf = std::io::Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(buf);
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+
+    zip.start_file("mimetype", stored).unwrap();
+    zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+        .unwrap();
+    zip.start_file("designmap.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+  <idPkg:Story src="Stories/Story_s1.xml"/>
+</Document>"#,
+    )
+    .unwrap();
+    zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 200 200"/>
+    <TextFrame Self="frameA" ParentStory="s1" GeometricBounds="20 20 180 180"/>
+  </Spread>
+</idPkg:Spread>"#,
+    )
+    .unwrap();
+    zip.start_file("Stories/Story_s1.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Story Self="s1" StoryDirection="VerticalWritingDirection">
+    <ParagraphStyleRange>
+      <CharacterStyleRange AppliedFont="Inter" PointSize="12">
+        <Content>ABC</Content>
+      </CharacterStyleRange>
+    </ParagraphStyleRange>
+  </Story>
+</idPkg:Story>"#,
+    )
+    .unwrap();
+    let bytes = zip.finish().unwrap().into_inner();
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+
+    let font_bytes = std::fs::read(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../corpus/fonts/Inter.ttf"),
+    )
+    .expect("Inter.ttf fixture");
+    let options = PipelineOptions {
+        font: Some(&font_bytes),
+        ..PipelineOptions::default()
+    };
+    let built = build_document(&doc, &options).expect("build");
+
+    // At least one command on the page should have a rotated
+    // transform. Identity transform = [1, 0, 0, 1, tx, ty];
+    // after 90° CW the linear part becomes [0, 1, -1, 0, ...].
+    // Glyph FillPath commands have transforms like
+    // [scale, 0, 0, scale, tx, ty] with scale ≈ 12/units_per_em.
+    // After 90° CW rotation: new linear = [0, scale, -scale, 0].
+    // The test detects "a became zero" + "b became non-zero" —
+    // any threshold > 0 catches it.
+    let mut owned = built.pages[0].list.commands.clone();
+    let mut saw_any = false;
+    let mut saw_rotated = false;
+    for cmd in owned.iter_mut() {
+        let xf = cmd.transform_mut();
+        saw_any = true;
+        // Rotated: a near 0, b non-zero. Pre-rotation: a non-zero, b near 0.
+        if xf.0[0].abs() < 1e-3 && xf.0[1].abs() > 1e-4 {
+            saw_rotated = true;
+            break;
+        }
+    }
+    assert!(saw_any, "expected at least one command on the page");
+    assert!(
+        saw_rotated,
+        "vertical-writing post-rotation should have rotated at least one command"
+    );
+}
+
+#[test]
+fn ruby_annotation_emits_above_base_run() {
+    // Ruby "abc" over "ABC": under a Japanese composer the renderer shapes
+    // the ruby at half size above the base run (3 glyphs + 3 ruby glyphs);
+    // under InDesign's default composer it sets none, as InDesign does.
+    let ruby = r#"RubyFlag="1" RubyString="abc""#;
+    let japanese = cjk_decoration_commands(Some("HL Composer J"), ruby);
+    assert!(
+        japanese >= 6,
+        "expected base + ruby glyphs (>=6 cmds), got {japanese}"
+    );
+    assert_eq!(
+        cjk_decoration_commands(None, ruby),
+        cjk_decoration_commands(None, ""),
+        "no ruby under the Paragraph Composer"
+    );
+    assert_eq!(
+        cjk_decoration_commands(Some("HL Composer Optyca"), ruby),
+        cjk_decoration_commands(Some("HL Composer Optyca"), ""),
+        "no ruby under the World-Ready Composer"
+    );
+}
+
+#[test]
+fn kenten_marks_emit_above_each_glyph() {
+    // `KentenKind` on "ABC": one mark per glyph under a Japanese composer
+    // (single-line too); none under the default composer.
+    let kenten = r#"KentenKind="KentenSesameDot""#;
+    for composer in ["HL Composer J", "HL Single J"] {
+        let marked = cjk_decoration_commands(Some(composer), kenten);
+        assert!(
+            marked >= 6,
+            "{composer}: expected glyphs + 3 kenten marks (>=6 cmds), got {marked}"
+        );
+    }
+    assert_eq!(
+        cjk_decoration_commands(None, kenten),
+        cjk_decoration_commands(None, ""),
+        "no kenten under the Paragraph Composer"
+    );
+}
+
+/// Display-list commands for one 12 pt "ABC" paragraph under `composer`,
+/// its run carrying `char_attrs` (ruby, kenten, …). InDesign 20.0.1 sets
+/// ruby and kenten only under its Japanese composers
+/// (tools/indesign-export/cjk-composer-probe).
+fn cjk_decoration_commands(composer: Option<&str>, char_attrs: &str) -> usize {
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+
+    let buf = std::io::Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(buf);
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+    zip.start_file("mimetype", stored).unwrap();
+    zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+        .unwrap();
+    zip.start_file("designmap.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+  <idPkg:Story src="Stories/Story_s1.xml"/>
+</Document>"#,
+    )
+    .unwrap();
+    zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 200 612"/>
+    <TextFrame Self="frameA" ParentStory="s1" GeometricBounds="40 40 180 572"/>
+  </Spread>
+</idPkg:Spread>"#,
+    )
+    .unwrap();
+    let composer = composer
+        .map(|c| format!(r#" Composer="{c}""#))
+        .unwrap_or_default();
+    let story = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Story Self="s1">
+    <ParagraphStyleRange{composer}>
+      <CharacterStyleRange AppliedFont="Inter" PointSize="12" {char_attrs}>
+        <Content>ABC</Content>
+      </CharacterStyleRange>
+    </ParagraphStyleRange>
+  </Story>
+</idPkg:Story>"#
+    );
+    zip.start_file("Stories/Story_s1.xml", deflated).unwrap();
+    zip.write_all(story.as_bytes()).unwrap();
+    let bytes = zip.finish().unwrap().into_inner();
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+    let font_bytes = std::fs::read(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../corpus/fonts/Inter.ttf"),
+    )
+    .expect("Inter.ttf fixture");
+    let options = PipelineOptions {
+        font: Some(&font_bytes),
+        ..PipelineOptions::default()
+    };
+    let built = build_document(&doc, &options).expect("build");
+    built.pages[0].list.commands.len()
+}
+
+#[test]
+fn footnotes_are_captured_onto_their_host_page() {
+    // Build an IDML with a body paragraph that anchors two
+    // footnotes. After running the pipeline, the page that
+    // hosts the body paragraph should carry both footnotes with
+    // per-page running numbers 1 and 2.
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+
+    let buf = std::io::Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(buf);
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+
+    zip.start_file("mimetype", stored).unwrap();
+    zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+        .unwrap();
+    zip.start_file("designmap.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+  <idPkg:Story src="Stories/Story_s1.xml"/>
+</Document>"#,
+    )
+    .unwrap();
+    zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 400 612"/>
+    <TextFrame Self="frameA" ParentStory="s1" GeometricBounds="40 40 380 572"/>
+  </Spread>
+</idPkg:Spread>"#,
+    )
+    .unwrap();
+    zip.start_file("Stories/Story_s1.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Story Self="s1">
+    <ParagraphStyleRange>
+      <CharacterStyleRange AppliedFont="Inter" PointSize="12">
+        <Content>Anchor host body.</Content>
+        <Footnote Self="Footnote/fn1">
+          <ParagraphStyleRange>
+            <CharacterStyleRange>
+              <Content>First footnote.</Content>
+            </CharacterStyleRange>
+          </ParagraphStyleRange>
+        </Footnote>
+        <Footnote Self="Footnote/fn2">
+          <ParagraphStyleRange>
+            <CharacterStyleRange>
+              <Content>Second footnote.</Content>
+            </CharacterStyleRange>
+          </ParagraphStyleRange>
+        </Footnote>
+      </CharacterStyleRange>
+    </ParagraphStyleRange>
+  </Story>
+</idPkg:Story>"#,
+    )
+    .unwrap();
+    let bytes = zip.finish().unwrap().into_inner();
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+
+    let font_bytes = std::fs::read(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../corpus/fonts/Inter.ttf"),
+    )
+    .expect("Inter.ttf fixture");
+    let options = PipelineOptions {
+        font: Some(&font_bytes),
+        ..PipelineOptions::default()
+    };
+    let built = build_document(&doc, &options).expect("build");
+    assert_eq!(built.pages.len(), 1);
+    let footnotes = &built.pages[0].footnotes;
+    assert_eq!(footnotes.len(), 2);
+    assert_eq!(footnotes[0].number, 1);
+    assert_eq!(
+        footnotes[0].footnote_self_id.as_deref(),
+        Some("Footnote/fn1")
+    );
+    assert_eq!(footnotes[1].number, 2);
+    assert_eq!(
+        footnotes[1].footnote_self_id.as_deref(),
+        Some("Footnote/fn2")
+    );
+    // Footnote bodies preserved verbatim.
+    assert_eq!(footnotes[0].paragraphs[0].runs[0].text, "First footnote.");
+    assert_eq!(footnotes[1].paragraphs[0].runs[0].text, "Second footnote.");
+
+    // Phase 5 footnote pool: the post-pass should have laid out
+    // the two footnotes as glyphs at the bottom of frameA.
+    // The body alone contributes ~17 glyphs ("Anchor host
+    // body."). With the pool emit firing, total commands grow
+    // by the two footnote bodies' glyph counts; we assert a
+    // floor of 40 to confirm pool emission happened without
+    // pinning the exact glyph count (which depends on the
+    // shaper's ligature decisions for the fallback font).
+    let cmd_count = built.pages[0].list.commands.len();
+    assert!(
+        cmd_count >= 40,
+        "expected footnote pool glyphs in display list (≥40), got {cmd_count}"
+    );
+}
+
+/// A paragraph split at a forced line break (`<Br/>`) is emitted piece by
+/// piece; its footnotes are still set, numbered through the story, once
+/// each.
+#[test]
+fn footnotes_survive_a_forced_line_break_in_their_paragraph() {
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+
+    let mut zip = ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+    let mut file = |name: &str, body: &str, opts| {
+        zip.start_file(name, opts).unwrap();
+        zip.write_all(body.as_bytes()).unwrap();
+    };
+    file(
+        "mimetype",
+        "application/vnd.adobe.indesign-idml-package",
+        stored,
+    );
+    file(
+        "designmap.xml",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+  <idPkg:Story src="Stories/Story_s1.xml"/>
+</Document>"#,
+        deflated,
+    );
+    file(
+        "Spreads/Spread_sp1.xml",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 400 612"/>
+    <TextFrame Self="frameA" ParentStory="s1" GeometricBounds="40 40 380 572"/>
+  </Spread>
+</idPkg:Spread>"#,
+        deflated,
+    );
+    file(
+        "Stories/Story_s1.xml",
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Story Self="s1">
+    <ParagraphStyleRange>
+      <CharacterStyleRange AppliedFont="Inter" PointSize="12">
+        <Content>First line of the host.</Content>
+        <Br/>
+        <Content>Second line of the host.</Content>
+        <Footnote Self="Footnote/fn1">
+          <ParagraphStyleRange>
+            <CharacterStyleRange>
+              <Content>The only footnote.</Content>
+            </CharacterStyleRange>
+          </ParagraphStyleRange>
+        </Footnote>
+      </CharacterStyleRange>
+    </ParagraphStyleRange>
+  </Story>
+</idPkg:Story>"#,
+        deflated,
+    );
+    let bytes = zip.finish().unwrap().into_inner();
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+    let font_bytes = inter_font_bytes();
+    let options = PipelineOptions {
+        font: Some(&font_bytes),
+        ..PipelineOptions::default()
+    };
+    let built = build_document(&doc, &options).expect("build");
+    let notes: Vec<_> = built.pages.iter().flat_map(|p| &p.footnotes).collect();
+    assert_eq!(notes.len(), 1, "the split paragraph's footnote is set once");
+    assert_eq!(notes[0].number, 1);
+    assert_eq!(notes[0].footnote_self_id.as_deref(), Some("Footnote/fn1"));
+}
+
+/// W1.7 — shared fixture for the footnote space-reservation tests:
+/// a SHORT frame whose body paragraph anchors `footnote_count`
+/// footnotes, each with a long body so the accumulated pool is a
+/// meaningful fraction of the frame height. `with_footnotes=false`
+/// produces the identical body with the footnotes stripped — the
+/// regression control.
+/// The references stand after the FIRST sentence: a note is set at the foot of
+/// the frame holding its reference's line and never pushes that line out
+/// (bee1e5d1, 4fa49151), so the pool can only push the text after it.
+fn footnote_reserve_idml(footnote_count: usize, with_footnotes: bool) -> Vec<u8> {
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+
+    let buf = std::io::Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(buf);
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+
+    zip.start_file("mimetype", stored).unwrap();
+    zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+        .unwrap();
+    zip.start_file("designmap.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+  <idPkg:Story src="Stories/Story_s1.xml"/>
+</Document>"#,
+    )
+    .unwrap();
+    zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+    // Short frame: 120pt tall (top 40, bottom 160), 232pt wide.
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 300 612"/>
+    <TextFrame Self="frameA" ParentStory="s1" GeometricBounds="40 40 160 272"/>
+  </Spread>
+</idPkg:Spread>"#,
+    )
+    .unwrap();
+
+    let mut footnotes_xml = String::new();
+    if with_footnotes {
+        for i in 0..footnote_count {
+            footnotes_xml.push_str(&format!(
+                    r#"<Footnote Self="Footnote/fn{i}">
+          <ParagraphStyleRange>
+            <CharacterStyleRange>
+              <Content>Footnote body number {i} runs long enough to wrap across several lines in the narrow pool column at the bottom of the host frame.</Content>
+            </CharacterStyleRange>
+          </ParagraphStyleRange>
+        </Footnote>"#
+                ));
+        }
+    }
+    let story = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Story Self="s1">
+    <ParagraphStyleRange>
+      <CharacterStyleRange AppliedFont="Inter" PointSize="12">
+        <Content>Body line one of the host paragraph.</Content>
+        {footnotes_xml}
+        <Content> Body line two continues the host text. Body line three keeps the frame filled so the footnote pool must reserve space and push these lines upward.</Content>
+      </CharacterStyleRange>
+    </ParagraphStyleRange>
+  </Story>
+</idPkg:Story>"#
+    );
+    zip.start_file("Stories/Story_s1.xml", deflated).unwrap();
+    zip.write_all(story.as_bytes()).unwrap();
+    zip.finish().unwrap().into_inner()
+}
+
+/// ADR 027 plan step 2 — the reservation pass measures only the chain's
+/// own pages. That is exact because a pool depends on its own page alone:
+/// measuring each page by itself yields the same map as measuring them all.
+#[test]
+fn footnote_pools_measured_per_page_equal_the_whole_document() {
+    let bytes = paged_gen::write_idml(&paged_gen::samples::footnotes::build()).expect("idml");
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+    let font_bytes = inter_font_bytes();
+    let options = PipelineOptions {
+        font: Some(&font_bytes),
+        ..PipelineOptions::default()
+    };
+    let built = build_document(&doc, &options).expect("build");
+    let with_notes = built
+        .pages
+        .iter()
+        .filter(|p| !p.footnotes.is_empty())
+        .count();
+    assert!(with_notes >= 1, "the fixture captures footnotes");
+    let font_table = FontTable::build(&doc, &options);
+    let measure = |pages: &[usize]| {
+        measure_footnote_pools(
+            &built.pages,
+            pages,
+            &options,
+            &doc,
+            &font_table,
+            &paged_text::Hyphenators::new(),
+            &doc.palette,
+            ColorCtx::default(),
+        )
+    };
+    let all: Vec<usize> = (0..built.pages.len()).collect();
+    let whole = measure(&all);
+    let mut per_page = std::collections::HashMap::new();
+    for p in 0..built.pages.len() {
+        let one = measure(&[p]);
+        assert!(
+            one.keys().all(|k| k.0 == p),
+            "page {p} measures only itself"
+        );
+        per_page.extend(one);
+    }
+    assert!(!whole.is_empty());
+    assert_eq!(whole, per_page);
+    assert!(measure(&[]).is_empty(), "no pages, no pools");
+}
+
+#[test]
+fn footnote_pool_reserves_space_below_body_text() {
+    // W1.7 (a): with the reservation pass, NO body line's baseline
+    // may fall inside the band the footnote pool occupies
+    // (frame content bottom − pool height). Before W1.7 the pool
+    // was a pure overlay and body lines ran straight through it.
+    let bytes = footnote_reserve_idml(3, true);
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+    let font_bytes = inter_font_bytes();
+    let options = PipelineOptions {
+        font: Some(&font_bytes),
+        ..PipelineOptions::default()
+    };
+    let built = build_document(&doc, &options).expect("build");
+    assert_eq!(built.pages.len(), 1);
+
+    // The pool must actually exist for this assertion to bite.
+    assert!(
+        !built.pages[0].footnotes.is_empty(),
+        "fixture should capture footnotes"
+    );
+    let font_table = FontTable::build(&doc, &options);
+    let pools = measure_footnote_pools(
+        &built.pages,
+        &[0],
+        &options,
+        &doc,
+        &font_table,
+        &paged_text::Hyphenators::new(),
+        &doc.palette,
+        ColorCtx::default(),
+    );
+    let pool_h: f32 = pools.values().copied().fold(0.0, f32::max);
+    assert!(pool_h > 0.0, "expected a measurable footnote pool height");
+
+    // Frame content area: top 40, height 120 (no insets) ⇒ bottom
+    // at page-local y = 160. The reserved band starts at
+    // bottom − pool_h; every kept body line's baseline sits at or
+    // above it (a small epsilon absorbs the rounding the overflow
+    // check does in 1/64-pt units).
+    let content_bottom_pt = 160.0_f32;
+    let reserved_top_pt = content_bottom_pt - pool_h;
+    let body_baselines: Vec<f32> = built.pages[0]
+        .story_layout
+        .iter()
+        .filter(|l| l.story_id == "s1")
+        .map(|l| l.baseline_y_pt)
+        .collect();
+    assert!(
+        !body_baselines.is_empty(),
+        "expected body lines in the layout index"
+    );
+    let max_baseline = body_baselines.iter().copied().fold(0.0, f32::max);
+    assert!(
+        max_baseline <= reserved_top_pt + 0.5,
+        "body baseline {max_baseline:.2}pt intrudes into the reserved \
+             footnote band (starts at {reserved_top_pt:.2}pt, pool {pool_h:.2}pt)"
+    );
+}
+
+#[test]
+fn footnote_reserve_loop_converges_and_pushes_text_up() {
+    // W1.7 (b): the compose→measure→re-compose loop terminates
+    // (build returns Ok, i.e. it didn't spin past the bail cap), and
+    // the reservation demonstrably moved body text — the
+    // footnote-bearing build keeps FEWER body lines on the page than
+    // the same body with footnotes stripped, because the pool ate
+    // the bottom of the frame.
+    let font_bytes = inter_font_bytes();
+    let options = PipelineOptions {
+        font: Some(&font_bytes),
+        ..PipelineOptions::default()
+    };
+
+    let with_doc =
+        idml_import::import_idml_doc(&footnote_reserve_idml(3, true)).expect("open with");
+    let with_built = build_document(&with_doc, &options).expect("build with footnotes");
+
+    let without_doc =
+        idml_import::import_idml_doc(&footnote_reserve_idml(3, false)).expect("open without");
+    let without_built = build_document(&without_doc, &options).expect("build without");
+
+    let count_body = |b: &BuiltDocument| {
+        b.pages[0]
+            .story_layout
+            .iter()
+            .filter(|l| l.story_id == "s1")
+            .count()
+    };
+    let with_lines = count_body(&with_built);
+    let without_lines = count_body(&without_built);
+    assert!(
+        with_lines < without_lines,
+        "reservation should keep fewer body lines on the page \
+             (with footnotes: {with_lines}, without: {without_lines})"
+    );
+}
+
+#[test]
+fn no_footnote_frame_is_byte_identical() {
+    // W1.7 (c) regression guard: a story with no footnotes must
+    // take the pass-0 early break (no rollback, no re-emit), so its
+    // display list is identical to the pre-W1.7 single-pass emit.
+    // We can't diff against old code in-process, so we assert (1)
+    // the build is deterministic across two runs, and (2) it emits
+    // ZERO footnote-pool commands — i.e. the reservation machinery
+    // left the page untouched. The display-list command count is
+    // the golden; update the comment here if a legitimate emit
+    // change shifts it.
+    let font_bytes = inter_font_bytes();
+    let options = PipelineOptions {
+        font: Some(&font_bytes),
+        ..PipelineOptions::default()
+    };
+    let bytes = footnote_reserve_idml(0, false);
+
+    let doc_a = idml_import::import_idml_doc(&bytes).expect("open a");
+    let built_a = build_document(&doc_a, &options).expect("build a");
+    let doc_b = idml_import::import_idml_doc(&bytes).expect("open b");
+    let built_b = build_document(&doc_b, &options).expect("build b");
+
+    assert!(
+        built_a.pages[0].footnotes.is_empty(),
+        "no-footnote fixture must capture zero footnotes"
+    );
+    // Deterministic command count across runs — the reservation
+    // loop is a no-op here, so nothing perturbs the display list.
+    assert_eq!(
+        built_a.pages[0].list.commands.len(),
+        built_b.pages[0].list.commands.len(),
+        "no-footnote build must be deterministic (reservation loop \
+             must not run for a footnote-free story)"
+    );
+    // No FootnoteOverflow / pool diagnostics leaked in.
+    assert!(
+        built_a
+            .diagnostics
+            .items
+            .iter()
+            .all(|d| d.code != DiagnosticCode::FootnoteOverflow),
+        "no-footnote build must not emit footnote diagnostics"
+    );
+}
+
+#[test]
+fn index_paragraphs_write_indesigns_default_index() {
+    // Construct a Document by parsing a small IDML so we exercise
+    // the full resolve_index → build path. Reusing the parser
+    // here is far cheaper than a hand-rolled Document.
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+
+    let buf = std::io::Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(buf);
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+
+    zip.start_file("mimetype", stored).unwrap();
+    zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+        .unwrap();
+    zip.start_file("designmap.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+  <idPkg:Story src="Stories/Story_s1.xml"/>
+</Document>"#,
+    )
+    .unwrap();
+    zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 200 200"/>
+    <TextFrame Self="f1" ParentStory="s1" GeometricBounds="10 10 190 190"/>
+  </Spread>
+</idPkg:Spread>"#,
+    )
+    .unwrap();
+    zip.start_file("Stories/Story_s1.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Story Self="s1">
+    <ParagraphStyleRange>
+      <CharacterStyleRange>
+        <Content>The apple is red.</Content>
+        <PageReference Self="PR1" TopicName="Apple"/>
+      </CharacterStyleRange>
+    </ParagraphStyleRange>
+  </Story>
+</idPkg:Story>"#,
+    )
+    .unwrap();
+    let bytes = zip.finish().unwrap().into_inner();
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+
+    let page_labels = vec!["1".to_string()];
+    let entries = doc.resolve_index_tree_on(&Default::default());
+    let paragraphs = index_paragraphs(None, entries, &page_labels);
+    let texts: Vec<String> = paragraphs
+        .iter()
+        .map(|p| p.runs.iter().map(|r| r.text.as_str()).collect())
+        .collect();
+    // InDesign's default index (ADR 168): the title, the section's
+    // letter, the topic and its page behind two spaces.
+    assert_eq!(texts, ["Index", "A", "Apple  1"]);
+    assert_eq!(
+        paragraphs[2].paragraph_style.as_deref(),
+        Some("ParagraphStyle/$ID/Index Level 1")
+    );
+}
+
+/// path and decode at native size via `image::load_from_memory`.
+#[test]
+fn track_1a_small_jpeg_keeps_native_dimensions() {
+    use image::{ImageBuffer, ImageFormat, Rgb};
+    use std::io::Cursor;
+    let src: ImageBuffer<Rgb<u8>, Vec<u8>> = ImageBuffer::from_fn(128, 96, |x, y| {
+        Rgb([
+            (x & 0xFF) as u8,
+            (y & 0xFF) as u8,
+            ((x.wrapping_add(y)) & 0xFF) as u8,
+        ])
+    });
+    let mut buf: Vec<u8> = Vec::new();
+    src.write_to(&mut Cursor::new(&mut buf), ImageFormat::Jpeg)
+        .expect("encode JPEG");
+    let decoded = decode_image_bytes_with_target_max(&buf, 4096).expect("small JPEG decode");
+    assert_eq!(decoded.width, 128);
+    assert_eq!(decoded.height, 96);
+}
+
+// ── W1.21: image clipping-path display-list tests ────────────────
+
+/// 100×100 RGBA PNG, base64-encoded for inline `<Contents>` so the
+/// image resolves with no asset resolver. Same fixture the
+/// `image-clipping` gen sample embeds.
+const CLIP_PNG_B64: &str = "iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAABw4pVUAAAA0klEQVR42u3RMREAMAgEMBQhEEHoqpPi4y9DFKR69yd40xFKiBAhQoQIESJEiBAhQoQIESJEiBAhQoQIESJEiBAhQoQIESJEiBAhQoQIESJEiBAhQoQIESJEiBAhQoQIESJEiBAhQoQIESJEiBAhQoQIESJEiBAhQoQIESJEiBAhQoQIESJEiBAhQoQIESJEiBAhQoQIESJEiBAhQoQIESJEiBAhQoQIESJEiBAhQoQIESJEiBAhQoQIESJEiBAhQoQIESJEiBAhQoQIESJESHrIAUVvrbCxtZyKAAAAAElFTkSuQmCC";
+
+/// Build a single-page IDML (in-memory zip) hosting a 100×100 inline
+/// image in a 100 pt rectangle with an identity inner ItemTransform,
+/// carrying the supplied `<ClippingPathSettings>` XML fragment.
+fn build_clip_idml(clipping_path_xml: &str) -> Vec<u8> {
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+
+    let buf = std::io::Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(buf);
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+
+    zip.start_file("mimetype", stored).unwrap();
+    zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+        .unwrap();
+    zip.start_file("designmap.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+</Document>"#,
+    )
+    .unwrap();
+    let spread = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 200 200"/>
+    <Rectangle Self="r1" GeometricBounds="0 0 100 100">
+      <Image Self="img1" ItemTransform="1 0 0 1 0 0" LinkResourceURI="file:clip.png">
+        <Properties>
+          <PathGeometry><GeometryPathType PathOpen="false"><PathPointArray>
+            <PathPointType Anchor="0 0"/>
+            <PathPointType Anchor="100 0"/>
+            <PathPointType Anchor="100 100"/>
+            <PathPointType Anchor="0 100"/>
+          </PathPointArray></GeometryPathType></PathGeometry>
+          <Contents><![CDATA[{CLIP_PNG_B64}]]></Contents>
+        </Properties>
+        {clipping_path_xml}
+        <Link LinkResourceURI="file:clip.png"/>
+      </Image>
+    </Rectangle>
+  </Spread>
+</idPkg:Spread>"#
+    );
+    zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+    zip.write_all(spread.as_bytes()).unwrap();
+    zip.finish().unwrap().into_inner()
+}
+
+/// Count the PushClip / Image commands and capture the clip-path
+/// `PathData`s in document order on page 0.
+fn clip_command_summary(built: &BuiltDocument) -> (usize, usize, Vec<paged_compose::PathData>) {
+    let page = &built.pages[0];
+    let mut push_clips = 0usize;
+    let mut images = 0usize;
+    let mut clip_paths = Vec::new();
+    for cmd in &page.list.commands {
+        match cmd {
+            paged_compose::DisplayCommand::PushClip { path_id, .. } => {
+                push_clips += 1;
+                if let Some(p) = page.list.paths.get(*path_id) {
+                    clip_paths.push(p.clone());
+                }
+            }
+            paged_compose::DisplayCommand::Image { .. } => images += 1,
+            _ => {}
+        }
+    }
+    (push_clips, images, clip_paths)
+}
+
+#[test]
+fn user_modified_clip_emits_extra_pushclip_around_image() {
+    // A star clip (UserModifiedPath) ⇒ the image is wrapped in TWO
+    // clips: the frame box AND the star path. Without the clip there
+    // would be exactly one PushClip (the frame).
+    let clip = r#"<ClippingPathSettings ClippingType="UserModifiedPath" InvertPath="false"
+              IncludeInsideEdges="false">
+          <PathGeometry><GeometryPathType PathOpen="false"><PathPointArray>
+            <PathPointType Anchor="50 2"/>
+            <PathPointType Anchor="62 38"/>
+            <PathPointType Anchor="98 38"/>
+            <PathPointType Anchor="68 60"/>
+            <PathPointType Anchor="80 96"/>
+            <PathPointType Anchor="50 74"/>
+            <PathPointType Anchor="20 96"/>
+            <PathPointType Anchor="32 60"/>
+            <PathPointType Anchor="2 38"/>
+            <PathPointType Anchor="38 38"/>
+          </PathPointArray></GeometryPathType></PathGeometry>
+        </ClippingPathSettings>"#;
+    let bytes = build_clip_idml(clip);
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+    let built = build_document(&doc, &PipelineOptions::default()).expect("build");
+
+    let (push_clips, images, clip_paths) = clip_command_summary(&built);
+    assert_eq!(images, 1, "exactly one placed image");
+    assert_eq!(
+        push_clips, 2,
+        "frame clip + image clipping path = two PushClips, got {push_clips}"
+    );
+    // No defer diagnostic for an inline UserModifiedPath.
+    assert!(
+        !built
+            .diagnostics
+            .items
+            .iter()
+            .any(|d| d.code == DiagnosticCode::ImageClippingPathDeferred),
+        "inline geometry must not defer"
+    );
+    // The second clip path (the star) is a single closed contour:
+    // one MoveTo + 10 CubicTo (9 between points + 1 closing) + Close.
+    let star = clip_paths.last().expect("clip path present");
+    let move_tos = star
+        .segments
+        .iter()
+        .filter(|s| matches!(s, paged_compose::PathSegment::MoveTo { .. }))
+        .count();
+    let cubics = star
+        .segments
+        .iter()
+        .filter(|s| matches!(s, paged_compose::PathSegment::CubicTo { .. }))
+        .count();
+    assert_eq!(move_tos, 1, "star is a single contour");
+    assert_eq!(cubics, 10, "10 anchors ⇒ 10 cubic segments");
+}
+
+#[test]
+fn invert_clip_path_punches_bbox_with_two_contours() {
+    // InvertPath ⇒ the clip path is (image bbox) − (rectangle), so
+    // the emitted clip path has TWO MoveTo contours: the bounding
+    // box and the punched rectangle.
+    let clip = r#"<ClippingPathSettings ClippingType="UserModifiedPath" InvertPath="true"
+              IncludeInsideEdges="false">
+          <PathGeometry><GeometryPathType PathOpen="false"><PathPointArray>
+            <PathPointType Anchor="30 30"/>
+            <PathPointType Anchor="70 30"/>
+            <PathPointType Anchor="70 70"/>
+            <PathPointType Anchor="30 70"/>
+          </PathPointArray></GeometryPathType></PathGeometry>
+        </ClippingPathSettings>"#;
+    let bytes = build_clip_idml(clip);
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+    let built = build_document(&doc, &PipelineOptions::default()).expect("build");
+
+    let (push_clips, images, clip_paths) = clip_command_summary(&built);
+    assert_eq!(images, 1);
+    assert_eq!(push_clips, 2, "frame + invert clip");
+    let invert = clip_paths.last().expect("clip path present");
+    let move_tos = invert
+        .segments
+        .iter()
+        .filter(|s| matches!(s, paged_compose::PathSegment::MoveTo { .. }))
+        .count();
+    assert_eq!(
+        move_tos, 2,
+        "invert clip = bbox + punched rectangle (two contours)"
+    );
+}
+
+#[test]
+fn compound_clip_path_keeps_hole_contour() {
+    // A star with a punched diamond (IncludeInsideEdges) ⇒ the clip
+    // path keeps both contours so the hole survives.
+    let clip = r#"<ClippingPathSettings ClippingType="UserModifiedPath" InvertPath="false"
+              IncludeInsideEdges="true">
+          <PathGeometry>
+            <GeometryPathType PathOpen="false"><PathPointArray>
+              <PathPointType Anchor="10 10"/>
+              <PathPointType Anchor="90 10"/>
+              <PathPointType Anchor="90 90"/>
+              <PathPointType Anchor="10 90"/>
+            </PathPointArray></GeometryPathType>
+            <GeometryPathType PathOpen="false"><PathPointArray>
+              <PathPointType Anchor="40 40"/>
+              <PathPointType Anchor="60 40"/>
+              <PathPointType Anchor="60 60"/>
+              <PathPointType Anchor="40 60"/>
+            </PathPointArray></GeometryPathType>
+          </PathGeometry>
+        </ClippingPathSettings>"#;
+    let bytes = build_clip_idml(clip);
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+    let built = build_document(&doc, &PipelineOptions::default()).expect("build");
+
+    let (_, images, clip_paths) = clip_command_summary(&built);
+    assert_eq!(images, 1);
+    let compound = clip_paths.last().expect("clip path present");
+    let move_tos = compound
+        .segments
+        .iter()
+        .filter(|s| matches!(s, paged_compose::PathSegment::MoveTo { .. }))
+        .count();
+    assert_eq!(move_tos, 2, "outer square + inner diamond hole");
+}
+
+#[test]
+fn photoshop_clip_path_defers_with_diagnostic() {
+    // PhotoshopPath references a named 8BIM path with no inline
+    // geometry ⇒ the image is clipped to the frame only (ONE
+    // PushClip) and exactly one ImageClippingPathDeferred diagnostic
+    // is recorded, carrying the path name + frame id.
+    let clip = r#"<ClippingPathSettings ClippingType="PhotoshopPath" InvertPath="false"
+              IncludeInsideEdges="false" AppliedPathName="Path 1"/>"#;
+    let bytes = build_clip_idml(clip);
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+    let built = build_document(&doc, &PipelineOptions::default()).expect("build");
+
+    let (push_clips, images, _) = clip_command_summary(&built);
+    assert_eq!(images, 1, "the image still renders (frame-clipped)");
+    assert_eq!(push_clips, 1, "frame clip only — no detached clip path");
+
+    let deferred: Vec<_> = built
+        .diagnostics
+        .items
+        .iter()
+        .filter(|d| d.code == DiagnosticCode::ImageClippingPathDeferred)
+        .collect();
+    assert_eq!(deferred.len(), 1, "one defer diagnostic");
+    assert_eq!(deferred[0].frame_id.as_deref(), Some("r1"));
+    assert!(
+        deferred[0].message.contains("Path 1"),
+        "diagnostic names the applied path: {}",
+        deferred[0].message
+    );
+}
+
+#[test]
+fn no_clipping_path_keeps_single_frame_clip() {
+    // Control: an image with no <ClippingPathSettings> keeps exactly
+    // one PushClip (the frame) and emits no defer diagnostic — the
+    // clipping path is purely additive.
+    let bytes = build_clip_idml("");
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+    let built = build_document(&doc, &PipelineOptions::default()).expect("build");
+
+    let (push_clips, images, _) = clip_command_summary(&built);
+    assert_eq!(images, 1);
+    assert_eq!(push_clips, 1, "frame clip only when no clipping path");
+    assert!(!built
+        .diagnostics
+        .items
+        .iter()
+        .any(|d| d.code == DiagnosticCode::ImageClippingPathDeferred));
+}
+
+// ── B-23 — polygon corner effects ────────────────────────────────────
+
+/// Anchor with degenerate handles (an IDML polyline corner).
+fn b23_anchor(x: f32, y: f32) -> paged_model::PathAnchor {
+    paged_model::PathAnchor {
+        anchor: (x, y),
+        left: (x, y),
+        right: (x, y),
+    }
+}
+
+/// The uniform-corner resolver reads slot 0 (`TopLeft`) only, as InDesign
+/// reads a polygon's corners (ADR 149): the item-level `CornerOption` /
+/// `CornerRadius` pair is not read, an option without a radius takes
+/// InDesign's 12 pt, and a `None` option means square corners.
+#[test]
+fn b23_uniform_corner_reads_the_topleft_slot_only() {
+    use paged_model::{CornerOption, CornerSpec};
+    let empty = [CornerSpec::default(); 4];
+    assert_eq!(shapes::uniform_corner(&empty), None);
+
+    let mut per = empty;
+    per[0] = CornerSpec {
+        option: Some(CornerOption::Bevel),
+        radius: Some(5.0),
+    };
+    assert_eq!(
+        shapes::uniform_corner(&per),
+        Some((CornerOption::Bevel, 5.0))
+    );
+    // No radius: InDesign's default corner size.
+    per[0].radius = None;
+    assert_eq!(
+        shapes::uniform_corner(&per),
+        Some((CornerOption::Bevel, 12.0))
+    );
+    // An explicit `None` option squares the corners despite a radius.
+    per[0] = CornerSpec {
+        option: Some(CornerOption::None),
+        radius: Some(12.0),
+    };
+    assert_eq!(shapes::uniform_corner(&per), None);
+
+    // The other three slots are rect-only addressing: a TopRight-only
+    // option does NOT drive polygon geometry. This is the corpus's
+    // five-point arch, whose curvature is already in its PathGeometry.
+    let mut tr_only = empty;
+    tr_only[1].option = Some(CornerOption::Rounded);
+    assert_eq!(shapes::uniform_corner(&tr_only), None);
+}
+
+/// Open contours and sub-three-anchor contours are copied through
+/// verbatim — the corpus's six "rounded" polygons are two-point OPEN
+/// lines that inherited the option from an object style and show no
+/// rounding in InDesign.
+#[test]
+fn b23_open_and_degenerate_contours_keep_their_outline() {
+    use paged_model::CornerOption;
+    let line = [b23_anchor(0.0, 0.0), b23_anchor(100.0, 0.0)];
+    assert!(
+        shapes::corner_polygon_path(&line, &[], &[true], CornerOption::Rounded, 16.0).is_none(),
+        "an open two-point contour has no corner to cut"
+    );
+    let tri = [
+        b23_anchor(0.0, 0.0),
+        b23_anchor(100.0, 0.0),
+        b23_anchor(0.0, 100.0),
+    ];
+    assert!(
+        shapes::corner_polygon_path(&tri, &[], &[true], CornerOption::Rounded, 16.0).is_none(),
+        "a contour flagged open keeps its raw outline"
+    );
+    assert!(
+        shapes::corner_polygon_path(&tri, &[], &[false], CornerOption::None, 16.0).is_none(),
+        "CornerOption::None is not an effect"
+    );
+    assert!(
+        shapes::corner_polygon_path(&tri, &[], &[false], CornerOption::Rounded, 0.0).is_none(),
+        "a zero radius is not an effect"
+    );
+    assert!(
+        shapes::corner_polygon_path(&tri, &[], &[false], CornerOption::Rounded, 16.0).is_some(),
+        "a closed triangle with a positive radius IS effected"
+    );
+}
+
+/// A curved junction (non-degenerate Bezier handles) is left alone: the
+/// corner effect applies where two STRAIGHT edges meet, never to a
+/// smooth spline point that already carries its own curvature.
+#[test]
+fn b23_curved_junctions_are_not_treated_as_corners() {
+    use paged_model::{CornerOption, PathAnchor};
+    // Square whose top-right point carries real handles.
+    let anchors = [
+        b23_anchor(0.0, 0.0),
+        PathAnchor {
+            anchor: (100.0, 0.0),
+            left: (60.0, -20.0),
+            right: (140.0, 20.0),
+        },
+        b23_anchor(100.0, 100.0),
+        b23_anchor(0.0, 100.0),
+    ];
+    let path =
+        shapes::corner_polygon_path(&anchors, &[], &[false], CornerOption::Rounded, 15.0).unwrap();
+    // The curved anchor survives verbatim; the three polyline corners
+    // are cut (3 arcs), and the two curved edges stay cubics.
+    let on_path: Vec<(f32, f32)> = path
+        .segments
+        .iter()
+        .filter_map(|s| match *s {
+            paged_compose::PathSegment::MoveTo { x, y }
+            | paged_compose::PathSegment::LineTo { x, y }
+            | paged_compose::PathSegment::CubicTo { x, y, .. } => Some((x, y)),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        on_path
+            .iter()
+            .any(|p| (p.0 - 100.0).abs() < 0.01 && p.1.abs() < 0.01),
+        "the smooth anchor keeps its position: {on_path:?}"
+    );
+}
+
+/// A four-corner axis-aligned polygon and a Rectangle with the same
+/// corner attributes must describe the SAME outline — the generalised
+/// construction has to reduce exactly to the rect math at 90°.
+#[test]
+fn b23_axis_aligned_quad_matches_the_rect_builder() {
+    use paged_model::CornerOption;
+    let quad = [
+        b23_anchor(0.0, 0.0),
+        b23_anchor(80.0, 0.0),
+        b23_anchor(80.0, 60.0),
+        b23_anchor(0.0, 60.0),
+    ];
+    let poly =
+        shapes::corner_polygon_path(&quad, &[], &[false], CornerOption::Rounded, 12.0).unwrap();
+    let rect = corner_rect_path(
+        paged_compose::Rect {
+            x: 0.0,
+            y: 0.0,
+            w: 80.0,
+            h: 60.0,
+        },
+        [Some(12.0); 4],
+        [CornerOption::Rounded; 4],
+    );
+    // Same segment kinds and the same on-path points (the polygon walk
+    // starts at a different corner, so compare the point SETS).
+    assert_eq!(poly.segments.len(), rect.segments.len());
+    let pts = |p: &paged_compose::PathData| {
+        let mut v: Vec<(i32, i32)> = p
+            .segments
+            .iter()
+            .filter_map(|s| match *s {
+                paged_compose::PathSegment::MoveTo { x, y }
+                | paged_compose::PathSegment::LineTo { x, y }
+                | paged_compose::PathSegment::CubicTo { x, y, .. } => {
+                    Some(((x * 100.0) as i32, (y * 100.0) as i32))
+                }
+                _ => None,
+            })
+            .collect();
+        v.sort_unstable();
+        v
+    };
+    assert_eq!(pts(&poly), pts(&rect));
+}
+
+/// A `paged_model::Polygon` with everything off — the B-23 clip test
+/// only cares about `self_id` / `anchors` / the corner fields.
+fn b23_bare_polygon(self_id: &str) -> paged_model::Polygon {
+    paged_model::Polygon::new(
+        self_id,
+        paged_model::Bounds {
+            top: 0.0,
+            left: 0.0,
+            bottom: 90.0,
+            right: 120.0,
+        },
+    )
+}
+
+/// B-18 × B-23 — a polygon container clips its nested children to the
+/// outline it PAINTS, corner effect included.
+#[test]
+fn b23_polygon_container_clip_carries_the_corner_effect() {
+    use paged_model::{CornerOption, CornerSpec};
+    let mut spread = paged_model::Spread::default();
+    let mut poly = b23_bare_polygon("host");
+    poly.anchors = vec![
+        b23_anchor(0.0, 0.0),
+        b23_anchor(120.0, 0.0),
+        b23_anchor(120.0, 90.0),
+        b23_anchor(0.0, 90.0),
+    ];
+    poly.subpath_open = vec![false];
+    spread.polygons.push(poly);
+
+    // No corner effect ⇒ the clip is the raw anchor path (all cubics
+    // from the anchor walk, no straight LineTo edges).
+    let plain = super::build_engine::container_clip_geometry(&spread, "host").unwrap();
+    assert_eq!(
+        plain
+            .0
+            .segments
+            .iter()
+            .filter(|s| matches!(s, paged_compose::PathSegment::LineTo { .. }))
+            .count(),
+        0,
+        "un-cornered container clips to the raw anchor path"
+    );
+
+    // With a corner effect the clip picks up the arcs.
+    spread.polygons[0].corners[0] = CornerSpec {
+        option: Some(CornerOption::Rounded),
+        radius: Some(18.0),
+    };
+    let rounded = super::build_engine::container_clip_geometry(&spread, "host").unwrap();
+    assert_eq!(
+        rounded
+            .0
+            .segments
+            .iter()
+            .filter(|s| matches!(s, paged_compose::PathSegment::CubicTo { .. }))
+            .count(),
+        4,
+        "one corner arc per vertex in the container clip path"
+    );
+    assert_ne!(format!("{:?}", plain.0), format!("{:?}", rounded.0));
+}
+
+/// Fixture for the measured auto-size rules: one page, the given
+/// spread items (a text frame `frameA` on story `a` plus anything
+/// else), and story `a` made of `paragraphs` set in Inter at
+/// `size`/`leading`.
+fn autosize_fixture(
+    spread_items: &str,
+    paragraphs: &[&str],
+    size: f32,
+    leading: f32,
+) -> BuiltDocument {
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+    let font = inter_font_bytes();
+    let buf = std::io::Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(buf);
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+    zip.start_file("mimetype", stored).unwrap();
+    zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+        .unwrap();
+    zip.start_file("designmap.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+  <idPkg:Story src="Stories/Story_a.xml"/>
+</Document>"#,
+    )
+    .unwrap();
+    let spread = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 800 1400"/>
+    {spread_items}
+  </Spread>
+</idPkg:Spread>"#
+    );
+    zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+    zip.write_all(spread.as_bytes()).unwrap();
+    let mut story = String::from(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Story Self="a">"#,
+    );
+    for text in paragraphs {
+        story.push_str(&format!(
+            r#"<ParagraphStyleRange><CharacterStyleRange AppliedFont="Inter" PointSize="{size}"><Properties><Leading type="unit">{leading}</Leading></Properties><Content>{text}</Content></CharacterStyleRange></ParagraphStyleRange>"#
+        ));
+    }
+    story.push_str("</Story></idPkg:Story>");
+    zip.start_file("Stories/Story_a.xml", deflated).unwrap();
+    zip.write_all(story.as_bytes()).unwrap();
+    let bytes = zip.finish().unwrap().into_inner();
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+    let options = PipelineOptions {
+        font: Some(&font),
+        ..PipelineOptions::default()
+    };
+    build_document(&doc, &options).expect("build")
+}
+
+/// A filled text frame `frameA` on story `a` at `bounds` (IDML
+/// `GeometricBounds` order: top left bottom right) with the given
+/// `<TextFramePreference>` attributes.
+fn autosize_frame(bounds: &str, prefs: &str) -> String {
+    format!(
+        r#"<TextFrame Self="frameA" ParentStory="a" GeometricBounds="{bounds}" FillColor="Color/Black">
+      <Properties/>
+      <TextFramePreference{prefs}/>
+    </TextFrame>"#
+    )
+}
+
+/// The painted box of `frameA` as (x, y, w, h): `for_rect_in(rect, I)`
+/// bakes `[w, 0, 0, h, x, y]` into the FillPath transform.
+fn painted_box(built: &BuiltDocument) -> (f32, f32, f32, f32) {
+    built.pages[0]
+        .list
+        .commands
+        .iter()
+        .find_map(|c| match c {
+            paged_compose::DisplayCommand::FillPath { transform, .. } => {
+                let t = transform.0;
+                Some((t[4], t[5], t[0], t[3]))
+            }
+            _ => None,
+        })
+        .expect("frame A should emit a fill box")
+}
+
+const AUTOSIZE_SENTENCE: &str = "Auto-sizing lets the box answer to the text instead of the text to the box: pour more and the frame grows in the directions its mode allows, holding whichever edges the mode pins in place.";
+
+#[test]
+fn width_only_fits_the_smallest_width_for_the_height_line_budget() {
+    // Measured 2026-09-06: a 42 pt-tall WidthOnly frame at 13 pt
+    // leading holds three lines, and InDesign makes the width the
+    // SMALLEST at which the text fits in three — 223.0 pt from a
+    // 130 pt start and 223.2 pt from a 400 pt start (the fit is not a
+    // growth). Inter's ascender differs from Source Serif's, so the
+    // absolute width is not compared, but the fit must be independent
+    // of the authored width, hold exactly three lines, and overset
+    // nothing.
+    let build = |bounds: &str| {
+        autosize_fixture(
+            &autosize_frame(
+                bounds,
+                r#" AutoSizingType="WidthOnly" AutoSizingReferencePoint="CenterPoint""#,
+            ),
+            &[AUTOSIZE_SENTENCE],
+            8.0,
+            13.0,
+        )
+    };
+    let narrow = build("100 60 142 190");
+    let wide = build("100 60 142 460");
+    let (nx, _, nw, nh) = painted_box(&narrow);
+    let (wx, _, ww, _) = painted_box(&wide);
+    assert!(
+        (nw - ww).abs() < 0.05,
+        "the fitted width must not depend on the authored width: {nw} vs {ww}"
+    );
+    assert!(
+        (nh - 42.0).abs() < 0.01,
+        "WidthOnly keeps the height, got {nh}"
+    );
+    assert!(
+        nw > 130.0 && nw < 400.0,
+        "three lines of 8 pt Inter need ~230 pt, got {nw}"
+    );
+    // Centre pinned: the box is centred on the authored centre.
+    assert!(
+        (nx + nw * 0.5 - 125.0).abs() < 0.01 && (wx + ww * 0.5 - 260.0).abs() < 0.01,
+        "CenterPoint keeps the authored centre, got {nx}+{nw}/2 and {wx}+{ww}/2"
+    );
+    for built in [&narrow, &wide] {
+        assert_eq!(built.stats.dropped_overflow_lines, 0, "nothing oversets");
+        assert_eq!(built.pages[0].story_layout.len(), 3, "exactly three lines");
+    }
+}
+
+#[test]
+fn width_only_shrinks_below_the_authored_width_for_a_short_text() {
+    // Measured 2026-09-06: "Short text." in a 130 × 42 WidthOnly frame
+    // → 32.8 pt wide, "Short" / "text." on two lines (the smallest
+    // width at which the text fits in the height's three-line budget).
+    let built = autosize_fixture(
+        &autosize_frame(
+            "100 60 142 190",
+            r#" AutoSizingType="WidthOnly" AutoSizingReferencePoint="CenterPoint""#,
+        ),
+        &["Short text."],
+        8.0,
+        13.0,
+    );
+    let (_, _, w, h) = painted_box(&built);
+    assert!(w < 40.0, "the box shrinks to the wider word, got {w}");
+    assert!((h - 42.0).abs() < 0.01);
+    assert_eq!(built.pages[0].story_layout.len(), 2, "Short / text.");
+    assert_eq!(built.stats.dropped_overflow_lines, 0);
+}
+
+#[test]
+fn height_only_ends_the_box_at_the_last_baseline() {
+    // Measured 2026-09-06: a HeightOnly frame's bottom lands ON the
+    // last baseline (one line → 8.29 pt tall for a 1.036 em ascender
+    // at 8 pt; six lines → 8.29 + 5 × 13), shrinking below the
+    // authored 42 pt as readily as growing past it.
+    let one = autosize_fixture(
+        &autosize_frame(
+            "100 60 142 190",
+            r#" AutoSizingType="HeightOnly" AutoSizingReferencePoint="TopLeftPoint""#,
+        ),
+        &["Short text."],
+        8.0,
+        13.0,
+    );
+    let (x, y, w, h) = painted_box(&one);
+    let baseline = one.pages[0].story_layout[0].baseline_y_pt;
+    assert!((x - 60.0).abs() < 0.01 && (y - 100.0).abs() < 0.01 && (w - 130.0).abs() < 0.01);
+    assert!(
+        (y + h - baseline).abs() < 0.03,
+        "bottom {} should sit on the baseline {baseline}",
+        y + h
+    );
+    assert!(h < 42.0, "one line shrinks the box, got {h}");
+
+    let six = autosize_fixture(
+        &autosize_frame(
+            "100 60 142 190",
+            r#" AutoSizingType="HeightOnly" AutoSizingReferencePoint="TopLeftPoint""#,
+        ),
+        &[AUTOSIZE_SENTENCE],
+        8.0,
+        13.0,
+    );
+    let (_, y6, _, h6) = painted_box(&six);
+    let lines = six.pages[0].story_layout.len();
+    let last = six.pages[0]
+        .story_layout
+        .iter()
+        .map(|l| l.baseline_y_pt)
+        .fold(0.0f32, f32::max);
+    assert!(
+        lines >= 5,
+        "8 pt Inter in 130 pt needs several lines, got {lines}"
+    );
+    assert!(
+        (y6 + h6 - last).abs() < 0.03,
+        "bottom {} vs last baseline {last}",
+        y6 + h6
+    );
+    assert!(
+        (h6 - (h + (lines as f32 - 1.0) * 13.0)).abs() < 0.05,
+        "leading stacks: {h6}"
+    );
+    assert_eq!(six.stats.dropped_overflow_lines, 0);
+}
+
+#[test]
+fn height_and_width_fits_the_narrowest_column_from_any_start() {
+    // Measured 2026-09-06: HeightAndWidth ends at the narrowest column
+    // no line overflows — 26 pt wide / 33–34 lines from BOTH a 130 pt
+    // and a 400 pt authored width, every line one unbreakable
+    // fragment ("Au / to-siz / ing / lets the / box …").
+    let build = |bounds: &str| {
+        autosize_fixture(
+            &autosize_frame(
+                bounds,
+                r#" AutoSizingType="HeightAndWidth" AutoSizingReferencePoint="TopLeftPoint""#,
+            ),
+            &[AUTOSIZE_SENTENCE],
+            8.0,
+            13.0,
+        )
+    };
+    let narrow = build("100 60 142 190");
+    let wide = build("100 60 142 460");
+    let (_, _, nw, nh) = painted_box(&narrow);
+    let (_, _, ww, wh) = painted_box(&wide);
+    assert!(
+        (nw - ww).abs() < 0.05 && (nh - wh).abs() < 0.05,
+        "{nw}×{nh} vs {ww}×{wh}"
+    );
+    assert!(
+        nw < 60.0,
+        "one fragment per line is a narrow column, got {nw}"
+    );
+    let lines = narrow.pages[0].story_layout.len();
+    assert!(
+        lines >= 20,
+        "one fragment per line is a tall column, got {lines} lines"
+    );
+    assert!(
+        (nh - (narrow.pages[0].story_layout[0].baseline_y_pt - 100.0
+            + (lines as f32 - 1.0) * 13.0))
+            .abs()
+            < 0.05
+    );
+    // No line overflows the fitted column.
+    for line in &narrow.pages[0].story_layout {
+        let right = line
+            .clusters
+            .iter()
+            .map(|c| c.x_pt + c.advance_pt)
+            .fold(0.0f32, f32::max);
+        assert!(
+            right <= 60.0 + nw + 0.05,
+            "line {} overflows: {right} > {}",
+            line.line_idx,
+            60.0 + nw
+        );
+    }
+    assert_eq!(narrow.stats.dropped_overflow_lines, 0);
+}
+
+#[test]
+fn proportional_fit_scales_both_axes_by_the_smallest_fitting_factor() {
+    // Measured 2026-09-06: 130 × 42 → 170.3 × 55.0 (×1.31, four lines)
+    // for the long sentence and 49.8 × 16.1 (×0.38, one line) for
+    // "Short text." — the aspect ratio holds to four decimals.
+    let build = |paragraphs: &[&str]| {
+        autosize_fixture(
+            &autosize_frame(
+                "100 60 142 190",
+                r#" AutoSizingType="HeightAndWidthProportionally" AutoSizingReferencePoint="CenterPoint""#,
+            ),
+            paragraphs,
+            8.0,
+            13.0,
+        )
+    };
+    let long = build(&[AUTOSIZE_SENTENCE]);
+    let (x, y, w, h) = painted_box(&long);
+    assert!(
+        ((w / h) - (130.0 / 42.0)).abs() < 0.002,
+        "aspect kept: {w}×{h}"
+    );
+    assert!(
+        w > 130.0 && h > 42.0,
+        "the long sentence grows the box: {w}×{h}"
+    );
+    assert!((x + w * 0.5 - 125.0).abs() < 0.02 && (y + h * 0.5 - 121.0).abs() < 0.02);
+    assert_eq!(long.stats.dropped_overflow_lines, 0);
+    let short = build(&["Short text."]);
+    let (_, _, sw, sh) = painted_box(&short);
+    assert!(
+        ((sw / sh) - (130.0 / 42.0)).abs() < 0.002,
+        "aspect kept: {sw}×{sh}"
+    );
+    assert!(
+        sw < 130.0 && sh < 42.0,
+        "a short text shrinks the box: {sw}×{sh}"
+    );
+    assert_eq!(short.pages[0].story_layout.len(), 1);
+}
+
+#[test]
+fn a_width_only_fit_stalls_on_a_next_column_obstacle_and_oversets_everything() {
+    // Measured 2026-09-06 on the annual's page 28: a centred WidthOnly
+    // frame (centre x 125) with a NextColumnTextWrap rectangle 507 pt
+    // to the right in the same vertical band ends up 1014.6 pt wide
+    // with NOTHING composed (`frameChars=0`, `overflows=true`) — the
+    // unbounded first composition runs into the obstacle and the text
+    // jumps to a column that doesn't exist. Out of the band, or with
+    // the wrap off, the frame fits to 223 pt / three lines.
+    let build = |obstacle_top: f32, mode: &str| {
+        let bottom = obstacle_top + 40.0;
+        let items = format!(
+            r#"{frame}
+    <Rectangle Self="wrapper" GeometricBounds="{obstacle_top} 632 {bottom} 696">
+      <Properties/>
+      <TextWrapPreference Inverse="false" TextWrapMode="{mode}">
+        <Properties>
+          <TextWrapOffset Top="0" Left="0" Bottom="0" Right="0"/>
+        </Properties>
+      </TextWrapPreference>
+    </Rectangle>"#,
+            frame = autosize_frame(
+                "400 60 442 190",
+                r#" AutoSizingType="WidthOnly" AutoSizingReferencePoint="CenterPoint""#,
+            ),
+        );
+        autosize_fixture(&items, &[AUTOSIZE_SENTENCE], 8.0, 13.0)
+    };
+    let stalled = build(408.0, "NextColumnTextWrap");
+    let (x, _, w, _) = painted_box(&stalled);
+    assert!(
+        (w - 1014.0).abs() < 0.05,
+        "stretched to twice the obstacle distance, got {w}"
+    );
+    assert!(
+        (x + w - 632.0).abs() < 0.05,
+        "the right edge touches the obstacle, got {}",
+        x + w
+    );
+    assert_eq!(stalled.pages[0].story_layout.len(), 0, "nothing composes");
+    assert!(
+        stalled.stats.dropped_overflow_lines > 0,
+        "the whole story is overset"
+    );
+    assert!(
+        stalled.diagnostics.overset_story_ids().contains("a"),
+        "the overset is reported for story a"
+    );
+
+    let clear = build(300.0, "NextColumnTextWrap");
+    let (_, _, cw, _) = painted_box(&clear);
+    assert!(
+        cw > 130.0 && cw < 400.0,
+        "out of the band the frame fits normally, got {cw}"
+    );
+    assert_eq!(clear.pages[0].story_layout.len(), 3);
+    let plain = build(408.0, "BoundingBoxTextWrap");
+    let (_, _, pw, _) = painted_box(&plain);
+    assert!(
+        (pw - cw).abs() < 0.05,
+        "only NextColumn stalls the fit: {pw} vs {cw}"
+    );
+}
+
+#[test]
+fn a_paragraph_that_carries_text_and_a_table_composes_both() {
+    // `…text<Br/><Table>` in one range: the break before the table ends
+    // the text's paragraph, so InDesign shows the text and THEN the
+    // table (measured 2026-09-06 on the annual's page 117, where a
+    // four-line paragraph vanished under its table on the canvas). The
+    // importer attaches the table to the text's paragraph; the emitter
+    // must compose the text before handing off to the table.
+    use std::io::Write;
+    use zip::{write::SimpleFileOptions, CompressionMethod, ZipWriter};
+    let font = inter_font_bytes();
+    let buf = std::io::Cursor::new(Vec::new());
+    let mut zip = ZipWriter::new(buf);
+    let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+    let deflated = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+    zip.start_file("mimetype", stored).unwrap();
+    zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+        .unwrap();
+    zip.start_file("designmap.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <idPkg:Spread src="Spreads/Spread_sp1.xml"/>
+  <idPkg:Story src="Stories/Story_a.xml"/>
+</Document>"#,
+    )
+    .unwrap();
+    zip.start_file("Spreads/Spread_sp1.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Spread Self="sp1">
+    <Page Self="p1" GeometricBounds="0 0 800 600"/>
+    <TextFrame Self="frameA" ParentStory="a" GeometricBounds="50 50 500 450">
+      <Properties/>
+    </TextFrame>
+  </Spread>
+</idPkg:Spread>"#,
+    )
+    .unwrap();
+    zip.start_file("Stories/Story_a.xml", deflated).unwrap();
+    zip.write_all(
+        br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging">
+  <Story Self="a">
+    <ParagraphStyleRange>
+      <CharacterStyleRange AppliedFont="Inter" PointSize="10">
+        <Content>Circulation by region</Content><Br/>
+      </CharacterStyleRange>
+    </ParagraphStyleRange>
+    <ParagraphStyleRange>
+      <CharacterStyleRange AppliedFont="Inter" PointSize="10">
+        <Content>The Alpine routes remain the backbone of the house.</Content><Br/>
+        <Table Self="t" HeaderRowCount="0" FooterRowCount="0" BodyRowCount="1" ColumnCount="2">
+          <Row Self="r0" Name="0" SingleRowHeight="20"/>
+          <Column Self="c0" Name="0" SingleColumnWidth="150"/>
+          <Column Self="c1" Name="1" SingleColumnWidth="150"/>
+          <Cell Self="c0r0" Name="0:0" RowSpan="1" ColumnSpan="1">
+            <ParagraphStyleRange><CharacterStyleRange AppliedFont="Inter" PointSize="10"><Content>Region</Content></CharacterStyleRange></ParagraphStyleRange>
+          </Cell>
+          <Cell Self="c1r0" Name="1:0" RowSpan="1" ColumnSpan="1">
+            <ParagraphStyleRange><CharacterStyleRange AppliedFont="Inter" PointSize="10"><Content>Copies</Content></CharacterStyleRange></ParagraphStyleRange>
+          </Cell>
+        </Table>
+      </CharacterStyleRange>
+    </ParagraphStyleRange>
+    <ParagraphStyleRange>
+      <CharacterStyleRange AppliedFont="Inter" PointSize="10">
+        <Content>Digital editions</Content>
+      </CharacterStyleRange>
+    </ParagraphStyleRange>
+  </Story>
+</idPkg:Story>"#,
+    )
+    .unwrap();
+    let bytes = zip.finish().unwrap().into_inner();
+    let doc = idml_import::import_idml_doc(&bytes).expect("open IDML");
+    let options = PipelineOptions {
+        font: Some(&font),
+        ..PipelineOptions::default()
+    };
+    let built = build_document(&doc, &options).expect("build");
+    let page = &built.pages[0];
+    let body: Vec<&LineLayout> = page
+        .story_layout
+        .iter()
+        .filter(|l| l.cell.is_none())
+        .collect();
+    let cells: Vec<&LineLayout> = page
+        .story_layout
+        .iter()
+        .filter(|l| l.cell.is_some())
+        .collect();
+    assert_eq!(
+        body.len(),
+        3,
+        "three body lines: heading, the text, the trailing paragraph"
+    );
+    assert_eq!(cells.len(), 2, "both cells compose");
+    let text_line = body[1].baseline_y_pt;
+    let cell_line = cells
+        .iter()
+        .map(|l| l.baseline_y_pt)
+        .fold(f32::MAX, f32::min);
+    let trailing = body[2].baseline_y_pt;
+    assert!(
+        text_line < cell_line && cell_line < trailing,
+        "text {text_line} above the table {cell_line} above the trailing paragraph {trailing}"
+    );
+}
+
+/// ADR 027 plan step 2 — an overset growing story grows by the frames its
+/// dropped lines need, not by doubling. A page-adding edit on a hinted
+/// rebuild is the hinted build plus ONE more (doubling took three: the
+/// hint, twice the hint, and the trim); a cold open is a few builds, not
+/// one per doubling. Either way the pages are the ones the exact count
+/// builds in a single pass.
+#[test]
+fn growth_by_estimate_takes_two_builds() {
+    use std::cell::RefCell;
+    let bytes = paged_gen::write_idml(&paged_gen::samples::reflow::build()).expect("idml");
+    let story_id = paged_gen::ids::self_id("reflow", "BodyStory", 0);
+    let doc_with = |n: usize| {
+        let mut doc = idml_import::import_idml_doc(&bytes).expect("import");
+        let story = doc
+            .stories
+            .iter_mut()
+            .find(|s| s.self_id == story_id)
+            .expect("body story");
+        story.story.grow = Some(paged_model::FlowGrowRule::default());
+        let template = story.story.paragraphs[0].clone();
+        story.story.paragraphs = (1..=n)
+            .map(|k| {
+                let mut p = template.clone();
+                p.runs.truncate(1);
+                p.runs[0].text = format!("Paragraph {k} of the growing story.");
+                p
+            })
+            .collect();
+        doc
+    };
+    let font = inter_font_bytes();
+    let build = |doc: &Document, hint: &RefCell<HashMap<String, u32>>| {
+        let opts = PipelineOptions {
+            font: Some(&font),
+            grow_hint: Some(hint),
+            ..PipelineOptions::default()
+        };
+        build_document(doc, &opts).expect("build")
+    };
+    let digests = |b: &BuiltDocument| -> Vec<(String, u64)> {
+        b.pages
+            .iter()
+            .map(|p| (p.id.0.clone(), p.list.digest()))
+            .collect()
+    };
+
+    let hint = RefCell::new(HashMap::new());
+    let cold = build(&doc_with(400), &hint);
+    assert!(cold.pages.len() > 10, "{} pages", cold.pages.len());
+    assert!(
+        cold.grow_passes <= 3,
+        "cold growth took {} builds",
+        cold.grow_passes
+    );
+    let exact = build(&doc_with(400), &RefCell::new(hint.borrow().clone()));
+    assert_eq!(exact.grow_passes, 1, "the settled count builds once");
+    assert_eq!(digests(&cold), digests(&exact));
+
+    // A page-adding edit: 60 more one-line paragraphs on the settled hint.
+    let grown = build(&doc_with(460), &hint);
+    assert!(grown.pages.len() > cold.pages.len(), "the edit adds pages");
+    assert_eq!(
+        grown.grow_passes, 2,
+        "the hinted build plus one sized build"
+    );
+    let exact = build(&doc_with(460), &RefCell::new(hint.borrow().clone()));
+    assert_eq!(exact.grow_passes, 1);
+    assert_eq!(digests(&grown), digests(&exact));
+}

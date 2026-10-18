@@ -1,0 +1,72 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Top-level renderer.
+//!
+//! Public Rust API. Coordinates parse → scene → text layout → compose →
+//! GPU raster. Mirrors the TypeScript surface described in idea.md §14.
+
+pub mod asset;
+pub mod container;
+pub mod diagnostics;
+pub mod flow;
+pub mod pipeline;
+pub mod resource_provider;
+
+mod module;
+
+pub use asset::{AssetResolver, BytesResolver, ResolvedFont};
+pub use diagnostics::{
+    Diagnostic, DiagnosticCode, OversetContinuation, RenderDiagnostics, Severity,
+};
+pub use flow::{FlowLine, PlacedLine, TextFlow};
+pub use pipeline::{
+    build, build_document, build_run_paint_picker, resolve_fill, resolve_stroke,
+    BodyStoryEmissionDelta, BodyStoryPageDelta, BuiltDocument, BuiltPage, CellAddr, CellRect,
+    ClusterPos, CmykTransformCache, DateParts, DocumentClock, EditSpan, EmissionPrints, FontKey,
+    FontMetricsOverride, FontTable, KeepSeed, KeepSeedStore, LineLayout, MasterTextEmitDelta,
+    PageId, PipelineOptions, PipelineStats, RunPaintPicker, StoryResume, StoryResumeStore,
+};
+pub use resource_provider::{
+    assemble_resource_tiles, mip_level_for_scale, ImageResourceProvider, ProviderTile,
+    ResourcePyramid, ResourceTilesNeeded,
+};
+
+#[cfg(feature = "cpu")]
+pub use pipeline::{render, render_built_page, render_document, separate_built_page};
+
+// Prepress: the CPU rasterizer's ink separation. Re-exported so the
+// canvas layer reads coverage without depending on `paged-gpu`
+// directly (it has no other reason to). CPU-only — the Vello backend
+// keeps no page-level plane state; see `paged_gpu::separations`.
+#[cfg(feature = "cpu")]
+pub use paged_gpu::separations::{
+    InkChannel, InkCoverageReport, InkPlate, PlateCoverage, Separation, TAC_BUCKETS, TAC_BUCKET_PCT,
+};
+
+// Which geometry an item is drawn from — its box or its path. The
+// canvas's translate gesture asks, so that what it moves is what is
+// painted (RFI C-78).
+pub use module::frame::{
+    graphic_line_drawn_from_path, polygon_drawn_from_path, rectangle_drawn_from_path,
+    text_frame_drawn_from_path,
+};
+
+// Re-export Document so consumers only need one `use` for the common
+// path: `use paged_renderer::{Document, pipeline, PipelineOptions};`.
+pub use paged_scene::Document;
+
+// Re-export the display-list IR so canvas crates depend on a single
+// upstream and don't pull `paged-compose` directly.
+pub use paged_compose::{DisplayCommand, DisplayList};

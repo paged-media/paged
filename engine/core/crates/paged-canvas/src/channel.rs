@@ -1,0 +1,5951 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Typed message channel between the React main thread and the
+//! canvas Web Worker.
+//!
+//! Envelopes are versioned serde structs with externally-tagged
+//! enums (`kind`/`payload`) so the TS side can switch on `kind`
+//! without knowing the Rust enum representation. Every message
+//! carries a `seq` for ordering / acknowledgement bookkeeping;
+//! the main thread is the source of `seq` for its outgoing
+//! messages, the worker echoes `seq` back in the corresponding
+//! `WorkerToMain`.
+//!
+//! Camera updates are NOT in this channel — they go through the
+//! `SharedArrayBuffer` defined in `crate::camera` for sub-frame
+//! latency.
+
+use paged_renderer::PageId;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+use tsify_next::Tsify;
+use wasm_bindgen::prelude::wasm_bindgen;
+
+use crate::model::{DocumentHandle, DocumentStats};
+
+// MainToWorker / WorkerToMain are `#[serde(flatten)]`-style structs
+// over a discriminated union (`MainToWorkerKind` / `WorkerToMainKind`).
+// Tsify-next emits these as `interface MainToWorker extends
+// MainToWorkerKind` which is invalid TypeScript — TS interfaces
+// can't extend a type-alias union. Manual TS type aliases via
+// intersection give consumers the discriminated-union view they need.
+//
+// Tsify derives stay off both outer envelope structs; they're
+// JSON-serialized through `handleMessage(string) -> string`, so the
+// only consumer of their TS shape is the worker-message marshalling
+// on the main thread.
+#[wasm_bindgen(typescript_custom_section)]
+const TS_ENVELOPES: &'static str = r#"
+export type MainToWorker = MainToWorkerKind & {
+  seq: number;
+  protocol: ProtocolVersion;
+};
+
+export type WorkerToMain = WorkerToMainKind & {
+  seq: number | null;
+  protocol: ProtocolVersion;
+};
+"#;
+
+/// Bumped on any incompatible change to the channel envelopes.
+/// Main thread compares this against its bundled value at worker
+/// handshake and refuses to proceed on mismatch — better to fail
+/// loud than to silently desync.
+///
+/// - v27: NodeSpec carries item_transform (RemoveNode → undo keeps the
+///   frame in place instead of snapping to the page origin).
+/// - v28 (W0.5/W0.6): the final wire-expansion bump. Covers
+///   - W0.6 caret queries: `RequestCaretNav` / `RequestLineBounds`
+///     requests + `CaretNavResult` / `LineBoundsResult` replies.
+///   - W0.5 operations reachable via `Mutation` translation:
+///     `LinkFrames` / `UnlinkFrames` (frame threading), `ApplyStyle`
+///     (named para/char style over a story range), `InsertField`
+///     (page-number marker), guide CRUD (`InsertGuide` / `MoveGuide` /
+///     `DeleteGuide`), `SetConditionVisible` / `ActivateConditionSet`,
+///     `ApplyMasterToPage`, `DuplicatePage`, section ops
+///     (`InsertSection` / `EditSection` / `DeleteSection`), and the
+///     `NodeSpec::Oval` insert kind. (The new `paged_mutate::Operation`
+///     variants ride the existing `Mutate(Mutation)` envelope, so the
+///     Mutation enum gains the variants below.)
+/// - v29 (W3.A1 — table NodeId surface): tables become addressable +
+///   mutable through the wire. Covers:
+///   - `HitResult.table_context` — `HitTest` into a table cell now
+///     returns the `(tableId, row, col)` it landed in (new
+///     `TableHitContext` payload).
+///   - cell-scoped `PropertyPath`s on a `NodeId::TableCell`
+///     (`cellFillColor` / `cellFillTint` / `cellInset{Top,Left,Bottom,
+///     Right}` / `cellVerticalJustification`; plus the now-live
+///     `appliedCellStyle`) and `appliedTableStyle` on a `NodeId::Table`
+///     — reachable via `SetElementProperty` against the new
+///     `ElementId::Table` / `ElementId::TableCell` addresses.
+///   - table-structure `Mutation`s: `SetRowHeight` / `SetColumnWidth` /
+///     `InsertTableRow` / `DeleteTableRow` / `InsertTableColumn` /
+///     `DeleteTableColumn` (translate to the matching new
+///     `paged_mutate::Operation` variants, with delete capturing the
+///     removed line for undo).
+/// - v31 (Aftercare-A — editor read-surface fill-in): three read-only
+///   additions found during the gap campaign.
+///   - `RequestWordBounds` / `WordBoundsResult`: the word containing a
+///     story byte offset, per Unicode word segmentation (UAX-29). The
+///     editor flips double-click word-selection on this. Mirrors the
+///     `RequestLineBounds` / `LineBoundsResult` wiring exactly.
+///   - table dimension reads: `element_properties` on a
+///     `NodeId::Table` now also returns `tableRowCount` /
+///     `tableColumnCount` (the integer-as-`Length` convention used for
+///     drop-cap counts). Read-only like `NextTextFrame` — no apply arm
+///     (writes reject via `apply_table_property`'s non-`AppliedTableStyle`
+///     guard).
+///   - per-cell geometry: `RequestElementGeometry` on a
+///     `ElementId::TableCell` now resolves against the BuiltPage's
+///     `cell_rects` (page-local pt, `item_transform: None`) instead of
+///     returning nothing.
+/// - v32 (B-04 — groups): `CreateGroup { member_ids }` /
+///   `DissolveGroup { group_id }` mutations. Create is z-order-neutral
+///   for members contiguous in paint order (scattered members collect
+///   at the earliest member's slot, InDesign-style); the reply carries
+///   the minted group id as `createdId`. Undo restores the exact
+///   pre-group z-order via inverse-side `restore_slots` (internal —
+///   not a wire field).
+/// - v34 (batch-created sentinel): inside a `Batch`, a child
+///   `SetPluginMetadata` / `SetElementProperty` whose element id is
+///   the literal `$created` addresses the element minted by the most
+///   recent CREATING child of the same (flat) batch — create + attach
+///   metadata/properties as ONE atomic, single-undo-step mutation.
+///   Nested batches don't propagate the sentinel outward.
+/// - v33 (plugin-metadata carrier, decision 9 facility):
+///   `SetPluginMetadata { element_id, key, value }` — set / replace /
+///   delete (value: null) one `Properties/Label` `KeyValuePair` in the
+///   reserved `x-paged:` namespace (engine-gated: key prefix, 64 KiB
+///   cap, JSON envelope `{v, data, engine?}`). `element_properties` on
+///   a leaf page item now also returns its `x-paged:*` entries as
+///   `PropertyPath::PluginMetadata` / `Value::PluginMetadata` pairs.
+/// - v35 (W1.23 — paragraph-bounds read surface): new message kinds
+///   `RequestParagraphBounds { story_id, offset }` →
+///   `ParagraphBoundsResult { bounds }` — the `[start, end)` byte span
+///   of the paragraph containing the offset (the caret's triple-click
+///   wire). Mirrors `RequestWordBounds` / `WordBoundsResult` exactly.
+///   New message kinds, so this bumps. Rides v35 (added before first
+///   consumer sync): the additive `FontSummary.styles` field (W1.23 —
+///   styles-per-family for the glyphs panel) — a `#[serde(default)]`
+///   field that wouldn't bump on its own, but it ships in the same
+///   mergeable unit as the new kinds.
+///   - W1.22 (engine gap 22 — list definitions) also rides v35: the
+///     `Mutation::{Create,Edit,Delete}NumberingList` variants (→ the
+///     matching `paged_mutate::Operation` variants). New Mutation /
+///     Operation variants would normally bump per rule 2, but v35 is
+///     still unpublished (highest tag v0.34.0, no v0.35 tag), so per
+///     governance rule 4 they ride the open number with this comment.
+///     The additive read surface that ships with them does NOT bump on
+///     its own (rule 1): the `NumberingLists` CollectionName +
+///     `NumberingListSummary`, `ParagraphAppliedNumberingList` +
+///     `ParagraphStyleNextStyle` PropertyPaths, and the
+///     `ParagraphStyleSummary.next_style` `#[serde(default)]` field.
+///   - W1.11b / W1.12a / W1.12b (tables v2) also ride v35 — same
+///     unpublished-protocol posture (rule 4). New, additive:
+///     - W1.11b: twelve per-cell edge-stroke `PropertyPath`s
+///       (`cell{Top,Bottom,Left,Right}EdgeStroke{Color,Weight,Tint}`)
+///       on a `NodeId::TableCell`, reachable via `SetElementProperty`;
+///       `element_properties` reports them read-side.
+///     - W1.12a: `Mutation::{Insert,Remove}{Header,Footer}Row` (→ the
+///       matching `Operation` variants) growing / shrinking the
+///       `HeaderRowCount` / `FooterRowCount` bands.
+///     - W1.12b: `Mutation::SetCellSpan` (→ `Operation::SetCellSpan`)
+///       setting a cell's `RowSpan` / `ColumnSpan` (merge / split),
+///       inverse restoring the prior spans.
+///   - W1.20 (groups v2) also rides v35 — same unpublished-protocol
+///     posture (rule 4). New / extended, additive: `CreateGroup`'s
+///     `member_ids` may now carry `Group` ids (nested create);
+///     `DissolveGroup` of a nested group splices into the parent;
+///     `Mutation::SetGroupTransform { group_id, transform }` (→
+///     `Operation::SetGroupTransform`) moves/scales/rotates a group as
+///     a unit (members' effective transforms + the hit-test follow).
+///     The read surface that ships with it does NOT bump on its own
+///     (rule 1): the Group `element_properties` now reports
+///     `FrameBounds` (the union AABB) + `FrameTransform` (own group
+///     transform); the scene-tree already nests group members.
+///   - v36 (2026-06-08): two additive wire changes earn the bump.
+///     B-08 — `OutlineStrokeVariable` (a new `PropertyPath` + `Value`
+///     variant: the variable-width stroke outline op, so a bump, not a
+///     ride). B-16 — an optional `caller` field on
+///     `Value::PluginMetadata` (`serde(default)`); additive, bundled in
+///     so the engine-side caller-identity gate pins to a protocol number.
+///   - v37 — additive `InsertTable` (the missing table-CREATE
+///     `Mutation` → `Operation::InsertNode { parent: NodeId::Story,
+///     node: NodeSpec::Table }`; backs the paged.sheet plugin's
+///     native-table lowering) + the `measure_text` font-metrics query
+///     on the canvas-wasm surface (a READ, no wire change of its own,
+///     ships in the same artifact). The new `Mutation` variant earns
+///     the bump.
+///   - v38 (Wave 2 — paged.sheet live pagination + font-metrics RPC):
+///     three additive wire surfaces, each a new message kind, so the
+///     bump.
+///     - `RequestFrameChain { story_id }` → `FrameChainResult { links }`
+///       (C-2 / S-05): read the `NextTextFrame` thread topology of a
+///       story as `FrameChainLink { frame_id, next, overflow }`. Pure
+///       READ over `paged_scene::Document::frame_chain`.
+///     - `FrameReflow { frame_id, content_box }` (C-2 / S-05): a
+///       content-box-geometry notification fired ONLY when a frame's
+///       content box changes (`Mutation::ResizeFrame`), NEVER on a pure
+///       transform (`MoveFrame` / `SetGroupTransform`). The §8.5
+///       resize-vs-transform distinction: pagination reacts to a
+///       content-box resize but not to scale/rotate/translate. Carried
+///       additively on `MutationApplied.reflow` (the reply the editor
+///       already correlates by seq) AND defined as a standalone
+///       `WorkerToMainKind` so the worker glue can post it unsolicited.
+///     - `RequestMeasureText { family, style, text, size_pt }` →
+///       `MeasureTextResult { advance, ascender, descender }` (K-7 /
+///       S-13): the wire round-trip for the v37 `measureText` method, so
+///       the editor can route `host.text.measureString`. Reuses the
+///       inner `CanvasModel::measure_text`; zero/None metrics when the
+///       face can't resolve (but `measure_text` already falls back to
+///       the default registered face).
+///   - v39 (C-1 — plugin scene layers): `SubmitSceneLayer { element_id,
+///     layer }` / `ClearSceneLayer { element_id }` requests +
+///     `SceneLayerApplied { element_id }` reply. A plugin submits a vector
+///     `paged_compose::SceneLayer` (display-list subset in frame-content
+///     coords); the worker stores it keyed by frame `Self` id and rebuilds
+///     so compose lowers it INSIDE that frame (transformed by the frame's
+///     ItemTransform, clipped to the content box — §8.5). EPHEMERAL: kept
+///     across gestures/undo, NOT a document mutation; it does not survive
+///     a document reload (the plugin re-submits). Clearing or submitting
+///     invalidates the page caches (`CacheEffect::ClearAll`).
+///   - v40 (C-1.1 — scene-layer text): `SceneItem` gains a `Text` variant
+///     (a single-line run in frame-content coords); the renderer shapes +
+///     emits glyphs in the document default font. Additive to the
+///     `SubmitSceneLayer` payload's `SceneLayer` — no new messages.
+///   - v41 (C-1.2 — scene-layer image, the GPU-texture door's Stage A):
+///     `SceneItem` gains an `Image` variant carrying tightly-packed RGBA8
+///     pixels plus a destination rect in frame-content coords. The renderer
+///     interns the pixels into the display-list image pool and lowers to same
+///     `DisplayCommand::Image` lane placed assets use (rasterises through
+///     tiny-skia/Vello), inside the content-box clip. Additive to the
+///     `SubmitSceneLayer` payload's `SceneLayer` — no new messages. This
+///     is what lets paged.image composite in-frame (image M4); the
+///     shared-`GPUDevice` zero-copy stage (Stage B) is a follow-on.
+///   - v42 (C-5 / I-04 — placed-asset bytes read door): new
+///     `RequestPlacedAssetBytes { element_id }` request +
+///     `PlacedAssetBytes { found, uri, width, height, encoded }` reply. A
+///     plugin reads the ORIGINAL encoded bytes of a document's placed
+///     image (the input side of image M4 — read placed → process →
+///     composite back via the v41 image scene layer). The worker resolves
+///     the frame's `image_link` URI and returns the bytes the build
+///     already decoded + cached. Pure READ, no mutation.
+///   - v43 (the campaign's Wire Batch 1 — one bump for the batch):
+///     D-01 tagged placeholders: `FieldKind` gains the plugin
+///     `placeholder` kind on `InsertField`, new `setFieldValue`
+///     mutation, new `RequestDocumentPlaceholders` request +
+///     `DocumentPlaceholders { items }` reply. D-14 asset placement:
+///     new `placeImage` mutation (`{ elementId, uri, fit? }`). W-06
+///     font bytes: `RequestFontFaceBytes { family, style? }` →
+///     `FontFaceBytes { found, family, style, postscript_name, format,
+///     bytes }`. Arrowheads: `frame.strokeStartArrowhead` /
+///     `frame.strokeEndArrowhead` SetProperty paths (GraphicLine,
+///     InDesign ArrowHead vocabulary). Writer-side (no wire): C-8
+///     new-entry emission (minted stories + InsertPage spreads survive
+///     IDML export, designmap patched).
+///   - v44 (the campaign's Wire Batch 2 — one bump for the batch). C-6
+///     (I-06) image resource provider — pyramid-tile pull. New message
+///     kinds (each a wire change, so the batch bump):
+///     - `ClaimImageResource { image_id, levels, tile_size, base_width,
+///       base_height, revision }` / `ReleaseImageResource { image_id }`
+///       (main→worker): register / drop a frame's claim. The worker keys
+///       the claim by the frame `Self` id parsed from the claim id's
+///       `x-paged-image:<frame>` namespace and pulls tiles from its LRU
+///       cache at build time. Reply: `ResourceClaimApplied`.
+///     - `ResourceTilesNeeded { image_id, level, tiles, generation }`
+///       (worker→main, UNSOLICITED): emitted during compose when a claimed
+///       image lacked tiles at the chosen mip level — compose painted the
+///       best cached level (or the whole-image fallback) and never blocked.
+///       The host fetches the listed tile origins and submits them.
+///     - `SubmitResourceTiles { image_id, level, tiles, generation }`
+///       (main→worker): fill the worker-side budgeted LRU tile cache and
+///       dirty the claimed image's pages. `generation` echoes the
+///       `ResourceTilesNeeded` it answers so a stale reply can be dropped.
+///       Reply: `ResourceClaimApplied`. `ProviderTileWire` carries one
+///       tile's RGBA8 bytes + level-space px origin + dims.
+// v45 (2026-06-13): the `SubmitSceneLayer` payload gains a
+// `SceneItem::FillPathGradient` variant (C-1.3 — linear/radial gradient
+// paints over the existing display-list gradient pool). A payload-only
+// addition on the existing channel, exactly like v40's `SceneItem::Text`
+// and v41's `SceneItem::Image` — no new message. Unblocks paged.web's CSS
+// gradient fidelity (ADR-011) and paged.draw gradient sceneLayers.
+// v46 (2026-06-13): the `SubmitSceneLayer` payload grows three more
+// additive sceneItems/paints: `SceneGradient::Sweep` (conic gradient —
+// new display-list `sweep_gradients` pool + `Paint::SweepGradient`),
+// `SceneItem::FillPathBlend` (per-fill `SceneBlendMode` → the existing
+// `DisplayCommand::FillPathBlend` offscreen-composite lane), and
+// `SceneItem::DropShadow` (CSS box-shadow → the existing
+// `DisplayCommand::DropShadow` stamp). All three lower to render support
+// that already exists; like v40/v41/v45, payload-only on the existing
+// channel — no new message. Unblocks paged.web `conic-gradient` /
+// `mix-blend-mode` / `box-shadow` fidelity and paged.draw blend/shadow.
+//
+// v47 (2026-06-13): the `SubmitSceneLayer` payload gains
+// `SceneItem::InnerShadow` (CSS `box-shadow: inset` → the existing
+// `DisplayCommand::InnerShadow` lane, with a `choke` inset-spread control).
+// Payload-only addition on the existing channel; outset spread was already
+// handled (the lowering captures the spread-inflated shadow path).
+//
+// v48 (2026-06-13): the `SubmitSceneLayer` payload gains
+// `SceneItem::StrokePathGradient` (gradient stroke) +
+// `SceneItem::FillPathGradientBlend` (gradient fill under a blend mode) —
+// both the gradient resolution of `FillPathGradient` on the existing
+// `StrokePath` / `FillPathBlend` lanes (stroke + blend share the rasterizer's
+// `paint_to_ts`, so no new render path). Payload-only. Unblocks paged.web CSS
+// gradient borders / gradient-with-`mix-blend-mode`.
+//
+// v49 (2026-06-15): new `MainToWorkerKind::NewBlankDocument { width_pt,
+// height_pt, font }` request — the engine-owned File ▸ New. Additive
+// (no existing payload changed), but a new editor SENDS a message an
+// older worker can't deserialise, so the minor bumps to keep the
+// editor/wasm pair in lockstep (the handshake catches the mismatch).
+//
+// v50 (C-1 Stage B — per-drag pixel layer + pixel save-back): two new
+// `MainToWorkerKind`s, `SubmitPixelLayer { element_id, layer }` /
+// `ClearPixelLayer { element_id }` (the STREAMING sibling of
+// `SubmitSceneLayer` — a set of independently-positioned RGBA8 tiles a
+// drag re-streams, lowered to the SAME `SceneItem::Image` scene-layer lane
+// via `PixelLayer::into_scene_layer`, so no new render path), plus the new
+// `Mutation::ReplaceImageBytes` → `Operation::ReplaceImageBytes` (commit a
+// processed result as a frame's inline `image_bytes` — one undoable
+// document mutation, the save-back companion to the ephemeral preview). A
+// new editor SENDS messages an older worker can't deserialise, so the
+// minor bumps; the handshake catches a stale pair.
+//
+// v51 (.paged container — the host.parts door): four new
+// `MainToWorkerKind`s — `WritePagedPart { path, bytes }` / `ReadPagedPart
+// { path }` / `ListPagedParts { prefix }` / `ExportPaged {}` — the engine
+// side of the SDK `host.parts` surface. A plugin persists namespaced
+// `paged/<plugin>/<id>/…` parts INTO the document container (they travel
+// with the `.paged` file, unlike per-browser OPFS blob storage); `ExportPaged`
+// serialises the document as a `.paged` package (valid IDML + the paged/ parts
+// + manifest.json). Additive — a new editor SENDS messages an older worker
+// can't deserialise, so the minor bumps; the handshake catches a stale pair.
+//
+// v52–v55 (doc doors + cell styling): see the per-variant doc comments —
+// v52 `InsertAnchoredFrame`, v53 `InsertHyperlink`, v54
+// `RequestStoryContent`, v55 `ApplyStyle.cell`.
+//
+// v56 (Wave B — path topology): two new `Mutation`s — `ClosePath
+// { elementId, subpath? }` (close an open subpath; the inverse gesture of
+// the `PathOpenAt` scissors cut, merging coincident endpoints back) and
+// `JoinPaths { elementId, otherId }` (weld two open single-contour path
+// elements at their nearest endpoints and delete the other; both-pairs-
+// coincident inputs close into a ring; rides `Operation::JoinPaths`, the
+// PathfinderBoolean-style internal Batch whose single undo restores both
+// elements). Additive — a new editor SENDS mutations an older worker can't
+// deserialise, so the minor bumps; the handshake catches a stale pair.
+//
+// v56 also carries B-18 (nested content / paste-into, same unpublished
+// batch — nothing shipped between, so no extra bump): `PasteInto
+// { containerId, childId }` nests an existing top-level page item inside
+// a container Rectangle / Oval / Polygon (the renderer clips it by the
+// container's outline; geometry preserved in document space) and
+// `ReleaseFrom { childId }` pops it back out, world transform preserved.
+// Both ride the same-named `Operation`s; each is one undo step (exact
+// z-slot / child-index restore).
+//
+// v57 (B-22 — planar regions / the region Pathfinder row): the engine
+// gains the level BELOW element hit-testing — the faces of the planar
+// arrangement overlapping paths divide the plane into (`paged_mutate::
+// planar`). One new read door, `RequestPlanarRegions { elementIds,
+// point? }` → `PlanarRegions { found, faces, inputCount, complete,
+// reason }`: with `point` it answers the single face under it (Shape
+// Builder's hover query), without it, every face. Seven new
+// `Mutation`s ride it: `pathfinderDivide` / `pathfinderTrim` /
+// `pathfinderMerge` / `pathfinderCrop` / `pathfinderOutline` /
+// `pathfinderMinusBack` (Illustrator's Pathfinder row, all over one
+// arrangement, `elementIds` top-to-bottom) plus `pathfinderFaces
+// { elementIds, faces, mode }` (unite the named faces — Shape
+// Builder's click/drag output). Additive — a new editor SENDS
+// messages an older worker can't deserialise, so the minor bumps; the
+// handshake catches a stale pair.
+//
+// NOT in v57 (named residual): Live Paint's PERSISTENT face/edge graph
+// with gap detection. That needs a document-resident object type that
+// survives edits, not a query.
+//
+// v57 also carries C-15 (batch composability) — it RIDES the open number
+// under governance rule 4: v57 has never been tagged or published (the
+// highest tag is v0.51.2 and npm carries `canvas-wasm@0.51.0`), so 57 is
+// still the open, unshipped contract. Two additions, both additive:
+//   - a new `Mutation::BindCreated { handle }`, legal only as a batch
+//     child, plus the `$h:<handle>` REFERENCE convention it enables:
+//     within-batch symbols, generalising the v34 `$created` sentinel from
+//     "the last creation, understood by two mutation kinds" to "any
+//     number of live names, addressable from any mutation kind" (see
+//     `batch_handles`). Every existing payload deserialises byte-
+//     identically and a batch that binds nothing takes the pre-C-15 path
+//     unchanged — nothing an older worker already accepts changes shape.
+//   - `setDocumentDefaults` INSIDE a batch now logs a reversible record
+//     (`LoggedMutation::Defaults`), so the batch's single undo restores
+//     the prior triple and a failing sibling rolls it back. Standalone it
+//     is still app state: applied, not undoable, no log entry. No wire
+//     field changed — same mutation, composable.
+// A stale pair still fails LOUD, which is why riding is safe here: an
+// older worker cannot deserialise `bindCreated` at all, and an engine
+// that ignored handles would fail the referencing child with an unknown
+// id rather than mis-apply it.
+//
+// v58 (C-28 opacity masks + C-29 type-on-a-path): two Illustrator
+// "Phase 2" doors, deliberately riding ONE bump because both are new
+// operations landing together.
+//
+// C-28 — `applyOpacityMask { targetId, maskId, maskType?, invert? }` /
+// `releaseOpacityMask { targetId }`. The engine gains a REAL soft
+// mask: a new `DisplayCommand` bracket (`BeginSoftMask` /
+// `BeginMaskedContent` / `EndSoftMask`) carrying per-pixel coverage,
+// not the hard binary `PushClip`. The CPU rasterizer resolves the
+// artwork to a `tiny_skia::Mask` (luminance or alpha, optionally
+// inverted) and multiplies it into the clip stack; the PDF exporter
+// lowers it onto the existing `PendingFormGroup::LuminosityGray`
+// soft-mask path (plus a new `AlphaGroup` for `/S /Alpha`); Vello
+// skips the artwork and renders the content unmasked (documented gap
+// — it has no coverage-buffer layer API).
+//
+// C-29 — `attachTextToPath { elementId, storyId, pathTypeAlignment?,
+// flipPathEffect?, startBracket?, endBracket? }` /
+// `detachTextFromPath { elementId }`. The renderer has drawn
+// `<TextPath>` for a long time; nothing could CREATE one. These two
+// ops close exactly that gap — no renderer change at all.
+//
+// Also additive on the reply side: `IdmlExported` grows a `lost:
+// string[]` naming every paged-native construct the IDML writer could
+// not carry (today: opacity masks — IDML has no such element). It is
+// `#[serde(default)]`, so an older payload still deserialises.
+//
+// Additive in the minor sense the handshake already covers: a new
+// editor SENDS mutations an older worker cannot deserialise, and the
+// version handshake catches the stale pair LOUD rather than letting a
+// mask silently not apply.
+//
+// v59 (Arrange — the z-order door): ONE new `Mutation`,
+// `reorderElement { elementId, to }`, riding the new
+// `Operation::ReorderNode`. Nothing on the wire could change an
+// element's stacking position before this — not the editor (no
+// bring-to-front / send-to-back anywhere), not a plugin (five plugin
+// modules document "inserted items land on top of the z-order" as an
+// accepted limit, and paged.draw's Live Paint v0 paints its face fills
+// OVER the strokes bounding them for exactly this reason).
+//
+// `to` is `"front" | "back" | "forward" | "backward" | { index: n }`
+// (`paged_mutate::ZOrderTarget`). The four RELATIVE verbs are the ones
+// a UI and a plugin can actually express — read-modify-write against
+// the order as the engine sees it at apply time, so there is no stale
+// index to race a concurrent edit. `{ index }` is the absolute form:
+// it is what the inverse uses (the apply layer echoes back the slot the
+// item came from, so ONE undo restores the previous order bytewise —
+// the same exact-slot property `RemoveNode`'s `z_slot` was built for),
+// and it is the honest shape for a layers-panel drag. An out-of-range
+// index is REJECTED, never clamped.
+//
+// Deliberately NOT on this door: reparenting. `Operation::MoveNode`'s
+// `new_parent` stays off the wire — reorder derives its sibling list
+// from where the element already is (top-level `frames_in_order`, a
+// `Group::members`, or a B-18 `nested_children` entry), so it cannot
+// move an item out of a group or into a container behind `PasteInto`'s
+// validation. Containment is structural here, not a checked rule.
+//
+// Additive in the minor sense the handshake already covers: a new
+// editor SENDS a mutation an older worker cannot deserialise, and the
+// handshake catches the stale pair LOUD.
+//
+// ── v62 (C-35 — layer assignment) ────────────────────────────────────
+//
+// `PropertyPath::ItemLayer`, reachable through the `SetElementProperty`
+// door that already existed. No new message: the vocabulary grew, not
+// the wire shape, which is why this is a bump and not a redesign.
+//
+// It closes the half of the layer model that was missing. The seven
+// `Layer*` mutations have always managed the layer LIST — insert,
+// remove, reorder, rename, visible, locked, printable — while WHICH
+// LAYER AN ITEM IS ON was written by no operation at all. Items could
+// only be born onto a layer by a generated fixture, so a Layers panel
+// could show the tree and toggle it but could never let you drag an
+// item between rows, and `layers-z.idml` was the only document in the
+// project with items on more than one layer.
+//
+// Addressed against a LEAF page item, never a `<Group>` — IDML puts no
+// `ItemLayer` on a group, its members each carry their own. The value
+// is a `<Layer>` self_id as `Value::Text`; the empty string clears the
+// reference to the default layer. The inverse restores the previous
+// reference, so one undo moves the item back.
+//
+// Note this is NOT `ReorderElement` with a different parent, and the
+// two do not collapse into each other: reorder positions an item
+// within the layer it is on, `ItemLayer` chooses the layer, and the
+// renderer sorts by layer BEFORE it consults the z table (Q-10). A
+// layers panel drives both.
+// v63 — `ExecuteScript` carries an OPTIONAL per-run budget.
+//
+// The kind used to hardcode `ScriptBudget::default()` — a 2 s wall
+// clock, right for the editor's REPL and wrong for a batch CLI where
+// authoring a 134-page document is the job rather than a hang. So
+// `paged script` reached past the wire and called `execute_script_with`
+// directly, which made it the one command in that crate not going
+// through `WorkerCore::dispatch` — a second door, for a parameter.
+//
+// The surface is shared now and only the parameter differs. Additive:
+// serde defaults the field, an older worker ignores it and runs the
+// default budget, and every existing caller is unchanged.
+// v64 — `SetFlowGrowRule` (ADR 026): a story's frame chain may
+// GROW. The renderer then adds generated pages after the last frame's page
+// while the story oversets, as InDesign's Smart Text Reflow does (measured:
+// end of story, the last page's master, a margin-box frame with default
+// options), and drops them when empty. The pages are derived at layout, so
+// the op carries only the rule and its inverse is the prior rule. A new op
+// an older worker cannot apply, hence the bump.
+// v65 — the paragraph-style editor's reads and writes:
+//   - `paragraphComposer`, a new `PropertyPath` at paragraph and
+//     paragraph-style level (`Value::Text`, the IDML composer name: "HL
+//     Composer", "HL Single", "HL Composer Optyca", "HL Single Optyca";
+//     "" clears). An unknown name is refused on the wire. An older worker
+//     cannot deserialise the path, hence the bump.
+//   - `RequestStyleProperties { collection, styleId }` → `StyleProperties
+//     { result }`: a style definition's settable properties, in the
+//     setter's shapes — the read a paragraph-style editor needs.
+//   - `StorySummary.growRule: { grow, maxPages, copyFrameOptions } | null`
+//     (the `stories` collection and `paged.stories()`): a story's ADR 026
+//     grow rule, readable at last. Additive on a reply.
+//   - `fontRegistered` / `fontRegistryCleared` report `pageIds` (and
+//     `pageStructureChanged` / `pageSizesPt`): the pages a late font
+//     re-laid out, so the host repaints exactly those. `fontRegistry
+//     Cleared` becomes a struct variant (a payload where there was none).
+// v65 also carries the drawing wave (RFI C-63 / C-24 / C-64), stacked on
+// the same unpublished number:
+//   - the effect paths, `frameOpacity` / `frameBlendMode` and
+//     `frameStrokeAlignment` reach the kinds that draw them (Polygon,
+//     Oval, TextFrame, Group) — no new path, more `(kind, path)` pairs
+//     accepted, and the descriptor reads what it now writes;
+//   - `DuplicateElements { elementIds, offset }`: a whole, translated
+//     clone of each element directly above its source, one undo step,
+//     the new ids in `mutationApplied.minted`. A new op an older worker
+//     cannot apply.
+// v66 — `RequestTextOutlines { id }` → `TextOutlines { result }` (RFI
+// C-69): a text frame's composed glyphs as path outlines in page space,
+// one run per fill colour — what "Create Outlines" inserts as compound
+// paths. A new message kind an older worker cannot answer, hence the
+// bump.
+// v66 — the paged.image batch (binary lanes + part deletion):
+//   - `DeletePagedPart { path, caller? }` → `PagedPartDeleted { existed }`:
+//     a part the loaded container carries is tombstoned, so read/list stop
+//     answering it and `ExportPaged` leaves it out. A new kind an older
+//     worker cannot deserialise, hence the bump.
+//   - `SceneItem::Image.rgba` / `PixelTile.rgba` are refcounted
+//     (`bytes::Bytes`): a rebuild hands the display list the refcount, not
+//     a copy. The JSON shape (`number[]`) is unchanged.
+//   - Binary doors on the canvas-wasm surface (no JSON, `Uint8Array` in or
+//     out; replies are the same `WorkerToMain` envelopes): `submitScene
+//     ImageDirect` (a frame's scene layer becomes one image),
+//     `submitSceneImageTilesDirect` (patch rectangles of that image in
+//     place; only the pages showing it re-encode, not the whole cache),
+//     `writePagedPartDirect`, `readPagedPartDirect`,
+//     `placedAssetBytesDirect` and `mutateWithBytesDirect` (a mutation —
+//     a `batch` too — whose first `replaceImageBytes` with empty `bytes`
+//     takes the transferred buffer).
+// v67 — snapping moves into the engine (RFI C-68):
+//   - `RequestSnapPoint { query }` → `SnapPoint { result }`: snap one
+//     page-local point to the points (anchors, frame corners, oval
+//     quadrant points, centres, the page), the x / y lines through them,
+//     ruler guides, the document grid and the nearest outline — one
+//     resolver for the Pen, Direct Selection and any plugin tool.
+//   - `SetSnapSettings { settings }` → `SnapSettingsApplied { settings }`:
+//     the session's tolerance and target switches, which the translate,
+//     resize and path-edit gestures obey too.
+//   - Gestures: translate aligns with every visible leaf kind (it saw
+//     text frames and rectangles only), resize snaps the edges it moves,
+//     a path edit snaps the dragged point.
+// Two new message kinds an older worker cannot answer, hence the bump.
+// v68 — the paged.web batch: scene-layer text in its own face.
+//   - `SceneItem::Text` honours `family` + `style` (reserved since v40 and
+//     ignored — every run drew in the document default font) and gains
+//     `weight` (CSS 100..900; the `wght` of a variable face, and the style
+//     name when `style` is absent) and `italic`. A run resolves through the
+//     faces the host registered; only an unresolvable family draws in the
+//     default font, and that is reported: a `FontSubstituted` diagnostic
+//     carrying the frame id and the face, and `SceneLayerApplied.
+//     fontFallbacks`. Registering or clearing fonts rebuilds the frames
+//     whose scene text names the family.
+//   - All fields additive; the bump is for the BEHAVIOUR: a host cannot
+//     tell a worker that draws `family` from one that ignores it by shape,
+//     so it gates per-run faces on `protocol >= 68`.
+// v69 — the paged.data batch.
+//   - `insertField.contentOffset`: place a field at the CARET. The caret
+//     (`ContentSelection`, `host.text.caret()`) counts UTF-8 bytes plus a
+//     synthetic `\n` per paragraph; field ops count chars with no
+//     separator. The engine converts at apply time, so a batch that types
+//     first still lands right. Additive; an older worker ignores it.
+//   - Behaviour: text typed at a field's edge lands beside the field, not
+//     inside its run (a refresh used to overwrite it).
+//   - `setDocumentMetadata`: a document-scoped, UNDOABLE plugin label
+//     (`DesignMap::labels`), read back in `DocumentMeta.pluginMetadata`;
+//     persisted in the `.paged` native model part (not yet in IDML).
+// v70 — the presentation batch and the platform doors for plugin content.
+//   - Pages and masters: `movePage` (reorder; `reorderSpreads` inverse),
+//     `setPageMetadata` (a page's `x-paged:` plugin label, in its spread's
+//     labels map; travels with duplicate, delete and undo),
+//     `insertHyperlink.page` (a link to a page), `requestSnapshot.hideItems`
+//     (a page drawn without some items), `onMaster` (edit a master's items
+//     through the ordinary ops) and `createMaster` / `deleteMaster` /
+//     `renameMaster`.
+//   - Model fields with no op of their own: a radial gradient's
+//     `GradientFillStart`, a cell / cell style's `…EdgeStrokeType`, and
+//     `ParsedMasterSpread.name`.
+//   - `RegisterFont.scope` (`"document"` default | `"sceneLayer"`) and an
+//     optional `ClearFontRegistry` payload `{ scope }`: scene-scoped faces
+//     resolve scene-layer text only, ahead of the document registry, and
+//     never reach document layout, `FontSummary.isMissing` or substitution
+//     tracing. A payload-less `clearFontRegistry` clears the document
+//     registry, as before.
+//   - Behaviour: a batch that translates whole (one `Operation::Batch`)
+//     reports each mint's `bindCreated` handle in `minted[].handle`, as
+//     the mixed lane always did (it reported `null`).
+//   - Behaviour: the `frameDropShadow*` paths apply to ovals, polygons and
+//     graphic lines (a line's shadow is cast by its stroke), and the IDML
+//     adapter reads and writes them; the document's `setDocumentMetadata`
+//     labels now round-trip through IDML (`<Document><Properties><Label>`).
+//   - New operations an older worker cannot apply, hence the bump (v0.69.0
+//     shipped the paged.data batch alone).
+// v71 — the object model (ADR 131 one address grammar + selectors, ADR 132
+//   typed property schemas + virtual paths), one batch:
+//   - `Mutation::Set { address, path, value }`: set ANY property of ANY
+//     object. `address` is an ADR 131 address STRING (`doc`, `page:#2`,
+//     `swatch:Color/Red`, `style:object/<id>`, `cell:<table>/0,1`,
+//     `textVariable:<id>`, …; `$h:` handles resolve in it); `path` is a
+//     `PropertyPath` name or a virtual path from the catalog's new
+//     `propertySchemas`. The engine resolves it to the ONE existing op that
+//     writes that property, so undo is that op's. A `Set` that resolves to
+//     an application-state op (colour settings, proof setup, an ink
+//     setting, the standard-Lab flag, document defaults — unlogged when
+//     sent alone) logs a reversible record: a `Set` is always one undo
+//     step. A selector is not a target — `RequestQuery` first.
+//   - `RequestQuery { selector }` → `QueryResult { addresses, error }` and
+//     `RequestGet { address, path }` → `PropertyValue { value, error,
+//     code?, mixed? }`, both pure reads. A mixed value (a range whose runs
+//     disagree) answers `mixed: true`; a refusal carries `code`
+//     (`badAddress` / `notFound` / `noSuchPath` / `noDocument`).
+//   - `Value` gains `number`, `enum`, `ref`, `gradientStops` and
+//     `swatchColor` (additive; the old `length`/`text` payloads coerce by
+//     schema). `swatch.color` writes space + components (+ model, tint)
+//     as one value.
+//   - `createTextVariable` / `deleteTextVariable`, and `insertField`'s
+//     `{ textVariable: { variableId } }` field kind: a custom text variable
+//     made and instanced in text; a `Set` on `textVariableContents`
+//     re-bakes every instance.
+//   - New `PropertyPath`s for fields that were modelled and unsettable:
+//     page margins and columns, document bleed and slug, text variables,
+//     object/cell/table style definitions (`SetStyleProperty` accepts the
+//     object, cell and table collections), and a page item's `Name`
+//     (`item.name`, held in `Spread::item_names`; reading and writing it in
+//     IDML is the plugin-publish adapter's `item-names` step).
+//   - Behaviour: the remaining effect paths (beyond v70's drop shadow)
+//     apply to graphic lines, cast from the stroke band.
+//   - The catalog adds `propertySchemas` (one typed schema per (address
+//     kind, path)) and generates `idGrammar` from `Address`.
+//   - The script host bridge (ADR 323): `ExecuteScript.hostObjects`
+//     (optional bool) says the host answers for `plugin:` addresses; such a
+//     script's reply may be `RequestHostObjects { session, calls }`
+//     (`HostObjectCall`: get / batch / query / schema / invoke /
+//     commands — the last two the typed commands of SDK §21.12; a
+//     batch takes `{ op: "invoke", id, args, handle? }` ops), answered by the
+//     host with `HostObjectsResult { session, answers, committed? }`
+//     (`HostObjectAnswer { value?, error?: { code, reason, index? } }`),
+//     whose reply is again `ScriptResult` or `RequestHostObjects`. Boa
+//     gains `paged.schema`; a script that wrote through the host undoes
+//     as one step. `committed` lists the `appliedSeq`s of the engine
+//     writes the host made answering the round: only those and the
+//     script's own writes fold into the script's undo step — an edit
+//     made while the script waited (a UI edit) is never folded, and the
+//     script's records on either side of it stay separate steps.
+// Additive on 71, no bump (governance rule 1), v0.71.13 — what a committed
+//   change reports and where a page sits (ADR 159): `GestureCommitted.reflow`,
+//   `ScriptResult.writes` / `page_ids`, `PageSummary.page_origin` /
+//   `spread_id`, and the read-only `tableHeaderRowCount` /
+//   `tableFooterRowCount` paths. All optional: a consumer detects them by
+//   presence, and one that needs them requires `canvas-wasm >= 0.71.13`.
+//   The same release carried insertFootnote / deleteFootnote (ADR 163),
+//   deleteHyperlink / editHyperlink (ADR 164) and updateTableOfContents
+//   (ADR 165) as new Mutation variants on 71.
+// v72 — generated text, notes and bookmarks over the wire: generateIndex
+//   (ADR 168), updateCrossReferences (ADR 169), insertNote / editNote /
+//   deleteNote / convertNoteToText and the `notes` collection (ADR 172),
+//   createBookmark / renameBookmark / moveBookmark / deleteBookmark and
+//   `BookmarkSummary.parent` (ADR 173), and `ExportPdfWireOptions.bookmarks`
+//   (ADR 171).
+// v73 — endnotes edited (ADR 174): insertEndnote, deleteEndnote,
+//   convertFootnoteToEndnote and the `endnotes` collection; the first
+//   endnote makes the endnote story on a page of its own.
+pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(74);
+
+/// A per-run script budget on the wire (v63). Every field is optional
+/// and falls back to the engine's default, so a caller overrides only
+/// what it means to.
+///
+/// `wall_clock_ms: Some(0)` DISABLES the deadline — the loop, recursion
+/// and stack guards still apply. Absent keeps the default 2 s. The zero
+/// sentinel exists because a nested `Option<Option<u64>>` on the wire
+/// distinguishes "unset" from "explicitly none" only by JSON `null`
+/// nesting, which is not worth the ambiguity in a hand-written payload.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ScriptBudgetWire {
+    #[serde(default)]
+    pub loop_iterations: Option<u64>,
+    #[serde(default)]
+    pub recursion_depth: Option<usize>,
+    #[serde(default)]
+    pub stack_size: Option<usize>,
+    /// Milliseconds; `0` disables the wall clock.
+    #[serde(default)]
+    pub wall_clock_ms: Option<u64>,
+}
+
+/// v71 — one call a suspended script makes on the host's object
+/// registry (ADR 323 `host.objects`). Addresses, selectors and op values
+/// are the registry's own spelling; core never interprets a `plugin:`
+/// address.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(tag = "op", rename_all = "camelCase", rename_all_fields = "camelCase")]
+pub enum HostObjectCall {
+    /// `objects.get(address, path)`. Answer: the `ObjectValue`.
+    Get { address: String, path: String },
+    /// `objects.batch(ops)` — `ObjectOp[]` (`{ op: "set", address, path,
+    /// value }`, `create`, `delete`), committed as ONE undo step. Answer:
+    /// the `ObjectWriteResult`; a refusal is the answer's `error` (with
+    /// the failing op's `index`).
+    Batch {
+        #[tsify(type = "unknown[]")]
+        ops: Vec<serde_json::Value>,
+    },
+    /// `objects.query(selector)`. Answer: `string[]`.
+    Query { selector: String },
+    /// `objects.schema(addressOrKind)`. Answer: `PropertySchema[]`.
+    Schema { target: String },
+    /// `objects.invoke(id, args)` — a typed command (`core.<op>` or a
+    /// plugin's), run by the host's registry as ONE batch. Answer: the
+    /// command's result (`{ created, undoSteps }` for a core command).
+    /// Additive within v71.
+    Invoke {
+        id: String,
+        #[serde(default)]
+        #[tsify(type = "unknown")]
+        args: serde_json::Value,
+    },
+    /// `objects.commands(owner?)` — the typed commands the host offers
+    /// (core's first), optionally of one owner (`"core"`, a plugin id).
+    /// Answer: `CommandInfo[]`. Additive within v71.
+    Commands {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        owner: Option<String>,
+    },
+}
+
+/// v71 — the host's answer to one `HostObjectCall`: `value` on success,
+/// `error` when the registry refused (the script sees an exception
+/// carrying `code`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct HostObjectAnswer {
+    #[serde(default)]
+    #[tsify(optional, type = "unknown")]
+    pub value: serde_json::Value,
+    #[serde(default)]
+    #[tsify(optional)]
+    pub error: Option<HostObjectError>,
+}
+
+/// v71 — a refused host-object call: the registry's `ObjectErrorCode`
+/// (`unknownAddress`, `unknownPath`, `invalidValue`, `readOnly`,
+/// `denied`, `unmapped`, `failed`, …), its reason, and for a batch the
+/// index of the op that failed.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct HostObjectError {
+    pub code: String,
+    pub reason: String,
+    #[serde(default)]
+    #[tsify(optional)]
+    pub index: Option<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+pub struct ProtocolVersion(pub u32);
+
+/// One element a mutation minted, in the order it was minted.
+///
+/// A single mutation reports its one creation as
+/// `MutationApplied::created_id`. A `Batch` mints as many as it has
+/// creating children and used to report only the LAST — so a caller
+/// authoring through batches could not learn what it had just made, and
+/// had to either send one mutation per element (paying a full rebuild
+/// each) or re-discover the ids with a scene walk. This is the list it
+/// could not get.
+///
+/// A `DuplicateElements` fills it too (C-64): it is the one single
+/// mutation that mints more than one element — a clone per source, in
+/// the order the sources were named — so `created_id` (its LAST clone)
+/// could not carry the answer. A group's clone is one entry, its group
+/// id; a text frame's clone carries the story copied for it.
+///
+/// `handle` is the name a C-15 `BindCreated` child gave the element
+/// (`None` when nothing named it); `story_id` is the story the creating
+/// child minted alongside it — a text frame's `ParentStory` — which is
+/// what a later `insertText` addresses.
+///
+/// Additive per governance rule 1 (`#[serde(default)]` on the reply
+/// field): an older main thread that ignores it reads exactly what it
+/// read before, so this is not a PROTOCOL_VERSION bump.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct MintedElement {
+    /// The C-15 handle bound to this element, if any.
+    pub handle: Option<String>,
+    /// The element the creating child minted.
+    pub element: crate::element_selection::ElementId,
+    /// The story minted with it, for the kinds that carry one.
+    pub story_id: Option<String>,
+}
+
+/// Concept 3 — PDF export options as the dialog sends them. Every
+/// field is optional/defaulted so the wire stays forward-compatible;
+/// the worker maps it onto `paged_export_pdf::ExportOptions`.
+/// One file an IDML export's image links point at — the wire form of
+/// `idml_export::ExportedLink` (see `IdmlExported.links`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportedLinkWire {
+    /// The basename the `<Link>` was written with (decoded: the name on
+    /// disk).
+    pub file_name: String,
+    /// The URI the model held for the asset — empty for an image that
+    /// existed only as bytes (its name was minted from the frame id).
+    pub source_uri: String,
+    /// Whether `bytes` carries the image's encoded file. `false` for a
+    /// link-only frame: the host copies the file from `source_uri`.
+    pub has_bytes: bool,
+    #[tsify(type = "number[]")]
+    pub bytes: ByteBuf,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportPdfWireOptions {
+    /// "pdf17" (default) | "pdfx4".
+    #[serde(default)]
+    pub standard: Option<String>,
+    /// Output-intent profile NAME, resolved against the worker's
+    /// registered profile registry. `None` ⇒ the active working
+    /// space profile.
+    #[serde(default)]
+    pub output_intent_profile: Option<String>,
+    /// Human-readable output condition for the OutputIntent dict.
+    #[serde(default)]
+    pub output_condition: Option<String>,
+    /// "preserveNumbers" (default) | "convertToDestination".
+    #[serde(default)]
+    pub color_policy: Option<String>,
+    /// 0-based inclusive page range; both `None` = all pages.
+    #[serde(default)]
+    pub page_from: Option<u32>,
+    #[serde(default)]
+    pub page_to: Option<u32>,
+    #[serde(default)]
+    pub crop_marks: bool,
+    #[serde(default)]
+    pub registration_marks: bool,
+    #[serde(default)]
+    pub color_bars: bool,
+    #[serde(default)]
+    pub page_info: bool,
+    #[serde(default)]
+    pub marks_offset_pt: Option<f32>,
+    /// Bleed override in pt (top, inside/left, bottom,
+    /// outside/right); `None` = the document's declared bleed.
+    #[serde(default)]
+    pub bleed_override_pt: Option<[f32; 4]>,
+    /// Resample images above this effective ppi; `None` = never.
+    #[serde(default)]
+    pub downsample_ppi: Option<f32>,
+    /// Raster resolution for effect soft-mask stamps (default 150).
+    #[serde(default)]
+    pub effect_dpi: Option<f32>,
+    /// "outline" (default) | "fail".
+    #[serde(default)]
+    pub restricted_font_policy: Option<String>,
+    /// Document title for Info/XMP.
+    #[serde(default)]
+    pub title: Option<String>,
+    /// ADR 171 — write the document's bookmarks as the PDF's outline
+    /// (InDesign's Include Bookmarks). Off by default, as in InDesign's
+    /// print presets.
+    #[serde(default)]
+    pub bookmarks: bool,
+    /// ADR 182 — Create Tagged PDF: the document's logical structure
+    /// (stories and their paragraphs) with `/MarkInfo` and `/Lang`. Off
+    /// by default, as in InDesign's print presets.
+    #[serde(default)]
+    pub tagged: bool,
+}
+
+/// panels.md gap 20 — one structured PDF-export preflight finding for
+/// the export dialog's findings list. The wire mirror of
+/// `paged_export_pdf::PreflightFinding`. `severity` is `"warning"` /
+/// `"error"`; `code` is a stable machine tag (`"font_not_embeddable"`
+/// / `"image_missing_bytes"`); `page_index` is the 0-based body-page
+/// the finding was raised on (`None` for document-level findings).
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct PreflightFinding {
+    pub code: String,
+    pub severity: String,
+    pub message: String,
+    #[serde(default)]
+    pub page_index: Option<u32>,
+}
+
+/// v44 (C-6 / I-06) — one pyramid tile on the wire. `rgba` is tightly
+/// packed RGBA8 (`width*height*4` bytes, row-major); `[x, y]` is the
+/// tile's origin in level-space px (the provider's grid origin). The
+/// worker interns these into its budgeted LRU tile cache; the renderer's
+/// resource provider serves them back as `paged_renderer::ProviderTile`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderTileWire {
+    /// Tile origin x in level-space px.
+    pub x: u32,
+    /// Tile origin y in level-space px.
+    pub y: u32,
+    /// Pixel width of the buffer.
+    pub width: u32,
+    /// Pixel height of the buffer.
+    pub height: u32,
+    /// Tightly packed RGBA8, row-major. Length must be `width*height*4`.
+    #[tsify(type = "number[]")]
+    pub rgba: ByteBuf,
+}
+
+/// v44 (C-6 / I-06) — one image's tile-miss request: the tiles a claimed
+/// image lacked at `level` during the last build. `tiles` are grid origins
+/// `[x, y]` in level-space px; `generation` is the pyramid revision the
+/// request was computed against (the host echoes it on submit so a stale
+/// reply is dropped).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceTilesNeededWire {
+    pub image_id: String,
+    pub level: u8,
+    pub tiles: Vec<[u32; 2]>,
+    pub generation: u64,
+}
+
+impl From<paged_renderer::ResourceTilesNeeded> for ResourceTilesNeededWire {
+    fn from(n: paged_renderer::ResourceTilesNeeded) -> Self {
+        Self {
+            image_id: n.image_id,
+            level: n.level,
+            tiles: n.tiles,
+            generation: n.generation,
+        }
+    }
+}
+
+/// One message from main → worker. (Tsify derive intentionally
+/// omitted; see `TS_ENVELOPES` above for the TS-side declaration.)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MainToWorker {
+    pub seq: u64,
+    pub protocol: ProtocolVersion,
+    #[serde(flatten)]
+    pub kind: MainToWorkerKind,
+}
+
+/// v70 — which registry a `RegisterFont` / `ClearFontRegistry` addresses.
+/// `document` is the registry document text lays out with (and the one
+/// `FontSummary.isMissing` and substitution tracing read); `sceneLayer` is
+/// consulted by plugin scene-layer text only, ahead of the document's.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub enum FontScope {
+    #[default]
+    Document,
+    SceneLayer,
+}
+
+/// v70 — `ClearFontRegistry`'s optional payload.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct ClearFontRegistryPayload {
+    #[serde(default)]
+    #[tsify(optional)]
+    pub scope: FontScope,
+}
+
+/// The discriminated payload of a `MainToWorker` message. Tagged so
+/// TS can do `switch (msg.kind) { case "loadDocument": ... }` against
+/// camelCase field names. `rename_all_fields` cascades to struct
+/// variants so e.g. `cmyk_icc_profile` becomes `cmykIccProfile` on
+/// the wire — the TS protocol mirror locks the camelCase contract.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "kind",
+    content = "payload"
+)]
+pub enum MainToWorkerKind {
+    /// Initial handshake. Worker replies with `WorkerToMainKind::Ready`
+    /// once it has loaded its WASM and is ready for the first
+    /// `LoadDocument`. Sent once per worker lifetime.
+    Hello,
+    /// Replace the active document with `bytes`. Returns
+    /// `DocumentLoaded` (success) or `LoadFailed`.
+    LoadDocument {
+        #[tsify(type = "number[]")]
+        bytes: ByteBuf,
+        #[serde(default)]
+        #[tsify(type = "number[] | null")]
+        font: Option<ByteBuf>,
+        #[serde(default)]
+        #[tsify(type = "number[] | null")]
+        cmyk_icc_profile: Option<ByteBuf>,
+    },
+    /// Replace the active document with a freshly-minted EMPTY one: a
+    /// single page sized `width_pt` × `height_pt` (points), seeded with
+    /// the default master / styles / swatches a parsed IDML carries.
+    /// Backs the editor's File ▸ New — the engine synthesises the blank
+    /// IDML package and loads it through the normal parse path, so the
+    /// result is identical in shape to `LoadDocument` (and `source_idml`
+    /// is populated for save-back). `font` is the optional default-font
+    /// fallback (the editor's auto-loaded Inter) so text the user then
+    /// types has glyph metrics, mirroring `LoadDocument`. Returns
+    /// `DocumentLoaded` (success) or `LoadFailed`.
+    NewBlankDocument {
+        width_pt: f32,
+        height_pt: f32,
+        #[serde(default)]
+        #[tsify(type = "number[] | null")]
+        font: Option<ByteBuf>,
+    },
+    /// Register a named font with the worker's family resolver. Persists
+    /// across loads so a fidelity test can preload Poppins/Roboto/etc
+    /// once per worker. Sent while a document is open, it also reaches
+    /// that document: the stories whose runs now resolve to the new face
+    /// are re-laid out before the reply (no protocol change: the reply is
+    /// still `FontRegistered`; re-render to see it).
+    /// Reply: `FontRegistered`.
+    ///
+    /// v70 — `scope` (default `"document"`, today's behaviour). A
+    /// `"sceneLayer"` face goes to a separate table that only scene-layer
+    /// text resolves through (before the document registry): it never
+    /// lays out document text, never clears `FontSummary.isMissing` and
+    /// never enters substitution tracing — a plugin's face cannot stand in
+    /// for a font the document lacks.
+    RegisterFont {
+        family: String,
+        #[serde(default)]
+        style: Option<String>,
+        #[tsify(type = "number[]")]
+        bytes: ByteBuf,
+        #[serde(default)]
+        #[tsify(optional)]
+        scope: FontScope,
+    },
+    /// Drop every font previously registered via `RegisterFont` in one
+    /// scope. Reply: `FontRegistryCleared`. Useful between two
+    /// consecutive packs in a long-running worker, and for dropping a
+    /// plugin's scene faces without touching the document's.
+    ///
+    /// v70 — the payload `{ scope }` is OPTIONAL: `{ kind:
+    /// "clearFontRegistry" }` (no payload, the message every older host
+    /// sends) clears the document registry, as before. It is a newtype
+    /// over an `Option` because an adjacently tagged struct variant
+    /// requires its `payload`, which would have refused that message.
+    ClearFontRegistry(#[tsify(optional)] Option<ClearFontRegistryPayload>),
+    /// Concept 2 — register a named ICC profile with the worker's
+    /// colour-profile registry (the `RegisterFont` pattern: sent any
+    /// time, persists across loads). Profiles are assets shipped by
+    /// the editor and loaded over the wire — never baked into the
+    /// wasm binary. `Mutation::SetColorSettings` resolves working-
+    /// space names against this registry; a document whose designmap
+    /// names a registered profile picks it up at load automatically.
+    /// Reply: `ColorProfileRegistered`.
+    RegisterColorProfile {
+        name: String,
+        #[tsify(type = "number[]")]
+        bytes: ByteBuf,
+    },
+    /// Apply a content mutation. Phase 1 returns `MutationFailed`
+    /// (NotImplemented). The message exists so the JS side can plumb
+    /// it end-to-end now.
+    Mutate(Mutation),
+    /// Request the per-page display list. Worker replies with
+    /// `DisplayListReady` carrying a small descriptor (page id +
+    /// command count + generation counters). Phase 1 does not stream
+    /// the actual command buffer over `postMessage` — it stays in
+    /// shared worker memory; the JS side calls into wasm directly
+    /// for the bytes when it needs them.
+    RequestPage { page_id: PageId, lod: LodTier },
+    /// Hit-test a document-space point. Reply: `HitResult`.
+    HitTest {
+        page_id: PageId,
+        doc_point: (f32, f32),
+        filter: HitFilter,
+    },
+    /// Render a snapshot (low-resolution thumbnail) of a page.
+    /// Reply: `SnapshotReady` with PNG bytes. Used by the navigator
+    /// and the canvas at overview zoom. `dpi` is optional and wins
+    /// over `target_width_px` when both are provided (the fidelity
+    /// suite uses DPI directly so the resulting PNG matches
+    /// `pdftoppm -r <dpi>` byte-for-byte at the dimension boundary).
+    RequestSnapshot {
+        page_id: PageId,
+        target_width_px: u32,
+        #[serde(default)]
+        dpi: Option<f32>,
+        /// v70 — draw the page without these items (a group: all its
+        /// members): a slideshow build step, rendered without touching the
+        /// document. Empty draws the page as it is.
+        #[serde(default)]
+        hide_items: Vec<crate::element_selection::ElementId>,
+    },
+    /// Replace the worker's current selection. Phase 3 Item 1 — the
+    /// worker mirrors the main thread's `ContentSelection` so the
+    /// caret / selection geometry queries have a stable state to
+    /// read.
+    SetSelection {
+        selection: Option<crate::selection::ContentSelection>,
+    },
+    /// Compute selection geometry (rect-per-line). Reply:
+    /// `SelectionGeometry`.
+    RequestSelectionGeometry {
+        selection: crate::selection::ContentSelection,
+    },
+    /// Compute caret geometry for a selection. Reply:
+    /// `CaretGeometry`.
+    RequestCaretGeometry {
+        selection: crate::selection::ContentSelection,
+    },
+    /// panels.md (W0.6 caret queries) — vertical caret navigation:
+    /// move the caret one visible line up/down from `offset`,
+    /// targeting the column nearest the source caret's x. Reply:
+    /// `CaretNavResult` whose `offset` is `None` when there's no line
+    /// in that direction (caret already on the first/last line).
+    RequestCaretNav {
+        story_id: String,
+        offset: u32,
+        direction: crate::geometry::CaretDirection,
+        /// W1.13 — cell qualifier (rides v35, additive). `None` ⇒
+        /// `offset` is a story-local body offset; `Some` ⇒ cell-local.
+        /// Navigation stays WITHIN the addressed stream (a cell's
+        /// caret-up/down does not escape the cell). See `TextCellAddr`.
+        #[serde(default)]
+        cell: Option<crate::selection::TextCellAddr>,
+    },
+    /// panels.md (W0.6 caret queries) — the `[line_start, line_end]`
+    /// story offsets of the visible line containing `offset` (Home /
+    /// End targets). Reply: `LineBoundsResult`.
+    RequestLineBounds {
+        story_id: String,
+        offset: u32,
+        /// W1.13 — cell qualifier (rides v35, additive). See
+        /// `RequestCaretNav::cell`.
+        #[serde(default)]
+        cell: Option<crate::selection::TextCellAddr>,
+    },
+    /// Aftercare-A (protocol v31) — the `[start, end]` story byte
+    /// offsets of the word containing the character at `offset`, per
+    /// Unicode word segmentation (UAX-29). The editor flips
+    /// double-click word-selection on this. Reply: `WordBoundsResult`.
+    /// Offsets are story-local *bytes* — the same address space
+    /// `HitResult.offset_within_story` / `RequestLineBounds` /
+    /// `RequestCaretNav` use. An offset that lands on a run of
+    /// whitespace selects that whitespace span (documented in
+    /// `word_bounds`); an offset past the story end clamps to the
+    /// final word.
+    RequestWordBounds {
+        story_id: String,
+        offset: u32,
+        /// W1.13 — cell qualifier (rides v35, additive). When `Some`,
+        /// offsets are cell-local and segmentation runs over the cell's
+        /// text. See `RequestCaretNav::cell`.
+        #[serde(default)]
+        cell: Option<crate::selection::TextCellAddr>,
+    },
+    /// W1.23 (protocol v35) — the `[start, end)` story byte offsets of
+    /// the paragraph containing the character at `offset`. The editor
+    /// flips triple-click paragraph-selection on this. Reply:
+    /// `ParagraphBoundsResult`. Offsets are story-local *bytes* — the
+    /// same address space `HitResult.offset_within_story` /
+    /// `RequestWordBounds` / `RequestLineBounds` use; a paragraph is a
+    /// maximal run between the synthetic inter-paragraph `\n`
+    /// separators (the boundary `\n` is excluded from the span). An
+    /// offset past the story end clamps to the final paragraph. Mirrors
+    /// `RequestWordBounds` exactly.
+    RequestParagraphBounds {
+        story_id: String,
+        offset: u32,
+        /// W1.13 — cell qualifier (rides v35, additive). See
+        /// `RequestCaretNav::cell`.
+        #[serde(default)]
+        cell: Option<crate::selection::TextCellAddr>,
+    },
+    /// Undo the most recent applied mutation. Reply: `UndoApplied`
+    /// or `MutationFailed` (when the log is empty).
+    Undo,
+    /// Re-apply the most recently undone mutation. Reply:
+    /// `RedoApplied` or `MutationFailed`.
+    Redo,
+    /// Phase A — replace the worker's element selection. Selection is
+    /// application state (not in the Operation log); the worker
+    /// mirrors it so geometry queries have a stable read.
+    /// Reply: `ElementSelectionApplied`.
+    SetElementSelection {
+        ids: Vec<crate::element_selection::ElementId>,
+        mode: crate::element_selection::SelectionMode,
+    },
+    /// Phase A — return every selectable element whose oriented bounds
+    /// intersect `rect` (page-local `[top, left, bottom, right]`).
+    /// Reply: `MarqueeHits`.
+    RequestMarqueeHits { page_id: PageId, rect: [f32; 4] },
+    /// Phase A — fetch oriented geometry (raw bounds + composed
+    /// transform) for one or more elements so the overlay can draw
+    /// selection chrome without re-deriving the math in TS.
+    /// Reply: `ElementGeometry`.
+    RequestElementGeometry {
+        ids: Vec<crate::element_selection::ElementId>,
+    },
+    /// Phase H — return every leaf descendant of the named group.
+    /// Used by the canvas's double-click-to-enter-group gesture.
+    /// Reply: `GroupLeaves`.
+    RequestGroupLeaves { group_id: String },
+    /// Step 5 — request the path-anchor table for a single Polygon /
+    /// Rectangle / Oval / TextFrame so the path-edit overlay can draw
+    /// one dot per anchor + Bezier-handle pair. Reply: `PathAnchors`.
+    /// Elements that don't carry an `anchors` array (rectangles
+    /// declared via `GeometricBounds` only) come back with `anchors`
+    /// empty.
+    RequestPathAnchors {
+        id: crate::element_selection::ElementId,
+    },
+    /// v66 (RFI C-69) — a text frame's composed glyphs as outlines.
+    RequestTextOutlines {
+        id: crate::element_selection::ElementId,
+    },
+    /// v67 (RFI C-68) — snap one page-local point. Reply: `SnapPoint`.
+    RequestSnapPoint {
+        query: crate::snap_point::SnapPointQuery,
+    },
+    /// v67 (RFI C-68) — replace the session's snapping preferences (all
+    /// gestures and `RequestSnapPoint` obey them). Survives document
+    /// loads; not saved, not undoable. Reply: `SnapSettingsApplied`.
+    SetSnapSettings {
+        settings: crate::snap_point::SnapSettings,
+    },
+    /// B-06 (protocol v30) — closest on-curve point on the element's
+    /// path. `point` is in the element's LOCAL coordinate space (the
+    /// same space `PathAnchors` reports — callers inverse-apply
+    /// `item_transform` first, exactly like the anchor tools).
+    /// Reply: `NearestPathPoint`.
+    RequestNearestPathPoint {
+        id: crate::element_selection::ElementId,
+        point: [f32; 2],
+    },
+    /// B-22 (protocol v57) — the REGION read door: resolve the faces
+    /// of the planar arrangement `element_ids` forms (the distinct
+    /// areas overlapping paths divide the plane into, one level below
+    /// element hit-testing). Reply: `PlanarRegions`.
+    ///
+    /// With `point` (element-local / raw path space, the space
+    /// `PathAnchors` reports) it answers ONLY the face under that point
+    /// — Shape Builder's hover query, which costs N point-in-path tests
+    /// plus one region materialisation instead of a full enumeration.
+    /// Without it, every face comes back.
+    ///
+    /// Pure READ. Face ids are stable for the same inputs, so a hovered
+    /// id can be handed straight to the `pathfinderFaces` mutation.
+    /// More than `paged_mutate::planar::MAX_PLANAR_INPUTS` ids is
+    /// refused (`found: false`), never truncated.
+    RequestPlanarRegions {
+        element_ids: Vec<crate::element_selection::ElementId>,
+        #[serde(default)]
+        point: Option<[f32; 2]>,
+    },
+    /// Track M — list every `<Layer>` from the loaded document's
+    /// designmap. Reply: `Layers`. The Layers panel polls this on
+    /// mount and on every `MutationApplied` / `UndoApplied` /
+    /// `RedoApplied` push (same pattern as the Inspector) — a
+    /// dedicated `LayersChanged` notification is overkill given the
+    /// small payload size and existing subscription wiring.
+    RequestLayers,
+    /// SDK Phase 5 (D1) — typed read of any document collection per
+    /// `panel-catalog-and-sdk-extension.md` §5.1. Single envelope
+    /// handles all 21 named collections; the dispatcher in
+    /// `CanvasModel::collection(name)` routes to the underlying
+    /// per-collection accessor. Reply: `CollectionReply` whose
+    /// `items` is a `serde_json::Value` — the consumer deserializes
+    /// to the typed `*Summary[]` it expects (matching the
+    /// `documentCollection:<name>` ReadSpec it declared). Unknown /
+    /// unimplemented collections come back with an empty array.
+    RequestCollection { name: CollectionName },
+    /// v38 (Wave 2, C-2 / S-05) — read the frame-chain topology of a
+    /// story: the ordered `NextTextFrame` thread starting at the chain
+    /// head. Pure READ over `paged_scene::Document::frame_chain`. Backs
+    /// the paged.sheet plugin's live-pagination view (which frame a
+    /// table/row lands in, where it overflows). Reply: `FrameChainResult`
+    /// whose `links` is empty when the story doesn't resolve or hosts no
+    /// frame.
+    RequestFrameChain { story_id: String },
+    /// DOC-03 (v54) — read a story's full CONTENT (paragraphs → runs → text +
+    /// applied styles + direct character overrides). Pure READ over
+    /// `CanvasModel::story_content`. Backs a content plugin reading an edited
+    /// document back to diff + save (paged.doc edited save-back). Reply:
+    /// `StoryContentResult` whose `content` is `None` when the story id doesn't
+    /// resolve.
+    RequestStoryContent { story_id: String },
+    /// v65 — read one style definition's settable properties: every path
+    /// `Mutation::SetStyleProperty` accepts for that collection, with the
+    /// style's OWN value in the shape the setter takes (`""` /
+    /// `Length(None)` when it inherits through `BasedOn`), so a style
+    /// editor can render and write back without re-deriving the schema.
+    /// Pure READ. Reply: `StyleProperties` whose `result` is `None` when
+    /// the style does not exist; object / cell / table styles, which have
+    /// no settable path yet, answer with no entries.
+    RequestStyleProperties {
+        collection: paged_mutate::StyleCollection,
+        style_id: String,
+    },
+    /// v42 (C-5 / I-04) — read the ORIGINAL encoded bytes (PSD / JPEG /
+    /// PNG file) of the placed image hosted by the frame `element_id`, so
+    /// a plugin (paged.image) can ingest a document's placed asset into
+    /// its own pipeline. Pure READ. Reply: `PlacedAssetBytes`
+    /// (`found:false` when the element isn't an image frame, its link
+    /// doesn't resolve, or the image hasn't rendered yet).
+    RequestPlacedAssetBytes { element_id: String },
+    /// v43 (W-06) — read the raw face bytes of a font the worker can
+    /// serve, so a plugin (`host.assets.getFontFace`) can ingest the
+    /// face into its own pipeline. The engine holds bytes ONLY for
+    /// faces registered over the wire (`RegisterFont`) — IDML packages
+    /// reference fonts by name and carry no font binaries, so a
+    /// document-declared face resolves here only when the editor has
+    /// registered it. `style: None` matches the family's first
+    /// registered face. Pure READ. Reply: `FontFaceBytes`
+    /// (`found:false` when no registered face matches).
+    RequestFontFaceBytes {
+        family: String,
+        #[serde(default)]
+        style: Option<String>,
+    },
+    /// v38 (Wave 2, K-7 / S-13) — font-metrics RPC: the wire round-trip
+    /// for the v37 `measureText` method, so the editor can route
+    /// `host.text.measureString` across the worker boundary. `style` is
+    /// IDML's `FontStyle` ("Bold" / "Italic" / …) or omitted; face
+    /// resolution uses the renderer's styled → bare-family →
+    /// document-default fallback. Reply: `MeasureTextResult`.
+    RequestMeasureText {
+        family: String,
+        #[serde(default)]
+        style: Option<String>,
+        text: String,
+        size_pt: f32,
+    },
+    /// v39 (C-1) — submit a plugin vector scene layer to render INSIDE the
+    /// frame whose `Self` id is `element_id`. The worker stores it and
+    /// rebuilds so compose lowers it inside that frame (clipped to the
+    /// content box, transformed by the frame's ItemTransform). Ephemeral
+    /// (re-submitted each session; not a document mutation). Reply:
+    /// `SceneLayerApplied`.
+    SubmitSceneLayer {
+        element_id: String,
+        layer: paged_compose::SceneLayer,
+        /// C-34 — the plugin submitting. When present the engine
+        /// records the frame's owner and refuses a foreign replace: a
+        /// frame's in-frame render belongs to ONE content type, and this
+        /// door used to be an unconditional insert. Optional, `None`
+        /// bypasses — see `WritePagedPart::caller`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        caller: Option<String>,
+    },
+    /// v39 (C-1) — drop the scene layer previously submitted for
+    /// `element_id` (no-op if none). Reply: `SceneLayerApplied`.
+    ClearSceneLayer { element_id: String },
+    /// v50 (C-1 Stage B) — submit a plugin PIXEL layer to composite INSIDE
+    /// the frame whose `Self` id is `element_id`. The streaming sibling of
+    /// `SubmitSceneLayer`: where that carries one whole-frame buffer, a
+    /// `PixelLayer` carries a SET OF independently-positioned RGBA8 tiles —
+    /// the granularity an interactive *drag* re-streams (only the dirtied
+    /// tiles, every frame). The worker LOWERS it to an ordinary
+    /// `SceneLayer` of `SceneItem::Image` tiles (`into_scene_layer`) and
+    /// stores it in the SAME per-frame registry `SubmitSceneLayer` uses, so
+    /// it composites through the EXISTING Stage-A image lane (CPU/GPU) with
+    /// no new rasterizer path. Ephemeral (re-submitted each gesture; not a
+    /// document mutation; does not survive a reload). Submitting invalidates
+    /// the page caches (`CacheEffect::ClearAll`). Reply: `SceneLayerApplied`.
+    SubmitPixelLayer {
+        element_id: String,
+        layer: paged_compose::PixelLayer,
+    },
+    /// v50 (C-1 Stage B) — drop the pixel (or scene) layer previously
+    /// submitted for `element_id` (no-op if none). A pixel layer lowers into
+    /// the same registry as a scene layer, so this clears either. Reply:
+    /// `SceneLayerApplied`.
+    ClearPixelLayer { element_id: String },
+    /// v44 (C-6 / I-06) — register an image-resource claim for the frame
+    /// whose `Self` id is encoded in `image_id`'s `x-paged-image:<frame>`
+    /// namespace. The worker records the claim's pyramid geometry
+    /// (`levels`, `tile_size`, base extent) and, on the next build, pulls
+    /// tiles from its LRU cache to assemble inside that frame at the mip
+    /// level matching the camera scale. A claimed image with no cached
+    /// tiles emits `ResourceTilesNeeded` (the whole-image lane paints
+    /// meanwhile). `revision` seeds the damage etag. Reply:
+    /// `ResourceClaimApplied`.
+    ClaimImageResource {
+        image_id: String,
+        levels: u8,
+        tile_size: u32,
+        base_width: u32,
+        base_height: u32,
+        revision: u64,
+    },
+    /// v44 (C-6 / I-06) — drop the claim for `image_id` (no-op if none):
+    /// frees its cached tiles + restores the native whole-image fallback
+    /// lane for the frame. Reply: `ResourceClaimApplied`.
+    ReleaseImageResource { image_id: String },
+    /// v44 (C-6 / I-06) — fill the worker-side LRU tile cache for
+    /// `image_id` at `level` with `tiles` (the host's reply to a
+    /// `ResourceTilesNeeded`). `generation` echoes the request's pyramid
+    /// revision so a stale reply (the image moved on) is dropped. Dirties
+    /// the claimed image's pages so the next snapshot consumes the new
+    /// tiles. Reply: `ResourceClaimApplied`.
+    SubmitResourceTiles {
+        image_id: String,
+        level: u8,
+        tiles: Vec<ProviderTileWire>,
+        generation: u64,
+    },
+    /// SDK Phase 5 (D1) — singleton document meta read per
+    /// `panel-catalog-and-sdk-extension.md` §5.6. Backs the
+    /// `documentMeta:<key>` ReadSpec form. The reply carries every
+    /// field at once; the consumer picks the one it bound against.
+    /// Volume is trivial so paging per-key isn't worth the round-
+    /// trip cost. Reply: `DocumentMetaReply`.
+    RequestDocumentMeta,
+    /// v43 (D-01) — enumerate every plugin placeholder field in the
+    /// document: the read door a data plugin's refresh loop walks to
+    /// re-find its anchors (offsets are only valid until the next
+    /// edit; re-read before each `SetFieldValue` pass). Pure READ.
+    /// Reply: `DocumentPlaceholders`.
+    RequestDocumentPlaceholders,
+    /// Object model (ADR 131) — evaluate a SELECTOR (`page:#3 > frame`,
+    /// `frame[name="price"]`, `[label.x-paged:oid=a1b2]`, unions with `,`)
+    /// against the document and return the canonical address of every
+    /// match, in document order. Pure READ. No document ⇒ empty list.
+    /// The grammar is `paged_wire::selector`'s. Reply: `QueryResult`.
+    RequestQuery { selector: String },
+    /// Object model (ADR 132) — read ONE property of any object, the read
+    /// twin of `Mutation::Set`: `address` is an ADR 131 address string,
+    /// `path` a `PropertyPath` name or a virtual path from the catalog's
+    /// `propertySchemas`. Pure READ. Reply: `PropertyValue`.
+    RequestGet { address: String, path: String },
+    /// SDK Phase 5 (v1 sweep) — resolved CMYK + RGB readout for a
+    /// named swatch. Powers the Color panel's CMYK/RGB display.
+    /// Editor sliders (which would mutate the swatch's channel
+    /// values) are a v2 follow-up needing
+    /// `Operation::SetSwatchValue` + a Color NodeId variant.
+    RequestColorPreview { swatch_id: String },
+    /// Concept 2 — resolve an ARBITRARY colour value (not a swatch
+    /// ref) through the document's active colour management:
+    /// display RGB + out-of-gamut verdict. Powers the mixer's live
+    /// preview + warning triangle while the user drags sliders,
+    /// BEFORE any swatch exists. `space` is the SwatchSpec
+    /// vocabulary ("CMYK" | "RGB" | "LAB" | "Gray"); `value` its
+    /// channels; `tint` 0..=100; spot alternates resolve like a
+    /// swatch would. Reply: `ColorComputeReply`.
+    RequestColorCompute {
+        space: String,
+        value: Vec<f32>,
+        #[serde(default)]
+        tint: Option<f32>,
+        #[serde(default)]
+        model: Option<String>,
+        #[serde(default)]
+        alternate_space: Option<String>,
+        #[serde(default)]
+        alternate_value: Option<Vec<f32>>,
+    },
+    /// Concept 2 — full stop detail for ONE gradient (the ramp
+    /// editor + faithful gradient chips). The lightweight
+    /// `GradientSummary` collection stays stop-free; detail is
+    /// fetched per selected gradient. Reply: `GradientDetailReply`.
+    RequestGradientDetail { gradient_id: String },
+    /// Concept 2 — serialise swatches back to `.ase` (the Swatches
+    /// panel's "Save .ase…"; lossless raw channel values, core owns
+    /// the format both ways). `group_id: Some` exports one
+    /// ColorGroup; `None` exports the whole palette grouped by the
+    /// document's ColorGroups. Reply: `SwatchLibraryExported`.
+    ExportSwatchLibrary {
+        #[serde(default)]
+        group_id: Option<String>,
+    },
+    /// Scripting Stage 2 — execute a JS source string against the
+    /// loaded document. The script's mutations route through
+    /// `Operation::SetProperty` (same channel as gestures + REPL)
+    /// so undo/redo work identically. Reply: `ScriptResult`.
+    ExecuteScript {
+        source: String,
+        /// v63 — optional per-run budget. Absent = the engine default
+        /// (the editor's 2 s REPL guard). See [`ScriptBudgetWire`].
+        #[serde(default)]
+        budget: Option<ScriptBudgetWire>,
+        /// v71 — the host answers `RequestHostObjects` (it has an ADR 323
+        /// object registry). When true, a script touching a `plugin:`
+        /// address SUSPENDS and the reply is `RequestHostObjects` instead
+        /// of `ScriptResult`; the host answers with `HostObjectsResult`.
+        /// Absent/false: such a call throws `noHost` in the script.
+        #[serde(default)]
+        #[tsify(optional)]
+        host_objects: bool,
+    },
+    /// v71 — the host's answers to a suspended script's
+    /// `RequestHostObjects`, one per call, in call order. `session` is
+    /// the id the request carried. Reply: `ScriptResult` (the script
+    /// finished) or another `RequestHostObjects` (it suspended again).
+    HostObjectsResult {
+        session: u32,
+        answers: Vec<HostObjectAnswer>,
+        /// The `appliedSeq`s (from their `MutationApplied` replies) of
+        /// the engine writes the host committed while answering this
+        /// round — a plugin write the registry turned into an engine
+        /// batch. They fold into the script's ONE undo step; any other
+        /// record logged while the script waited is a foreign edit and
+        /// is left alone. Absent = none.
+        #[serde(default)]
+        #[tsify(optional)]
+        committed: Vec<u64>,
+    },
+    /// Concept 3 — open a PDF export session. The worker re-runs the
+    /// scene build one-shot (glyph side-channel on, splice caches
+    /// off) and parks the writer state under a session id. Reply:
+    /// `ExportPdfBegun` (or `ExportPdfFailed`).
+    ExportPdfBegin { options: ExportPdfWireOptions },
+    /// Concept 3 — export ONE page of the session. The main thread
+    /// drives this loop, which is what makes progress + cancellation
+    /// real on a synchronous worker. Reply: `ExportPdfProgress`.
+    ExportPdfPage { session: u32 },
+    /// Concept 3 — serialise the finished document and drop the
+    /// session. Reply: `PdfExported`.
+    ExportPdfFinish { session: u32 },
+    /// Concept 3 — abandon an in-flight session (dialog Cancel /
+    /// AbortSignal). Reply: `ExportPdfCancelled`.
+    ExportPdfCancel { session: u32 },
+    /// W3.B2 (rides v29 — added before first editor sync) — serialise
+    /// the loaded (possibly-mutated) document back to an IDML package
+    /// for save-back. Unlike the PDF export this is a single one-shot
+    /// (the carry-through writer is cheap: it patches only the
+    /// model-owned Spreads/Stories and copies every other entry
+    /// verbatim), so there's no session/progress loop. Reply:
+    /// `IdmlExported` (or `ExportIdmlFailed`).
+    ///
+    /// `link_base` (additive, governance rule 1 — `#[serde(default)]`,
+    /// no bump): an ABSOLUTE directory the host will write the reply's
+    /// `links` into. Every placed image's `LinkResourceURI` is then
+    /// spelled `file:<link_base>/<basename>`, which InDesign resolves
+    /// (measured on 20.0.1: the model's relative URI binds nothing).
+    /// Omitted ⇒ URIs as the model holds them, no `links`.
+    ExportIdml {
+        #[serde(default)]
+        link_base: Option<String>,
+    },
+    /// v51 (.paged container — the host.parts door) — write/overwrite a
+    /// plugin-namespaced container part. `path` MUST be under `paged/`
+    /// (the IDML parts + manifest are off-limits); the bytes are persisted
+    /// INTO the document on the next `ExportPaged` (they travel with the
+    /// file). Reply: `PagedPartWritten` / `PagedPartFailed`.
+    WritePagedPart {
+        path: String,
+        #[tsify(type = "number[]")]
+        bytes: ByteBuf,
+        /// C-34 — the plugin making the request. When present the
+        /// engine confines the write to `paged/<caller>/`, closing the
+        /// hole where any holder of the canvas handle could clobber
+        /// another plugin's content part — which is where a plugin
+        /// content type's own model, including its own layers, lives.
+        ///
+        /// OPTIONAL, and `None` bypasses, exactly as
+        /// `SetPluginMetadata.caller` does: the host's own writes and
+        /// every sender that omits it keep the prior behaviour. It lets a
+        /// correct caller PROVE it is correct; it is not a boundary
+        /// against a hostile one, which needs the isolate/RPC host.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        caller: Option<String>,
+    },
+    /// v51 — read a `.paged` part's bytes (the live overlay, else the loaded
+    /// container). Reply: `PagedPartRead` (or `PagedPartFailed`).
+    ReadPagedPart { path: String },
+    /// v51 — list `.paged` part paths under `prefix` (the `paged/` namespace
+    /// only). Reply: `PagedPartList` (or `PagedPartFailed`).
+    ListPagedParts { prefix: String },
+    /// v66 — delete a `.paged` part. It leaves the live overlay and, when
+    /// the loaded container carries it, is tombstoned so read/list stop
+    /// answering it and the next `ExportPaged` leaves it out. Same
+    /// `paged/` boundary and C-34 `caller` gate as `WritePagedPart`; not
+    /// undoable, like the write. Reply: `PagedPartDeleted` (or
+    /// `PagedPartFailed`).
+    DeletePagedPart {
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        caller: Option<String>,
+    },
+    /// v51 — serialise the document as a `.paged` container: a valid IDML
+    /// package + the plugin `paged/` parts + a refreshed `manifest.json`.
+    /// Reply: `PagedExported` / `PagedPartFailed`.
+    ExportPaged {},
+    /// Inspector P1 — return a property snapshot for one element so
+    /// the Inspector panel can render typed editors. Reply:
+    /// `ElementProperties`. Each entry carries the property path +
+    /// its authored value tagged by kind so the UI picks the right
+    /// editor without re-deriving the schema. `None` when the id
+    /// doesn't resolve.
+    RequestElementProperties {
+        id: crate::element_selection::ElementId,
+    },
+    /// Inspector P1 — return the scene hierarchy
+    /// (spread → page → group? → frame) so the Tree panel can render
+    /// a navigable outline. The reply carries name + id + kind per
+    /// node + nested children. Lightweight enough to send eagerly.
+    RequestSceneTree,
+    /// Phase B — start a gesture against the listed elements. Reply
+    /// `GestureBegun { handle }` carrying the opaque handle the main
+    /// thread sends back on every subsequent update / commit / cancel.
+    /// Errors with `MutationFailed` when a gesture is already active.
+    ///
+    /// Phase D — `anchor` is required for Rotate / Scale (the pointer
+    /// position at gesture start, in page-local coords + the page id).
+    /// Optional for Translate / Resize. Phase G — `camera_scale`
+    /// (px/pt) lets the snap pass keep its tolerance constant in
+    /// screen px. Omitting it falls back to a 4 doc-space-pt
+    /// tolerance.
+    BeginGesture {
+        nodes: Vec<crate::element_selection::ElementId>,
+        gesture: crate::gesture::GestureType,
+        #[serde(default)]
+        anchor: Option<crate::gesture::GestureAnchor>,
+        #[serde(default)]
+        camera_scale: Option<f32>,
+    },
+    /// Phase B — push a pointer-delta + modifier state into the
+    /// active gesture. Worker rewrites the preview and replies
+    /// `GestureUpdated { handle, page_ids }`.
+    UpdateGesture {
+        handle: crate::gesture::GestureHandle,
+        /// Cumulative pointer delta since `BeginGesture`, in doc pt.
+        delta: (f32, f32),
+        modifiers: crate::gesture::GestureModifiers,
+    },
+    /// Phase B — commit the active gesture. Reply
+    /// `GestureCommitted { handle, applied_seq, page_ids }`. The
+    /// committed mutation lands on the unified undo log.
+    CommitGesture {
+        handle: crate::gesture::GestureHandle,
+    },
+    /// Phase B — discard the active gesture. Reply
+    /// `GestureCancelled { handle, page_ids }`; scene reverts to the
+    /// pre-`BeginGesture` snapshot.
+    CancelGesture {
+        handle: crate::gesture::GestureHandle,
+    },
+}
+
+/// Which runtime budget a script exhausted (B-09 / W-08). The typed
+/// half of a `ScriptResult`: lets the host distinguish a budget abort
+/// from an ordinary script exception (e.g. show a "script hit its
+/// time/iteration limit" banner). Mirrors `paged_script::
+/// ScriptBudgetKind` — kept in this crate so the wire types carry no
+/// dependency on `paged-script` (which depends on us). Additive on the
+/// wire: rides protocol v35 as an optional field on `ScriptResult`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub enum ScriptBudgetKind {
+    /// Loop-iteration limit tripped (runaway / pathological pure-JS
+    /// loop). Enforced natively by Boa's bytecode loop opcode.
+    Iterations,
+    /// Recursion-depth limit tripped (unbounded / too-deep recursion).
+    Recursion,
+    /// VM value-stack overflow guard tripped.
+    StackSize,
+    /// Wall-clock deadline elapsed during a host call. The single-
+    /// threaded wasm worker cannot preempt a host-call-free pure-JS
+    /// loop, so this fires at the next `paged.*`/`console.*` boundary.
+    WallClock,
+}
+
+/// Coarse LOD tiers requested by the navigator + canvas (per spec §4.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub enum LodTier {
+    /// Atlas thumbnail. Used by the navigator and overview zoom.
+    Snapshot,
+    /// Per-page bitmap. Used at page-fit-ish zoom.
+    MidRes,
+    /// Live Vello tiles at the current zoom.
+    Live,
+}
+
+/// What to consider when hit-testing. The inspector + editor route
+/// pointer events through this. Phase 1 only implements `Frame`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub enum HitFilter {
+    Frame,
+    Text,
+    Any,
+}
+
+/// Hit-test result.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct HitResult {
+    pub frame_id: Option<String>,
+    pub story_id: Option<String>,
+    pub offset_within_story: Option<u32>,
+    /// Selected frame's bounding box in page-local coordinates.
+    /// AABB of the transformed corners. Returned for back-compat with
+    /// callers that only want a quick rectangle.
+    pub frame_bounds: Option<FrameBounds>,
+    /// Phase A — typed element identifier, the new canonical handle.
+    /// `frame_id` is kept as the raw-id alias for back-compat with
+    /// callers that haven't migrated.
+    #[serde(default)]
+    pub element: Option<crate::element_selection::ElementId>,
+    /// Phase A — the element's raw `GeometricBounds` (content-box
+    /// space). Combine with `item_transform` to draw an oriented
+    /// selection chrome on the main thread without re-deriving the
+    /// math. `[top, left, bottom, right]`.
+    #[serde(default)]
+    pub bounds: Option<[f32; 4]>,
+    /// Phase A — composed affine `[a, b, c, d, tx, ty]` on the hit
+    /// element, into the hit page's space like `frame_bounds` (the
+    /// page's origin inside its spread folded in). `None` for an item
+    /// with no `ItemTransform` on a page at its spread's origin.
+    #[serde(default)]
+    pub item_transform: Option<[f32; 6]>,
+    /// Phase A — containing group ancestry, outer-most first. Empty
+    /// when the hit element is not nested in any group.
+    #[serde(default)]
+    pub group_chain: Vec<String>,
+    /// W3.A1 — table cell context when the point landed inside a cell
+    /// of the hit frame's story. `None` for non-table hits. Carries
+    /// `(tableId, row, col)` so the canvas can select / mutate the cell
+    /// without a second query.
+    #[serde(default)]
+    pub table_context: Option<TableHitContext>,
+}
+
+/// W3.A1 — wire shape of [`crate::hit::TableHitContext`]: the table
+/// cell a `HitTest` landed in.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct TableHitContext {
+    pub table_id: String,
+    pub row: u32,
+    pub col: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameBounds {
+    pub left: f32,
+    pub top: f32,
+    pub right: f32,
+    pub bottom: f32,
+}
+
+/// One message from worker → main.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkerToMain {
+    /// Echo of the corresponding `MainToWorker.seq` when this message
+    /// is a reply; `None` for unsolicited messages (e.g. `PagesDirty`).
+    #[serde(default)]
+    pub seq: Option<u64>,
+    pub protocol: ProtocolVersion,
+    #[serde(flatten)]
+    pub kind: WorkerToMainKind,
+}
+
+/// Discriminated payload of a `WorkerToMain` message.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "kind",
+    content = "payload"
+)]
+pub enum WorkerToMainKind {
+    /// Worker bootstrap complete; ready to accept `LoadDocument`.
+    Ready { protocol: ProtocolVersion },
+    /// `LoadDocument` succeeded. Carries the handle the main thread
+    /// shows in the page navigator + structural debug HUD.
+    DocumentLoaded(DocumentHandle),
+    /// `LoadDocument` failed.
+    LoadFailed { error: LoadError },
+    /// `Mutate` failed (Phase 1: always).
+    MutationFailed { error: WorkerError },
+    /// `RequestPage` reply: page is renderable at the requested LOD.
+    /// Carries the latest generation counters so the main thread can
+    /// detect staleness.
+    DisplayListReady {
+        page_id: PageId,
+        lod: LodTier,
+        commands: usize,
+        layout_generation: u64,
+        numbering_generation: u64,
+    },
+    /// `HitTest` reply.
+    HitResult(HitResult),
+    /// Unsolicited: the listed pages have new display lists. If the
+    /// main thread has any of them in its viewport, redraw.
+    PagesDirty { page_ids: Vec<PageId> },
+    /// Unsolicited: a story's content changed (used by inspector to
+    /// update content views).
+    StoryDirty { story_id: String },
+    /// Unsolicited: convergence cap, missing font, overset text, etc.
+    Warning { kind: String, details: String },
+    /// Unsolicited: the worker's most recent operation produced
+    /// metrics worth surfacing (initial document stats, post-build
+    /// counts, etc.).
+    Stats(DocumentStats),
+    /// `RequestSnapshot` reply: PNG-encoded snapshot ready for the
+    /// main thread to stash in an `<img>` / `ImageBitmap` / texture
+    /// atlas. Carries the source page's generation counters so the
+    /// main thread can detect staleness before drawing.
+    SnapshotReady(crate::snapshot::SnapshotPng),
+    /// `RequestSnapshot` failed (e.g. unknown page id).
+    SnapshotFailed {
+        error: crate::snapshot::SnapshotError,
+    },
+    /// Phase 3 Item 6 — a mutation was successfully applied. The
+    /// worker assigns `applied_seq` (monotone); the main thread
+    /// matches against its own `client_seq` to ack pending sends.
+    MutationApplied {
+        client_seq: u64,
+        applied_seq: u64,
+        /// Pages whose display lists need re-rendering. The canvas
+        /// invalidates their entries in the LOD cache.
+        page_ids: Vec<PageId>,
+        /// Phase 4 Step 2 instrumentation — layout-cache stats for
+        /// the rebuild that just finished. `hits + misses` equals the
+        /// number of paragraphs that ran through the layout pass.
+        cache_stats: LayoutCacheStats,
+        /// Editor-ops — the element created by a structural insert
+        /// (`InsertFrame` / `InsertLine` / `InsertPath`). The editor
+        /// uses it to select the fresh element. `None` for every
+        /// other mutation kind — including `InsertPage`: pages are
+        /// not elements (`ElementId` has no Page variant); the new
+        /// page is discoverable from `page_ids` + `page_sizes_pt`.
+        #[serde(default)]
+        created_id: Option<crate::element_selection::ElementId>,
+        /// Every element the mutation minted, in mint order, each with
+        /// the C-15 handle that named it. Populated for a `Batch` —
+        /// where `created_id` can only report the last — and empty for
+        /// a single mutation, whose one mint `created_id` already
+        /// names. Additive (governance rule 1): omitted by an older
+        /// worker, deserialises to empty.
+        #[serde(default)]
+        minted: Vec<MintedElement>,
+        /// Editor-ops — `true` when the mutation changed the page
+        /// LIST itself (insert/delete/resize page); the editor must
+        /// refresh its page grid from `page_sizes_pt` + `page_ids`
+        /// instead of only repainting.
+        #[serde(default)]
+        page_structure_changed: bool,
+        /// Editor-ops — the post-mutation per-page sizes, populated
+        /// only when `page_structure_changed` (ordered like
+        /// `page_ids`).
+        #[serde(default)]
+        page_sizes_pt: Option<Vec<(f32, f32)>>,
+        /// v38 (Wave 2, C-2 / S-05) — content-box reflow, populated ONLY
+        /// when the applied mutation was a `Mutation::ResizeFrame` (a
+        /// content-box change). `None` for every other mutation kind —
+        /// crucially including `MoveFrame` / `SetGroupTransform` and any
+        /// transform-only edit, which change display geometry but must
+        /// NOT re-paginate (the §8.5 resize-vs-transform distinction).
+        /// The editor's paged.sheet pagination listens on this; the same
+        /// data is also available as a standalone `FrameReflow`
+        /// notification.
+        #[serde(default)]
+        reflow: Option<FrameReflowInfo>,
+    },
+    /// Phase 3 Item 4 — rect-per-line geometry for a selection range.
+    SelectionGeometry { rects: Vec<crate::SelectionRect> },
+    /// Phase 3 Item 3 — caret position for a selection.
+    CaretGeometry {
+        caret: Option<crate::geometry::CaretGeometry>,
+    },
+    /// panels.md (W0.6 caret queries) — `RequestCaretNav` reply.
+    /// `offset` is the destination story offset, or `None` when there
+    /// was no line in the requested direction.
+    CaretNavResult {
+        #[serde(default)]
+        offset: Option<u32>,
+    },
+    /// panels.md (W0.6 caret queries) — `RequestLineBounds` reply.
+    /// `None` when the offset doesn't fall on a visible line (story
+    /// has no captured layout).
+    LineBoundsResult {
+        #[serde(default)]
+        bounds: Option<crate::geometry::LineBounds>,
+    },
+    /// Aftercare-A (protocol v31) — `RequestWordBounds` reply. `None`
+    /// when the story doesn't resolve or carries no text; otherwise
+    /// the `[start, end)` byte span of the word (or whitespace run)
+    /// containing the requested offset.
+    WordBoundsResult {
+        #[serde(default)]
+        bounds: Option<crate::geometry::WordBounds>,
+    },
+    /// W1.23 (protocol v35) — `RequestParagraphBounds` reply. `None`
+    /// when the story doesn't resolve or carries no text; otherwise the
+    /// `[start, end)` byte span of the paragraph containing the
+    /// requested offset.
+    ParagraphBoundsResult {
+        #[serde(default)]
+        bounds: Option<crate::geometry::ParagraphBounds>,
+    },
+    /// DOC-03 (v54) — `RequestStoryContent` reply. `None` when the story id
+    /// doesn't resolve.
+    StoryContentResult {
+        #[serde(default)]
+        content: Option<StoryContent>,
+    },
+    /// Phase 3 Item 7 — undo applied. `undone_seq` is the
+    /// `applied_seq` of the mutation that was reversed.
+    UndoApplied {
+        undone_seq: u64,
+        applied_seq: u64,
+        page_ids: Vec<PageId>,
+        cache_stats: LayoutCacheStats,
+        /// Editor-ops — same page-grid refresh contract as
+        /// `MutationApplied`: undoing a page mutation changes the
+        /// page list and the editor must not need a reload to see
+        /// it. The worker diffs the built page table across the
+        /// undo to populate these.
+        #[serde(default)]
+        page_structure_changed: bool,
+        #[serde(default)]
+        page_sizes_pt: Option<Vec<(f32, f32)>>,
+    },
+    /// Phase 3 Item 7 — redo applied.
+    RedoApplied {
+        redone_seq: u64,
+        applied_seq: u64,
+        page_ids: Vec<PageId>,
+        cache_stats: LayoutCacheStats,
+        #[serde(default)]
+        page_structure_changed: bool,
+        #[serde(default)]
+        page_sizes_pt: Option<Vec<(f32, f32)>>,
+    },
+    /// `RegisterFont` reply: the font is now part of the worker's
+    /// asset resolver.
+    ///
+    /// v65 — with a document open, the face re-lays out the stories whose
+    /// runs now resolve to it (core 133f19b), and `page_ids` names the
+    /// pages whose display lists that changed, so the host repaints them
+    /// (empty: nothing changed, or no document). `page_structure_changed`
+    /// / `page_sizes_pt` as on `MutationApplied`: a growing story can gain
+    /// or lose generated pages when its face changes. All three are
+    /// `#[serde(default)]`.
+    FontRegistered {
+        family: String,
+        #[serde(default)]
+        page_ids: Vec<PageId>,
+        #[serde(default)]
+        page_structure_changed: bool,
+        #[serde(default)]
+        page_sizes_pt: Option<Vec<(f32, f32)>>,
+    },
+    /// `ClearFontRegistry` reply. v65 — the same page report as
+    /// `FontRegistered`, for the stories that lost a face.
+    FontRegistryCleared {
+        #[serde(default)]
+        page_ids: Vec<PageId>,
+        #[serde(default)]
+        page_structure_changed: bool,
+        #[serde(default)]
+        page_sizes_pt: Option<Vec<(f32, f32)>>,
+    },
+    /// Concept 2 — `RegisterColorProfile` reply.
+    ColorProfileRegistered { name: String },
+    /// Phase A — `SetElementSelection` reply. Echoes the post-update
+    /// selection so the main thread can reconcile if its optimistic
+    /// update drifted.
+    ElementSelectionApplied {
+        ids: Vec<crate::element_selection::ElementId>,
+    },
+    /// Phase A — `RequestMarqueeHits` reply. Element ids in paint
+    /// order, top-first.
+    MarqueeHits {
+        ids: Vec<crate::element_selection::ElementId>,
+    },
+    /// Phase A — `RequestElementGeometry` reply. One entry per id;
+    /// elements that don't resolve (id missing or not on a body page)
+    /// are dropped silently.
+    ElementGeometry { items: Vec<ElementGeometryItem> },
+    /// Phase H — `RequestGroupLeaves` reply. Empty when the group id
+    /// doesn't resolve.
+    GroupLeaves {
+        ids: Vec<crate::element_selection::ElementId>,
+    },
+    /// Step 5 — `RequestPathAnchors` reply. `None` when the id doesn't
+    /// resolve or sits on a master spread; `Some` even when the
+    /// element's anchor list is empty (lets the caller distinguish
+    /// "no path data" from "didn't resolve").
+    PathAnchors { result: Option<PathAnchorsResult> },
+    /// v66 — `RequestTextOutlines` reply. `None` when the id is not a
+    /// text frame, does not resolve, or sits on no page.
+    TextOutlines { result: Option<TextOutlinesResult> },
+    /// v67 — `RequestSnapPoint` reply. With no document loaded the point
+    /// comes back unsnapped.
+    SnapPoint {
+        result: crate::snap_point::SnapPointResult,
+    },
+    /// v67 — `SetSnapSettings` reply: the settings now in force.
+    SnapSettingsApplied {
+        settings: crate::snap_point::SnapSettings,
+    },
+    /// B-22 (protocol v57) — `RequestPlanarRegions` reply.
+    PlanarRegions { result: PlanarRegionsResult },
+    /// B-06 — `RequestNearestPathPoint` reply. `None` when the id
+    /// doesn't resolve or carries no path data.
+    NearestPathPoint {
+        result: Option<NearestPathPointResult>,
+    },
+    /// Track M — `RequestLayers` reply. Documents without `<Layer>`
+    /// elements (rare; the IDML container always emits at least a
+    /// default layer) come back with an empty Vec.
+    Layers { items: Vec<LayerSummary> },
+    /// SDK Phase 5 (D1) — `RequestCollection` reply. `items` is a
+    /// `serde_json::Value` (always an array on the wire) so a single
+    /// envelope handles every collection's typed shape. The consumer
+    /// deserializes against the typed `*Summary` it expects —
+    /// `SwatchSummary[]` for `name: "swatches"`,
+    /// `ParagraphStyleSummary[]` for `name: "paragraphStyles"`,
+    /// etc. Per `panel-catalog-and-sdk-extension.md` §5.1. Unknown
+    /// or not-yet-implemented collections come back with an empty
+    /// array.
+    CollectionReply {
+        name: CollectionName,
+        #[tsify(type = "any")]
+        items: serde_json::Value,
+    },
+    /// v38 (Wave 2, C-2 / S-05) — `RequestFrameChain` reply. `links` is
+    /// the ordered `NextTextFrame` thread, head-first; empty when the
+    /// story doesn't resolve or hosts no frame.
+    FrameChainResult { links: Vec<FrameChainLink> },
+    /// v43 (D-01) — `RequestDocumentPlaceholders` reply: every
+    /// placeholder field in the document, in story order.
+    DocumentPlaceholders { items: Vec<PlaceholderItem> },
+    /// `RequestQuery` reply. `addresses` are canonical address strings
+    /// (`paged_wire::Address`); `error` is set — and `addresses` empty —
+    /// when the selector does not parse, with the byte offset it failed at.
+    QueryResult {
+        addresses: Vec<String>,
+        error: Option<paged_wire::GrammarError>,
+    },
+    /// `RequestGet` reply. `value` is the property's wire `Value`;
+    /// `error` is set — and `value` absent — when the address does not
+    /// parse or names nothing, the path is not readable on that kind, or
+    /// no document is loaded, and `code` says which (`badAddress`,
+    /// `notFound`, `noSuchPath`, `noDocument`). `mixed: true` — with
+    /// neither `value` nor `error` — is an ANSWER: the object has the
+    /// path but its value is not one value (a story range whose runs
+    /// disagree). `code` and `mixed` are additive within v71.
+    PropertyValue {
+        address: String,
+        path: String,
+        value: Option<paged_mutate::Value>,
+        error: Option<String>,
+        #[serde(default)]
+        #[tsify(optional)]
+        code: Option<String>,
+        #[serde(default)]
+        #[tsify(optional)]
+        mixed: bool,
+    },
+    /// v42 (C-5 / I-04) — `RequestPlacedAssetBytes` reply. `encoded` is the
+    /// placed image's ORIGINAL file bytes (PSD / JPEG / PNG) with its
+    /// natural pixel `width`/`height`; `found:false` (empty fields) when
+    /// the element isn't an image frame, the link doesn't resolve, or the
+    /// image has not rendered (so the worker hasn't decoded + cached it).
+    PlacedAssetBytes {
+        element_id: String,
+        found: bool,
+        uri: String,
+        width: u32,
+        height: u32,
+        #[tsify(type = "number[]")]
+        encoded: ByteBuf,
+    },
+    /// v43 (W-06) — `RequestFontFaceBytes` reply. `bytes` is the face's
+    /// raw file exactly as registered; `format` is sniffed from its
+    /// magic bytes (`"truetype"` / `"opentype"` / `"woff"` / `"woff2"`,
+    /// empty when unrecognised); `postscript_name` comes from the
+    /// face's `name` table (`None` for woff/woff2 payloads, which the
+    /// sfnt parser doesn't read). On a hit `family`/`style` echo the
+    /// MATCHED registry entry; `found:false` echoes the REQUESTED
+    /// family/style with the remaining fields empty.
+    FontFaceBytes {
+        found: bool,
+        family: String,
+        style: Option<String>,
+        postscript_name: Option<String>,
+        format: String,
+        #[tsify(type = "number[]")]
+        bytes: ByteBuf,
+    },
+    /// v38 (Wave 2, K-7 / S-13) — `RequestMeasureText` reply. Advance /
+    /// ascender / descender in POINTS (`descender` negative per the
+    /// OpenType convention). All zero when no document is loaded or the
+    /// face can't resolve — but `CanvasModel::measure_text` already
+    /// falls back to the default registered face, so a zero advance with
+    /// a loaded document means the run shaped to nothing (empty text) or
+    /// no face is registered at all.
+    MeasureTextResult {
+        advance: f32,
+        ascender: f32,
+        descender: f32,
+    },
+    /// v39 (C-1) — ack for `SubmitSceneLayer` / `ClearSceneLayer`. Echoes
+    /// the `element_id`; the page caches are invalidated so the next
+    /// snapshot reflects the layer. `applied` is false only when there was
+    /// no document loaded.
+    SceneLayerApplied {
+        element_id: String,
+        applied: bool,
+        /// v66 — the pages whose render the change touched, when the
+        /// engine scoped it (the binary scene-image doors do); absent means
+        /// unscoped, so a host repaints every page. Additive on the reply.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page_ids: Option<Vec<PageId>>,
+        /// v68 — the faces this frame's scene-layer text runs named that
+        /// did not resolve, each drawn in the document default font
+        /// (`"Family Style"`, report order). Absent when every named
+        /// family resolved, on a clear, and from an older worker.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        font_fallbacks: Option<Vec<String>>,
+    },
+    /// v44 (C-6 / I-06) — ack for `ClaimImageResource` /
+    /// `ReleaseImageResource` / `SubmitResourceTiles`. Echoes `image_id`;
+    /// `applied` is false only when no document was loaded. The page caches
+    /// are invalidated when tiles changed so the next snapshot consumes
+    /// them. `needed` carries the tile-miss requests the rebuild produced
+    /// (additively, so a single-reply transport delivers them alongside the
+    /// ack the way `MutationApplied.reflow` rides its reply); the host
+    /// fetches + submits them. The standalone `ResourceTilesNeeded` variant
+    /// exists for worker glue that posts unsolicited.
+    ResourceClaimApplied {
+        image_id: String,
+        applied: bool,
+        #[serde(default)]
+        needed: Vec<ResourceTilesNeededWire>,
+    },
+    /// v44 (C-6 / I-06) — UNSOLICITED: a claimed image lacked tiles at the
+    /// chosen mip level during the last build. The host fetches the listed
+    /// tile origins from the plugin's pyramid and replies with
+    /// `SubmitResourceTiles`. Compose did NOT block: the frame painted the
+    /// best cached level (or the native whole-image fallback) meanwhile.
+    /// Mirrors `PagesDirty`'s unsolicited-post pattern. The same payload is
+    /// also delivered additively on `ResourceClaimApplied.needed`.
+    ResourceTilesNeeded(ResourceTilesNeededWire),
+    /// v38 (Wave 2, C-2 / S-05) — content-box reflow notification. Fired
+    /// ONLY when a frame's CONTENT BOX changes (a `Mutation::ResizeFrame`
+    /// settles), NEVER on a pure transform (`MoveFrame` /
+    /// `SetGroupTransform` / scale / rotate). The §8.5 resize-vs-transform
+    /// ruling: pagination must react to a content-box resize but must NOT
+    /// re-paginate on display-geometry transforms. `content_box` is the
+    /// frame's post-resize `GeometricBounds` `[top, left, bottom, right]`
+    /// in spread coords. Also carried additively on
+    /// `MutationApplied.reflow` so it rides the reply the editor
+    /// correlates by seq; this standalone variant lets the worker glue
+    /// post it as an unsolicited notification (mirrors `PagesDirty`).
+    FrameReflow {
+        frame_id: String,
+        /// `[top, left, bottom, right]`.
+        content_box: [f32; 4],
+    },
+    /// SDK Phase 5 (D1) — `RequestDocumentMeta` reply. Per
+    /// `panel-catalog-and-sdk-extension.md` §5.6.
+    DocumentMetaReply { meta: DocumentMeta },
+    /// SDK Phase 5 (v1 sweep) — `RequestColorPreview` reply.
+    /// `result` is `None` when the swatch id doesn't resolve.
+    ColorPreviewReply { result: Option<ColorPreview> },
+    /// Concept 2 — `RequestColorCompute` reply.
+    ColorComputeReply {
+        rgb_hex: String,
+        cmyk: Option<[f32; 4]>,
+        out_of_gamut: bool,
+    },
+    /// Concept 2 — `RequestGradientDetail` reply. `None` when the
+    /// id doesn't resolve to a gradient.
+    GradientDetailReply { result: Option<GradientDetail> },
+    /// Concept 2 — `ExportSwatchLibrary` reply.
+    SwatchLibraryExported {
+        #[tsify(type = "number[]")]
+        ase_bytes: ByteBuf,
+    },
+    /// Concept 3 — `ExportPdfBegin` reply.
+    ExportPdfBegun { session: u32, page_count: u32 },
+    /// Concept 3 — `ExportPdfPage` reply (one page exported).
+    ExportPdfProgress { session: u32, done: u32, total: u32 },
+    /// Concept 3 — `ExportPdfFinish` reply. `diagnostics` carries the
+    /// human-readable summary lines; panels.md gap 20 — `findings`
+    /// carries the SAME findings structured (code + severity + page)
+    /// so the dialog can render a grouped, severity-coloured list and
+    /// deep-link to the offending page.
+    PdfExported {
+        #[tsify(type = "number[]")]
+        pdf_bytes: ByteBuf,
+        diagnostics: Vec<String>,
+        #[serde(default)]
+        findings: Vec<PreflightFinding>,
+    },
+    /// Concept 3 — `ExportPdfCancel` reply.
+    ExportPdfCancelled { session: u32 },
+    /// Concept 3 — any export request that could not be honoured
+    /// (unknown session, bad options, build/write failure).
+    ExportPdfFailed { error: String },
+    /// W3.B2 (rides v29 — added before first editor sync) — `ExportIdml`
+    /// reply. `idml_bytes` is the re-serialised package (mirrors how
+    /// `PdfExported` carries `pdf_bytes` as a `ByteBuf` rendered as a
+    /// `number[]` on the wire). The main thread offers it to the user
+    /// as a `.idml` download / save target.
+    IdmlExported {
+        #[tsify(type = "number[]")]
+        idml_bytes: ByteBuf,
+        /// v58 (C-28) — paged-NATIVE constructs the IDML writer could
+        /// not carry, one human-readable line each. Empty for a
+        /// document that uses only IDML-expressible features. Today
+        /// the only entry kind is opacity masks (IDML has no such
+        /// element). The host is expected to SURFACE this — the whole
+        /// point is that a lossy save is never silent; `.paged` is
+        /// the lossless target. `#[serde(default)]` so a pre-v58
+        /// payload still deserialises.
+        #[serde(default)]
+        lost: Vec<String>,
+        /// The files the package's image links point at — one per
+        /// distinct file, populated only when the request carried a
+        /// `linkBase`. The host writes `bytes` (when `hasBytes`) as
+        /// `<linkBase>/<fileName>`, or copies the file `sourceUri`
+        /// names there. Bytes ride inline as `number[]` (the
+        /// `pdfBytes` / `idmlBytes` shape) rather than on a second
+        /// request kind, which would bump the protocol. Additive
+        /// (governance rule 1): omitted by an older worker,
+        /// deserialises to empty.
+        #[serde(default)]
+        links: Vec<ExportedLinkWire>,
+    },
+    /// W3.B2 (rides v29 — added before first editor sync) — `ExportIdml`
+    /// failed (no document loaded, or the carry-through writer errored).
+    /// Mirrors `ExportPdfFailed`'s flat-string error shape.
+    ExportIdmlFailed { error: String },
+    /// v51 — `WritePagedPart` ack.
+    PagedPartWritten {},
+    /// v51 — `ReadPagedPart` reply. `found: false` + empty `bytes` when the
+    /// part is absent (mirrors the placed-asset-bytes found/empty shape).
+    PagedPartRead {
+        found: bool,
+        #[tsify(type = "number[]")]
+        bytes: ByteBuf,
+    },
+    /// v51 — `ListPagedParts` reply (paths under the requested prefix).
+    PagedPartList { paths: Vec<String> },
+    /// v66 — `DeletePagedPart` ack. `existed: false` when there was no
+    /// such part (deleting an absent part is not an error).
+    PagedPartDeleted { existed: bool },
+    /// v51 — `ExportPaged` reply: the `.paged` container bytes (mirrors how
+    /// `IdmlExported` carries `idml_bytes` as a `number[]` on the wire).
+    PagedExported {
+        #[tsify(type = "number[]")]
+        bytes: ByteBuf,
+    },
+    /// v51 — any `.paged` parts op failed (no document loaded, a path outside
+    /// the `paged/` namespace, or the container writer errored).
+    PagedPartFailed { error: String },
+    /// Inspector P1 — `RequestElementProperties` reply. `None` when
+    /// the id doesn't resolve.
+    ElementProperties { result: Option<ElementProperties> },
+    /// v65 — `RequestStyleProperties` reply. `None` when the style does
+    /// not exist.
+    StyleProperties { result: Option<StyleProperties> },
+    /// Inspector P1 — `RequestSceneTree` reply.
+    SceneTree { roots: Vec<SceneTreeNode> },
+    /// Scripting Stage 2 — `ExecuteScript` reply. `output` is the
+    /// concatenated console.* lines; `error` is non-null when the
+    /// script threw an unhandled exception. `budget_kind` is set (with
+    /// `error` also set) when the abort was a runtime-budget exhaustion
+    /// (B-09 / W-08 typed-exhaustion contract). Additive on the wire —
+    /// rides protocol v35; omitted from the JSON for ordinary results,
+    /// so pre-existing consumers are unaffected.
+    ScriptResult {
+        output: Vec<String>,
+        error: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        budget_kind: Option<ScriptBudgetKind>,
+        /// v0.71.5 — the document's counts after the script ran. A script
+        /// writes through the model without the `MutationApplied` /
+        /// selection round trip that refreshes a host's counters, so
+        /// panels reading `Stats` (and an assistant's overset diagnosis)
+        /// went stale after every script. Additive and optional: absent
+        /// when no document is loaded; older hosts ignore it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        stats: Option<crate::model::DocumentStats>,
+        /// v0.71.13 — how many writes the run committed to the document
+        /// itself: each one step the engine logged (a `paged.set`, an
+        /// insert, a `paged.undo`, …). `0` for a read-only script. The
+        /// engine writes a host made answering a suspended script are
+        /// not counted: they answered as `MutationApplied` of their own.
+        /// Absent with no document, and from older workers.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        writes: Option<u32>,
+        /// v0.71.13 — the pages the run's writes changed, in document order:
+        /// the pages the engine laid out afresh for them. A text edit
+        /// narrows to its story's pages; any other write names every
+        /// page, as `MutationApplied.page_ids` does for it. Empty when no
+        /// write changed a page (`writes` is 0, or the writes touched
+        /// nothing a page draws — the document still changed). Absent
+        /// when the engine cannot say (no document; an older worker):
+        /// treat every page as changed.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        page_ids: Option<Vec<PageId>>,
+    },
+    /// v71 — the `ExecuteScript` (or `HostObjectsResult`) reply when the
+    /// script SUSPENDED on the host's object registry: it named a
+    /// `plugin:` address in `paged.get/set/batch/query/schema`. `calls`
+    /// is every call the script made since it last ran, batched (one
+    /// round trip per script step; consecutive `paged.set`s fold into one
+    /// `batch`). The host answers each through `host.objects` and sends
+    /// `HostObjectsResult { session, answers }`.
+    RequestHostObjects {
+        session: u32,
+        calls: Vec<HostObjectCall>,
+    },
+    /// Phase B — `BeginGesture` succeeded.
+    GestureBegun {
+        handle: crate::gesture::GestureHandle,
+    },
+    /// Phase B — `UpdateGesture` applied. `page_ids` is the dirty set
+    /// so the canvas can scope its LOD-cache invalidation. Phase E —
+    /// `snap_lines` is the active set of snap guides the overlay
+    /// should render (one entry per axis that snapped this update).
+    GestureUpdated {
+        handle: crate::gesture::GestureHandle,
+        page_ids: Vec<PageId>,
+        #[serde(default)]
+        snap_lines: Vec<crate::snap::SnapLine>,
+    },
+    /// Phase B — `CommitGesture` succeeded. Mirrors
+    /// `MutationApplied`'s payload: the new applied_seq + dirty pages
+    /// + layout-cache stats so the main thread can update its HUD.
+    GestureCommitted {
+        handle: crate::gesture::GestureHandle,
+        applied_seq: u64,
+        page_ids: Vec<PageId>,
+        cache_stats: LayoutCacheStats,
+        /// v0.71.13 — content-box reflow: what `MutationApplied.reflow`
+        /// reports for the equivalent `resizeFrame`. Present when the
+        /// gesture resized ONE frame by its handles; absent for a move,
+        /// rotate, scale or shear (display geometry only, the §8.5
+        /// resize-vs-transform ruling), for a gesture that did not move,
+        /// and for a resize of several frames (a batch, which reports no
+        /// reflow as a mutation either). Older workers omit it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[tsify(optional)]
+        reflow: Option<FrameReflowInfo>,
+    },
+    /// Phase B — `CancelGesture` complete; scene was restored from the
+    /// snapshot. `page_ids` covers the restored pages.
+    GestureCancelled {
+        handle: crate::gesture::GestureHandle,
+        page_ids: Vec<PageId>,
+    },
+    /// Phase B — gesture-lifecycle error. Sent for any of
+    /// `BeginGesture` / `UpdateGesture` / `CommitGesture` /
+    /// `CancelGesture` that the worker can't fulfil (stale handle,
+    /// rotated frame, already-active gesture).
+    GestureFailed { error: GestureFailure },
+    /// Sent by the JS-side worker glue (not by Rust) after the
+    /// renderer attaches to the host canvas. Carries the GPU
+    /// readiness flag + the configured scene-cache budget. The Rust
+    /// variant exists so the TS contract is unified — emitting code
+    /// lives in `apps/canvas/src/worker/worker.ts`.
+    AttachReady {
+        gpu_active: bool,
+        scene_cache_budget: u32,
+    },
+    /// Step 5e — fired by the JS-side worker glue after a SAB-drain
+    /// tick that ran `update_gesture_raw`. The SAB hot path bypasses
+    /// the `GestureUpdated` JSON envelope, so this unsolicited notify
+    /// is how the overlay still learns about the active snap guides.
+    /// Always carries the latest snap-line set, including the empty
+    /// vec when the gesture left a previously-snapped axis (so the
+    /// overlay can clear stale guides). Emitting code lives in
+    /// `apps/canvas/src/worker/worker.ts`.
+    GestureSnapLines {
+        snap_lines: Vec<crate::snap::SnapLine>,
+    },
+    /// Sent by the JS-side worker glue (not by Rust) after `LoadDocument`
+    /// succeeds, carrying the Tier 3 resolution result. The Rust variant
+    /// exists so the TS contract is unified — emitting code lives in
+    /// `apps/canvas/src/worker/worker.ts`.
+    ResolutionDone(crate::resolve::ResolutionResult),
+}
+
+/// Wire-format errors for the gesture envelope. Mirrors the variants
+/// of `crate::gesture::GestureError` so the channel doesn't expose the
+/// internal `thiserror` representation.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase", tag = "kind", content = "details")]
+pub enum GestureFailure {
+    NoDocument,
+    UnsupportedGesture {
+        reason: String,
+    },
+    AlreadyActive {
+        handle: crate::gesture::GestureHandle,
+    },
+    HandleMismatch,
+    ElementNotFound {
+        id: crate::element_selection::ElementId,
+    },
+    RotatedFrameUnsupported,
+    EmptySelection,
+    MissingAnchor,
+    UnknownAnchorPage {
+        page_id: PageId,
+    },
+    /// C-77 — the element (or a member of the dragged group) is locked.
+    Locked {
+        id: crate::element_selection::ElementId,
+    },
+    Other {
+        message: String,
+    },
+}
+
+impl From<crate::gesture::GestureError> for GestureFailure {
+    fn from(e: crate::gesture::GestureError) -> Self {
+        use crate::gesture::GestureError::*;
+        match e {
+            NoDocument => GestureFailure::NoDocument,
+            UnsupportedGesture(g) => GestureFailure::UnsupportedGesture {
+                reason: format!("{g:?}"),
+            },
+            AlreadyActive(h) => GestureFailure::AlreadyActive { handle: h },
+            HandleMismatch => GestureFailure::HandleMismatch,
+            ElementNotFound(id) => GestureFailure::ElementNotFound { id },
+            RotatedFrameUnsupported => GestureFailure::RotatedFrameUnsupported,
+            EmptySelection => GestureFailure::EmptySelection,
+            Mutate(msg) => GestureFailure::Other { message: msg },
+            MissingAnchor => GestureFailure::MissingAnchor,
+            UnknownAnchorPage(page_id) => GestureFailure::UnknownAnchorPage { page_id },
+            Locked(id) => GestureFailure::Locked { id },
+        }
+    }
+}
+
+/// Oriented geometry for one selected element. `bounds` is the raw
+/// `GeometricBounds` (content-box space); `item_transform` is the
+/// composed affine into the PAGE the element sits on (see
+/// [`Self::item_transform`]). The overlay layer multiplies bounds
+/// corners by the transform to draw the oriented selection chrome.
+///
+/// A GROUP answers the box InDesign draws around it: `bounds` is the
+/// union of its members' outlines in the group's own coordinate space
+/// and `item_transform` the group's composed transform, so a rotated
+/// group reads as a rotated box, the same shape as a rotated frame's.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ElementGeometryItem {
+    pub id: crate::element_selection::ElementId,
+    /// C-23 — the page this element sits on, or `None` when it sits on
+    /// the PASTEBOARD and belongs to no page.
+    ///
+    /// This used to be a plain `PageId`, and the door did not report a
+    /// pageless element as pageless — it dropped it from the reply
+    /// entirely, so a plugin that generated art off-page (paged.draw's
+    /// pattern bake, stepping a tile past the page edge) created and
+    /// grouped something it then could not read back.
+    ///
+    /// **The convention `None` carries:** `bounds` + `item_transform`
+    /// compose against the SPREAD origin rather than a page origin (a
+    /// page-owned item composes against its page's).
+    /// `spread_id` names which spread, because without it the answer is
+    /// unusable the moment a document has two.
+    ///
+    /// Runtime-safe to widen: every element of every existing document
+    /// is on a page, so no existing reply changes shape. The `None`
+    /// only appears for items this door used to omit.
+    #[serde(default)]
+    pub page_id: Option<PageId>,
+    /// C-23 — the owning spread. Always populated; the page-owned case
+    /// carries it too, so a consumer never has to ask a second door.
+    #[serde(default)]
+    pub spread_id: Option<String>,
+    /// `[top, left, bottom, right]`.
+    pub bounds: [f32; 4],
+    /// `[a, b, c, d, tx, ty]`: `bounds` through it lands in the
+    /// coordinates of `page_id`'s page, `(0, 0)` at its top-left — the
+    /// space of the hit test's `frameBounds`, carets, selection rects and
+    /// the inserts. It is the stored `ItemTransform` with the page's
+    /// origin inside its spread folded in ([`Self::page_origin`]); the two
+    /// differ wherever a page does not start at its spread's origin (a
+    /// verso, every page of an InDesign document). `moveFrame` takes it
+    /// back in the same space. A pageless item answers in spread space.
+    #[serde(default)]
+    pub item_transform: Option<[f32; 6]>,
+    /// The page's origin inside its spread, `[x, y]` in spread
+    /// coordinates; `None` for a pageless item and a table cell. The
+    /// stored `ItemTransform` (what the `frameTransform` property reads
+    /// and writes) is `translate(page_origin) ∘ item_transform`. Additive.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub page_origin: Option<[f32; 2]>,
+    /// Phase F — `true` when this element hosts a placed image
+    /// (`Rectangle` with `<Image>` / `<EPSImage>` / `<PDF>` /
+    /// `<ImportedPage>` nested). The TS overlay uses this to decide
+    /// whether a Cmd-drag should kick off `TranslateContent` instead
+    /// of `Translate`.
+    #[serde(default)]
+    pub has_image: bool,
+    /// The story a TEXT FRAME shows (its `ParentStory`); `None` for every
+    /// other kind. `hitTest` answers `storyId: null` for an EMPTY frame
+    /// (the text hit path needs a laid-out line), so a frame's story was
+    /// discoverable only by diffing the stories collection around its
+    /// insert. Additive: absent from the JSON when `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub story_id: Option<String>,
+}
+
+/// Step 5 — one anchor's three control points, in the polygon's
+/// inner coords (before `item_transform` + page-origin shift). The
+/// overlay applies the same affine chain it already uses for selection
+/// chrome.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct PathAnchorTriple {
+    pub anchor: [f32; 2],
+    pub left: [f32; 2],
+    pub right: [f32; 2],
+}
+
+/// Track M — wire-shape mirror of `paged_model::Layer`. Surfaces
+/// everything the Layers panel needs without leaking parse-side
+/// fields the wasm boundary doesn't understand.
+///
+/// `z` is the layer's zero-based index in `designmap.layers`, and
+/// **`z == 0` is the BACKMOST layer** — the first declared, painted
+/// first. The topmost layer has the HIGHEST z.
+///
+/// This comment previously said "top-first … designmap[0] = topmost",
+/// which is the inversion `paged_scene::layer` records as a real bug
+/// (its module doc: "Cycle 2's Q-10 commit had this inverted"), fixed
+/// in the renderer and asserted by its own test. The wire comment kept
+/// the wrong version, so a panel author sorting by `z` would have
+/// stacked the list upside down. See `paged_scene::layer` for the
+/// authority.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct LayerSummary {
+    pub self_id: String,
+    pub name: Option<String>,
+    pub visible: bool,
+    pub locked: bool,
+    pub printable: bool,
+    pub z: u32,
+    /// v60 — `Self` of the enclosing `<Layer>` when this layer is nested
+    /// inside a layer GROUP (folder) in InDesign's Layers panel; `None`
+    /// for a top-level layer, which is the overwhelmingly common case.
+    ///
+    /// Mirrors [`paged_model::Layer::parent_id`], which the model has
+    /// carried all along — the summary simply dropped it, so every
+    /// consumer of this wire type saw a FLAT layer list and a Layers
+    /// panel could not render a tree. Added when ADR 023's shared-panel
+    /// work hit exactly that wall.
+    ///
+    /// Note the renderer already resolves visibility and lock THROUGH
+    /// ancestors (a visible child inside a hidden parent group is
+    /// hidden), so `visible`/`locked` here are the layer's OWN flags,
+    /// not the resolved ones. A panel showing effective state must walk
+    /// the chain itself.
+    #[serde(default)]
+    pub parent_id: Option<String>,
+}
+
+/// v38 (Wave 2, C-2 / S-05) — one link in a story's `NextTextFrame`
+/// thread, as `RequestFrameChain` reports it (head-first). `frame_id` is
+/// the frame's `Self` id; `next` is its `NextTextFrame` target (`None`
+/// at end-of-chain). `overflow` is `true` only on the LAST link when the
+/// story's text overflowed the chain — InDesign drops overset past the
+/// final frame, so the overset flag (derived from the build's
+/// story-level `overset_story_ids`) lands on the tail. Interior links
+/// always carry `overflow: false`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameChainLink {
+    pub frame_id: String,
+    pub next: Option<String>,
+    pub overflow: bool,
+}
+
+/// v43 (D-01) — one plugin placeholder field, as
+/// `RequestDocumentPlaceholders` reports it. `offset` is the char
+/// offset of the field's run START in its story (the address
+/// `SetFieldValue` / `DeleteField` take); it is only valid until the
+/// next edit — re-enumerate, don't cache. `value` is the cached
+/// resolved display (`null` = unresolved; the run shows `<key>`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaceholderItem {
+    pub story_id: String,
+    pub offset: u32,
+    pub plugin: String,
+    pub key: String,
+    pub value: Option<String>,
+}
+
+/// v38 (Wave 2, C-2 / S-05) — content-box reflow payload. Carried on
+/// `MutationApplied.reflow` (and mirrored by the standalone
+/// `WorkerToMainKind::FrameReflow`). `content_box` is the frame's
+/// post-resize `GeometricBounds` `[top, left, bottom, right]` in spread
+/// coords. Emitted ONLY for a `Mutation::ResizeFrame` — never for a
+/// transform-only edit (the §8.5 resize-vs-transform distinction).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameReflowInfo {
+    pub frame_id: String,
+    /// `[top, left, bottom, right]`.
+    pub content_box: [f32; 4],
+}
+
+/// Inspector P1 — typed property snapshot for one element. The
+/// Inspector panel maps each entry to the right typed editor:
+/// bounds → `BoundsInput`, transform → 6-cell matrix, colour ref →
+/// `ColorPicker`, length → `LengthInput`, etc.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ElementProperties {
+    pub id: crate::element_selection::ElementId,
+    pub kind: String,
+    /// Optional human-readable name (frame label, layer name, …) when
+    /// the underlying type carries one.
+    #[serde(default)]
+    pub name: Option<String>,
+    pub entries: Vec<PropertyEntry>,
+}
+
+/// v65 — one style definition's settable properties
+/// (`RequestStyleProperties`). `entries` uses the inspector's row shape;
+/// every value is `Some` (a style has one value per field, never "mixed").
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct StyleProperties {
+    pub collection: paged_mutate::StyleCollection,
+    pub style_id: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    /// The style's `BasedOn` reference, verbatim.
+    #[serde(default)]
+    pub based_on: Option<String>,
+    pub entries: Vec<PropertyEntry>,
+}
+
+/// Inspector P1 — one row of the inspector. `path` is the
+/// `PropertyPath` discriminant (camelCase). `value` mirrors the
+/// `Value` wire shape so the panel can pass it through to
+/// `Mutation::SetElementProperty` without re-encoding.
+///
+/// SDK Phase 3 — `value` is `Option<Value>` (was `Value`). `None`
+/// signals "mixed / indeterminate" — a `NodeId::StoryRange` whose
+/// `CharacterRun`s carry conflicting values for this path returns
+/// `None` so the binding renderer can show a placeholder (em-dash)
+/// rather than picking an arbitrary winner. For frame-level reads
+/// the value is always `Some(_)`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct PropertyEntry {
+    pub path: paged_mutate::PropertyPath,
+    #[serde(default)]
+    pub value: Option<paged_mutate::Value>,
+}
+
+/// SDK Phase 5 (D1) — closed enumeration of every document
+/// collection a panel may bind against. Per
+/// `panel-catalog-and-sdk-extension.md` §5.1. The Rust enum and the
+/// TS `CollectionName` union (in `packages/catalog/src/types.ts`)
+/// stay in lockstep; tsify emits a string-tag enum at the boundary
+/// so consumers can pass names verbatim.
+///
+/// Not every variant has a backing model accessor yet — the wire
+/// surface lands here as the §5 binding ceiling, and the per-
+/// collection accessors fill in as panels need them. The
+/// `CanvasModel::collection(name)` dispatcher returns an empty
+/// `serde_json::Value::Array` for unimplemented entries, surfacing
+/// a runtime warning rather than a panic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub enum CollectionName {
+    Swatches,
+    Gradients,
+    ColorGroups,
+    ParagraphStyles,
+    CharacterStyles,
+    ObjectStyles,
+    CellStyles,
+    TableStyles,
+    Layers,
+    Spreads,
+    Pages,
+    MasterPages,
+    Links,
+    Articles,
+    Hyperlinks,
+    Bookmarks,
+    CrossReferences,
+    Conditions,
+    ConditionSets,
+    Fonts,
+    IndexTopics,
+    /// v0.71.13 (ADR 163) — the document's footnotes, one row per note: its id,
+    /// story, the story offset of its reference, the label it prints and
+    /// the page it is set on, and its text. Backs `paged.insertFootnote`
+    /// / `deleteFootnote` callers and a Footnotes panel.
+    Footnotes,
+    /// ADR 174 — the document's endnotes, one row per note in reference
+    /// order: its id, story, the story offset of its reference, the number
+    /// it prints and its text. Backs `paged.insertEndnote` /
+    /// `deleteEndnote` callers and an Endnotes panel.
+    Endnotes,
+    /// ADR 172 — the document's editorial notes, one row per note: its id,
+    /// story, the story offset of its place, its text, author and dates.
+    /// Backs `paged.insertNote` / `editNote` / `deleteNote` /
+    /// `convertNoteToText` callers and a Notes panel.
+    Notes,
+    /// D-02 — the document's XML tags (`XML/Tags.xml`), one row per tag.
+    XmlTags,
+    /// D-02 — the document's XML structure depth-first, one row per
+    /// element: its tag, depth, what it tags, its attributes. An element
+    /// tagging a story is followed by the elements tagging its ranges.
+    XmlElements,
+    /// D-01 — the document's tracked changes, one row per change in story
+    /// order: its story, the story offset of its place, its kind, author,
+    /// date and text. Deletions today; tracked insertions read as the
+    /// story's text and are not listed yet.
+    TrackedChanges,
+    /// Concept 2 — the Ink Manager's ink list (one row per spot
+    /// swatch, carrying its output-time settings).
+    Inks,
+    /// panels.md gaps 9/10/19 — `<Section>` numbering definitions
+    /// (one row per section). Backs the Pages panel's section bands.
+    Sections,
+    /// W3.A0 — the document's stories (one row per `<Story>`, carrying
+    /// character/paragraph counts + the overset flag). The same
+    /// `StorySummary` list `paged.stories()` already builds. Backs
+    /// link-panel / preflight surfaces that bind against the collection
+    /// rather than the bespoke `stories()` accessor.
+    Stories,
+    /// W1.22 (engine gap 22) — the document's `<NumberingList>`
+    /// resources (one row per list, carrying its continuity flags).
+    /// Backs `documentCollection:numberingLists` — the editor's
+    /// list-definitions surface. Additive read-only collection.
+    NumberingLists,
+    /// §21 advanced prepress — one row per page, carrying the ink
+    /// separation read off the CPU rasterizer's plane state: which
+    /// plates the page needs, how heavily each is inked, and the
+    /// total-area-coverage distribution. Backs the Separations /
+    /// ink-limit surface.
+    ///
+    /// **This one renders.** Every other collection is a cheap walk
+    /// over parsed state; this rasterises every page once (72 dpi) to
+    /// get per-pixel ink. The model memoises it against the rebuild
+    /// counter so a re-fetch after an unrelated mutation is free, but
+    /// a caller should still treat it as an on-demand analysis rather
+    /// than something to poll.
+    InkCoverage,
+}
+
+impl CollectionName {
+    /// String form matching the TS `CollectionName` union — used by
+    /// the script-host generic `paged.collection(name)` to round-trip
+    /// from a JS string.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Swatches => "swatches",
+            Self::Gradients => "gradients",
+            Self::ColorGroups => "colorGroups",
+            Self::ParagraphStyles => "paragraphStyles",
+            Self::CharacterStyles => "characterStyles",
+            Self::ObjectStyles => "objectStyles",
+            Self::CellStyles => "cellStyles",
+            Self::TableStyles => "tableStyles",
+            Self::Layers => "layers",
+            Self::Spreads => "spreads",
+            Self::Pages => "pages",
+            Self::MasterPages => "masterPages",
+            Self::Links => "links",
+            Self::Articles => "articles",
+            Self::Hyperlinks => "hyperlinks",
+            Self::Bookmarks => "bookmarks",
+            Self::CrossReferences => "crossReferences",
+            Self::Conditions => "conditions",
+            Self::ConditionSets => "conditionSets",
+            Self::Fonts => "fonts",
+            Self::IndexTopics => "indexTopics",
+            Self::Footnotes => "footnotes",
+            Self::Notes => "notes",
+            Self::XmlTags => "xmlTags",
+            Self::XmlElements => "xmlElements",
+            Self::TrackedChanges => "trackedChanges",
+            Self::Endnotes => "endnotes",
+            Self::Inks => "inks",
+            Self::Sections => "sections",
+            Self::Stories => "stories",
+            Self::NumberingLists => "numberingLists",
+            Self::InkCoverage => "inkCoverage",
+        }
+    }
+
+    // Inherent `from_str` returns `Option` (unknown name → `None`); the
+    // `FromStr` trait would force a `Result`/`Err` type and change callers.
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: &str) -> Option<Self> {
+        Some(match s {
+            "swatches" => Self::Swatches,
+            "gradients" => Self::Gradients,
+            "colorGroups" => Self::ColorGroups,
+            "paragraphStyles" => Self::ParagraphStyles,
+            "characterStyles" => Self::CharacterStyles,
+            "objectStyles" => Self::ObjectStyles,
+            "cellStyles" => Self::CellStyles,
+            "tableStyles" => Self::TableStyles,
+            "layers" => Self::Layers,
+            "spreads" => Self::Spreads,
+            "pages" => Self::Pages,
+            "masterPages" => Self::MasterPages,
+            "links" => Self::Links,
+            "articles" => Self::Articles,
+            "hyperlinks" => Self::Hyperlinks,
+            "bookmarks" => Self::Bookmarks,
+            "crossReferences" => Self::CrossReferences,
+            "conditions" => Self::Conditions,
+            "conditionSets" => Self::ConditionSets,
+            "fonts" => Self::Fonts,
+            "indexTopics" => Self::IndexTopics,
+            "footnotes" => Self::Footnotes,
+            "notes" => Self::Notes,
+            "xmlTags" => Self::XmlTags,
+            "xmlElements" => Self::XmlElements,
+            "trackedChanges" => Self::TrackedChanges,
+            "endnotes" => Self::Endnotes,
+            "inks" => Self::Inks,
+            "sections" => Self::Sections,
+            "stories" => Self::Stories,
+            "numberingLists" => Self::NumberingLists,
+            "inkCoverage" => Self::InkCoverage,
+            _ => return None,
+        })
+    }
+}
+
+/// SDK Phase 5 (D1) — singleton document-level state. Per
+/// `panel-catalog-and-sdk-extension.md` §5.6. Powers the Info panel,
+/// status bar, and any chrome that reflects whole-document state
+/// (vs. selection state). Scalar reads of singleton properties; the
+/// six fields cover the v1 panel needs.
+///
+/// `dirty` mirrors the Project's "has uncommitted edits since the
+/// last save" flag (always `false` at v1 since there's no
+/// save/export path through the worker yet — the flag exists so
+/// the Info panel and tab title can react when one lands).
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentMeta {
+    pub page_count: u32,
+    pub active_page: Option<PageId>,
+    /// User-facing measurement unit — `"pt"` / `"px"` / `"in"` /
+    /// `"mm"` / `"cm"` / `"pica"` etc. Empty when the IDML doesn't
+    /// declare a default and the renderer hasn't established one.
+    pub units: String,
+    /// IDML's document colour mode — `"cmyk"` / `"rgb"`. Empty when
+    /// the source doesn't declare it.
+    pub color_mode: String,
+    /// Human-readable document name. Often the source `.idml`
+    /// filename minus extension; empty for synthetic / in-memory
+    /// documents.
+    pub document_name: String,
+    /// `true` when the worker has applied a mutation since
+    /// `LoadDocument`. Reset on save/export when that path lands.
+    pub dirty: bool,
+    /// Editor-ops — document defaults for newly-created objects (the
+    /// triple `SetDocumentDefaults` writes). `None` = no fill / no
+    /// stroke / engine-default weight.
+    #[serde(default)]
+    pub default_fill_color: Option<String>,
+    #[serde(default)]
+    pub default_stroke_color: Option<String>,
+    #[serde(default)]
+    pub default_stroke_weight: Option<f32>,
+    /// Concept 2 — active colour-management settings (the state
+    /// `SetColorSettings` writes; seeded from the IDML designmap's
+    /// `CMYKProfile`/`SolidColorIntent` at load). `cmyk_profile_name`
+    /// is `None` until a registered profile is active by name.
+    #[serde(default)]
+    pub cmyk_profile_name: Option<String>,
+    /// Concept 3 — true when ACTUAL profile bytes back the working
+    /// space (explicit load bytes or a registry hit). The NAME above
+    /// can be a designmap declaration with no bytes behind it — the
+    /// export dialog's X-4 gate needs this, not the name.
+    #[serde(default)]
+    pub cmyk_profile_active: bool,
+    #[serde(default)]
+    pub rgb_policy: Option<String>,
+    #[serde(default)]
+    pub rendering_intent: Option<String>,
+    #[serde(default)]
+    pub black_point_compensation: Option<bool>,
+    /// Concept 2 — active soft-proof condition (`None` = proofing
+    /// off) + its paper-white flag.
+    #[serde(default)]
+    pub proof_profile_name: Option<String>,
+    #[serde(default)]
+    pub proof_simulate_paper_white: Option<bool>,
+    /// Concept 2 (Ink Manager) — global "Use Standard Lab Values
+    /// for Spots" toggle.
+    #[serde(default)]
+    pub use_standard_lab_for_spots: Option<bool>,
+    /// W2.5 — document baseline-grid settings (read-only), parsed from
+    /// `<GridPreference>`. `None` when the document carried no
+    /// `<GridPreference>` element. The editor's baseline-grid panel
+    /// shows these real values and the canvas overlay seats its grid
+    /// lines on them. Snapping text to the grid is deferred (a
+    /// layout-engine task — see the parse note). `baseline_division`
+    /// drives the grid pitch; `baseline_start` its top offset; both in
+    /// points.
+    #[serde(default)]
+    pub baseline_grid_start: Option<f32>,
+    #[serde(default)]
+    pub baseline_grid_division: Option<f32>,
+    /// Default-shown flag for the baseline grid (`BaselineGridShown`).
+    #[serde(default)]
+    pub baseline_grid_shown: Option<bool>,
+    /// `BaselineGridRelativeOption` — `"TopOfPage"` / `"TopMargin"`.
+    #[serde(default)]
+    pub baseline_grid_relative_to: Option<String>,
+    /// `BaselineColor` — grid-line colour ref / named colour.
+    #[serde(default)]
+    pub baseline_grid_color: Option<String>,
+    /// v69 — the document's own plugin metadata (`SetDocumentMetadata`
+    /// entries, write order). PRESENT (possibly empty) from a v69 worker,
+    /// absent from an older one, so a reader can tell "none" from "this
+    /// engine has no document labels".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub plugin_metadata: Option<Vec<PluginMetadataEntry>>,
+}
+
+/// SDK Phase 3 — one swatch's identity + display name + kind.
+/// Surfaced by `CanvasModel::swatches()` and the `paged.swatches()`
+/// host fn so collection-backed panels (Swatches, the color picker
+/// dropdown, the Character/Stroke fill-color enum-select) can
+/// enumerate the document's colour palette without re-parsing the
+/// graphic resource.
+///
+/// `kind` is the IDML colour-model discriminant — `"process"` for
+/// CMYK/RGB/Lab process colours, `"spot"` for named-ink swatches
+/// (PANTONE etc.), `"mixedInk"` / `"mixedInkGroup"` for those
+/// composites, and the literal labels `"none"` / `"paper"` /
+/// `"black"` / `"registration"` for the four special swatches
+/// IDML treats as built-ins. Renderers use this to badge the
+/// swatch grid.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct SwatchSummary {
+    pub self_id: String,
+    pub name: String,
+    pub kind: String,
+    /// §21 advanced prepress — the swatch's total area coverage in
+    /// percent: how much ink every press plate lays down for it,
+    /// summed. A process CMYK swatch sums its four channels (a 60/40/
+    /// 40/100 rich black is 240%); a spot swatch is ONE plate, so it
+    /// contributes its own tint (100% PANTONE 286 C is 100%, not the
+    /// 175% its CMYK alternate would sum to).
+    ///
+    /// `None` — not `0.0` — when the swatch has no ink decomposition:
+    /// RGB, Lab, mixed-ink and unknown swatches separate at the RIP,
+    /// not here. The distinction is load-bearing; a UI must show a
+    /// blank, never a zero.
+    ///
+    /// This is the EXACT reading, computed from the palette with no
+    /// render involved, so it is resolution-free and catches an
+    /// over-limit colour wherever it is used — including in hairlines
+    /// that the rendered per-page coverage under-samples. Additive
+    /// read-only field; no protocol bump on its own.
+    #[serde(default)]
+    pub total_area_coverage_pct: Option<f32>,
+}
+
+/// §21 advanced prepress — one ink plate's coverage on one page.
+///
+/// `area_pct` is the share of the WHOLE page this plate puts any ink
+/// on — the "does this plate earn its pass on press" number.
+/// `max_tint_pct` / `mean_tint_pct` describe how heavily, over the
+/// inked pixels only.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct PlateCoverageSummary {
+    /// `"cyan"` / `"magenta"` / `"yellow"` / `"black"` for the process
+    /// inks; the spot swatch's `Color/<id>` for a named ink — the same
+    /// id `InkSummary::spot_id` uses, so the Ink Manager and this
+    /// surface address the same ink.
+    pub ink_id: String,
+    /// Display name: `"Cyan"` … `"Black"`, or the spot swatch's
+    /// palette name (falling back to its id).
+    pub name: String,
+    pub is_spot: bool,
+    pub area_pct: f32,
+    pub max_tint_pct: f32,
+    pub mean_tint_pct: f32,
+}
+
+/// §21 advanced prepress — one page's ink-coverage reading, produced
+/// by rasterising the page and reading the CPU rasterizer's per-ink
+/// plane state.
+///
+/// # Read `separated_pct` before quoting any other number
+///
+/// The raster lane only decomposes a pixel into inks when the draw
+/// that made it carried a CMYK or spot swatch. Placed images, RGB and
+/// Lab swatches, gradients, and anything inside a blend group carry no
+/// ink decomposition — those pixels are **unknown**, not blank, and
+/// every statistic below excludes them. `separatedPct` is how much of
+/// the page was actually measured. A `maxTacPct` of 340 over a
+/// `separatedPct` of 4 is a statement about 4% of the page.
+///
+/// Nothing here estimates the unknown pixels. The renderer's RGB→CMYK
+/// map is 100%-GCR (a rich black inverts to K-only / 100% TAC where a
+/// real coated profile gives ~300%), so folding it in would make the
+/// headline figure confidently wrong exactly where operators check it.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct InkCoverageSummary {
+    pub page_id: PageId,
+    pub page_index: u32,
+    /// **Check this first.** `false` means the document has no active
+    /// CMYK working profile (none supplied at load, none named by the
+    /// designmap that the host had registered, no soft proof), and
+    /// therefore the renderer resolved every CMYK and spot swatch
+    /// straight to display RGB — there is no ink lane at all and every
+    /// figure below is structurally zero.
+    ///
+    /// That is a completely different condition from "this page is all
+    /// RGB artwork", and a surface MUST NOT render them the same way:
+    /// one says *activate a profile*, the other says *this content
+    /// separates at the RIP*. Both produce `separatedPct == 0`.
+    ///
+    /// `SwatchSummary::totalAreaCoveragePct` is unaffected — it is
+    /// palette arithmetic and needs no profile — so the swatch-level
+    /// ink-limit audit still works when this is `false`.
+    pub separation_available: bool,
+    /// Sampling resolution of the analysis render, in dpi. An area
+    /// measurement is dpi-independent for solid tints; anti-aliased
+    /// edges dilute their ink with the paper they partly cover, so
+    /// sub-pixel hairlines under-report. Check hairline rich blacks
+    /// against `SwatchSummary::totalAreaCoveragePct`, which is exact.
+    pub analysis_dpi: f32,
+    /// The total-area-coverage limit `overLimitPixels` was counted
+    /// against, in percent.
+    pub limit_pct: f32,
+    pub total_pixels: u32,
+    pub separated_pixels: u32,
+    /// `separatedPixels / totalPixels`, 0..=100. The honesty
+    /// denominator — see the type docs.
+    pub separated_pct: f32,
+    pub max_tac_pct: f32,
+    pub mean_tac_pct: f32,
+    pub over_limit_pixels: u32,
+    /// Share of the SEPARATED pixels over the limit, 0..=100.
+    pub over_limit_pct: f32,
+    /// Four process plates always, then one per spot ink used on the
+    /// page. A blank process plate still appears — "Cyan: 0%" is
+    /// itself a reading.
+    pub plates: Vec<PlateCoverageSummary>,
+    /// 81 counts over the separated pixels, bucket `i` covering
+    /// `[i·10%, (i+1)·10%)` of total area coverage (so 0–800%, which
+    /// leaves room for spot plates above the 400% process ceiling).
+    /// Lets a panel re-threshold the ink limit with a slider and no
+    /// re-render.
+    pub histogram: Vec<u32>,
+}
+
+/// SDK Phase 3 — one paragraph style's identity + display name +
+/// based-on link. Surfaced by `CanvasModel::paragraph_styles()`
+/// (and `paged.paragraphStyles()`) so collection-backed Style
+/// panels can render the hierarchy without re-parsing styles.xml.
+/// The `based_on` field is the parent style's `selfId` (the cascade
+/// root); `None` means this is a top-level style.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ParagraphStyleSummary {
+    pub self_id: String,
+    pub name: String,
+    pub based_on: Option<String>,
+    /// styles.next-style (W1.22) — the style's `NextStyle` reference
+    /// (the style applied to the following paragraph when the user
+    /// presses Enter at this paragraph's end). `None` ⇒ no chain
+    /// declared. Additive `#[serde(default)]` field — the editor
+    /// reads it to implement the typing-time next-style flow; the
+    /// renderer never acts on it. No protocol bump on its own.
+    #[serde(default)]
+    pub next_style: Option<String>,
+}
+
+/// SDK Phase 3 — one character style's summary. Same shape as
+/// `ParagraphStyleSummary`; separate type so a future SwatchPicker
+/// composition can disambiguate styles in its options source.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct CharacterStyleSummary {
+    pub self_id: String,
+    pub name: String,
+    pub based_on: Option<String>,
+}
+
+/// SDK Phase 5 (v1 sweep) — one spread summary. Backs
+/// `documentCollection:spreads`. `pageCount` is the number of
+/// `<Page>` children in the spread; `label` is what InDesign's Pages
+/// panel shows for it, its pages' folios (`"3"`, `"2–3"`, see
+/// [`PageSummary::name`]) — the spread's `Self` id (or filename) only
+/// when it has no built page.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct SpreadSummary {
+    pub self_id: String,
+    pub label: String,
+    pub page_count: u32,
+    /// W3.A0 — the spread's live `<Guide>` set, refreshed on every
+    /// `collection("spreads")` request. `DocumentHandle.ruler_guides`
+    /// is load-time-only (it doesn't pick up `InsertGuide` /
+    /// `MoveGuide` / `DeleteGuide` mutations), so the editor re-queries
+    /// this collection after an undo/redo to re-sync its overlay
+    /// mirror. Empty for spreads with no guides.
+    #[serde(default)]
+    pub guides: Vec<GuideSummary>,
+}
+
+/// W3.A0 — one live ruler guide on a spread, carried inline on
+/// [`SpreadSummary`]. `id` is the positional id the guide-CRUD
+/// mutations mint (`"Guide/<spreadSelf>/<index>"`), so the editor can
+/// address a `MoveGuide` / `DeleteGuide` at it without a second
+/// round-trip. `position` is the page-local coordinate on the
+/// perpendicular axis (x for `Vertical`, y for `Horizontal`).
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct GuideSummary {
+    /// Positional id — `"Guide/<spreadSelf>/<index>"`. Matches the id
+    /// `Operation::InsertGuide` mints (see `apply::guide_id_for`).
+    pub id: String,
+    /// `"vertical"` (snaps on x) or `"horizontal"` (snaps on y).
+    pub orientation: crate::model::GuideOrientationWire,
+    /// Page-local coordinate on the perpendicular axis (pt).
+    pub position: f32,
+    /// Zero-based index into the spread's pages (IDML's `PageIndex`).
+    pub page_index: u32,
+}
+
+/// SDK Phase 5 (v1 sweep) — one page summary. Backs
+/// `documentCollection:pages`. Mirrors `DocumentHandle.page_ids` plus
+/// `page_sizes_pt` so a Pages-as-collection panel can render a
+/// thumbnail/label list. The Navigator (existing legacy panel)
+/// uses the same data through a different surface.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct PageSummary {
+    /// Stable id (matches `PageId` everywhere else).
+    pub self_id: String,
+    /// 1-based index — what the user types in "Go to page #".
+    pub index: u32,
+    /// The page's name as InDesign gives it: its folio, the label a
+    /// page-number marker on it prints (`"3"`, `"iv"`, `"A-2"`) — the
+    /// baked `Name` of a page InDesign wrote, else the number the section
+    /// rules give it where it stands. Never the page's id. Additive.
+    #[serde(default)]
+    pub name: String,
+    /// `[width, height]` in points.
+    pub size_pt: [f32; 2],
+    /// panels.md gap 10 — page margins in pt (from the page's
+    /// `<MarginPreference>`). All four default to 0 when the page
+    /// declared no margins. The editor's margin-box overlay insets
+    /// the page rect by these.
+    #[serde(default)]
+    pub margin_top_pt: f32,
+    #[serde(default)]
+    pub margin_left_pt: f32,
+    #[serde(default)]
+    pub margin_bottom_pt: f32,
+    #[serde(default)]
+    pub margin_right_pt: f32,
+    /// panels.md gap 10 — column grid inside the margin box.
+    /// `column_count` defaults to 1, `column_gutter_pt` to 0.
+    #[serde(default)]
+    pub column_count: u32,
+    #[serde(default)]
+    pub column_gutter_pt: f32,
+    /// panels.md gap 10 — document bleed in pt (top, left, bottom,
+    /// right), from `<DocumentPreference>`. Document-level (the same
+    /// values on every page); carried per-page so the overlay can
+    /// draw the bleed box without a second round-trip. All 0 when the
+    /// document declares no bleed.
+    #[serde(default)]
+    pub bleed_top_pt: f32,
+    #[serde(default)]
+    pub bleed_left_pt: f32,
+    #[serde(default)]
+    pub bleed_bottom_pt: f32,
+    #[serde(default)]
+    pub bleed_right_pt: f32,
+    /// v70 — the page's own `x-paged:` plugin-metadata entries
+    /// (`SetPageMetadata`): a slide's notes, transition, hidden flag. Empty
+    /// when it has none.
+    #[serde(default)]
+    pub plugin_metadata: Vec<PluginMetadataEntry>,
+    /// v0.71.13 — the page's origin (its top-left) in its spread's
+    /// coordinates, `[x, y]`: the same value `ElementGeometryItem.page_origin`
+    /// carries for an item on this page. Page 2 of a two-page spread whose
+    /// first page starts at the spread's origin sits at `[width of page 1,
+    /// 0]`. Older workers omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub page_origin: Option<[f32; 2]>,
+    /// v0.71.13 — the spread the page belongs to: `SpreadSummary.self_id` and
+    /// `ElementGeometryItem.spread_id` name the same spread. Older workers
+    /// omit it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub spread_id: Option<String>,
+}
+
+/// panels.md gaps 9/10/19 — one `<Section>` definition. Backs
+/// `documentCollection:sections`. The Pages panel groups page
+/// thumbnails by section and labels each group with its prefix +
+/// numbering style; `start_page_index` + `page_count` let it draw
+/// the section bands. `page_count` is computed by walking the body
+/// pages between this section's start and the next section's start
+/// (or the document end).
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct SectionSummary {
+    /// IDML `Self` id of the `<Section>`.
+    pub self_id: String,
+    /// `SectionPrefix` (e.g. `"A-"`); empty when the section has no
+    /// prefix or doesn't include it in labels.
+    pub prefix: String,
+    /// Page-number style — `"arabic"` / `"upperRoman"` /
+    /// `"lowerRoman"` / `"upperAlpha"` / `"lowerAlpha"`. The label a
+    /// panel renders next to the section band.
+    pub label_style: String,
+    /// 0-based flat body-page index where this section begins (the
+    /// page whose `Self` matches `PageStart`). `None` when the
+    /// section's start page can't be located in the built document.
+    #[serde(default)]
+    pub start_page_index: Option<u32>,
+    /// Number of body pages this section spans (up to the next
+    /// section's start, or the document end).
+    pub page_count: u32,
+}
+
+/// SDK Phase 5 (v1 sweep) — one master-spread summary. Backs
+/// `documentCollection:masterPages`. Documents typically ship 1–3
+/// master spreads (A-Master, B-Master, …) that pages reference
+/// via `AppliedMaster`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct MasterPageSummary {
+    pub self_id: String,
+    pub label: String,
+    pub page_count: u32,
+}
+
+/// SDK Phase 5 (v1 sweep) — one cell-style summary. Backs
+/// `documentCollection:cellStyles`. Apply-an-entity via
+/// `AppliedCellStyle` is wire-shape-only (UnsupportedProperty
+/// until the Table NodeId surface lands); the panel can still
+/// list defined styles today.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct CellStyleSummary {
+    pub self_id: String,
+    pub name: String,
+    pub based_on: Option<String>,
+}
+
+/// SDK Phase 5 (v1 sweep) — one table-style summary. Backs
+/// `documentCollection:tableStyles`. Same shape + apply-an-entity
+/// pattern as `CellStyleSummary`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct TableStyleSummary {
+    pub self_id: String,
+    pub name: String,
+    pub based_on: Option<String>,
+}
+
+/// SDK Phase 5 (v1 sweep) — one font family/style entry derived
+/// from the document's content. The parse layer doesn't carry a
+/// font registry — fonts are referenced from runs + paragraph
+/// styles. The accessor walks them and dedups; the result is the
+/// set of typefaces *used* by the document.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct FontSummary {
+    /// Family name (`"Open Sans"`, `"Helvetica Neue"`, …). Used as
+    /// the row react-key.
+    pub family: String,
+    /// Number of runs/styles that reference this family. Surfaces
+    /// "this font is used N times" without a full audit pass.
+    pub reference_count: u32,
+    /// panels.md gap 4 — `true` when the family can't be resolved to
+    /// face bytes by the worker's font registry (`BytesResolver`),
+    /// so the renderer substituted a fallback. The Fonts/Preflight
+    /// panel flags these in red. `false` means at least one style of
+    /// the family resolved.
+    ///
+    /// `embedded` is intentionally omitted: IDML packages reference
+    /// fonts by name (the `Fonts/Font_*.xml` resource carries no face
+    /// bytes), so the engine can't honestly say whether a font is
+    /// "embedded" — only whether it's installed/registered. Surfacing
+    /// a fabricated `embedded` flag would mislead the panel.
+    #[serde(default)]
+    pub is_missing: bool,
+    /// W1.23 — the distinct style strings observed for this family,
+    /// sorted. Populated from the document's own `FontStyle` strings
+    /// (character runs + paragraph/character style defaults) unioned
+    /// with the styles registered for the family via `RegisterFont`.
+    /// The glyphs / fonts panel renders these as the per-family style
+    /// list. Additive field (rides v35) — `#[serde(default)]` keeps the
+    /// wire backward-compatible, so an older consumer that doesn't know
+    /// the field reads an empty list.
+    #[serde(default)]
+    pub styles: Vec<String>,
+}
+
+/// SDK Phase 5 (v1 sweep) — resolved colour readout for a single
+/// swatch. The Color panel uses this to surface "what does this
+/// swatch actually look like" — CMYK percentages for spot / CMYK
+/// process inks, and an RGB hex string for the display fallback
+/// the renderer paints with. Editor sliders are v2.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ColorPreview {
+    pub self_id: String,
+    pub name: String,
+    /// IDML colour model — `"process"` / `"spot"` / `"mixedInk"`
+    /// / `"none"` / `"paper"` / `"black"` / `"registration"`.
+    pub model: String,
+    /// CMYK percent values (0..=100). `None` for non-CMYK swatches
+    /// (e.g. RGB / Lab process colours; spots whose alternate
+    /// isn't CMYK).
+    pub cmyk: Option<[f32; 4]>,
+    /// Display RGB as `#rrggbb`. Always present (the renderer
+    /// computes a fallback RGB for every swatch).
+    pub rgb_hex: String,
+    /// Concept 2 — out-of-gamut against the document's active CMYK
+    /// working space (false when no working profile is configured).
+    #[serde(default)]
+    pub out_of_gamut: bool,
+    /// Concept 2 — the RAW authored space + channels (IDML units),
+    /// so the swatch editor seeds losslessly (a Lab swatch edits in
+    /// Lab, not via its display RGB).
+    #[serde(default)]
+    pub space: Option<String>,
+    #[serde(default)]
+    pub value: Option<Vec<f32>>,
+}
+
+/// Concept 2 — full gradient detail: the stop table the ramp
+/// editor mutates and the chips render. Stops carry the swatch REF
+/// (gradients reference swatches, never inline colours — edits to a
+/// component swatch propagate, spot stops survive to Separation at
+/// export) plus a display-resolved hex for painting the ramp.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct GradientDetail {
+    pub self_id: String,
+    pub name: String,
+    /// "linear" | "radial" | "unknown".
+    pub kind: String,
+    pub stops: Vec<GradientStopWire>,
+}
+
+/// Concept 2 — one resolved gradient stop.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct GradientStopWire {
+    /// `Color/<id>` reference — the model identity.
+    pub stop_color_ref: String,
+    /// Display-resolved `#rrggbb` via the active CMM (ramp render).
+    pub resolved_rgb_hex: String,
+    /// 0..=100 position along the ramp.
+    pub location_pct: f32,
+    /// 0..=100 blend midpoint toward the NEXT stop; `None` = 50.
+    pub midpoint_pct: Option<f32>,
+}
+
+/// Concept 2 — one ink row for the Ink Manager: a spot swatch's
+/// identity + its OUTPUT-TIME settings. Converting to process or
+/// aliasing never edits the swatch itself (AC-8) — these are
+/// separations decisions consumed by Concept 3's export encoding
+/// (and, for `useStandardLabForSpots`, by the preview resolver).
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct InkSummary {
+    /// The spot swatch's `Color/<id>`.
+    pub spot_id: String,
+    /// The ink/colourant name (the swatch name — for spots this IS
+    /// the colourant identity).
+    pub name: String,
+    pub convert_to_process: bool,
+    /// Output as another ink's plate (`Color/<id>` of the alias
+    /// target). `None` = own plate.
+    pub alias_to: Option<String>,
+}
+
+/// SDK Phase 5 (v1 sweep) — one `<Article>` summary. Backs
+/// `documentCollection:articles`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ArticleSummary {
+    pub self_id: String,
+    pub name: String,
+    pub members: Vec<String>,
+}
+
+/// SDK Phase 5 (v1 sweep) — one `<Hyperlink>` summary. Backs
+/// `documentCollection:hyperlinks`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct HyperlinkSummary {
+    pub self_id: String,
+    pub name: String,
+    pub source: String,
+    pub destination: String,
+    /// v70 — where the destination goes: a URL, or a page (its `Self`
+    /// id). Both absent for a text-anchor destination.
+    #[serde(default)]
+    pub destination_url: Option<String>,
+    #[serde(default)]
+    pub destination_page: Option<String>,
+}
+
+/// SDK Phase 5 (v1 sweep) — one `<Bookmark>` summary. Backs
+/// `documentCollection:bookmarks`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct BookmarkSummary {
+    pub self_id: String,
+    pub name: String,
+    pub destination: String,
+    /// The bookmark it stands under (ADR 173); `None` at the top level.
+    /// The collection lists the bookmarks in document order, a parent
+    /// before its children.
+    pub parent: Option<String>,
+}
+
+/// SDK Phase 5 (v1 sweep) — one `<CrossReferenceSource>` summary.
+/// Backs `documentCollection:crossReferences`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct CrossReferenceSummary {
+    pub self_id: String,
+    pub name: String,
+    pub format: String,
+    pub destination: String,
+}
+
+/// SDK Phase 5 (v1 sweep) — one `<Topic>` summary. Backs
+/// `documentCollection:indexTopics`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexTopicSummary {
+    pub self_id: String,
+    pub name: String,
+    pub sort_order: String,
+}
+
+/// v0.71.13 (ADR 163) — one footnote. Backs `documentCollection:footnotes`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct FootnoteSummary {
+    /// The note's `Self` id (`DeleteFootnote.footnoteId`).
+    pub self_id: String,
+    pub story_id: String,
+    /// The story char offset (contiguous) of its reference.
+    pub offset: u32,
+    /// What its reference prints (`[3]`, `iv`, …), once laid out.
+    pub label: Option<String>,
+    /// The page its note is set on, once laid out.
+    pub page_index: Option<u32>,
+    /// The note's text, without its number and separator.
+    pub text: String,
+}
+
+/// ADR 174 — one endnote. Backs `documentCollection:endnotes`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct EndnoteSummary {
+    /// The `<Endnote>` `Self` id (`DeleteEndnote.endnoteId`).
+    pub id: String,
+    pub story_id: String,
+    /// The story char offset (contiguous) of its reference.
+    pub offset: u32,
+    /// Its `<EndnoteRange>` in the endnote story.
+    pub range_id: Option<String>,
+    /// What its reference prints (`3`, `iv`, …).
+    pub label: Option<String>,
+    /// Its text, without its number and separator.
+    pub text: String,
+}
+
+/// D-02 — one XML element of the document's structure. Backs
+/// `documentCollection:xmlElements`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct XmlElementSummary {
+    pub self_id: String,
+    /// The tag's name (`Article`).
+    pub tag: String,
+    /// 0 for the root.
+    pub depth: u32,
+    /// The story or page item it tags, when it tags one.
+    pub content: Option<String>,
+    /// The story its text range stands in, when it tags a range.
+    pub story_id: Option<String>,
+    pub attributes: Vec<(String, String)>,
+}
+
+/// ADR 172 — one editorial note. Backs `documentCollection:notes`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct NoteSummary {
+    /// The note's id (`EditNote.noteId` and the rest).
+    pub id: String,
+    pub story_id: String,
+    /// The story char offset (contiguous) of its place.
+    pub offset: u32,
+    /// Its text, paragraphs separated by U+000D.
+    pub text: String,
+    pub user_name: Option<String>,
+    pub creation_date: Option<String>,
+    pub modification_date: Option<String>,
+    pub collapsed: bool,
+}
+
+/// D-01 — one tracked change. Backs `documentCollection:trackedChanges`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackedChangeSummary {
+    pub story_id: String,
+    /// The story char offset (contiguous) of its place.
+    pub offset: u32,
+    /// `InsertedText`, `DeletedText` or `MovedText`.
+    pub change_type: String,
+    pub user_name: Option<String>,
+    pub date: Option<String>,
+    /// The text it inserted or deleted, paragraphs separated by U+000D.
+    pub text: String,
+}
+
+/// SDK Phase 5 (v1 sweep) — one `<ConditionSet>` definition. Backs
+/// `documentCollection:conditionSets` per §5.1. Each entry is a
+/// named grouping of Condition self_ids; the editor's Conditions
+/// panel can use this to toggle a set as a unit (v2 affordance).
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ConditionSetSummary {
+    pub self_id: String,
+    pub name: String,
+    /// Member Condition self_ids the set wraps.
+    pub conditions: Vec<String>,
+}
+
+/// SDK Phase 5 (v1 sweep) — one `<ColorGroup>` definition. Backs
+/// `documentCollection:colorGroups` per §5.1. A user-defined
+/// grouping of `Color` self_ids the document organises its
+/// palette into.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ColorGroupSummary {
+    pub self_id: String,
+    pub name: String,
+    /// Member color/swatch self_ids the group wraps.
+    pub members: Vec<String>,
+}
+
+/// SDK Phase 5 (v1 sweep) — one `<Condition>` definition. Backs
+/// `documentCollection:conditions` per `panel-catalog-and-sdk-
+/// extension.md` §5.1. The Conditions panel renders this for
+/// inspection; per-condition visibility toggling requires a new
+/// `Operation::SetConditionVisible` that v1 doesn't ship yet.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ConditionSummary {
+    pub self_id: String,
+    pub name: String,
+    /// Default `true` when the IDML doesn't specify (`Visible`
+    /// attribute is optional).
+    pub visible: bool,
+    /// `"Underline"` / `"Highlight"` / `"None"` (or empty).
+    pub indicator_method: String,
+}
+
+/// W1.22 (engine gap 22) — one `<NumberingList>` resource. Backs
+/// `documentCollection:numberingLists`. The editor's list-definitions
+/// surface renders this; `continue_across_stories` is the flag that
+/// drives cross-story numbering continuity in the renderer.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct NumberingListSummary {
+    pub self_id: String,
+    pub name: String,
+    /// `ContinueNumbersAcrossStories`. Default `false` when the IDML
+    /// doesn't specify.
+    pub continue_across_stories: bool,
+    /// `ContinueNumbersAcrossDocuments` (round-trip only). Default
+    /// `false`.
+    pub continue_across_documents: bool,
+}
+
+/// SDK Phase 5 (v1 sweep) — one placed-image link summary. Backs
+/// `documentCollection:links` per `panel-catalog-and-sdk-extension.md`
+/// §5.1. Each entry is a `(frame, image_link)` pair derived from
+/// the parse layer's `Rectangle::image_link` / `Oval::image_link` /
+/// `Polygon::image_link` fields. The Links panel renders this list
+/// for inspection; the per-link "relocate" / "update" actions land
+/// when those Operations ship.
+///
+/// `host_kind` lets a future panel disambiguate "this link sits on
+/// a Rectangle vs. an Oval". `host_self_id` is the host frame's
+/// IDML `Self` id; the panel uses it as the row react-key.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkSummary {
+    pub host_self_id: String,
+    pub host_kind: String,
+    pub uri: String,
+    /// panels.md gap 2 — `"ok"` when the build resolved + decoded the
+    /// link, `"missing"` when the renderer fell back to the grey
+    /// missing-image placeholder (`ImageLinkMissing` /
+    /// `ImageDecodeFailed` diagnostic for this frame). Derived from
+    /// the build's render diagnostics, so it reflects the SAME
+    /// resolution outcome the rendered page shows.
+    #[serde(default)]
+    pub status: String,
+    /// panels.md gap 3 — placed-image colour space (`"CMYK"` /
+    /// `"RGB"` / `"Gray"` / `"LAB"`), from the `<Image Space>`
+    /// attribute InDesign baked at export. `None` when the IDML
+    /// omits it (synthetic fixtures, vector placements).
+    #[serde(default)]
+    pub colorspace: Option<String>,
+    /// panels.md gap 3 — effective ppi at print size (native ppi ÷
+    /// placement scale), from the `<Image EffectivePpi>` attribute.
+    /// The number a preflight resolution check compares against a
+    /// 300-ppi floor. `None` when the IDML omits it.
+    #[serde(default)]
+    pub effective_ppi: Option<f32>,
+    /// C-27 — the placed image's OWN `<Image ItemTransform>`: how the
+    /// pixels sit inside the frame. `elementGeometry` reports the frame
+    /// and nothing reported this, so a plugin deriving geometry from the
+    /// pixels (Image Trace today; any measure or annotate tool later)
+    /// had to assume the image fills the frame — and quietly mis-placed
+    /// its output on every cropped or fitted placement.
+    ///
+    /// Row-major `[a, b, c, d, tx, ty]`, mapping the image's natural
+    /// pixel rect `(0, 0, width, height)` into the frame's INNER
+    /// coordinate space — the same matrix the renderer composes with
+    /// the frame's own transform. Compose it the same way and generated
+    /// geometry lands where the pixels do.
+    ///
+    /// `None` for synthetic IDMLs that omit the inner transform, which
+    /// is the case the renderer handles by stretching the image to the
+    /// frame bounds; a consumer seeing `None` may assume that fill.
+    #[serde(default)]
+    pub image_transform: Option<[f32; 6]>,
+}
+
+/// SDK Phase 5 (v1 sweep) — one object style's summary. Backs
+/// `documentCollection:objectStyles` per `panel-catalog-and-sdk-
+/// extension.md` §5.1; consumed by the Object Styles panel via
+/// the `collection-select` primitive to drive an
+/// `appliedObjectStyle` write on the selected frame.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ObjectStyleSummary {
+    pub self_id: String,
+    pub name: String,
+    pub based_on: Option<String>,
+}
+
+/// SDK Phase 3 — one gradient swatch's summary. `kind` is the
+/// IDML `Type` attribute — `"linear"` / `"radial"` — so a picker
+/// composition can icon-badge linear vs radial.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct GradientSummary {
+    pub self_id: String,
+    pub name: String,
+    pub kind: String,
+}
+
+/// Where a story's flow overran its frame chain — the first-class overset
+/// **continuation** the engine records (`paged_flow::Overset::Remains`, via
+/// `RenderDiagnostics::overset_continuations()`). Lets the editor jump the
+/// caret to the first clipped line / show "overset at ¶N line M" instead of
+/// only a boolean overset badge. Addresses match the layout stream
+/// (`paragraph` within the story's body flow, `line` within that paragraph).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct OversetAt {
+    pub paragraph: u32,
+    pub line: u32,
+}
+
+/// SDK Phase 3 — one story's identity + total character length.
+/// Surfaced by `CanvasModel::stories()` and the `paged.stories()`
+/// script host function so consumers can pick valid character
+/// ranges (e.g. `[0, length)` is always a well-formed StoryRange).
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct StorySummary {
+    /// IDML `Self` id (`Story/u123`).
+    pub self_id: String,
+    /// Total character count across every `CharacterRun.text` in
+    /// every paragraph. The largest valid `StoryRange.end`.
+    pub character_count: u32,
+    /// Number of paragraphs. Useful for binding-renderer fallbacks
+    /// that want to address "the whole story" without computing
+    /// the character count.
+    pub paragraph_count: u32,
+    /// panels.md gap 1 — `true` when this story's text overflowed the
+    /// last frame in its chain at build time (overset). Derived from
+    /// the build's `OversetTextDropped` diagnostics; drives the
+    /// Preflight panel + the red "+" overset badge on the frame.
+    #[serde(default)]
+    pub overset: bool,
+    /// When `overset`, *where* the flow overran — the continuation cursor
+    /// (`OversetAt`). `None` when the story fits. Additive/optional, so an
+    /// older client that ignores it still reads the `overset` flag.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overset_at: Option<OversetAt>,
+    /// v65 (thoughts ADR 026) — the story's grow rule, in the shape
+    /// `Mutation::SetFlowGrowRule` takes (`grow` is always `true` here:
+    /// a cleared rule reads as `None`). `None` = a fixed chain.
+    #[serde(default)]
+    pub grow_rule: Option<StoryGrowRule>,
+}
+
+/// v65 — a story's grow rule on the read side ([`StorySummary::grow_rule`]).
+/// Mirrors the `setFlowGrowRule` payload so a host can show the rule and
+/// send it back unchanged.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct StoryGrowRule {
+    pub grow: bool,
+    /// Upper bound on generated pages; `None` = the renderer's default.
+    #[serde(default)]
+    pub max_pages: Option<u32>,
+    /// Generated frames copy the chain's last frame's text-frame options.
+    pub copy_frame_options: bool,
+}
+
+/// DOC-03 (v54) — a story's full CONTENT: its paragraphs, each with its runs'
+/// text + applied styles + direct character overrides. Where `StorySummary` gives
+/// counts, this gives the text and formatting a content plugin needs to read an
+/// edited document back (e.g. paged.doc diffs it against its import baseline to
+/// drive edited save-back). Surfaced by `CanvasModel::story_content()`; read via
+/// `RequestStoryContent { story_id }` → `StoryContentResult`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct StoryContent {
+    /// IDML `Self` id (`Story/u123`).
+    pub self_id: String,
+    /// Paragraphs in body order.
+    pub paragraphs: Vec<ParagraphContent>,
+}
+
+/// DOC-03 — one paragraph's applied style + its runs.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct ParagraphContent {
+    /// The applied paragraph style id, if any (`w:pStyle` equivalent).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paragraph_style: Option<String>,
+    pub runs: Vec<RunContent>,
+}
+
+/// DOC-03 — one run's text + its applied character style + its DIRECT character
+/// overrides (each `None` = inherit). A run styled only through an applied style
+/// carries just `character_style`; direct editor formatting shows in the override
+/// fields. Field names mirror `paged_model::CharacterRun`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct RunContent {
+    pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub character_style: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_style: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub point_size: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub underline: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub strikethru: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capitalization: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub baseline_shift: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tracking: Option<f32>,
+}
+
+/// Inspector P1 — one node in the scene tree. Children are nested
+/// (Spread → Page → Group? → frame leaf). `kind` is a short label
+/// the panel renders ("Spread", "Page", "TextFrame", "Group", …).
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneTreeNode {
+    /// Element id when the node is selectable (frames, groups). For
+    /// Spread / Page rows that don't address into the gesture spine,
+    /// `None`.
+    #[serde(default)]
+    pub id: Option<crate::element_selection::ElementId>,
+    pub kind: String,
+    /// Human-readable label. For frames falls back to the kind + raw
+    /// id; for pages uses the parsed `<Page Name>`.
+    pub label: String,
+    #[serde(default)]
+    pub children: Vec<SceneTreeNode>,
+    /// C-65 — the item's plugin metadata (its reserved-namespace
+    /// `x-paged:` Label entries, the same rows `RequestElementProperties`
+    /// reports as `pluginMetadata`), so one tree read answers what used to
+    /// take one property read PER LEAF: paged.draw's link discovery cost
+    /// 1 403 round trips on a 1 403-leaf document. PRESENT on every page
+    /// ITEM row — empty when the item carries none — and omitted only for
+    /// spread / page rows, so a reader can tell "this engine reports
+    /// metadata here and there is none" from "this engine predates the
+    /// field" (an older engine omits it everywhere). Additive.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub plugin_metadata: Option<Vec<PluginMetadataEntry>>,
+}
+
+/// C-65 — one plugin-metadata Label entry on a scene-tree node.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginMetadataEntry {
+    pub key: String,
+    pub value: String,
+}
+
+/// Step 5 — `RequestPathAnchors` reply payload. `anchors.len()` may
+/// be zero (e.g. a Rectangle with no `<PathGeometry>`); the overlay
+/// treats that as "nothing to draw" without surfacing an error.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct PathAnchorsResult {
+    pub id: crate::element_selection::ElementId,
+    /// C-23 — see [`ElementGeometryItem::page_id`]; same convention,
+    /// same reason. Anchors are in the element's own space either way.
+    #[serde(default)]
+    pub page_id: Option<PageId>,
+    /// C-23 — the owning spread; see [`ElementGeometryItem::spread_id`].
+    #[serde(default)]
+    pub spread_id: Option<String>,
+    pub anchors: Vec<PathAnchorTriple>,
+    /// Per-contour boundaries. Empty for the common single-contour
+    /// case so callers can iterate a single subpath without special-
+    /// casing the empty `subpath_starts` vector.
+    pub subpath_starts: Vec<u32>,
+    /// Parallel to `subpath_starts` (or, when `subpath_starts` is
+    /// empty, a single entry for the single contour). `true` ⇒ the
+    /// contour is open. Lets the overlay emit closing-edge insert
+    /// hit-zones for closed subpaths only.
+    #[serde(default)]
+    pub subpath_open: Vec<bool>,
+    /// `[a, b, c, d, tx, ty]`. None ⇒ identity. Into the PAGE the path
+    /// sits on, the page's origin folded in, exactly as
+    /// [`ElementGeometryItem::item_transform`].
+    #[serde(default)]
+    pub item_transform: Option<[f32; 6]>,
+    /// See [`ElementGeometryItem::page_origin`]. Additive.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[tsify(optional)]
+    pub page_origin: Option<[f32; 2]>,
+}
+
+/// B-06 — `RequestNearestPathPoint` reply payload. Coordinates are
+/// in the element's local space (the `PathAnchors` space).
+/// v66 (RFI C-69) — `RequestTextOutlines` reply payload: the frame's
+/// composed glyphs as closed outlines, in PAGE space (the space
+/// `insertPath` takes), grouped into one run per fill colour so each
+/// becomes one compound path. Outlines are exactly the shapes the
+/// renderer fills (the same `FillPath` commands), so what is inserted
+/// looks like what was on screen. Stroked text, gradients on text and
+/// overset text are not included.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct TextOutlinesResult {
+    pub id: crate::element_selection::ElementId,
+    pub page_id: PageId,
+    pub runs: Vec<TextOutlineRun>,
+    /// Glyphs left out (stroked, or a non-solid paint).
+    #[serde(default)]
+    pub skipped_glyphs: u32,
+}
+
+/// One fill colour's glyph outlines (see [`TextOutlinesResult`]).
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct TextOutlineRun {
+    /// sRGB, 0..1 — the colour the renderer filled with.
+    pub rgb: [f32; 3],
+    /// The CMYK the paint carried, 0..1, when it was a process colour.
+    #[serde(default)]
+    pub cmyk: Option<[f32; 4]>,
+    pub anchors: Vec<PathAnchorTriple>,
+    pub subpath_starts: Vec<u32>,
+    pub glyphs: u32,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct NearestPathPointResult {
+    /// Flat index of the segment's START anchor.
+    pub seg_start: u32,
+    /// Flat index of the segment's END anchor (wraps to the subpath
+    /// start on a closing segment).
+    pub seg_end: u32,
+    /// Curve parameter on that segment, 0..=1.
+    pub t: f32,
+    pub point: [f32; 2],
+    pub distance: f32,
+}
+
+/// B-22 (protocol v57) — one face of a planar arrangement: a connected
+/// region of the plane whose containment signature is constant.
+///
+/// Coordinates are in the same RAW path space `PathAnchors` reports
+/// (per-element `ItemTransform`s are not composed in — the arrangement
+/// runs on the anchors as stored, exactly like `pathfinderBoolean`).
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanarFaceWire {
+    /// Stable id — `"<signature>#<component>"`, e.g. `"0-1#0"`. Stable
+    /// across calls with the same inputs, which is what lets a hover
+    /// query's id ride straight into `pathfinderFaces`.
+    pub id: String,
+    /// Indices into the REQUEST's `element_ids` whose interior contains
+    /// this face.
+    pub signature: Vec<u32>,
+    /// The face outline (closed). A face with holes carries them as
+    /// extra contours.
+    pub anchors: Vec<PathAnchorTriple>,
+    /// Per-contour boundaries into `anchors`.
+    pub subpath_starts: Vec<u32>,
+    /// Unsigned area, outer contour minus holes.
+    pub area: f32,
+    /// A point strictly inside the face — what a hover highlight or a
+    /// fill drop can key off without re-deriving containment.
+    pub inside: [f32; 2],
+}
+
+/// B-22 (protocol v57) — `RequestPlanarRegions` reply.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanarRegionsResult {
+    /// `false` when the request could not be answered at all — no
+    /// document, an id that doesn't resolve, or more inputs than the
+    /// kernel's cap. `reason` says which. Never a truncated answer.
+    pub found: bool,
+    /// Populated when `found`. With a `point` in the request this holds
+    /// at most one face (empty means the point is outside every input).
+    pub faces: Vec<PlanarFaceWire>,
+    /// How many inputs the arrangement was built from.
+    pub input_count: u32,
+    /// `true` when the resolved faces tile the union of the inputs.
+    /// `false` flags that the enumeration missed a sliver — the faces
+    /// listed are all real, the list just isn't exhaustive. Always
+    /// `true` for a point query (one face is not a tiling claim).
+    pub complete: bool,
+    /// Why `found` is false. `None` on success.
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+/// Phase 4 Step 2 — per-rebuild layout cache statistics.
+///
+/// Sent piggyback on `MutationApplied` / `UndoApplied` / `RedoApplied`
+/// so the main thread's HUD can show the incremental-layout win.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase")]
+pub struct LayoutCacheStats {
+    pub hits: u64,
+    pub misses: u64,
+    pub len: usize,
+    pub capacity: usize,
+    /// Phase 4 instrumentation — wall-clock duration of the rebuild
+    /// that produced these stats, in milliseconds. Lets the HUD
+    /// compare cache wins against the underlying budget (AC-E-1
+    /// requires < 32 ms).
+    pub rebuild_ms: f32,
+    // ---- W1.24 (audit B18) — additive RebuildStats breakdown. -------
+    // These ride v35 (additive, `#[serde(default)]`): the existing
+    // `rebuild_ms` already shipped on this struct, so a richer
+    // breakdown is a back-compatible field add, not a new message kind
+    // — no PROTOCOL_VERSION bump (governance rule 1). A pre-W1.24 main
+    // thread that omits them deserialises to 0; the editor HUD reads
+    // them to show "build X ms / op Y ms over N pages" instead of one
+    // opaque number.
+    /// Wall-clock of the scene edit that preceded the rebuild, ms.
+    #[serde(default)]
+    pub op_apply_ms: f32,
+    /// Pages in the freshly built document.
+    #[serde(default)]
+    pub pages: u32,
+    /// Paragraphs laid out (relayout cost scales with this).
+    #[serde(default)]
+    pub paragraphs: u32,
+    /// Monotone rebuild counter (initial load = 1).
+    #[serde(default)]
+    pub rebuilds: u64,
+    /// Undo-log depth after this rebuild (B19 cap visible here — never
+    /// exceeds `paged_canvas::MAX_APPLIED_LOG`).
+    #[serde(default)]
+    pub applied_log_len: u32,
+}
+
+impl From<paged_text::CacheStats> for LayoutCacheStats {
+    fn from(s: paged_text::CacheStats) -> Self {
+        Self {
+            hits: s.hits,
+            misses: s.misses,
+            len: s.len,
+            capacity: s.capacity,
+            rebuild_ms: 0.0,
+            op_apply_ms: 0.0,
+            pages: 0,
+            paragraphs: 0,
+            rebuilds: 0,
+            applied_log_len: 0,
+        }
+    }
+}
+
+impl LayoutCacheStats {
+    /// W1.24 (audit B18) — fold a model's `RebuildStats` breakdown onto
+    /// the wire stats. The dispatch layer calls this after a mutation /
+    /// undo / redo so the main thread gets the op-apply / pages /
+    /// paragraphs / rebuild-count detail alongside the cache hit ratio.
+    /// `rebuild_ms` stays whatever the caller measured end-to-end (it
+    /// already includes op-apply + build); the added fields are the
+    /// finer split the model captured internally.
+    pub fn with_rebuild_stats(mut self, s: &crate::RebuildStats) -> Self {
+        self.op_apply_ms = s.op_apply_ms as f32;
+        self.pages = s.pages as u32;
+        self.paragraphs = s.paragraphs as u32;
+        self.rebuilds = s.rebuilds;
+        self.applied_log_len = s.applied_log_len as u32;
+        self
+    }
+}
+
+/// The wire vocabulary lives in `paged-wire` now — a leaf crate the
+/// light, published `paged-introspect` can depend on to carry the op
+/// roster in the capability catalog, which it could not do while these
+/// types sat inside the canvas model. Re-exported here so every
+/// `paged_canvas::channel::Mutation` call site is unchanged.
+pub use paged_wire::{wire_tag_of, ByteBuf, Mutation, MUTATION_NAMES};
+
+/// Typed `LoadDocument` failure. Each variant maps to a specific UI
+/// recovery in the main thread (corrupted file → "try another file";
+/// missing font → "install or substitute"; etc.).
+#[derive(Debug, Clone, Error, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(rename_all = "camelCase", tag = "kind", content = "message")]
+pub enum LoadError {
+    /// paged-parse failed (zip / xml structural problem).
+    #[error("idml parse error: {0}")]
+    Parse(String),
+    /// paged-scene resolution failed (missing master, broken
+    /// cross-reference, etc.).
+    #[error("idml scene error: {0}")]
+    Scene(String),
+    /// pipeline::build_document failed.
+    #[error("idml build error: {0}")]
+    Build(String),
+}
+
+/// Typed worker-side error for non-load operations. Mutations,
+/// hit-tests, page requests all report through this. Variants are
+/// kept stable across protocol versions.
+#[derive(Debug, Clone, Error, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "kind",
+    content = "details"
+)]
+pub enum WorkerError {
+    /// Feature not yet implemented in this phase. `what` carries a
+    /// short identifier (e.g. `"Mutation::InsertText"`).
+    #[error("not implemented: {what}")]
+    NotImplemented { what: String },
+    /// Requested page id is unknown — caller is using a stale id
+    /// from before a page was deleted, or a typo.
+    #[error("unknown page id: {page_id}")]
+    UnknownPage { page_id: PageId },
+    /// Worker has no document loaded — `LoadDocument` must come first.
+    #[error("no document loaded")]
+    NoDocument,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn main_to_worker_envelope_roundtrips_through_json() {
+        let msg = MainToWorker {
+            seq: 7,
+            protocol: PROTOCOL_VERSION,
+            kind: MainToWorkerKind::LoadDocument {
+                bytes: ByteBuf::from(vec![1, 2, 3]),
+                font: None,
+                cmyk_icc_profile: None,
+            },
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        // External tag lives at top level — `kind` field decides the
+        // payload shape. Check by string match so we lock down the
+        // wire format the TS side consumes.
+        assert!(
+            json.contains("\"kind\":\"loadDocument\""),
+            "tag missing: {json}"
+        );
+        // Inner field rename: cmyk_icc_profile must emit as
+        // cmykIccProfile. If this assertion fires, the TS protocol
+        // mirror needs updating in lockstep — the browser will see
+        // `undefined` for the field and React renders will crash.
+        assert!(
+            json.contains("\"cmykIccProfile\":") || !json.contains("\"cmyk_icc_profile\":"),
+            "camelCase field rename broken: {json}"
+        );
+        let back: MainToWorker = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            MainToWorkerKind::LoadDocument { bytes, .. } => {
+                assert_eq!(bytes.as_slice(), &[1, 2, 3]);
+            }
+            other => panic!("expected LoadDocument, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn document_handle_serialises_with_camel_case_fields() {
+        // Frozen wire format the TS DocumentHandle interface
+        // consumes. Regression test for the snake-case leak that
+        // showed up as "Cannot read properties of undefined" in
+        // React when the rename_all dropped through.
+        let h = crate::model::DocumentHandle {
+            doc_id: "doc-1".into(),
+            page_count: 2,
+            page_ids: vec![PageId("p1".into()), PageId("p2".into())],
+            page_sizes_pt: vec![(612.0, 792.0), (612.0, 792.0)],
+            stats: crate::model::DocumentStats {
+                spreads: 1,
+                pages: 2,
+                frames: 4,
+                stories: 1,
+                paragraphs: 2,
+                runs: 3,
+                glyphs: 50,
+                lines: 5,
+                overset_stories: 0,
+            },
+            ruler_guides: Vec::new(),
+        };
+        let json = serde_json::to_string(&h).unwrap();
+        for needle in [
+            "\"docId\":",
+            "\"pageCount\":",
+            "\"pageIds\":",
+            "\"pageSizesPt\":",
+        ] {
+            assert!(json.contains(needle), "{needle} missing in {json}");
+        }
+        for snake in [
+            "\"doc_id\":",
+            "\"page_count\":",
+            "\"page_ids\":",
+            "\"page_sizes_pt\":",
+        ] {
+            assert!(!json.contains(snake), "{snake} leaked snake_case: {json}");
+        }
+    }
+
+    #[test]
+    fn request_snapshot_payload_uses_camel_case() {
+        let msg = MainToWorker {
+            seq: 1,
+            protocol: PROTOCOL_VERSION,
+            kind: MainToWorkerKind::RequestSnapshot {
+                page_id: PageId("p1".into()),
+                target_width_px: 256,
+                dpi: None,
+                hide_items: Vec::new(),
+            },
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"kind\":\"requestSnapshot\""), "{json}");
+        assert!(json.contains("\"pageId\":"), "{json}");
+        assert!(json.contains("\"targetWidthPx\":"), "{json}");
+        assert!(!json.contains("target_width_px"), "snake leaked: {json}");
+    }
+
+    #[test]
+    fn mutation_discriminant_is_stable() {
+        let m = Mutation::InsertText {
+            story_id: "s1".into(),
+            offset: 0,
+            text: "x".into(),
+            cell: None,
+        };
+        assert_eq!(m.discriminant(), "InsertText");
+        let json = serde_json::to_string(&m).unwrap();
+        // Wire tag is camelCase but `discriminant()` is PascalCase
+        // for human-readable error messages. Both contracts.
+        assert!(json.contains("\"op\":\"insertText\""), "tag drift: {json}");
+    }
+
+    /// v50 (C-1 Stage B) — the `SubmitPixelLayer` / `ClearPixelLayer`
+    /// messages round-trip through the MainToWorker envelope with their
+    /// camelCase tags and the `PixelLayer` tile payload intact.
+    #[test]
+    fn v50_pixel_layer_messages_round_trip() {
+        let layer = paged_compose::PixelLayer {
+            tiles: vec![paged_compose::PixelTile {
+                rgba: vec![255, 0, 0, 255].into(),
+                width: 1,
+                height: 1,
+                x: 2.0,
+                y: 3.0,
+                w: 4.0,
+                h: 5.0,
+            }],
+        };
+        let env = MainToWorker {
+            seq: 7,
+            protocol: PROTOCOL_VERSION,
+            kind: MainToWorkerKind::SubmitPixelLayer {
+                element_id: "Rectangle/u1".into(),
+                layer: layer.clone(),
+            },
+        };
+        let json = serde_json::to_string(&env).unwrap();
+        assert!(
+            json.contains("\"kind\":\"submitPixelLayer\""),
+            "tag drift: {json}"
+        );
+        assert!(json.contains("\"elementId\":\"Rectangle/u1\""), "{json}");
+        let back: MainToWorker = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            MainToWorkerKind::SubmitPixelLayer {
+                element_id,
+                layer: l,
+            } => {
+                assert_eq!(element_id, "Rectangle/u1");
+                assert_eq!(l, layer);
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
+
+        let env = MainToWorker {
+            seq: 8,
+            protocol: PROTOCOL_VERSION,
+            kind: MainToWorkerKind::ClearPixelLayer {
+                element_id: "Rectangle/u1".into(),
+            },
+        };
+        let json = serde_json::to_string(&env).unwrap();
+        assert!(
+            json.contains("\"kind\":\"clearPixelLayer\""),
+            "tag drift: {json}"
+        );
+        let back: MainToWorker = serde_json::from_str(&json).unwrap();
+        assert!(matches!(
+            back.kind,
+            MainToWorkerKind::ClearPixelLayer { .. }
+        ));
+    }
+
+    /// v50 (C-1 Stage B) — the `ReplaceImageBytes` mutation survives the
+    /// mutate envelope with its camelCase tag, `elementId`, and the inline
+    /// bytes payload (a JSON number array).
+    #[test]
+    fn v50_replace_image_bytes_mutation_round_trips() {
+        let m = Mutation::ReplaceImageBytes {
+            element_id: "Rectangle/u1".into(),
+            bytes: Some(ByteBuf(vec![9, 8, 7, 6])),
+        };
+        assert_eq!(m.discriminant(), "ReplaceImageBytes");
+        let env = MainToWorker {
+            seq: 9,
+            protocol: PROTOCOL_VERSION,
+            kind: MainToWorkerKind::Mutate(m),
+        };
+        let json = serde_json::to_string(&env).unwrap();
+        assert!(
+            json.contains("\"op\":\"replaceImageBytes\""),
+            "tag drift: {json}"
+        );
+        assert!(json.contains("\"elementId\":\"Rectangle/u1\""), "{json}");
+        let back: MainToWorker = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            MainToWorkerKind::Mutate(Mutation::ReplaceImageBytes { element_id, bytes }) => {
+                assert_eq!(element_id, "Rectangle/u1");
+                assert_eq!(bytes.map(|b| b.0), Some(vec![9, 8, 7, 6]));
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn w05_mutations_round_trip_through_the_mutate_envelope() {
+        // Every W0.5 Mutation variant survives the JSON envelope the
+        // worker decodes `Mutate(Mutation)` from.
+        let muts = vec![
+            Mutation::LinkFrames {
+                from: "TextFrame/a".into(),
+                to: "TextFrame/b".into(),
+            },
+            Mutation::UnlinkFrames {
+                frame: "TextFrame/a".into(),
+            },
+            Mutation::ApplyStyle {
+                paragraph: None,
+                story_id: "Story/u1".into(),
+                start: 0,
+                end: 5,
+                style: "ParagraphStyle/Body".into(),
+                scope: paged_mutate::operation::StyleScope::Paragraph,
+                cell: None,
+            },
+            Mutation::InsertField {
+                story_id: "Story/u1".into(),
+                offset: 2,
+                field: paged_mutate::operation::FieldKind::PageNumber,
+                content_offset: None,
+            },
+            Mutation::InsertOval {
+                page_id: PageId("Page/u1".into()),
+                bounds: (1.0, 2.0, 3.0, 4.0),
+            },
+            Mutation::InsertTextFrame {
+                page_id: PageId("Page/u1".into()),
+                bounds: (1.0, 2.0, 3.0, 4.0),
+            },
+            Mutation::InsertGuide {
+                spread_id: "Spread/u1".into(),
+                orientation: paged_mutate::operation::GuideOrientationSpec::Horizontal,
+                position: 50.0,
+                page_index: 0,
+            },
+            Mutation::MoveGuide {
+                guide_id: "Guide/Spread/u1/0".into(),
+                position: 75.0,
+            },
+            Mutation::DeleteGuide {
+                guide_id: "Guide/Spread/u1/0".into(),
+            },
+            Mutation::SetConditionVisible {
+                condition: "Condition/A".into(),
+                visible: false,
+            },
+            Mutation::SetFlowGrowRule {
+                story_id: "u1".into(),
+                grow: true,
+                max_pages: Some(12),
+                copy_frame_options: Some(true),
+            },
+            Mutation::ActivateConditionSet {
+                set: "ConditionSet/Print".into(),
+            },
+            Mutation::ApplyMasterToPage {
+                page: PageId("Page/u1".into()),
+                master: Some("MasterSpread/uA".into()),
+            },
+            Mutation::DuplicatePage {
+                page: PageId("Page/u1".into()),
+            },
+            Mutation::InsertSection {
+                at_page: PageId("Page/u1".into()),
+                prefix: Some("A-".into()),
+                numbering_style: Some("UpperRoman".into()),
+                start_at: Some(1),
+            },
+            Mutation::EditSection {
+                section_id: "Section/u0".into(),
+                prefix: Some(None),
+                numbering_style: None,
+                start_at: Some(Some(3)),
+            },
+            Mutation::DeleteSection {
+                section_id: "Section/u0".into(),
+            },
+        ];
+        for m in muts {
+            let disc = m.discriminant();
+            let env = MainToWorker {
+                seq: 1,
+                protocol: PROTOCOL_VERSION,
+                kind: MainToWorkerKind::Mutate(m),
+            };
+            let json = serde_json::to_string(&env).unwrap();
+            let back: MainToWorker = serde_json::from_str(&json).unwrap();
+            match back.kind {
+                MainToWorkerKind::Mutate(m2) => assert_eq!(m2.discriminant(), disc, "{json}"),
+                other => panic!("unexpected: {other:?}"),
+            }
+        }
+    }
+
+    /// W1.2 — `MoveFrame` survives the mutate envelope with its fields
+    /// intact (frame id + the 6-element `ItemTransform`). The variant
+    /// already shipped at v34; W1.2 only un-stubs its semantics, so no
+    /// bump — this test pins the wire shape.
+    #[test]
+    fn w12_move_frame_round_trips_through_the_mutate_envelope() {
+        let m = Mutation::MoveFrame {
+            frame_id: "Rectangle/r1".into(),
+            transform: [1.0, 0.0, 0.0, 1.0, 12.5, -7.0],
+        };
+        let env = MainToWorker {
+            seq: 1,
+            protocol: PROTOCOL_VERSION,
+            kind: MainToWorkerKind::Mutate(m),
+        };
+        let json = serde_json::to_string(&env).unwrap();
+        let back: MainToWorker = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            MainToWorkerKind::Mutate(Mutation::MoveFrame {
+                frame_id,
+                transform,
+            }) => {
+                assert_eq!(frame_id, "Rectangle/r1");
+                assert_eq!(transform, [1.0, 0.0, 0.0, 1.0, 12.5, -7.0]);
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
+    }
+
+    /// W1.1 — `Value::Lengths` serialises as the additive
+    /// `{ type: "lengths", value: [...] }` wire shape and round-trips
+    /// (incl. the empty-clear list). Rides the current protocol — an
+    /// additive `Value` variant does not bump (the `TabStops` /
+    /// `ParagraphRule` precedent).
+    #[test]
+    fn w11_value_lengths_wire_shape_round_trips() {
+        let v = paged_mutate::Value::Lengths(vec![6.0, 3.0]);
+        let json = serde_json::to_string(&v).unwrap();
+        assert_eq!(json, r#"{"type":"lengths","value":[6.0,3.0]}"#);
+        let back: paged_mutate::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, v);
+        // Empty-clear list also round-trips.
+        let empty = paged_mutate::Value::Lengths(Vec::new());
+        let json = serde_json::to_string(&empty).unwrap();
+        assert_eq!(json, r#"{"type":"lengths","value":[]}"#);
+        assert_eq!(
+            serde_json::from_str::<paged_mutate::Value>(&json).unwrap(),
+            empty
+        );
+    }
+
+    /// The tag-on-bump guard. This constant and the published
+    /// `@paged-media/canvas-wasm` minor are the same number by
+    /// convention (`0.<protocol>.<patch>`), so a bump here is a
+    /// release commitment, not a detail — the protocol-governance
+    /// record exists because nine bumps once shipped untagged.
+    #[test]
+    fn protocol_version_is_v74() {
+        assert_eq!(PROTOCOL_VERSION.0, 74);
+    }
+
+    /// v59 (Arrange) — the `reorderElement` wire shape. The tag is the
+    /// camelCase op name; `to` is the externally-tagged
+    /// `ZOrderTarget`, so the four verbs are bare strings and the
+    /// absolute form is `{"index": n}`. Pinned as a hand-authored
+    /// payload because a plugin writes this JSON by hand.
+    #[test]
+    fn v59_reorder_element_wire_shape_round_trips() {
+        use paged_mutate::ZOrderTarget;
+
+        let m = Mutation::ReorderElement {
+            element_id: crate::element_selection::ElementId::Polygon("Polygon/p1".into()),
+            to: ZOrderTarget::Front,
+        };
+        let json = serde_json::to_string(&m).unwrap();
+        assert_eq!(
+            json,
+            r#"{"op":"reorderElement","args":{"elementId":{"kind":"polygon","id":"Polygon/p1"},"to":"front"}}"#
+        );
+        let back: Mutation = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.discriminant(), "ReorderElement");
+
+        // The absolute form — the shape the inverse carries.
+        let m = Mutation::ReorderElement {
+            element_id: crate::element_selection::ElementId::Rectangle("Rectangle/r1".into()),
+            to: ZOrderTarget::Index(3),
+        };
+        let json = serde_json::to_string(&m).unwrap();
+        assert!(json.contains(r#""to":{"index":3}"#), "shape: {json}");
+
+        // Hand-authored, as a plugin would send it.
+        for (verb, expect) in [
+            ("\"back\"", ZOrderTarget::Back),
+            ("\"forward\"", ZOrderTarget::Forward),
+            ("\"backward\"", ZOrderTarget::Backward),
+            ("{\"index\":0}", ZOrderTarget::Index(0)),
+        ] {
+            let raw = format!(
+                r#"{{"op":"reorderElement","args":{{"elementId":{{"kind":"group","id":"Group/g1"}},"to":{verb}}}}}"#
+            );
+            let hand: Mutation = serde_json::from_str(&raw).expect("hand-authored reorderElement");
+            match hand {
+                Mutation::ReorderElement { to, .. } => assert_eq!(to, expect),
+                other => panic!("unexpected: {other:?}"),
+            }
+        }
+    }
+
+    /// v58 (C-28 / C-29) — the four new wire shapes. Tags are the
+    /// camelCase op names; every knob is optional so a caller that
+    /// sends only the required ids stays deserialisable, and the
+    /// engine applies the Illustrator/IDML defaults.
+    #[test]
+    fn v58_opacity_mask_and_text_path_wire_shapes_round_trip() {
+        use crate::element_selection::ElementId;
+
+        let apply_mask = Mutation::ApplyOpacityMask {
+            target_id: ElementId::Rectangle("r1".into()),
+            mask_id: ElementId::Polygon("p1".into()),
+            mask_type: Some("alpha".into()),
+            invert: Some(true),
+        };
+        let json = serde_json::to_string(&apply_mask).unwrap();
+        assert!(
+            json.contains("\"op\":\"applyOpacityMask\""),
+            "tag missing: {json}"
+        );
+        assert!(json.contains("\"targetId\":"), "{json}");
+        assert!(json.contains("\"maskId\":"), "{json}");
+        assert!(json.contains("\"maskType\":\"alpha\""), "{json}");
+        assert!(!json.contains("mask_type"), "snake leaked: {json}");
+        let back: Mutation = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.discriminant(), "ApplyOpacityMask");
+
+        // Ids only — the optional knobs default.
+        let minimal: Mutation = serde_json::from_str(
+            r#"{"op":"applyOpacityMask","args":{"targetId":{"kind":"rectangle","id":"r1"},
+                "maskId":{"kind":"rectangle","id":"r2"}}}"#,
+        )
+        .expect("ids-only payload deserialises");
+        match minimal {
+            Mutation::ApplyOpacityMask {
+                mask_type, invert, ..
+            } => {
+                assert!(mask_type.is_none());
+                assert!(invert.is_none());
+            }
+            other => panic!("wrong variant: {other:?}"),
+        }
+
+        let release = Mutation::ReleaseOpacityMask {
+            target_id: ElementId::Rectangle("r1".into()),
+        };
+        let json = serde_json::to_string(&release).unwrap();
+        assert!(
+            json.contains("\"op\":\"releaseOpacityMask\""),
+            "tag missing: {json}"
+        );
+        let _: Mutation = serde_json::from_str(&json).unwrap();
+
+        let attach = Mutation::AttachTextToPath {
+            element_id: ElementId::Polygon("curve".into()),
+            story_id: "st1".into(),
+            path_type_alignment: Some("CenterPathType".into()),
+            flip_path_effect: Some("Flipped".into()),
+            start_bracket: Some(10.0),
+            end_bracket: Some(90.0),
+        };
+        let json = serde_json::to_string(&attach).unwrap();
+        assert!(
+            json.contains("\"op\":\"attachTextToPath\""),
+            "tag missing: {json}"
+        );
+        assert!(json.contains("\"storyId\":\"st1\""), "{json}");
+        assert!(json.contains("\"pathTypeAlignment\":"), "{json}");
+        assert!(json.contains("\"startBracket\":"), "{json}");
+        assert!(!json.contains("start_bracket"), "snake leaked: {json}");
+        let _: Mutation = serde_json::from_str(&json).unwrap();
+
+        // Required fields only.
+        let minimal: Mutation = serde_json::from_str(
+            r#"{"op":"attachTextToPath","args":{"elementId":{"kind":"polygon","id":"c"},
+                "storyId":"st1"}}"#,
+        )
+        .expect("required-only payload deserialises");
+        assert_eq!(minimal.discriminant(), "AttachTextToPath");
+
+        let detach = Mutation::DetachTextFromPath {
+            element_id: ElementId::Polygon("curve".into()),
+        };
+        let json = serde_json::to_string(&detach).unwrap();
+        assert!(
+            json.contains("\"op\":\"detachTextFromPath\""),
+            "tag missing: {json}"
+        );
+        let _: Mutation = serde_json::from_str(&json).unwrap();
+    }
+
+    /// v58 — `IdmlExported.lost` is additive: a pre-v58 payload without
+    /// the field still deserialises (to an empty list), so an older
+    /// worker's reply does not break a newer main thread.
+    #[test]
+    fn v58_idml_exported_lost_field_is_backward_compatible() {
+        let legacy =
+            r#"{"seq":1,"protocol":58,"kind":"idmlExported","payload":{"idmlBytes":[80,75]}}"#;
+        let msg: WorkerToMain = serde_json::from_str(legacy).expect("legacy payload");
+        match msg.kind {
+            WorkerToMainKind::IdmlExported {
+                lost, idml_bytes, ..
+            } => {
+                assert!(lost.is_empty(), "missing `lost` defaults to empty");
+                assert_eq!(idml_bytes.as_slice(), &[80, 75]);
+            }
+            other => panic!("wrong variant: {other:?}"),
+        }
+        // And a populated list rides as camelCase-free plain strings.
+        let msg = WorkerToMain {
+            seq: Some(1),
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::IdmlExported {
+                idml_bytes: ByteBuf::from(vec![80, 75]),
+                lost: vec!["opacity mask on `r1`".into()],
+                links: Vec::new(),
+            },
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(
+            json.contains("\"lost\":[\"opacity mask on `r1`\"]"),
+            "{json}"
+        );
+    }
+
+    /// v56 (Wave B) — `ClosePath` / `JoinPaths` wire shapes. The tag is
+    /// the camelCase op name; `subpath` is optional (absent = default =
+    /// the single/last open subpath) so older callers' payloads stay
+    /// deserialisable; `elementId` / `otherId` ride the same tagged
+    /// `ElementId` shape every path op uses.
+    #[test]
+    fn v56_close_path_and_join_paths_wire_shapes_round_trip() {
+        use crate::element_selection::ElementId;
+
+        let close = Mutation::ClosePath {
+            element_id: ElementId::Polygon("poly1".into()),
+            subpath: None,
+        };
+        let json = serde_json::to_string(&close).unwrap();
+        assert!(json.contains("\"op\":\"closePath\""), "tag missing: {json}");
+        assert!(json.contains("\"elementId\":"), "{json}");
+        let back: Mutation = serde_json::from_str(&json).unwrap();
+        assert!(matches!(back, Mutation::ClosePath { subpath: None, .. }));
+        // `subpath` omitted entirely still deserialises (serde default).
+        let no_subpath: Mutation = serde_json::from_str(
+            r#"{"op":"closePath","args":{"elementId":{"kind":"polygon","id":"poly1"}}}"#,
+        )
+        .expect("subpath is optional on the wire");
+        assert!(matches!(
+            no_subpath,
+            Mutation::ClosePath { subpath: None, .. }
+        ));
+        // Explicit subpath index round-trips.
+        let close_1 = Mutation::ClosePath {
+            element_id: ElementId::Polygon("poly1".into()),
+            subpath: Some(1),
+        };
+        let json = serde_json::to_string(&close_1).unwrap();
+        assert!(json.contains("\"subpath\":1"), "{json}");
+        let back: Mutation = serde_json::from_str(&json).unwrap();
+        assert!(matches!(
+            back,
+            Mutation::ClosePath {
+                subpath: Some(1),
+                ..
+            }
+        ));
+
+        let join = Mutation::JoinPaths {
+            element_id: ElementId::Polygon("polyA".into()),
+            other_id: ElementId::GraphicLine("lineB".into()),
+        };
+        let json = serde_json::to_string(&join).unwrap();
+        assert!(json.contains("\"op\":\"joinPaths\""), "tag missing: {json}");
+        assert!(json.contains("\"elementId\":"), "{json}");
+        assert!(json.contains("\"otherId\":"), "camelCase rename: {json}");
+        assert!(!json.contains("other_id"), "snake leaked: {json}");
+        let back: Mutation = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.discriminant(), "JoinPaths");
+    }
+
+    /// v56 (B-18) — `PasteInto` / `ReleaseFrom` wire shapes. camelCase
+    /// op tags; `containerId` / `childId` ride the same tagged
+    /// `ElementId` shape every structural op uses; no inverse-only
+    /// field (`child_index` / `restore_slot`) leaks onto the wire.
+    #[test]
+    fn v56_paste_into_and_release_from_wire_shapes_round_trip() {
+        use crate::element_selection::ElementId;
+
+        let paste = Mutation::PasteInto {
+            container_id: ElementId::Rectangle("host1".into()),
+            child_id: ElementId::Oval("child1".into()),
+        };
+        let json = serde_json::to_string(&paste).unwrap();
+        assert!(json.contains("\"op\":\"pasteInto\""), "tag missing: {json}");
+        assert!(
+            json.contains("\"containerId\":"),
+            "camelCase rename: {json}"
+        );
+        assert!(json.contains("\"childId\":"), "camelCase rename: {json}");
+        assert!(!json.contains("container_id"), "snake leaked: {json}");
+        let back: Mutation = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.discriminant(), "PasteInto");
+        // A hand-authored payload (the editor's shape) deserialises.
+        let hand: Mutation = serde_json::from_str(
+            r#"{"op":"pasteInto","args":{"containerId":{"kind":"rectangle","id":"host1"},"childId":{"kind":"textFrame","id":"tf1"}}}"#,
+        )
+        .expect("hand-authored pasteInto");
+        assert!(matches!(hand, Mutation::PasteInto { .. }));
+
+        let release = Mutation::ReleaseFrom {
+            child_id: ElementId::Oval("child1".into()),
+        };
+        let json = serde_json::to_string(&release).unwrap();
+        assert!(
+            json.contains("\"op\":\"releaseFrom\""),
+            "tag missing: {json}"
+        );
+        assert!(json.contains("\"childId\":"), "{json}");
+        let back: Mutation = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.discriminant(), "ReleaseFrom");
+    }
+
+    /// v38 — `RequestFrameChain` serialises with its camelCase tag and
+    /// round-trips its `storyId`; `FrameChainResult` round-trips the
+    /// `FrameChainLink` rows (incl. the `overflow` tail flag).
+    #[test]
+    fn v38_frame_chain_request_and_reply_round_trip() {
+        let env = MainToWorker {
+            seq: 3,
+            protocol: PROTOCOL_VERSION,
+            kind: MainToWorkerKind::RequestFrameChain {
+                story_id: "story1".into(),
+            },
+        };
+        let json = serde_json::to_string(&env).unwrap();
+        assert!(
+            json.contains("\"kind\":\"requestFrameChain\""),
+            "tag missing: {json}"
+        );
+        assert!(json.contains("\"storyId\":\"story1\""), "{json}");
+        let back: MainToWorker = serde_json::from_str(&json).unwrap();
+        assert!(matches!(
+            back.kind,
+            MainToWorkerKind::RequestFrameChain { story_id } if story_id == "story1"
+        ));
+
+        let reply = WorkerToMain {
+            seq: Some(3),
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::FrameChainResult {
+                links: vec![
+                    FrameChainLink {
+                        frame_id: "tf1".into(),
+                        next: Some("tf2".into()),
+                        overflow: false,
+                    },
+                    FrameChainLink {
+                        frame_id: "tf2".into(),
+                        next: None,
+                        overflow: true,
+                    },
+                ],
+            },
+        };
+        let json = serde_json::to_string(&reply).unwrap();
+        assert!(
+            json.contains("\"kind\":\"frameChainResult\""),
+            "tag missing: {json}"
+        );
+        assert!(json.contains("\"frameId\":\"tf1\""), "{json}");
+        let back: WorkerToMain = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            WorkerToMainKind::FrameChainResult { links } => {
+                assert_eq!(links.len(), 2);
+                assert_eq!(links[0].next.as_deref(), Some("tf2"));
+                assert!(!links[0].overflow);
+                assert!(links[1].overflow, "tail link carries the overset flag");
+            }
+            other => panic!("expected FrameChainResult, got {other:?}"),
+        }
+    }
+
+    /// v38 — `RequestMeasureText` serialises with its camelCase tag +
+    /// payload (incl. the optional `style`), and `MeasureTextResult`
+    /// round-trips the metric triple.
+    #[test]
+    fn v38_measure_text_request_and_reply_round_trip() {
+        let env = MainToWorker {
+            seq: 4,
+            protocol: PROTOCOL_VERSION,
+            kind: MainToWorkerKind::RequestMeasureText {
+                family: "Inter".into(),
+                style: Some("Bold".into()),
+                text: "Hi".into(),
+                size_pt: 12.0,
+            },
+        };
+        let json = serde_json::to_string(&env).unwrap();
+        assert!(
+            json.contains("\"kind\":\"requestMeasureText\""),
+            "tag missing: {json}"
+        );
+        assert!(json.contains("\"sizePt\":12"), "{json}");
+        let back: MainToWorker = serde_json::from_str(&json).unwrap();
+        assert!(matches!(
+            back.kind,
+            MainToWorkerKind::RequestMeasureText { ref family, .. } if family == "Inter"
+        ));
+
+        let reply = WorkerToMain {
+            seq: Some(4),
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::MeasureTextResult {
+                advance: 14.5,
+                ascender: 9.6,
+                descender: -2.4,
+            },
+        };
+        let json = serde_json::to_string(&reply).unwrap();
+        assert!(
+            json.contains("\"kind\":\"measureTextResult\""),
+            "tag missing: {json}"
+        );
+        let back: WorkerToMain = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            WorkerToMainKind::MeasureTextResult {
+                advance,
+                ascender,
+                descender,
+            } => {
+                assert!((advance - 14.5).abs() < 1e-4);
+                assert!((ascender - 9.6).abs() < 1e-4);
+                assert!((descender + 2.4).abs() < 1e-4);
+            }
+            other => panic!("expected MeasureTextResult, got {other:?}"),
+        }
+    }
+
+    /// v38 — the standalone `FrameReflow` notification serialises with
+    /// its camelCase tag + `[t,l,b,r]` content box and round-trips.
+    #[test]
+    fn v38_frame_reflow_notification_round_trips() {
+        let reply = WorkerToMain {
+            seq: None,
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::FrameReflow {
+                frame_id: "tf1".into(),
+                content_box: [100.0, 100.0, 500.0, 400.0],
+            },
+        };
+        let json = serde_json::to_string(&reply).unwrap();
+        assert!(
+            json.contains("\"kind\":\"frameReflow\""),
+            "tag missing: {json}"
+        );
+        assert!(json.contains("\"contentBox\":[100"), "{json}");
+        let back: WorkerToMain = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            WorkerToMainKind::FrameReflow {
+                frame_id,
+                content_box,
+            } => {
+                assert_eq!(frame_id, "tf1");
+                assert_eq!(content_box, [100.0, 100.0, 500.0, 400.0]);
+            }
+            other => panic!("expected FrameReflow, got {other:?}"),
+        }
+    }
+
+    /// W1.23 — the new `RequestParagraphBounds` request kind serialises
+    /// with the camelCase tag the TS side switches on and round-trips
+    /// its `storyId` / `offset` payload.
+    #[test]
+    fn w123_request_paragraph_bounds_round_trips() {
+        let env = MainToWorker {
+            seq: 9,
+            protocol: PROTOCOL_VERSION,
+            kind: MainToWorkerKind::RequestParagraphBounds {
+                story_id: "story1".into(),
+                offset: 7,
+                cell: None,
+            },
+        };
+        let json = serde_json::to_string(&env).unwrap();
+        assert!(
+            json.contains("\"kind\":\"requestParagraphBounds\""),
+            "tag missing: {json}"
+        );
+        assert!(json.contains("\"storyId\":\"story1\""), "{json}");
+        let back: MainToWorker = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            MainToWorkerKind::RequestParagraphBounds {
+                story_id,
+                offset,
+                cell: _,
+            } => {
+                assert_eq!(story_id, "story1");
+                assert_eq!(offset, 7);
+            }
+            other => panic!("expected RequestParagraphBounds, got {other:?}"),
+        }
+    }
+
+    /// W1.23 — the `ParagraphBoundsResult` reply kind serialises with
+    /// its camelCase tag and round-trips the `bounds` payload (both the
+    /// `Some` span and the `None` "no resolution" case).
+    #[test]
+    fn w123_paragraph_bounds_result_round_trips() {
+        let env = WorkerToMain {
+            seq: Some(9),
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::ParagraphBoundsResult {
+                bounds: Some(crate::geometry::ParagraphBounds { start: 6, end: 10 }),
+            },
+        };
+        let json = serde_json::to_string(&env).unwrap();
+        assert!(
+            json.contains("\"kind\":\"paragraphBoundsResult\""),
+            "tag missing: {json}"
+        );
+        let back: WorkerToMain = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            WorkerToMainKind::ParagraphBoundsResult { bounds } => {
+                let b = bounds.expect("Some span");
+                assert_eq!((b.start, b.end), (6, 10));
+            }
+            other => panic!("expected ParagraphBoundsResult, got {other:?}"),
+        }
+        // The `None` case also round-trips.
+        let none = WorkerToMain {
+            seq: Some(9),
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::ParagraphBoundsResult { bounds: None },
+        };
+        let json = serde_json::to_string(&none).unwrap();
+        let back: WorkerToMain = serde_json::from_str(&json).unwrap();
+        assert!(matches!(
+            back.kind,
+            WorkerToMainKind::ParagraphBoundsResult { bounds: None }
+        ));
+    }
+
+    /// W1.23 — the additive `FontSummary.styles` field serialises as a
+    /// camelCase array and survives a round-trip, AND an older payload
+    /// that omits the field deserialises to an empty list (the
+    /// `#[serde(default)]` back-compat that lets it ride v35 without an
+    /// extra bump).
+    #[test]
+    fn w123_font_summary_styles_field_round_trips_and_defaults() {
+        let fs = FontSummary {
+            family: "Open Sans".into(),
+            reference_count: 3,
+            is_missing: false,
+            styles: vec!["Bold".into(), "Regular".into()],
+        };
+        let json = serde_json::to_string(&fs).unwrap();
+        assert!(json.contains("\"styles\":[\"Bold\",\"Regular\"]"), "{json}");
+        let back: FontSummary = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.styles, vec!["Bold".to_string(), "Regular".to_string()]);
+        // A legacy payload with no `styles` key defaults to empty.
+        let legacy = r#"{"family":"Inter","referenceCount":1,"isMissing":false}"#;
+        let back: FontSummary = serde_json::from_str(legacy).unwrap();
+        assert!(back.styles.is_empty(), "missing styles must default empty");
+    }
+
+    /// W1.24 (audit B18) — the additive `RebuildStats` breakdown on
+    /// `LayoutCacheStats` serialises as camelCase fields, round-trips,
+    /// AND an older payload that omits them deserialises to 0 (the
+    /// `#[serde(default)]` back-compat that lets them ride v35 without a
+    /// PROTOCOL_VERSION bump — `rebuild_ms` already shipped on this
+    /// struct, so the breakdown is a back-compatible field add).
+    #[test]
+    fn w124_layout_cache_stats_rebuild_breakdown_round_trips_and_defaults() {
+        let stats = LayoutCacheStats {
+            hits: 9,
+            misses: 1,
+            len: 10,
+            capacity: 16,
+            rebuild_ms: 12.5,
+            op_apply_ms: 0.3,
+            pages: 4,
+            paragraphs: 42,
+            rebuilds: 7,
+            applied_log_len: 3,
+        };
+        let json = serde_json::to_string(&stats).unwrap();
+        // Additive fields present in camelCase.
+        assert!(json.contains("\"opApplyMs\":0.3"), "{json}");
+        assert!(json.contains("\"pages\":4"), "{json}");
+        assert!(json.contains("\"paragraphs\":42"), "{json}");
+        assert!(json.contains("\"rebuilds\":7"), "{json}");
+        assert!(json.contains("\"appliedLogLen\":3"), "{json}");
+        let back: LayoutCacheStats = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, stats);
+
+        // A legacy payload carrying only the pre-W1.24 fields
+        // deserialises with the new fields defaulted to 0 — no bump.
+        let legacy = r#"{"hits":1,"misses":0,"len":1,"capacity":4,"rebuildMs":5.0}"#;
+        let back: LayoutCacheStats = serde_json::from_str(legacy).unwrap();
+        assert_eq!(back.op_apply_ms, 0.0, "missing opApplyMs defaults to 0");
+        assert_eq!(back.pages, 0, "missing pages defaults to 0");
+        assert_eq!(back.paragraphs, 0);
+        assert_eq!(back.rebuilds, 0);
+        assert_eq!(back.applied_log_len, 0);
+        assert_eq!(back.rebuild_ms, 5.0, "pre-existing rebuildMs still parses");
+    }
+
+    #[test]
+    fn w3a1_table_mutations_round_trip_through_the_mutate_envelope() {
+        let muts = vec![
+            Mutation::SetRowHeight {
+                story_id: "Story/t1".into(),
+                table_id: "Table/tbl1".into(),
+                row: 1,
+                height: Some(42.0),
+            },
+            Mutation::SetColumnWidth {
+                story_id: "Story/t1".into(),
+                table_id: "Table/tbl1".into(),
+                col: 0,
+                width: None,
+            },
+            Mutation::InsertTableRow {
+                story_id: "Story/t1".into(),
+                table_id: "Table/tbl1".into(),
+                at: 1,
+            },
+            Mutation::DeleteTableRow {
+                story_id: "Story/t1".into(),
+                table_id: "Table/tbl1".into(),
+                at: 0,
+            },
+            Mutation::InsertTableColumn {
+                story_id: "Story/t1".into(),
+                table_id: "Table/tbl1".into(),
+                at: 2,
+            },
+            Mutation::DeleteTableColumn {
+                story_id: "Story/t1".into(),
+                table_id: "Table/tbl1".into(),
+                at: 1,
+            },
+        ];
+        for m in muts {
+            let disc = m.discriminant();
+            let env = MainToWorker {
+                seq: 1,
+                protocol: PROTOCOL_VERSION,
+                kind: MainToWorkerKind::Mutate(m),
+            };
+            let json = serde_json::to_string(&env).unwrap();
+            let back: MainToWorker = serde_json::from_str(&json).unwrap();
+            match back.kind {
+                MainToWorkerKind::Mutate(m2) => assert_eq!(m2.discriminant(), disc, "{json}"),
+                other => panic!("unexpected: {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn s03_insert_table_round_trips_through_the_mutate_envelope() {
+        let m = Mutation::InsertTable {
+            story_id: "Story/u30".into(),
+            rows: 3,
+            cols: 2,
+            header_rows: 1,
+            footer_rows: 0,
+            column_widths: vec![120.0, 80.0],
+            row_heights: vec![],
+        };
+        assert_eq!(m.discriminant(), "InsertTable");
+        let env = MainToWorker {
+            seq: 1,
+            protocol: PROTOCOL_VERSION,
+            kind: MainToWorkerKind::Mutate(m),
+        };
+        let json = serde_json::to_string(&env).unwrap();
+        // camelCase tag + field shape the TS plugin emits.
+        assert!(json.contains("\"op\":\"insertTable\""), "{json}");
+        assert!(json.contains("\"storyId\":\"Story/u30\""), "{json}");
+        assert!(json.contains("\"headerRows\":1"), "{json}");
+        assert!(json.contains("\"columnWidths\":[120.0,80.0]"), "{json}");
+        let back: MainToWorker = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            MainToWorkerKind::Mutate(Mutation::InsertTable {
+                story_id,
+                rows,
+                cols,
+                header_rows,
+                footer_rows,
+                column_widths,
+                row_heights,
+            }) => {
+                assert_eq!(story_id, "Story/u30");
+                assert_eq!((rows, cols), (3, 2));
+                assert_eq!((header_rows, footer_rows), (1, 0));
+                assert_eq!(column_widths, vec![120.0, 80.0]);
+                assert!(row_heights.is_empty());
+            }
+            other => panic!("expected InsertTable, got {other:?}"),
+        }
+    }
+
+    /// S-03 — the band/sizing fields are `serde(default)`, so a minimal
+    /// `insertTable` payload (only story/rows/cols) deserialises with the
+    /// bands at 0 and the size vecs empty.
+    #[test]
+    fn s03_insert_table_minimal_payload_defaults() {
+        let json = r#"{"op":"insertTable","args":{"storyId":"u30","rows":2,"cols":2}}"#;
+        let m: Mutation = serde_json::from_str(json).expect("minimal insertTable parses");
+        match m {
+            Mutation::InsertTable {
+                story_id,
+                rows,
+                cols,
+                header_rows,
+                footer_rows,
+                column_widths,
+                row_heights,
+            } => {
+                assert_eq!(story_id, "u30");
+                assert_eq!((rows, cols), (2, 2));
+                assert_eq!((header_rows, footer_rows), (0, 0));
+                assert!(column_widths.is_empty() && row_heights.is_empty());
+            }
+            other => panic!("expected InsertTable, got {other:?}"),
+        }
+    }
+
+    /// C-15 — the handle declaration is an ordinary batch child on the
+    /// wire, and a batch that carries one still decodes as a `Batch`
+    /// (nothing about the envelope changed, which is why this rides v57
+    /// rather than bumping).
+    #[test]
+    fn c15_bind_created_rides_the_batch_envelope() {
+        let json = r#"{"op":"batch","args":{"ops":[
+            {"op":"insertPath","args":{"pageId":"p1","anchors":[],"open":false}},
+            {"op":"bindCreated","args":{"handle":"a"}},
+            {"op":"setElementProperty","args":{"elementId":{"kind":"polygon","id":"$h:a"},
+             "path":"frameFillColor","value":{"type":"colorRef","value":"Color/Black"}}}
+        ]}}"#;
+        let m: Mutation = serde_json::from_str(json).expect("batch with a handle parses");
+        let Mutation::Batch { ops } = m else {
+            panic!("expected Batch");
+        };
+        assert_eq!(ops.len(), 3);
+        match &ops[1] {
+            Mutation::BindCreated { handle } => assert_eq!(handle, "a"),
+            other => panic!("expected BindCreated, got {other:?}"),
+        }
+        // …and re-encodes to the same op tag.
+        let back = serde_json::to_string(&ops[1]).expect("encode");
+        assert_eq!(back, r#"{"op":"bindCreated","args":{"handle":"a"}}"#);
+    }
+
+    #[test]
+    fn w3a1_hit_result_table_context_round_trips() {
+        let hr = HitResult {
+            frame_id: Some("frameA".into()),
+            story_id: Some("u10".into()),
+            table_context: Some(TableHitContext {
+                table_id: "t1".into(),
+                row: 1,
+                col: 0,
+            }),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&hr).unwrap();
+        // camelCase wire keys.
+        assert!(json.contains("\"tableContext\":"), "{json}");
+        assert!(json.contains("\"tableId\":\"t1\""), "{json}");
+        let back: HitResult = serde_json::from_str(&json).unwrap();
+        let tc = back.table_context.expect("table_context round-trips");
+        assert_eq!((tc.row, tc.col), (1, 0));
+        assert_eq!(tc.table_id, "t1");
+        // A non-table hit serialises `table_context: null`.
+        let plain = HitResult {
+            frame_id: Some("rectA".into()),
+            ..Default::default()
+        };
+        let back2: HitResult =
+            serde_json::from_str(&serde_json::to_string(&plain).unwrap()).unwrap();
+        assert!(back2.table_context.is_none());
+    }
+
+    #[test]
+    fn worker_to_main_unsolicited_pages_dirty_roundtrips() {
+        let msg = WorkerToMain {
+            seq: None,
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::PagesDirty {
+                page_ids: vec![PageId("p1".into()), PageId("p2".into())],
+            },
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let back: WorkerToMain = serde_json::from_str(&json).unwrap();
+        assert!(back.seq.is_none());
+        match back.kind {
+            WorkerToMainKind::PagesDirty { page_ids } => {
+                assert_eq!(page_ids.len(), 2);
+                assert_eq!(page_ids[0].as_str(), "p1");
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn c6_claim_image_resource_roundtrips_with_camelcase_tag() {
+        // v44 (C-6) — the claim message marshals through JSON with the
+        // camelCase kind/field contract the TS protocol mirror locks.
+        let msg = MainToWorker {
+            seq: 11,
+            protocol: PROTOCOL_VERSION,
+            kind: MainToWorkerKind::ClaimImageResource {
+                image_id: "x-paged-image:f1".into(),
+                levels: 3,
+                tile_size: 256,
+                base_width: 4096,
+                base_height: 4096,
+                revision: 7,
+            },
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"kind\":\"claimImageResource\""), "{json}");
+        assert!(json.contains("\"tileSize\":256"), "{json}");
+        assert!(json.contains("\"baseWidth\":4096"), "{json}");
+        let back: MainToWorker = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            MainToWorkerKind::ClaimImageResource {
+                image_id,
+                levels,
+                revision,
+                ..
+            } => {
+                assert_eq!(image_id, "x-paged-image:f1");
+                assert_eq!(levels, 3);
+                assert_eq!(revision, 7);
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn c6_submit_resource_tiles_roundtrips() {
+        let msg = MainToWorker {
+            seq: 12,
+            protocol: PROTOCOL_VERSION,
+            kind: MainToWorkerKind::SubmitResourceTiles {
+                image_id: "x-paged-image:f1".into(),
+                level: 1,
+                tiles: vec![ProviderTileWire {
+                    x: 0,
+                    y: 256,
+                    width: 2,
+                    height: 1,
+                    rgba: vec![1, 2, 3, 4, 5, 6, 7, 8].into(),
+                }],
+                generation: 7,
+            },
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"kind\":\"submitResourceTiles\""), "{json}");
+        let back: MainToWorker = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            MainToWorkerKind::SubmitResourceTiles {
+                level,
+                tiles,
+                generation,
+                ..
+            } => {
+                assert_eq!(level, 1);
+                assert_eq!(generation, 7);
+                assert_eq!(tiles.len(), 1);
+                assert_eq!((tiles[0].width, tiles[0].height), (2, 1));
+                assert_eq!(tiles[0].rgba.as_slice().len(), 8);
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn c6_resource_tiles_needed_and_ack_roundtrip() {
+        // The ack carries the misses additively; the standalone variant is
+        // the same payload posted unsolicited.
+        let ack = WorkerToMain {
+            seq: Some(11),
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::ResourceClaimApplied {
+                image_id: "x-paged-image:f1".into(),
+                applied: true,
+                needed: vec![ResourceTilesNeededWire {
+                    image_id: "x-paged-image:f1".into(),
+                    level: 0,
+                    tiles: vec![[0, 0], [256, 0]],
+                    generation: 7,
+                }],
+            },
+        };
+        let json = serde_json::to_string(&ack).unwrap();
+        assert!(json.contains("\"kind\":\"resourceClaimApplied\""), "{json}");
+        let back: WorkerToMain = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            WorkerToMainKind::ResourceClaimApplied {
+                applied, needed, ..
+            } => {
+                assert!(applied);
+                assert_eq!(needed.len(), 1);
+                assert_eq!(needed[0].tiles, vec![[0, 0], [256, 0]]);
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
+
+        let unsolicited = WorkerToMain {
+            seq: None,
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::ResourceTilesNeeded(ResourceTilesNeededWire {
+                image_id: "x-paged-image:f1".into(),
+                level: 2,
+                tiles: vec![[0, 0]],
+                generation: 7,
+            }),
+        };
+        let json = serde_json::to_string(&unsolicited).unwrap();
+        assert!(json.contains("\"kind\":\"resourceTilesNeeded\""), "{json}");
+        let back: WorkerToMain = serde_json::from_str(&json).unwrap();
+        assert!(back.seq.is_none());
+        match back.kind {
+            WorkerToMainKind::ResourceTilesNeeded(n) => {
+                assert_eq!(n.level, 2);
+                assert_eq!(n.tiles, vec![[0, 0]]);
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn load_error_serialises_with_kind_message() {
+        let e = LoadError::Parse("malformed zip".into());
+        let json = serde_json::to_string(&e).unwrap();
+        assert!(json.contains("\"kind\":\"parse\""), "{json}");
+        assert!(json.contains("malformed zip"), "{json}");
+    }
+
+    #[test]
+    fn sections_collection_name_round_trips() {
+        // panels.md gaps 9/10/19 — the new collection name maps both
+        // ways and serialises as the camelCase tag the TS union uses.
+        assert_eq!(CollectionName::Sections.as_str(), "sections");
+        assert_eq!(
+            CollectionName::from_str("sections"),
+            Some(CollectionName::Sections)
+        );
+        let json = serde_json::to_string(&CollectionName::Sections).unwrap();
+        assert_eq!(json, "\"sections\"");
+    }
+
+    #[test]
+    fn paged_part_messages_round_trip_through_json() {
+        // v51 (.paged container — the host.parts door): the request + reply
+        // variants survive the JSON envelope the worker (de)serialises.
+        let msg = MainToWorker {
+            seq: 51,
+            protocol: PROTOCOL_VERSION,
+            kind: MainToWorkerKind::WritePagedPart {
+                path: "paged/media.paged.sheet/o1/spec.json".into(),
+                bytes: ByteBuf::from(vec![1u8, 2, 3]),
+                caller: None,
+            },
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"kind\":\"writePagedPart\""), "{json}");
+        // C-34 — AN ABSENT CALLER IS ABSENT ON THE WIRE, not a
+        // serialized null. That is what makes the field additive under
+        // GOVERNANCE RULE 1 (a back-compatible `#[serde(default)]` add
+        // on an existing message kind is NOT a protocol bump): the
+        // bytes a sender that omits it produces are unchanged, so an
+        // older worker sees exactly the message it always saw.
+        assert!(
+            !json.contains("caller"),
+            "an omitted caller must not appear: {json}"
+        );
+        match serde_json::from_str::<MainToWorker>(&json).unwrap().kind {
+            MainToWorkerKind::WritePagedPart {
+                path,
+                bytes,
+                caller,
+            } => {
+                assert_eq!(path, "paged/media.paged.sheet/o1/spec.json");
+                assert_eq!(bytes.into_vec(), vec![1, 2, 3]);
+                assert!(caller.is_none());
+            }
+            other => panic!("wrong request variant: {other:?}"),
+        }
+
+        // …and a message written BEFORE the field existed still
+        // deserializes — the other half of "additive", and the half a
+        // round-trip of our own struct cannot show.
+        let legacy = r#"{"seq":51,"protocol":61,"kind":"writePagedPart","payload":{"path":"paged/x/a","bytes":[1]}}"#;
+        match serde_json::from_str::<MainToWorker>(legacy).unwrap().kind {
+            MainToWorkerKind::WritePagedPart { caller, .. } => assert!(caller.is_none()),
+            other => panic!("wrong request variant: {other:?}"),
+        }
+
+        // The export reply carries the container bytes as number[] on the wire.
+        let reply = WorkerToMain {
+            seq: Some(51),
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::PagedExported {
+                bytes: ByteBuf::from(vec![9u8, 8, 7]),
+            },
+        };
+        let rj = serde_json::to_string(&reply).unwrap();
+        assert!(rj.contains("\"kind\":\"pagedExported\""), "{rj}");
+        match serde_json::from_str::<WorkerToMain>(&rj).unwrap().kind {
+            WorkerToMainKind::PagedExported { bytes } => {
+                assert_eq!(bytes.into_vec(), vec![9, 8, 7]);
+            }
+            other => panic!("wrong reply variant: {other:?}"),
+        }
+
+        // The read + list replies tag camelCase + carry their payloads.
+        let list = WorkerToMain {
+            seq: Some(1),
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::PagedPartList {
+                paths: vec!["paged/x/1/spec.json".into()],
+            },
+        };
+        let lj = serde_json::to_string(&list).unwrap();
+        assert!(lj.contains("\"kind\":\"pagedPartList\""), "{lj}");
+        assert!(lj.contains("paged/x/1/spec.json"), "{lj}");
+    }
+
+    #[test]
+    fn caret_nav_request_round_trips_through_json() {
+        // panels.md (W0.6 caret queries) — the new request variant
+        // survives the JSON envelope round-trip the worker uses.
+        let msg = MainToWorker {
+            seq: 9,
+            protocol: PROTOCOL_VERSION,
+            kind: MainToWorkerKind::RequestCaretNav {
+                story_id: "u10".into(),
+                offset: 5,
+                direction: crate::geometry::CaretDirection::Down,
+                cell: None,
+            },
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"kind\":\"requestCaretNav\""), "{json}");
+        assert!(json.contains("\"direction\":\"down\""), "{json}");
+        let back: MainToWorker = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            MainToWorkerKind::RequestCaretNav {
+                story_id,
+                offset,
+                direction,
+                cell: _,
+            } => {
+                assert_eq!(story_id, "u10");
+                assert_eq!(offset, 5);
+                assert_eq!(direction, crate::geometry::CaretDirection::Down);
+            }
+            other => panic!("wrong variant: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn caret_nav_and_line_bounds_replies_round_trip() {
+        let r = WorkerToMain {
+            seq: Some(1),
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::CaretNavResult { offset: Some(12) },
+        };
+        let json = serde_json::to_string(&r).unwrap();
+        let back: WorkerToMain = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            WorkerToMainKind::CaretNavResult { offset } => assert_eq!(offset, Some(12)),
+            other => panic!("wrong variant: {other:?}"),
+        }
+
+        let r = WorkerToMain {
+            seq: Some(1),
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::LineBoundsResult {
+                bounds: Some(crate::geometry::LineBounds {
+                    line_start: 3,
+                    line_end: 9,
+                }),
+            },
+        };
+        let json = serde_json::to_string(&r).unwrap();
+        let back: WorkerToMain = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            WorkerToMainKind::LineBoundsResult { bounds } => {
+                let b = bounds.expect("bounds present");
+                assert_eq!((b.line_start, b.line_end), (3, 9));
+            }
+            other => panic!("wrong variant: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn word_bounds_request_round_trips_through_json() {
+        // Aftercare-A — the new request variant survives the JSON
+        // envelope with the camelCase tag the worker switches on.
+        let msg = MainToWorker {
+            seq: 13,
+            protocol: PROTOCOL_VERSION,
+            kind: MainToWorkerKind::RequestWordBounds {
+                story_id: "u10".into(),
+                offset: 7,
+                cell: None,
+            },
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"kind\":\"requestWordBounds\""), "{json}");
+        let back: MainToWorker = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            MainToWorkerKind::RequestWordBounds {
+                story_id,
+                offset,
+                cell: _,
+            } => {
+                assert_eq!(story_id, "u10");
+                assert_eq!(offset, 7);
+            }
+            other => panic!("wrong variant: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn word_bounds_reply_round_trips_through_json() {
+        // Aftercare-A — `WordBoundsResult` carries a camelCase
+        // `[start, end)` span; `None` is the unresolved-story case.
+        let r = WorkerToMain {
+            seq: Some(13),
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::WordBoundsResult {
+                bounds: Some(crate::geometry::WordBounds { start: 4, end: 9 }),
+            },
+        };
+        let json = serde_json::to_string(&r).unwrap();
+        assert!(json.contains("\"kind\":\"wordBoundsResult\""), "{json}");
+        assert!(json.contains("\"start\":4"), "{json}");
+        let back: WorkerToMain = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            WorkerToMainKind::WordBoundsResult { bounds } => {
+                let b = bounds.expect("bounds present");
+                assert_eq!((b.start, b.end), (4, 9));
+            }
+            other => panic!("wrong variant: {other:?}"),
+        }
+
+        let none = WorkerToMain {
+            seq: Some(13),
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::WordBoundsResult { bounds: None },
+        };
+        let back: WorkerToMain =
+            serde_json::from_str(&serde_json::to_string(&none).unwrap()).unwrap();
+        match back.kind {
+            WorkerToMainKind::WordBoundsResult { bounds } => assert!(bounds.is_none()),
+            other => panic!("wrong variant: {other:?}"),
+        }
+    }
+
+    /// W3.B2 — the IDML save-back message kinds (ride v29) survive the
+    /// JSON envelope with the camelCase tag + field contract the editor
+    /// mirrors. `ExportIdml` (main→worker) carries no payload; the
+    /// replies `IdmlExported` / `ExportIdmlFailed` carry the bytes /
+    /// error.
+    #[test]
+    fn idml_export_message_kinds_round_trip_through_json() {
+        // Request: empty-payload struct variant. The external tag must
+        // be `exportIdml`.
+        let req = MainToWorker {
+            seq: 11,
+            protocol: PROTOCOL_VERSION,
+            kind: MainToWorkerKind::ExportIdml { link_base: None },
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(
+            json.contains("\"kind\":\"exportIdml\""),
+            "tag drift: {json}"
+        );
+        let back: MainToWorker = serde_json::from_str(&json).unwrap();
+        assert!(matches!(
+            back.kind,
+            MainToWorkerKind::ExportIdml { link_base: None }
+        ));
+
+        // Success reply: idml_bytes renders as a number[] (ByteBuf) and
+        // the field is camelCase on the wire.
+        let ok = WorkerToMain {
+            seq: Some(11),
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::IdmlExported {
+                idml_bytes: ByteBuf::from(vec![80, 75, 3, 4]), // "PK\x03\x04"
+                // v58 (C-28) — a clean document loses nothing.
+                lost: Vec::new(),
+                links: Vec::new(),
+            },
+        };
+        let json = serde_json::to_string(&ok).unwrap();
+        assert!(
+            json.contains("\"kind\":\"idmlExported\""),
+            "tag drift: {json}"
+        );
+        assert!(
+            json.contains("\"idmlBytes\":"),
+            "field rename broken: {json}"
+        );
+        assert!(!json.contains("idml_bytes"), "snake leaked: {json}");
+        let back: WorkerToMain = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            WorkerToMainKind::IdmlExported {
+                idml_bytes,
+                lost,
+                links,
+            } => {
+                assert_eq!(idml_bytes.as_slice(), &[80, 75, 3, 4]);
+                assert!(lost.is_empty());
+                assert!(links.is_empty());
+            }
+            other => panic!("wrong variant: {other:?}"),
+        }
+
+        // Failure reply: flat-string error, mirroring ExportPdfFailed.
+        let err = WorkerToMain {
+            seq: Some(11),
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::ExportIdmlFailed {
+                error: "no document loaded".into(),
+            },
+        };
+        let json = serde_json::to_string(&err).unwrap();
+        assert!(
+            json.contains("\"kind\":\"exportIdmlFailed\""),
+            "tag drift: {json}"
+        );
+        let back: WorkerToMain = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            WorkerToMainKind::ExportIdmlFailed { error } => {
+                assert_eq!(error, "no document loaded");
+            }
+            other => panic!("wrong variant: {other:?}"),
+        }
+    }
+
+    /// The `linkBase` request field and the `links` reply field are
+    /// ADDITIVE (governance rule 1, no bump): a pre-existing empty
+    /// `exportIdml` payload still deserialises (`link_base: None`), a
+    /// reply without `links` deserialises to empty, and a populated
+    /// link rides camelCase with its bytes as a `number[]`.
+    #[test]
+    fn idml_export_link_base_and_links_are_additive() {
+        // An older host's request: no `linkBase` at all.
+        let old: MainToWorker = serde_json::from_str(&format!(
+            r#"{{"seq":1,"protocol":{},"kind":"exportIdml","payload":{{}}}}"#,
+            PROTOCOL_VERSION.0
+        ))
+        .unwrap();
+        assert!(matches!(
+            old.kind,
+            MainToWorkerKind::ExportIdml { link_base: None }
+        ));
+        // A host that asks for resolvable links.
+        let req = MainToWorker {
+            seq: 2,
+            protocol: PROTOCOL_VERSION,
+            kind: MainToWorkerKind::ExportIdml {
+                link_base: Some("/Users/me/Book/Links".into()),
+            },
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(
+            json.contains(r#""linkBase":"/Users/me/Book/Links""#),
+            "camelCase: {json}"
+        );
+        let back: MainToWorker = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            MainToWorkerKind::ExportIdml { link_base } => {
+                assert_eq!(link_base.as_deref(), Some("/Users/me/Book/Links"));
+            }
+            other => panic!("wrong variant: {other:?}"),
+        }
+
+        // An older worker's reply: no `links`.
+        let old: WorkerToMain = serde_json::from_str(&format!(
+            r#"{{"seq":2,"protocol":{},"kind":"idmlExported","payload":{{"idmlBytes":[80,75]}}}}"#,
+            PROTOCOL_VERSION.0
+        ))
+        .unwrap();
+        match old.kind {
+            WorkerToMainKind::IdmlExported { links, lost, .. } => {
+                assert!(links.is_empty());
+                assert!(lost.is_empty());
+            }
+            other => panic!("wrong variant: {other:?}"),
+        }
+        // A populated link.
+        let ok = WorkerToMain {
+            seq: Some(2),
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::IdmlExported {
+                idml_bytes: ByteBuf::from(vec![80, 75]),
+                lost: Vec::new(),
+                links: vec![ExportedLinkWire {
+                    file_name: "CODE 1.jpg".into(),
+                    source_uri: "assets/CODE%201.jpg".into(),
+                    has_bytes: true,
+                    bytes: ByteBuf::from(vec![0xFF, 0xD8]),
+                }],
+            },
+        };
+        let json = serde_json::to_string(&ok).unwrap();
+        assert!(
+            json.contains(r#""links":[{"fileName":"CODE 1.jpg","sourceUri":"assets/CODE%201.jpg","hasBytes":true,"bytes":[255,216]}]"#),
+            "{json}"
+        );
+        let back: WorkerToMain = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            WorkerToMainKind::IdmlExported { links, .. } => {
+                assert_eq!(links.len(), 1);
+                assert_eq!(links[0].file_name, "CODE 1.jpg");
+                assert!(links[0].has_bytes);
+                assert_eq!(links[0].bytes.as_slice(), &[0xFF, 0xD8]);
+            }
+            other => panic!("wrong variant: {other:?}"),
+        }
+    }
+
+    /// B-09 / W-08 — the typed budget-exhaustion field rides the
+    /// `ScriptResult` reply over the wire. A wall-clock abort serialises
+    /// its `budgetKind` as the camelCase tag the host matches on, and
+    /// round-trips back to the typed enum. Additive on protocol v35.
+    #[test]
+    fn script_result_budget_kind_round_trips() {
+        let env = WorkerToMain {
+            seq: Some(7),
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::ScriptResult {
+                output: vec!["[log] hi".into()],
+                error: Some("runtime budget exceeded: …".into()),
+                budget_kind: Some(ScriptBudgetKind::WallClock),
+                stats: None,
+                writes: None,
+                page_ids: None,
+            },
+        };
+        let json = serde_json::to_string(&env).unwrap();
+        assert!(
+            json.contains("\"kind\":\"scriptResult\""),
+            "tag drift: {json}"
+        );
+        assert!(
+            json.contains("\"budgetKind\":\"wallClock\""),
+            "typed budget kind missing / mis-tagged: {json}"
+        );
+        let back: WorkerToMain = serde_json::from_str(&json).unwrap();
+        match back.kind {
+            WorkerToMainKind::ScriptResult {
+                error, budget_kind, ..
+            } => {
+                assert!(error.is_some());
+                assert_eq!(budget_kind, Some(ScriptBudgetKind::WallClock));
+            }
+            other => panic!("wrong variant: {other:?}"),
+        }
+    }
+
+    /// Additive-on-the-wire proof: a `ScriptResult` for an ordinary
+    /// (non-budget) outcome omits `budgetKind` from the JSON, and a
+    /// PRE-EXISTING reply that never had the field still decodes — so
+    /// older producers/consumers ride v35 unchanged.
+    #[test]
+    fn script_result_omits_budget_kind_and_decodes_legacy() {
+        // Producing: ordinary result → no budgetKind key.
+        let env = WorkerToMain {
+            seq: Some(7),
+            protocol: PROTOCOL_VERSION,
+            kind: WorkerToMainKind::ScriptResult {
+                output: vec![],
+                error: None,
+                budget_kind: None,
+                stats: None,
+                writes: None,
+                page_ids: None,
+            },
+        };
+        let json = serde_json::to_string(&env).unwrap();
+        assert!(
+            !json.contains("budgetKind"),
+            "ordinary result must omit budgetKind: {json}"
+        );
+
+        // Consuming: a legacy reply with no budgetKind field decodes
+        // with budget_kind defaulting to None. The envelope is
+        // adjacently tagged (`tag = "kind", content = "payload"`), so
+        // the variant fields live under `payload`.
+        let legacy =
+            r#"{"seq":7,"protocol":35,"kind":"scriptResult","payload":{"output":[],"error":null}}"#;
+        let back: WorkerToMain = serde_json::from_str(legacy).unwrap();
+        match back.kind {
+            WorkerToMainKind::ScriptResult { budget_kind, .. } => {
+                assert_eq!(budget_kind, None);
+            }
+            other => panic!("wrong variant: {other:?}"),
+        }
+    }
+}

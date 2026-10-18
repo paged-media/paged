@@ -1,0 +1,28 @@
+[package]
+name = "paged-store"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Native Paged document codec — (de)serialize the Paged model to/from .paged bytes; the counterpart to the import/export adapter."
+
+[lints]
+workspace = true
+
+[dependencies]
+paged-scene = { path = "../paged-scene" }
+paged-model = { path = "../paged-model" }
+blake3 = "1"
+serde = { workspace = true }
+serde_json = "1"
+zip = { workspace = true }
+flate2 = { workspace = true }
+
+[dev-dependencies]
+idml-import = { git = "https://github.com/paged-media/plugin-publish", rev = "05c57195d9a7514357cede90d89d987141bf01d8" }
+# A hermetic IDML fixture to import; the reconstruct path under test never
+# touches IDML. paged-renderer builds both docs for the digest comparison
+# (default-features off — the digest needs layout, not the CPU rasterizer).
+paged-gen = { path = "../paged-gen" }
+paged-renderer = { path = "../paged-renderer", default-features = false }

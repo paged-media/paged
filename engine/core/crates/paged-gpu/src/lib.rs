@@ -1,0 +1,181 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! GPU backend.
+//!
+//! Owns the `PathRasterizer` trait — the abstraction that lets the
+//! pipeline swap between rasterizer implementations (Vello, forked
+//! Vello, or a custom tile-based pipeline) without changing callers.
+//! The choice is driven by Spike A in `spikes/vello-eval`.
+//!
+//! Two impls live behind feature flags:
+//!  - `cpu` (default): tiny-skia. Always-works backend used by tests
+//!    and the fidelity harness.
+//!  - `vello-backend`: Vello-via-wgpu. Currently a stub — real
+//!    integration lands as a follow-up batch.
+
+use paged_compose::{Color, DisplayList};
+
+/// CMYK (each channel 0..=1) → linear-RGB via the naive Adobe-style
+/// conversion (R=(1-C)(1-K) etc.) followed by sRGB→linear. Used by
+/// rasterizers as the fallback when no ICC transform is plumbed
+/// through. Matches the per-component math `paged-parse::graphic::to_linear_rgb`
+/// applies for swatch-side CMYK, so a `Paint::Cmyk` of swatch values
+/// rasterises identically to the prior `Paint::Solid` path for the
+/// non-ICC case.
+pub fn cmyk_unit_to_linear_rgb(c: f32, m: f32, y: f32, k: f32) -> Color {
+    let c = c.clamp(0.0, 1.0);
+    let m = m.clamp(0.0, 1.0);
+    let y = y.clamp(0.0, 1.0);
+    let k = k.clamp(0.0, 1.0);
+    let r = (1.0 - c) * (1.0 - k);
+    let g = (1.0 - m) * (1.0 - k);
+    let b = (1.0 - y) * (1.0 - k);
+    fn srgb_to_linear(v: f32) -> f32 {
+        if v <= 0.040_45 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    }
+    Color::rgba(srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b), 1.0)
+}
+
+/// Naive 8-bit RGB→CMYK (Adobe-style: K = 255 - max(R,G,B), then the
+/// chromatic channels relative to the remaining range).
+///
+/// Gated because a build with NEITHER rasterizer has no caller and the
+/// workspace's denied `dead_code` fails on it. It used to say `cpu`
+/// alone, on the reasoning that the Vello path mirrors this math in
+/// WGSL (`cmyk_compute/shaders/splat_or_overprint.wgsl`) and so never
+/// needs the Rust form. That stopped being true: `vello_rs`'s
+/// overprint orchestrator calls it on the non-CMYK-paint fallback
+/// path, so a `vello-backend` build WITHOUT `cpu` — which is exactly
+/// what the wasm publish builds — failed to compile. It did not show
+/// up in `cargo test`, because the workspace default enables `cpu`.
+#[cfg(any(feature = "cpu", feature = "vello-backend"))]
+pub(crate) fn rgb_to_naive_cmyk_8bit(r: u8, g: u8, b: u8) -> (u8, u8, u8, u8) {
+    let max_rgb = r.max(g).max(b);
+    let k = 255u8.saturating_sub(max_rgb);
+    if k == 255 {
+        return (0, 0, 0, 255);
+    }
+    let denom = (255u16 - k as u16).max(1);
+    let calc = |v: u8| {
+        let num = 255u16.saturating_sub(v as u16).saturating_sub(k as u16);
+        ((num * 255 + denom / 2) / denom).min(255) as u8
+    };
+    (calc(r), calc(g), calc(b), k)
+}
+
+#[cfg(feature = "vello-backend")]
+pub mod cmyk_compute;
+#[cfg(feature = "cpu")]
+pub mod cpu;
+/// Ink separations + total-area-coverage readings off the CPU
+/// rasterizer's plane state. CPU-only: the Vello backend keeps plane
+/// state per overprint batch, not per page, so it has no separation to
+/// hand out (see the module docs).
+#[cfg(feature = "cpu")]
+pub mod separations;
+#[cfg(all(feature = "vello-backend", target_arch = "wasm32"))]
+pub mod surface;
+#[cfg(feature = "vello-backend")]
+pub mod vello_rs;
+
+#[cfg(feature = "cpu")]
+pub use cpu::rasterize;
+#[cfg(feature = "cpu")]
+pub use cpu::rasterize_with_separation;
+#[cfg(feature = "cpu")]
+pub use cpu::CpuRasterizer;
+#[cfg(feature = "cpu")]
+pub use separations::{
+    InkChannel, InkCoverageReport, InkPlate, PlateCoverage, Separation, TAC_BUCKETS, TAC_BUCKET_PCT,
+};
+#[cfg(all(feature = "vello-backend", target_arch = "wasm32"))]
+pub use surface::{PendingReadback, SurfaceError, SurfacePresenter, Viewport};
+// Re-export vello::Scene so consumers (paged-canvas-wasm) don't need
+// vello as a direct dependency to hold cached scenes.
+#[cfg(all(feature = "vello-backend", target_arch = "wasm32"))]
+pub use vello::kurbo as vello_kurbo;
+#[cfg(all(feature = "vello-backend", target_arch = "wasm32"))]
+pub use vello::Scene as VelloScene;
+#[cfg(feature = "vello-backend")]
+pub use vello_rs::VelloRasterizer;
+
+/// Knobs every rasterizer respects.
+#[derive(Debug, Clone, Copy)]
+pub struct RasterOptions {
+    /// Page width in pt.
+    pub page_width_pt: f32,
+    /// Page height in pt.
+    pub page_height_pt: f32,
+    /// Output DPI; 72 produces 1 px per pt, 300 is print quality.
+    pub dpi: f32,
+    /// Background fill applied to the whole canvas before any
+    /// commands run. Linear RGB, as per display-list convention.
+    pub background: Color,
+    /// Place every filled glyph the way poppler's Splash rasteriser
+    /// (`pdftoppm`) does: its origin floored to whole device pixels
+    /// vertically and to quarter pixels horizontally, so a glyph is drawn
+    /// at the same sub-pixel phase as in the reference raster. Only the
+    /// fidelity gate wants this — it compares against `pdftoppm` renders
+    /// of InDesign's PDFs, and without it a layout change below a pixel
+    /// (a 0.125 pt stroke inset at 144 dpi) reads as a regression: the
+    /// reference draws that text exactly where it drew it before, the
+    /// candidate re-samples it a quarter pixel off. Needs the display
+    /// list's glyph-run side channel (`collect_glyph_runs`); a list
+    /// without one is drawn unchanged. CPU backend only.
+    pub snap_glyph_origins: bool,
+}
+
+impl RasterOptions {
+    pub fn new(page_width_pt: f32, page_height_pt: f32) -> Self {
+        Self {
+            page_width_pt,
+            page_height_pt,
+            dpi: 96.0,
+            background: Color::WHITE,
+            snap_glyph_origins: false,
+        }
+    }
+
+    /// Output dimensions in pixels at the configured DPI.
+    pub fn pixel_size(&self) -> (u32, u32) {
+        let scale = self.dpi / 72.0;
+        let w = ((self.page_width_pt * scale).ceil() as u32).max(1);
+        let h = ((self.page_height_pt * scale).ceil() as u32).max(1);
+        (w, h)
+    }
+}
+
+/// Rasterizer abstraction. Implementations turn a `DisplayList` into
+/// an RGBA8 buffer at the requested DPI. The trait stays small so the
+/// pipeline can pick a backend at construction time and the fidelity
+/// harness can run multiple impls against the same display list.
+///
+/// Implementations should be cheap to construct — typically one per
+/// render at most. Long-lived state (wgpu device, glyph atlas) lives
+/// inside the impl.
+pub trait PathRasterizer {
+    /// Human-readable name; surfaces in CI logs and the inspect tool.
+    fn name(&self) -> &'static str;
+
+    /// Rasterise `list` at `options.dpi`. Returns an RGBA8 buffer of
+    /// `options.pixel_size()` packed row-major. Implementations that
+    /// can't currently render a particular `DisplayCommand` should
+    /// log + skip it rather than fail the whole render.
+    fn rasterize(&self, list: &DisplayList, options: &RasterOptions) -> Vec<u8>;
+}

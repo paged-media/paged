@@ -1,0 +1,60 @@
+[package]
+name = "paged-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "`paged` — the engine on the command line: open, author, render, export, verify."
+
+[[bin]]
+name = "paged"
+path = "src/main.rs"
+
+[dependencies]
+# The document lane. `paged-canvas` brings the CPU rasterizer (its
+# default `cpu` feature) and, through it, the renderer, the PDF
+# exporter, mutate, store and colour — so this leaf crate can hold every
+# subcommand without the dependency cycle that keeps `paged-inspect` and
+# `paged-export` in separate binaries.
+paged-canvas = { path = "../paged-canvas" }
+# `paged place` names a `PropertyPath` and a `Value` to set the fit and
+# the placed image's transform. Both come through `paged-canvas`
+# already; naming the crate makes the existing dependency honest rather
+# than adding one.
+paged-mutate = { path = "../paged-mutate" }
+# `paged place --fit` resolves the fit into the image transform with
+# `paged_model::fitting`, reading the picture's pixel size from its header.
+paged-model = { path = "../paged-model" }
+image = { workspace = true }
+# `ElementId::parse` — the address grammar `paged describe` publishes.
+paged-wire = { path = "../paged-wire" }
+# ADR 132 — `paged set` / `paged get` coerce by the property schemas.
+paged-introspect = { path = "../paged-introspect", default-features = false }
+# The typed wire door: `WorkerCore::dispatch` is the same code path the
+# editor drives, so a CLI built on it cannot express a mutation the
+# product cannot.
+paged-canvas-wasm = { path = "../paged-canvas-wasm" }
+paged-script = { path = "../paged-script" }
+paged-color = { path = "../paged-color" }
+paged-fidelity = { path = "../paged-fidelity" }
+paged-gen = { path = "../paged-gen" }
+# Reads the declared `CMYKProfile` off a package's designmap BEFORE the
+# load that has to be told about it. Same rev as paged-canvas pins.
+idml-import = { git = "https://github.com/paged-media/plugin-publish", rev = "05c57195d9a7514357cede90d89d987141bf01d8" }
+clap = { version = "4", features = ["derive"] }
+# `paged mcp` and `paged library`: the repository (ADR 180) and the MCP surface.
+paged-repo = { path = "../paged-repo" }
+paged-mcp = { path = "../paged-mcp" }
+base64 = { workspace = true }
+serde = { workspace = true }
+serde_json = "1"
+anyhow = { workspace = true }
+
+[dev-dependencies]
+serde_json = "1"
+# `package_folder` reads the packaged IDML back.
+zip = { workspace = true }
+
+[lints]
+workspace = true

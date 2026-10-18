@@ -1,0 +1,239 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! v52 — the anchored-frame CREATE/REMOVE door.
+//!
+//! The anchored-object model (`paged_model::AnchoredFrame` on
+//! `Paragraph::anchored_frames`), its inline render path
+//! (`paged-renderer` `anchored.rs`), and its property edits
+//! (`AnchoredPosition` / `AnchoredXOffset` / …) all predate this. What was
+//! missing was a way to *create* an anchored frame with a mutation — the door
+//! a content plugin (paged.doc) needs to place an inline image in the text
+//! flow. `InsertAnchoredFrame` pushes an image-bearing anchored Rectangle onto
+//! the paragraph containing a story character offset; leaving `setting = None`
+//! makes the renderer default `anchored_position` to `"InlinePosition"`, so the
+//! frame is drawn inline at the paragraph origin (its `image_link` painted via
+//! the existing deferred-image path).
+
+use crate::error::OperationError;
+use crate::operation::{AppliedOperation, NodeId, Operation};
+use paged_scene::Document;
+
+use super::path_topology::reflow_hint_for_story;
+
+/// The paragraph index in `story` whose `[start, end)` char range contains
+/// story character `offset`; clamps to the last paragraph when `offset` is at
+/// or past the end. CONTIGUOUS char offsets — the same address space as
+/// `paged_mutate::apply::character` / `apply::paragraph` (no synthetic break
+/// character between paragraphs), so the frame anchors at the offset a
+/// contiguous char pour computes. NOTE: this is deliberately NOT the
+/// `mutate::locate` / `InsertText` byte+`\n` address space — the range-styling
+/// apply ops this door sits beside walk char-contiguous, so it matches them.
+fn paragraph_for_offset(story: &paged_model::Story, offset: u32) -> Option<(usize, u32)> {
+    if story.paragraphs.is_empty() {
+        return None;
+    }
+    let mut char_offset: u32 = 0;
+    for (i, para) in story.paragraphs.iter().enumerate() {
+        let chars: u32 = para
+            .runs
+            .iter()
+            .map(|r| r.text.chars().count() as u32)
+            .sum();
+        let para_end = char_offset + chars;
+        if offset < para_end {
+            return Some((i, offset - char_offset));
+        }
+        if i + 1 == story.paragraphs.len() {
+            return Some((i, chars));
+        }
+        char_offset = para_end; // contiguous — no inter-paragraph break char
+    }
+    None
+}
+
+/// The story character offset of paragraph `para_idx`'s start.
+fn paragraph_start(story: &paged_model::Story, para_idx: usize) -> u32 {
+    story.paragraphs[..para_idx]
+        .iter()
+        .flat_map(|p| &p.runs)
+        .map(|r| r.text.chars().count() as u32)
+        .sum()
+}
+
+/// Find the (story index, paragraph index) of the anchored frame `self_id`.
+fn locate_anchored_frame(doc: &Document, self_id: &str) -> Option<(usize, usize)> {
+    for (si, ps) in doc.stories.iter().enumerate() {
+        for (pi, para) in ps.story.paragraphs.iter().enumerate() {
+            if para
+                .anchored_frames
+                .iter()
+                .any(|af| af.self_id.as_deref() == Some(self_id))
+            {
+                return Some((si, pi));
+            }
+        }
+    }
+    None
+}
+
+/// v52 — insert an image-bearing anchored Rectangle at the paragraph holding
+/// `offset` in `story_id`. v65: `paragraph` names the paragraph outright
+/// (an empty paragraph has no offset of its own in the contiguous space);
+/// `offset` is still the story offset, clamped into that paragraph.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn apply_insert_anchored_frame(
+    doc: &mut Document,
+    story_id: &str,
+    paragraph: Option<u32>,
+    offset: u32,
+    width: f32,
+    height: f32,
+    image_uri: Option<&str>,
+    self_id: &str,
+) -> Result<AppliedOperation, OperationError> {
+    if locate_anchored_frame(doc, self_id).is_some() {
+        return Err(OperationError::DuplicateNodeId {
+            id: self_id.to_string(),
+        });
+    }
+    let story_idx = doc
+        .stories
+        .iter()
+        .position(|s| s.self_id == story_id)
+        .ok_or_else(|| OperationError::NodeNotFound(NodeId::Story(story_id.to_string())))?;
+
+    let (para_idx, local) = match paragraph {
+        Some(index) => {
+            let story = &doc.stories[story_idx].story;
+            let para = story.paragraphs.get(index as usize).ok_or_else(|| {
+                OperationError::InvalidValue {
+                    node: NodeId::Story(story_id.to_string()),
+                    path: crate::PropertyPath::AnchoredPosition,
+                    reason: format!(
+                        "paragraph {index} is past the story's {} paragraphs",
+                        story.paragraphs.len()
+                    ),
+                }
+            })?;
+            let chars: u32 = para
+                .runs
+                .iter()
+                .map(|r| r.text.chars().count() as u32)
+                .sum();
+            // `offset` stays a STORY offset (what an engine without the
+            // address reads); the address only says which paragraph.
+            let start = paragraph_start(story, index as usize);
+            (index as usize, offset.saturating_sub(start).min(chars))
+        }
+        None => paragraph_for_offset(&doc.stories[story_idx].story, offset)
+            .ok_or_else(|| OperationError::NodeNotFound(NodeId::Story(story_id.to_string())))?,
+    };
+
+    let para = &mut doc.stories[story_idx].story.paragraphs[para_idx];
+    // The frame stands in its line at `offset` (an inline object is a
+    // character of its line). Frames without a recorded anchor anchor
+    // at the paragraph's start; give them that explicitly so this one's
+    // offset lines up with its index.
+    let recorded = para.anchored_frames.len();
+    para.anchored_frame_offsets.resize(recorded, 0);
+    para.anchored_frame_offsets.push(local);
+    para.anchored_frames.push(paged_model::AnchoredFrame {
+        frame_kind: paged_model::AnchoredFrameKind::Rectangle,
+        self_id: Some(self_id.to_string()),
+        bounds: Some(paged_model::Bounds {
+            top: 0.0,
+            left: 0.0,
+            bottom: height,
+            right: width,
+        }),
+        item_transform: None,
+        parent_story: None,
+        // `setting: None` ⇒ the renderer defaults `anchored_position` to
+        // "InlinePosition": the frame is a character of its line at `offset`.
+        setting: None,
+        fill_color: None,
+        stroke_color: None,
+        stroke_weight: None,
+        fill_tint: None,
+        gradient_fill_angle: None,
+        applied_object_style: None,
+        image_link: image_uri.map(str::to_string),
+        image_item_transform: None,
+        children: Vec::new(),
+    });
+
+    let invalidation = reflow_hint_for_story(doc, story_id);
+    Ok(AppliedOperation {
+        op: Operation::InsertAnchoredFrame {
+            paragraph,
+            story_id: story_id.to_string(),
+            offset,
+            width,
+            height,
+            image_uri: image_uri.map(str::to_string),
+            self_id: self_id.to_string(),
+        },
+        inverse: Operation::RemoveAnchoredFrame {
+            story_id: story_id.to_string(),
+            self_id: self_id.to_string(),
+        },
+        invalidation,
+    })
+}
+
+/// v52 — remove the anchored frame `self_id` (the `InsertAnchoredFrame` inverse).
+pub(super) fn apply_remove_anchored_frame(
+    doc: &mut Document,
+    story_id: &str,
+    self_id: &str,
+) -> Result<AppliedOperation, OperationError> {
+    let (story_idx, para_idx) = locate_anchored_frame(doc, self_id)
+        .ok_or_else(|| OperationError::NodeNotFound(NodeId::Story(story_id.to_string())))?;
+
+    let para_start = paragraph_start(&doc.stories[story_idx].story, para_idx);
+    let para = &mut doc.stories[story_idx].story.paragraphs[para_idx];
+    let pos = para
+        .anchored_frames
+        .iter()
+        .position(|af| af.self_id.as_deref() == Some(self_id))
+        .expect("locate_anchored_frame just found it");
+    let removed = para.anchored_frames.remove(pos);
+    let local = if pos < para.anchored_frame_offsets.len() {
+        para.anchored_frame_offsets.remove(pos)
+    } else {
+        0
+    };
+
+    let width = removed.bounds.map(|b| b.right - b.left).unwrap_or(0.0);
+    let height = removed.bounds.map(|b| b.bottom - b.top).unwrap_or(0.0);
+    let invalidation = reflow_hint_for_story(doc, story_id);
+    Ok(AppliedOperation {
+        op: Operation::RemoveAnchoredFrame {
+            story_id: story_id.to_string(),
+            self_id: self_id.to_string(),
+        },
+        inverse: Operation::InsertAnchoredFrame {
+            // By paragraph: the contiguous offset cannot name an empty one.
+            paragraph: Some(para_idx as u32),
+            story_id: story_id.to_string(),
+            offset: para_start + local,
+            width,
+            height,
+            image_uri: removed.image_link.clone(),
+            self_id: self_id.to_string(),
+        },
+        invalidation,
+    })
+}

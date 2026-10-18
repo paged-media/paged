@@ -1,0 +1,1137 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! `apply(doc, op)` — the only function that mutates a [`Document`].
+//!
+//! Each variant of [`Operation`] dispatches to a small per-variant
+//! helper. The helper captures the "before" state, performs the
+//! mutation in place on the parse-layer structs, and hands the
+//! captured pieces to the [`invert`](crate::invert) helpers to build
+//! the matching inverse op. The result is bundled into an
+//! [`AppliedOperation`] along with an [`InvalidationHint`].
+//!
+//! Batch atomicity: if any child fails, every previously-applied
+//! child is rolled back by applying its inverse in reverse order
+//! *before* `apply` returns the error. The document is then in the
+//! state it was in before the batch began. The error carries the
+//! index that failed.
+//!
+//! `Document`'s pre-built indices (`text_frame_index`,
+//! `frame_for_story`, `anchors`) are NOT surgically maintained — they
+//! are recomputed wholesale at the end of every top-level [`apply`], so
+//! the parse-layer leaf data stays the single source of truth and no
+//! caller has to remember to refresh. This used to be a Stage-1
+//! limitation ("consumers that want them fresh should rebuild"), and
+//! the render-effect sweep found what it cost: `LinkFrames` threaded
+//! into a wire-created frame and painted nothing, because the chain
+//! walk resolves `NextTextFrame` through the stale index. See [`apply`]
+//! for why the whole-index rebuild is the right shape here and what it
+//! measures.
+//!
+//! Stage 1 limitations (flagged in the original scripting-layer design's
+//! Stage-1 deliverables):
+//!   - `InsertNode`/`RemoveNode`/`MoveNode` support TextFrame and
+//!     Rectangle children under a Spread parent. Group nesting,
+//!     Page-level routing, and the other shape kinds (Oval, Polygon,
+//!     GraphicLine) come as later stages.
+
+use paged_scene::Document;
+
+use crate::error::OperationError;
+use crate::operation::{
+    AppliedOperation, NodeId, Operation, PathAnchorSpec, PathfinderKind, PropertyPath, Value,
+};
+use crate::pathfinder::{pathfinder_boolean, PathfinderKind as InternalPathfinderKind};
+
+/// Apply an operation to `doc`. Returns the captured `AppliedOperation`
+/// (carrying op + inverse + invalidation hint) on success. The only
+/// mutation entry point in the crate.
+///
+/// **Post-condition: `doc`'s derived caches are fresh.** `Document`
+/// keeps three `#[serde(skip)]` indices — `text_frame_index`,
+/// `frame_for_story` and the heading `anchors` table — that are pure
+/// functions of `spreads` + `stories`. They used to be built by
+/// `Document::open` and by nothing that ran after a mutation, which
+/// made every one of them a lie the moment the wire created a frame:
+/// `Document::frame_chain` follows `NextTextFrame` through
+/// `Document::text_frame`, an O(1) lookup in `text_frame_index`, so a
+/// `LinkFrames` into a frame `InsertTextFrame` had just minted threaded
+/// the model and rendered nothing at all — the walk stopped at a frame
+/// the index had never heard of. Rebuilding here makes the invariant
+/// the mutation layer's own rather than a note asking consumers to
+/// remember (none did).
+///
+/// Rebuilt ONCE per top-level call: [`apply_inner`] is what a `Batch`'s
+/// children and the composite ops (`PathfinderBoolean`, the planar
+/// verbs, path topology) recurse through, so an N-child batch pays for
+/// one rebuild, not N — which matters, because a pour is a batch of
+/// thousands and a per-child rebuild would make it quadratic in the
+/// document. Nothing inside the apply layer reads the indices for
+/// anything but an advisory `InvalidationHint`, so a child seeing the
+/// pre-batch index cannot mis-apply — it can only name one fewer frame
+/// in a hint the batch is about to merge anyway.
+///
+/// **Why wholesale, and what it costs.** Measured (release, macOS
+/// arm64) on the largest documents to hand: a 48-page, 576-text-frame,
+/// 572-story InDesign export rebuilds its indices in **351 µs**, against
+/// **2.66 s** for one `CanvasModel::apply_mutation` on the same document
+/// — which already runs a full `pipeline::build_document` — i.e. **0.013
+/// %** of a mutation. A 255-frame newspaper template: 141 µs against 900
+/// ms, 0.016 %. Across seven documents the worst share was 0.02 %. The
+/// narrower designs were weighed and rejected on correctness, not cost:
+/// rebuilding only when a node was added or removed would leave
+/// `frame_for_story` stale, because it stores CLONED `TextFrame`s and so
+/// goes stale on any property write to a frame; and `anchors` is derived
+/// from the stories, which text edits change. Wholesale is the only one
+/// of the three that closes the whole class, and at 1/5000th of the cost
+/// a mutation already pays there is nothing to buy by being cleverer.
+pub fn apply(doc: &mut Document, op: &Operation) -> Result<AppliedOperation, OperationError> {
+    let applied = apply_inner(doc, op)?;
+    doc.rebuild_indexes();
+    Ok(applied)
+}
+
+/// The dispatch itself, without the index-refresh post-condition. In-crate
+/// recursion goes through here so one logical mutation rebuilds once; see
+/// [`apply`].
+pub(crate) fn apply_inner(
+    doc: &mut Document,
+    op: &Operation,
+) -> Result<AppliedOperation, OperationError> {
+    // C-77 — a locked page item is not moved, reshaped, restacked or
+    // removed, whichever surface asks (see `lock`).
+    lock::refuse_if_locked(doc, op)?;
+    match op {
+        // ADR 132 — the typed value forms (`Number`, `Enum`, `Ref`) fold into
+        // the variants the arms match on, so one apply path serves both.
+        Operation::SetProperty { node, path, value } => {
+            apply_set_property(doc, node, *path, &value.normalized())
+        }
+        Operation::InsertNode {
+            parent,
+            position,
+            node,
+            z_slot,
+        } => apply_insert_node(doc, parent, *position, *z_slot, node),
+        Operation::RemoveNode { node } => apply_remove_node(doc, node),
+        Operation::MoveNode {
+            node,
+            new_parent,
+            position,
+        } => apply_move_node(doc, node, new_parent, *position),
+        // v59 — Arrange. Unlike `MoveNode` this never changes the
+        // node's parent: it permutes the sibling list the node is
+        // already in (see the operation doc).
+        Operation::ReorderNode { node, target } => apply_reorder_node(doc, node, *target),
+        Operation::Batch { ops } => apply_batch(doc, ops),
+        Operation::RemoveStory { story_id } => apply_remove_story(doc, story_id),
+        Operation::RestoreStory {
+            position,
+            story_json,
+        } => apply_restore_story(doc, *position, story_json),
+        Operation::ReplaceStoryParagraphs {
+            story_id,
+            paragraphs_json,
+        } => apply_replace_story_paragraphs(doc, story_id, paragraphs_json),
+        Operation::InsertPage {
+            after_page_id,
+            master_id,
+            spread_self_id,
+            page_self_id,
+            restore_spread_json,
+        } => apply_insert_page(
+            doc,
+            after_page_id.as_deref(),
+            master_id.as_deref(),
+            spread_self_id.clone(),
+            page_self_id.clone(),
+            restore_spread_json.as_deref(),
+        ),
+        Operation::RemovePage { page_id } => apply_remove_page(doc, page_id),
+        Operation::MoveLayer {
+            layer_id,
+            new_index,
+        } => apply_move_layer(doc, layer_id, *new_index),
+        Operation::InsertLayer {
+            position,
+            name,
+            self_id,
+        } => apply_insert_layer(doc, *position, name, self_id.as_deref()),
+        Operation::RemoveLayer { layer_id } => apply_remove_layer(doc, layer_id),
+        Operation::CreateSwatch { spec } => apply_create_swatch(doc, spec),
+        Operation::EditSwatch { swatch_id, spec } => apply_edit_swatch(doc, swatch_id, spec),
+        Operation::DeleteSwatch { swatch_id } => apply_delete_swatch(doc, swatch_id),
+        Operation::CreateParagraphStyle {
+            self_id,
+            name,
+            based_on,
+            restore_json,
+        } => apply_create_paragraph_style(
+            doc,
+            self_id.clone(),
+            name.clone(),
+            based_on.clone(),
+            restore_json.as_deref(),
+        ),
+        Operation::RenameParagraphStyle { style_id, name } => {
+            apply_rename_paragraph_style(doc, style_id, name)
+        }
+        Operation::DeleteParagraphStyle { style_id } => apply_delete_paragraph_style(doc, style_id),
+        Operation::CreateCharacterStyle {
+            self_id,
+            name,
+            based_on,
+            restore_json,
+        } => apply_create_character_style(
+            doc,
+            self_id.clone(),
+            name.clone(),
+            based_on.clone(),
+            restore_json.as_deref(),
+        ),
+        Operation::RenameCharacterStyle { style_id, name } => {
+            apply_rename_character_style(doc, style_id, name)
+        }
+        Operation::DeleteCharacterStyle { style_id } => apply_delete_character_style(doc, style_id),
+        Operation::CreateObjectStyle {
+            self_id,
+            name,
+            based_on,
+            restore_json,
+        } => apply_create_object_style(
+            doc,
+            self_id.clone(),
+            name.clone(),
+            based_on.clone(),
+            restore_json.as_deref(),
+        ),
+        Operation::RenameObjectStyle { style_id, name } => {
+            apply_rename_object_style(doc, style_id, name)
+        }
+        Operation::DeleteObjectStyle { style_id } => apply_delete_object_style(doc, style_id),
+        Operation::CreateCellStyle {
+            self_id,
+            name,
+            based_on,
+            restore_json,
+        } => apply_create_cell_style(
+            doc,
+            self_id.clone(),
+            name.clone(),
+            based_on.clone(),
+            restore_json.as_deref(),
+        ),
+        Operation::RenameCellStyle { style_id, name } => {
+            apply_rename_cell_style(doc, style_id, name)
+        }
+        Operation::DeleteCellStyle { style_id } => apply_delete_cell_style(doc, style_id),
+        Operation::CreateTableStyle {
+            self_id,
+            name,
+            based_on,
+            restore_json,
+        } => apply_create_table_style(
+            doc,
+            self_id.clone(),
+            name.clone(),
+            based_on.clone(),
+            restore_json.as_deref(),
+        ),
+        Operation::RenameTableStyle { style_id, name } => {
+            apply_rename_table_style(doc, style_id, name)
+        }
+        Operation::DeleteTableStyle { style_id } => apply_delete_table_style(doc, style_id),
+        Operation::DuplicateNodes {
+            sources,
+            dx,
+            dy,
+            ids,
+            story_ids,
+        } => apply_duplicate_nodes(doc, sources, *dx, *dy, ids, story_ids),
+        Operation::RemoveDuplicates {
+            sources,
+            dx,
+            dy,
+            ids,
+            story_ids,
+        } => apply_remove_duplicates(doc, sources, *dx, *dy, ids, story_ids),
+        Operation::CreateGroup { spec } => apply_create_group(doc, spec),
+        Operation::DissolveGroup {
+            group_id,
+            restore_slots,
+        } => apply_dissolve_group(doc, group_id, restore_slots.as_deref()),
+        Operation::SetGroupTransform {
+            group,
+            transform,
+            prev,
+        } => apply_set_group_transform(doc, group, *transform, *prev),
+        Operation::CreateGradient { spec } => apply_create_gradient(doc, spec),
+        Operation::EditGradient { gradient_id, spec } => {
+            apply_edit_gradient(doc, gradient_id, spec)
+        }
+        Operation::DeleteGradient { gradient_id } => apply_delete_gradient(doc, gradient_id),
+        Operation::CreateColorGroup { spec } => apply_create_color_group(doc, spec),
+        Operation::EditColorGroup { group_id, spec } => apply_edit_color_group(doc, group_id, spec),
+        Operation::DeleteColorGroup { group_id } => apply_delete_color_group(doc, group_id),
+        Operation::CreateNumberingList { spec } => apply_create_numbering_list(doc, spec),
+        Operation::EditNumberingList { list_id, spec } => {
+            apply_edit_numbering_list(doc, list_id, spec)
+        }
+        Operation::DeleteNumberingList { list_id } => apply_delete_numbering_list(doc, list_id),
+        Operation::SetStyleProperty {
+            collection,
+            style_id,
+            path,
+            value,
+        } => apply_set_style_property(doc, *collection, style_id, *path, &value.normalized()),
+        Operation::PathfinderBoolean {
+            kept,
+            others,
+            op_kind,
+        } => apply_pathfinder(doc, kept, others, *op_kind),
+        Operation::JoinPaths { kept, other } => apply_join_paths(doc, kept, other),
+        // B-22 — the region-level Pathfinder row + Shape Builder, both
+        // over one planar arrangement (`crate::planar`).
+        Operation::PathfinderRegion { elements, verb } => {
+            planar_ops::apply_pathfinder_region(doc, elements, *verb)
+        }
+        Operation::PathfinderFaces {
+            elements,
+            faces,
+            mode,
+        } => planar_ops::apply_pathfinder_faces(doc, elements, faces, *mode),
+        Operation::PasteInto {
+            container,
+            child,
+            child_index,
+        } => apply_paste_into(doc, container, child, *child_index),
+        Operation::ReleaseFrom {
+            child,
+            restore_slot,
+        } => apply_release_from(doc, child, *restore_slot),
+        // C-28 opacity masks — the soft-mask sibling of the B-18 pair
+        // just above.
+        Operation::ApplyOpacityMask {
+            target,
+            mask,
+            mask_type,
+            invert,
+        } => apply_opacity_mask(doc, target, mask, mask_type.to_model(), *invert),
+        Operation::ReleaseOpacityMask {
+            target,
+            restore_slot,
+        } => apply_release_opacity_mask(doc, target, *restore_slot),
+        // C-29 type-on-a-path.
+        Operation::AttachTextToPath {
+            host,
+            story_id,
+            spec,
+        } => apply_attach_text_to_path(doc, host, story_id, spec),
+        Operation::DetachTextFromPath {
+            host,
+            index,
+            restore,
+        } => apply_detach_text_from_path(doc, host, *index, restore.as_ref()),
+        Operation::LinkFrames { from, to } => apply_link_frames(doc, from, to),
+        Operation::UnlinkFrames {
+            frame,
+            prev_next,
+            restore_target,
+        } => apply_unlink_frames(doc, frame, prev_next.as_deref(), restore_target.as_ref()),
+        Operation::ApplyStyle {
+            story_id,
+            start,
+            end,
+            style,
+            scope,
+            cell,
+            paragraph,
+        } => apply_apply_style(
+            doc,
+            story_id,
+            *start,
+            *end,
+            style,
+            *scope,
+            cell.as_ref(),
+            *paragraph,
+        ),
+        Operation::InsertField {
+            story_id,
+            offset,
+            field,
+            content_offset,
+        } => apply_insert_field(doc, story_id, *offset, field, *content_offset),
+        Operation::DeleteField {
+            story_id,
+            offset,
+            field,
+        } => apply_delete_field(doc, story_id, *offset, field),
+        Operation::InsertAnchoredFrame {
+            story_id,
+            offset,
+            width,
+            height,
+            image_uri,
+            self_id,
+            paragraph,
+        } => anchored_frame::apply_insert_anchored_frame(
+            doc,
+            story_id,
+            *paragraph,
+            *offset,
+            *width,
+            *height,
+            image_uri.as_deref(),
+            self_id,
+        ),
+        Operation::RemoveAnchoredFrame { story_id, self_id } => {
+            anchored_frame::apply_remove_anchored_frame(doc, story_id, self_id)
+        }
+        Operation::InsertFootnote {
+            story_id,
+            offset,
+            paragraph,
+            footnote_id,
+            text,
+            restore,
+        } => footnote::apply_insert_footnote(
+            doc,
+            story_id,
+            *offset,
+            *paragraph,
+            footnote_id,
+            text,
+            restore.as_deref(),
+        ),
+        Operation::RemoveFootnote {
+            story_id,
+            footnote_id,
+        } => footnote::apply_remove_footnote(doc, story_id, footnote_id),
+        Operation::InsertNote {
+            story_id,
+            offset,
+            paragraph,
+            note_id,
+            text,
+            user,
+            date,
+            restore,
+        } => note::apply_insert_note(
+            doc,
+            story_id,
+            *offset,
+            *paragraph,
+            note_id,
+            note::NewNote {
+                text,
+                user: user.as_deref(),
+                date: date.as_deref(),
+            },
+            restore.as_deref(),
+        ),
+        Operation::EditNote {
+            note_id,
+            text,
+            modification_date,
+        } => note::apply_edit_note(doc, note_id, text, modification_date.as_deref()),
+        Operation::DeleteNote { note_id } => note::apply_delete_note(doc, note_id),
+        Operation::AcceptTrackedChange { story_id, offset } => {
+            tracked_change::apply_accept(doc, story_id, *offset)
+        }
+        Operation::RejectTrackedChange { story_id, offset } => {
+            tracked_change::apply_reject(doc, story_id, *offset)
+        }
+        Operation::RestoreTrackedChange {
+            story_id,
+            offset,
+            remove,
+            change,
+        } => tracked_change::apply_restore(doc, story_id, *offset, *remove, change),
+        Operation::CreateBookmark {
+            bookmark_id,
+            name,
+            parent,
+            index,
+            destination,
+            page,
+            dest_id,
+        } => bookmark::apply_create_bookmark(
+            doc,
+            bookmark_id,
+            name,
+            parent.as_deref(),
+            *index,
+            destination.as_deref(),
+            page.as_deref(),
+            dest_id,
+        ),
+        Operation::DeleteBookmark { bookmark_id } => {
+            bookmark::apply_delete_bookmark(doc, bookmark_id)
+        }
+        Operation::RenameBookmark { bookmark_id, name } => {
+            bookmark::apply_rename_bookmark(doc, bookmark_id, name)
+        }
+        Operation::MoveBookmark {
+            bookmark_id,
+            parent,
+            index,
+        } => bookmark::apply_move_bookmark(doc, bookmark_id, parent.as_deref(), *index),
+        Operation::RestoreBookmarks { state } => bookmark::apply_restore_bookmarks(doc, state),
+        Operation::InsertEndnote {
+            story_id,
+            offset,
+            paragraph,
+            endnote_id,
+            range_id,
+            text,
+            restore,
+        } => endnote::apply_insert_endnote(
+            doc,
+            story_id,
+            *offset,
+            *paragraph,
+            endnote::NewEndnote {
+                endnote_id,
+                range_id,
+                text,
+            },
+            restore.as_deref(),
+        ),
+        Operation::DeleteEndnote { endnote_id } => endnote::apply_delete_endnote(doc, endnote_id),
+        Operation::CreateEndnoteStory {
+            spread_id,
+            page_id,
+            frame_id,
+            story_id,
+        } => endnote::apply_create_endnote_story(
+            doc,
+            endnote::EndnoteStoryIds {
+                spread_id: spread_id.as_deref(),
+                page_id: page_id.as_deref(),
+                frame_id,
+                story_id,
+            },
+        ),
+        Operation::InsertHyperlink {
+            story_id,
+            start,
+            end,
+            url,
+            source_id,
+            dest_id,
+            hyperlink_id,
+            page,
+        } => hyperlink::apply_insert_hyperlink(
+            doc,
+            story_id,
+            *start,
+            *end,
+            url,
+            source_id,
+            dest_id,
+            hyperlink_id,
+            page.as_deref(),
+        ),
+        Operation::RemoveHyperlink {
+            story_id,
+            start,
+            end,
+            url,
+            source_id,
+            dest_id,
+            hyperlink_id,
+            page,
+        } => hyperlink::apply_remove_hyperlink(
+            doc,
+            story_id,
+            *start,
+            *end,
+            url,
+            source_id,
+            dest_id,
+            hyperlink_id,
+            page.as_deref(),
+        ),
+        Operation::DeleteHyperlink { hyperlink_id } => {
+            hyperlink_edit::apply_delete_hyperlink(doc, hyperlink_id)
+        }
+        Operation::EditHyperlink {
+            hyperlink_id,
+            name,
+            url,
+            page,
+            dest_id,
+        } => hyperlink_edit::apply_edit_hyperlink(
+            doc,
+            hyperlink_id,
+            name.as_deref(),
+            url.as_deref(),
+            page.as_deref(),
+            dest_id,
+        ),
+        Operation::RestoreHyperlink { state } => {
+            hyperlink_edit::apply_restore_hyperlink(doc, state)
+        }
+        Operation::SetFieldValue {
+            story_id,
+            offset,
+            value,
+        } => apply_set_field_value(doc, story_id, *offset, value.as_deref()),
+        Operation::PlaceImage {
+            frame,
+            image_uri,
+            fit,
+        } => place_image::apply_place_image(doc, frame, image_uri.as_deref(), fit.as_deref()),
+        Operation::ReplaceImageBytes {
+            frame,
+            bytes,
+            prior_has_image_element,
+        } => replace_image_bytes::apply_replace_image_bytes(
+            doc,
+            frame,
+            bytes.as_deref(),
+            *prior_has_image_element,
+        ),
+        Operation::InsertGuide {
+            spread_id,
+            orientation,
+            position,
+            page_index,
+            guide_id,
+        } => apply_insert_guide(
+            doc,
+            spread_id,
+            *orientation,
+            *position,
+            *page_index,
+            guide_id.clone(),
+        ),
+        Operation::MoveGuide { guide_id, position } => apply_move_guide(doc, guide_id, *position),
+        Operation::DeleteGuide { guide_id } => apply_delete_guide(doc, guide_id),
+        Operation::SetConditionVisible { condition, visible } => {
+            apply_set_condition_visible(doc, condition, *visible)
+        }
+        Operation::SetFlowGrowRule { story_id, rule } => {
+            apply_set_flow_grow_rule(doc, story_id, rule)
+        }
+        Operation::ActivateConditionSet { set } => apply_activate_condition_set(doc, set),
+        Operation::RestoreConditionVisibility { states } => {
+            apply_restore_condition_visibility(doc, states)
+        }
+        Operation::MovePage {
+            page_id,
+            after_page_id,
+        } => apply_move_page(doc, page_id, after_page_id.as_deref()),
+        Operation::OnMaster { master_id, op } => master::apply_on_master(doc, master_id, op),
+        Operation::CreateMaster {
+            master_id,
+            name,
+            width_pt,
+            height_pt,
+            duplicate_of,
+            restore_json,
+        } => master::apply_create_master(
+            doc,
+            master_id,
+            name.as_deref(),
+            *width_pt,
+            *height_pt,
+            duplicate_of.as_deref(),
+            restore_json.as_deref(),
+        ),
+        Operation::DeleteMaster { master_id } => master::apply_delete_master(doc, master_id),
+        Operation::RestoreMaster { master_json } => master::apply_restore_master(doc, master_json),
+        Operation::RenameMaster { master_id, name } => {
+            master::apply_rename_master(doc, master_id, name.as_deref())
+        }
+        Operation::SetSpreadOrder { spreads } => apply_set_spread_order(doc, spreads),
+        Operation::ApplyMasterToPage { page, master } => {
+            apply_master_to_page(doc, page, master.as_deref())
+        }
+        Operation::DuplicatePage {
+            page,
+            clone_spread_json,
+        } => apply_duplicate_page(doc, page, clone_spread_json.as_deref()),
+        Operation::RemovePageClone {
+            page,
+            cloned_page,
+            story_ids,
+            hyperlink_ids,
+        } => apply_remove_page_clone(doc, page, cloned_page, story_ids, hyperlink_ids),
+        Operation::InsertSection {
+            at_page,
+            prefix,
+            numbering_style,
+            start_at,
+            self_id,
+        } => apply_insert_section(
+            doc,
+            at_page,
+            prefix.clone(),
+            numbering_style.clone(),
+            *start_at,
+            self_id.clone(),
+        ),
+        Operation::EditSection {
+            section_id,
+            prefix,
+            numbering_style,
+            start_at,
+        } => apply_edit_section(
+            doc,
+            section_id,
+            prefix.clone(),
+            numbering_style.clone(),
+            *start_at,
+        ),
+        Operation::DeleteSection { section_id } => apply_delete_section(doc, section_id),
+        Operation::SetDocumentMetadata { key, value, caller } => {
+            layer::apply_document_metadata(doc, key, value, caller)
+        }
+        Operation::CreateTextVariable {
+            self_id,
+            name,
+            variable_type,
+            contents,
+            text_before,
+            text_after,
+        } => layer::apply_create_text_variable(
+            doc,
+            self_id,
+            name,
+            variable_type,
+            contents,
+            text_before,
+            text_after,
+        ),
+        Operation::DeleteTextVariable { variable_id } => {
+            layer::apply_delete_text_variable(doc, variable_id)
+        }
+        Operation::SetRowHeight {
+            story_id,
+            table_id,
+            row,
+            height,
+        } => apply_set_row_height(doc, story_id, table_id, *row, *height),
+        Operation::SetColumnWidth {
+            story_id,
+            table_id,
+            col,
+            width,
+        } => apply_set_column_width(doc, story_id, table_id, *col, *width),
+        Operation::InsertTableRow {
+            story_id,
+            table_id,
+            at,
+            restore,
+        } => apply_insert_table_row(doc, story_id, table_id, *at, restore.as_deref()),
+        Operation::DeleteTableRow {
+            story_id,
+            table_id,
+            at,
+        } => apply_delete_table_row(doc, story_id, table_id, *at),
+        Operation::InsertTableColumn {
+            story_id,
+            table_id,
+            at,
+            restore,
+        } => apply_insert_table_column(doc, story_id, table_id, *at, restore.as_deref()),
+        Operation::DeleteTableColumn {
+            story_id,
+            table_id,
+            at,
+        } => apply_delete_table_column(doc, story_id, table_id, *at),
+        Operation::InsertHeaderRow {
+            story_id,
+            table_id,
+            restore,
+        } => apply_insert_band_row(
+            doc,
+            story_id,
+            table_id,
+            TableBand::Header,
+            restore.as_deref(),
+        ),
+        Operation::RemoveHeaderRow { story_id, table_id } => {
+            apply_remove_band_row(doc, story_id, table_id, TableBand::Header)
+        }
+        Operation::InsertFooterRow {
+            story_id,
+            table_id,
+            restore,
+        } => apply_insert_band_row(
+            doc,
+            story_id,
+            table_id,
+            TableBand::Footer,
+            restore.as_deref(),
+        ),
+        Operation::RemoveFooterRow { story_id, table_id } => {
+            apply_remove_band_row(doc, story_id, table_id, TableBand::Footer)
+        }
+        Operation::SetCellSpan {
+            story_id,
+            table_id,
+            row,
+            col,
+            row_span,
+            column_span,
+        } => apply_set_cell_span(doc, story_id, table_id, *row, *col, *row_span, *column_span),
+    }
+}
+
+/// SDK Phase 5 (v1 sweep) — apply a multi-target Pathfinder
+/// boolean. Reads every input's path, runs flo_curves CSG via
+/// `pathfinder::pathfinder_boolean`, then builds + applies an
+/// internal Batch (FramePath on kept + RemoveNode for each other).
+/// The returned AppliedOperation is the Batch — undo reverses
+/// everything in one Cmd-Z. Inverse restoration of the removed
+/// frames goes through the same path RemoveNode normally takes
+/// (specs captured at remove time).
+fn apply_pathfinder(
+    doc: &mut Document,
+    kept: &NodeId,
+    others: &[NodeId],
+    kind: PathfinderKind,
+) -> Result<AppliedOperation, OperationError> {
+    // 1. Snapshot every input's path. find_path_anchors_mut also
+    //    handles the "no anchors → bounds rectangle" fallback in
+    //    its callers; for Pathfinder we read anchors directly
+    //    since the result IS a path replacement.
+    let mut inputs: Vec<(Vec<paged_model::PathAnchor>, Vec<usize>)> =
+        Vec::with_capacity(1 + others.len());
+    for node in std::iter::once(kept).chain(others.iter()) {
+        let (anchors, starts) = read_path(doc, node)?;
+        inputs.push((anchors, starts));
+    }
+    // 2. Run the boolean.
+    let internal_kind = match kind {
+        PathfinderKind::Union => InternalPathfinderKind::Union,
+        PathfinderKind::Intersect => InternalPathfinderKind::Intersect,
+        PathfinderKind::Subtract => InternalPathfinderKind::Subtract,
+        PathfinderKind::Exclude => InternalPathfinderKind::Exclude,
+    };
+    let (result_anchors, result_starts) = pathfinder_boolean(&inputs, internal_kind);
+    // 3. Build the inner Batch.
+    let result_spec_anchors: Vec<PathAnchorSpec> = result_anchors
+        .iter()
+        .map(PathAnchorSpec::from_parse)
+        .collect();
+    let mut batch_children: Vec<Operation> = Vec::with_capacity(1 + others.len());
+    batch_children.push(Operation::SetProperty {
+        node: kept.clone(),
+        path: PropertyPath::FramePath,
+        value: Value::FramePath {
+            anchors: result_spec_anchors,
+            subpath_starts: result_starts,
+        },
+    });
+    for other in others {
+        batch_children.push(Operation::RemoveNode {
+            node: other.clone(),
+        });
+    }
+    let batch = Operation::Batch {
+        ops: batch_children,
+    };
+    // 4. Apply the Batch — the existing `apply_batch` machinery
+    //    rolls back on any child failure and produces the inverse.
+    let applied = apply_inner(doc, &batch)?;
+    // The op we record is the original PathfinderBoolean (so the
+    // forward op is meaningful in logs); the inverse is the
+    // Batch's inverse (which restores the removed frames + the
+    // kept frame's prior path).
+    Ok(AppliedOperation {
+        op: Operation::PathfinderBoolean {
+            kept: kept.clone(),
+            others: others.to_vec(),
+            op_kind: kind,
+        },
+        inverse: applied.inverse,
+        invalidation: applied.invalidation,
+    })
+}
+
+/// SDK Phase 5 (v1 sweep) — read a frame's full path. Returns
+/// the anchors + subpath_starts as a cloned snapshot. When the
+/// frame has no explicit anchors (a Rectangle declared via
+/// `GeometricBounds` alone), synthesises a four-corner closed
+/// path from the bounds so Pathfinder still has geometry to
+/// operate on.
+fn read_path(
+    doc: &Document,
+    node: &NodeId,
+) -> Result<(Vec<paged_model::PathAnchor>, Vec<usize>), OperationError> {
+    use paged_model::PathAnchor;
+    let raw = node.self_id();
+    for parsed in &doc.spreads {
+        match node {
+            NodeId::TextFrame(_) => {
+                if let Some(f) = parsed
+                    .spread
+                    .text_frames
+                    .iter()
+                    .find(|p| p.self_id.as_deref() == Some(raw))
+                {
+                    if !f.anchors.is_empty() {
+                        return Ok((f.anchors.clone(), f.subpath_starts.clone()));
+                    }
+                    return Ok((rect_anchors_from_bounds(f.bounds), vec![0]));
+                }
+            }
+            NodeId::Rectangle(_) => {
+                if let Some(f) = parsed
+                    .spread
+                    .rectangles
+                    .iter()
+                    .find(|p| p.self_id.as_deref() == Some(raw))
+                {
+                    if !f.anchors.is_empty() {
+                        return Ok((f.anchors.clone(), f.subpath_starts.clone()));
+                    }
+                    return Ok((rect_anchors_from_bounds(f.bounds), vec![0]));
+                }
+            }
+            NodeId::Oval(_) => {
+                if let Some(f) = parsed
+                    .spread
+                    .ovals
+                    .iter()
+                    .find(|p| p.self_id.as_deref() == Some(raw))
+                {
+                    return Ok((oval_anchors(f.bounds), vec![0]));
+                }
+            }
+            NodeId::Polygon(_) => {
+                if let Some(f) = parsed
+                    .spread
+                    .polygons
+                    .iter()
+                    .find(|p| p.self_id.as_deref() == Some(raw))
+                {
+                    return Ok((f.anchors.clone(), f.subpath_starts.clone()));
+                }
+            }
+            NodeId::GraphicLine(_) => {
+                if let Some(f) = parsed
+                    .spread
+                    .graphic_lines
+                    .iter()
+                    .find(|p| p.self_id.as_deref() == Some(raw))
+                {
+                    return Ok((f.anchors.clone(), f.subpath_starts.clone()));
+                }
+            }
+            _ => {}
+        }
+    }
+    let _ = PathAnchor {
+        anchor: (0.0, 0.0),
+        left: (0.0, 0.0),
+        right: (0.0, 0.0),
+    };
+    Err(OperationError::NodeNotFound(node.clone()))
+}
+
+/// The path an `<Oval>` is: the ellipse inscribed in its bounds as four
+/// cubic arcs, spelled the way InDesign spells one — edge midpoints
+/// bottom → right → top → left, each handle κ·r along the tangent. The
+/// model keeps an oval as bounds only, so every reader that needs its
+/// outline (the `pathAnchors` door, the planar arrangement, the
+/// pathfinder) takes it from here, in the oval's raw path space.
+pub fn oval_anchors(b: paged_model::Bounds) -> Vec<paged_model::PathAnchor> {
+    use paged_model::PathAnchor;
+    const KAPPA: f32 = 0.552_284_8;
+    let (cx, cy) = ((b.left + b.right) * 0.5, (b.top + b.bottom) * 0.5);
+    let kx = (b.right - b.left) * 0.5 * KAPPA;
+    let ky = (b.bottom - b.top) * 0.5 * KAPPA;
+    let point = |anchor: (f32, f32), left: (f32, f32), right: (f32, f32)| PathAnchor {
+        anchor,
+        left,
+        right,
+    };
+    vec![
+        point((cx, b.bottom), (cx - kx, b.bottom), (cx + kx, b.bottom)),
+        point((b.right, cy), (b.right, cy + ky), (b.right, cy - ky)),
+        point((cx, b.top), (cx + kx, b.top), (cx - kx, b.top)),
+        point((b.left, cy), (b.left, cy - ky), (b.left, cy + ky)),
+    ]
+}
+
+fn rect_anchors_from_bounds(b: paged_model::Bounds) -> Vec<paged_model::PathAnchor> {
+    use paged_model::PathAnchor;
+    let (t, l, r, btm) = (b.top, b.left, b.right, b.bottom);
+    let corner = |x: f32, y: f32| PathAnchor {
+        anchor: (x, y),
+        left: (x, y),
+        right: (x, y),
+    };
+    vec![corner(l, t), corner(r, t), corner(r, btm), corner(l, btm)]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn run_with(text: &str) -> paged_model::CharacterRun {
+        paged_model::CharacterRun {
+            text: text.to_string(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn split_run_at_partitions_by_char_index() {
+        let (l, r) = split_run_at(run_with("hello"), 2);
+        assert_eq!(l.text, "he");
+        assert_eq!(r.text, "llo");
+    }
+
+    #[test]
+    fn split_run_at_zero_keeps_all_on_the_right() {
+        let (l, r) = split_run_at(run_with("hello"), 0);
+        assert_eq!(l.text, "");
+        assert_eq!(r.text, "hello");
+    }
+
+    #[test]
+    fn split_run_at_or_past_end_keeps_all_on_the_left() {
+        let (l, r) = split_run_at(run_with("hi"), 2);
+        assert_eq!(l.text, "hi");
+        assert_eq!(r.text, "");
+        // char_idx beyond the char count clamps to the byte length.
+        let (l2, r2) = split_run_at(run_with("hi"), 99);
+        assert_eq!(l2.text, "hi");
+        assert_eq!(r2.text, "");
+    }
+
+    #[test]
+    fn split_run_at_respects_multibyte_char_boundaries() {
+        // "é" + "🚀" are 2- and 4-byte chars; splitting at char 1 must
+        // land on a valid UTF-8 boundary, not mid-codepoint.
+        let (l, r) = split_run_at(run_with("é🚀x"), 1);
+        assert_eq!(l.text, "é");
+        assert_eq!(r.text, "🚀x");
+    }
+}
+
+// ── module decomposition (audit 2026-06-11, 1.6 / 01 A2) ──────────────
+// apply.rs grew past 11k lines; split into per-domain submodules. The
+// glob imports preserve the former flat namespace (every helper still
+// calls every other helper) — purely a file-layout change, net-zero
+// behaviour. The named re-export keeps `crate::apply::new_*` stable for
+// lib.rs's callers.
+/// v55 — the paragraph stream a range op addresses: the story body (`cell:
+/// None`) or a table cell's own paragraphs. A `<Table>` hangs off a host
+/// paragraph's `table` field and the cell is matched by `(col, row)` — the same
+/// resolution `paged_canvas::mutate::find_cell_paragraphs_mut` does for text
+/// ops. `None` when the table or cell doesn't resolve (e.g. a stale address
+/// after the table shape changed).
+fn cell_paragraphs_mut<'a>(
+    story: &'a mut paged_model::Story,
+    cell: Option<&crate::operation::CellAddr>,
+) -> Option<&'a mut Vec<paged_model::Paragraph>> {
+    let Some(addr) = cell else {
+        return Some(&mut story.paragraphs);
+    };
+    for para in story.paragraphs.iter_mut() {
+        let Some(table) = para.table.as_mut() else {
+            continue;
+        };
+        if table.self_id.as_deref() != Some(addr.table_id.as_str()) {
+            continue;
+        }
+        for c in table.cells.iter_mut() {
+            if c.coords() == Some((addr.col, addr.row)) {
+                return Some(&mut c.paragraphs);
+            }
+        }
+    }
+    None
+}
+
+mod anchored_frame;
+mod batch_page;
+mod character;
+mod conditions;
+mod duplicate_nodes;
+pub use duplicate_nodes::{duplicate_demand, duplicate_roots, DuplicateDemand};
+mod bookmark;
+mod duplicate_page;
+mod endnote;
+mod flow;
+mod footnote;
+mod guides;
+mod helpers;
+mod hyperlink;
+mod hyperlink_edit;
+mod insert_node;
+mod layer;
+mod lock;
+mod note;
+mod tracked_change;
+/// ADR 132 — model → wire-spec readers, for the `Set` resolver: a
+/// virtual path on a swatch, gradient or numbering list is an edit of the
+/// whole spec, read here, merged and written back.
+pub use layer::{gradient_spec_from_entry, numbering_list_spec_from_def, swatch_spec_from_entry};
+pub use lock::is_locked;
+mod master;
+mod move_node;
+mod nested;
+mod opacity_mask;
+mod paragraph;
+pub use paragraph::caret_paragraphs;
+pub(crate) use paragraph::COMPOSER_EXPECTED;
+mod path_topology;
+mod place_image;
+mod planar_ops;
+
+/// `NodeSpec::Table::to_parse_table` mints its cells through the same
+/// helper the row / column inserts use, so a table's first cells and
+/// every cell added to it later wear the same InDesign defaults.
+pub(crate) use path_topology::new_table_cell;
+pub use planar_ops::element_path;
+mod remove_node;
+mod reorder;
+mod replace_image_bytes;
+mod sections;
+mod set_property;
+mod story;
+mod text_on_path;
+
+use batch_page::*;
+use character::*;
+use conditions::*;
+use duplicate_nodes::{apply_duplicate_nodes, apply_remove_duplicates};
+use duplicate_page::*;
+use flow::*;
+use guides::*;
+use helpers::*;
+use insert_node::*;
+use layer::*;
+use master::*;
+use move_node::*;
+use nested::*;
+use opacity_mask::*;
+use paragraph::*;
+use path_topology::*;
+use remove_node::*;
+use reorder::*;
+use sections::*;
+use set_property::*;
+use story::*;
+use text_on_path::*;
+
+pub(crate) use path_topology::{new_oval, new_rectangle, new_text_frame};

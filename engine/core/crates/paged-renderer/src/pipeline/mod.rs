@@ -1,0 +1,2053 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! End-to-end pipeline: `Document` → `DisplayList` → `RgbaImage`.
+//!
+//! Everything the inspect binary does minus the pretty-printing. This
+//! is the thin, reusable top-level Rust API that hosts (WASM binding,
+//! native tools, the fidelity harness) call into.
+//!
+//! The pipeline consumes `&paged_scene::Document` — parsing and resource
+//! walking live in that crate so we stay focused on layout + emission.
+
+use std::collections::HashMap;
+
+use bytes::Bytes;
+use paged_compose::{
+    emit_ellipse, emit_glyph_slice, emit_glyph_slice_stroke, emit_paragraph, emit_rect,
+    emit_stroke_rect, emit_stroke_rect_transformed, Color, DisplayList, DropShadow, GlyphOutliner,
+    Paint, PathData, PathSegment, Rect, Stroke, Transform, TtfOutliner,
+};
+use paged_model::{
+    to_linear_rgb, Graphic, GraphicLine, Oval, PathAnchor, Polygon, Rectangle, SectionWalk,
+    TextFrame, TextPath,
+};
+use paged_scene::Document;
+
+use crate::diagnostics::{Diagnostic, DiagnosticCode, RenderDiagnostics};
+use crate::module::{Geometry, ResolvedFrame};
+use crate::AssetResolver;
+
+mod anchored;
+mod auto_size;
+mod baseline_grid;
+mod blend_shadow;
+mod build_engine;
+mod color_paint;
+mod compose_opts;
+mod conditions;
+mod datefmt;
+mod decorations;
+mod deltas;
+mod font_table;
+mod footnotes;
+mod geom;
+mod image_convert;
+mod image_decode;
+mod images;
+mod keeps;
+mod placed_pdf;
+mod resume;
+mod ruby;
+/// C-26 — the inline-image cache key is shared with `paged-canvas`'s
+/// `placed_asset_bytes` door on purpose. Two copies of this format
+/// string that drift apart is exactly the bug C-26 was: the renderer
+/// caching an embedded payload under a name no reader could produce.
+pub use images::inline_image_cache_key;
+mod links;
+mod metrics;
+mod nested_styles;
+mod numbering;
+mod shapes;
+mod span_columns;
+mod stroke_geom;
+mod tables;
+mod text_frame;
+mod text_path;
+mod text_slots;
+
+pub use anchored::AnchoredImageEmit;
+use anchored::{emit_anchored_frames_for_paragraph, emit_anchored_rect_image};
+pub use datefmt::DateParts;
+// Doc-link-only imports: referenced from `///` comments in this file.
+#[cfg(doc)]
+use anchored::{emit_anchored_textframe_story, MAX_ANCHORED_STORY_RECURSION};
+#[cfg(doc)]
+use tables::emit_cell_paragraph;
+
+use images::{emit_oval_image, emit_polygon_image, emit_rectangle_image};
+use tables::emit_table_into_chain;
+
+pub(crate) use shapes::{
+    aligned_outline_path, blend_mode_from_idml, corner_rect_path, ellipse_outline_path, inset_rect,
+    per_corner_kinds, per_corner_radii, stroke_alignment_offset,
+};
+use shapes::{
+    emit_line_into, emit_oval_into, emit_oval_missing_image_placeholder,
+    emit_polygon_missing_image_placeholder, emit_rectangle_into,
+    emit_rectangle_missing_image_placeholder, emit_unrenderable_content_ghost_cross,
+    unit_ellipse_path,
+};
+#[cfg(test)]
+use shapes::{PLACEHOLDER_FILL_RGB, PLACEHOLDER_X_RGB, PLACEHOLDER_X_STROKE_PT};
+use shapes::{SUBSTITUTED_HIGHLIGHT_B, SUBSTITUTED_HIGHLIGHT_G, SUBSTITUTED_HIGHLIGHT_R};
+
+pub(crate) use blend_shadow::{
+    emit_blended_shadow, frame_group_opacity, frame_needs_blend_group, pop_blend_group,
+    push_blend_group, push_target_group, resolve_frame_shadow, shadow_group_blend, target_opacity,
+};
+use build_engine::*;
+pub use build_engine::{index_paragraphs, toc_paragraphs};
+pub(crate) use color_paint::{apply_fill_tint_ctx, object_tint, stroke_for};
+use color_paint::{build_cmyk_transform, CmykTransformRef};
+use color_paint::{
+    build_footnote_paint_picker, build_run_paint_picker_resolved, build_run_stroke_picker,
+};
+pub use color_paint::{
+    build_run_paint_picker, build_run_paint_picker_with_cmyk, color_id_to_paint,
+    color_id_to_paint_with_list, color_id_to_paint_with_list_dir, gradient_midpoint_paint,
+    resolve_fill, resolve_rect_fill, resolve_rect_stroke, resolve_stroke, CmykTransformCache,
+    ColorCtx, RunPaintPicker, RunStrokePicker,
+};
+#[cfg(test)]
+use color_paint::{color_lerp, linear_gradient_endpoints, midpoint_blend};
+use compose_opts::*;
+use decorations::*;
+use deltas::*;
+use font_table::*;
+pub use font_table::{FontKey, FontTable};
+use footnotes::*;
+use geom::*;
+pub(crate) use geom::{
+    fnv_1a_u64, frame_fill_is_transparent, frame_stroke_is_visible, path_signature,
+    transform_bounds, wght_for_font_style,
+};
+use image_convert::{cmyk32_to_rgba, l16_to_rgba, l8_to_rgba, rgb24_to_rgba};
+use image_decode::decode_image_bytes;
+#[cfg(test)]
+use image_decode::decode_image_bytes_with_target_max;
+use metrics::map_tab_alignment;
+pub use metrics::*;
+pub use nested_styles::*;
+#[cfg(test)]
+use numbering::list_prefix;
+pub use numbering::story_list_labels;
+use numbering::{bullet_marker_character_style, list_prefix_with_levels, marker_run_attrs};
+#[cfg(test)]
+use numbering::{format_number, substitute_numbering_expression};
+pub use resume::{EditSpan, StoryResume, StoryResumeStore};
+use text_frame::*;
+#[cfg(test)]
+use text_path::polygon_path_from_anchors;
+pub(crate) use text_path::polygon_path_from_anchors_with_open;
+use text_path::{emit_polygon_into, emit_text_path_into};
+
+/// Per-family override of the metrics the renderer uses for
+/// baseline-placement math. Glyph outlines still come from whichever
+/// font the asset resolver returned for that family; only the values
+/// `first_baseline_for_frame` reads (ascender, optional cap-height /
+/// x-height) are sourced here.
+///
+/// Use case: an IDML names "Arial" but you've substituted Roboto via
+/// `--font-family Arial=Roboto-Regular.ttf`. Roboto's ascender (~0.928)
+/// differs from Arial's (~0.905) and the per-frame baseline drift
+/// dominates the per-pixel ΔE against an Arial-rendered reference PDF.
+/// Registering Arial's metrics here pins the baseline math without
+/// touching glyph rendering.
+///
+/// Values are em-fractions (parsed-from-font fields are scaled by
+/// `units_per_em`).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FontMetricsOverride {
+    pub ascender: f32,
+    pub cap_height: Option<f32>,
+    pub x_height: Option<f32>,
+}
+
+/// W1.18a — the document's date clock for `CreationDate` /
+/// `ModificationDate` / `OutputDate` text variables.
+///
+/// **Determinism.** Date variables must NEVER read the wall clock —
+/// two renders of the same model on different days would otherwise
+/// differ. Every field is an explicit [`DateParts`] supplied by the
+/// caller (or defaulted to [`DocumentClock::EPOCH`], a documented
+/// constant). `OutputDate` — the moment of *this* render — is the
+/// `output` field, defaulting to `modification` so an un-set clock
+/// still produces a stable, sensible value rather than "today".
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DocumentClock {
+    /// `CreationDateType` — when the document was first authored.
+    pub creation: DateParts,
+    /// `ModificationDateType` — when the document was last edited.
+    pub modification: DateParts,
+    /// `OutputDateType` — the instant of this render/export. Injected
+    /// (never `now()`) so output is reproducible; defaults to
+    /// `modification`.
+    pub output: DateParts,
+}
+
+impl DocumentClock {
+    /// A documented, deterministic fallback when the package carries no
+    /// metadata and the caller supplies no clock: the Unix epoch
+    /// midnight, 1970-01-01 00:00:00. Stable across machines and runs.
+    pub const EPOCH: DateParts = DateParts {
+        year: 1970,
+        month: 1,
+        day: 1,
+        hour: 0,
+        minute: 0,
+        second: 0,
+    };
+
+    /// Build a clock from optional package-derived creation /
+    /// modification dates. `output` defaults to `modification` (the
+    /// task's documented default) so OutputDate is deterministic even
+    /// when the caller doesn't pin a render instant. Absent dates fall
+    /// back to [`Self::EPOCH`].
+    pub fn from_metadata(creation: Option<DateParts>, modification: Option<DateParts>) -> Self {
+        let creation = creation.unwrap_or(Self::EPOCH);
+        let modification = modification.unwrap_or(creation);
+        Self {
+            creation,
+            modification,
+            output: modification,
+        }
+    }
+}
+
+impl Default for DocumentClock {
+    fn default() -> Self {
+        Self {
+            creation: Self::EPOCH,
+            modification: Self::EPOCH,
+            output: Self::EPOCH,
+        }
+    }
+}
+
+/// Knobs the caller tunes when driving the full pipeline.
+#[derive(Clone)]
+pub struct PipelineOptions<'a> {
+    /// Default font bytes. Used as a fallback for any paragraph
+    /// whose `AppliedFont` doesn't resolve via `assets`. `None` plus
+    /// no resolver hit → text is skipped.
+    pub font: Option<&'a [u8]>,
+    /// Asset resolver consulted per (family, style). When set, the
+    /// pipeline pre-resolves every distinct font referenced in the
+    /// document; runs without a hit fall back to `font`.
+    pub assets: Option<&'a dyn AssetResolver>,
+    /// Fallback point size for runs with no `PointSize` attribute.
+    pub default_point_size: f32,
+    /// Fallback column width in pt when a paragraph has no frame
+    /// (extremely rare).
+    pub fallback_column_width_pt: Option<f32>,
+    /// W2 — paint a story's glyphs at their text frame's z position
+    /// instead of on top of every page item.
+    ///
+    /// A story is emitted after the whole page walk (the emitter needs
+    /// the frame chain, which spans pages), so its glyphs land at the
+    /// end of each page's command list. InDesign paints them at the
+    /// frame's own slot: a panel above a text frame HIDES its text, and
+    /// our canvas hit-tester already sorts that way, so paint and
+    /// selection disagree when this is off. Default `true`; `false`
+    /// reproduces the pre-W2 command stream byte for byte.
+    pub text_at_frame_z: bool,
+    /// Fill paint for frames that have no resolvable FillColor.
+    pub fallback_frame_fill: Paint,
+    /// Fill paint for runs that have no resolvable FillColor.
+    pub fallback_text_paint: Paint,
+    /// CMYK ICC profile bytes. When present (and on a target with
+    /// lcms2 available — i.e. not wasm32), CMYK swatches are routed
+    /// through ICC instead of the naive math in `paged-parse::graphic`.
+    /// None → naive conversion (existing behaviour).
+    pub cmyk_icc_profile: Option<&'a [u8]>,
+    /// Concept 2 — rendering intent for the CMYK display transform.
+    /// The default reproduces the previously hardcoded behaviour
+    /// (Relative Colorimetric on native; qcms maps it per target).
+    pub cmyk_intent: paged_color::Intent,
+    /// Concept 2 — black-point compensation for the CMYK display
+    /// transform. Default `true` (the previously hardcoded value).
+    pub cmyk_bpc: bool,
+    /// Concept 2 — the Ink Manager's "Use Standard Lab Values for
+    /// Spots". With this on, a spot swatch whose PRIMARY space is Lab
+    /// is displayed from those measured values instead of through its
+    /// CMYK alternate; the alternate still supplies the paint's CMYK
+    /// channels, so separations and overprint are untouched. Default
+    /// `false` — InDesign's default, and the setting the fidelity
+    /// corpus's reference PDFs were exported under.
+    pub use_standard_lab_for_spots: bool,
+    /// Concept 3 (PDF export) — record the glyph-run side-channel
+    /// on every page's display list so the exporter can emit real
+    /// text. Default `false`: the live canvas build never pays for
+    /// it and the command stream stays byte-identical.
+    pub collect_glyph_runs: bool,
+    /// W1.4 (PDF export) — record the link-region side-channel on
+    /// every page's display list so the exporter can emit `/Annots`
+    /// Link annotations for hyperlinks / cross-references. Default
+    /// `false`: the live canvas build never pays for it.
+    pub collect_link_regions: bool,
+    /// Synthetic drop shadow applied to every TextFrame and
+    /// Rectangle. Useful for tooling demos and as a stopgap until
+    /// `<TransparencySetting>` parsing lands and per-frame effects
+    /// flow from the IDML itself.
+    pub frame_drop_shadow: Option<DropShadow>,
+    /// Per-family metric overrides keyed by IDML `AppliedFont` name.
+    /// When `first_baseline_for_frame` resolves a run's family that
+    /// matches an entry here, the override wins over the metrics
+    /// parsed from the substitute font's bytes. Empty by default.
+    pub font_metrics_overrides: &'a [(String, FontMetricsOverride)],
+    /// When `true` (default), frames that nest an `<Image>` (or
+    /// `<EPSImage>` / `<PDF>` / `<ImportedPage>`) whose link cannot be
+    /// resolved are stamped with InDesign's missing-image placeholder
+    /// — a 50% grey fill clipped to the host path plus two 1.5pt black
+    /// diagonal stroke segments. Templates routinely ship with broken
+    /// links so every "Your Image Here" slot ends up looking like the
+    /// IDML's reference PDF instead of falling back to the frame's raw
+    /// fill.
+    pub missing_image_placeholder: bool,
+    /// A3/A4 — degraded-asset markers for *interactive* builds: a pink
+    /// highlight painted behind text whose font was substituted at the
+    /// resolver seam, and a stroke-only ghost-cross over inline-EPS/PDF
+    /// frames whose link is missing (visually distinct from the grey-X
+    /// missing-image placeholder — the artwork exists, we just can't
+    /// rasterise it). Default `false` so exports and the fidelity gate
+    /// stay pixel-identical; the canvas enables it for live builds only.
+    pub degraded_asset_markers: bool,
+    /// ADR 026 — generated-page counts per growing story, carried
+    /// between builds. Read as the starting point (so an edit usually
+    /// settles in one build) and written with the counts the build settled
+    /// on. `None` starts every growing story from zero.
+    pub grow_hint: Option<&'a std::cell::RefCell<HashMap<String, u32>>>,
+    /// Track 2: when true, the renderer records one [`BreakRecord`] per
+    /// laid-out line into [`BuiltDocument::breaks`]. Cheap (Vec push
+    /// per line) and gated so production renders pay zero cost.
+    pub collect_breaks: bool,
+    /// Cycle 6 Track 1: when `collect_breaks` is on, restrict
+    /// collection to lines whose `story_id` matches. `None` ⇒ collect
+    /// from every story (cycle-5 behaviour). Used by the A/B harness
+    /// to isolate a single body story from pack-wide structural
+    /// divergence noise.
+    pub break_story_filter: Option<String>,
+    /// Cycle 6 Track 1: half-open `[start, end)` page-index filter
+    /// for break collection. `None` ⇒ no filter. ANDs with
+    /// `break_story_filter` when both are set.
+    pub break_page_range: Option<std::ops::Range<u32>>,
+    /// Perf-S — persistent `URI → DecodedImage` cache. When `Some`,
+    /// `build_document` reuses entries instead of re-decoding every
+    /// image on every call. The same `RefCell` shared across multiple
+    /// `build_document` calls amortises decode cost — critical for
+    /// gesture rebuilds on image-heavy fixtures, where the per-call
+    /// scratch cache otherwise dominates the rebuild time (5e perf
+    /// finding: ~1s per `update_gesture` on `brand-guidelines`, 99%
+    /// of which is image decoding). `None` falls back to the v0
+    /// behaviour: a fresh local cache per call.
+    pub image_decode_cache:
+        Option<&'a std::cell::RefCell<HashMap<String, paged_compose::DecodedImage>>>,
+    /// Perf-FontTable — pre-built shaping table. When `Some`,
+    /// `build_document` skips its internal `FontTable::build` call
+    /// (which walks every paragraph + resolver-fetches every font
+    /// and costs ~225ms on a multi-spread fixture). Callers that
+    /// own the document for multiple builds (e.g. `CanvasModel`)
+    /// should pre-build once and pass `&self.font_table` here on
+    /// every subsequent rebuild. `None` ⇒ build fresh per call.
+    pub pre_built_font_table: Option<&'a FontTable>,
+    /// ADR 027 plan step 2 — the CMYK display transform kept across
+    /// builds, keyed by profile bytes, intent and black-point
+    /// compensation. `None` ⇒ build it fresh per call (twice for a
+    /// document with a post-layout pass).
+    pub cmyk_transform_cache: Option<&'a CmykTransformCache>,
+    /// Perf-MasterText — per-(master_frame_self_id, page_idx) cache
+    /// of the DisplayList delta produced by the master-text pass.
+    /// Master stories (page-number footers, running headers) are
+    /// stable across gesture-driven rebuilds — they depend only on
+    /// the master frame's content + page index + page label.
+    /// The cache stores path entries + commands with path_ids
+    /// RELATIVE to the path-buffer state at emit-start, so on hit
+    /// we can splice the delta into a different per-build state
+    /// without renumbering pre-existing references. Entries that
+    /// touched the gradient or image pools during emission are
+    /// marked uncacheable and skip the cache — covers rare master
+    /// frames with gradient fills or embedded images. ~161ms
+    /// savings per rebuild on a multi-spread fixture.
+    pub master_text_emit_cache:
+        Option<&'a std::cell::RefCell<HashMap<(String, usize), MasterTextEmitDelta>>>,
+    /// Perf-BodyStory — per-(story_id, signature) cache of the
+    /// multi-page DisplayList delta produced by the body-story
+    /// pass. The signature hashes the chain's frames (bounds +
+    /// transforms) + the wrap_rects on the chain's host pages,
+    /// so a story whose chain doesn't include the dragged frame
+    /// AND whose chain pages don't see a wrap-rect change keeps
+    /// hitting the cache during gestures. The body-story pass is
+    /// the largest single cost in `build_document` on a multi-
+    /// spread fixture (~613ms); most stories are unaffected by
+    /// any given gesture, so the win ratio is high.
+    pub body_story_emit_cache:
+        Option<&'a std::cell::RefCell<HashMap<(String, u64), BodyStoryEmissionDelta>>>,
+    /// ADR 027 plan step 3 — each story's settled keep-option
+    /// breaks from the previous build, read as the keeps fixpoint's
+    /// starting point and written with the breaks the build settled on.
+    /// Only a story named in [`Self::keep_seed_hints`] is seeded. `None`
+    /// starts every fixpoint from no forced breaks (the cold build).
+    pub keep_seeds: Option<&'a KeepSeedStore>,
+    /// Story id → index of the first paragraph an edit changed since the
+    /// build that wrote [`Self::keep_seeds`]. Paragraphs before it are
+    /// unchanged, which is what makes their breaks reusable.
+    pub keep_seed_hints: Option<&'a HashMap<String, u32>>,
+    /// ADR 027 plan step 6 — each story's previous emission with a
+    /// mark per paragraph, so an edited story resumes at the edit and stops
+    /// where its flow rejoins the previous one. Written for the stories
+    /// that can be resumed, read only for a story named in
+    /// [`Self::edit_spans`]. `None` re-emits every edited story whole.
+    pub story_resume: Option<&'a StoryResumeStore>,
+    /// Story id → the paragraphs a single text edit changed since the
+    /// build that wrote [`Self::story_resume`].
+    pub edit_spans: Option<&'a HashMap<String, EditSpan>>,
+    /// A counter the caller bumps per build; a resume record is never read
+    /// back in the build that wrote it.
+    pub build_generation: u64,
+    /// ADR 027 plan step 7 — a print of each master-text emission
+    /// (frame id, page id, post-layout pass) from the previous build, so a
+    /// master re-emitted with identical output does not mark its page
+    /// fresh ([`BuiltDocument::fresh_pages`]). Read and written per build.
+    pub emission_prints: Option<&'a EmissionPrints>,
+    /// ADR 027 plan step 7 — the previous build's pages. A page
+    /// this build laid nothing out on afresh (see
+    /// [`BuiltDocument::fresh_pages`]) and that has the same id at the same
+    /// index is the previous page by construction: it is moved in instead,
+    /// and the per-page post-passes (footnote pools, z-slot relocation,
+    /// transparency-group fit) skip it. The caller passes it only for a
+    /// build whose commits leave the frame pass untouched.
+    pub previous_pages: Option<&'a std::cell::RefCell<Vec<BuiltPage>>>,
+    /// ADR 028 — the keep breaks carried from one grow build to the next
+    /// WITHIN a [`build_document`] call (the same text over a chain that
+    /// grew at its end). `build_document` sets it; callers leave it `None`.
+    pub keep_carry: Option<&'a KeepSeedStore>,
+    /// W1.18a — the date clock for `CreationDate` / `ModificationDate` /
+    /// `OutputDate` text variables. Explicit + injectable so date
+    /// variables resolve deterministically (never the wall clock). The
+    /// caller pins package-derived dates here; the default
+    /// ([`DocumentClock::EPOCH`]) renders a stable constant rather than
+    /// "today".
+    pub document_clock: DocumentClock,
+    /// C-1 — plugin scene layers keyed by frame element id (`Self`). When
+    /// a body frame's id has an entry, its vector [`SceneLayer`] is lowered
+    /// into the frame's content box (transformed by the frame's
+    /// `ItemTransform`, clipped to the content box) right after the frame's
+    /// own content, so a plugin renders inside a frame through the same
+    /// display-list → Vello/tiny-skia path. `None` (the default) is the
+    /// no-plugin path and costs nothing.
+    pub scene_layers: Option<&'a std::collections::HashMap<String, paged_compose::SceneLayer>>,
+    /// v70 — faces registered for scene-layer text ONLY (a plugin's own
+    /// fonts). A scene text run resolves here first, then through
+    /// [`Self::assets`]; document text, the font table and substitution
+    /// tracing never read it, so a plugin face cannot stand in for a font
+    /// the document lacks. `None` (the default): scene text resolves
+    /// through the document registry alone, as before.
+    pub scene_fonts: Option<&'a dyn AssetResolver>,
+    /// C-6 (I-06) — image resource providers keyed by frame element id
+    /// (`Self`). When a body frame's id has an entry, the renderer pulls
+    /// pyramid tiles from the provider at the mip level matching
+    /// [`Self::render_scale`] and assembles them into the frame's content
+    /// box as ordinary `DisplayCommand::Image` entries (the same lane the
+    /// C-1 image scene layer + placed assets use). Missing tiles are
+    /// recorded on `BuiltPage::resource_tiles_needed` for the host to fill
+    /// asynchronously — compose never blocks. `None` (the default) keeps
+    /// the existing whole-image lane and costs nothing. Keyed by frame id
+    /// (the worker maps the `x-paged-image:<frame>` claim id back to the
+    /// frame before building); the entry's `image_id` is what the
+    /// emitted `ResourceTilesNeeded` carries.
+    pub resource_providers:
+        Option<&'a std::collections::HashMap<String, ResourceProviderEntry<'a>>>,
+    /// C-6 — the rasteriser scale (px-per-content-pt) the assembled tiles
+    /// will be drawn at, used only to pick the pyramid mip level
+    /// ([`crate::resource_provider::mip_level_for_scale`]). Default `1.0`
+    /// (full resolution). The display list itself stays
+    /// resolution-independent: this is a *hint* for which level of detail
+    /// to assemble, not a geometry scale.
+    pub render_scale: f32,
+}
+
+/// C-6 — one frame's claimed image-resource entry on [`PipelineOptions`]:
+/// the provider to pull tiles from, the pyramid geometry, and the
+/// provider-claimed `image_id` the [`crate::resource_provider::
+/// ResourceTilesNeeded`] signal carries. Borrowed (not owned) so the
+/// worker's cache stays the single source of truth across rebuilds.
+#[derive(Clone, Copy)]
+pub struct ResourceProviderEntry<'a> {
+    /// Provider-claimed id (`x-paged-image:<frame>`); echoed in the
+    /// `ResourceTilesNeeded` request so the host knows which claim to fill.
+    pub image_id: &'a str,
+    /// Pyramid geometry (base extent, level count, tile size).
+    pub pyramid: crate::resource_provider::ResourcePyramid,
+    /// The tile source. One provider may back many claimed images.
+    pub provider: &'a dyn crate::resource_provider::ImageResourceProvider,
+}
+
+/// Perf-BodyStory — captured multi-page emission delta from one
+/// body-story pass iteration. The per-page entries reuse
+/// `MasterTextEmitDelta`'s relative-path-id rebase trick AND
+/// also carry the `story_layout` + `footnotes` entries the emit
+/// would have appended so caret/hit-test queries and per-page
+/// footnote pools land in the same shape as a non-cached build.
+/// The anchored + breaks side-channels survive verbatim because
+/// their contents are page-indexed and pool-independent.
+#[derive(Debug, Clone)]
+pub struct BodyStoryEmissionDelta {
+    pub per_page: Vec<(usize, std::sync::Arc<BodyStoryPageDelta>)>,
+    pub anchored: Vec<AnchoredImageEmit>,
+    pub breaks: Vec<BreakRecord>,
+    /// ADR 027 plan step 4 — the diagnostics the emit reported
+    /// (overset, ...), replayed on a hit, so a story that reports one is
+    /// cacheable too.
+    pub diagnostics: Vec<Diagnostic>,
+    /// The cross-story numbering ledger after the story, when the
+    /// document has one. The key carries the ledger before it, so a hit
+    /// replays the story's ledger update by restoring this.
+    pub ledger_out: Option<HashMap<String, u32>>,
+    /// What the emit added to the build's [`PipelineStats`].
+    pub stats: PipelineStats,
+    /// The overset the emit measured, replayed on a hit like the
+    /// diagnostics so the page-growth loop can still size its next pass.
+    pub(crate) overset: Option<OversetMeasure>,
+}
+
+/// ADR 027 plan step 3 — one story's settled keep-option breaks,
+/// kept from one build to the next.
+///
+/// Every forced break records the frame it was decided in and the line
+/// that opened that frame, and holds only while both match (ADR 028; the
+/// `keeps` module doc), so the keeps fixpoint settles on the same breaks
+/// from any start whose breaks were decided on the same text. The seed is
+/// the breaks decided wholly before the edited paragraph (`e`): their
+/// paragraph and the next end before it. The rest are settled again.
+#[derive(Debug, Clone, Default)]
+pub struct KeepSeed {
+    pub(crate) forced: keeps::ForcedBreaks,
+    /// `body_story_signature` of the chain the breaks were settled on.
+    pub(crate) chain_sig: u64,
+}
+
+/// (frame id, page id, post-layout pass) → print of a master-text
+/// emission (see [`PipelineOptions::emission_prints`]).
+pub type EmissionPrints = std::cell::RefCell<HashMap<(String, String, bool), u64>>;
+
+/// Story id and "is the post-layout pass" → [`KeepSeed`].
+pub type KeepSeedStore = std::cell::RefCell<HashMap<(String, bool), KeepSeed>>;
+
+/// Perf-BodyStory — single page's worth of captured emission state.
+/// Splice on hit: push `paths` through `PathBuffer::push_anon`
+/// (rebasing each command's path-ids by the current pool size),
+/// extend `pages[i].story_layout` with `story_layout`, and extend
+/// `pages[i].footnotes` / `pages[i].cell_rects` likewise.
+#[derive(Debug, Clone)]
+pub struct BodyStoryPageDelta {
+    pub paths: Vec<paged_compose::PathData>,
+    /// The intern key of each of `paths` (`None` = anonymous), so the
+    /// replay registers them as the emit did (ADR 027).
+    pub path_keys: Vec<Option<u64>>,
+    /// The page's path-buffer fingerprint before the story emitted: a
+    /// hit is spliced only into a buffer that has it, which is what makes
+    /// the delta's path ids (including references to paths an earlier
+    /// emit interned) resolve as they did.
+    pub pre_fingerprint: u64,
+    pub commands: Vec<paged_compose::DisplayCommand>,
+    pub story_layout: Vec<LineLayout>,
+    pub footnotes: Vec<EmittedFootnote>,
+    /// The table cell rects the story pushed on the page (the cell
+    /// hit-test map), replayed like `story_layout`.
+    pub cell_rects: Vec<CellRect>,
+    /// W2 — where each chain frame's piece of `commands` begins,
+    /// relative to the start of the delta: `(chain_idx, rel_start)`,
+    /// ascending. A replayed delta is appended at the page tail, so
+    /// these are what let the relocation pass cut it back into
+    /// per-frame blocks and move each to its own z-slot.
+    pub segments: Vec<(usize, usize)>,
+}
+
+/// Perf-MasterText — captured DisplayList delta for one
+/// `(master_frame_self_id, page_idx)` emission, used by
+/// `PipelineOptions::master_text_emit_cache`. The `paths` and
+/// `commands` vectors are produced by snapshotting the page's
+/// PathBuffer + commands vec around the emit, then extracting
+/// the new entries. Path_ids in `commands` are RELATIVE — i.e.
+/// `0` means the first new path; replay adds the current
+/// `page.list.paths.len()` to remap.
+#[derive(Debug, Clone)]
+pub struct MasterTextEmitDelta {
+    /// Raw path geometries appended by emit (no intern dedup);
+    /// replay pushes them via `PathBuffer::push_anon` so the IDs
+    /// stay sequential and the relative offsets in `commands`
+    /// resolve correctly.
+    pub paths: Vec<paged_compose::PathData>,
+    /// The intern key of each of `paths` (ADR 027).
+    pub path_keys: Vec<Option<u64>>,
+    /// The page's path-buffer fingerprint before the emit; a hit is
+    /// spliced only into a buffer that has it.
+    pub pre_fingerprint: u64,
+    /// The `story_layout` lines the emit appended to the page (caret and
+    /// hit-test geometry), replayed on a hit like the commands.
+    pub story_layout: Vec<LineLayout>,
+    /// Commands appended by emit, with path-id fields rebased to
+    /// `0..paths.len()`. Replay adds the current path-buffer
+    /// size to each id before pushing.
+    pub commands: Vec<paged_compose::DisplayCommand>,
+    /// Hash of the page-numbering context (labels, numbers, sections,
+    /// page count) the delta was emitted under. A hit under a different
+    /// context is a miss: the text printed page numbers that changed.
+    pub numbering: u64,
+}
+
+impl std::fmt::Debug for PipelineOptions<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PipelineOptions")
+            .field("font", &self.font.map(|b| b.len()))
+            .field("assets", &self.assets.is_some())
+            .field("default_point_size", &self.default_point_size)
+            .field("fallback_column_width_pt", &self.fallback_column_width_pt)
+            .field("cmyk_icc_profile", &self.cmyk_icc_profile.map(|b| b.len()))
+            .field("frame_drop_shadow", &self.frame_drop_shadow)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Default for PipelineOptions<'_> {
+    fn default() -> Self {
+        Self {
+            font: None,
+            assets: None,
+            default_point_size: 12.0,
+            fallback_column_width_pt: None,
+            text_at_frame_z: true,
+            fallback_frame_fill: Paint::Solid(Color::rgba(0.92, 0.92, 0.92, 1.0)),
+            fallback_text_paint: Paint::Solid(Color::BLACK),
+            cmyk_icc_profile: None,
+            cmyk_intent: paged_color::Intent::RelativeColorimetric,
+            cmyk_bpc: true,
+            use_standard_lab_for_spots: false,
+            collect_glyph_runs: false,
+            collect_link_regions: false,
+            frame_drop_shadow: None,
+            font_metrics_overrides: &[],
+            missing_image_placeholder: true,
+            degraded_asset_markers: false,
+            grow_hint: None,
+            collect_breaks: false,
+            break_story_filter: None,
+            break_page_range: None,
+            image_decode_cache: None,
+            pre_built_font_table: None,
+            cmyk_transform_cache: None,
+            master_text_emit_cache: None,
+            body_story_emit_cache: None,
+            keep_seeds: None,
+            keep_seed_hints: None,
+            story_resume: None,
+            edit_spans: None,
+            build_generation: 0,
+            emission_prints: None,
+            previous_pages: None,
+            keep_carry: None,
+            document_clock: DocumentClock::default(),
+            scene_layers: None,
+            scene_fonts: None,
+            resource_providers: None,
+            render_scale: 1.0,
+        }
+    }
+}
+
+/// Stable page identity, independent of position in the page vector.
+///
+/// Derived from the IDML `<Page Self="...">` attribute where present;
+/// synthesised as `"page-<spread_idx>-<local_idx>"` when missing
+/// (older / synthetic fixtures without `Self`). The canvas keys
+/// display-list caches and LOD tiles by `PageId`, so the value must
+/// stay stable across re-layouts — only document-structural edits
+/// (insert/delete page) should ever change the set of `PageId`s.
+/// Re-export: `PageId` moved to `paged-wire`, the leaf crate carrying
+/// the wire vocabulary, so the light `paged-introspect` can name a page
+/// without depending on the renderer. Every `paged_renderer::PageId`
+/// call site is unchanged.
+pub use paged_wire::PageId;
+
+/// Page bounding box and display-list built from a `Document`.
+#[derive(Debug)]
+pub struct BuiltPage {
+    /// Stable identity for cache keys (LOD tiers, salsa queries, the
+    /// canvas worker's `display_list_for_page` lookups). Today every
+    /// page in `BuiltDocument::pages` has a unique `id`; we don't
+    /// rely on positional indexing in callers.
+    pub id: PageId,
+    pub width_pt: f32,
+    pub height_pt: f32,
+    /// Page origin in spread coordinates (top-left). The display list's
+    /// commands are page-relative — the rasterizer treats (0, 0) as
+    /// the page's top-left corner regardless of where the page sits in
+    /// its parent spread. Stays in spread-INNER coords (pre-spread-
+    /// ItemTransform); the spread's rotation/scale rides
+    /// `spread_transform` and is applied *about* this origin.
+    pub spread_origin: (f32, f32),
+    /// W1.9 — the LINEAR part (rotation / scale, translation dropped) of
+    /// the parent `<Spread>` / `<MasterSpread>`'s own `ItemTransform`.
+    /// InDesign restricts a spread transform to translation +
+    /// 0/90/180/270 rotation; the translation cancels against
+    /// `spread_origin` (both spread-inner) so only the linear part needs
+    /// to ride here. It is applied about the page origin:
+    /// `frame_outer_transform` builds
+    /// `spread_transform ∘ translate(-spread_origin) ∘ item_transform`,
+    /// rotating/scaling the whole page's content in place. The canvas
+    /// hit-tester reads the SAME field and inverts it, so painter and
+    /// hit-test agree by construction (cycle-8: a transform the painter
+    /// applies but the hit-tester ignores breaks selection silently).
+    /// `IDENTITY` (the common case) makes the composition byte-identical
+    /// to the pre-W1.9 `translate(-spread_origin) ∘ item_transform`.
+    pub spread_transform: Transform,
+    pub list: DisplayList,
+    /// Bumped whenever any frame on this page is re-laid-out. The
+    /// canvas combines `(id, layout_generation, numbering_generation)`
+    /// as the cache key for display-list-derived artifacts (snapshot,
+    /// mid-res, live tiles). Today the whole pipeline is one-shot, so
+    /// every build starts every page at 0; Tier 3 (Phase 2) and
+    /// incremental Tier 2 (Phase 3) populate this for real.
+    pub layout_generation: u64,
+    /// Bumped whenever any resolved field on this page changes value.
+    /// Reserved for Phase 2 resolution work — today always 0.
+    pub numbering_generation: u64,
+    /// Aggregated counts, useful for logging / CI reporting.
+    pub stats: PipelineStats,
+    /// Phase 3 (correctness layer) — per-line layout index for every
+    /// laid-out paragraph whose visible glyphs land on this page.
+    /// Carries the per-cluster page-local positions the canvas needs
+    /// to (a) hit-test by character offset, (b) place the caret, and
+    /// (c) compute selection geometry (rect-per-line). Empty when no
+    /// text emitted on the page (e.g. graphic-only pages). Captured
+    /// unconditionally at emit time; cost is O(visible glyphs).
+    pub story_layout: Vec<LineLayout>,
+    /// Phase 5 — footnotes anchored on paragraphs that landed on this
+    /// page. Each entry preserves the host paragraph's identity and
+    /// the footnote body. The renderer draws these bodies bottom-up at
+    /// the host frame's content area in a post-pass
+    /// ([`emit_footnote_pools`]); the captures stay here so downstream
+    /// tools can observe footnote distribution. Remaining work:
+    /// reserving the pool's space *before* the main text fills (so
+    /// bodies don't overlap the last lines) and per-run styling — see
+    /// the pool emitter's docs.
+    pub footnotes: Vec<EmittedFootnote>,
+    /// Lossy-render signals collected while emitting this page (missing
+    /// image links, decode failures). Aggregated into
+    /// [`BuiltDocument::diagnostics`] with `page_index` backfilled. Empty
+    /// for a clean page. Story-level signals (overset) ride the emit
+    /// channel instead, so this stays untouched by the body-story cache.
+    pub diagnostics: Vec<Diagnostic>,
+    /// W3.A1 — per-cell page-local rects for every table cell that
+    /// landed on this page. Captured at table-emit time (the only place
+    /// cell geometry exists; the display list flattens it into fills /
+    /// strokes / glyphs). The canvas's hit-tester reads this to resolve
+    /// a doc-point inside a table frame to its `(tableId, row, col)`
+    /// context. Empty for pages with no tables — mirrors how
+    /// `story_layout` retains text-line hit data. Header / footer
+    /// *replays* on continuation frames push their own rects (each
+    /// carries the template row index), so a click on a replayed header
+    /// resolves to the source row.
+    pub cell_rects: Vec<CellRect>,
+    /// C-6 (I-06) — tiles a claimed image resource lacked at the chosen
+    /// mip level while emitting this page. The whole-image lane (or a
+    /// coarser cached level) painted in their place; the host fills the
+    /// gaps asynchronously and the next build sharpens the frame. Empty
+    /// unless `PipelineOptions::resource_providers` is wired and a claimed
+    /// frame on this page had a cache miss. Aggregated verbatim into
+    /// `BuiltDocument::resource_tiles_needed`.
+    pub resource_tiles_needed: Vec<crate::resource_provider::ResourceTilesNeeded>,
+    /// The frames (IDML `Self` ids) whose plugin scene layer (C-1) was
+    /// lowered onto this page, in emit order. A frame that reaches across
+    /// pages of its spread is listed on each page it is emitted onto. The
+    /// canvas reads this to
+    /// re-encode only the pages a scene-layer submit changed instead of
+    /// dropping every cached page.
+    pub scene_layer_frames: Vec<String>,
+}
+
+impl BuiltPage {
+    /// The page edge its binding runs along, from where it sits in its
+    /// spread (see [`BindingEdge::of_page`]).
+    pub fn binding_edge(&self) -> BindingEdge {
+        BindingEdge::of_page(self.spread_origin.0, self.width_pt)
+    }
+}
+
+/// W3.A1 — one table cell's page-local rect plus its addressing keys.
+/// Page-local pt, `(0, 0)` = page top-left (same frame as
+/// [`LineLayout`]). Captured once per emitted physical row × column.
+#[derive(Debug, Clone)]
+pub struct CellRect {
+    /// `<Story Self="…">` owning the table.
+    pub story_id: String,
+    /// `<Table Self="…">` id. Empty string when the table carried no
+    /// `Self` (synthetic / malformed) — such tables aren't addressable.
+    pub table_id: String,
+    /// Zero-based row index in the table's `rows` (the *template* row;
+    /// header / footer replays report their source row).
+    pub row: u32,
+    /// Zero-based column index.
+    pub col: u32,
+    /// Page-local rect `[x, y, w, h]` in pt (cell's outer box,
+    /// inset-inclusive).
+    pub rect: [f32; 4],
+}
+
+/// Phase 5 — a footnote captured at emit time on the page where its
+/// host paragraph landed. The `number` is a per-page running counter
+/// (1-based) and is the value the host paragraph's anchor character
+/// should display once anchor-substitution lands. Renderer doesn't
+/// yet write footnote bodies into the page display list; this
+/// struct's `paragraphs` are the source body verbatim, untouched.
+#[derive(Debug, Clone)]
+pub struct EmittedFootnote {
+    /// The note's number through its story, 1-based (its label is
+    /// `FootnoteOptions::label`).
+    pub number: u32,
+    /// `<Story Self="...">` id of the host story (the one carrying
+    /// the anchor character, not the footnote story itself).
+    pub host_story_id: String,
+    /// Index of the host paragraph within the host story. Lets
+    /// downstream tools cross-reference back to the source AST.
+    pub host_paragraph_idx: u32,
+    /// `<Footnote Self="...">` id, when present.
+    pub footnote_self_id: Option<String>,
+    /// Footnote body paragraphs, exactly as parsed.
+    pub paragraphs: Vec<paged_model::Paragraph>,
+    /// Page-local pt rect of the host frame's content area at
+    /// capture time. The footnote-pool emit pass uses this to know
+    /// where to lay out the body text at the bottom of the frame.
+    pub host_frame_rect_pt: Rect,
+    /// Page-local pt rect the note's area is set in: the host column's
+    /// content rect, or the whole frame's when its notes span its
+    /// columns (ADR 160). Notes sharing it share one area.
+    pub pool_rect_pt: Rect,
+    /// The host frame's own footnote layout (ADR 160).
+    pub frame_footnotes: paged_model::FrameFootnotes,
+    /// The note's lines this area sets, counted over all its paragraphs:
+    /// from `first_line`, up to `end_line` (`None`: to its last). A note
+    /// too tall for the room under its reference keeps the lines that fit
+    /// and continues in the next column or frame's area (ADR 161).
+    pub first_line: u32,
+    pub end_line: Option<u32>,
+    /// The entry continues a note from an earlier column or frame: it
+    /// heads its area, under the continuing rule (ADR 161).
+    pub continued: bool,
+    /// Where a continued note's text resumes (ADR 178): the segment of
+    /// the note (a paragraph, or a piece a forced line break splits off)
+    /// and the byte in that segment's shaped text where the next line
+    /// starts. Its lines are composed from there at its own area's width,
+    /// as InDesign recomposes a note's continuation in a frame of another
+    /// width. `None` for a note's first area.
+    pub resume_at: Option<(u32, u32)>,
+    /// Page-local baseline of the line holding the note's reference: the
+    /// pool never rises above it (see `emit_footnote_pools`).
+    pub ref_baseline_pt: f32,
+}
+
+/// Disjoint paragraph-address qualifier for a laid-out line that
+/// lives inside a table cell rather than in the story's main
+/// paragraph flow (W1.13).
+///
+/// ## Why this exists — the paragraph_idx collision
+///
+/// Table-cell text is stored OUT OF BAND: a cell's paragraphs hang off
+/// `Table.cells[].paragraphs`, not off `Story.paragraphs`. The host
+/// paragraph that physically carries the `<Table>` has its own
+/// `paragraph_idx` in the body flow, and every cell paragraph the table
+/// pass emits used to be stamped with that SAME host `paragraph_idx`
+/// (see `tables.rs::emit_cell_paragraph`). Result: body paragraph N and
+/// a cell paragraph both reported `paragraph_idx == N`, so
+/// `story_layout` / `paragraph_byte_offset` / hit-test could not tell
+/// a body caret from a cell caret — the long-standing W3.A1 deferral.
+///
+/// The fix is a disjoint address axis. `LineLayout.cell` is `None` for
+/// body lines and `Some(CellAddr)` for cell lines; `paragraph_idx` is
+/// then re-based to be local to its own stream (the cell's own
+/// paragraph list, or the body flow). Two lines are the "same
+/// paragraph" only when BOTH `(cell, paragraph_idx)` match. This
+/// mirrors the wire-side `TextCellAddr` qualifier on `ContentSelection`
+/// / `TextOp` (`paged-canvas`), which selects `cell.paragraphs` instead
+/// of `story.paragraphs` for the identical `locate`/`splice` machinery.
+///
+/// `table_id` / `row` / `col` reuse the exact identifiers the
+/// `cell_rects` hit-test surface already carries (`CellRect`), so a
+/// `HitTest` that lands in a cell and the `LineLayout` it should map to
+/// share one coordinate.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CellAddr {
+    /// `<Table Self="...">` id of the owning table.
+    pub table_id: String,
+    /// Template row (0-based). Header / footer replays report their
+    /// SOURCE row so a caret in a replayed header maps to the original
+    /// cell's text — matching `CellRect`'s convention.
+    pub row: u32,
+    /// Column (0-based). Span-origin column for spanned cells.
+    pub col: u32,
+}
+
+/// One laid-out line of a story, in page-local pt coordinates.
+///
+/// Captured at emit time and stored on the hosting `BuiltPage`. The
+/// canvas reconstructs whole-story layouts via
+/// [`BuiltDocument::story_layout`], which walks every page and
+/// gathers lines whose `story_id` matches.
+///
+/// Page-local means: `(0, 0)` is the page's top-left in spread
+/// coordinates; subtract the page's `spread_origin` from spread-space
+/// values to land here. Y grows downward.
+#[derive(Debug, Clone)]
+pub struct LineLayout {
+    /// IDML `<Story Self="...">` of the source story.
+    pub story_id: String,
+    /// Page hosting this visible line. Threaded text spans pages, so
+    /// every line records its host independently.
+    pub page_id: PageId,
+    /// W1.13 — disjoint paragraph-address qualifier. `None` for lines
+    /// in the story's main paragraph flow; `Some` for lines inside a
+    /// table cell, where `paragraph_idx` is then local to that cell's
+    /// own paragraph stream. Two lines belong to the same paragraph
+    /// only when BOTH `(cell, paragraph_idx)` are equal — this is what
+    /// disambiguates body paragraph N from cell paragraph N. See
+    /// [`CellAddr`].
+    pub cell: Option<CellAddr>,
+    /// Paragraph index within its own stream: within the story's body
+    /// flow when `cell` is `None`, or within `cell.paragraphs` when
+    /// `cell` is `Some`. NOT globally unique on its own — pair it with
+    /// `cell` for an unambiguous address.
+    pub paragraph_idx: u32,
+    /// Line index within the paragraph.
+    pub line_idx: u32,
+    /// Frame's IDML `Self` id when present (synthetic frames may have
+    /// none). Lets the overlay attribute selections to specific
+    /// frames within a chain.
+    pub frame_id: Option<String>,
+    /// Page-local baseline y in pt.
+    pub baseline_y_pt: f32,
+    /// Approximate ascent above the baseline in pt. Phase 3 first cut
+    /// derives this as `0.8 × line_height`; real font metrics arrive
+    /// alongside the main-thread fast composer.
+    pub ascent_pt: f32,
+    /// Approximate descent below the baseline in pt (`0.2 × line_height`).
+    pub descent_pt: f32,
+    /// Paragraph-local byte range covered by this visible line.
+    pub byte_range: std::ops::Range<u32>,
+    /// Per-glyph-cluster page-local positions, in left-to-right order.
+    /// The hit-tester bisects on `x_pt`; the caret rule keys on
+    /// `byte` for an exact-offset lookup. A list marker's glyphs are
+    /// not here: they are not characters of the story.
+    pub clusters: Vec<ClusterPos>,
+    /// The list marker this line opens with, cluster by cluster
+    /// (`byte` counts within the marker's own text). Empty on a line
+    /// without one.
+    pub marker: Vec<ClusterPos>,
+}
+
+/// One glyph cluster's page-local position. Cluster bytes are
+/// paragraph-local so they compose with `LineLayout::byte_range`.
+#[derive(Debug, Clone, Copy)]
+pub struct ClusterPos {
+    pub byte: u32,
+    /// Left edge in page-local pt.
+    pub x_pt: f32,
+    /// Cluster's horizontal advance in page-local pt.
+    pub advance_pt: f32,
+}
+
+/// Multi-page render output. Each entry is a fully populated
+/// `BuiltPage` with its own DisplayList and dimensions.
+#[derive(Debug)]
+pub struct BuiltDocument {
+    pub pages: Vec<BuiltPage>,
+    pub stats: PipelineStats,
+    /// Track 2: per-laid-out-line break records, when collection was
+    /// enabled via [`PipelineOptions::collect_breaks`]. Empty when
+    /// the flag was off (the default). Used by the A/B harness to
+    /// compare candidate-side break decisions against PDF-derived
+    /// references.
+    pub breaks: Vec<BreakRecord>,
+    /// Structured signals for lossy / degraded renders (overset text
+    /// dropped, missing image links, section-numbering fallback).
+    /// Empty for a fully-faithful render. Aggregated from the
+    /// per-page collectors plus the per-story emit channel; the
+    /// underlying `tracing::warn!` calls still fire too.
+    pub diagnostics: RenderDiagnostics,
+    /// C-6 (I-06) — every page's tile-miss requests, aggregated. The
+    /// worker turns these into `ResourceTilesNeeded` wire messages so the
+    /// host fetches + submits the missing tiles. Empty when no resource
+    /// provider was wired (the default) or every claimed image was fully
+    /// cached at the chosen level.
+    pub resource_tiles_needed: Vec<crate::resource_provider::ResourceTilesNeeded>,
+    /// Per body story that oversets: how much it laid out past its
+    /// chain's last frame. The page-growth loop sizes the next pass from
+    /// it ([`grow_estimate`]).
+    pub(crate) overset: HashMap<String, OversetMeasure>,
+    /// Builds the page-growth loop ran for this result (1 without growth).
+    pub(crate) grow_passes: usize,
+    /// Per story, the byte offset each BODY paragraph starts at in the
+    /// story's text (run bytes, one separator between paragraphs): the
+    /// space `LineLayout::byte_range` is local to. From the model, not
+    /// from the lines: a line's range leaves out trailing spaces, and a
+    /// paragraph past the last frame has no line at all.
+    pub(crate) paragraph_starts: HashMap<String, Vec<u32>>,
+    /// ADR 182 — per story (in document order), per paragraph: the name a
+    /// tagged PDF gives its structure element, after its paragraph style
+    /// ([`structure_name`]). Filled when glyph runs are collected (the
+    /// tagged export reads it); empty otherwise.
+    pub structure_names: Vec<Vec<String>>,
+    /// The standard structure type each name in [`Self::structure_names`]
+    /// role-maps to: the style's PDF export tag when it names a heading
+    /// or a paragraph (`H`, `H1`…`H6`, `P`), `P` otherwise.
+    pub structure_roles: std::collections::BTreeMap<String, String>,
+    /// ADR 027 §7 / plan step 7 — per page, whether this build laid
+    /// any of its content out afresh (rather than splicing it from an emit
+    /// cache) AND that content may differ from the previous build's. A
+    /// spliced page is the previous build's page by construction. Master
+    /// text re-emitted with the same output (checked against
+    /// [`PipelineOptions::emission_prints`]) does not count. Every page is
+    /// fresh in a build without caches. The frame pass is not tracked: a
+    /// caller that changed frames must treat every page as changed.
+    pub fresh_pages: Vec<bool>,
+}
+
+/// A body story's overset, measured by the pass that dropped it.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct OversetMeasure {
+    /// Summed line heights (1/64 pt) of the lines laid out past the
+    /// chain's last frame.
+    pub(crate) dropped_height_64: i64,
+    /// Summed line heights each chain frame took, by frame id.
+    pub(crate) frame_heights_64: HashMap<String, i64>,
+}
+
+/// The structure-element name InDesign gives a paragraph in a tagged PDF:
+/// its style's name with every character but an ASCII letter or digit
+/// turned into `_` (`$ID/[No paragraph style]` → `_No_paragraph_style_`;
+/// measured, InDesign 20.0.1, `tagged-pdf-probe` / `tagged-styles-probe`).
+pub fn structure_name(style_name: &str) -> String {
+    let name = style_name.strip_prefix("$ID/").unwrap_or(style_name);
+    name.chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect()
+}
+
+/// The standard type a style's PDF export tag role-maps to: a heading
+/// level or `P`. Anything else is written as `P`, as InDesign 20.0.1 wrote
+/// a style tagged `Artifact` (`tagged-styles-probe`).
+pub fn structure_role(pdf_export_tag: Option<&str>) -> &'static str {
+    match pdf_export_tag {
+        Some("H") => "H",
+        Some("H1") => "H1",
+        Some("H2") => "H2",
+        Some("H3") => "H3",
+        Some("H4") => "H4",
+        Some("H5") => "H5",
+        Some("H6") => "H6",
+        _ => "P",
+    }
+}
+
+impl BuiltDocument {
+    /// The story byte offset body paragraph `paragraph_idx` of `story_id`
+    /// starts at; a line's `byte_range` counts from there.
+    pub fn paragraph_start(&self, story_id: &str, paragraph_idx: u32) -> Option<u32> {
+        self.paragraph_starts
+            .get(story_id)?
+            .get(paragraph_idx as usize)
+            .copied()
+    }
+
+    /// Look up a page by stable id. Linear scan — `pages` typically
+    /// fits in cache, and the canvas worker calls this once per
+    /// viewport-visible page per dirty event. If a future profile
+    /// shows this in hot paths, swap to an `IndexMap` keyed by
+    /// `PageId` without changing the public signature.
+    pub fn page(&self, id: &PageId) -> Option<&BuiltPage> {
+        self.pages.iter().find(|p| &p.id == id)
+    }
+
+    /// Convenience for the canvas Tier 4: hand back just the slice
+    /// of render commands for one page. Mirrors the
+    /// `display_list_for_page(page_id)` accessor named in the
+    /// canvas concept (`docs/design/canvas.md` §4.4).
+    pub fn display_list_for_page(&self, id: &PageId) -> Option<&DisplayList> {
+        self.page(id).map(|p| &p.list)
+    }
+
+    /// All page ids in document order. The canvas's page navigator
+    /// and minimap consume this to drive the snapshot atlas. Returns
+    /// an iterator so callers don't pay for the `Vec` allocation when
+    /// they only want a count or a prefix.
+    pub fn page_ids(&self) -> impl Iterator<Item = &PageId> {
+        self.pages.iter().map(|p| &p.id)
+    }
+
+    /// Where each body paragraph was laid out: per story, paragraph
+    /// index → the 0-based page its first line stands on (L-06). Table
+    /// cells' lines are not body paragraphs and are left out. Feeds
+    /// `Document::resolve_toc_on` / `resolve_index_on`, so a heading or an
+    /// index marker in a story threaded across pages takes the page it is
+    /// on rather than its story's head frame's.
+    pub fn paragraph_pages(&self) -> paged_scene::ParagraphPages {
+        let mut out = paged_scene::ParagraphPages::new();
+        for (page_idx, page) in self.pages.iter().enumerate() {
+            for line in &page.story_layout {
+                if line.cell.is_some() {
+                    continue;
+                }
+                out.entry(line.story_id.clone())
+                    .or_default()
+                    .entry(line.paragraph_idx as usize)
+                    .or_insert(page_idx);
+            }
+        }
+        out
+    }
+
+    /// Lines belonging to `story_id`, gathered from every page that
+    /// hosts part of the story (chained text spans pages). Sorted by
+    /// `(paragraph_idx, line_idx)` so the canvas can walk the story
+    /// in document order without re-sorting. Empty when the story is
+    /// unplaced or unparsed.
+    ///
+    /// Phase 3 correctness layer (Item A) — selection, caret, and
+    /// selection geometry all key off this index.
+    pub fn story_layout(&self, story_id: &str) -> Vec<&LineLayout> {
+        let mut out: Vec<&LineLayout> = Vec::new();
+        for page in &self.pages {
+            for line in &page.story_layout {
+                if line.story_id == story_id {
+                    out.push(line);
+                }
+            }
+        }
+        // W1.13 — sort within each disjoint stream. Body lines
+        // (`cell == None`) sort ahead of any cell stream; cell streams
+        // sort by their `(table_id, row, col)` qualifier so callers can
+        // walk one cell's lines contiguously. Within a stream, the
+        // `(paragraph_idx, line_idx)` order is document order. Pairing
+        // `cell` into the key is what keeps body paragraph N and cell
+        // paragraph N from interleaving.
+        out.sort_by(|a, b| {
+            cell_sort_key(&a.cell)
+                .cmp(&cell_sort_key(&b.cell))
+                .then((a.paragraph_idx, a.line_idx).cmp(&(b.paragraph_idx, b.line_idx)))
+        });
+        out
+    }
+
+    /// W1.13 — all lines of `story_id` that belong to the given cell
+    /// stream (`cell == Some(addr)`), in document order. Body lines are
+    /// excluded. Used by the cell-aware caret / hit-test / byte-offset
+    /// machinery to walk a single cell's paragraph flow.
+    pub fn cell_layout<'a>(&'a self, story_id: &str, addr: &CellAddr) -> Vec<&'a LineLayout> {
+        let mut out: Vec<&LineLayout> = Vec::new();
+        for page in &self.pages {
+            for line in &page.story_layout {
+                if line.story_id == story_id && line.cell.as_ref() == Some(addr) {
+                    out.push(line);
+                }
+            }
+        }
+        out.sort_by(|a, b| (a.paragraph_idx, a.line_idx).cmp(&(b.paragraph_idx, b.line_idx)));
+        out
+    }
+}
+
+/// Total ordering key for the cell qualifier: body (`None`) first,
+/// then cell streams ordered by `(table_id, row, col)`.
+fn cell_sort_key(cell: &Option<CellAddr>) -> (u8, &str, u32, u32) {
+    match cell {
+        None => (0, "", 0, 0),
+        Some(c) => (1, c.table_id.as_str(), c.row, c.col),
+    }
+}
+
+/// One laid-out line, captured by the renderer when
+/// [`PipelineOptions::collect_breaks`] is set. Coordinates are in pt
+/// (1 pt = 1/72 in); byte offsets are paragraph-local.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BreakRecord {
+    pub story_id: String,
+    pub paragraph_idx: u32,
+    pub line_idx: u32,
+    pub page_idx: u32,
+    pub frame_idx: u32,
+    pub first_byte: u32,
+    /// Exclusive upper bound (matches `Range`'s `end`).
+    pub last_byte: u32,
+    pub baseline_y_pt: f32,
+    pub width_pt: f32,
+    /// Cycle-5 Track 1: the line's source text, sliced from the
+    /// paragraph's concatenated bytes by `[first_byte..last_byte]`.
+    /// Newlines / forced-break characters preserved as-is. Empty
+    /// when collection wasn't enabled; populated only when
+    /// `PipelineOptions::collect_breaks` is set.
+    pub source_text: String,
+    /// What the line prints that its story does not hold (a list's
+    /// marker, a tab's leader, a page number), in `source_text` order.
+    /// Omitted from the JSON when the line has none, so a line without
+    /// any reads as it did before the field existed.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub generated: Vec<GeneratedSpan>,
+    /// For type on a path: the `<TextPath>` the line rides (its `Self`,
+    /// empty when it has none). Such a record is the path's one line:
+    /// `first_byte..last_byte` index the story's text rather than a
+    /// paragraph's, `baseline_y_pt` is the page-local y where the text
+    /// starts on the path and `width_pt` the arc length it covers.
+    /// Omitted for every other line.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_path: Option<String>,
+}
+
+/// One stretch of a [`BreakRecord`]'s line that the engine generated
+/// rather than took from the story.
+///
+/// A text gate compares what InDesign printed with what the engine laid
+/// out, and the generated characters are where the two part without
+/// either being wrong: InDesign's PDF sets a marker in a larger size as a
+/// line of its own and carries a tab's leader as text the story lacks.
+/// The record says which characters they are, so a reader drops them on
+/// both sides instead of guessing from the PDF alone.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct GeneratedSpan {
+    pub kind: GeneratedKind,
+    /// Half-open byte range in the record's `source_text`.
+    pub start: u32,
+    pub end: u32,
+    /// What prints in place of `source_text[start..end]` when that is not
+    /// those characters: a tab leader's repeats fill the tab they follow.
+    /// Omitted when the span's own characters are what prints.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+
+/// What a [`GeneratedSpan`] stands for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GeneratedKind {
+    /// A list's bullet or number with the text after it
+    /// (`BulletsTextAfter`), opening the paragraph's first line.
+    ListMarker,
+    /// The repeats of a tab stop's `Leader` across the tab's gap.
+    TabLeader,
+    /// A current, next or previous page number.
+    PageNumber,
+    /// A section marker.
+    SectionMarker,
+    /// A footnote's number: its reference in the body, or the number
+    /// opening the note.
+    FootnoteNumber,
+    /// A text variable's value.
+    TextVariable,
+    /// The placeholder an inline anchored object takes in its line.
+    AnchoredObject,
+    /// An editorial note's place (ADR 172), which prints nothing.
+    Note,
+    /// A tracked deletion's place (D-01), which prints nothing.
+    TrackedDeletion,
+}
+
+/// A [`GeneratedSpan`] before it is cut to a line: a byte range of its
+/// paragraph's text, its kind and what prints in its place.
+pub(crate) type GeneratedRange = (std::ops::Range<usize>, GeneratedKind, Option<String>);
+
+impl GeneratedSpan {
+    /// The spans among `spans` that a line covering `line` of their
+    /// paragraph's text holds, clipped to it and counted from its start.
+    pub(crate) fn clip_to_line(
+        spans: &[GeneratedRange],
+        line: std::ops::Range<usize>,
+    ) -> Vec<GeneratedSpan> {
+        spans
+            .iter()
+            .filter_map(|(r, kind, text)| {
+                let start = r.start.max(line.start);
+                let end = r.end.min(line.end);
+                (start < end).then(|| GeneratedSpan {
+                    kind: *kind,
+                    start: (start - line.start) as u32,
+                    end: (end - line.start) as u32,
+                    text: text.clone(),
+                })
+            })
+            .collect()
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct PipelineStats {
+    pub spreads: usize,
+    pub pages: usize,
+    pub frames: usize,
+    pub stories: usize,
+    pub paragraphs: usize,
+    pub runs: usize,
+    pub glyphs: usize,
+    pub lines: usize,
+    /// Number of distinct URIs decoded into the renderer-scoped
+    /// `DecodedImage` cache. Stays 0 when no image-bearing frames
+    /// were encountered; otherwise lets callers observe cross-page
+    /// image sharing (one decode per URI, regardless of how many
+    /// rectangles or pages reference it).
+    pub decoded_images: usize,
+    /// Number of laid-out lines dropped because they fell past the
+    /// last frame in their chain (typically a wider font substitute).
+    /// Surfaced for diagnostics; non-zero means a story didn't fit
+    /// its declared frame chain (P-13).
+    pub dropped_overflow_lines: usize,
+    /// ADR 027 plan step 3 — stories whose keeps fixpoint
+    /// started from the previous build's settled breaks and kept them,
+    /// one emit pass instead of two.
+    pub keep_seeds_used: usize,
+    /// ADR 027 plan step 4 — body stories spliced from the emit
+    /// cache instead of laid out.
+    pub body_stories_reused: usize,
+    /// ADR 027 plan step 6 — chain frames body-story emission
+    /// laid out (not spliced) in this build: every frame of a story that
+    /// re-emitted whole, the frames between the resume and the stop of
+    /// one that resumed. A cached story adds none.
+    pub frames_emitted: usize,
+    /// Edited stories that resumed at the edit and stopped early.
+    pub stories_resumed: usize,
+    /// ADR 027 plan step 7 — pages taken over from the previous
+    /// build instead of finished again (see `PipelineOptions::previous_pages`).
+    pub pages_adopted: usize,
+}
+
+impl PipelineStats {
+    /// The emit counters a story added since `before` (ADR 027:
+    /// a cached story replays them). `keep_seeds_used` is not replayed:
+    /// a hit runs no fixpoint.
+    pub(crate) fn emitted_since(&self, before: &Self) -> Self {
+        Self {
+            paragraphs: self.paragraphs - before.paragraphs,
+            runs: self.runs - before.runs,
+            glyphs: self.glyphs - before.glyphs,
+            lines: self.lines - before.lines,
+            dropped_overflow_lines: self.dropped_overflow_lines - before.dropped_overflow_lines,
+            ..Self::default()
+        }
+    }
+
+    /// Add what [`Self::emitted_since`] measured.
+    pub(crate) fn add_emitted(&mut self, d: &Self) {
+        self.paragraphs += d.paragraphs;
+        self.runs += d.runs;
+        self.glyphs += d.glyphs;
+        self.lines += d.lines;
+        self.dropped_overflow_lines += d.dropped_overflow_lines;
+    }
+}
+
+/// W1.18c / W1.19 — the post-layout resolution context handed to the
+/// SECOND build pass. Built from the first pass's seated layout: the
+/// per-page running-header pickup index, and a story / text-anchor →
+/// flat page-index map (cross-reference + text-anchor hyperlink
+/// destinations resolve to the page their target story landed on).
+///
+/// Threaded internally only — `build_document` builds it after the
+/// first pass and re-invokes the inner builder with it. Keeping it
+/// internal lets `RunningHeaderIndex` stay private to the pipeline
+/// module rather than leaking onto the public `PipelineOptions`.
+struct PostLayoutCtx {
+    running_headers: links::RunningHeaderIndex,
+    /// Story `<Self>` id (and any text-anchor id that maps to a story)
+    /// → flat 0-based page index of that story's first laid-out line.
+    story_page: HashMap<String, u32>,
+    /// Cross-reference source `<Self>` → the flat page index its
+    /// destination paragraph was laid out on (ADR 169): what the source's
+    /// `XRefPageNumber` prints, live, as InDesign prints it.
+    xref_page: HashMap<String, usize>,
+}
+
+/// Build one `BuiltPage` per `<Page>` in the document. Each page's
+/// display list contains only frames whose centres fall inside the
+/// page's `GeometricBounds`. Frames placed entirely on the pasteboard
+/// (rare) land on the first page so they don't disappear silently.
+///
+/// Returns a `BuiltDocument` with aggregated stats. Use `build` for
+/// the historical single-page (union of all bounds) shape.
+///
+/// W1.18c / W1.19 — when the document contains running-header variables
+/// or cross-reference (text-anchor) destinations, this runs the inner
+/// builder TWICE: the first pass seats the text, then we index where
+/// each style / story landed and re-run so running headers + page-number
+/// cross-references resolve against the CURRENT layout. The re-run is
+/// gated; documents without those features build in a single pass.
+/// Cap on generated pages for a growing story whose rule sets none.
+pub const DEFAULT_MAX_GENERATED_PAGES: u32 = 2000;
+
+/// Cap on build passes the page-growth loop may spend. Growth by estimate
+/// needs one or two; the doubling fallback reaches the default page cap in
+/// ~11.
+const MAX_GROW_PASSES: usize = 24;
+
+/// Build the document. Stories with a grow rule (ADR 026) get
+/// generated pages until they no longer overset: each pass materialises the
+/// current counts ([`Document::with_generated_pages`]) and builds. A story
+/// that still oversets grows by the frames its dropped lines need
+/// ([`grow_estimate`]), or doubles its count when the pass gives no
+/// estimate; one that fits drops the trailing generated frames that
+/// received no line. The counts start from the previous layout's
+/// (`grow_hint`), clamped to each rule's current page cap. A document
+/// without grow rules is built exactly once, as before.
+pub fn build_document(
+    document: &Document,
+    options: &PipelineOptions,
+) -> anyhow::Result<BuiltDocument> {
+    let growing = document.growing_stories();
+    if growing.is_empty() {
+        return build_document_fixed(document, options, true);
+    }
+    let caps: HashMap<String, u32> = document
+        .stories
+        .iter()
+        .filter_map(|s| {
+            s.story.grow.as_ref().map(|g| {
+                (
+                    s.self_id.clone(),
+                    g.max_pages.unwrap_or(DEFAULT_MAX_GENERATED_PAGES),
+                )
+            })
+        })
+        .collect();
+    let cap_of = |story: &str| {
+        caps.get(story)
+            .copied()
+            .unwrap_or(DEFAULT_MAX_GENERATED_PAGES)
+    };
+    // The previous layout's counts, clamped to the CURRENT cap: a rule
+    // whose `max_pages` was lowered must not keep the pages it had.
+    let mut counts: HashMap<String, u32> = growing
+        .iter()
+        .map(|s| {
+            let hinted = options
+                .grow_hint
+                .and_then(|h| h.borrow().get(s).copied())
+                .unwrap_or(0);
+            (s.clone(), hinted.min(cap_of(s)))
+        })
+        .collect();
+    // Overset passes that grew a story by estimate. Past
+    // `MAX_ESTIMATED_GROWS` the story doubles instead, so a story the
+    // estimate cannot size still reaches its cap in a few passes.
+    let mut estimated: HashMap<&str, usize> = HashMap::new();
+
+    let carry = KeepSeedStore::default();
+    let mut carrying = options.clone();
+    if carrying.keep_carry.is_none() {
+        carrying.keep_carry = Some(&carry);
+    }
+    let options = &carrying;
+
+    let mut pass = 0;
+    loop {
+        let grown = document.with_generated_pages(&counts);
+        // Only the first pass may adopt the previous build's pages: a later
+        // one would find the first pass's discarded pages there.
+        let mut built = build_document_fixed(&grown, options, pass == 0)?;
+        pass += 1;
+        paged_compose::perf::count(|c| c.grow_passes += 1);
+        built.grow_passes = pass;
+        let mut changed = false;
+        for story in &growing {
+            let count = counts[story];
+            // A story needs another page when it drops text, or when a
+            // note of its has no column or frame left to continue in
+            // (C-44): the grow rule paginates notes as Word does. InDesign
+            // does not count a note's overset as the story's
+            // (`footnote-reflow-probe`: a split note past the last frame
+            // leaves `overflows` false), but its documents carry no grow
+            // rule — Word's (ADR 034) do.
+            let overset = built.diagnostics.items.iter().any(|d| {
+                matches!(
+                    d.code,
+                    crate::diagnostics::DiagnosticCode::OversetTextDropped
+                        | crate::diagnostics::DiagnosticCode::FootnoteOverflow
+                ) && d.story_id.as_deref() == Some(story.as_str())
+            });
+            if overset {
+                let tries = estimated.entry(story.as_str()).or_insert(0);
+                let grow_by = match grow_estimate(&built, story, count) {
+                    Some(n) if *tries < MAX_ESTIMATED_GROWS => {
+                        *tries += 1;
+                        n
+                    }
+                    _ => count.max(1),
+                };
+                let next = count.saturating_add(grow_by).min(cap_of(story));
+                if next != count {
+                    counts.insert(story.clone(), next);
+                    changed = true;
+                }
+            } else if count > 0 {
+                // Drop trailing generated frames that received no line and
+                // no note of the story's (a page grown for a note's
+                // continuation holds only that).
+                let lines = built.story_layout(story);
+                let mut used = count;
+                while used > 0 {
+                    let id = paged_scene::grow::generated_frame_id(story, used);
+                    let page = paged_scene::grow::generated_page_id(story, used);
+                    let holds_note = built.pages.iter().any(|p| {
+                        p.id.as_str() == page
+                            && p.footnotes.iter().any(|f| f.host_story_id == *story)
+                    });
+                    if holds_note
+                        || lines
+                            .iter()
+                            .any(|l| l.frame_id.as_deref() == Some(id.as_str()))
+                    {
+                        break;
+                    }
+                    used -= 1;
+                }
+                if used != count {
+                    counts.insert(story.clone(), used);
+                    changed = true;
+                }
+            }
+        }
+        if !changed || pass >= MAX_GROW_PASSES {
+            if let Some(hint) = options.grow_hint {
+                *hint.borrow_mut() = counts;
+            }
+            return Ok(built);
+        }
+    }
+}
+
+/// How many overset passes may size a story's growth by estimate before
+/// the loop falls back to doubling.
+const MAX_ESTIMATED_GROWS: usize = 4;
+
+/// The generated frames an overset story still needs, estimated from the
+/// pass that oversetted: the summed line heights it laid out past its
+/// chain's end, over the line heights a generated frame took in that pass
+/// (before any page was generated: the chain's last frame). Line heights,
+/// not line counts, so text pasted at another leading is sized at its own.
+/// `None` when the pass gives no measure; the caller then doubles.
+fn grow_estimate(built: &BuiltDocument, story: &str, count: u32) -> Option<u32> {
+    let m = built.overset.get(story)?;
+    let (taken, frames) = if count > 0 {
+        let taken: i64 = m
+            .frame_heights_64
+            .iter()
+            .filter(|(id, _)| {
+                paged_scene::grow::generated_frame_ordinal(story, id).is_some_and(|k| k <= count)
+            })
+            .map(|(_, h)| *h)
+            .sum();
+        (taken, i64::from(count))
+    } else {
+        let lines = built.story_layout(story);
+        let last = lines.iter().rev().find_map(|l| l.frame_id.as_deref())?;
+        (m.frame_heights_64.get(last).copied()?, 1)
+    };
+    if taken <= 0 || m.dropped_height_64 <= 0 {
+        return None;
+    }
+    // ceil(dropped / (taken / frames))
+    let need = (m.dropped_height_64 * frames + taken - 1) / taken;
+    u32::try_from(need.max(1)).ok()
+}
+
+/// Build `document` exactly as given (no page growth).
+fn build_document_fixed(
+    document: &Document,
+    options: &PipelineOptions,
+    adopt: bool,
+) -> anyhow::Result<BuiltDocument> {
+    // Does the document need the post-layout pass? (Same predicate the
+    // inner builder uses; cheap to recompute and avoids plumbing a flag
+    // back out.) Known up front: only the build that is returned may adopt
+    // the previous build's clean pages (ADR 027 plan step 7).
+    let dm = &document.designmap;
+    let has_running_header = dm
+        .text_variables
+        .iter()
+        .any(|v| links::is_running_header_type(v.variable_type.as_deref()));
+    let has_text_anchor_dest = options.collect_link_regions
+        && dm.hyperlink_destinations.iter().any(|d| {
+            matches!(
+                &d.kind,
+                paged_model::HyperlinkDestinationKind::TextAnchor(_)
+            )
+        });
+    // ADR 169 — a cross-reference prints its destination's page live.
+    let has_xref_page = dm
+        .text_variables
+        .iter()
+        .any(|v| v.variable_type.as_deref() == Some("XrefPageNumberType"));
+    let single = !has_running_header && !has_text_anchor_dest && !has_xref_page;
+    let first = build_document_inner(document, options, None, adopt && single)?;
+    if single {
+        return Ok(first);
+    }
+
+    // Build the resolution context from the first pass's seated layout,
+    // then re-run with it in hand. Only one re-run ever happens (the
+    // inner builder, given a `post`, never asks for another).
+    let post = build_post_layout_ctx(document, &first);
+    let mut second = build_document_inner(document, options, Some(&post), adopt)?;
+    // The reuse counters describe the whole build, both passes.
+    second.stats.keep_seeds_used += first.stats.keep_seeds_used;
+    second.stats.body_stories_reused += first.stats.body_stories_reused;
+    second.stats.frames_emitted += first.stats.frames_emitted;
+    second.stats.stories_resumed += first.stats.stories_resumed;
+    Ok(second)
+}
+
+/// W1.18c / W1.19 — derive the running-header pickup index + the
+/// story→page map from a first-pass [`BuiltDocument`].
+///
+/// Every paragraph in a matched paragraph style, and every contiguous
+/// range in a matched character style, is a MATCH with a position in its
+/// story. A page's own matches are those its lines show, in line order;
+/// a page without one carries forward as InDesign does (see
+/// [`links::RunningHeaderIndex`]): the last match preceding the page's
+/// text in its own story, else the previous page's value.
+fn build_post_layout_ctx(document: &Document, first: &BuiltDocument) -> PostLayoutCtx {
+    let mut running_headers = links::RunningHeaderIndex::default();
+    let mut story_page: HashMap<String, u32> = HashMap::new();
+
+    // The styles the document's running headers match.
+    let styles: std::collections::BTreeSet<&str> = document
+        .designmap
+        .text_variables
+        .iter()
+        .filter(|v| links::is_running_header_type(v.variable_type.as_deref()))
+        .filter_map(links::running_header_style)
+        .collect();
+
+    // Story → style → its matches in story order: (paragraph, byte start,
+    // byte end, text). A paragraph match spans its whole paragraph.
+    type Match = (u32, u32, u32, String);
+    let mut matches: HashMap<(&str, &str), Vec<Match>> = HashMap::new();
+    for parsed in &document.stories {
+        for (p_idx, para) in parsed.story.paragraphs.iter().enumerate() {
+            let p_idx = p_idx as u32;
+            if let Some(style) = para
+                .paragraph_style
+                .as_deref()
+                .filter(|s| styles.contains(s))
+            {
+                let text: String = para
+                    .runs
+                    .iter()
+                    .flat_map(|r| r.text.chars())
+                    .filter(|c| !paged_model::is_generated_marker(*c))
+                    .collect();
+                let text = text.trim_end_matches(['\n', '\r']).to_string();
+                if !text.is_empty() {
+                    matches
+                        .entry((parsed.self_id.as_str(), style))
+                        .or_default()
+                        .push((p_idx, 0, u32::MAX, text));
+                }
+            }
+            // Contiguous character-style ranges (consecutive runs in the
+            // same style merge into one match).
+            let mut offset = 0u32;
+            let mut open: Option<(&str, Match)> = None;
+            for run in &para.runs {
+                let len = run.text.len() as u32;
+                let style = run
+                    .character_style
+                    .as_deref()
+                    .filter(|s| styles.contains(s));
+                match (&mut open, style) {
+                    (Some((open_style, m)), Some(style)) if *open_style == style => {
+                        m.2 = offset + len;
+                        m.3.push_str(&run.text);
+                    }
+                    _ => {
+                        if let Some((open_style, m)) = open.take() {
+                            matches
+                                .entry((parsed.self_id.as_str(), open_style))
+                                .or_default()
+                                .push(m);
+                        }
+                        if let Some(style) = style {
+                            open = Some((style, (p_idx, offset, offset + len, run.text.clone())));
+                        }
+                    }
+                }
+                offset += len;
+            }
+            if let Some((open_style, m)) = open.take() {
+                matches
+                    .entry((parsed.self_id.as_str(), open_style))
+                    .or_default()
+                    .push(m);
+            }
+        }
+    }
+    for list in matches.values_mut() {
+        for m in list.iter_mut() {
+            m.3 =
+                m.3.chars()
+                    .filter(|c| !paged_model::is_generated_marker(*c))
+                    .collect();
+        }
+        list.retain(|m| !m.3.trim().is_empty());
+    }
+
+    for (page_idx, page) in first.pages.iter().enumerate() {
+        for line in &page.story_layout {
+            // Story → first page it appears on.
+            story_page
+                .entry(line.story_id.clone())
+                .or_insert(page_idx as u32);
+        }
+        // Body-flow lines in reading order (table cells keep their own
+        // paragraph streams and are not searched).
+        let lines: Vec<_> = page
+            .story_layout
+            .iter()
+            .filter(|l| l.cell.is_none())
+            .collect();
+        for &style in &styles {
+            let mut own: Vec<&str> = Vec::new();
+            for line in &lines {
+                let Some(list) = matches.get(&(line.story_id.as_str(), style)) else {
+                    continue;
+                };
+                for m in list {
+                    let overlaps = m.0 == line.paragraph_idx
+                        && m.1 < line.byte_range.end.max(line.byte_range.start + 1)
+                        && line.byte_range.start < m.2;
+                    if overlaps && own.last() != Some(&m.3.as_str()) {
+                        own.push(m.3.as_str());
+                    }
+                }
+            }
+            let key = (page_idx, style.to_string());
+            if let (Some(f), Some(l)) = (own.first(), own.last()) {
+                running_headers.first.insert(key.clone(), (*f).to_string());
+                running_headers.last.insert(key, (*l).to_string());
+                continue;
+            }
+            // No match of its own: the last match preceding the page's
+            // text in its story, for the first story on the page that has
+            // one.
+            let mut seen: Vec<&str> = Vec::new();
+            let mut carried: Option<&str> = None;
+            for line in &lines {
+                if seen.contains(&line.story_id.as_str()) {
+                    continue;
+                }
+                seen.push(line.story_id.as_str());
+                let at = (line.paragraph_idx, line.byte_range.start);
+                carried = matches
+                    .get(&(line.story_id.as_str(), style))
+                    .and_then(|list| list.iter().rev().find(|m| (m.0, m.1) < at))
+                    .map(|m| m.3.as_str());
+                if carried.is_some() {
+                    break;
+                }
+            }
+            if let Some(text) = carried {
+                running_headers.first.insert(key.clone(), text.to_string());
+                running_headers.last.insert(key, text.to_string());
+            } else if page_idx > 0 {
+                // Else what the previous page showed, per strategy.
+                let prev = (page_idx - 1, style.to_string());
+                if let Some(t) = running_headers.first.get(&prev).cloned() {
+                    running_headers.first.insert(key.clone(), t);
+                }
+                if let Some(t) = running_headers.last.get(&prev).cloned() {
+                    running_headers.last.insert(key, t);
+                }
+            }
+        }
+    }
+
+    PostLayoutCtx {
+        running_headers,
+        story_page,
+        xref_page: xref_pages(document, first),
+    }
+}
+
+/// ADR 169 — each cross-reference source's destination page in `first`:
+/// source → its hyperlink → the destination's paragraph (a paragraph
+/// destination or a text anchor standing in a story) → the page that
+/// paragraph's first line was laid out on.
+fn xref_pages(document: &Document, first: &BuiltDocument) -> HashMap<String, usize> {
+    let mut out: HashMap<String, usize> = HashMap::new();
+    let sources: Vec<&str> = document
+        .stories
+        .iter()
+        .flat_map(|s| s.story.cross_reference_sources.iter())
+        .map(|x| x.self_id.as_str())
+        .collect();
+    if sources.is_empty() {
+        return out;
+    }
+    let laid_out = first.paragraph_pages();
+    let destinations: HashMap<&str, (&str, u32)> = document
+        .stories
+        .iter()
+        .flat_map(|s| {
+            s.story
+                .destinations
+                .iter()
+                .map(move |d| (d.self_id.as_str(), (s.self_id.as_str(), d.paragraph)))
+        })
+        .collect();
+    for source in sources {
+        let dest = document
+            .designmap
+            .hyperlinks
+            .iter()
+            .find(|h| h.source.as_deref() == Some(source))
+            .and_then(|h| h.destination.as_deref());
+        let page = dest
+            .and_then(|d| destinations.get(d))
+            .and_then(|(story, para)| {
+                laid_out
+                    .get(*story)
+                    .and_then(|m| m.get(&(*para as usize)).copied())
+            });
+        if let Some(page) = page {
+            out.insert(source.to_string(), page);
+        }
+    }
+    out
+}
+
+/// Single-page convenience: union every page's bounds and emit all
+/// frames in spread coordinates. Kept for back-compat and for hosts
+/// that genuinely want one canvas — but multi-page callers should use
+/// `build_document` instead.
+pub fn build(document: &Document, options: &PipelineOptions) -> anyhow::Result<BuiltPage> {
+    let palette = &document.palette;
+    let mut stats = PipelineStats::default();
+    let mut list = DisplayList::new();
+
+    // Page bounding box — union across every page the document has.
+    let mut page_w: f32 = 612.0;
+    let mut page_h: f32 = 792.0;
+    let mut saw_page = false;
+
+    for parsed in &document.spreads {
+        let spread = &parsed.spread;
+        stats.spreads += 1;
+        stats.pages += spread.pages.len();
+        stats.frames += spread.text_frames.len() + spread.rectangles.len();
+
+        for p in &spread.pages {
+            if saw_page {
+                page_w = page_w.max(p.bounds.width());
+                page_h = page_h.max(p.bounds.height());
+            } else {
+                page_w = p.bounds.width();
+                page_h = p.bounds.height();
+                saw_page = true;
+            }
+        }
+
+        for frame in &spread.text_frames {
+            let rect = Rect {
+                x: frame.bounds.left,
+                y: frame.bounds.top,
+                w: frame.bounds.width(),
+                h: frame.bounds.height(),
+            };
+            let fill_paint = resolve_fill(frame, palette).unwrap_or(options.fallback_frame_fill);
+            emit_rect(rect, fill_paint, &mut list);
+            if let Some(stroke_paint) = resolve_stroke(frame, palette) {
+                let width = frame.stroke_weight.unwrap_or(1.0);
+                if width > 0.0 {
+                    emit_stroke_rect(rect, Stroke::new(width), stroke_paint, &mut list);
+                }
+            }
+        }
+
+        for rect in &spread.rectangles {
+            let r = Rect {
+                x: rect.bounds.left,
+                y: rect.bounds.top,
+                w: rect.bounds.width(),
+                h: rect.bounds.height(),
+            };
+            let fill = resolve_rect_fill(rect, palette).unwrap_or(options.fallback_frame_fill);
+            emit_rect(r, fill, &mut list);
+            if let Some(paint) = resolve_rect_stroke(rect, palette) {
+                let width = rect.stroke_weight.unwrap_or(1.0);
+                if width > 0.0 {
+                    emit_stroke_rect(r, Stroke::new(width), paint, &mut list);
+                }
+            }
+        }
+    }
+
+    let shaping_face = options
+        .font
+        .and_then(|bytes| paged_text::Face::from_slice(bytes, 0));
+    let outline_face = options
+        .font
+        .and_then(|bytes| ttf_parser::Face::parse(bytes, 0).ok());
+    let font_id = options.font.map(fnv_1a_u32).unwrap_or(0);
+
+    for parsed in &document.stories {
+        stats.stories += 1;
+        let story = &parsed.story;
+        let frame = document.frame_for(&parsed.self_id);
+        let column_width_pt = options
+            .fallback_column_width_pt
+            .or_else(|| frame.map(|f| f.bounds.width()));
+
+        for paragraph in &story.paragraphs {
+            stats.paragraphs += 1;
+            stats.runs += paragraph.runs.len();
+
+            let paragraph_size = paragraph
+                .runs
+                .first()
+                .and_then(|r| r.point_size)
+                .unwrap_or(options.default_point_size);
+            let paragraph_text: String = paragraph.runs.iter().map(|r| r.text.as_str()).collect();
+
+            if let Some(face) = shaping_face.as_ref() {
+                for run in &paragraph.runs {
+                    let size = run.point_size.unwrap_or(options.default_point_size);
+                    let shaped = paged_text::shape_run(face, &run.text, size);
+                    stats.glyphs += shaped.glyphs.len();
+                }
+            }
+
+            let (Some(face), Some(col_pt)) = (shaping_face.as_ref(), column_width_pt) else {
+                continue;
+            };
+            let measurer = paged_text::HarfrustMeasurer::new(face, paragraph_size);
+            let mut lopts = paged_text::LayoutOptions::new(col_pt, paragraph_size);
+            (lopts.alignment, lopts.last_line_alignment) =
+                map_justification(paragraph.justification, BindingEdge::default());
+            let laid_out = paged_text::layout_paragraph(&paragraph_text, &measurer, &lopts);
+            stats.lines += laid_out.lines.len();
+
+            let (Some(outline), Some(frame)) = (outline_face.as_ref(), frame) else {
+                continue;
+            };
+            let outliner = TtfOutliner::new(outline);
+            let picker = build_run_paint_picker(paragraph, palette, options.fallback_text_paint);
+            let origin = frame_spread_top_left(frame.bounds, frame.item_transform);
+            emit_paragraph(
+                &laid_out,
+                // This path never mixes a wght into its id — it is the
+                // plain hash of `options.font` — so both halves agree.
+                paged_compose::FontRef::plain(font_id),
+                paragraph_size,
+                |cluster| picker.pick(cluster),
+                origin,
+                &outliner,
+                &mut list,
+            );
+        }
+    }
+
+    Ok(BuiltPage {
+        id: PageId::synthetic(0, 0),
+        width_pt: page_w,
+        height_pt: page_h,
+        spread_origin: (0.0, 0.0),
+        spread_transform: Transform::IDENTITY,
+        list,
+        layout_generation: 0,
+        numbering_generation: 0,
+        stats,
+        story_layout: Vec::new(),
+        footnotes: Vec::new(),
+        diagnostics: Vec::new(),
+        cell_rects: Vec::new(),
+        resource_tiles_needed: Vec::new(),
+        scene_layer_frames: Vec::new(),
+    })
+}
+
+/// Rasterise a single already-built page at a target DPI. Shared by
+/// `render_document` and the canvas LOD cache, which wants to
+/// produce low-resolution snapshots (page navigator / minimap) and
+/// per-page bitmaps at viewport zoom without re-running
+/// `build_document`. `background` is composited under transparent
+/// regions of the display list.
+#[cfg(feature = "cpu")]
+pub fn render_built_page(page: &BuiltPage, dpi: f32, background: Color) -> image::RgbaImage {
+    let mut raster_opts = paged_gpu::RasterOptions::new(page.width_pt, page.height_pt);
+    raster_opts.dpi = dpi;
+    raster_opts.background = background;
+    paged_gpu::rasterize(&page.list, &raster_opts)
+}
+
+/// Separate an already-built page into its ink plates at `dpi`.
+///
+/// The raster is thrown away — only the plate state is wanted. Cost is
+/// one full CPU rasterisation of the page, so callers should treat this
+/// as an on-demand analysis, not something to run per keystroke.
+///
+/// `dpi` sets the sampling resolution of an *area* measurement: a solid
+/// tint reads correctly at any dpi, but an anti-aliased edge dilutes
+/// its ink with the paper it partially covers, so sub-pixel hairlines
+/// under-report at low dpi. 72 (1 px per pt) is the sane default for a
+/// coverage reading; raise it when hairline rules matter. Ink limits on
+/// *swatches* are better checked against the palette directly — that is
+/// exact and resolution-free.
+#[cfg(feature = "cpu")]
+pub fn separate_built_page(page: &BuiltPage, dpi: f32) -> paged_gpu::separations::Separation {
+    let mut raster_opts = paged_gpu::RasterOptions::new(page.width_pt, page.height_pt);
+    raster_opts.dpi = dpi;
+    paged_gpu::rasterize_with_separation(&page.list, &raster_opts).1
+}
+
+/// Build + rasterise every page. Returns one `RgbaImage` per page in
+/// document order. `dpi` and `background` apply uniformly.
+#[cfg(feature = "cpu")]
+pub fn render_document(
+    document: &Document,
+    options: &PipelineOptions,
+    dpi: f32,
+    background: Color,
+) -> anyhow::Result<(BuiltDocument, Vec<image::RgbaImage>)> {
+    let built = build_document(document, options)?;
+    let mut images = Vec::with_capacity(built.pages.len());
+    for page in &built.pages {
+        images.push(render_built_page(page, dpi, background));
+    }
+    Ok((built, images))
+}
+
+/// Build + rasterise in one call. `dpi` and `background` control the
+/// raster pass; everything else comes from `options`.
+#[cfg(feature = "cpu")]
+pub fn render(
+    document: &Document,
+    options: &PipelineOptions,
+    dpi: f32,
+    background: Color,
+) -> anyhow::Result<(BuiltPage, image::RgbaImage)> {
+    let built = build(document, options)?;
+    let mut raster_opts = paged_gpu::RasterOptions::new(built.width_pt, built.height_pt);
+    raster_opts.dpi = dpi;
+    raster_opts.background = background;
+    let image = paged_gpu::rasterize(&built.list, &raster_opts);
+    Ok((built, image))
+}
+
+#[cfg(test)]
+mod tests;

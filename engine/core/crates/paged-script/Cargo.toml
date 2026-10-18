@@ -1,0 +1,39 @@
+[package]
+name = "paged-script"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+# Pure-Rust JS engine. Compiles cleanly to wasm32-unknown-unknown
+# without a libc sysroot or wasm-capable clang — the canvas wasm
+# build is back to vanilla `cargo build --target wasm32-unknown-
+# unknown` once this is the only scripting dep.
+boa_engine = { version = "0.21", default-features = false }
+
+paged-canvas = { path = "../paged-canvas" }
+paged-mutate = { path = "../paged-mutate" }
+# The capability catalog (the single JS-name -> PropertyPath table) lives in
+# the neutral, published introspection crate so every surface projects one
+# contract (ADR 019); the Boa bridge delegates parse_property_path to it.
+paged-introspect = { path = "../paged-introspect" }
+# ADR 132 — `VirtualTarget`, the `Set` target a script names (and the op
+# roster the reachability gate reads).
+paged-wire = { path = "../paged-wire" }
+serde = { workspace = true }
+serde_json = "1"
+
+[dev-dependencies]
+# Budget tests build a minimal in-memory IDML package so they don't
+# depend on the gitignored fidelity corpus (the worktree has none).
+zip = { workspace = true }
+# W1.20 — the groups-v2 script test reads parsed `FrameRef` members.
+paged-model = { path = "../paged-model" }
+# The value-construct gate probes the apply layer on generated documents
+# (no dependency on the gitignored corpus).
+paged-gen = { path = "../paged-gen" }
+paged-scene = { path = "../paged-scene" }
+
+[lints]
+workspace = true

@@ -1,0 +1,5769 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Scripting Stage 2 — embedded Boa (pure-Rust JS) bridge.
+//!
+//! Hosts a Boa JS context inside the canvas worker so user scripts
+//! can mutate the document through the same Operation channel the
+//! Inspector + REPL already use. Per the original scripting-layer design (not published; see `docs/adr/001-boa-over-quickjs.md`)
+//! every write goes through `paged_mutate::apply`; the host functions
+//! installed here are the only path JS can take to reach it.
+//!
+//! Boa is pure Rust, so the wasm build needs nothing more than
+//! `cargo build --target wasm32-unknown-unknown` — no libc sysroot,
+//! no wasm-capable clang, no WASI polyfill (which were all required
+//! by the previous rquickjs/QuickJS-in-C path).
+//!
+//! v1 surface (function-style + Proxy sugar via the bootstrap JS):
+//!   paged.set(idStr, pathStr, value)
+//!   paged.get(idStr, pathStr) -> value | null
+//!   paged.insertText(storyId, offset, text) -> bool       (Stage 1 authoring)
+//!   paged.deleteRange(storyId, start, end) -> bool
+//!   paged.insertTextFrame(pageId, [t,l,b,r]) -> "textFrame:<id>" | null
+//!   paged.insertFrame(pageId, [t,l,b,r]) -> address | null  (Stage 2 authoring)
+//!   paged.insertPage(afterPageId?) -> pageId | null
+//!   paged.placeImage(frameId, uri, fit?) -> bool
+//!   paged.applyStyle(storyId, start, end, styleRef) -> bool
+//!   paged.createGroup([id, ...]) -> bool
+//!   paged.duplicateElements([id, ...], dx, dy) -> address[] JSON | null
+//!   paged.inspect(idStr) -> ElementProperties JSON
+//!   paged.layers() -> LayerSummary[]
+//!   paged.tree() -> SceneTreeNode[]
+//!   paged.selection() -> ElementId[] JSON (current element selection)
+//!   paged.contentSelection() -> ContentSelection JSON | null
+//!   paged.undo() / paged.redo()
+//!   paged.frame(idStr) -> Proxy whose `prop = value` writes go
+//!                          through paged.set
+//!   console.log(...) -> captured into the output log
+
+use std::cell::Cell;
+use std::cell::RefCell;
+#[cfg(target_arch = "wasm32")]
+use std::rc::Rc;
+
+use boa_engine::{
+    builtins::promise::PromiseState,
+    js_string,
+    object::{builtins::JsPromise, JsObject, ObjectInitializer},
+    property::Attribute,
+    Context, JsArgs, JsError, JsNativeError, JsResult, JsValue, NativeFunction, Script, Source,
+};
+use paged_canvas::channel::{CollectionName, Mutation};
+pub use paged_canvas::channel::{HostObjectAnswer, HostObjectCall, HostObjectError};
+
+mod host_bridge;
+pub use host_bridge::MAX_HOST_ROUNDS;
+use paged_canvas::CanvasModel;
+use paged_canvas::PageId;
+use serde::{Deserialize, Serialize};
+
+// The capability catalog is owned by `paged-introspect` (the neutral, published
+// home — ADR 019); re-exported here so existing consumers (`paged-run`) and the
+// Boa bridge keep referencing it as before.
+pub use paged_introspect::catalog::{api_catalog, ApiCatalog};
+
+/// Which runtime budget a script exhausted. Surfaced as the typed
+/// half of a `ScriptResult` so the host (editor REPL, plugin runner,
+/// headless conformance) can distinguish a *budget* abort from an
+/// ordinary script exception and react accordingly (e.g. show a
+/// "script hit its time/iteration limit" banner instead of a generic
+/// error). B-09 / W-08: this is the typed-exhaustion contract the
+/// plugin repos asked for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ScriptBudgetKind {
+    /// `loop_iteration_limit` tripped — a runaway / pathologically
+    /// long pure-JS loop. Enforced natively by Boa's bytecode loop
+    /// opcode.
+    Iterations,
+    /// `recursion_limit` tripped — unbounded / too-deep recursion.
+    Recursion,
+    /// `stack_size_limit` tripped — VM value-stack overflow guard.
+    StackSize,
+    /// The wall-clock deadline elapsed while the script was inside a
+    /// host call (`paged.*` / `console.*`). The single-threaded
+    /// wasm worker cannot preempt a pure-JS loop, so this fires at
+    /// the next host-function boundary — see the `ScriptBudget`
+    /// wall-clock note.
+    WallClock,
+}
+
+impl ScriptBudgetKind {
+    /// Stable lower-case tag for log lines and message matching.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ScriptBudgetKind::Iterations => "iterations",
+            ScriptBudgetKind::Recursion => "recursion",
+            ScriptBudgetKind::StackSize => "stackSize",
+            ScriptBudgetKind::WallClock => "wallClock",
+        }
+    }
+}
+
+/// Per-execution runtime budget. Hosts tighten or loosen this through
+/// `execute_script_with`; `execute_script` uses `Default`. Every field
+/// maps onto a concrete Boa guard or the bridge's wall-clock deadline:
+///
+/// - `loop_iterations` → `RuntimeLimits::set_loop_iteration_limit`
+///   (kills `while (true) {}` and friends; generous enough that a
+///   script touching every element of a large document never trips
+///   it, tight enough that an infinite loop dies promptly).
+/// - `recursion_depth` → `RuntimeLimits::set_recursion_limit`.
+/// - `stack_size`      → `RuntimeLimits::set_stack_size_limit`.
+/// - `wall_clock_ms`   → the bridge-level deadline (this crate; Boa
+///   has no native instruction-level wall-clock interrupt in its
+///   synchronous run loop — see the wall-clock note below).
+///
+/// ## Wall-clock guarantee (and the wasm limitation, stated precisely)
+///
+/// Boa 0.21 runs scripts to completion **synchronously** inside
+/// `Context::eval`. Its bytecode loop consults no clock and exposes no
+/// host interrupt hook on the synchronous path (the only instruction
+/// counter, `instructions_remaining`, is `#[cfg(feature = "fuzz")]`
+/// only). The canvas worker is single-threaded wasm, so there is no
+/// second thread that could set an interrupt flag mid-loop. We
+/// therefore CANNOT preempt an arbitrary pure-JS busy loop on the wall
+/// clock — that class is bounded only by `loop_iterations`.
+///
+/// What `wall_clock_ms` *does* guarantee: the deadline is checked at
+/// the entry of **every** `paged.*` / `console.*` host function (the
+/// only way a script reaches the document, the only way it can block
+/// on a slow native, and the cadence at which any host-call-driven
+/// loop ticks). So a script blocked in a long native call CHAIN, a
+/// pathological per-iteration host call, or a loop that does any work
+/// through the bridge terminates within one host call of the deadline,
+/// with a typed `WallClock` exhaustion. A breach raises Boa's
+/// **non-catchable** `RuntimeLimit` error, so user `try/catch` cannot
+/// swallow it and the engine unwinds cleanly back to the embedder.
+///
+/// True preemption of a host-call-free CPU loop would require
+/// terminating the whole Web Worker from the main thread (an editor-
+/// side concern, outside this crate). `loop_iterations` is the
+/// in-crate backstop for that class.
+#[derive(Debug, Clone, Copy)]
+pub struct ScriptBudget {
+    pub loop_iterations: u64,
+    pub recursion_depth: usize,
+    pub stack_size: usize,
+    /// Wall-clock ceiling in milliseconds, enforced at host-call
+    /// boundaries. `None` disables the deadline (loop/recursion/stack
+    /// guards still apply).
+    pub wall_clock_ms: Option<u64>,
+}
+
+/// Default budget. Preserves the values that shipped with the PARTIAL
+/// B-09 landing (10M loop iterations, Boa's default 512 recursion) and
+/// adds the previously-absent wall-clock ceiling + an explicit stack
+/// guard.
+impl Default for ScriptBudget {
+    fn default() -> Self {
+        Self {
+            loop_iterations: 10_000_000,
+            recursion_depth: 512,
+            // Boa's own default stack size limit; made explicit so the
+            // guard classifies as a typed `StackSize` exhaustion.
+            stack_size: boa_engine::vm::RuntimeLimits::default().stack_size_limit(),
+            // 2 s: long enough for a heavy document sweep that calls
+            // through the bridge, short enough that a stuck native
+            // chain in the editor REPL doesn't feel like a hang.
+            wall_clock_ms: Some(2_000),
+        }
+    }
+}
+
+/// Wall-clock source, in milliseconds (same unit + shape as the canvas
+/// worker's `Clock`: `js_sys::Date::now` on wasm, a monotonic-ish
+/// native clock in tests). Injected by the host so this crate stays
+/// wasm-clean — it never touches `std::time` on its own.
+pub type Clock<'a> = dyn Fn() -> f64 + 'a;
+
+/// Result of one `execute_script` call. Output is the accumulated
+/// `console.log` / `console.warn` / etc. lines (in emission order).
+/// `error` is set when the script threw an unhandled exception.
+/// `budget_kind` is set (and `error` is also set) when the abort was a
+/// runtime-budget exhaustion rather than an ordinary script error —
+/// the typed half of the B-09 / W-08 contract.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScriptResult {
+    pub output: Vec<String>,
+    pub error: Option<String>,
+    /// `Some(kind)` iff the script aborted on a runtime budget. Always
+    /// accompanied by a human-readable `error`. Additive: absent in
+    /// the JSON for ordinary results.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_kind: Option<ScriptBudgetKind>,
+    /// v0.71.13 — how many writes the run committed to the document itself
+    /// (each a step the engine logged). `0` for a read-only script. The
+    /// writes a host made answering a suspended script are its own
+    /// replies' to report, not counted here. `None` only where no run
+    /// happened. Additive: absent in the JSON when `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub writes: Option<u32>,
+    /// v0.71.13 — the pages the run's writes changed, in document order, as
+    /// the engine's rebuilds named them (a text edit narrows to its
+    /// story's pages; any other write names every page). Empty when no
+    /// write changed a page. `None` when it cannot say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_ids: Option<Vec<paged_canvas::PageId>>,
+}
+
+// SAFETY pattern: Boa runs host functions synchronously inside the
+// `ctx.eval(...)` call from `execute_script`. We stash a raw pointer
+// to the CanvasModel in thread-local storage on entry and clear it
+// on exit. The host functions read it via `with_model`. Wasm is
+// single-threaded so the thread-local pattern is safe by
+// construction; native (test-only) usage is also serial.
+thread_local! {
+    static MODEL_PTR: RefCell<Option<*mut CanvasModel>> = const { RefCell::new(None) };
+    static OUTPUT: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    /// Wall-clock deadline state for the in-flight `execute_script`
+    /// call. `clock` returns "now" in ms; `deadline_ms` is the absolute
+    /// ms value past which any host-function entry aborts. Both are
+    /// cleared on exit so a deadline can never leak across calls. The
+    /// clock is a boxed closure (the host injects it) — single-threaded
+    /// by construction, like `MODEL_PTR`.
+    static DEADLINE: RefCell<Option<DeadlineState>> = const { RefCell::new(None) };
+    /// Set once when the deadline first trips, so every subsequent host
+    /// call in the same execution short-circuits to the same typed
+    /// abort (and so the classifier can recover the kind even though
+    /// Boa's `RuntimeLimit` message is opaque).
+    static DEADLINE_TRIPPED: Cell<bool> = const { Cell::new(false) };
+}
+
+struct DeadlineState {
+    /// Borrowed clock reference, lifetime-erased to `'static`. SAFETY
+    /// contract (same as `MODEL_PTR`): only dereferenced inside
+    /// `check_deadline`, which only runs while this `execute_script_with`
+    /// call is on the stack; the slot is cleared before the call
+    /// returns, so the reference is never read after the real clock is
+    /// gone. Single-threaded by construction.
+    clock: &'static Clock<'static>,
+    deadline_ms: f64,
+}
+
+/// Sentinel embedded in the wall-clock abort message so `classify_*`
+/// can tell a deadline breach apart from Boa's own loop/recursion
+/// `RuntimeLimit` messages (both arrive as opaque native errors).
+const WALL_CLOCK_SENTINEL: &str = "paged:wall-clock-deadline";
+
+/// Returns `Err(non-catchable RuntimeLimit)` when the wall-clock
+/// deadline has passed; `Ok(())` otherwise (or when no deadline is
+/// set). Called at the top of every host function — the only place a
+/// single-threaded synchronous engine can observe the clock without a
+/// native VM interrupt hook (which Boa 0.21 does not expose). Once
+/// tripped it stays tripped for the rest of the execution.
+fn check_deadline() -> JsResult<()> {
+    if DEADLINE_TRIPPED.with(Cell::get) {
+        return Err(deadline_error());
+    }
+    let over = DEADLINE.with(|d| {
+        d.borrow()
+            .as_ref()
+            .is_some_and(|s| (s.clock)() >= s.deadline_ms)
+    });
+    if over {
+        DEADLINE_TRIPPED.with(|c| c.set(true));
+        return Err(deadline_error());
+    }
+    Ok(())
+}
+
+fn deadline_error() -> boa_engine::JsError {
+    // `RuntimeLimit` is NON-catchable in Boa (see `JsNativeErrorKind::
+    // is_catchable`), so a user `try { ... } catch {}` cannot swallow
+    // the abort — it unwinds straight back to the embedder, exactly
+    // like the native loop/recursion limits. The sentinel lets the
+    // classifier recover the `WallClock` kind.
+    JsNativeError::runtime_limit()
+        .with_message(format!(
+            "{WALL_CLOCK_SENTINEL}: script exceeded its time budget"
+        ))
+        .into()
+}
+
+fn with_model<R>(f: impl FnOnce(&mut CanvasModel) -> R) -> R {
+    MODEL_PTR.with(|p| {
+        let ptr = p
+            .borrow()
+            .expect("paged-script: host fn called outside execute_script");
+        // SAFETY: pointer valid for the duration of the enclosing
+        // execute_script call (set/cleared by execute_script itself).
+        unsafe { f(&mut *ptr) }
+    })
+}
+
+fn push_output(line: String) {
+    OUTPUT.with(|o| o.borrow_mut().push(line));
+}
+
+/// B-09 (plugin platform) / W-08 (plugin-web transforms) — runtime
+/// budgets. Boa runs synchronously inside the worker, so a runaway
+/// script hangs the editor unless the engine itself bails. The budget
+/// combines Boa's native `RuntimeLimits` (loop / recursion / stack)
+/// with a bridge-level wall-clock deadline checked at host-call
+/// boundaries. See `ScriptBudget` for the full mechanism + the precise
+/// wasm wall-clock guarantee.
+fn budgeted_context(budget: &ScriptBudget) -> Context {
+    // v71 — the bridge runs promise jobs, and Boa's job loop reads the
+    // context clock; its default (`StdClock`, `SystemTime::now`) panics on
+    // wasm32-unknown-unknown. A fixed clock: no timer jobs are ever queued
+    // (scripts have no setTimeout), and the wall-clock budget has its own
+    // host-injected clock.
+    #[cfg(target_arch = "wasm32")]
+    let builder = Context::builder().clock(Rc::new(FixedClock));
+    #[cfg(not(target_arch = "wasm32"))]
+    let builder = Context::builder();
+    let mut ctx = builder.build().expect("a Boa context builds");
+    let mut limits = boa_engine::vm::RuntimeLimits::default();
+    limits.set_loop_iteration_limit(budget.loop_iterations);
+    limits.set_recursion_limit(budget.recursion_depth);
+    limits.set_stack_size_limit(budget.stack_size);
+    ctx.set_runtime_limits(limits);
+    ctx
+}
+
+/// See `budgeted_context`.
+#[cfg(target_arch = "wasm32")]
+struct FixedClock;
+
+#[cfg(target_arch = "wasm32")]
+impl boa_engine::context::time::Clock for FixedClock {
+    fn now(&self) -> boa_engine::context::time::JsInstant {
+        boa_engine::context::time::JsInstant::new(0, 0)
+    }
+}
+
+/// Run `source` against the given `CanvasModel` with the default
+/// budget and a native wall-clock. Every write the script issues lands
+/// as an `Operation` via `apply_mutation`, so undo/redo work
+/// identically to any UI-driven change.
+///
+/// Convenience wrapper over [`execute_script_with`]; hosts that need to
+/// tighten or loosen the budget (the editor REPL, the plugin runner,
+/// headless conformance) — or that must inject a wasm-safe clock —
+/// call `execute_script_with` directly.
+pub fn execute_script(model: &mut CanvasModel, source: &str) -> ScriptResult {
+    execute_script_with(model, source, ScriptBudget::default(), &native_clock)
+}
+
+/// Native millisecond clock used by `execute_script`. Monotonic enough
+/// for a deadline: `Instant` since a process-lifetime anchor. Kept
+/// behind a `cfg` so the crate never references `std::time` on wasm32,
+/// where the host injects `js_sys::Date::now` instead.
+#[cfg(not(target_arch = "wasm32"))]
+fn native_clock() -> f64 {
+    use std::sync::OnceLock;
+    use std::time::Instant;
+    static ANCHOR: OnceLock<Instant> = OnceLock::new();
+    let anchor = ANCHOR.get_or_init(Instant::now);
+    anchor.elapsed().as_secs_f64() * 1000.0
+}
+
+/// On wasm32 the host MUST supply a clock via `execute_script_with`;
+/// the default `execute_script` falls back to a zero clock, which
+/// disables only the wall-clock deadline (loop / recursion / stack
+/// guards still apply). The wasm worker always uses
+/// `execute_script_with(js_sys::Date::now)`, so this fallback is never
+/// the live path — it exists so the crate compiles wasm-clean without
+/// `std::time`.
+#[cfg(target_arch = "wasm32")]
+fn native_clock() -> f64 {
+    0.0
+}
+
+/// Run `source` with an explicit `budget` and host-injected `clock`.
+/// The per-execution entry point for embedders. The clock returns "now"
+/// in milliseconds (`js_sys::Date::now` on wasm); the wall-clock
+/// deadline, if any, is `clock() + budget.wall_clock_ms` captured at
+/// entry and enforced at every host-function boundary.
+///
+/// No host object registry: a `plugin:` address throws `noHost`. Hosts
+/// that have one use [`start_script`].
+pub fn execute_script_with(
+    model: &mut CanvasModel,
+    source: &str,
+    budget: ScriptBudget,
+    clock: &Clock<'_>,
+) -> ScriptResult {
+    match start_script(model, source, budget, clock, false, 0) {
+        (ScriptStep::Done(result), _) => result,
+        // Unreachable without a host: nothing can be queued.
+        (ScriptStep::Suspended { .. }, _) => ScriptResult {
+            error: Some("script suspended without a host".into()),
+            ..Default::default()
+        },
+    }
+}
+
+/// v71 — what one segment of a script run ended in.
+#[derive(Debug)]
+pub enum ScriptStep {
+    /// The script finished (or failed).
+    Done(ScriptResult),
+    /// The script waits on the host's object registry: answer every call,
+    /// in order, then [`ScriptSession::resume`].
+    Suspended { calls: Vec<HostObjectCall> },
+}
+
+/// How the script's top level ended: a value, a promise still settling
+/// (an async body, or a script whose last expression is a promise), or a
+/// synchronous throw.
+enum Outcome {
+    Value(JsValue),
+    Promise(JsObject),
+    Failed(String),
+}
+
+/// v71 — a script suspended on the host bridge (see `host_bridge`): its
+/// Boa context, the calls in flight, and what it printed so far. Owned by
+/// the worker between `RequestHostObjects` and `HostObjectsResult`.
+pub struct ScriptSession {
+    id: u32,
+    pending: Vec<host_bridge::Queued>,
+    outcome: Outcome,
+    output: Vec<String>,
+    budget: ScriptBudget,
+    /// Bridge promises the host's answers rejected, in rejection order.
+    rejected: Vec<JsObject>,
+    undo_mark: u64,
+    /// The `applied_seq`s that are this script's own: every record logged
+    /// while one of its segments ran (`(after, upto]` ranges — the worker
+    /// is single-threaded, so nothing else writes then), plus the host
+    /// commits a `HostObjectsResult` reported. Everything else logged
+    /// while the script waited is a foreign edit the fold must not take.
+    own_segments: Vec<(u64, u64)>,
+    host_commits: Vec<u64>,
+    /// `applied_seq` when the running segment began.
+    segment_start: u64,
+    /// v0.71.13 — the writes this script's own segments committed, and the
+    /// pages their builds changed (collected per segment, so an edit made
+    /// while the script waited on the host is never counted as its own).
+    writes: u64,
+    changed_pages: std::collections::BTreeSet<paged_canvas::PageId>,
+    host_writes: bool,
+    rounds: u32,
+    // Last: everything above may hold GC handles of this context.
+    ctx: Context,
+}
+
+impl std::fmt::Debug for ScriptSession {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScriptSession")
+            .field("id", &self.id)
+            .field("pending", &self.pending.len())
+            .field("rounds", &self.rounds)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Arm the per-segment thread-locals (model, deadline) for one synchronous
+/// stretch of a script. [`leave_segment`] disarms them; both run on the
+/// same stack, which is what keeps the lifetime-erased pointers sound.
+fn enter_segment(model: &mut CanvasModel, budget: &ScriptBudget, clock: &Clock<'_>) {
+    let ptr = model as *mut CanvasModel;
+    MODEL_PTR.with(|p| *p.borrow_mut() = Some(ptr));
+    OUTPUT.with(|o| o.borrow_mut().clear());
+    DEADLINE_TRIPPED.with(|c| c.set(false));
+    // Clear any stale deadline up front too, so a `wall_clock_ms: None`
+    // run never inherits a previous call's clock reference.
+    DEADLINE.with(|d| *d.borrow_mut() = None);
+    if let Some(ms) = budget.wall_clock_ms {
+        let deadline_ms = clock() + ms as f64;
+        // Lifetime-erase the borrowed clock to `'static` so it can live
+        // in the thread-local for the duration of this segment. SAFETY:
+        // the DEADLINE slot is cleared by `leave_segment` before the
+        // segment's caller returns, and `check_deadline` — the only
+        // reader — only runs synchronously inside the segment on this
+        // same stack. Single-threaded, same contract as `MODEL_PTR`.
+        let clock_static: &'static Clock<'static> =
+            unsafe { std::mem::transmute::<&Clock<'_>, &'static Clock<'static>>(clock) };
+        DEADLINE.with(|d| {
+            *d.borrow_mut() = Some(DeadlineState {
+                clock: clock_static,
+                deadline_ms,
+            });
+        });
+    }
+}
+
+fn leave_segment() -> Vec<String> {
+    let output = OUTPUT.with(|o| std::mem::take(&mut *o.borrow_mut()));
+    MODEL_PTR.with(|p| *p.borrow_mut() = None);
+    DEADLINE.with(|d| *d.borrow_mut() = None);
+    DEADLINE_TRIPPED.with(|c| c.set(false));
+    output
+}
+
+/// v71 — start a script. `host_objects`: the caller answers
+/// `ScriptStep::Suspended` (it has an ADR 323 object registry); without
+/// one a `plugin:` address throws `noHost`. `session_id` names the
+/// session in the `RequestHostObjects` the caller sends. Returns the
+/// session to keep when the step is `Suspended`.
+pub fn start_script(
+    model: &mut CanvasModel,
+    source: &str,
+    budget: ScriptBudget,
+    clock: &Clock<'_>,
+    host_objects: bool,
+    session_id: u32,
+) -> (ScriptStep, Option<ScriptSession>) {
+    let undo_mark = model.last_applied_seq();
+    model.begin_page_change_tracking();
+    enter_segment(model, &budget, clock);
+    host_bridge::open_queue(host_objects);
+    let mut ctx = budgeted_context(&budget);
+    let outcome = evaluate(&mut ctx, source);
+    let session = ScriptSession {
+        id: session_id,
+        pending: Vec::new(),
+        outcome,
+        output: Vec::new(),
+        budget,
+        rejected: Vec::new(),
+        undo_mark,
+        own_segments: Vec::new(),
+        host_commits: Vec::new(),
+        segment_start: undo_mark,
+        writes: 0,
+        changed_pages: std::collections::BTreeSet::new(),
+        host_writes: false,
+        rounds: 0,
+        ctx,
+    };
+    session.drive(model)
+}
+
+impl ScriptSession {
+    /// The id the `RequestHostObjects` carried.
+    pub fn id(&self) -> u32 {
+        self.id
+    }
+
+    /// Settle the in-flight calls from the host's `answers` (call order)
+    /// and run the script on until it suspends again or finishes.
+    /// `committed`: the `applied_seq`s of the engine writes the host made
+    /// answering (see `HostObjectsResult.committed`) — the script's own.
+    pub fn resume(
+        mut self,
+        model: &mut CanvasModel,
+        answers: &[HostObjectAnswer],
+        committed: &[u64],
+        clock: &Clock<'_>,
+    ) -> (ScriptStep, Option<ScriptSession>) {
+        self.host_commits
+            .extend(committed.iter().copied().filter(|&s| s > self.undo_mark));
+        self.segment_start = model.last_applied_seq();
+        model.begin_page_change_tracking();
+        enter_segment(model, &self.budget, clock);
+        host_bridge::open_queue(true);
+        for (i, queued) in std::mem::take(&mut self.pending).into_iter().enumerate() {
+            host_bridge::settle(queued, answers.get(i), &mut self.ctx, &mut self.rejected);
+        }
+        self.drive(model)
+    }
+
+    /// Run every runnable job; then suspend on what was queued, or finish.
+    fn drive(mut self, model: &mut CanvasModel) -> (ScriptStep, Option<ScriptSession>) {
+        if !matches!(self.outcome, Outcome::Failed(_)) {
+            if let Err(e) = self.ctx.run_jobs() {
+                self.outcome = Outcome::Failed(format_error(&e, &mut self.ctx));
+            }
+        }
+        let (queued, writes) = host_bridge::close_queue();
+        // The segment ends here (a suspended script runs nothing more until
+        // resumed; `finish` writes nothing): what it logged is its own.
+        self.own_segments
+            .push((self.segment_start, model.last_applied_seq()));
+        self.writes += model.last_applied_seq().saturating_sub(self.segment_start);
+        self.changed_pages.extend(model.end_page_change_tracking());
+        // A script that threw does not flush what it queued: its host
+        // writes never leave, as a synchronous script's later writes
+        // never run.
+        if !queued.is_empty() && !matches!(self.outcome, Outcome::Failed(_)) {
+            if self.rounds >= host_bridge::MAX_HOST_ROUNDS {
+                self.outcome = Outcome::Failed(format!(
+                    "runtime budget exceeded: more than {} host round trips",
+                    host_bridge::MAX_HOST_ROUNDS
+                ));
+            } else {
+                self.rounds += 1;
+                self.host_writes |= writes;
+                let calls = host_bridge::calls_of(&queued);
+                self.pending = queued;
+                self.output.extend(leave_segment());
+                return (ScriptStep::Suspended { calls }, Some(self));
+            }
+        }
+        let result = self.finish(model);
+        (ScriptStep::Done(result), None)
+    }
+
+    fn finish(mut self, model: &mut CanvasModel) -> ScriptResult {
+        let ctx = &mut self.ctx;
+        let error = match &self.outcome {
+            Outcome::Failed(e) => Some(e.clone()),
+            Outcome::Value(v) => {
+                if !v.is_undefined() {
+                    push_output(format_value(v, ctx));
+                }
+                None
+            }
+            Outcome::Promise(p) => {
+                let state = JsPromise::from_object(p.clone()).map(|p| p.state());
+                match state {
+                    Ok(PromiseState::Fulfilled(v)) => {
+                        if !v.is_undefined() {
+                            push_output(format_value(&v, ctx));
+                        }
+                        None
+                    }
+                    Ok(PromiseState::Rejected(v)) => {
+                        Some(format_error(&JsError::from_opaque(v), ctx))
+                    }
+                    Ok(PromiseState::Pending) | Err(_) => Some(
+                        "the script awaited a promise that never settles (no host call is pending)"
+                            .to_string(),
+                    ),
+                }
+            }
+        };
+        let error = error.or_else(|| {
+            host_bridge::first_unhandled(&self.rejected, ctx).map(|v| {
+                format!(
+                    "unhandled rejection: {}",
+                    format_error(&JsError::from_opaque(v), ctx)
+                )
+            })
+        });
+        let budget_kind = error.as_deref().and_then(classify_budget_message);
+        if self.host_writes {
+            let (segments, commits) = (&self.own_segments, &self.host_commits);
+            model.group_undo_runs_since(self.undo_mark, |seq| {
+                commits.contains(&seq) || segments.iter().any(|&(a, b)| seq > a && seq <= b)
+            });
+        }
+        let mut output = std::mem::take(&mut self.output);
+        output.extend(leave_segment());
+        ScriptResult {
+            output,
+            error,
+            budget_kind,
+            writes: Some(u32::try_from(self.writes).unwrap_or(u32::MAX)),
+            page_ids: Some(model.in_document_order(&self.changed_pages)),
+        }
+    }
+}
+
+/// Recover the typed `ScriptBudgetKind` from a budget-abort message.
+/// Boa surfaces every `RuntimeLimit` as an opaque string, so we match
+/// on the (stable) message text + our own wall-clock sentinel. Returns
+/// `None` for ordinary script errors.
+fn classify_budget_message(msg: &str) -> Option<ScriptBudgetKind> {
+    // Only "runtime budget exceeded: ..." lines are budget aborts;
+    // `format_error` prefixes exactly that for native RuntimeLimits.
+    if !msg.contains("runtime budget exceeded") {
+        return None;
+    }
+    // NB: match on the sentinel only — the generic prefix
+    // "runtime budget exceeded" itself contains the substring
+    // "time budget", so we must not key WallClock off that.
+    if msg.contains(WALL_CLOCK_SENTINEL) {
+        Some(ScriptBudgetKind::WallClock)
+    } else if msg.contains("loop iteration") {
+        Some(ScriptBudgetKind::Iterations)
+    } else if msg.contains("recursive calls") {
+        Some(ScriptBudgetKind::Recursion)
+    } else if msg.contains("call stack") {
+        Some(ScriptBudgetKind::StackSize)
+    } else {
+        // Unknown RuntimeLimit message — still a budget abort; default
+        // to Iterations rather than mislabel it as an ordinary error.
+        Some(ScriptBudgetKind::Iterations)
+    }
+}
+
+/// Install the bridge and evaluate `source`. A source that parses only
+/// with top-level `await` runs as the body of an async function (its
+/// `return` value is what prints), so `await paged.get(plugin, …)` works
+/// at the top level; every other source runs exactly as before.
+fn evaluate(ctx: &mut Context, source: &str) -> Outcome {
+    if let Err(e) = install_bridge(ctx) {
+        return Outcome::Failed(format!("bridge install: {}", format_error(&e, ctx)));
+    }
+    let bootstrap = r#"
+        (function () {
+            const baseSet = paged.set;
+            const baseGet = paged.get;
+            paged.frame = function (id) {
+                return new Proxy({}, {
+                    set(_t, prop, value) {
+                        baseSet(id, String(prop), value);
+                        return true;
+                    },
+                    get(_t, prop) {
+                        const raw = baseGet(id, String(prop));
+                        if (raw === null || raw === undefined) return null;
+                        try { return JSON.parse(raw); } catch (_) { return raw; }
+                    },
+                });
+            };
+        })();
+    "#;
+    for code in [bootstrap, host_bridge::TRACK_BOOTSTRAP] {
+        if let Err(e) = ctx.eval(Source::from_bytes(code.as_bytes())) {
+            return Outcome::Failed(format!("bootstrap: {}", format_error(&e, ctx)));
+        }
+    }
+    let script = match Script::parse(Source::from_bytes(source.as_bytes()), None, ctx) {
+        Ok(script) => script,
+        Err(e) if source.contains("await") => {
+            let wrapped = format!("(async () => {{\n{source}\n}})()");
+            match ctx.eval(Source::from_bytes(wrapped.as_bytes())) {
+                Ok(v) => return outcome_of(v),
+                // Report the ORIGINAL parse error: the wrapper is ours.
+                Err(_) => return Outcome::Failed(format_error(&e, ctx)),
+            }
+        }
+        Err(e) => return Outcome::Failed(format_error(&e, ctx)),
+    };
+    match script.evaluate(ctx) {
+        Ok(v) => outcome_of(v),
+        Err(e) => Outcome::Failed(format_error(&e, ctx)),
+    }
+}
+
+fn outcome_of(v: JsValue) -> Outcome {
+    match v.as_object() {
+        Some(obj) if obj.is::<boa_engine::builtins::promise::Promise>() => {
+            Outcome::Promise(obj.clone())
+        }
+        _ => Outcome::Value(v),
+    }
+}
+
+/// Wrap a host function pointer so the wall-clock deadline is checked
+/// before it runs. This is the single point where the synchronous
+/// engine observes the clock (Boa 0.21 has no native per-instruction
+/// interrupt on its sync run loop): every `paged.*` / `console.*` call
+/// — the only way a script reaches the document or blocks on a slow
+/// native — passes through here. A fn pointer is `Copy`, so the `move`
+/// closure satisfies `from_copy_closure`'s `Copy` bound.
+fn guarded(f: fn(&JsValue, &[JsValue], &mut Context) -> JsResult<JsValue>) -> NativeFunction {
+    NativeFunction::from_copy_closure(move |this, args, ctx| {
+        check_deadline()?;
+        f(this, args, ctx)
+    })
+}
+
+fn install_bridge(ctx: &mut Context) -> JsResult<()> {
+    let paged = ObjectInitializer::new(ctx)
+        .function(guarded(paged_set), js_string!("set"), 3)
+        .function(guarded(paged_get), js_string!("get"), 2)
+        .function(guarded(paged_insert_text), js_string!("insertText"), 3)
+        .function(guarded(paged_delete_range), js_string!("deleteRange"), 3)
+        .function(
+            guarded(paged_insert_text_frame),
+            js_string!("insertTextFrame"),
+            2,
+        )
+        .function(guarded(paged_insert_frame), js_string!("insertFrame"), 2)
+        .function(guarded(paged_insert_page), js_string!("insertPage"), 1)
+        .function(guarded(paged_place_image), js_string!("placeImage"), 3)
+        .function(guarded(paged_apply_style), js_string!("applyStyle"), 4)
+        .function(guarded(paged_create_group), js_string!("createGroup"), 1)
+        .function(
+            guarded(paged_duplicate_elements),
+            js_string!("duplicateElements"),
+            3,
+        )
+        .function(guarded(paged_undo), js_string!("undo"), 0)
+        .function(guarded(paged_redo), js_string!("redo"), 0)
+        .function(guarded(paged_inspect), js_string!("inspect"), 1)
+        .function(guarded(paged_layers), js_string!("layers"), 0)
+        .function(guarded(paged_query), js_string!("query"), 1)
+        .function(guarded(paged_schema), js_string!("schema"), 1)
+        .function(guarded(paged_invoke), js_string!("invoke"), 2)
+        .function(guarded(paged_commands), js_string!("commands"), 1)
+        .function(guarded(paged_address), js_string!("address"), 1)
+        .function(guarded(paged_tree), js_string!("tree"), 0)
+        .function(
+            guarded(paged_planar_regions),
+            js_string!("planarRegions"),
+            2,
+        )
+        .function(guarded(paged_pages), js_string!("pages"), 0)
+        .function(guarded(paged_stories), js_string!("stories"), 0)
+        .function(guarded(paged_swatches), js_string!("swatches"), 0)
+        .function(
+            guarded(paged_paragraph_styles),
+            js_string!("paragraphStyles"),
+            0,
+        )
+        .function(
+            guarded(paged_character_styles),
+            js_string!("characterStyles"),
+            0,
+        )
+        .function(guarded(paged_object_styles), js_string!("objectStyles"), 0)
+        .function(guarded(paged_links), js_string!("links"), 0)
+        .function(guarded(paged_conditions), js_string!("conditions"), 0)
+        .function(
+            guarded(paged_condition_sets),
+            js_string!("conditionSets"),
+            0,
+        )
+        .function(guarded(paged_color_groups), js_string!("colorGroups"), 0)
+        .function(guarded(paged_gradients), js_string!("gradients"), 0)
+        .function(guarded(paged_collection), js_string!("collection"), 1)
+        .function(guarded(paged_document_meta), js_string!("documentMeta"), 0)
+        .function(guarded(paged_selection), js_string!("selection"), 0)
+        .function(
+            guarded(paged_content_selection),
+            js_string!("contentSelection"),
+            0,
+        )
+        // --- complete mutation surface (additive) ---
+        // pages & masters
+        .function(guarded(paged_delete_page), js_string!("deletePage"), 1)
+        .function(
+            guarded(paged_duplicate_page),
+            js_string!("duplicatePage"),
+            1,
+        )
+        .function(guarded(paged_resize_page), js_string!("resizePage"), 2)
+        .function(
+            guarded(paged_apply_master_to_page),
+            js_string!("applyMasterToPage"),
+            2,
+        )
+        .function(guarded(paged_move_page), js_string!("movePage"), 2)
+        .function(guarded(paged_on_master), js_string!("onMaster"), 2)
+        .function(guarded(paged_create_master), js_string!("createMaster"), 2)
+        .function(guarded(paged_delete_master), js_string!("deleteMaster"), 1)
+        .function(guarded(paged_rename_master), js_string!("renameMaster"), 2)
+        .function(
+            guarded(paged_set_page_metadata),
+            js_string!("setPageMetadata"),
+            3,
+        )
+        // frames & groups
+        .function(
+            guarded(paged_delete_element),
+            js_string!("deleteElement"),
+            1,
+        )
+        .function(
+            guarded(paged_dissolve_group),
+            js_string!("dissolveGroup"),
+            1,
+        )
+        .function(guarded(paged_move_frame), js_string!("moveFrame"), 2)
+        .function(guarded(paged_resize_frame), js_string!("resizeFrame"), 2)
+        .function(guarded(paged_link_frames), js_string!("linkFrames"), 2)
+        .function(guarded(paged_unlink_frames), js_string!("unlinkFrames"), 1)
+        // shape inserts
+        .function(guarded(paged_insert_line), js_string!("insertLine"), 3)
+        .function(guarded(paged_insert_oval), js_string!("insertOval"), 2)
+        .function(guarded(paged_insert_path), js_string!("insertPath"), 4)
+        // path-point editing
+        .function(
+            guarded(paged_path_point_insert),
+            js_string!("pathPointInsert"),
+            4,
+        )
+        .function(
+            guarded(paged_path_point_remove),
+            js_string!("pathPointRemove"),
+            2,
+        )
+        .function(
+            guarded(paged_path_point_curve_type),
+            js_string!("pathPointCurveType"),
+            3,
+        )
+        .function(guarded(paged_path_point_set), js_string!("pathPointSet"), 4)
+        .function(guarded(paged_path_open_at), js_string!("pathOpenAt"), 2)
+        .function(
+            guarded(paged_outline_stroke),
+            js_string!("outlineStroke"),
+            5,
+        )
+        .function(guarded(paged_offset_path), js_string!("offsetPath"), 4)
+        .function(guarded(paged_simplify_path), js_string!("simplifyPath"), 2)
+        .function(
+            guarded(paged_pathfinder_boolean),
+            js_string!("pathfinderBoolean"),
+            3,
+        )
+        // fields & images
+        .function(guarded(paged_insert_field), js_string!("insertField"), 3)
+        .function(
+            guarded(paged_set_field_value),
+            js_string!("setFieldValue"),
+            3,
+        )
+        .function(
+            guarded(paged_replace_image_bytes),
+            js_string!("replaceImageBytes"),
+            2,
+        )
+        // tables
+        .function(guarded(paged_insert_table), js_string!("insertTable"), 2)
+        .function(guarded(paged_set_row_height), js_string!("setRowHeight"), 4)
+        .function(
+            guarded(paged_set_column_width),
+            js_string!("setColumnWidth"),
+            4,
+        )
+        .function(
+            guarded(paged_insert_table_row),
+            js_string!("insertTableRow"),
+            3,
+        )
+        .function(guarded(paged_delete_table), js_string!("deleteTable"), 2)
+        .function(
+            guarded(paged_delete_table_row),
+            js_string!("deleteTableRow"),
+            3,
+        )
+        .function(
+            guarded(paged_insert_table_column),
+            js_string!("insertTableColumn"),
+            3,
+        )
+        .function(
+            guarded(paged_delete_table_column),
+            js_string!("deleteTableColumn"),
+            3,
+        )
+        .function(
+            guarded(paged_insert_header_row),
+            js_string!("insertHeaderRow"),
+            2,
+        )
+        .function(
+            guarded(paged_remove_header_row),
+            js_string!("removeHeaderRow"),
+            2,
+        )
+        .function(
+            guarded(paged_insert_footer_row),
+            js_string!("insertFooterRow"),
+            2,
+        )
+        .function(
+            guarded(paged_remove_footer_row),
+            js_string!("removeFooterRow"),
+            2,
+        )
+        .function(guarded(paged_set_cell_span), js_string!("setCellSpan"), 6)
+        // style CRUD
+        .function(
+            guarded(paged_create_paragraph_style),
+            js_string!("createParagraphStyle"),
+            1,
+        )
+        .function(
+            guarded(paged_rename_paragraph_style),
+            js_string!("renameParagraphStyle"),
+            2,
+        )
+        .function(
+            guarded(paged_delete_paragraph_style),
+            js_string!("deleteParagraphStyle"),
+            1,
+        )
+        .function(
+            guarded(paged_create_character_style),
+            js_string!("createCharacterStyle"),
+            1,
+        )
+        .function(
+            guarded(paged_rename_character_style),
+            js_string!("renameCharacterStyle"),
+            2,
+        )
+        .function(
+            guarded(paged_delete_character_style),
+            js_string!("deleteCharacterStyle"),
+            1,
+        )
+        .function(
+            guarded(paged_create_object_style),
+            js_string!("createObjectStyle"),
+            1,
+        )
+        .function(
+            guarded(paged_rename_object_style),
+            js_string!("renameObjectStyle"),
+            2,
+        )
+        .function(
+            guarded(paged_delete_object_style),
+            js_string!("deleteObjectStyle"),
+            1,
+        )
+        .function(
+            guarded(paged_create_cell_style),
+            js_string!("createCellStyle"),
+            1,
+        )
+        .function(
+            guarded(paged_rename_cell_style),
+            js_string!("renameCellStyle"),
+            2,
+        )
+        .function(
+            guarded(paged_delete_cell_style),
+            js_string!("deleteCellStyle"),
+            1,
+        )
+        .function(
+            guarded(paged_create_table_style),
+            js_string!("createTableStyle"),
+            1,
+        )
+        .function(
+            guarded(paged_rename_table_style),
+            js_string!("renameTableStyle"),
+            2,
+        )
+        .function(
+            guarded(paged_delete_table_style),
+            js_string!("deleteTableStyle"),
+            1,
+        )
+        .function(
+            guarded(paged_set_style_property),
+            js_string!("setStyleProperty"),
+            4,
+        )
+        // numbering lists
+        .function(
+            guarded(paged_create_numbering_list),
+            js_string!("createNumberingList"),
+            1,
+        )
+        .function(
+            guarded(paged_edit_numbering_list),
+            js_string!("editNumberingList"),
+            2,
+        )
+        .function(
+            guarded(paged_delete_numbering_list),
+            js_string!("deleteNumberingList"),
+            1,
+        )
+        // sections
+        .function(
+            guarded(paged_insert_section),
+            js_string!("insertSection"),
+            2,
+        )
+        .function(guarded(paged_edit_section), js_string!("editSection"), 2)
+        .function(
+            guarded(paged_delete_section),
+            js_string!("deleteSection"),
+            1,
+        )
+        // conditions
+        .function(
+            guarded(paged_set_condition_visible),
+            js_string!("setConditionVisible"),
+            2,
+        )
+        // growing frame chains (ADR 026)
+        .function(
+            guarded(paged_set_flow_grow_rule),
+            js_string!("setFlowGrowRule"),
+            4,
+        )
+        .function(
+            guarded(paged_activate_condition_set),
+            js_string!("activateConditionSet"),
+            1,
+        )
+        // layers
+        .function(guarded(paged_layer_insert), js_string!("layerInsert"), 2)
+        .function(guarded(paged_layer_remove), js_string!("layerRemove"), 1)
+        .function(guarded(paged_layer_move), js_string!("layerMove"), 2)
+        // guides
+        .function(guarded(paged_insert_guide), js_string!("insertGuide"), 4)
+        .function(guarded(paged_move_guide), js_string!("moveGuide"), 2)
+        .function(guarded(paged_delete_guide), js_string!("deleteGuide"), 1)
+        // document defaults & colour management
+        .function(
+            guarded(paged_set_document_defaults),
+            js_string!("setDocumentDefaults"),
+            1,
+        )
+        .function(
+            guarded(paged_set_color_settings),
+            js_string!("setColorSettings"),
+            1,
+        )
+        .function(
+            guarded(paged_set_proof_setup),
+            js_string!("setProofSetup"),
+            1,
+        )
+        .function(
+            guarded(paged_import_swatch_library),
+            js_string!("importSwatchLibrary"),
+            2,
+        )
+        .function(
+            guarded(paged_set_ink_setting),
+            js_string!("setInkSetting"),
+            2,
+        )
+        .function(
+            guarded(paged_set_use_standard_lab_for_spots),
+            js_string!("setUseStandardLabForSpots"),
+            1,
+        )
+        // plugin metadata & batch
+        .function(
+            guarded(paged_set_plugin_metadata),
+            js_string!("setPluginMetadata"),
+            4,
+        )
+        .function(
+            guarded(paged_set_document_metadata),
+            js_string!("setDocumentMetadata"),
+            3,
+        )
+        .function(
+            guarded(paged_create_text_variable),
+            js_string!("createTextVariable"),
+            4,
+        )
+        .function(
+            guarded(paged_delete_text_variable),
+            js_string!("deleteTextVariable"),
+            1,
+        )
+        .function(guarded(paged_batch), js_string!("batch"), 1)
+        // selection setters
+        .function(
+            guarded(paged_set_element_selection),
+            js_string!("setElementSelection"),
+            1,
+        )
+        .function(
+            guarded(paged_clear_selection),
+            js_string!("clearSelection"),
+            0,
+        )
+        .function(
+            guarded(paged_set_content_selection),
+            js_string!("setContentSelection"),
+            1,
+        )
+        // --- the thirty-one that only `paged.batch` could reach ---
+        // Every name below is the camelCase of its wire op, which is the
+        // convention the rest of this table already follows: one spelling
+        // for a capability, not a fn name and a serde name that differ.
+        // z-order & nesting
+        .function(
+            guarded(paged_reorder_element),
+            js_string!("reorderElement"),
+            2,
+        )
+        .function(guarded(paged_paste_into), js_string!("pasteInto"), 2)
+        .function(guarded(paged_release_from), js_string!("releaseFrom"), 1)
+        // path topology
+        .function(guarded(paged_close_path), js_string!("closePath"), 2)
+        .function(guarded(paged_join_paths), js_string!("joinPaths"), 2)
+        // the six region verbs + faces
+        .function(
+            guarded(paged_pathfinder_divide),
+            js_string!("pathfinderDivide"),
+            1,
+        )
+        .function(
+            guarded(paged_pathfinder_trim),
+            js_string!("pathfinderTrim"),
+            1,
+        )
+        .function(
+            guarded(paged_pathfinder_merge),
+            js_string!("pathfinderMerge"),
+            1,
+        )
+        .function(
+            guarded(paged_pathfinder_crop),
+            js_string!("pathfinderCrop"),
+            1,
+        )
+        .function(
+            guarded(paged_pathfinder_outline),
+            js_string!("pathfinderOutline"),
+            1,
+        )
+        .function(
+            guarded(paged_pathfinder_minus_back),
+            js_string!("pathfinderMinusBack"),
+            1,
+        )
+        .function(
+            guarded(paged_pathfinder_faces),
+            js_string!("pathfinderFaces"),
+            3,
+        )
+        // opacity masks & text on a path
+        .function(
+            guarded(paged_apply_opacity_mask),
+            js_string!("applyOpacityMask"),
+            3,
+        )
+        .function(
+            guarded(paged_release_opacity_mask),
+            js_string!("releaseOpacityMask"),
+            1,
+        )
+        .function(
+            guarded(paged_attach_text_to_path),
+            js_string!("attachTextToPath"),
+            3,
+        )
+        .function(
+            guarded(paged_detach_text_from_path),
+            js_string!("detachTextFromPath"),
+            1,
+        )
+        // anchored frames & hyperlinks
+        .function(
+            guarded(paged_insert_anchored_frame),
+            js_string!("insertAnchoredFrame"),
+            5,
+        )
+        .function(
+            guarded(paged_insert_hyperlink),
+            js_string!("insertHyperlink"),
+            5,
+        )
+        .function(
+            guarded(paged_delete_hyperlink),
+            js_string!("deleteHyperlink"),
+            1,
+        )
+        .function(
+            guarded(paged_edit_hyperlink),
+            js_string!("editHyperlink"),
+            2,
+        )
+        .function(
+            guarded(paged_update_table_of_contents),
+            js_string!("updateTableOfContents"),
+            1,
+        )
+        .function(
+            guarded(paged_generate_index),
+            js_string!("generateIndex"),
+            1,
+        )
+        .function(
+            guarded(paged_update_cross_references),
+            js_string!("updateCrossReferences"),
+            1,
+        )
+        .function(
+            guarded(paged_insert_footnote),
+            js_string!("insertFootnote"),
+            3,
+        )
+        .function(
+            guarded(paged_delete_footnote),
+            js_string!("deleteFootnote"),
+            2,
+        )
+        .function(guarded(paged_insert_note), js_string!("insertNote"), 3)
+        .function(guarded(paged_edit_note), js_string!("editNote"), 2)
+        .function(guarded(paged_delete_note), js_string!("deleteNote"), 1)
+        .function(
+            guarded(paged_accept_tracked_change),
+            js_string!("acceptTrackedChange"),
+            2,
+        )
+        .function(
+            guarded(paged_reject_tracked_change),
+            js_string!("rejectTrackedChange"),
+            2,
+        )
+        .function(
+            guarded(paged_convert_note_to_text),
+            js_string!("convertNoteToText"),
+            1,
+        )
+        .function(
+            guarded(paged_create_bookmark),
+            js_string!("createBookmark"),
+            2,
+        )
+        .function(
+            guarded(paged_delete_bookmark),
+            js_string!("deleteBookmark"),
+            1,
+        )
+        .function(
+            guarded(paged_rename_bookmark),
+            js_string!("renameBookmark"),
+            2,
+        )
+        .function(guarded(paged_move_bookmark), js_string!("moveBookmark"), 3)
+        .function(
+            guarded(paged_insert_endnote),
+            js_string!("insertEndnote"),
+            3,
+        )
+        .function(
+            guarded(paged_delete_endnote),
+            js_string!("deleteEndnote"),
+            1,
+        )
+        .function(
+            guarded(paged_convert_footnote_to_endnote),
+            js_string!("convertFootnoteToEndnote"),
+            2,
+        )
+        // layer attributes
+        .function(
+            guarded(paged_layer_set_visible),
+            js_string!("layerSetVisible"),
+            2,
+        )
+        .function(
+            guarded(paged_layer_set_locked),
+            js_string!("layerSetLocked"),
+            2,
+        )
+        .function(
+            guarded(paged_layer_set_printable),
+            js_string!("layerSetPrintable"),
+            2,
+        )
+        .function(guarded(paged_layer_set_name), js_string!("layerSetName"), 2)
+        // colour-resource CRUD
+        .function(guarded(paged_create_swatch), js_string!("createSwatch"), 1)
+        .function(guarded(paged_edit_swatch), js_string!("editSwatch"), 2)
+        .function(guarded(paged_delete_swatch), js_string!("deleteSwatch"), 1)
+        .function(
+            guarded(paged_create_gradient),
+            js_string!("createGradient"),
+            1,
+        )
+        .function(guarded(paged_edit_gradient), js_string!("editGradient"), 2)
+        .function(
+            guarded(paged_delete_gradient),
+            js_string!("deleteGradient"),
+            1,
+        )
+        .function(
+            guarded(paged_create_color_group),
+            js_string!("createColorGroup"),
+            1,
+        )
+        .function(
+            guarded(paged_edit_color_group),
+            js_string!("editColorGroup"),
+            2,
+        )
+        .function(
+            guarded(paged_delete_color_group),
+            js_string!("deleteColorGroup"),
+            1,
+        )
+        .build();
+    ctx.register_global_property(js_string!("paged"), paged, Attribute::all())?;
+
+    let console = ObjectInitializer::new(ctx)
+        .function(guarded(console_log), js_string!("log"), 0)
+        .function(guarded(console_warn), js_string!("warn"), 0)
+        .function(guarded(console_error), js_string!("error"), 0)
+        .function(guarded(console_info), js_string!("info"), 0)
+        .build();
+    ctx.register_global_property(js_string!("console"), console, Attribute::all())?;
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------- paged.*
+
+/// A `Set` / `get` target from a script that is not an element id
+/// string: an ADR 131 address string (`"swatch:Color/Red"`, `"doc"`,
+/// `"frame:u12"`, `"cell:u2f/0,1"`, `"style:object/ObjectStyle/x"`), or
+/// — DEPRECATED, the protocol-70 form — the target object
+/// (`{ kind: "layer", layerId: "ua" }`).
+fn js_address(value: &JsValue, ctx: &mut Context) -> Option<paged_wire::Address> {
+    if value.is_object() {
+        return from_js::<paged_wire::VirtualTarget>(value, ctx).map(Into::into);
+    }
+    let s = value.as_string()?.to_std_string_escaped();
+    paged_wire::Address::parse(&s).ok()
+}
+
+/// `paged.set(address, path, value)` through `Mutation::Set`: coerce the
+/// JS value against the path's schema on the target's kind. The planned
+/// mutation, or `None` when the target, path or value does not resolve.
+fn plan_set_virtual(
+    address: paged_wire::Address,
+    path: &str,
+    value: &JsValue,
+    ctx: &mut Context,
+) -> Option<Mutation> {
+    let target = with_model(|m| m.target_of(&address)).ok()?;
+    let family = match &target {
+        paged_wire::VirtualTarget::Style { family, .. } => Some(family.as_str()),
+        _ => None,
+    };
+    let schema = paged_introspect::virtual_paths::schema_for(target.address_kind(), family, path)?;
+    let value = js_to_value_by_schema(value, &schema, ctx)?;
+    Some(Mutation::Set {
+        address,
+        path: path.to_string(),
+        value,
+    })
+}
+
+/// The ONE mutation `paged.set(target, path, value)` applies, or `None`
+/// when it does not resolve. Shared by `paged.set` and the core half of
+/// an object `paged.batch`.
+fn plan_set(
+    target: &JsValue,
+    path: &str,
+    value_arg: &JsValue,
+    ctx: &mut Context,
+) -> Option<Mutation> {
+    let element_id = target
+        .as_string()
+        .and_then(|s| parse_element_id(&s.to_std_string_escaped()));
+    let Some(element_id) = element_id else {
+        // Any other object (ADR 131 address string, or the deprecated
+        // target object) goes through `Set`.
+        let address = js_address(target, ctx)?;
+        return plan_set_virtual(address, path, value_arg, ctx);
+    };
+
+    // W1.20 (groups v2) — `paged.set("group:<id>", "groupTransform",
+    // [a,b,c,d,tx,ty])` moves/scales/rotates a group as a UNIT (members'
+    // effective transforms + the hit-test follow). This is distinct
+    // from `frameTransform` on a group, which writes only the group's
+    // own metadata transform (the v1 store-only arm). Routed to the
+    // dedicated `SetGroupTransform` mutation rather than
+    // `SetElementProperty`.
+    if path == "groupTransform" {
+        let paged_canvas::element_selection::ElementId::Group(group_id) = element_id else {
+            return None;
+        };
+        // `null` clears to identity; a 6-element array sets the matrix.
+        let transform = if value_arg.is_null() {
+            None
+        } else {
+            match js_value_to_wire(value_arg, paged_mutate::PropertyPath::FrameTransform, ctx) {
+                Some(paged_mutate::Value::Transform(t)) => t,
+                _ => return None,
+            }
+        };
+        return Some(Mutation::SetGroupTransform {
+            group_id,
+            transform,
+        });
+    }
+
+    let Some(wire_path) = parse_property_path(path) else {
+        // Not an element `PropertyPath`: a virtual path on the element
+        // (`imageUri`, `labels[x-paged:k]`) goes through `Set`.
+        let address = paged_wire::Address::from(element_id);
+        return plan_set_virtual(address, path, value_arg, ctx);
+    };
+    let wire_value = js_value_to_wire(value_arg, wire_path, ctx)?;
+    Some(Mutation::SetElementProperty {
+        element_id,
+        path: wire_path,
+        value: wire_value,
+    })
+}
+
+/// v71 — a `plugin:` address string (ADR 131), which only the HOST's
+/// object registry can answer.
+fn plugin_address(value: &JsValue) -> Option<String> {
+    let s = value.as_string()?.to_std_string_escaped();
+    s.starts_with("plugin:").then_some(s)
+}
+
+fn paged_set(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let target = args.get_or_undefined(0);
+    let path = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let value_arg = args.get_or_undefined(2).clone();
+    if let Some(address) = plugin_address(target) {
+        let value = to_json_value(&value_arg, ctx).unwrap_or(serde_json::Value::Null);
+        let op =
+            serde_json::json!({ "op": "set", "address": address, "path": path, "value": value });
+        return host_bridge::enqueue(
+            HostObjectCall::Batch { ops: vec![op] },
+            host_bridge::Shape::Set { index: 0 },
+            ctx,
+        );
+    }
+    let Some(mutation) = plan_set(target, &path, &value_arg, ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(JsValue::from(with_model(|m| {
+        m.apply_mutation(&mutation).is_ok()
+    })))
+}
+
+/// `paged.insertText(storyId, offset, text)` — insert plain text at a
+/// story-local body offset (Stage 1 text authoring). `\n` splits into
+/// paragraphs. Lands as `Mutation::InsertText` through the same apply
+/// layer as the UI Type tool, so undo/redo work identically. Returns
+/// `true` iff the insert applied. (Cell-local insertion is `None` for
+/// now — the body-offset form covers ordinary story authoring.)
+fn paged_insert_text(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let offset = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let text = args
+        .get_or_undefined(2)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let mutation = Mutation::InsertText {
+        story_id,
+        offset,
+        text,
+        cell: None,
+    };
+    Ok(JsValue::from(with_model(|m| {
+        m.apply_mutation(&mutation).is_ok()
+    })))
+}
+
+/// `paged.deleteRange(storyId, start, end)` — delete the `[start, end)`
+/// story-local body range (`Mutation::DeleteRange`). The complement of
+/// `insertText`, for re-merge / replace flows. Returns `true` iff applied.
+fn paged_delete_range(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let start = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let end = args.get_or_undefined(2).to_number(ctx)? as u32;
+    let mutation = Mutation::DeleteRange {
+        story_id,
+        start,
+        end,
+        cell: None,
+    };
+    Ok(JsValue::from(with_model(|m| {
+        m.apply_mutation(&mutation).is_ok()
+    })))
+}
+
+/// Apply a structural insert, auto-select the freshly-created element
+/// (so a following `paged.selection()` / `paged.set` addresses it), and
+/// return its `kind:id` address as a JS string — or `null` on failure or
+/// when the mutation mints no addressable element. Selection is set on the
+/// worker model only (it doesn't push to the editor's React panels — a
+/// protocol-bumping follow-up).
+fn apply_insert(mutation: &Mutation) -> JsValue {
+    let created = with_model(|m| match m.apply_mutation(mutation) {
+        Ok(outcome) => {
+            if let Some(id) = &outcome.created_id {
+                m.element_selection.ids = vec![id.clone()];
+            }
+            outcome.created_id
+        }
+        Err(_) => None,
+    });
+    match created {
+        Some(id) => JsValue::from(js_string!(element_id_to_address(&id))),
+        None => JsValue::null(),
+    }
+}
+
+/// `paged.insertTextFrame(pageId, [top, left, bottom, right])` — create
+/// an empty, text-pourable frame on a page at page-local point bounds
+/// (`Mutation::InsertTextFrame`; the model mints the ParentStory) and
+/// select it. Returns the new frame's `textFrame:<id>` address (pass it to
+/// `paged.insertText` / `paged.set`), or `null` if the insert failed or
+/// `bounds` is not a 4-number array.
+fn paged_insert_text_frame(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(bounds) = read_quad(args.get_or_undefined(1), ctx) else {
+        return Ok(JsValue::null());
+    };
+    let mutation = Mutation::InsertTextFrame {
+        page_id: PageId(page),
+        bounds,
+    };
+    Ok(apply_insert(&mutation))
+}
+
+/// Read a JS 4-number array `[a, b, c, d]` into a tuple. Mirrors the
+/// array-length idiom `js_value_to_wire` uses for `FrameBounds`.
+fn read_quad(value: &JsValue, ctx: &mut Context) -> Option<(f32, f32, f32, f32)> {
+    let obj = value.as_object()?;
+    let len = obj.get(js_string!("length"), ctx).ok()?.as_number()? as usize;
+    if len != 4 {
+        return None;
+    }
+    let mut out = [0.0f32; 4];
+    for (i, slot) in out.iter_mut().enumerate() {
+        *slot = obj.get(i as u32, ctx).ok()?.as_number()? as f32;
+    }
+    Some((out[0], out[1], out[2], out[3]))
+}
+
+// ------------------------------------------------- Stage 2: structural authoring
+
+/// `paged.insertFrame(pageId, [t,l,b,r])` — create an empty graphic
+/// (non-text) frame on a page (`Mutation::InsertFrame`); the usual
+/// target for `placeImage`. Sibling of `insertTextFrame`.
+fn paged_insert_frame(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(bounds) = read_quad(args.get_or_undefined(1), ctx) else {
+        return Ok(JsValue::null());
+    };
+    let mutation = Mutation::InsertFrame {
+        page_id: PageId(page),
+        bounds,
+    };
+    Ok(apply_insert(&mutation))
+}
+
+/// `paged.insertPage(afterPageId?)` — append a page after `afterPageId`
+/// (or at the document end when omitted), inheriting the default master
+/// (`Mutation::InsertPage`).
+fn paged_insert_page(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let after = args.get_or_undefined(0);
+    let after_page_id = if after.is_undefined() || after.is_null() {
+        None
+    } else {
+        let s = after.to_string(ctx)?.to_std_string_escaped();
+        (!s.is_empty()).then_some(PageId(s))
+    };
+    let mutation = Mutation::InsertPage {
+        after_page_id,
+        master_id: None,
+    };
+    // A page has no `ElementId` variant (so `MutationOutcome.created_id` is
+    // None for InsertPage); recover the minted page id by diffing the page
+    // `selfId`s before/after. Pages are few, so the scan is free. The
+    // returned `selfId` is reusable as the next `afterPageId`.
+    let before: std::collections::HashSet<String> =
+        with_model(|m| m.pages().into_iter().map(|p| p.self_id).collect());
+    let ok = with_model(|m| m.apply_mutation(&mutation).is_ok());
+    if !ok {
+        return Ok(JsValue::null());
+    }
+    let new_id = with_model(|m| m.pages().into_iter().find(|p| !before.contains(&p.self_id)))
+        .map(|p| p.self_id);
+    Ok(match new_id {
+        Some(s) => JsValue::from(js_string!(s)),
+        None => JsValue::null(),
+    })
+}
+
+/// `paged.placeImage(frameId, uri, fit?)` — place an image into a frame
+/// (`Mutation::PlaceImage`). `fit` is an optional InDesign fitting mode.
+fn paged_place_image(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let element_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let uri = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let fit_arg = args.get_or_undefined(2);
+    let fit = if fit_arg.is_undefined() || fit_arg.is_null() {
+        None
+    } else {
+        Some(fit_arg.to_string(ctx)?.to_std_string_escaped())
+    };
+    let mutation = Mutation::PlaceImage {
+        element_id,
+        uri,
+        fit,
+    };
+    Ok(JsValue::from(with_model(|m| {
+        m.apply_mutation(&mutation).is_ok()
+    })))
+}
+
+/// `paged.applyStyle(storyId, start, end, styleRef)` — apply a named
+/// paragraph/character style to a story range (`Mutation::ApplyStyle`).
+/// Scope is inferred from the ref prefix (`CharacterStyle/…` →
+/// Character, else Paragraph).
+fn paged_apply_style(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let start = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let end = args.get_or_undefined(2).to_number(ctx)? as u32;
+    let style = args
+        .get_or_undefined(3)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let scope = if style.starts_with("CharacterStyle") {
+        paged_mutate::operation::StyleScope::Character
+    } else {
+        paged_mutate::operation::StyleScope::Paragraph
+    };
+    let mutation = Mutation::ApplyStyle {
+        paragraph: None,
+        story_id,
+        start,
+        end,
+        style,
+        scope,
+        // The script surface addresses body ranges; cell-qualified styling (v55)
+        // is reached through the wire op, not `paged.applyStyle`.
+        cell: None,
+    };
+    Ok(JsValue::from(with_model(|m| {
+        m.apply_mutation(&mutation).is_ok()
+    })))
+}
+
+/// `paged.createGroup([id, ...])` — group two-or-more elements
+/// (`Mutation::CreateGroup`). Ids are parsed with the same resolver as
+/// `paged.set`; unparseable entries are dropped, and fewer than two
+/// valid members returns `false`.
+fn paged_create_group(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let value = args.get_or_undefined(0);
+    let Some(obj) = value.as_object() else {
+        return Ok(JsValue::from(false));
+    };
+    let len = obj
+        .get(js_string!("length"), ctx)
+        .ok()
+        .and_then(|v| v.as_number())
+        .unwrap_or(0.0) as usize;
+    let mut member_ids = Vec::with_capacity(len);
+    for i in 0..len {
+        let item = obj.get(i as u32, ctx)?;
+        let s = item.to_string(ctx)?.to_std_string_escaped();
+        if let Some(id) = parse_element_id(&s) {
+            member_ids.push(id);
+        }
+    }
+    if member_ids.len() < 2 {
+        return Ok(JsValue::from(false));
+    }
+    let mutation = Mutation::CreateGroup { member_ids };
+    Ok(JsValue::from(with_model(|m| {
+        m.apply_mutation(&mutation).is_ok()
+    })))
+}
+
+// ================================================================
+// Complete mutation surface — one `paged.<name>` host fn per remaining
+// `Mutation` variant. Additive over the Stage 1/2 authoring above.
+//
+// Three apply shapes recur, factored here:
+//   * `apply_bool`        — fire-and-forget; returns the success boolean.
+//   * `apply_insert`(above)— structural inserts that carry a `created_id`;
+//     auto-selects + returns the `kind:id` address.
+//   * `apply_new_self_id` — collection CRUD that mints an id the apply
+//     layer does NOT surface via `created_id` (styles, numbering lists);
+//     recovered by diffing the collection's `selfId`s — the same trick
+//     `insertPage`/`duplicatePage` use for pages.
+// ================================================================
+
+// ---------------------------------------------------- shared apply helpers
+
+/// Apply a mutation for its success boolean only.
+fn apply_bool(mutation: &Mutation) -> JsValue {
+    JsValue::from(with_model(|m| m.apply_mutation(mutation).is_ok()))
+}
+
+/// Resolve an element address (`kind:id`) — or an already-bare self id —
+/// to the bare `Self` id the typed frame mutations
+/// (`MoveFrame`/`ResizeFrame`/`DeleteFrame`/`LinkFrames`/`UnlinkFrames`/
+/// `DissolveGroup`/`PlaceImage`/`ReplaceImageBytes`) match against
+/// (`CanvasModel::resolve_frame_node_id` keys off the bare id).
+fn bare_id(s: &str) -> String {
+    parse_element_id(s)
+        .map(|id| id.raw_id().to_string())
+        .unwrap_or_else(|| s.to_string())
+}
+
+/// The `selfId` set of a typed document collection — the before/after
+/// snapshot used to recover a freshly-minted id the apply layer does not
+/// thread through `created_id`.
+fn collection_self_ids(name: CollectionName) -> std::collections::HashSet<String> {
+    with_model(|m| {
+        serde_json::to_value(m.collection(name))
+            .ok()
+            .and_then(|v| {
+                v.as_array().map(|a| {
+                    a.iter()
+                        .filter_map(|e| e.get("selfId").and_then(|s| s.as_str()).map(String::from))
+                        .collect()
+                })
+            })
+            .unwrap_or_default()
+    })
+}
+
+/// Apply a collection-CRUD create and return the newly-minted `selfId`
+/// (string) by diffing the collection, or `null` on failure / no new id.
+fn apply_new_self_id(name: CollectionName, mutation: &Mutation) -> JsValue {
+    let before = collection_self_ids(name);
+    if !with_model(|m| m.apply_mutation(mutation).is_ok()) {
+        return JsValue::null();
+    }
+    match collection_self_ids(name)
+        .into_iter()
+        .find(|id| !before.contains(id))
+    {
+        Some(id) => JsValue::from(js_string!(id)),
+        None => JsValue::null(),
+    }
+}
+
+/// Apply an `InsertTable` and return the minted `<Table>` `Self` id
+/// (the id the plugin addresses cells with) — or `null` on failure.
+fn apply_insert_table(mutation: &Mutation) -> JsValue {
+    use paged_canvas::element_selection::ElementId;
+    let created = with_model(|m| match m.apply_mutation(mutation) {
+        Ok(o) => {
+            if let Some(id) = &o.created_id {
+                m.element_selection.ids = vec![id.clone()];
+            }
+            o.created_id
+        }
+        Err(_) => None,
+    });
+    match created {
+        Some(ElementId::Table { table_id, .. }) => JsValue::from(js_string!(table_id)),
+        Some(other) => JsValue::from(js_string!(other.raw_id().to_string())),
+        None => JsValue::null(),
+    }
+}
+
+// ---------------------------------------------------- shared arg readers
+
+/// JS value → `serde_json::Value`, or `None` when it cannot be represented.
+fn to_json_value(value: &JsValue, ctx: &mut Context) -> Option<serde_json::Value> {
+    value.to_json(ctx).ok().flatten()
+}
+
+/// Deserialize a JS arg into a serde spec type (`PathAnchorSpec`,
+/// `FieldKind`, `NumberingListSpec`, `Vec<Mutation>`, …). `None` on any
+/// shape mismatch — callers translate that to `false`/`null`, never a
+/// throw (the user-input-never-panics rule).
+fn from_js<T: serde::de::DeserializeOwned>(value: &JsValue, ctx: &mut Context) -> Option<T> {
+    serde_json::from_value(to_json_value(value, ctx)?).ok()
+}
+
+/// Read a JS 2-number array `[x, y]` (line endpoints, path-point set).
+fn read_pair(value: &JsValue, ctx: &mut Context) -> Option<(f32, f32)> {
+    let obj = value.as_object()?;
+    let len = obj.get(js_string!("length"), ctx).ok()?.as_number()? as usize;
+    if len != 2 {
+        return None;
+    }
+    let x = obj.get(0u32, ctx).ok()?.as_number()? as f32;
+    let y = obj.get(1u32, ctx).ok()?.as_number()? as f32;
+    Some((x, y))
+}
+
+/// Read a fixed-length JS number array into `[f32; N]` (the 6-element
+/// `MoveFrame` transform). Generalises [`read_quad`].
+fn read_floats<const N: usize>(value: &JsValue, ctx: &mut Context) -> Option<[f32; N]> {
+    let obj = value.as_object()?;
+    let len = obj.get(js_string!("length"), ctx).ok()?.as_number()? as usize;
+    if len != N {
+        return None;
+    }
+    let mut out = [0.0f32; N];
+    for (i, slot) in out.iter_mut().enumerate() {
+        *slot = obj.get(i as u32, ctx).ok()?.as_number()? as f32;
+    }
+    Some(out)
+}
+
+/// An optional `f32` arg: `undefined`/`null`/non-number ⇒ `None`.
+fn opt_f32(value: &JsValue) -> Option<f32> {
+    value.as_number().map(|n| n as f32)
+}
+
+/// An optional non-empty `String` arg: `undefined`/`null`/empty ⇒ `None`.
+fn opt_string(value: &JsValue, ctx: &mut Context) -> Option<String> {
+    if value.is_undefined() || value.is_null() {
+        return None;
+    }
+    let s = value.to_string(ctx).ok()?.to_std_string_escaped();
+    (!s.is_empty()).then_some(s)
+}
+
+/// Optional non-empty string property of a JS object.
+fn prop_string(obj: &boa_engine::object::JsObject, key: &str, ctx: &mut Context) -> Option<String> {
+    let v = obj.get(js_string!(key), ctx).ok()?;
+    opt_string(&v, ctx)
+}
+
+/// Optional `f32` property of a JS object.
+fn prop_f32(obj: &boa_engine::object::JsObject, key: &str, ctx: &mut Context) -> Option<f32> {
+    obj.get(js_string!(key), ctx)
+        .ok()
+        .and_then(|v| v.as_number())
+        .map(|n| n as f32)
+}
+
+/// Optional `u32` property of a JS object.
+fn prop_u32(obj: &boa_engine::object::JsObject, key: &str, ctx: &mut Context) -> Option<u32> {
+    obj.get(js_string!(key), ctx)
+        .ok()
+        .and_then(|v| v.as_number())
+        .map(|n| n as u32)
+}
+
+/// Optional `bool` property of a JS object (absent and `null` both read
+/// as "not given", so an options bag can omit a flag rather than say
+/// `false`).
+fn prop_bool(obj: &boa_engine::object::JsObject, key: &str, ctx: &mut Context) -> Option<bool> {
+    let v = obj.get(js_string!(key), ctx).ok()?;
+    (!v.is_undefined() && !v.is_null()).then(|| v.to_boolean())
+}
+
+/// Read a JS array of strings (the face ids `pathfinderFaces` selects).
+fn read_string_array(value: &JsValue, ctx: &mut Context) -> Vec<String> {
+    let mut out = Vec::new();
+    let Some(obj) = value.as_object() else {
+        return out;
+    };
+    let len = obj
+        .get(js_string!("length"), ctx)
+        .ok()
+        .and_then(|v| v.as_number())
+        .unwrap_or(0.0) as usize;
+    for i in 0..len {
+        if let Ok(item) = obj.get(i as u32, ctx) {
+            if let Ok(sv) = item.to_string(ctx) {
+                out.push(sv.to_std_string_escaped());
+            }
+        }
+    }
+    out
+}
+
+/// Parse a JS array of element-id address strings into `ElementId`s,
+/// dropping unparseable entries (shared by `setElementSelection` +
+/// `pathfinderBoolean`).
+fn parse_element_id_array(
+    value: &JsValue,
+    ctx: &mut Context,
+) -> Vec<paged_canvas::element_selection::ElementId> {
+    let mut out = Vec::new();
+    let Some(obj) = value.as_object() else {
+        return out;
+    };
+    let len = obj
+        .get(js_string!("length"), ctx)
+        .ok()
+        .and_then(|v| v.as_number())
+        .unwrap_or(0.0) as usize;
+    for i in 0..len {
+        if let Ok(item) = obj.get(i as u32, ctx) {
+            if let Ok(s) = item.to_string(ctx) {
+                if let Some(id) = parse_element_id(&s.to_std_string_escaped()) {
+                    out.push(id);
+                }
+            }
+        }
+    }
+    out
+}
+
+// ---------------------------------------------------- pages & masters
+
+/// `paged.deletePage(pageId)` — remove a page (`Mutation::DeletePage`).
+fn paged_delete_page(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeletePage {
+        page_id: PageId(page),
+    }))
+}
+
+/// `paged.duplicatePage(pageId)` — duplicate a single-page spread after
+/// the source (`Mutation::DuplicatePage`). Returns the new page `selfId`
+/// (recovered by diffing `pages()`, like `insertPage`), or `null`.
+fn paged_duplicate_page(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let mutation = Mutation::DuplicatePage { page: PageId(page) };
+    let before: std::collections::HashSet<String> =
+        with_model(|m| m.pages().into_iter().map(|p| p.self_id).collect());
+    if !with_model(|m| m.apply_mutation(&mutation).is_ok()) {
+        return Ok(JsValue::null());
+    }
+    let new_id = with_model(|m| m.pages().into_iter().find(|p| !before.contains(&p.self_id)))
+        .map(|p| p.self_id);
+    Ok(match new_id {
+        Some(s) => JsValue::from(js_string!(s)),
+        None => JsValue::null(),
+    })
+}
+
+/// `paged.resizePage(pageId, [t,l,b,r])` — set the page's
+/// `GeometricBounds` in page-inner points (`Mutation::ResizePage`).
+fn paged_resize_page(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(bounds) = read_quad(args.get_or_undefined(1), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::ResizePage {
+        page_id: PageId(page),
+        bounds,
+    }))
+}
+
+/// `paged.applyMasterToPage(pageId, masterId?)` — set a page's applied
+/// master (`masterId` omitted/null detaches; `Mutation::ApplyMasterToPage`).
+fn paged_apply_master_to_page(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let master = opt_string(args.get_or_undefined(1), ctx);
+    Ok(apply_bool(&Mutation::ApplyMasterToPage {
+        page: PageId(page),
+        master,
+    }))
+}
+
+/// `paged.movePage(pageId, afterPageId?)` — move a page to follow
+/// `afterPageId`, or to the front when it is omitted/null
+/// (`Mutation::MovePage`).
+fn paged_move_page(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let after = opt_string(args.get_or_undefined(1), ctx).map(PageId);
+    Ok(apply_bool(&Mutation::MovePage {
+        page: PageId(page),
+        after,
+    }))
+}
+
+/// `paged.createMaster(masterId, { name?, widthPt?, heightPt?,
+/// duplicateOf? })` — create a master spread (`Mutation::CreateMaster`).
+fn paged_create_master(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let master = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let mut opts = to_json_value(args.get_or_undefined(1), ctx)
+        .filter(serde_json::Value::is_object)
+        .unwrap_or_else(|| serde_json::json!({}));
+    opts["master"] = serde_json::Value::String(master);
+    let Ok(mutation) = serde_json::from_value::<Mutation>(serde_json::json!({
+        "op": "createMaster",
+        "args": opts,
+    })) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&mutation))
+}
+
+/// `paged.deleteMaster(masterId)` — delete a master no page applies
+/// (`Mutation::DeleteMaster`).
+fn paged_delete_master(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let master = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteMaster { master }))
+}
+
+/// `paged.renameMaster(masterId, name?)` — set or clear a master's name
+/// (`Mutation::RenameMaster`).
+fn paged_rename_master(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let master = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let name = opt_string(args.get_or_undefined(1), ctx);
+    Ok(apply_bool(&Mutation::RenameMaster { master, name }))
+}
+
+/// `paged.onMaster(masterId, mutation)` — apply a wire mutation (an
+/// `{ op, args }` object, as `paged.batch` takes) to the items of a master
+/// spread (`Mutation::OnMaster`).
+fn paged_on_master(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let master = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(inner) = to_json_value(args.get_or_undefined(1), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    let Ok(mutation) = serde_json::from_value::<Mutation>(inner) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::OnMaster {
+        master,
+        mutation: Box::new(mutation),
+    }))
+}
+
+/// `paged.setPageMetadata(pageId, key, value?)` — set (or, with
+/// `value` omitted/null, delete) one plugin-metadata entry on a page
+/// (`Mutation::SetPageMetadata`; the value is the JSON envelope string).
+fn paged_set_page_metadata(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let key = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let value = opt_string(args.get_or_undefined(2), ctx);
+    Ok(apply_bool(&Mutation::SetPageMetadata {
+        page: PageId(page),
+        key,
+        value,
+        caller: None,
+    }))
+}
+
+// ---------------------------------------------------- frames & groups
+
+/// `paged.deleteElement(id)` — delete a page item (`Mutation::DeleteFrame`).
+/// Accepts the `kind:id` address or a bare self id; groups are removed via
+/// `dissolveGroup`, not here.
+fn paged_delete_element(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteFrame {
+        frame_id: bare_id(&id),
+    }))
+}
+
+/// `paged.duplicateElements([id, ...], dx, dy)` — duplicate page items
+/// (`Mutation::DuplicateElements`): a whole clone of each, `(dx, dy)`
+/// points away, directly above its source, in one undo step. Selects
+/// the clones and returns their `kind:id` addresses as a JSON array, in
+/// the order the sources were named; `null` when the engine refuses
+/// (a threaded text frame, an anchored object, …) or an id does not
+/// parse. A missing offset is `0`.
+fn paged_duplicate_elements(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let given = args
+        .get_or_undefined(0)
+        .as_object()
+        .and_then(|o| o.get(js_string!("length"), ctx).ok())
+        .and_then(|v| v.as_number())
+        .unwrap_or(0.0) as usize;
+    let element_ids = parse_element_id_array(args.get_or_undefined(0), ctx);
+    // An id that does not parse is a caller error, not something to
+    // drop quietly: duplicating two of three named elements would be a
+    // different operation from the one asked for.
+    if element_ids.is_empty() || element_ids.len() != given {
+        return Ok(JsValue::null());
+    }
+    let coord = |v: &JsValue, ctx: &mut Context| -> JsResult<f32> {
+        if v.is_undefined() || v.is_null() {
+            Ok(0.0)
+        } else {
+            Ok(v.to_number(ctx)? as f32)
+        }
+    };
+    let dx = coord(args.get_or_undefined(1), ctx)?;
+    let dy = coord(args.get_or_undefined(2), ctx)?;
+    let mutation = Mutation::DuplicateElements {
+        element_ids,
+        offset: (dx, dy),
+    };
+    let clones = with_model(|m| match m.apply_mutation(&mutation) {
+        Ok(outcome) => {
+            let ids: Vec<_> = outcome.minted.into_iter().map(|e| e.element).collect();
+            m.element_selection.ids = ids.clone();
+            Some(ids)
+        }
+        Err(_) => None,
+    });
+    Ok(match clones {
+        Some(ids) => {
+            let addresses: Vec<String> = ids.iter().map(element_id_to_address).collect();
+            JsValue::from(js_string!(
+                serde_json::to_string(&addresses).unwrap_or_default()
+            ))
+        }
+        None => JsValue::null(),
+    })
+}
+
+/// `paged.dissolveGroup(groupId)` — ungroup; members return to the
+/// group's paint slot (`Mutation::DissolveGroup`).
+fn paged_dissolve_group(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DissolveGroup {
+        group_id: bare_id(&id),
+    }))
+}
+
+/// `paged.moveFrame(frameId, [a,b,c,d,tx,ty])` — set a frame's affine
+/// placement transform (`Mutation::MoveFrame`), in the space of the page
+/// it sits on (the space element geometry reads).
+fn paged_move_frame(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(transform) = read_floats::<6>(args.get_or_undefined(1), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::MoveFrame {
+        frame_id: bare_id(&id),
+        transform,
+    }))
+}
+
+/// `paged.resizeFrame(frameId, [t,l,b,r])` — set a frame's content-box
+/// bounds (`Mutation::ResizeFrame`; this is the re-paginating resize).
+fn paged_resize_frame(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(bounds) = read_quad(args.get_or_undefined(1), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::ResizeFrame {
+        frame_id: bare_id(&id),
+        bounds,
+    }))
+}
+
+/// `paged.linkFrames(fromId, toId)` — thread `from`'s overflow into the
+/// empty frame `to` (`Mutation::LinkFrames`).
+fn paged_link_frames(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let from = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let to = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::LinkFrames {
+        from: bare_id(&from),
+        to: bare_id(&to),
+    }))
+}
+
+/// `paged.unlinkFrames(frameId)` — break the thread leaving `frame`
+/// (`Mutation::UnlinkFrames`).
+fn paged_unlink_frames(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let frame = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::UnlinkFrames {
+        frame: bare_id(&frame),
+    }))
+}
+
+/// `paged.reorderElement(elementId, target)` — raise or lower an element
+/// in its parent's z-order (`Mutation::ReorderElement`). `target` is the
+/// wire `ZOrderTarget` verbatim: `"front"` | `"back"` | `"forward"` |
+/// `"backward"` | `{ index: n }` (n = the FINAL slot, 0 = backmost).
+fn paged_reorder_element(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&id) else {
+        return Ok(JsValue::from(false));
+    };
+    let Some(to) = from_js::<paged_mutate::ZOrderTarget>(args.get_or_undefined(1), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::ReorderElement { element_id, to }))
+}
+
+/// `paged.pasteInto(containerId, childId)` — nest an existing item inside
+/// a container frame (`Mutation::PasteInto`).
+fn paged_paste_into(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let container = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let child = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let (Some(container_id), Some(child_id)) =
+        (parse_element_id(&container), parse_element_id(&child))
+    else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::PasteInto {
+        container_id,
+        child_id,
+    }))
+}
+
+/// `paged.releaseFrom(childId)` — lift a nested item back out of its
+/// container (`Mutation::ReleaseFrom`), the inverse of `pasteInto`.
+fn paged_release_from(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let child = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(child_id) = parse_element_id(&child) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::ReleaseFrom { child_id }))
+}
+
+// ---------------------------------------------------- shape inserts
+
+/// `paged.insertLine(pageId, [x1,y1], [x2,y2])` — insert a two-anchor
+/// open `GraphicLine` (`Mutation::InsertLine`). Returns the new
+/// `graphicLine:<id>` address.
+fn paged_insert_line(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(start) = read_pair(args.get_or_undefined(1), ctx) else {
+        return Ok(JsValue::null());
+    };
+    let Some(end) = read_pair(args.get_or_undefined(2), ctx) else {
+        return Ok(JsValue::null());
+    };
+    Ok(apply_insert(&Mutation::InsertLine {
+        page_id: PageId(page),
+        start,
+        end,
+    }))
+}
+
+/// `paged.insertOval(pageId, [t,l,b,r])` — insert an `Oval`
+/// (`Mutation::InsertOval`). Returns the new `oval:<id>` address.
+fn paged_insert_oval(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(bounds) = read_quad(args.get_or_undefined(1), ctx) else {
+        return Ok(JsValue::null());
+    };
+    Ok(apply_insert(&Mutation::InsertOval {
+        page_id: PageId(page),
+        bounds,
+    }))
+}
+
+/// `paged.insertPath(pageId, anchors, open, smooth?)` — insert an
+/// arbitrary path (`Mutation::InsertPath`). `anchors` is a JS array of
+/// `{ anchor:[x,y], left:[x,y], right:[x,y] }`. Returns the new address.
+fn paged_insert_path(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(anchors) =
+        from_js::<Vec<paged_mutate::operation::PathAnchorSpec>>(args.get_or_undefined(1), ctx)
+    else {
+        return Ok(JsValue::null());
+    };
+    let open = args.get_or_undefined(2).to_boolean();
+    let smooth = args.get_or_undefined(3).to_boolean();
+    Ok(apply_insert(&Mutation::InsertPath {
+        page_id: PageId(page),
+        anchors,
+        open,
+        smooth,
+    }))
+}
+
+// ---------------------------------------------------- path-point editing
+
+/// `paged.pathPointInsert(elemId, index, anchor, subpathStarts?)` — insert
+/// an anchor into a path element's flat `PathPointArray` at `index`.
+fn paged_path_point_insert(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&id) else {
+        return Ok(JsValue::from(false));
+    };
+    let index = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let Some(anchor) =
+        from_js::<paged_mutate::operation::PathAnchorSpec>(args.get_or_undefined(2), ctx)
+    else {
+        return Ok(JsValue::from(false));
+    };
+    let sub = args.get_or_undefined(3);
+    let prev_subpath_starts = if sub.is_undefined() || sub.is_null() {
+        None
+    } else {
+        from_js::<Vec<u32>>(sub, ctx)
+    };
+    Ok(apply_bool(&Mutation::PathPointInsert {
+        element_id,
+        index,
+        anchor,
+        prev_subpath_starts,
+    }))
+}
+
+/// `paged.pathPointRemove(elemId, index)` — remove the anchor at flat
+/// `index` (`Mutation::PathPointRemove`).
+fn paged_path_point_remove(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&id) else {
+        return Ok(JsValue::from(false));
+    };
+    let index = args.get_or_undefined(1).to_number(ctx)? as u32;
+    Ok(apply_bool(&Mutation::PathPointRemove { element_id, index }))
+}
+
+/// `paged.pathPointCurveType(elemId, index, smooth)` — toggle an anchor
+/// between corner and smooth (`Mutation::PathPointCurveType`).
+fn paged_path_point_curve_type(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&id) else {
+        return Ok(JsValue::from(false));
+    };
+    let index = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let smooth = args.get_or_undefined(2).to_boolean();
+    Ok(apply_bool(&Mutation::PathPointCurveType {
+        element_id,
+        index,
+        smooth,
+    }))
+}
+
+/// `paged.pathPointSet(elemId, index, role, [x,y])` — write one Bezier
+/// handle (`role` = `"anchor"|"left"|"right"`; `Mutation::PathPointSet`).
+fn paged_path_point_set(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&id) else {
+        return Ok(JsValue::from(false));
+    };
+    let index = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let Some(role) = from_js::<paged_mutate::PathPointRole>(args.get_or_undefined(2), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    let Some((x, y)) = read_pair(args.get_or_undefined(3), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::PathPointSet {
+        element_id,
+        index,
+        role,
+        position: [x, y],
+    }))
+}
+
+/// `paged.pathOpenAt(elemId, index)` — cut the path at the anchor at flat
+/// `index` (`Mutation::PathOpenAt`).
+fn paged_path_open_at(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&id) else {
+        return Ok(JsValue::from(false));
+    };
+    let index = args.get_or_undefined(1).to_number(ctx)? as u32;
+    Ok(apply_bool(&Mutation::PathOpenAt { element_id, index }))
+}
+
+/// `paged.outlineStroke(elemId, width, cap, join, miter)` — replace the
+/// path with its stroke-expansion outline (`Mutation::OutlineStroke`).
+fn paged_outline_stroke(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&id) else {
+        return Ok(JsValue::from(false));
+    };
+    let width = args.get_or_undefined(1).to_number(ctx)? as f32;
+    let cap = args
+        .get_or_undefined(2)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let join = args
+        .get_or_undefined(3)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let miter_limit = args.get_or_undefined(4).to_number(ctx)? as f32;
+    Ok(apply_bool(&Mutation::OutlineStroke {
+        element_id,
+        width,
+        cap,
+        join,
+        miter_limit,
+    }))
+}
+
+/// `paged.offsetPath(elemId, delta, join, miter)` — inset/outset a single
+/// closed contour (`Mutation::OffsetPath`).
+fn paged_offset_path(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&id) else {
+        return Ok(JsValue::from(false));
+    };
+    let delta = args.get_or_undefined(1).to_number(ctx)? as f32;
+    let join = args
+        .get_or_undefined(2)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let miter_limit = args.get_or_undefined(3).to_number(ctx)? as f32;
+    Ok(apply_bool(&Mutation::OffsetPath {
+        element_id,
+        delta,
+        join,
+        miter_limit,
+    }))
+}
+
+/// `paged.simplifyPath(elemId, tolerance)` — re-express the path with
+/// fewer anchors within `tolerance` pt (`Mutation::SimplifyPath`).
+fn paged_simplify_path(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&id) else {
+        return Ok(JsValue::from(false));
+    };
+    let tolerance = args.get_or_undefined(1).to_number(ctx)? as f32;
+    Ok(apply_bool(&Mutation::SimplifyPath {
+        element_id,
+        tolerance,
+    }))
+}
+
+/// `paged.pathfinderBoolean(keptId, [otherIds], kind)` — Pathfinder
+/// boolean op (`kind` = `"union"|"intersect"|"subtract"|"exclude"`;
+/// `Mutation::PathfinderBoolean`).
+fn paged_pathfinder_boolean(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(kept) = parse_element_id(&id) else {
+        return Ok(JsValue::from(false));
+    };
+    let others = parse_element_id_array(args.get_or_undefined(1), ctx);
+    let Some(kind) = from_js::<paged_mutate::PathfinderKind>(args.get_or_undefined(2), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::PathfinderBoolean {
+        kept,
+        others,
+        kind,
+    }))
+}
+
+/// `paged.closePath(elementId, subpath?)` — close an open contour
+/// (`Mutation::ClosePath`). `subpath` defaults to the whole path.
+fn paged_close_path(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&id) else {
+        return Ok(JsValue::from(false));
+    };
+    let v = args.get_or_undefined(1);
+    let subpath = (!v.is_undefined() && !v.is_null()).then(|| v.to_number(ctx).map(|n| n as u32));
+    let subpath = match subpath {
+        Some(Ok(n)) => Some(n),
+        Some(Err(e)) => return Err(e),
+        None => None,
+    };
+    Ok(apply_bool(&Mutation::ClosePath {
+        element_id,
+        subpath,
+    }))
+}
+
+/// `paged.joinPaths(elementId, otherId)` — weld two open paths into one
+/// (`Mutation::JoinPaths`).
+fn paged_join_paths(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let a = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let b = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let (Some(element_id), Some(other_id)) = (parse_element_id(&a), parse_element_id(&b)) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::JoinPaths {
+        element_id,
+        other_id,
+    }))
+}
+
+/// The six REGION verbs take one shape — a selection in, the artwork
+/// rewritten in place — so they share one body and differ only in the
+/// variant they mint. Empty selection is `false`, never a throw.
+fn pathfinder_region(
+    args: &[JsValue],
+    ctx: &mut Context,
+    make: fn(Vec<paged_canvas::element_selection::ElementId>) -> Mutation,
+) -> JsValue {
+    let element_ids = parse_element_id_array(args.get_or_undefined(0), ctx);
+    if element_ids.is_empty() {
+        return JsValue::from(false);
+    }
+    apply_bool(&make(element_ids))
+}
+
+/// `paged.pathfinderDivide(elementIds)` (`Mutation::PathfinderDivide`).
+fn paged_pathfinder_divide(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    Ok(pathfinder_region(args, ctx, |element_ids| {
+        Mutation::PathfinderDivide { element_ids }
+    }))
+}
+
+/// `paged.pathfinderTrim(elementIds)` (`Mutation::PathfinderTrim`).
+fn paged_pathfinder_trim(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    Ok(pathfinder_region(args, ctx, |element_ids| {
+        Mutation::PathfinderTrim { element_ids }
+    }))
+}
+
+/// `paged.pathfinderMerge(elementIds)` (`Mutation::PathfinderMerge`).
+fn paged_pathfinder_merge(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    Ok(pathfinder_region(args, ctx, |element_ids| {
+        Mutation::PathfinderMerge { element_ids }
+    }))
+}
+
+/// `paged.pathfinderCrop(elementIds)` (`Mutation::PathfinderCrop`).
+fn paged_pathfinder_crop(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    Ok(pathfinder_region(args, ctx, |element_ids| {
+        Mutation::PathfinderCrop { element_ids }
+    }))
+}
+
+/// `paged.pathfinderOutline(elementIds)` (`Mutation::PathfinderOutline`).
+fn paged_pathfinder_outline(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    Ok(pathfinder_region(args, ctx, |element_ids| {
+        Mutation::PathfinderOutline { element_ids }
+    }))
+}
+
+/// `paged.pathfinderMinusBack(elementIds)` (`Mutation::PathfinderMinusBack`).
+fn paged_pathfinder_minus_back(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    Ok(pathfinder_region(args, ctx, |element_ids| {
+        Mutation::PathfinderMinusBack { element_ids }
+    }))
+}
+
+/// `paged.pathfinderFaces(elementIds, faceIds, mode)` — keep or drop the
+/// named faces of the planar arrangement (`Mutation::PathfinderFaces`).
+/// `mode` is the wire `FaceSelectMode`.
+fn paged_pathfinder_faces(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let element_ids = parse_element_id_array(args.get_or_undefined(0), ctx);
+    if element_ids.is_empty() {
+        return Ok(JsValue::from(false));
+    }
+    let faces = read_string_array(args.get_or_undefined(1), ctx);
+    let Some(mode) = from_js::<paged_mutate::FaceSelectMode>(args.get_or_undefined(2), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::PathfinderFaces {
+        element_ids,
+        faces,
+        mode,
+    }))
+}
+
+// ------------------------------------- opacity masks & text on a path
+
+/// `paged.applyOpacityMask(targetId, maskId, options?)` — mask one
+/// element with another (`Mutation::ApplyOpacityMask`). `options` =
+/// `{ maskType?, invert? }`.
+fn paged_apply_opacity_mask(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let target = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let mask = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let (Some(target_id), Some(mask_id)) = (parse_element_id(&target), parse_element_id(&mask))
+    else {
+        return Ok(JsValue::from(false));
+    };
+    let (mask_type, invert) = match args.get_or_undefined(2).as_object() {
+        Some(o) => (
+            prop_string(&o, "maskType", ctx),
+            prop_bool(&o, "invert", ctx),
+        ),
+        None => (None, None),
+    };
+    Ok(apply_bool(&Mutation::ApplyOpacityMask {
+        target_id,
+        mask_id,
+        mask_type,
+        invert,
+    }))
+}
+
+/// `paged.releaseOpacityMask(targetId)` (`Mutation::ReleaseOpacityMask`).
+fn paged_release_opacity_mask(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let target = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(target_id) = parse_element_id(&target) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::ReleaseOpacityMask { target_id }))
+}
+
+/// `paged.attachTextToPath(elementId, storyId, options?)` — run a story
+/// along a path (`Mutation::AttachTextToPath`). `options` =
+/// `{ pathTypeAlignment?, flipPathEffect?, startBracket?, endBracket? }`.
+fn paged_attach_text_to_path(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&id) else {
+        return Ok(JsValue::from(false));
+    };
+    let story_id = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let (path_type_alignment, flip_path_effect, start_bracket, end_bracket) =
+        match args.get_or_undefined(2).as_object() {
+            Some(o) => (
+                prop_string(&o, "pathTypeAlignment", ctx),
+                prop_string(&o, "flipPathEffect", ctx),
+                prop_f32(&o, "startBracket", ctx),
+                prop_f32(&o, "endBracket", ctx),
+            ),
+            None => (None, None, None, None),
+        };
+    Ok(apply_bool(&Mutation::AttachTextToPath {
+        element_id,
+        story_id,
+        path_type_alignment,
+        flip_path_effect,
+        start_bracket,
+        end_bracket,
+    }))
+}
+
+/// `paged.detachTextFromPath(elementId)` (`Mutation::DetachTextFromPath`).
+fn paged_detach_text_from_path(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&id) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::DetachTextFromPath { element_id }))
+}
+
+// ---------------------------------------------------- fields & images
+
+/// `paged.insertField(storyId, offset, fieldKind)` — insert a field marker
+/// at a story offset. `fieldKind` = `"pageNumber"` | `"nextPageNumber"` |
+/// `{ placeholder: { plugin, key, value? } }` (`Mutation::InsertField`).
+fn paged_insert_field(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let offset = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let Some(field) = from_js::<paged_mutate::operation::FieldKind>(args.get_or_undefined(2), ctx)
+    else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::InsertField {
+        story_id,
+        offset,
+        field,
+        content_offset: None,
+    }))
+}
+
+/// `paged.setFieldValue(storyId, offset, value?)` — update a placeholder
+/// field's cached display value (`null` ⇒ unresolved `<key>`;
+/// `Mutation::SetFieldValue`).
+fn paged_set_field_value(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let offset = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let value = opt_string(args.get_or_undefined(2), ctx);
+    Ok(apply_bool(&Mutation::SetFieldValue {
+        story_id,
+        offset,
+        value,
+    }))
+}
+
+/// `paged.replaceImageBytes(frameId, bytes?)` — commit inline image bytes
+/// on a graphic frame (`bytes` = a JS `number[]` of u8, or `null` to
+/// clear; `Mutation::ReplaceImageBytes`). The `ByteBuf` field is filled by
+/// deserializing the whole mutation so the bridge needs no `serde_bytes`
+/// dependency.
+fn paged_replace_image_bytes(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let bytes_arg = args.get_or_undefined(1);
+    let bytes_json = if bytes_arg.is_undefined() || bytes_arg.is_null() {
+        serde_json::Value::Null
+    } else {
+        match to_json_value(bytes_arg, ctx) {
+            Some(v) => v,
+            None => return Ok(JsValue::from(false)),
+        }
+    };
+    let m_json = serde_json::json!({
+        "op": "replaceImageBytes",
+        "args": { "elementId": bare_id(&id), "bytes": bytes_json },
+    });
+    match serde_json::from_value::<Mutation>(m_json) {
+        Ok(mutation) => Ok(apply_bool(&mutation)),
+        Err(_) => Ok(JsValue::from(false)),
+    }
+}
+
+/// `paged.insertAnchoredFrame(storyId, offset, width, height, imageUri?)`
+/// — anchor a frame in the text at a story offset
+/// (`Mutation::InsertAnchoredFrame`); with `imageUri` the frame is
+/// created holding that image.
+fn paged_insert_anchored_frame(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let offset = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let width = args.get_or_undefined(2).to_number(ctx)? as f32;
+    let height = args.get_or_undefined(3).to_number(ctx)? as f32;
+    let image_uri = opt_string(args.get_or_undefined(4), ctx);
+    Ok(apply_bool(&Mutation::InsertAnchoredFrame {
+        paragraph: None,
+        story_id,
+        offset,
+        width,
+        height,
+        image_uri,
+    }))
+}
+
+/// `paged.insertHyperlink(storyId, start, end, url, pageId?)` — make a
+/// character range a clickable link (`Mutation::InsertHyperlink`); with
+/// `pageId` it goes to that page (v70) and `url` may be empty. The read side is
+/// `paged.collection("hyperlinks")` — NOT `paged.links()`, which is the
+/// placed-asset link list and stays empty here.
+fn paged_insert_hyperlink(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let start = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let end = args.get_or_undefined(2).to_number(ctx)? as u32;
+    let url = args
+        .get_or_undefined(3)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let page = opt_string(args.get_or_undefined(4), ctx).map(PageId);
+    Ok(apply_bool(&Mutation::InsertHyperlink {
+        story_id,
+        start,
+        end,
+        url,
+        page,
+    }))
+}
+
+/// `paged.deleteHyperlink(hyperlinkId)` — delete a hyperlink of any origin
+/// by its `Hyperlink` id (`Mutation::DeleteHyperlink`, ADR 164): its text
+/// stops linking. Ids come from `paged.collection("hyperlinks")`.
+fn paged_delete_hyperlink(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let hyperlink_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteHyperlink { hyperlink_id }))
+}
+
+/// `paged.editHyperlink(hyperlinkId, { name?, url?, pageId? })` — rename a
+/// hyperlink or send it somewhere new (`Mutation::EditHyperlink`, ADR 164);
+/// `pageId` wins over `url`, and an empty `name` clears the name.
+fn paged_edit_hyperlink(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let hyperlink_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let (mut name, mut url, mut page) = (None, None, None);
+    if let Some(o) = args.get_or_undefined(1).as_object() {
+        let raw = o.get(js_string!("name"), ctx)?;
+        if !raw.is_undefined() && !raw.is_null() {
+            name = Some(raw.to_string(ctx)?.to_std_string_escaped());
+        }
+        url = prop_string(&o, "url", ctx);
+        page = prop_string(&o, "pageId", ctx).map(PageId);
+    }
+    Ok(apply_bool(&Mutation::EditHyperlink {
+        hyperlink_id,
+        name,
+        url,
+        page,
+    }))
+}
+
+/// `paged.updateTableOfContents(storyId)` — Update Table of Contents
+/// (`Mutation::UpdateTableOfContents`, ADR 165): rewrite a TOC story from
+/// its TOC style over the current layout.
+fn paged_update_table_of_contents(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::UpdateTableOfContents { story_id }))
+}
+
+/// `paged.generateIndex(storyId)` — Generate Index
+/// (`Mutation::GenerateIndex`, ADR 168): write the document's index into
+/// a story, replacing its text.
+fn paged_generate_index(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::GenerateIndex { story_id }))
+}
+
+/// `paged.updateCrossReferences(sourceId?)` — Update Cross-References
+/// (`Mutation::UpdateCrossReferences`, ADR 169): one source by its id, or
+/// every one.
+fn paged_update_cross_references(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let source_id = opt_string(args.get_or_undefined(0), ctx);
+    Ok(apply_bool(&Mutation::UpdateCrossReferences { source_id }))
+}
+
+/// `paged.insertFootnote(storyId, offset, text)` — insert a footnote at
+/// story char `offset` (`Mutation::InsertFootnote`, ADR 163): its
+/// reference there, and the note, its number and separator then `text`.
+/// Returns the new note's id, or `null` when the insert was refused. The
+/// read side is `paged.collection("footnotes")`.
+fn paged_insert_footnote(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let offset = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let text = opt_string(args.get_or_undefined(2), ctx).unwrap_or_default();
+    let ids = |m: &paged_canvas::CanvasModel| -> Vec<String> {
+        m.footnotes().into_iter().map(|f| f.self_id).collect()
+    };
+    let minted = with_model(|m| {
+        let before = ids(m);
+        m.apply_mutation(&Mutation::InsertFootnote {
+            story_id,
+            offset,
+            paragraph: None,
+            text,
+        })
+        .ok()?;
+        ids(m).into_iter().find(|id| !before.contains(id))
+    });
+    Ok(minted.map_or(JsValue::null(), |id| JsValue::from(js_string!(id))))
+}
+
+/// `paged.deleteFootnote(storyId, footnoteId)` — delete a footnote, its
+/// reference and its note (`Mutation::DeleteFootnote`, ADR 163).
+fn paged_delete_footnote(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let footnote_id = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteFootnote {
+        story_id,
+        footnote_id,
+    }))
+}
+
+/// `paged.insertNote(storyId, offset, text, user?, date?)` — insert an
+/// editorial note at story char `offset` (`Mutation::InsertNote`, ADR
+/// 172): its place there, one character that prints nothing, and its
+/// text (paragraphs separated by `\r`). Returns the new note's id, or
+/// `null` when the insert was refused. The read side is
+/// `paged.collection("notes")`.
+fn paged_insert_note(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let offset = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let text = opt_string(args.get_or_undefined(2), ctx).unwrap_or_default();
+    let user = opt_string(args.get_or_undefined(3), ctx);
+    let date = opt_string(args.get_or_undefined(4), ctx);
+    let ids = |m: &paged_canvas::CanvasModel| -> Vec<String> {
+        m.notes().into_iter().map(|n| n.id).collect()
+    };
+    let minted = with_model(|m| {
+        let before = ids(m);
+        m.apply_mutation(&Mutation::InsertNote {
+            story_id,
+            offset,
+            paragraph: None,
+            text,
+            user,
+            date,
+        })
+        .ok()?;
+        ids(m).into_iter().find(|id| !before.contains(id))
+    });
+    Ok(minted.map_or(JsValue::null(), |id| JsValue::from(js_string!(id))))
+}
+
+/// `paged.editNote(noteId, text, date?)` — rewrite a note's text
+/// (`Mutation::EditNote`, ADR 172); `date` becomes its modification date.
+fn paged_edit_note(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let note_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let text = opt_string(args.get_or_undefined(1), ctx).unwrap_or_default();
+    let date = opt_string(args.get_or_undefined(2), ctx);
+    Ok(apply_bool(&Mutation::EditNote {
+        note_id,
+        text,
+        date,
+    }))
+}
+
+/// `paged.deleteNote(noteId)` — delete a note and its place
+/// (`Mutation::DeleteNote`, ADR 172).
+fn paged_delete_note(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let note_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteNote { note_id }))
+}
+
+/// `paged.acceptTrackedChange(storyId, offset)` — accept the tracked
+/// deletion at a story offset, as `paged.collection("trackedChanges")`
+/// lists it (`Mutation::AcceptTrackedChange`, D-01).
+fn paged_accept_tracked_change(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let offset = args.get_or_undefined(1).to_number(ctx)? as u32;
+    Ok(apply_bool(&Mutation::AcceptTrackedChange {
+        story_id,
+        offset,
+    }))
+}
+
+/// `paged.rejectTrackedChange(storyId, offset)` — reject the tracked
+/// deletion at a story offset: its text comes back
+/// (`Mutation::RejectTrackedChange`, D-01).
+fn paged_reject_tracked_change(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let offset = args.get_or_undefined(1).to_number(ctx)? as u32;
+    Ok(apply_bool(&Mutation::RejectTrackedChange {
+        story_id,
+        offset,
+    }))
+}
+
+/// `paged.convertNoteToText(noteId)` — Convert to Text
+/// (`Mutation::ConvertNoteToText`, ADR 172): the note's place becomes a
+/// space and its text.
+fn paged_convert_note_to_text(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let note_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::ConvertNoteToText { note_id }))
+}
+
+/// `paged.createBookmark(name, { page?, destination?, parent?, index? })` —
+/// New Bookmark (`Mutation::CreateBookmark`, ADR 173): to a page (its
+/// `Self` id) or an existing destination, under a bookmark or at the top
+/// level. Returns the new bookmark's id, or `null` when it was refused. The
+/// read side is `paged.collection("bookmarks")`.
+fn paged_create_bookmark(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(default)]
+    struct Spec {
+        page: Option<String>,
+        destination: Option<String>,
+        parent: Option<String>,
+        index: Option<u32>,
+    }
+    let name = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let spec = from_js::<Spec>(args.get_or_undefined(1), ctx).unwrap_or_default();
+    let ids = |m: &paged_canvas::CanvasModel| -> Vec<String> {
+        m.bookmarks().into_iter().map(|b| b.self_id).collect()
+    };
+    let minted = with_model(|m| {
+        let before = ids(m);
+        m.apply_mutation(&Mutation::CreateBookmark {
+            name,
+            page: spec.page.map(PageId),
+            destination: spec.destination,
+            parent: spec.parent,
+            index: spec.index,
+        })
+        .ok()?;
+        ids(m).into_iter().find(|id| !before.contains(id))
+    });
+    Ok(minted.map_or(JsValue::null(), |id| JsValue::from(js_string!(id))))
+}
+
+/// `paged.deleteBookmark(bookmarkId)` — delete a bookmark and the
+/// bookmarks under it (`Mutation::DeleteBookmark`, ADR 173).
+fn paged_delete_bookmark(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let bookmark_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteBookmark { bookmark_id }))
+}
+
+/// `paged.renameBookmark(bookmarkId, name)` — rename a bookmark
+/// (`Mutation::RenameBookmark`, ADR 173).
+fn paged_rename_bookmark(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let bookmark_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let name = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::RenameBookmark { bookmark_id, name }))
+}
+
+/// `paged.moveBookmark(bookmarkId, parentId?, index?)` — move a bookmark
+/// and the bookmarks under it (`Mutation::MoveBookmark`, ADR 173): under
+/// a bookmark (the top level for `null`), at an index among its children
+/// (the end when absent).
+fn paged_move_bookmark(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let bookmark_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let parent = opt_string(args.get_or_undefined(1), ctx);
+    let index = match args.get_or_undefined(2) {
+        v if v.is_undefined() || v.is_null() => None,
+        v => Some(v.to_number(ctx)? as u32),
+    };
+    Ok(apply_bool(&Mutation::MoveBookmark {
+        bookmark_id,
+        parent,
+        index,
+    }))
+}
+
+/// The endnote ids `m` lists, in reference order.
+fn endnote_ids(m: &paged_canvas::CanvasModel) -> Vec<String> {
+    m.endnotes().into_iter().map(|e| e.id).collect()
+}
+
+/// `paged.insertEndnote(storyId, offset, text)` — insert an endnote at
+/// story char `offset` (`Mutation::InsertEndnote`, ADR 174): its reference
+/// there and its range in the endnote story, which the first endnote makes
+/// on a page of its own. Returns the new endnote's id, or `null` when the
+/// insert was refused. The read side is `paged.collection("endnotes")`.
+fn paged_insert_endnote(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let offset = args.get_or_undefined(1).to_number(ctx)? as u32;
+    let text = opt_string(args.get_or_undefined(2), ctx).unwrap_or_default();
+    let minted = with_model(|m| {
+        let before = endnote_ids(m);
+        m.apply_mutation(&Mutation::InsertEndnote {
+            story_id,
+            offset,
+            paragraph: None,
+            text,
+        })
+        .ok()?;
+        endnote_ids(m).into_iter().find(|id| !before.contains(id))
+    });
+    Ok(minted.map_or(JsValue::null(), |id| JsValue::from(js_string!(id))))
+}
+
+/// `paged.deleteEndnote(endnoteId)` — delete an endnote, its reference and
+/// its range (`Mutation::DeleteEndnote`, ADR 174).
+fn paged_delete_endnote(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let endnote_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteEndnote { endnote_id }))
+}
+
+/// `paged.convertFootnoteToEndnote(storyId, footnoteId)` — the footnote
+/// becomes an endnote of its text at its reference's place
+/// (`Mutation::ConvertFootnoteToEndnote`, ADR 174). Returns the endnote's
+/// id, or `null` when refused.
+fn paged_convert_footnote_to_endnote(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let footnote_id = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let minted = with_model(|m| {
+        let before = endnote_ids(m);
+        m.apply_mutation(&Mutation::ConvertFootnoteToEndnote {
+            story_id,
+            footnote_id,
+        })
+        .ok()?;
+        endnote_ids(m).into_iter().find(|id| !before.contains(id))
+    });
+    Ok(minted.map_or(JsValue::null(), |id| JsValue::from(js_string!(id))))
+}
+
+// ---------------------------------------------------- tables
+
+/// `paged.insertTable(storyId, spec)` — create a `<Table>` at the end of a
+/// story (`Mutation::InsertTable`). `spec` = `{ rows, cols, headerRows?,
+/// footerRows?, columnWidths?, rowHeights? }`. Returns the minted table id.
+fn paged_insert_table(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(rename_all = "camelCase", default)]
+    struct Spec {
+        rows: u32,
+        cols: u32,
+        header_rows: u32,
+        footer_rows: u32,
+        column_widths: Vec<f32>,
+        row_heights: Vec<f32>,
+    }
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(spec) = from_js::<Spec>(args.get_or_undefined(1), ctx) else {
+        return Ok(JsValue::null());
+    };
+    Ok(apply_insert_table(&Mutation::InsertTable {
+        story_id,
+        rows: spec.rows,
+        cols: spec.cols,
+        header_rows: spec.header_rows,
+        footer_rows: spec.footer_rows,
+        column_widths: spec.column_widths,
+        row_heights: spec.row_heights,
+    }))
+}
+
+/// `paged.setRowHeight(storyId, tableId, row, height?)` — set/clear a row
+/// height in pt (`Mutation::SetRowHeight`).
+fn paged_set_row_height(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let table_id = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let row = args.get_or_undefined(2).to_number(ctx)? as u32;
+    let height = opt_f32(args.get_or_undefined(3));
+    Ok(apply_bool(&Mutation::SetRowHeight {
+        story_id,
+        table_id,
+        row,
+        height,
+    }))
+}
+
+/// `paged.setColumnWidth(storyId, tableId, col, width?)` — set/clear a
+/// column width in pt (`Mutation::SetColumnWidth`).
+fn paged_set_column_width(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let table_id = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let col = args.get_or_undefined(2).to_number(ctx)? as u32;
+    let width = opt_f32(args.get_or_undefined(3));
+    Ok(apply_bool(&Mutation::SetColumnWidth {
+        story_id,
+        table_id,
+        col,
+        width,
+    }))
+}
+
+/// `paged.insertTableRow(storyId, tableId, at)` — insert an empty body row
+/// (`Mutation::InsertTableRow`).
+fn paged_insert_table_row(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let table_id = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let at = args.get_or_undefined(2).to_number(ctx)? as u32;
+    Ok(apply_bool(&Mutation::InsertTableRow {
+        story_id,
+        table_id,
+        at,
+    }))
+}
+
+/// `paged.deleteTable(storyId, tableId)` — delete a whole table and the
+/// paragraph that hosts it (`Mutation::DeleteTable`). Undo restores it.
+fn paged_delete_table(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let table_id = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteTable { story_id, table_id }))
+}
+
+/// `paged.deleteTableRow(storyId, tableId, at)` — delete the row at `at`
+/// (`Mutation::DeleteTableRow`).
+fn paged_delete_table_row(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let table_id = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let at = args.get_or_undefined(2).to_number(ctx)? as u32;
+    Ok(apply_bool(&Mutation::DeleteTableRow {
+        story_id,
+        table_id,
+        at,
+    }))
+}
+
+/// `paged.insertTableColumn(storyId, tableId, at)` — insert an empty
+/// column (`Mutation::InsertTableColumn`).
+fn paged_insert_table_column(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let table_id = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let at = args.get_or_undefined(2).to_number(ctx)? as u32;
+    Ok(apply_bool(&Mutation::InsertTableColumn {
+        story_id,
+        table_id,
+        at,
+    }))
+}
+
+/// `paged.deleteTableColumn(storyId, tableId, at)` — delete the column at
+/// `at` (`Mutation::DeleteTableColumn`).
+fn paged_delete_table_column(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let table_id = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let at = args.get_or_undefined(2).to_number(ctx)? as u32;
+    Ok(apply_bool(&Mutation::DeleteTableColumn {
+        story_id,
+        table_id,
+        at,
+    }))
+}
+
+/// `paged.insertHeaderRow(storyId, tableId)` — insert a header-band row
+/// (`Mutation::InsertHeaderRow`).
+fn paged_insert_header_row(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let table_id = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::InsertHeaderRow {
+        story_id,
+        table_id,
+    }))
+}
+
+/// `paged.removeHeaderRow(storyId, tableId)` — remove the first header row
+/// (`Mutation::RemoveHeaderRow`).
+fn paged_remove_header_row(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let table_id = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::RemoveHeaderRow {
+        story_id,
+        table_id,
+    }))
+}
+
+/// `paged.insertFooterRow(storyId, tableId)` — insert a footer-band row
+/// (`Mutation::InsertFooterRow`).
+fn paged_insert_footer_row(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let table_id = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::InsertFooterRow {
+        story_id,
+        table_id,
+    }))
+}
+
+/// `paged.removeFooterRow(storyId, tableId)` — remove the last footer row
+/// (`Mutation::RemoveFooterRow`).
+fn paged_remove_footer_row(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let table_id = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::RemoveFooterRow {
+        story_id,
+        table_id,
+    }))
+}
+
+/// `paged.setCellSpan(storyId, tableId, row, col, rowSpan, columnSpan)` —
+/// set a cell's row/column span (`Mutation::SetCellSpan`).
+fn paged_set_cell_span(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let table_id = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let row = args.get_or_undefined(2).to_number(ctx)? as u32;
+    let col = args.get_or_undefined(3).to_number(ctx)? as u32;
+    let row_span = args.get_or_undefined(4).to_number(ctx)? as u32;
+    let column_span = args.get_or_undefined(5).to_number(ctx)? as u32;
+    Ok(apply_bool(&Mutation::SetCellSpan {
+        story_id,
+        table_id,
+        row,
+        col,
+        row_span,
+        column_span,
+    }))
+}
+
+// ---------------------------------------------------- style CRUD
+
+/// Read a `{ id?, name?, basedOn? }` style-create spec object.
+fn read_style_spec(
+    value: &JsValue,
+    ctx: &mut Context,
+) -> (Option<String>, Option<String>, Option<String>) {
+    match value.as_object() {
+        Some(obj) => (
+            prop_string(&obj, "id", ctx),
+            prop_string(&obj, "name", ctx),
+            prop_string(&obj, "basedOn", ctx),
+        ),
+        None => (None, None, None),
+    }
+}
+
+/// `paged.createParagraphStyle({id?,name?,basedOn?})` — returns the new
+/// style id (`Mutation::CreateParagraphStyle`).
+fn paged_create_paragraph_style(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let (self_id, name, based_on) = read_style_spec(args.get_or_undefined(0), ctx);
+    Ok(apply_new_self_id(
+        CollectionName::ParagraphStyles,
+        &Mutation::CreateParagraphStyle {
+            self_id,
+            name,
+            based_on,
+        },
+    ))
+}
+
+/// `paged.renameParagraphStyle(styleId, name)` (`Mutation::RenameParagraphStyle`).
+fn paged_rename_paragraph_style(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let style_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let name = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::RenameParagraphStyle {
+        style_id,
+        name,
+    }))
+}
+
+/// `paged.deleteParagraphStyle(styleId)` (`Mutation::DeleteParagraphStyle`).
+fn paged_delete_paragraph_style(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let style_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteParagraphStyle { style_id }))
+}
+
+/// `paged.createCharacterStyle({id?,name?,basedOn?})` — returns the new id.
+fn paged_create_character_style(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let (self_id, name, based_on) = read_style_spec(args.get_or_undefined(0), ctx);
+    Ok(apply_new_self_id(
+        CollectionName::CharacterStyles,
+        &Mutation::CreateCharacterStyle {
+            self_id,
+            name,
+            based_on,
+        },
+    ))
+}
+
+/// `paged.renameCharacterStyle(styleId, name)`.
+fn paged_rename_character_style(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let style_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let name = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::RenameCharacterStyle {
+        style_id,
+        name,
+    }))
+}
+
+/// `paged.deleteCharacterStyle(styleId)`.
+fn paged_delete_character_style(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let style_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteCharacterStyle { style_id }))
+}
+
+/// `paged.createObjectStyle({id?,name?,basedOn?})` — returns the new id.
+fn paged_create_object_style(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let (self_id, name, based_on) = read_style_spec(args.get_or_undefined(0), ctx);
+    Ok(apply_new_self_id(
+        CollectionName::ObjectStyles,
+        &Mutation::CreateObjectStyle {
+            self_id,
+            name,
+            based_on,
+        },
+    ))
+}
+
+/// `paged.renameObjectStyle(styleId, name)`.
+fn paged_rename_object_style(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let style_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let name = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::RenameObjectStyle { style_id, name }))
+}
+
+/// `paged.deleteObjectStyle(styleId)`.
+fn paged_delete_object_style(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let style_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteObjectStyle { style_id }))
+}
+
+/// `paged.createCellStyle({id?,name?,basedOn?})` — returns the new id.
+fn paged_create_cell_style(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let (self_id, name, based_on) = read_style_spec(args.get_or_undefined(0), ctx);
+    Ok(apply_new_self_id(
+        CollectionName::CellStyles,
+        &Mutation::CreateCellStyle {
+            self_id,
+            name,
+            based_on,
+        },
+    ))
+}
+
+/// `paged.renameCellStyle(styleId, name)`.
+fn paged_rename_cell_style(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let style_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let name = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::RenameCellStyle { style_id, name }))
+}
+
+/// `paged.deleteCellStyle(styleId)`.
+fn paged_delete_cell_style(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let style_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteCellStyle { style_id }))
+}
+
+/// `paged.createTableStyle({id?,name?,basedOn?})` — returns the new id.
+fn paged_create_table_style(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let (self_id, name, based_on) = read_style_spec(args.get_or_undefined(0), ctx);
+    Ok(apply_new_self_id(
+        CollectionName::TableStyles,
+        &Mutation::CreateTableStyle {
+            self_id,
+            name,
+            based_on,
+        },
+    ))
+}
+
+/// `paged.renameTableStyle(styleId, name)`.
+fn paged_rename_table_style(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let style_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let name = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::RenameTableStyle { style_id, name }))
+}
+
+/// `paged.deleteTableStyle(styleId)`.
+fn paged_delete_table_style(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let style_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteTableStyle { style_id }))
+}
+
+/// `paged.setStyleProperty(collection, styleId, path, value)` — set one
+/// property on a style definition (`collection` =
+/// `"paragraph"|"character"|"object"|"cell"|"table"`, `path` a settable
+/// path name; `Mutation::SetStyleProperty`).
+fn paged_set_style_property(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let Some(collection) = from_js::<paged_mutate::StyleCollection>(args.get_or_undefined(0), ctx)
+    else {
+        return Ok(JsValue::from(false));
+    };
+    let style_id = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let path_str = args
+        .get_or_undefined(2)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(path) = parse_property_path(&path_str) else {
+        return Ok(JsValue::from(false));
+    };
+    let value_arg = args.get_or_undefined(3).clone();
+    let Some(value) = js_value_to_wire(&value_arg, path, ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::SetStyleProperty {
+        collection,
+        style_id,
+        path,
+        value,
+    }))
+}
+
+// ---------------------------------------------------- numbering lists
+
+/// `paged.createNumberingList(spec)` — create a `<NumberingList>`
+/// (`spec` = a `NumberingListSpec`; `Mutation::CreateNumberingList`).
+/// Returns the new list id.
+fn paged_create_numbering_list(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let Some(spec) = from_js::<paged_mutate::NumberingListSpec>(args.get_or_undefined(0), ctx)
+    else {
+        return Ok(JsValue::null());
+    };
+    Ok(apply_new_self_id(
+        CollectionName::NumberingLists,
+        &Mutation::CreateNumberingList { spec },
+    ))
+}
+
+/// `paged.editNumberingList(listId, spec)` (`Mutation::EditNumberingList`).
+fn paged_edit_numbering_list(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let list_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(spec) = from_js::<paged_mutate::NumberingListSpec>(args.get_or_undefined(1), ctx)
+    else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::EditNumberingList { list_id, spec }))
+}
+
+/// `paged.deleteNumberingList(listId)` (`Mutation::DeleteNumberingList`).
+fn paged_delete_numbering_list(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let list_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteNumberingList { list_id }))
+}
+
+// ---------------------------------------------------- sections
+
+/// `paged.insertSection(pageId, {prefix?,style?,start?})` — anchor a
+/// `<Section>` at a page (`Mutation::InsertSection`).
+fn paged_insert_section(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let page = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let (prefix, numbering_style, start_at) = match args.get_or_undefined(1).as_object() {
+        Some(obj) => (
+            prop_string(&obj, "prefix", ctx),
+            prop_string(&obj, "style", ctx),
+            prop_u32(&obj, "start", ctx),
+        ),
+        None => (None, None, None),
+    };
+    Ok(apply_bool(&Mutation::InsertSection {
+        at_page: PageId(page),
+        prefix,
+        numbering_style,
+        start_at,
+    }))
+}
+
+/// `paged.editSection(sectionId, {prefix?,style?,start?})` — edit a
+/// `<Section>`. `prefix`/`start` are tri-state: omit a key to leave it,
+/// pass `null` to clear it (`Mutation::EditSection`).
+fn paged_edit_section(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let section_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(obj) = args.get_or_undefined(1).as_object() else {
+        return Ok(JsValue::from(false));
+    };
+    // tri-state: absent ⇒ leave; null ⇒ clear; value ⇒ set.
+    let prefix = {
+        let v = obj.get(js_string!("prefix"), ctx)?;
+        if v.is_undefined() {
+            None
+        } else if v.is_null() {
+            Some(None)
+        } else {
+            Some(Some(v.to_string(ctx)?.to_std_string_escaped()))
+        }
+    };
+    let start_at = {
+        let v = obj.get(js_string!("start"), ctx)?;
+        if v.is_undefined() {
+            None
+        } else if v.is_null() {
+            Some(None)
+        } else {
+            Some(Some(v.to_number(ctx)? as u32))
+        }
+    };
+    let numbering_style = prop_string(&obj, "style", ctx);
+    Ok(apply_bool(&Mutation::EditSection {
+        section_id,
+        prefix,
+        numbering_style,
+        start_at,
+    }))
+}
+
+/// `paged.deleteSection(sectionId)` (`Mutation::DeleteSection`).
+fn paged_delete_section(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let section_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteSection { section_id }))
+}
+
+// ---------------------------------------------------- conditions
+
+/// `paged.setConditionVisible(conditionId, visible)`
+/// (`Mutation::SetConditionVisible`).
+fn paged_set_condition_visible(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let condition = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let visible = args.get_or_undefined(1).to_boolean();
+    Ok(apply_bool(&Mutation::SetConditionVisible {
+        condition,
+        visible,
+    }))
+}
+
+/// `paged.setFlowGrowRule(storyId, grow, maxPages?, copyFrameOptions?)`
+/// (`Mutation::SetFlowGrowRule`, ADR 026).
+fn paged_set_flow_grow_rule(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let story_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let grow = args.get_or_undefined(1).to_boolean();
+    let max_pages = match args.get_or_undefined(2) {
+        v if v.is_undefined() || v.is_null() => None,
+        v => Some(v.to_u32(ctx)?),
+    };
+    let copy_frame_options = match args.get_or_undefined(3) {
+        v if v.is_undefined() || v.is_null() => None,
+        v => Some(v.to_boolean()),
+    };
+    Ok(apply_bool(&Mutation::SetFlowGrowRule {
+        story_id,
+        grow,
+        max_pages,
+        copy_frame_options,
+    }))
+}
+
+/// `paged.activateConditionSet(setId)` (`Mutation::ActivateConditionSet`).
+fn paged_activate_condition_set(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let set = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::ActivateConditionSet { set }))
+}
+
+// ---------------------------------------------------- layers
+
+/// `paged.layerInsert(position, name)` — append a layer at the given
+/// zero-based stacking index (`Mutation::LayerInsert`).
+fn paged_layer_insert(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let position = args.get_or_undefined(0).to_number(ctx)? as u32;
+    let name = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::LayerInsert { position, name }))
+}
+
+/// `paged.layerRemove(layerId)` (`Mutation::LayerRemove`).
+fn paged_layer_remove(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let layer_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::LayerRemove { layer_id }))
+}
+
+/// `paged.layerMove(layerId, newIndex)` — reorder a layer
+/// (`Mutation::LayerMove`).
+fn paged_layer_move(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let layer_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let new_index = args.get_or_undefined(1).to_number(ctx)? as u32;
+    Ok(apply_bool(&Mutation::LayerMove {
+        layer_id,
+        new_index,
+    }))
+}
+
+/// `paged.layerSetVisible(layerId, visible)` (`Mutation::LayerSetVisible`).
+fn paged_layer_set_visible(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let layer_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let visible = args.get_or_undefined(1).to_boolean();
+    Ok(apply_bool(&Mutation::LayerSetVisible { layer_id, visible }))
+}
+
+/// `paged.layerSetLocked(layerId, locked)` (`Mutation::LayerSetLocked`).
+fn paged_layer_set_locked(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let layer_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let locked = args.get_or_undefined(1).to_boolean();
+    Ok(apply_bool(&Mutation::LayerSetLocked { layer_id, locked }))
+}
+
+/// `paged.layerSetPrintable(layerId, printable)`
+/// (`Mutation::LayerSetPrintable`).
+fn paged_layer_set_printable(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let layer_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let printable = args.get_or_undefined(1).to_boolean();
+    Ok(apply_bool(&Mutation::LayerSetPrintable {
+        layer_id,
+        printable,
+    }))
+}
+
+/// `paged.layerSetName(layerId, name)` (`Mutation::LayerSetName`).
+fn paged_layer_set_name(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let layer_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let name = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::LayerSetName { layer_id, name }))
+}
+
+// ---------------------------------------------------- guides
+
+/// `paged.insertGuide(spreadId, orientation, position, pageIndex?)` —
+/// insert a ruler guide (`orientation` = `"vertical"|"horizontal"`;
+/// `Mutation::InsertGuide`).
+fn paged_insert_guide(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let spread_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(orientation) =
+        from_js::<paged_mutate::operation::GuideOrientationSpec>(args.get_or_undefined(1), ctx)
+    else {
+        return Ok(JsValue::from(false));
+    };
+    let position = args.get_or_undefined(2).to_number(ctx)? as f32;
+    let page_index = opt_f32(args.get_or_undefined(3)).map_or(0, |n| n as u32);
+    Ok(apply_bool(&Mutation::InsertGuide {
+        spread_id,
+        orientation,
+        position,
+        page_index,
+    }))
+}
+
+/// `paged.moveGuide(guideId, position)` (`Mutation::MoveGuide`).
+fn paged_move_guide(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let guide_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let position = args.get_or_undefined(1).to_number(ctx)? as f32;
+    Ok(apply_bool(&Mutation::MoveGuide { guide_id, position }))
+}
+
+/// `paged.deleteGuide(guideId)` (`Mutation::DeleteGuide`).
+fn paged_delete_guide(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let guide_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteGuide { guide_id }))
+}
+
+// ---------------------------------------------------- document defaults & colour
+
+/// `paged.setDocumentDefaults({fill?,stroke?,weight?})` — set the
+/// new-object fill/stroke/weight defaults (`Mutation::SetDocumentDefaults`;
+/// whole-triple semantics — omitted fields become "no fill"/"no stroke"/
+/// engine-default weight).
+fn paged_set_document_defaults(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let (fill_color, stroke_color, stroke_weight) = match args.get_or_undefined(0).as_object() {
+        Some(obj) => (
+            prop_string(&obj, "fill", ctx),
+            prop_string(&obj, "stroke", ctx),
+            prop_f32(&obj, "weight", ctx),
+        ),
+        None => (None, None, None),
+    };
+    Ok(apply_bool(&Mutation::SetDocumentDefaults {
+        fill_color,
+        stroke_color,
+        stroke_weight,
+    }))
+}
+
+/// `paged.setColorSettings({cmykProfileName?,rgbPolicy?,intent?,bpc?})` —
+/// replace the document colour-management settings
+/// (`Mutation::SetColorSettings`).
+fn paged_set_color_settings(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(rename_all = "camelCase", default)]
+    struct Spec {
+        cmyk_profile_name: Option<String>,
+        rgb_policy: Option<String>,
+        intent: Option<String>,
+        bpc: Option<bool>,
+    }
+    let Some(spec) = from_js::<Spec>(args.get_or_undefined(0), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::SetColorSettings {
+        cmyk_profile_name: spec.cmyk_profile_name,
+        rgb_policy: spec.rgb_policy,
+        intent: spec.intent,
+        bpc: spec.bpc,
+    }))
+}
+
+/// `paged.setProofSetup({profileName?,simulatePaperWhite?,intent?})` —
+/// soft-proofing configuration (`Mutation::SetProofSetup`).
+fn paged_set_proof_setup(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(rename_all = "camelCase", default)]
+    struct Spec {
+        profile_name: Option<String>,
+        simulate_paper_white: bool,
+        intent: Option<String>,
+    }
+    let Some(spec) = from_js::<Spec>(args.get_or_undefined(0), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::SetProofSetup {
+        profile_name: spec.profile_name,
+        simulate_paper_white: spec.simulate_paper_white,
+        intent: spec.intent,
+    }))
+}
+
+/// `paged.importSwatchLibrary(bytes, groupName?)` — import an `.ase`
+/// library (`bytes` = a JS `number[]`; `Mutation::ImportSwatchLibrary`).
+/// The `ByteBuf` field is filled by deserializing the whole mutation.
+fn paged_import_swatch_library(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let Some(bytes_json) = to_json_value(args.get_or_undefined(0), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    let group_name = opt_string(args.get_or_undefined(1), ctx);
+    let m_json = serde_json::json!({
+        "op": "importSwatchLibrary",
+        "args": { "bytes": bytes_json, "groupName": group_name },
+    });
+    match serde_json::from_value::<Mutation>(m_json) {
+        Ok(mutation) => Ok(apply_bool(&mutation)),
+        Err(_) => Ok(JsValue::from(false)),
+    }
+}
+
+/// `paged.setInkSetting(spotId, {convertToProcess?,aliasTo?})` — replace
+/// one ink's output-time settings (`Mutation::SetInkSetting`).
+fn paged_set_ink_setting(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    #[derive(Default, serde::Deserialize)]
+    #[serde(rename_all = "camelCase", default)]
+    struct Spec {
+        convert_to_process: bool,
+        alias_to: Option<String>,
+    }
+    let spot_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let spec = from_js::<Spec>(args.get_or_undefined(1), ctx).unwrap_or_default();
+    Ok(apply_bool(&Mutation::SetInkSetting {
+        spot_id,
+        convert_to_process: spec.convert_to_process,
+        alias_to: spec.alias_to,
+    }))
+}
+
+/// `paged.setUseStandardLabForSpots(enabled)`
+/// (`Mutation::SetUseStandardLabForSpots`).
+fn paged_set_use_standard_lab_for_spots(
+    _this: &JsValue,
+    args: &[JsValue],
+    _ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let enabled = args.get_or_undefined(0).to_boolean();
+    Ok(apply_bool(&Mutation::SetUseStandardLabForSpots { enabled }))
+}
+
+// The nine colour-resource CRUD ops. Each `spec` argument is the wire
+// spec type verbatim (`SwatchSpec` / `GradientSpec` / `ColorGroupSpec`),
+// so a script names the same fields the editor's panels send and there
+// is no second spelling to learn.
+
+/// `paged.createSwatch(spec)` — returns the new swatch `Self` id, or
+/// `null` (`Mutation::CreateSwatch`).
+fn paged_create_swatch(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let Some(spec) = from_js::<paged_mutate::SwatchSpec>(args.get_or_undefined(0), ctx) else {
+        return Ok(JsValue::null());
+    };
+    Ok(apply_new_self_id(
+        CollectionName::Swatches,
+        &Mutation::CreateSwatch { spec },
+    ))
+}
+
+/// `paged.editSwatch(swatchId, spec)` (`Mutation::EditSwatch`).
+fn paged_edit_swatch(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let swatch_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(spec) = from_js::<paged_mutate::SwatchSpec>(args.get_or_undefined(1), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::EditSwatch { swatch_id, spec }))
+}
+
+/// `paged.deleteSwatch(swatchId)` (`Mutation::DeleteSwatch`).
+fn paged_delete_swatch(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let swatch_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteSwatch { swatch_id }))
+}
+
+/// `paged.createGradient(spec)` — returns the new gradient `Self` id, or
+/// `null` (`Mutation::CreateGradient`).
+fn paged_create_gradient(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let Some(spec) = from_js::<paged_mutate::GradientSpec>(args.get_or_undefined(0), ctx) else {
+        return Ok(JsValue::null());
+    };
+    Ok(apply_new_self_id(
+        CollectionName::Gradients,
+        &Mutation::CreateGradient { spec },
+    ))
+}
+
+/// `paged.editGradient(gradientId, spec)` (`Mutation::EditGradient`).
+fn paged_edit_gradient(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let gradient_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(spec) = from_js::<paged_mutate::GradientSpec>(args.get_or_undefined(1), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::EditGradient { gradient_id, spec }))
+}
+
+/// `paged.deleteGradient(gradientId)` (`Mutation::DeleteGradient`).
+fn paged_delete_gradient(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let gradient_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteGradient { gradient_id }))
+}
+
+/// `paged.createColorGroup(spec)` — returns the new group `Self` id, or
+/// `null` (`Mutation::CreateColorGroup`).
+fn paged_create_color_group(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let Some(spec) = from_js::<paged_mutate::ColorGroupSpec>(args.get_or_undefined(0), ctx) else {
+        return Ok(JsValue::null());
+    };
+    Ok(apply_new_self_id(
+        CollectionName::ColorGroups,
+        &Mutation::CreateColorGroup { spec },
+    ))
+}
+
+/// `paged.editColorGroup(groupId, spec)` (`Mutation::EditColorGroup`).
+fn paged_edit_color_group(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let group_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(spec) = from_js::<paged_mutate::ColorGroupSpec>(args.get_or_undefined(1), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::EditColorGroup { group_id, spec }))
+}
+
+/// `paged.deleteColorGroup(groupId)` (`Mutation::DeleteColorGroup`).
+fn paged_delete_color_group(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let group_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    Ok(apply_bool(&Mutation::DeleteColorGroup { group_id }))
+}
+
+// ---------------------------------------------------- plugin metadata & batch
+
+/// `paged.setPluginMetadata(elemId, key, value?, caller?)` — write one
+/// `Label` key/value pair on a leaf page item (`value` null deletes;
+/// `Mutation::SetPluginMetadata`).
+fn paged_set_plugin_metadata(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&id) else {
+        return Ok(JsValue::from(false));
+    };
+    let key = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let value = opt_string(args.get_or_undefined(2), ctx);
+    let caller = opt_string(args.get_or_undefined(3), ctx);
+    Ok(apply_bool(&Mutation::SetPluginMetadata {
+        element_id,
+        key,
+        value,
+        caller,
+    }))
+}
+
+/// `paged.setDocumentMetadata(key, value?, caller?)` — write one
+/// document-scoped `Label` key/value pair (`value` null deletes;
+/// `Mutation::SetDocumentMetadata`, v69).
+fn paged_set_document_metadata(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let key = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let value = opt_string(args.get_or_undefined(1), ctx);
+    let caller = opt_string(args.get_or_undefined(2), ctx);
+    Ok(apply_bool(&Mutation::SetDocumentMetadata {
+        key,
+        value,
+        caller,
+    }))
+}
+
+/// `paged.createTextVariable(name, contents?, textBefore?, textAfter?)` —
+/// define a custom text variable (`Mutation::CreateTextVariable`, v71).
+/// Returns its address (`textVariable:dTextVariablen<name>`), or `null`
+/// when refused (empty or taken name).
+fn paged_create_text_variable(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let name = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let contents = opt_string(args.get_or_undefined(1), ctx);
+    let text_before = opt_string(args.get_or_undefined(2), ctx);
+    let text_after = opt_string(args.get_or_undefined(3), ctx);
+    let address = paged_wire::Address::TextVariable {
+        id: format!("dTextVariablen{name}"),
+    }
+    .to_string();
+    let applied = with_model(|m| {
+        m.apply_mutation(&Mutation::CreateTextVariable {
+            name,
+            contents,
+            text_before,
+            text_after,
+        })
+        .is_ok()
+    });
+    Ok(if applied {
+        JsValue::from(js_string!(address))
+    } else {
+        JsValue::null()
+    })
+}
+
+/// `paged.deleteTextVariable(variableId)` — remove a text variable
+/// definition no text still uses (`Mutation::DeleteTextVariable`, v71).
+fn paged_delete_text_variable(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let variable_id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let variable_id = variable_id
+        .strip_prefix("textVariable:")
+        .map(str::to_string)
+        .unwrap_or(variable_id);
+    Ok(apply_bool(&Mutation::DeleteTextVariable { variable_id }))
+}
+
+/// `paged.batch([mutations])` — apply an array of `{ op, args }` mutation
+/// objects as ONE undoable step (`Mutation::Batch`). An unparseable array
+/// returns `false`.
+fn paged_batch(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    if let Some(ops) = object_ops(args.get_or_undefined(0), ctx) {
+        return object_batch(ops, ctx);
+    }
+    let Some(ops) = from_js::<Vec<Mutation>>(args.get_or_undefined(0), ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    Ok(apply_bool(&Mutation::Batch { ops }))
+}
+
+/// v71 — an `ObjectOp[]` (ADR 323: `{ op: "set", address, path, value }`,
+/// `create`, `delete`, and `{ op: "invoke", id, args, handle? }`), told
+/// apart from a wire `Mutation[]` by having no `args` (an `invoke` op
+/// carries its command's `args` and a string `id`). `None` for anything else (the wire batch path).
+fn object_ops(value: &JsValue, ctx: &mut Context) -> Option<Vec<serde_json::Value>> {
+    let json = to_json_value(value, ctx)?;
+    let ops = json.as_array()?;
+    // An `invoke` op carries `args` (the command's); any other op with
+    // `args` is a wire `Mutation`.
+    let is_invoke = |o: &serde_json::Value| {
+        o.get("op").and_then(serde_json::Value::as_str) == Some("invoke")
+            && o.get("id").is_some_and(serde_json::Value::is_string)
+    };
+    let is_object_op = |o: &serde_json::Value| {
+        is_invoke(o)
+            || o.get("args").is_none()
+                && matches!(
+                    o.get("op").and_then(serde_json::Value::as_str),
+                    Some("set" | "create" | "delete" | "invoke")
+                )
+    };
+    (!ops.is_empty() && ops.iter().all(is_object_op)).then(|| ops.clone())
+}
+
+/// `paged.batch(objectOps)` — all-or-nothing, ONE undo step, resolving to
+/// the per-op results (`[{ ok: true } | { ok: false, code, reason }]`
+/// JSON). An op on a plugin object sends the WHOLE batch to the host's
+/// registry, which commits core and plugin writes as one engine batch
+/// (a promise); a core-only batch applies here as one `Mutation::Batch`
+/// (synchronous).
+fn object_batch(ops: Vec<serde_json::Value>, ctx: &mut Context) -> JsResult<JsValue> {
+    let is_plugin = |o: &serde_json::Value| {
+        ["address", "kind"].iter().any(|k| {
+            o.get(*k)
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|s| s.starts_with("plugin:"))
+        })
+    };
+    // A typed command (`invoke`) is the host registry's: it makes the
+    // whole batch the host's, like a plugin op.
+    let is_invoke =
+        |o: &serde_json::Value| o.get("op").and_then(serde_json::Value::as_str) == Some("invoke");
+    let n = ops.len();
+    if ops.iter().any(|o| is_plugin(o) || is_invoke(o)) {
+        return host_bridge::enqueue(
+            HostObjectCall::Batch { ops },
+            host_bridge::Shape::Batch { n },
+            ctx,
+        );
+    }
+    let refuse = |index: usize, code: &str, reason: String| HostObjectError {
+        code: code.into(),
+        reason,
+        index: Some(index as u32),
+    };
+    let mut mutations = Vec::with_capacity(n);
+    let mut error = None;
+    for (i, op) in ops.iter().enumerate() {
+        let kind = op
+            .get("op")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        if kind != "set" {
+            error = Some(refuse(i, "unmapped", format!(
+                "a core `{kind}` is not an object op here: use its paged.* fn (create/delete land with core's Set)"
+            )));
+            break;
+        }
+        let address = op
+            .get("address")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        let path = op
+            .get("path")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        let value = op.get("value").cloned().unwrap_or(serde_json::Value::Null);
+        let target = JsValue::from(js_string!(address));
+        let value = JsValue::from_json(&value, ctx).unwrap_or(JsValue::null());
+        match plan_set(&target, path, &value, ctx) {
+            Some(m) => mutations.push(m),
+            None => {
+                error = Some(refuse(
+                    i,
+                    "invalidValue",
+                    format!("{address} {path}: the address, path or value does not resolve"),
+                ));
+                break;
+            }
+        }
+    }
+    if error.is_none() {
+        if let Err(e) = with_model(|m| m.apply_mutation(&Mutation::Batch { ops: mutations })) {
+            error = Some(HostObjectError {
+                code: "failed".into(),
+                reason: format!("{e:?}"),
+                index: None,
+            });
+        }
+    }
+    let results = host_bridge::per_op_results(n, error.as_ref());
+    Ok(JsValue::from(js_string!(
+        serde_json::to_string(&results).unwrap_or_default()
+    )))
+}
+
+/// `paged.schema(addressOrKind)` — the typed property schema rows (ADR
+/// 132) of an address's kind (`"frame:u1"`, `"swatch:Color/Red"`) or of a
+/// kind name (`"frame"`, `"page"`), as JSON. A `plugin:` address or kind
+/// asks the host's registry (a promise).
+fn paged_schema(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let target = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    if target.starts_with("plugin:") {
+        return host_bridge::enqueue(
+            HostObjectCall::Schema { target },
+            host_bridge::Shape::Json,
+            ctx,
+        );
+    }
+    let kind = match paged_wire::Address::parse(&target) {
+        Ok(address) => with_model(|m| m.target_of(&address))
+            .map(|t| t.address_kind().to_string())
+            .unwrap_or_else(|_| address.kind().prefix().to_string()),
+        Err(_) => target,
+    };
+    let rows: Vec<_> = paged_introspect::virtual_paths::property_schemas()
+        .into_iter()
+        .filter(|r| r.address_kind == kind)
+        .collect();
+    Ok(JsValue::from(js_string!(
+        serde_json::to_string(&rows).unwrap_or_default()
+    )))
+}
+
+/// `paged.invoke(id, args)` — run a typed command (`core.<op>` or a
+/// plugin's, SDK DESIGN §21.12) through the host's object registry: a
+/// promise of the result's JSON (`{ created, undoSteps }` for a core
+/// command). Commands live in the host's registry only, so without a host
+/// this throws `noHost`; a refusal rejects with `.code`.
+fn paged_invoke(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let arg = args.get_or_undefined(1);
+    let args = if arg.is_undefined() {
+        serde_json::Value::Null
+    } else {
+        to_json_value(arg, ctx).unwrap_or(serde_json::Value::Null)
+    };
+    host_bridge::enqueue(
+        HostObjectCall::Invoke { id, args },
+        host_bridge::Shape::Json,
+        ctx,
+    )
+}
+
+/// `paged.commands(owner?)` — the typed commands the host offers (core's
+/// first), optionally of one owner (`"core"`, a plugin id): a promise of
+/// the `CommandInfo[]` JSON. Without a host this throws `noHost`.
+fn paged_commands(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let owner = args.get_or_undefined(0);
+    let owner = if owner.is_undefined() || owner.is_null() {
+        None
+    } else {
+        Some(owner.to_string(ctx)?.to_std_string_escaped())
+    };
+    host_bridge::enqueue(
+        HostObjectCall::Commands { owner },
+        host_bridge::Shape::Json,
+        ctx,
+    )
+}
+
+// ---------------------------------------------------- selection setters
+//
+// These set the worker model's selection state directly — they are
+// application state, NOT undoable document mutations, so they do not go
+// through `apply_mutation`.
+
+/// `paged.setElementSelection([id, ...])` — replace the element selection
+/// with the parseable ids. Always returns `true`.
+fn paged_set_element_selection(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let ids = parse_element_id_array(args.get_or_undefined(0), ctx);
+    with_model(|m| m.element_selection.ids = ids);
+    Ok(JsValue::from(true))
+}
+
+/// `paged.clearSelection()` — clear the element selection.
+fn paged_clear_selection(
+    _this: &JsValue,
+    _args: &[JsValue],
+    _ctx: &mut Context,
+) -> JsResult<JsValue> {
+    with_model(|m| m.element_selection.clear());
+    Ok(JsValue::from(true))
+}
+
+/// `paged.setContentSelection({storyId,start,end} | null)` — set or clear
+/// the text caret/range. Returns `false` if a non-null arg is not a valid
+/// `ContentSelection` shape.
+fn paged_set_content_selection(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let value = args.get_or_undefined(0);
+    if value.is_undefined() || value.is_null() {
+        with_model(|m| m.current_selection = None);
+        return Ok(JsValue::from(true));
+    }
+    let Some(sel) = from_js::<paged_canvas::selection::ContentSelection>(value, ctx) else {
+        return Ok(JsValue::from(false));
+    };
+    with_model(|m| m.current_selection = Some(sel));
+    Ok(JsValue::from(true))
+}
+
+fn paged_get(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let target = args.get_or_undefined(0);
+    if let Some(address) = plugin_address(target) {
+        let path = args
+            .get_or_undefined(1)
+            .to_string(ctx)?
+            .to_std_string_escaped();
+        return host_bridge::enqueue(
+            HostObjectCall::Get { address, path },
+            host_bridge::Shape::Get,
+            ctx,
+        );
+    }
+    let is_element = target
+        .as_string()
+        .is_some_and(|s| parse_element_id(&s.to_std_string_escaped()).is_some());
+    if !is_element {
+        let Some(address) = js_address(target, ctx) else {
+            return Ok(JsValue::null());
+        };
+        let path = args
+            .get_or_undefined(1)
+            .to_string(ctx)?
+            .to_std_string_escaped();
+        return Ok(get_virtual(&address, &path));
+    }
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let path = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&id) else {
+        return Ok(JsValue::null());
+    };
+    let entry = with_model(|m| {
+        m.element_properties(&element_id).and_then(|props| {
+            props
+                .entries
+                .into_iter()
+                .find(|e| property_path_label(e.path) == path)
+        })
+    });
+    match entry {
+        Some(e) => Ok(JsValue::from(js_string!(
+            serde_json::to_string(&e.value).unwrap_or_default()
+        ))),
+        // A virtual path on the element (`imageUri`, `labels[key]`, a
+        // group's `groupTransform`).
+        None if parse_property_path(&path).is_none() => {
+            Ok(get_virtual(&paged_wire::Address::from(element_id), &path))
+        }
+        None => Ok(JsValue::null()),
+    }
+}
+
+/// The read twin of `set_virtual`: the value's wire JSON, or `null`.
+fn get_virtual(address: &paged_wire::Address, path: &str) -> JsValue {
+    match with_model(|m| m.get_property_at(address, path)) {
+        Ok(v) => JsValue::from(js_string!(serde_json::to_string(&v).unwrap_or_default())),
+        Err(_) => JsValue::null(),
+    }
+}
+
+fn paged_undo(_this: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+    Ok(JsValue::from(with_model(|m| m.undo().is_some())))
+}
+
+fn paged_redo(_this: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+    Ok(JsValue::from(with_model(|m| m.redo().is_some())))
+}
+
+fn paged_inspect(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let id = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(element_id) = parse_element_id(&id) else {
+        return Ok(match with_model(|m| inspect_story(m, &id)) {
+            Some(s) => JsValue::from(js_string!(s)),
+            None => JsValue::null(),
+        });
+    };
+    let payload = with_model(|m| {
+        m.element_properties(&element_id)
+            .map(|p| serde_json::to_string(&p).unwrap_or_default())
+    });
+    match payload {
+        Some(s) => Ok(JsValue::from(js_string!(s))),
+        None => Ok(JsValue::null()),
+    }
+}
+
+/// `paged.inspect("story:<id>")` — a story's snapshot in the shape an
+/// element's has (`{ id, kind, name, entries: [{ path, value }] }`): its
+/// `text` first, then every row the property schemas list for a story.
+/// `None` when the address names no story in this document.
+fn inspect_story(m: &CanvasModel, address: &str) -> Option<String> {
+    let resolved = m.resolve_address(address)?;
+    let paged_wire::Address::Story { id } = &resolved else {
+        return None;
+    };
+    let paths = std::iter::once("text").chain(
+        paged_introspect::virtual_paths::property_schemas()
+            .into_iter()
+            .filter(|row| row.address_kind == "story")
+            .map(|row| row.path),
+    );
+    let entries: Vec<serde_json::Value> = paths
+        .filter_map(|path| {
+            let value = m.get_property_at(&resolved, path).ok()?;
+            Some(serde_json::json!({ "path": path, "value": value }))
+        })
+        .collect();
+    serde_json::to_string(&serde_json::json!({
+        "id": { "kind": "story", "id": id },
+        "kind": "Story",
+        "name": null,
+        "entries": entries,
+    }))
+    .ok()
+}
+
+fn paged_layers(_this: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+    let s = with_model(|m| serde_json::to_string(&m.layers()).unwrap_or_default());
+    Ok(JsValue::from(js_string!(s)))
+}
+
+/// `paged.planarRegions([id, ...], point?)` — the planar arrangement of
+/// the named paths as a JSON `PlanarRegionsResult` (`found`, `faces`,
+/// `inputCount`, `complete`, `reason`). With `point` it answers only the
+/// face under it.
+///
+/// This is the READ half of `pathfinderFaces`: a face is addressed by
+/// the `id` this returns, so without it the verb ships with no way to
+/// name its argument.
+fn paged_planar_regions(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let ids = parse_element_id_array(args.get_or_undefined(0), ctx);
+    let point = read_pair(args.get_or_undefined(1), ctx).map(|(x, y)| [x, y]);
+    let s =
+        with_model(|m| serde_json::to_string(&m.planar_regions(&ids, point)).unwrap_or_default());
+    Ok(JsValue::from(js_string!(s)))
+}
+
+fn paged_tree(_this: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+    let s = with_model(|m| serde_json::to_string(&m.scene_tree()).unwrap_or_default());
+    Ok(JsValue::from(js_string!(s)))
+}
+
+/// SDK Phase 3 — returns the loaded document's stories as a JSON-
+/// encoded `StorySummary[]`. Each entry carries `selfId`,
+/// `characterCount`, `paragraphCount`. Scripts use this to pick
+/// valid `StoryRange` addresses; tests use it to populate the
+/// content selection programmatically.
+/// `paged.query(selector)` — the canonical address of every object the
+/// selector matches (ADR 131), as a JSON-encoded `string[]` in document
+/// order. A selector that does not parse THROWS a SyntaxError naming the
+/// offset — a typo is a bug in the script, not an empty answer.
+fn paged_query(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let selector = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    // v71 — a selector naming a plugin kind or object yields plugin
+    // addresses: the host's registry evaluates it (core steps included).
+    if selector.contains("plugin:") {
+        return host_bridge::enqueue(
+            HostObjectCall::Query { selector },
+            host_bridge::Shape::Json,
+            ctx,
+        );
+    }
+    match with_model(|m| m.query(&selector)) {
+        Ok(found) => {
+            let list: Vec<String> = found.iter().map(ToString::to_string).collect();
+            Ok(JsValue::from(js_string!(
+                serde_json::to_string(&list).unwrap_or_default()
+            )))
+        }
+        Err(e) => Err(JsNativeError::syntax()
+            .with_message(format!("paged.query({selector:?}): {e}"))
+            .into()),
+    }
+}
+
+/// `paged.address(id)` — the canonical address string of an object, or
+/// `null` when nothing in the document answers to it. Takes an address
+/// string in any accepted spelling (`frame:u1`, `page:#2`,
+/// `story:s@0..4`, a style by name) or a `{ kind, id }` element object as
+/// `paged.selection()` / `paged.tree()` return them.
+fn paged_address(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let arg = args.get_or_undefined(0);
+    let text = match arg.as_object() {
+        Some(obj) => match element_id_address_of(&obj, ctx) {
+            Some(s) => s,
+            None => return Ok(JsValue::null()),
+        },
+        None => arg.to_string(ctx)?.to_std_string_escaped(),
+    };
+    match with_model(|m| m.resolve_address(&text)) {
+        Some(a) => Ok(JsValue::from(js_string!(a.to_string()))),
+        None => Ok(JsValue::null()),
+    }
+}
+
+fn paged_stories(_this: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+    let s = with_model(|m| serde_json::to_string(&m.stories()).unwrap_or_default());
+    Ok(JsValue::from(js_string!(s)))
+}
+
+/// `paged.pages()` — the loaded document's pages as a JSON-encoded
+/// `PageSummary[]` (each carries `selfId`, a 1-based `index`, and
+/// `sizePt`). `selfId` is the page id accepted by `insertFrame`,
+/// `insertTextFrame`, and `insertPage` (and the `afterPageId` of
+/// `insertPage`). Pages are not addressable elements (they carry
+/// `id:null` in `paged.tree()`), so this is the only way a script can
+/// obtain a usable page id.
+fn paged_pages(_this: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+    let s = with_model(|m| serde_json::to_string(&m.pages()).unwrap_or_default());
+    Ok(JsValue::from(js_string!(s)))
+}
+
+/// SDK Phase 3 — returns the loaded document's swatch palette as
+/// a JSON-encoded `SwatchSummary[]`. First implementation of the
+/// `documentCollection` read kind per
+/// `docs/paged/panel-catalog-and-sdk-extension.md` §5.1; the same
+/// shape the (future) UI `paged.collection("swatches")` consumes.
+fn paged_swatches(_this: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+    let s = with_model(|m| serde_json::to_string(&m.swatches()).unwrap_or_default());
+    Ok(JsValue::from(js_string!(s)))
+}
+
+fn paged_paragraph_styles(
+    _this: &JsValue,
+    _args: &[JsValue],
+    _ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let s = with_model(|m| serde_json::to_string(&m.paragraph_styles()).unwrap_or_default());
+    Ok(JsValue::from(js_string!(s)))
+}
+
+fn paged_character_styles(
+    _this: &JsValue,
+    _args: &[JsValue],
+    _ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let s = with_model(|m| serde_json::to_string(&m.character_styles()).unwrap_or_default());
+    Ok(JsValue::from(js_string!(s)))
+}
+
+/// SDK Phase 5 (v1 sweep) — `paged.objectStyles()` legacy-shape
+/// alias for `paged.collection("objectStyles")`. The generic
+/// `paged.collection(name)` is the canonical entry point; this
+/// alias mirrors the existing `paragraphStyles` / `characterStyles`
+/// style and stays for back-compat with scripts that learn the
+/// per-collection name.
+fn paged_object_styles(
+    _this: &JsValue,
+    _args: &[JsValue],
+    _ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let s = with_model(|m| serde_json::to_string(&m.object_styles()).unwrap_or_default());
+    Ok(JsValue::from(js_string!(s)))
+}
+
+/// SDK Phase 5 (v1 sweep) — `paged.links()` legacy-shape alias for
+/// `paged.collection("links")`.
+fn paged_links(_this: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+    let s = with_model(|m| serde_json::to_string(&m.links()).unwrap_or_default());
+    Ok(JsValue::from(js_string!(s)))
+}
+
+/// SDK Phase 5 (v1 sweep) — `paged.conditions()` legacy-shape
+/// alias for `paged.collection("conditions")`.
+fn paged_conditions(_this: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+    let s = with_model(|m| serde_json::to_string(&m.conditions()).unwrap_or_default());
+    Ok(JsValue::from(js_string!(s)))
+}
+
+/// SDK Phase 5 (v1 sweep) — `paged.conditionSets()` alias.
+fn paged_condition_sets(
+    _this: &JsValue,
+    _args: &[JsValue],
+    _ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let s = with_model(|m| serde_json::to_string(&m.condition_sets()).unwrap_or_default());
+    Ok(JsValue::from(js_string!(s)))
+}
+
+/// SDK Phase 5 (v1 sweep) — `paged.colorGroups()` alias.
+fn paged_color_groups(_this: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+    let s = with_model(|m| serde_json::to_string(&m.color_groups()).unwrap_or_default());
+    Ok(JsValue::from(js_string!(s)))
+}
+
+fn paged_gradients(_this: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+    let s = with_model(|m| serde_json::to_string(&m.gradients()).unwrap_or_default());
+    Ok(JsValue::from(js_string!(s)))
+}
+
+/// SDK Phase 5 (D1) — generic typed-collection read. Backs the
+/// `documentCollection:<name>` ReadSpec end of the §5 binding
+/// ceiling and the matching `client.collection(name)` TS API.
+///
+/// Returns a JSON-encoded array matching the typed `*Summary[]`
+/// for the requested collection — `SwatchSummary[]` for
+/// `"swatches"`, `ParagraphStyleSummary[]` for
+/// `"paragraphStyles"`, etc. Unknown collection names return
+/// `"[]"` (NOT `null`) with a console warning, so consumers'
+/// typed arrays stay valid; this matches the model dispatcher's
+/// empty-for-unwired semantics. The convergence thesis (sdk.md
+/// §11.1) means this fn and the UI's `useCollection` hook reach
+/// the same `CanvasModel::collection(name)` source — one truth
+/// for both call sites.
+fn paged_collection(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let name_str = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let Some(name) = paged_canvas::channel::CollectionName::from_str(&name_str) else {
+        push_output(format!(
+            "[warn] paged.collection(\"{name_str}\") — unknown collection; returning []"
+        ));
+        return Ok(JsValue::from(js_string!("[]")));
+    };
+    let s = with_model(|m| serde_json::to_string(&m.collection(name)).unwrap_or_default());
+    Ok(JsValue::from(js_string!(s)))
+}
+
+/// SDK Phase 5 (D1) — singleton document-state snapshot. Backs
+/// the `documentMeta:<key>` ReadSpec form and the
+/// `client.documentMeta()` TS API. Returns a JSON-encoded
+/// `DocumentMeta` (the six §5.6 fields).
+fn paged_document_meta(
+    _this: &JsValue,
+    _args: &[JsValue],
+    _ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let s = with_model(|m| serde_json::to_string(&m.document_meta()).unwrap_or_default());
+    Ok(JsValue::from(js_string!(s)))
+}
+
+/// Returns the current element-selection set as a JSON-encoded
+/// `ElementId[]`. Empty selection yields `"[]"` — never `null` —
+/// to mirror the always-present array shape the UI consumes via
+/// `useElementSelection()`. Application state, not document state:
+/// reads do not enter the Operation log, and the caller is expected
+/// to re-poll on `mutationApplied` if it wants to react to changes.
+fn paged_selection(_this: &JsValue, _args: &[JsValue], _ctx: &mut Context) -> JsResult<JsValue> {
+    let s = with_model(|m| serde_json::to_string(&m.element_selection.ids).unwrap_or_default());
+    Ok(JsValue::from(js_string!(s)))
+}
+
+/// Returns the current text-side selection (caret or range) as a
+/// JSON-encoded `ContentSelection`, or JS `null` when there is none.
+/// Same shape `client.setSelection` accepts on the way in.
+fn paged_content_selection(
+    _this: &JsValue,
+    _args: &[JsValue],
+    _ctx: &mut Context,
+) -> JsResult<JsValue> {
+    let payload = with_model(|m| {
+        m.current_selection
+            .as_ref()
+            .map(|s| serde_json::to_string(s).unwrap_or_default())
+    });
+    match payload {
+        Some(s) => Ok(JsValue::from(js_string!(s))),
+        None => Ok(JsValue::null()),
+    }
+}
+
+// ---------------------------------------------------------------- console.*
+
+fn console_log(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    emit_console("log", args, ctx);
+    Ok(JsValue::undefined())
+}
+fn console_warn(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    emit_console("warn", args, ctx);
+    Ok(JsValue::undefined())
+}
+fn console_error(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    emit_console("error", args, ctx);
+    Ok(JsValue::undefined())
+}
+fn console_info(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    emit_console("info", args, ctx);
+    Ok(JsValue::undefined())
+}
+
+fn emit_console(level: &str, args: &[JsValue], ctx: &mut Context) {
+    let parts: Vec<String> = args.iter().map(|v| format_value(v, ctx)).collect();
+    push_output(format!("[{level}] {}", parts.join(" ")));
+}
+
+// ---------------------------------------------------------------- parsing
+
+/// The `kind:id` address grammar, which now lives in `paged-wire`
+/// beside `ElementId` — see [`paged_wire::ElementId::parse`]. It was
+/// forty lines here, private to this bridge, and the CLI became the
+/// second surface to need it.
+fn parse_element_id(s: &str) -> Option<paged_canvas::element_selection::ElementId> {
+    paged_canvas::element_selection::ElementId::parse(s)
+}
+
+/// Inverse of `parse_element_id`: the canonical address (ADR 131).
+/// `to_address` is total since table and cell gained a form; the
+/// `raw_id` fallback only keeps the `Option` signature honest.
+fn element_id_to_address(id: &paged_canvas::element_selection::ElementId) -> String {
+    id.to_address().unwrap_or_else(|| id.raw_id().to_string())
+}
+
+fn parse_property_path(s: &str) -> Option<paged_mutate::PropertyPath> {
+    // Single source of truth: the JS-name -> PropertyPath table owned by
+    // `paged-introspect`, which also backs `api_catalog().settable_paths`
+    // (ADR 019). No second list.
+    paged_introspect::lookup_path(s)
+}
+
+/// The JS name of a property path.
+///
+/// Delegates to `paged-introspect`, which owns the one variant → name
+/// table (see `property_paths!`). This used to be a second 217-arm
+/// match living here, agreeing with the catalog's 176-entry table by
+/// hand — so `paged.get` knew 217 names and `paged.set` 176, and the
+/// difference was invisible to both.
+fn property_path_label(path: paged_mutate::PropertyPath) -> &'static str {
+    paged_introspect::wire_name(path)
+}
+
+/// Evaluate a JS expression and convert it through the same bridge
+/// `paged.set` uses, for `path` (an advertised name). `None` when the
+/// expression does not evaluate or the bridge refuses the value.
+///
+/// Test surface only: it lets a gate assert, for every advertised
+/// path, that a script author has SOME literal the bridge turns into
+/// the wire value — without driving a whole script per path.
+#[doc(hidden)]
+#[must_use]
+pub fn js_literal_to_wire(expression: &str, path: &str) -> Option<paged_mutate::Value> {
+    let path = parse_property_path(path)?;
+    let mut ctx = Context::default();
+    let value = ctx
+        .eval(boa_engine::Source::from_bytes(&format!("({expression})")))
+        .ok()?;
+    js_value_to_wire(&value, path, &mut ctx)
+}
+
+fn js_value_to_wire(
+    value: &JsValue,
+    path: paged_mutate::PropertyPath,
+    ctx: &mut Context,
+) -> Option<paged_mutate::Value> {
+    use paged_mutate::PropertyPath as P;
+    use paged_mutate::Value as W;
+    // ADR 132 — scalars coerce against the path's SCHEMA: the wire form
+    // (`Length` / `Text` / `ColorRef` / `Bool`), the range and, for a
+    // closed enum, the members. This replaces the hand list that chose
+    // `Text` over `ColorRef` by path and turned every number into a
+    // `Length`; a string on a length path may carry a unit (`"3mm"`).
+    let schema = paged_introspect::catalog::schema(path);
+    if let Some(s) = value.as_string() {
+        let s = s.to_std_string_escaped();
+        return paged_introspect::schema::coerce(
+            &schema,
+            paged_introspect::schema::Input::Text(&s),
+        )
+        .ok();
+    }
+    if let Some(input) = js_scalar(value) {
+        return paged_introspect::schema::coerce(&schema, input).ok();
+    }
+    if let Some(obj) = value.as_object() {
+        // Structured paths whose natural JS form is not the `{ type,
+        // value }` wrapper: a script hands a path as its anchors, and a
+        // dash array as its numbers. Without these arms the bridge read
+        // `[6, 3]` as nothing and `[a, b, c, d]` as BOUNDS, and a bare
+        // `{ anchors }` failed the wrapper's decode — `paged.set` returned
+        // false on paths the catalog advertises as settable.
+        if matches!(path, P::FramePath | P::FrameStrokeDashArray) {
+            let json = value.to_json(ctx).ok()??;
+            let is_wrapper = json.get("type").is_some() && json.get("value").is_some();
+            if !is_wrapper {
+                return match path {
+                    P::FramePath => frame_path_from_json(&json),
+                    _ => json
+                        .as_array()?
+                        .iter()
+                        .map(|n| n.as_f64().map(|n| n as f32))
+                        .collect::<Option<Vec<f32>>>()
+                        .map(W::Lengths),
+                };
+            }
+        }
+        if obj.is_array() {
+            let len = obj
+                .get(js_string!("length"), ctx)
+                .ok()?
+                .to_length(ctx)
+                .ok()? as usize;
+            if len == 4 {
+                let mut out = [0.0f32; 4];
+                for (i, slot) in out.iter_mut().enumerate() {
+                    let v = obj.get(i as u32, ctx).ok()?;
+                    *slot = v.as_number()? as f32;
+                }
+                return Some(W::Bounds(out));
+            }
+            if len == 6 {
+                let mut out = [0.0f32; 6];
+                for (i, slot) in out.iter_mut().enumerate() {
+                    let v = obj.get(i as u32, ctx).ok()?;
+                    *slot = v.as_number()? as f32;
+                }
+                return Some(W::Transform(Some(out)));
+            }
+        }
+        // `{ type, value }` shape — round-trip via JSON, then through the
+        // schema, so a typed `{ type: "enum" }` is checked against the
+        // members and a `{ type: "number" }` lands in the wire form.
+        let json = value.to_json(ctx).ok()??;
+        let wire = serde_json::from_value::<paged_mutate::Value>(json).ok()?;
+        return paged_introspect::schema::validate(&schema, &wire).ok();
+    }
+    None
+}
+
+/// A JS scalar as the surface-neutral coercion input; `None` for
+/// objects and arrays (and `undefined`).
+fn js_scalar(value: &JsValue) -> Option<paged_introspect::schema::Input<'static>> {
+    use paged_introspect::schema::Input;
+    if value.is_null() {
+        return Some(Input::Null);
+    }
+    if let Some(b) = value.as_boolean() {
+        return Some(Input::Bool(b));
+    }
+    if let Some(n) = value.as_number() {
+        return Some(Input::Number(n));
+    }
+    // Strings borrow from the JS value, so each caller converts them in
+    // place (`Input::Text`) rather than through this helper.
+    None
+}
+
+/// Convert a JS value for a path whose schema is known — the `Set`
+/// lane, where the path may be virtual (`tint`, `labels[k]`,
+/// `rows[2].height`) and so has no `PropertyPath` to dispatch on. One
+/// conversion for every JSON-holding surface: `schema::from_json`.
+fn js_to_value_by_schema(
+    value: &JsValue,
+    schema: &paged_introspect::schema::PropertySchema,
+    ctx: &mut Context,
+) -> Option<paged_mutate::Value> {
+    let json = if value.is_null() {
+        serde_json::Value::Null
+    } else {
+        value.to_json(ctx).ok()??
+    };
+    paged_introspect::schema::from_json(schema, &json).ok()
+}
+
+/// A whole path in its script spellings: an anchor array, or
+/// `{ anchors, subpathStarts? }`. An anchor is `[x, y]` (a corner — both
+/// handles on the anchor) or `{ anchor, left?, right? }` (a missing
+/// handle sits on the anchor). `subpathStarts` defaults to `[0]`, one
+/// contour.
+fn frame_path_from_json(json: &serde_json::Value) -> Option<paged_mutate::Value> {
+    fn point(v: &serde_json::Value) -> Option<[f32; 2]> {
+        let a = v.as_array()?;
+        if a.len() != 2 {
+            return None;
+        }
+        Some([a[0].as_f64()? as f32, a[1].as_f64()? as f32])
+    }
+    fn anchor(v: &serde_json::Value) -> Option<paged_mutate::operation::PathAnchorSpec> {
+        if v.is_array() {
+            let p = point(v)?;
+            return Some(paged_mutate::operation::PathAnchorSpec {
+                anchor: p,
+                left: p,
+                right: p,
+            });
+        }
+        let at = point(v.get("anchor")?)?;
+        let handle = |key: &str| match v.get(key) {
+            None | Some(serde_json::Value::Null) => Some(at),
+            Some(h) => point(h),
+        };
+        Some(paged_mutate::operation::PathAnchorSpec {
+            anchor: at,
+            left: handle("left")?,
+            right: handle("right")?,
+        })
+    }
+    let (anchors, starts) = match json {
+        serde_json::Value::Array(_) => (json, None),
+        serde_json::Value::Object(o) => (o.get("anchors")?, o.get("subpathStarts")),
+        _ => return None,
+    };
+    let anchors = anchors
+        .as_array()?
+        .iter()
+        .map(anchor)
+        .collect::<Option<Vec<_>>>()?;
+    let subpath_starts = match starts {
+        None | Some(serde_json::Value::Null) => vec![0],
+        Some(s) => s
+            .as_array()?
+            .iter()
+            .map(|n| n.as_u64().map(|n| n as usize))
+            .collect::<Option<Vec<usize>>>()?,
+    };
+    Some(paged_mutate::Value::FramePath {
+        anchors,
+        subpath_starts,
+    })
+}
+
+// ---------------------------------------------------------------- formatting
+
+/// If `obj` is an `ElementId`-shaped object (`{kind: string, id: string}`),
+/// return its `kind:id` address string. Used to pretty-print parsed element
+/// ids in `console.log`.
+fn element_id_address_of(obj: &boa_engine::object::JsObject, ctx: &mut Context) -> Option<String> {
+    let kind = obj.get(js_string!("kind"), ctx).ok()?;
+    let id = obj.get(js_string!("id"), ctx).ok()?;
+    let kind = kind.as_string()?.to_std_string_escaped();
+    let id = id.as_string()?.to_std_string_escaped();
+    if kind.is_empty() || id.is_empty() {
+        return None;
+    }
+    Some(format!("{kind}:{id}"))
+}
+
+/// Render a JS array as `[addr, addr, …]` iff every element is
+/// `ElementId`-shaped; otherwise `None` (so the caller falls back to JSON
+/// and non-element arrays keep their compact-JSON formatting).
+fn render_element_id_array(
+    obj: &boa_engine::object::JsObject,
+    ctx: &mut Context,
+) -> Option<String> {
+    let len = obj.get(js_string!("length"), ctx).ok()?.as_number()? as usize;
+    if len == 0 {
+        return None;
+    }
+    let mut parts = Vec::with_capacity(len);
+    for i in 0..len {
+        let el = obj.get(i as u32, ctx).ok()?;
+        let el_obj = el.as_object()?;
+        parts.push(element_id_address_of(&el_obj, ctx)?);
+    }
+    Some(format!("[{}]", parts.join(", ")))
+}
+
+fn format_value(value: &JsValue, ctx: &mut Context) -> String {
+    if value.is_undefined() {
+        return "undefined".to_string();
+    }
+    if value.is_null() {
+        return "null".to_string();
+    }
+    if let Some(b) = value.as_boolean() {
+        return b.to_string();
+    }
+    if let Some(n) = value.as_number() {
+        if n.is_finite() && n == n.trunc() && n.abs() < 1e15 {
+            return (n as i64).to_string();
+        }
+        return n.to_string();
+    }
+    if let Some(s) = value.as_string() {
+        return s.to_std_string_escaped();
+    }
+    if let Some(obj) = value.as_object() {
+        // An `ElementId`-shaped object `{kind, id}` — what
+        // `JSON.parse(paged.selection())[0]` yields — reads far better as its
+        // `kind:id` address than as raw JSON, so `console.log('sel', sel[0])`
+        // prints `sel textFrame:u123`.
+        if let Some(addr) = element_id_address_of(&obj, ctx) {
+            return addr;
+        }
+        // An array of `ElementId`s (e.g. the parsed selection) prints as
+        // `[textFrame:u1, rectangle:u2]`. Only arrays whose every element is
+        // ElementId-shaped take this path; all other arrays fall through to
+        // JSON so numbers/strings are unaffected.
+        if obj.is_array() {
+            if let Some(rendered) = render_element_id_array(&obj, ctx) {
+                return rendered;
+            }
+        }
+        // Error-shaped objects: pull `.name`, `.message`, `.stack`.
+        let name_v = obj.get(js_string!("name"), ctx).ok();
+        let msg_v = obj.get(js_string!("message"), ctx).ok();
+        let has_msg = msg_v
+            .as_ref()
+            .is_some_and(|v| !v.is_undefined() && !v.is_null());
+        if has_msg {
+            let mut head = String::new();
+            if let Some(nv) = name_v {
+                if !nv.is_undefined() && !nv.is_null() {
+                    head.push_str(&format_value(&nv, ctx));
+                }
+            }
+            let msg_s = format_value(msg_v.as_ref().unwrap(), ctx);
+            if !head.is_empty() {
+                head.push_str(": ");
+            }
+            head.push_str(&msg_s);
+            if let Ok(stack) = obj.get(js_string!("stack"), ctx) {
+                if !stack.is_undefined() && !stack.is_null() {
+                    return format!("{head}\n{}", format_value(&stack, ctx));
+                }
+            }
+            return head;
+        }
+    }
+    // Fallback: JSON.stringify equivalent via Boa's to_json.
+    if let Ok(Some(json)) = value.to_json(ctx) {
+        return serde_json::to_string(&json).unwrap_or_else(|_| "[opaque]".to_string());
+    }
+    "[opaque]".to_string()
+}
+
+fn format_error(err: &boa_engine::JsError, ctx: &mut Context) -> String {
+    // B-09 — a tripped RuntimeLimit is a NATIVE error that Boa
+    // refuses to convert to an opaque JS value (`to_opaque` PANICS on
+    // it — which would abort the wasm worker, the exact hang-class
+    // the budget exists to prevent). Surface it as a plain string
+    // before touching the opaque path.
+    if let Some(native) = err.as_native() {
+        if native.is_runtime_limit() {
+            return format!("runtime budget exceeded: {native}");
+        }
+    }
+    // Boa exposes the thrown value via `to_opaque(ctx)`; reuse the
+    // value formatter so Error objects come out as "Name: message".
+    let opaque = err.to_opaque(ctx);
+    format_value(&opaque, ctx)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `parse_property_path` now delegates to the single `paged_introspect::catalog::PROPERTY_PATHS`
+    /// table, so every table entry resolves through the public parser to the
+    /// table's own variant — the parser and the catalog cannot disagree.
+    #[test]
+    fn parser_matches_the_catalog_table() {
+        for (name, path) in paged_introspect::catalog::PROPERTY_PATHS {
+            assert_eq!(
+                parse_property_path(name),
+                Some(*path),
+                "parse_property_path({name:?}) disagreed with the catalog table"
+            );
+        }
+    }
+
+    /// The single table lists no duplicate JS names.
+    #[test]
+    fn settable_paths_are_unique() {
+        let mut seen = std::collections::HashSet::new();
+        for (name, _) in paged_introspect::catalog::PROPERTY_PATHS {
+            assert!(seen.insert(*name), "duplicate catalog path {name:?}");
+        }
+    }
+
+    /// Spot-check the non-obvious short-name → `*Enabled` (and renamed) mappings
+    /// the table transcription had to get right — a guard against a future
+    /// hand-edit silently breaking them.
+    #[test]
+    fn known_mappings_are_stable() {
+        use paged_mutate::PropertyPath as P;
+        assert_eq!(
+            parse_property_path("characterFontSize"),
+            Some(P::CharacterFontSize)
+        );
+        assert_eq!(
+            parse_property_path("frameBevel"),
+            Some(P::FrameBevelEnabled)
+        );
+        assert_eq!(
+            parse_property_path("frameTextWrapInvert"),
+            Some(P::TextWrapInvert)
+        );
+        assert_eq!(
+            parse_property_path("frameInnerGlow"),
+            Some(P::FrameInnerGlowEnabled)
+        );
+        assert_eq!(parse_property_path("notARealPath"), None);
+    }
+}

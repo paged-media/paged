@@ -1,0 +1,23 @@
+[package]
+name = "paged-composition"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "The Paged-native composition model (document.pgd): surfaces, pages, regions, flows, positioning. Format-neutral."
+
+[lints]
+workspace = true
+
+# NOTE: this crate stays PURE (paged-flow + serde only, no render stack).
+# `paged-scene` depends on it (for `Document::to_composition`), and the
+# render stack (paged-compose/paged-gpu) depends on `paged-scene` — so the
+# compositor drive lives one layer up, in `paged-composition-render`, to keep
+# the dependency graph acyclic.
+[dependencies]
+paged-flow = { path = "../paged-flow" }
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = "1"

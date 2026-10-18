@@ -1,0 +1,1564 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Page-item shapes. Phase 0 only emits Rectangle (with optional
+//! `parent_story` so a TextFrame-equivalent rectangle can host body
+//! text). Phase-2 adds `<Group>` wrappers (with their own
+//! `ItemTransform`) and `<Polygon>` items with custom `PathGeometry`
+//! (multi-subpath compound paths).
+
+use crate::geometry::{format_matrix, Matrix, IDENTITY};
+use crate::xml::{format_f32, XmlBuilder};
+
+/// One of the spread-level renderable items the spread builder knows
+/// how to emit. Wraps the existing `Rect` and the newer `Group` /
+/// `Polygon` shapes in a single enum so a `Spread` can carry a
+/// heterogeneous tree of children.
+pub enum PageItem {
+    // `Rect` is ~550 bytes vs ≤128 for the others; box it so the enum
+    // isn't sized to its largest variant (clippy::large_enum_variant).
+    Rect(Box<Rect>),
+    Group(Group),
+    Polygon(Polygon),
+    Oval(Oval),
+    GraphicLine(GraphicLine),
+    /// B-18 paste-into: a container `Rect` whose element nests child
+    /// page items (InDesign's paste-into serialisation — the children
+    /// are the container element's last children, `ItemTransform`s
+    /// relative to the container). A separate variant so the many
+    /// existing `Rect { .. }` literals stay untouched.
+    PasteInto {
+        container: Box<Rect>,
+        children: Vec<PageItem>,
+    },
+}
+
+impl From<Rect> for PageItem {
+    fn from(r: Rect) -> Self {
+        PageItem::Rect(Box::new(r))
+    }
+}
+
+impl From<Group> for PageItem {
+    fn from(g: Group) -> Self {
+        PageItem::Group(g)
+    }
+}
+
+impl From<Polygon> for PageItem {
+    fn from(p: Polygon) -> Self {
+        PageItem::Polygon(p)
+    }
+}
+
+impl From<Oval> for PageItem {
+    fn from(o: Oval) -> Self {
+        PageItem::Oval(o)
+    }
+}
+
+impl From<GraphicLine> for PageItem {
+    fn from(l: GraphicLine) -> Self {
+        PageItem::GraphicLine(l)
+    }
+}
+
+impl PageItem {
+    pub fn write(&self, b: &mut XmlBuilder) {
+        match self {
+            PageItem::Rect(r) => r.write(b),
+            PageItem::Group(g) => g.write(b),
+            PageItem::Polygon(p) => p.write(b),
+            PageItem::Oval(o) => o.write(b),
+            PageItem::GraphicLine(l) => l.write(b),
+            PageItem::PasteInto {
+                container,
+                children,
+            } => {
+                let kind = container.write_body(b);
+                for c in children {
+                    c.write(b);
+                }
+                b.end(kind);
+            }
+        }
+    }
+}
+
+/// IDML `<Oval>` — an ellipse inscribed in `width_pt × height_pt` at
+/// inner origin. Emits the four-arc Bézier `<PathGeometry>` InDesign
+/// writes for an oval: anchors at the edge midpoints in the order
+/// bottom, right, top, left, each with κ·r handles along its edge
+/// (measured on InDesign 20.0.1's own export, 2026-09-06).
+///
+/// This used to emit the four-corner bounding box, with a comment
+/// claiming that was InDesign's spelling. It is not — an `<Oval>` is an
+/// ellipse only by its PATH, so InDesign drew every generated oval as a
+/// RECTANGLE while our renderer drew the inscribed ellipse, and the
+/// reference PDF baked that disagreement in. Used by the W1.5
+/// stroke-alignment page.
+pub struct Oval {
+    pub self_id: String,
+    pub width_pt: f32,
+    pub height_pt: f32,
+    pub item_transform: Matrix,
+    pub fill_color: Option<String>,
+    pub stroke_color: Option<String>,
+    pub stroke_weight_pt: Option<f32>,
+    /// Extra attributes (e.g. `("StrokeAlignment", "InsideAlignment")`).
+    pub extra_attrs: Vec<(String, String)>,
+}
+
+impl Oval {
+    pub fn write(&self, b: &mut XmlBuilder) {
+        let mut attrs: Vec<(&str, String)> = vec![("Self", self.self_id.clone())];
+        // Emit the `[None]` object-style default only when the caller
+        // hasn't supplied an explicit `AppliedObjectStyle` via
+        // `extra_attrs` — emitting both would duplicate the attribute
+        // (rejected by paged-write's strict rewrite). The explicit
+        // override wins (mirrors `Rect::write`).
+        if !self
+            .extra_attrs
+            .iter()
+            .any(|(k, _)| k == "AppliedObjectStyle")
+        {
+            attrs.push(("AppliedObjectStyle", "ObjectStyle/$ID/[None]".to_string()));
+        }
+        attrs.push(("ItemTransform", format_matrix(&self.item_transform)));
+        push_color_attr(&mut attrs, "FillColor", &self.fill_color);
+        attrs.push((
+            "StrokeColor",
+            self.stroke_color
+                .clone()
+                .unwrap_or_else(|| "Swatch/None".to_string()),
+        ));
+        attrs.push((
+            "StrokeWeight",
+            format_f32(self.stroke_weight_pt.unwrap_or(0.0)),
+        ));
+        for (k, v) in &self.extra_attrs {
+            attrs.push((k.as_str(), v.clone()));
+        }
+        let attr_refs: Vec<(&str, &str)> = attrs.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        b.start("Oval", &attr_refs);
+        b.start("Properties", &[]);
+        write_oval_path_geometry(b, self.width_pt, self.height_pt);
+        b.end("Properties");
+        b.end("Oval");
+    }
+}
+
+/// IDML `<Group>` — wraps any number of child page items and applies
+/// its own `ItemTransform` on top of theirs. Spec §10.3 ("Group") +
+/// §10.3.3 ("Nested Objects and IDML Structure"). The parser in
+/// `paged-parse/src/spread.rs` recognises just the `ItemTransform`
+/// attribute and pushes/pops a transform stack, so emitting `Self`
+/// + `ItemTransform` is sufficient for round-trip.
+pub struct Group {
+    pub self_id: String,
+    pub item_transform: Matrix,
+    pub children: Vec<PageItem>,
+}
+
+impl Group {
+    pub fn write(&self, b: &mut XmlBuilder) {
+        let xform = format_matrix(&self.item_transform);
+        b.start(
+            "Group",
+            &[("Self", self.self_id.as_str()), ("ItemTransform", &xform)],
+        );
+        for child in &self.children {
+            child.write(b);
+        }
+        b.end("Group");
+    }
+}
+
+/// One `<PathPointType>`: an anchor plus its incoming (`left`) and
+/// outgoing (`right`) Bézier control handles. For a straight corner
+/// all three coincide (IDML's degenerate-handle serialisation); for a
+/// curve the handles pull the cubic off the chord.
+#[derive(Clone, Copy)]
+pub struct PathPoint {
+    pub anchor: (f32, f32),
+    pub left: (f32, f32),
+    pub right: (f32, f32),
+}
+
+impl PathPoint {
+    /// Straight corner — handles collapse onto the anchor.
+    pub fn corner(anchor: (f32, f32)) -> Self {
+        Self {
+            anchor,
+            left: anchor,
+            right: anchor,
+        }
+    }
+
+    /// Curve point with explicit incoming / outgoing handles.
+    pub fn curve(anchor: (f32, f32), left: (f32, f32), right: (f32, f32)) -> Self {
+        Self {
+            anchor,
+            left,
+            right,
+        }
+    }
+}
+
+/// One sub-path inside a `<Polygon>`'s `<PathGeometry>`. Each entry
+/// becomes a single `<GeometryPathType>` element with its own
+/// `<PathPointArray>`. Multiple sub-paths in one polygon = compound
+/// path (visible via the renderer's even-odd fill rule).
+#[derive(Clone)]
+pub struct PolygonSubPath {
+    /// Points walked in order. For a closed sub-path, the emitter sets
+    /// `PathOpen="false"`; the points themselves don't repeat the
+    /// first vertex.
+    pub points: Vec<PathPoint>,
+    pub closed: bool,
+}
+
+impl PolygonSubPath {
+    /// Build a straight-corner sub-path from bare anchor coordinates
+    /// (the legacy convenience — every handle collapses onto its
+    /// anchor).
+    pub fn corners(anchors: impl IntoIterator<Item = (f32, f32)>, closed: bool) -> Self {
+        Self {
+            points: anchors.into_iter().map(PathPoint::corner).collect(),
+            closed,
+        }
+    }
+}
+
+/// W1.21: `<ClippingPathSettings>` nested inside a placed `<Image>`.
+/// Drives the renderer's detached image-clip. `subpaths` carries the
+/// resolved clip geometry (in the image's pixel space) for a
+/// `UserModifiedPath`; leave it empty for the deferred types
+/// (PhotoshopPath / AlphaChannel / DetectEdges), which reference a path
+/// in the image binary the renderer can't reach from the XML.
+#[derive(Clone)]
+pub struct ClipPathSpec {
+    /// `ClippingType` — `"UserModifiedPath"` (geometry inline),
+    /// `"PhotoshopPath"` / `"AlphaChannel"` / `"DetectEdges"` (deferred),
+    /// or `"None"`.
+    pub clipping_type: &'static str,
+    /// `InvertPath` — keep the area outside the path.
+    pub invert: bool,
+    /// `IncludeInsideEdges` — keep interior contours as holes.
+    pub include_inside_edges: bool,
+    /// `AppliedPathName` — the named 8BIM path / alpha channel (for the
+    /// deferred types). `None` ⇒ omitted.
+    pub applied_path_name: Option<&'static str>,
+    /// Resolved clip-path contours in image-pixel coordinates. Empty for
+    /// the deferred types. Multiple subpaths = compound clip (holes).
+    pub subpaths: Vec<PolygonSubPath>,
+}
+
+impl ClipPathSpec {
+    fn write(&self, b: &mut XmlBuilder) {
+        let invert = if self.invert { "true" } else { "false" };
+        let inside = if self.include_inside_edges {
+            "true"
+        } else {
+            "false"
+        };
+        let mut attrs: Vec<(&str, &str)> = vec![
+            ("ClippingType", self.clipping_type),
+            ("InvertPath", invert),
+            ("IncludeInsideEdges", inside),
+        ];
+        if let Some(name) = self.applied_path_name {
+            attrs.push(("AppliedPathName", name));
+        }
+        if self.subpaths.is_empty() {
+            b.empty("ClippingPathSettings", &attrs);
+            return;
+        }
+        b.start("ClippingPathSettings", &attrs);
+        b.start("PathGeometry", &[]);
+        for sub in &self.subpaths {
+            let open = if sub.closed { "false" } else { "true" };
+            b.start("GeometryPathType", &[("PathOpen", open)]);
+            b.start("PathPointArray", &[]);
+            for p in &sub.points {
+                let anchor = format!("{} {}", format_f32(p.anchor.0), format_f32(p.anchor.1));
+                let left = format!("{} {}", format_f32(p.left.0), format_f32(p.left.1));
+                let right = format!("{} {}", format_f32(p.right.0), format_f32(p.right.1));
+                b.empty(
+                    "PathPointType",
+                    &[
+                        ("Anchor", &anchor),
+                        ("LeftDirection", &left),
+                        ("RightDirection", &right),
+                    ],
+                );
+            }
+            b.end("PathPointArray");
+            b.end("GeometryPathType");
+        }
+        b.end("PathGeometry");
+        b.end("ClippingPathSettings");
+    }
+}
+
+/// `<TextPath>` child of a host shape — attaches a story so its text
+/// flows along the shape's path rather than filling a column. Mirrors
+/// `idml_import::spread::TextPath`; only the attributes the renderer
+/// reads are emitted.
+pub struct TextPathChild {
+    pub self_id: String,
+    pub parent_story: String,
+    /// `TextAlignment`, as InDesign 20.0.1 writes it: which part of the
+    /// type sits on the path — `BaselineTextAlignment` (the default),
+    /// `CenterTextAlignment`, `AscenderTextAlignment`,
+    /// `DescenderTextAlignment`.
+    pub text_alignment: Option<&'static str>,
+    /// `PathEffect` — `RainbowPathEffect` (default) etc.
+    pub path_effect: Option<&'static str>,
+    /// `StartBracket` / `EndBracket` — arc-length window for the text.
+    pub start_bracket: Option<f32>,
+    pub end_bracket: Option<f32>,
+}
+
+impl TextPathChild {
+    fn write(&self, b: &mut XmlBuilder) {
+        let mut attrs: Vec<(&str, String)> = vec![
+            ("Self", self.self_id.clone()),
+            ("ParentStory", self.parent_story.clone()),
+        ];
+        if let Some(a) = self.text_alignment {
+            attrs.push(("TextAlignment", a.to_string()));
+        }
+        if let Some(e) = self.path_effect {
+            attrs.push(("PathEffect", e.to_string()));
+        }
+        if let Some(s) = self.start_bracket {
+            attrs.push(("StartBracket", format_f32(s)));
+        }
+        if let Some(e) = self.end_bracket {
+            attrs.push(("EndBracket", format_f32(e)));
+        }
+        let refs: Vec<(&str, &str)> = attrs.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        b.empty("TextPath", &refs);
+    }
+}
+
+/// IDML `<Polygon>` with a fully custom `<PathGeometry>` containing
+/// one or more sub-paths. Used for compound paths (e.g. a square
+/// with a square hole) and for text-on-path host shapes (a curved
+/// open path or a circle carrying a `<TextPath>` child).
+pub struct Polygon {
+    pub self_id: String,
+    pub item_transform: Matrix,
+    pub fill_color: Option<String>,
+    pub stroke_color: Option<String>,
+    pub stroke_weight_pt: Option<f32>,
+    /// Extra attributes appended after the standard fill/stroke attrs
+    /// (e.g. `("StrokeAlignment", "OutsideAlignment")` for W1.5). Same
+    /// "last attribute wins" escape hatch as [`Rect::extra_attrs`].
+    pub extra_attrs: Vec<(String, String)>,
+    pub subpaths: Vec<PolygonSubPath>,
+    /// Optional text-on-path child. The polygon's geometry supplies
+    /// the curve; the child references the story whose text rides it.
+    pub text_path: Option<TextPathChild>,
+}
+
+impl Polygon {
+    pub fn write(&self, b: &mut XmlBuilder) {
+        let xform = format_matrix(&self.item_transform);
+        let mut attrs: Vec<(&str, String)> =
+            vec![("Self", self.self_id.clone()), ("ItemTransform", xform)];
+        push_color_attr(&mut attrs, "FillColor", &self.fill_color);
+        push_color_attr(&mut attrs, "StrokeColor", &self.stroke_color);
+        if let Some(w) = self.stroke_weight_pt {
+            attrs.push(("StrokeWeight", format_f32(w)));
+        }
+        for (k, v) in &self.extra_attrs {
+            attrs.push((k.as_str(), v.clone()));
+        }
+        let attr_refs: Vec<(&str, &str)> = attrs.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        b.start("Polygon", &attr_refs);
+        b.start("Properties", &[]);
+        b.start("PathGeometry", &[]);
+        for sub in &self.subpaths {
+            let open = if sub.closed { "false" } else { "true" };
+            b.start("GeometryPathType", &[("PathOpen", open)]);
+            b.start("PathPointArray", &[]);
+            for p in &sub.points {
+                let anchor = format!("{} {}", format_f32(p.anchor.0), format_f32(p.anchor.1));
+                let left = format!("{} {}", format_f32(p.left.0), format_f32(p.left.1));
+                let right = format!("{} {}", format_f32(p.right.0), format_f32(p.right.1));
+                b.empty(
+                    "PathPointType",
+                    &[
+                        ("Anchor", &anchor),
+                        ("LeftDirection", &left),
+                        ("RightDirection", &right),
+                    ],
+                );
+            }
+            b.end("PathPointArray");
+            b.end("GeometryPathType");
+        }
+        b.end("PathGeometry");
+        b.end("Properties");
+        // `<TextPath>` is a sibling of `<Properties>` inside the host
+        // shape — the parser keys it to the current frame.
+        if let Some(tp) = &self.text_path {
+            tp.write(b);
+        }
+        b.end("Polygon");
+    }
+}
+
+/// IDML `<GraphicLine>` — an open path, stroke only. Written the way
+/// InDesign writes one: an explicit `[None]` object style, no fill, and
+/// the path as one `PathOpen="true"` `<GeometryPathType>` (two anchors for
+/// a straight line). `extra_attrs` carries the stroke vocabulary a sample
+/// exercises — `EndCap`, `LeftLineEnd` / `RightLineEnd`, the arrowhead
+/// scales — the same escape hatch as [`Polygon::extra_attrs`].
+pub struct GraphicLine {
+    pub self_id: String,
+    pub item_transform: Matrix,
+    pub stroke_color: Option<String>,
+    pub stroke_weight_pt: Option<f32>,
+    pub extra_attrs: Vec<(String, String)>,
+    pub points: Vec<PathPoint>,
+}
+
+impl GraphicLine {
+    pub fn write(&self, b: &mut XmlBuilder) {
+        let mut attrs: Vec<(&str, String)> = vec![
+            ("Self", self.self_id.clone()),
+            ("AppliedObjectStyle", "ObjectStyle/$ID/[None]".to_string()),
+            ("ItemTransform", format_matrix(&self.item_transform)),
+            ("FillColor", "Swatch/None".to_string()),
+        ];
+        push_color_attr(&mut attrs, "StrokeColor", &self.stroke_color);
+        if let Some(w) = self.stroke_weight_pt {
+            attrs.push(("StrokeWeight", format_f32(w)));
+        }
+        for (k, v) in &self.extra_attrs {
+            attrs.push((k.as_str(), v.clone()));
+        }
+        let attr_refs: Vec<(&str, &str)> = attrs.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        b.start("GraphicLine", &attr_refs);
+        b.start("Properties", &[]);
+        write_custom_path_geometry(
+            b,
+            &[PolygonSubPath {
+                points: self.points.clone(),
+                closed: false,
+            }],
+        );
+        b.end("Properties");
+        b.end("GraphicLine");
+    }
+}
+
+/// `fill_color` / `stroke_color` value meaning **omit the attribute
+/// entirely**, as distinct from `None`, which writes
+/// `FillColor="Swatch/None"` — an explicit "no fill".
+///
+/// IDML draws that distinction and InDesign uses both: 17,143 of the
+/// 66,052 page items in the corpus packs carry no `FillColor` at all
+/// and take their paint from the applied object style, while the rest
+/// name one. A generator that can only write the attribute cannot
+/// produce the inheriting case, so the object-style cascade was
+/// untestable — the `swatches` fixture claimed to exercise it and
+/// silently wrote an inline fill on every frame.
+pub const INHERIT: &str = "$INHERIT";
+
+/// Push a colour attribute unless the caller asked to omit it.
+fn push_color_attr<'a>(attrs: &mut Vec<(&'a str, String)>, name: &'a str, value: &Option<String>) {
+    match value.as_deref() {
+        Some(INHERIT) => {}
+        Some(v) => attrs.push((name, v.to_string())),
+        None => attrs.push((name, "Swatch/None".to_string())),
+    }
+}
+
+/// Spec §10.3.1: a Rectangle (or any spline item) with `<Properties>`
+/// holding a `<PathGeometry>` describing its closed bounding box in
+/// inner coordinates.
+pub struct Rect {
+    pub self_id: String,
+    pub width_pt: f32,
+    pub height_pt: f32,
+    pub item_transform: Matrix,
+    pub fill_color: Option<String>,
+    pub stroke_color: Option<String>,
+    pub stroke_weight_pt: Option<f32>,
+    /// Optional `ParentStory` reference — when set, the rectangle
+    /// becomes a text frame (kind = `TextFrame` in the XML). Phase-0
+    /// labels live in stories on the page they describe.
+    pub parent_story: Option<String>,
+    /// `NextTextFrame` self-id — the frame that continues this story
+    /// when its content overflows the current frame. `None` ⇒ the
+    /// builder emits `"n"` (end-of-chain / unthreaded), matching the
+    /// historical default. Only meaningful on a text frame (one with a
+    /// `parent_story`); the chain is what makes a story overset across
+    /// multiple frames instead of a single one.
+    pub next_text_frame: Option<String>,
+    /// `PreviousTextFrame` self-id — the frame this one continues from.
+    /// `None` ⇒ the builder emits `"n"`. The renderer's chain walk
+    /// keys off `NextTextFrame` only (it derives the head as the frame
+    /// no `NextTextFrame` targets), but real InDesign exports always
+    /// write the back-link too, so we mirror it for fidelity.
+    pub previous_text_frame: Option<String>,
+    /// Sample-specific attribute overrides emitted after the standard
+    /// fill/stroke attrs (so they win on duplicate keys per IDML's
+    /// "last attribute wins" reader behaviour). Values come straight
+    /// from the IDML enum tables — `("StrokeType", "StrokeStyle/$ID/Dashed")`,
+    /// `("EndCap", "RoundEndCap")`, `("StrokeAlignment", "InsideAlignment")`,
+    /// etc. Avoids ballooning the struct as more samples land.
+    pub extra_attrs: Vec<(String, String)>,
+    /// `<BlendingSetting>` emitted inside
+    /// `<Properties><TransparencySetting>`. None ⇒ no transparency
+    /// element is emitted (default: opaque + Normal blend).
+    pub blending: Option<Blending>,
+    /// `<DropShadowSetting>` emitted alongside `BlendingSetting`.
+    pub drop_shadow: Option<DropShadow>,
+    /// Frame-effects family (`<InnerShadowSetting>` etc.) emitted inside
+    /// the same `<TransparencySetting>` block. Each is written
+    /// `Applied="true"`. Empty ⇒ none. Used by the effects sample's
+    /// W1.3/W1.4 variant pages.
+    pub frame_effects: Vec<EffectSetting>,
+    /// Optional placed-image payload. When set, the rectangle becomes
+    /// a graphic frame: a nested `<Image>` element carries the
+    /// `LinkResourceURI`, and a sibling `<FrameFittingOption>` element
+    /// describes how the image is cropped against the frame edges.
+    pub placed_image: Option<PlacedImage>,
+    /// Optional `<TextWrapPreference>` payload. When set, the page
+    /// item carries a wrap-exclusion zone that other text frames on
+    /// the same page must flow around.
+    pub text_wrap: Option<TextWrap>,
+    /// Optional `<AnchoredObjectSetting>` payload. Marks this frame
+    /// as an anchored object — only meaningful when the frame is
+    /// nested inside a `<CharacterStyleRange>` of a flowing story
+    /// (the story emitter handles the nesting). Setting this on a
+    /// top-level frame still emits the element so a parser
+    /// round-trip records `is_anchored = true`.
+    pub anchored_setting: Option<AnchoredObjectSetting>,
+    /// Optional `<TextFramePreference>` payload. When set on a text
+    /// frame (one with a `parent_story`), the builder emits a
+    /// `<TextFramePreference>` carrying AutoSizing attributes — the W1.7
+    /// AutoSizing fixtures author an undersized frame the renderer grows
+    /// to fit its story.
+    pub text_frame_pref: Option<TextFramePref>,
+    /// W1.10 — optional fully custom `<PathGeometry>` contours. When
+    /// `Some`, the builder emits these sub-paths verbatim (one
+    /// `<GeometryPathType>` each) instead of the four-corner bounding
+    /// rect, so a text frame can carry an oval / triangle / compound
+    /// (donut) outline that the renderer lays text out *inside* of.
+    /// `width_pt`/`height_pt` are ignored for geometry but still seed
+    /// the frame's `GeometricBounds`. `None` ⇒ the legacy rect path.
+    pub custom_subpaths: Option<Vec<PolygonSubPath>>,
+}
+
+/// `<TextFramePreference>` payload — currently the AutoSizing knobs the
+/// W1.7 fixtures need. Each is optional so the element only carries the
+/// attributes the sample sets; absent ⇒ the IDML default (static frame).
+#[derive(Clone, Default)]
+pub struct TextFramePref {
+    /// `AutoSizingType` — `"Off"`, `"HeightOnly"`, `"WidthOnly"`,
+    /// `"HeightAndWidth"`, `"HeightAndWidthProportionally"`.
+    pub auto_sizing_type: Option<&'static str>,
+    /// `AutoSizingReferencePoint` — `"TopLeftPoint"`, `"CenterPoint"`,
+    /// `"BottomRightPoint"`, etc. The corner/edge pinned as the frame
+    /// grows.
+    pub auto_sizing_reference_point: Option<&'static str>,
+    /// `InsetSpacing` — `[top, left, bottom, right]` in pt. W1.10 uses
+    /// this to verify shaped-frame segments are inset like any column.
+    /// `None` ⇒ omit (no inset).
+    pub inset_spacing: Option<[f32; 4]>,
+    /// `VerticalJustification` — `"TopAlign"`, `"CenterAlign"`,
+    /// `"BottomAlign"`, `"JustifyAlign"`. `None` ⇒ omit (Top default).
+    pub vertical_justification: Option<&'static str>,
+    /// `FirstBaselineOffset` — `"AscentOffset"`, `"CapHeight"`,
+    /// `"LeadingOffset"`, `"EmboxHeight"`, `"FixedHeight"`. `None` ⇒
+    /// omit (renderer heuristic).
+    pub first_baseline_offset: Option<&'static str>,
+    /// `TextColumnCount` — number of text columns the frame splits its
+    /// inner box into (W1-layout). `None` ⇒ omit (single column).
+    pub text_column_count: Option<u32>,
+    /// `TextColumnGutter` — gutter (pt) between adjacent text columns.
+    /// `None` ⇒ omit (InDesign's default gutter).
+    pub text_column_gutter: Option<f32>,
+    /// `VerticalBalanceColumns` — `Some(true)` levels the last chunk of
+    /// text across the columns instead of filling the first to the
+    /// bottom. `None` ⇒ omit (InDesign's default, false).
+    pub vertical_balance_columns: Option<bool>,
+    /// The frame's own baseline grid, written as InDesign does: a
+    /// `<BaselineFrameGridOption>` SIBLING of `<TextFramePreference>`
+    /// under the frame, not a child of it. `None` ⇒ omit (the document
+    /// grid applies).
+    pub baseline_frame_grid: Option<BaselineFrameGrid>,
+    /// `IgnoreWrap` — the frame's text ignores every text wrap. `None` ⇒
+    /// omit (false).
+    pub ignore_wrap: Option<bool>,
+    /// Column rules between the frame's columns, in InDesign's
+    /// `ColumnRule*` attributes. `None` ⇒ omit (no rules).
+    pub column_rule: Option<ColumnRulePref>,
+    /// The frame's own footnote layout: `Some(span)` writes
+    /// `FootnotesEnableOverrides="true"` and `FootnotesSpanAcrossColumns`.
+    /// `None` ⇒ omit (the document's `FootnoteOption` applies).
+    pub footnotes_span_across_columns: Option<bool>,
+}
+
+/// A text frame's column rules (`ColumnRuleOverride="true"` and its
+/// companions on `<TextFramePreference>`).
+#[derive(Clone, Copy)]
+pub struct ColumnRulePref {
+    /// `ColumnRuleStrokeWidth` (pt).
+    pub stroke_width: f32,
+    /// `ColumnRuleStrokeType`, a stroke style `Self`.
+    pub stroke_type: &'static str,
+    /// `ColumnRuleStrokeColor`, a swatch `Self`.
+    pub stroke_color: &'static str,
+    /// `ColumnRuleStrokeTint` (%).
+    pub stroke_tint: f32,
+    /// `ColumnRuleTopInset` (pt).
+    pub top_inset: f32,
+    /// `ColumnRuleBottomInset` (pt).
+    pub bottom_inset: f32,
+    /// `ColumnRuleInsetChainOverride`: the two insets are linked.
+    pub inset_chain: bool,
+    /// `ColumnRuleOffset` (pt), the rule's horizontal offset.
+    pub offset: f32,
+}
+
+/// `<BaselineFrameGridOption>` payload — a text frame's custom baseline
+/// grid, in InDesign's attribute names.
+#[derive(Clone, Copy)]
+pub struct BaselineFrameGrid {
+    /// `UseCustomBaselineFrameGrid`.
+    pub use_custom: bool,
+    /// `StartingOffsetForBaselineFrameGrid` (pt).
+    pub starting_offset: f32,
+    /// `BaselineFrameGridRelativeOption` — `TopOfPage`, `TopOfMargin`,
+    /// `TopOfFrame` or `TopOfInset`.
+    pub relative_option: &'static str,
+    /// `BaselineFrameGridIncrement` (pt).
+    pub increment: f32,
+}
+
+/// `<TextWrapPreference>` payload emitted as a child of a page item.
+/// Mirrors `idml_import::TextWrap` shape — mode + four offsets.
+#[derive(Clone)]
+pub struct TextWrap {
+    /// `TextWrapMode` enum string: `"None"`, `"BoundingBoxTextWrap"`,
+    /// `"Contour"`, `"JumpObjectTextWrap"`,
+    /// `"NextColumnTextWrap"`.
+    pub mode: &'static str,
+    /// `[top, left, bottom, right]` offsets in pt — the wrap
+    /// rectangle is the page item's AABB inflated outwards by these.
+    pub offsets: [f32; 4],
+    /// `TextWrapSide` — `"BothSides"` (default), `"LeftSide"`,
+    /// `"RightSide"`, `"LargestArea"`, `"SideAwayFromSpine"`,
+    /// `"SideTowardsSpine"`. None ⇒ omit the attribute.
+    pub side: Option<&'static str>,
+    /// `Inverse` — text flows inside the wrap shape instead of round it.
+    pub inverse: bool,
+    /// `ApplyToMasterPageOnly` — a master item's wrap acts on the
+    /// master's own text only.
+    pub master_only: bool,
+    /// `<ContourOption ContourType>` for a contour wrap — `"SameAsClipping"`,
+    /// `"GraphicFrame"`, `"BoundingBox"`, … `None` ⇒ no element.
+    pub contour_type: Option<&'static str>,
+}
+
+impl TextWrap {
+    /// A wrap of `mode` with `offsets`, both sides, not inverted.
+    pub fn new(mode: &'static str, offsets: [f32; 4]) -> Self {
+        TextWrap {
+            mode,
+            offsets,
+            side: None,
+            inverse: false,
+            master_only: false,
+            contour_type: None,
+        }
+    }
+}
+
+/// `<AnchoredObjectSetting>` payload — IDML's spec for how an
+/// anchored frame positions itself relative to its anchor in the host
+/// story. Every attribute is optional so callers can lean on the IDML
+/// defaults; the parser only inspects the *presence* of the element
+/// today (sets `is_anchored = true`), but the attributes round-trip
+/// through real InDesign readers.
+#[derive(Clone)]
+pub struct AnchoredObjectSetting {
+    /// `"InlinePosition"` (in-line with text), `"AboveLine"` (own
+    /// line above the host), or `"Anchored"` (custom positioned).
+    pub anchored_position: &'static str,
+    /// `SpineRelative="true"` mirrors the offsets on facing pages.
+    pub spine_relative: bool,
+    /// `LockPosition="true"` prevents manual positioning in InDesign.
+    pub lock_position: bool,
+    /// `PinPosition="true"` keeps the anchor's position unchanged
+    /// when the host text reflows. InDesign's default is `true`.
+    pub pin_position: bool,
+    /// `AnchorPoint` — `"BottomRightAnchor"`, `"TopLeftAnchor"`, etc.
+    pub anchor_point: Option<&'static str>,
+    /// `HorizontalReferencePoint` — `"TextFrame"`, `"PageEdge"`,
+    /// `"PageMargins"`, `"ColumnEdge"`, `"AnchorLocation"`.
+    pub horizontal_reference_point: Option<&'static str>,
+    pub vertical_reference_point: Option<&'static str>,
+    pub horizontal_alignment: Option<&'static str>,
+    pub vertical_alignment: Option<&'static str>,
+    /// `AnchorXoffset` / `AnchorYoffset` in pt — explicit numerical
+    /// offsets used when `anchored_position == "Anchored"`.
+    pub anchor_x_offset: Option<f32>,
+    pub anchor_y_offset: Option<f32>,
+}
+
+impl AnchoredObjectSetting {
+    /// Inline-position default — anchored as if the frame were a
+    /// glyph in the host text run.
+    pub fn inline() -> Self {
+        Self {
+            anchored_position: "InlinePosition",
+            spine_relative: false,
+            lock_position: false,
+            pin_position: true,
+            anchor_point: Some("BottomRightAnchor"),
+            horizontal_reference_point: Some("TextFrame"),
+            vertical_reference_point: Some("LineBaseline"),
+            horizontal_alignment: Some("LeftAlign"),
+            vertical_alignment: Some("TopAlign"),
+            anchor_x_offset: None,
+            anchor_y_offset: None,
+        }
+    }
+}
+
+/// IDML `<Image>` + `<FrameFittingOption>` payload nested inside a
+/// `<Rectangle>`. The renderer maps the image to the frame's inner-
+/// coordinate rect minus the four crop offsets — so the crops are
+/// what actually determine "fit to frame" / "center content" /
+/// "fill proportionally" placement (the `FittingOnEmptyFrame` enum
+/// is descriptive, not authoritative, as far as the renderer is
+/// concerned).
+#[derive(Clone)]
+pub struct PlacedImage {
+    /// Where the link resolves. `"file:<basename>.ext"` keeps the
+    /// asset-resolver lookup simple — `--links-dir` joins the
+    /// basename onto its search dirs.
+    pub link_resource_uri: String,
+    /// `FittingOnEmptyFrame` value: `None | Proportionally |
+    /// FillProportionally | FitContent | FitContentToFrame |
+    /// CenterContent | ContentAwareFit`.
+    pub fitting: &'static str,
+    /// Per-side crops in the model's convention: frame-space points from
+    /// the frame's edge to the picture's, positive shrinking the picture
+    /// inward, negative growing it outward (`FillProportionally`'s
+    /// overflow). Written in InDesign's convention — see
+    /// [`indesign_crops`].
+    pub left_crop: f32,
+    pub top_crop: f32,
+    pub right_crop: f32,
+    pub bottom_crop: f32,
+    /// Self id for the inner `<Image>` element. Stable across runs
+    /// so determinism holds.
+    pub image_self_id: String,
+    /// Native pixel dimensions of the image in pt (1 px = 1 pt at
+    /// 72 DPI), used for the inner `<PathGeometry>` describing the
+    /// unscaled image bounds. Currently emitted purely for shape;
+    /// the renderer's placement uses the frame rect + crops.
+    pub image_w_pt: f32,
+    pub image_h_pt: f32,
+    /// Override for the inner `<Image ItemTransform>`. None ⇒
+    /// identity (`"1 0 0 1 0 0"`). Real InDesign exports often store
+    /// the actual scale-translate-rotate of the placed image here
+    /// while the `<Rectangle>` carries the frame's transform
+    /// separately. Tests of "image transform on top of frame
+    /// transform" need this knob.
+    pub image_item_transform: Option<Matrix>,
+    /// `EffectivePpi` attribute on `<Image>` — emitted as a
+    /// parenthesised `"(x y)"` pair (e.g. `"(144 144)"`) to match real
+    /// InDesign serialisation. When `None`, the attribute is omitted
+    /// (parser then leaves `effective_ppi = None`, and the canvas may
+    /// derive it from pixel dims ÷ placed size if it has the decode).
+    pub effective_ppi: Option<(f32, f32)>,
+    /// `ActualPpi` attribute on `<Image>` — the source asset's native
+    /// resolution, parenthesised `"(x y)"`. Emitted alongside
+    /// `EffectivePpi` so a low-effective-PPI placement reads honestly
+    /// (a high `ActualPpi` scaled down to a low `EffectivePpi`). `None`
+    /// ⇒ omitted.
+    pub actual_ppi: Option<(f32, f32)>,
+    /// `Space` attribute on `<Image>` — the colour space InDesign
+    /// records (`"$ID/RGB"`, `"$ID/CMYK"`, …). Drives the Links
+    /// panel's colour-space column. `None` ⇒ omitted.
+    pub color_space: Option<&'static str>,
+    /// Raw image bytes to inline as a base64 `<Contents>` CDATA payload
+    /// under the `<Image><Properties>`. When `Some`, the placed image
+    /// resolves to these bytes at build time (no external file / asset
+    /// resolver needed), so its host frame renders "ok" rather than the
+    /// missing-image placeholder. `None` ⇒ link-only (resolved via the
+    /// URI; "missing" when nothing on disk answers it).
+    pub inline_bytes: Option<Vec<u8>>,
+    /// W1.21: `<ClippingPathSettings>` nested in the `<Image>`. `None`
+    /// ⇒ no detached clip (the frame outline is the only crop).
+    pub clipping_path: Option<ClipPathSpec>,
+    /// `Some`: the placed file is a PDF (or an Illustrator `.ai`), written
+    /// as InDesign writes one — a `<PDF>` with `<GraphicBounds>` (the
+    /// page's crop box, `image_w_pt × image_h_pt`), a `<PDFAttribute>` and
+    /// the link on its `<Link>` child — instead of an `<Image>`.
+    pub pdf: Option<PdfPlacement>,
+}
+
+/// `<PDFAttribute>` of a placed PDF.
+#[derive(Clone, Copy)]
+pub struct PdfPlacement {
+    /// `PageNumber`, 1-based.
+    pub page: u32,
+    /// `PDFCrop`: `CropContent`, `CropArt`, `CropPDF`, `CropTrim`,
+    /// `CropBleed`, `CropMedia`, `CropContentAllLayers`,
+    /// `CropContentVisibleLayers`.
+    pub crop: &'static str,
+}
+
+/// IDML `<BlendingSetting>` — `Opacity` is 0..=100, `BlendMode` is
+/// the standard enum (`Normal`, `Multiply`, `Screen`, `Overlay`,
+/// `Multiply`, `Darken`, `Lighten`, etc).
+#[derive(Clone, Default)]
+pub struct Blending {
+    pub opacity_pct: Option<f32>,
+    pub blend_mode: Option<&'static str>,
+}
+
+/// IDML `<DropShadowSetting>` — distances in pt, `opacity_pct` is
+/// 0..=100, `effect_color` references a Color self id.
+///
+/// Every attribute except `mode` is optional: when `None`, it is
+/// omitted from the emitted XML so downstream consumers (the parser
+/// and InDesign itself) fall back to the IDML defaults documented in
+/// §IDML Defaults Table 84 (`XOffset=7`, `YOffset=7`, `Size=5`,
+/// `Opacity=75`, `EffectColor=Black`). Use the `default_drop()` helper
+/// to construct a "use IDML defaults for everything" shadow.
+#[derive(Clone)]
+pub struct DropShadow {
+    /// `Mode` — typically `"Drop"` for an enabled shadow,
+    /// `"None"` to serialise but disable.
+    pub mode: &'static str,
+    pub x_offset: Option<f32>,
+    pub y_offset: Option<f32>,
+    pub size: Option<f32>,
+    pub opacity_pct: Option<f32>,
+    pub effect_color: Option<String>,
+}
+
+impl DropShadow {
+    /// `<DropShadowSetting Mode="Drop"/>` — a shadow that emits no
+    /// attributes other than `Mode`, so every other parameter falls
+    /// through to the IDML default. Lets samples exercise the
+    /// parser's default-fill-in path (vs. an explicit-value shadow).
+    pub fn default_drop() -> Self {
+        Self {
+            mode: "Drop",
+            x_offset: None,
+            y_offset: None,
+            size: None,
+            opacity_pct: None,
+            effect_color: None,
+        }
+    }
+}
+
+/// One serialised `<*Setting>` element for the frame-effects family
+/// (InnerShadow / OuterGlow / InnerGlow / BevelAndEmboss / Satin /
+/// Feather / DirectionalFeather). The sample builder splices these,
+/// `Applied="true"`, into the `<TransparencySetting>` so the renderer's
+/// parse → compose → rasterize chain is exercised end to end (W1.3
+/// reconcile / W1.4 parity). `element` is the bare tag name (e.g.
+/// `"BevelAndEmbossSetting"`); `attrs` are the per-effect attributes
+/// (`Style`, `Direction`, `LeftWidth`, …) appended verbatim.
+#[derive(Clone)]
+pub struct EffectSetting {
+    pub element: &'static str,
+    pub attrs: Vec<(&'static str, String)>,
+}
+
+impl EffectSetting {
+    /// Construct from a static attribute list (numbers pre-formatted by
+    /// the caller). Always emits `Applied="true"`.
+    pub fn new(element: &'static str, attrs: Vec<(&'static str, String)>) -> Self {
+        Self { element, attrs }
+    }
+
+    fn write(&self, b: &mut XmlBuilder) {
+        let mut a: Vec<(&str, &str)> = Vec::with_capacity(self.attrs.len() + 1);
+        a.push(("Applied", "true"));
+        for (k, v) in &self.attrs {
+            a.push((k, v.as_str()));
+        }
+        b.empty(self.element, &a);
+    }
+}
+
+impl Rect {
+    /// Convenience constructor for the common "filled rectangle, no
+    /// stroke, no parent story" shape.
+    pub fn filled(self_id: impl Into<String>, w: f32, h: f32, item_transform: Matrix) -> Self {
+        Self {
+            self_id: self_id.into(),
+            width_pt: w,
+            height_pt: h,
+            item_transform,
+            fill_color: Some("Color/Black".into()),
+            stroke_color: None,
+            stroke_weight_pt: None,
+            parent_story: None,
+            next_text_frame: None,
+            previous_text_frame: None,
+            extra_attrs: Vec::new(),
+            blending: None,
+            drop_shadow: None,
+            placed_image: None,
+            text_wrap: None,
+            anchored_setting: None,
+            frame_effects: Vec::new(),
+            text_frame_pref: None,
+            custom_subpaths: None,
+        }
+    }
+
+    /// Attach a `<TextFramePreference>` (AutoSizing) payload.
+    pub fn with_text_frame_pref(mut self, pref: TextFramePref) -> Self {
+        self.text_frame_pref = Some(pref);
+        self
+    }
+
+    pub fn with_fill(mut self, color: impl Into<String>) -> Self {
+        self.fill_color = Some(color.into());
+        self
+    }
+
+    pub fn with_stroke(mut self, color: impl Into<String>, weight_pt: f32) -> Self {
+        self.stroke_color = Some(color.into());
+        self.stroke_weight_pt = Some(weight_pt);
+        self
+    }
+
+    pub fn with_attr(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.extra_attrs.push((key.into(), value.into()));
+        self
+    }
+
+    pub fn with_parent_story(mut self, story_id: impl Into<String>) -> Self {
+        self.parent_story = Some(story_id.into());
+        self
+    }
+}
+
+impl Rect {
+    /// Emit either `<Rectangle .../>` or `<TextFrame .../>` depending
+    /// on whether a parent story was attached.
+    pub fn write(&self, b: &mut XmlBuilder) {
+        let kind = self.write_body(b);
+        b.end(kind);
+    }
+
+    /// B-18 paste-into: emit the element WITHOUT its close tag and
+    /// return the element name, so `PageItem::PasteInto` can nest
+    /// child page items inside before closing (InDesign serialises
+    /// pasted-in content as the container element's last children).
+    fn write_body(&self, b: &mut XmlBuilder) -> &'static str {
+        let kind = if self.parent_story.is_some() {
+            "TextFrame"
+        } else {
+            "Rectangle"
+        };
+        let mut attrs: Vec<(&str, String)> = Vec::new();
+        attrs.push(("Self", self.self_id.clone()));
+        if let Some(story) = &self.parent_story {
+            attrs.push(("ParentStory", story.clone()));
+            attrs.push((
+                "PreviousTextFrame",
+                self.previous_text_frame
+                    .clone()
+                    .unwrap_or_else(|| "n".to_string()),
+            ));
+            attrs.push((
+                "NextTextFrame",
+                self.next_text_frame
+                    .clone()
+                    .unwrap_or_else(|| "n".to_string()),
+            ));
+            attrs.push(("ContentType", "TextType".to_string()));
+        }
+        // Pin AppliedObjectStyle to the built-in `[None]` style so
+        // InDesign doesn't cascade the default Object Style's 1pt
+        // black stroke (and other surprises) over our explicit
+        // attributes. Real InDesign exports always emit this — even
+        // when the object visually has no style applied. Without it
+        // the BlendingSetting cascade under the default object style
+        // overrides our per-rectangle BlendingSetting back to Normal,
+        // and StrokeColor="Swatch/None" gets shadowed by the default
+        // 1pt stroke.
+        //
+        // A sample that wants an EXPLICIT object style (e.g. swatches'
+        // BasedOn cascade) passes `AppliedObjectStyle` via `extra_attrs`.
+        // Emit the `[None]` default ONLY when no such override is present
+        // — otherwise the element would carry the attribute twice, which
+        // our lenient parser swallows but paged-write's strict XML rewrite
+        // rejects ("duplicated attribute"), breaking `--roundtrip`. The
+        // explicit style wins.
+        if !self
+            .extra_attrs
+            .iter()
+            .any(|(k, _)| k == "AppliedObjectStyle")
+        {
+            attrs.push(("AppliedObjectStyle", "ObjectStyle/$ID/[None]".to_string()));
+        }
+        attrs.push(("Visible", "true".to_string()));
+        // The unnamed default, unless the sample names the item itself
+        // (InDesign refuses an element that carries an attribute twice).
+        if !self.extra_attrs.iter().any(|(k, _)| k == "Name") {
+            attrs.push(("Name", "$ID/".to_string()));
+        }
+        attrs.push(("ItemTransform", format_matrix(&self.item_transform)));
+        push_color_attr(&mut attrs, "FillColor", &self.fill_color);
+        attrs.push((
+            "StrokeColor",
+            self.stroke_color
+                .clone()
+                .unwrap_or_else(|| "Swatch/None".to_string()),
+        ));
+        // Always emit StrokeWeight — when no stroke is wanted, "0"
+        // makes the no-stroke explicit so InDesign's cascade default
+        // doesn't fill in 1pt.
+        let stroke_weight = self.stroke_weight_pt.unwrap_or(0.0);
+        attrs.push(("StrokeWeight", format_f32(stroke_weight)));
+        for (k, v) in &self.extra_attrs {
+            attrs.push((k.as_str(), v.clone()));
+        }
+        let attr_refs: Vec<(&str, &str)> = attrs.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        b.start(kind, &attr_refs);
+        b.start("Properties", &[]);
+        if let Some(subpaths) = &self.custom_subpaths {
+            // W1.10 — emit the caller's contours verbatim so a text
+            // frame can carry a non-rectangular outline (oval /
+            // triangle / compound donut).
+            write_custom_path_geometry(b, subpaths);
+        } else {
+            write_path_geometry(b, self.width_pt, self.height_pt);
+        }
+        b.end("Properties");
+        // TransparencySetting is a SIBLING of Properties under the
+        // page item, not a child (spec §IDML File Reference: Spreads
+        // and Master Spreads — Rectangle content model). When we
+        // earlier nested it inside Properties, InDesign silently
+        // dropped the BlendingSetting and the blend reverted to
+        // Normal in the exported PDF.
+        if self.blending.is_some() || self.drop_shadow.is_some() || !self.frame_effects.is_empty() {
+            b.start("TransparencySetting", &[]);
+            if let Some(bl) = &self.blending {
+                let opacity_str: String;
+                let mut a: Vec<(&str, &str)> = Vec::new();
+                if let Some(o) = bl.opacity_pct {
+                    opacity_str = format_f32(o);
+                    a.push(("Opacity", opacity_str.as_str()));
+                }
+                if let Some(m) = bl.blend_mode {
+                    a.push(("BlendMode", m));
+                }
+                b.empty("BlendingSetting", &a);
+            }
+            if let Some(ds) = &self.drop_shadow {
+                // Optional attributes are emitted only when set so a
+                // `<DropShadowSetting Mode="Drop"/>` round-trips
+                // through the parser into the IDML defaults (§IDML
+                // Defaults Table 84) rather than being pinned to
+                // zeroes.
+                let xo = ds.x_offset.map(format_f32);
+                let yo = ds.y_offset.map(format_f32);
+                let sz = ds.size.map(format_f32);
+                let op = ds.opacity_pct.map(format_f32);
+                let mut a: Vec<(&str, &str)> = Vec::with_capacity(6);
+                a.push(("Mode", ds.mode));
+                if let Some(xo) = &xo {
+                    a.push(("XOffset", xo.as_str()));
+                }
+                if let Some(yo) = &yo {
+                    a.push(("YOffset", yo.as_str()));
+                }
+                if let Some(sz) = &sz {
+                    a.push(("Size", sz.as_str()));
+                }
+                if let Some(op) = &op {
+                    a.push(("Opacity", op.as_str()));
+                }
+                if let Some(ec) = &ds.effect_color {
+                    a.push(("EffectColor", ec.as_str()));
+                }
+                b.empty("DropShadowSetting", &a);
+            }
+            // Frame-effects family — InnerShadow / OuterGlow /
+            // InnerGlow / BevelAndEmboss / Satin / Feather /
+            // DirectionalFeather, each `Applied="true"`.
+            for fx in &self.frame_effects {
+                fx.write(b);
+            }
+            b.end("TransparencySetting");
+        }
+        if let Some(img) = &self.placed_image {
+            let mut return_after_pdf = false;
+            // `<FrameFittingOption>` is a direct child of the
+            // Rectangle (not inside Properties) — matches what
+            // InDesign emits and what the paged-parse Rectangle
+            // descendant walker expects.
+            let [lc, tc, rc, bc] = indesign_crops(img).map(format_f32);
+            b.empty(
+                "FrameFittingOption",
+                &[
+                    ("LeftCrop", lc.as_str()),
+                    ("TopCrop", tc.as_str()),
+                    ("RightCrop", rc.as_str()),
+                    ("BottomCrop", bc.as_str()),
+                    ("FittingOnEmptyFrame", img.fitting),
+                ],
+            );
+            // `<Image>` carries its own Properties / PathGeometry
+            // describing the unscaled native image extents (so
+            // strict consumers see a complete object), plus a
+            // `<Link>` child that mirrors the URI on the Image
+            // element itself. The renderer reads either source.
+            let img_xform = img
+                .image_item_transform
+                .as_ref()
+                .map(format_matrix)
+                .unwrap_or_else(|| "1 0 0 1 0 0".to_string());
+            let mut img_attrs: Vec<(&str, &str)> = vec![
+                ("Self", img.image_self_id.as_str()),
+                ("ItemTransform", img_xform.as_str()),
+                ("LinkResourceURI", img.link_resource_uri.as_str()),
+            ];
+            if let Some(space) = img.color_space {
+                img_attrs.push(("Space", space));
+            }
+            // ActualPpi / EffectivePpi serialise as a parenthesised
+            // `"(x y)"` pair — what real InDesign writes and what
+            // paged-parse's `parse_ppi_x` expects (it tolerates a bare
+            // `"x"` too, but the canonical form round-trips cleanly).
+            let actual_ppi_str: String;
+            if let Some((px, py)) = img.actual_ppi {
+                actual_ppi_str = format!("({} {})", format_f32(px), format_f32(py));
+                img_attrs.push(("ActualPpi", actual_ppi_str.as_str()));
+            }
+            let ppi_str: String;
+            if let Some((px, py)) = img.effective_ppi {
+                ppi_str = format!("({} {})", format_f32(px), format_f32(py));
+                img_attrs.push(("EffectivePpi", ppi_str.as_str()));
+            }
+            if let Some(pdf) = img.pdf {
+                let (w, h) = (format_f32(img.image_w_pt), format_f32(img.image_h_pt));
+                let page = pdf.page.to_string();
+                b.start(
+                    "PDF",
+                    &[
+                        ("Self", img.image_self_id.as_str()),
+                        ("ItemTransform", img_xform.as_str()),
+                    ],
+                );
+                b.start("Properties", &[]);
+                b.empty(
+                    "GraphicBounds",
+                    &[("Left", "0"), ("Top", "0"), ("Right", &w), ("Bottom", &h)],
+                );
+                b.end("Properties");
+                b.empty(
+                    "PDFAttribute",
+                    &[
+                        ("PageNumber", page.as_str()),
+                        ("PDFCrop", pdf.crop),
+                        ("TransparentBackground", "true"),
+                    ],
+                );
+                b.empty(
+                    "Link",
+                    &[
+                        ("LinkResourceURI", img.link_resource_uri.as_str()),
+                        (
+                            "LinkResourceFormat",
+                            "$ID/Adobe Portable Document Format (PDF)",
+                        ),
+                    ],
+                );
+                b.end("PDF");
+                return_after_pdf = true;
+            }
+            if !return_after_pdf {
+                b.start("Image", &img_attrs);
+                b.start("Properties", &[]);
+                write_path_geometry(b, img.image_w_pt, img.image_h_pt);
+                // Inline-embedded image bytes: a base64 `<Contents>` CDATA
+                // payload sibling of the PathGeometry. The parser captures
+                // this into `image_bytes`, so the renderer resolves it
+                // without an external file — the frame renders "ok" rather
+                // than the missing-image placeholder.
+                if let Some(bytes) = &img.inline_bytes {
+                    use base64::Engine;
+                    let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+                    b.start("Contents", &[]);
+                    b.cdata(&encoded);
+                    b.end("Contents");
+                }
+                b.end("Properties");
+                // W1.21: `<ClippingPathSettings>` is a sibling of
+                // `<Properties>` / `<Link>` inside the `<Image>`. The parser
+                // keys it onto the host frame's pending clip.
+                if let Some(clip) = &img.clipping_path {
+                    clip.write(b);
+                }
+                b.empty(
+                    "Link",
+                    &[("LinkResourceURI", img.link_resource_uri.as_str())],
+                );
+                b.end("Image");
+            }
+        }
+        // `<TextFramePreference>` — sibling of Properties. Carries the
+        // AutoSizing attributes; the parser reads them onto the open
+        // text frame (`AutoSizingType` / `AutoSizingReferencePoint`).
+        if let Some(tfp) = &self.text_frame_pref {
+            let mut tfa: Vec<(&str, &str)> = Vec::new();
+            if let Some(at) = tfp.auto_sizing_type {
+                tfa.push(("AutoSizingType", at));
+            }
+            if let Some(rp) = tfp.auto_sizing_reference_point {
+                tfa.push(("AutoSizingReferencePoint", rp));
+            }
+            if let Some(vj) = tfp.vertical_justification {
+                tfa.push(("VerticalJustification", vj));
+            }
+            if let Some(fbo) = tfp.first_baseline_offset {
+                tfa.push(("FirstBaselineOffset", fbo));
+            }
+            let col_count: String;
+            if let Some(tc) = tfp.text_column_count {
+                col_count = tc.to_string();
+                tfa.push(("TextColumnCount", col_count.as_str()));
+            }
+            let col_gutter: String;
+            if let Some(tg) = tfp.text_column_gutter {
+                col_gutter = format_f32(tg);
+                tfa.push(("TextColumnGutter", col_gutter.as_str()));
+            }
+            if let Some(bal) = tfp.vertical_balance_columns {
+                tfa.push(("VerticalBalanceColumns", if bal { "true" } else { "false" }));
+            }
+            if let Some(iw) = tfp.ignore_wrap {
+                tfa.push(("IgnoreWrap", if iw { "true" } else { "false" }));
+            }
+            if let Some(span) = tfp.footnotes_span_across_columns {
+                tfa.push(("FootnotesEnableOverrides", "true"));
+                tfa.push((
+                    "FootnotesSpanAcrossColumns",
+                    if span { "true" } else { "false" },
+                ));
+            }
+            let rule_numbers: Vec<String>;
+            if let Some(cr) = tfp.column_rule {
+                rule_numbers = [
+                    cr.stroke_width,
+                    cr.stroke_tint,
+                    cr.top_inset,
+                    cr.bottom_inset,
+                    cr.offset,
+                ]
+                .iter()
+                .map(|v| format_f32(*v))
+                .collect();
+                tfa.push(("ColumnRuleOverride", "true"));
+                tfa.push(("ColumnRuleStrokeWidth", rule_numbers[0].as_str()));
+                tfa.push(("ColumnRuleStrokeType", cr.stroke_type));
+                tfa.push(("ColumnRuleStrokeColor", cr.stroke_color));
+                tfa.push(("ColumnRuleStrokeTint", rule_numbers[1].as_str()));
+                tfa.push(("ColumnRuleOverprintOverride", "false"));
+                tfa.push(("ColumnRuleTopInset", rule_numbers[2].as_str()));
+                tfa.push(("ColumnRuleBottomInset", rule_numbers[3].as_str()));
+                tfa.push((
+                    "ColumnRuleInsetChainOverride",
+                    if cr.inset_chain { "true" } else { "false" },
+                ));
+                tfa.push(("ColumnRuleOffset", rule_numbers[4].as_str()));
+            }
+            // The insets are a typed `<InsetSpacing>` child of
+            // `<Properties>`, never an attribute. Measured on InDesign
+            // 20.0.1: opening an IDML that spells them as
+            // `InsetSpacing="4 4 4 4"` reports
+            // `textFramePreferences.insetSpacing = [0]` — the attribute
+            // is ignored outright — and across 271 real-world packages
+            // InDesign writes the attribute form zero times against
+            // 13,938 typed children. One scalar when all four sides
+            // agree, a four-item list otherwise, in IDML's
+            // `[top, left, bottom, right]` order.
+            match tfp.inset_spacing {
+                None => b.empty("TextFramePreference", &tfa),
+                Some(ins) => {
+                    b.start("TextFramePreference", &tfa);
+                    b.start("Properties", &[]);
+                    if ins.iter().all(|v| *v == ins[0]) {
+                        b.start("InsetSpacing", &[("type", "unit")]);
+                        b.text(&format_f32(ins[0]));
+                        b.end("InsetSpacing");
+                    } else {
+                        b.start("InsetSpacing", &[("type", "list")]);
+                        for v in ins {
+                            b.start("ListItem", &[("type", "unit")]);
+                            b.text(&format_f32(v));
+                            b.end("ListItem");
+                        }
+                        b.end("InsetSpacing");
+                    }
+                    b.end("Properties");
+                    b.end("TextFramePreference");
+                }
+            }
+            if let Some(grid) = tfp.baseline_frame_grid {
+                let offset = format_f32(grid.starting_offset);
+                let increment = format_f32(grid.increment);
+                b.empty(
+                    "BaselineFrameGridOption",
+                    &[
+                        (
+                            "UseCustomBaselineFrameGrid",
+                            if grid.use_custom { "true" } else { "false" },
+                        ),
+                        ("StartingOffsetForBaselineFrameGrid", offset.as_str()),
+                        ("BaselineFrameGridRelativeOption", grid.relative_option),
+                        ("BaselineFrameGridIncrement", increment.as_str()),
+                    ],
+                );
+            }
+        }
+        // `<TextWrapPreference>` — sibling of Properties / Image. The
+        // parser inspects this on every shape kind (text frame,
+        // rectangle, oval, polygon, line); the renderer's wrap-rect
+        // collector pulls AABB + offsets from here per page.
+        if let Some(tw) = &self.text_wrap {
+            let top = format_f32(tw.offsets[0]);
+            let left = format_f32(tw.offsets[1]);
+            let bottom = format_f32(tw.offsets[2]);
+            let right = format_f32(tw.offsets[3]);
+            let flag = |v: bool| if v { "true" } else { "false" };
+            let mut twa: Vec<(&str, &str)> = vec![
+                ("Inverse", flag(tw.inverse)),
+                ("ApplyToMasterPageOnly", flag(tw.master_only)),
+            ];
+            if let Some(side) = tw.side {
+                twa.push(("TextWrapSide", side));
+            }
+            twa.push(("TextWrapMode", tw.mode));
+            b.start("TextWrapPreference", &twa);
+            b.start("Properties", &[]);
+            b.empty(
+                "TextWrapOffset",
+                &[
+                    ("Top", top.as_str()),
+                    ("Left", left.as_str()),
+                    ("Bottom", bottom.as_str()),
+                    ("Right", right.as_str()),
+                ],
+            );
+            b.end("Properties");
+            if let Some(ct) = tw.contour_type {
+                b.empty(
+                    "ContourOption",
+                    &[
+                        ("ContourType", ct),
+                        ("IncludeInsideEdges", "false"),
+                        ("ContourPathName", "$ID/"),
+                    ],
+                );
+            }
+            b.end("TextWrapPreference");
+        }
+        // `<AnchoredObjectSetting>` — sibling of Properties. The
+        // parser sets `is_anchored = true` on whichever shape is
+        // currently open; the host story emitter is responsible for
+        // putting that shape inside a CharacterStyleRange so the
+        // renderer's text-flow integration sees it.
+        if let Some(a) = &self.anchored_setting {
+            let xo;
+            let yo;
+            let mut aa: Vec<(&str, &str)> = Vec::new();
+            aa.push(("AnchoredPosition", a.anchored_position));
+            aa.push((
+                "SpineRelative",
+                if a.spine_relative { "true" } else { "false" },
+            ));
+            aa.push((
+                "LockPosition",
+                if a.lock_position { "true" } else { "false" },
+            ));
+            aa.push(("PinPosition", if a.pin_position { "true" } else { "false" }));
+            if let Some(p) = a.anchor_point {
+                aa.push(("AnchorPoint", p));
+            }
+            if let Some(p) = a.horizontal_reference_point {
+                aa.push(("HorizontalReferencePoint", p));
+            }
+            if let Some(p) = a.vertical_reference_point {
+                aa.push(("VerticalReferencePoint", p));
+            }
+            if let Some(p) = a.horizontal_alignment {
+                aa.push(("HorizontalAlignment", p));
+            }
+            if let Some(p) = a.vertical_alignment {
+                aa.push(("VerticalAlignment", p));
+            }
+            if let Some(o) = a.anchor_x_offset {
+                xo = format_f32(o);
+                aa.push(("AnchorXoffset", xo.as_str()));
+            } else {
+                aa.push(("AnchorXoffset", "0"));
+            }
+            if let Some(o) = a.anchor_y_offset {
+                yo = format_f32(o);
+                aa.push(("AnchorYoffset", yo.as_str()));
+            } else {
+                aa.push(("AnchorYoffset", "0"));
+            }
+            b.empty("AnchoredObjectSetting", &aa);
+        }
+        kind
+    }
+}
+
+/// The four-arc Bézier circle constant.
+const OVAL_KAPPA: f32 = 0.552_284_8;
+
+/// `<PathGeometry>` for an `<Oval>`: the ellipse inscribed in
+/// `w × h` at inner origin, spelled the way InDesign spells it —
+/// midpoint anchors bottom → right → top → left with κ·r handles.
+/// The anchors sit on the edge midpoints, so a parser reading the
+/// AABB of the anchors still recovers the authored box.
+fn write_oval_path_geometry(b: &mut XmlBuilder, w: f32, h: f32) {
+    b.start("PathGeometry", &[]);
+    b.start("GeometryPathType", &[("PathOpen", "false")]);
+    b.start("PathPointArray", &[]);
+    let (cx, cy) = (w * 0.5, h * 0.5);
+    let (kx, ky) = (cx * OVAL_KAPPA, cy * OVAL_KAPPA);
+    let points = [
+        ((cx, h), (cx - kx, h), (cx + kx, h)),
+        ((w, cy), (w, cy + ky), (w, cy - ky)),
+        ((cx, 0.0), (cx + kx, 0.0), (cx - kx, 0.0)),
+        ((0.0, cy), (0.0, cy - ky), (0.0, cy + ky)),
+    ];
+    let xy = |p: (f32, f32)| format!("{} {}", format_f32(p.0), format_f32(p.1));
+    for (anchor, left, right) in points {
+        b.empty(
+            "PathPointType",
+            &[
+                ("Anchor", &xy(anchor)),
+                ("LeftDirection", &xy(left)),
+                ("RightDirection", &xy(right)),
+            ],
+        );
+    }
+    b.end("PathPointArray");
+    b.end("GeometryPathType");
+    b.end("PathGeometry");
+}
+
+fn write_path_geometry(b: &mut XmlBuilder, w: f32, h: f32) {
+    // Rectangle anchored at (0, 0) with the given inner extents.
+    // Spec §10.3.2: PathPointArray walks corners; each anchor stores
+    // its on-curve position plus the (degenerate) Bezier handles.
+    b.start("PathGeometry", &[]);
+    b.start("GeometryPathType", &[("PathOpen", "false")]);
+    b.start("PathPointArray", &[]);
+    let corners = [(0.0, 0.0), (0.0, h), (w, h), (w, 0.0)];
+    for (x, y) in corners {
+        let xy = format!("{} {}", format_f32(x), format_f32(y));
+        b.empty(
+            "PathPointType",
+            &[
+                ("Anchor", &xy),
+                ("LeftDirection", &xy),
+                ("RightDirection", &xy),
+            ],
+        );
+    }
+    b.end("PathPointArray");
+    b.end("GeometryPathType");
+    b.end("PathGeometry");
+}
+
+/// W1.10 — emit a fully custom `<PathGeometry>`: one `<GeometryPathType>`
+/// per sub-path, each carrying its anchors with explicit Bezier handles.
+/// Shares the IDML shape with [`Polygon::write`]'s geometry block so the
+/// parser reads anchors, `subpath_starts`, and `subpath_open` the same
+/// way regardless of host element (here a `<TextFrame>`).
+fn write_custom_path_geometry(b: &mut XmlBuilder, subpaths: &[PolygonSubPath]) {
+    b.start("PathGeometry", &[]);
+    for sub in subpaths {
+        let open = if sub.closed { "false" } else { "true" };
+        b.start("GeometryPathType", &[("PathOpen", open)]);
+        b.start("PathPointArray", &[]);
+        for p in &sub.points {
+            let anchor = format!("{} {}", format_f32(p.anchor.0), format_f32(p.anchor.1));
+            let left = format!("{} {}", format_f32(p.left.0), format_f32(p.left.1));
+            let right = format!("{} {}", format_f32(p.right.0), format_f32(p.right.1));
+            b.empty(
+                "PathPointType",
+                &[
+                    ("Anchor", &anchor),
+                    ("LeftDirection", &left),
+                    ("RightDirection", &right),
+                ],
+            );
+        }
+        b.end("PathPointArray");
+        b.end("GeometryPathType");
+    }
+    b.end("PathGeometry");
+}
+
+/// `IDENTITY` exported for builders that want a concrete `Matrix` to
+/// pass through.
+pub const fn identity_transform() -> Matrix {
+    IDENTITY
+}
+
+/// A placed picture's `(left, top, right, bottom)` crops as InDesign
+/// spells them in `<FrameFittingOption>`: from the picture's edge to the
+/// frame's, in the picture's own units, positive where the frame cuts
+/// into the picture — the model's frame-space inset with the other sign,
+/// over the scale of the `<Image ItemTransform>` written beside it
+/// (`crop = −model / |scale|`). InDesign's own packages agree with that
+/// reading of their transforms and picture boxes, and the importer
+/// converts back by the same rule (`idml_import::crop_from_idml`).
+///
+/// A transform that rotates or skews the picture, or has no scale on an
+/// axis, has no such rule; the crops are then written as held, which is
+/// what the importer leaves them as too.
+pub(crate) fn indesign_crops(img: &PlacedImage) -> [f32; 4] {
+    let m = img.image_item_transform.unwrap_or(IDENTITY);
+    let crops = [img.left_crop, img.top_crop, img.right_crop, img.bottom_crop];
+    if !(m[1] == 0.0 && m[2] == 0.0 && m[0] != 0.0 && m[3] != 0.0) {
+        return crops;
+    }
+    let (sx, sy) = (m[0].abs(), m[3].abs());
+    [
+        -crops[0] / sx,
+        -crops[1] / sy,
+        -crops[2] / sx,
+        -crops[3] / sy,
+    ]
+}

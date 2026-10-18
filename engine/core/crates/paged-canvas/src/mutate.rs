@@ -1,0 +1,2057 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Text mutation primitives.
+//!
+//! Phase 3 correctness layer (Item 5).
+//!
+//! Implements the three text mutations that AC-E-1..AC-E-9 demand
+//! (InsertText, DeleteRange, ApplyTextStyle), keyed by content
+//! addresses (story id + story-local byte offsets per the story-
+//! offset contract in `selection.rs`). Mutations operate on the
+//! parsed `paged_scene::Document`'s in-memory story representation
+//! and produce a cached **inverse** so the undo layer (Item 7) can
+//! replay without recomputation.
+//!
+//! Lives in `paged-canvas` (not `paged-mutate`) so the Inspector M1
+//! work in flight on `paged-mutate::Operation` can land without
+//! conflicts; once both Phase 3 + Inspector M1 are stable, the text
+//! variants can be folded into `paged_mutate::Operation` per the
+//! original plan.
+//!
+//! ### Run merging
+//!
+//! After every mutation, adjacent runs in the affected paragraph are
+//! merged when **every** style field is byte-for-byte identical. The
+//! merge is what makes determinism hashing stable: without it, two
+//! replays could leave a story with different but visually identical
+//! run topologies.
+
+use crate::selection::TextCellAddr;
+use paged_model::CharacterRun;
+use paged_scene::Document;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+/// Result of applying a text mutation — the inverse op (for undo),
+/// plus the affected story id for cache invalidation.
+#[derive(Debug, Clone)]
+pub struct AppliedText {
+    pub story_id: String,
+    pub inverse: TextOp,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "kind"
+)]
+pub enum TextOp {
+    InsertText {
+        story_id: String,
+        offset: u32,
+        text: String,
+        /// W1.13 — cell qualifier. `None` ⇒ `offset` is a story-local
+        /// body offset; `Some(addr)` ⇒ cell-local offset into that
+        /// cell's paragraph stream. Rides v35 additively. The inverse
+        /// op carries the SAME qualifier so undo lands in the same
+        /// stream.
+        #[serde(default)]
+        cell: Option<TextCellAddr>,
+        /// v69 — set on the inverse of a `DeleteRange`: the paragraphs the
+        /// delete merged, exactly as they were (runs with their formatting
+        /// and field identity, paragraph attributes, tables, anchors). The
+        /// undo puts THEM back instead of re-typing `text` into one run —
+        /// which turned a placeholder field into plain text and dropped
+        /// every run's own formatting. `text` still carries the recovered
+        /// characters, so offsets, selection shifts and edit spans read the
+        /// op as before. Internal to the undo log; not a wire field.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        restore: Option<ParagraphSnapshot>,
+    },
+    DeleteRange {
+        story_id: String,
+        start: u32,
+        end: u32,
+        /// On apply this is unused; on the inverse it holds the
+        /// text that was originally at `[start, end)` so an `Undo`
+        /// can call `InsertText` with the right payload.
+        #[serde(default)]
+        recovered: String,
+        /// W1.13 — cell qualifier (see `InsertText::cell`).
+        #[serde(default)]
+        cell: Option<TextCellAddr>,
+        /// Set on the inverse of an insert that had to SEED the stream's
+        /// first paragraph (a freshly inserted table cell carries none).
+        /// Undoing that insert then leaves the stream empty again instead
+        /// of holding an empty paragraph the document never had — which
+        /// made the undo of a cell pour land on a different state.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        unseed: bool,
+        /// Set on the inverse of an insert whose paragraph held only
+        /// EMPTY runs (a fresh frame's story is one paragraph with one
+        /// empty run). The insert typed into that run; deleting the text
+        /// would drop the emptied run with it. With this set, a paragraph
+        /// the delete leaves run-less gets that run back, empty and with
+        /// its formatting, so the undo lands on exactly the prior state.
+        /// Internal to the undo log; not a wire field.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        keep_run: bool,
+    },
+}
+
+/// v69 — paragraphs captured by a `DeleteRange` for its undo. Compared by
+/// their serialisation (`CharacterRun` has no `PartialEq`; same approach as
+/// [`runs_mergeable`]).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParagraphSnapshot(pub Vec<paged_model::Paragraph>);
+
+impl PartialEq for ParagraphSnapshot {
+    fn eq(&self, other: &Self) -> bool {
+        serde_json::to_vec(&self.0).ok() == serde_json::to_vec(&other.0).ok()
+    }
+}
+
+impl TextOp {
+    /// W1.13 — the cell qualifier this op addresses (`None` for body).
+    pub fn cell(&self) -> &Option<TextCellAddr> {
+        match self {
+            TextOp::InsertText { cell, .. } | TextOp::DeleteRange { cell, .. } => cell,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Error)]
+pub enum TextOpError {
+    #[error("unknown story id: {0}")]
+    UnknownStory(String),
+    #[error("offset {offset} is past the end of story {story_id} (length {len})")]
+    OffsetOutOfRange {
+        story_id: String,
+        offset: u32,
+        len: u32,
+    },
+    #[error("delete range start={start} end={end} is invalid (start > end)")]
+    InvalidRange { start: u32, end: u32 },
+    /// The byte offset falls INSIDE a multi-byte UTF-8 character. Text
+    /// offsets are byte offsets; splitting a character there used to
+    /// panic in `String::insert_str` / `replace_range` (ADR 031: untrusted
+    /// input never aborts the engine).
+    #[error("offset {offset} in story {story_id} is not on a character boundary")]
+    NotCharBoundary { story_id: String, offset: u32 },
+}
+
+/// True when `offset` (insertText's byte space) lands on a UTF-8 character
+/// boundary of the run it falls in.
+fn on_char_boundary(paragraphs: &[paged_model::Paragraph], offset: u32) -> bool {
+    match locate(paragraphs, offset) {
+        Locate::InRun {
+            paragraph_idx,
+            run_idx,
+            byte_in_run,
+        } => paragraphs[paragraph_idx].runs[run_idx]
+            .text
+            .is_char_boundary(byte_in_run),
+        _ => true,
+    }
+}
+
+/// Apply a `TextOp` to the document. Returns the inverse op + the
+/// affected story id. Caller (CanvasModel::apply_mutation) wraps
+/// the returned inverse into its applied-log + invalidates caches.
+pub fn apply(doc: &mut Document, op: &TextOp) -> Result<AppliedText, TextOpError> {
+    match op {
+        TextOp::InsertText {
+            story_id,
+            offset,
+            text,
+            cell,
+            restore: Some(snapshot),
+        } => apply_restore_paragraphs(doc, story_id, cell, *offset, text, snapshot),
+        TextOp::InsertText {
+            story_id,
+            offset,
+            text,
+            cell,
+            restore: None,
+        } => apply_insert_text(doc, story_id, cell, *offset, text),
+        TextOp::DeleteRange {
+            story_id,
+            start,
+            end,
+            cell,
+            unseed,
+            keep_run,
+            ..
+        } => apply_delete_range(doc, story_id, cell, *start, *end, *unseed, *keep_run),
+    }
+}
+
+/// W1.13 — resolve the mutable paragraph stream a text address targets:
+/// the story's body `paragraphs` when `cell` is `None`, or the named
+/// cell's `paragraphs` when `cell` is `Some`. The whole `locate` /
+/// `splice` / run-merge machinery operates on this `&mut Vec<Paragraph>`
+/// so body and cell editing share ONE code path.
+fn find_paragraphs_mut<'a>(
+    doc: &'a mut Document,
+    story_id: &str,
+    cell: &Option<TextCellAddr>,
+) -> Result<&'a mut Vec<paged_model::Paragraph>, TextOpError> {
+    let story = find_story_mut(doc, story_id)?;
+    match cell {
+        None => Ok(&mut story.paragraphs),
+        Some(addr) => find_cell_paragraphs_mut(story, story_id, addr),
+    }
+}
+
+/// Locate the cell's paragraph stream inside a story's body paragraphs.
+/// A `<Table>` hangs off a host paragraph's `table` field; the cell is
+/// matched by `(col, row)` coords. Returns `UnknownStory` (reused as a
+/// generic "address not found") when the table or cell is absent —
+/// e.g. an edit aimed at a stale cell after the table shape changed.
+fn find_cell_paragraphs_mut<'a>(
+    story: &'a mut paged_model::Story,
+    story_id: &str,
+    addr: &TextCellAddr,
+) -> Result<&'a mut Vec<paged_model::Paragraph>, TextOpError> {
+    for para in story.paragraphs.iter_mut() {
+        let Some(table) = para.table.as_mut() else {
+            continue;
+        };
+        if table.self_id.as_deref() != Some(addr.table_id.as_str()) {
+            continue;
+        }
+        for c in table.cells.iter_mut() {
+            if c.coords() == Some((addr.col, addr.row)) {
+                return Ok(&mut c.paragraphs);
+            }
+        }
+    }
+    Err(TextOpError::UnknownStory(format!(
+        "{story_id} cell {}:{} of table {}",
+        addr.col, addr.row, addr.table_id
+    )))
+}
+
+fn apply_insert_text(
+    doc: &mut Document,
+    story_id: &str,
+    cell: &Option<TextCellAddr>,
+    offset: u32,
+    text: &str,
+) -> Result<AppliedText, TextOpError> {
+    let paragraphs = find_paragraphs_mut(doc, story_id, cell)?;
+    let len = paragraphs_byte_len(paragraphs);
+    if offset > len {
+        return Err(TextOpError::OffsetOutOfRange {
+            story_id: story_id.into(),
+            offset,
+            len,
+        });
+    }
+    if !on_char_boundary(paragraphs, offset) {
+        return Err(TextOpError::NotCharBoundary {
+            story_id: story_id.into(),
+            offset,
+        });
+    }
+
+    // A freshly-created table cell (and any other empty paragraph stream)
+    // carries ZERO paragraphs. `locate` pins an empty stream to
+    // `paragraph_idx 0` (via `saturating_sub(1)`), and `insert_one_segment`
+    // would then index an empty slice — the `index out of bounds: len is 0
+    // but the index is 0` panic the sheet cell-pour hit. Seed one empty
+    // paragraph so the first write into a new cell has a stream to land in.
+    let seeded = paragraphs.is_empty();
+    if seeded {
+        paragraphs.push(paged_model::Paragraph::default());
+    }
+    // Typing into a paragraph of only empty runs fills one of them; the
+    // inverse must hand that run back once the text is gone again.
+    let keep_run = !seeded && !text.is_empty() && {
+        let (para, _) = locate_para_local(paragraphs, offset);
+        paragraphs
+            .get(para)
+            .is_some_and(|p| !p.runs.is_empty() && p.runs.iter().all(|r| r.text.is_empty()))
+    };
+
+    // Phase 3 Gap-D: split text on `\n`. Each segment becomes a
+    // contiguous insert within a (possibly new) paragraph. Multiple
+    // `\n`s in the source split into multiple paragraphs.
+    //
+    // The text "abc\ndef" inserted at offset O produces:
+    //   - "abc" inserted at O in the original paragraph
+    //   - a paragraph split at O+3 (tail of original paragraph moves
+    //     to a new paragraph below)
+    //   - "def" inserted at the head of the new paragraph
+    //
+    // The implementation walks segments and splits as needed,
+    // chaining the resulting locate() to the next insertion point.
+    insert_segments(paragraphs, offset, text);
+    Ok(AppliedText {
+        story_id: story_id.into(),
+        inverse: TextOp::DeleteRange {
+            story_id: story_id.into(),
+            start: offset,
+            // Use byte length (which includes synthetic \n bytes for
+            // any inter-paragraph boundaries inserted) so the inverse
+            // covers the exact stretch we just inserted.
+            end: offset + text.len() as u32,
+            recovered: String::new(),
+            // W1.13 — undo must land in the same stream we edited.
+            cell: cell.clone(),
+            unseed: seeded,
+            keep_run,
+        },
+    })
+}
+
+/// `text` inserted at story byte `offset`, each `\n` a paragraph break.
+fn insert_segments(paragraphs: &mut Vec<paged_model::Paragraph>, offset: u32, text: &str) {
+    let segments: Vec<&str> = text.split('\n').collect();
+    // First segment: insert in place.
+    insert_one_segment(paragraphs, offset, segments[0]);
+    let mut next_offset = offset + segments[0].len() as u32;
+    // For each remaining segment: split the paragraph at next_offset
+    // (creating a new paragraph), then insert the segment at the head of
+    // the new paragraph.
+    for seg in &segments[1..] {
+        split_paragraph_at(paragraphs, next_offset);
+        // The split inserts a paragraph break at next_offset; the new
+        // paragraph starts at next_offset + 1 (per the story-offset
+        // contract: synthetic \n between paragraphs consumes 1 byte of
+        // story-local offset).
+        next_offset += 1;
+        insert_one_segment(paragraphs, next_offset, seg);
+        next_offset += seg.len() as u32;
+    }
+    merge_adjacent_runs_in_target(paragraphs, offset);
+}
+
+/// ADR 172 — Convert to Text: note `k` of paragraph `pi` leaves the model
+/// and its place becomes a space and the note's text, the note's
+/// paragraphs (U+000D) the story's, as InDesign 20.0.1 converts one
+/// (`notes-probe`). The text goes in where the note stood, in the
+/// formatting of the run that held it.
+pub(crate) fn convert_note_to_text(
+    paragraphs: &mut Vec<paged_model::Paragraph>,
+    pi: usize,
+    k: usize,
+) {
+    let para = &mut paragraphs[pi];
+    let markers: Vec<u32> = para
+        .runs
+        .iter()
+        .flat_map(|r| r.text.chars())
+        .enumerate()
+        .filter(|(_, c)| *c == paged_model::NOTE_MARKER)
+        .map(|(i, _)| i as u32)
+        .collect();
+    let at = if markers.len() == para.notes.len() {
+        markers[k]
+    } else {
+        para.notes[k].anchor
+    };
+    let note = para.notes.remove(k);
+    let byte = para.byte_of_char_offset(at);
+    if markers.contains(&at) {
+        let mut taken = String::new();
+        splice_paragraph(
+            para,
+            byte,
+            byte + paged_model::NOTE_MARKER.len_utf8(),
+            &mut taken,
+        );
+    }
+    let start: u32 = paragraphs[..pi]
+        .iter()
+        .map(|p| p.runs.iter().map(|r| r.text.len() as u32).sum::<u32>() + 1)
+        .sum();
+    let text = format!(" {}", note.text.replace(['\r', '\u{2029}'], "\n"));
+    insert_segments(paragraphs, start + byte as u32, &text);
+}
+
+/// v69 — undo of a `DeleteRange`: the delete left ONE paragraph where the
+/// snapshot's paragraphs were (or none, when it also dropped a seeded
+/// stream); put the snapshot back in its place. The inverse is the same
+/// delete again, so redo re-captures whatever is there then.
+fn apply_restore_paragraphs(
+    doc: &mut Document,
+    story_id: &str,
+    cell: &Option<TextCellAddr>,
+    offset: u32,
+    text: &str,
+    snapshot: &ParagraphSnapshot,
+) -> Result<AppliedText, TextOpError> {
+    let paragraphs = find_paragraphs_mut(doc, story_id, cell)?;
+    let len = paragraphs_byte_len(paragraphs);
+    if offset > len {
+        return Err(TextOpError::OffsetOutOfRange {
+            story_id: story_id.into(),
+            offset,
+            len,
+        });
+    }
+    let unseed = paragraphs.is_empty();
+    let (at, remove) = if unseed {
+        (0, 0)
+    } else {
+        (locate_para_local(paragraphs, offset).0, 1)
+    };
+    paragraphs.splice(at..at + remove, snapshot.0.iter().cloned());
+    Ok(AppliedText {
+        story_id: story_id.into(),
+        inverse: TextOp::DeleteRange {
+            story_id: story_id.into(),
+            start: offset,
+            end: offset + text.len() as u32,
+            recovered: String::new(),
+            cell: cell.clone(),
+            unseed,
+            keep_run: false,
+        },
+    })
+}
+
+/// Insert plain (no-newline) text at `offset`. Internal helper —
+/// caller guarantees no `\n` in `seg`.
+fn insert_one_segment(paragraphs: &mut [paged_model::Paragraph], offset: u32, seg: &str) {
+    if seg.is_empty() {
+        return;
+    }
+    let target = locate(paragraphs, offset);
+    match target {
+        Locate::InRun {
+            paragraph_idx,
+            run_idx,
+            byte_in_run,
+        } => {
+            let para = &mut paragraphs[paragraph_idx];
+            let before: usize = para.runs[..run_idx].iter().map(|r| r.text.len()).sum();
+            let at = para.char_offset_of_byte(before + byte_in_run);
+            para.shift_anchors(at, seg.chars().count() as i64);
+            let run_len = para.runs[run_idx].text.len();
+            if is_field_run(&para.runs[run_idx]) && (byte_in_run == 0 || byte_in_run == run_len) {
+                insert_beside_field(para, run_idx, byte_in_run == 0, seg);
+            } else {
+                para.runs[run_idx].text.insert_str(byte_in_run, seg);
+            }
+        }
+        Locate::EndOfStory { paragraph_idx } => {
+            let para = &mut paragraphs[paragraph_idx];
+            let end = para
+                .runs
+                .iter()
+                .map(|r| r.text.chars().count() as u32)
+                .sum();
+            para.shift_anchors(end, seg.chars().count() as i64);
+            if para.runs.last().is_some_and(is_field_run) {
+                let last = para.runs.len() - 1;
+                insert_beside_field(para, last, false, seg);
+            } else if let Some(run) = para.runs.last_mut() {
+                run.text.push_str(seg);
+            } else {
+                let run = CharacterRun {
+                    text: seg.into(),
+                    ..Default::default()
+                };
+                para.runs.push(run);
+            }
+        }
+        Locate::AtParagraphBreak {
+            after_paragraph_idx,
+        } => {
+            let next_idx = after_paragraph_idx + 1;
+            let next_para = &mut paragraphs[next_idx];
+            next_para.shift_anchors(0, seg.chars().count() as i64);
+            if next_para.runs.first().is_some_and(is_field_run) {
+                insert_beside_field(next_para, 0, true, seg);
+            } else if let Some(run) = next_para.runs.first_mut() {
+                run.text.insert_str(0, seg);
+            } else {
+                let run = CharacterRun {
+                    text: seg.into(),
+                    ..Default::default()
+                };
+                next_para.runs.push(run);
+            }
+        }
+    }
+}
+
+/// A run that IS a field — a plugin placeholder (v43) or an imported
+/// InDesign text variable instance. Its text is the field's display, owned
+/// by the field: a refresh replaces all of it.
+fn is_field_run(run: &CharacterRun) -> bool {
+    run.placeholder.is_some() || run.text_variable.is_some()
+}
+
+/// v69 — insert `seg` at a field run's edge, OUTSIDE the field. InDesign
+/// treats a text variable as one atomic character: a caret on either side
+/// of it types beside it. The text joins the neighbouring ordinary run when
+/// there is one; otherwise it becomes a run of its own carrying the field's
+/// formatting (the character style at the insertion point) without the
+/// field's identity. The story-offset position of the inserted bytes is the
+/// same as before, so the inverse `DeleteRange` is unchanged.
+fn insert_beside_field(
+    para: &mut paged_model::Paragraph,
+    field_idx: usize,
+    before: bool,
+    seg: &str,
+) {
+    let neighbour = if before {
+        field_idx.checked_sub(1)
+    } else {
+        Some(field_idx + 1).filter(|&i| i < para.runs.len())
+    };
+    if let Some(n) = neighbour.filter(|&n| !is_field_run(&para.runs[n])) {
+        if before {
+            para.runs[n].text.push_str(seg);
+        } else {
+            para.runs[n].text.insert_str(0, seg);
+        }
+        return;
+    }
+    let mut run = para.runs[field_idx].clone();
+    run.placeholder = None;
+    run.text_variable = None;
+    run.text = seg.into();
+    let at = if before { field_idx } else { field_idx + 1 };
+    para.runs.insert(at, run);
+}
+
+/// Split a paragraph at `offset`. The bytes at/after `offset` move
+/// into a new paragraph inserted immediately after the original.
+/// Inherits the original paragraph's style attributes (the only
+/// thing IDML's paragraph carries that's level-affecting — runs keep
+/// their own character styles intact).
+fn split_paragraph_at(paragraphs: &mut Vec<paged_model::Paragraph>, offset: u32) {
+    let target = locate(paragraphs, offset);
+    let (paragraph_idx, run_idx, byte_in_run) = match target {
+        Locate::InRun {
+            paragraph_idx,
+            run_idx,
+            byte_in_run,
+        } => (paragraph_idx, run_idx, byte_in_run),
+        Locate::EndOfStory { paragraph_idx } => {
+            // Split at the end of the paragraph — the new paragraph
+            // is empty.
+            let para = &paragraphs[paragraph_idx];
+            let new_para = paged_model::Paragraph {
+                paragraph_style: para.paragraph_style.clone(),
+                ..Default::default()
+            };
+            paragraphs.insert(paragraph_idx + 1, new_para);
+            return;
+        }
+        Locate::AtParagraphBreak { .. } => {
+            // Already on a paragraph break — splitting here is a no-op.
+            return;
+        }
+    };
+    let para = &mut paragraphs[paragraph_idx];
+    // Objects anchored at or after the split point move with their text.
+    let before: usize = para.runs[..run_idx].iter().map(|r| r.text.len()).sum();
+    let split_char = para.char_offset_of_byte(before + byte_in_run);
+    let (moved_frames, moved_offsets) = take_anchors_from(para, split_char);
+    let (moved_notes, moved_table) = take_notes_and_table_from(para, split_char);
+    let moved_editorial = take_editorial_notes_from(para, split_char);
+    let moved_deletions = take_tracked_deletions_from(para, split_char);
+    // Tail runs that come AFTER the split point move to the new
+    // paragraph. The split-point run itself is split into two halves;
+    // the right half becomes the first run of the new paragraph.
+    let mut tail_runs: Vec<CharacterRun> = para.runs.split_off(run_idx + 1);
+    let split_run = &mut para.runs[run_idx];
+    if byte_in_run < split_run.text.len() {
+        let right_text: String = split_run.text.split_off(byte_in_run);
+        let mut right_run = split_run.clone();
+        right_run.text = right_text;
+        tail_runs.insert(0, right_run);
+    }
+    // If the split-point run is now empty, drop it.
+    if para.runs.last().map(|r| r.text.is_empty()).unwrap_or(false) {
+        para.runs.pop();
+    }
+    let style = para.paragraph_style.clone();
+    let (table, table_anchor) = moved_table.unzip();
+    let new_para = paged_model::Paragraph {
+        paragraph_style: style,
+        runs: tail_runs,
+        anchored_frames: moved_frames,
+        anchored_frame_offsets: moved_offsets,
+        footnotes: moved_notes,
+        notes: moved_editorial,
+        tracked_deletions: moved_deletions,
+        table,
+        table_anchor,
+        ..Default::default()
+    };
+    paragraphs.insert(paragraph_idx + 1, new_para);
+}
+
+/// Drop the footnotes whose reference stands in characters `[from, to)` of
+/// `para`: a note goes with its reference, as InDesign deletes it with
+/// its reference (ADR 163). A note is matched to its reference marker by
+/// order when the paragraph holds one marker per note (what the renderer
+/// reads), by its anchor otherwise. Call it before the text changes.
+fn drop_notes_in(para: &mut paged_model::Paragraph, from: u32, to: u32) {
+    let markers = |para: &paged_model::Paragraph, mark: char| -> Vec<u32> {
+        para.runs
+            .iter()
+            .flat_map(|r| r.text.chars())
+            .enumerate()
+            .filter(|(_, c)| *c == mark)
+            .map(|(i, _)| i as u32)
+            .collect()
+    };
+    if !para.footnotes.is_empty() {
+        let markers = markers(para, paged_model::FOOTNOTE_REFERENCE_MARKER);
+        let one_each = markers.len() == para.footnotes.len();
+        let mut k = 0usize;
+        para.footnotes.retain(|f| {
+            let at = if one_each {
+                markers[k]
+            } else {
+                f.anchor.unwrap_or(0)
+            };
+            k += 1;
+            !(from..to).contains(&at)
+        });
+    }
+    // D-01 — a tracked deletion goes with its place: the k-th marker is
+    // the k-th entry (left alone when the two disagree).
+    if !para.tracked_deletions.is_empty() {
+        let markers = markers(para, paged_model::TRACKED_DELETION_MARKER);
+        if markers.len() == para.tracked_deletions.len() {
+            let mut k = 0usize;
+            para.tracked_deletions.retain(|_| {
+                let at = markers[k];
+                k += 1;
+                !(from..to).contains(&at)
+            });
+        }
+    }
+    // ADR 172 — an editorial note goes with its place, as InDesign
+    // deletes it with the character.
+    if !para.notes.is_empty() {
+        let markers = markers(para, paged_model::NOTE_MARKER);
+        let one_each = markers.len() == para.notes.len();
+        let mut k = 0usize;
+        para.notes.retain(|n| {
+            let at = if one_each { markers[k] } else { n.anchor };
+            k += 1;
+            !(from..to).contains(&at)
+        });
+    }
+}
+
+/// Remove from `para` the tracked deletions standing at character `from`
+/// or later (D-01): they go with their markers to the paragraph a split
+/// starts.
+fn take_tracked_deletions_from(
+    para: &mut paged_model::Paragraph,
+    from: u32,
+) -> Vec<paged_model::TrackedChange> {
+    let before = para
+        .runs
+        .iter()
+        .flat_map(|r| r.text.chars())
+        .take(from as usize)
+        .filter(|c| *c == paged_model::TRACKED_DELETION_MARKER)
+        .count();
+    if before >= para.tracked_deletions.len() {
+        return Vec::new();
+    }
+    para.tracked_deletions.split_off(before)
+}
+
+/// Remove from `para` the editorial notes standing at character `from`
+/// or later, returning them with their anchors rebased to `from` (ADR
+/// 172): they go with their characters to the paragraph a split starts.
+fn take_editorial_notes_from(
+    para: &mut paged_model::Paragraph,
+    from: u32,
+) -> Vec<paged_model::Note> {
+    let (moved, kept): (Vec<_>, Vec<_>) = std::mem::take(&mut para.notes)
+        .into_iter()
+        .partition(|n| n.anchor >= from);
+    para.notes = kept;
+    moved
+        .into_iter()
+        .map(|mut n| {
+            n.anchor -= from;
+            n
+        })
+        .collect()
+}
+
+/// Remove from `para` the footnotes whose reference stands at character
+/// `from` or later, and its table when that is anchored there or later,
+/// returning them with their anchors rebased to `from`: they go with
+/// their characters to the paragraph a split starts. A table with no
+/// anchor stays (it stands after the text the paragraph keeps).
+fn take_notes_and_table_from(
+    para: &mut paged_model::Paragraph,
+    from: u32,
+) -> (
+    Vec<paged_model::Footnote>,
+    Option<(paged_model::Table, u32)>,
+) {
+    let (moved, kept): (Vec<_>, Vec<_>) = std::mem::take(&mut para.footnotes)
+        .into_iter()
+        .partition(|f| f.anchor.is_some_and(|a| a >= from));
+    para.footnotes = kept;
+    let moved = moved
+        .into_iter()
+        .map(|mut f| {
+            f.anchor = f.anchor.map(|a| a - from);
+            f
+        })
+        .collect();
+    let table = match para.table_anchor {
+        Some(a) if a >= from => {
+            para.table_anchor = None;
+            para.table.take().map(|t| (t, a - from))
+        }
+        _ => None,
+    };
+    (moved, table)
+}
+
+/// Remove from `para` the frames anchored at character `from` or later,
+/// returning them with their offsets rebased to `from`. Frames with no
+/// recorded anchor stay.
+fn take_anchors_from(
+    para: &mut paged_model::Paragraph,
+    from: u32,
+) -> (Vec<paged_model::AnchoredFrame>, Vec<u32>) {
+    let mut moved = (Vec::new(), Vec::new());
+    let mut kept = (Vec::new(), Vec::new());
+    let offsets = std::mem::take(&mut para.anchored_frame_offsets);
+    for (i, frame) in std::mem::take(&mut para.anchored_frames)
+        .into_iter()
+        .enumerate()
+    {
+        match offsets.get(i) {
+            Some(&o) if o >= from => {
+                moved.0.push(frame);
+                moved.1.push(o - from);
+            }
+            Some(&o) => {
+                kept.0.push(frame);
+                kept.1.push(o);
+            }
+            None => kept.0.push(frame),
+        }
+    }
+    para.anchored_frames = kept.0;
+    para.anchored_frame_offsets = kept.1;
+    moved
+}
+
+fn apply_delete_range(
+    doc: &mut Document,
+    story_id: &str,
+    cell: &Option<TextCellAddr>,
+    start: u32,
+    end: u32,
+    unseed: bool,
+    keep_run: bool,
+) -> Result<AppliedText, TextOpError> {
+    if end < start {
+        return Err(TextOpError::InvalidRange { start, end });
+    }
+    if end == start {
+        if unseed {
+            drop_seeded_paragraph(find_paragraphs_mut(doc, story_id, cell)?);
+        }
+        return Ok(AppliedText {
+            story_id: story_id.into(),
+            inverse: TextOp::InsertText {
+                story_id: story_id.into(),
+                offset: start,
+                text: String::new(),
+                cell: cell.clone(),
+                restore: None,
+            },
+        });
+    }
+    let paragraphs = find_paragraphs_mut(doc, story_id, cell)?;
+    let len = paragraphs_byte_len(paragraphs);
+    if end > len {
+        return Err(TextOpError::OffsetOutOfRange {
+            story_id: story_id.into(),
+            offset: end,
+            len,
+        });
+    }
+    for offset in [start, end] {
+        if !on_char_boundary(paragraphs, offset) {
+            return Err(TextOpError::NotCharBoundary {
+                story_id: story_id.into(),
+                offset,
+            });
+        }
+    }
+
+    // Phase 3 Gap-D — full cross-paragraph delete support.
+    //
+    // Strategy:
+    //   1. Find (start_para, start_local) and (end_para, end_local)
+    //      via locate(); EndOfStory and AtParagraphBreak collapse to
+    //      same logical positions.
+    //   2. If same paragraph: splice within it (the existing fast
+    //      path).
+    //   3. Otherwise:
+    //      a. Capture the deleted text into `recovered` by walking
+    //         start_para's tail + each whole middle paragraph
+    //         (joined with synthetic `\n` per the story-offset
+    //         contract) + end_para's head.
+    //      b. Splice start_para's runs to keep only bytes 0..start_local.
+    //      c. Append end_para's tail-runs (runs from end_local onward)
+    //         to start_para.
+    //      d. Drop paragraphs (start_para+1..=end_para).
+    let (start_para, start_local) = locate_para_local(paragraphs, start);
+    let (end_para, end_local) = locate_para_local(paragraphs, end);
+    let snapshot = ParagraphSnapshot(paragraphs[start_para..=end_para].to_vec());
+    // The formatting of the text where the deletion starts. A delete that
+    // empties the paragraph keeps it as an empty run, so what is typed
+    // next is set in it, as InDesign keeps a cleared paragraph's
+    // character attributes. Without it, select-all + delete + type
+    // dropped every character attribute (font, size, colour).
+    let start_format = {
+        let para = &paragraphs[start_para];
+        let mut acc = 0usize;
+        para.runs
+            .iter()
+            .find(|r| {
+                let hit = !r.text.is_empty() && start_local < acc + r.text.len();
+                acc += r.text.len();
+                hit
+            })
+            .or(para.runs.first())
+            .map(|r| CharacterRun {
+                text: String::new(),
+                ..r.clone()
+            })
+    };
+    // The run the undone insert typed into, emptied — see `keep_run`.
+    let kept_run = keep_run
+        .then(|| {
+            let runs = &paragraphs[start_para].runs;
+            runs.iter()
+                .find(|r| !r.text.is_empty())
+                .or(runs.first())
+                .map(|r| CharacterRun {
+                    text: String::new(),
+                    ..r.clone()
+                })
+        })
+        .flatten();
+
+    let mut recovered = String::with_capacity((end - start) as usize);
+    if start_para == end_para {
+        // Same-paragraph fast path.
+        let para = &mut paragraphs[start_para];
+        splice_paragraph(para, start_local, end_local, &mut recovered);
+    } else {
+        // Capture tail of start_para.
+        {
+            let para = &paragraphs[start_para];
+            for run in &para.runs {
+                let already: usize = run_text_total_before(para, run);
+                let run_end_in_para = already + run.text.len();
+                if start_local < run_end_in_para && already < usize::MAX {
+                    let lo = start_local.max(already) - already;
+                    let hi = run.text.len();
+                    if hi > lo {
+                        recovered.push_str(&run.text[lo..hi]);
+                    }
+                }
+            }
+            // Synthetic \n joining start_para to whatever's next.
+            recovered.push('\n');
+        }
+        // Capture whole middle paragraphs + the head of end_para.
+        for para in &paragraphs[(start_para + 1)..end_para] {
+            for run in &para.runs {
+                recovered.push_str(&run.text);
+            }
+            recovered.push('\n');
+        }
+        {
+            let para = &paragraphs[end_para];
+            let mut acc: usize = 0;
+            for run in &para.runs {
+                let rlen = run.text.len();
+                let lo = 0;
+                let hi = end_local.min(acc + rlen).saturating_sub(acc);
+                if hi > lo {
+                    recovered.push_str(&run.text[lo..hi]);
+                }
+                acc += rlen;
+                if acc >= end_local {
+                    break;
+                }
+            }
+        }
+
+        // Now mutate: trim start_para to its [0..start_local] runs,
+        // then append end_para's tail. A note goes with its reference
+        // (ADR 163), and what stands after the deletion in end_para —
+        // its notes, its table, its anchored frames — moves with its
+        // text into start_para.
+        let start_char = paragraphs[start_para].char_offset_of_byte(start_local);
+        drop_notes_in(&mut paragraphs[start_para], start_char, u32::MAX);
+        let end_char = paragraphs[end_para].char_offset_of_byte(end_local);
+        drop_notes_in(&mut paragraphs[end_para], 0, end_char);
+        let (moved_frames, moved_offsets) = take_anchors_from(&mut paragraphs[end_para], end_char);
+        let (moved_notes, moved_table) =
+            take_notes_and_table_from(&mut paragraphs[end_para], end_char);
+        let moved_editorial = take_editorial_notes_from(&mut paragraphs[end_para], end_char);
+        let moved_deletions = take_tracked_deletions_from(&mut paragraphs[end_para], end_char);
+        let end_tail_runs = capture_tail_runs(&paragraphs[end_para], end_local);
+        let start_para_ref = &mut paragraphs[start_para];
+        truncate_paragraph_to(start_para_ref, start_local);
+        start_para_ref.runs.extend(end_tail_runs);
+        start_para_ref
+            .anchored_frame_offsets
+            .resize(start_para_ref.anchored_frames.len(), 0);
+        start_para_ref.anchored_frames.extend(moved_frames);
+        start_para_ref
+            .anchored_frame_offsets
+            .extend(moved_offsets.into_iter().map(|o| o + start_char));
+        start_para_ref
+            .footnotes
+            .extend(moved_notes.into_iter().map(|mut f| {
+                f.anchor = f.anchor.map(|a| a + start_char);
+                f
+            }));
+        start_para_ref
+            .notes
+            .extend(moved_editorial.into_iter().map(|mut n| {
+                n.anchor += start_char;
+                n
+            }));
+        start_para_ref.tracked_deletions.extend(moved_deletions);
+        if start_para_ref.table.is_none() {
+            if let Some((table, anchor)) = moved_table {
+                start_para_ref.table = Some(table);
+                start_para_ref.table_anchor = Some(anchor + start_char);
+            }
+        }
+        // Drop paragraphs (start_para+1 ..= end_para).
+        paragraphs.drain((start_para + 1)..=end_para);
+    }
+
+    merge_adjacent_runs_in_target(paragraphs, start);
+    if let Some(run) = kept_run.or(start_format) {
+        if paragraphs[start_para].runs.is_empty() {
+            paragraphs[start_para].runs.push(run);
+        }
+    }
+    if unseed {
+        drop_seeded_paragraph(paragraphs);
+    }
+    Ok(AppliedText {
+        story_id: story_id.into(),
+        inverse: TextOp::InsertText {
+            story_id: story_id.into(),
+            offset: start,
+            text: recovered,
+            cell: cell.clone(),
+            restore: Some(snapshot),
+        },
+    })
+}
+
+/// Undo of an insert that seeded an empty stream: the stream is back to
+/// the one paragraph the insert added, now empty — remove it. A stream
+/// that holds anything else (text, a second paragraph, an anchored frame)
+/// is left alone.
+fn drop_seeded_paragraph(paragraphs: &mut Vec<paged_model::Paragraph>) {
+    if let [only] = paragraphs.as_slice() {
+        if only.runs.iter().all(|r| r.text.is_empty()) && only.anchored_frames.is_empty() {
+            paragraphs.clear();
+        }
+    }
+}
+
+/// Convert a stream-local offset to (paragraph_idx, byte-within-paragraph).
+/// `AtParagraphBreak` resolves to the START of the next paragraph
+/// (which matches the offset's logical position past the break).
+fn locate_para_local(paragraphs: &[paged_model::Paragraph], offset: u32) -> (usize, usize) {
+    match locate(paragraphs, offset) {
+        Locate::InRun {
+            paragraph_idx,
+            run_idx,
+            byte_in_run,
+        } => {
+            let para = &paragraphs[paragraph_idx];
+            let head: usize = para.runs[..run_idx].iter().map(|r| r.text.len()).sum();
+            (paragraph_idx, head + byte_in_run)
+        }
+        Locate::EndOfStory { paragraph_idx } => {
+            let para = &paragraphs[paragraph_idx];
+            let total: usize = para.runs.iter().map(|r| r.text.len()).sum();
+            (paragraph_idx, total)
+        }
+        Locate::AtParagraphBreak {
+            after_paragraph_idx,
+        } => (after_paragraph_idx + 1, 0),
+    }
+}
+
+/// ADR 027 plan step 6 — the paragraphs a text op changes, before
+/// and after it (see [`paged_renderer::EditSpan`]). Read on the document
+/// BEFORE the op is applied.
+pub(crate) fn edit_span(op: &TextOp, doc: &Document) -> Option<(String, paged_renderer::EditSpan)> {
+    let (story_id, offset, cell) = match op {
+        TextOp::InsertText {
+            story_id,
+            offset,
+            cell,
+            ..
+        } => (story_id, *offset, cell),
+        TextOp::DeleteRange {
+            story_id,
+            start,
+            cell,
+            ..
+        } => (story_id, *start, cell),
+    };
+    // A cell edit changes the paragraph hosting the table; which one is
+    // not worth resolving here.
+    if cell.is_some() {
+        return None;
+    }
+    let story = doc.stories.iter().find(|s| &s.self_id == story_id)?;
+    let paragraphs = &story.story.paragraphs;
+    if paragraphs.is_empty() {
+        let span = paged_renderer::EditSpan {
+            first: 0,
+            old_end: 0,
+            new_end: 0,
+        };
+        return Some((story_id.clone(), span));
+    }
+    let (first, _) = locate_para_local(paragraphs, offset);
+    let first = first as u32;
+    let span = match op {
+        // `k` paragraph breaks split the paragraph into `k + 1`.
+        TextOp::InsertText { text, .. } => {
+            let breaks = text.matches('\n').count() as u32;
+            paged_renderer::EditSpan {
+                first,
+                old_end: first + 1,
+                new_end: first + 1 + breaks,
+            }
+        }
+        // The paragraphs from `start` to `end` merge into one.
+        TextOp::DeleteRange { end, .. } => {
+            let (last, _) = locate_para_local(paragraphs, *end);
+            paged_renderer::EditSpan {
+                first,
+                old_end: (last as u32).max(first) + 1,
+                new_end: first + 1,
+            }
+        }
+    };
+    Some((story_id.clone(), span))
+}
+
+/// Sum of run text bytes that precede `target_run` in `para`'s run
+/// list. Returns `usize::MAX` if `target_run` isn't in the list
+/// (defensive — shouldn't happen since the caller iterates `para.runs`).
+fn run_text_total_before(para: &paged_model::Paragraph, target_run: &CharacterRun) -> usize {
+    let mut total: usize = 0;
+    for r in &para.runs {
+        if std::ptr::eq(r, target_run) {
+            return total;
+        }
+        total += r.text.len();
+    }
+    usize::MAX
+}
+
+/// Take the tail of `para`'s runs starting at byte `from`. The
+/// returned vec is freshly allocated; the source paragraph is read
+/// only.
+fn capture_tail_runs(para: &paged_model::Paragraph, from: usize) -> Vec<CharacterRun> {
+    let mut out: Vec<CharacterRun> = Vec::new();
+    let mut acc: usize = 0;
+    for run in &para.runs {
+        let rlen = run.text.len();
+        if acc >= from {
+            out.push(run.clone());
+        } else if acc + rlen > from {
+            let lo = from - acc;
+            let mut tail = run.clone();
+            tail.text = run.text[lo..].to_string();
+            out.push(tail);
+        }
+        acc += rlen;
+    }
+    out
+}
+
+/// Truncate `para`'s runs to keep only bytes `[0..keep)`.
+fn truncate_paragraph_to(para: &mut paged_model::Paragraph, keep: usize) {
+    let mut acc: usize = 0;
+    let mut split_at: Option<(usize, usize)> = None; // (run_idx, local)
+    for (i, run) in para.runs.iter().enumerate() {
+        let rlen = run.text.len();
+        if acc + rlen >= keep {
+            split_at = Some((i, keep - acc));
+            break;
+        }
+        acc += rlen;
+    }
+    let Some((i, local)) = split_at else {
+        return;
+    };
+    para.runs.truncate(i + 1);
+    let run = &mut para.runs[i];
+    run.text.truncate(local);
+    if run.text.is_empty() {
+        para.runs.pop();
+    }
+}
+
+// ---- helpers ---------------------------------------------------------
+
+#[derive(Debug, Clone)]
+enum Locate {
+    InRun {
+        paragraph_idx: usize,
+        run_idx: usize,
+        byte_in_run: usize,
+    },
+    EndOfStory {
+        paragraph_idx: usize,
+    },
+    AtParagraphBreak {
+        after_paragraph_idx: usize,
+    },
+}
+
+fn find_story_mut<'a>(
+    doc: &'a mut Document,
+    story_id: &str,
+) -> Result<&'a mut paged_model::Story, TextOpError> {
+    doc.stories
+        .iter_mut()
+        .find(|s| s.self_id == story_id)
+        .map(|s| &mut s.story)
+        .ok_or_else(|| TextOpError::UnknownStory(story_id.into()))
+}
+
+/// Total byte length of a paragraph stream per the story-offset
+/// contract: sum of run bytes + one synthetic `\n` per inter-paragraph
+/// boundary. Works for the body flow and for a cell's `paragraphs`
+/// alike (the contract is stream-local — W1.13).
+fn paragraphs_byte_len(paragraphs: &[paged_model::Paragraph]) -> u32 {
+    let mut total: u32 = 0;
+    for (i, p) in paragraphs.iter().enumerate() {
+        if i > 0 {
+            total += 1;
+        }
+        for r in &p.runs {
+            total += r.text.len() as u32;
+        }
+    }
+    total
+}
+
+fn locate(paragraphs: &[paged_model::Paragraph], story_offset: u32) -> Locate {
+    let mut consumed: u32 = 0;
+    for (pi, p) in paragraphs.iter().enumerate() {
+        let para_byte_len: u32 = p.runs.iter().map(|r| r.text.len() as u32).sum();
+        // Is the offset in this paragraph's runs?
+        if story_offset <= consumed + para_byte_len {
+            let local = (story_offset - consumed) as usize;
+            // Walk runs.
+            let mut acc: usize = 0;
+            for (ri, r) in p.runs.iter().enumerate() {
+                let rlen = r.text.len();
+                if local <= acc + rlen {
+                    return Locate::InRun {
+                        paragraph_idx: pi,
+                        run_idx: ri,
+                        byte_in_run: local - acc,
+                    };
+                }
+                acc += rlen;
+            }
+            // Past last run of this paragraph but ≤ paragraph length
+            // — special case: empty paragraph with no runs.
+            return Locate::EndOfStory { paragraph_idx: pi };
+        }
+        consumed += para_byte_len;
+        // Synthetic \n between paragraphs. If the offset falls
+        // *exactly* on the synthetic byte, it's the paragraph break.
+        if story_offset == consumed && pi + 1 < paragraphs.len() {
+            return Locate::AtParagraphBreak {
+                after_paragraph_idx: pi,
+            };
+        }
+        consumed += 1;
+    }
+    // Offset past last paragraph: pin to last paragraph.
+    Locate::EndOfStory {
+        paragraph_idx: paragraphs.len().saturating_sub(1),
+    }
+}
+
+fn splice_paragraph(
+    para: &mut paged_model::Paragraph,
+    local_start: usize,
+    local_end: usize,
+    recovered: &mut String,
+) {
+    let from = para.char_offset_of_byte(local_start);
+    let to = para.char_offset_of_byte(local_end);
+    drop_notes_in(para, from, to);
+    para.shift_anchors(from, -i64::from(to.saturating_sub(from)));
+    // Walk runs, splice the bytes in [local_start, local_end).
+    let mut acc: usize = 0;
+    for run in &mut para.runs {
+        let rlen = run.text.len();
+        let run_start_in_para = acc;
+        let run_end_in_para = acc + rlen;
+        let lo = local_start.max(run_start_in_para);
+        let hi = local_end.min(run_end_in_para);
+        if hi > lo {
+            let lo_in_run = lo - run_start_in_para;
+            let hi_in_run = hi - run_start_in_para;
+            recovered.push_str(&run.text[lo_in_run..hi_in_run]);
+            run.text.replace_range(lo_in_run..hi_in_run, "");
+        }
+        acc = run_end_in_para;
+    }
+    // Drop empty runs left after the splice.
+    para.runs.retain(|r| !r.text.is_empty());
+}
+
+/// Run-merge: walk the paragraph that contains `story_offset` and
+/// coalesce adjacent runs whose **every** style field is identical.
+/// Without this, repeated edits fragment a paragraph into many
+/// effectively-identical runs and break determinism hashing.
+fn merge_adjacent_runs_in_target(paragraphs: &mut [paged_model::Paragraph], story_offset: u32) {
+    // Find the target paragraph.
+    let mut consumed: u32 = 0;
+    let mut target: Option<usize> = None;
+    for (pi, p) in paragraphs.iter().enumerate() {
+        let para_byte_len: u32 = p.runs.iter().map(|r| r.text.len() as u32).sum();
+        if story_offset <= consumed + para_byte_len {
+            target = Some(pi);
+            break;
+        }
+        consumed += para_byte_len + 1;
+    }
+    let pi = target.unwrap_or(0);
+    if pi >= paragraphs.len() {
+        return;
+    }
+    let para = &mut paragraphs[pi];
+    if para.runs.len() < 2 {
+        return;
+    }
+    let mut i = 0;
+    while i + 1 < para.runs.len() {
+        if runs_mergeable(&para.runs[i], &para.runs[i + 1]) {
+            let next_text = std::mem::take(&mut para.runs[i + 1].text);
+            para.runs[i].text.push_str(&next_text);
+            para.runs.remove(i + 1);
+            // Don't advance i — the new merged run might be
+            // mergeable with the next one too.
+        } else {
+            i += 1;
+        }
+    }
+}
+
+fn runs_mergeable(a: &CharacterRun, b: &CharacterRun) -> bool {
+    // CharacterRun doesn't implement PartialEq (it carries Vec /
+    // Option fields whose downstream consumers prefer structural
+    // walks). Field-by-field comparison via serde round-trip is
+    // both stable and "byte-identical except for text". serde_json
+    // sorts struct fields by source order which matches the parser,
+    // so equal serialisations imply equal merge-relevant state.
+    let mut a_clone = a.clone();
+    let mut b_clone = b.clone();
+    a_clone.text.clear();
+    b_clone.text.clear();
+    let a_json = serde_json::to_vec(&a_clone).unwrap_or_default();
+    let b_json = serde_json::to_vec(&b_clone).unwrap_or_default();
+    a_json == b_json
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{CanvasModel, CanvasOptions};
+
+    fn small_idml() -> Vec<u8> {
+        use std::io::Write;
+        let mut buf = Vec::new();
+        {
+            let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+            let opts = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored);
+            zip.start_file("mimetype", opts).unwrap();
+            zip.write_all(b"application/vnd.adobe.indesign-idml-package")
+                .unwrap();
+            zip.start_file("META-INF/container.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+<rootfiles><rootfile full-path="designmap.xml" media-type="text/xml"/></rootfiles></container>"#,
+            )
+            .unwrap();
+            zip.start_file("designmap.xml", opts).unwrap();
+            zip.write_all(br#"<?xml version="1.0" encoding="UTF-8"?>
+<Document DOMVersion="13.1" Self="d1">
+<idPkg:Spread src="Spreads/Spread_s1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+<idPkg:Story src="Stories/Story_story1.xml" xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging"/>
+</Document>"#).unwrap();
+            zip.start_file("Spreads/Spread_s1.xml", opts).unwrap();
+            zip.write_all(br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Spread xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+<Spread Self="s1" PageCount="1">
+<Page Self="p1" Name="1" GeometricBounds="0 0 792 612" ItemTransform="1 0 0 1 0 0"/>
+<TextFrame Self="tf1" ParentStory="story1" GeometricBounds="100 100 400 400" ItemTransform="1 0 0 1 0 0"/>
+</Spread></idPkg:Spread>"#).unwrap();
+            zip.start_file("Stories/Story_story1.xml", opts).unwrap();
+            zip.write_all(
+                br#"<?xml version="1.0" encoding="UTF-8"?>
+<idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="13.1">
+<Story Self="story1">
+<ParagraphStyleRange>
+<CharacterStyleRange><Content>Hello world</Content></CharacterStyleRange>
+</ParagraphStyleRange>
+</Story></idPkg:Story>"#,
+            )
+            .unwrap();
+            zip.finish().unwrap();
+        }
+        buf
+    }
+
+    /// D-02 — the structure reads depth-first, a story's range elements
+    /// under the element that tags the story.
+    #[test]
+    fn the_xml_structure_reads_depth_first_into_tagged_stories() {
+        use paged_model::XmlElement;
+        let mut model = CanvasModel::load("d", &small_idml(), CanvasOptions::default()).unwrap();
+        let el =
+            |id: &str, tag: &str, content: Option<&str>, children: Vec<XmlElement>| XmlElement {
+                self_id: id.into(),
+                tag: format!("XMLTag/{tag}"),
+                content: content.map(str::to_string),
+                children,
+                ..Default::default()
+            };
+        let scene = model.scene_mut();
+        scene.designmap.xml_root = Some(el(
+            "r",
+            "Root",
+            None,
+            vec![
+                el("a", "Article", Some("story1"), vec![]),
+                el("f", "Figure", Some("tf9"), vec![]),
+            ],
+        ));
+        scene.stories[0].story.xml_elements = vec![el(
+            "a",
+            "Article",
+            Some("story1"),
+            vec![
+                el("t", "Title", None, vec![]),
+                el("b", "Body", None, vec![]),
+            ],
+        )];
+        let rows: Vec<(String, u32, Option<String>)> = model
+            .xml_elements()
+            .into_iter()
+            .map(|r| (r.tag, r.depth, r.story_id))
+            .collect();
+        assert_eq!(
+            rows,
+            vec![
+                ("Root".into(), 0, None),
+                ("Article".into(), 1, None),
+                ("Title".into(), 2, Some("story1".into())),
+                ("Body".into(), 2, Some("story1".into())),
+                ("Figure".into(), 1, None),
+            ]
+        );
+    }
+
+    /// D-01 — "Hello" + a tracked deletion's place + " world".
+    fn model_with_deletion() -> CanvasModel {
+        let mut model = CanvasModel::load("d", &small_idml(), CanvasOptions::default()).unwrap();
+        let para = &mut model.scene_mut().stories[0].story.paragraphs[0];
+        para.runs[0].text = format!("Hello{} world", paged_model::TRACKED_DELETION_MARKER);
+        para.tracked_deletions = vec![paged_model::TrackedChange {
+            change_type: "DeletedText".into(),
+            user_name: Some("Reviewer".into()),
+            deleted_text: Some("cruel ".into()),
+            ..Default::default()
+        }];
+        model
+    }
+
+    fn delete(model: &mut CanvasModel, start: u32, end: u32) {
+        apply(
+            model.scene_mut(),
+            &TextOp::DeleteRange {
+                story_id: "story1".into(),
+                start,
+                end,
+                recovered: String::new(),
+                unseed: false,
+                keep_run: false,
+                cell: None,
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_tracked_deletion_goes_with_its_place() {
+        let mut model = model_with_deletion();
+        assert_eq!(model.tracked_changes().len(), 1);
+        assert_eq!(model.tracked_changes()[0].offset, 5);
+        assert_eq!(model.tracked_changes()[0].text, "cruel ");
+        // Text before it moves its place, not the deletion's identity.
+        delete(&mut model, 0, 2);
+        assert_eq!(model.tracked_changes()[0].offset, 3);
+        // Deleting its character (three bytes of UTF-8) deletes it.
+        delete(&mut model, 3, 6);
+        assert!(model.tracked_changes().is_empty());
+    }
+
+    #[test]
+    fn a_tracked_deletion_follows_a_split_and_a_merge() {
+        let mut model = model_with_deletion();
+        apply(
+            model.scene_mut(),
+            &TextOp::InsertText {
+                story_id: "story1".into(),
+                offset: 2,
+                text: "\n".into(),
+                cell: None,
+                restore: None,
+            },
+        )
+        .unwrap();
+        let paras = &model.scene().stories[0].story.paragraphs;
+        assert_eq!(paras.len(), 2);
+        assert!(paras[0].tracked_deletions.is_empty());
+        assert_eq!(paras[1].tracked_deletions.len(), 1, "it went with its text");
+        // Joining the paragraphs again brings it back.
+        delete(&mut model, 2, 3);
+        let paras = &model.scene().stories[0].story.paragraphs;
+        assert_eq!(paras.len(), 1);
+        assert_eq!(paras[0].tracked_deletions.len(), 1);
+        assert_eq!(model.tracked_changes()[0].offset, 5);
+    }
+
+    #[test]
+    fn insert_text_in_run_middle_shifts_text() {
+        let mut model = CanvasModel::load("d", &small_idml(), CanvasOptions::default()).unwrap();
+        let scene_mut = model.scene_mut();
+        let applied = apply(
+            scene_mut,
+            &TextOp::InsertText {
+                story_id: "story1".into(),
+                offset: 5,
+                text: ",".into(),
+                cell: None,
+                restore: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(applied.story_id, "story1");
+        // "Hello world" + "," at offset 5 → "Hello, world"
+        let runs = &model.scene().stories[0].story.paragraphs[0].runs;
+        assert_eq!(runs[0].text, "Hello, world");
+        // Inverse is a DeleteRange that recovers ","
+        match applied.inverse {
+            TextOp::DeleteRange { start, end, .. } => {
+                assert_eq!(start, 5);
+                assert_eq!(end, 6);
+            }
+            _ => panic!("inverse must be DeleteRange"),
+        }
+    }
+
+    #[test]
+    fn delete_range_within_run_recovers_text() {
+        let mut model = CanvasModel::load("d", &small_idml(), CanvasOptions::default()).unwrap();
+        let scene_mut = model.scene_mut();
+        let applied = apply(
+            scene_mut,
+            &TextOp::DeleteRange {
+                story_id: "story1".into(),
+                start: 5,
+                end: 11,
+                recovered: String::new(),
+                unseed: false,
+                keep_run: false,
+                cell: None,
+            },
+        )
+        .unwrap();
+        let runs = &model.scene().stories[0].story.paragraphs[0].runs;
+        assert_eq!(runs[0].text, "Hello");
+        match applied.inverse {
+            TextOp::InsertText { text, offset, .. } => {
+                assert_eq!(offset, 5);
+                assert_eq!(text, " world");
+            }
+            _ => panic!("inverse must be InsertText"),
+        }
+    }
+
+    #[test]
+    fn insert_then_undo_via_inverse_restores_original_hash() {
+        let mut model = CanvasModel::load("d", &small_idml(), CanvasOptions::default()).unwrap();
+        let initial = model.initial_state_hash();
+        let scene_mut = model.scene_mut();
+        let applied = apply(
+            scene_mut,
+            &TextOp::InsertText {
+                story_id: "story1".into(),
+                offset: 5,
+                text: ",".into(),
+                cell: None,
+                restore: None,
+            },
+        )
+        .unwrap();
+        assert_ne!(
+            initial,
+            model.current_state_hash(),
+            "mutation must change state"
+        );
+        // Apply inverse (delete the ","), expect back to original.
+        let scene_mut = model.scene_mut();
+        apply(scene_mut, &applied.inverse).unwrap();
+        assert_eq!(
+            initial,
+            model.current_state_hash(),
+            "inverse must restore state"
+        );
+    }
+
+    #[test]
+    fn insert_newline_splits_paragraph() {
+        let mut model = CanvasModel::load("d", &small_idml(), CanvasOptions::default()).unwrap();
+        // Insert "\n" at offset 5 of "Hello world" → splits into
+        // "Hello" / " world".
+        apply(
+            model.scene_mut(),
+            &TextOp::InsertText {
+                story_id: "story1".into(),
+                offset: 5,
+                text: "\n".into(),
+                cell: None,
+                restore: None,
+            },
+        )
+        .unwrap();
+        let paragraphs = &model.scene().stories[0].story.paragraphs;
+        assert_eq!(paragraphs.len(), 2, "should have split into two paragraphs");
+        let head: String = paragraphs[0].runs.iter().map(|r| r.text.clone()).collect();
+        let tail: String = paragraphs[1].runs.iter().map(|r| r.text.clone()).collect();
+        assert_eq!(head, "Hello");
+        assert_eq!(tail, " world");
+    }
+
+    #[test]
+    fn insert_with_internal_newline_splits_and_inserts() {
+        let mut model = CanvasModel::load("d", &small_idml(), CanvasOptions::default()).unwrap();
+        // "X\nY" at offset 5: head paragraph gets "X" appended ("HelloX"),
+        // a paragraph break is inserted, "Y" prefixes the new paragraph
+        // which then contains the original tail " world".
+        apply(
+            model.scene_mut(),
+            &TextOp::InsertText {
+                story_id: "story1".into(),
+                offset: 5,
+                text: "X\nY".into(),
+                cell: None,
+                restore: None,
+            },
+        )
+        .unwrap();
+        let ps = &model.scene().stories[0].story.paragraphs;
+        assert_eq!(ps.len(), 2);
+        let head: String = ps[0].runs.iter().map(|r| r.text.clone()).collect();
+        let tail: String = ps[1].runs.iter().map(|r| r.text.clone()).collect();
+        assert_eq!(head, "HelloX");
+        assert_eq!(tail, "Y world");
+    }
+
+    #[test]
+    fn delete_across_paragraph_boundary_merges_paragraphs() {
+        let mut model = CanvasModel::load("d", &small_idml(), CanvasOptions::default()).unwrap();
+        // First split at offset 5 so we have "Hello" / " world".
+        apply(
+            model.scene_mut(),
+            &TextOp::InsertText {
+                story_id: "story1".into(),
+                offset: 5,
+                text: "\n".into(),
+                cell: None,
+                restore: None,
+            },
+        )
+        .unwrap();
+        // Story is now "Hello" + \n (5) + " world" (6) — total 12.
+        // Delete [3, 8) — covers "lo" (from para 0) + "\n" + " w" (from para 1).
+        let applied = apply(
+            model.scene_mut(),
+            &TextOp::DeleteRange {
+                story_id: "story1".into(),
+                start: 3,
+                end: 8,
+                recovered: String::new(),
+                unseed: false,
+                keep_run: false,
+                cell: None,
+            },
+        )
+        .unwrap();
+        let ps = &model.scene().stories[0].story.paragraphs;
+        assert_eq!(ps.len(), 1, "cross-paragraph delete must merge");
+        let merged: String = ps[0].runs.iter().map(|r| r.text.clone()).collect();
+        assert_eq!(merged, "Helorld");
+        // Inverse should let us recover the original split structure.
+        match applied.inverse {
+            TextOp::InsertText { text, offset, .. } => {
+                assert_eq!(offset, 3);
+                assert_eq!(text, "lo\n w");
+            }
+            other => panic!("unexpected inverse: {other:?}"),
+        }
+    }
+
+    // ---- W1.13 — cell text editing (apply-level unit tests) --------
+
+    use paged_model::{Paragraph, Story, Table, TableCell};
+    use paged_scene::{Document, ParsedStory};
+
+    /// Build a single-cell text paragraph carrying `text`.
+    fn cell_with_text(name: &str, span_cols: u32, text: &str) -> TableCell {
+        TableCell {
+            name: Some(name.to_string()),
+            row_span: 1,
+            column_span: span_cols.max(1),
+            paragraphs: vec![Paragraph {
+                runs: vec![CharacterRun {
+                    text: text.to_string(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    /// A `Document` whose story `t1` holds a host paragraph carrying a
+    /// table `tbl1` with the supplied cells. `Document` doesn't derive
+    /// `Default`, so we clone a real loaded scene and replace its single
+    /// story's paragraphs — this keeps `find_story_mut` / cell lookup
+    /// honest without hand-building `SourceArchive` / `Graphic` / styles.
+    fn doc_with_table(cells: Vec<TableCell>) -> Document {
+        doc_with_paragraphs(vec![Paragraph {
+            table: Some(Table {
+                self_id: Some("tbl1".into()),
+                body_row_count: 2,
+                column_count: 2,
+                cells,
+                ..Default::default()
+            }),
+            ..Default::default()
+        }])
+    }
+
+    /// Clone the `small_idml` scene and overwrite its one story's
+    /// paragraphs + id so tests can inject arbitrary structures.
+    fn doc_with_paragraphs(paragraphs: Vec<Paragraph>) -> Document {
+        let model = CanvasModel::load("d", &small_idml(), CanvasOptions::default()).unwrap();
+        let mut doc = model.scene().clone();
+        doc.stories = vec![ParsedStory {
+            src: "Stories/Story_t1.xml".into(),
+            self_id: "t1".into(),
+            story: Story {
+                paragraphs,
+                ..Default::default()
+            },
+        }];
+        doc
+    }
+
+    /// Clearing a paragraph and typing again keeps the cleared text's
+    /// character attributes, across two paragraphs too; undo brings the
+    /// original runs back.
+    #[test]
+    fn typing_after_clearing_keeps_the_formatting() {
+        let styled = |text: &str| CharacterRun {
+            text: text.into(),
+            point_size: Some(60.0),
+            font: Some("Aptos Display".into()),
+            fill_color: Some("Color/dk1".into()),
+            ..Default::default()
+        };
+        let plain = |text: &str| CharacterRun {
+            text: text.into(),
+            ..Default::default()
+        };
+        let mut doc = doc_with_paragraphs(vec![
+            Paragraph {
+                runs: vec![styled("Title"), plain(" tail")],
+                ..Default::default()
+            },
+            Paragraph {
+                runs: vec![plain("second")],
+                ..Default::default()
+            },
+        ]);
+        // Delete everything: "Title tail" + \n + "second".
+        let delete = TextOp::DeleteRange {
+            story_id: "t1".into(),
+            start: 0,
+            end: 17,
+            recovered: String::new(),
+            unseed: false,
+            keep_run: false,
+            cell: None,
+        };
+        let applied = apply(&mut doc, &delete).unwrap();
+        let paragraphs = &doc.stories[0].story.paragraphs;
+        assert_eq!(paragraphs.len(), 1);
+        let kept = &paragraphs[0].runs;
+        assert_eq!(kept.len(), 1, "an empty run keeps the formatting: {kept:?}");
+        assert_eq!(kept[0].text, "");
+        assert_eq!(kept[0].point_size, Some(60.0));
+
+        apply(
+            &mut doc,
+            &TextOp::InsertText {
+                story_id: "t1".into(),
+                offset: 0,
+                text: "Hello".into(),
+                cell: None,
+                restore: None,
+            },
+        )
+        .unwrap();
+        let runs = &doc.stories[0].story.paragraphs[0].runs;
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].text, "Hello");
+        assert_eq!(runs[0].point_size, Some(60.0));
+        assert_eq!(runs[0].font.as_deref(), Some("Aptos Display"));
+
+        // Undo the typing, then the delete: the original text and runs.
+        let typed_inverse = TextOp::DeleteRange {
+            story_id: "t1".into(),
+            start: 0,
+            end: 5,
+            recovered: String::new(),
+            unseed: false,
+            keep_run: true,
+            cell: None,
+        };
+        apply(&mut doc, &typed_inverse).unwrap();
+        apply(&mut doc, &applied.inverse).unwrap();
+        let back = &doc.stories[0].story.paragraphs;
+        assert_eq!(back.len(), 2);
+        assert_eq!(back[0].runs[0].text, "Title");
+        assert_eq!(back[0].runs[0].point_size, Some(60.0));
+        assert_eq!(back[1].runs[0].text, "second");
+    }
+
+    /// A partial delete inside a paragraph changes nothing about its runs
+    /// beyond the deleted text.
+    #[test]
+    fn a_partial_delete_keeps_no_empty_run() {
+        let mut doc = doc_with_paragraphs(vec![Paragraph {
+            runs: vec![CharacterRun {
+                text: "Hello".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }]);
+        apply(
+            &mut doc,
+            &TextOp::DeleteRange {
+                story_id: "t1".into(),
+                start: 1,
+                end: 5,
+                recovered: String::new(),
+                unseed: false,
+                keep_run: false,
+                cell: None,
+            },
+        )
+        .unwrap();
+        let runs = &doc.stories[0].story.paragraphs[0].runs;
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].text, "H");
+    }
+
+    fn cell_addr(col: u32, row: u32) -> TextCellAddr {
+        TextCellAddr {
+            table_id: "tbl1".into(),
+            row,
+            col,
+        }
+    }
+
+    fn read_cell(doc: &Document, col: u32, row: u32) -> String {
+        let table = doc.stories[0]
+            .story
+            .paragraphs
+            .iter()
+            .find_map(|p| p.table.as_ref())
+            .unwrap();
+        let c = table
+            .cells
+            .iter()
+            .find(|c| c.coords() == Some((col, row)))
+            .unwrap();
+        c.paragraphs
+            .iter()
+            .flat_map(|p| p.runs.iter())
+            .map(|r| r.text.clone())
+            .collect()
+    }
+
+    #[test]
+    fn cell_insert_apply_and_invert_round_trip() {
+        let mut doc = doc_with_table(vec![
+            cell_with_text("0:0", 1, "abc"),
+            cell_with_text("1:0", 1, "def"),
+        ]);
+        // Insert "Z" at cell-local offset 2 of cell (0,0): "abc" → "abZc".
+        let applied = apply(
+            &mut doc,
+            &TextOp::InsertText {
+                story_id: "t1".into(),
+                offset: 2,
+                text: "Z".into(),
+                cell: Some(cell_addr(0, 0)),
+                restore: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(read_cell(&doc, 0, 0), "abZc");
+        // Sibling untouched.
+        assert_eq!(read_cell(&doc, 1, 0), "def");
+        // Inverse carries the cell qualifier and restores the cell.
+        assert_eq!(applied.inverse.cell(), &Some(cell_addr(0, 0)));
+        apply(&mut doc, &applied.inverse).unwrap();
+        assert_eq!(read_cell(&doc, 0, 0), "abc");
+    }
+
+    #[test]
+    fn cell_delete_apply_and_invert_round_trip() {
+        let mut doc = doc_with_table(vec![cell_with_text("0:0", 1, "hello")]);
+        let applied = apply(
+            &mut doc,
+            &TextOp::DeleteRange {
+                story_id: "t1".into(),
+                start: 1,
+                end: 4,
+                recovered: String::new(),
+                unseed: false,
+                keep_run: false,
+                cell: Some(cell_addr(0, 0)),
+            },
+        )
+        .unwrap();
+        assert_eq!(read_cell(&doc, 0, 0), "ho");
+        // Inverse is a cell-qualified InsertText recovering "ell".
+        match &applied.inverse {
+            TextOp::InsertText {
+                offset, text, cell, ..
+            } => {
+                assert_eq!(*offset, 1);
+                assert_eq!(text, "ell");
+                assert_eq!(cell, &Some(cell_addr(0, 0)));
+            }
+            other => panic!("inverse must be InsertText, got {other:?}"),
+        }
+        apply(&mut doc, &applied.inverse).unwrap();
+        assert_eq!(read_cell(&doc, 0, 0), "hello");
+    }
+
+    #[test]
+    fn cell_multi_paragraph_insert_and_invert() {
+        let mut doc = doc_with_table(vec![cell_with_text("0:0", 1, "onetwo")]);
+        // Insert "\n" at offset 3 → two cell paragraphs "one" / "two".
+        let applied = apply(
+            &mut doc,
+            &TextOp::InsertText {
+                story_id: "t1".into(),
+                offset: 3,
+                text: "\n".into(),
+                cell: Some(cell_addr(0, 0)),
+                restore: None,
+            },
+        )
+        .unwrap();
+        let table = doc.stories[0]
+            .story
+            .paragraphs
+            .iter()
+            .find_map(|p| p.table.as_ref())
+            .unwrap();
+        let c = table
+            .cells
+            .iter()
+            .find(|c| c.coords() == Some((0, 0)))
+            .unwrap();
+        assert_eq!(c.paragraphs.len(), 2, "cell split into two paragraphs");
+        // Cell-local text contract: "one" + \n + "two".
+        assert_eq!(read_cell(&doc, 0, 0), "onetwo"); // read_cell flattens runs; \n is paragraph break
+                                                     // Invert merges the cell paragraphs back to one.
+        apply(&mut doc, &applied.inverse).unwrap();
+        let table = doc.stories[0]
+            .story
+            .paragraphs
+            .iter()
+            .find_map(|p| p.table.as_ref())
+            .unwrap();
+        let c = table
+            .cells
+            .iter()
+            .find(|c| c.coords() == Some((0, 0)))
+            .unwrap();
+        assert_eq!(c.paragraphs.len(), 1, "undo must merge cell paragraphs");
+        assert_eq!(read_cell(&doc, 0, 0), "onetwo");
+    }
+
+    #[test]
+    fn spanned_cell_addressed_at_span_origin() {
+        // A 2-column-span cell occupies (0,0)+(1,0); it is addressed at
+        // its origin (0,0). Editing it must reach the span-origin cell's
+        // text. (The non-origin coord (1,0) has no `<Cell>` of its own.)
+        let mut doc = doc_with_table(vec![cell_with_text("0:0", 2, "wide")]);
+        apply(
+            &mut doc,
+            &TextOp::InsertText {
+                story_id: "t1".into(),
+                offset: 4,
+                text: "r".into(),
+                cell: Some(cell_addr(0, 0)),
+                restore: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(read_cell(&doc, 0, 0), "wider");
+        // Addressing the covered (non-origin) coord is an error, not a
+        // silent body edit.
+        let err = apply(
+            &mut doc,
+            &TextOp::InsertText {
+                story_id: "t1".into(),
+                offset: 0,
+                text: "x".into(),
+                cell: Some(cell_addr(1, 0)),
+                restore: None,
+            },
+        );
+        assert!(err.is_err(), "covered span coord has no addressable cell");
+    }
+
+    #[test]
+    fn unknown_cell_address_errors_without_touching_body() {
+        let mut doc = doc_with_table(vec![cell_with_text("0:0", 1, "x")]);
+        let err = apply(
+            &mut doc,
+            &TextOp::InsertText {
+                story_id: "t1".into(),
+                offset: 0,
+                text: "y".into(),
+                cell: Some(cell_addr(5, 5)),
+                restore: None,
+            },
+        );
+        assert!(matches!(err, Err(TextOpError::UnknownStory(_))));
+        // Body host paragraph is still empty (no stray insert).
+        assert!(doc.stories[0].story.paragraphs[0].runs.is_empty());
+    }
+
+    #[test]
+    fn body_and_cell_offsets_are_independent_streams() {
+        // Body has a real paragraph 0 carrying text; the table host is a
+        // SEPARATE paragraph. A body insert at offset 0 and a cell insert
+        // at offset 0 must not interfere.
+        let body_para = Paragraph {
+            runs: vec![CharacterRun {
+                text: "body".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let host = Paragraph {
+            table: Some(Table {
+                self_id: Some("tbl1".into()),
+                cells: vec![cell_with_text("0:0", 1, "cell")],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let mut doc = doc_with_paragraphs(vec![body_para, host]);
+
+        // Edit body offset 0.
+        apply(
+            &mut doc,
+            &TextOp::InsertText {
+                story_id: "t1".into(),
+                offset: 0,
+                text: "B".into(),
+                cell: None,
+                restore: None,
+            },
+        )
+        .unwrap();
+        // Edit cell offset 0.
+        apply(
+            &mut doc,
+            &TextOp::InsertText {
+                story_id: "t1".into(),
+                offset: 0,
+                text: "C".into(),
+                cell: Some(cell_addr(0, 0)),
+                restore: None,
+            },
+        )
+        .unwrap();
+
+        let body0: String = doc.stories[0].story.paragraphs[0]
+            .runs
+            .iter()
+            .map(|r| r.text.clone())
+            .collect();
+        assert_eq!(body0, "Bbody");
+        assert_eq!(read_cell(&doc, 0, 0), "Ccell");
+    }
+}

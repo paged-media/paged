@@ -1,0 +1,46 @@
+[package]
+name = "paged-export-pdf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Print-grade PDF (PDF/X-4) export backend over the resolved display list."
+
+[lints]
+workspace = true
+
+[dependencies]
+idml-import = { git = "https://github.com/paged-media/plugin-publish", rev = "05c57195d9a7514357cede90d89d987141bf01d8" }
+paged-compose = { path = "../paged-compose" }
+paged-renderer = { path = "../paged-renderer", default-features = false }
+paged-color = { path = "../paged-color" }
+paged-model = { path = "../paged-model" }
+pdf-writer = "0.15"
+subsetter = "0.2"
+xmp-writer = "0.3"
+ttf-parser = "0.25"
+bytes = { workspace = true }
+flate2 = "1"
+image = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+clap = { version = "4", features = ["derive"], optional = true }
+anyhow = { workspace = true, optional = true }
+paged-scene = { path = "../paged-scene", optional = true }
+
+[features]
+# The `paged-export` CLI (kept out of the library consumers' tree —
+# paged-canvas links the lib and must not pull clap into wasm).
+cli = ["dep:clap", "dep:anyhow", "dep:paged-scene"]
+
+[[bin]]
+name = "paged-export"
+required-features = ["cli"]
+
+[dev-dependencies]
+anyhow = { workspace = true }
+lopdf = "0.42"
+paged-scene = { path = "../paged-scene" }
+paged-gen = { path = "../paged-gen" }

@@ -1,0 +1,127 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/paged-model",
+    "crates/paged-flow",
+    "crates/paged-composition",
+    "crates/paged-composition-render",
+    "crates/paged-scene",
+    "crates/paged-text",
+    "crates/paged-color",
+    "crates/paged-compose",
+    "crates/paged-gpu",
+    "crates/paged-renderer",
+    "crates/paged-fidelity",
+    "crates/paged-sdk",
+    "crates/paged-mutate",
+    "crates/paged-introspect",
+    "crates/paged-introspect-wasm",
+    "crates/paged-gen",
+    "crates/paged-store",
+    "crates/paged-repo",
+    "crates/paged-repo-wasm",
+    "crates/paged-mcp",
+    "crates/paged-wire",
+    "crates/paged-canvas",
+    "crates/paged-canvas-wasm",
+    "crates/paged-export-pdf",
+    "crates/paged-script",
+    "crates/paged-run",
+    "crates/paged-cli",
+    "crates/paged-perf",
+    "spikes/vello-eval",
+    "spikes/composer-calibration",
+    "spikes/wasm-size",
+]
+# W0 (paged.web) — standalone on purpose: the Blitz/Stylo tree is huge
+# and version-skewed from the workspace; keep it out of our Cargo.lock.
+exclude = ["spikes/blitz-wasm"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.92"
+license = "MPL-2.0 OR LicenseRef-PMEL"
+publish = false
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+needless_pass_by_value = "allow"
+too_many_arguments = "allow"
+
+# Shared dependency versions. Individual crates pick what they need.
+# Versions are intentionally conservative pins; bump during Phase 0.
+[workspace.dependencies]
+thiserror = "2"
+anyhow = "1"
+bytes = "1"
+# zip 9's `deflate` feature turns on flate2's zlib-rs backend (and zopfli),
+# and flate2 picks one backend for the whole graph, PDF export and PNG
+# included. Take `deflate-flate2` instead and ask for flate2's
+# `rust_backend` as zip 2's `deflate` did, so flate2's feature set, and
+# with it every deflated byte, stays what it was. Crates that depend on
+# `zip` list `flate2` beside it.
+zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2"] }
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+quick-xml = { version = "0.41", features = ["serialize"] }
+serde = { version = "1", features = ["derive"] }
+tracing = "0.1"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "tiff", "gif", "bmp"] }
+base64 = "0.22"
+tsify-next = { version = "0.5", default-features = false, features = ["js"] }
+wasm-bindgen = "0.2"
+# W1.24 (audit B17) — benchmark harness (dev-only). `html_reports` is
+# off: the bench lane is local + CI-smoke, not a report-publishing gate,
+# and the gnuplot/plotters report deps bloat the dev build for no value
+# in `make bench`. Declared at the workspace level so any crate that
+# grows a bench picks the same pin.
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+
+# N10.2 — the IDML adapter (idml-import/idml-export) now lives in the public
+# paged-media/plugin-publish repo and is git-depended back into the engine.
+# The adapter git-deps the shared model crates from THIS repo; Cargo would
+# otherwise treat those git copies as distinct from core's local crates
+# (path source != git source), so `import_idml`'s Document wouldn't be core's
+# Document. This [patch] redirects the adapter's git deps on core's own model
+# crates back to the local sources, unifying crate identity.
+[patch."https://github.com/paged-media/core"]
+paged-model = { path = "crates/paged-model" }
+paged-scene = { path = "crates/paged-scene" }
+paged-flow = { path = "crates/paged-flow" }
+paged-composition = { path = "crates/paged-composition" }
+
+# C-21 — flo_curves upstream fix, pinned until it is released.
+#
+# `GraphPath::exterior_paths()` orders the graph's points with a comparator
+# that compares x against a tolerance, which is not transitive — so it is not
+# a valid strict weak ordering and `sort_by` panics on it ("user-provided
+# comparison function does not correctly implement a total order"). Every
+# boolean ends in that call, and `panic = abort` in the wasm worker means we
+# cannot catch it. Upstream PR: Logicalshift/flo_curves#33.
+#
+# Pinned to a REV, not a branch, so a force-push cannot change what we build.
+# REMOVE THIS BLOCK when the fix reaches a crates.io release: drop it, raise
+# the `flo_curves` version pin, and re-lock. `paged-mutate`'s BOOLEAN_GRID
+# snap stays either way — it is defence in depth, and it is what protects a
+# build that does not carry this patch.
+[patch.crates-io]
+flo_curves = { git = "https://github.com/drietsch/flo_curves", rev = "6196f18" }
+
+# Bench builds keep line tables, so `samply` / Instruments name the
+# engine's functions (crates/paged-perf/README.md). Optimisation is
+# release's; only debug info is added, and only to benches.
+[profile.bench]
+debug = 1
+
+# The published wasm packages (publish-wasm.yml: canvas-wasm,
+# introspect-wasm, sdk). One codegen unit and whole-program LTO let the
+# optimiser see across every crate before `wasm-opt -Oz` runs, which is
+# what keeps the editor's whole-app wasm budget. Native release builds
+# keep `release` (fast to link, and what the tests and benches use).
+# Output lands in `target/wasm32-unknown-unknown/wasm-release/`.
+[profile.wasm-release]
+inherits = "release"
+lto = "fat"
+codegen-units = 1

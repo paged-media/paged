@@ -1,0 +1,1362 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+use paged_scene::Document;
+
+use crate::error::OperationError;
+use crate::operation::{
+    AppliedOperation, InvalidationHint, NodeId, Operation, PropertyPath, Value,
+};
+
+// ---------------------------------------------------------------------------
+// SDK Phase 3 — paragraph properties addressed by `NodeId::StoryRange`
+// ---------------------------------------------------------------------------
+//
+// Paragraphs are atomic: you can't half-apply `ParagraphSpaceBefore`
+// to the middle of a paragraph. The apply layer walks `story.paragraphs`,
+// finds every paragraph whose `[para_start, para_end)` intersects the
+// requested `[start, end)`, and writes the property to each. Inverse
+// is a `Batch` of per-paragraph SetProperty restorations addressed
+// at each paragraph's full range — undo applies them in order to
+// restore prior values without needing to know the original input
+// range. Paragraph boundaries are NOT split (unlike CharacterRuns) —
+// the apply layer rounds the range to whole paragraphs by treating
+// intersection as the trigger.
+//
+// A zero-length range is a caret: it addresses the paragraph the caret
+// stands in (see `caret_paragraphs`) — the only way to name an EMPTY
+// paragraph, which occupies no characters in this contiguous space.
+
+pub(super) fn apply_paragraph_property(
+    doc: &mut Document,
+    story_id: &str,
+    start: u32,
+    end: u32,
+    node: &NodeId,
+    path: PropertyPath,
+    value: &Value,
+) -> Result<AppliedOperation, OperationError> {
+    apply_paragraph_property_in(doc, story_id, None, start, end, node, path, value)
+}
+
+/// As [`apply_paragraph_property`], but `cell` may redirect the range to a table
+/// cell's own paragraph stream (v55) instead of the story body.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn apply_paragraph_property_in(
+    doc: &mut Document,
+    story_id: &str,
+    cell: Option<&crate::operation::CellAddr>,
+    start: u32,
+    end: u32,
+    node: &NodeId,
+    path: PropertyPath,
+    value: &Value,
+) -> Result<AppliedOperation, OperationError> {
+    if start > end {
+        return Err(OperationError::InvalidValue {
+            node: node.clone(),
+            path,
+            reason: format!("inverted range: start={start} > end={end}"),
+        });
+    }
+
+    let story_idx = doc
+        .stories
+        .iter()
+        .position(|s| s.self_id == story_id)
+        .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+
+    let paragraphs = super::cell_paragraphs_mut(&mut doc.stories[story_idx].story, cell)
+        .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+
+    // Each paragraph's `[start, end)` in the CONTIGUOUS character space
+    // (run text only; the paragraph break is not a character here).
+    let mut spans: Vec<(u32, u32)> = Vec::with_capacity(paragraphs.len());
+    let mut char_offset: u32 = 0;
+    for para in paragraphs.iter() {
+        let para_chars: u32 = para
+            .runs
+            .iter()
+            .map(|r| r.text.chars().count() as u32)
+            .sum();
+        spans.push((char_offset, char_offset + para_chars));
+        char_offset += para_chars;
+    }
+
+    let targets: Vec<usize> = if start == end {
+        caret_paragraphs(paragraphs, &spans, start)
+    } else {
+        // Every paragraph intersecting `[start, end)`.
+        spans
+            .iter()
+            .enumerate()
+            .filter(|(_, (ps, pe))| !(*pe <= start || *ps >= end))
+            .map(|(i, _)| i)
+            .collect()
+    };
+    if start == end && targets.is_empty() {
+        return Err(OperationError::InvalidValue {
+            node: node.clone(),
+            path,
+            reason: format!(
+                "caret offset {start} addresses no paragraph (story length {char_offset})"
+            ),
+        });
+    }
+
+    // A caret over several empty paragraphs (consecutive blank lines share
+    // one contiguous offset) writes all of them. Its inverse can only
+    // address them together too, so it is exact only when they agree on
+    // the prior value: snapshot first, and refuse rather than record an
+    // undo that would flatten their differences.
+    let snapshots: Vec<paged_model::Paragraph> = if start == end && targets.len() > 1 {
+        targets.iter().map(|&i| paragraphs[i].clone()).collect()
+    } else {
+        Vec::new()
+    };
+
+    let mut inverse_ops: Vec<Operation> = Vec::new();
+    for &i in &targets {
+        let (para_start, para_end) = spans[i];
+        let (prev_value, _new_set) = apply_paragraph_field(&mut paragraphs[i], path, value)?;
+        let restore = Operation::SetProperty {
+            node: NodeId::StoryRange {
+                story_id: story_id.to_string(),
+                start: para_start,
+                end: para_end,
+            },
+            path,
+            value: prev_value,
+        };
+        if !snapshots.is_empty() && inverse_ops.first().is_some_and(|first| *first != restore) {
+            for (&i, snap) in targets.iter().zip(snapshots) {
+                paragraphs[i] = snap;
+            }
+            return Err(OperationError::InvalidValue {
+                node: node.clone(),
+                path,
+                reason: format!(
+                    "caret offset {start} is shared by {} empty paragraphs whose current \
+                     values differ; address them with a range that covers them",
+                    targets.len()
+                ),
+            });
+        }
+        if snapshots.is_empty() || inverse_ops.is_empty() {
+            inverse_ops.push(restore);
+        }
+    }
+
+    if inverse_ops.is_empty() {
+        return Ok(AppliedOperation {
+            op: Operation::SetProperty {
+                node: node.clone(),
+                path,
+                value: value.clone(),
+            },
+            inverse: Operation::SetProperty {
+                node: node.clone(),
+                path,
+                value: value.clone(),
+            },
+            invalidation: InvalidationHint::default(),
+        });
+    }
+
+    let invalidation = match doc.frame_for_story.get(story_id) {
+        Some(frame) => {
+            if let Some(self_id) = &frame.self_id {
+                InvalidationHint {
+                    text_reflow: vec![NodeId::TextFrame(self_id.clone())],
+                    ..Default::default()
+                }
+            } else {
+                InvalidationHint::default()
+            }
+        }
+        None => InvalidationHint::default(),
+    };
+
+    let inverse = if inverse_ops.len() == 1 {
+        inverse_ops.into_iter().next().unwrap()
+    } else {
+        Operation::Batch { ops: inverse_ops }
+    };
+
+    Ok(AppliedOperation {
+        op: Operation::SetProperty {
+            node: node.clone(),
+            path,
+            value: value.clone(),
+        },
+        inverse,
+        invalidation,
+    })
+}
+
+/// v65 (RFI C-53) — apply paragraph style `style` to exactly paragraph
+/// `index` of the stream (the story body, or `cell`'s own paragraphs). The
+/// inverse names the same paragraph with its prior style ("" clears), so
+/// undo is exact for an empty paragraph among others at one offset.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn apply_paragraph_style_at(
+    doc: &mut Document,
+    story_id: &str,
+    cell: Option<&crate::operation::CellAddr>,
+    index: u32,
+    style: &str,
+    scope: crate::operation::StyleScope,
+    start: u32,
+    end: u32,
+) -> Result<AppliedOperation, OperationError> {
+    let node = NodeId::Story(story_id.to_string());
+    let path = PropertyPath::AppliedParagraphStyle;
+    if scope != crate::operation::StyleScope::Paragraph {
+        return Err(OperationError::InvalidValue {
+            node,
+            path,
+            reason: "a paragraph address takes a paragraph style (scope = paragraph)".to_string(),
+        });
+    }
+    let story_idx = doc
+        .stories
+        .iter()
+        .position(|s| s.self_id == story_id)
+        .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+    let paragraphs = super::cell_paragraphs_mut(&mut doc.stories[story_idx].story, cell)
+        .ok_or_else(|| OperationError::NodeNotFound(node.clone()))?;
+    let count = paragraphs.len();
+    let Some(para) = paragraphs.get_mut(index as usize) else {
+        return Err(OperationError::InvalidValue {
+            node,
+            path,
+            reason: format!("paragraph {index} is past the stream's {count} paragraphs"),
+        });
+    };
+    let (prev, _) = apply_paragraph_field(para, path, &Value::Text(style.to_string()))?;
+    let Value::Text(prev) = prev else {
+        unreachable!("the applied paragraph style is text");
+    };
+    let invalidation = match doc
+        .frame_for_story
+        .get(story_id)
+        .and_then(|f| f.self_id.clone())
+    {
+        Some(frame) => InvalidationHint {
+            text_reflow: vec![NodeId::TextFrame(frame)],
+            ..Default::default()
+        },
+        None => InvalidationHint::default(),
+    };
+    let op = |style: String| Operation::ApplyStyle {
+        story_id: story_id.to_string(),
+        start,
+        end,
+        style,
+        scope,
+        cell: cell.cloned(),
+        paragraph: Some(index),
+    };
+    Ok(AppliedOperation {
+        op: op(style.to_string()),
+        inverse: op(prev),
+        invalidation,
+    })
+}
+
+/// The paragraph(s) a zero-length range — a caret — at contiguous offset
+/// `at` is in, the way InDesign applies a paragraph attribute to the
+/// paragraph holding the insertion point.
+///
+/// An empty paragraph occupies no characters, so in the contiguous space
+/// it sits AT the offset where the next paragraph starts; a caret is the
+/// only range that can name it. So the empty paragraph(s) at `at` win;
+/// otherwise the paragraph with `start <= at < end`; otherwise, at the
+/// very end of the story, the last paragraph. A table's host paragraph
+/// has no runs either but is not a line the caret can stand on, so it is
+/// never a caret target.
+pub fn caret_paragraphs(
+    paragraphs: &[paged_model::Paragraph],
+    spans: &[(u32, u32)],
+    at: u32,
+) -> Vec<usize> {
+    let empties: Vec<usize> = spans
+        .iter()
+        .enumerate()
+        .filter(|(i, (ps, pe))| ps == pe && *ps == at && paragraphs[*i].table.is_none())
+        .map(|(i, _)| i)
+        .collect();
+    if !empties.is_empty() {
+        return empties;
+    }
+    if let Some(i) = spans.iter().position(|(ps, pe)| *ps <= at && at < *pe) {
+        return vec![i];
+    }
+    match spans.iter().rposition(|(ps, pe)| ps < pe) {
+        Some(i) if spans[i].1 == at => vec![i],
+        _ => Vec::new(),
+    }
+}
+
+/// W0.2 — set one `Option<f32>` field on a `Paragraph` from a
+/// `Value::Length`. `Length(None)` clears the override; the captured
+/// prior `Option<f32>` round-trips bytewise through the inverse.
+/// Paragraph-scope analogue of `set_run_length_field`.
+pub(super) fn set_para_length_field(
+    path: PropertyPath,
+    value: &Value,
+    slot: &mut Option<f32>,
+) -> Result<(Value, Value), OperationError> {
+    let Value::Length(new_val) = value else {
+        return Err(OperationError::TypeMismatch {
+            path,
+            expected: "Length".to_string(),
+        });
+    };
+    let prev = *slot;
+    *slot = *new_val;
+    Ok((Value::Length(prev), Value::Length(*new_val)))
+}
+
+/// W0.2 — set one `u32` count field on a `Paragraph` from a
+/// `Value::Length` carrying the integer (the inspector's
+/// integer-as-Length convention). `Length(None)` ⇒ 0. The captured
+/// prior is returned as `Value::Length(Some(prev as f32))` so the
+/// inverse round-trips bytewise. `field` is a non-`Option` `u32`
+/// (the drop-cap counts default to 0, not `None`).
+pub(super) fn set_para_u32_length_field(
+    path: PropertyPath,
+    value: &Value,
+    slot: &mut u32,
+) -> Result<(Value, Value), OperationError> {
+    let Value::Length(new_val) = value else {
+        return Err(OperationError::TypeMismatch {
+            path,
+            expected: "Length".to_string(),
+        });
+    };
+    let prev = *slot;
+    // Round defensively; counts are authored as whole numbers but the
+    // wire carries f32. Negative / NaN clamps to 0.
+    *slot = new_val.map(|n| n.max(0.0).round() as u32).unwrap_or(0);
+    Ok((
+        Value::Length(Some(prev as f32)),
+        Value::Length(Some(*slot as f32)),
+    ))
+}
+
+/// W0.2 — set one `Option<u32>` count field on a `Paragraph` from a
+/// `Value::Length` carrying the integer. `Length(None)` clears the
+/// override. The captured prior `Option<u32>` round-trips bytewise.
+pub(super) fn set_para_opt_u32_length_field(
+    path: PropertyPath,
+    value: &Value,
+    slot: &mut Option<u32>,
+) -> Result<(Value, Value), OperationError> {
+    let Value::Length(new_val) = value else {
+        return Err(OperationError::TypeMismatch {
+            path,
+            expected: "Length".to_string(),
+        });
+    };
+    let prev = *slot;
+    *slot = new_val.map(|n| n.max(0.0).round() as u32);
+    Ok((
+        Value::Length(prev.map(|n| n as f32)),
+        Value::Length(*new_val),
+    ))
+}
+
+/// W0.2 — set one `Option<bool>` field on a `Paragraph` from a
+/// `Value::Bool`. The write always stores `Some(new_val)`. The
+/// inverse captures `prev.unwrap_or(default_when_none)` — a write
+/// over an explicit prior round-trips bytewise; a prior-`None` undoes
+/// to `Some(default_when_none)` (the `Value::Bool` wire shape carries
+/// no `None`). Paragraph-scope analogue of `set_run_bool_field`, with
+/// an explicit default so each toggle restores its own IDML default.
+pub(super) fn set_para_bool_field(
+    path: PropertyPath,
+    value: &Value,
+    slot: &mut Option<bool>,
+    default_when_none: bool,
+) -> Result<(Value, Value), OperationError> {
+    let Value::Bool(new_val) = value else {
+        return Err(OperationError::TypeMismatch {
+            path,
+            expected: "Bool".to_string(),
+        });
+    };
+    let prev = slot.unwrap_or(default_when_none);
+    *slot = Some(*new_val);
+    Ok((Value::Bool(prev), Value::Bool(*new_val)))
+}
+
+/// W0.2 — set one `Option<String>` field on a `Paragraph` from a
+/// `Value::Text`. The empty string clears the override (`None`); the
+/// captured prior is returned as `Value::Text` (`None ⇒ ""`).
+/// Paragraph-scope analogue of `set_run_text_field`.
+pub(super) fn set_para_text_field(
+    path: PropertyPath,
+    value: &Value,
+    slot: &mut Option<String>,
+) -> Result<(Value, Value), OperationError> {
+    let Value::Text(new_val) = value else {
+        return Err(OperationError::TypeMismatch {
+            path,
+            expected: "Text".to_string(),
+        });
+    };
+    let prev = slot.clone().unwrap_or_default();
+    *slot = if new_val.is_empty() {
+        None
+    } else {
+        Some(new_val.clone())
+    };
+    Ok((Value::Text(prev), Value::Text(new_val.clone())))
+}
+
+/// ADR 028 — set an `Option<StartParagraph>` from a `Value::Text`
+/// carrying the IDML string. The empty string clears the override
+/// (`None`); the captured prior is returned as `Value::Text`
+/// (`None ⇒ ""`) so the inverse round-trips. An unknown string is
+/// refused (`TypeMismatch` naming the accepted values) and the slot is
+/// left untouched — never silently dropped to `None`.
+pub(super) fn set_para_start_paragraph_field(
+    path: PropertyPath,
+    value: &Value,
+    slot: &mut Option<paged_model::StartParagraph>,
+) -> Result<(Value, Value), OperationError> {
+    const EXPECTED: &str =
+        "Text: \"\" | Anywhere | NextColumn | NextFrame | NextPage | NextOddPage | NextEvenPage";
+    let Value::Text(new_val) = value else {
+        return Err(OperationError::TypeMismatch {
+            path,
+            expected: EXPECTED.to_string(),
+        });
+    };
+    let next = if new_val.is_empty() {
+        None
+    } else {
+        match paged_model::StartParagraph::from_idml(new_val) {
+            Some(sp) => Some(sp),
+            None => {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: EXPECTED.to_string(),
+                });
+            }
+        }
+    };
+    let prev = slot.map(|sp| sp.as_idml().to_string()).unwrap_or_default();
+    *slot = next;
+    Ok((Value::Text(prev), Value::Text(new_val.clone())))
+}
+
+/// Set an `Option<SpanColumnType>` from a `Value::Text` carrying the
+/// IDML string, the same contract as [`set_para_start_paragraph_field`]:
+/// `""` clears, an unknown string is refused and the slot untouched, the
+/// prior comes back as `Value::Text` (`None ⇒ ""`).
+pub(super) fn set_para_span_column_type_field(
+    path: PropertyPath,
+    value: &Value,
+    slot: &mut Option<paged_model::SpanColumnType>,
+) -> Result<(Value, Value), OperationError> {
+    const EXPECTED: &str = "Text: \"\" | SingleColumn | SpanColumns | SplitColumns";
+    let refuse = || OperationError::TypeMismatch {
+        path,
+        expected: EXPECTED.to_string(),
+    };
+    let Value::Text(new_val) = value else {
+        return Err(refuse());
+    };
+    let next = if new_val.is_empty() {
+        None
+    } else {
+        Some(paged_model::SpanColumnType::from_idml(new_val).ok_or_else(refuse)?)
+    };
+    let prev = slot.map(|t| t.as_idml().to_string()).unwrap_or_default();
+    *slot = next;
+    Ok((Value::Text(prev), Value::Text(new_val.clone())))
+}
+
+/// Set an `Option<SpanSplitColumnCount>`. The wire shape is
+/// `Value::Text` — `"All"` or a whole number >= 1, `""` clears — since
+/// the count is an enum-or-number no `Length` can carry. A bare count
+/// is also accepted as `Value::Length(Some(n))` (the keep-count
+/// convention; a script's `2` arrives that way) and `Length(None)`
+/// clears. Zero, fractions, negatives and other strings are refused with
+/// the slot untouched. The prior always comes back as `Value::Text`
+/// (`None ⇒ ""`), which this setter accepts, so the inverse round-trips.
+pub(super) fn set_para_span_split_count_field(
+    path: PropertyPath,
+    value: &Value,
+    slot: &mut Option<paged_model::SpanSplitColumnCount>,
+) -> Result<(Value, Value), OperationError> {
+    use paged_model::SpanSplitColumnCount as Count;
+    const EXPECTED: &str = "Text: \"\" | All | a whole number >= 1 (or Length(count))";
+    let refuse = || OperationError::TypeMismatch {
+        path,
+        expected: EXPECTED.to_string(),
+    };
+    let next = match value {
+        Value::Text(t) if t.is_empty() => None,
+        Value::Text(t) => Some(Count::from_idml(t).ok_or_else(refuse)?),
+        Value::Length(None) => None,
+        Value::Length(Some(n)) if n.is_finite() && *n >= 1.0 && n.fract() == 0.0 => {
+            Some(Count::Count(*n as u32))
+        }
+        _ => return Err(refuse()),
+    };
+    let prev = slot.map(Count::as_idml).unwrap_or_default();
+    *slot = next;
+    Ok((
+        Value::Text(prev),
+        Value::Text(next.map(Count::as_idml).unwrap_or_default()),
+    ))
+}
+
+/// Route one of the six span / split columns paths to its field of a
+/// paragraph's (or paragraph style's) `SpanColumns`. `None` for any
+/// other path.
+pub(super) fn set_span_columns_field(
+    path: PropertyPath,
+    value: &Value,
+    span: &mut paged_model::SpanColumns,
+) -> Option<Result<(Value, Value), OperationError>> {
+    Some(match path {
+        PropertyPath::ParagraphSpanColumnType => {
+            set_para_span_column_type_field(path, value, &mut span.column_type)
+        }
+        PropertyPath::ParagraphSpanSplitColumnCount => {
+            set_para_span_split_count_field(path, value, &mut span.count)
+        }
+        PropertyPath::ParagraphSpanColumnMinSpaceBefore => {
+            set_para_length_field(path, value, &mut span.min_space_before)
+        }
+        PropertyPath::ParagraphSpanColumnMinSpaceAfter => {
+            set_para_length_field(path, value, &mut span.min_space_after)
+        }
+        PropertyPath::ParagraphSplitColumnInsideGutter => {
+            set_para_length_field(path, value, &mut span.inside_gutter)
+        }
+        PropertyPath::ParagraphSplitColumnOutsideGutter => {
+            set_para_length_field(path, value, &mut span.outside_gutter)
+        }
+        _ => return None,
+    })
+}
+
+/// Set an `Option<i32>` list start (`NumberingStartAt`) from a
+/// `Value::Length` carrying a whole number >= 1. `Length(None)` clears
+/// the override. Zero, negatives, fractions and non-finite values are
+/// refused with the slot untouched — a count that starts at 0 or 2.5 is
+/// not something InDesign can say, and clamping would store a value the
+/// caller never asked for. The prior comes back as
+/// `Value::Length(prev as f32)`, which this setter accepts, so the
+/// inverse round-trips.
+pub(super) fn set_para_numbering_start_at_field(
+    path: PropertyPath,
+    value: &Value,
+    slot: &mut Option<i32>,
+) -> Result<(Value, Value), OperationError> {
+    let refuse = || OperationError::TypeMismatch {
+        path,
+        expected: "Length: a whole number >= 1, or None".to_string(),
+    };
+    let next = match value {
+        Value::Length(None) => None,
+        Value::Length(Some(n))
+            if n.is_finite() && *n >= 1.0 && n.fract() == 0.0 && *n <= i32::MAX as f32 =>
+        {
+            Some(*n as i32)
+        }
+        _ => return Err(refuse()),
+    };
+    let prev = *slot;
+    *slot = next;
+    Ok((
+        Value::Length(prev.map(|n| n as f32)),
+        Value::Length(next.map(|n| n as f32)),
+    ))
+}
+
+/// Set an `Option<bool>` whose unset state means something different
+/// from either value (`NumberingContinue`: an explicit `true` resumes a
+/// count a non-list paragraph interrupted, an inheriting paragraph
+/// restarts). `Value::Bool(b)` stores `Some(b)`; `Value::Text("")`
+/// clears to `None`. The prior comes back as `Bool(b)` or, for `None`,
+/// `Text("")` — so undo restores the slot exactly, unlike
+/// [`set_para_bool_field`], whose `Bool` inverse cannot say "unset".
+pub(super) fn set_para_tristate_bool_field(
+    path: PropertyPath,
+    value: &Value,
+    slot: &mut Option<bool>,
+) -> Result<(Value, Value), OperationError> {
+    let encode = |v: Option<bool>| v.map(Value::Bool).unwrap_or(Value::Text(String::new()));
+    let next = match value {
+        Value::Bool(b) => Some(*b),
+        Value::Text(t) if t.is_empty() => None,
+        _ => {
+            return Err(OperationError::TypeMismatch {
+                path,
+                expected: "Bool, or Text(\"\") to clear".to_string(),
+            })
+        }
+    };
+    let prev = *slot;
+    *slot = next;
+    Ok((encode(prev), encode(next)))
+}
+
+/// Set a list level (`NumberingLevel`) from a `Value::Length` carrying a
+/// whole number from 1 to 9; `Length(None)` clears the override. Any
+/// other value is refused with the slot untouched (InDesign offers nine
+/// levels). The prior comes back as `Value::Length`, which this setter
+/// accepts, so the inverse round-trips.
+pub(super) fn set_para_list_level_field(
+    path: PropertyPath,
+    value: &Value,
+    slot: &mut Option<u32>,
+) -> Result<(Value, Value), OperationError> {
+    let next = match value {
+        Value::Length(None) => None,
+        Value::Length(Some(n)) if (1.0..=9.0).contains(n) && n.fract() == 0.0 => Some(*n as u32),
+        _ => {
+            return Err(OperationError::TypeMismatch {
+                path,
+                expected: "Length: a whole number from 1 to 9, or None".to_string(),
+            })
+        }
+    };
+    let prev = *slot;
+    *slot = next;
+    Ok((
+        Value::Length(prev.map(|n| n as f32)),
+        Value::Length(next.map(|n| n as f32)),
+    ))
+}
+
+/// The list-level paths (ADR 158) on a paragraph's or a paragraph
+/// style's [`paged_model::ListLevel`]; `None` for any other path.
+pub(super) fn set_list_level_field(
+    path: PropertyPath,
+    value: &Value,
+    ll: &mut paged_model::ListLevel,
+) -> Option<Result<(Value, Value), OperationError>> {
+    Some(match path {
+        PropertyPath::ParagraphNumberingLevel => {
+            set_para_list_level_field(path, value, &mut ll.level)
+        }
+        PropertyPath::ParagraphNumberingApplyRestartPolicy => {
+            set_para_tristate_bool_field(path, value, &mut ll.apply_restart)
+        }
+        _ => return None,
+    })
+}
+
+/// The six list-marker attributes a paragraph and a paragraph style
+/// share, borrowed from either.
+pub(super) struct ListMarkerSlots<'a> {
+    pub bullets_text_after: &'a mut Option<String>,
+    pub numbering_expression: &'a mut Option<String>,
+    pub numbering_start_at: &'a mut Option<i32>,
+    pub numbering_continue: &'a mut Option<bool>,
+    pub bullets_character_style: &'a mut Option<String>,
+    pub numbering_character_style: &'a mut Option<String>,
+}
+
+/// Route one of the six list-marker paths to its slot, the same helper
+/// at paragraph and style level so the two cannot disagree on a value
+/// kind or an undo. `None` for any other path.
+pub(super) fn set_list_marker_field(
+    path: PropertyPath,
+    value: &Value,
+    slots: ListMarkerSlots<'_>,
+) -> Option<Result<(Value, Value), OperationError>> {
+    Some(match path {
+        PropertyPath::ParagraphBulletsTextAfter => {
+            set_para_text_field(path, value, slots.bullets_text_after)
+        }
+        PropertyPath::ParagraphNumberingExpression => {
+            set_para_text_field(path, value, slots.numbering_expression)
+        }
+        PropertyPath::ParagraphNumberingStartAt => {
+            set_para_numbering_start_at_field(path, value, slots.numbering_start_at)
+        }
+        PropertyPath::ParagraphNumberingContinue => {
+            set_para_tristate_bool_field(path, value, slots.numbering_continue)
+        }
+        PropertyPath::ParagraphBulletsCharacterStyle => {
+            set_para_text_field(path, value, slots.bullets_character_style)
+        }
+        PropertyPath::ParagraphNumberingCharacterStyle => {
+            set_para_text_field(path, value, slots.numbering_character_style)
+        }
+        _ => return None,
+    })
+}
+
+/// Set an `Option<Composer>` from a `Value::Text` carrying the IDML
+/// string; the empty string clears the override (`None`). The prior is
+/// returned as `Value::Text` (`None ⇒ ""`), so the inverse round-trips.
+///
+/// This layer stores an unknown string verbatim, as the parser does
+/// ([`paged_model::Composer::Other`]): it is what the inverse of
+/// overwriting a third-party composer carries, and refusing it here would
+/// make that undo fail. Authoring surfaces refuse it instead — see
+/// [`crate::refuse_unauthorable_value`], which the canvas runs on every
+/// wire mutation.
+pub(super) fn set_para_composer_field(
+    path: PropertyPath,
+    value: &Value,
+    slot: &mut Option<paged_model::Composer>,
+) -> Result<(Value, Value), OperationError> {
+    let Value::Text(new_val) = value else {
+        return Err(OperationError::TypeMismatch {
+            path,
+            expected: COMPOSER_EXPECTED.to_string(),
+        });
+    };
+    let prev = slot
+        .as_ref()
+        .map(|c| c.as_idml().to_string())
+        .unwrap_or_default();
+    *slot = (!new_val.is_empty()).then(|| paged_model::Composer::from_idml(new_val));
+    Ok((Value::Text(prev), Value::Text(new_val.clone())))
+}
+
+/// The values an authoring surface may send for `paragraphComposer`.
+pub(crate) const COMPOSER_EXPECTED: &str =
+    "Text: \"\" | \"HL Composer\" | \"HL Single\" | \"HL Composer Optyca\" | \"HL Single Optyca\"";
+
+/// Set an `Option<T>` closed IDML enum from a `Value::Text`, the same
+/// contract as [`set_para_start_paragraph_field`]: `""` clears, an
+/// unknown string is refused (`TypeMismatch` naming `expected`) and the
+/// slot left untouched, the prior comes back as `Value::Text`
+/// (`None ⇒ ""`).
+pub(super) fn set_para_enum_field<T: Copy>(
+    path: PropertyPath,
+    value: &Value,
+    slot: &mut Option<T>,
+    from_idml: fn(&str) -> Option<T>,
+    as_idml: fn(T) -> &'static str,
+    expected: &str,
+) -> Result<(Value, Value), OperationError> {
+    let mismatch = || OperationError::TypeMismatch {
+        path,
+        expected: expected.to_string(),
+    };
+    let Value::Text(new_val) = value else {
+        return Err(mismatch());
+    };
+    let next = if new_val.is_empty() {
+        None
+    } else {
+        Some(from_idml(new_val).ok_or_else(mismatch)?)
+    };
+    let prev = slot.map(as_idml).unwrap_or_default().to_string();
+    *slot = next;
+    Ok((Value::Text(prev), Value::Text(new_val.clone())))
+}
+
+/// The values `paragraphSingleWordJustification` takes.
+pub(crate) const SINGLE_WORD_EXPECTED: &str =
+    "Text: \"\" | FullyJustified | LeftAlign | CenterAlign | RightAlign";
+
+/// The values `paragraphBalanceRaggedLines` takes.
+pub(crate) const BALANCE_EXPECTED: &str =
+    "Text: \"\" | NoBalancing | FullyBalanced | PyramidShape | VeeShape";
+
+/// The line-setting paths (ADR 153) on a paragraph's or a paragraph
+/// style's [`paged_model::LineSetting`]; `None` for any other path.
+pub(super) fn set_line_setting_field(
+    path: PropertyPath,
+    value: &Value,
+    ls: &mut paged_model::LineSetting,
+) -> Option<Result<(Value, Value), OperationError>> {
+    use paged_model::{BalanceRaggedLines, SingleWordJustification};
+    Some(match path {
+        PropertyPath::ParagraphAutoLeading => {
+            set_para_length_field(path, value, &mut ls.auto_leading)
+        }
+        PropertyPath::ParagraphLastLineIndent => {
+            set_para_length_field(path, value, &mut ls.last_line_indent)
+        }
+        PropertyPath::ParagraphSingleWordJustification => set_para_enum_field(
+            path,
+            value,
+            &mut ls.single_word,
+            SingleWordJustification::from_idml,
+            SingleWordJustification::as_idml,
+            SINGLE_WORD_EXPECTED,
+        ),
+        PropertyPath::ParagraphBalanceRaggedLines => set_para_enum_field(
+            path,
+            value,
+            &mut ls.balance,
+            BalanceRaggedLines::from_idml,
+            BalanceRaggedLines::as_idml,
+            BALANCE_EXPECTED,
+        ),
+        _ => return None,
+    })
+}
+
+/// W0.2 — set the whole `ParagraphRule` struct (`rule_above` /
+/// `rule_below`) from a `Value::ParagraphRule`. `ParagraphRule(None)`
+/// clears the rule to the all-`None` default. The captured prior is
+/// returned as a `Value::ParagraphRule(Some(prior))` so the inverse
+/// round-trips the rule bytewise. Whole-struct analogue of the
+/// `FrameGradientFeather` apply.
+pub(super) fn set_para_rule_field(
+    path: PropertyPath,
+    value: &Value,
+    slot: &mut paged_model::ParagraphRule,
+) -> Result<(Value, Value), OperationError> {
+    let Value::ParagraphRule(new_spec) = value else {
+        return Err(OperationError::TypeMismatch {
+            path,
+            expected: "ParagraphRule".to_string(),
+        });
+    };
+    let prev = crate::operation::ParagraphRuleSpec::from_parse(slot);
+    *slot = match new_spec {
+        Some(spec) => spec.to_parse(),
+        None => paged_model::ParagraphRule::default(),
+    };
+    Ok((
+        Value::ParagraphRule(Some(prev)),
+        Value::ParagraphRule(new_spec.clone()),
+    ))
+}
+
+pub(super) fn apply_paragraph_field(
+    para: &mut paged_model::Paragraph,
+    path: PropertyPath,
+    value: &Value,
+) -> Result<(Value, Value), OperationError> {
+    match path {
+        PropertyPath::ParagraphSpaceBefore => {
+            let Value::Length(new_val) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Length".to_string(),
+                });
+            };
+            let prev = para.space_before;
+            para.space_before = *new_val;
+            Ok((Value::Length(prev), Value::Length(*new_val)))
+        }
+        PropertyPath::ParagraphSpaceAfter => {
+            let Value::Length(new_val) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Length".to_string(),
+                });
+            };
+            let prev = para.space_after;
+            para.space_after = *new_val;
+            Ok((Value::Length(prev), Value::Length(*new_val)))
+        }
+        PropertyPath::ParagraphFirstLineIndent => {
+            let Value::Length(new_val) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Length".to_string(),
+                });
+            };
+            let prev = para.first_line_indent;
+            para.first_line_indent = *new_val;
+            Ok((Value::Length(prev), Value::Length(*new_val)))
+        }
+        PropertyPath::AppliedParagraphStyle => {
+            // Apply-an-entity. Empty string clears the override.
+            let Value::Text(new_val) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Text".to_string(),
+                });
+            };
+            let prev = para.paragraph_style.clone().unwrap_or_default();
+            para.paragraph_style = if new_val.is_empty() {
+                None
+            } else {
+                Some(new_val.clone())
+            };
+            Ok((Value::Text(prev), Value::Text(new_val.clone())))
+        }
+        PropertyPath::ParagraphJustification => {
+            // SDK Phase 5 (v1 sweep) — paragraph alignment via the
+            // IDML attribute string. Empty value clears the override
+            // (`None` ⇒ inherit from style cascade); non-empty parses
+            // through `Justification::from_idml` and stores. Unknown
+            // strings raise `InvalidValue` (the toggle-group primitive
+            // ensures the UI never emits an unknown value).
+            let Value::Text(new_val) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Text".to_string(),
+                });
+            };
+            let prev = para
+                .justification
+                .map(|j| j.as_idml().to_string())
+                .unwrap_or_default();
+            para.justification = if new_val.is_empty() {
+                None
+            } else {
+                match paged_model::Justification::from_idml(new_val) {
+                    Some(j) => Some(j),
+                    None => {
+                        return Err(OperationError::InvalidValue {
+                            node: NodeId::StoryRange {
+                                story_id: String::new(),
+                                start: 0,
+                                end: 0,
+                            },
+                            path,
+                            reason: format!("unknown Justification: {new_val:?}"),
+                        });
+                    }
+                }
+            };
+            Ok((Value::Text(prev), Value::Text(new_val.clone())))
+        }
+        // W0.2 — paragraph indents. `Value::Length(None)` clears the
+        // per-paragraph override (inherit from the cascade).
+        PropertyPath::ParagraphLeftIndent => {
+            set_para_length_field(path, value, &mut para.left_indent)
+        }
+        PropertyPath::ParagraphRightIndent => {
+            set_para_length_field(path, value, &mut para.right_indent)
+        }
+        // W0.2 — drop-cap counts. The run fields are non-`Option`
+        // `u32` (0 ⇒ no drop cap), carried on the wire as
+        // integer-Length.
+        PropertyPath::ParagraphDropCapCharacters => {
+            set_para_u32_length_field(path, value, &mut para.drop_cap_characters)
+        }
+        PropertyPath::ParagraphDropCapLines => {
+            set_para_u32_length_field(path, value, &mut para.drop_cap_lines)
+        }
+        // W0.2 — keep-with-next is an `Option<u32>` line count.
+        PropertyPath::ParagraphKeepWithNext => {
+            set_para_opt_u32_length_field(path, value, &mut para.keep_with_next)
+        }
+        // W0.2 — boolean toggles. Each restores its own IDML default
+        // on a prior-`None` undo: hyphenation defaults true,
+        // keep-lines-together defaults false.
+        PropertyPath::ParagraphHyphenation => {
+            set_para_bool_field(path, value, &mut para.hyphenation, true)
+        }
+        PropertyPath::ParagraphHyphenationZone => {
+            set_para_length_field(path, value, &mut para.hyphenation_zone)
+        }
+        PropertyPath::ParagraphKeepLinesTogether => {
+            set_para_bool_field(path, value, &mut para.keep_lines_together, false)
+        }
+        // ADR 028 — keep options and the break-before rule. The model
+        // and renderer carried these; this is their setter.
+        PropertyPath::ParagraphKeepAllLinesTogether => {
+            set_para_bool_field(path, value, &mut para.keep_all_lines_together, false)
+        }
+        PropertyPath::ParagraphKeepFirstLines => {
+            set_para_opt_u32_length_field(path, value, &mut para.keep_first_lines)
+        }
+        PropertyPath::ParagraphKeepLastLines => {
+            set_para_opt_u32_length_field(path, value, &mut para.keep_last_lines)
+        }
+        PropertyPath::ParagraphStartParagraph => {
+            set_para_start_paragraph_field(path, value, &mut para.start_paragraph)
+        }
+        PropertyPath::ParagraphComposer => set_para_composer_field(path, value, &mut para.composer),
+        PropertyPath::ParagraphAutoLeading
+        | PropertyPath::ParagraphSingleWordJustification
+        | PropertyPath::ParagraphLastLineIndent
+        | PropertyPath::ParagraphBalanceRaggedLines => {
+            set_line_setting_field(path, value, &mut para.line_setting)
+                .expect("a line-setting path")
+        }
+        PropertyPath::ParagraphNumberingLevel
+        | PropertyPath::ParagraphNumberingApplyRestartPolicy => {
+            set_list_level_field(path, value, &mut para.list_level).expect("a list-level path")
+        }
+        PropertyPath::ParagraphSpanColumnType
+        | PropertyPath::ParagraphSpanSplitColumnCount
+        | PropertyPath::ParagraphSpanColumnMinSpaceBefore
+        | PropertyPath::ParagraphSpanColumnMinSpaceAfter
+        | PropertyPath::ParagraphSplitColumnInsideGutter
+        | PropertyPath::ParagraphSplitColumnOutsideGutter => {
+            set_span_columns_field(path, value, &mut para.span_columns)
+                .expect("a span / split columns path")
+        }
+        // W0.2 — whole rule structs.
+        PropertyPath::ParagraphRuleAbove => set_para_rule_field(path, value, &mut para.rule_above),
+        PropertyPath::ParagraphRuleBelow => set_para_rule_field(path, value, &mut para.rule_below),
+        // W0.2 — whole `<TabList>` replacement. The captured prior is
+        // returned as a `Value::TabStops` so the inverse restores the
+        // exact prior stop list (bytewise round-trip).
+        PropertyPath::ParagraphTabStops => {
+            let Value::TabStops(new_stops) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "TabStops".to_string(),
+                });
+            };
+            let prev: Vec<crate::operation::TabStopSpec> = para
+                .tab_list
+                .iter()
+                .map(crate::operation::TabStopSpec::from_parse)
+                .collect();
+            para.tab_list = new_stops.iter().map(|s| s.to_parse()).collect();
+            Ok((Value::TabStops(prev), Value::TabStops(new_stops.clone())))
+        }
+        // W0.2 — bullets / numbering list type. Stored verbatim as the
+        // IDML enum string; empty clears the override.
+        PropertyPath::ParagraphListType => {
+            set_para_text_field(path, value, &mut para.bullets_list_type)
+        }
+        // W0.2 — bullet glyph. The wire carries the glyph character
+        // (`Value::Text`); the run field is a `u32` codepoint. The
+        // empty string clears the override; a multi-char string takes
+        // the first scalar. The inverse re-encodes the prior codepoint
+        // back to its glyph (a prior-`None` round-trips to `""`).
+        PropertyPath::ParagraphBulletCharacter => {
+            let Value::Text(new_val) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Text".to_string(),
+                });
+            };
+            let prev = para
+                .bullet_character
+                .and_then(char::from_u32)
+                .map(|c| c.to_string())
+                .unwrap_or_default();
+            para.bullet_character = new_val.chars().next().map(|c| c as u32);
+            Ok((Value::Text(prev), Value::Text(new_val.clone())))
+        }
+        // W0.2 — numbering-format expression. Stored verbatim; empty
+        // clears the override.
+        PropertyPath::ParagraphNumberingFormat => {
+            set_para_text_field(path, value, &mut para.numbering_format)
+        }
+        // W1.22 (engine gap 22) — applied numbering list ref. Stored
+        // verbatim; empty clears the override (inherit from the style
+        // cascade). The renderer resolves it to find the list's
+        // cross-story continuity flag.
+        PropertyPath::ParagraphAppliedNumberingList => {
+            set_para_text_field(path, value, &mut para.applied_numbering_list)
+        }
+        PropertyPath::ParagraphBulletsTextAfter
+        | PropertyPath::ParagraphNumberingExpression
+        | PropertyPath::ParagraphNumberingStartAt
+        | PropertyPath::ParagraphNumberingContinue
+        | PropertyPath::ParagraphBulletsCharacterStyle
+        | PropertyPath::ParagraphNumberingCharacterStyle => set_list_marker_field(
+            path,
+            value,
+            ListMarkerSlots {
+                bullets_text_after: &mut para.bullets_text_after,
+                numbering_expression: &mut para.numbering_expression,
+                numbering_start_at: &mut para.numbering_start_at,
+                numbering_continue: &mut para.numbering_continue,
+                bullets_character_style: &mut para.bullets_character_style,
+                numbering_character_style: &mut para.bullets_and_numbering_digits_character_style,
+            },
+        )
+        .expect("a list-marker path"),
+        _ => Err(OperationError::UnsupportedProperty {
+            node: NodeId::StoryRange {
+                story_id: String::new(),
+                start: 0,
+                end: 0,
+            },
+            path,
+        }),
+    }
+}
+
+/// SDK Phase 3.x — split a `CharacterRun` at character offset
+/// `char_idx`. The left piece contains the first `char_idx`
+/// characters of `run.text`; the right piece contains the rest.
+/// Every other field is duplicated via `Clone` so the two pieces
+/// inherit identical properties pre-mutation. `char_idx` must lie
+/// strictly inside the run (0 < char_idx < run.text.chars().count()) —
+/// the caller is responsible for that constraint; this function
+/// produces undefined byte boundaries otherwise.
+pub(super) fn split_run_at(
+    run: paged_model::CharacterRun,
+    char_idx: u32,
+) -> (paged_model::CharacterRun, paged_model::CharacterRun) {
+    // Find the byte position of the char_idx'th character. char_indices
+    // yields each char's byte offset; chars past the end map to the
+    // string's total byte length.
+    let byte_idx = run
+        .text
+        .char_indices()
+        .nth(char_idx as usize)
+        .map(|(byte, _)| byte)
+        .unwrap_or(run.text.len());
+    let left_text = run.text[..byte_idx].to_string();
+    let right_text = run.text[byte_idx..].to_string();
+    let mut left = run.clone();
+    left.text = left_text;
+    let mut right = run;
+    right.text = right_text;
+    (left, right)
+}
+
+/// W0.1 — set one `Option<String>` field on a `CharacterRun` from a
+/// `Value::Text`. The empty string clears the override (`None`); the
+/// captured prior is returned as `Value::Text` (`None ⇒ ""`) so the
+/// inverse re-applies the prior string and round-trips a prior-`None`
+/// back to `None`. `field` selects the run field by `&mut` reference.
+pub(super) fn set_run_text_field(
+    run: &mut paged_model::CharacterRun,
+    path: PropertyPath,
+    value: &Value,
+    field: impl FnOnce(&mut paged_model::CharacterRun) -> &mut Option<String>,
+) -> Result<(Value, Value), OperationError> {
+    let Value::Text(new_val) = value else {
+        return Err(OperationError::TypeMismatch {
+            path,
+            expected: "Text".to_string(),
+        });
+    };
+    let slot = field(run);
+    let prev = slot.clone().unwrap_or_default();
+    *slot = if new_val.is_empty() {
+        None
+    } else {
+        Some(new_val.clone())
+    };
+    Ok((Value::Text(prev), Value::Text(new_val.clone())))
+}
+
+/// W0.1 — set one `Option<f32>` field on a `CharacterRun` from a
+/// `Value::Length`. `Length(None)` clears the override; the captured
+/// prior `Option<f32>` round-trips bytewise through the inverse.
+pub(super) fn set_run_length_field(
+    run: &mut paged_model::CharacterRun,
+    path: PropertyPath,
+    value: &Value,
+    field: impl FnOnce(&mut paged_model::CharacterRun) -> &mut Option<f32>,
+) -> Result<(Value, Value), OperationError> {
+    let Value::Length(new_val) = value else {
+        return Err(OperationError::TypeMismatch {
+            path,
+            expected: "Length".to_string(),
+        });
+    };
+    let slot = field(run);
+    let prev = *slot;
+    *slot = *new_val;
+    Ok((Value::Length(prev), Value::Length(*new_val)))
+}
+
+/// W0.1 — set one `Option<bool>` field on a `CharacterRun` from a
+/// `Value::Bool`. The write always stores `Some(new_val)`. The
+/// inverse captures `prev.unwrap_or(false)` — a write over an
+/// explicit prior round-trips bytewise; a prior-`None` undoes to
+/// `Some(false)` (the `Value::Bool` wire shape carries no `None`).
+pub(super) fn set_run_bool_field(
+    run: &mut paged_model::CharacterRun,
+    path: PropertyPath,
+    value: &Value,
+    default: bool,
+    field: impl FnOnce(&mut paged_model::CharacterRun) -> &mut Option<bool>,
+) -> Result<(Value, Value), OperationError> {
+    let Value::Bool(new_val) = value else {
+        return Err(OperationError::TypeMismatch {
+            path,
+            expected: "Bool".to_string(),
+        });
+    };
+    let slot = field(run);
+    // `None` means "inherit the field's default". The inverse must
+    // restore the EFFECTIVE prior value, so collapse `None` to the
+    // field's default (ligatures default ON; underline/strikethru OFF) —
+    // undoing a toggle on a defaulted run lands the visible default back,
+    // not the wrong-polarity `false` the old `unwrap_or(false)` produced.
+    let prev = slot.unwrap_or(default);
+    *slot = Some(*new_val);
+    Ok((Value::Bool(prev), Value::Bool(*new_val)))
+}
+
+/// Apply one character property to one `CharacterRun`. Returns
+/// (previous_value, new_value) on success. The new_value mirrors
+/// what was set so downstream logging can attribute correctly even
+/// when the caller passes through e.g. `Length(None)`.
+pub(super) fn apply_character_field_on_run(
+    run: &mut paged_model::CharacterRun,
+    path: PropertyPath,
+    value: &Value,
+) -> Result<(Value, Value), OperationError> {
+    match path {
+        PropertyPath::CharacterFontSize => {
+            let Value::Length(new_val) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Length".to_string(),
+                });
+            };
+            let prev = run.point_size;
+            run.point_size = *new_val;
+            Ok((Value::Length(prev), Value::Length(*new_val)))
+        }
+        PropertyPath::CharacterLeading => {
+            let Value::Length(new_val) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Length".to_string(),
+                });
+            };
+            let prev = run.leading;
+            run.leading = *new_val;
+            Ok((Value::Length(prev), Value::Length(*new_val)))
+        }
+        PropertyPath::CharacterTracking => {
+            let Value::Length(new_val) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Length".to_string(),
+                });
+            };
+            let prev = run.tracking;
+            run.tracking = *new_val;
+            Ok((Value::Length(prev), Value::Length(*new_val)))
+        }
+        PropertyPath::CharacterFillColor => {
+            let Value::ColorRef(new_val) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "ColorRef".to_string(),
+                });
+            };
+            let prev = run.fill_color.clone();
+            run.fill_color = new_val.clone();
+            Ok((Value::ColorRef(prev), Value::ColorRef(new_val.clone())))
+        }
+        PropertyPath::AppliedCharacterStyle => {
+            // Apply-an-entity (D3 of panel-catalog doc): the
+            // character_style ref is a string-id payload. Empty
+            // string clears the override; otherwise stores the
+            // style's `self_id`.
+            let Value::Text(new_val) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Text".to_string(),
+                });
+            };
+            let prev = run.character_style.clone().unwrap_or_default();
+            run.character_style = if new_val.is_empty() {
+                None
+            } else {
+                Some(new_val.clone())
+            };
+            Ok((Value::Text(prev), Value::Text(new_val.clone())))
+        }
+        PropertyPath::AppliedConditions => {
+            // SDK Phase 5 (D3 completion) — applied conditions per
+            // CharacterRun. Wire encoding mirrors IDML's
+            // `AppliedConditions="A B C"` attribute: a single
+            // Value::Text whose payload is a whitespace-separated
+            // list of `<Condition>` self_ids. Empty string clears.
+            // Set semantics (de-dup, individual add/remove) are
+            // the caller's concern for v1.
+            let Value::Text(new_val) = value else {
+                return Err(OperationError::TypeMismatch {
+                    path,
+                    expected: "Text".to_string(),
+                });
+            };
+            let prev = run.applied_conditions.join(" ");
+            run.applied_conditions = if new_val.is_empty() {
+                Vec::new()
+            } else {
+                new_val.split_whitespace().map(|s| s.to_string()).collect()
+            };
+            Ok((Value::Text(prev), Value::Text(new_val.clone())))
+        }
+        // W0.1 — string-valued character properties. Each stores the
+        // raw IDML attribute string (enum strings pass through
+        // verbatim — the toggle-group UI never emits an unknown
+        // value). The empty string clears the per-run override back
+        // to `None` (inherit from the style cascade); the inverse
+        // re-applies the captured prior string, which round-trips a
+        // prior-`None` back to `None` since `unwrap_or_default()`
+        // maps `None ⇒ ""`.
+        PropertyPath::CharacterFontFamily => set_run_text_field(run, path, value, |r| &mut r.font),
+        PropertyPath::CharacterFontStyle => {
+            set_run_text_field(run, path, value, |r| &mut r.font_style)
+        }
+        PropertyPath::CharacterKerningMethod => {
+            set_run_text_field(run, path, value, |r| &mut r.kerning_method)
+        }
+        PropertyPath::CharacterCase => {
+            set_run_text_field(run, path, value, |r| &mut r.capitalization)
+        }
+        PropertyPath::CharacterPosition => {
+            set_run_text_field(run, path, value, |r| &mut r.position)
+        }
+        PropertyPath::CharacterLanguage => {
+            set_run_text_field(run, path, value, |r| &mut r.applied_language)
+        }
+        PropertyPath::CharacterOtfFeatures => {
+            set_run_text_field(run, path, value, |r| &mut r.otf_features)
+        }
+        // W0.1 — numeric character properties. `Value::Length(None)`
+        // clears the per-run override (inherit from the cascade);
+        // the captured prior `Option<f32>` round-trips bytewise.
+        PropertyPath::CharacterBaselineShift => {
+            set_run_length_field(run, path, value, |r| &mut r.baseline_shift)
+        }
+        PropertyPath::CharacterHorizontalScale => {
+            set_run_length_field(run, path, value, |r| &mut r.horizontal_scale)
+        }
+        PropertyPath::CharacterVerticalScale => {
+            set_run_length_field(run, path, value, |r| &mut r.vertical_scale)
+        }
+        PropertyPath::CharacterSkew => set_run_length_field(run, path, value, |r| &mut r.skew),
+        // W0.1 — boolean character properties. `Value::Bool` carries
+        // the new toggle; the field is `Option<bool>`. The inverse
+        // captures `prev.unwrap_or(false)` — writes over an explicit
+        // prior round-trip bytewise; a prior-`None` undoes to
+        // `Some(false)` (see the path doc-comments for the
+        // documented default-restore limitation).
+        PropertyPath::CharacterUnderline => {
+            set_run_bool_field(run, path, value, false, |r| &mut r.underline)
+        }
+        PropertyPath::CharacterStrikethru => {
+            set_run_bool_field(run, path, value, false, |r| &mut r.strikethru)
+        }
+        PropertyPath::CharacterNoBreak => {
+            set_run_bool_field(run, path, value, false, |r| &mut r.no_break)
+        }
+        // Ligatures default ON (OpenType/InDesign): undo of a toggle on a
+        // defaulted run must restore the visible ON state (punch-list).
+        PropertyPath::CharacterLigatures => {
+            set_run_bool_field(run, path, value, true, |r| &mut r.ligatures_on)
+        }
+        _ => Err(OperationError::UnsupportedProperty {
+            node: NodeId::StoryRange {
+                story_id: String::new(),
+                start: 0,
+                end: 0,
+            },
+            path,
+        }),
+    }
+}

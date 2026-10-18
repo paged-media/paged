@@ -1,0 +1,880 @@
+/*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ *
+ * This file is part of paged (https://paged.media) and is additionally
+ * available under the Paged Media Enterprise License (PMEL). Full
+ * copyright and license information is available in LICENSE.md which is
+ * distributed with this source code.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    MPL-2.0 OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Font table + glyph-metrics parsing (FontTable, FontMetrics). Extracted from pipeline/mod.rs (1.6b).
+
+use super::*;
+use std::collections::HashMap;
+
+use bytes::Bytes;
+use paged_scene::Document;
+
+/// Every run's resolved attributes, plus the list marker's when
+/// its character style gives it a face of its own (see
+/// `marker_run_attrs`) — the marker is shaped as a run too.
+fn shaped_run_attrs(
+    document: &Document,
+    paragraph: &paged_model::Paragraph,
+) -> Vec<paged_scene::ResolvedRunAttrs> {
+    // The faces a nested style names are shaped too.
+    let paragraph = &*super::with_nested_styles(document, paragraph);
+    let mut out: Vec<paged_scene::ResolvedRunAttrs> = paragraph
+        .runs
+        .iter()
+        .map(|run| document.resolved_run_attrs(paragraph, run))
+        .collect();
+    if let Some(head) = out.first() {
+        let p = document.resolved_paragraph_attrs(paragraph);
+        if let Some(marker) = super::marker_run_attrs(document, &p, head) {
+            out.push(marker);
+        }
+    }
+    out
+}
+
+/// The paragraphs shaped inside `paragraph` besides its own runs: its
+/// table cells' paragraphs and its footnote bodies.
+fn nested_paragraphs(
+    paragraph: &paged_model::Paragraph,
+) -> impl Iterator<Item = &paged_model::Paragraph> + '_ {
+    let cells = paragraph
+        .table
+        .iter()
+        .flat_map(|table| table.cells.iter())
+        .flat_map(|cell| cell.paragraphs.iter());
+    let footnotes = paragraph
+        .footnotes
+        .iter()
+        .flat_map(|footnote| footnote.paragraphs.iter());
+    cells.chain(footnotes)
+}
+
+/// A (family, style) font request as a run's resolved attributes carry it.
+pub type FontKey = (String, Option<String>);
+
+/// Per-render font cache. Pre-resolves every distinct (family, style)
+/// pair referenced anywhere in the document via the configured
+/// `AssetResolver`. Falls back to `options.font` when nothing
+/// resolves. Also extracts OS/2 / hhea metrics per font_id at
+/// build time so baseline math doesn't have to re-parse the font
+/// per paragraph.
+///
+/// Field declaration order matters: `faces` is declared FIRST so on
+/// drop it is dropped FIRST — before `face_bytes`. The cached
+/// `paged_text::Face<'static>` values borrow from the `Bytes` stored
+/// in `face_bytes`; if we dropped `face_bytes` first the Faces would
+/// briefly hold dangling references. Rust drops struct fields in
+/// declaration order (first declared = first dropped), so keeping
+/// `faces` above `face_bytes` is load-bearing for soundness.
+/// Per-render shaping resource: the resolved bytes + configured
+/// shaping Faces for every (family, style, wght) referenced by the
+/// document. Built once per `build_document` call by default; the
+/// caller can pre-build it (via `FontTable::build`) and pass it
+/// through `PipelineOptions::pre_built_font_table` to amortise the
+/// ~225ms harvest-and-resolve cost across gesture rebuilds on
+/// image-heavy fixtures. See the SAFETY contract on `faces` below
+/// — the struct can be moved + held by a long-lived caller (e.g.
+/// `CanvasModel`) without invalidating the Face references.
+pub struct FontTable {
+    /// Pre-configured shaping `Face` cache keyed by
+    /// `(font_id, wght_bits)`. The `Face<'static>` lifetime is a
+    /// LIE narrowed back to `&self` at the public accessor.
+    ///
+    /// SAFETY contract (also enforced at each insertion site):
+    ///   1. Each cached Face borrows from the `Bytes` stored under
+    ///      the matching `font_id` key in `face_bytes`. `bytes::Bytes`
+    ///      is refcounted with a stable heap pointer — the underlying
+    ///      buffer cannot move while any clone is alive.
+    ///   2. `face_bytes` is never removed-from or overwritten after
+    ///      `FontTable::build` returns: it is populated inside
+    ///      `build` and never touched by any later method. Therefore
+    ///      the buffer a cached Face borrows from outlives that Face.
+    ///   3. `faces` is declared before `face_bytes`, so on `Drop` the
+    ///      Faces are dropped first — they never see a freed `Bytes`.
+    ///   4. The accessor [`Self::face`] returns `&paged_text::Face<'_>`
+    ///      with the lifetime narrowed to `&self`. No caller ever
+    ///      observes the `'static` lifetime, so the lie can't escape.
+    ///   5. Variations are baked in at insert time. The cached Face
+    ///      is never mutated post-insert (no `&mut Face` is ever
+    ///      exposed). Two runs with the same bytes but different
+    ///      `wght` use distinct cache keys → distinct cached Faces.
+    pub(super) faces: HashMap<(u32, u32), paged_text::Face<'static>>,
+    /// Glyph-outline id (`fnv(bytes) ^ wght_bits`) to the id that
+    /// resolves to FACE BYTES (`fnv(bytes)`) — `None` for an instance
+    /// whose outlines have a `wght` variation baked in, where the bytes
+    /// alone would reproduce the wrong weight.
+    ///
+    /// This map is the inverse the exporter could not compute: an XOR
+    /// with an unknown weight is not invertible, so the table that
+    /// mixed the ids has to be the one that unmixes them.
+    /// [`Self::font_ref`] is the question every glyph-emitting site
+    /// asks.
+    pub(super) outline_to_bytes: HashMap<u32, Option<u32>>,
+    /// Bytes kept alive for `faces` to point into. One entry per
+    /// distinct `font_id` (the wght variant is irrelevant — same
+    /// buffer, just different variation state on the Face).
+    ///
+    /// Marked `dead_code`-allow: the field is never read after
+    /// `build`, but its EXISTENCE is load-bearing — drop-time
+    /// soundness of `faces` (which holds `Face<'static>` references
+    /// into these buffers) depends on this map keeping the `Bytes`
+    /// values alive for at least as long as `faces`. See the SAFETY
+    /// contract on `faces` above.
+    #[allow(dead_code)]
+    pub(super) face_bytes: HashMap<u32, Bytes>,
+    /// Every (family, style) key the document's runs asked for when the
+    /// table was built, resolved or not. See [`Self::keys`].
+    pub(super) keys: std::collections::BTreeSet<FontKey>,
+    pub(super) cache: HashMap<FontKey, Bytes>,
+    /// A1 — cache keys whose bytes the resolver reported as a
+    /// *substitute* (its catch-all default font stood in for the
+    /// requested face — see `AssetResolver::resolve_font_traced`).
+    /// `bytes_for` re-reads this to flag runs for the degraded-asset
+    /// pink highlight. `BTreeSet` so the once-per-(family, style)
+    /// `FontSubstituted` diagnostics emit in a deterministic order.
+    pub(super) substituted: std::collections::BTreeSet<FontKey>,
+    pub(super) fallback: Option<Bytes>,
+    /// The families the fallback face claims ([`crate::asset::face_family_names`]):
+    /// it stands in for any other family, but is the face of these.
+    pub(super) fallback_families: Vec<String>,
+    /// The styles the fallback face can set ([`crate::asset::FaceStyles`]):
+    /// of its own family, only these are the face rather than a stand-in.
+    pub(super) fallback_styles: Option<crate::asset::FaceStyles>,
+    /// The families each face in the table claims, keyed by `font_id`, so
+    /// [`Self::metrics_for_real_face`] can tell a face of the run's own
+    /// family standing in for a style it lacks from a foreign stand-in.
+    pub(super) face_families: HashMap<u32, Vec<String>>,
+    /// Metrics keyed by `fnv_1a_u32(bytes)` (same id the rest of
+    /// the pipeline uses for glyph-cache routing).
+    pub(super) metrics: HashMap<u32, FontMetrics>,
+    /// Per-IDML-family metric override. Populated from
+    /// `PipelineOptions::font_metrics_overrides` and consulted FIRST
+    /// by `metrics_for_family` so a substitute font doesn't force its
+    /// own ascender / cap-height onto baseline math when the IDML
+    /// names a different family. Empty when no overrides were set.
+    pub(super) family_metrics: HashMap<String, FontMetrics>,
+}
+
+/// Per-font metrics the renderer reads at baseline-placement time.
+/// All values are scale-free (unit = font units / `units_per_em`)
+/// so callers can multiply by `point_size` to get pt.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct FontMetrics {
+    /// `OS/2.sCapHeight`, fraction of em. `None` when the font
+    /// doesn't expose it (legacy fonts without the OS/2 v2+ field).
+    pub(super) cap_height: Option<f32>,
+    /// `OS/2.sxHeight`, fraction of em.
+    pub(super) x_height: Option<f32>,
+    /// The face's ascent as InDesign takes it, fraction of em: its
+    /// `hhea.ascender`, or a CJK face's own measure (`cjk_ascent_descent`).
+    /// Always present.
+    pub(super) ascender: f32,
+    /// The matching descent, fraction of em, stored as a POSITIVE distance
+    /// below the baseline (ttf-parser returns a negative value; we flip
+    /// the sign at parse time). Used by the anchored `TopOfLeading`
+    /// vertical reference point to split a line's leading into its
+    /// above- and below-baseline portions in the font's own
+    /// ascent:descent proportion (InDesign's leading model).
+    pub(super) descender: f32,
+    /// The top of a CJK face's em box, fraction of em above the baseline
+    /// (`ideographic_em_top`); `None`: centred on half the cap height.
+    pub(super) em_top: Option<f32>,
+}
+
+impl FontTable {
+    /// Whether any face is at hand: the legacy single font, or one the
+    /// asset resolver supplied for a family the document names. (A build
+    /// whose fonts all come through the resolver — the inspector's
+    /// `--font-family`, the editor's asset seam — has no `fallback`.)
+    pub(super) fn has_any_face(&self) -> bool {
+        self.fallback.is_some() || !self.cache.is_empty()
+    }
+
+    /// Concept 3 (PDF export) — the ORIGINAL face bytes for a
+    /// font-table id, for subsetting/embedding. `None` for unknown
+    /// ids.
+    pub fn face_data(&self, font_id: u32) -> Option<&[u8]> {
+        self.face_bytes.get(&font_id).map(|b| b.as_ref())
+    }
+
+    /// The (family, style) keys the table was built for: every key a
+    /// shaped run of the document asked for at build time, whether the
+    /// resolver served it or not.
+    ///
+    /// The table is a snapshot of the document's fonts. A family that a
+    /// later edit introduces is not in it and shapes in the fallback face,
+    /// so a caller that keeps a table across edits (`CanvasModel`) compares
+    /// this set with [`Self::story_font_keys`] of the edited document and
+    /// rebuilds the table when they differ.
+    pub fn keys(&self) -> &std::collections::BTreeSet<FontKey> {
+        &self.keys
+    }
+
+    /// The face a run asking for `(family, style)` shapes with in this
+    /// table, as `(font id, substituted)` — the same lookup the pipeline
+    /// makes (`(family, style)`, then the bare family, then the fallback).
+    /// Two tables that agree on this for a key lay that key's runs out
+    /// identically. `None` when no face is available at all.
+    pub fn resolution(&self, family: &str, style: Option<&str>) -> Option<(u32, bool)> {
+        self.bytes_for(Some(family), style)
+            .map(|(bytes, substituted)| (font_id(&bytes), substituted))
+    }
+
+    /// The font keys each story's shaped runs ask for, keyed by the
+    /// story's self id. The walk covers everything the pipeline shapes
+    /// inside a story: its paragraphs, their table cells and footnote
+    /// bodies, and list markers with a face of their own. A story with no
+    /// family-bearing run is listed with an empty set.
+    pub fn story_font_keys(
+        document: &Document,
+    ) -> Vec<(String, std::collections::BTreeSet<FontKey>)> {
+        fn harvest(
+            document: &Document,
+            paragraph: &paged_model::Paragraph,
+            keys: &mut std::collections::BTreeSet<FontKey>,
+        ) {
+            for resolved in shaped_run_attrs(document, paragraph) {
+                // The faces its ruby and a custom kenten mark print in
+                // (`RubyFont`, `KentenFont`) are asked for too.
+                let m = &resolved.marks;
+                for (family, style) in [
+                    (&m.ruby_font, &m.ruby_font_style),
+                    (&m.kenten_font, &m.kenten_font_style),
+                ] {
+                    if let Some(family) = family {
+                        keys.insert((family.clone(), style.clone()));
+                    }
+                }
+                if let Some(family) = resolved.font {
+                    keys.insert((family, resolved.font_style));
+                }
+            }
+            for inner in nested_paragraphs(paragraph) {
+                harvest(document, inner, keys);
+            }
+        }
+        document
+            .stories
+            .iter()
+            .map(|parsed| {
+                let mut keys = std::collections::BTreeSet::new();
+                for paragraph in &parsed.story.paragraphs {
+                    harvest(document, paragraph, &mut keys);
+                }
+                (parsed.self_id.clone(), keys)
+            })
+            .collect()
+    }
+
+    pub fn build(document: &Document, options: &PipelineOptions) -> Self {
+        let fallback = options.font.map(Bytes::copy_from_slice);
+        let mut cache: HashMap<FontKey, Bytes> = HashMap::new();
+        let mut substituted: std::collections::BTreeSet<FontKey> =
+            std::collections::BTreeSet::new();
+        // Every run's effective (family, style) comes from the cascade
+        // (run direct > applied character style > applied paragraph
+        // style), so a run that only carries `AppliedCharacterStyle`
+        // still requests the right font. The keys are kept whether or
+        // not a resolver is configured: they are what `CanvasModel`
+        // compares against the document after an edit to learn that a
+        // family appeared that this table was not built for.
+        let keys: std::collections::BTreeSet<FontKey> = Self::story_font_keys(document)
+            .into_iter()
+            .flat_map(|(_, keys)| keys)
+            .collect();
+        if let Some(resolver) = options.assets {
+            // `resolve_font` may be a JS Promise wrapper or a disk
+            // read, so the keys are deduplicated before it is asked.
+            cache.reserve(keys.len());
+            for key in &keys {
+                if let Some(rf) = resolver.resolve_font_traced(&key.0, key.1.as_deref()) {
+                    if rf.substituted {
+                        substituted.insert(key.clone());
+                    }
+                    cache.insert(key.clone(), rf.bytes);
+                }
+            }
+        }
+        // Pre-build the shaping-Face cache. Walk every run again to
+        // collect each distinct `(font_id, wght_bits)` actually used
+        // across all stories (incl. nested table cells). The first
+        // pass above resolves bytes from the asset resolver; the wght
+        // axis value comes from the per-run resolved `FontStyle`.
+        // Storing the configured Face here (vs. per-paragraph) lets
+        // the shaping sites in `emit_paragraph_into_chain`,
+        // `emit_cell_paragraph`, and `measure_cell_paragraph` share
+        // one paged_text::Face across the entire render — Adobe-typical
+        // docs reuse the same (font, weight) thousands of times.
+        let mut face_keys: std::collections::HashSet<(u32, u32)> = std::collections::HashSet::new();
+        let mut id_to_bytes: HashMap<u32, Bytes> = HashMap::new();
+        let harvest_face_keys =
+            |paragraph: &paged_model::Paragraph,
+             face_keys: &mut std::collections::HashSet<(u32, u32)>,
+             id_to_bytes: &mut HashMap<u32, Bytes>| {
+                // Inner walk: handle both top-level paragraphs and
+                // recursive table-cell paragraphs.
+                fn walk(
+                    document: &Document,
+                    cache: &HashMap<(String, Option<String>), Bytes>,
+                    fallback: &Option<Bytes>,
+                    paragraph: &paged_model::Paragraph,
+                    face_keys: &mut std::collections::HashSet<(u32, u32)>,
+                    id_to_bytes: &mut HashMap<u32, Bytes>,
+                ) {
+                    for resolved in shaped_run_attrs(document, paragraph) {
+                        // Mirror `FontTable::bytes_for`: (family, style)
+                        // direct hit, then bare-family, then fallback.
+                        let bytes = resolved
+                            .font
+                            .as_deref()
+                            .and_then(|f| {
+                                cache
+                                    .get(&(f.to_string(), resolved.font_style.clone()))
+                                    .or_else(|| cache.get(&(f.to_string(), None)))
+                            })
+                            .or(fallback.as_ref());
+                        if let Some(b) = bytes {
+                            let font_id = font_id(b);
+                            let wght = wght_for_font_style(resolved.font_style.as_deref());
+                            face_keys.insert((font_id, wght.to_bits()));
+                            id_to_bytes.entry(font_id).or_insert_with(|| b.clone());
+                        }
+                    }
+                    for inner in nested_paragraphs(paragraph) {
+                        walk(document, cache, fallback, inner, face_keys, id_to_bytes);
+                    }
+                }
+                walk(
+                    document,
+                    &cache,
+                    &fallback,
+                    paragraph,
+                    face_keys,
+                    id_to_bytes,
+                );
+            };
+        for parsed in &document.stories {
+            for paragraph in &parsed.story.paragraphs {
+                harvest_face_keys(paragraph, &mut face_keys, &mut id_to_bytes);
+            }
+        }
+        // Build `face_bytes` first (so the buffers are owned before
+        // any Face borrows from them), then build `faces`. Per the
+        // SAFETY contract on `faces`, the cached Face<'static>
+        // borrows from the Bytes stored at the same `font_id` in
+        // `face_bytes`; `Bytes` is a refcounted heap buffer whose
+        // pointer is stable across clones, so the buffer is alive
+        // for as long as the `face_bytes` map holds an entry.
+        let face_bytes: HashMap<u32, Bytes> = id_to_bytes;
+        let mut faces: HashMap<(u32, u32), paged_text::Face<'static>> =
+            HashMap::with_capacity(face_keys.len());
+        let mut outline_to_bytes: HashMap<u32, Option<u32>> = HashMap::new();
+        let wght_tag = ttf_parser::Tag::from_bytes(b"wght");
+        for (font_id, wght_bits) in face_keys {
+            let Some(buf) = face_bytes.get(&font_id) else {
+                continue;
+            };
+            // SAFETY: extending the byte slice's lifetime to 'static.
+            //  1. `buf` is a `Bytes` stored in `face_bytes` and owned
+            //     by `Self`. `bytes::Bytes` is a refcounted heap
+            //     buffer with a stable interior pointer — the
+            //     underlying allocation cannot move while any clone
+            //     exists.
+            //  2. The map `face_bytes` is never mutated after this
+            //     `build` returns (it has no exposed `&mut` accessor)
+            //     so the buffer survives as long as the `FontTable`.
+            //  3. The cached `Face<'static>` is dropped before
+            //     `face_bytes`: `faces` is declared above `face_bytes`
+            //     in `FontTable`, and Rust drops struct fields in
+            //     declaration order (first declared = first dropped).
+            //  4. The public accessor [`Self::face`] returns
+            //     `&paged_text::Face<'_>` with the lifetime re-anchored
+            //     to `&self`, so the 'static lie never escapes the
+            //     module.
+            //  5. The Face is never mutated post-insert: no `&mut`
+            //     reference to it is exposed. Variations are baked
+            //     in at insert time below; (font_id, wght_bits) keys
+            //     guarantee a bold-vs-regular pair sharing the same
+            //     bytes ends up in distinct cache slots.
+            let bytes_static: &'static [u8] =
+                unsafe { std::mem::transmute::<&[u8], &'static [u8]>(buf.as_ref()) };
+            let Some(mut face) = paged_text::Face::from_slice(bytes_static, 0) else {
+                continue;
+            };
+            // Only bake a wght variation when the face actually exposes
+            // a `wght` axis — otherwise `set_variations` silently no-ops
+            // and the bold/light slot reuses Regular metrics (P-06).
+            let wght_axis = face
+                .variation_axes()
+                .into_iter()
+                .find(|axis| axis.tag == wght_tag);
+            let wght = f32::from_bits(wght_bits);
+            if wght_axis.is_some() {
+                face.set_variations(&[paged_text::Variation {
+                    tag: wght_tag,
+                    value: wght,
+                }]);
+            }
+            // Whether the face's own BYTES still produce these outlines.
+            //
+            // Having a `wght` axis is not enough to say they don't —
+            // almost every modern face has one, and the common request
+            // is its DEFAULT (Inter, Open Sans and Source Serif 4 all
+            // default to 400, which is exactly what an unstyled run
+            // asks for). Setting an axis to the value it already has
+            // changes no outline. Testing for the axis rather than for
+            // a MOVED axis would keep the embed path shut for nearly
+            // every document.
+            let at_default = wght_axis.is_none_or(|a| (a.def_value - wght).abs() < 0.01);
+            // The same mixing `build_engine` does when it builds
+            // `font_ids`, recorded so it can be undone.
+            outline_to_bytes.insert(font_id ^ wght_bits, at_default.then_some(font_id));
+            faces.insert((font_id, wght_bits), face);
+        }
+        // Parse metrics for every distinct byte buffer we ended up
+        // caching, plus the fallback. Keyed by the same fnv hash
+        // emit_paragraph uses for font_id — so the lookup is direct.
+        let mut metrics: HashMap<u32, FontMetrics> = HashMap::new();
+        let mut record = |bytes: &[u8]| {
+            let id = fnv_1a_u32(bytes);
+            if metrics.contains_key(&id) {
+                return;
+            }
+            if let Some(m) = parse_font_metrics(bytes) {
+                metrics.insert(id, m);
+            }
+        };
+        for b in cache.values() {
+            record(b.as_ref());
+        }
+        if let Some(b) = fallback.as_ref() {
+            record(b.as_ref());
+        }
+        let mut face_families: HashMap<u32, Vec<String>> = HashMap::new();
+        for b in cache.values().chain(fallback.as_ref()) {
+            face_families
+                .entry(font_id(b))
+                .or_insert_with(|| crate::asset::face_family_names(b));
+        }
+        // Family-keyed override map. The override carries an
+        // ascender (mandatory) plus optional cap-height / x-height —
+        // missing optional values fall back to whichever metrics
+        // `parse_font_metrics` extracted from the substitute font
+        // (looked up by lifting them out of `metrics` via the cache's
+        // bytes hash for the same family). This lets a caller pin
+        // only the ascender (the dominant axis for first-baseline
+        // drift) while leaving the rest at the substitute's natural
+        // values.
+        let mut family_metrics: HashMap<String, FontMetrics> = HashMap::new();
+        for (family, ov) in options.font_metrics_overrides {
+            // Find the substitute's parsed metrics for sensible
+            // defaults on missing optional fields.
+            let substitute = cache
+                .get(&(family.clone(), None))
+                .or_else(|| {
+                    cache
+                        .iter()
+                        .find_map(|((f, _), b)| if f == family { Some(b) } else { None })
+                })
+                .map(font_id)
+                .and_then(|id| metrics.get(&id))
+                .copied()
+                .unwrap_or(FontMetrics {
+                    cap_height: None,
+                    x_height: None,
+                    ascender: ov.ascender,
+                    descender: 0.0,
+                    em_top: None,
+                });
+            family_metrics.insert(
+                family.clone(),
+                FontMetrics {
+                    ascender: ov.ascender,
+                    cap_height: ov.cap_height.or(substitute.cap_height),
+                    x_height: ov.x_height.or(substitute.x_height),
+                    // Descender isn't an override axis (it only feeds the
+                    // anchored leading split); inherit the substitute's.
+                    descender: substitute.descender,
+                    // A pinned cap height places the em box itself.
+                    em_top: substitute.em_top.filter(|_| ov.cap_height.is_none()),
+                },
+            );
+        }
+        Self {
+            faces,
+            outline_to_bytes,
+            face_bytes,
+            keys,
+            cache,
+            substituted,
+            fallback_families: fallback
+                .as_deref()
+                .map(crate::asset::face_family_names)
+                .unwrap_or_default(),
+            fallback_styles: fallback.as_deref().and_then(crate::asset::FaceStyles::of),
+            face_families,
+            fallback,
+            metrics,
+            family_metrics,
+        }
+    }
+
+    /// Returns the cached, pre-configured shaping Face for the given
+    /// `(font_id, wght_bits)` key. The returned reference's lifetime
+    /// is narrowed to `&self`, hiding the underlying `'static` lie
+    /// (see the SAFETY contract on `FontTable::faces`).
+    ///
+    /// Callers must NOT call `set_variations` on the returned Face —
+    /// variations are baked in at cache-insert time. The signature
+    /// (`&Face`, not `&mut Face`) enforces that at compile time.
+    pub(super) fn face(&self, font_id: u32, wght_bits: u32) -> Option<&paged_text::Face<'_>> {
+        self.faces.get(&(font_id, wght_bits))
+    }
+
+    /// Both id spaces for a glyph-outline id, as one value a caller
+    /// cannot mix up.
+    ///
+    /// The glyph-outline cache is keyed on `fnv(bytes) ^ wght_bits` so
+    /// one variable face fed two weights does not conflate its
+    /// outlines; `face_bytes` and `metrics` are keyed on the plain
+    /// `fnv(bytes)`. The PDF exporter needs the second and was handed
+    /// the first — every lookup missed, and a miss means "draw
+    /// outlines", so every PDF this engine exported carried no text
+    /// layer at all and nothing went red.
+    ///
+    /// An id this table never issued (the synthetic `u32::MAX` the ruby
+    /// and scene-layer lanes use) has no bytes to embed and comes back
+    /// with `bytes: None` — outlines, exactly as before.
+    pub(super) fn font_ref(&self, outline_id: u32) -> paged_compose::FontRef {
+        match self.outline_to_bytes.get(&outline_id) {
+            Some(Some(bytes)) => paged_compose::FontRef {
+                outline: outline_id,
+                bytes: Some(*bytes),
+            },
+            _ => paged_compose::FontRef::varied(outline_id),
+        }
+    }
+
+    /// Look up the bytes a paragraph should shape with, plus whether
+    /// they substitute for the requested face (A1). Resolver hit >
+    /// options.font fallback. `None` means no font is available —
+    /// caller skips the paragraph.
+    pub(super) fn bytes_for(
+        &self,
+        family: Option<&str>,
+        style: Option<&str>,
+    ) -> Option<(Bytes, bool)> {
+        if let Some(family) = family {
+            // Direct (family, style) hit, then bare-family hit, so
+            // a doc that only registers "Body Font" still picks up
+            // its bold runs. Either hit inherits the resolver's own
+            // substitution flag for that cache key.
+            let styled_key = (family.to_string(), style.map(str::to_string));
+            if let Some(b) = self.cache.get(&styled_key) {
+                return Some((b.clone(), self.substituted.contains(&styled_key)));
+            }
+            let bare_key = (family.to_string(), None);
+            if let Some(b) = self.cache.get(&bare_key) {
+                return Some((b.clone(), self.substituted.contains(&bare_key)));
+            }
+            // The renderer-wide default font standing in for a named
+            // family that resolved nowhere is a substitution — unless
+            // it is the face asked for: the default face's own family,
+            // in a style the face has (a static Regular asked for Bold
+            // sets the run in Regular).
+            let own = self
+                .fallback_families
+                .iter()
+                .any(|f| f.eq_ignore_ascii_case(family.trim()))
+                && self
+                    .fallback_styles
+                    .as_ref()
+                    .is_some_and(|s| s.supplies(style));
+            return self.fallback.clone().map(|b| (b, !own));
+        }
+        // No family requested at all: the configured default IS the
+        // asked-for font, not a stand-in.
+        self.fallback.clone().map(|b| (b, false))
+    }
+
+    /// A4 — the resolver-substituted `(family, style)` keys, in
+    /// deterministic order. `build_document` fires one
+    /// `FontSubstituted` diagnostic per entry.
+    pub(super) fn substituted_keys(&self) -> impl Iterator<Item = &(String, Option<String>)> + '_ {
+        self.substituted.iter()
+    }
+
+    /// Resolve a paragraph's per-run font bytes, filling any
+    /// individually-unresolvable run with a paragraph-level fallback
+    /// so a single bad run doesn't drop the entire paragraph. The
+    /// per-paragraph fallback is, in order: the first sibling run
+    /// that DID resolve (keeps the visual style closest to what the
+    /// rest of the paragraph uses), then [`FontTable::fallback`]
+    /// (the renderer-wide default font), then `None` — signalling
+    /// no font is available anywhere and the caller should skip.
+    ///
+    /// Each slot also carries the A1 substitution flag: a run served
+    /// by `bytes_for` keeps that lookup's flag; a run filled from the
+    /// paragraph-level fallback is by definition rendered in a face it
+    /// didn't ask for, so sibling-style fills always count as
+    /// substituted.
+    ///
+    /// Returns `None` when no run resolves AND no document-wide
+    /// fallback is configured. In that case the paragraph still has
+    /// to be dropped because there's nothing to shape with.
+    pub(super) fn resolve_paragraph_bytes(
+        &self,
+        runs: &[paged_scene::ResolvedRunAttrs],
+    ) -> Option<Vec<(Bytes, bool)>> {
+        if runs.is_empty() {
+            return None;
+        }
+        let per_run: Vec<Option<(Bytes, bool)>> = runs
+            .iter()
+            .map(|r| self.bytes_for(r.font.as_deref(), r.font_style.as_deref()))
+            .collect();
+        let paragraph_fallback: Option<Bytes> = per_run
+            .iter()
+            .find_map(|b| b.as_ref().map(|(bytes, _)| bytes.clone()))
+            .or_else(|| self.fallback.clone());
+        let paragraph_fallback = paragraph_fallback?;
+        Some(
+            per_run
+                .into_iter()
+                .map(|b| b.unwrap_or_else(|| (paragraph_fallback.clone(), true)))
+                .collect(),
+        )
+    }
+
+    pub(super) fn metrics_for(&self, font_id: u32) -> Option<&FontMetrics> {
+        self.metrics.get(&font_id)
+    }
+
+    /// Metrics of the face `(family, style)` shapes with — but only
+    /// when that face is the one asked for, or another face of its
+    /// family. A foreign substitute's ascender says nothing about where
+    /// InDesign, which had the real face, put the first baseline, so
+    /// such a lookup yields `None` and the caller keeps its heuristic.
+    pub(super) fn metrics_for_real_face(
+        &self,
+        family: Option<&str>,
+        style: Option<&str>,
+    ) -> Option<&FontMetrics> {
+        let (bytes, substituted) = self.bytes_for(family, style)?;
+        let id = font_id(&bytes);
+        // A face of the run's own family set in place of a style it lacks
+        // (a static Regular asked for Bold) is reported as a substitute,
+        // but its vertical metrics are its family's: the real face's
+        // ascender, where InDesign puts the first baseline, is far closer
+        // to them than to the heuristic a foreign stand-in falls back on.
+        let own_family = family.is_some_and(|f| {
+            self.face_families
+                .get(&id)
+                .is_some_and(|names| names.iter().any(|n| n.eq_ignore_ascii_case(f.trim())))
+        });
+        if substituted && !own_family {
+            return None;
+        }
+        self.metrics.get(&id)
+    }
+
+    /// Override-aware metrics lookup keyed by IDML family name.
+    /// Returns the per-family override when present, otherwise falls
+    /// through so the caller can try the byte-hash path.
+    pub(super) fn metrics_for_family(&self, family: &str) -> Option<&FontMetrics> {
+        self.family_metrics.get(family)
+    }
+}
+
+/// Where a face's em box lies, in ems: `top` above the baseline, `bottom`
+/// below it (`top + bottom == 1`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct EmBox {
+    pub top: f32,
+    pub bottom: f32,
+}
+
+/// The face's em box: one em tall, its top `ideographic_em_top`, or, for
+/// a face with neither, centred on half its cap height (`ruby`'s notes;
+/// `FirstBaselineOffset::EmBoxHeight`).
+pub(super) fn em_box(face: &ttf_parser::Face) -> EmBox {
+    let upem = f32::from(face.units_per_em()).max(1.0);
+    let top = ideographic_em_top(face)
+        .or_else(|| {
+            face.capital_height()
+                .filter(|&c| c > 0)
+                .map(|cap| 0.5 + f32::from(cap) / upem / 2.0)
+        })
+        // No cap height to centre on: a CJK font's conventional box.
+        .unwrap_or(0.88);
+    EmBox {
+        top,
+        bottom: 1.0 - top,
+    }
+}
+
+/// The top of a CJK face's em box, ems above the baseline: one em above
+/// its `BASE` table's ideographic baseline (`ideo`), or, with no `BASE`,
+/// one em centred on its 永 (U+6C38). InDesign 20.0.1
+/// (`tools/indesign-export/cjk-first-baseline-probe`, Em Box Height first
+/// baseline): Kozuka, Hiragino, Adobe Song and Noto Sans JP at 0.88,
+/// Apple SD Gothic Neo at 0.8; Songti SC 0.7985, AppleMyungjo 0.8452 and
+/// Arial Unicode MS 0.8865, each its 永's centre plus half an em. `None`
+/// for a face with neither (a Latin face).
+pub(super) fn ideographic_em_top(face: &ttf_parser::Face) -> Option<f32> {
+    let upem = f32::from(face.units_per_em()).max(1.0);
+    if let Some(ideo) = base_horizontal(face, b"ideo") {
+        return Some(1.0 + f32::from(ideo) / upem);
+    }
+    let ei = face.glyph_bounding_box(face.glyph_index('\u{6C38}')?)?;
+    Some(0.5 + (f32::from(ei.y_max) + f32::from(ei.y_min)) / 2.0 / upem)
+}
+
+/// A horizontal baseline of the face's `BASE` table (`ideo`, `icft`, …),
+/// in font units: the first script that states it (they agree in
+/// practice).
+pub(super) fn base_horizontal(face: &ttf_parser::Face, tag: &[u8; 4]) -> Option<i16> {
+    let data = face
+        .raw_face()
+        .table(ttf_parser::Tag::from_bytes(b"BASE"))?;
+    let u16_at = |at: usize| {
+        data.get(at..at + 2)
+            .map(|b| u16::from_be_bytes([b[0], b[1]]))
+    };
+    let axis = usize::from(u16_at(4)?);
+    if axis == 0 {
+        return None;
+    }
+    let tag_list = axis + usize::from(u16_at(axis)?);
+    let script_list = axis + usize::from(u16_at(axis + 2)?);
+    let tags = usize::from(u16_at(tag_list)?);
+    let ideo = (0..tags)
+        .find(|&i| data.get(tag_list + 2 + 4 * i..tag_list + 6 + 4 * i) == Some(tag.as_slice()))?;
+    let scripts = usize::from(u16_at(script_list)?);
+    (0..scripts).find_map(|i| {
+        let script = script_list + usize::from(u16_at(script_list + 2 + 6 * i + 4)?);
+        let values = usize::from(u16_at(script)?);
+        if values == 0 {
+            return None;
+        }
+        let values = script + values;
+        if ideo >= usize::from(u16_at(values + 2)?) {
+            return None;
+        }
+        let coord = values + usize::from(u16_at(values + 4 + 2 * ideo)?);
+        u16_at(coord + 2).map(|v| v as i16)
+    })
+}
+
+pub(super) fn parse_font_metrics(bytes: &[u8]) -> Option<FontMetrics> {
+    let face = ttf_parser::Face::parse(bytes, 0).ok()?;
+    let upem = face.units_per_em() as f32;
+    if upem <= 0.0 {
+        return None;
+    }
+    // `hhea.descender` is negative (below the baseline); store the
+    // magnitude so the leading-split math reads naturally.
+    let (ascender, descender) = cjk_ascent_descent(&face).unwrap_or((
+        face.ascender() as f32 / upem,
+        (face.descender() as f32 / upem).abs(),
+    ));
+    Some(FontMetrics {
+        cap_height: face.capital_height().map(|v| v as f32 / upem),
+        x_height: face.x_height().map(|v| v as f32 / upem),
+        ascender,
+        descender,
+        em_top: ideographic_em_top(&face),
+    })
+}
+
+/// A CJK face's ascent and descent as InDesign takes them (fractions of
+/// em), where its `hhea` says something else; `None` for any other face,
+/// whose `hhea` InDesign uses as it stands. Asked of InDesign 20.0.1
+/// (`tools/indesign-export/cjk-first-baseline-probe`: the first baseline
+/// of a 30 pt frame, `Ascent` offset, and the ascent and descent it
+/// reports):
+///
+/// * the top of the face's `d` and the bottom of its `p`, whatever its
+///   `hhea` (Kozuka Mincho Pr6N 0.772 / 0.257 against `hhea` 0.88 / 0.12;
+///   Kozuka Gothic, Hiragino Mincho, Adobe Song, Apple SD Gothic Neo,
+///   Songti SC, AppleMyungjo and Arial Unicode MS alike), where Minion Pro
+///   and Open Sans keep their `hhea`;
+/// * a variable face (Noto Sans JP, the one measured): one em below the
+///   top of its ideographic character face (`BASE` `icft`), 0.827 / 0.173.
+///
+/// A face is CJK when it maps 一 (U+4E00).
+fn cjk_ascent_descent(face: &ttf_parser::Face) -> Option<(f32, f32)> {
+    face.glyph_index('\u{4E00}')?;
+    let upem = f32::from(face.units_per_em());
+    if face.is_variable() {
+        let top = f32::from(base_horizontal(face, b"icft")?) / upem;
+        return Some((top, 1.0 - top));
+    }
+    let d = face.glyph_bounding_box(face.glyph_index('d')?)?;
+    let p = face.glyph_bounding_box(face.glyph_index('p')?)?;
+    Some((f32::from(d.y_max) / upem, -f32::from(p.y_min) / upem))
+}
+
+/// The font id of a face buffer: `fnv_1a_u32` of its bytes, computed once
+/// per buffer instead of once per call.
+///
+/// The id is a hash of the WHOLE file, and the pipeline asks for it per
+/// paragraph (several times: shaping faces, outline cache keys, metrics).
+/// With real fonts registered (0.6–1.2 MB each, a CJK face 9 MB) that was
+/// gigabytes of byte-hashing per rebuild: ~17 s of a ~18 s wasm rebuild on the
+/// 134-page annual (ADR 030). Native benches never saw it because
+/// they ran without registered fonts, so every lookup took the substituted
+/// early return.
+///
+/// Memoised by buffer identity (pointer + length). The map holds a clone of
+/// each `Bytes`, so a buffer cannot be freed (and its address reused by a
+/// different font) while its entry exists. `Bytes` is immutable, so same
+/// pointer and length means the same content, and the id is the same value
+/// `fnv_1a_u32` returns: output is unchanged.
+pub(super) fn font_id(bytes: &Bytes) -> u32 {
+    use std::cell::RefCell;
+    thread_local! {
+        static IDS: RefCell<HashMap<(usize, usize), (Bytes, u32)>> =
+            RefCell::new(HashMap::new());
+    }
+    let key = (bytes.as_ptr() as usize, bytes.len());
+    IDS.with(|ids| {
+        if let Some((_, id)) = ids.borrow().get(&key) {
+            return *id;
+        }
+        let id = fnv_1a_u32(bytes.as_ref());
+        paged_compose::perf::count(|c| c.font_bytes_hashed += bytes.len() as u64);
+        let mut ids = ids.borrow_mut();
+        // Bounded: a long session that loads many documents must not pin
+        // every font buffer it ever saw. Clearing only costs re-hashing.
+        if ids.len() >= 256 {
+            ids.clear();
+        }
+        ids.insert(key, (bytes.clone(), id));
+        id
+    })
+}
+
+pub(super) fn fnv_1a_u32(bytes: &[u8]) -> u32 {
+    // Stable per-render font-cache key; the u32 range collides in
+    // ~2B fonts — enough for any realistic document.
+    const FNV_OFFSET: u32 = 0x811c_9dc5;
+    const FNV_PRIME: u32 = 0x0100_0193;
+    let mut h = FNV_OFFSET;
+    for &b in bytes {
+        h ^= b as u32;
+        h = h.wrapping_mul(FNV_PRIME);
+    }
+    h
+}

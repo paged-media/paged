@@ -1,0 +1,28 @@
+[package]
+name = "paged-run"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "paged-run"
+path = "src/main.rs"
+
+[dependencies]
+# The session itself lives in `paged-cli` so `paged session` and this
+# binary are one implementation. Everything else this crate used to
+# depend on came with it.
+paged-cli = { path = "../paged-cli" }
+anyhow = { workspace = true }
+
+# `tests/session.rs` is the protocol's contract test and is deliberately
+# untouched by the move — it spawns this binary by `CARGO_BIN_EXE` and
+# asserts on the wire, so it needs what it always needed.
+[dev-dependencies]
+paged-script = { path = "../paged-script" }
+serde_json = "1"
+
+[lints]
+workspace = true
