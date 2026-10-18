@@ -1,9 +1,8 @@
 # paged.server — concept (draft, 2026-10-17)
 
 Replaces the TypeScript `editor-server` in this same repository (`paged-media/editor-server`),
-which is rewritten in Rust on Cloudflare. Intended licence AGPL-3.0 OR PMEL once the repository
-is made public (a visibility change, not yet done). ADR range proposed **950–999** (750–799 is
-plugin-template); to be added to the register in thoughts.
+rewritten in Rust on Cloudflare (`server/`). AGPL-3.0 OR PMEL. Decision records: `docs/adr/`
+(950–999).
 
 ## 1. What it is, and what it is not
 
@@ -25,7 +24,7 @@ endpoint** and a **relay** between Claude and an open editor tab.
 | From | Kept | Dropped |
 |---|---|---|
 | editor-server | problem+json errors, cursor paging, schema-first contracts, "bucket holds bytes, DB holds truth", GDPR export/erasure, M7's "offline-first stays ground truth" | Fastify/Node, Drizzle, better-auth, Stripe, font proxy, image search, `/generate`, opaque-file `files` table, delete-on-replace "versioning" |
-| guardian | content addressing with domain-separated BLAKE3; blobs + commits + refs + evidence as the only authority; draft = branch; published = release; size-threshold blob split with verify-on-read; one writer per repository; agent provenance; agents contribute through branch → change request; policy as governed data that fails closed; writes are audited by commits, reads/refusals by evidence; derivatives addressed by recipe; repository = unit of operation | Raft, Cedar (v1), the full canonical binary format, Pimcore element model, workflow/calendar suite |
+| governed-repository design | content addressing with domain-separated BLAKE3; blobs + commits + refs + evidence as the only authority; draft = branch; published = release; size-threshold blob split with verify-on-read; one writer per repository; agent provenance; agents contribute through branch → change request; policy as governed data that fails closed; writes are audited by commits, reads/refusals by evidence; derivatives addressed by recipe; repository = unit of operation | Raft, Cedar (v1), the full canonical binary format, Pimcore element model, workflow/calendar suite |
 
 ## 3. Topology (Cloudflare, all Rust on workers-rs)
 
