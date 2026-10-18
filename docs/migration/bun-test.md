@@ -52,3 +52,5 @@ package. It is gated on
 | doc-bundle | 41 | 41 | yes | codemod only (`it.fails` → `it.failing`) |
 | doc-host-model | 44 | 44 | yes | codemod only |
 | image glue | 343 | 343 | yes | 3 `vi.mock` factories with `importOriginal` → `importActual` + `mock.module`; `waitFor` (+ `clock: vi` under fake timers) and `advanceTimersByTimeAsync` → test kit |
+| sheet-host-model | 193 | 193 | yes | codemod only |
+| sheet-bundle | 335 + 1 skipped | 335 + 1 skipped | yes | 2 `vi.mock` factories (`importActual`/`importOriginal`) → `importActual` + `mock.module` (perf-budgets: its two dynamic imports move out of the factory); `vi.setConfig` → `setDefaultTimeout`; `stubGlobal`, `waitFor`, `advanceTimersByTimeAsync` → test kit |

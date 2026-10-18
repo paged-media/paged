@@ -21,7 +21,7 @@
 // forms are well-formed (plugin-sdk validatePanelSchema), and the active
 // cell is published as an address the cell rows read.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PropertySchema } from "@paged-media/plugin-api";
 import { propertyRowsOf, validatePanelSchema } from "@paged-media/plugin-sdk";

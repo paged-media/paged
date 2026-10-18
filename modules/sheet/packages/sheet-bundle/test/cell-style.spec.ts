@@ -27,7 +27,7 @@
 // the routing (grid coords → lowered tableCell), the mutation sequence, and
 // the honest outcome.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type {
   BundleHost,

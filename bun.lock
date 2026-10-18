@@ -444,13 +444,14 @@
         "@paged-media/plugin-api": "workspace:*",
         "@paged-media/plugin-sdk": "workspace:*",
         "@paged-media/sheet-host-model": "workspace:*",
+        "@paged-media/test-kit": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@types/react": "catalog:",
         "@types/react-test-renderer": "18.3.1",
         "react": "catalog:",
         "react-test-renderer": "18.3.1",
         "typescript": "catalog:",
-        "vitest": "catalog:",
       },
       "peerDependencies": {
         "@paged-media/plugin-api": "workspace:*",
@@ -465,8 +466,8 @@
         "@paged-media/plugin-api": "workspace:*",
       },
       "devDependencies": {
+        "@types/bun": "catalog:",
         "typescript": "catalog:",
-        "vitest": "catalog:",
       },
     },
     "modules/slide": {

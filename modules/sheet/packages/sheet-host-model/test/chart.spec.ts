@@ -21,7 +21,7 @@
 // paged.draw wire ops out (insertPath / insertTextFrame), the binding on
 // the $created sentinel. No chart semantics here (decided in Rust).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   LABEL_FIT_ALLOWANCE_PT,

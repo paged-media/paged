@@ -2,7 +2,7 @@
 // (sheet.xlsx.condfmt): IR bars mapped onto the table's measured columns,
 // drawn as paths under the frame.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { Mutation } from "@paged-media/plugin-api";
 

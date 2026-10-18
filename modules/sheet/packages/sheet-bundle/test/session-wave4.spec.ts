@@ -33,7 +33,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "bun:test";
+import { advanceTimersByTimeAsync, stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
 
 import type {
   BundleHost,
@@ -202,7 +203,7 @@ const ops = (ms: Mutation[]): Mutation[] =>
 
 afterEach(() => {
   vi.useRealTimers();
-  vi.unstubAllGlobals();
+  unstubAllGlobals();
 });
 
 describe.skipIf(!built)("placed tables: styled door + refresh in place [sheet.lower.page]", () => {
@@ -257,7 +258,7 @@ describe.skipIf(!built)("placed tables: styled door + refresh in place [sheet.lo
     const mark = mutations.length;
 
     session.editCell(0, 0, 0, "10");
-    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS + 50);
+    await advanceTimersByTimeAsync(vi, REFRESH_DEBOUNCE_MS + 50);
     await session.refreshPlacements();
 
     const after = ops(mutations.slice(mark));
@@ -313,13 +314,13 @@ describe.skipIf(!built)("placed charts refresh after edits [sheet.chart.engine]"
 
     // An edit OUTSIDE the chart's series redraws nothing.
     session.editCell(0, 49, 25, "unrelated");
-    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS + 50);
+    await advanceTimersByTimeAsync(vi, REFRESH_DEBOUNCE_MS + 50);
     await session.refreshPlacements();
     expect(ops(mutations.slice(firstBatch)).filter((m) => m.op === "deleteFrame")).toHaveLength(0);
 
     // An edit to a series value (B2) replaces the chart.
     session.editCell(0, 1, 1, "999");
-    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS + 50);
+    await advanceTimersByTimeAsync(vi, REFRESH_DEBOUNCE_MS + 50);
     await session.refreshPlacements();
 
     const after = mutations.slice(firstBatch);
@@ -441,7 +442,7 @@ describe.skipIf(!built)("insert/delete rows and columns [sheet.calc.rewrite.stru
 
 describe.skipIf(!built)("CSV / TSV import [sheet.import.csv]", () => {
   it("a German CSV becomes a typed one-sheet workbook", async () => {
-    vi.stubGlobal("navigator", { language: "de-DE" });
+    stubGlobal("navigator", { language: "de-DE" });
     const { host } = fakeDoc();
     const session = createWorkbookSession(host);
     await session.importCsv("Region;Umsatz;Datum\nNord;1.234,50;04.10.2026\n", "umsatz.csv");

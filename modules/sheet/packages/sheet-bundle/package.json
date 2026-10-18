@@ -12,7 +12,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
+    "test": "bun test --parallel",
     "build": "tsup",
     "prepublishOnly": "bun run build"
   },
@@ -32,7 +32,8 @@
     "react": "catalog:",
     "react-test-renderer": "18.3.1",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "@paged-media/test-kit": "workspace:*",
+    "@types/bun": "catalog:"
   },
   "files": [
     "dist",
