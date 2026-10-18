@@ -49,7 +49,7 @@ import type {
 } from "@paged-media/plugin-api";
 import type { ComponentType } from "react";
 
-import { type CreateElement, requireCreateElement } from "./react-optional";
+import { type CreateElement, requireCreateElement } from "./react-optional.js";
 
 /** The render paths need React; a headless consumer never calls them. */
 function h(): CreateElement {

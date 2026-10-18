@@ -69,7 +69,7 @@ jobs:
             if npm view "$name@$version" version >/dev/null 2>&1; then
               echo "skip $name@$version (already published)"; continue
             fi
-            node "$GITHUB_WORKSPACE/tooling/js/pack.mjs" "$dir" "$RUNNER_TEMP" >/dev/null
+            bun "$GITHUB_WORKSPACE/tooling/js/pack.mjs" "$dir" "$RUNNER_TEMP" >/dev/null
             tgz="$RUNNER_TEMP/$(echo "$name" | sed 's#@##; s#/#-#')-${version}.tgz"
             echo "publish $name@$version ($tgz) via OIDC"
             npm publish "$tgz" --tag canary --access public

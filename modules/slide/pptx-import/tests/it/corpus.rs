@@ -18,33 +18,35 @@
 
 //! Every corpus deck reads into the IR (M0 acceptance).
 //!
-//! The corpus is the private corpus at the repository root (`<repo
-//! root>/corpus/pptx/packs/*/primary.pptx`, i.e. `../../corpus` from this
-//! module; gitignored, a local symlink) or `PAGED_CORPUS`. Without it
-//! the test skips and says so; `PAGED_REQUIRE_CORPUS=1` turns the skip into a
-//! failure, so a CI lane that is meant to read the corpus cannot pass by not
-//! looking.
+//! The decks are the private corpus's `pptx/packs/*/primary.pptx`
+//! (`PAGED_CORPUS_DIR`, or the gitignored `<repo root>/corpus` link). An
+//! opt-in lane (docs/development/testing.md):
+//!
+//! ```text
+//! PAGED_CORPUS_DIR=<corpus root> PAGED_REQUIRE_CORPUS=1 \
+//!     cargo nextest run --profile corpus --run-ignored only
+//! ```
+//!
+//! Without the corpus the test reports `unavailable: private corpus` and
+//! returns; `PAGED_REQUIRE_CORPUS=1` turns that into a failure.
 
 use std::path::PathBuf;
 
 use pptx_core::{FrameContent, Shape};
 
+/// `<corpus>/pptx/packs`, or `None` after reporting the corpus unavailable.
 fn corpus_dir() -> Option<PathBuf> {
-    let base = std::env::var_os("PAGED_CORPUS")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../corpus"));
-    let dir = base.join("pptx/packs");
-    dir.is_dir().then_some(dir)
+    let pptx = paged_test_resources::corpus("pptx", &["PAGED_CORPUS"])?;
+    let dir = pptx.join("packs");
+    paged_test_resources::available(
+        paged_test_resources::Resource::Corpus,
+        dir.is_dir().then_some(dir.clone()),
+        format_args!("{} is not a directory", dir.display()),
+    )
 }
 
-fn decks() -> Vec<PathBuf> {
-    let Some(dir) = corpus_dir() else {
-        if std::env::var("PAGED_REQUIRE_CORPUS").as_deref() == Ok("1") {
-            panic!("PAGED_REQUIRE_CORPUS=1 but no corpus at PAGED_CORPUS or ../../corpus");
-        }
-        eprintln!("SKIP: no pptx corpus");
-        return Vec::new();
-    };
+fn decks() -> Option<Vec<PathBuf>> {
+    let dir = corpus_dir()?;
     let mut out: Vec<PathBuf> = std::fs::read_dir(dir)
         .unwrap()
         .filter_map(|e| {
@@ -53,7 +55,7 @@ fn decks() -> Vec<PathBuf> {
         })
         .collect();
     out.sort();
-    out
+    Some(out)
 }
 
 fn count(shapes: &[Shape], n: &mut [usize; 6]) {
@@ -78,8 +80,11 @@ fn count(shapes: &[Shape], n: &mut [usize; 6]) {
 }
 
 #[test]
+#[ignore = "corpus: pptx"]
 fn every_corpus_deck_reads() {
-    let decks = decks();
+    let Some(decks) = decks() else {
+        return;
+    };
     for path in &decks {
         let bytes = std::fs::read(path).unwrap();
         let deck =
@@ -118,11 +123,9 @@ fn every_corpus_deck_reads() {
             deck.diagnostics.len(),
         );
     }
-    if corpus_dir().is_some() {
-        assert!(
-            decks.len() >= 7,
-            "expected at least 7 corpus decks, found {}",
-            decks.len()
-        );
-    }
+    assert!(
+        decks.len() >= 7,
+        "expected at least 7 corpus decks, found {}",
+        decks.len()
+    );
 }

@@ -28,10 +28,10 @@
 // via `getEditor()`, resolved at call time (the command registry's
 // thunk idiom, avoids stale-closure drift).
 
-import { createCoreObjects } from "./core-objects";
-import { createObjectRegistry, type ObjectRegistry } from "./object-registry";
-import { isCoreCommand } from "./core-commands";
-import { checkSchemaRows } from "./object-schema";
+import { createCoreObjects } from "./core-objects.js";
+import { createObjectRegistry, type ObjectRegistry } from "./object-registry.js";
+import { isCoreCommand } from "./core-commands.js";
+import { checkSchemaRows } from "./object-schema.js";
 import type {
   ObjectModelContribution,
   ObjectModelHandle,
@@ -130,10 +130,10 @@ import type {
   SnapPointResult,
 } from "@paged-media/plugin-api";
 
-import { DisposableStore, toDisposable } from "./disposables";
-import { documentChangeOf } from "./document-change";
-import { FALLBACK_WIDGETS } from "./widgets-fallback";
-import { makeSchemaPanelComponent } from "./schema-panel";
+import { DisposableStore, toDisposable } from "./disposables.js";
+import { documentChangeOf } from "./document-change.js";
+import { FALLBACK_WIDGETS } from "./widgets-fallback.js";
+import { makeSchemaPanelComponent } from "./schema-panel.js";
 
 /** The reply envelope `client.mutate` resolves with. */
 type MutateReply = Awaited<ReturnType<PagedEditor["client"]["mutate"]>>;

@@ -717,7 +717,7 @@ once by a fix for the other:
   `peerDependenciesMeta.react.optional` is a manifest claim; this is the
   runtime one.
 - **No top-level await in the emitted bundle.** The fix for the above
-  was a top-level `await import("react")`. tsup emits it verbatim, and
+  was a top-level `await import("react")`. The bundler emits it verbatim, and
   Vite's dep-optimizer compiles pre-bundled dependencies down to its
   ES2020 floor, where top-level await does not exist — so pre-bundling
   the published package fails a consuming dev server outright. The
@@ -738,11 +738,14 @@ rule: a visible seam, never fake UI). The module is internal — it is not
 re-exported from `index.ts`, because how the two members obtain
 `createElement` is not contract surface.
 
-The build pins `--target es2020`, Vite's own dep-optimizer floor.
-esbuild cannot LOWER top-level await, so that target makes it
-unemittable: a future one fails `pnpm build` here instead of a
-consumer's dev server. That is the gate, not the fix — the fix is the
-source shape above. Do not raise the target without reading this.
+The declaration build (`tsconfig.build.json`) compiles at
+`"module": "ES2020"`, Vite's own dep-optimizer floor. TypeScript rejects
+a top-level await there (TS1378), so a future one fails `bun run build`
+here instead of a consumer's dev server. That is the gate, not the fix —
+the fix is the source shape above. Do not raise the module setting
+without reading this. (Until TypeScript 7 the gate was tsup's
+`--target es2020`; `bun build`, which bundles the JavaScript now, has no
+syntax target.)
 
 ## 6. RPC-readiness audit (the isolate migration debt, stated)
 
@@ -2474,17 +2477,21 @@ pathfinder, styles, swatches, sections, guides …) were reachable from
 They are now TYPED COMMANDS beside the plugins' own:
 
 - **Generated, not hand-listed.** `scripts/gen-core-commands.mjs` reads the
-  vendored `wire.d.ts` with the TypeScript compiler API and writes
-  `core-commands.generated.ts`: one row per `Mutation` arm, its args as a
-  `ValueType` struct (`string` → `text`, `number`, `boolean` → `bool`,
-  `[n,n]` / 4-tuple / 6-tuple → `point` / `bounds` / `transform`, `T[]` →
-  `list`, a string-literal union → `enum`, an interface → an open struct
-  with `shape`, `ElementId` → `ref` to `item`, any other union
-  (`FieldKind`, `ZOrderTarget`, `Value`) → an OPAQUE struct core
-  validates; `?` → optional; a required `X | null` → optional, sent as
-  null). Id positions (`storyId`, `tableId`, `page`, `frameId`, …) are
-  `ref`s whose `to` names the ADR 131 kind. `--check` and a spec fail when
-  the file drifts from the wire.
+  engine's JSON Schema of the wire
+  (`engine/core/crates/paged-wire/schema/mutation.schema.json`, engine
+  ADR 187; until 2026-10-18 it parsed the vendored `wire.d.ts` with the
+  TypeScript compiler API) and writes `core-commands.generated.ts`: one row
+  per `Mutation` arm, its args as a `ValueType` struct (`string` → `text`,
+  integer / number → `number`, `boolean` → `bool`, a numeric tuple of 2 / 4
+  / 6 → `point` / `bounds` / `transform`, any other array → `list`, a string
+  enum → `enum`, a named struct → an open struct with `shape`, `ElementId` →
+  `ref` to `item`, any other union (`FieldKind`, `ZOrderTarget`, `Value`) →
+  an OPAQUE struct core validates; not required → optional; an `Option` the
+  TypeScript declares `X | null` without `?` → optional, sent as null). Id
+  positions (`storyId`, `tableId`, `page`, `frameId`, …) are `ref`s whose
+  `to` names the ADR 131 kind. `--check` and a spec fail when the file
+  drifts from the schema; the engine's tests fail when the schema drifts
+  from the Rust types or from what tsify declares in `wire.d.ts`.
 - **The guard.** `object-model-commands.spec.ts` fails a catalog
   `operations` entry that is neither a command nor in
   `CORE_COMMAND_EXCLUSIONS` with a reason. Excluded (8): `batch` (that is

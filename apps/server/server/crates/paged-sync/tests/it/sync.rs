@@ -15,8 +15,11 @@
 
 //! End to end against a running paged.server: `PAGED_SERVER_URL` (for local dev,
 //! `npx wrangler dev` in crates/paged-server, whose `.dev.vars` knows the
-//! tokens `dev-token` → user:dev and `other-token` → user:other). Without
-//! `PAGED_SERVER_URL` these tests do nothing.
+//! tokens `dev-token` → user:dev and `other-token` → user:other). The tests
+//! are an opt-in lane (`#[ignore = "server: …"]`, `cargo nextest run
+//! --profile server --run-ignored only`); without `PAGED_SERVER_URL` they
+//! report `unavailable: running server`, a failure under
+//! `PAGED_REQUIRE_SERVER=1`.
 
 use std::io::{Cursor, Write};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -26,8 +29,10 @@ use paged_sync::{Error, Remote};
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
 
+/// `PAGED_SERVER_URL`, or `None` after reporting the server unavailable
+/// (`PAGED_REQUIRE_SERVER=1` makes that a failure).
 fn server() -> Option<String> {
-    std::env::var("PAGED_SERVER_URL").ok()
+    paged_test_resources::env_var(paged_test_resources::Resource::Server, "PAGED_SERVER_URL")
 }
 
 /// A repository name no earlier run used: local dev state persists.
@@ -85,6 +90,7 @@ fn commit(repo: &mut Repo<MemoryStore>, file: &[u8]) {
 }
 
 #[test]
+#[ignore = "server: a running paged.server (PAGED_SERVER_URL)"]
 fn a_push_sends_what_the_server_lacks_and_a_pull_brings_it_back() {
     let Some(url) = server() else { return };
     let name = fresh("roundtrip");
@@ -127,6 +133,7 @@ fn a_push_sends_what_the_server_lacks_and_a_pull_brings_it_back() {
 }
 
 #[test]
+#[ignore = "server: a running paged.server (PAGED_SERVER_URL)"]
 fn a_file_with_history_comes_back_with_it() {
     let Some(url) = server() else { return };
     let remote = Remote::new(&url, &fresh("history"), "dev-token");
@@ -147,6 +154,7 @@ fn a_file_with_history_comes_back_with_it() {
 }
 
 #[test]
+#[ignore = "server: a running paged.server (PAGED_SERVER_URL)"]
 fn of_two_writers_from_the_same_base_one_wins() {
     let Some(url) = server() else { return };
     let remote = Remote::new(&url, &fresh("race"), "dev-token");
@@ -166,6 +174,7 @@ fn of_two_writers_from_the_same_base_one_wins() {
 }
 
 #[test]
+#[ignore = "server: a running paged.server (PAGED_SERVER_URL)"]
 fn strangers_are_refused() {
     let Some(url) = server() else { return };
     let name = fresh("owned");
@@ -190,6 +199,7 @@ fn strangers_are_refused() {
 }
 
 #[test]
+#[ignore = "server: a running paged.server (PAGED_SERVER_URL)"]
 fn a_tampered_upload_is_refused() {
     let Some(url) = server() else { return };
     let name = fresh("tamper");

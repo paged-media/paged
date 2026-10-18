@@ -12,33 +12,16 @@
 // declare a `data` key that INVITES user content, and every registered code
 // must have a policy that actually bounds it.
 //
-// Run: `node scripts/journal.test.mjs`  (root `test:journal` npm script.)
+// Run: `bun test ./scripts/journal.test.mjs`  (root `test:journal` script.)
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
-import { existsSync } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 // `packages/client` is consumed by vite, so its imports are extensionless in
-// the house style. Node's type-stripping ESM loader wants a real specifier, so
-// resolve `./foo` -> `./foo.ts` for this run only. Kept in the test rather
-// than the source: the guard adapts to the code, not the other way round.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith(".") && !/\.[cm]?[jt]s$/.test(specifier)) {
-      const parent = context.parentURL
-        ? dirname(fileURLToPath(context.parentURL))
-        : process.cwd();
-      const candidate = resolvePath(parent, `${specifier}.ts`);
-      if (existsSync(candidate)) {
-        return { url: pathToFileURL(candidate).href, shortCircuit: true };
-      }
-    }
-    return nextResolve(specifier, context);
-  },
-});
+// the house style. Bun resolves `./foo` to `./foo.ts` itself (Node needed a
+// module.registerHooks resolver here).
 
 const here = dirname(fileURLToPath(import.meta.url));
 const CLIENT = pathToFileURL(

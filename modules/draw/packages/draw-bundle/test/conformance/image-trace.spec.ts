@@ -1391,20 +1391,15 @@ describe("draw conformance — IMAGE TRACE off the calling thread", () => {
       expect(drawBundle.manifest.capabilities?.workers).toEqual({ max: 2 });
     });
 
-    it("the worker is its own build entry and its own package export, in source and as published", () => {
+    it("the worker is its own package export, and the wasm it boots ships with the package", () => {
       const pkg = JSON.parse(read("package.json")) as {
         exports: Record<string, unknown>;
-        publishConfig: { exports: Record<string, { default?: string }> };
         files: string[];
       };
       expect(pkg.exports["./trace-worker"]).toBe("./src/trace-worker.ts");
-      expect(pkg.publishConfig.exports["./trace-worker"].default).toBe(
-        "./dist/trace-worker.js",
-      );
-      expect(read("tsup.config.ts")).toContain('"src/trace-worker.ts"');
-      // The wasm the worker boots ships beside `dist/`, where its
+      // The wasm the worker boots ships beside `src/`, where its
       // `../wasm/…` import points.
-      expect(pkg.files).toEqual(expect.arrayContaining(["dist", "wasm"]));
+      expect(pkg.files).toEqual(expect.arrayContaining(["wasm"]));
     });
   });
 });

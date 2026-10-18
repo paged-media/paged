@@ -61,7 +61,9 @@ export function PanelHost({ id }: { id: string }) {
   // (globals.css): plugin panels draw raw <input>/<select>/<button>, and
   // without it those rendered as light OS widgets on the dark theme, with
   // disabled buttons indistinguishable from live ones.
-  const source = (contribution as { source?: string }).source;
+  // Host-stamped provenance (the SDK adapter sets it from the bundle's
+  // manifest); the editor's own panels leave it unset.
+  const source = contribution.source;
   return (
     <div data-panel-host={id} data-panel-source={source || "host"} style={{ display: "contents" }}>
       <PanelBindingScope panelId={id}>

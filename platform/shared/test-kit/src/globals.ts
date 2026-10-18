@@ -24,8 +24,14 @@
 const originals = new Map<PropertyKey, PropertyDescriptor | undefined>();
 
 export function stubGlobal(name: string | symbol, value: unknown): void {
-  if (!originals.has(name)) originals.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
-  Object.defineProperty(globalThis, name, { value, writable: true, configurable: true, enumerable: true });
+  if (!originals.has(name))
+    originals.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
+  Object.defineProperty(globalThis, name, {
+    value,
+    writable: true,
+    configurable: true,
+    enumerable: true,
+  });
 }
 
 export function unstubAllGlobals(): void {

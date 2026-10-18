@@ -67,8 +67,8 @@
 //! (A file that is now REFUSED on purpose — the import learned it was
 //! approximating — is accepted with `PAGED_PSD_LEDGER=accept-refusals`.)
 //!
-//! PAGED_PSD_CORPUS=1 cargo test --release -p image-conformance \
-//!   --test psd_composite_oracle -- --ignored --nocapture
+//! PAGED_CORPUS_DIR=<corpus root> cargo nextest run --profile corpus --run-ignored only \
+//!   --release psd_composite_oracle::
 //! ```
 
 use std::collections::BTreeMap;
@@ -499,21 +499,26 @@ fn outcome_count(ledger: &Json, outcome: &str) -> u64 {
 
 #[test]
 #[allow(non_snake_case)]
-#[ignore = "psd corpus oracle: opt-in (PAGED_PSD_CORPUS=1 + the private corpus + a GPU)"]
+#[ignore = "corpus: psd (composite oracle; and a GPU)"]
 fn photoshop_merged_composite_vs_our_layer_flatten__feat__image_psd_layer_import() {
     let Some(root) = corpus_root("PAGED_PSD_CORPUS") else {
         return;
     };
     let Some(ctx) = image_conformance::device::test_device() else {
-        eprintln!("SKIP psd composite oracle: no GPU adapter");
-        return;
+        return; // reported `unavailable: GPU adapter` (PAGED_REQUIRE_GPU=1 fails)
     };
     let files = psds_by_magic(&root);
     println!(
         "psd composite oracle: {} file(s) by 8BPS magic",
         files.len()
     );
-    assert!(!files.is_empty(), "no PSD content under {}", root.display());
+    if files.is_empty() {
+        image_conformance::corpus::missing(
+            "psd",
+            format_args!("no PSD content under {}", root.display()),
+        );
+        return;
+    }
 
     let mut rows: BTreeMap<String, Row> = BTreeMap::new();
     let mut failures = Vec::new();

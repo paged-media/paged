@@ -10,7 +10,7 @@
 # Pre-1.0: every version is a -canary.N prerelease under the `canary` dist-tag.
 # Unchanged versions skip; bump a package's version to release it.
 #
-# One-time npm setup per package (plugin-api, plugin-sdk, plugin-cli, cli):
+# One-time npm setup per package (plugin-api, plugin-sdk, plugin-cli):
 #   npmjs.com → package → Trusted Publisher → GitHub Actions →
 #     org: paged-media, repo: plugin-sdk, workflow: publish.yml, action: npm publish
 #
@@ -75,19 +75,20 @@ jobs:
       # "leads the publish" marker).
       - name: wire and catalog vendoring lockstep (hard gate)
         run: |
-          node scripts/sync-wire.mjs --check
-          node scripts/sync-catalog.mjs --check
+          bun scripts/sync-wire.mjs --check
+          bun scripts/sync-catalog.mjs --check
       - name: publish changed versions via OIDC (canary)
         run: |
           set -e
-          for dir in packages/plugin-api packages/plugin-sdk packages/plugin-cli packages/ai packages/cli; do
+          # ai and cli are private workspace packages (PM-0008).
+          for dir in packages/plugin-api packages/plugin-sdk packages/plugin-cli; do
             name=$(node -p "require('./$dir/package.json').name")
             version=$(node -p "require('./$dir/package.json').version")
             if npm view "$name@$version" version >/dev/null 2>&1; then
               echo "skip $name@$version (already published)"; continue
             fi
             tgz="$RUNNER_TEMP/$(echo "$name" | sed 's#@##; s#/#-#')-${version}.tgz"
-            node "$GITHUB_WORKSPACE/tooling/js/pack.mjs" "$dir" "$RUNNER_TEMP" >/dev/null
+            bun "$GITHUB_WORKSPACE/tooling/js/pack.mjs" "$dir" "$RUNNER_TEMP" >/dev/null
             echo "publish $name@$version via OIDC ($tgz)"
             npm publish "$tgz" --tag canary --access public
           done

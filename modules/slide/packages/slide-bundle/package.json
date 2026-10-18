@@ -1,6 +1,7 @@
 {
   "name": "@paged-media/slide",
   "version": "0.1.0-canary.1",
+  "private": true,
   "type": "module",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "main": "./src/index.ts",
@@ -14,23 +15,9 @@
     "schema",
     "manifest.json"
   ],
-  "publishConfig": {
-    "access": "public",
-    "tag": "canary",
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "./manifest.json": "./manifest.json"
-    }
-  },
   "scripts": {
     "typecheck": "bun check",
-    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts",
-    "build": "tsup"
+    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts"
   },
   "peerDependencies": {
     "@paged-media/plugin-api": "workspace:*",
@@ -44,7 +31,6 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "react": "catalog:",
-    "tsup": "^8.5.1",
     "typescript": "catalog:",
     "@paged-media/test-kit": "workspace:*",
     "@types/bun": "catalog:"

@@ -89,3 +89,11 @@ and is `private`.
   `status: "planned"`; tool activation as a derived command
 - https://github.com/paged-media/core/blob/main/docs/adr/114-interaction-lives-in-the-engine.md
   — the gesture protocol on the engine side
+
+## Amendment, 2026-10-18
+
+`ToolContribution`, `CursorSpec`, `ToolOptionsSpec` and `GestureHandler` are now defined by
+the contract and extended in the shell ([ADR 226](226-contribution-types-have-one-definition.md)).
+The cited assertions in `apps/canvas/src/plugin-api-compat.ts` moved next to the shell types:
+`_ToolRegistrable` in `packages/shell/src/registries/tool.ts` and `_ContractHandlerMountable`
+in `packages/shell/src/tools/gesture-handler.ts`.

@@ -72,10 +72,11 @@ fn dir(who: &str) -> PathBuf {
 
 #[test]
 fn new_then_script_then_export_then_render_then_diff() {
-    if !a_font().exists() {
-        eprintln!("skipping: corpus/fonts absent");
-        return;
-    }
+    assert!(
+        a_font().is_file(),
+        "{} is committed at engine/core/corpus/fonts; a partial checkout?",
+        a_font().display()
+    );
     let d = dir("chain");
     let (blank, js) = (d.join("blank.paged"), d.join("article.js"));
     std::fs::write(&js, SCRIPT).unwrap();

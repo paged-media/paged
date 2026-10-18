@@ -83,8 +83,8 @@ runs:
           if [ "$M" = data ]; then grep -E '"apache-arrow"' bun.lock; fi
           echo "$BUILD_ARGS $TOOLCHAIN"
         }
-        # Node, not sha256sum: the showcase nightly runs on macOS.
-        KEY=$(inputs | node -e '
+        # Bun, not sha256sum: the showcase nightly runs on macOS.
+        KEY=$(inputs | bun -e '
           const h = require("crypto").createHash("sha256");
           process.stdin.on("data", (d) => h.update(d)).on("end", () => console.log(h.digest("hex").slice(0, 40)));
         ')

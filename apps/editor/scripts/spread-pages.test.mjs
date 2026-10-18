@@ -7,7 +7,7 @@
 // `spreadId` (engine 0.71.13) with a fixture page list, and the fallback
 // an older worker takes.
 //
-// Run: `node --experimental-strip-types scripts/spread-pages.test.mjs`
+// Run: `bun test ./scripts/spread-pages.test.mjs`
 // (root `test:spread-pages` npm script).
 
 import { test } from "node:test";

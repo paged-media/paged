@@ -28,8 +28,9 @@
 // its types: hand-written editor-contract shapes in ./editor, the
 // engine wire types VENDORED in ./wire.d.ts (synced from the
 // editor's generated tsify output via scripts/sync-wire.mjs). The
-// EDITOR asserts compatibility against this contract through its
-// dev link (apps/canvas/src/plugin-api-compat.ts) — drift fails the
+// EDITOR builds on this contract — its shell registries extend the
+// contribution types (editor ADR 226) and apps/canvas/src/
+// plugin-api-compat.ts asserts its handles — so drift fails the
 // editor's typecheck, never a consumer's build. What's IN the
 // façade is decided by what paged.draw / paged.web needed — gaps
 // live in the consumers' BREAKAGE_LOG.md files. Design rationale:

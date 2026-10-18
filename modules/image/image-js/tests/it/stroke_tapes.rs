@@ -33,7 +33,7 @@
 //! writes back wherever the effective coverage is non-zero.
 //!
 //! GPU-only (the composite is a kernel dispatch); skips without a device
-//! unless `REQUIRE_GPU=1`.
+//! unless `PAGED_REQUIRE_GPU=1`.
 
 use std::sync::Arc;
 

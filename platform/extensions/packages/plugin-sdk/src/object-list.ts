@@ -30,7 +30,7 @@
 
 import type { Address, BundleHost, Disposable, ElementId } from "@paged-media/plugin-api";
 
-import { fromElementId } from "./object-address";
+import { fromElementId } from "./object-address.js";
 
 export interface ObjectListRow {
   selfId: Address;
