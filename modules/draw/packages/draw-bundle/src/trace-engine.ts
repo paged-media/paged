@@ -41,9 +41,8 @@
 // use the host's `loadBundleWasm` (a raw module with no wbindgen
 // imports); the glue loads in the BUNDLE REALM.
 //
-// THIS MODULE MUST STAY AT `src/` DEPTH 1. tsup emits a FLAT `dist/`, so
-// `../wasm/…` is the only relative path that resolves both from
-// `src/trace-engine.ts` and from `dist/index.js`.
+// THIS MODULE MUST STAY AT `src/` DEPTH 1: it reaches the wasm as
+// `../wasm/…`, relative to `src/trace-engine.ts`.
 //
 // BLOCKING — MEASURED, not estimated, because the first estimate here was
 // wrong by two orders of magnitude. `TraceEngine.trace()` is synchronous

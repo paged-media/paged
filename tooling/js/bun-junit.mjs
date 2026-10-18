@@ -34,13 +34,20 @@ if (inputs.length === 0) {
 const ENTITIES = { lt: "<", gt: ">", amp: "&", quot: '"', apos: "'" };
 const decode = (s) =>
   s.replace(/&(#x[0-9a-fA-F]+|#\d+|\w+);/g, (m, e) =>
-    e[0] === "#" ? String.fromCodePoint(e[1] === "x" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)) : ENTITIES[e] ?? m,
+    e[0] === "#"
+      ? String.fromCodePoint(
+          e[1] === "x" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10),
+        )
+      : (ENTITIES[e] ?? m),
   );
 // vitest's escapeXML: the five entities, then the characters XML 1.0 forbids
 // (and the ones it discourages) are dropped, not escaped. bun writes them
 // raw, which no XML parser accepts. Newlines stay raw, as vitest left them.
-const INVALID = /([\0-\x08\v\f\x0E-\x1F\uFFFD\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF])/g;
+const INVALID =
+  // eslint-disable-next-line no-control-regex -- these are the control characters XML 1.0 forbids
+  /([\0-\x08\v\f\x0E-\x1F\uFFFD\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF])/g;
 const DISCOURAGED = new RegExp(
+  // eslint-disable-next-line no-control-regex -- the characters XML 1.0 discourages
   "([\\x7F-\\x84]|[\\x86-\\x9F]|[\\uFDD0-\\uFDEF]|\\uD83F[\\uDFFE\\uDFFF]|(?:\\uD87F[\\uDFFE\\uDFFF])|\\uD8BF[\\uDFFE\\uDFFF]|\\uD8FF[\\uDFFE\\uDFFF]|(?:\\uD93F[\\uDFFE\\uDFFF])|\\uD97F[\\uDFFE\\uDFFF]|\\uD9BF[\\uDFFE\\uDFFF]|\\uD9FF[\\uDFFE\\uDFFF]|\\uDA3F[\\uDFFE\\uDFFF]|\\uDA7F[\\uDFFE\\uDFFF]|\\uDABF[\\uDFFE\\uDFFF]|(?:\\uDAFF[\\uDFFE\\uDFFF])|\\uDB3F[\\uDFFE\\uDFFF]|\\uDB7F[\\uDFFE\\uDFFF]|(?:\\uDBBF[\\uDFFE\\uDFFF])|\\uDBFF[\\uDFFE\\uDFFF](?:[\\0-\\t\\v\\f\\x0E-\\u2027\\u202A-\\uD7FF\\uE000-\\uFFFF]|[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]|[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])|(?:[^\\uD800-\\uDBFF]|^)[\\uDC00-\\uDFFF]))",
   "g",
 );
@@ -63,7 +70,8 @@ const attrs = (tag) => {
 function parse(xml) {
   const cases = [];
   const stack = []; // open <testsuite> attrs, outermost first
-  const TOKEN = /<testsuite\b([^>]*?)(\/?)>|<\/testsuite>|<testcase\b([^>]*?)\/>|<testcase\b([^>]*?)>([\s\S]*?)<\/testcase>/g;
+  const TOKEN =
+    /<testsuite\b([^>]*?)(\/?)>|<\/testsuite>|<testcase\b([^>]*?)\/>|<testcase\b([^>]*?)>([\s\S]*?)<\/testcase>/g;
   for (const m of xml.matchAll(TOKEN)) {
     if (m[0].startsWith("</testsuite")) stack.pop();
     else if (m[0].startsWith("<testsuite")) {
@@ -89,7 +97,12 @@ function render(cases) {
     if (!files.has(c.file)) files.set(c.file, []);
     files.get(c.file).push(c);
   }
-  const status = (c) => (/<(failure|error)\b/.test(c.body) ? "failed" : /<skipped\b/.test(c.body) ? "skipped" : "passed");
+  const status = (c) =>
+    /<(failure|error)\b/.test(c.body)
+      ? "failed"
+      : /<skipped\b/.test(c.body)
+        ? "skipped"
+        : "passed";
   const count = (cs, s) => cs.filter((c) => status(c) === s).length;
   const seconds = (cs) => cs.reduce((t, c) => t + Number(c.time || 0), 0);
   const host = hostname();
@@ -105,7 +118,11 @@ function render(cases) {
     for (const c of cs) {
       const name = [...c.chain, c.name].join(" > ");
       const open = `        <testcase classname="${encode(file)}" name="${encode(name)}" time="${c.time}"`;
-      lines.push(c.body ? `${open}>\n            ${c.body}\n        </testcase>` : `${open}>\n        </testcase>`);
+      lines.push(
+        c.body
+          ? `${open}>\n            ${c.body}\n        </testcase>`
+          : `${open}>\n        </testcase>`,
+      );
     }
     lines.push("    </testsuite>");
   }

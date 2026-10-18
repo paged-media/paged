@@ -13,9 +13,9 @@ description: >-
 # in those directories. A job that typechecks, tests or builds against them
 # runs this first.
 #
-# Prerequisites: the repository checked out at the workspace root, and Node on
+# Prerequisites: the repository checked out at the workspace root, and Bun on
 # PATH (moonrepo/setup-toolchain; build-wasm-packages.sh checks the built
-# files with `node -e`). Composite steps do not inherit the caller's
+# files with `bun -e`). Composite steps do not inherit the caller's
 # `defaults.run.working-directory`, so every step names its directory.
 #
 # The cache key hashes everything the build reads: the engine's crates,
@@ -136,7 +136,7 @@ runs:
       run: |
         set -euo pipefail
         for PKG in canvas-wasm introspect-wasm repo-wasm sdk; do
-          node -e '
+          bun -e '
             const fs = require("fs");
             const dir = process.argv[1];
             const pkg = JSON.parse(fs.readFileSync(dir + "/package.json", "utf8"));

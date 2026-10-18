@@ -139,10 +139,11 @@ jobs:
           fi
           echo "ok: flo_curves is not in the graph"
 
-  # The TS side — the paged.publish plugin bundle (packages/publish-bundle),
-  # which consumes the published @paged-media/plugin-api + plugin-sdk canaries.
+  # The TS side — the paged.publish and paged.pdf plugin bundles. The editor
+  # builds them from source (they are private workspace packages, PM-0008),
+  # so there is no bundle build here: typecheck and manifest validation.
   bundle:
-    name: bundles typecheck + build + validate
+    name: bundles typecheck + validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -157,8 +158,8 @@ jobs:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
-      # pdf-bundle's build bundles the pdf-import mapper's glue
-      # (packages/pdf-bundle/bin/pdf_import.js), a build output since B3b.
+      # The pdf-import mapper's glue and wasm (packages/pdf-bundle/bin/), a
+      # build output since B3b; validate checks the declared wasm against it.
       - name: module wasm (publish)
         uses: ./.github/actions/module-wasm
         with: { module: publish }
@@ -167,13 +168,12 @@ jobs:
         working-directory: .
         run: bun install --frozen-lockfile
       - run: bun run --filter './packages/*' typecheck
-      - run: bun run --filter './packages/*' build
       - name: validate every bundle manifest
         run: |
           set -e
           for m in packages/*/manifest.json; do
             echo "== validate $m =="
-            node "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs" validate "$m"
+            bun "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs" validate "$m"
           done
 
   # Test evidence — the suites this repo has always had and CI never ran.

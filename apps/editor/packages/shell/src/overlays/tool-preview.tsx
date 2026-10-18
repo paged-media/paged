@@ -70,7 +70,6 @@ function ToolPreviewRender(props: OverlayProps) {
         // Positional key: the list is republished wholesale on every
         // pointermove, so there is no identity to preserve across
         // renders.
-        // eslint-disable-next-line react/no-array-index-key
         <g key={i}>{renderPreviewShape(shape, props)}</g>
       ))}
     </>
@@ -96,7 +95,6 @@ export function renderPreviewShape(
         {p.cells.map(([top, left, bottom, right], i) => (
           <rect
             // Static list (one published grid frame); index key is stable.
-            // eslint-disable-next-line react/no-array-index-key
             key={i}
             x={pr.x + left}
             y={pr.y + top}

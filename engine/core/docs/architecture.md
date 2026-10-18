@@ -58,8 +58,8 @@ content, and `paged-store` the codec that writes `Document` as a container part
 
 **Output.** `paged-compose` defines the display list, the effect masks and the scene-layer
 types plugins submit. `paged-gpu` owns the `PathRasterizer` trait and two implementations
-behind Cargo features: `cpu` (tiny-skia, the default) and `vello-backend` (Vello 0.10 on
-wgpu 29) ([ADR 100](adr/100-two-rasterisers-one-trait.md)). `paged-renderer` is the
+behind Cargo features: `cpu` (tiny-skia, the default) and `vello-backend` (Vello 0.11 on
+wgpu 30) ([ADR 100](adr/100-two-rasterisers-one-trait.md)). `paged-renderer` is the
 pipeline: `pipeline::build_document`, the asset resolver, diagnostics, and the
 `paged-inspect` binary. `paged-export-pdf` writes PDF from the display list
 ([ADR 119](adr/119-pdf-export-backend.md)). `paged-composition-render` renders a
@@ -195,7 +195,10 @@ writes are `Mutation` values passed to `CanvasModel::apply_mutation`.
 
 **Surface descriptions.** `crates/paged-introspect/catalog.json` (host functions, settable
 paths, operations, elements) and `crates/paged-cli/cli.json` are generated and committed; a
-test fails when either differs from the code. `web/idml-viewer/api-catalog.json` is written
+test fails when either differs from the code. `crates/paged-wire/schema/mutation.schema.json`
+is the JSON Schema of `Mutation` and every type it carries, written by `schemars` beside the
+`Tsify` derives under `paged-wire`'s `schema` feature; its tests fail when it is stale or
+disagrees with tsify's declaration ([ADR 187](adr/187-the-wire-describes-itself-as-json-schema.md)). `web/idml-viewer/api-catalog.json` is written
 by hand, and a test fails when an export is missing from it
 ([ADR 019](adr/019-capability-catalog-one-contract.md)). Two more tests pin what a surface
 cannot reach: the command line sends 32 of the 62 message kinds

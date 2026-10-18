@@ -20,9 +20,8 @@
     "./api-catalog.json": "./api-catalog.json"
   },
   "scripts": {
-    "catalog": "node ../../scripts/client-api-catalog.mjs",
-    "typecheck": "bun check -p tsconfig.json",
-    "lint": "eslint src"
+    "catalog": "bun ../../scripts/client-api-catalog.mjs",
+    "typecheck": "bun check -p tsconfig.json"
   },
   "dependencies": {
     "@paged-media/canvas-wasm": "workspace:*"

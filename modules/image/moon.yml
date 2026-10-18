@@ -24,12 +24,6 @@ tasks:
       - project: 'extensions'
         filter: ['packages/plugin-cli/**/*', 'packages/plugin-api/src/manifest.schema.json']
 
-  js-lint:
-    description: 'The contract-import guard (scripts/check-contract-imports.mjs).'
-    command: 'bun run lint:contract'
-    inputs:
-      - '@group(js-sources)'
-
   js-test:
     # The specs boot glue/wasm and wasm-fresh.spec.ts checks it; image-ci
     # builds it first.
@@ -37,10 +31,6 @@ tasks:
     inputs:
       - project: 'extensions'
         filter: ['packages/plugin-cli/**/*', 'packages/plugin-api/src/manifest.schema.json']
-
-  js-build:
-    # The packages are glue/ and manifest/, not packages/*.
-    command: "bun run --filter './glue' --filter './manifest' build"
 
   wasm:
     description: 'image-js wasm into glue/wasm/ and manifest/wasm/ (scripts/build-wasm.sh).'

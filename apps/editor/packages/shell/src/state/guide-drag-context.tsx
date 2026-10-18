@@ -53,7 +53,6 @@ import {
   type PropsWithChildren,
 } from "react";
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { PageId } from "@paged-media/client";
 
 export type GuideOrientation = "horizontal" | "vertical";

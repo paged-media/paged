@@ -34,7 +34,6 @@
 
 import { useCallback } from "react";
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { ElementId, PageId } from "@paged-media/client";
 
 import { useCanvasClient } from "./canvas-client-context";

@@ -22,7 +22,6 @@
 // entered at. One function, so the entering point and the first pointer
 // after it can never disagree about where the content origin is.
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { ElementGeometryItem } from "@paged-media/client";
 
 /**

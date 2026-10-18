@@ -307,7 +307,9 @@ impl ResidencyManager {
 
         let mut heap = Vec::with_capacity(HEAP_TILE_BYTES);
         {
-            let data = slice.get_mapped_range();
+            let data = slice
+                .get_mapped_range()
+                .map_err(|e| GpuError::Readback(format!("mapped range: {e}")))?;
             for row in 0..TILE {
                 let start = (row * padded_row) as usize;
                 heap.extend_from_slice(&data[start..start + row_bytes as usize]);

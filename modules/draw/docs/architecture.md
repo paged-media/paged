@@ -51,15 +51,16 @@ out, over the `visioncortex` crate. No wasm-bindgen dependency.
  packages/draw-bundle/wasm/  <== scripts/build-wasm.sh ==  crates/trace-js --> crates/draw-trace
 ```
 
-- tsup inlines the two private packages into the published one (`noExternal`), with two
+- `draw-bundle` reaches the two internal packages through the workspace and has two
   entry points: the bundle, and `./geometry`, a re-export of `draw-geometry`
   (`geometry.ts`). The editor imports both: the bundle in `editor: apps/canvas/src/main.tsx`
   and the geometry in its built-in Pen and Pencil (`editor: packages/tools/src/handlers/`).
   `draw-tools` has no entry point of its own.
 - `@paged-media/plugin-api`, `@paged-media/plugin-sdk` and `react` are peer dependencies of the
-  published package. `scripts/check-contract-imports.mjs` runs before the tests and fails on any
-  static `import … from` or `export … from` that is not one of those three, a package of this repo,
-  or relative. It does not check dynamic `import()` (three `node:` modules in `trace-engine.ts`).
+  published package. The contract-import lint rule (`/bunfig.toml`, PM-0003) fails on any import
+  or `export … from` that is not one of those three, a package of this repo, a shared package
+  (`platform/shared/*`), or relative. It does not check dynamic `import()` (three `node:` modules
+  in `trace-engine.ts`).
 - The wasm is build output in `packages/draw-bundle/wasm/` (gitignored; `scripts/build-wasm.sh`,
   `moon run draw:wasm`, and in CI `.github/actions/module-wasm`). That directory is both the
   path the manifest declares (`wasm/trace_js_bg.wasm`) and the path `trace-engine.ts`
@@ -229,10 +230,9 @@ for the C-15 handles and the B-18 nesting pair).
 
 ## Build and test
 
-- The root `build` script is the typecheck. `pnpm -r build` runs tsup in each package; only
-  `draw-bundle` is published. `.github/workflows/publish.yml` runs typecheck and build on
-  every push to `main` and publishes `@paged-media/draw` under the `canary` tag when the
-  version is not yet on npm.
+- The root `build` script is the typecheck. No package builds on its own: all are private
+  workspace packages (PM-0008), and the editor builds them from source.
+  `.github/workflows/draw-publish.yml` stays, dispatch-only, until the npm deprecation.
 - `scripts/build-wasm.sh` builds `trace-js` in release mode, checks that the installed
   `wasm-bindgen` CLI matches `Cargo.lock`, runs `wasm-bindgen --target web` and, if
   present, `wasm-opt -Oz`, and writes `packages/draw-bundle/wasm/`. It is needed only when

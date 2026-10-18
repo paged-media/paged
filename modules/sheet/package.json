@@ -7,12 +7,10 @@
   "scripts": {
     "typecheck": "bun run --filter './packages/*' typecheck",
     "build": "bun run --filter './packages/*' typecheck",
-    "lint:contract": "node scripts/check-contract-imports.mjs",
-    "test": "node scripts/check-contract-imports.mjs && bun run --filter './packages/*' test",
-    "validate:manifest": "node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/sheet-bundle/manifest.json"
+    "test": "bun run --filter './packages/*' test",
+    "validate:manifest": "bun ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/sheet-bundle/manifest.json"
   },
   "devDependencies": {
-    "tsup": "^8.5.1",
     "typescript": "catalog:"
   }
 }

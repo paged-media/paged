@@ -56,7 +56,7 @@ die() {
 [ "$(uname -s)" = "Darwin" ] || die 2 "this drives Adobe Illustrator through osascript; macOS only"
 [ -f "$1" ] || die 2 "no such probe: $1"
 command -v osascript >/dev/null || die 2 "osascript not found"
-command -v node >/dev/null || die 2 "node not found (the reply is validated with it)"
+command -v bun >/dev/null || die 2 "bun not found (the reply is validated with it)"
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 PROBE="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
@@ -226,7 +226,7 @@ DOCS_AFTER="$(ping_app "String(app.documents.length)")" ||
 
 # --- 4 + 6. judge the artifact, then write the fixture ----------------------
 SHA="$(cat "$SRC" | shasum -a 256 | cut -d' ' -f1)"
-node "$WRITER" \
+bun "$WRITER" \
   "$RAW" "$OUT" "$NAME" "${PROBE#"$ROOT"/}" "$SHA" "$(sw_vers -productVersion)" ||
   die 4 "Illustrator's reply was refused; nothing was written to $OUT" \
     "Raw reply kept: $RAW"

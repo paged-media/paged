@@ -188,7 +188,7 @@ async function loadModule(): Promise<DocWasmModule> {
     });
   } else {
     // @ts-ignore — `?url` is a bundler affordance, untyped (the editor's
-    // wasm-loading convention; tsup marks `?url` external).
+    // wasm-loading convention; Vite resolves `?url`).
     const wasmUrl = (await import("../bin/docx_js_bg.wasm?url")) as {
       default: string;
     };

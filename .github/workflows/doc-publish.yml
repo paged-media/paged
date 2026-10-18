@@ -71,6 +71,6 @@ jobs:
             # The packed tarball, not the directory: npm does not apply
             # publishConfig (main/types/exports -> dist/) nor resolve
             # workspace:/catalog: specifiers; tooling/js/pack.mjs does.
-            tgz=$(node "$GITHUB_WORKSPACE/tooling/js/pack.mjs" "$dir" "$RUNNER_TEMP")
+            tgz=$(bun "$GITHUB_WORKSPACE/tooling/js/pack.mjs" "$dir" "$RUNNER_TEMP")
             npm publish "$tgz" --provenance --tag canary --access public
           done

@@ -9,7 +9,7 @@
 // import map or a dev-server rewrite. Inlined, a static host serves it like the
 // wasm next to it.
 //
-// esbuild comes from tsup (a root devDependency); apache-arrow from the
+// esbuild is a devDependency of modules/data; apache-arrow comes from the
 // bundle's own node_modules. Both exist after `bun install`.
 //
 // usage: node scripts/bundle-duckdb-api.mjs <in.mjs> <out.mjs>
@@ -28,9 +28,9 @@ if (!input || !output) {
 const rootRequire = createRequire(resolve(ROOT, "package.json"));
 let esbuild;
 try {
-  esbuild = createRequire(rootRequire.resolve("tsup"))("esbuild");
+  esbuild = rootRequire("esbuild");
 } catch (err) {
-  console.error(`bundle-duckdb-api: esbuild (via tsup) not found — run \`bun install\` first (${err.message})`);
+  console.error(`bundle-duckdb-api: esbuild not found — run \`bun install\` first (${err.message})`);
   process.exit(1);
 }
 try {

@@ -65,12 +65,23 @@ tasks:
       - project: 'web'
         filter: ['packages/web-bundle/**/*', 'packages/web-model/**/*']
 
+  # The repository's lint self-test lives here: the editor's zones were its
+  # first cases (ADR 206). It checks the whole root config (the module and
+  # extension contracts, the Rules of React), so it reads /bunfig.toml.
   js-lint:
-    description: 'ESLint architecture boundaries and their self-test.'
-    script: 'bun run lint && bun run lint:boundaries-selftest'
+    deps: ['~:lint-selftest']
+
+  lint-selftest:
+    description: 'Every lint boundary fires and every allowed import stays allowed (tooling/js/lint-selftest.mjs).'
+    toolchains: ['system']
+    command: 'bun $workspaceRoot/tooling/js/lint-selftest.mjs'
     inputs:
-      - '@group(js-sources)'
-      - 'test/eslint-boundaries/**/*'
+      - '/bunfig.toml'
+      - '/tooling/js/lint-selftest.mjs'
+      - '/tooling/js/lint-selftest/**/*'
+      - '/tooling/js/bun-canary.sh'
+      - '/tooling/js/bun-canary-version'
+      - '/platform/shared/*/package.json'
 
   js-test:
     description: 'The static guards of the editor-tests `checks` job, in its order.'
@@ -117,6 +128,10 @@ tasks:
     description: 'vite build of apps/* (needs the engine wasm and the bundles'' engine wasm).'
     command: 'bun run build'
     deps: ['core:wasm-pkg', 'doc:wasm', 'slide:wasm', 'sheet:wasm', 'data:wasm', 'web:wasm']
+    inputs:
+      - '@group(js-sources)'
+    options:
+      runInCI: false
 
   fixtures:
     description: 'paged-gen (engine/core) emits every sample into corpus/idml/generated/, as editor-tests does.'

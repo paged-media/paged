@@ -41,7 +41,7 @@ mod wasm {
     #[wasm_bindgen]
     pub fn keep_wgpu_linked() -> String {
         // Instantiating a wgpu type ensures the linker keeps its code.
-        let _instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
+        let _instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
         super::shaping_stack_linked().to_string()
     }
 }

@@ -19,7 +19,6 @@
 
 import type { ReactNode } from "react";
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { ElementGeometryItem } from "@paged-media/client";
 
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";

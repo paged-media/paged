@@ -16,6 +16,11 @@ root=$(git rev-parse --show-toplevel)
 # Lint fixes go before the formatter, so that the formatter has the last
 # word on the layout.
 
+# Lint the staged JavaScript and TypeScript files (bunfig.toml [lint],
+# docs/adr/PM-0003) and fix what bun lint can fix. A finding it cannot fix
+# stops the commit.
+"$root/tooling/js/bun-canary.sh" lint --no-script --staged --fix
+
 # Format the staged JS/TS, JSON, CSS, HTML, Markdown and YAML files
 # (bunfig.toml [fmt], /.prettierignore).
 "$root/tooling/js/fmt.sh" --staged
