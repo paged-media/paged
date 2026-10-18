@@ -1206,6 +1206,9 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
                             text_variable: None,
                             placeholder: None,
                             text: String::new(),
+                            // Fields the model gains later (a tracked
+                            // change, D-01) default here.
+                            ..Default::default()
                         });
                     }
                     b"Content" => {

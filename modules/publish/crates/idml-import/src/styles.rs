@@ -690,6 +690,19 @@ pub fn parse_stylesheet(xml: &[u8]) -> Result<StyleSheet, ParseError> {
                 }
             }
             Event::Empty(e) => match e.name().as_ref() {
+                // A paragraph style's PDF export tagging (core ADR 182):
+                // the structure type a tagged PDF role-maps it to.
+                b"StyleExportTagMap"
+                    if matches!(current_style, Some(CurrentStyle::Paragraph))
+                        && attr(&e, b"ExportType").as_deref() == Some("PDF") =>
+                {
+                    if let Some(p) = current_paragraph_style
+                        .as_deref()
+                        .and_then(|id| out.paragraph_styles.get_mut(id))
+                    {
+                        p.pdf_export_tag = attr(&e, b"ExportTag").filter(|t| !t.is_empty());
+                    }
+                }
                 // A paragraph style's restart policy: an empty
                 // `<Properties>` child carrying attributes (core ADR 158).
                 b"NumberingRestartPolicies"
@@ -3341,6 +3354,30 @@ mod object_style_text_frame_tests {
     /// An object style's own text wrap and anchored-object options, as
     /// InDesign 20.0.1 writes them (ADR 143): the wrap's offsets a
     /// `<TextWrapOffset>` child, the anchoring every attribute.
+    /// A paragraph style's PDF export tag, as InDesign 20.0.1 writes it
+    /// (core `tagged-styles-probe`); the EPUB/HTML maps are not PDF's.
+    #[test]
+    fn a_paragraph_styles_pdf_export_tag_is_read() {
+        let xml = br#"<idPkg:Styles xmlns:idPkg="x"><RootParagraphStyleGroup>
+<ParagraphStyle Self="ParagraphStyle/Heading" Name="Heading" PointSize="16">
+<StyleExportTagMap Self="udeStyleExportTagMapnEPUB" ExportType="EPUB" ExportTag="h2" ExportClass="" ExportAttributes="" SplitDocument="false" EmitCss="true" />
+<StyleExportTagMap Self="udeStyleExportTagMapnPDF" ExportType="PDF" ExportTag="H1" ExportClass="" ExportAttributes="" SplitDocument="false" EmitCss="true" />
+</ParagraphStyle>
+<ParagraphStyle Self="ParagraphStyle/Body" Name="Body"><Properties><BasedOn type="string">$ID/[No paragraph style]</BasedOn></Properties></ParagraphStyle>
+</RootParagraphStyleGroup></idPkg:Styles>"#;
+        let sheet = parse_stylesheet(xml).expect("styles");
+        assert_eq!(
+            sheet.paragraph_styles["ParagraphStyle/Heading"]
+                .pdf_export_tag
+                .as_deref(),
+            Some("H1")
+        );
+        assert_eq!(
+            sheet.paragraph_styles["ParagraphStyle/Body"].pdf_export_tag,
+            None
+        );
+    }
+
     #[test]
     fn an_object_styles_wrap_and_anchoring_read_in_indesigns_spelling() {
         let xml = br#"<idPkg:Styles xmlns:idPkg="x"><RootObjectStyleGroup>
