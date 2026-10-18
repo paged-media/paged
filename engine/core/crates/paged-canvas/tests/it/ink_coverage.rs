@@ -288,3 +288,92 @@ fn ink_coverage_routes_through_the_collection_dispatcher() {
         serde_json::to_value(model.ink_coverage()).unwrap()
     );
 }
+
+/// The numbers themselves, not ranges: a pixel-aligned rectangle covers
+/// whole pixels, so every reading below is exact arithmetic on its
+/// 200 × 400 pt (80 000 px at 72 dpi) of a 160 000 px page — whatever
+/// rasterizer draws it — a change here is a change of SEMANTICS
+/// (which pixels separate, how a plate's tint is read), never of
+/// antialiasing.
+#[test]
+fn ink_coverage_numbers_are_exact_for_a_pixel_aligned_fill() {
+    let Some(profile) = cmyk_profile() else {
+        skip!(
+            Resource::Icc,
+            "{}",
+            paged_color::test_profiles::NO_PROFILE_HINT
+        );
+    };
+    let row = |fill: &str| {
+        let model = CanvasModel::load(
+            "doc-1",
+            &prepress_idml(fill),
+            CanvasOptions {
+                cmyk_icc_profile: Some(profile.clone()),
+                ..CanvasOptions::default()
+            },
+        )
+        .expect("load");
+        model.ink_coverage().remove(0)
+    };
+    let plates = |r: &paged_canvas::channel::InkCoverageSummary| -> Vec<(String, f32, f32, f32)> {
+        r.plates
+            .iter()
+            .map(|p| {
+                (
+                    p.ink_id.clone(),
+                    p.area_pct,
+                    p.max_tint_pct,
+                    p.mean_tint_pct,
+                )
+            })
+            .collect()
+    };
+    let bucket = |r: &paged_canvas::channel::InkCoverageSummary| -> Vec<(usize, u32)> {
+        r.histogram
+            .iter()
+            .enumerate()
+            .filter(|(_, n)| **n > 0)
+            .map(|(i, n)| (i, *n))
+            .collect()
+    };
+
+    let rich = row("Color/richblack");
+    assert_eq!(
+        (rich.total_pixels, rich.separated_pixels),
+        (160_000, 80_000)
+    );
+    assert_eq!(rich.separated_pct, 50.0);
+    assert_eq!((rich.max_tac_pct, rich.mean_tac_pct), (240.0, 240.0));
+    assert_eq!(rich.over_limit_pixels, 0);
+    assert_eq!(
+        plates(&rich),
+        vec![
+            ("cyan".into(), 50.0, 60.0, 60.0),
+            ("magenta".into(), 50.0, 40.0, 40.0),
+            ("yellow".into(), 50.0, 40.0, 40.0),
+            ("black".into(), 50.0, 100.0, 100.0),
+        ]
+    );
+    assert_eq!(bucket(&rich), vec![(24, 80_000)]);
+
+    let flat = row("Color/flatk");
+    assert_eq!(flat.separated_pixels, 80_000);
+    assert_eq!((flat.max_tac_pct, flat.mean_tac_pct), (100.0, 100.0));
+    assert_eq!(plates(&flat)[3], ("black".into(), 50.0, 100.0, 100.0));
+    assert_eq!(bucket(&flat), vec![(10, 80_000)]);
+
+    // A spot is its own plate at its own tint; the process plates stay
+    // blank under it.
+    let spot = row("Color/pms");
+    assert_eq!(spot.separated_pixels, 80_000);
+    assert_eq!((spot.max_tac_pct, spot.mean_tac_pct), (100.0, 100.0));
+    let spot_plates = plates(&spot);
+    assert_eq!(spot_plates.len(), 5);
+    assert!(
+        spot_plates[..4].iter().all(|p| p.1 == 0.0),
+        "{spot_plates:?}"
+    );
+    assert_eq!(spot_plates[4], ("Color/pms".into(), 50.0, 100.0, 100.0));
+    assert_eq!(bucket(&spot), vec![(10, 80_000)]);
+}
