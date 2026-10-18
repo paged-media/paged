@@ -19,12 +19,11 @@
 // The suite is evidence about the contract it RESOLVED, not the one a
 // manifest names. Pinned here:
 //
-// 1. the installed plugin-api / plugin-sdk are the devDependency versions
-//    (a stale node_modules or a sibling link would otherwise test some
-//    other contract and report green);
+// 1. the installed plugin-api / plugin-sdk are the workspace packages the
+//    devDependencies name (`workspace:*`; a stale node_modules or a stray
+//    npm pin would otherwise test some other contract and report green);
 // 2. plugin-api and plugin-sdk move together (they release together);
-// 3. the published peer range admits the pin the specs ran against (the
-//    floor itself stays a deliberate compatibility floor).
+// 3. the peers name the same workspace packages as the devDependencies.
 
 import { readFileSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -43,48 +42,25 @@ const bundle = JSON.parse(readFileSync(resolve(HERE, "../package.json"), "utf8")
 
 const API = "@paged-media/plugin-api";
 const SDK = "@paged-media/plugin-sdk";
-const EXACT = /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/;
-
-/** The version installed under `node_modules/<name>` — read from the file,
- *  because the packages' `exports` map hides `./package.json`. */
-function installedVersion(name: string): string {
-  const dir = realpathSync(resolve(HERE, "..", "node_modules", name));
-  return (JSON.parse(readFileSync(resolve(dir, "package.json"), "utf8")) as { version: string })
-    .version;
-}
-
-/** Numeric compare of `a.b.c-canary.n` versions (enough for our pins). */
-function cmp(a: string, b: string): number {
-  const parts = (v: string) => v.split(/[.-]/).map((x) => (/^\d+$/.test(x) ? Number(x) : x));
-  const pa = parts(a);
-  const pb = parts(b);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const x = pa[i] ?? 0;
-    const y = pb[i] ?? 0;
-    if (x === y) continue;
-    if (typeof x === "number" && typeof y === "number") return x - y;
-    return String(x) < String(y) ? -1 : 1;
-  }
-  return 0;
-}
+const WORKSPACE = "workspace:*";
+/** The workspace package a contract name resolves to. */
+const workspaceDir = (name: string): string =>
+  realpathSync(resolve(HERE, "../../../../../platform/extensions/packages", name.slice("@paged-media/".length)));
 
 describe("the SDK contract the specs run against", () => {
   for (const name of [API, SDK]) {
     const pin = bundle.devDependencies?.[name] ?? "";
 
-    it(`${name}: web-bundle pins an exact version (no dist-tag, no range)`, () => {
-      expect(pin).toMatch(EXACT);
+    it(`${name}: web-bundle takes the workspace package (no npm version, no range)`, () => {
+      expect(pin).toBe(WORKSPACE);
     });
 
-    it(`${name}: installed = the devDependency pin`, () => {
-      expect(installedVersion(name)).toBe(pin);
+    it(`${name}: installed = the workspace package the devDependency names`, () => {
+      expect(realpathSync(resolve(HERE, "..", "node_modules", name))).toBe(workspaceDir(name));
     });
 
-    it(`${name}: the peer range admits the tested pin`, () => {
-      const peer = bundle.peerDependencies?.[name] ?? "";
-      const floor = peer.match(/^>=(.+)$/)?.[1];
-      expect(floor, `peer ${peer} is not a >= floor`).toBeDefined();
-      expect(cmp(floor!, pin)).toBeLessThanOrEqual(0);
+    it(`${name}: the peer names the same workspace package`, () => {
+      expect(bundle.peerDependencies?.[name]).toBe(pin);
     });
   }
 

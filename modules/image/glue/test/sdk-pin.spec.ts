@@ -19,13 +19,13 @@
 // The suite is evidence about the contract it RESOLVED, not the one the
 // manifest names. Two things are pinned here:
 //
-// 1. the installed plugin-api / plugin-sdk are the devDependency versions
-//    (a stale node_modules or a sibling link would otherwise test some
-//    other contract and report green);
-// 2. the peer floor the published bundle declares is the version these
-//    specs ran against. Until 2026-10-04 the floor said >=0.2.29, the
-//    specs ran 0.2.33 and the editor shipped 0.2.37: the bundle claimed
-//    a range nobody had tested at either end.
+// 1. the installed plugin-api / plugin-sdk are the workspace packages the
+//    devDependencies name (`workspace:*`; a stale node_modules or a stray
+//    npm pin would otherwise test some other contract and report green);
+// 2. the peers name what these specs ran against: the same workspace
+//    packages. Until 2026-10-04 the floor said >=0.2.29, the specs ran
+//    0.2.33 and the editor shipped 0.2.37: the bundle claimed a range
+//    nobody had tested at either end.
 
 import { readFileSync, realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -41,22 +41,19 @@ const pkg = JSON.parse(readFileSync(resolve(HERE, "../package.json"), "utf8")) a
 
 const CONTRACT = ["@paged-media/plugin-api", "@paged-media/plugin-sdk"] as const;
 
-/** The version in glue/node_modules — read from the file, because the
- *  packages' `exports` map does not expose `./package.json`. */
-function installedVersion(name: string): string {
-  const dir = realpathSync(resolve(HERE, "../node_modules", name));
-  return (JSON.parse(readFileSync(resolve(dir, "package.json"), "utf8")) as { version: string })
-    .version;
-}
+/** The workspace package a contract name resolves to. */
+const workspaceDir = (name: string): string =>
+  realpathSync(resolve(HERE, "../../../../platform/extensions/packages", name.slice("@paged-media/".length)));
 
 describe("the SDK contract the specs run against", () => {
   for (const name of CONTRACT) {
-    it(`${name}: installed = the devDependency pin`, () => {
-      expect(installedVersion(name)).toBe(pkg.devDependencies[name]);
+    it(`${name}: installed = the workspace package the devDependency names`, () => {
+      expect(pkg.devDependencies[name]).toBe("workspace:*");
+      expect(realpathSync(resolve(HERE, "../node_modules", name))).toBe(workspaceDir(name));
     });
 
-    it(`${name}: the peer floor is the tested pin`, () => {
-      expect(pkg.peerDependencies[name]).toBe(`>=${pkg.devDependencies[name]}`);
+    it(`${name}: the peer names the same workspace package`, () => {
+      expect(pkg.peerDependencies[name]).toBe(pkg.devDependencies[name]);
     });
   }
 
