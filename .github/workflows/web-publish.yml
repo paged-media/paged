@@ -1,0 +1,131 @@
+name: web / publish
+
+# Disabled in the monorepo: built-in modules are no longer published separately (PM-0008). Kept for reference until wave D.
+#
+# MONOREPO (step A3): ported from paged-media/plugin-web .github/workflows/
+# publish.yml with `on: workflow_dispatch` only (its workflow_run trigger on `vitest` is removed). Paths are ported so the
+# file stays readable as a reference; the npm Trusted Publisher it names is
+# bound to the OLD repo and file name, so a dispatch could not publish anyway.
+#
+# Publish @paged-media/web to npm via OIDC TRUSTED PUBLISHING (tokenless).
+# Requires a Trusted Publisher on npm: org paged-media, this repo, workflow
+# publish.yml (keep this FILE NAME: the trusted publisher is bound to it).
+# Pre-1.0 -canary.N under the `canary` dist-tag.
+#
+# Runs only after `vitest` AND `rust` succeeded on main, on exactly the
+# commit they tested, and runs the TS suite against the wasm it builds
+# before packing. It used to run on every push in parallel with CI and test
+# nothing, so a commit that failed CI could still reach npm.
+#
+# A version already on npm is skipped — and since that turns "changed the
+# code, forgot the bump" into a green run that ships nothing,
+# scripts/package-hash.mjs --check FAILS the run when the sources differ
+# from the published version's PACKAGE_HASH.
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # OIDC token for trusted publishing
+  contents: read
+  actions: read     # look up the rust run for the same commit
+
+defaults:
+  run:
+    working-directory: modules/web
+
+jobs:
+  publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      # workflow_run fires per workflow; `vitest` triggers this one, and
+      # `rust` (fmt, clippy, cargo test) must be green for the same commit
+      # too. Wait for it if it is still running.
+      - name: rust CI green for this commit
+        # Runs before the checkout, when the module directory does not exist yet.
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 90); do
+            run=$(gh api "repos/${{ github.repository }}/actions/workflows/web-rust.yml/runs?head_sha=$SHA&event=push&per_page=1" \
+                    --jq '.workflow_runs[0] | "\(.status) \(.conclusion)"' || true)
+            echo "rust @ $SHA: ${run:-none}"
+            case "$run" in
+              "completed success") exit 0 ;;
+              completed*) echo "rust CI did not succeed for $SHA"; exit 1 ;;
+            esac
+            sleep 20
+          done
+          echo "timed out waiting for rust CI on $SHA"; exit 1
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.93.0
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/web/packages/web-render -> target
+          prefix-key: v0-rust-web
+      # The version is READ FROM the crate's lockfile, so the CLI and the
+      # crate cannot disagree (build-wasm.sh refuses a mismatch anyway).
+      - name: wasm-bindgen (prebuilt; version from the web-render lockfile)
+        run: |
+          set -euo pipefail
+          LOCK=packages/web-render/Cargo.lock
+          WB=$(grep -A1 '^name = "wasm-bindgen"$' "$LOCK" | grep version | head -1 | cut -d'"' -f2)
+          test -n "$WB" || { echo "could not read wasm-bindgen from $LOCK"; exit 1; }
+          echo "wasm-bindgen $WB (from Cargo.lock)"
+          curl -fsSL "https://github.com/rustwasm/wasm-bindgen/releases/download/$WB/wasm-bindgen-$WB-x86_64-unknown-linux-musl.tar.gz" | tar xz
+          echo "$PWD/wasm-bindgen-$WB-x86_64-unknown-linux-musl" >> "$GITHUB_PATH"
+      - name: binaryen (prebuilt wasm-opt; pinned — old apt binaryen breaks externref)
+        run: |
+          curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_119/binaryen-version_119-x86_64-linux.tar.gz | tar xz
+          echo "$PWD/binaryen-version_119/bin" >> "$GITHUB_PATH"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22   # >= 22.14 for OIDC trusted publishing
+      - name: upgrade npm (OIDC needs >= 11.5.1)
+        run: npm install -g npm@latest
+      # Fail BEFORE building when the sources changed but the version did
+      # not: the publish below would skip it and ship nothing.
+      - name: version bumped when the sources changed
+        run: node scripts/package-hash.mjs --check
+      - name: build wasm (stamps bin/SOURCE_HASH)
+        run: bash scripts/build-wasm.sh --engine
+      - run: pnpm install --frozen-lockfile
+      # The TS suite against the wasm built above (wasm-fresh.spec.ts proves
+      # it is the one these sources build; REQUIRE_REAL_ENGINE turns every
+      # "artifact missing" skip into a failure).
+      - name: test
+        run: node scripts/check-contract-imports.mjs && pnpm -r test
+        env:
+          REQUIRE_REAL_ENGINE: "1"
+      - run: pnpm -r build
+      - name: stamp bin/PACKAGE_HASH (read by the next run's bump check)
+        run: node scripts/package-hash.mjs --stamp
+      - name: publish via OIDC (canary)
+        run: |
+          set -e
+          for dir in packages/web-bundle; do
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "skip $name@$version (already published)"; continue
+            fi
+            tgz="$RUNNER_TEMP/$(echo "$name" | sed 's#@##; s#/#-#')-${version}.tgz"
+            ( cd "$dir" && pnpm pack --pack-destination "$RUNNER_TEMP" )
+            echo "publish $name@$version via OIDC"
+            npm publish "$tgz" --tag canary --access public
+          done

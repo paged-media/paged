@@ -1,0 +1,121 @@
+name: sheet / rust
+# MONOREPO (step A3): ported from paged-media/plugin-sheets
+# .github/workflows/rust.yml; runs in modules/sheet.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "modules/sheet/**"
+      - ".github/workflows/sheet-rust.yml"
+  # Pre-merge gate (audit finding: this lane was push-main-only, so a PR
+  # could land red and only redden main afterwards).
+  pull_request:
+    paths:
+      - "modules/sheet/**"
+      - ".github/workflows/sheet-rust.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sheet-rust-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: modules/sheet
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.93.0
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/sheet -> target
+          prefix-key: v0-rust-sheet
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      # Each guard fails explicitly. They used to be two `! (… | grep …)`
+      # lines: bash's errexit ignores a `!`-negated command, so only the
+      # LAST line's status reached the step and the sheet-fn guard could
+      # never fail.
+      - name: dependency guards (spec §4 rules)
+        run: |
+          if cargo tree -p sheet-fn --edges normal | grep -E 'sheet-(calc|parser|xlsx|lower|js)'; then
+            echo "LEAK: sheet-fn depends on a calc/parser/xlsx/lower/js crate"; exit 1
+          fi
+          if cargo tree -p sheet-js --target wasm32-unknown-unknown | grep -E 'sheet-conformance|proptest'; then
+            echo "LEAK: the wasm tree pulls a test-only crate"; exit 1
+          fi
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: modules/sheet/Cargo.toml
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.93.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/sheet -> target
+          prefix-key: v0-rust-sheet
+      - uses: taiki-e/install-action@nextest
+      # No `|| true` here (audit P2 / June V18): a red suite must redden the
+      # job. The junit artifact still publishes on failure — the upload step
+      # below runs under `if: ${{ !cancelled() }}`, so state still ingests
+      # red results.
+      - name: nextest (junit; red results still publish via !cancelled upload)
+        run: cargo nextest run --workspace --profile ci
+      - name: coverage gate (the §12.2 verification invariant)
+        run: cargo run -p sheet-conformance --bin coverage-gate
+      # Evidence hand-off, INVERTED (2026-07-25). This step used to call
+      # paged-media/state/actions/publish-results@main, but that action lives in the
+      # PRIVATE paged-media/state repo, and GitHub refuses to resolve a private
+      # repo's action from a public workflow ("Unable to resolve action
+      # paged-media/state, not found") — so the job died at SET-UP, before any step
+      # ran, and this lane never published a single result. Follow the inverted
+      # pattern core/ci.yml and plugin-doc use: upload the results as an artifact
+      # and let state PULL it (private state can read a public repo's artifacts).
+      # Consumer: state/.github/workflows/siblings-pull.yml (source=plugin-sheets,
+      # suite=nextest, format=nextest-junit).
+      - name: upload nextest results artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-junit
+          path: modules/sheet/target/nextest/ci/junit.xml
+          if-no-files-found: error
+          retention-days: 14
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.93.0
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/sheet -> target
+          prefix-key: v0-rust-sheet
+      - name: install pinned wasm-bindgen-cli (Cargo.lock version)
+        run: |
+          V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
+          cargo install wasm-bindgen-cli --version "$V" --locked
+      - name: install pinned binaryen (reftypes-safe; old apt binaryen breaks externref table grow)
+        run: |
+          curl -sL https://github.com/WebAssembly/binaryen/releases/download/version_119/binaryen-version_119-x86_64-linux.tar.gz | tar xz
+          echo "$PWD/binaryen-version_119/bin" >> "$GITHUB_PATH"
+      - name: build + budget gate (100 MB app-wide)
+        run: bash scripts/build-wasm.sh

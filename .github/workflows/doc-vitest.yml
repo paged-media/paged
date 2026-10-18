@@ -1,0 +1,74 @@
+name: doc / vitest
+# MONOREPO (step A3): ported from paged-media/plugin-doc
+# .github/workflows/vitest.yml; runs in modules/doc. Push-only, as before.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "modules/doc/**"
+      - ".github/workflows/doc-vitest.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: doc-vitest-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: modules/doc
+
+jobs:
+  vitest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # paged.doc consumes the PUBLISHED @paged-media canaries (no link chain),
+      # so a plain install suffices.
+      - run: pnpm install --frozen-lockfile
+      - name: contract-import lint (fail fast)
+        run: node scripts/check-contract-imports.mjs
+      - name: typecheck
+        run: pnpm -r run typecheck
+      # CI never checks out ../plugin-sdk (that path only exists in the local
+      # sibling-clone layout), so validate through the PUBLISHED plugin-cli —
+      # the same way plugin-publish/ci.yml validates its manifests.
+      - name: validate manifest
+        run: npx --yes @paged-media/plugin-cli@canary validate packages/doc-bundle/manifest.json
+      # Red results must still upload (the state matrix wants the ✗), so the
+      # run does not abort here — the gate at the end fails the job once the
+      # artifact is safely uploaded.
+      - name: vitest (junit per package; red results still upload)
+        run: |
+          set -uo pipefail
+          pnpm -r --no-bail exec \
+            vitest run --reporter=junit --outputFile=junit.xml \
+            || echo "TS_FAILED=1" >> "$GITHUB_ENV"
+          cat packages/*/junit.xml > junit-all.xml 2>/dev/null || true
+          [ -s junit-all.xml ]
+      # plugin-doc is a PUBLIC repo and the publish-results action lives in the
+      # PRIVATE paged-media/state repo. GitHub refuses to resolve a private
+      # repo's action from a public workflow ("Unable to resolve action
+      # paged-media/state, not found"), which failed this job at SET-UP — before
+      # any step ran — on all 18 runs since the workflow was added. So we follow
+      # core/ci.yml's inverted pattern: upload the JUnit as an artifact, and let
+      # state pull it (private state CAN read a public repo's artifacts).
+      - name: upload vitest JUnit artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-junit
+          path: modules/doc/junit-all.xml
+          if-no-files-found: error
+          retention-days: 14
+      - name: tests failed
+        if: ${{ env.TS_FAILED == '1' }}
+        run: exit 1

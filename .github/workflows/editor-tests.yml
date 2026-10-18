@@ -1,0 +1,639 @@
+name: editor / tests
+
+# Editor Playwright surface → state-matrix evidence (W0.5).
+#
+# Decision-B model: the engine wasm ships in the published
+# `@paged-media/canvas-wasm` package, so `pnpm install` is the whole
+# engine setup — no `core` checkout, no build-from-source bridge. The
+# vite dev server (spawned by playwright.config's `webServer`) sets the
+# COOP/COEP headers SharedArrayBuffer needs; that middleware runs in the
+# server process and works headless, so the chromium runner gets a
+# cross-origin-isolated context with no extra flags.
+#
+# Plugin bundles: `apps/canvas/package.json` consumes every plugin package
+# (@paged-media/plugin-api, plugin-sdk, draw, web, data, sheet, image,
+# publish, pdf) as PUBLISHED npm versions — the historical pnpm `link:`
+# sibling chain is gone, so `pnpm install` alone resolves all plugins with
+# no sibling checkouts. (The link:-era sibling checkout/install lattice —
+# and the build-image-wasm artifact lane — are gone: every published
+# bundle is self-contained, @paged-media/image ships its own wasm.)
+#
+# Scope: the behaviour surface (panels + gesture + e2e op-sandwiches),
+# NOT the Envato fidelity gate. That gate needs the 4.4 GB
+# `corpus/idml` LFS packs, their InDesign reference PDFs, poppler's
+# `pdftoppm`, and the `paged-diff` Rust binary built from a `core`
+# checkout — none of which the package-boundary runner carries. It stays
+# a local / core-CI concern; `PAGED_CI_LEAN=1` drops `fidelity.spec.ts`
+# + `extensive-corpus.spec.ts` from collection (both read the envato
+# manifest at import time). The lean surface (~412 tests) still needs the
+# small license-clear `corpus/idml/generated` fixtures + `corpus/fonts`, which
+# the harness loads — those come from a sparse LFS checkout of the
+# private `paged-media/corpus` repo (≈25 MB, not the 4.4 GB envato tier).
+#
+# Sharding: playwright.config pins workers:1 (snapshot determinism), so
+# the ~20-25 min surface is split across 3 shards (~7-9 min each + setup)
+# via `--shard`, each emitting a `blob` report. A final job merges the
+# blobs into one Playwright JSON and uploads it as the `playwright-results`
+# artifact. The private `paged-media/state` repo PULLS that artifact
+# (siblings-pull.yml), converts it to contract-v1, applies
+# `ingest/test-map.yaml` plus the journeys' inline `@feat:` tags, and
+# gates feature ids against the registry. See the step comment at the
+# hand-off for why the direction is inverted.
+#
+# MONOREPO (step A3): ported from paged-media/editor .github/workflows/
+# tests.yml. The repository is checked out at the workspace root, so the
+# editor is apps/editor (the default working directory below); core's
+# paged-gen and the doc/slide link targets are in-tree (engine/core,
+# modules/doc, modules/slide) instead of sibling checkouts. The path filters
+# therefore also name the in-tree inputs the jobs build from: modules/doc and
+# modules/slide (the two composite actions build them for the link
+# overrides) and engine/core/crates/paged-gen (the fixture generator).
+
+on:
+  push:
+    # `feat/plugin-panel-surfaces` was added here 2026-08-18, when main
+    # was frozen and development lived on that branch, so main-only push
+    # triggers meant no fresh playwright-results ever reached the state
+    # matrix. The instruction left with it was "remove the extra branch
+    # here (and there) when the branch merges".
+    #
+    # It merged into main on 2026-08-23 (d93be6e) and last ran
+    # 2026-08-22. Removed 2026-09-09, with the `branch` override in
+    # state's ingest/artifacts.yaml that paired with it — where the same
+    # stale pin had become the thing starving the lane it was added to
+    # feed, because the puller kept looking at a branch nothing pushed to.
+    branches: [main]
+    paths:
+      - "apps/editor/**"
+      - "modules/doc/**"
+      - "modules/slide/**"
+      - "engine/core/crates/paged-gen/**"
+      - ".github/actions/plugin-doc-from-source/**"
+      - ".github/actions/plugin-slide-from-source/**"
+      - ".github/workflows/editor-tests.yml"
+  pull_request:
+    paths:
+      - "apps/editor/apps/canvas/**"
+      - "apps/editor/packages/**"
+      - "apps/editor/pnpm-lock.yaml"
+      - "apps/editor/package.json"
+      - "apps/editor/eslint.config.mjs"
+      - "apps/editor/scripts/**"
+      - "modules/doc/**"
+      - "modules/slide/**"
+      - "engine/core/crates/paged-gen/**"
+      - ".github/actions/plugin-doc-from-source/**"
+      - ".github/actions/plugin-slide-from-source/**"
+      - ".github/workflows/editor-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: editor-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: apps/editor
+
+env:
+  SHARDS: 3
+
+jobs:
+  # Static guards that need only the editor repo itself — no plugin
+  # siblings, no corpus/core checkout, no browser. These scripts all
+  # EXISTED but ran in no CI job (audit 02 E8'): the ESLint architecture
+  # boundaries (eslint.config.mjs — worker/shell/client/gesture-spine
+  # zones) + their self-test, the boot-time cross-origin-isolation check
+  # (the COOP/COEP contract SharedArrayBuffer needs), and the
+  # fidelity-thresholds JSON schema guard (every gated pack has an entry,
+  # so the gate can't silently skip). They're fast (seconds) and depend
+  # only on the root devDependencies, so a plain editor checkout + root
+  # frozen install is the whole setup.
+  checks:
+    name: checks (lint + boundaries + boot-coi + thresholds)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # action-setup reads the editor's `packageManager: pnpm@9.0.0` from
+      # apps/editor/package.json (the monorepo root has no package.json, and
+      # `uses:` steps ignore the working-directory default). Do NOT also pass
+      # a `version:` input — pnpm/action-setup@v4 errors ("Multiple versions
+      # of pnpm specified: ERR_PNPM_BAD_PM_VERSION") when both a `version`
+      # input and a readable `packageManager` field are present. The
+      # playwright/publish jobs below pass `version: 9` instead, as before.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/editor/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/editor/pnpm-lock.yaml
+
+      - name: install (editor root)
+        run: pnpm install --frozen-lockfile
+
+      # ESLint architecture boundaries (eslint.config.mjs is boundaries-only,
+      # not style) + the fixtures proving each zone actually fires.
+      - name: lint (architecture boundaries)
+        run: pnpm lint
+
+      - name: lint boundaries self-test
+        run: pnpm lint:boundaries-selftest
+
+      # The COOP/COEP boot contract SharedArrayBuffer needs (pairs with
+      # apps/canvas/public/_headers).
+      - name: boot cross-origin-isolation check
+        run: pnpm test:boot-coi
+
+      # The D-03 network wall (ADR 218): exact build-time data origins only,
+      # and the committed _headers floor in lock-step with the module.
+      - name: network policy (connect-src)
+        run: pnpm test:network-policy
+
+      # The module door (ADR 223): what the editor answers host.modules, and
+      # the build-time module manifest it answers from.
+      - name: module door (module manifest)
+        run: pnpm test:modules
+
+      # Selection chrome on the pasteboard: where a page sits in its spread,
+      # from the page summaries (engine 0.71.13) or the older fallback.
+      - name: pasteboard placement (spread pages)
+        run: pnpm test:spread-pages
+
+      # Every gated fidelity pack must carry a threshold entry, or the
+      # fidelity gate silently skips it.
+      - name: fidelity thresholds schema
+        run: pnpm test:thresholds
+
+      # The app-wide wasm budget: 100 MB for the editor AND every plugin
+      # together (2026-08-19). Every other wasm ceiling in the platform is
+      # per-artifact or per-bundle, so until now nothing measured the sum —
+      # eight bundles could each pass their own gate and the app could still
+      # ship a quarter of a gigabyte. This job is the only place that sees
+      # the whole assembled app, so this is where the sum is checked.
+      - name: app-wide wasm budget (100 MB, editor + all plugins)
+        # `--json-out` writes the measurement artifact as a SIDE EFFECT and
+        # still exits on the budget. Deliberately not `--json | tee`: a pipe
+        # replaces this step's exit code with tee's, which would turn the
+        # budget gate into a gate that always passes.
+        run: pnpm test:wasm-budget --json-out "$RUNNER_TEMP/paged-measurements-wasm.json"
+
+      # The number, kept. The gate above answers "are we under 100 MB today";
+      # only a series answers "which way is it moving, and how fast". Uploaded
+      # `if: always()` because a FAILING run's number is precisely the one
+      # worth having in the trend.
+      - name: upload wasm measurement
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paged-measurements-wasm
+          path: ${{ runner.temp }}/paged-measurements-wasm.json
+          if-no-files-found: warn
+          retention-days: 90
+      # Every panel / tool / keybinding / menu item the host registers, and
+      # every contribution the loaded plugin bundles inject, must be named
+      # by some spec or sit under a per-kind ceiling that only ever falls.
+      - name: editor surface coverage
+        run: pnpm test:surface-coverage
+      # A seam may not outlive the gap it names: a capability lands and
+      # the UI still says it is missing, which is the same lie as
+      # claiming an unbuilt feature works, only harder to notice.
+      - name: seam guard
+        run: pnpm test:seam-guard
+      # One vocabulary for "this doesn't apply here". The four rules that
+      # existed were four independent reasonable decisions, which is why
+      # no review caught them — there was nothing for them to disagree with.
+      - name: applicability vocabulary
+        run: pnpm test:applicability
+      # Solo profiles are ALLOW-lists, which is the right direction (a
+      # deny-list leaks every new host panel into every profile) and buys
+      # the opposite failure: a panel renamed host-side silently DROPS
+      # OUT and the app just boots one panel poorer. This resolves every
+      # id against the code that registers it. Written after a first
+      # draft named a draw "layers" panel that has never existed.
+      - name: solo profiles resolve
+        run: pnpm test:solo-profiles
+      # A `@feat:` tag that matches no registry row covers NOTHING, and
+      # says so nowhere: the join files it as drift in another repo and
+      # the spec still passes. Twenty ids in this tree were in that state
+      # on 2026-09-09, fourteen of them in the plugin-surface tier — the
+      # one tier that asserts capability x surface reachability. The
+      # vocabulary is vendored (scripts/feat-vocabulary.json) rather than
+      # read across the repo boundary, because both repos are private and
+      # a token-gated read degrades to a skip. state's
+      # `sync-feat-vocabulary.mjs --check` keeps the copy current.
+      - name: feature-id vocabulary (@feat tags resolve)
+        run: pnpm test:feat-vocabulary
+      # `packages/client` is the programmable SDK — the write surface the
+      # read-only viewer SDK deliberately is not. Its api-catalog.json is
+      # GENERATED from the source, so this step is two assertions at once:
+      # the artifact is current, and no public member ships without a doc
+      # comment to generate a summary from.
+      - name: client SDK catalog is current
+        run: pnpm test:client-catalog
+
+  playwright:
+    name: playwright (shard ${{ matrix.shard }}/3)
+    runs-on: ubuntu-latest
+    # 50, not 30: the COLD (uncached) paged-gen fixture-generator build
+    # consumed most of a 30-min budget, leaving no room for the sharded
+    # tests. After run 1 `core/target` is cached and the job drops back to
+    # ~20-25 min; the headroom only matters on a cold cache.
+    #
+    # Then 75, not 50: that budget was never actually exercised — the job
+    # had never once reached its tests (see the chromium note below), so
+    # "~20-25 min" described a job that spent its life in `apt`. A second
+    # cold rust build (the paged.doc engine wasm) now shares it too. The
+    # long steps carry their OWN bounds — chromium install 10 min, doc
+    # wasm 25 min — so a hang still reports as a hang at the step that
+    # hung, and this number only buys the tests room to finish. Re-measure
+    # and bring it back down once a green run says what the suite costs.
+    # Measured 2026-10-11: shard 1 (lean surface + GPU journeys + baseline
+    # seeding) runs 77-80 min with every step green, and the 75 cut it
+    # off in its last uploads. 90 gives it room.
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      # The whole repository at the workspace root: the editor is
+      # apps/editor, core's paged-gen is engine/core, and the doc/slide link
+      # targets are modules/doc + modules/slide — no sibling checkouts.
+      - name: checkout repository
+        uses: actions/checkout@v4
+
+      # License-clear fixtures the harness loads (corpus/idml/generated/*.idml
+      # + corpus/fonts). Sparse + LFS so we pull ~25 MB, not the 4.4 GB
+      # envato tier. The editor's vite config + tests resolve the corpus
+      # colocated in the editor first (`<editor>/corpus`, then
+      # `<editor>/../corpus`), so it is checked out at apps/editor/corpus.
+      # That path also stays valid once the editor's default moves to
+      # `<repo root>/corpus` (step A4): the colocated copy is kept as the
+      # fallback there. (It is the PRIVATE corpus repo, hence the token.)
+      # `STATE_DISPATCH_TOKEN` already has read scope on the
+      # private paged-media siblings (used by plugin-draw for the sdk
+      # checkout); fall back to github.token for same-org runs.
+      #
+      # `envato/overrides` is in the sparse set too: even in lean mode
+      # (no fidelity/extensive-corpus specs), the canvas test driver's
+      # default-font path reads `envato/overrides/_default/fonts.sh`
+      # (tests/fidelity/fonts.ts → loadPackFonts fallback), so without it
+      # every canvas-loading spec ENOENTs. The overrides tree is ~84 KB
+      # of plain .sh/.jsx (the fonts it names all live in corpus/fonts/);
+      # the heavy envato `.zip`/`.idml`/`.pdf` assets stay out of the
+      # sparse set entirely, so cone-mode never even checks them out.
+      #
+      # LFS: smudge ON (`lfs: true`). Cone-mode sparse-checkout only
+      # populates the four tiers above, so checkout's native LFS pass
+      # downloads just THEIR objects (~25 MB: the generated/samples IDMLs
+      # + sample PDFs + the corpus/fonts TTFs), not the 4.4 GB envato
+      # tier. The earlier `lfs: false` + manual `git lfs pull --include`
+      # fetched zero objects (the smudge filter was off, so the working
+      # tree kept LFS *pointers* — the fixtures then parsed as "invalid
+      # Zip: Could not find EOCD"). Letting checkout do the smudge against
+      # the sparse tree is the reliable path.
+      - name: checkout corpus fixtures (sparse + LFS)
+        uses: actions/checkout@v4
+        with:
+          repository: paged-media/corpus
+          path: apps/editor/corpus
+          token: ${{ secrets.STATE_DISPATCH_TOKEN || github.token }}
+          lfs: true
+          # Cone entries are TOP-LEVEL directory names and a stale one
+          # yields an EMPTY checkout, not an error — the "verify corpus
+          # fixtures are materialized" step below is what turns that into
+          # a loud failure. `vendor` is deliberately absent: it is the
+          # heavy tier (1.3 GB of packs) and no test on this surface
+          # reads it.
+          # NESTED cone paths — verified working. Naming `idml` whole
+          # would drag in idml/packs (1.3 GB of Envato packs) on every
+          # shard of every push; these two subtrees are 10 MB. The
+          # "verify corpus fixtures are materialized" step below is what
+          # catches a stale name, because a wrong cone yields an EMPTY
+          # checkout rather than an error.
+          sparse-checkout: |
+            idml/generated
+            idml/samples
+            fonts
+            config
+          sparse-checkout-cone-mode: true
+
+      # The canvas Playwright surface loads ~33 per-feature IDML fixtures
+      # from `corpus/idml/generated/*.idml` (61 of the lean specs reference
+      # them). Those files are NOT committed to the corpus repo — its
+      # `generated/.gitignore` excludes `*.idml` because they are
+      # reproducible from `cargo run -p paged-gen` (core). So neither a
+      # sparse nor a full corpus checkout carries them, and without a
+      # provisioning step the suite fails ~170/shard with ENOENT (file
+      # absent) or "invalid Zip: Could not find EOCD" (LFS-pointer parse).
+      #
+      # Provision them by building the `paged-gen` fixture generator from
+      # the in-tree engine (engine/core) and emitting every sample into
+      # corpus/idml/generated. It does NOT touch the Decision-B *wasm*
+      # boundary (the engine still arrives as the published npm package —
+      # this only generates test fixtures).
+      #
+      # Pre-monorepo this was an UNPINNED checkout of paged-media/core's
+      # default branch, with an ordering coupling (a core change had to be
+      # pushed before the editor change that used it — the 2026-08-19
+      # `emit-all` breakage). In the monorepo paged-gen comes from the same
+      # revision as the editor, so that coupling is gone.
+
+      - name: rust toolchain (for paged-gen)
+        uses: dtolnay/rust-toolchain@stable
+
+      # Covers BOTH rust builds this job does: paged-gen (fixtures) and the
+      # paged.doc engine wasm. Without plugin-doc/target in here the doc
+      # wasm is a cold release build of a vendored-ooxmlsdk workspace on
+      # every single run — the thing this cache exists to prevent.
+      - name: cache cargo + paged-gen build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+            engine/core/target
+            modules/doc/target
+          key: paged-rust-${{ runner.os }}-${{ hashFiles('engine/core/Cargo.lock') }}
+          restore-keys: paged-rust-${{ runner.os }}-
+
+      - name: generate corpus/idml/generated/*.idml from paged-gen
+        working-directory: engine/core
+        run: |
+          cargo build --release -p paged-gen --bin paged-gen
+          GEN="$GITHUB_WORKSPACE/apps/editor/corpus/idml/generated"
+          mkdir -p "$GEN"
+          # `emit-all`, NOT a hand-copied name list. This step used to
+          # carry its own copy of paged-gen's sample names — the fourth
+          # copy of that list in the project — and it had silently lost
+          # `layers-z` and `paste-into`. The guard on the other copies only
+          # ever caught an UNKNOWN name; a name left OUT is invisible. The
+          # result: four layers-panel specs failed here with "Could not
+          # find EOCD", fetching a fixture CI had never emitted, and the
+          # suite had never run far enough for anyone to see it.
+          ./target/release/paged-gen emit-all --out "$GEN"
+
+      # Guard: the IDML fixtures must now be real bytes on disk, or the
+      # whole canvas surface fails with opaque parse errors mid-suite.
+      # Fail fast here (existence AND not-a-pointer) if provisioning
+      # didn't land.
+      - name: verify corpus fixtures are materialized
+        working-directory: apps/editor/corpus
+        run: |
+          # Paths are corpus-root-relative. They said `generated/…` until
+          # 2026-08-19, when assets were grouped by format under `idml/`
+          # — and this guard is what caught the stale list, before 170
+          # specs per shard could fail on a fixture that was simply
+          # somewhere else. Keep it that way: it is the only thing
+          # standing between a mis-typed sparse cone and a mystery.
+          for f in idml/generated/text.idml idml/generated/text-overset.idml \
+                   idml/generated/geometry.idml idml/generated/links-broken.idml \
+                   idml/samples/sample.idml fonts/Inter.ttf; do
+            if [ ! -f "$f" ]; then
+              echo "::error::$f is missing — paged-gen provisioning failed"
+              exit 1
+            fi
+            if head -c 64 "$f" | grep -q "git-lfs"; then
+              echo "::error::$f is still an LFS pointer — smudge failed"
+              exit 1
+            fi
+          done
+          echo "corpus fixtures materialized OK"
+
+      # Pin pnpm: the monorepo root has no package.json for action-setup to
+      # read `packageManager` from — match the editor's pnpm@9.0.0
+      # explicitly. v9 reads every component's lockfile-v9 natively.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/editor/pnpm-lock.yaml
+
+      # @paged-media/doc and @paged-media/slide are consumed via pnpm
+      # `link:` overrides to the in-tree modules/doc and modules/slide
+      # bundles. The shared stopgap actions install those modules and build
+      # their wasm (no checkout: they are part of this repository). DROP
+      # them when the editor no longer links a build output.
+      - name: plugin-doc from source (in-tree modules/doc)
+        uses: ./.github/actions/plugin-doc-from-source
+      - name: plugin-slide from source (in-tree modules/slide)
+        uses: ./.github/actions/plugin-slide-from-source
+
+      - name: install editor (engine wasm + all plugin bundles resolve from npm)
+        run: pnpm install --frozen-lockfile
+
+      # The Playwright surface runs against the vite DEV server
+      # (playwright.config `webServer: npx vite`), so no production build
+      # is needed — but typecheck the canvas app so a wire/type break
+      # fails fast here rather than as an opaque runtime error mid-suite.
+      # (`pnpm -r build` is avoided: the `packages/*` have no build step
+      # — they're consumed as workspace TS source — and `apps/devtools`
+      # would pull in the unrelated introspect-wasm build.)
+      - name: typecheck canvas app
+        run: pnpm --filter ./apps/canvas run typecheck
+
+      # The TEST TREE, which was outside every static gate until
+      # 2026-08-24. `apps/canvas/tsconfig.json` includes only `src` and
+      # `vite.config.ts`, so several hundred Playwright specs compiled
+      # nowhere and the first thing able to notice a broken one was the
+      # runner. That cost a red main: a CLEAN auto-merge (no conflict on
+      # either side) deleted a `const after = …` in one commit while
+      # another added a line that read it, and typecheck + build both
+      # passed on code that could not run.
+      - name: typecheck canvas tests
+        run: pnpm --filter ./apps/canvas run typecheck:tests
+
+      # NO `--with-deps`. That flag shells out to `apt-get update` as root,
+      # and on the ubuntu-24.04 runner that hangs: azure.archive.ubuntu.com
+      # answers every index request with `Ign:`, apt falls back to
+      # archive.ubuntu.com, and then it simply stops — the last log line is
+      # `Get:5 …noble-security InRelease` and nothing follows until the
+      # job's 50-minute timeout kills it. Deterministic, not flaky: all
+      # three shards hung at the same line in the same run, and this is why
+      # `tests.yml` has never once published a green Playwright result (30
+      # runs: 18 failure, 12 timed-out-as-cancelled, 0 success). Because
+      # the evidence artifact is produced by this job, every downstream
+      # consumer starved too — state's coverage gate reports "0 linked
+      # tests" for eight features whose specs exist and are tagged.
+      #
+      # The flag was never needed: the runner image ships Playwright's
+      # browser libraries preinstalled. Without it, `playwright install`
+      # only fetches the browser from Playwright's own CDN and touches apt
+      # never. And if a library IS ever missing, the browser fails to
+      # launch with a named error in seconds instead of a silent 50-minute
+      # stall — strictly better feedback either way.
+      - name: install chromium
+        # A browser download is ~1 minute. Bounding the step means a future
+        # stall here is reported AS a stall, in ten minutes, instead of
+        # eating the job's whole 50-minute budget and surfacing as
+        # "cancelled" — which is indistinguishable from a concurrency
+        # cancel and is precisely why this went unnoticed.
+        timeout-minutes: 10
+        run: pnpm --filter ./apps/canvas exec playwright install chromium
+
+      # --project is REQUIRED here, not tidiness. Without it Playwright
+      # runs EVERY project in the config, which on a Linux runner means
+      # `journeys-gpu` and `showcase` — both of which need real Chrome
+      # (`channel: "chrome"`), and `journeys-gpu` additionally passes
+      # `--use-angle=metal`, a macOS-only flag. playwright.config.ts says
+      # of that lane, in its own words, "it cannot run on the Linux CI
+      # runners, and no workflow invokes it". That was false: this step
+      # invoked it, its one WebGPU test failed for want of an adapter, and
+      # because the converter drops the project dimension the failure
+      # collided with the SAME test's pass from the CPU `journeys` lane on
+      # one test_id — red winning. That single phantom failure is what put
+      # THREE features red on state.paged.media (command-palette,
+      # context-toolbars, panels.properties — the latter two attached only
+      # because the ingest test-map unions them onto every journey spec).
+      # Naming the two real gating projects fixes all of it.
+      - name: playwright (lean surface, shard ${{ matrix.shard }})
+        working-directory: apps/editor/apps/canvas
+        env:
+          CI: "1"
+          PAGED_CI_LEAN: "1"
+        run: |
+          npx playwright test \
+            --project=chromium \
+            --project=journeys \
+            --shard=${{ matrix.shard }}/${{ env.SHARDS }} \
+            --reporter=blob
+
+      # Advisory GPU lane — re-run the journey tier through the WebGPU /
+      # Vello present path (headed via xvfb; software Vulkan when present,
+      # CPU fallback otherwise). Opt-in (workflow_dispatch only) on one
+      # shard, `continue-on-error` so it NEVER gates: the journeys' visual
+      # regression is the deterministic CPU readback above — this only
+      # smoke-checks that the GPU live-render path runs without crashing.
+      - name: journeys (GPU, advisory)
+        if: ${{ github.event_name == 'workflow_dispatch' && matrix.shard == 1 }}
+        continue-on-error: true
+        working-directory: apps/editor/apps/canvas
+        env:
+          CI: "1"
+          PAGED_CI_LEAN: "1"
+          BACKEND: gpu
+        run: |
+          xvfb-run -a npx playwright test \
+            --project=journeys \
+            --reporter=list
+
+      # Seed/refresh the committed LINUX visual baselines. Opt-in
+      # (workflow_dispatch only) on one shard: runs the journey tier with
+      # JOURNEY_VISUAL=1 (turns the content + chrome checkpoints ON — they
+      # CI-skip by default until baselines exist) and --update-snapshots,
+      # then uploads the regenerated PNGs as an artifact for the author to
+      # commit. Linux is the gate platform; the {platform} token in
+      # playwright.config's snapshotPathTemplate keeps macOS-local
+      # baselines (-darwin) separate from these (-linux). Reuses CI's
+      # already-working multi-repo install — no local Docker dance.
+      # `always()`: the seeding run regenerates baselines and must NOT be
+      # skipped just because an unrelated lean-surface test failed in the
+      # main sharded step above (steps don't run after a failure by
+      # default). It stays `continue-on-error` so it never gates either.
+      - name: seed journey visual baselines (Linux, advisory)
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && matrix.shard == 1 }}
+        continue-on-error: true
+        working-directory: apps/editor/apps/canvas
+        env:
+          CI: "1"
+          PAGED_CI_LEAN: "1"
+          JOURNEY_VISUAL: "1"
+        run: |
+          npx playwright test \
+            --project=journeys \
+            --update-snapshots \
+            --reporter=list
+
+      - name: upload regenerated baselines
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && matrix.shard == 1 }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: journey-baselines-linux
+          path: "apps/editor/apps/canvas/tests/journey/__screenshots__/**/*-linux.png"
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: upload blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: apps/editor/apps/canvas/blob-report
+          retention-days: 7
+
+  publish:
+    name: merge reports + publish evidence
+    needs: playwright
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      # merge-reports only needs apps/canvas's @playwright/test; the
+      # repository checkout carries it under apps/editor.
+      - name: checkout repository
+        uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/editor/pnpm-lock.yaml
+
+      # Only the canvas app's @playwright/test is needed for merge-reports.
+      - name: install (apps/canvas only)
+        run: pnpm install --frozen-lockfile --filter ./apps/canvas
+
+      # all-blobs/ and playwright-results.json stay at the WORKSPACE root:
+      # the merge step addresses both through ${{ github.workspace }}.
+      - name: download shard blobs
+        uses: actions/download-artifact@v4
+        with:
+          path: all-blobs
+          pattern: blob-report-*
+          merge-multiple: true
+
+      - name: merge shards → single Playwright JSON
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ github.workspace }}/playwright-results.json
+        run: |
+          pnpm --filter ./apps/canvas exec \
+            playwright merge-reports --reporter=json ${{ github.workspace }}/all-blobs \
+            > /dev/null
+          test -s "${{ github.workspace }}/playwright-results.json"
+
+      # Evidence hand-off, INVERTED (2026-07-25, PR #16 on main; ported to
+      # this branch 2026-08-17). This step used to call
+      # paged-media/state/actions/publish-results@main, but that action lives
+      # in the PRIVATE paged-media/state repo, and GitHub refuses to resolve a
+      # private repo's action from a public workflow ("Unable to resolve
+      # action paged-media/state, not found") — so the job died at SET-UP,
+      # before any step ran, and this lane never published a single result.
+      # Follow the inverted pattern core/ci.yml and plugin-doc use: upload the
+      # results as an artifact and let state PULL it (private state can read a
+      # public repo's artifacts). Consumer:
+      # state/.github/workflows/siblings-pull.yml (source=editor,
+      # suite=playwright-e2e, format=playwright-json).
+      - name: upload playwright-e2e results artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: playwright-results.json
+          if-no-files-found: error
+          retention-days: 14

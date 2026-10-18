@@ -1,0 +1,35 @@
+name: core / licenses
+
+# Dependency-license + supply-chain audit. The engine is MPL-2.0, so every
+# transitive dependency must be permissively licensed (see deny.toml).
+#
+# Ported from paged-media/core .github/workflows/licenses.yml (step A3). The
+# action is a `uses:` step (no working-directory), so it is pointed at the
+# engine workspace by manifest-path; cargo-deny then reads the deny.toml next
+# to that manifest (engine/core/deny.toml).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "engine/core/**"
+      - ".github/workflows/core-licenses.yml"
+  pull_request:
+    paths:
+      - "engine/core/**"
+      - ".github/workflows/core-licenses.yml"
+
+jobs:
+  cargo-deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: engine/core/Cargo.toml
+          # advisories MUST be listed explicitly (audit B22): naming a
+          # subset of checks makes cargo-deny run ONLY those, so the prior
+          # `licenses bans sources` silently skipped the RUSTSEC advisory
+          # scan even though deny.toml has an [advisories] section. All
+          # four checks now run: vulnerabilities + license policy +
+          # dup/wildcard bans + registry/source allowlist.
+          command: check advisories licenses bans sources

@@ -1,0 +1,89 @@
+name: slide / bundle
+# MONOREPO (step A3): ported from paged-media/plugin-slide
+# .github/workflows/bundle.yml; runs in modules/slide.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "modules/slide/**"
+      - ".github/workflows/slide-bundle.yml"
+  pull_request:
+    paths:
+      - "modules/slide/**"
+      - ".github/workflows/slide-bundle.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: slide-bundle-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: modules/slide
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.93.0
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/slide -> target
+          prefix-key: v0-rust-slide
+      - name: install pinned wasm-bindgen-cli (Cargo.lock version)
+        run: |
+          V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
+          cargo install wasm-bindgen-cli --version "$V" --locked
+      - name: install pinned binaryen (reftypes-safe; old apt binaryen breaks externref table grow)
+        run: |
+          curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_119/binaryen-version_119-x86_64-linux.tar.gz | tar xz
+          echo "$PWD/binaryen-version_119/bin" >> "$GITHUB_PATH"
+      - name: build the engine wasm (100 MB app-wide budget gate)
+        run: bash scripts/build-wasm.sh
+      # pnpm's version comes from package.json's packageManager field;
+      # naming it here as well fails the action (two versions specified).
+      # The field lives in modules/slide/package.json (uses: steps ignore
+      # the working-directory default; the monorepo root has no package.json).
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: modules/slide/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # The bundle consumes the published @paged-media canaries and the
+      # published canvas-wasm (the conformance engine), so a plain install
+      # suffices.
+      - run: pnpm install --frozen-lockfile
+      - name: contract-import lint
+        run: node scripts/check-contract-imports.mjs
+      - name: typecheck
+        run: pnpm -r run typecheck
+      - name: validate manifest
+        run: npx --yes @paged-media/plugin-cli@canary validate packages/slide-bundle/manifest.json
+      # Red results still upload (the cockpit wants the failures too); the
+      # last step fails the job.
+      - name: vitest (importer + conformance against the real engine)
+        run: |
+          set -uo pipefail
+          pnpm -r --no-bail exec vitest run --reporter=default --reporter=junit --outputFile.junit=junit.xml \
+            || echo "TS_FAILED=1" >> "$GITHUB_ENV"
+          cat packages/*/junit.xml > junit-all.xml 2>/dev/null || true
+          [ -s junit-all.xml ]
+      - name: upload vitest JUnit artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-junit
+          path: modules/slide/junit-all.xml
+          if-no-files-found: error
+          retention-days: 14
+      - name: tests failed
+        if: ${{ env.TS_FAILED == '1' }}
+        run: exit 1

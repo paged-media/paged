@@ -1,0 +1,223 @@
+name: core / gpu
+
+# W0.7 GPU lane (audit B14): exercise the Vello/wgpu rasterizer headlessly
+# on a software Vulkan stack (Mesa lavapipe) so the GPU code path gets CI
+# coverage without a physical GPU. The paged-gpu `vello-backend` tests
+# (crates/paged-gpu/src/vello_rs.rs `mod tests`) request a real wgpu
+# adapter via `init_gpu()`; with lavapipe installed and VK_ICD_FILENAMES
+# pointed at it, that adapter request succeeds and the pixel-level Vello
+# assertions actually run. Without it (or on a stock runner) those same
+# tests skip silently, so the lane FAILS when vulkaninfo finds no
+# lavapipe device: from early October until 2026-10-14 Mesa's renamed
+# ICD left it with no adapter and every Vello test passed by skipping.
+#
+# PROMOTION STEP 1 (fidelity-governance second half; audit 17082026
+# §1.10): `continue-on-error` is REMOVED, so a failure now shows as a
+# red check on the PR/commit instead of a green check with a buried
+# banner. The lane is deliberately NOT added to branch protection's
+# required checks yet — one week of visible-red observation first
+# (llvmpipe ≠ a real GPU; Vello on lavapipe can diverge at the pixel
+# level, and a flaky required gate would be neutered within days).
+# After the observation week, the deliberate second flip is marking
+# this check required in branch protection — that flip happens in the
+# repo settings, not in this file.
+#
+# Ported from paged-media/core .github/workflows/gpu.yml (step A3).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "engine/core/**"
+      - ".github/workflows/core-gpu.yml"
+  pull_request:
+    paths:
+      - "engine/core/crates/paged-gpu/**"
+      - "engine/core/crates/paged-compose/**"
+      # The parity step below renders the generated corpus, so what
+      # builds the display list and what the fixtures are reach it too.
+      - "engine/core/crates/paged-renderer/**"
+      - "engine/core/corpus/generated/**"
+      - ".github/workflows/core-gpu.yml"
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: engine/core
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  toolchain:
+    name: resolve pinned toolchain
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.pin.outputs.channel }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: pin
+        run: echo "channel=$(bash scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
+
+  vello-lavapipe:
+    name: vello on lavapipe
+    needs: toolchain
+    runs-on: ubuntu-latest
+    # No `continue-on-error` — failures are a VISIBLE red check. Not
+    # branch-protection-required yet; see the header (audit 17082026
+    # §1.10).
+    env:
+      # The lavapipe ICD path is found after the install (see "point the
+      # Vulkan loader at lavapipe"): Mesa renamed it from
+      # lvp_icd.x86_64.json to lvp_icd.json, the loader found no driver,
+      # and every Vello test skipped for want of an adapter while the
+      # lane stayed green.
+      # Surface adapter-selection detail in wgpu logs if a test fails.
+      RUST_LOG: wgpu=warn,vello=warn
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ needs.toolchain.outputs.channel }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine/core -> target
+          prefix-key: v0-rust-core
+
+      - name: install Mesa lavapipe (software Vulkan) + vulkan tools
+        # Bounded: unlike the poppler/brotli cases this genuinely needs
+        # apt (lavapipe is not on the image), so it cannot be skipped —
+        # but it must not hang unbounded either. See 2026-08-19, when
+        # three unbounded apt calls stalled across this workspace.
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          # Bypass the Azure mirror — see the note in ci.yml; on
+          # 2026-08-19 it Ign'd every index request and stalled apt.
+          sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' \
+              /etc/apt/sources.list /etc/apt/sources.list.d/*.list \
+              /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+          sudo apt-get update
+          # mesa-vulkan-drivers ships lavapipe (lvp); vulkan-tools gives
+          # vulkaninfo for the sanity check below; libvulkan1 + the loader
+          # let wgpu find the ICD.
+          sudo apt-get install -y --no-install-recommends \
+            mesa-vulkan-drivers vulkan-tools libvulkan1
+
+      - name: point the Vulkan loader at lavapipe
+        # Force wgpu/Vulkan onto Mesa's lavapipe software ICD, whatever
+        # this Mesa calls the file. Both env names are honoured by the
+        # loader across versions; set both.
+        run: |
+          set -euo pipefail
+          icd="$(ls /usr/share/vulkan/icd.d/lvp_icd*.json 2>/dev/null | head -1 || true)"
+          if [ -z "$icd" ]; then
+            ls -la /usr/share/vulkan/icd.d/ || true
+            echo "::error::no lavapipe ICD under /usr/share/vulkan/icd.d"
+            exit 1
+          fi
+          echo "VK_ICD_FILENAMES=$icd" >> "$GITHUB_ENV"
+          echo "VK_DRIVER_FILES=$icd" >> "$GITHUB_ENV"
+
+      - name: sanity — lavapipe is the active Vulkan device
+        # Hard: without a device every Vello test returns early on an
+        # empty buffer and passes, so a lane with no adapter is a lane
+        # that tests nothing.
+        run: |
+          set -euo pipefail
+          echo "VK_ICD_FILENAMES=$VK_ICD_FILENAMES"
+          # `vulkaninfo --summary` prints the device name; assert llvmpipe.
+          if vulkaninfo --summary 2>/dev/null | grep -i 'llvmpipe\|lavapipe'; then
+            echo "lavapipe present — the Vello GPU tests will exercise the real path."
+          else
+            vulkaninfo --summary 2>&1 | tail -20 || true
+            echo "::error::lavapipe not detected by vulkaninfo; the Vello tests would skip."
+            exit 1
+          fi
+
+      - name: install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: cargo nextest -p paged-gpu --features vello-backend → JUnit
+        id: gpu_tests
+        # The vello_rs test module drives the Vello rasterizer; with
+        # lavapipe active, init_gpu() succeeds and the pixel assertions
+        # run instead of skipping. `--profile ci` writes
+        # target/nextest/ci/junit.xml (.config/nextest.toml), which the
+        # upload below hands to cockpit as the `core/vello-lavapipe` lane:
+        # before it, the only GPU evidence was this job's colour.
+        run: cargo nextest run -p paged-gpu --features vello-backend --profile ci --no-fail-fast
+
+      - name: CPU ↔ Vello parity over the generated corpus
+        id: parity
+        # P-0: the unit tests above check single commands; this renders
+        # every page of every generated fixture through BOTH backends and
+        # diffs them against the budgets in
+        # corpus/generated/parity-thresholds.json. Before it the GPU lane
+        # the editor and viewer draw with skipped shadows, drew dashes
+        # solid and blended against the paper, and no check noticed.
+        #
+        # Hard: the budgets were measured on Metal, and the first run on
+        # lavapipe with a real device (2026-10-14) put all 77 fixtures
+        # inside them too.
+        timeout-minutes: 45
+        env:
+          IDML_PARITY_OUT: /tmp/idml-parity
+        run: |
+          set -euo pipefail
+          bash scripts/regen-fixtures.sh
+          cargo build --release -p paged-renderer --features gpu --bin paged-inspect
+          cargo build --release -p paged-fidelity --bin paged-diff
+          ./corpus/generated/parity-diff.sh
+
+      - name: upload parity report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: vello-parity
+          # parity.json + per-fixture pages.json, and heatmaps for any
+          # page over budget.
+          path: |
+            /tmp/idml-parity/parity.json
+            /tmp/idml-parity/*/pages.json
+            /tmp/idml-parity/*/heat-*.png
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: upload JUnit artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: vello-junit
+          path: engine/core/target/nextest/ci/junit.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: lane summary
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "## GPU lane (Vello on lavapipe)"
+            echo ""
+            if [ "${{ steps.gpu_tests.outcome }}" = "success" ]; then
+              echo "✅ \`cargo nextest run -p paged-gpu --features vello-backend\` PASSED on Mesa lavapipe."
+            else
+              echo "❌ \`cargo nextest run -p paged-gpu --features vello-backend\` did NOT pass on Mesa lavapipe."
+              echo ""
+              echo "This check is now VISIBLY red on failure (promotion step 1, audit 17082026 §1.10) but is"
+              echo "deliberately **not** branch-protection-required during the one-week observation window."
+              echo "Software-rasterizer (llvmpipe) parity can diverge from a real GPU; triage the log, don't auto-trust red."
+            fi
+            echo ""
+            echo "Promotion step 2 — marking this check required — is a repo-settings flip after the observation week (W0.7)."
+            echo ""
+            if [ "${{ steps.parity.outcome }}" = "success" ]; then
+              echo "✅ CPU ↔ Vello parity: every generated fixture within its budget."
+            else
+              echo "❌ CPU ↔ Vello parity: a fixture is over its budget; see the vello-parity artifact's parity.json and heatmaps."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Also emit a workflow annotation so it shows on the checks tab.
+          if [ "${{ steps.gpu_tests.outcome }}" != "success" ]; then
+            echo "::warning title=GPU lane red::Vello-on-lavapipe tests did not pass; red check is visible but not yet branch-protection-required (observation week, audit 17082026 §1.10)."
+          fi

@@ -1,0 +1,307 @@
+# Gate CI for paged.image: the Rust engine (rust job) and the TS bundle
+# (ts job). Evidence publishing to paged-media/state lives in the sibling
+# publish-state.yml; this file is the merge gate — every step here is
+# `-D warnings`-strict and must be green before a PR lands.
+#
+# MONOREPO (step A3): ported from paged-media/plugin-image
+# .github/workflows/ci.yml; runs in modules/image. The ts job's sibling
+# paged-media/plugin-sdk checkout is gone: the manifest validate runs the
+# in-tree platform/extensions plugin-cli, so its sources join the filters.
+name: image / ci
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "modules/image/**"
+      - "platform/extensions/packages/plugin-cli/**"
+      - ".github/workflows/image-ci.yml"
+  pull_request:
+    paths:
+      - "modules/image/**"
+      - "platform/extensions/packages/plugin-cli/**"
+      - ".github/workflows/image-ci.yml"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: modules/image
+
+jobs:
+  # The Rust engine: fmt + clippy + test, the three isolation-contract
+  # dependency guards (spec §2.1 / §4 dep rule 3), and the wasm size
+  # report against the 100 MB app wasm budget (BREAKAGE I-07). dtolnay/rust-toolchain
+  # reads the channel straight from rust-toolchain.toml (`channel = 1.93.0`)
+  # — same single-source-of-truth posture as core's resolved `toolchain`
+  # job, without a separate channel-resolver script in this repo.
+  rust:
+    name: rust engine
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # `toolchain:` is REQUIRED. This step used to omit it, on the belief
+      # that dtolnay/rust-toolchain resolves the channel from
+      # rust-toolchain.toml — it does not (the action has no such lookup;
+      # the file is honoured by rustup at invocation time, not by the
+      # installer). @master hard-fails the input check instead: "'toolchain'
+      # is a required input", exit 1 — which is what has been killing this
+      # job. Pin it here and MIRROR rust-toolchain.toml; bump both together.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.93.0" # mirrors rust-toolchain.toml
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/image -> target
+          prefix-key: v0-rust-image
+
+      - name: fmt
+        run: cargo fmt --all --check
+
+      - name: clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # GPU device tests self-skip here (no adapter on ubuntu-latest): on
+      # 2026-10-04, 224 of 1,034 tests reported "passed" this way without
+      # running. This step covers the CPU logic and the scalar reference
+      # twins; the gpu-sw and gpu-metal jobs below run the device tests
+      # with REQUIRE_GPU=1, where a skip is a failure.
+      - name: test
+        run: cargo test --workspace
+
+      # --- Isolation-contract dependency guards (spec §2.1 / §4) ---------
+      # Each guard asserts an EMPTY match: grep exits 1 on no-match, which
+      # is the success condition, so we invert it and fail loudly on a hit.
+
+      # Guard 1 (§6 GPU-only / layering): image-kernels is the leaf kernel
+      # crate — it must not pull in any engine/host crate. A normal-edge
+      # path into pipeline/graph/gpu/cms/js means a layering inversion.
+      - name: guard — image-kernels has no engine deps
+        run: |
+          if cargo tree -p image-kernels --edges normal \
+               | grep -E 'image-(pipeline|graph|gpu|cms|js)'; then
+            echo "::error::image-kernels reached an engine crate (pipeline/graph/gpu/cms/js)"
+            exit 1
+          fi
+
+      # Guard 2 (§6 GPU-only): the shipped wasm must prove by construction
+      # that no scalar reference / proptest code is reachable — those are
+      # TEST-ONLY (image-conformance dev-dep). Their presence in image-js's
+      # wasm32 tree would mean reference kernels could ship.
+      - name: guard — image-js wasm tree excludes test-only deps
+        run: |
+          if cargo tree -p image-js --target wasm32-unknown-unknown \
+               | grep -E 'image-conformance|proptest'; then
+            echo "::error::image-js wasm32 tree reaches image-conformance/proptest (TEST-ONLY)"
+            exit 1
+          fi
+
+      # Guard 3 (§4 dep rule 3): deny.toml [sources] forbids a path/git
+      # reach-around into core/editor internals; licenses + advisories +
+      # bans round out the SDK-only Rust posture.
+      - name: install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
+      - name: guard — cargo deny check
+        run: cargo deny check
+
+      # --- wasm artifact size report (BREAKAGE I-07) --------------------
+      # The bundle's compute artifact is image-js. The wasm packaging
+      # contract caps the whole app at 100 MB; report both the raw and the
+      # brotli-compressed (over-the-wire) size against that budget. This is
+      # a REPORT, not yet a hard gate — the real gate flips once the engine
+      # has substance to measure (spec §9.3 / I-07 follow-up).
+      - name: wasm32 release build of image-js
+        run: cargo build --release --target wasm32-unknown-unknown -p image-js
+      - name: install brotli
+        # Bounded, and apt only when the tool is absent. 2026-08-19:
+        # GitHub's Ubuntu runners intermittently could not reach the
+        # archive and three unbounded apt calls hung across this
+        # workspace — one of them for a month, unnoticed, because a hung
+        # job and a slow job look identical. Two of the three were
+        # installing something the image already carried.
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          if command -v brotli >/dev/null 2>&1; then
+            echo "brotli already present ($(command -v brotli)) — skipping apt"
+          else
+            # The Azure mirror is the actual fault. On 2026-08-19 it
+            # answered `Ign:` to every index request while
+            # archive.ubuntu.com responded normally, and apt then sat
+            # there — hanging the editor's Playwright lane for a MONTH
+            # and two core jobs for 70 and 32 minutes. Point sources at
+            # archive.ubuntu.com before updating, so a sick regional
+            # mirror cannot stall the build.
+            sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' \
+                /etc/apt/sources.list /etc/apt/sources.list.d/*.list \
+                /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+            sudo apt-get update && sudo apt-get install -y brotli
+          fi
+      - name: wasm size report (vs 100 MB app wasm budget)
+        run: |
+          set -euo pipefail
+          WASM=target/wasm32-unknown-unknown/release/image_js.wasm
+          if [ ! -f "$WASM" ]; then
+            echo "::warning::$WASM not found — image-js may not yet emit a cdylib; skipping size report"
+            exit 0
+          fi
+          BUDGET=$((100 * 1000 * 1000))  # 100 MB app-wide cap (2026-08-19)
+          RAW=$(stat -c '%s' "$WASM")
+          brotli -q 11 -f -o "$WASM.br" "$WASM"
+          BR=$(stat -c '%s' "$WASM.br")
+          echo "image_js.wasm        raw: $RAW bytes"
+          echo "image_js.wasm.br  brotli: $BR bytes"
+          echo "budget (app-wide): $BUDGET bytes (100 MB)"
+          if [ "$RAW" -gt "$BUDGET" ]; then
+            echo "::warning title=wasm budget::raw image_js.wasm ($RAW bytes) exceeds the 100 MB app wasm budget — see BREAKAGE I-07"
+          fi
+
+  # The GPU device tests on a SOFTWARE Vulkan adapter (Mesa lavapipe),
+  # on every PR. WGPU_FALLBACK=1 selects the CPU-type adapter, which is
+  # lavapipe; REQUIRE_GPU=1 makes a missing adapter fail every device test
+  # instead of skipping it (image-gpu/src/test_support.rs). The first test
+  # step prints the adapter, so the log says what the tests ran on.
+  gpu-sw:
+    name: rust GPU tests (lavapipe)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      WGPU_BACKEND: vulkan
+      WGPU_FALLBACK: "1"
+      REQUIRE_GPU: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.93.0" # mirrors rust-toolchain.toml
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/image -> target
+          prefix-key: v0-rust-image
+          key: gpu-sw
+      - name: install lavapipe (Mesa software Vulkan)
+        # Bounded, and off the Azure mirror first (the brotli step above
+        # explains why both are needed).
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          sudo sed -i 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' \
+              /etc/apt/sources.list /etc/apt/sources.list.d/*.list \
+              /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1
+      - name: adapter
+        run: cargo test -p image-gpu --features test-support --lib test_support -- --nocapture
+      - name: test (REQUIRE_GPU=1)
+        run: cargo test --workspace --no-fail-fast
+
+  # The same tests on real hardware (Apple silicon, Metal) after every
+  # merge to main and on demand: lavapipe is a conformant Vulkan driver,
+  # but it is not the class of device the bundle runs on.
+  gpu-metal:
+    name: rust GPU tests (Metal)
+    if: github.event_name != 'pull_request'
+    runs-on: macos-14
+    timeout-minutes: 60
+    env:
+      WGPU_BACKEND: metal
+      REQUIRE_GPU: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.93.0" # mirrors rust-toolchain.toml
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/image -> target
+          prefix-key: v0-rust-image
+          key: gpu-metal
+      - name: adapter
+        run: cargo test -p image-gpu --features test-support --lib test_support -- --nocapture
+      - name: test (REQUIRE_GPU=1)
+        run: cargo test --workspace --no-fail-fast
+
+  # The TS bundle: the contract-import lint (isolation §2.1), typecheck,
+  # vitest, and manifest validation. Pre-monorepo this nested two checkouts
+  # (plugin-image/ + a plugin-sdk/ sibling) because the manifest package's
+  # scripts reach the plugin-cli by a relative path; the plugin-cli is now
+  # in-tree at platform/extensions/packages/plugin-cli, so one checkout.
+  ts:
+    name: ts bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: install (plugin-sdk sibling satisfies the link chain)
+        run: pnpm install --frozen-lockfile
+
+      # Build the engine wasm from THIS commit before the specs boot it.
+      # The committed glue/wasm is whatever was last rebuilt by hand;
+      # testing it instead of the sources is how a 2026-08-09 build went
+      # on passing for two months of Rust changes. wasm-fresh.spec.ts
+      # checks the stamp, so a local run against a stale copy fails too.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.93.0" # mirrors rust-toolchain.toml
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/image -> target
+          prefix-key: v0-rust-image
+          key: wasm
+      - name: wasm-bindgen (prebuilt; version from Cargo.lock)
+        run: |
+          set -euo pipefail
+          WB=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
+          test -n "$WB" || { echo "could not read wasm-bindgen from Cargo.lock"; exit 1; }
+          curl -fsSL "https://github.com/rustwasm/wasm-bindgen/releases/download/$WB/wasm-bindgen-$WB-x86_64-unknown-linux-musl.tar.gz" | tar xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/wasm-bindgen-$WB-x86_64-unknown-linux-musl" >> "$GITHUB_PATH"
+      - name: binaryen (prebuilt wasm-opt; pinned)
+        run: |
+          curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_119/binaryen-version_119-x86_64-linux.tar.gz | tar xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/binaryen-version_119/bin" >> "$GITHUB_PATH"
+      - name: build wasm
+        run: bash scripts/build-wasm.sh
+
+      # Isolation contract, TS half: every import must come through the
+      # sanctioned contract surface (spec §2.1). An editor-internal import
+      # fails here with a pointer to BREAKAGE_LOG.md.
+      - name: contract-import lint
+        run: node scripts/check-contract-imports.mjs
+
+      - name: typecheck
+        run: pnpm -r typecheck
+
+      # REQUIRE_REAL_WASM turns wasm-exec.spec.ts's "artifact missing"
+      # skip into a hard failure: the artifact was just built (and is
+      # committed too), so its absence is a regression, and the only
+      # real-execution lane must never silently drop back to skip.
+      - name: test
+        run: pnpm -r test
+        env:
+          REQUIRE_REAL_WASM: "1"
+
+      # Validate the bundle manifest with the in-tree plugin-cli (the same
+      # binary the package.json validate:manifest script invokes).
+      - name: validate manifest
+        run: >-
+          node "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs"
+          validate manifest/manifest.json
