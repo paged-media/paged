@@ -43,22 +43,60 @@ use std::process::{Command, Stdio};
 /// they agree. `cargo test -p paged-cli` alone rebuilds only ours and
 /// leaves whatever `paged-run` was last built there, which answers the
 /// PREVIOUS protocol and fails this comparison for a reason that is not
-/// drift. A binary that predates our build is skipped loudly rather than
-/// reported as a difference that isn't one.
+/// drift. A binary built before the newest engine source changed is
+/// skipped loudly rather than reported as a difference that isn't one.
 ///
-/// "Predates" allows a minute: one `cargo test --workspace` links the two
-/// binaries in parallel, in either order, so `paged-run` is often a few
-/// milliseconds older than `paged` from the very same build. A strict
-/// `>=` skipped this half on about every other workspace run.
+/// Fresh means "newer than every engine source", not "newer than
+/// `paged`": one workspace build links the two binaries at different
+/// times, in either order (minutes apart on a cold build), so comparing
+/// them with each other skipped this half on about every other run.
 fn paged_run() -> Option<PathBuf> {
     let mine = PathBuf::from(env!("CARGO_BIN_EXE_paged"));
     let sibling = mine.with_file_name(format!("paged-run{}", std::env::consts::EXE_SUFFIX));
-    let built_at = |p: &PathBuf| std::fs::metadata(p).and_then(|m| m.modified()).ok();
-    let same_build = std::time::Duration::from_secs(60);
-    match (built_at(&sibling), built_at(&mine)) {
-        (Some(theirs), Some(ours)) if theirs + same_build >= ours => Some(sibling),
-        _ => None,
+    let built = std::fs::metadata(&sibling)
+        .and_then(|m| m.modified())
+        .ok()?;
+    let engine = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let newest = newest_source(&engine.join("crates"))
+        .into_iter()
+        .chain(["Cargo.toml", "Cargo.lock"].iter().filter_map(|f| {
+            std::fs::metadata(engine.join(f))
+                .and_then(|m| m.modified())
+                .ok()
+        }))
+        .max()?;
+    (built >= newest).then_some(sibling)
+}
+
+/// The newest modification time of a source file (`.rs`, `.toml`,
+/// `.wgsl`) under `dir`, skipping build output; `None` for an empty tree.
+/// Only sources: tests write other files (outputs, snapshots) while this
+/// one runs.
+fn newest_source(dir: &std::path::Path) -> Option<std::time::SystemTime> {
+    let mut newest = None;
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(meta) = entry.metadata() else { continue };
+            if meta.is_dir() {
+                if path.file_name().is_some_and(|n| n != "target") {
+                    stack.push(path);
+                }
+            } else if path
+                .extension()
+                .is_some_and(|e| e == "rs" || e == "toml" || e == "wgsl")
+            {
+                if let Ok(t) = meta.modified() {
+                    newest = newest.max(Some(t));
+                }
+            }
+        }
     }
+    newest
 }
 
 /// Requests exercising the additive Phase-2 surface alongside the
@@ -125,7 +163,7 @@ fn both_binaries_answer_the_same_protocol() {
     let Some(run) = paged_run() else {
         skip!(
             Resource::Fixtures,
-            "the binary-vs-binary half: paged-run is absent or older than this build; \
+            "the binary-vs-binary half: paged-run is absent or older than the engine sources; \
              build the whole workspace (`cargo nextest run --workspace`, as CI does)"
         );
     };
