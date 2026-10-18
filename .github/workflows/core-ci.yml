@@ -98,6 +98,13 @@ jobs:
       - name: fetch CMYK profile for the colour tests
         run: bash scripts/fetch-profiles.sh || echo "::warning title=colour tests degraded::profile fetch failed — colour tests will skip this run"
 
+      # idml-coverage's tests run `cargo metadata --offline`, which needs
+      # every crate of the graph on disk; rust-cache prunes the ones the
+      # build never compiles, so fetch the whole graph first. `--locked`
+      # also fails the job here if Cargo.lock is out of date.
+      - name: fetch the dependency graph
+        run: cargo fetch --locked
+
       # --no-fail-fast: a fail-fast abort silently SKIPS every binary after
       # the first failure and reads as "the rest were green" in a truncated
       # log — that combination hid a second, unrelated failure twice on
@@ -153,6 +160,11 @@ jobs:
       - name: fetch CMYK profile for the colour tests
         run: bash scripts/fetch-profiles.sh || echo "::warning title=colour tests degraded::profile fetch failed — colour tests will skip this run"
 
+      # Same as the `check` job: idml-coverage's tests need the whole graph
+      # on disk for `cargo metadata --offline`.
+      - name: fetch the dependency graph
+        run: cargo fetch --locked
+
       - name: nextest (workspace) → JUnit
         # nextest writes target/nextest/ci/junit.xml when [profile.ci]
         # carries `junit.path` (see .config/nextest.toml). A red run must
@@ -205,11 +217,13 @@ jobs:
       # `check` never sees them and their lints piled up unseen. Lint them
       # on their own target here, in the same target dir and cache as the
       # test lane. `gpu` is the build the packages ship (publish-wasm.yml);
-      # without it paged-sdk compiles to a stub.
+      # without it paged-sdk compiles to a stub. idml-import and idml-export
+      # run in the editor/SDK wasm too (the IDML load and save-back paths).
       - name: clippy (wasm32)
         run: >-
           cargo clippy --target wasm32-unknown-unknown --all-targets
           -p paged-canvas-wasm -p paged-gpu -p paged-sdk -p paged-introspect-wasm
+          -p idml-import -p idml-export
           --features paged-canvas-wasm/gpu,paged-sdk/gpu
           -- -D warnings
       # scripts/test-wasm.sh runs the wasm-bindgen tests node-hosted, so it
