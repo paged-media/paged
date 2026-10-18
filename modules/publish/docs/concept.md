@@ -12,9 +12,10 @@ IDML packages to and from the native `Document`, and PDF files into it.
 <!-- source: CONTRIBUTING.md:43-48; crates/pdf-import/src/lib.rs:15-17 -->
 
 It began as the home of the IDML adapter, the import/export bridge that was moved out of the
-engine ([ADR 022](adr/022-idml-relocates-to-plugin-publish.md)). The adapter crates depend
-on the engine's model crates by a pinned git revision, and the engine consumes the adapter
-crates back across the same boundary ([ADR 650](adr/650-mutual-git-revision-pins.md)).
+engine ([ADR 022](adr/022-idml-relocates-to-plugin-publish.md)). The adapter has since moved
+back into the engine workspace, which removed the mutual git-revision pins
+([PM-0005](../../../docs/adr/PM-0005-workspace-policy.md), superseding
+[ADR 650](adr/650-mutual-git-revision-pins.md)).
 PDF is the second foreign format here. It has its own crate and its own plugin bundle, and
 it is import only: a PDF becomes a native document, and the bundle contributes no exporter.
 <!-- source: README.md:3-4; README.md:12-15; crates/pdf-import/src/lib.rs:15-23; packages/pdf-bundle/manifest.json:18-20 -->

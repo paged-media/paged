@@ -57,6 +57,11 @@ recording is `crates/idml-export/tests/fixtures/indesign-2025-object-model/verif
 
 ### Release order
 
+> Historical: this was the protocol-71 release, when the engine and this repository were
+> separate and pinned each other by git revision. Since
+> [PM-0005](../../../docs/adr/PM-0005-workspace-policy.md) the adapter lives in the engine
+> workspace and one commit changes both, so there is no release order any more.
+
 The two repositories pin each other by git revision, so the steps run in this order:
 
 1. **core:** merge `om/protocol-71` into `main` and tag `v0.71.0`. Call that commit `C`.

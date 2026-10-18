@@ -10,11 +10,13 @@ deferred, what "done" would look like, and the trigger that would re-prioritise
 it.
 
 The record was written against commit `819bdf9`. The code pointers were
-re-located on 2026-10-02 at commit `9f933f1`. The IDML reader has since moved
-out of this repository into `plugin-publish` (crate `idml-import`; see
-[ADR 022](https://github.com/paged-media/plugin-publish/blob/main/docs/adr/022-idml-relocates-to-plugin-publish.md)),
-so parser pointers are written `plugin-publish: crates/idml-import/…` and were
-checked at that repository's commit `6994ad1`. Where the code does something
+re-located on 2026-10-02 at commit `9f933f1`. The IDML reader (crate `idml-import`)
+lived in the plugin-publish repository for a while
+([ADR 022](../../../../modules/publish/docs/adr/022-idml-relocates-to-plugin-publish.md))
+and is back in this workspace since
+[PM-0005](../../../../docs/adr/PM-0005-workspace-policy.md); parser pointers
+(`crates/idml-import/…`) were checked at plugin-publish's commit `6994ad1`, so
+their line numbers may have drifted. Where the code does something
 other than the 2026-06-07 text says, a status note at the top of the section
 says so; the text below it is unchanged.
 
@@ -56,27 +58,27 @@ plus the full `RubyAlignment` / `RubyXOffset` family. `KentenKind` /
 **What the engine does today.**
 - **Vertical writing** — `StoryDirection` (Horizontal/Vertical) is *parsed* and
   stored on the story; no vertical layout. `crates/paged-model/src/lib.rs:4674`
-  (`enum StoryDirection`), `plugin-publish: crates/idml-import/src/story.rs:532`
+  (`enum StoryDirection`), `crates/idml-import/src/story.rs:532`
   (attr read).
-- **Kinsoku** — parsed (`plugin-publish: crates/idml-import/src/story.rs:692`,
+- **Kinsoku** — parsed (`crates/idml-import/src/story.rs:692`,
   `kinsoku_set`/`kinsoku_type`); cascaded (`crates/paged-scene/src/lib.rs:1222`);
   the production renderer enables **hard-kinsoku enforcement keyed on presence
   only** — `crates/paged-renderer/src/pipeline/compose_opts.rs:214`
   (`lopts.compose.kinsoku_enforce = resolved.kinsoku_type.is_some()`); the
   composer adds per-character breaks at `crates/paged-text/src/compose.rs:128`.
   Push-in/push-out *flavour* behaviour is not implemented.
-- **Mojikumi** — parsed (`plugin-publish: crates/idml-import/src/story.rs:694`);
+- **Mojikumi** — parsed (`crates/idml-import/src/story.rs:694`);
   renderer enables a **uniform half-width tightening MVP** when a table/set
   resolves — `crates/paged-renderer/src/pipeline/compose_opts.rs:220`; the pass
   is `crates/paged-text/src/layout.rs:623` (`apply_mojikumi_half_width`).
   Per-table per-adjacency lookups are not implemented.
-- **Ruby** — parsed (`plugin-publish: crates/idml-import/src/story.rs:967`,
+- **Ruby** — parsed (`crates/idml-import/src/story.rs:967`,
   `ruby_flag`/`ruby_type`/`ruby_string`); cascaded
   (`crates/paged-scene/src/lib.rs:949`); renderer **emits a GroupRuby MVP**
   (`crates/paged-renderer/src/pipeline/decorations.rs:126`,
   `emit_ruby_for_line`); `PerCharacter` collapses to the same centred-group
   placement (no per-char distribution).
-- **Kenten** — parsed (`plugin-publish: crates/idml-import/src/story.rs:970`);
+- **Kenten** — parsed (`crates/idml-import/src/story.rs:970`);
   renderer **emits a filled-circle emphasis mark** above each glyph
   (`crates/paged-renderer/src/pipeline/decorations.rs:37`,
   `emit_kenten_for_line`); per-`KentenKind` glyph variants
@@ -116,7 +118,7 @@ CJK exemplar. Until then this is the "CJK Stage 3/4" backlog.
 glyph *outlines* rather than the font's GPOS/`kern` table.
 
 **What the engine does today.** Parsed
-(`plugin-publish: crates/idml-import/src/story.rs:991`, `kerning_method`); the
+(`crates/idml-import/src/story.rs:991`, `kerning_method`); the
 shaper recognises the enum but **falls through to Metrics**:
 `crates/paged-text/src/shape.rs:182` ("`Optical` falls through to Metrics for
 now") and `:302` (`Optical` variant comment: "fall back to Metrics until the
@@ -151,7 +153,7 @@ note "optical kerning → metrics fallback").
 
 *Status note (2026-10-02): this section predates two changes. The IDML element
 is `<EPS>`, not `<EPSImage>`, and the reader matches `<EPS>` since 2026-08-04
-(`plugin-publish: crates/idml-import/src/spread.rs:2100`). And the frame no
+(`crates/idml-import/src/spread.rs:2100`). And the frame no
 longer gets the grey placeholder: an EPS whose bytes resolve is reported as
 `ImageDecodeFailed` with the frame's own fill left in place
 (`crates/paged-renderer/src/pipeline/images.rs:37`, `:138`), and an EPS embedded
@@ -164,7 +166,7 @@ not decoded.*
 placed `.eps` link), parallel to `<Image>` / `<PDF>` / `<ImportedPage>`.
 
 **What the engine does today.** The parser **recognises `<EPSImage>`** as an
-image-bearing child (`plugin-publish: crates/idml-import/src/spread.rs:2107`);
+image-bearing child (`crates/idml-import/src/spread.rs:2107`);
 the renderer **sniffs the `%!PS-Adobe` magic and emits the missing-image
 placeholder** rather than decoding —
 `crates/paged-renderer/src/pipeline/image_decode.rs:33` (magic) and `:186`
@@ -235,7 +237,7 @@ structured workflows. Stories carry `AppliedXMLTag`; the `XML/` folder holds the
 backing store.
 
 **What the engine does today.** **Not parsed.** No `<XMLElement>` / `<XMLStory>`
-consumer exists in the IDML reader (`plugin-publish: crates/idml-import`). (The
+consumer exists in the IDML reader (`crates/idml-import`). (The
 only `XMLStory` / `XMLTag` references in this repository are in the *fixture
 generator* `crates/paged-gen/src/builders/xml_folder.rs:32` — it *emits* a
 minimal XML folder for valid packages; nothing reads it back. The blank-package
@@ -275,7 +277,7 @@ story — a standalone exported story), and InDesign object libraries.
 **What the engine does today.** **Full-document entry only.** The IDML reader's
 `open_source_archive` confirms the IDML mimetype
 (`application/vnd.adobe.indesign-idml-package`) and locates the root
-`designmap.xml` — `plugin-publish: crates/idml-import/src/lib.rs:112`-`150`.
+`designmap.xml` — `crates/idml-import/src/lib.rs:112`-`150`.
 There is no `.indb` / `.idms` / `.icml` entry point; no book-member resolution
 (the "from sibling book documents" flag, `IncludeBookDocuments`, is
 noted-but-not-followed at `crates/paged-model/src/lib.rs:3396`).
@@ -313,7 +315,7 @@ modelled.** Asked of InDesign 20.0.1 (2026-10-12): each `<State>` of a
 `Active="true|false"`; InDesign's layout shows the active state, placed by the
 container's `ItemTransform`, and its default print PDF leaves interactive
 elements out. The IDML reader reads a button or multi-state object as a group of
-its active state (`plugin-publish: crates/idml-import/src/spread.rs`,
+its active state (`crates/idml-import/src/spread.rs`,
 `a_button_and_a_multi_state_object_show_their_active_state_where_indesign_puts_it`);
 before, every state was drawn, stacked, at untransformed spread coordinates.
 States, behaviors, `<Sound>` / `<Movie>` and `<AnimationSetting>` are not
@@ -349,7 +351,7 @@ drag-and-drop text editing (an editor gesture, not an IDML element).
 **What the engine does today.**
 - **Hidden text** — the parser **recognises `<HiddenText>` and actively drops
   its content** (matches InDesign's default "hidden text not output"):
-  `plugin-publish: crates/idml-import/src/story.rs:520`
+  `crates/idml-import/src/story.rs:520`
   (`matches!(name, b"HiddenText" | b"Note")` → suppress) and `:1437`; tested by
   `track5c_hidden_text_block_drops_content` (`story.rs:2222`). So it is *not*
   "treated as normal text" — it is correctly suppressed.
@@ -361,7 +363,7 @@ drag-and-drop text editing (an editor gesture, not an IDML element).
   as if every change were accepted, and a deletion nests its own paragraph and
   character ranges inside `<Change ChangeType="DeletedText">`. The reader skips
   deletions and reads insertions and moves through their transparent `<Change>`
-  (`plugin-publish: crates/idml-import/src/story.rs`,
+  (`crates/idml-import/src/story.rs`,
   `a_tracked_story_reads_as_if_every_change_were_accepted`); before, the nested
   ranges derailed the story and only the deleted words were drawn. Changes are not
   modelled: no review, accept or reject, and a rewritten story drops them.

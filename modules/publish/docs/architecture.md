@@ -44,28 +44,25 @@ two bundles do not import each other and the editor loads them as two plugins
 ([ADR 657](adr/657-one-bundle-per-format.md)).
 
 ```
-core (engine)                                    this repository
-  paged-model, paged-scene, paged-store  <-- git rev --  idml-import <-- idml-export
-                                                         pdf-import
+engine/core (engine workspace)                   modules/publish (this workspace)
+  paged-model, paged-scene, paged-store  <-- path --  pdf-import
+  idml-import, idml-export, idml-coverage
   paged-canvas, paged-renderer,
-  paged-sdk, paged-cli, ...              -- git rev -->  idml-import, idml-export
+  paged-sdk, paged-cli, ...  (link idml-import / idml-export in-workspace)
         | built into the engine wasm
         v
-editor  <-- npm --  @paged-media/publish   TypeScript only
-        <-- npm --  @paged-media/pdf       TypeScript + pdf-import wasm + PDFium wasm
+editor  <-- workspace --  @paged-media/publish   TypeScript only
+        <-- workspace --  @paged-media/pdf       TypeScript + pdf-import wasm + PDFium wasm
 ```
 
-- The crates take `paged-scene`, `paged-model` and `paged-store` from the engine repository
-  as git dependencies on one revision (`Cargo.toml:24-29`): `idml-import` the first two,
-  `idml-export` the first, `pdf-import` all three.
-- The engine depends back on `idml-import` and `idml-export` by git revision, and patches
-  the adapter's git dependencies onto its own local crates so both sides share one
-  `Document` type (`core: Cargo.toml:71-82`). At that commit, six engine crates link
-  `idml-import` as a normal dependency (`paged-canvas`, `paged-renderer`, `paged-sdk`,
-  `paged-cli`, `paged-export-pdf`, `paged-introspect-wasm`) and two of them, `paged-canvas`
-  and `paged-renderer`, also link `idml-export`. The revision the engine pins need not be
-  this repository's head: at `core` `9f933f1` it is `a88315d`, the parent of the commit
-  described here. See [ADR 650](adr/650-mutual-git-revision-pins.md).
+- The IDML adapter (`idml-import`, `idml-export`) and its coverage tool moved into the
+  engine workspace (`engine/core/crates/`); see
+  [PM-0005](../../../docs/adr/PM-0005-workspace-policy.md), which supersedes
+  [ADR 650](adr/650-mutual-git-revision-pins.md).
+- `pdf-import` takes `paged-scene`, `paged-model` and `paged-store` from the engine by path,
+  and `idml-import` as a dev-dependency for its round-trip tests. A CI guard
+  (`cargo tree -i flo_curves` is empty) keeps this workspace off `paged-mutate`, whose
+  geometry kernel the engine patches.
 - So the IDML code reaches a user inside the engine build, not inside
   `@paged-media/publish`. Only `pdf-import` is compiled to a wasm module that a bundle here
   ships. See [ADR 651](adr/651-idml-compiled-into-engine-wasm.md).
