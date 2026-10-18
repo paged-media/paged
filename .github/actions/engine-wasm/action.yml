@@ -1,0 +1,169 @@
+name: engine wasm packages
+description: >-
+  Fills the engine's workspace packages engine/core/packages/{canvas-wasm,
+  introspect-wasm,repo-wasm,sdk} with their generated files (the
+  wasm-bindgen glue, its .d.ts, the optimised wasm and introspect-wasm's
+  catalog.json). Restores them from the cache when the engine's inputs are
+  unchanged, builds them otherwise, and uploads them as the
+  `engine-wasm-packages` artifact.
+
+# Every JS package that depends on @paged-media/canvas-wasm, introspect-wasm,
+# repo-wasm or sdk does so through `workspace:*` (engine/core ADR 185), and a
+# fresh checkout has only the committed package.json, README and licence files
+# in those directories. A job that typechecks, tests or builds against them
+# runs this first.
+#
+# Prerequisites: the repository checked out at the workspace root, and Node on
+# PATH (moonrepo/setup-toolchain; build-wasm-packages.sh checks the built
+# files with `node -e`). Composite steps do not inherit the caller's
+# `defaults.run.working-directory`, so every step names its directory.
+#
+# The cache key hashes everything the build reads: the engine's crates,
+# manifests, lockfile and toolchain pin, the build script, the package
+# manifests, the repository's Cargo config, and the wasm-bindgen-cli and
+# binaryen versions tooling/bootstrap.sh pins. A hit restores the files in
+# seconds; a miss builds all four packages (the `wasm-release` profile with fat
+# LTO, then `wasm-bindgen --target web` and `wasm-opt -Oz`), as
+# core-publish-wasm.yml does for a release.
+
+inputs:
+  artifact:
+    description: >-
+      Upload the packages as the `engine-wasm-packages` artifact. An artifact
+      name is unique within a workflow run, so when several jobs of one
+      workflow use this action, all but one pass "false".
+    required: false
+    default: "true"
+
+outputs:
+  cache-hit:
+    description: '"true" when the packages came from the cache.'
+    value: ${{ steps.restore.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: engine wasm — read the tool pins
+      id: pins
+      shell: bash
+      run: |
+        set -euo pipefail
+        WB=$(sed -n 's/^WASM_BINDGEN=//p' tooling/bootstrap.sh)
+        BY=$(sed -n 's/^BINARYEN=//p' tooling/bootstrap.sh)
+        test -n "$WB" && test -n "$BY" \
+          || { echo "::error::cannot read the wasm-bindgen/binaryen pins from tooling/bootstrap.sh"; exit 1; }
+        echo "wasm-bindgen=$WB" >> "$GITHUB_OUTPUT"
+        echo "binaryen=$BY" >> "$GITHUB_OUTPUT"
+        echo "channel=$(bash engine/core/scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
+
+    - name: engine wasm — restore
+      id: restore
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          engine/core/packages/*/paged_*
+          engine/core/packages/*/snippets
+          engine/core/packages/introspect-wasm/catalog.json
+        key: >-
+          engine-wasm-v1-${{ runner.os }}-${{ runner.arch }}-wb${{ steps.pins.outputs.wasm-bindgen }}-binaryen${{ steps.pins.outputs.binaryen }}-${{
+          hashFiles('engine/core/crates/**', 'engine/core/Cargo.toml', 'engine/core/Cargo.lock',
+          'engine/core/rust-toolchain.toml', 'engine/core/scripts/build-wasm-packages.sh',
+          'engine/core/packages/*/package.json', '.cargo/config.toml') }}
+
+    # ---- a miss: build ------------------------------------------------------
+    - name: engine wasm — Rust toolchain (rust-toolchain.toml pin)
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ steps.pins.outputs.channel }}
+        targets: wasm32-unknown-unknown
+
+    - name: engine wasm — mold (the Rust linker on Linux, .cargo/config.toml)
+      if: steps.restore.outputs.cache-hit != 'true' && runner.os == 'Linux'
+      uses: rui314/setup-mold@v1
+
+    # One dependency cache for every job that builds the packages, so an
+    # engine change rebuilds the engine's crates, not its dependencies.
+    - name: engine wasm — Rust dependency cache
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: engine/core -> target
+        prefix-key: v0-rust-core-wasm
+        shared-key: engine-wasm
+
+    # Prebuilt releases at the bootstrap.sh pins. Not apt's binaryen: an old
+    # one miscompiles wasm-bindgen's externref table grow ("Table.grow failed").
+    - name: engine wasm — wasm-bindgen-cli and binaryen (pinned)
+      if: steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        WB: ${{ steps.pins.outputs.wasm-bindgen }}
+        BY: ${{ steps.pins.outputs.binaryen }}
+      run: |
+        set -euo pipefail
+        case "${{ runner.os }}-${{ runner.arch }}" in
+          Linux-X64)   WBT=x86_64-unknown-linux-musl; BYT=x86_64-linux ;;
+          macOS-ARM64) WBT=aarch64-apple-darwin;      BYT=arm64-macos ;;
+          macOS-X64)   WBT=x86_64-apple-darwin;       BYT=x86_64-macos ;;
+          *) echo "::error::no prebuilt wasm-bindgen/binaryen for ${{ runner.os }}-${{ runner.arch }}"; exit 1 ;;
+        esac
+        DEST="$RUNNER_TEMP/engine-wasm-tools"
+        mkdir -p "$DEST"
+        curl -fsSL "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/$WB/wasm-bindgen-$WB-$WBT.tar.gz" | tar xz -C "$DEST"
+        curl -fsSL "https://github.com/WebAssembly/binaryen/releases/download/version_$BY/binaryen-version_$BY-$BYT.tar.gz" | tar xz -C "$DEST"
+        echo "$DEST/wasm-bindgen-$WB-$WBT" >> "$GITHUB_PATH"
+        echo "$DEST/binaryen-version_$BY/bin" >> "$GITHUB_PATH"
+
+    # Checks the CLI against Cargo.lock, and under CI refuses to run without
+    # wasm-opt. Writes only the generated files; the committed ones stay.
+    - name: engine wasm — build the four packages
+      if: steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: engine/core
+      run: |
+        set -euo pipefail
+        wasm-bindgen --version
+        wasm-opt --version
+        bash scripts/build-wasm-packages.sh --workspace
+
+    - name: engine wasm — save
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          engine/core/packages/*/paged_*
+          engine/core/packages/*/snippets
+          engine/core/packages/introspect-wasm/catalog.json
+        key: ${{ steps.restore.outputs.cache-primary-key }}
+
+    # ---- always -------------------------------------------------------------
+    # A hit restores exactly what a build writes, so the same check holds for
+    # both: every file each manifest names is present.
+    - name: engine wasm — every package is complete
+      shell: bash
+      working-directory: engine/core/packages
+      run: |
+        set -euo pipefail
+        for PKG in canvas-wasm introspect-wasm repo-wasm sdk; do
+          node -e '
+            const fs = require("fs");
+            const dir = process.argv[1];
+            const pkg = JSON.parse(fs.readFileSync(dir + "/package.json", "utf8"));
+            const missing = [pkg.main, pkg.types, ...pkg.files].filter((f) => !fs.existsSync(dir + "/" + f));
+            if (missing.length) { console.error("::error::" + dir + " lacks " + missing.join(", ")); process.exit(1); }
+            console.log("ok " + pkg.name + "@" + pkg.version);
+          ' "$PKG"
+        done
+
+    - name: engine wasm — upload the engine-wasm-packages artifact
+      if: inputs.artifact == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: engine-wasm-packages
+        path: |
+          engine/core/packages/*/paged_*
+          engine/core/packages/*/snippets
+          engine/core/packages/introspect-wasm/catalog.json
+        if-no-files-found: error
+        retention-days: 7
