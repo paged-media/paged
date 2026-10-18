@@ -528,7 +528,7 @@ fn a_gradient_stroke_paints_through_a_shading_pattern() {
     let parsed = lopdf::Document::load_mem(&pdf).expect("re-parse");
     let mut content = Vec::new();
     for (_, page_id) in parsed.get_pages() {
-        content.extend(parsed.get_page_content(page_id).expect("page content"));
+        content.extend(parsed.get_page_content(page_id));
     }
     let text = String::from_utf8_lossy(&content);
     assert!(

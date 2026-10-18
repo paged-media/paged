@@ -11,7 +11,7 @@ description = "Static inventory of the IDML elements and attributes idml-import 
 workspace = true
 
 [dependencies]
-syn = { version = "2", features = ["full", "visit", "printing", "parsing"] }
+syn = { version = "3", features = ["full", "visit", "printing", "parsing"] }
 proc-macro2 = { version = "1", features = ["span-locations"] }
 quote = "1"
 serde = { workspace = true }
