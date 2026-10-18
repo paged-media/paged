@@ -86,7 +86,9 @@ fn view(id: &str, view: &str) -> Vec<u8> {
     match ch {
         4 => v,
         3 => v
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .flat_map(|p| [p[0], p[1], p[2], 255])
             .collect(),
         n => panic!("{n}-channel PNG"),
@@ -104,7 +106,7 @@ fn ours_converted_merged(file: &PsdFile) -> Vec<u8> {
     );
     let mut rgba = ink.to_rgba8(&c.cmyk);
     if let Some(a) = &c.alpha {
-        for (p, &al) in rgba.chunks_exact_mut(4).zip(a) {
+        for (p, &al) in rgba.as_chunks_mut::<4>().0.iter_mut().zip(a) {
             p[3] = al;
         }
     }
@@ -239,12 +241,16 @@ fn cmyk_composite_reads_the_ink_photoshop_filled__feat__image_psd_rendered() {
 fn cmyk_layer_channels_decode_to_the_filled_ink__feat__image_psd_layer_import() {
     let file = psd("opaque-stack");
     let cmy = |ink: &[u8]| -> Vec<u8> {
-        ink.chunks_exact(4)
+        ink.as_chunks::<4>()
+            .0
+            .iter()
             .flat_map(|p| [p[0], p[1], p[2], 255])
             .collect()
     };
     let k = |ink: &[u8]| -> Vec<u8> {
-        ink.chunks_exact(4)
+        ink.as_chunks::<4>()
+            .0
+            .iter()
             .flat_map(|p| [p[3], p[3], p[3], 255])
             .collect()
     };
@@ -397,7 +403,12 @@ fn a_transparent_cmyk_composite_is_unmatted_against_paper__feat__image_psd_rende
     let ours = ours_converted_merged(&file);
     let theirs = view("transparent-soft", "relcol-bpc");
     let mut worst = 0u8;
-    for (a, b) in ours.chunks_exact(4).zip(theirs.chunks_exact(4)) {
+    for (a, b) in ours
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(theirs.as_chunks::<4>().0)
+    {
         assert_eq!(a[3], b[3], "alpha decodes exactly");
         if b[3] >= 64 {
             worst = worst.max((0..3).map(|c| a[c].abs_diff(b[c])).max().unwrap_or(0));

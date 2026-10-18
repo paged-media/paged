@@ -47,10 +47,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # The server has no rust-toolchain.toml of its own; the engine crates
-      # it builds pin theirs (engine/core/rust-toolchain.toml), so read that.
+      # The server pins the same channel as the engine crates it builds;
+      # read its own rust-toolchain.toml.
       - id: pin
-        run: echo "channel=$(bash ../../../engine/core/scripts/rust-channel.sh)" >> "$GITHUB_OUTPUT"
+        run: echo "channel=$(bash ../../../engine/core/scripts/rust-channel.sh .)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ steps.pin.outputs.channel }}

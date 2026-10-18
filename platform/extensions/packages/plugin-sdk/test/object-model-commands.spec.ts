@@ -40,6 +40,7 @@ import {
 } from "../src/core-commands";
 import { CORE_WIRE_OPS } from "../src/core-commands.generated";
 import { createHeadlessHost, type HeadlessHost } from "../src/harness";
+import { protocolFromVersion, readVendoredWireVersion } from "../src/wasm-loader";
 import { checkValueType } from "../src/object-schema";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
@@ -98,7 +99,8 @@ describe("guard — every catalog operation is a typed command or excluded with 
 
 async function boot() {
   const h = (live = await createHeadlessHost({ console: silent }));
-  expect(h.protocolVersion).toBe(73);
+  // The engine the contract's wire was synced from (no skew), not a fixed number.
+  expect(h.protocolVersion).toBe(protocolFromVersion((await readVendoredWireVersion())!));
   await h.load(minimalIdml());
   const made = await h.objects.batch([
     { op: "create", kind: "textFrame", within: "page:#1", props: { frameBounds: [10, 10, 100, 200] }, handle: "t" },

@@ -34,6 +34,17 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # The engine wasm packages the harness boots (workspace:*), and what
+      # builds them (.github/actions/engine-wasm).
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
   pull_request:
     paths:
       - "platform/extensions/**"
@@ -43,6 +54,17 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # The engine wasm packages the harness boots (workspace:*), and what
+      # builds them (.github/actions/engine-wasm).
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
   workflow_dispatch:
 
 permissions:
@@ -55,7 +77,8 @@ defaults:
 jobs:
   vitest:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # A cold engine wasm build (a cache miss) takes most of this.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       # Bun and Node at the versions in /.prototools, installed by proto.
@@ -70,10 +93,24 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
 
+      # The engine's wasm packages, which the harness specs boot.
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
+
       # One install for the whole root workspace (bun.lock).
       - name: bun install (root workspace)
         working-directory: .
         run: bun install --frozen-lockfile
+
+      # plugin-api vendors the engine's wire types and capability catalog.
+      # Both sources are in this checkout now: the wire is the .d.ts of the
+      # canvas-wasm workspace package built above, the catalog is
+      # engine/core's catalog.json. A wire or catalog change in the engine
+      # without a resync fails here.
+      - name: vendored wire and catalog match the engine
+        run: |
+          node scripts/sync-wire.mjs --check
+          node scripts/sync-catalog.mjs --check
 
       # Build BEFORE the suite: react-free-import.spec.ts asserts on the
       # SHIPPED artifact (no static react import, no AWAITED react import),
@@ -83,8 +120,8 @@ jobs:
       # cannot emit a top-level await into. See DESIGN.md §5.1.
       - run: bun run --filter @paged-media/plugin-sdk build
 
-      # The harness specs boot the published canvas-wasm from node_modules, so
-      # this is a real engine run, not a mock.
+      # The harness specs boot canvas-wasm, the workspace package the step
+      # above filled, so this is a real engine run, not a mock.
       #
       # Red results must still publish (the matrix wants the ✗), so the run
       # does not abort the job here — the gate at the end fails the build after

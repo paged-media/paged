@@ -875,7 +875,9 @@ fn decode_height_map(bytes: &[u8], grid_size: Option<i32>, w: &mut Vec<AbrWarnin
         (None, None) => 0,
     };
     let values = bytes
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
         .collect();
     HeightMap {

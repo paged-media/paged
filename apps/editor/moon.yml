@@ -12,28 +12,58 @@ project:
   description: 'The editor application.'
 
 dependsOn:
-  # `workspace:*` dependencies: the editor bundles these two from source.
+  # `workspace:*` dependencies the editor compiles from source: every module
+  # bundle, the extension contract and ai, and the engine's wasm packages.
+  - id: 'core'
+    scope: 'production'
+  - id: 'extensions'
+    scope: 'production'
+  - id: 'data'
+    scope: 'production'
   - id: 'doc'
+    scope: 'production'
+  - id: 'draw'
+    scope: 'production'
+  - id: 'image'
+    scope: 'production'
+  - id: 'publish'
+    scope: 'production'
+  - id: 'sheet'
     scope: 'production'
   - id: 'slide'
     scope: 'production'
-  # Test fixtures (paged-gen), the fidelity lane's paged-diff, engine corpus.
-  - id: 'core'
-    scope: 'development'
-  # vite's dev-only DUCKDB_DIST fallback reads modules/data.
-  - id: 'data'
-    scope: 'development'
+  - id: 'web'
+    scope: 'production'
 
 tasks:
   js-check:
     description: 'typecheck of apps/*, then the canvas test sources (as editor-tests runs them).'
     script: 'bun run typecheck && bun run --filter ./apps/canvas typecheck:tests'
-    # The doc and slide workspace bundles are compiled into the editor from source.
+    # The workspace packages are compiled into the editor from source, and
+    # canvas-wasm's .d.ts is a build output (core:wasm-pkg).
+    deps: ['core:wasm-pkg']
     inputs:
+      - '@group(js-sources)'
+      - project: 'core'
+        filter: ['packages/*/**/*']
+      - project: 'extensions'
+        filter: ['packages/*/src/**/*', 'packages/*/package.json']
+      - project: 'data'
+        filter: ['packages/*/**/*']
       - project: 'doc'
-        filter: ['packages/doc-bundle/**/*']
+        filter: ['packages/*/**/*']
+      - project: 'draw'
+        filter: ['packages/*/**/*']
+      - project: 'image'
+        filter: ['glue/**/*', 'manifest/**/*']
+      - project: 'publish'
+        filter: ['packages/*/**/*']
+      - project: 'sheet'
+        filter: ['packages/*/**/*']
       - project: 'slide'
-        filter: ['packages/slide-bundle/**/*']
+        filter: ['packages/*/**/*']
+      - project: 'web'
+        filter: ['packages/web-bundle/**/*', 'packages/web-model/**/*']
 
   js-lint:
     description: 'ESLint architecture boundaries and their self-test.'
@@ -49,6 +79,7 @@ tasks:
       && bun run test:network-policy
       && bun run test:modules
       && bun run test:spread-pages
+      && bun run test:repository
       && bun run test:thresholds
       && bun run test:wasm-budget
       && bun run test:surface-coverage
@@ -57,16 +88,35 @@ tasks:
       && bun run test:solo-profiles
       && bun run test:feat-vocabulary
       && bun run test:client-catalog
+    # The wasm budget and the module door measure the wasm the app ships.
+    deps: ['core:wasm-pkg', 'doc:wasm', 'slide:wasm', 'sheet:wasm', 'data:wasm', 'web:wasm']
     inputs:
+      - '@group(js-sources)'
+      - project: 'core'
+        filter: ['packages/*/**/*']
+      - project: 'extensions'
+        filter: ['packages/*/src/**/*', 'packages/*/package.json']
+      - project: 'data'
+        filter: ['packages/*/**/*']
       - project: 'doc'
-        filter: ['packages/doc-bundle/**/*']
+        filter: ['packages/*/**/*']
+      - project: 'draw'
+        filter: ['packages/*/**/*']
+      - project: 'image'
+        filter: ['glue/**/*', 'manifest/**/*']
+      - project: 'publish'
+        filter: ['packages/*/**/*']
+      - project: 'sheet'
+        filter: ['packages/*/**/*']
       - project: 'slide'
-        filter: ['packages/slide-bundle/**/*']
+        filter: ['packages/*/**/*']
+      - project: 'web'
+        filter: ['packages/web-bundle/**/*', 'packages/web-model/**/*']
 
   js-build:
-    description: 'vite build of apps/* (needs the doc and slide engine wasm).'
+    description: 'vite build of apps/* (needs the engine wasm and the bundles'' engine wasm).'
     command: 'bun run build'
-    deps: ['doc:wasm', 'slide:wasm']
+    deps: ['core:wasm-pkg', 'doc:wasm', 'slide:wasm', 'sheet:wasm', 'data:wasm', 'web:wasm']
 
   fixtures:
     description: 'paged-gen (engine/core) emits every sample into corpus/idml/generated/, as editor-tests does.'
@@ -89,7 +139,7 @@ tasks:
       private corpus at apps/editor/corpus (a symlink) and a browser
       (`bunx playwright install chromium` in apps/canvas).
     script: 'cd apps/canvas && bunx --no-install playwright test --project=chromium --project=journeys'
-    deps: ['~:fixtures', 'doc:wasm', 'slide:wasm']
+    deps: ['~:fixtures', 'core:wasm-pkg', 'doc:wasm', 'slide:wasm', 'sheet:wasm', 'data:wasm', 'web:wasm']
     inputs:
       - '@group(js-sources)'
     options:

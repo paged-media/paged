@@ -78,17 +78,34 @@ jobs:
         run: bash scripts/fetch-profiles.sh
         working-directory: engine/core
 
-      # Without it the dev server cannot resolve @paged-media/doc, the app
-      # never boots (`__canvas` times out at 30 s) and every chapter fails —
-      # every night since 2026-09-11. DROP with the action when doc publishes.
       - name: install (root workspace)
         working-directory: .
         run: bun install --frozen-lockfile
 
-      - name: plugin-doc from source (in-tree modules/doc)
-        uses: ./.github/actions/plugin-doc-from-source
-      - name: plugin-slide from source (in-tree modules/slide)
-        uses: ./.github/actions/plugin-slide-from-source
+      # The engine's wasm packages and the bundles' engine wasm (build
+      # outputs; the editor consumes the workspace packages). Without them
+      # the dev server cannot resolve sheet's, web's and doc's
+      # `../bin/<glue>.js`, the app never boots (`__canvas` times out at
+      # 30 s) and every chapter fails, as every night from 2026-09-11 until
+      # doc's wasm was built here.
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
+        with: { artifact: "false" }
+      - name: module wasm (doc)
+        uses: ./.github/actions/module-wasm
+        with: { module: doc }
+      - name: module wasm (slide)
+        uses: ./.github/actions/module-wasm
+        with: { module: slide }
+      - name: module wasm (sheet)
+        uses: ./.github/actions/module-wasm
+        with: { module: sheet }
+      - name: module wasm (data)
+        uses: ./.github/actions/module-wasm
+        with: { module: data }
+      - name: module wasm (web)
+        uses: ./.github/actions/module-wasm
+        with: { module: web }
 
       - name: install real Chrome
         run: npx playwright install chrome

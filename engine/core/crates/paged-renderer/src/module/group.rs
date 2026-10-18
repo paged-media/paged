@@ -282,7 +282,7 @@ pub(crate) fn group_pass(
     }
 
     // Reverse splice order so earlier groups' ranges stay valid.
-    entries.sort_by(|a, b| b.0.cmp(&a.0));
+    entries.sort_by_key(|a| std::cmp::Reverse(a.0));
 
     for (gi, per_page, member_text, member_windows) in entries {
         let group = &spread.groups[gi];
@@ -296,7 +296,7 @@ pub(crate) fn group_pass(
         // so multiple bracketed pages don't disturb each other (in
         // practice a single group lives on one page; defensive).
         let mut per_page = per_page;
-        per_page.sort_by(|a, b| b.1.cmp(&a.1));
+        per_page.sort_by_key(|a| std::cmp::Reverse(a.1));
         for (page_idx, start, mut end) in per_page {
             if page_idx >= pages.len() || start >= end {
                 continue;
@@ -311,7 +311,7 @@ pub(crate) fn group_pass(
                         .map(move |(_, a, b)| (*a, *b, text))
                 })
                 .collect();
-            windows.sort_by(|a, b| b.0.cmp(&a.0));
+            windows.sort_by_key(|a| std::cmp::Reverse(a.0));
             for (a, b, text) in windows {
                 let page = &mut pages[page_idx];
                 if is_single_bracket(&page.list.commands, a, b) {

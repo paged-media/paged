@@ -51,7 +51,10 @@ export const W1_EMPTY_PAGE: WebFixture = {
  *  flagged. */
 export const W2_FONTS: WebFixture = {
   id: "registered-fonts",
-  about: "document registering IBM Plex Sans + Source Serif Pro via styles",
+  // The engine's `fonts` collection lists the families the text is SET in
+  // (each run's resolved font), so each family sets one run: IBM Plex Sans
+  // through the paragraph style, Source Serif Pro through a run override.
+  about: "document whose text is set in IBM Plex Sans (paragraph style) + Source Serif Pro (run override)",
   pageId: "usp",
   bytes() {
     const styles =
@@ -72,6 +75,9 @@ export const W2_FONTS: WebFixture = {
       `<CharacterStyleRange AppliedCharacterStyle="CharacterStyle/$ID/[No character style]">` +
       `<Properties><AppliedFont type="string">Source Serif Pro</AppliedFont></Properties>` +
       `<Content>Hello from a styled story.</Content>` +
+      `</CharacterStyleRange>` +
+      `<CharacterStyleRange AppliedCharacterStyle="CharacterStyle/$ID/[No character style]">` +
+      `<Content> Set in the paragraph style's face.</Content>` +
       `</CharacterStyleRange></ParagraphStyleRange></Story></idPkg:Story>`;
     const tf =
       `<TextFrame Self="utf" ParentStory="ustory" GeometricBounds="100 100 300 400" ItemTransform="1 0 0 1 0 0"/>`;

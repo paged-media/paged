@@ -10,7 +10,7 @@ the crate or package under discussion. A path in the engine repository is writte
 
 The repository is two workspaces side by side: a Cargo workspace with three crates under
 `crates/` and a pnpm workspace with two packages under `packages/`. The Rust toolchain is
-pinned to 1.94.1 with the `wasm32-unknown-unknown` target (`rust-toolchain.toml`). All three
+pinned to 1.99.1 with the `wasm32-unknown-unknown` target (`rust-toolchain.toml`). All three
 crates are version `0.0.0` and `publish = false`.
 
 **`crates/idml-import`** reads an IDML package into the engine's model. `src/lib.rs` holds

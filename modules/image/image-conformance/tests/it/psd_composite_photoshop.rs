@@ -81,7 +81,9 @@ fn png_rgba8(path: &Path) -> Vec<u8> {
     match ch {
         4 => px,
         3 => px
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .flat_map(|p| [p[0], p[1], p[2], 255])
             .collect(),
         n => panic!("{n}-channel PNG"),
@@ -188,7 +190,12 @@ fn merged_composite_of_a_transparent_psd_decodes_to_straight_colour__feat__image
     let ours = file.composite_rgba8().expect("decode").rgba;
     let theirs = png_rgba8(&dir().join("transparent-soft.png"));
     let mut over = Vec::new();
-    for (a, b) in ours.chunks_exact(4).zip(theirs.chunks_exact(4)) {
+    for (a, b) in ours
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(theirs.as_chunks::<4>().0)
+    {
         if b[3] < 16 {
             continue; // colour is ill-conditioned this close to clear
         }
@@ -214,7 +221,12 @@ fn unmatting_leaves_alpha_and_opaque_pixels_exact__feat__image_psd_rendered() {
     let file = psd("transparent-soft");
     let ours = file.composite_rgba8().expect("decode").rgba;
     let theirs = png_rgba8(&dir().join("transparent-soft.png"));
-    for (a, b) in ours.chunks_exact(4).zip(theirs.chunks_exact(4)) {
+    for (a, b) in ours
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(theirs.as_chunks::<4>().0)
+    {
         assert_eq!(a[3], b[3], "alpha decodes exactly");
         if b[3] == 255 {
             assert!(

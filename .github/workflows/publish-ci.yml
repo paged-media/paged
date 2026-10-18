@@ -17,6 +17,18 @@ on:
       # workspace settings), so an engine change can break it.
       - "engine/core/Cargo.toml"
       - "engine/core/crates/**"
+      # The engine's wasm packages the bundle specs boot (workspace:*), the
+      # rest of what builds them, and the extension contract.
+      - "engine/core/Cargo.lock"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
+      - "platform/extensions/packages/plugin-api/**"
+      - "platform/extensions/packages/plugin-sdk/**"
       - ".github/workflows/publish-ci.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -34,6 +46,18 @@ on:
       # workspace settings), so an engine change can break it.
       - "engine/core/Cargo.toml"
       - "engine/core/crates/**"
+      # The engine's wasm packages the bundle specs boot (workspace:*), the
+      # rest of what builds them, and the extension contract.
+      - "engine/core/Cargo.lock"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
+      - "platform/extensions/packages/plugin-api/**"
+      - "platform/extensions/packages/plugin-sdk/**"
       - ".github/workflows/publish-ci.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -64,7 +88,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.94.1"
+          toolchain: "1.99.1"
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
@@ -141,7 +165,7 @@ jobs:
           set -e
           for m in packages/*/manifest.json; do
             echo "== validate $m =="
-            npx --yes @paged-media/plugin-cli@canary validate "$m"
+            node "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs" validate "$m"
           done
 
   # Test evidence — the suites this repo has always had and CI never ran.
@@ -157,14 +181,15 @@ jobs:
   tests:
     name: tests (evidence)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # A cold engine wasm build (a cache miss) adds most of the time.
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
           # Mirrors rust-toolchain.toml — dtolnay's action does NOT read that
           # file and hard-fails without an explicit toolchain.
-          toolchain: stable
+          toolchain: "1.99.1"
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
         uses: rui314/setup-mold@v1
@@ -205,6 +230,10 @@ jobs:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
+      # The engine's wasm packages (canvas-wasm, workspace:*), which the
+      # bundles' command specs boot.
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
       # One install for the whole root workspace (bun.lock).
       - name: bun install (root workspace)
         working-directory: .

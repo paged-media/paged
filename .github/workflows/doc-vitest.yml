@@ -12,6 +12,20 @@ on:
     branches: [main]
     paths:
       - "modules/doc/**"
+      # The extension contract the bundle builds against (workspace:*).
+      - "platform/extensions/packages/plugin-api/**"
+      - "platform/extensions/packages/plugin-sdk/**"
+      # The engine wasm packages this workflow builds against (workspace:*),
+      # and what builds them, so an engine change re-tests its consumers.
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
       - ".github/workflows/doc-vitest.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -37,8 +51,10 @@ jobs:
         with:
           auto-install: true
           proto-version: "0.63.1"
-      # paged.doc consumes the PUBLISHED @paged-media canaries (no link chain),
-      # so a plain install suffices.
+      # The engine's wasm packages (canvas-wasm and the rest, workspace:*),
+      # which the real-engine specs boot.
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
       # One install for the whole root workspace (bun.lock).
       - name: bun install (root workspace)
         working-directory: .
@@ -51,7 +67,7 @@ jobs:
       # sibling-clone layout), so validate through the PUBLISHED plugin-cli —
       # the same way plugin-publish/ci.yml validates its manifests.
       - name: validate manifest
-        run: npx --yes @paged-media/plugin-cli@canary validate packages/doc-bundle/manifest.json
+        run: node "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs" validate packages/doc-bundle/manifest.json
       # Red results must still upload (the state matrix wants the ✗), so the
       # run does not abort here — the gate at the end fails the job once the
       # artifact is safely uploaded.

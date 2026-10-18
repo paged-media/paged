@@ -136,7 +136,7 @@ pub fn luma_bin(r: u8, g: u8, b: u8) -> usize {
 /// across platforms, its own golden (§6.3). Alpha is not binned.
 pub fn histogram_rgba8(pixels: &[u8]) -> RgbaLumaHistogram {
     let mut hist = RgbaLumaHistogram::default();
-    for px in pixels.chunks_exact(4) {
+    for px in pixels.as_chunks::<4>().0 {
         let (r, g, b) = (px[0], px[1], px[2]);
         hist.r[r as usize] += 1;
         hist.g[g as usize] += 1;

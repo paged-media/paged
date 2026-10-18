@@ -213,12 +213,10 @@ pub fn parse(
                         run_text.clear();
                     }
                 }
-                b"t" => {
-                    // Rich-text run (a:t) inside a title.
-                    if in_title {
-                        in_text_run = true;
-                        run_text.clear();
-                    }
+                // Rich-text run (a:t) inside a title.
+                b"t" if in_title => {
+                    in_text_run = true;
+                    run_text.clear();
                 }
                 _ => {}
             },

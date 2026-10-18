@@ -173,7 +173,7 @@ impl<B: ByteSource> PngSource<B> {
             if channels == ChannelLayout::Rgba && depth == SampleDepth::U16 && src.len() == n * 6 {
                 // 16-bit RGB → RGBA: opaque alpha is 0xFFFF, not 0xFF.
                 let mut v = Vec::with_capacity(n * 8);
-                for px in src.chunks_exact(6) {
+                for px in src.as_chunks::<6>().0 {
                     v.extend_from_slice(px);
                     v.extend_from_slice(&u16::MAX.to_ne_bytes());
                 }
@@ -350,7 +350,7 @@ fn widen_rgb_to_rgba(rgb: &[u8], width: usize, height: usize) -> Result<Vec<u8>>
         });
     }
     let mut out = vec![0u8; px * 4];
-    for (i, chunk) in rgb.chunks_exact(3).enumerate() {
+    for (i, chunk) in rgb.as_chunks::<3>().0.iter().enumerate() {
         let d = i * 4;
         out[d] = chunk[0];
         out[d + 1] = chunk[1];

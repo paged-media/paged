@@ -345,7 +345,7 @@ fn map_colorspace(cs: ColorSpace) -> Result<Mapping> {
 
 fn widen_rgb_to_rgba(rgb: &[u8], px: usize) -> Vec<u8> {
     let mut out = vec![0u8; px * 4];
-    for (i, chunk) in rgb.chunks_exact(3).enumerate() {
+    for (i, chunk) in rgb.as_chunks::<3>().0.iter().enumerate() {
         let d = i * 4;
         out[d] = chunk[0];
         out[d + 1] = chunk[1];
@@ -376,7 +376,7 @@ fn cmyk_from_stored(stored: &[u8], px: usize) -> Vec<u8> {
 /// true ink (the same Adobe APP14 rule).
 fn cmyk_from_ycck(ycck: &[u8], px: usize) -> Vec<u8> {
     let mut out = vec![0u8; px * 4];
-    for (i, chunk) in ycck.chunks_exact(4).enumerate() {
+    for (i, chunk) in ycck.as_chunks::<4>().0.iter().enumerate() {
         let (r, g, b) = ycbcr_to_rgb(chunk[0], chunk[1], chunk[2]);
         let d = i * 4;
         // r,g,b == stored (inverted) C,M,Y ⇒ true ink = 255 - stored.

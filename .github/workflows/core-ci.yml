@@ -45,7 +45,7 @@ env:
 jobs:
   # Resolve the pinned toolchain ONCE from rust-toolchain.toml (audit B21)
   # so every downstream job installs the same version the file pins
-  # (channel = "1.94.1") instead of drifting on `@stable`.
+  # (channel = "1.99.1") instead of drifting on `@stable`.
   toolchain:
     name: resolve pinned toolchain
     # No job needs this one since step A10: each reads the pin itself, which

@@ -17,9 +17,13 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "useDefineForClassFields": true
+    "useDefineForClassFields": true,
+    "types": [
+      "node"
+    ]
   },
   "include": [
-    "src"
+    "src",
+    "test"
   ]
 }

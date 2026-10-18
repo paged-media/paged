@@ -142,15 +142,15 @@ fn first_value(xml: &[u8]) -> String {
     loop {
         match r.read_event_into(&mut buf).expect("well-formed") {
             quick_xml::events::Event::Eof => return String::new(),
-            quick_xml::events::Event::Start(e) | quick_xml::events::Event::Empty(e) => {
-                if e.name().as_ref() == b"KeyValuePair" {
-                    for a in e.attributes().flatten() {
-                        if a.key.as_ref() == b"Value" {
-                            return a
-                                .normalized_value(quick_xml::XmlVersion::Implicit1_0)
-                                .expect("decode")
-                                .into_owned();
-                        }
+            quick_xml::events::Event::Start(e) | quick_xml::events::Event::Empty(e)
+                if e.name().as_ref() == b"KeyValuePair" =>
+            {
+                for a in e.attributes().flatten() {
+                    if a.key.as_ref() == b"Value" {
+                        return a
+                            .normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                            .expect("decode")
+                            .into_owned();
                     }
                 }
             }

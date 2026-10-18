@@ -45,7 +45,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.93.0
+          toolchain: 1.99.1
           targets: wasm32-unknown-unknown
           components: rustfmt, clippy
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
@@ -81,7 +81,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.93.0
+          toolchain: 1.99.1
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
         uses: rui314/setup-mold@v1
@@ -139,7 +139,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.93.0
+          toolchain: 1.99.1
           targets: wasm32-unknown-unknown
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'

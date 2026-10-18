@@ -118,3 +118,31 @@ test("the build manifest lists each plugin's declared wasm with sha384 and host 
   assert.equal(dev.host, null);
   assert.match(dev.packages["@paged-media/x"].files["bin/engine.wasm"].fs, /\/bin\/engine\.wasm$/);
 });
+
+test("a workspace package whose declared wasm was not built fails the manifest", () => {
+  const app = mkdtempSync(join(tmpdir(), "paged-modules-unbuilt-"));
+  const scope = join(app, "node_modules", "@paged-media");
+  mkdirSync(scope, { recursive: true });
+  // a workspace package: its real directory is in the repository, here modules/doc
+  const root = join(app, "modules", "doc", "packages", "doc-bundle");
+  mkdirSync(join(root, "bin"), { recursive: true });
+  writeFileSync(join(root, "package.json"), JSON.stringify({ name: "@paged-media/doc", version: "0.1.0" }));
+  writeFileSync(
+    join(root, "manifest.json"),
+    JSON.stringify({
+      id: "media.paged.doc",
+      capabilities: { wasm: [{ name: "engine", path: "bin/docx_js_bg.wasm", purpose: "compute" }] },
+    }),
+  );
+  symlinkSync(root, join(scope, "doc"));
+  assert.throws(
+    () => buildModuleManifest({ app }),
+    (e) =>
+      /declared wasm was not built/.test(e.message) &&
+      e.message.includes("@paged-media/doc: bin/docx_js_bg.wasm") &&
+      e.message.includes("moon run doc:wasm"),
+  );
+  // once built, the same package is listed
+  writeFileSync(join(root, "bin", "docx_js_bg.wasm"), Buffer.from([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0]));
+  assert.deepEqual(Object.keys(buildModuleManifest({ app }).plugins), ["media.paged.doc"]);
+});
