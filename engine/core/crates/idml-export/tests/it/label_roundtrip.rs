@@ -322,11 +322,11 @@ fn a_moved_items_label_keeps_its_newlines() {
 /// The corpus entries the defect was measured on. Opt-in.
 ///
 /// ```text
-/// PAGED_IDML_CORPUS=1 cargo test -p idml-export --test label_roundtrip \
-///     -- --ignored --nocapture
+/// PAGED_CORPUS_DIR=<corpus root> cargo test -p idml-export --test it -- \
+///     --ignored --nocapture label_roundtrip::
 /// ```
 #[test]
-#[ignore = "private corpus: opt-in (PAGED_IDML_CORPUS=1 + the corpus mount)"]
+#[ignore = "corpus: idml"]
 fn corpus_sample_3_labels_survive_an_unmutated_save() {
     let Some(root) = corpus::root() else { return };
     let package = corpus::package(&root, "idml/samples/sample-3.idml");

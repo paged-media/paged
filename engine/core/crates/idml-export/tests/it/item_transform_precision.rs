@@ -425,11 +425,11 @@ fn a_group_member_with_no_transform_grows_the_identity() {
 /// cleanly wherever it is absent.
 ///
 /// ```text
-/// PAGED_IDML_CORPUS=1 cargo test -p idml-export --test item_transform_precision \
-///     -- --ignored --nocapture
+/// PAGED_CORPUS_DIR=<corpus root> cargo test -p idml-export --test it -- \
+///     --ignored --nocapture item_transform_precision::
 /// ```
 #[test]
-#[ignore = "private corpus: opt-in (PAGED_IDML_CORPUS=1 + the corpus mount)"]
+#[ignore = "corpus: idml"]
 fn a_corpus_template_saves_back_byte_identically() {
     let Some(root) = corpus::root() else { return };
     let package = corpus::package(&root, "idml/packs/ancient-building-magazine/template.idml");

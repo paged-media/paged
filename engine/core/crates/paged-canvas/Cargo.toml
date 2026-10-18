@@ -75,6 +75,7 @@ js-sys = "0.3"
 web-sys = { version = "0.3", features = ["console"] }
 
 [dev-dependencies]
+paged-test-resources.workspace = true
 # W1.24 (audit B17) — perf bench lane. `paged-gen` regenerates the bench
 # fixtures in setup (same path the fidelity corpus uses), so no fixture
 # bytes are committed. criterion drives the measurements.

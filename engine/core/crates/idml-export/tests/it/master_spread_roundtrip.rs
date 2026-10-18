@@ -233,11 +233,11 @@ fn a_master_item_transform_edit_survives_save_and_reopen() {
 /// private and gitignored, so this no-ops cleanly wherever it is absent.
 ///
 /// ```text
-/// PAGED_IDML_CORPUS=1 cargo test -p idml-export --test master_spread_roundtrip \
-///     -- --ignored --nocapture
+/// PAGED_CORPUS_DIR=<corpus root> cargo test -p idml-export --test it -- \
+///     --ignored --nocapture master_spread_roundtrip::
 /// ```
 #[test]
-#[ignore = "private corpus: opt-in (PAGED_IDML_CORPUS=1 + the corpus mount)"]
+#[ignore = "corpus: idml"]
 fn corpus_master_spreads_rewrite_byte_identically() {
     let Some(root) = corpus::root() else { return };
     let mut checked = 0usize;

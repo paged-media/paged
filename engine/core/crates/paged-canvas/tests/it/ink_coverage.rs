@@ -30,6 +30,7 @@
 //! The tests below pin the boundary between them, because the failure
 //! mode this feature must not have is a confident zero.
 
+use paged_test_resources::{skip, Resource};
 use std::io::Write;
 
 use paged_canvas::{channel::CollectionName, CanvasModel, CanvasOptions};
@@ -175,8 +176,11 @@ fn ink_coverage_without_a_cmyk_profile_says_so_instead_of_reporting_zero() {
 #[test]
 fn ink_coverage_measures_a_rich_black_when_a_profile_is_active() {
     let Some(profile) = cmyk_profile() else {
-        eprintln!("skipping: {}", paged_color::test_profiles::NO_PROFILE_HINT);
-        return;
+        skip!(
+            Resource::Icc,
+            "{}",
+            paged_color::test_profiles::NO_PROFILE_HINT
+        );
     };
     let model = CanvasModel::load(
         "doc-1",
@@ -237,8 +241,11 @@ fn ink_coverage_measures_a_rich_black_when_a_profile_is_active() {
 #[test]
 fn rgb_artwork_separates_nothing_even_with_a_profile_active() {
     let Some(profile) = cmyk_profile() else {
-        eprintln!("skipping: {}", paged_color::test_profiles::NO_PROFILE_HINT);
-        return;
+        skip!(
+            Resource::Icc,
+            "{}",
+            paged_color::test_profiles::NO_PROFILE_HINT
+        );
     };
     let model = CanvasModel::load(
         "doc-1",

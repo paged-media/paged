@@ -61,3 +61,6 @@ futures-channel = { version = "0.3" }
 # absent, so the unconditional dep is benign for non-Vello builds.
 [build-dependencies]
 naga = { version = "29", features = ["wgsl-in"] }
+
+[dev-dependencies]
+paged-test-resources.workspace = true
