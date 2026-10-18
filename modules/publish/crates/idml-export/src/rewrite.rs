@@ -5657,6 +5657,11 @@ fn rewrite_story_part(
     let mut opaque_direct = false;
     // Inside an `<EndnoteRange>` of the endnote story (core ADR 174): its
     // text is the run's, and its `<?ACE 4?>` is the note's number.
+    // An inserted or moved text's `<Change>` wrapper is open in the run
+    // (D-01): its start and end ride the run's opaque subtrees as empty
+    // pieces at their character offsets, so a run rewritten from the
+    // model writes its text back inside the wrapper.
+    let mut in_tracked_insert = false;
     let mut in_endnote_range = false;
 
     // W1.15 lane 3 — table-cell text write-back. Inside a `<Cell
@@ -5899,6 +5904,14 @@ fn rewrite_story_part(
                         body.in_content = true;
                         body.ends_with_br = false;
                         body.events.push(Event::Start(e.into_owned()));
+                    }
+                    b"Change" if csr_open && is_tracked_insertion(&e) => {
+                        in_tracked_insert = true;
+                        body.active = true;
+                        let event = Event::Start(e.into_owned());
+                        body.opaque
+                            .push((body.text.chars().count(), vec![event.clone()]));
+                        body.events.push(event);
                     }
                     // An endnote's range in the endnote story: its text is the
                     // run's (core ADR 174); the run is written again around
@@ -6345,6 +6358,15 @@ fn rewrite_story_part(
                     // keep their own arms above: they carry writer-side
                     // cursor state (table depth, the cell stack, the run
                     // flush) that buffering would strand.
+                    b"Change" if in_tracked_insert => {
+                        in_tracked_insert = false;
+                        let event = Event::End(e.into_owned());
+                        body.opaque
+                            .push((body.text.chars().count(), vec![event.clone()]));
+                        body.events.push(event);
+                        buf.clear();
+                        continue;
+                    }
                     b"EndnoteRange" if body.active => {
                         in_endnote_range = false;
                         body.events.push(Event::End(e.into_owned()));
@@ -6808,6 +6830,31 @@ fn remap_opaque(
         .collect()
 }
 
+/// A tracked insertion whose text an edit removed entirely leaves its
+/// wrapper's start and end at one offset: drop the pair rather than
+/// write an empty `<Change>`.
+fn drop_emptied_insertions(
+    opaque: Vec<(usize, Vec<Event<'static>>)>,
+) -> Vec<(usize, Vec<Event<'static>>)> {
+    let opens =
+        |ev: &[Event<'static>]| matches!(ev, [Event::Start(e)] if e.name().as_ref() == b"Change");
+    let closes =
+        |ev: &[Event<'static>]| matches!(ev, [Event::End(e)] if e.name().as_ref() == b"Change");
+    let mut out: Vec<(usize, Vec<Event<'static>>)> = Vec::with_capacity(opaque.len());
+    for entry in opaque {
+        if closes(&entry.1) {
+            if let Some(last) = out.last() {
+                if opens(&last.1) && last.0 == entry.0 {
+                    out.pop();
+                    continue;
+                }
+            }
+        }
+        out.push(entry);
+    }
+    out
+}
+
 /// A run's text written from the model with its opaque subtrees (see
 /// [`RunBody::opaque`]) back at their character offsets, clamped to the
 /// new text.
@@ -7030,6 +7077,16 @@ fn is_opaque_subtree(e: &BytesStart) -> bool {
     }
 }
 
+/// `<Change ChangeType="InsertedText">` or `"MovedText"`: text a tracked
+/// change added, which the parser reads as the story's text (D-01).
+fn is_tracked_insertion(e: &BytesStart) -> bool {
+    e.name().as_ref() == b"Change"
+        && matches!(
+            attr_value(e, b"ChangeType").as_deref(),
+            Some("InsertedText") | Some("MovedText")
+        )
+}
+
 #[allow(clippy::too_many_arguments)]
 fn flush_run_body(
     writer: &mut Writer<Cursor<Vec<u8>>>,
@@ -7088,7 +7145,7 @@ fn flush_run_body(
         // offset in the text both share before the edit stays, one after
         // it keeps its distance from the end, one inside it goes to the
         // edit's end.
-        let opaque = remap_opaque(&body.opaque, source_text, &text);
+        let opaque = drop_emptied_insertions(remap_opaque(&body.opaque, source_text, &text));
         let flavoured = |t: Option<String>| {
             matches!(
                 t.as_deref(),
