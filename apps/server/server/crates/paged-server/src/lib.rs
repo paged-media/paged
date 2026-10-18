@@ -27,6 +27,10 @@
 //!   GET  /v1/r/{repo}/objects/{a}    one object, immutable
 //!   GET  /v1/r/{repo}/file/{ref}     the .paged projection (?history=1 carries it)
 //!   GET  /v1/r/{repo}/evidence       the evidence log
+//!   …/cr, …/cr/{id}/{approve,merge,close}   change requests
+//!
+//! The same routes under /v1/w/{ws}/r/{repo}/ are a workspace's repository,
+//! governed by the workspace's policy (`WorkspaceObject`, /v1/w/{ws}/policy).
 //!
 //!   /.well-known/oauth-authorization-server, /.well-known/oauth-protected-resource,
 //!   /oauth/{register,authorize,callback,token}   sign-in (see `oauth`)
@@ -41,9 +45,11 @@ mod oauth;
 mod problem;
 mod repo_object;
 mod store;
+mod workspace_object;
 
 pub use auth_object::AuthObject;
 pub use repo_object::RepoObject;
+pub use workspace_object::WorkspaceObject;
 
 use worker::{event, Context, Env, Headers, Method, Request, RequestInit, Response, Result};
 
@@ -52,6 +58,10 @@ use crate::problem::problem;
 /// The header the Worker uses to tell a repository who is calling. Anything a
 /// client sends under this name is dropped before forwarding.
 pub(crate) const ACTOR_HEADER: &str = "x-paged-actor";
+/// Which repository and route a forwarded request is for, and its workspace.
+pub(crate) const REPO_HEADER: &str = "x-paged-repo";
+pub(crate) const ROUTE_HEADER: &str = "x-paged-route";
+pub(crate) const WORKSPACE_HEADER: &str = "x-paged-workspace";
 
 fn valid_repo(name: &str) -> bool {
     !name.is_empty()
@@ -100,16 +110,53 @@ async fn route(mut req: Request, env: Env) -> Result<Response> {
             _ => problem(404, "Not found", "no such route"),
         };
     }
-    let Some(rest) = path.strip_prefix("/v1/r/") else {
-        return problem(404, "Not found", "no such route");
+    // Which Durable Object answers: a personal repository, a workspace's
+    // repository, or the workspace itself.
+    let segments: Vec<&str> = path.trim_start_matches('/').splitn(6, '/').collect();
+    let (ns, object, workspace, repo_name, rest) = match segments.as_slice() {
+        ["v1", "r", repo, rest @ ..] => (
+            "REPO",
+            repo.to_string(),
+            None,
+            Some(repo.to_string()),
+            rest.join("/"),
+        ),
+        ["v1", "w", ws, "r", repo, rest @ ..] => {
+            if !valid_repo(repo) {
+                return problem(
+                    400,
+                    "Bad repository name",
+                    "lowercase letters, digits and '-', at most 64",
+                );
+            }
+            let name = format!("{ws}/{repo}");
+            (
+                "REPO",
+                name.clone(),
+                Some(ws.to_string()),
+                Some(name),
+                rest.join("/"),
+            )
+        }
+        ["v1", "w", ws, rest @ ..] => (
+            "WORKSPACE",
+            ws.to_string(),
+            Some(ws.to_string()),
+            None,
+            rest.join("/"),
+        ),
+        _ => return problem(404, "Not found", "no such route"),
     };
-    let repo = rest.split('/').next().unwrap_or("");
-    if !valid_repo(repo) {
+    let first = object.split('/').next().unwrap_or("");
+    if !valid_repo(first) || workspace.as_deref().is_some_and(|w| !valid_repo(w)) {
         return problem(
             400,
-            "Bad repository name",
+            "Bad name",
             "lowercase letters, digits and '-', at most 64",
         );
+    }
+    if rest.starts_with("internal") {
+        return problem(404, "Not found", "no such route");
     }
     let actor = match auth::actor(&req, &env) {
         Ok(a) => a,
@@ -137,6 +184,13 @@ async fn route(mut req: Request, env: Env) -> Result<Response> {
         headers.set("content-type", &ct)?;
     }
     headers.set(ACTOR_HEADER, &actor)?;
+    headers.set(ROUTE_HEADER, &rest)?;
+    if let Some(name) = &repo_name {
+        headers.set(REPO_HEADER, name)?;
+    }
+    if let (Some(ws), Some(_)) = (&workspace, &repo_name) {
+        headers.set(WORKSPACE_HEADER, ws)?;
+    }
     let mut init = RequestInit::new();
     init.with_method(req.method()).with_headers(headers);
     if !matches!(req.method(), Method::Get | Method::Head) {
@@ -146,6 +200,6 @@ async fn route(mut req: Request, env: Env) -> Result<Response> {
         ));
     }
     let forwarded = Request::new_with_init(url.as_str(), &init)?;
-    let stub = env.durable_object("REPO")?.id_from_name(repo)?.get_stub()?;
+    let stub = env.durable_object(ns)?.id_from_name(&object)?.get_stub()?;
     stub.fetch_with_request(forwarded).await
 }

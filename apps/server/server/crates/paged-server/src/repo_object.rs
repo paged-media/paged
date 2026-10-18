@@ -28,12 +28,14 @@ use paged_repo::{
 };
 use serde::Deserialize;
 use worker::{
-    durable_object, Bucket, DurableObject, Env, Method, Request, Response, Result, State,
+    durable_object, Bucket, DurableObject, Env, Method, Request, Response, Result,
+    SqlStorageValue as V, State,
 };
 
 use crate::problem::problem;
 use crate::store::{DoStore, INLINE_MAX, SCHEMA};
-use crate::ACTOR_HEADER;
+use crate::workspace_object::INTERNAL_POLICY;
+use crate::{ACTOR_HEADER, REPO_HEADER, ROUTE_HEADER, WORKSPACE_HEADER};
 
 #[durable_object]
 pub struct RepoObject {
@@ -78,6 +80,25 @@ impl RepoObject {
 
     fn policy(store: &DoStore) -> Option<std::result::Result<Policy, Refusal>> {
         store.meta("policy").map(|b| Policy::parse(&b))
+    }
+
+    async fn workspace_policy(&self, ws: &str) -> std::result::Result<Policy, Refusal> {
+        let none = || Refusal::PolicyInvalid(format!("workspace `{ws}` has no readable policy"));
+        let Ok(ns) = self.env.durable_object("WORKSPACE") else {
+            return Err(none());
+        };
+        let Ok(stub) = ns.id_from_name(ws).and_then(|id| id.get_stub()) else {
+            return Err(none());
+        };
+        let url = format!("https://workspace/v1/w/{ws}/{INTERNAL_POLICY}");
+        let Ok(mut resp) = stub.fetch_with_str(&url).await else {
+            return Err(none());
+        };
+        let body: serde_json::Value = resp.json().await.map_err(|_| none())?;
+        match body["policy"].as_str() {
+            Some(p) => Policy::parse(p.as_bytes()),
+            None => Err(none()),
+        }
     }
 
     /// Reads what `objects` names from R2 into the store's cache.
@@ -132,10 +153,10 @@ impl DurableObject for RepoObject {
 
     async fn fetch(&self, mut req: Request) -> Result<Response> {
         let url = req.url()?;
-        let path = url.path().to_string();
-        let mut parts = path.trim_start_matches("/v1/r/").splitn(2, '/');
-        let name = parts.next().unwrap_or("").to_string();
-        let route = parts.next().unwrap_or("").to_string();
+        // The Worker resolved which repository and route this is.
+        let name = req.headers().get(REPO_HEADER)?.unwrap_or_default();
+        let route = req.headers().get(ROUTE_HEADER)?.unwrap_or_default();
+        let workspace = req.headers().get(WORKSPACE_HEADER)?;
         let Some(actor_id) = req.headers().get(ACTOR_HEADER)? else {
             return problem(401, "Unauthenticated", "no actor");
         };
@@ -154,11 +175,16 @@ impl DurableObject for RepoObject {
         };
 
         let store = DoStore::new(self.state.storage().sql(), &name);
-        let policy = Self::policy(&store);
+        // A workspace repository obeys its workspace's policy, and refuses
+        // everything when it cannot read one; a personal one keeps its own.
+        let policy = match &workspace {
+            Some(ws) => Some(self.workspace_policy(ws).await),
+            None => Self::policy(&store),
+        };
         // Reading needs a role; a repository nobody has written yet has none to read.
         let may_read = matches!(&policy, Some(Ok(p)) if p.role(&actor_id).is_some());
         let may_write = match &policy {
-            None => true,
+            None => workspace.is_none(),
             Some(Ok(p)) => p
                 .role(&actor_id)
                 .is_some_and(|r| r >= paged_repo::Role::Editor),
@@ -269,6 +295,7 @@ impl DurableObject for RepoObject {
                 // The first writer owns a new repository (until workspaces assign roles).
                 let policy = match policy {
                     Some(p) => p,
+                    None if workspace.is_some() => Err(Refusal::PolicyInvalid("no policy".into())),
                     None => {
                         let p = Policy::local(&actor_id);
                         store.set_meta("policy", &serde_json::to_vec(&p).expect("serializes"));
@@ -377,7 +404,201 @@ impl DurableObject for RepoObject {
                     .collect();
                 Response::from_json(&entries)
             }
+            (Method::Get, "cr") => {
+                if !may_read {
+                    return problem(404, "Not found", "no such repository");
+                }
+                Response::from_json(&change_requests(&store, None)?)
+            }
+            (Method::Post, "cr") => {
+                if !may_write {
+                    return problem(403, "Refused", "proposing needs write access");
+                }
+                #[derive(Deserialize)]
+                struct Open {
+                    source: String,
+                    target: String,
+                    #[serde(default)]
+                    title: String,
+                }
+                let o: Open = req.json().await?;
+                if store.get_ref(&o.source).is_none() || store.get_ref(&o.target).is_none() {
+                    return problem(422, "No such ref", "push the source and target first");
+                }
+                store.sql().exec(
+                    "INSERT INTO change_requests (source, target, title, author, status, created) VALUES (?, ?, ?, ?, 'open', ?)",
+                    vec![
+                        V::String(o.source),
+                        V::String(o.target),
+                        V::String(o.title.chars().take(200).collect()),
+                        V::String(actor_id.clone()),
+                        V::Integer(now()),
+                    ],
+                )?;
+                let id = match store
+                    .sql()
+                    .exec("SELECT last_insert_rowid()", None)?
+                    .raw()
+                    .next()
+                {
+                    Some(Ok(r)) => match r[0] {
+                        V::Integer(i) => i,
+                        _ => 0,
+                    },
+                    _ => 0,
+                };
+                Response::from_json(&change_requests(&store, Some(id))?[0])
+            }
+            (Method::Post, r) if r.starts_with("cr/") => {
+                let mut it = r.trim_start_matches("cr/").splitn(2, '/');
+                let id: i64 = it.next().and_then(|i| i.parse().ok()).unwrap_or(-1);
+                let action = it.next().unwrap_or("").to_string();
+                let Some(cr) = change_requests(&store, Some(id))?.into_iter().next() else {
+                    return problem(404, "Not found", "no such change request");
+                };
+                if cr["status"] != "open" {
+                    return problem(
+                        409,
+                        "Not open",
+                        &format!("this change request is {}", cr["status"]),
+                    );
+                }
+                let s = |k: &str| cr[k].as_str().unwrap_or("").to_string();
+                let policy = match policy {
+                    Some(p) => p,
+                    None => Err(Refusal::PolicyInvalid("no policy".into())),
+                };
+                let mut repo = Repo::new(store, policy);
+                let Some(head) = repo.head(&s("source")) else {
+                    return problem(422, "No such ref", "the source ref is gone");
+                };
+                match action.as_str() {
+                    "approve" => {
+                        // The kernel's rule: never one's own change, never an agent, reviewer up.
+                        let author = match repo.read_commit(&head) {
+                            Ok(c) => c.author.id,
+                            Err(e) => return answer(e),
+                        };
+                        let verdict = repo
+                            .policy()
+                            .and_then(|p| p.authorize_approval(&ctx.actor, &author));
+                        if let Err(r) = verdict {
+                            repo.record(
+                                &ctx,
+                                "approve",
+                                &format!("cr/{id}"),
+                                &format!("refused: {r}"),
+                            );
+                            return problem(403, "Refused", &r.to_string());
+                        }
+                        repo.store.sql().exec(
+                            "INSERT OR REPLACE INTO approvals (cr, actor, head, ts) VALUES (?, ?, ?, ?)",
+                            vec![V::Integer(id), V::String(actor_id.clone()), V::String(head.to_hex()), V::Integer(now())],
+                        )?;
+                        repo.record(
+                            &ctx,
+                            "approve",
+                            &format!("cr/{id}"),
+                            &format!("ok {}", head.to_hex()),
+                        );
+                        Response::from_json(&change_requests(&repo.store, Some(id))?[0])
+                    }
+                    "merge" => {
+                        // Only approvals of the head being merged count: a source
+                        // that moved after an approval needs it again.
+                        let approvers: Vec<Actor> = cr["approvals"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter(|a| a["head"].as_str() == Some(head.to_hex().as_str()))
+                            .filter_map(|a| a["actor"].as_str())
+                            .map(|a| Actor {
+                                id: a.to_string(),
+                                kind: ActorKind::Human,
+                            })
+                            .collect();
+                        let (source, target) = (s("source"), s("target"));
+                        match self
+                            .faulting(&mut repo, |repo| {
+                                repo.merge(&source, &target, &ctx, &approvers)
+                            })
+                            .await?
+                        {
+                            Ok(merged) => {
+                                repo.store.sql().exec(
+                                    "UPDATE change_requests SET status = 'merged', merged = ? WHERE id = ?",
+                                    vec![V::String(merged.to_hex()), V::Integer(id)],
+                                )?;
+                                Response::from_json(&change_requests(&repo.store, Some(id))?[0])
+                            }
+                            Err(Error::Conflict(paths)) => problem(
+                                409,
+                                "Conflict",
+                                &format!("both sides changed: {}", paths.join(", ")),
+                            ),
+                            Err(e) => answer(e),
+                        }
+                    }
+                    "close" => {
+                        let owner = repo.policy().ok().and_then(|p| p.role(&actor_id))
+                            == Some(paged_repo::Role::Owner);
+                        if s("author") != actor_id && !owner {
+                            return problem(
+                                403,
+                                "Refused",
+                                "only its author or an owner closes it",
+                            );
+                        }
+                        repo.store.sql().exec(
+                            "UPDATE change_requests SET status = 'closed' WHERE id = ?",
+                            vec![V::Integer(id)],
+                        )?;
+                        repo.record(&ctx, "close", &format!("cr/{id}"), "ok");
+                        Response::from_json(&change_requests(&repo.store, Some(id))?[0])
+                    }
+                    _ => problem(404, "Not found", "approve, merge or close"),
+                }
+            }
             _ => problem(404, "Not found", "no such route"),
         }
     }
+}
+
+/// Change requests (one, or all newest first) with their approvals.
+fn change_requests(store: &DoStore, id: Option<i64>) -> Result<Vec<serde_json::Value>> {
+    let text = |v: &V| match v {
+        V::String(s) => serde_json::Value::String(s.clone()),
+        V::Integer(i) => serde_json::json!(i),
+        _ => serde_json::Value::Null,
+    };
+    let (q, b) = match id {
+        Some(i) => ("SELECT id, source, target, title, author, status, created, merged FROM change_requests WHERE id = ?", vec![V::Integer(i)]),
+        None => ("SELECT id, source, target, title, author, status, created, merged FROM change_requests ORDER BY id DESC", vec![]),
+    };
+    let rows: Vec<Vec<V>> = store
+        .sql()
+        .exec(q, b)?
+        .raw()
+        .filter_map(|r| r.ok())
+        .collect();
+    let mut out = Vec::new();
+    for r in rows {
+        let cr = match r[0] {
+            V::Integer(i) => i,
+            _ => continue,
+        };
+        let approvals: Vec<serde_json::Value> = store
+            .sql()
+            .exec("SELECT actor, head, ts FROM approvals WHERE cr = ? ORDER BY ts", vec![V::Integer(cr)])?
+            .raw()
+            .filter_map(|a| a.ok())
+            .map(|a| serde_json::json!({ "actor": text(&a[0]), "head": text(&a[1]), "ts": text(&a[2]) }))
+            .collect();
+        out.push(serde_json::json!({
+            "id": cr, "source": text(&r[1]), "target": text(&r[2]), "title": text(&r[3]),
+            "author": text(&r[4]), "status": text(&r[5]), "created": text(&r[6]), "merged": text(&r[7]),
+            "approvals": approvals,
+        }));
+    }
+    Ok(out)
 }

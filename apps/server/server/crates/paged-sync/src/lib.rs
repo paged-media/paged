@@ -62,7 +62,8 @@ pub struct PushReport {
 
 pub struct Remote {
     base: String,
-    repo: String,
+    /// `r/{repo}` for a personal repository, `w/{ws}/r/{repo}` for a workspace's.
+    prefix: String,
     token: String,
 }
 
@@ -70,13 +71,59 @@ impl Remote {
     pub fn new(base: &str, repo: &str, token: &str) -> Remote {
         Remote {
             base: base.trim_end_matches('/').to_string(),
-            repo: repo.to_string(),
+            prefix: format!("r/{repo}"),
+            token: token.to_string(),
+        }
+    }
+
+    /// A repository in a workspace, governed by the workspace's policy.
+    pub fn in_workspace(base: &str, ws: &str, repo: &str, token: &str) -> Remote {
+        Remote {
+            base: base.trim_end_matches('/').to_string(),
+            prefix: format!("w/{ws}/r/{repo}"),
             token: token.to_string(),
         }
     }
 
     fn url(&self, route: &str) -> String {
-        format!("{}/v1/r/{}/{}", self.base, self.repo, route)
+        format!("{}/v1/{}/{}", self.base, self.prefix, route)
+    }
+
+    fn json(
+        &self,
+        req: ureq::Request,
+        body: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value, Error> {
+        let req = self.call(req);
+        let resp = match body {
+            Some(b) => Self::answer(req.send_json(b))?,
+            None => Self::answer(req.call())?,
+        };
+        resp.into_json()
+            .map_err(|e| Error::Transport(e.to_string()))
+    }
+
+    /// Opens a change request to merge `source` into `target`.
+    pub fn open_change(
+        &self,
+        source: &str,
+        target: &str,
+        title: &str,
+    ) -> Result<serde_json::Value, Error> {
+        let body = serde_json::json!({ "source": source, "target": target, "title": title });
+        self.json(ureq::post(&self.url("cr")), Some(body))
+    }
+
+    pub fn changes(&self) -> Result<serde_json::Value, Error> {
+        self.json(ureq::get(&self.url("cr")), None)
+    }
+
+    /// `approve`, `merge` or `close` change request `id`.
+    pub fn change(&self, id: i64, action: &str) -> Result<serde_json::Value, Error> {
+        self.json(
+            ureq::post(&self.url(&format!("cr/{id}/{action}"))),
+            Some(serde_json::json!({})),
+        )
     }
 
     fn call(&self, req: ureq::Request) -> ureq::Request {
@@ -244,5 +291,71 @@ impl Remote {
         Self::answer(self.call(ureq::get(&self.url("evidence"))).call())?
             .into_json()
             .map_err(|e| Error::Transport(e.to_string()))
+    }
+}
+
+/// A workspace: members' roles and the policy its repositories obey.
+pub struct Workspace {
+    base: String,
+    ws: String,
+    token: String,
+}
+
+impl Workspace {
+    pub fn new(base: &str, ws: &str, token: &str) -> Workspace {
+        Workspace {
+            base: base.trim_end_matches('/').to_string(),
+            ws: ws.to_string(),
+            token: token.to_string(),
+        }
+    }
+
+    fn send(
+        &self,
+        req: ureq::Request,
+        body: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value, Error> {
+        let req = req.set("authorization", &format!("Bearer {}", self.token));
+        let resp = match body {
+            Some(b) => Remote::answer(req.send_json(b))?,
+            None => Remote::answer(req.call())?,
+        };
+        resp.into_json()
+            .map_err(|e| Error::Transport(e.to_string()))
+    }
+
+    pub fn create(&self) -> Result<serde_json::Value, Error> {
+        self.send(
+            ureq::post(&format!("{}/v1/w/{}", self.base, self.ws)),
+            Some(serde_json::json!({})),
+        )
+    }
+
+    /// `{seq, policy}`.
+    pub fn policy(&self) -> Result<serde_json::Value, Error> {
+        self.send(
+            ureq::get(&format!("{}/v1/w/{}/policy", self.base, self.ws)),
+            None,
+        )
+    }
+
+    /// Replaces the policy at version `expected_seq`.
+    pub fn set_policy(
+        &self,
+        expected_seq: i64,
+        policy: serde_json::Value,
+    ) -> Result<serde_json::Value, Error> {
+        let body = serde_json::json!({ "expected_seq": expected_seq, "policy": policy });
+        self.send(
+            ureq::put(&format!("{}/v1/w/{}/policy", self.base, self.ws)),
+            Some(body),
+        )
+    }
+
+    pub fn policy_log(&self) -> Result<serde_json::Value, Error> {
+        self.send(
+            ureq::get(&format!("{}/v1/w/{}/policy/log", self.base, self.ws)),
+            None,
+        )
     }
 }

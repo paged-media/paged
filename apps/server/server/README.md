@@ -25,7 +25,24 @@ an MCP endpoint. Concept: `../docs/concept.md`.
 | `GET /v1/r/{repo}/file/{ref}` | the `.paged` projection; `?history=1` carries the history |
 | `GET /v1/r/{repo}/evidence` | the evidence log |
 
-Errors are RFC 9457 problem+json. The first writer of a repository owns it.
+| `GET/POST /v1/r/{repo}/cr` | change requests: list, open `{source, target, title}` |
+| `POST /v1/r/{repo}/cr/{id}/{approve,merge,close}` | approvals bind to the source head they saw; merge goes through the kernel |
+| `POST /v1/r/{repo}/fetch` | `{want, have}` → one pack of what `want` adds (pull) |
+
+Errors are RFC 9457 problem+json. A personal repository (`/v1/r/…`) is owned by its
+first writer.
+
+## Workspaces
+
+`/v1/w/{ws}/r/{repo}/…` takes the same routes for a workspace's repository, which
+obeys the workspace's policy and refuses everything when it cannot read one.
+
+| Route | |
+|---|---|
+| `POST /v1/w/{ws}` | create; the caller is its owner |
+| `GET /v1/w/{ws}/policy` | `{seq, policy}`: roles (owner, editor, reviewer, viewer), agent autonomy, `main_merge_only` |
+| `PUT /v1/w/{ws}/policy` | `{expected_seq, policy}`: owner only, compare-and-set; a policy that does not parse or leaves no owner is refused |
+| `GET /v1/w/{ws}/policy/log` | every version, each hash naming the one before |
 
 ## Sign-in
 
@@ -74,7 +91,6 @@ deliberate acts.
 
 ## Not yet
 
-The Workspace DO (members,
-roles, policy as governed data); change requests over HTTP; the MCP endpoint;
+The MCP endpoint;
 the Session DO relay to an open editor tab. `paged-repo` is a path dependency
 into a sibling core checkout until core's `feat/paged-repo` is on origin.

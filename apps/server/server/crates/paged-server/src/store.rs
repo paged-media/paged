@@ -39,6 +39,11 @@ CREATE TABLE IF NOT EXISTS objects (hash BLOB PRIMARY KEY, kind INTEGER NOT NULL
 CREATE TABLE IF NOT EXISTS refs (name TEXT PRIMARY KEY, hash BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS evidence (seq INTEGER PRIMARY KEY, entry BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v BLOB NOT NULL);
+CREATE TABLE IF NOT EXISTS change_requests (id INTEGER PRIMARY KEY, source TEXT NOT NULL,
+  target TEXT NOT NULL, title TEXT NOT NULL, author TEXT NOT NULL, status TEXT NOT NULL,
+  created INTEGER NOT NULL, merged TEXT);
+CREATE TABLE IF NOT EXISTS approvals (cr INTEGER NOT NULL, actor TEXT NOT NULL, head TEXT NOT NULL,
+  ts INTEGER NOT NULL, PRIMARY KEY (cr, actor));
 ";
 
 pub struct DoStore {
@@ -70,6 +75,10 @@ fn hash_of(v: &V) -> Option<Hash> {
 }
 
 impl DoStore {
+    pub fn sql(&self) -> &SqlStorage {
+        &self.sql
+    }
+
     pub fn new(sql: SqlStorage, repo: &str) -> DoStore {
         DoStore {
             sql,

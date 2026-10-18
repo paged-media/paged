@@ -8,12 +8,14 @@
   "durable_objects": {
     "bindings": [
       { "name": "REPO", "class_name": "RepoObject" },
-      { "name": "AUTH", "class_name": "AuthObject" }
+      { "name": "AUTH", "class_name": "AuthObject" },
+      { "name": "WORKSPACE", "class_name": "WorkspaceObject" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["RepoObject"] },
-    { "tag": "v2", "new_sqlite_classes": ["AuthObject"] }
+    { "tag": "v2", "new_sqlite_classes": ["AuthObject"] },
+    { "tag": "v3", "new_sqlite_classes": ["WorkspaceObject"] }
   ],
   "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "paged-objects" }]
 }
