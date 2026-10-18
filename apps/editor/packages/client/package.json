@@ -54,6 +54,6 @@
     "@paged-media/canvas-wasm": "0.73.3"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "catalog:"
   }
 }

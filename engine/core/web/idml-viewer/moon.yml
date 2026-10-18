@@ -1,8 +1,8 @@
 $schema: '../../../../.moon/cache/schemas/project.json'
 
 # @paged-media/idml-viewer: the TypeScript wrapper around the engine's
-# paged-sdk wasm. A standalone npm package (no lockfile is committed), so it
-# installs with npm like core-ci's viewer job, not through the pnpm toolchain.
+# paged-sdk wasm, a package of the root Bun workspace (Moon installs that
+# once, at the root, before the first JS task).
 language: 'typescript'
 layer: 'library'
 stack: 'frontend'
@@ -18,31 +18,11 @@ dependsOn:
   - id: 'core'
     scope: 'build'
 
-toolchains:
-  # Not a pnpm workspace: keep Moon from running `pnpm install` here.
-  javascript: false
-  pnpm: false
-
 tasks:
-  install:
-    description: 'npm install, as core-ci does (package-lock.json is gitignored).'
-    command: 'npm install --no-fund --no-audit'
-    inputs:
-      - 'package.json'
-    options:
-      cache: false
-
-  js-check:
-    command: 'npm run typecheck'
-    deps: ['~:install']
-
-  js-test:
-    command: 'npm test'
-    deps: ['~:install']
-
+  # js-check and js-test are the inherited `bun run typecheck` and
+  # `bun run test`; a single package builds with its own script.
   js-build:
     description: 'tsc to dist/.'
-    command: 'npm run build'
-    deps: ['~:install']
+    command: 'bun run build'
     outputs:
       - 'dist/**/*'

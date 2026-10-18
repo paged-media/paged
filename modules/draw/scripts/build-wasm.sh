@@ -11,7 +11,7 @@
 # therefore nothing to drift.
 #
 # The artifact is COMMITTED (paged.image's convention for the copy the
-# bundle imports): `pnpm test` and `pnpm -r typecheck` must pass on a
+# bundle imports): `bun run test` and `bun run typecheck` must pass on a
 # fresh checkout without a Rust toolchain, and the plugin-cli size gate
 # only measures a file that exists.
 #

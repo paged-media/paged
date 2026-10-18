@@ -92,11 +92,13 @@ jobs:
 
       # Node 24, not 20: Node 20/22 bundle npm 10.x, and Node 20 is deprecated
       # on GitHub runners. npm 11.x is also what trusted publishing needs, so
-      # the switch below costs no further change.
-      - uses: actions/setup-node@v4
+      # the switch below costs no further change. Node (24.22.0) and Bun come
+      # from /.prototools, installed by proto; Bun installs the root workspace
+      # the idml-viewer wrapper is built in.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          node-version: 24
-          registry-url: https://registry.npmjs.org
+          auto-install: true
+          proto-version: "0.63.1"
 
       # ADVISORY, never fatal: is trusted publishing ready to replace the
       # token yet? The four Trusted Publisher entries are not in place, so
@@ -350,10 +352,10 @@ jobs:
       - name: Build @paged-media/idml-viewer (TS wrapper + bundled wasm)
         run: |
           set -euo pipefail
+          (cd "$GITHUB_WORKSPACE" && bun install --frozen-lockfile)
           cd web/idml-viewer
-          npm install --no-fund --no-audit
-          npm test
-          npm run build
+          bun run test
+          bun run build
           mkdir -p wasm
           cp ../../dist/sdk/paged_sdk.js ../../dist/sdk/paged_sdk_bg.wasm ../../dist/sdk/paged_sdk.d.ts wasm/
           npm pkg set version="${{ steps.ver.outputs.version }}"
@@ -388,8 +390,15 @@ jobs:
           # publisher is indistinguishable from a missing package.
           TAG="${{ steps.disttag.outputs.tag }}"
           echo "publishing under npm dist-tag: $TAG"
+          # The token userconfig setup-node's `registry-url` used to write
+          # (npm expands ${NODE_AUTH_TOKEN} itself).
+          export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/.npmrc-publish"
+          printf '%s\n' "//registry.npmjs.org/:_authToken=\${NODE_AUTH_TOKEN}" "registry=https://registry.npmjs.org/" > "$NPM_CONFIG_USERCONFIG"
+          # The viewer is a workspace package: publish its packed tarball, in
+          # which `bun pm pack` has resolved its catalog: devDependencies.
+          VIEWER_TGZ=$(node "$GITHUB_WORKSPACE/tooling/js/pack.mjs" ./web/idml-viewer "$RUNNER_TEMP")
           npm publish --loglevel verbose --access public --tag "$TAG" ./dist/canvas-wasm
           npm publish --loglevel verbose --access public --tag "$TAG" ./dist/introspect-wasm
           npm publish --loglevel verbose --access public --tag "$TAG" ./dist/sdk
           npm publish --loglevel verbose --access public --tag "$TAG" ./dist/repo-wasm
-          npm publish --loglevel verbose --access public --tag "$TAG" ./web/idml-viewer
+          npm publish --loglevel verbose --access public --tag "$TAG" "$VIEWER_TGZ"

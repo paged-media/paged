@@ -21,9 +21,11 @@ on:
       - "apps/editor/packages/client/src/protocol.ts"
       - "apps/editor/packages/client/package.json"
       - "apps/editor/apps/canvas/package.json"
-      - "apps/editor/pnpm-lock.yaml"
       - "apps/editor/scripts/check-plugin-pins.mjs"
       - ".github/workflows/editor-protocol-version.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
   workflow_dispatch:
 
 defaults:
@@ -36,23 +38,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The editor's packageManager (pnpm@9.0.0) lives in apps/editor; the
-      # monorepo root has no package.json.
-      - uses: pnpm/action-setup@v4
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          package_json_file: apps/editor/package.json
+          auto-install: true
+          proto-version: "0.63.1"
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          # At real flip time the @paged-media packages are public on
-          # npmjs.org and no extra registry config is needed. (During the
-          # Decision-B dry-run they resolve from a local Verdaccio via the
-          # `@paged-media:registry` line in the branch `.npmrc`.)
-
-      # Only the client workspace + its dep tree is needed to resolve the
-      # installed @paged-media/canvas-wasm version.
-      - run: pnpm install --frozen-lockfile
+      # The installed @paged-media/canvas-wasm version is what protocol.ts reads.
+      # One install for the whole root workspace (bun.lock).
+      - name: bun install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
 
       # No protocol-version / package agreement step: protocol.ts READS
       # the protocol from the installed package's version, so there is no
@@ -64,7 +60,7 @@ jobs:
       # RELEASE reconciles it. Running it here still catches the cheap
       # mistakes (a pin referencing an unpublished version fails the
       # install step above first; a malformed pin fails the script), and
-      # `pnpm check:pins` is the local release-time gate where the
+      # `bun run check:pins` is the local release-time gate where the
       # siblings DO exist.
       # In the monorepo the bundles are in-tree, so the check no longer skips.
       # It is a release-time gate by design (an in-tree bundle ahead of the

@@ -11,7 +11,8 @@ incubate-then-extract window (strategy:
 `thoughts/docs/paged/plugin-draw/reality-check.md`). Three packages:
 `draw-geometry` (pure math), `draw-tools` (host-agnostic state machines),
 `draw-bundle` (manifest + `activate(host)`). The editor consumes
-geometry/tools via pnpm `link:` and wraps the machines in thin
+geometry/tools through the published `@paged-media/draw` (its `./geometry` and
+`./machines` exports) and wraps the machines in thin
 `GestureHandler` shims.
 
 Since Image Trace (2026-08-04) there is ALSO a Rust half, in `crates/`:
@@ -556,7 +557,7 @@ over a set of items. The `GroupSpec` has no clip flag and core's parsed
   behavior change lands with a vitest case (`packages/*/test/`).
 - **Wire compatibility is asserted, not assumed.**
   `draw-tools/src/wire-compat.ts` type-asserts machine output against the
-  engine wire types; a protocol break fails `pnpm typecheck` here. Don't
+  engine wire types; a protocol break fails `bun run typecheck` here. Don't
   delete those assertions to make a build green — they're the §12.3 alarm.
 - **`panels/*.panel.json` are design prototypes.** Not interpreted by any
   host; keep them honest against the catalog's binding ceiling (no
@@ -588,7 +589,7 @@ over a set of items. The `GroupSpec` has no clip flag and core's parsed
 ## Commands
 
 ```bash
-pnpm install && pnpm test && pnpm -r typecheck
+bun install && bun run test && bun run typecheck
 node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
 
 # The Rust half (only needed when crates/ changes — the artifact is committed)

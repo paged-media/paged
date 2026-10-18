@@ -10,12 +10,18 @@ on:
     paths:
       - "modules/data/**"
       - ".github/workflows/data-vitest.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
   # Pre-merge gate: a PR that breaks the bundle goes red BEFORE it lands
   # (this lane used to run on push to main only).
   pull_request:
     paths:
       - "modules/data/**"
       - ".github/workflows/data-vitest.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
   workflow_dispatch:
 
 permissions:
@@ -37,12 +43,11 @@ jobs:
       # the sibling plugin-sdk checkout this lane used to make for a `link:`
       # chain is no longer read by anything.
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+          auto-install: true
+          proto-version: "0.63.1"
       # ------------------------------------------------------------------
       # REAL-ENGINE artifact (audit P4). This lane used to run vitest with
       # no wasm artifact, so data-bundle's engine-real.spec.ts skipIf gate
@@ -80,8 +85,10 @@ jobs:
       # prebuilt, never compiled in-tree), which also stages the eh variant
       # as the governed bin/duckdb-engine.wasm. REQUIRE_REAL_DUCKDB=1 below
       # turns every "DuckDB not vendored" skip into a failure.
-      - name: install
-        run: pnpm install --frozen-lockfile
+      # One install for the whole root workspace (bun.lock).
+      - name: bun install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
       # after install: vendor-duckdb.sh bundles the DuckDB JS API with the
       # installed apache-arrow (scripts/bundle-duckdb-api.mjs)
       - name: vendor DuckDB-WASM (MIT prebuilt)
@@ -92,7 +99,7 @@ jobs:
       - name: contract-import lint (fail fast)
         run: node scripts/check-contract-imports.mjs
       - name: typecheck
-        run: pnpm -r typecheck
+        run: bun run --filter './packages/*' typecheck
       # A red spec FAILS this job. It used to end in `|| true` (so red
       # results would still be published as evidence), which also meant the
       # TS lane could never go red: a failing spec merged green. Evidence
@@ -119,8 +126,8 @@ jobs:
           REQUIRE_REAL_CORE: "1"
           REQUIRE_REAL_BROWSER: "1"
         run: |
-          pnpm -r --no-bail exec \
-            vitest run --reporter=default --reporter=junit --outputFile.junit=junit.xml
+          bun run --filter './packages/*' test \
+            --reporter=default --reporter=junit --outputFile.junit=junit.xml
       - name: collect junit
         if: ${{ !cancelled() }}
         run: |

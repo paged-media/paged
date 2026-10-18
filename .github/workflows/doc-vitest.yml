@@ -7,6 +7,9 @@ on:
     paths:
       - "modules/doc/**"
       - ".github/workflows/doc-vitest.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
   workflow_dispatch:
 
 permissions:
@@ -25,19 +28,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+          auto-install: true
+          proto-version: "0.63.1"
       # paged.doc consumes the PUBLISHED @paged-media canaries (no link chain),
       # so a plain install suffices.
-      - run: pnpm install --frozen-lockfile
+      # One install for the whole root workspace (bun.lock).
+      - name: bun install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
       - name: contract-import lint (fail fast)
         run: node scripts/check-contract-imports.mjs
       - name: typecheck
-        run: pnpm -r run typecheck
+        run: bun run --filter './packages/*' typecheck
       # CI never checks out ../plugin-sdk (that path only exists in the local
       # sibling-clone layout), so validate through the PUBLISHED plugin-cli —
       # the same way plugin-publish/ci.yml validates its manifests.
@@ -49,8 +54,8 @@ jobs:
       - name: vitest (junit per package; red results still upload)
         run: |
           set -uo pipefail
-          pnpm -r --no-bail exec \
-            vitest run --reporter=junit --outputFile=junit.xml \
+          bun run --filter './packages/*' test \
+            --reporter=junit --outputFile=junit.xml \
             || echo "TS_FAILED=1" >> "$GITHUB_ENV"
           cat packages/*/junit.xml > junit-all.xml 2>/dev/null || true
           [ -s junit-all.xml ]

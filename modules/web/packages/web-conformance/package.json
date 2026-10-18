@@ -12,9 +12,9 @@
     "record:flow": "node chrome/record-flow.mjs"
   },
   "devDependencies": {
-    "@types/node": "20.19.39",
+    "@types/node": "catalog:",
     "playwright": "1.63.0",
-    "typescript": "^5.9.3",
-    "vitest": "^2.1.9"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

@@ -7,7 +7,7 @@
 // modules-sync.mjs hosts modules by, ADR 220).
 //
 // Run: `node --experimental-strip-types scripts/modules.test.mjs`
-//   (root script `pnpm test:modules`).
+//   (root script `bun run test:modules`).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -29,7 +29,7 @@ const manifest = (host) => ({
     "@paged-media/data": {
       version: "0.1.0-canary.14",
       files: {
-        "bin/duckdb-engine.wasm": { integrity: SRI, version: "0.1.0-canary.14", fs: "/repo/node_modules/.pnpm/x/bin/duckdb-engine.wasm" },
+        "bin/duckdb-engine.wasm": { integrity: SRI, version: "0.1.0-canary.14", fs: "/repo/node_modules/.bun/x/bin/duckdb-engine.wasm" },
         "bin/data_js_bg.wasm": { integrity: SRI, version: "0.1.0-canary.14" },
       },
     },
@@ -49,7 +49,7 @@ test("a hosted build answers the module host, with integrity", () => {
 test("dev answers the installed file under /@fs/; a plain build answers null", () => {
   const dev = createEditorModulesBackend(manifest(null), "http://127.0.0.1:5180");
   assert.deepEqual(dev.url("media.paged.data", duck), {
-    url: "http://127.0.0.1:5180/@fs/repo/node_modules/.pnpm/x/bin/duckdb-engine.wasm",
+    url: "http://127.0.0.1:5180/@fs/repo/node_modules/.bun/x/bin/duckdb-engine.wasm",
     integrity: SRI,
   });
   // No fs path (a production build that is not hosted): the bundle's own copy.
@@ -80,8 +80,8 @@ test("the build manifest lists each plugin's declared wasm with sha384 and host 
   };
   const scope = join(app, "node_modules", "@paged-media");
   mkdirSync(scope, { recursive: true });
-  // published: the real dir is inside the pnpm store
-  const store = join(app, "node_modules", ".pnpm", "@paged-media+x@1.0.0", "node_modules", "@paged-media", "x");
+  // published: the real dir is inside the Bun store (isolated linker)
+  const store = join(app, "node_modules", ".bun", "@paged-media+x@1.0.0", "node_modules", "@paged-media", "x");
   pkg(store, "@paged-media/x", "1.0.0", {
     id: "media.paged.x",
     capabilities: {

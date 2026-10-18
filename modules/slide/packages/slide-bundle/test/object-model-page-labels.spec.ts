@@ -36,6 +36,13 @@ import slideBundle from "../src/index";
 import { parseState } from "../src/slides-model";
 import { slideEngine, type ImportReport } from "../src/engine";
 import { DECK_ADDRESS, IMPORT_PPTX_COMMAND, LABEL_KEY, NEW_SLIDE_COMMAND, PLUGIN_ID, transitionRecord } from "../src/object-model";
+import { fileURLToPath } from "node:url";
+
+// The engine is this package's own @paged-media/canvas-wasm devDependency.
+// Without an anchor the headless harness resolves it from plugin-sdk's
+// install location, which in the root Bun workspace is whichever version the
+// store hoists, not the one this package pins.
+const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
 const P = "plugin:media.paged.slide";
 const FIXTURE = new URL("../../../slide-conformance/fixtures/placeholders.pptx", import.meta.url);
@@ -50,7 +57,7 @@ let slides: string[];
 let mutateCalls = 0;
 
 beforeEach(async () => {
-  h = await createHeadlessHost();
+  h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
   h.loadBundle(slideBundle);
   const bytes = new Uint8Array(readFileSync(FIXTURE));
   report = (await slideEngine()).importPptx(bytes, "placeholders").report;
@@ -113,7 +120,7 @@ describe("[plugin-slide.object-model] slide data on page labels (protocol 70)", 
   });
 
   it("a model write keeps what it does not own: the source part, and the deck's transition element while it still describes it", async () => {
-    const m = await createHeadlessHost();
+    const m = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
     try {
       m.loadBundle(slideBundle);
       const bytes = new Uint8Array(readFileSync(new URL("../../../slide-conformance/fixtures/motion.pptx", import.meta.url)));

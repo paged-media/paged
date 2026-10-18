@@ -1,6 +1,6 @@
 $schema: '../../.moon/cache/schemas/project.json'
 
-# paged.image: a Cargo workspace (image-* crates) and a pnpm workspace
+# paged.image: a Cargo workspace (image-* crates) and JS packages
 # (glue/, manifest/).
 language: 'rust'
 layer: 'library'
@@ -24,7 +24,7 @@ tasks:
 
   js-lint:
     description: 'The contract-import guard (scripts/check-contract-imports.mjs).'
-    command: 'pnpm run lint:contract'
+    command: 'bun run lint:contract'
     inputs:
       - '@group(js-sources)'
 
@@ -32,6 +32,10 @@ tasks:
     inputs:
       - project: 'extensions'
         filter: ['packages/plugin-cli/**/*', 'packages/plugin-api/src/manifest.schema.json']
+
+  js-build:
+    # The packages are glue/ and manifest/, not packages/*.
+    command: "bun run --filter './glue' --filter './manifest' build"
 
   wasm:
     description: 'image-js wasm into glue/wasm/ and manifest/wasm/ (scripts/build-wasm.sh).'

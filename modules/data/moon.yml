@@ -1,6 +1,6 @@
 $schema: '../../.moon/cache/schemas/project.json'
 
-# paged.data: a Cargo workspace (data-* crates) and a pnpm workspace
+# paged.data: a Cargo workspace (data-* crates) and JS packages
 # (data-bundle, data-host-model).
 language: 'rust'
 layer: 'library'
@@ -19,7 +19,7 @@ dependsOn:
 tasks:
   js-lint:
     description: 'The contract-import guard (scripts/check-contract-imports.mjs).'
-    command: 'pnpm run lint:contract'
+    command: 'bun run lint:contract'
     inputs:
       - '@group(js-sources)'
 
@@ -34,7 +34,7 @@ tasks:
       - 'scripts/vendor-duckdb.sh'
       - 'scripts/bundle-duckdb-api.mjs'
       - 'packages/data-bundle/manifest.json'
-      - 'pnpm-lock.yaml'
+      - '/bun.lock'
     options:
       # Downloads from npm; data-vitest runs it in CI.
       runInCI: 'skip'

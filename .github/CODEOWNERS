@@ -15,7 +15,7 @@
 /tooling/                           @drietsch
 /docs/adr/                          @drietsch
 **/Cargo.lock                       @drietsch
-**/pnpm-lock.yaml                   @drietsch
+/bunfig.toml                        @drietsch
 /bun.lock                           @drietsch
 /LICENSE                            @drietsch
 /LICENSE.md                         @drietsch

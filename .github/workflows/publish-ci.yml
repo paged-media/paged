@@ -13,6 +13,9 @@ on:
       - "engine/core/Cargo.toml"
       - "engine/core/crates/**"
       - ".github/workflows/publish-ci.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
   pull_request:
     paths:
       - "modules/publish/**"
@@ -22,6 +25,9 @@ on:
       - "engine/core/Cargo.toml"
       - "engine/core/crates/**"
       - ".github/workflows/publish-ci.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
 
 defaults:
   run:
@@ -96,17 +102,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          version: 10
-      - uses: actions/setup-node@v4
+          auto-install: true
+          proto-version: "0.63.1"
+      - name: cache Bun's package cache
+        uses: actions/cache@v4
         with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: modules/publish/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm -r --filter "./packages/*" typecheck
-      - run: pnpm -r --filter "./packages/*" build
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      # One install for the whole root workspace (bun.lock).
+      - name: bun install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
+      - run: bun run --filter './packages/*' typecheck
+      - run: bun run --filter './packages/*' build
       - name: validate every bundle manifest
         run: |
           set -e
@@ -163,17 +175,23 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - uses: pnpm/action-setup@v4
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          version: 10
-      - uses: actions/setup-node@v4
+          auto-install: true
+          proto-version: "0.63.1"
+      - name: cache Bun's package cache
+        uses: actions/cache@v4
         with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: modules/publish/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      # One install for the whole root workspace (bun.lock).
+      - name: bun install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
 
-      # Only packages that DECLARE a test script. `pnpm -r exec vitest run`
+      # Only packages that DECLARE a test script. Running vitest in every package
       # runs it everywhere, and vitest exits non-zero in a package with no
       # test files ("No test files found") — which set the failure flag on the
       # first run here even though all 170 Rust and 18 TS tests passed. A gate
@@ -185,7 +203,7 @@ jobs:
             node -e "process.exit(require('./${d}package.json').scripts?.test ? 0 : 1)" \
               2>/dev/null || continue
             echo "== vitest in $d"
-            (cd "$d" && pnpm exec vitest run --reporter=default \
+            (cd "$d" && bunx --no-install vitest run --reporter=default \
               --reporter=junit --outputFile=junit.xml) \
               || echo "TS_FAILED=1" >> "$GITHUB_ENV"
           done

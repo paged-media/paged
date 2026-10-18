@@ -54,18 +54,17 @@ jobs:
           workspaces: engine/core -> target
           prefix-key: v0-rust-editor
 
-      # The monorepo root has no package.json for action-setup to read —
-      # pass the version explicitly (the inverse of the trap documented in
-      # editor-tests.yml).
-      - uses: pnpm/action-setup@v4
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          version: 9
-
-      - uses: actions/setup-node@v4
+          auto-install: true
+          proto-version: "0.63.1"
+      - name: cache Bun's package cache
+        uses: actions/cache@v4
         with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: apps/editor/pnpm-lock.yaml
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
       - name: generate the base fixture (paged-gen)
         run: bash scripts/regen-fixtures.sh
@@ -82,13 +81,14 @@ jobs:
       # Without it the dev server cannot resolve @paged-media/doc, the app
       # never boots (`__canvas` times out at 30 s) and every chapter fails —
       # every night since 2026-09-11. DROP with the action when doc publishes.
+      - name: install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
+
       - name: plugin-doc from source (in-tree modules/doc)
         uses: ./.github/actions/plugin-doc-from-source
       - name: plugin-slide from source (in-tree modules/slide)
         uses: ./.github/actions/plugin-slide-from-source
-
-      - name: install (editor)
-        run: pnpm install --frozen-lockfile
 
       - name: install real Chrome
         run: npx playwright install chrome

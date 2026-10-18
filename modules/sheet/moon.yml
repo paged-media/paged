@@ -1,7 +1,7 @@
 $schema: '../../.moon/cache/schemas/project.json'
 
 # paged.sheet: a Cargo workspace (sheet-* crates; fuzz/ is a separate
-# cargo-fuzz workspace that sheet-fuzz.yml runs) and a pnpm workspace.
+# cargo-fuzz workspace that sheet-fuzz.yml runs) and JS packages.
 language: 'rust'
 layer: 'library'
 stack: 'systems'
@@ -34,7 +34,7 @@ fileGroups:
 tasks:
   js-lint:
     description: 'The contract-import guard (scripts/check-contract-imports.mjs).'
-    command: 'pnpm run lint:contract'
+    command: 'bun run lint:contract'
     inputs:
       - '@group(js-sources)'
 

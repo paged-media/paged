@@ -20,9 +20,10 @@ until 2026-06-22, when it was opened.)
   published `@paged-media` wasm/SDK packages — **never** a Rust path
   dependency, and never reaches into core's source tree.
 
-## Workspace layout (pnpm)
+## Workspace layout (Bun)
 
-`pnpm-workspace.yaml` → `apps/*` + `packages/*`. React 18 + Vite + TS +
+`apps/*` + `packages/*`, members of the repository's root Bun workspace
+(`/package.json` `workspaces`, one `/bun.lock`). React 18 + Vite + TS +
 Tailwind.
 
 - `apps/canvas` (`paged-canvas`) — the editor app. React shell →
@@ -61,7 +62,7 @@ barrel is React-free by lint), or deep-import the specific module —
 The engine arrives as **published npm packages**: `packages/client`
 depends on `@paged-media/canvas-wasm`, `apps/devtools` on
 `@paged-media/introspect-wasm` (apps/canvas also direct-depends on
-canvas-wasm — the worker DEEP-IMPORTS it). `pnpm install` suffices;
+canvas-wasm — the worker DEEP-IMPORTS it). `bun install` suffices;
 there is no build-from-core step and no vendored `.d.ts` (types come
 from the package).
 
@@ -102,9 +103,9 @@ against InDesign reference PDFs).
 
 ```bash
 cd apps/canvas                  # engine wasm arrives via npm (Decision B);
-                                # no build step — `pnpm install` suffices
-pnpm test:fidelity              # full gate
-BACKEND=gpu pnpm test:fidelity  # WebGPU/Vello path (headed; CPU fallback)
+                                # no build step — `bun install` suffices
+bun run test:fidelity              # full gate
+BACKEND=gpu bun run test:fidelity  # WebGPU/Vello path (headed; CPU fallback)
 ```
 
 The Vite dev server (spawned/reused by Playwright) sets the COOP/COEP

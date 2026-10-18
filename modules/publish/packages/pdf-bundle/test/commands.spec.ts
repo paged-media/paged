@@ -33,6 +33,13 @@ import { pdfBundle } from "../src/activate";
 import { IMPORT_PDF_ARGS_TYPE, IMPORT_PDF_COMMAND, IMPORT_PDF_RESULT_TYPE } from "../src/commands";
 import { _resetPdfMapperCache } from "../src/engine-loader";
 import { PDF_IMPORT_DEFAULTS } from "../src/io/pdf";
+import { fileURLToPath } from "node:url";
+
+// The engine is this package's own @paged-media/canvas-wasm devDependency.
+// Without an anchor the headless harness resolves it from plugin-sdk's
+// install location, which in the root Bun workspace is whichever version the
+// store hoists, not the one this package pins.
+const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
 const IDML = new URL("../../../../../engine/core/crates/idml-export/tests/fixtures/indesign-20.0.1-navigation.idml", import.meta.url);
 
@@ -55,7 +62,7 @@ async function enginePdf(): Promise<Uint8Array> {
 
 beforeEach(async () => {
   _resetPdfMapperCache();
-  h = await createHeadlessHost();
+  h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
   h.loadBundle(pdfBundle);
   sourcePages = (await h.load(new Uint8Array(readFileSync(IDML)))).length;
   pdf = await enginePdf();

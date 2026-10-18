@@ -1,10 +1,11 @@
 # Moon workspace (moon v2; version pinned in /.prototools).
 #
-# One project per Cargo workspace and per JS workspace root that has tasks
-# of its own. A module directory that holds both a Cargo workspace and a
-# pnpm workspace is ONE project with both toolchains (tags `rust` + `node`).
-# The packages inside a pnpm workspace are not projects: their scripts run
-# through the workspace root (`pnpm -r ...`), as the component CI does.
+# One project per Cargo workspace and per JS component root that has tasks
+# of its own. A module directory that holds both a Cargo workspace and JS
+# packages is ONE project with both toolchains (tags `rust` + `node`). The
+# JS packages are members of the one root Bun workspace (/package.json),
+# not projects: their scripts run through the component root
+# (`bun run --filter ...`), as the component CI does.
 # See docs/adr/PM-0006-proto-moon-mcp.md.
 $schema: './cache/schemas/workspace.json'
 

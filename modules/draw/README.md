@@ -41,10 +41,10 @@ No sibling checkout is needed: the plugin contract
 `packages/draw-bundle/package.json`.
 
 ```bash
-pnpm install
-pnpm test           # contract-import lint + vitest in every package
-pnpm typecheck      # includes the wire-compat assertions against plugin-api
-pnpm bench          # geometry benches (trended, never gated)
+bun install
+bun run test           # contract-import lint + vitest in every package
+bun run typecheck      # includes the wire-compat assertions against plugin-api
+bun run bench          # geometry benches (trended, never gated)
 node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json
 ```
 
@@ -59,7 +59,7 @@ node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate
 - **Perf budgets** (`packages/draw-bundle/test/perf/`) — work COUNTED at
   the host doors (engine round trips, mutations, preview publishes), not
   timed. A budget is the measured value and only ever goes down.
-- **Real artwork** — `PAGED_SVG_CORPUS=1 pnpm --filter @paged-media/draw test`
+- **Real artwork** — `PAGED_SVG_CORPUS=1 bun run --filter @paged-media/draw test`
   parses the private corpus's SVGs and checks `.ai` / `.eps` are refused
   rather than half-read.
 

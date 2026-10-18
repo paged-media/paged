@@ -24,10 +24,16 @@ on:
     paths:
       - "platform/extensions/**"
       - ".github/workflows/extensions-vitest.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
   pull_request:
     paths:
       - "platform/extensions/**"
       - ".github/workflows/extensions-vitest.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
   workflow_dispatch:
 
 permissions:
@@ -47,19 +53,22 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          # REQUIRED here: this repo's package.json has no `packageManager`
-          # field, and action-setup@v4 errors "No pnpm version is specified"
-          # without one of the two.
-          version: 10
-      - uses: actions/setup-node@v4
+          auto-install: true
+          proto-version: "0.63.1"
+      - name: cache Bun's package cache
+        uses: actions/cache@v4
         with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: platform/extensions/pnpm-lock.yaml
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
-      - run: pnpm install --frozen-lockfile
+      # One install for the whole root workspace (bun.lock).
+      - name: bun install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
 
       # Build BEFORE the suite: react-free-import.spec.ts asserts on the
       # SHIPPED artifact (no static react import, no AWAITED react import),
@@ -67,7 +76,7 @@ jobs:
       # was inert in CI. The build is also the top-level-await gate: tsup
       # pins `--target es2020` (Vite's dep-optimizer floor), which esbuild
       # cannot emit a top-level await into. See DESIGN.md §5.1.
-      - run: pnpm --filter @paged-media/plugin-sdk build
+      - run: bun run --filter @paged-media/plugin-sdk build
 
       # The harness specs boot the published canvas-wasm from node_modules, so
       # this is a real engine run, not a mock.
@@ -75,20 +84,20 @@ jobs:
       # Red results must still publish (the matrix wants the ✗), so the run
       # does not abort the job here — the gate at the end fails the build after
       # the artifact is safely uploaded. Only plugin-sdk emits JUnit; plugin-api
-      # is type-only and plugin-cli has no suite, so `-r` would produce nothing
-      # for them.
+      # is type-only and plugin-cli has no suite, so a run over every package
+      # would produce nothing for them.
       - name: vitest → JUnit
         run: |
           set -uo pipefail
-          pnpm --filter @paged-media/plugin-sdk exec vitest run \
+          ( cd packages/plugin-sdk && bunx --no-install vitest run \
             --reporter=default --reporter=junit \
-            --outputFile=junit.xml || echo "VITEST_FAILED=1" >> "$GITHUB_ENV"
+            --outputFile=junit.xml ) || echo "VITEST_FAILED=1" >> "$GITHUB_ENV"
           test -s packages/plugin-sdk/junit.xml
 
       # @paged-media/ai: the agent loop and the proxy against the real
       # engine, with the model replaced by canned turns (no key, no network).
       - name: ai package suite
-        run: pnpm --filter @paged-media/ai exec vitest run || echo "VITEST_FAILED=1" >> "$GITHUB_ENV"
+        run: ( cd packages/ai && bunx --no-install vitest run ) || echo "VITEST_FAILED=1" >> "$GITHUB_ENV"
 
       - name: upload vitest results artifact
         if: ${{ !cancelled() }}
