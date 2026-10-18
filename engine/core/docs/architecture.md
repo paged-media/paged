@@ -11,7 +11,7 @@ count, shaping library, colour on wasm); this page follows the code.
 
 One Cargo workspace (`Cargo.toml`): 24 crates under `crates/` and three spikes that are
 workspace members (`spikes/vello-eval`, `spikes/composer-calibration`, `spikes/wasm-size`).
-`spikes/blitz-wasm` is excluded and has its own lockfile. The toolchain is pinned to 1.94.1
+`spikes/blitz-wasm` is excluded and has its own lockfile. The toolchain is pinned to 1.99.1
 in `rust-toolchain.toml`, `Cargo.lock` is tracked, and the workspace sets `publish = false`.
 Besides Rust there is one TypeScript package (`web/idml-viewer`), bash for the gates
 (`scripts/`, `corpus/generated/*.sh`), and ExtendScript in `tools/indesign-export`.

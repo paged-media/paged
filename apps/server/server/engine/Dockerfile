@@ -15,7 +15,7 @@
 # (run from the repository root). Untested here at the time of writing (no
 # Docker daemon in that environment); the binary itself is tested by core's
 # engine_serve test.
-FROM rust:1.92-bookworm AS build
+FROM rust:1.99.1-bookworm AS build
 WORKDIR /src/engine/core
 COPY engine/core/ ./
 RUN cargo build --release -p paged-cli --bin paged
