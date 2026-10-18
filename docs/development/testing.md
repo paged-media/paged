@@ -167,9 +167,10 @@ Add `PAGED_SKIP_LOG=/tmp/skips.tsv` to see what reported unavailable, and
 | core `corpus diff` (fidelity) | Coated FOGRA39 for the pixel gate | nothing: no runner has the profile, so the gate reports `unavailable: FOGRA39 profile` in its step name, log, annotation and job summary; the golden snapshot and the text-layer gate still gate |
 | image `rust engine` | **no GPU** | named "test (CPU only; device tests are unavailable here)"; the lane report lists the device tests as unavailable |
 | image `nextest evidence` (publish-state) | **no GPU** | the lane report marks the device tests `<skipped>` in the JUnit before the upload |
-| image `rust GPU tests (lavapipe)`, `(Metal)` | a GPU adapter | `PAGED_REQUIRE_GPU=1`; lane report |
+| image `rust GPU tests (lavapipe)`, `(Metal)` | a GPU adapter | `PAGED_REQUIRE_GPU=1`; lane report. Measured on main: 1,192 executed, 0 unavailable on both; the no-GPU `rust engine` lane and the publish-state evidence report 282 unavailable and 910 executed |
 | slide, doc, sheet nextest | nothing optional | `PAGED_SKIP_LOG`, `--no-tests=fail`, lane report |
 | data, publish, web nextest | nothing optional | `--no-tests=fail` |
+| editor Playwright (`editor / tests`) | **no GPU** | the bundled Chromium has no WebGPU adapter, so the journeys run the CPU fallback; no step claims GPU coverage (the WebGPU path runs in the local `journeys-gpu` project and the macOS showcase nightly) |
 
 **The lane report** is `tooling/rust/skip-report.py`. Given nextest's JUnit
 (`--junit`) it adds a `<skipped message="unavailable: …">` to every logged test
