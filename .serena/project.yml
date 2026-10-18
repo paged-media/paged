@@ -17,7 +17,10 @@ line_ending:
 
 language_backend: "LSP"
 
-agent_interface:
+# One MCP tool per operation, so .claude/settings.json can allow the read tools
+# and ask before edits. (Serena 2.0 defaults to the REPL interface: one
+# `serena_repl` tool that runs Python, which can only be allowed or asked as a whole.)
+agent_interface: "tools"
 
 # target/, node_modules/, dist/, the private corpus link and the wasm build
 # outputs are gitignored already.

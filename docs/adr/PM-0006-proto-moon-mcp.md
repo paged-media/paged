@@ -117,7 +117,9 @@ the component workflows. The CI-speed step decides with measurements.
 - **Serena 2.0.0** (`serena start-mcp-server --context claude-code --project-from-cwd`):
   the code-intelligence layer for agents, for Rust (rust-analyzer) and TypeScript/JavaScript
   (typescript-language-server). The version is pinned in the install command and the project
-  file follows its 2.0.0 template. `.serena/project.yml` passes rust-analyzer the ten
+  file follows its 2.0.0 template, with the `tools` agent interface (one MCP tool per
+  operation) instead of Serena 2.0's default REPL tool, so reads and edits can be permitted
+  separately. `.serena/project.yml` passes rust-analyzer the ten
   workspaces as `linkedProjects` and a separate target directory; `.vscode/settings.json`
   does the same for VS Code. A root `rust-analyzer.toml` would not be read
   (`linkedProjects` is a client- or user-level setting). Setup, caveats and the measurement
