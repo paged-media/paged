@@ -184,6 +184,18 @@ its engine once while it loads (a throwaway headless host, the same calls the te
 the cases are `it.skipIf` on the result. The `PAGED_REQUIRE_V66`/`V67` switches still turn the
 skip into a failure.
 
+### A synchronous test that vitest's timeout could not stop
+
+draw-bundle `svg-io.spec.ts` › "FIXED (C-79): a batch with a setDocumentDefaults child, over the
+undo-log cap, is ONE undo step" sends one 10 501-child batch, then undoes and redoes it: three
+synchronous engine calls. vitest gave it no longer timeout than the 5 s default, and in CI it took
+9.6 s under V8 and passed: vitest's timeout is a timer, and a timer cannot fire while the call
+holds the thread. bun test measures the elapsed time, and on main the test failed at 6.1 s on a
+4-core runner (1.6 s on a developer machine). It now carries an explicit 30 s timeout, with that
+reason beside it. No other unit test that the T0 inventory measured above 3 s in CI lacks one: the
+others are in files that already set theirs (data-bundle's `--timeout`, the perf-budget specs'
+`setDefaultTimeout`).
+
 ### Benchmarks
 
 The seven `*.bench.ts` files (vitest's `bench`) run on [mitata](https://github.com/evanwashere/mitata):
