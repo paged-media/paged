@@ -5657,11 +5657,12 @@ fn rewrite_story_part(
     let mut opaque_direct = false;
     // Inside an `<EndnoteRange>` of the endnote story (core ADR 174): its
     // text is the run's, and its `<?ACE 4?>` is the note's number.
-    // An inserted or moved text's `<Change>` wrapper is open in the run
-    // (D-01): its start and end ride the run's opaque subtrees as empty
-    // pieces at their character offsets, so a run rewritten from the
-    // model writes its text back inside the wrapper.
-    let mut in_tracked_insert = false;
+    // The inline wrappers open in the run: an inserted or moved text's
+    // `<Change>` (D-01) and an `<XMLElement>` tagging a text range (D-02).
+    // Their starts and ends ride the run's opaque subtrees as empty pieces
+    // at their character offsets, so a run rewritten from the model writes
+    // its text back inside them.
+    let mut inline_wraps: usize = 0;
     let mut in_endnote_range = false;
 
     // W1.15 lane 3 — table-cell text write-back. Inside a `<Cell
@@ -5905,8 +5906,11 @@ fn rewrite_story_part(
                         body.ends_with_br = false;
                         body.events.push(Event::Start(e.into_owned()));
                     }
-                    b"Change" if csr_open && is_tracked_insertion(&e) => {
-                        in_tracked_insert = true;
+                    b"Change" | b"XMLElement"
+                        if csr_open
+                            && (e.name().as_ref() == b"XMLElement" || is_tracked_insertion(&e)) =>
+                    {
+                        inline_wraps += 1;
                         body.active = true;
                         let event = Event::Start(e.into_owned());
                         body.opaque
@@ -6358,8 +6362,8 @@ fn rewrite_story_part(
                     // keep their own arms above: they carry writer-side
                     // cursor state (table depth, the cell stack, the run
                     // flush) that buffering would strand.
-                    b"Change" if in_tracked_insert => {
-                        in_tracked_insert = false;
+                    b"Change" | b"XMLElement" if inline_wraps > 0 => {
+                        inline_wraps -= 1;
                         let event = Event::End(e.into_owned());
                         body.opaque
                             .push((body.text.chars().count(), vec![event.clone()]));
