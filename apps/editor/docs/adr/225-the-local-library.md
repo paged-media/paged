@@ -40,7 +40,6 @@ the wrong edit could not be undone across sessions.
 7. **The library asks to persist** (`navigator.storage.persist()`), so the browser does not
    evict it under storage pressure. A refused request is not fatal: the file on disk, or
    Export with history, is the backup.
-
 8. **A server is opt-in at build time.** `PAGED_SERVER_URL` names the paged.server a build
    syncs with; its origin joins the network wall (`connect-src`) exactly as a data origin
    does. Without it the panel has no server controls. With it, the panel signs in with an
