@@ -222,6 +222,7 @@ pub fn parse_designmap(xml: &[u8]) -> Result<DesignMap, ParseError> {
                 //   FileNameVariablePreference     IncludePath, IncludeExtension
                 //   DateVariablePreference         Format
                 //   CustomTextVariablePreference   <Properties><Contents>
+                //   CaptionMetadataVariablePreference MetadataProviderName
                 //
                 // all with TextBefore / TextAfter. The engine's older
                 // fixtures wrote a generic `<TextVariablePreference>`
@@ -273,6 +274,10 @@ pub fn parse_designmap(xml: &[u8]) -> Result<DesignMap, ParseError> {
                             read_decoration(var, &e);
                         }
                         b"CustomTextVariablePreference" => read_decoration(var, &e),
+                        b"CaptionMetadataVariablePreference" => {
+                            var.metadata_provider = attr(&e, b"MetadataProviderName");
+                            read_decoration(var, &e);
+                        }
                         b"Contents" if is_start => custom_contents = Some(String::new()),
                         _ => {}
                     }
@@ -1293,6 +1298,9 @@ mod tests {
 			</Properties>
 		</CustomTextVariablePreference>
 	</TextVariable>
+	<TextVariable Self="dTextVariablenCaption Name" Name="Caption Name" VariableType="LiveCaptionType">
+		<CaptionMetadataVariablePreference TextBefore="Image: " MetadataProviderName="$ID/#LinkInfoNameStr" TextAfter="" />
+	</TextVariable>
 </Document>"#;
         let dm = parse_designmap(xml).unwrap();
         let v = |id: &str| {
@@ -1342,6 +1350,12 @@ mod tests {
             Some(" R&D notes "),
             "custom contents are verbatim, entities resolved"
         );
+        let caption = v("dTextVariablenCaption Name");
+        assert_eq!(
+            caption.metadata_provider.as_deref(),
+            Some("$ID/#LinkInfoNameStr")
+        );
+        assert_eq!(caption.text_before.as_deref(), Some("Image: "));
     }
 
     #[test]
