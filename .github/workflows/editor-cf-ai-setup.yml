@@ -87,4 +87,4 @@ jobs:
       - name: redeploy the playground (bindings apply to new deployments)
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run editor-playground.yml -R "$GITHUB_REPOSITORY" --ref main
+        run: gh workflow run release.yml -R "$GITHUB_REPOSITORY" --ref main

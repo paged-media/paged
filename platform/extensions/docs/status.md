@@ -193,10 +193,9 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
   worker, native-document, journal, widget, diagnostics, module, page-navigation, text-reveal
   or caret backend. The engine text shaper is opt-in (`engineShaper`). Menu entries are not
   recorded; gestures are not replayed.
-- **Two packages are not on npm.** `@paged-media/ai` and `@paged-media/cli` have never been
-  published. `publish.yml` publishes through trusted publishing, which cannot make a
-  package's first publish: every run publishes the contract packages whose version changed
-  and then fails at `@paged-media/ai` (`ENEEDAUTH`), so `@paged-media/cli` is never reached.
+- **Two packages are not on npm, by decision.** `@paged-media/ai` and `@paged-media/cli` are
+  private workspace packages (PM-0008); `release.yml` publishes only `plugin-api` and
+  `plugin-sdk` of this directory.
 - **Gaps in the test and version gates.** The version-bump guard covers `plugin-api` and
   `plugin-sdk` only, so a change to `plugin-cli`, `ai` or `cli` without a bump publishes
   nothing. `vitest.yml` runs the `plugin-sdk` and `ai` suites on every pull request; the
@@ -204,14 +203,15 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
 - **Doors without a first-party user.** None of the nine first-party bundle manifests
   declares `secrets`. The editor passes no `journal` option to `loadBundle`
   (`editor: apps/canvas/src/main.tsx:1579-1626`), so `host.journal` records nothing there.
-- **Present but unused.** `scripts/assert-dist-tags.mjs` is run by no workflow.
-  `PluginApiNotImplemented` is exported and never thrown. `plugin-cli` has no test suite of
-  its own; specs in `plugin-sdk` run it as a subprocess. The vendored `catalog.json` is not
+- **Present but unused.** `PluginApiNotImplemented` is exported and never thrown. (The
+  unused `scripts/assert-dist-tags.mjs` is gone; `tooling/release/assert-dist-tags.mjs` runs
+  in `release.yml`.) The `paged-plugin` bin has no test suite of its own; specs in
+  `plugin-sdk` run it as a subprocess. The vendored `catalog.json` is not
   in the published `plugin-api`; the `plugin-sdk` build inlines its `propertySchemas` and
   `pathAliases`.
 - **Text in this repo that lags the code.**
   - The code under `packages/*/src`, the tests, the CLI's untyped baseline (`"adr": "323"`),
-    `packages/plugin-cli/bin/paged-plugin.mjs`, two scripts and a `contract-guard` step name
+    `packages/plugin-sdk/bin/paged-plugin.mjs`, two scripts and a `contract-guard` step name
     cite the object model as "ADR 323", its proposal number. The record is
     [ADR 329](adr/329-plugins-contribute-a-typed-object-model.md); 323 is page navigation
     and page images. A comment change under `packages/*/src` needs a version bump, so these
