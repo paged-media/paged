@@ -26,37 +26,20 @@
 // settings — NOT document mutations. They write a small per-tool
 // settings store keyed by `toolId`, never `paged.mutate`.
 //
-// The popover that renders a spec + the `tool-settings` store land in
-// Phase 3; this file pins the type so the registry can reference it.
+// The field + spec types are the contract's (`@paged-media/plugin-api`,
+// ADR 226): a bundle declares its tool options in the same shape.
+
+import type * as Api from "@paged-media/plugin-api";
 
 /** One field in a tool's options popover. */
-export type ToolOptionField =
-  | {
-      kind: "number";
-      key: string;
-      label: string;
-      min?: number;
-      max?: number;
-      step?: number;
-      unit?: string;
-    }
-  | { kind: "toggle"; key: string; label: string }
-  | {
-      kind: "select";
-      key: string;
-      label: string;
-      options: Array<{ value: string; label: string }>;
-    };
+export type ToolOptionField = Api.ToolOptionField;
 
 /**
  * A tool's double-click options surface. Pure composition over
  * tool-scoped settings (app-state). `toolId` is the settings
  * namespace, usually the owning tool's id.
  */
-export interface ToolOptionsSpec {
-  toolId: string;
-  fields: ToolOptionField[];
-}
+export type ToolOptionsSpec = Api.ToolOptionsSpec;
 
 /** Concrete per-tool values, keyed by `field.key`. Persisted in the
  *  tool-settings store under the spec's `toolId`. */

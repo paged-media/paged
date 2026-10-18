@@ -17,8 +17,10 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+import type * as Api from "@paged-media/plugin-api";
+
 import { isEnabled } from "./types";
-import type { Disposable, VisibilityPredicate } from "./types";
+import type { Disposable, Registrable } from "./types";
 import type { ShellValueType } from "../catalog/object-model-types";
 import {
   BIND_PROPERTY_ARGS,
@@ -41,24 +43,26 @@ const DECLARED_ARGS: ReadonlyMap<string, ShellValueType> = new Map(
  * every command-palette entry resolves to a command. The handler
  * receives the editor handle (and an optional payload for
  * parameterised commands like `paged.page.goto`).
+ *
+ * The contract's `CommandContribution` (one definition,
+ * `@paged-media/plugin-api`): id, title, category, icon, handler, when.
+ * The handler's return is `unknown` rather than `void` so a command can
+ * surface a result through the registry's `invoke` (bundles use this for
+ * the round-trip RPC); `when` gates every invocation (see `invoke`).
+ * The shell adds the payload's declared type.
  */
-export interface CommandContribution {
-  id: string;
-  title: string;
-  category?: string;
-  icon?: string;
-  /** Handler return is `unknown` rather than `void` so command
-   * implementations can surface a result through the registry's
-   * `invoke` (bundles use this for the round-trip RPC). Most
-   * shell-internal commands return nothing. */
-  handler: (paged: unknown, payload?: unknown) => unknown | Promise<unknown>;
-  /** Optional enablement predicate. Disabled commands appear greyed. */
-  when?: VisibilityPredicate;
+export interface CommandContribution extends Api.CommandContribution {
   /** ADR 323 — the payload's value type. When declared (here or in the
    *  registry's declared table), `invoke` checks the payload against it
    *  and throws `invalidValue: …` instead of running the handler. */
   args?: ShellValueType;
 }
+
+/** A contract-authored command registers here unchanged. */
+export type _CommandRegistrable = Registrable<
+  CommandContribution,
+  Api.CommandContribution
+>;
 
 /**
  * One pass through `invoke`. `seq` is monotonic per registry instance
@@ -80,7 +84,7 @@ export type CommandInvocationEvent =
 
 export type CommandObserver = (event: CommandInvocationEvent) => void;
 
-export interface CommandRegistry {
+export interface CommandRegistry extends Api.CommandRegistry {
   register(contribution: CommandContribution): Disposable;
   unregister(id: string): void;
   invoke(id: string, payload?: unknown): Promise<unknown>;

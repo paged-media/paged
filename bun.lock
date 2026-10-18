@@ -136,6 +136,7 @@
         "@paged-media/ai": "workspace:*",
         "@paged-media/catalog": "workspace:*",
         "@paged-media/client": "workspace:*",
+        "@paged-media/plugin-api": "workspace:*",
         "@paged-media/repository": "workspace:*",
         "@paged-media/ui": "workspace:*",
         "@radix-ui/react-dialog": "^1.1.23",

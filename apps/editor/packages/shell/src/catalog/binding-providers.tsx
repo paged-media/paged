@@ -45,10 +45,11 @@
 //      ADR 023's Consequences section names, and it would make the whole
 //      inversion pointless.
 //
-// WHY A STRUCTURAL MIRROR AND NOT AN IMPORT: the same reason
-// `schema-panel-types.ts` mirrors the schema contract. `@paged-media/shell`
-// sits BELOW `apps/canvas` in the consumer chain and does not depend on
-// `@paged-media/plugin-api`/`plugin-sdk` — only the app does. The app
+// WHY A STRUCTURAL MIRROR AND NOT AN IMPORT: `@paged-media/shell` sits
+// BELOW `apps/canvas` in the consumer chain and does not depend on
+// `@paged-media/plugin-sdk`, whose runtime the registry is — only the app
+// does. (It depends on the type-only `plugin-api` since ADR 226, for the
+// contribution types; the mirror predates that.) The app
 // builds the ONE registry (`createBindingProviderRegistry()`), asserts it
 // satisfies this mirror at the injection point, and hands it down through
 // `BindingProviderProvider`. A contract change therefore fails the
