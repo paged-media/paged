@@ -112,15 +112,21 @@ def main():
         print("skip-report: give --junit or --cargo-log", file=sys.stderr)
         return 2
 
-    by_resource = collections.Counter(e["resource"] for e in entries)
+    # One row per test: a test that asks for its device several times logs
+    # several lines.
+    by_resource = collections.Counter(r for _, _, r in {(e["binary"], e["test"], e["resource"]) for e in entries})
     lines = [f"### {args.lane}: {executed} tests executed", "", counts, ""]
     if entries:
         lines += ["| Resource | Tests reported unavailable |", "|---|---|"]
         lines += [f"| {r} | {n} |" for r, n in by_resource.most_common()]
         lines += ["", "<details><summary>Unavailable tests</summary>", "", "```"]
-        lines += [f"{e['binary']} {e['test']}: {e['message']}" for e in entries[:200]]
-        if len(entries) > 200:
-            lines.append(f"... and {len(entries) - 200} more")
+        first = {}
+        for e in entries:
+            first.setdefault((e["binary"], e["test"]), e["message"])
+        rows = [f"{b} {t}: {m}" for (b, t), m in first.items()]
+        lines += rows[:200]
+        if len(rows) > 200:
+            lines.append(f"... and {len(rows) - 200} more")
         lines += ["```", "</details>", ""]
     text = "\n".join(lines)
     print(text)
