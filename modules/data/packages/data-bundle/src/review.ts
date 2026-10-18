@@ -158,13 +158,17 @@ export interface ReviewContext {
   emit(): void;
 }
 
-const COLLECTION: Record<RuleStyleKind, "paragraphStyles" | "characterStyles" | "cellStyles"> = {
+const COLLECTION: Record<
+  RuleStyleKind,
+  "paragraphStyles" | "characterStyles" | "cellStyles"
+> = {
   paragraph: "paragraphStyles",
   character: "characterStyles",
   cell: "cellStyles",
 };
 
-const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
+const errText = (err: unknown) =>
+  err instanceof Error ? err.message : String(err);
 
 /** The review methods, closed over the owning session's context. */
 export function reviewMethods(ctx: ReviewContext): ReviewSession {
@@ -179,7 +183,11 @@ export function reviewMethods(ctx: ReviewContext): ReviewSession {
     try {
       e = await ctx.ensureEngine();
     } catch (err) {
-      ctx.report({ level: "error", source: "binding", message: `engine unavailable: ${errText(err)}` });
+      ctx.report({
+        level: "error",
+        source: "binding",
+        message: `engine unavailable: ${errText(err)}`,
+      });
       return null;
     }
     if (typeof e[method] !== "function") {
@@ -196,15 +204,22 @@ export function reviewMethods(ctx: ReviewContext): ReviewSession {
   function statusOf(e: DataEngineLike, id: string): SyncStatus | null {
     try {
       const st = e.sync_state(id) as { status?: unknown } | null;
-      return st && typeof st.status === "string" ? (st.status as SyncStatus) : null;
+      return st && typeof st.status === "string"
+        ? (st.status as SyncStatus)
+        : null;
     } catch {
       return null;
     }
   }
 
   /** The engine's recipe for one binding (the payload's flattened def). */
-  function bindingDef(e: DataEngineLike, id: string): Record<string, unknown> | null {
-    const payload = (e.payload() ?? {}) as { bindings?: Record<string, unknown>[] };
+  function bindingDef(
+    e: DataEngineLike,
+    id: string,
+  ): Record<string, unknown> | null {
+    const payload = (e.payload() ?? {}) as {
+      bindings?: Record<string, unknown>[];
+    };
     return payload.bindings?.find((b) => b.id === id) ?? null;
   }
 
@@ -233,20 +248,34 @@ export function reviewMethods(ctx: ReviewContext): ReviewSession {
       try {
         e = await ctx.ensureEngine();
       } catch {
-        return list.map((b) => ({ ...b, status: null, locale: null, format: null }));
+        return list.map((b) => ({
+          ...b,
+          status: null,
+          locale: null,
+          format: null,
+        }));
       }
       let locales: Record<string, string> = {};
       try {
-        locales = (e.binding_locales?.() as Record<string, string> | null) ?? {};
+        locales =
+          (e.binding_locales?.() as Record<string, string> | null) ?? {};
       } catch {
         locales = {};
       }
-      const payload = (e.payload() ?? {}) as { bindings?: { id: string; expr?: unknown }[] };
-      const exprs = new Map((payload.bindings ?? []).map((b) => [b.id, b.expr]));
+      const payload = (e.payload() ?? {}) as {
+        bindings?: { id: string; expr?: unknown }[];
+      };
+      const exprs = new Map(
+        (payload.bindings ?? []).map((b) => [b.id, b.expr]),
+      );
       return list.map((b) => {
         let format: BindingSync["format"] = null;
         const expr = exprs.get(b.id);
-        if (b.kind === "variable" && typeof expr === "string" && e.split_expression) {
+        if (
+          b.kind === "variable" &&
+          typeof expr === "string" &&
+          e.split_expression
+        ) {
           try {
             format = e.split_expression(expr) as BindingSync["format"];
           } catch {
@@ -292,11 +321,15 @@ export function reviewMethods(ctx: ReviewContext): ReviewSession {
       for (const [id, t] of ctx.ruleTargets) ruleQueries[id] = t.query;
       try {
         return (
-          (e.row_diff!({ keys: Object.fromEntries(diffKeys), ruleQueries }) as QueryRowDiff[] | null) ??
-          []
+          (e.row_diff!({ keys: Object.fromEntries(diffKeys), ruleQueries }) as
+            QueryRowDiff[] | null) ?? []
         );
       } catch (err) {
-        ctx.report({ level: "error", source: "refresh", message: `row diff failed: ${errText(err)}` });
+        ctx.report({
+          level: "error",
+          source: "refresh",
+          message: `row diff failed: ${errText(err)}`,
+        });
         return [];
       }
     },
@@ -317,13 +350,24 @@ export function reviewMethods(ctx: ReviewContext): ReviewSession {
 
     async checkExpression(src, query) {
       const e = await engineWith("check_expression");
-      if (!e) return { ok: false, error: "the engine cannot check expressions", fields: [], unknownFields: [] };
+      if (!e)
+        return {
+          ok: false,
+          error: "the engine cannot check expressions",
+          fields: [],
+          unknownFields: [],
+        };
       return e.check_expression!(src, query ?? null) as ExprCheck;
     },
 
     async previewCondition(query, when) {
       const e = await engineWith("preview_condition");
-      if (!e) return { fires: [], total: 0, error: "the engine cannot preview conditions" };
+      if (!e)
+        return {
+          fires: [],
+          total: 0,
+          error: "the engine cannot preview conditions",
+        };
       try {
         return e.preview_condition!(query, when) as ConditionPreview;
       } catch (err) {
@@ -333,9 +377,10 @@ export function reviewMethods(ctx: ReviewContext): ReviewSession {
 
     async documentStyles(kind) {
       try {
-        const rows = await ctx.host.document.collection<{ selfId: string; name: string }>(
-          COLLECTION[kind],
-        );
+        const rows = await ctx.host.document.collection<{
+          selfId: string;
+          name: string;
+        }>(COLLECTION[kind]);
         return rows.map((r) => ({ selfId: r.selfId, name: r.name }));
       } catch (err) {
         ctx.report({
@@ -362,7 +407,12 @@ export function reviewMethods(ctx: ReviewContext): ReviewSession {
       try {
         e.set_binding_locale!(id, tag);
       } catch (err) {
-        ctx.report({ level: "error", source: "binding", binding: id, message: `locale: ${errText(err)}` });
+        ctx.report({
+          level: "error",
+          source: "binding",
+          binding: id,
+          message: `locale: ${errText(err)}`,
+        });
         return;
       }
       ctx.markDirty();
@@ -392,12 +442,18 @@ export function reviewMethods(ctx: ReviewContext): ReviewSession {
       try {
         e.define_binding({ ...def, expr });
       } catch (err) {
-        ctx.report({ level: "error", source: "binding", binding: id, message: errText(err) });
+        ctx.report({
+          level: "error",
+          source: "binding",
+          binding: id,
+          message: errText(err),
+        });
         return false;
       }
       ctx.markDirty();
       const status = statusOf(e, id);
-      if (status !== "pinned" && status !== "overridden") await ctx.writeVariable(id);
+      if (status !== "pinned" && status !== "overridden")
+        await ctx.writeVariable(id);
       ctx.emit();
       return true;
     },
@@ -408,7 +464,12 @@ export function reviewMethods(ctx: ReviewContext): ReviewSession {
       try {
         return (e.preview_display!(id, record) as string | null) ?? null;
       } catch (err) {
-        ctx.report({ level: "warn", source: "preview", binding: id, message: errText(err) });
+        ctx.report({
+          level: "warn",
+          source: "preview",
+          binding: id,
+          message: errText(err),
+        });
         return null;
       }
     },

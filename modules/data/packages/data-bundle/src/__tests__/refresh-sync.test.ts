@@ -22,7 +22,13 @@ const actualDuckdb = await importActual(() => import("../query/duckdb"));
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
-type Field = { storyId: string; offset: number; plugin: string; key: string; value: string | null };
+type Field = {
+  storyId: string;
+  offset: number;
+  plugin: string;
+  key: string;
+  value: string | null;
+};
 
 function fakeHost(opts?: { placeholders?: () => Field[] | Promise<Field[]> }) {
   const mutations: Mutation[] = [];
@@ -31,14 +37,18 @@ function fakeHost(opts?: { placeholders?: () => Field[] | Promise<Field[]> }) {
     log: silent,
     supports: () => true,
     selection: { get: () => [], set: async () => [] },
-    network: { consentedOrigins: () => [], requestConsent: async () => ({ granted: [], denied: [] }) },
+    network: {
+      consentedOrigins: () => [],
+      requestConsent: async () => ({ granted: [], denied: [] }),
+    },
     document: {
       onWillSave: () => ({ dispose() {} }),
       mutate: async (m: Mutation) => {
         mutations.push(m);
         return { applied: true, createdId: null, pageIds: [] };
       },
-      placeholders: async () => (opts?.placeholders ? await opts.placeholders() : []),
+      placeholders: async () =>
+        opts?.placeholders ? await opts.placeholders() : [],
       frameChain: async () => [],
       elementGeometry: async () => [],
       hitTest: async () => null,
@@ -103,7 +113,12 @@ async function sessionWith(
   return createSession(host, 20613);
 }
 
-const field = (key: string, offset: number, value: string | null, storyId = "s1"): Field => ({
+const field = (
+  key: string,
+  offset: number,
+  value: string | null,
+  storyId = "s1",
+): Field => ({
   storyId,
   offset,
   plugin: "media.paged.data",
@@ -111,15 +126,26 @@ const field = (key: string, offset: number, value: string | null, storyId = "s1"
   value,
 });
 
-const variable = (text: string) => ({ kind: "variable", target: "anchor", text, hidden: false });
+const variable = (text: string) => ({
+  kind: "variable",
+  target: "anchor",
+  text,
+  hidden: false,
+});
 
 describe("refreshFields honours sync state (ADR 553) [data.bind.engine]", () => {
   for (const status of ["overridden", "pinned"] as const) {
     it(`skips a ${status} field and does not resolve it [data.bind.engine]`, async () => {
-      const fake = fakeHost({ placeholders: () => [field("kept", 0, "edited by hand"), field("live", 20, "old")] });
+      const fake = fakeHost({
+        placeholders: () => [
+          field("kept", 0, "edited by hand"),
+          field("live", 20, "old"),
+        ],
+      });
       const resolved: string[] = [];
       const engine = fakeEngine({
-        sync_state: (id: string) => (id === "kept" ? { status, last_resolved: null } : { status: "stale" }),
+        sync_state: (id: string) =>
+          id === "kept" ? { status, last_resolved: null } : { status: "stale" },
         resolve_lowered: (id: string) => {
           resolved.push(id);
           return variable(`new ${id}`);
@@ -134,7 +160,10 @@ describe("refreshFields honours sync state (ADR 553) [data.bind.engine]", () => 
       expect(written).toBe(1);
       expect(resolved).toEqual(["live"]); // resolving would have re-linked it
       expect(fake.mutations).toEqual([
-        { op: "setFieldValue", args: { storyId: "s1", offset: 20, value: "new live" } },
+        {
+          op: "setFieldValue",
+          args: { storyId: "s1", offset: 20, value: "new live" },
+        },
       ]);
       expect(s.getState().message).toMatch(/1 .*(pinned|overridden)/i);
     });
@@ -164,13 +193,19 @@ describe("refreshFields writes back to front off one read [data.lower.v43-consum
         field("a", 25, "1"),
       ],
     });
-    const engine = fakeEngine({ resolve_lowered: (id: string) => variable(`${id}-new`) });
+    const engine = fakeEngine({
+      resolve_lowered: (id: string) => variable(`${id}-new`),
+    });
     const s = await sessionWith(fake.host, engine);
-    for (const id of ["a", "b", "c"]) s.addVariableBinding(id, "anchor", "q", id);
+    for (const id of ["a", "b", "c"])
+      s.addVariableBinding(id, "anchor", "q", id);
     expect(await s.refreshFields()).toBe(4);
     // ONE mutate: a batch, which core applies as one rebuild and one undo step.
     expect(fake.mutations.length).toBe(1);
-    const batch = fake.mutations[0] as { op: string; args: { ops: Mutation[] } };
+    const batch = fake.mutations[0] as {
+      op: string;
+      args: { ops: Mutation[] };
+    };
     expect(batch.op).toBe("batch");
     const order = batch.args.ops.map((m) => {
       const a = (m as { args: { storyId: string; offset: number } }).args;
@@ -180,31 +215,59 @@ describe("refreshFields writes back to front off one read [data.lower.v43-consum
   });
 
   it("a rejected batch names its child: that field is reported, the rest are written [data.lower.v43-consumers]", async () => {
-    const fake = fakeHost({ placeholders: () => [field("a", 0, "1"), field("b", 10, "2"), field("c", 20, "3")] });
+    const fake = fakeHost({
+      placeholders: () => [
+        field("a", 0, "1"),
+        field("b", 10, "2"),
+        field("c", 20, "3"),
+      ],
+    });
     const sent: number[] = [];
-    (fake.host.document as { mutate: unknown }).mutate = async (m: { op: string; args: { ops: Mutation[] } }) => {
+    (fake.host.document as { mutate: unknown }).mutate = async (m: {
+      op: string;
+      args: { ops: Mutation[] };
+    }) => {
       const ops = m.op === "batch" ? m.args.ops : [m];
       sent.push(ops.length);
       // Core rolls the batch back and names the child (b, at offset 10).
-      const bad = ops.findIndex((o) => (o as { args: { offset: number } }).args.offset === 10);
+      const bad = ops.findIndex(
+        (o) => (o as { args: { offset: number } }).args.offset === 10,
+      );
       if (bad >= 0) {
         return {
           applied: false,
-          error: { kind: "notImplemented", details: { what: `Mutation::Batch child ${bad} (SetFieldValue): no placeholder field at offset 10 — batch rolled back` } },
+          error: {
+            kind: "notImplemented",
+            details: {
+              what: `Mutation::Batch child ${bad} (SetFieldValue): no placeholder field at offset 10 — batch rolled back`,
+            },
+          },
         };
       }
       return { applied: true, createdId: null, pageIds: [] };
     };
-    const s = await sessionWith(fake.host, fakeEngine({ resolve_lowered: (id: string) => variable(`${id}-new`) }));
-    for (const id of ["a", "b", "c"]) s.addVariableBinding(id, "anchor", "q", id);
+    const s = await sessionWith(
+      fake.host,
+      fakeEngine({ resolve_lowered: (id: string) => variable(`${id}-new`) }),
+    );
+    for (const id of ["a", "b", "c"])
+      s.addVariableBinding(id, "anchor", "q", id);
     expect(await s.refreshFields()).toBe(2);
     expect(sent).toEqual([3, 2]); // the batch, then the batch without b
-    const d = s.getState().diagnostics.filter((x) => x.message.includes("rejected"));
+    const d = s
+      .getState()
+      .diagnostics.filter((x) => x.message.includes("rejected"));
     expect(d.map((x) => x.binding)).toEqual(["b"]);
   });
 
   it("asks the engine for every field in ONE call when the wasm has refresh_field_values [data.bind.engine]", async () => {
-    const fake = fakeHost({ placeholders: () => [field("a", 0, "old"), field("k", 5, "kept"), field("a", 9, "old")] });
+    const fake = fakeHost({
+      placeholders: () => [
+        field("a", 0, "old"),
+        field("k", 5, "kept"),
+        field("a", 9, "old"),
+      ],
+    });
     const asked: string[][] = [];
     const engine = fakeEngine({
       refresh_field_values: (ids: string[]) => {
@@ -241,8 +304,13 @@ describe("swallowed errors become session diagnostics [data.plugin.bundle]", () 
     await s.registerCsvSource("people", "a,b\n1");
     const st = s.getState();
     expect(st.status).toBe("error");
-    expect(st.diagnostics.map((d) => [d.source, d.level])).toContainEqual(["import", "error"]);
-    expect(st.diagnostics.at(-1)?.message).toMatch(/people.*CSV parse error at line 3/);
+    expect(st.diagnostics.map((d) => [d.source, d.level])).toContainEqual([
+      "import",
+      "error",
+    ]);
+    expect(st.diagnostics.at(-1)?.message).toMatch(
+      /people.*CSV parse error at line 3/,
+    );
   });
 
   it("refreshFields reports a placeholders() failure [data.plugin.bundle]", async () => {
@@ -253,7 +321,10 @@ describe("swallowed errors become session diagnostics [data.plugin.bundle]", () 
     });
     const s = await sessionWith(fake.host, fakeEngine());
     expect(await s.refreshFields()).toBe(0);
-    expect(s.getState().diagnostics.at(-1)).toMatchObject({ source: "refresh", level: "error" });
+    expect(s.getState().diagnostics.at(-1)).toMatchObject({
+      source: "refresh",
+      level: "error",
+    });
     expect(s.getState().diagnostics.at(-1)?.message).toMatch(/worker gone/);
   });
 
@@ -263,14 +334,20 @@ describe("swallowed errors become session diagnostics [data.plugin.bundle]", () 
       throw new Error("data-js wasm not built");
     });
     expect(await s.refreshFields()).toBe(0);
-    expect(s.getState().diagnostics.at(-1)).toMatchObject({ source: "refresh", level: "error" });
+    expect(s.getState().diagnostics.at(-1)).toMatchObject({
+      source: "refresh",
+      level: "error",
+    });
   });
 
   it("refreshFields names a binding that does not resolve [data.plugin.bundle]", async () => {
-    const fake = fakeHost({ placeholders: () => [field("broken", 0, "x"), field("ok", 5, "y")] });
+    const fake = fakeHost({
+      placeholders: () => [field("broken", 0, "x"), field("ok", 5, "y")],
+    });
     const engine = fakeEngine({
       resolve_lowered: (id: string) => {
-        if (id === "broken") throw new Error("no result ingested for query 'q'");
+        if (id === "broken")
+          throw new Error("no result ingested for query 'q'");
         return variable("ok-new");
       },
     });
@@ -285,11 +362,19 @@ describe("swallowed errors become session diagnostics [data.plugin.bundle]", () 
 
   it("refreshFields reports a field write the host rejected [data.plugin.bundle]", async () => {
     const fake = fakeHost({ placeholders: () => [field("v", 0, "x")] });
-    (fake.host.document as { mutate: unknown }).mutate = async () => ({ applied: false, error: "no placeholder field at offset 0" });
-    const s = await sessionWith(fake.host, fakeEngine({ resolve_lowered: () => variable("y") }));
+    (fake.host.document as { mutate: unknown }).mutate = async () => ({
+      applied: false,
+      error: "no placeholder field at offset 0",
+    });
+    const s = await sessionWith(
+      fake.host,
+      fakeEngine({ resolve_lowered: () => variable("y") }),
+    );
     s.addVariableBinding("v", "anchor", "q", "a");
     expect(await s.refreshFields()).toBe(0);
-    expect(s.getState().diagnostics.find((x) => x.binding === "v")?.message).toMatch(/rejected/);
+    expect(
+      s.getState().diagnostics.find((x) => x.binding === "v")?.message,
+    ).toMatch(/rejected/);
   });
 
   it("variables() reports an engine boot failure and a throwing read [data.dataset.palette]", async () => {
@@ -297,7 +382,10 @@ describe("swallowed errors become session diagnostics [data.plugin.bundle]", () 
       throw new Error("data-js wasm not built");
     });
     expect(await boot.variables()).toEqual([]);
-    expect(boot.getState().diagnostics.at(-1)).toMatchObject({ source: "variables", level: "error" });
+    expect(boot.getState().diagnostics.at(-1)).toMatchObject({
+      source: "variables",
+      level: "error",
+    });
 
     const throwing = await sessionWith(
       fakeHost().host,
@@ -308,12 +396,18 @@ describe("swallowed errors become session diagnostics [data.plugin.bundle]", () 
       }),
     );
     expect(await throwing.variables()).toEqual([]);
-    expect(throwing.getState().diagnostics.at(-1)?.message).toMatch(/serializer failed/);
+    expect(throwing.getState().diagnostics.at(-1)?.message).toMatch(
+      /serializer failed/,
+    );
   });
 
   it("an empty variable expression is flagged when the binding is defined [data.bind.authoring]", async () => {
     const s = await sessionWith(fakeHost().host, fakeEngine());
     s.addVariableBinding("v_demo", "anchor", "q", "");
-    expect(s.getState().diagnostics.at(-1)).toMatchObject({ source: "binding", binding: "v_demo", level: "warn" });
+    expect(s.getState().diagnostics.at(-1)).toMatchObject({
+      source: "binding",
+      binding: "v_demo",
+      level: "warn",
+    });
   });
 });

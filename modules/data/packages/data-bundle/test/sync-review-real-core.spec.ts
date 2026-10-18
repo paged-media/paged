@@ -21,8 +21,18 @@ import { existsSync } from "node:fs";
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
-import { dataFields, ENGINE_ANCHOR, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
-import { bootRealDuckDB, bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_DUCKDB } from "./real-duckdb";
+import {
+  dataFields,
+  ENGINE_ANCHOR,
+  openRealHost,
+  REQUIRE_REAL_CORE,
+} from "./real-core";
+import {
+  bootRealDuckDB,
+  bootRealEngine,
+  DATA_JS_WASM,
+  REQUIRE_REAL_DUCKDB,
+} from "./real-duckdb";
 
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
@@ -35,7 +45,10 @@ const CSV = "sku,price\nA-1,9.99\nB-2,19.99\nC-3,29.99\n";
 const CSV2 = "sku,price\nA-1,12.5\nB-2,19.99\nC-3,29.99\n";
 
 const probe = await bootRealDuckDB();
-const ready = ENGINE_ANCHOR !== null && probe.handle !== undefined && existsSync(DATA_JS_WASM);
+const ready =
+  ENGINE_ANCHOR !== null &&
+  probe.handle !== undefined &&
+  existsSync(DATA_JS_WASM);
 const required = REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB;
 
 async function loadBundleModule() {
@@ -55,7 +68,10 @@ async function loadBundleModule() {
 }
 
 async function exportPaged(host: BundleHost): Promise<Uint8Array> {
-  const reply = (await host.editor.client.send({ kind: "exportPaged", payload: {} } as never)) as {
+  const reply = (await host.editor.client.send({
+    kind: "exportPaged",
+    payload: {},
+  } as never)) as {
     kind: string;
     payload: { bytes?: number[]; error?: string };
   };
@@ -64,7 +80,10 @@ async function exportPaged(host: BundleHost): Promise<Uint8Array> {
   return Uint8Array.from(reply.payload.bytes!);
 }
 
-async function fieldValue(host: BundleHost, key: string): Promise<string | null | undefined> {
+async function fieldValue(
+  host: BundleHost,
+  key: string,
+): Promise<string | null | undefined> {
   // A placeholder field, or (protocol 71) the text variable `paged:<key>`.
   return (await dataFields(host as never)).find((p) => p.key === key)?.value;
 }
@@ -85,20 +104,29 @@ describe.skipIf(!ready && !required)(
     }
 
     it("pattern + locale, pin, row diff, accept source, save and reopen [data.bind.sync-review]", async () => {
-      expect(ready, "real core, DuckDB and the data-js wasm must all be available").toBe(true);
+      expect(
+        ready,
+        "real core, DuckDB and the data-js wasm must all be available",
+      ).toBe(true);
       const mod = await loadBundleModule();
       const h1 = await open();
       h1.loadBundle(mod.dataBundle);
       const s = mod.sessionFor(h1.host)!;
       await s.whenRestored();
       await s.registerCsvSource("products", CSV);
-      s.addQuery("q", "SELECT sku, price FROM products ORDER BY sku", "recordStream");
+      s.addQuery(
+        "q",
+        "SELECT sku, price FROM products ORDER BY sku",
+        "recordStream",
+      );
       s.addVariableBinding("v_price", "anchor", "q", "price");
       await s.lowerAll();
       expect(await fieldValue(h1.host, "v_price")).toBe("9.99");
 
       // A display pattern and the field's own locale are written now.
-      expect(await s.setBindingFormat("v_price", { kind: "currency", decimals: 2 })).toBe(true);
+      expect(
+        await s.setBindingFormat("v_price", { kind: "currency", decimals: 2 }),
+      ).toBe(true);
       expect(await fieldValue(h1.host, "v_price")).toBe("$9.99");
       await s.setBindingLocale("v_price", "fr");
       expect(await fieldValue(h1.host, "v_price")).toBe("9,99 €");
@@ -107,12 +135,20 @@ describe.skipIf(!ready && !required)(
       // Pin it; the data changes; a refresh leaves the pinned field alone.
       await s.pin("v_price");
       await s.registerCsvSource("products_v2", CSV2);
-      s.addQuery("q", "SELECT sku, price FROM products_v2 ORDER BY sku", "recordStream");
+      s.addQuery(
+        "q",
+        "SELECT sku, price FROM products_v2 ORDER BY sku",
+        "recordStream",
+      );
       await s.refreshData();
       const [diff] = await s.rowDiff();
       expect(diff.query).toBe("q");
       expect(diff.key).toEqual(["sku"]);
-      expect([diff.insertedCount, diff.removedCount, diff.updatedCount]).toEqual([0, 0, 1]);
+      expect([
+        diff.insertedCount,
+        diff.removedCount,
+        diff.updatedCount,
+      ]).toEqual([0, 0, 1]);
       expect(diff.updated[0]).toEqual({
         index: 0,
         key: "A-1",
@@ -131,7 +167,9 @@ describe.skipIf(!ready && !required)(
       // Accept the source: the new price, and the binding follows it again.
       expect(await s.acceptSource("v_price")).toBe(true);
       expect(await fieldValue(h1.host, "v_price")).toBe("12,50 €");
-      expect((await s.bindingSync()).find((b) => b.id === "v_price")?.status).toBe("linked");
+      expect(
+        (await s.bindingSync()).find((b) => b.id === "v_price")?.status,
+      ).toBe("linked");
 
       // Pin again and save: the decision, the locale and the pattern reopen.
       await s.pin("v_price");
@@ -141,7 +179,9 @@ describe.skipIf(!ready && !required)(
       h2.loadBundle(mod.dataBundle);
       const s2 = mod.sessionFor(h2.host)!;
       await s2.whenRestored();
-      expect((await s2.bindingSync()).find((b) => b.id === "v_price")).toMatchObject({
+      expect(
+        (await s2.bindingSync()).find((b) => b.id === "v_price"),
+      ).toMatchObject({
         status: "pinned",
         locale: "fr",
         format: { inner: "price", pattern: { kind: "currency", decimals: 2 } },
@@ -157,14 +197,20 @@ describe.skipIf(!ready && !required)(
       const s = mod.sessionFor(h.host)!;
       await s.whenRestored();
       await s.registerCsvSource("products", CSV);
-      s.addQuery("q", "SELECT sku, price FROM products ORDER BY sku", "recordStream");
+      s.addQuery(
+        "q",
+        "SELECT sku, price FROM products ORDER BY sku",
+        "recordStream",
+      );
       // A story to style: the variable field lands in a fresh frame; three
       // paragraphs go in front of it, one per record.
       s.addVariableBinding("v_sku", "anchor", "q", "sku");
       await s.lowerAll();
       // The variable's frame is the only story (its field may be a text
       // variable, protocol 71, which names no story).
-      const stories = await h.host.document.collection<{ selfId: string }>("stories");
+      const stories = await h.host.document.collection<{ selfId: string }>(
+        "stories",
+      );
       expect(stories).toHaveLength(1);
       const storyId = stories[0]!.selfId;
       const ins = await h.host.document.mutate({
@@ -180,11 +226,19 @@ describe.skipIf(!ready && !required)(
 
       // The style is offered from the document's own collection.
       const styles = await s.documentStyles("paragraph");
-      expect(styles).toContainEqual({ selfId: "ParagraphStyle/Low", name: "Low" });
+      expect(styles).toContainEqual({
+        selfId: "ParagraphStyle/Low",
+        name: "Low",
+      });
 
       // The preview and the applied rule agree: records 0 and 1 fire.
-      expect(await s.previewCondition("q", "price < 20")).toEqual({ fires: [0, 1], total: 3 });
-      expect((await s.checkExpression("stock < 5", "q")).unknownFields).toEqual(["stock"]);
+      expect(await s.previewCondition("q", "price < 20")).toEqual({
+        fires: [0, 1],
+        total: 3,
+      });
+      expect((await s.checkExpression("stock < 5", "q")).unknownFields).toEqual(
+        ["stock"],
+      );
       s.addRuleBinding(
         "r_low",
         "r_low",
@@ -196,7 +250,11 @@ describe.skipIf(!ready && !required)(
       expect(await s.applyRule("r_low")).toBe(2);
       const story = await h.host.document.storyContent(storyId);
       const styled = story!.paragraphs.map((p) => p.paragraphStyle ?? null);
-      expect(styled.slice(0, 3)).toEqual(["ParagraphStyle/Low", "ParagraphStyle/Low", styled[2]]);
+      expect(styled.slice(0, 3)).toEqual([
+        "ParagraphStyle/Low",
+        "ParagraphStyle/Low",
+        styled[2],
+      ]);
       expect(styled[2]).not.toBe("ParagraphStyle/Low");
     });
   },

@@ -45,10 +45,17 @@ function fakeHost() {
     log: silent,
     supports: () => true,
     selection: { get: () => [], set: async () => [] },
-    network: { consentedOrigins: () => [], requestConsent: async () => ({ granted: [], denied: [] }) },
+    network: {
+      consentedOrigins: () => [],
+      requestConsent: async () => ({ granted: [], denied: [] }),
+    },
     document: {
       onWillSave: () => ({ dispose() {} }),
-      mutate: async (_m: Mutation) => ({ applied: true, createdId: null, pageIds: [] }),
+      mutate: async (_m: Mutation) => ({
+        applied: true,
+        createdId: null,
+        pageIds: [],
+      }),
       placeholders: async () => [],
       frameChain: async () => [],
       elementGeometry: async () => [],
@@ -103,16 +110,38 @@ async function sessionWith(host: BundleHost, engine: DataEngineLike) {
   }));
   mock.module("../query/duckdb", () => ({
     ...actualDuckdb,
-    bootDuckDB: async () => ({ registerCsv: async () => {}, query: async () => ({}), close: async () => {} }),
+    bootDuckDB: async () => ({
+      registerCsv: async () => {},
+      query: async () => ({}),
+      close: async () => {},
+    }),
   }));
   const { createSession: make } = await import("../session");
   return make(host, 20613);
 }
 
 const MAPPINGS: ColumnMapping[] = [
-  { column: "sku", header: "Sku", expr: "sku", fieldType: "text", mappable: true },
-  { column: "unit_price", header: "Unit Price", expr: "unit_price", fieldType: "float", mappable: true },
-  { column: "Unit Cost", header: "Unit Cost", expr: "", fieldType: "float", mappable: false },
+  {
+    column: "sku",
+    header: "Sku",
+    expr: "sku",
+    fieldType: "text",
+    mappable: true,
+  },
+  {
+    column: "unit_price",
+    header: "Unit Price",
+    expr: "unit_price",
+    fieldType: "float",
+    mappable: true,
+  },
+  {
+    column: "Unit Cost",
+    header: "Unit Cost",
+    expr: "",
+    fieldType: "float",
+    mappable: false,
+  },
 ];
 
 describe("data_bind_field_mapping session lane (§9)", () => {
@@ -144,7 +173,9 @@ describe("data_bind_field_mapping session lane (§9)", () => {
     expect(s.getState().bindings).toEqual(["v_sku", "v_unit_price"]);
 
     // The engine received the bindings with the engine-computed exprs.
-    const defined = (engine as unknown as { __defined: { id: string; expr: string }[] }).__defined;
+    const defined = (
+      engine as unknown as { __defined: { id: string; expr: string }[] }
+    ).__defined;
     expect(defined.map((d) => [d.id, d.expr])).toEqual([
       ["v_sku", "sku"],
       ["v_unit_price", "unit_price"],
@@ -154,7 +185,10 @@ describe("data_bind_field_mapping session lane (§9)", () => {
   it("applyMappings honours a custom id prefix + target", async () => {
     const fake = fakeHost();
     const s = await sessionWith(fake.host, fakeEngine());
-    const ids = s.applyMappings("q_all", MAPPINGS, { idPrefix: "fld_", target: "frame-7" });
+    const ids = s.applyMappings("q_all", MAPPINGS, {
+      idPrefix: "fld_",
+      target: "frame-7",
+    });
     expect(ids).toEqual(["fld_sku", "fld_unit_price"]);
   });
 });

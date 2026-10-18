@@ -42,7 +42,11 @@
 
 import type { ElementId } from "@paged-media/plugin-api";
 
-import type { IdmlFit, RuleTarget, VisibilityTargetKind } from "../../data-host-model/src";
+import type {
+  IdmlFit,
+  RuleTarget,
+  VisibilityTargetKind,
+} from "../../data-host-model/src";
 import type { ImportFormat } from "./query/import";
 import type { RefreshPolicy } from "./refresh";
 import type { RemoteFormat } from "./remote";
@@ -71,7 +75,11 @@ export interface CsvLabel {
 /** One imported source's data: inline, or a pointer to its own part. */
 export type PersistedData =
   | ({ source: string; format: "csv"; text: string } & CsvLabel)
-  | ({ source: string; format: "csv"; ref: { hash: string; bytes: number } } & CsvLabel)
+  | ({
+      source: string;
+      format: "csv";
+      ref: { hash: string; bytes: number };
+    } & CsvLabel)
   | {
       source: string;
       format: BinaryFormat;
@@ -98,7 +106,10 @@ export interface PersistedRemote {
 export interface PersistedTargets {
   image: Record<string, { elementId: string; fit?: IdmlFit }>;
   barcode: Record<string, { elementId: string }>;
-  visibility: Record<string, { elementId: string; kind?: VisibilityTargetKind }>;
+  visibility: Record<
+    string,
+    { elementId: string; kind?: VisibilityTargetKind }
+  >;
   rule: Record<string, { query: string; target: RuleTarget }>;
   /** The element each table / record-flow binding was last lowered into. */
   lowered: Record<string, ElementId>;
@@ -127,14 +138,20 @@ const decoder = new TextDecoder();
 /** Hex SHA-256 of `bytes`, shortened to 32 hex chars (128 bits) — a content
  *  address, not a security boundary. */
 export async function contentHash(bytes: Uint8Array): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes as BufferSource);
+  const digest = await globalThis.crypto.subtle.digest(
+    "SHA-256",
+    bytes as BufferSource,
+  );
   return Array.from(new Uint8Array(digest).slice(0, 16), (b) =>
     b.toString(16).padStart(2, "0"),
   ).join("");
 }
 
 /** The part a stored file is written to (`data/<hash>.<ext>`). */
-export function dataPartPath(hash: string, format: "csv" | BinaryFormat = "csv"): string {
+export function dataPartPath(
+  hash: string,
+  format: "csv" | BinaryFormat = "csv",
+): string {
   return `${DATA_PART_DIR}${hash}.${format}`;
 }
 
@@ -169,8 +186,14 @@ export async function storeFile(
   writePart: (path: string, bytes: Uint8Array) => Promise<void>,
   known: Set<string>,
 ): Promise<PersistedData> {
-  const head = { source, format, fileName, ...(sheet !== undefined ? { sheet } : {}) };
-  if (bytes.length <= INLINE_DATA_MAX_BYTES) return { ...head, base64: toBase64(bytes) };
+  const head = {
+    source,
+    format,
+    fileName,
+    ...(sheet !== undefined ? { sheet } : {}),
+  };
+  if (bytes.length <= INLINE_DATA_MAX_BYTES)
+    return { ...head, base64: toBase64(bytes) };
   const hash = await contentHash(bytes);
   const path = dataPartPath(hash, format);
   if (!known.has(path)) {
@@ -199,7 +222,8 @@ export async function storeData(
   known: Set<string>,
 ): Promise<CsvData> {
   const bytes = encoder.encode(text);
-  if (bytes.length <= INLINE_DATA_MAX_BYTES) return { source, format: "csv", text };
+  if (bytes.length <= INLINE_DATA_MAX_BYTES)
+    return { source, format: "csv", text };
   const hash = await contentHash(bytes);
   const path = dataPartPath(hash);
   if (!known.has(path)) {
@@ -224,14 +248,19 @@ export function encodeSession(s: PersistedSession): Uint8Array {
 }
 
 /** Parse a session part. Returns the session, or a reason it cannot be used. */
-export function decodeSession(bytes: Uint8Array): PersistedSession | { error: string } {
+export function decodeSession(
+  bytes: Uint8Array,
+): PersistedSession | { error: string } {
   let parsed: unknown;
   try {
     parsed = JSON.parse(decoder.decode(bytes));
   } catch (err) {
-    return { error: `the saved data session is not valid JSON (${String(err)})` };
+    return {
+      error: `the saved data session is not valid JSON (${String(err)})`,
+    };
   }
-  if (!parsed || typeof parsed !== "object") return { error: "the saved data session is empty" };
+  if (!parsed || typeof parsed !== "object")
+    return { error: "the saved data session is empty" };
   const v = (parsed as { v?: unknown }).v;
   if (v !== SESSION_VERSION) {
     return {

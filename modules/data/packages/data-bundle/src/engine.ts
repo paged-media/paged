@@ -52,7 +52,11 @@ export interface DataEngineLike {
   push_date?(values: Int32Array, valid?: Uint8Array): void;
   push_datetime?(values: Float64Array, valid?: Uint8Array): void;
   push_utf8?(bytes: Uint8Array, offsets: Int32Array, valid?: Uint8Array): void;
-  push_binary?(bytes: Uint8Array, offsets: Int32Array, valid?: Uint8Array): void;
+  push_binary?(
+    bytes: Uint8Array,
+    offsets: Int32Array,
+    valid?: Uint8Array,
+  ): void;
   finish_columns?(): string;
   /** The content token (hex content hash) of a query's ingested result —
    *  equal tokens, equal data. `undefined` before an ingest. */
@@ -61,7 +65,11 @@ export interface DataEngineLike {
   /** ADR 558: every property binding's lowering over `record` (with
    *  `withVisibility`, visibility bindings re-expressed too), for ONE apply
    *  (`PropertyApply[]`). Optional: a wasm built before it lacks it. */
-  resolve_properties_at?(record: number, withVisibility: boolean, bindings?: string[]): unknown;
+  resolve_properties_at?(
+    record: number,
+    withVisibility: boolean,
+    bindings?: string[],
+  ): unknown;
   /** Remove a binding from the recipe. Optional (a wasm built before it). */
   remove_binding?(binding: string): boolean;
   /** §9 record-preview stepper: the count of records ingested for a query — the
@@ -92,7 +100,11 @@ export interface DataEngineLike {
   capture_data_set?(name: string, record: number): unknown;
   /** §9.9: capture ONE data set per record of a query. Returns the names in
    *  record order. Optional (see `variables`). */
-  capture_every_record?(query: string, prefix: string, nameColumn?: string): unknown;
+  capture_every_record?(
+    query: string,
+    prefix: string,
+    nameColumn?: string,
+  ): unknown;
   /** §9.9: the named data sets, in palette order. Optional (see `variables`). */
   list_data_sets?(): unknown;
   /** §9.9: delete a data set by name. Optional (see `variables`). */
@@ -118,10 +130,19 @@ export interface DataEngineLike {
   merge_words?(plan: unknown, frames: number): unknown;
   /** Wave 5: per record, per frame, is the merged text overset (DM-7)? */
   merge_overset?(plan: unknown, metrics: unknown): unknown;
-  publish_provider(query: string, providerId: string, category: string): unknown;
+  publish_provider(
+    query: string,
+    providerId: string,
+    category: string,
+  ): unknown;
   governed_catalog(query: string, metadata: unknown): unknown;
   plan_batch(query: string, mode: unknown): unknown;
-  run_record_flow_batch(binding: string, mode: unknown, chain: unknown, opts: unknown): unknown;
+  run_record_flow_batch(
+    binding: string,
+    mode: unknown,
+    chain: unknown,
+    opts: unknown,
+  ): unknown;
   /** D-13: evaluate a data-driven formatting rule over a query's records —
    *  returns `{scope, fires, apply, total}` (the firing decision; the host
    *  applies the named document style). */
@@ -200,7 +221,10 @@ export interface BootEngineOptions {
 
 /** Boot a `DataEngine` over the wasm-bindgen glue. Throws [`ENGINE_NOT_BUILT`]
  *  when the artifact is absent (the panel renders that honestly). */
-export async function bootEngine(today: number, opts: BootEngineOptions = {}): Promise<DataEngineLike> {
+export async function bootEngine(
+  today: number,
+  opts: BootEngineOptions = {},
+): Promise<DataEngineLike> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mod: any = null;
   try {
@@ -256,7 +280,10 @@ export function ingestColumnBatch(
   query: string,
   batch: ColumnBatch,
 ): "changed" | "unchanged" {
-  if (typeof e.begin_columns !== "function" || typeof e.finish_columns !== "function") {
+  if (
+    typeof e.begin_columns !== "function" ||
+    typeof e.finish_columns !== "function"
+  ) {
     e.ingest_result(query, {
       schema: batch.schema,
       columns: batch.columns.map((c) => columnToValues(c, batch.row_count)),

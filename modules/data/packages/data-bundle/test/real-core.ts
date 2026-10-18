@@ -46,7 +46,11 @@ export const ENGINE_ANCHOR = findEngineAnchor();
 export const ENGINE_PROTOCOL: number = (() => {
   if (!ENGINE_ANCHOR) return 0;
   try {
-    const v = (JSON.parse(readFileSync(join(ENGINE_ANCHOR, PKG), "utf8")) as { version: string }).version;
+    const v = (
+      JSON.parse(readFileSync(join(ENGINE_ANCHOR, PKG), "utf8")) as {
+        version: string;
+      }
+    ).version;
     return Number(v.split(".")[1]) || 0;
   } catch {
     return 0;
@@ -55,7 +59,10 @@ export const ENGINE_PROTOCOL: number = (() => {
 
 /** `it` from engine protocol `min` on, `it.failing` (a pinned defect) before
  *  it: a defect a released engine fixes stays pinned against the older one. */
-export function fixedFrom<T extends { failing: unknown }>(min: number, it: T): T | T["failing"] {
+export function fixedFrom<T extends { failing: unknown }>(
+  min: number,
+  it: T,
+): T | T["failing"] {
   return ENGINE_PROTOCOL >= min ? it : it.failing;
 }
 export const REQUIRE_REAL_CORE = process.env.REQUIRE_REAL_CORE === "1";
@@ -64,7 +71,9 @@ const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
 /** Boot a headless host over the real engine and load the minimal fixture
  *  (one page, Self="usp"). */
-export async function openRealHost(extra: { engineShaper?: boolean } = {}): Promise<HeadlessHost> {
+export async function openRealHost(
+  extra: { engineShaper?: boolean } = {},
+): Promise<HeadlessHost> {
   if (!ENGINE_ANCHOR) {
     throw new Error(
       "REQUIRE_REAL_CORE=1 but no @paged-media/canvas-wasm was found " +
@@ -95,8 +104,21 @@ export interface DataField {
 }
 
 type FieldHost = {
-  document: { placeholders(): Promise<readonly { storyId: string; offset: number; plugin: string; key: string; value: string | null }[]> };
-  objects?: { query(s: string): Promise<string[]>; get(a: string, p: string): Promise<unknown> };
+  document: {
+    placeholders(): Promise<
+      readonly {
+        storyId: string;
+        offset: number;
+        plugin: string;
+        key: string;
+        value: string | null;
+      }[]
+    >;
+  };
+  objects?: {
+    query(s: string): Promise<string[]>;
+    get(a: string, p: string): Promise<unknown>;
+  };
 };
 
 /** paged.data's fields in a document: placeholder fields first (story
@@ -104,16 +126,33 @@ type FieldHost = {
 export async function dataFields(host: FieldHost): Promise<DataField[]> {
   const out: DataField[] = (await host.document.placeholders())
     .filter((p) => p.plugin === "media.paged.data")
-    .map((p) => ({ key: p.key, storyId: p.storyId, offset: p.offset, value: p.value }));
+    .map((p) => ({
+      key: p.key,
+      storyId: p.storyId,
+      offset: p.offset,
+      value: p.value,
+    }));
   if (ENGINE_PROTOCOL >= 71 && host.objects) {
     // Ours by NAME: an InDesign save re-spells the Self (`paged-v_name`).
-    for (const address of await host.objects.query('textVariable[name^="paged:"]')) {
+    for (const address of await host.objects.query(
+      'textVariable[name^="paged:"]',
+    )) {
       const id = address.slice("textVariable:".length);
-      const name = (await host.objects.get(address, "textVariableName")) as { value?: unknown };
+      const name = (await host.objects.get(address, "textVariableName")) as {
+        value?: unknown;
+      };
       const key = String(name.value).slice("paged:".length);
-      const v = (await host.objects.get(address, "textVariableContents")) as { value?: unknown };
+      const v = (await host.objects.get(address, "textVariableContents")) as {
+        value?: unknown;
+      };
       const contents = typeof v.value === "string" ? v.value : null;
-      out.push({ key, storyId: address, offset: 0, value: contents === `<${key}>` ? null : contents, variable: id });
+      out.push({
+        key,
+        storyId: address,
+        offset: 0,
+        value: contents === `<${key}>` ? null : contents,
+        variable: id,
+      });
     }
   }
   return out;

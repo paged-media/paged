@@ -5,7 +5,7 @@ Rust/WASM data-binding engine delivered as a **Paged plugin** that makes Paged
 capable of **database publishing** (the EasyCatalog category for InDesign):
 variable replacement, dynamic/expanding tables, image placeholders, scriptable
 queries, data-driven formatting, record flow across pages, and batch document
-generation. A publication becomes a *projection of governed data*, not a
+generation. A publication becomes a _projection of governed data_, not a
 hand-assembled artifact.
 
 Spec (the authority): [`docs/concept.md`](./docs/concept.md).

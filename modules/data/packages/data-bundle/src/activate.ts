@@ -30,7 +30,10 @@
 
 import type { BundleHandle, BundleHost } from "@paged-media/plugin-api";
 import { contributeMenu } from "./menu";
-import { contributePanel, contributeSchemaPanel } from "@paged-media/plugin-sdk";
+import {
+  contributePanel,
+  contributeSchemaPanel,
+} from "@paged-media/plugin-sdk";
 
 import manifest from "../manifest.json";
 import { createSession, type DataSourceSession } from "./session";
@@ -40,7 +43,11 @@ import { makeBindingsPanel } from "./panels/bindings-panel";
 import { makeDatasetPanel } from "./panels/dataset-panel";
 import { makeQueryPanel } from "./panels/query-panel";
 import { contributeObjectModel } from "./object-model";
-import { DATA_OBJECTS_PANEL, OBJECTS_PANEL_ID, publishObjectLists } from "./panels/objects-panel";
+import {
+  DATA_OBJECTS_PANEL,
+  OBJECTS_PANEL_ID,
+  publishObjectLists,
+} from "./panels/objects-panel";
 
 const SOURCES_PANEL_ID = "media.paged.data.panel.sources";
 const BINDINGS_PANEL_ID = "media.paged.data.panel.bindings";
@@ -58,7 +65,12 @@ const IMPORTER_ID = "media.paged.data.importer.table";
  *  them here would silently take the spreadsheet import away from the sheet.
  *  A per-file choice between importers is a host-UI gap; until it exists,
  *  only the extensions no other bundle claims are routed here. */
-export const IMPORTER_EXTENSIONS = [".json", ".ndjson", ".jsonl", ".parquet"] as const;
+export const IMPORTER_EXTENSIONS = [
+  ".json",
+  ".ndjson",
+  ".jsonl",
+  ".parquet",
+] as const;
 
 /** The injected eval clock for `TODAY()` (days since 1970-01-01). The host
  *  supplies a real clock in production; M0 uses the load-time UTC day. */
@@ -85,7 +97,9 @@ export function activate(host: BundleHost): BundleHandle {
   // Activation runs once, at app start; documents come and go after it. On
   // every open (`document.onDidOpen`) the session drops the previous
   // document's state and restores the new one's.
-  const documentOpenedSub = host.document.onDidOpen(() => void session.documentOpened());
+  const documentOpenedSub = host.document.onDidOpen(
+    () => void session.documentOpened(),
+  );
 
   contributePanel(host, {
     id: SOURCES_PANEL_ID,
@@ -129,7 +143,11 @@ export function activate(host: BundleHost): BundleHandle {
       id: IMPORTER_ID,
       title: "Data source (JSON, Parquet)",
       extensions: IMPORTER_EXTENSIONS,
-      mimeTypes: ["application/json", "application/x-ndjson", "application/vnd.apache.parquet"],
+      mimeTypes: [
+        "application/json",
+        "application/x-ndjson",
+        "application/vnd.apache.parquet",
+      ],
       async import(file) {
         await session.whenRestored();
         await session.importFile(file.name, file.bytes);
@@ -176,7 +194,12 @@ export function activate(host: BundleHost): BundleHandle {
     // source) and holds the Data Merge options. Scripts take the same path
     // through the typed command `media.paged.data.merge` (object-model.ts).
     handler: (_paged, payload) =>
-      runMergeCommand(host, session, BINDINGS_PANEL_ID, (payload ?? {}) as Partial<import("./session").SessionMergeOptions>),
+      runMergeCommand(
+        host,
+        session,
+        BINDINGS_PANEL_ID,
+        (payload ?? {}) as Partial<import("./session").SessionMergeOptions>,
+      ),
   });
   host.contribute.command({
     id: "media.paged.data.command.openDataset",
@@ -274,7 +297,9 @@ export function activate(host: BundleHost): BundleHandle {
   // ADR 323 — paged.data's own objects (sources, queries, bindings, data
   // sets, variables) and typed commands, for scripts, the CLI and the
   // editor's "Bind to data…". A host without the door skips it.
-  const objectModel = contributeObjectModel(host, session, { bindings: BINDINGS_PANEL_ID });
+  const objectModel = contributeObjectModel(host, session, {
+    bindings: BINDINGS_PANEL_ID,
+  });
   // ADR 323 §4 — the same objects as host-rendered PropertyFields: a schema
   // panel of property rows ("Data objects"; needs the object model and the
   // schema-panel door). The React panels above keep their features.
@@ -297,15 +322,25 @@ export function activate(host: BundleHost): BundleHandle {
     title: "Bind to data…",
     category: "Data",
     handler: (_paged, payload) => {
-      const p = (payload ?? {}) as { selector?: string; path?: string; schema?: string };
+      const p = (payload ?? {}) as {
+        selector?: string;
+        path?: string;
+        schema?: string;
+      };
       if (!p.selector || !p.path) {
         // Without a named object and property there is nothing to draft;
         // the Bindings panel is where a binding is made by hand.
-        host.log.warn("bindProperty: the payload needs { selector, path, schema }");
+        host.log.warn(
+          "bindProperty: the payload needs { selector, path, schema }",
+        );
         host.shell.openPanel(BINDINGS_PANEL_ID);
         return null;
       }
-      session.setPropertyDraft({ selector: p.selector, path: p.path, schema: p.schema ?? "" });
+      session.setPropertyDraft({
+        selector: p.selector,
+        path: p.path,
+        schema: p.schema ?? "",
+      });
       host.shell.openPanel(BINDINGS_PANEL_ID);
       return { status: "draft", opened: true };
     },
@@ -334,8 +369,16 @@ export function activate(host: BundleHost): BundleHandle {
 export function isLoweredContent(metadata: unknown): boolean {
   if (!metadata || typeof metadata !== "object") return false;
   const m = metadata as { data?: unknown };
-  const data = (m.data && typeof m.data === "object" ? m.data : m) as Record<string, unknown>;
-  return "binding" in data || "merge" in data || "kind" in data || !("bind" in data || "oid" in data);
+  const data = (m.data && typeof m.data === "object" ? m.data : m) as Record<
+    string,
+    unknown
+  >;
+  return (
+    "binding" in data ||
+    "merge" in data ||
+    "kind" in data ||
+    !("bind" in data || "oid" in data)
+  );
 }
 
 export {

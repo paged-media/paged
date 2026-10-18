@@ -33,7 +33,12 @@ import type {
 } from "@paged-media/plugin-api";
 
 import manifest from "../manifest.json";
-import { mergeCommandResult, mergeOptionsOf, runMergeCommand, type MergeCommandArgs } from "./merge-command";
+import {
+  mergeCommandResult,
+  mergeOptionsOf,
+  runMergeCommand,
+  type MergeCommandArgs,
+} from "./merge-command";
 import { objectsOf } from "./property-lane";
 import type { PropertyBindingSpec } from "./property-session";
 import type { DataSourceSession } from "./session";
@@ -47,7 +52,11 @@ export type KindName = "source" | "query" | "binding" | "dataSet" | "variable";
  *  the host's shared `PropertyField` over `host.objects`. Every schema row of
  *  every kind is here (a spec holds it to that); read-only and derived rows
  *  render read-only from the schema. */
-export const PANEL_FIELDS: ReadonlyArray<{ kind: KindName; path: string; group: string }> = [
+export const PANEL_FIELDS: ReadonlyArray<{
+  kind: KindName;
+  path: string;
+  group: string;
+}> = [
   { kind: "source", path: "name", group: "Sources" },
   { kind: "source", path: "type", group: "Sources" },
   { kind: "source", path: "fileName", group: "Sources" },
@@ -78,14 +87,17 @@ export function schemaOf(kind: KindName): PropertySchema[] | undefined {
   return declared.kinds.find((x) => x.kind === kind)?.schema;
 }
 
-const declared = (manifest.contributes as unknown as {
-  objectModel: {
-    kinds: { kind: KindName; title: string; schema: PropertySchema[] }[];
-    commands: { id: string; title: string; args: ValueType }[];
-  };
-}).objectModel;
+const declared = (
+  manifest.contributes as unknown as {
+    objectModel: {
+      kinds: { kind: KindName; title: string; schema: PropertySchema[] }[];
+      commands: { id: string; title: string; args: ValueType }[];
+    };
+  }
+).objectModel;
 
-export const addressOf = (kind: KindName, id: string) => `plugin:${PLUGIN_ID}/${kind}/${id}`;
+export const addressOf = (kind: KindName, id: string) =>
+  `plugin:${PLUGIN_ID}/${kind}/${id}`;
 
 function idOf(address: string, kind: KindName): string | null {
   const prefix = `plugin:${PLUGIN_ID}/${kind}/`;
@@ -93,7 +105,11 @@ function idOf(address: string, kind: KindName): string | null {
 }
 
 const val = (value: unknown): ObjectValue => ({ kind: "value", value });
-const unknown = (address: string): ObjectValue => ({ kind: "refused", code: "unknownAddress", reason: `no ${address}` });
+const unknown = (address: string): ObjectValue => ({
+  kind: "refused",
+  code: "unknownAddress",
+  reason: `no ${address}`,
+});
 const none: ObjectWrite = { kind: "mutations", mutations: [] };
 const no = (reason: string): ObjectWrite => ({ kind: "rejected", reason });
 
@@ -102,25 +118,36 @@ const SHAPES = ["recordStream", "singleRecord", "scalar"] as const;
 /** Read the engine's recipe (sources, queries, bindings, data sets). */
 async function recipe(session: DataSourceSession) {
   return (await session.recipe()) as {
-    sources?: { id: string; kind?: { kind?: string; format?: string; name?: string; url?: string } }[];
+    sources?: {
+      id: string;
+      kind?: { kind?: string; format?: string; name?: string; url?: string };
+    }[];
     queries?: { id: string; sql?: string; shape?: { shape?: string } }[];
     bindings?: { id: string; kind: string; [k: string]: unknown }[];
     variables?: {
       variables?: { name: string; trait: string }[];
-      dataSets?: { name: string; values: Record<string, Record<string, unknown>> }[];
+      dataSets?: {
+        name: string;
+        values: Record<string, Record<string, unknown>>;
+      }[];
     };
   };
 }
 
 function displayOf(v: Record<string, unknown>): string {
   for (const k of ["text", "href", "visible", "value", "raw"]) {
-    if (k in v) return typeof v[k] === "string" ? (v[k] as string) : JSON.stringify(v[k]);
+    if (k in v)
+      return typeof v[k] === "string" ? (v[k] as string) : JSON.stringify(v[k]);
   }
   return "";
 }
 
-function kinds(host: BundleHost, session: DataSourceSession): ObjectKindContribution[] {
-  const rows = (k: KindName) => declared.kinds.find((x) => x.kind === k)!.schema;
+function kinds(
+  host: BundleHost,
+  session: DataSourceSession,
+): ObjectKindContribution[] {
+  const rows = (k: KindName) =>
+    declared.kinds.find((x) => x.kind === k)!.schema;
   const base = (k: KindName) => ({
     kind: k,
     title: declared.kinds.find((x) => x.kind === k)!.title,
@@ -139,14 +166,21 @@ function kinds(host: BundleHost, session: DataSourceSession): ObjectKindContribu
       const st = session.getState();
       if (!id || !st.sources.includes(id)) return unknown(address);
       const def = (await recipe(session)).sources?.find((s) => s.id === id);
-      const file = st.files.find((f) => f.source === id) as { fileName?: string; format?: string } | undefined;
+      const file = st.files.find((f) => f.source === id) as
+        { fileName?: string; format?: string } | undefined;
       const remote = st.remote.find((r) => r.name === id);
       switch (path) {
         case "name":
           return val(id);
         case "type": {
-          const t = remote ? "remote" : (file?.format ?? def?.kind?.format ?? "csv");
-          return val(["csv", "tsv", "json", "parquet", "xlsx", "remote"].includes(t) ? t : "other");
+          const t = remote
+            ? "remote"
+            : (file?.format ?? def?.kind?.format ?? "csv");
+          return val(
+            ["csv", "tsv", "json", "parquet", "xlsx", "remote"].includes(t)
+              ? t
+              : "other",
+          );
         }
         case "fileName":
           return val(file?.fileName ?? def?.kind?.name ?? null);
@@ -162,9 +196,13 @@ function kinds(host: BundleHost, session: DataSourceSession): ObjectKindContribu
     },
     async set(address, path, value) {
       const id = idOf(address, "source");
-      if (!id || !session.getState().sources.includes(id)) return no(`no source ${address}`);
+      if (!id || !session.getState().sources.includes(id))
+        return no(`no source ${address}`);
       if (path !== "refresh") return no(`${path} is read-only`);
-      const policy = value === "interval" ? { policy: "interval" as const, secs: 300 } : { policy: value as "manual" | "onOpen" };
+      const policy =
+        value === "interval"
+          ? { policy: "interval" as const, secs: 300 }
+          : { policy: value as "manual" | "onOpen" };
       const refused = session.setRefreshPolicy(id, policy);
       return refused ? no(refused) : none;
     },
@@ -189,8 +227,15 @@ function kinds(host: BundleHost, session: DataSourceSession): ObjectKindContribu
         if (op.op === "create") {
           const p = (op.props ?? {}) as { sql?: string; shape?: string };
           const id = op.handle ?? (op.props as { id?: string } | undefined)?.id;
-          if (!id || typeof p.sql !== "string") return no("create query: props { sql } and a handle (the query id)");
-          session.addQuery(id, p.sql, (p.shape as (typeof SHAPES)[number]) ?? "recordStream");
+          if (!id || typeof p.sql !== "string")
+            return no(
+              "create query: props { sql } and a handle (the query id)",
+            );
+          session.addQuery(
+            id,
+            p.sql,
+            (p.shape as (typeof SHAPES)[number]) ?? "recordStream",
+          );
           continue;
         }
         if (op.op !== "set") return no(`${op.op} is not supported on queries`);
@@ -198,8 +243,11 @@ function kinds(host: BundleHost, session: DataSourceSession): ObjectKindContribu
         const def = (await recipe(session)).queries?.find((q) => q.id === id);
         if (!id || !def) return no(`no query ${op.address}`);
         const sql = op.path === "sql" ? String(op.value) : (def.sql ?? "");
-        const shape = (op.path === "shape" ? op.value : (def.shape?.shape ?? "recordStream")) as (typeof SHAPES)[number];
-        if (op.path !== "sql" && op.path !== "shape") return no(`${op.path} is read-only`);
+        const shape = (
+          op.path === "shape" ? op.value : (def.shape?.shape ?? "recordStream")
+        ) as (typeof SHAPES)[number];
+        if (op.path !== "sql" && op.path !== "shape")
+          return no(`${op.path} is read-only`);
         session.addQuery(id, sql, shape);
       }
       return none;
@@ -219,19 +267,33 @@ function kinds(host: BundleHost, session: DataSourceSession): ObjectKindContribu
         case "kind":
           return val(def.kind);
         case "query":
-          return def.query ? val(addressOf("query", String(def.query))) : { kind: "absent" };
+          return def.query
+            ? val(addressOf("query", String(def.query)))
+            : { kind: "absent" };
         case "expr":
-          return typeof def.expr === "string" ? val(def.expr) : typeof def.when === "string" ? val(def.when) : { kind: "absent" };
+          return typeof def.expr === "string"
+            ? val(def.expr)
+            : typeof def.when === "string"
+              ? val(def.when)
+              : { kind: "absent" };
         case "target": {
           const sel = (def.target as { selector?: string } | null)?.selector;
           return def.kind === "property" && sel ? val(sel) : { kind: "absent" };
         }
         case "path":
-          return def.kind === "property" ? val(def.path) : def.kind === "visibility" ? val("elementVisible") : { kind: "absent" };
+          return def.kind === "property"
+            ? val(def.path)
+            : def.kind === "visibility"
+              ? val("elementVisible")
+              : { kind: "absent" };
         case "coerce":
-          return def.kind === "property" ? val(def.coerce ?? "strict") : { kind: "absent" };
+          return def.kind === "property"
+            ? val(def.coerce ?? "strict")
+            : { kind: "absent" };
         case "missing":
-          return def.kind === "property" ? val(def.missing ?? "keepLast") : { kind: "absent" };
+          return def.kind === "property"
+            ? val(def.missing ?? "keepLast")
+            : { kind: "absent" };
         case "status":
           return val(session.syncStatusOf(id) ?? "linked");
         case "definition":
@@ -247,14 +309,21 @@ function kinds(host: BundleHost, session: DataSourceSession): ObjectKindContribu
       for (const op of ops) {
         if (op.op === "delete") {
           const id = idOf(op.address, "binding");
-          if (!id || !(await session.removeBinding(id, defer))) return no(`no binding ${op.address}`);
+          if (!id || !(await session.removeBinding(id, defer)))
+            return no(`no binding ${op.address}`);
           continue;
         }
         if (op.op === "create") {
           const p = (op.props ?? {}) as Record<string, unknown>;
-          const def = typeof p.definition === "string" ? (JSON.parse(p.definition) as Record<string, unknown>) : null;
+          const def =
+            typeof p.definition === "string"
+              ? (JSON.parse(p.definition) as Record<string, unknown>)
+              : null;
           const id = op.handle ?? (def?.id as string | undefined);
-          if (!id) return no("create binding: a handle (the binding id) or a definition with an id");
+          if (!id)
+            return no(
+              "create binding: a handle (the binding id) or a definition with an id",
+            );
           const r = def
             ? await session.redefineBinding({ ...def, id }, defer)
             : await session.addPropertyBinding(
@@ -262,7 +331,10 @@ function kinds(host: BundleHost, session: DataSourceSession): ObjectKindContribu
                 {
                   target: String(p.target ?? ""),
                   path: String(p.path ?? ""),
-                  query: String(p.query ?? "").replace(`plugin:${PLUGIN_ID}/query/`, ""),
+                  query: String(p.query ?? "").replace(
+                    `plugin:${PLUGIN_ID}/query/`,
+                    "",
+                  ),
                   expr: String(p.expr ?? ""),
                   ...(p.coerce ? { coerce: p.coerce as "strict" } : {}),
                   ...(p.missing ? { missing: p.missing as "keepLast" } : {}),
@@ -279,25 +351,39 @@ function kinds(host: BundleHost, session: DataSourceSession): ObjectKindContribu
         if (op.path === "status") {
           if (op.value === "pinned") session.setPinned(id, true);
           else if (op.value === "linked") session.setPinned(id, false);
-          else return no(`status can be set to pinned or linked, not ${String(op.value)}`);
+          else
+            return no(
+              `status can be set to pinned or linked, not ${String(op.value)}`,
+            );
           continue;
         }
         let next: Record<string, unknown>;
         if (op.path === "definition") {
           try {
-            next = { ...(JSON.parse(String(op.value)) as Record<string, unknown>), id };
+            next = {
+              ...(JSON.parse(String(op.value)) as Record<string, unknown>),
+              id,
+            };
           } catch {
             return no("the definition is not JSON");
           }
         } else if (op.path === "query") {
-          next = { ...def, query: String(op.value).replace(`plugin:${PLUGIN_ID}/query/`, "") };
+          next = {
+            ...def,
+            query: String(op.value).replace(`plugin:${PLUGIN_ID}/query/`, ""),
+          };
         } else if (op.path === "expr") {
-          next = def.kind === "rule" ? { ...def, when: op.value } : { ...def, expr: op.value };
+          next =
+            def.kind === "rule"
+              ? { ...def, when: op.value }
+              : { ...def, expr: op.value };
         } else if (op.path === "target") {
-          if (def.kind !== "property") return no("only a property binding has a selector target");
+          if (def.kind !== "property")
+            return no("only a property binding has a selector target");
           next = { ...def, target: { selector: String(op.value) } };
         } else if (["path", "coerce", "missing"].includes(op.path)) {
-          if (def.kind !== "property") return no(`${op.path} applies to property bindings`);
+          if (def.kind !== "property")
+            return no(`${op.path} applies to property bindings`);
           next = { ...def, [op.path]: op.value };
           if (op.path === "path") delete next.schema; // read again for the new path
         } else {
@@ -318,11 +404,17 @@ function kinds(host: BundleHost, session: DataSourceSession): ObjectKindContribu
     },
     async get(address, path) {
       const id = idOf(address, "dataSet");
-      const set = (await recipe(session)).variables?.dataSets?.find((d) => d.name === id);
+      const set = (await recipe(session)).variables?.dataSets?.find(
+        (d) => d.name === id,
+      );
       if (!id || !set) return unknown(address);
       if (path === "name") return val(set.name);
       if (path === "values") {
-        return val(Object.fromEntries(Object.entries(set.values).map(([k, v]) => [k, displayOf(v)])));
+        return val(
+          Object.fromEntries(
+            Object.entries(set.values).map(([k, v]) => [k, displayOf(v)]),
+          ),
+        );
       }
       return { kind: "absent" };
     },
@@ -330,16 +422,20 @@ function kinds(host: BundleHost, session: DataSourceSession): ObjectKindContribu
       for (const op of ops) {
         if (op.op === "delete") {
           const id = idOf(op.address, "dataSet");
-          if (!id || !(await session.deleteDataSet(id))) return no(`no data set ${op.address}`);
+          if (!id || !(await session.deleteDataSet(id)))
+            return no(`no data set ${op.address}`);
           continue;
         }
         if (op.op === "create") {
-          const name = op.handle ?? (op.props as { name?: string } | undefined)?.name;
+          const name =
+            op.handle ?? (op.props as { name?: string } | undefined)?.name;
           if (!name) return no("create dataSet: a handle (the data set name)");
           await session.captureDataSet(name, 0);
           continue;
         }
-        return no(`${op.op} is not supported on data sets (apply one with media.paged.data.applyDataSet)`);
+        return no(
+          `${op.op} is not supported on data sets (apply one with media.paged.data.applyDataSet)`,
+        );
       }
       return none;
     },
@@ -348,7 +444,9 @@ function kinds(host: BundleHost, session: DataSourceSession): ObjectKindContribu
   const variable: ObjectKindContribution = {
     ...base("variable"),
     async list() {
-      return (await session.variables()).map((v) => addressOf("variable", v.name));
+      return (await session.variables()).map((v) =>
+        addressOf("variable", v.name),
+      );
     },
     async get(address, path) {
       const id = idOf(address, "variable");
@@ -381,14 +479,16 @@ export async function defineBinding(
   const kind = `plugin:${PLUGIN_ID}/binding`;
   let registered = false;
   try {
-    registered = !!objects && (await objects.kinds()).some((k) => k.kind === kind);
+    registered =
+      !!objects && (await objects.kinds()).some((k) => k.kind === kind);
   } catch {
     registered = false;
   }
   if (!objects || !registered) return session.addPropertyBinding(id, spec);
   let schema: unknown;
   try {
-    schema = typeof spec.schema === "string" ? JSON.parse(spec.schema) : spec.schema;
+    schema =
+      typeof spec.schema === "string" ? JSON.parse(spec.schema) : spec.schema;
   } catch {
     return { ok: false, reason: "the schema row is not JSON" };
   }
@@ -403,34 +503,77 @@ export async function defineBinding(
     ...(spec.missing ? { missing: spec.missing } : {}),
     ...(schema && typeof schema === "object" ? { schema } : {}),
   };
-  const out = await objects.batch([{ op: "create", kind, handle: id, props: { definition: JSON.stringify(definition) } }]);
-  return out.applied ? { ok: true } : { ok: false, reason: out.reason ?? "refused" };
+  const out = await objects.batch([
+    {
+      op: "create",
+      kind,
+      handle: id,
+      props: { definition: JSON.stringify(definition) },
+    },
+  ]);
+  return out.applied
+    ? { ok: true }
+    : { ok: false, reason: out.reason ?? "refused" };
 }
 
-function commands(host: BundleHost, session: DataSourceSession, panels: { bindings: string }): TypedCommandContribution[] {
+function commands(
+  host: BundleHost,
+  session: DataSourceSession,
+  panels: { bindings: string },
+): TypedCommandContribution[] {
   const spec = (id: string) => declared.commands.find((c) => c.id === id)!;
-  const cmd = <A>(id: string, handler: (args: A) => unknown): TypedCommandContribution =>
-    ({ id, title: spec(id).title, args: spec(id).args, handler: (_ctx: unknown, args: A) => handler(args) }) as TypedCommandContribution;
+  const cmd = <A>(
+    id: string,
+    handler: (args: A) => unknown,
+  ): TypedCommandContribution =>
+    ({
+      id,
+      title: spec(id).title,
+      args: spec(id).args,
+      handler: (_ctx: unknown, args: A) => handler(args),
+    }) as TypedCommandContribution;
   return [
-    cmd<{ selector: string; path: string; schema: string }>("media.paged.data.bindProperty", async (a) => {
-      // "Bind to data…" on a schema-driven field: remember the target and
-      // open the Bindings panel, which asks for the query and the expression.
-      session.setPropertyDraft({ selector: a.selector, path: a.path, schema: a.schema });
-      let opened = false;
-      try {
-        host.shell.openPanel(panels.bindings);
-        opened = true;
-      } catch {
-        opened = false; // headless: define it with media.paged.data.defineProperty
-      }
-      return { status: "draft", opened };
-    }),
-    cmd<{ id: string; selector: string; path: string; query: string; expr: string }>(
-      "media.paged.data.defineProperty",
-      async (a) => session.addPropertyBinding(a.id, { target: a.selector, path: a.path, query: a.query, expr: a.expr }),
+    cmd<{ selector: string; path: string; schema: string }>(
+      "media.paged.data.bindProperty",
+      async (a) => {
+        // "Bind to data…" on a schema-driven field: remember the target and
+        // open the Bindings panel, which asks for the query and the expression.
+        session.setPropertyDraft({
+          selector: a.selector,
+          path: a.path,
+          schema: a.schema,
+        });
+        let opened = false;
+        try {
+          host.shell.openPanel(panels.bindings);
+          opened = true;
+        } catch {
+          opened = false; // headless: define it with media.paged.data.defineProperty
+        }
+        return { status: "draft", opened };
+      },
     ),
-    cmd<{ address: string; path: string }>("media.paged.data.propertyBindings", (a) =>
-      session.propertyBindings({ ...(a.address ? { address: a.address } : {}), ...(a.path ? { path: a.path } : {}) }),
+    cmd<{
+      id: string;
+      selector: string;
+      path: string;
+      query: string;
+      expr: string;
+    }>("media.paged.data.defineProperty", async (a) =>
+      session.addPropertyBinding(a.id, {
+        target: a.selector,
+        path: a.path,
+        query: a.query,
+        expr: a.expr,
+      }),
+    ),
+    cmd<{ address: string; path: string }>(
+      "media.paged.data.propertyBindings",
+      (a) =>
+        session.propertyBindings({
+          ...(a.address ? { address: a.address } : {}),
+          ...(a.path ? { path: a.path } : {}),
+        }),
     ),
     cmd<Record<string, never>>("media.paged.data.refresh", async () => {
       await session.refreshData();
@@ -439,22 +582,41 @@ function commands(host: BundleHost, session: DataSourceSession, panels: { bindin
     cmd<{ record: number }>("media.paged.data.apply", async (a) => {
       await session.refreshData();
       if (a.record > 0) {
-        for (const b of session.listBindings()) await session.previewRecord(b.id, a.record);
+        for (const b of session.listBindings())
+          await session.previewRecord(b.id, a.record);
       } else {
         await session.lowerAll();
       }
       return session.getState().message;
     }),
-    cmd<{ name: string; csv: string }>("media.paged.data.defineSource", async (a) => {
-      await session.registerCsvSource(a.name, a.csv);
-      return session.getState().sources;
-    }),
-    cmd<{ name: string; record: number }>("media.paged.data.captureDataSet", (a) => session.captureDataSet(a.name, a.record)),
-    cmd<{ name: string }>("media.paged.data.applyDataSet", (a) => session.applyDataSet(a.name)),
-    cmd<{ save: boolean }>("media.paged.data.exportDataMergeTemplate", (a) => session.exportDataMergeTemplate({ save: a.save })),
+    cmd<{ name: string; csv: string }>(
+      "media.paged.data.defineSource",
+      async (a) => {
+        await session.registerCsvSource(a.name, a.csv);
+        return session.getState().sources;
+      },
+    ),
+    cmd<{ name: string; record: number }>(
+      "media.paged.data.captureDataSet",
+      (a) => session.captureDataSet(a.name, a.record),
+    ),
+    cmd<{ name: string }>("media.paged.data.applyDataSet", (a) =>
+      session.applyDataSet(a.name),
+    ),
+    cmd<{ save: boolean }>("media.paged.data.exportDataMergeTemplate", (a) =>
+      session.exportDataMergeTemplate({ save: a.save }),
+    ),
     // Data Merge from a script: the menu command's own path (merge-command.ts).
     cmd<MergeCommandArgs>("media.paged.data.merge", async (a) =>
-      mergeCommandResult(await runMergeCommand(host, session, panels.bindings, mergeOptionsOf(a ?? {})), session),
+      mergeCommandResult(
+        await runMergeCommand(
+          host,
+          session,
+          panels.bindings,
+          mergeOptionsOf(a ?? {}),
+        ),
+        session,
+      ),
     ),
   ];
 }
@@ -466,5 +628,8 @@ export function contributeObjectModel(
   panels: { bindings: string },
 ): Disposable | null {
   if (!host.supports("contribute.objectModel@1")) return null;
-  return host.contribute.objectModel({ kinds: kinds(host, session), commands: commands(host, session, panels) });
+  return host.contribute.objectModel({
+    kinds: kinds(host, session),
+    commands: commands(host, session, panels),
+  });
 }
