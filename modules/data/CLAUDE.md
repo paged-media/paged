@@ -223,10 +223,8 @@ bash scripts/build-wasm.sh
 bun install && bun run typecheck && bun run test
 bun run validate:manifest
 
-# Publishing (publish.yml, after green CI): a version already on npm must be
-# bumped when its inputs changed, and the tarball must carry DuckDB.
-bun scripts/package-hash.mjs --check
-bash scripts/pubcheck.sh <packed.tgz>
+# The bundle is a private workspace package, built into the editor and never
+# published on its own (PM-0008).
 
 # Oracles (docs/design/oracles.md): replays run in the suites above
 # (data-conformance oracle.rs / oracle_props.rs; bun test duckdb-sql-oracle +

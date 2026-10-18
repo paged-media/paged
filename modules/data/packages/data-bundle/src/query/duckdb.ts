@@ -39,8 +39,8 @@
 // only the imports the caller passes and no worker. DuckDB is an Emscripten
 // module that its own worker instantiates with its own imports, so the bundle
 // resolves the file URL and hands it to DuckDB's worker. The manifest
-// declaration stays the governance anchor: the plugin-cli size gate and
-// scripts/pubcheck.mjs check the shipped file against its maxBytes.
+// declaration stays the governance anchor: the paged-plugin size gate checks
+// the shipped file against its maxBytes.
 //
 // WHERE THE ENGINE COMES FROM (plugin-sdk ADR 326, the module door): the
 // boot first asks the HOST where it serves the declared `duckdb-engine`
