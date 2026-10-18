@@ -58,8 +58,8 @@ fn corpus_word_files() -> Option<Vec<PathBuf>> {
     };
     let switch = switch.to_string_lossy().into_owned();
     let root = if switch == "1" || switch.is_empty() {
-        // Default sibling layout: ~/paged/corpus next to
-        // ~/paged/plugins/plugin-doc.
+        // Default: the monorepo's <repo root>/corpus (gitignored; a
+        // local symlink to the private corpus).
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../corpus")
     } else {
         PathBuf::from(switch)
