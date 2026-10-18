@@ -683,8 +683,7 @@ pub(super) fn emit_text_path_into(
             let wght_bits = wght_for_font_style(resolved.font_style.as_deref()).to_bits();
             let owned_face: Option<paged_text::Face> =
                 if font_table.face(font_id, wght_bits).is_none() {
-                    let Some(mut rf) = paged_text::Face::from_slice(face_bytes_b.as_ref(), 0)
-                    else {
+                    let Some(mut rf) = paged_text::Face::from_bytes(&face_bytes_b, 0) else {
                         continue;
                     };
                     let wght_tag = ttf_parser::Tag::from_bytes(b"wght");

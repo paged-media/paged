@@ -12564,7 +12564,7 @@ impl CanvasModel {
         use paged_renderer::AssetResolver;
         let resolver = build_font_resolver(&self.font_registry, self.font_bytes.as_deref())?;
         let bytes = resolver.resolve_font(family, style)?;
-        let face = paged_text::Face::from_slice(&bytes, 0)?;
+        let face = paged_text::Face::from_bytes(&bytes, 0)?;
 
         let upem = face.units_per_em() as f32;
         if upem <= 0.0 {

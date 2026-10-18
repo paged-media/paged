@@ -1706,7 +1706,7 @@ impl SceneTextFaces {
             let Some((_, b)) = self.bytes.iter().find(|(k, _)| k == key) else {
                 continue;
             };
-            let Some(mut shape) = paged_text::Face::from_slice(b.as_ref(), 0) else {
+            let Some(mut shape) = paged_text::Face::from_bytes(b, 0) else {
                 continue;
             };
             let Ok(mut outline) = ttf_parser::Face::parse(b.as_ref(), 0) else {

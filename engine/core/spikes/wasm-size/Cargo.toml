@@ -17,7 +17,7 @@ crate-type = ["cdylib", "rlib"]
 # passes without a full WASM toolchain. The real target is wasm32; see
 # measure.sh in this directory.
 [dependencies]
-harfrust = "0.13"
+harfrust = "0.14"
 ttf-parser = "0.25"
 # Pulls in the full render stack so the measured artefact reflects
 # what a real browser deployment would ship.

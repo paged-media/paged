@@ -22,29 +22,24 @@
 //! through this function. Output is a `ShapedRun` whose advances are in
 //! 1/64 pt so downstream layout can stay in integer arithmetic.
 
-use harfrust::UnicodeBuffer;
+use std::sync::Arc;
 
 /// A font ready for both shaping and metric/table reads.
 ///
-/// harfrust splits the rustybuzz `Face` role in two: a zero-copy
-/// `FontRef` view plus a `ShaperData` cache holding the accelerated
-/// GSUB/GPOS/cmap lookups. Building `ShaperData` is the expensive part
-/// (rustybuzz paid the same cost inside `Face::from_slice`), so this
-/// wrapper owns one per face and every `shape_run` call derives a cheap
-/// per-call `Shaper` from it — cached faces (FontTable, the per-
-/// paragraph pools) therefore amortise the shaping tables exactly like
-/// they amortised the rustybuzz `Face`.
+/// The shaping side is a `harfrust::Font` (read-fonts' font model). It owns
+/// or shares its bytes and keeps the accelerated GSUB/GPOS/cmap lookups,
+/// built on the first shaping call, so cached faces (FontTable, the
+/// per-paragraph pools) amortise them; every `shape_run` call derives a
+/// cheap per-call `ShaperFont` from it.
 ///
 /// Metric reads (`units_per_em`, `ascender`, `variation_axes`,
 /// `outline_glyph`, …) go through a parallel `ttf_parser::Face` over
 /// the same bytes, exposed via `Deref` — the same surface the rustybuzz
 /// `Face` deref used to provide, so metric call sites are unchanged.
 pub struct Face<'a> {
-    font: harfrust::FontRef<'a>,
-    shaper_data: harfrust::ShaperData,
-    /// Variable-font position for the shaping side. `None` = default
-    /// (non-variable or all axes at default).
-    instance: Option<harfrust::ShaperInstance>,
+    /// At the variable-font position `set_variations` chose, or the
+    /// default location.
+    font: harfrust::Font,
     metrics: ttf_parser::Face<'a>,
 }
 
@@ -62,41 +57,54 @@ impl<'a> Face<'a> {
     /// shaping view or the metrics view rejects the bytes (matching the
     /// old `rustybuzz::Face::from_slice` contract of Option-on-parse-
     /// failure).
+    ///
+    /// The shaping side owns its data, so this copies the bytes once. A
+    /// caller holding the font in a [`bytes::Bytes`] shares it instead with
+    /// [`Face::from_bytes`].
     pub fn from_slice(data: &'a [u8], index: u32) -> Option<Self> {
-        let font = harfrust::FontRef::from_index(data, index).ok()?;
+        Self::new(data, harfrust::Font::new(data.to_vec(), index)?, index)
+    }
+
+    /// [`Face::from_slice`] without the copy: the shaping side keeps a
+    /// reference to `data`'s buffer.
+    pub fn from_bytes(data: &'a bytes::Bytes, index: u32) -> Option<Self> {
+        let shared: Arc<dyn AsRef<[u8]> + Send + Sync> = Arc::new(data.clone());
+        Self::new(data.as_ref(), harfrust::Font::new(shared, index)?, index)
+    }
+
+    fn new(data: &'a [u8], font: harfrust::Font, index: u32) -> Option<Self> {
         let metrics = ttf_parser::Face::parse(data, index).ok()?;
-        let shaper_data = harfrust::ShaperData::new(&font);
-        Some(Self {
-            font,
-            shaper_data,
-            instance: None,
-            metrics,
-        })
+        Some(Self { font, metrics })
     }
 
     /// Set variation-axis values on both the shaping and the metric
     /// side (rustybuzz's `set_variations` updated both through its
     /// single inner face; here the two views are updated in lockstep).
     pub fn set_variations(&mut self, variations: &[Variation]) {
-        self.instance = Some(harfrust::ShaperInstance::from_variations(
-            &self.font,
-            variations.iter().map(|v| harfrust::Variation {
-                tag: harfrust::Tag::new(&v.tag.to_bytes()),
-                value: v.value,
-            }),
-        ));
+        self.font = self
+            .font
+            .instance_builder()
+            .variations(variations.iter().map(|v| {
+                harfrust::font::Variation::new(harfrust::Tag::new(&v.tag.to_bytes()), v.value)
+            }))
+            .build();
         for v in variations {
             self.metrics.set_variation(v.tag, v.value);
         }
     }
 
     /// Derive a shaper for this face. Cheap — the heavy lookup caches
-    /// live in the wrapped `ShaperData`.
-    pub fn shaper(&self) -> harfrust::Shaper<'_> {
-        self.shaper_data
-            .shaper(&self.font)
-            .instance(self.instance.as_ref())
-            .build()
+    /// live in the wrapped `harfrust::Font`.
+    pub fn shaper(&self) -> harfrust::ShaperFont<'_, '_> {
+        harfrust::ShaperFont::new(&self.font)
+    }
+}
+
+impl Face<'static> {
+    /// [`Face::from_slice`] for bytes that live for the whole program: the
+    /// shaping side borrows them, without a copy.
+    pub fn from_static(data: &'static [u8], index: u32) -> Option<Self> {
+        Self::new(data, harfrust::Font::new(data, index)?, index)
     }
 }
 
@@ -579,7 +587,7 @@ pub fn shape_run_with_features_at(
     features: ShapingFeatures,
     pen: &mut f64,
 ) -> ShapedRun {
-    let mut buf = UnicodeBuffer::new();
+    let mut buf = harfrust::Buffer::new();
     // A TAB is blank ink that advances to a stop. The stop-snapping
     // pass keys on the `\t` byte in the paragraph text and needs the
     // glyph as its carrier, so the character stays in the stream —
@@ -607,9 +615,15 @@ pub fn shape_run_with_features_at(
     }
     buf.guess_segment_properties();
     let hr_features = features.to_harfrust();
-    let shaped = face
-        .shaper()
-        .shape(buf, harfrust::ShapeOptions::new().features(&hr_features));
+    // The buffer is fresh and has a direction, which is all `shape`
+    // checks for.
+    harfrust::shape(
+        &face.shaper(),
+        &mut buf,
+        harfrust::ShapeOptions::new().features(&hr_features),
+    )
+    .expect("a fresh buffer with a direction shapes");
+    let shaped = &buf;
 
     let units_per_em = face.units_per_em() as f32;
     let scale = point_size * ADVANCE_PRECISION / units_per_em;

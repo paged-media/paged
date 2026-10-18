@@ -2431,8 +2431,8 @@ pub(super) fn build_document_inner(
     // The font table pre-resolves every distinct (family, style)
     // referenced anywhere in the document so each paragraph picks up
     // the right TTF without re-querying the resolver. Per paragraph
-    // we still build `Face`s on demand — `paged_text::Face::from_slice`
-    // is cheap (parses font tables, no allocation churn).
+    // we still build `Face`s on demand — `paged_text::Face::from_bytes`
+    // is cheap (parses font tables and shares the buffer, no copy).
     // Group transparency pass: bracket every group's emitted frame
     // range with `BeginBlendGroup` / `EndBlendGroup` whenever the
     // group's `<TransparencySetting>` has non-default values. Runs
@@ -6771,7 +6771,7 @@ fn emit_paragraph_lines(
             .face(bytes_font_ids[i], wghts[i].to_bits())
             .is_none()
         {
-            let Some(mut rf) = paged_text::Face::from_slice(bytes_ref, 0) else {
+            let Some(mut rf) = paged_text::Face::from_bytes(&bytes_pool[i], 0) else {
                 return;
             };
             if has_wght_axis {
@@ -7764,7 +7764,7 @@ fn emit_paragraph_lines(
             [0, 1].map(|i| {
                 let b = pair[i].as_ref()?;
                 Some((
-                    paged_text::Face::from_slice(b, 0)?,
+                    paged_text::Face::from_bytes(b, 0)?,
                     ttf_parser::Face::parse(b, 0).ok()?,
                     font_id(b) ^ 400f32.to_bits(),
                 ))

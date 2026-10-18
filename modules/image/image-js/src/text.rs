@@ -281,9 +281,10 @@ pub fn rasterize_run(
 
     // SHAPE. `guess_segment_properties` reads script, direction and
     // language off the text itself, which is what makes a right-to-left
-    // run come out right without the caller declaring anything.
-    let data = harfrust::ShaperData::new(&font);
-    let shaper = data.shaper(&font).build();
+    // run come out right without the caller declaring anything. The
+    // shaper's font model owns its bytes, so it takes a copy.
+    let shaping_font = harfrust::Font::new(font_bytes.to_vec(), 0)?;
+    let shaper = harfrust::ShaperFont::new(&shaping_font);
 
     let upem = shaper.units_per_em() as f32;
     if upem <= 0.0 {
@@ -347,19 +348,26 @@ pub fn rasterize_run(
     // widest line before ANY line can be placed, so measuring first is
     // not an optimisation, it is the only order that works.
     let shape_line = |line: &str| {
-        let mut buf = harfrust::UnicodeBuffer::new();
+        let mut buf = harfrust::Buffer::new();
         buf.push_str(line);
         buf.guess_segment_properties();
-        shaper.shape(buf, &features)
+        // A fresh buffer with a direction is all `shape` checks for.
+        harfrust::shape(
+            &shaper,
+            &mut buf,
+            harfrust::ShapeOptions::new().features(&features),
+        )
+        .expect("a fresh buffer with a direction shapes");
+        buf
     };
-    let advance_of = |shaped: &harfrust::GlyphBuffer| -> f32 {
+    let advance_of = |shaped: &harfrust::Buffer| -> f32 {
         shaped
             .glyph_positions()
             .iter()
             .map(|p| p.x_advance as f32 * scale * style.h_scale + track_px)
             .sum()
     };
-    let shaped_lines: Vec<Option<harfrust::GlyphBuffer>> = lines
+    let shaped_lines: Vec<Option<harfrust::Buffer>> = lines
         .iter()
         .map(|l| {
             if l.is_empty() {

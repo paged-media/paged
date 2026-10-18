@@ -202,7 +202,7 @@ pub(super) fn compose_footnote_paragraphs(
             let mut owned_faces: Vec<Option<paged_text::Face>> =
                 Vec::with_capacity(bytes_pool.len());
             for (i, b) in bytes_pool.iter().enumerate() {
-                let face = paged_text::Face::from_slice(b.as_ref(), 0).map(|mut rf| {
+                let face = paged_text::Face::from_bytes(b, 0).map(|mut rf| {
                     let has_wght = ttf_parser::Face::parse(b.as_ref(), 0)
                         .ok()
                         .map(|of| of.variation_axes().into_iter().any(|a| a.tag == wght_tag))

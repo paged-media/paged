@@ -1296,14 +1296,13 @@ dependencies = [
 
 [[package]]
 name = "harfrust"
-version = "0.13.3"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "948d0741125ba89cd3e1c23e5642415b6ade7e1d29d67ba25fb925b533e989d6"
+checksum = "86aa776d6d32b072119e1f1650f4db843ff4382a4aaa6a2c9c4e35703cd377cb"
 dependencies = [
  "bitflags 2.13.2",
  "bytemuck",
- "once_cell",
- "read-fonts 0.43.3",
+ "read-fonts 0.45.1",
  "smallvec",
 ]
 
@@ -2777,6 +2776,7 @@ name = "paged-text"
 version = "0.0.0"
 dependencies = [
  "blake3",
+ "bytes",
  "harfrust",
  "hypher",
  "paged-scene",
@@ -3270,6 +3270,19 @@ dependencies = [
  "bytemuck",
  "font-types 0.12.7",
  "once_cell",
+]
+
+[[package]]
+name = "read-fonts"
+version = "0.45.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4edc8db0d972de88e53a085b1f01fb3fbdae7bb0cb7a0ce2b2f8285a412fe3ef"
+dependencies = [
+ "bytemuck",
+ "foldhash",
+ "font-types 0.12.7",
+ "once_cell",
+ "yoke",
 ]
 
 [[package]]

@@ -2543,8 +2543,7 @@ fn measure_cell_paragraph(
             .face(bytes_font_ids[i], wghts[i].to_bits())
             .is_none()
         {
-            let bytes_ref = bytes_pool[i].as_ref();
-            let Some(mut rf) = paged_text::Face::from_slice(bytes_ref, 0) else {
+            let Some(mut rf) = paged_text::Face::from_bytes(&bytes_pool[i], 0) else {
                 return Vec::new();
             };
             let has_wght_axis = rf
@@ -2798,7 +2797,7 @@ pub(super) fn emit_cell_paragraph(
             .face(bytes_font_ids[i], wghts[i].to_bits())
             .is_none()
         {
-            let Some(mut rf) = paged_text::Face::from_slice(bytes_ref, 0) else {
+            let Some(mut rf) = paged_text::Face::from_bytes(&bytes_pool[i], 0) else {
                 return;
             };
             if has_wght_axis {

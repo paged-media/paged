@@ -413,7 +413,7 @@ impl FontTable {
             //     bytes ends up in distinct cache slots.
             let bytes_static: &'static [u8] =
                 unsafe { std::mem::transmute::<&[u8], &'static [u8]>(buf.as_ref()) };
-            let Some(mut face) = paged_text::Face::from_slice(bytes_static, 0) else {
+            let Some(mut face) = paged_text::Face::from_static(bytes_static, 0) else {
                 continue;
             };
             // Only bake a wght variation when the face actually exposes
