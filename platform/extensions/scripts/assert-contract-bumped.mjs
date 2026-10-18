@@ -97,7 +97,11 @@ const blameIgnored = new Set(
     try {
       // A bare `<rev>:<path>` resolves from the repository root, where the
       // file lives.
-      return git(["show", "HEAD:.git-blame-ignore-revs"]).split("\n");
+      return execFileSync("git", ["show", "HEAD:.git-blame-ignore-revs"], {
+        cwd: root,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }).split("\n");
     } catch {
       return [];
     }
