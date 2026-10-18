@@ -97,7 +97,7 @@ import {
 import { pageOriginOf, storedTransformOf } from "../page-origin";
 import { engineOpVocabulary } from "./join-average";
 import { frameTransformMutationFor } from "./objects-on-path";
-import { batchMutationFor } from "./v59-wire";
+import { batchMutationFor } from "./batch-handles";
 
 import { registerCommand } from "../command-registry";
 export const TRANSFORM_COMMAND_CATEGORY = "Transform";

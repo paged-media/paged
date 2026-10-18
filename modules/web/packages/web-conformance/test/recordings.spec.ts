@@ -25,7 +25,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 const CHROME = fileURLToPath(new URL("../chrome/", import.meta.url));
 const WIDTHS = [240, 400];

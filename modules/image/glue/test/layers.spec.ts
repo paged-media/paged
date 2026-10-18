@@ -23,7 +23,7 @@
 // so the pixel proofs live in Rust (image-js/src/layers.rs's device
 // tests) and the undo proofs in image-graph's journal suite.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type { PluginManifest } from "@paged-media/plugin-api";

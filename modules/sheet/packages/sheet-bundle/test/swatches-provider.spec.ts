@@ -21,7 +21,7 @@
 // touch. Wiring + refusal semantics against a hand-rolled fake host; no
 // editor, no engine.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import type { BundleHost, Mutation, SwatchSummary } from "@paged-media/plugin-api";
 import { paletteEntry } from "../../sheet-host-model/src";
@@ -31,7 +31,6 @@ import {
   makeSwatchesBindingProvider,
   SERVED_OPS,
 } from "../src/binding-provider/swatches-provider";
-import { supportsBindingProviders } from "../src/binding-provider/adr023-seam";
 
 const CHART_BLUE = paletteEntry("chart", "4E79A7");
 const BAR_GREY = paletteEntry("dataBar", "638EC6");
@@ -298,35 +297,22 @@ describe("sheet_plugin_swatch_provider: the structural write", () => {
 });
 
 describe("sheet_plugin_swatch_provider: the honest door", () => {
-  it("reports NO binding-provider support when the host lacks the door", () => {
-    const host = {
-      contribute: {},
-      supports: () => false,
-      log: { debug() {}, info() {}, warn() {}, error() {} },
-    } as unknown as BundleHost;
-    expect(supportsBindingProviders(host)).toBe(false);
-  });
-
-  it("reports NO support when the door exists but no registry is wired", () => {
-    const host = {
-      contribute: { bindingProvider: () => ({ dispose() {}, invalidate() {} }) },
-      supports: (f: string) => f !== "bindings.provider@1",
-      log: { debug() {}, info() {}, warn() {}, error() {} },
-    } as unknown as BundleHost;
-    expect(supportsBindingProviders(host)).toBe(false);
-  });
-
   it("activate() registers the provider for the `sheet` context when both hold", () => {
     const registered: { contextType: string }[] = [];
     let disposed = 0;
     const host = {
       manifest: sheetBundle.manifest,
       log: { debug() {}, info() {}, warn() {}, error() {} },
+      // The document doors every host has; nothing here fires them.
+      document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
       supports: (f: string) =>
         f === "contribute.objectType@1" ||
         f === "contribute.editContext@1" ||
         f === "bindings.provider@1",
       contribute: {
+        objectModel: () => ({ changed() {}, dispose() {} }),
+        keybinding: () => ({ dispose() {} }),
+        menu: () => ({ dispose() {} }),
         panel: () => ({ dispose() {} }),
         command: () => ({ dispose() {} }),
         objectType: () => ({ dispose() {} }),
@@ -361,9 +347,14 @@ describe("sheet_plugin_swatch_provider: the honest door", () => {
     const host = {
       manifest: sheetBundle.manifest,
       log: { debug() {}, info() {}, warn() {}, error() {} },
+      // The document doors every host has; nothing here fires them.
+      document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
       supports: (f: string) =>
         f === "contribute.objectType@1" || f === "contribute.editContext@1",
       contribute: {
+        objectModel: () => ({ changed() {}, dispose() {} }),
+        keybinding: () => ({ dispose() {} }),
+        menu: () => ({ dispose() {} }),
         panel: () => ({ dispose() {} }),
         command: () => ({ dispose() {} }),
         objectType: () => ({ dispose() {} }),
@@ -377,7 +368,7 @@ describe("sheet_plugin_swatch_provider: the honest door", () => {
     } as unknown as BundleHost;
 
     sheetBundle.activate(host).dispose();
-    // The degradation is honest: on a pre-ADR host the shared Swatches
+    // The degradation is honest: with no registry the shared Swatches
     // panel keeps reading core, and nothing throws.
     expect(registered).toEqual([]);
   });

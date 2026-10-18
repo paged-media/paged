@@ -23,7 +23,7 @@
 // (CI runs it); this asserts the same invariants in-process so the row
 // carries a real test lane.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import manifest from "../manifest.json";
 

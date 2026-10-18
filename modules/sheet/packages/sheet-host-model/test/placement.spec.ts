@@ -20,7 +20,7 @@
 // placement: sizes the box from the IR's summed width/height, clamps to
 // a max, sits at the fixed inset. Pure geometry.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   DEFAULT_INSET_PT,

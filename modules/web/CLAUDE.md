@@ -17,7 +17,7 @@ fragmentation → the bundle's engine wasm).
 
 - **`web-model` stays pure** — zero deps, no DOM APIs (the linter is a
   scanner, not a parser; it must never crash on bad input). Every
-  behavior change lands with a vitest case.
+  behavior change lands with a unit test.
 - **The bundle touches host surfaces + React only.** No
   `@paged-media/shell`/`client` imports — selection reactivity comes
   from `host.selection.onDidChange`, persistence from `host.storage`,
@@ -74,8 +74,11 @@ fragmentation → the bundle's engine wasm).
   uppercase kickers, mono tabular code, hairline borders, no hardcoded
   chrome hexes. Content colours (the preview's paper white) stay
   literal by design.
-- **Contract pins:** `@paged-media/plugin-api` / `plugin-sdk` are exact npm
-  devDependency pins (peers keep a `>=` floor); `sdk-pin.spec.ts` checks it.
+- **Contract:** `@paged-media/plugin-api` / `plugin-sdk` come from the
+  workspace (`workspace:*`, dev and peer); the repo-wide
+  `tooling/js/check-workspace-deps.mjs` checks it. Every door of the in-tree
+  contract exists at this revision, so call it directly; probe
+  `host.supports()` only for a backend a host may not wire.
 - **Engine wasm freshness:** after any Rust change run
   `bash scripts/build-wasm.sh --engine` (wasm-bindgen-cli must equal the
   version in `packages/web-render/Cargo.lock`); `wasm-fresh.spec.ts` fails on
@@ -85,9 +88,9 @@ fragmentation → the bundle's engine wasm).
 ## Commands
 
 ```bash
-pnpm install && bash scripts/build-wasm.sh --engine
-pnpm -r typecheck && REQUIRE_REAL_ENGINE=1 pnpm -r test
+bun install && bash scripts/build-wasm.sh --engine
+bun run typecheck && REQUIRE_REAL_ENGINE=1 bun run test
 (cd packages/web-render && cargo fmt --check && cargo clippy --all-targets --features blitz -- -D warnings && cargo test --features blitz)
-# The same through Moon, from anywhere: engine wasm + vitest, and web-render's lanes
+# The same through Moon, from anywhere: engine wasm + bun test, and web-render's lanes
 moon run web:test web-render:test
 ```

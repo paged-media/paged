@@ -28,7 +28,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -54,7 +54,7 @@ const wasmPath = binDir + "blitz_web_bg.wasm";
 const artifactPresent = existsSync(gluePath) && existsSync(wasmPath);
 
 // DUAL GATE (mirrors engine.spec.ts): locally a missing engine artifact
-// SKIPS this conformance suite; in CI the vitest workflow builds the
+// SKIPS this conformance suite; in CI the unit-test workflow builds the
 // artifact and sets REQUIRE_REAL_ENGINE=1, under which a missing artifact
 // FAILS instead of skipping — the bake conformance can never silently
 // fall out of CI on a skip gate.
@@ -64,7 +64,7 @@ if (process.env.REQUIRE_REAL_ENGINE === "1" && !artifactPresent) {
       throw new Error(
         `REQUIRE_REAL_ENGINE=1 but ${wasmPath} (or its glue) is missing — ` +
           "build it with `bash scripts/build-wasm.sh --engine` (CI must " +
-          "build the artifact before running vitest; skipping is not allowed here)",
+          "build the artifact before running bun test; skipping is not allowed here)",
       );
     });
   });

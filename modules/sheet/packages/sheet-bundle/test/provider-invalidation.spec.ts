@@ -3,7 +3,7 @@
 // selection move or an edit inside the selection, the swatches provider
 // only on unclassified changes. Pure: a fake session signal.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   a1Bounds,

@@ -55,9 +55,10 @@ in the private package `@paged-media/image-manifest`: `pnpm validate:manifest` a
 "validate manifest" step of CI check this file, and 14 of the 19 spec files in `glue/test/`
 import it. No script copies one to the other; the test "is byte-identical to the validated
 manifest" in `glue/test/activate.spec.ts` fails when they differ. The wasm artefact is
-doubled the same way: `scripts/build-wasm.sh` writes it to `glue/wasm/` (committed; the
-bundle loads it from there) and copies it to `manifest/wasm/` (gitignored), where the
-manifest's path `wasm/image_js_bg.wasm` resolves from `manifest/`.
+doubled the same way: `scripts/build-wasm.sh` writes it to `glue/wasm/` (the bundle loads
+it from there) and copies it to `manifest/wasm/`, where the manifest's path
+`wasm/image_js_bg.wasm` resolves from `manifest/`. Both are build output (gitignored;
+`moon run image:wasm`, and in CI `.github/actions/module-wasm`).
 
 ## The wasm boundary
 
@@ -233,7 +234,7 @@ of at most 8 MiB. No code in `glue/src` calls a hit-test door or uses shared mem
   found (`image-conformance/src/device.rs`). CI runs on `ubuntu-latest`, which per the
   comment in `ci.yml` has none, so GPU output is compared with the scalar reference only
   on a machine with an adapter ([ADR 453](adr/453-tolerance-not-golden-bytes.md)).
-- TypeScript: `pnpm test` runs the import lint, then vitest in `glue/` against the SDK's
+- TypeScript: `pnpm test` runs the import lint, then `bun test` in `glue/` against the SDK's
   `createBundleHost` and a fake editor. `glue/test/wasm-exec.spec.ts` loads the committed
   module in Node and drives the CPU lanes; CI sets `REQUIRE_REAL_WASM=1`, which turns a
   missing module from a skip into a failure. The manifest validator is the `plugin-cli` of

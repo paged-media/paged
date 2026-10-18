@@ -23,7 +23,7 @@
 // face — without the document's own fonts seeing it. The same holds for a
 // face a source's `@font-face` rule loads from the container.
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
@@ -42,6 +42,13 @@ import { W1_EMPTY_PAGE } from "../fixtures/corpus";
 import { renamedFace } from "../fixtures/fonts";
 import { blitzPresent, primeBlitz, requireBlitz } from "./blitz";
 import { mapBacking, silent } from "./host";
+import { fileURLToPath } from "node:url";
+
+// The engine is this package's own @paged-media/canvas-wasm devDependency.
+// Without an anchor the headless harness resolves it from plugin-sdk's
+// install location, which in the root Bun workspace is whichever version the
+// store hoists, not the one this package pins.
+const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
 requireBlitz("web conformance — scene faces");
 
@@ -58,6 +65,7 @@ describe.skipIf(!blitzPresent)("web conformance — scene-layer faces (real host
     // scene-layer registry, never the document's.
     const send: Send = (m) => (h.host.editor as unknown as { client: { send: Send } }).client.send(m);
     h = await createHeadlessHost({
+      resolveFrom: ENGINE_ANCHOR,
       console: silent,
       storage: mapBacking(),
       assetSource: {

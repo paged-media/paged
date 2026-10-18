@@ -97,6 +97,6 @@ cargo deny check
 bash scripts/build-wasm.sh
 
 # TS (the bundle) — consumes the PUBLISHED @paged-media canaries (no link chain)
-pnpm install && pnpm typecheck && pnpm test
-pnpm validate:manifest
+bun install && bun run typecheck && bun run test
+bun run validate:manifest
 ```

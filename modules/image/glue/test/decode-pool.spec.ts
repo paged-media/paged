@@ -24,7 +24,7 @@
 // the codec output, a batch fans out across the pool, dispose terminates
 // every worker, and the honest null when the host wires no workers.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost, type WorkerBackend } from "@paged-media/plugin-sdk";
 import type { PagedEditor, PluginManifest } from "@paged-media/plugin-api";

@@ -6,7 +6,7 @@ like the rest of the repository (ADR PM-0001; it was MPL-2.0 OR PMEL before).
 
 ## What this is
 
-pnpm workspace with five packages (see README for the tier table):
+Five packages of the repository's root Bun workspace (see README for the tier table):
 `packages/plugin-api` (the contract, **type-only**), `packages/plugin-sdk`
 (the runtime: in-process `BundleHost` adapter, loader, gesture kit,
 object registry, headless host), `packages/plugin-cli` (zero-dep ESM CLI,
@@ -68,6 +68,6 @@ cites its proposal number, "ADR 323".
 ## Commands
 
 ```bash
-pnpm install && pnpm -r typecheck
+bun install && bun run typecheck
 node packages/plugin-cli/bin/paged-plugin.mjs validate <manifest.json>
 ```

@@ -1,4 +1,9 @@
 name: publish / ci
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # MONOREPO (step A3): ported from paged-media/plugin-publish
 # .github/workflows/ci.yml; runs in modules/publish.
@@ -12,7 +17,28 @@ on:
       # workspace settings), so an engine change can break it.
       - "engine/core/Cargo.toml"
       - "engine/core/crates/**"
+      # The engine's wasm packages the bundle specs boot (workspace:*), the
+      # rest of what builds them, and the extension contract.
+      - "engine/core/Cargo.lock"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
+      - ".github/actions/module-wasm/**"
+      - "platform/extensions/packages/plugin-api/**"
+      - "platform/extensions/packages/plugin-sdk/**"
       - ".github/workflows/publish-ci.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/publish/docs/**/*.md"
   pull_request:
     paths:
       - "modules/publish/**"
@@ -21,7 +47,28 @@ on:
       # workspace settings), so an engine change can break it.
       - "engine/core/Cargo.toml"
       - "engine/core/crates/**"
+      # The engine's wasm packages the bundle specs boot (workspace:*), the
+      # rest of what builds them, and the extension contract.
+      - "engine/core/Cargo.lock"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
+      - ".github/actions/module-wasm/**"
+      - "platform/extensions/packages/plugin-api/**"
+      - "platform/extensions/packages/plugin-sdk/**"
       - ".github/workflows/publish-ci.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/publish/docs/**/*.md"
 
 defaults:
   run:
@@ -53,6 +100,8 @@ jobs:
         with:
           workspaces: modules/publish -> target
           prefix-key: v0-rust-publish
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: fmt
         run: cargo fmt --all --check
@@ -96,30 +145,41 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          version: 10
-      - uses: actions/setup-node@v4
+          auto-install: true
+          proto-version: "0.63.1"
+      - name: cache Bun's package cache
+        uses: actions/cache@v4
         with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: modules/publish/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm -r --filter "./packages/*" typecheck
-      - run: pnpm -r --filter "./packages/*" build
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      # pdf-bundle's build bundles the pdf-import mapper's glue
+      # (packages/pdf-bundle/bin/pdf_import.js), a build output since B3b.
+      - name: module wasm (publish)
+        uses: ./.github/actions/module-wasm
+        with: { module: publish }
+      # One install for the whole root workspace (bun.lock).
+      - name: bun install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
+      - run: bun run --filter './packages/*' typecheck
+      - run: bun run --filter './packages/*' build
       - name: validate every bundle manifest
         run: |
           set -e
           for m in packages/*/manifest.json; do
             echo "== validate $m =="
-            npx --yes @paged-media/plugin-cli@canary validate "$m"
+            node "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs" validate "$m"
           done
 
   # Test evidence — the suites this repo has always had and CI never ran.
   # `check` covers fmt/clippy/build and `bundle` covers typecheck/build, so a
   # green run said nothing about whether the Rust tests (pdf-import; the
   # idml-import ones run in core-ci.yml since the adapter moved to
-  # engine/core) or the pdf-bundle vitest specs still passed. The state matrix
+  # engine/core) or the pdf-bundle unit specs (bun test) still passed. The state matrix
   # read plugin.publish "never published" for the same reason.
   #
   # Evidence hand-off is INVERTED (2026-07-26): this repo is PUBLIC and the
@@ -128,7 +188,8 @@ jobs:
   tests:
     name: tests (evidence)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # A cold engine wasm build (a cache miss) adds most of the time.
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
@@ -143,6 +204,8 @@ jobs:
         with:
           workspaces: modules/publish -> target
           prefix-key: v0-rust-publish
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@nextest
 
       # Red results must still publish (the matrix wants the ✗), so the run
@@ -163,30 +226,45 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - uses: pnpm/action-setup@v4
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          version: 10
-      - uses: actions/setup-node@v4
+          auto-install: true
+          proto-version: "0.63.1"
+      - name: cache Bun's package cache
+        uses: actions/cache@v4
         with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: modules/publish/pnpm-lock.yaml
-      - run: pnpm install --frozen-lockfile
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      # The engine's wasm packages (canvas-wasm, workspace:*), which the
+      # bundles' command specs boot.
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
+      # The pdf-import mapper wasm (packages/pdf-bundle/bin/pdf_import*,
+      # build output), which pdf-bundle's mapper specs load.
+      - name: module wasm (publish)
+        uses: ./.github/actions/module-wasm
+        with: { module: publish }
+      # One install for the whole root workspace (bun.lock).
+      - name: bun install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
 
-      # Only packages that DECLARE a test script. `pnpm -r exec vitest run`
-      # runs it everywhere, and vitest exits non-zero in a package with no
-      # test files ("No test files found") — which set the failure flag on the
-      # first run here even though all 170 Rust and 18 TS tests passed. A gate
-      # that fires on a package having no tests is a gate nobody will believe.
-      - name: vitest → JUnit
+      # Only packages that DECLARE a test script (both do today). bun test
+      # writes its own JUnit shape; tooling/js/bun-junit.mjs rewrites it into
+      # the vitest shape the evidence has always had (classname = spec path,
+      # name = "describe > title"), so the uploaded test ids stay the same.
+      - name: bun test → JUnit
         run: |
           set -uo pipefail
           for d in packages/*/; do
-            node -e "process.exit(require('./${d}package.json').scripts?.test ? 0 : 1)" \
+            bun -e "process.exit(require('./${d}package.json').scripts?.test ? 0 : 1)" \
               2>/dev/null || continue
-            echo "== vitest in $d"
-            (cd "$d" && pnpm exec vitest run --reporter=default \
-              --reporter=junit --outputFile=junit.xml) \
+            echo "== bun test in $d"
+            (cd "$d" && bun run test --reporter=junit --reporter-outfile=junit.bun.xml) \
+              || echo "TS_FAILED=1" >> "$GITHUB_ENV"
+            bun ../../tooling/js/bun-junit.mjs --out "${d}junit.xml" "${d}junit.bun.xml" \
               || echo "TS_FAILED=1" >> "$GITHUB_ENV"
           done
           ls packages/*/junit.xml
@@ -197,7 +275,7 @@ jobs:
       # publish-bundle one and its declared plugin-pdf/vitest lane sat
       # "never published" (state ingest/artifacts.yaml, 2026-08-17 audit).
       # Artifact names pair with state's pull table: vitest-junit-<package>.
-      - name: upload pdf-bundle vitest artifact
+      - name: upload pdf-bundle JUnit artifact
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
@@ -206,16 +284,15 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # publish-bundle declares no test script yet, so this uploads nothing
-      # today (warn, not error) — the lane starts feeding the day its first
-      # vitest lands, with no workflow change.
-      - name: upload publish-bundle vitest artifact
+      # The artifact names keep their `vitest-` prefix: the evidence pull
+      # addresses them by name.
+      - name: upload publish-bundle JUnit artifact
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: vitest-junit-publish-bundle
           path: modules/publish/packages/publish-bundle/junit.xml
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
       - name: tests failed

@@ -82,7 +82,7 @@ import {
   batchMutationFor,
   bindCreatedMutationFor,
   handleElementId,
-} from "../commands/v59-wire";
+} from "../commands/batch-handles";
 
 /** Paintbrush + Blob Brush nib — the DEFAULTS (6pt base size, 45° nib
  *  angle, roundness 0.3). They were the only nib until the tools grew

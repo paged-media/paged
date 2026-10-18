@@ -176,10 +176,11 @@ application on the main thread; no bundle is discovered or loaded from a URL at 
   during activation is reported to the journal and the Problems panel, and the rest load.
 - The worker backend resolves a bundle's declared module path only from a table the editor
   ships; the table has one entry, the image plugin's decode worker.
-- One bundle is not consumed as a pinned package: the root `package.json` overrides
-  `@paged-media/doc` with a `link:` to a sibling checkout of plugin-doc, which `tests.yml` and
-  `showcase-nightly.yml` check out and build first (`.github/actions/plugin-doc-from-source/action.yml`);
-  `playground.yml` does not.
+- Every bundle, the contract and the engine's wasm packages are workspace packages
+  (`workspace:*`), consumed from source in the same checkout. Where a bundle's engine wasm
+  is a build output (doc, slide, sheet, data, web), CI builds it first
+  (`.github/actions/module-wasm`), and the engine's packages likewise
+  (`.github/actions/engine-wasm`).
 - `scripts/wasm-budget.mjs` fails when the distinct `.wasm` files the application can
   resolve sum to more than 100 MB
   ([plugin-sdk ADR 308](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/308-plugin-wasm.md)).

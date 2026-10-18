@@ -22,7 +22,7 @@
 // session down cleanly (the honesty smoke test). Engine behavior is NOT
 // exercised here — this is wiring only.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type {
   BundleHost,
@@ -58,6 +58,8 @@ function fakeHost() {
   const host = {
     manifest: sheetBundle.manifest,
     log: { debug() {}, info() {}, warn() {}, error() {} },
+    // The document doors every host has; nothing here fires them.
+    document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
     // The IO contribution doors are wired; the host file picker is NOT,
     // so importXlsx exercises the panel-fallback path (S-11 fallback).
     supports: (f: string) =>
@@ -67,6 +69,9 @@ function fakeHost() {
       f === "contribute.editContext@1" ||
       f === "contribute.schemaPanel@1",
     contribute: {
+      objectModel: () => ({ changed() {}, dispose() {} }),
+      keybinding: () => ({ dispose() {} }),
+      menu: () => ({ dispose() {} }),
       panel(c: PanelContribution): Disposable {
         panels.push(c);
         return track();

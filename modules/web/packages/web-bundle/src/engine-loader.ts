@@ -193,7 +193,7 @@ export interface LoadEngineOptions {
   importGlue?: () => Promise<BlitzGlue>;
 }
 
-/** True when running under Node (vitest / headless conformance), false in
+/** True when running under Node (bun test / headless conformance), false in
  *  the browser (the editor). Branches the glue's wasm-instantiation path. */
 function isNode(): boolean {
   return (

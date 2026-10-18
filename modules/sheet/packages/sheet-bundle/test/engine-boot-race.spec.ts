@@ -38,7 +38,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WASM = join(HERE, "..", "bin", "sheet_js_bg.wasm");
@@ -66,11 +67,11 @@ describe.skipIf(!built && !required)(
     beforeAll(() => {
       expect(existsSync(WASM), `${WASM} missing — run scripts/build-wasm.sh`).toBe(true);
       (globalThis as { window?: unknown }).window = globalThis; // the browser branch
-      vi.stubGlobal("fetch", delayedWasmFetch);
+      stubGlobal("fetch", delayedWasmFetch);
     });
     afterAll(() => {
       delete (globalThis as { window?: unknown }).window;
-      vi.unstubAllGlobals();
+      unstubAllGlobals();
     });
 
     it("an engine booted alongside another still reads its workbook (list_freeze_panes)", async () => {

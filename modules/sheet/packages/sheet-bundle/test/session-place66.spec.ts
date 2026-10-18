@@ -17,20 +17,15 @@
  */
 
 // The ONE-CALL placement (protocol 66: core resolves a table handle in a
-// `tableId` / `table_id` position, 0eff96b). On a 66 host the frame, its
-// binding, the table, the pour, the decor and the text styles are one
-// `mutate`. On a host without a 66 door (`withoutDoors66` over the real
-// core) it is never sent; when it is sent anyway and refused (a core that
-// resolves no table handle, `refusingTableHandles`), the placement falls
-// back to the two-batch path and remembers the refusal.
-//
-// The 66 host is `withTableHandles66` (test/perf/workload.ts) over the REAL
-// headless core: the engine applies what 66 would, the bundle makes one call.
+// `tableId` / `table_id` position, 0eff96b): the frame, its binding, the
+// table, the pour, the decor and the text styles are one `mutate`, over the
+// REAL headless core. When the engine refuses that batch
+// (`refusingTableHandles`), the placement falls back to the two-batch path.
 //
 // Real engine: skipped without the wasm artifact, FAILS under
 // REQUIRE_REAL_ENGINE=1 (the engine-real.spec.ts dual gate).
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -48,10 +43,7 @@ import {
   refusingTableHandles,
   settle,
   sheetHost,
-  withDoors66,
   withSceneChannel,
-  withTableHandles66,
-  withoutDoors66,
 } from "./perf/workload";
 
 if (process.env.REQUIRE_REAL_ENGINE === "1" && !ENGINE_BUILT) {
@@ -76,7 +68,7 @@ async function textFrames(host: BundleHost): Promise<string[]> {
 }
 
 describe.skipIf(!ENGINE_BUILT)("one-call placement [sheet.lower.page]", () => {
-  vi.setConfig({ testTimeout: 60_000 });
+  setDefaultTimeout(60_000);
   let h: HeadlessHost;
   let raw: BundleHost;
   const sessions: WorkbookSession[] = [];
@@ -99,9 +91,9 @@ describe.skipIf(!ENGINE_BUILT)("one-call placement [sheet.lower.page]", () => {
     return s;
   }
 
-  it("a 66 host places frame, table and content in ONE mutate", async () => {
+  it("the host places frame, table and content in ONE mutate", async () => {
     const tally = new Tally();
-    const { host } = countingHost(withTableHandles66(h, raw), tally);
+    const { host } = countingHost(raw, tally);
     const s = await placeOn(host);
     tally.work.reset();
     const frame = await s.lowerSelection();
@@ -141,7 +133,7 @@ describe.skipIf(!ENGINE_BUILT)("one-call placement [sheet.lower.page]", () => {
   });
 
   it("a later session finds a one-call table by reading the page [sheet.plugin.persistence]", async () => {
-    const a = await placeOn(withTableHandles66(h, raw));
+    const a = await placeOn(raw);
     const frame = await a.lowerSelection();
     await settle();
     await a.flushPersist();
@@ -171,34 +163,12 @@ describe.skipIf(!ENGINE_BUILT)("one-call placement [sheet.lower.page]", () => {
     ).toBeTruthy();
   });
 
-  it("a host with no 66 door: never sent, two mutates as before", async () => {
+  it("a refused one-call batch: rolled back, then the two-batch placement", async () => {
+    // The engine under test resolves the table handle; the wrapper refuses
+    // the one-call batch, and the placement must still land exactly once.
     const tally = new Tally();
-    const { host } = countingHost(withoutDoors66(raw), tally);
+    const { host } = countingHost(refusingTableHandles(raw), tally);
     const s = await placeOn(host);
-    tally.work.reset();
-    expect(await s.lowerSelection()).not.toBeNull();
-    await settle();
-    expect(tally.work.count("document.mutate")).toBe(2);
-    expect(tally.work.rejected).toBe(0);
-    expect(tally.work.mutations.some((m) => (m.kinds.bindCreated ?? 0) > 1)).toBe(false);
-  });
-
-  it("a 66 signal over a core without table handles: refused once, rolled back, two-batch placement, remembered", async () => {
-    // `minted` is a 66 door; a pre-66 core does not resolve the table
-    // handle, so the one-call batch is refused and the placement must still
-    // land exactly once. (The engine under test resolves it; the wrapper
-    // refuses that batch as the 0.64 core did.)
-    const tally = new Tally();
-    const { host } = countingHost(
-      refusingTableHandles(withDoors66(h, withoutDoors66(raw), { minted: true })),
-      tally,
-    );
-    const s = await placeOn(host);
-    // The first placement knows nothing yet (two batches); its outcome
-    // carries `minted` — the 66 signal.
-    expect(await s.lowerSelection()).not.toBeNull();
-    await settle();
-    expect(tally.work.rejected).toBe(0);
     const tablesBefore = (await exportedTableCells(h)).length;
     const treeBefore = JSON.stringify(await raw.document.tree());
     const framesBefore = await textFrames(raw);
@@ -216,22 +186,20 @@ describe.skipIf(!ENGINE_BUILT)("one-call placement [sheet.lower.page]", () => {
     expect(tables).toHaveLength(tablesBefore + 1);
     expect(tables[tablesBefore].get("2:1")).toBe("21");
     // Two undo steps (the two batches) and the page is as it was: the
-    // refused attempt left no step behind. (Core 0.64 refusing the batch
-    // itself left the refused frame's empty STORY in its model — a
-    // rolled-back insertTextFrame kept its ParentStory, with no frame and
-    // not exported; not asserted here.)
+    // refused attempt left no step behind.
     await raw.document.undo();
     await raw.document.undo();
     await settle();
     expect(JSON.stringify(await raw.document.tree())).toBe(treeBefore);
     expect(await exportedTableCells(h)).toHaveLength(tablesBefore);
 
-    // Remembered: the next placement does not try again.
+    // A refusal is about that batch, not the host: the next placement
+    // tries the one call again.
     tally.work.reset();
     s.setRange("A1:A2");
     expect(await s.lowerSelection()).not.toBeNull();
     await settle();
-    expect(tally.work.count("document.mutate")).toBe(2);
-    expect(tally.work.rejected).toBe(0);
+    expect(tally.work.count("document.mutate")).toBe(3);
+    expect(tally.work.rejected).toBe(1);
   });
 });

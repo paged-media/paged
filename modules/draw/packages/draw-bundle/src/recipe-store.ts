@@ -138,11 +138,7 @@ const asciiJson = (text: string): string =>
 
 /** Does this host carry the undoable label lane? */
 export function labelled(host: RecipeHost): boolean {
-  return (
-    typeof host.document?.getDocumentMetadata === "function" &&
-    typeof host.document?.setDocumentMetadata === "function" &&
-    host.supports(RECIPE_LABEL_FEATURE)
-  );
+  return host.supports(RECIPE_LABEL_FEATURE);
 }
 
 /** The recipes map out of a document envelope (tolerant). */

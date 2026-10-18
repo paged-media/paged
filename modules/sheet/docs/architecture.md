@@ -215,7 +215,7 @@ The manifest declares `document` (read `broad`, write `scoped`), `rendering` (`h
   `coverage-gate`, which fails when a registry row marked `implemented` names no test or
   one that is not on disk ([ADR 507](adr/507-golden-corpora-coverage-gate.md)). A third job
   builds the wasm.
-- TypeScript lane: `pnpm test` runs the import lint, then vitest in both packages (29 spec
+- TypeScript lane: `pnpm test` runs the import lint, then `bun test` in both packages (29 spec
   files; the bundle specs use hand-built fake hosts). `.github/workflows/vitest.yml` runs on
   pushes to `main` and on manual dispatch, not on pull requests. It builds the wasm first and sets
   `REQUIRE_REAL_ENGINE=1`, so the real-engine spec fails instead of skipping when the

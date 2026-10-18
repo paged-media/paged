@@ -13,20 +13,20 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "tsup",
-    "test": "vitest run"
+    "test": "bun test --parallel"
   },
   "peerDependencies": {
-    "@paged-media/plugin-api": ">=0.2.44-canary.0",
-    "@paged-media/plugin-sdk": ">=0.2.44-canary.0"
+    "@paged-media/plugin-api": "workspace:*",
+    "@paged-media/plugin-sdk": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "20.19.39",
+    "@types/node": "catalog:",
     "tsup": "^8.3.5",
-    "typescript": "^5.6.3",
-    "@paged-media/plugin-api": "0.2.45-canary.0",
-    "@paged-media/plugin-sdk": "0.2.45-canary.0",
-    "@paged-media/canvas-wasm": "0.71.1",
-    "vitest": "^3.2.7"
+    "typescript": "catalog:",
+    "@paged-media/plugin-api": "workspace:*",
+    "@paged-media/plugin-sdk": "workspace:*",
+    "@paged-media/canvas-wasm": "workspace:*",
+    "@types/bun": "catalog:"
   },
   "files": [
     "dist",

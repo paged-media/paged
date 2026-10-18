@@ -40,6 +40,7 @@ function fakeHost() {
     selection: { get: () => [], set: async () => [] },
     network: { consentedOrigins: () => [], requestConsent: async () => ({ granted: [], denied: [] }) },
     document: {
+      onWillSave: () => ({ dispose() {} }),
       mutate: async (_m: Mutation) => ({ applied: true, createdId: null, pageIds: [] }),
       placeholders: async () => [],
       frameChain: async () => [],

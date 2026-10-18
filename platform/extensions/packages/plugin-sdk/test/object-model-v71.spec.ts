@@ -37,6 +37,7 @@ import { codeOfEngineRefusal } from "../src/core-objects-v71";
 import { CORE_CATALOG_ROWS, CORE_PATHS, CORE_ROWLESS_PATHS, coreSchema71 } from "../src/core-schema";
 import { assetFromBytes, validateValue } from "../src/object-schema";
 import { createHeadlessHost, type HeadlessHost } from "../src/harness";
+import { protocolFromVersion, readVendoredWireVersion } from "../src/wasm-loader";
 import { createObjectRegistry } from "../src/object-registry";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
@@ -126,7 +127,8 @@ async function everything(h: HeadlessHost) {
 describe("protocol 71 — every core address kind round-trips Set / Get", () => {
   it("one representative writable path per kind, read back through RequestGet", async () => {
     const h = (live = await createHeadlessHost({ console: silent }));
-    expect(h.protocolVersion).toBe(73);
+    // The engine the contract's wire was synced from (no skew), not a fixed number.
+    expect(h.protocolVersion).toBe(protocolFromVersion((await readVendoredWireVersion())!));
     const o = await everything(h);
     const cases: Array<[address: string, path: string, value: unknown]> = [
       ["doc", "documentBleedTop", 9],

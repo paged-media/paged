@@ -3,8 +3,8 @@
 #
 # Rust is NOT pinned here: each Cargo workspace keeps its own
 # rust-toolchain.toml, which rustup honours per directory.
-# pnpm is resolved per component from its package.json `packageManager`
-# field until the components share one Bun workspace.
+# Bun is the package manager of the one root JavaScript workspace
+# (package.json `workspaces`, bun.lock, bunfig.toml).
 moon = "2.6.2"
 bun = "1.4.3"
 # Node is only for what Bun can't run (Playwright's runner, wrangler, npm

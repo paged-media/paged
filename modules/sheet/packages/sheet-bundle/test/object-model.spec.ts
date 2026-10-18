@@ -7,7 +7,7 @@
 // DUAL-GATED like the other real-engine suites: skipped without the wasm
 // artifact locally, FAILED under REQUIRE_REAL_ENGINE=1 (CI).
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { editValue, type HeadlessHost } from "@paged-media/plugin-sdk";
 import type { BundleHost, ObjectValue, ProviderRecordSet } from "@paged-media/plugin-api";
@@ -43,7 +43,7 @@ if (process.env.REQUIRE_REAL_ENGINE === "1" && !ENGINE_BUILT) {
 const val = (v: ObjectValue): unknown => (v.kind === "value" ? v.value : v);
 
 describe.skipIf(!ENGINE_BUILT)("paged.sheet object model [sheet.objects]", () => {
-  vi.setConfig({ testTimeout: 60_000 });
+  setDefaultTimeout(60_000);
   let h: HeadlessHost;
   let host: BundleHost;
   let s: WorkbookSession;
@@ -425,7 +425,7 @@ describe.skipIf(!ENGINE_BUILT)("paged.sheet object model [sheet.objects]", () =>
 });
 
 describe.skipIf(!ENGINE_BUILT)("paged.sheet tables [sheet.objects]", () => {
-  vi.setConfig({ testTimeout: 60_000 });
+  setDefaultTimeout(60_000);
   it("reads a structured table; writes are refused (the part re-emits verbatim)", async () => {
     const h = await openHost();
     try {
@@ -452,7 +452,7 @@ describe.skipIf(!ENGINE_BUILT)("paged.sheet tables [sheet.objects]", () => {
 });
 
 describe.skipIf(!ENGINE_BUILT)("paged.sheet datasets, both directions [sheet.objects] [sheet.data.consumer]", () => {
-  vi.setConfig({ testTimeout: 60_000 });
+  setDefaultTimeout(60_000);
 
   const records = (rows: [string, number][]): ProviderRecordSet => ({
     schema: { fields: [{ name: "region", ty: "text" }, { name: "units", ty: "float" }] },
@@ -538,7 +538,7 @@ describe.skipIf(!ENGINE_BUILT)("paged.sheet datasets, both directions [sheet.obj
 });
 
 describe.skipIf(!ENGINE_BUILT)("the real bundle boots headless with its object model [sheet.objects]", () => {
-  vi.setConfig({ testTimeout: 60_000 });
+  setDefaultTimeout(60_000);
   it("activate registers the kinds and typed commands; get/set/batch/undo work", async () => {
     const h = await openHost();
     try {

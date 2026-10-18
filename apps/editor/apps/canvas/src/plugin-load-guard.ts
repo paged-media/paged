@@ -40,7 +40,7 @@
 import { errorIdent } from "@paged-media/client/journal";
 
 /** The shape `loadBundle` returns, restated locally so this module does not
- *  depend on the plugin contract (the editor pins a published canary). */
+ *  depend on the plugin contract (its unit test runs without it). */
 export interface LoadedBundleLike {
   readonly id: string;
   readonly active: boolean;

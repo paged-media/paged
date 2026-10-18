@@ -24,7 +24,8 @@
 
 import { readFileSync } from "node:fs";
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "bun:test";
+import { waitFor } from "@paged-media/test-kit";
 
 import type {
   BundleHost,
@@ -221,7 +222,7 @@ describe("paged.slide importer", () => {
       },
     } as unknown as BundleHost;
     const handle = activate(host);
-    await vi.waitFor(() => expect(live.get(SLIDES_PANEL_ID)?.rail).toBe(true));
+    await waitFor(() => expect(live.get(SLIDES_PANEL_ID)?.rail).toBe(true));
     expect(live.get(NOTES_PANEL_ID)?.rail).toBe(true);
     handle.dispose();
     expect(live.size).toBe(0);

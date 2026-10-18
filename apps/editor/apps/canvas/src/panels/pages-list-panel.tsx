@@ -21,9 +21,10 @@
 //
 // Gallery list shape over `documentCollection:pages`, with the LIVE
 // toolbar: New rides `insertPage` (after the selected page or the
-// document end) and Delete rides `deletePage` against the selected row.
-// Duplicate stays an honest seam (no duplicatePage Operation yet); the
-// master column waits on per-page master reads.
+// document end), Duplicate rides `duplicatePage`, and both select the
+// page they made (the reply's `createdPages`); Delete rides `deletePage`
+// against the selected row. The master column waits on per-page master
+// reads.
 //
 // B3 — CLICKING A ROW ALSO NAVIGATES. InDesign's Pages panel is one
 // surface that both goes to a page and edits the page list; paged split
@@ -89,6 +90,15 @@ export function PagesListPanel() {
 
   const selectedPage = items.find((p) => p.selfId === selected) ?? null;
 
+  // The page New or Duplicate made becomes the selected row, so the next
+  // Delete or Duplicate acts on it, as in InDesign's Pages panel. The
+  // engine's reply names it; there is no page list to diff.
+  const selectCreated = (reply: Awaited<ReturnType<typeof client.mutate>>) => {
+    if (reply.kind !== "mutationApplied") return;
+    const created = reply.payload.createdPages?.[0];
+    if (created) setSelected(created);
+  };
+
   const onNew = () => {
     const after = selectedPage ?? items[items.length - 1] ?? null;
     void client
@@ -96,6 +106,7 @@ export function PagesListPanel() {
         op: "insertPage",
         args: { afterPageId: after?.selfId ?? null, masterId: null },
       })
+      .then(selectCreated)
       .catch(() => {});
   };
 
@@ -108,6 +119,7 @@ export function PagesListPanel() {
     ? () => {
         void client
           .mutate({ op: "duplicatePage", args: { page: selectedPage.selfId } })
+          .then(selectCreated)
           .catch(() => {});
       }
     : undefined;

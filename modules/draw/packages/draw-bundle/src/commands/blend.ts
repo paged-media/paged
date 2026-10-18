@@ -34,8 +34,8 @@
 // contract (plugin-sdk `bc52766`), so a batch can ADDRESS the ids it
 // mints and the inserts, the swatches, the fills and the links all ride
 // ONE mutation. Repeats v1 was the first consumer; this is the second,
-// and it rides the SAME seam (`commands/v59-wire.ts`) rather than a
-// second copy of the cast. MEASURED: make = 1, update = 1, expand = 1,
+// and it builds through the same batch-handle helpers
+// (`commands/batch-handles.ts`). MEASURED: make = 1, update = 1, expand = 1,
 // release = 1, reverse-spine / reverse-front-to-back = 1 each (they are
 // updates), select = 0.
 //
@@ -175,7 +175,7 @@ import {
   batchMutationFor,
   bindCreatedMutationFor,
   handleElementId,
-} from "./v59-wire";
+} from "./batch-handles";
 
 import { registerCommand } from "../command-registry";
 import {

@@ -76,12 +76,12 @@ landed. How the parts fit is in
   generator fills, painting, resize and the composite of more than one layer return an
   error; decode, the identity composite, selection and histograms still work.
 - **The preview on the page** is one scene-layer image, cleared when the frame leaves the
-  selection and on Reset. On a host with the protocol-66 doors (`glue/src/host66.ts`) it
-  crosses as bytes and a brush sample sends only the rectangle it changed; on an older host
-  it is RGBA8 in a JavaScript number array. Edits reach the document only by a commit
-  (ADR 462). With the protocol-66 doors the baked PNG crosses as bytes, revisions older than
-  the last eight are deleted, and saving the document commits first; on an older host the
-  bake is capped at 8 MB, nothing is deleted and a save does not commit.
+  selection and on Reset. It goes through the scene layer's image doors (`submitImage`,
+  `submitImageTiles`), so a brush sample sends only the rectangle it changed. Edits reach
+  the document only by a commit (ADR 462). After each commit, revisions older than the last
+  eight are deleted. Where the host has the binary mutation lane (`document.mutateBinary@1`)
+  the baked PNG crosses as bytes; without it the bake is capped at 8 MB. Where the host
+  announces saves (`document.onWillSave@1`), saving the document commits first.
 - **Tiles** are level 0 only, served only after the command, and cut from the held image
   without the panel's chain. The mip export `image_tile_rgba8_level` has no TypeScript caller.
 - **Colour.** Transforms run once, on the CPU, at decode: RGB with an embedded profile to

@@ -22,7 +22,7 @@
 // document properties into style-collection writes, and OFFERS the apply-back
 // op the caller attempts separately (wire-shape-only residual).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { ElementId, PropertyPath, Value } from "@paged-media/plugin-api";
 

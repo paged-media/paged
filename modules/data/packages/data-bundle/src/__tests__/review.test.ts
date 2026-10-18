@@ -24,6 +24,7 @@ function fakeHost(opts?: { placeholders?: () => Field[] | Promise<Field[]> }) {
     selection: { get: () => [], set: async () => [] },
     network: { consentedOrigins: () => [], requestConsent: async () => ({ granted: [], denied: [] }) },
     document: {
+      onWillSave: () => ({ dispose() {} }),
       mutate: async (m: Mutation) => {
         mutations.push(m);
         return { applied: true, createdId: null, pageIds: [] };

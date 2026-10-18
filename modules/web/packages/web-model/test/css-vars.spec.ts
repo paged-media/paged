@@ -21,7 +21,7 @@
 // splices ONE value and leaves every other byte as written.
 
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { cssVarNames, cssVarValueProblem, scanCssVars, setCssVar } from "../src";
 

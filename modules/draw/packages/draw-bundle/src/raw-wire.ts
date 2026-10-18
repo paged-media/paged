@@ -75,13 +75,8 @@ export function hasRawWire(host: BundleHost): boolean {
 export async function rawRead(host: BundleHost, request: RawRequest): Promise<unknown> {
   if (!hasRawWire(host)) return null;
   try {
-    // `requestTextOutlines` is protocol-AHEAD of the installed wire types
-    // (protocol 66; the pinned canvas-wasm is 64), so the request is
-    // widened to the send's parameter here, in the one place the hatch
-    // is called. An older engine answers it with an error reply, which
-    // the reply-kind check below turns into null.
-    type SendArg = Parameters<BundleHost["editor"]["client"]["send"]>[0];
-    const reply = (await host.editor.client.send(request as unknown as SendArg)) as {
+    // An error reply is turned into null by the reply-kind check below.
+    const reply = (await host.editor.client.send(request)) as {
       kind?: string;
       payload?: unknown;
     } | null;

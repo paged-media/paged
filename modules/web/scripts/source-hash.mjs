@@ -6,7 +6,7 @@
 // WEB_RENDER_SOURCE_HASH env var) and next to it
 // (packages/web-bundle/bin/SOURCE_HASH); packages/web-bundle/test/
 // wasm-fresh.spec.ts recomputes it and fails when the wasm in bin/ was built
-// from different sources. Without that check every vitest run exercises
+// from different sources. Without that check every unit-test run exercises
 // whatever wasm was last built, however old.
 //
 // Inputs: web-render's src/, assets/ (the vendored font is compiled in),

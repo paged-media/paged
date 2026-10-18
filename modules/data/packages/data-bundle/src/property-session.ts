@@ -277,7 +277,7 @@ export function propertyMethods(ctx: PropertyContext) {
     try {
       // The open already read the document label (labelledSession); read it
       // here only when it did not.
-      const doc = (documentLabel !== undefined ? documentLabel : await host.document.getDocumentMetadata?.()) as {
+      const doc = (documentLabel !== undefined ? documentLabel : await host.document.getDocumentMetadata()) as {
         data?: { recipe?: PayloadJson };
       } | null;
       recipe = doc?.data?.recipe ?? null;

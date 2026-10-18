@@ -65,7 +65,6 @@ import {
 import { F1_MULTI_SHAPE } from "../fixtures/corpus";
 import { countingHost } from "../perf/counting-host";
 import { openHost } from "./host";
-import { withoutHatch, withoutMintedOutcome } from "./one-batch";
 
 const PAGE = F1_MULTI_SHAPE.pageId;
 const enc = (s: string) => new TextEncoder().encode(s);
@@ -576,9 +575,9 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
   // `importSvg` answers its ids off the engine's reply (`commands/minted.ts`)
   // — one list per APPLIED batch, appended in commit order. A bisected file
   // is the case that can get that wrong: several batches, refused ones in
-  // between. On every lane of the seam the answer must be exactly the new
-  // leaves, in document order, and nothing a refused batch rolled back.
-  it("importSvg across a bisected file: exactly the new leaves, in order, on every lane", async () => {
+  // between. The answer must be exactly the new leaves, in document order,
+  // and nothing a refused batch rolled back.
+  it("importSvg across a bisected file: exactly the new leaves, in order", async () => {
     const svg =
       `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">` +
       `<rect x="10" y="10" width="40" height="40" fill="#101010"/>` +
@@ -586,31 +585,21 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
       `<rect x="60" y="10" width="40" height="40" fill="#303030"/>` +
       `<path d="M10 100h20v20h-20Z M1e999 200h20v20h-20Z M50 100h20v20h-20Z" fill="#404040"/>` +
       `</svg>`;
-    // The shipped host answers through the outcome (plugin-sdk 0.2.38);
-    // the two older lanes need an SDK whose outcome carries no list.
-    for (const [lane, host] of [
-      ["outcome", h.host],
-      ["reply", withoutMintedOutcome(h.host)],
-      ["diff", withoutHatch(withoutMintedOutcome(h.host))],
-    ] as const) {
-      const leaves = await leafCount(h);
-      const before = new Set((await leafList(h)).map((id) => String(id.id)));
-      const counted = countingHost(host);
-      const ids = await importSvg(counted.host, file("bisected.svg", svg));
-      const made = (await leafList(h)).filter((id) => !before.has(String(id.id)));
-      expect(ids, lane).toEqual(made);
-      expect(await firstAnchors(h, ids), lane).toEqual([
-        [10, 10],
-        [60, 10],
-        [10, 100],
-        [50, 100],
-      ]);
-      // No tree read on the outcome and reply lanes; two per APPLIED batch
-      // on the diff lane (a refused batch reads its "before" and stops).
-      if (lane !== "diff") expect(counted.work.count("document.tree"), lane).toBe(0);
-      else expect(counted.work.count("document.tree")).toBeGreaterThan(2);
-      while ((await leafCount(h)) > leaves) await h.host.document.undo();
-    }
+    const leaves = await leafCount(h);
+    const before = new Set((await leafList(h)).map((id) => String(id.id)));
+    const counted = countingHost(h.host);
+    const ids = await importSvg(counted.host, file("bisected.svg", svg));
+    const made = (await leafList(h)).filter((id) => !before.has(String(id.id)));
+    expect(ids).toEqual(made);
+    expect(await firstAnchors(h, ids)).toEqual([
+      [10, 10],
+      [60, 10],
+      [10, 100],
+      [50, 100],
+    ]);
+    // The ids come off the outcomes: no tree read.
+    expect(counted.work.count("document.tree")).toBe(0);
+    while ((await leafCount(h)) > leaves) await h.host.document.undo();
   });
 
   it("File ▸ Open — the registered importer — commits the file in one undo step", async () => {

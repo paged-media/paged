@@ -46,11 +46,13 @@ function fakeHost(opts?: FakeOpts) {
   const host = {
     manifest: { id: "media.paged.data", version: "0.0.1" },
     log: silent,
-    supports: (f: string) => (opts?.supports ? opts.supports(f) : true),
+    // Every door this fake carries; it has no object registry (`objects@1`).
+    supports: (f: string) => (opts?.supports ? opts.supports(f) : f !== "objects@1"),
     selection: { get: () => opts?.selection?.() ?? [], set: async () => [] },
     network: { consentedOrigins: () => [], requestConsent: async () => ({ granted: [], denied: [] }) },
     text,
     document: {
+      onWillSave: () => ({ dispose() {} }),
       mutate: async (m: Mutation) => {
         mutateCalls += 1;
         mutations.push(m);

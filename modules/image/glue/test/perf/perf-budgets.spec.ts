@@ -25,7 +25,8 @@
 // often it recomposites, re-reads histograms, resubmits the page image —
 // not kernel work (image-js/tests/perf_budgets.rs counts that natively).
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, mock } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type { PluginManifest } from "@paged-media/plugin-api";
@@ -37,8 +38,9 @@ import { countingEngine, type EngineLog } from "./counting-engine";
 
 let engineLog: EngineLog | null = null;
 
-vi.mock("../../src/engine", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../src/engine")>();
+const actualEngine = await importActual(() => import("../../src/engine"));
+mock.module("../../src/engine", () => {
+  const actual = actualEngine;
   return {
     ...actual,
     bootEngine: async () => {

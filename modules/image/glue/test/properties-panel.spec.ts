@@ -21,7 +21,7 @@
 // not widgets); every row is a row of its kind's schema and the address
 // forms are well-formed (plugin-sdk validatePanelSchema).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PropertySchema } from "@paged-media/plugin-api";
 import { isPropertyRow, propertyRowsOf, validatePanelSchema } from "@paged-media/plugin-sdk";

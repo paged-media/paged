@@ -2,7 +2,7 @@
 // (sheet.lower.page): the engine resolves each cell's alignment; these turn
 // it into a paragraph-style mint + a cell-qualified paragraph applyStyle.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { Mutation } from "@paged-media/plugin-api";
 

@@ -88,7 +88,6 @@ import {
   lowerChartToFrame,
   type PlacedChart,
 } from "./lower-chart";
-import { doors66, onWillSave } from "./protocol66";
 import { readWorkbookPart, writeWorkbookPart } from "./workbook-part";
 import {
   advance,
@@ -1380,15 +1379,12 @@ export function createWorkbookSession(
   }
 
   let historyChain: Promise<void> = Promise.resolve();
-  const historySub =
-    typeof host.document?.onDidChange === "function"
-      ? host.document.onDidChange((e) => {
-          if (e.kind !== "undoApplied" && e.kind !== "redoApplied") return;
-          historyChain = historyChain.then(followDocumentHistory).catch((err) => {
-            host.log.warn("document-undo follower failed", err);
-          });
-        })
-      : null;
+  const historySub = host.document.onDidChange((e) => {
+    if (e.kind !== "undoApplied" && e.kind !== "redoApplied") return;
+    historyChain = historyChain.then(followDocumentHistory).catch((err) => {
+      host.log.warn("document-undo follower failed", err);
+    });
+  });
 
   // ── Wave 5 — selection model, bulk writes, fill, clear, find, keys ──
 
@@ -2055,17 +2051,20 @@ export function createWorkbookSession(
   }
 
   // A .paged save takes the workbook part as it stands; an edit still in the
-  // debounce window would miss it. Where the host has the will-save door
-  // (protocol 66) the save waits for the pending write first. Without it,
-  // the debounce, the flush on frame exit and the flush on dispose remain.
-  const willSaveSub = onWillSave(host, () =>
-    Promise.all([
-      flushPersist().catch((err) => host.log.warn("workbook persist before save failed", err)),
-      flushPlacementRecords().catch((err) =>
-        host.log.warn("placement records before save failed", err),
-      ),
-    ]).then(() => undefined),
-  );
+  // debounce window would miss it. Where the host announces saves
+  // (`document.onWillSave@1`) the save waits for the pending write first.
+  // Without it, the debounce, the flush on frame exit and the flush on
+  // dispose remain.
+  const willSaveSub = host.supports("document.onWillSave@1")
+    ? host.document.onWillSave(() =>
+        Promise.all([
+          flushPersist().catch((err) => host.log.warn("workbook persist before save failed", err)),
+          flushPlacementRecords().catch((err) =>
+            host.log.warn("placement records before save failed", err),
+          ),
+        ]).then(() => undefined),
+      )
+    : null;
 
   // ── what the placed tables show, kept for a later session ──────────────
   //
@@ -2128,13 +2127,10 @@ export function createWorkbookSession(
       ownWrites -= 1;
     }
   }
-  const foreignChangeSub =
-    typeof host.document?.onDidChange === "function"
-      ? host.document.onDidChange((e) => {
-          if (e.kind === "mutationApplied" && ownWrites > 0) return;
-          for (const frameId of loweredTables.keys()) unverified.add(frameId);
-        })
-      : null;
+  const foreignChangeSub = host.document.onDidChange((e) => {
+    if (e.kind === "mutationApplied" && ownWrites > 0) return;
+    for (const frameId of loweredTables.keys()) unverified.add(frameId);
+  });
 
   /** Wave 4 — after a burst of edits, refresh what this session placed. */
   function scheduleRefresh(): void {
@@ -2270,9 +2266,7 @@ export function createWorkbookSession(
    *  undo follower never reads an older stamp as newer. Returns the count. */
   async function rediscoverPlacements(): Promise<number> {
     const engine = state.engine;
-    if (!engine || !host.document?.getMetadata || typeof host.document.tree !== "function") {
-      return 0;
-    }
+    if (!engine) return 0;
     let roots: Awaited<ReturnType<BundleHost["document"]["tree"]>>;
     try {
       roots = await host.document.tree();
@@ -2308,10 +2302,8 @@ export function createWorkbookSession(
       let ids: { storyId: string; tableId: string } | null;
       if (rec.storyId !== undefined && rec.tableId !== undefined) {
         ids = { storyId: rec.storyId, tableId: rec.tableId };
-        if (doors66(host).geometryStoryId !== false) {
-          const story = await storyOfFrame(host, frameId);
-          if (story !== null && story !== ids.storyId) continue;
-        }
+        const story = await storyOfFrame(host, frameId);
+        if (story !== null && story !== ids.storyId) continue;
       } else {
         // Placed in one batch (66): the binding could not name the ids —
         // read them off the page (the frame's own table, so a duplicated
@@ -2500,7 +2492,6 @@ export function createWorkbookSession(
    *  document). A document with no sheet frame gets no workbook from
    *  another document's cache. */
   async function documentHasSheetFrame(): Promise<boolean> {
-    if (!host.document?.getMetadata || typeof host.document.tree !== "function") return false;
     let roots: Awaited<ReturnType<BundleHost["document"]["tree"]>>;
     try {
       roots = await host.document.tree();
@@ -4164,8 +4155,8 @@ export function createWorkbookSession(
     },
 
     dispose() {
-      historySub?.dispose();
-      foreignChangeSub?.dispose();
+      historySub.dispose();
+      foreignChangeSub.dispose();
       willSaveSub?.dispose();
       // What the placed tables show, kept for a later session (taken before
       // the placements are forgotten; written in the background).

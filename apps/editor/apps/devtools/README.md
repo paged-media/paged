@@ -23,7 +23,7 @@ M0 — frame `Bounds` + `Fill color` for `TextFrame` — and expands as
    (the build script prints the version on first run).
 3. Optional: `binaryen` for `wasm-opt` size pass
    (`brew install binaryen`).
-4. Node + npm/pnpm.
+4. Node + Bun (versions in the repository's `.prototools`).
 
 ## Running
 

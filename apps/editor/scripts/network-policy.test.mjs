@@ -7,7 +7,7 @@
 // check.
 //
 // Run: `node --experimental-strip-types scripts/network-policy.test.mjs`
-//   (root script `pnpm test:network-policy`).
+//   (root script `bun run test:network-policy`).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";

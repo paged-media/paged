@@ -47,7 +47,7 @@ bash scripts/illustrator/run-probe.sh \
   scripts/illustrator/probes/offset-path.jsx \
   packages/draw-bundle/test/fixtures/oracle/offset-path.illustrator.json
 
-pnpm --filter @paged-media/draw exec vitest run test/oracle
+(cd packages/draw-bundle && bunx vitest run test/oracle)
 ```
 
 The first run from a new terminal or IDE raises a macOS consent prompt

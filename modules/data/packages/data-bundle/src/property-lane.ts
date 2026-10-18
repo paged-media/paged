@@ -35,15 +35,9 @@ export interface PropertyLaneResult {
   calls: number;
 }
 
-/** `host.objects`, when this host has the object model (plugin-sdk ≥ 0.2.42). */
+/** `host.objects`, when this host announces the object model (`objects@1`). */
 export function objectsOf(host: BundleHost): ObjectsSurface | null {
-  const objects = (host as { objects?: ObjectsSurface }).objects;
-  if (!objects || typeof objects.batch !== "function") return null;
-  try {
-    return typeof host.supports === "function" && !host.supports("objects@1") ? null : objects;
-  } catch {
-    return objects;
-  }
+  return host.supports("objects@1") ? host.objects : null;
 }
 
 export const NO_OBJECT_MODEL =

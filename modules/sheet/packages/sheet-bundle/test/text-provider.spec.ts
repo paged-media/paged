@@ -34,7 +34,7 @@
 //
 // Pure: a hand-rolled source, no engine, no editor.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { LoweredContent, LoweredStyle } from "../../sheet-host-model/src";
@@ -122,9 +122,8 @@ describe("paged.sheet text provider — the declaration", () => {
     // engine has no cell-style write API, and DECLARING that is what
     // keeps the host's controls read-only instead of fake-interactive.
     expect(p.provides.writablePaths).toEqual([]);
-    // The mirror does not even carry a `writeProperty` lane — see
-    // `adr023-seam.ts`: neither of this repo's providers implements one,
-    // and an unimplemented lane is not declared.
+    // No `writeProperty` lane either: neither of this repo's providers
+    // implements one, and an unimplemented lane is not declared.
     expect("writeProperty" in p).toBe(false);
     expect(p.applyMutation).toBeUndefined();
   });

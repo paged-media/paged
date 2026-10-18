@@ -1,14 +1,12 @@
-// Wave 9 — consuming the protocol-66 doors, against a REAL headless host
-// (core via canvas-wasm: real document undo, real plugin metadata) and the
-// REAL sheet engine. Each 66 door is FEATURE-DETECTED. The real host under
-// test has them since the pins moved past 66, so the fallback path runs
-// through `withoutDoors66` (the real core with those doors taken away), and
-// the 66 path through a host wrapper that adds the door's reply shape.
+// Wave 9 — consuming the protocol-66 doors (`minted`, the geometry read's
+// `storyId`, `deleteTable`), against a REAL headless host (core via
+// canvas-wasm: real document undo, real plugin metadata) and the REAL sheet
+// engine.
 //
 // Real engine: skipped without the wasm artifact, FAILS under
 // REQUIRE_REAL_ENGINE=1 (the engine-real.spec.ts dual gate).
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -33,10 +31,8 @@ import {
   openHost,
   settle,
   sheetHost,
-  withDoors66,
   withSceneChannel,
   withoutBandCounts,
-  withoutDoors66,
 } from "./perf/workload";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -65,7 +61,7 @@ if (process.env.REQUIRE_REAL_ENGINE === "1" && !ENGINE_BUILT) {
 }
 
 describe.skipIf(!ENGINE_BUILT)("wave 9 — placed-table refresh", () => {
-  vi.setConfig({ testTimeout: 60_000 });
+  setDefaultTimeout(60_000);
   let h: HeadlessHost;
   let host: BundleHost;
   let s: WorkbookSession | null = null;
@@ -114,7 +110,7 @@ describe.skipIf(!ENGINE_BUILT)("wave 9 — placed-table refresh", () => {
 });
 
 describe.skipIf(!ENGINE_BUILT)("wave 9 — placed charts and frame stories", () => {
-  vi.setConfig({ testTimeout: 60_000 });
+  setDefaultTimeout(60_000);
   let h: HeadlessHost;
   let raw: BundleHost;
   let s: WorkbookSession | null = null;
@@ -171,23 +167,21 @@ describe.skipIf(!ENGINE_BUILT)("wave 9 — placed charts and frame stories", () 
     expect(await spreads()).toBe(art);
   });
 
-  it("with 66 `minted`, a chart is placed and replaced with no scene-tree or story reads [sheet.chart.engine]", async () => {
+  it("with `minted`, a chart is placed and replaced with no scene-tree or story reads [sheet.chart.engine]", async () => {
     const tally = new Tally();
-    const { host } = countingHost(withDoors66(h, raw, { minted: true }), tally);
+    const { host } = countingHost(raw, tally);
     await chartScenario(host);
-    // The FIRST lowering cannot know yet whether the host sends `minted`, so
-    // it reads the tree before its batch (the fallback's half); its outcome
-    // answers, and the replacement reads nothing. No tree read AFTER either
-    // batch, no stories read at all.
-    expect(tally.work.count("document.tree")).toBe(1);
+    // The outcomes' `minted` lists name what each batch made: no tree read
+    // before or after either batch, no stories read at all.
+    expect(tally.work.count("document.tree")).toBe(0);
     // pages (the active page, once) + one swatch read per lowering.
     expect(tally.work.count("document.collection")).toBe(3);
     expect(tally.work.count("document.mutate")).toBe(2); // place; replace (deletes + new art + labels)
   });
 
-  it("with 66 `minted`, a placement names its frame by handle: no frame-chain read [sheet.lower.page]", async () => {
+  it("with `minted`, a placement names its frame by handle: no frame-chain read [sheet.lower.page]", async () => {
     const tally = new Tally();
-    const { host } = countingHost(withDoors66(h, raw, { minted: true }), tally);
+    const { host } = countingHost(raw, tally);
     const session = createWorkbookSession(host);
     s = session;
     await session.import(await authorWorkbook(3, 2, (r, c) => `${r}${c}`), "m.xlsx");
@@ -201,7 +195,7 @@ describe.skipIf(!ENGINE_BUILT)("wave 9 — placed charts and frame stories", () 
     ).not.toBeNull();
   });
 
-  it("frame -> story: one geometry read with 66 storyId, the stories walk without [sheet.lower.paginate]", async () => {
+  it("frame -> story: one geometry read, its storyId [sheet.lower.paginate]", async () => {
     const before = new Set(
       (await raw.document.collection<{ selfId: string }>("stories")).map((x) => x.selfId),
     );
@@ -215,24 +209,15 @@ describe.skipIf(!ENGINE_BUILT)("wave 9 — placed charts and frame stories", () 
       .map((x) => x.selfId)
       .find((id) => !before.has(id));
 
-    const t66 = new Tally();
-    const h66 = countingHost(withDoors66(h, raw, { geometryStoryId: true }), t66).host;
-    expect(await storyOfFrame(h66, frameId)).toBe(storyId);
-    expect(t66.work.calls).toEqual({ "document.elementGeometry": 1 });
-
-    // A pre-66 host: the geometry item has no story — asked once, then the
-    // walk; the second resolution skips the geometry read.
-    const t64 = new Tally();
-    const h64 = countingHost(withoutDoors66(raw), t64).host;
-    expect(await storyOfFrame(h64, frameId)).toBe(storyId);
-    expect(await storyOfFrame(h64, frameId)).toBe(storyId);
-    expect(t64.work.count("document.elementGeometry")).toBe(1);
-    expect(t64.work.count("document.collection")).toBe(2);
+    const tally = new Tally();
+    const counted = countingHost(raw, tally).host;
+    expect(await storyOfFrame(counted, frameId)).toBe(storyId);
+    expect(tally.work.calls).toEqual({ "document.elementGeometry": 1 });
   });
 });
 
 describe.skipIf(!ENGINE_BUILT)("wave 9 — placements from an earlier session", () => {
-  vi.setConfig({ testTimeout: 60_000 });
+  setDefaultTimeout(60_000);
   let h: HeadlessHost;
   let host: BundleHost;
   const sessions: WorkbookSession[] = [];
@@ -522,7 +507,7 @@ async function cellParagraphStyles(h: HeadlessHost): Promise<Map<string, string>
 }
 
 describe.skipIf(!ENGINE_BUILT)("wave 9 — alignment reaches the placed table", () => {
-  vi.setConfig({ testTimeout: 60_000 });
+  setDefaultTimeout(60_000);
   let h: HeadlessHost;
   let host: BundleHost;
   let s: WorkbookSession | null = null;
@@ -566,7 +551,7 @@ describe.skipIf(!ENGINE_BUILT)("wave 9 — alignment reaches the placed table", 
 });
 
 describe.skipIf(!ENGINE_BUILT)("wave 9 — format changes are undo steps [sheet.edit.undo]", () => {
-  vi.setConfig({ testTimeout: 60_000 });
+  setDefaultTimeout(60_000);
   let h: HeadlessHost;
   let s: WorkbookSession | null = null;
 
@@ -673,7 +658,7 @@ describe.skipIf(!ENGINE_BUILT)("wave 9 — format changes are undo steps [sheet.
 });
 
 describe.skipIf(!ENGINE_BUILT)("wave 9 — data bars on the native table [sheet.xlsx.condfmt]", () => {
-  vi.setConfig({ testTimeout: 60_000 });
+  setDefaultTimeout(60_000);
   let h: HeadlessHost;
   let raw: BundleHost;
   let s: WorkbookSession | null = null;
@@ -733,12 +718,11 @@ describe.skipIf(!ENGINE_BUILT)("wave 9 — data bars on the native table [sheet.
     expect((await exportedTableCells(h))[0].get("1:0")).toBe("40");
   });
 
-  it("with 66 `minted`, the bars' ids come back without a scene-tree read", async () => {
+  it("with `minted`, the bars' ids come back without a scene-tree read", async () => {
     const tally = new Tally();
-    const { host } = countingHost(withDoors66(h, raw, { minted: true }), tally);
+    const { host } = countingHost(raw, tally);
     const session = await placeBars(host);
-    // The placement learned that the host sends `minted` from its first
-    // batch, so the content batch drew the bars without a tree read.
+    // The batch's `minted` names the bars: no tree read.
     expect(tally.work.count("document.tree")).toBe(0);
     session.editCell(0, 1, 3, "5");
     await session.refreshPlacements();

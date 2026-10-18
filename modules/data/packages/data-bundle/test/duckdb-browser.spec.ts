@@ -301,7 +301,7 @@ describe.skipIf(!REQUIRED && process.env.PAGED_BROWSER_LANE === "0")(
           // The glue is initialised once per realm, so a second boot cannot
           // show the fallback; prove that the browser refuses a wrong digest
           // for the same response (bootEngine then loads bin/ — the unit
-          // test in src/__tests__/module-door.test.ts drives that branch).
+          // test in src/__tests__/wasm-door.test.ts drives that branch).
           let refused = false;
           try {
             await fetch(url, { integrity: bad });

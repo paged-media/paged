@@ -33,8 +33,7 @@ import { createHeadlessHost, defineBundle, type HeadlessHost } from "@paged-medi
 
 import manifestJson from "../manifest.json";
 import { mergeRecords, pageElements, readMergeTemplate, type RecordsPerPage } from "../src/merge";
-import { documentLabelDoors, engineHasDocumentLabels } from "../src/doors";
-import { ENGINE_ANCHOR, ENGINE_PROTOCOL, fixedFrom, REQUIRE_REAL_CORE } from "./real-core";
+import { ENGINE_ANCHOR, fixedFrom, REQUIRE_REAL_CORE } from "./real-core";
 import { bootRealEngine, DATA_JS_WASM } from "./real-duckdb";
 
 const LANE = fileURLToPath(new URL("../../../conformance/indesign-merge/", import.meta.url));
@@ -201,10 +200,9 @@ describe.skipIf(!ready && !REQUIRE_REAL_CORE)(
           textFrame.content = { kind: "text", text: expected };
         }
 
-        // Page handles: detected as the session detects them (a v69 engine
-        // behind an SDK with the label doors), and right about the engine.
-        const pageHandles = await engineHasDocumentLabels(host);
-        expect(pageHandles).toBe(ENGINE_PROTOCOL >= 69 && documentLabelDoors(host) !== null);
+        // Page handles: the in-tree engine (protocol >= 69) places pages by
+        // in-batch handle, as the session does by default.
+        const pageHandles = true;
         const result = await mergeRecords(host, engine, template!, {
           query: "q",
           ...mergeOptions(fx),

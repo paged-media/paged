@@ -24,7 +24,7 @@
 
 import { createElement } from "react";
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
@@ -65,6 +65,8 @@ function fakeHost(features: string[] = []): { host: BundleHost; opened: string[]
   const opened: string[] = [];
   const host = {
     log: { debug() {}, info() {}, warn() {}, error() {} },
+    // The document doors every host has; nothing here fires them.
+    document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
     supports: (f: string) => features.includes(f),
     shell: { openPanel: (id: string) => void opened.push(id) },
   } as unknown as BundleHost;
@@ -185,6 +187,8 @@ describe("datasets panel names", () => {
   it("shows the name, not the id, and keeps the id in the tooltip", () => {
     const host = {
       log: { debug() {}, info() {}, warn() {}, error() {} },
+      // The document doors every host has; nothing here fires them.
+      document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
       supports: (f: string) => f === "dataProviders@1",
       dataProviders: {
         discover: () => [

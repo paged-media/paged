@@ -864,10 +864,10 @@ describe("draw conformance — IMAGE TRACE v0", () => {
     // it exactly. Two is the floor: the record names the regions by id
     // inside the source's JSON metadata, where a handle is never resolved
     // (module header).
-    // [scenario, plan, tree reads in the diff lane]
-    for (const [name, plan, diffReads] of [
-      ["a ring (one region, no group)", () => ringPlan(), 2],
-      ["two colours (a group)", () => twoColourPlan(), 4],
+    // [scenario, plan]
+    for (const [name, plan] of [
+      ["a ring (one region, no group)", () => ringPlan()],
+      ["two colours (a group)", () => twoColourPlan()],
     ] as const) {
       it(`the created ids off the reply, ${name}: no tree read, and the document every other lane leaves`, async () => {
         const fixed = plan();
@@ -883,26 +883,6 @@ describe("draw conformance — IMAGE TRACE v0", () => {
         expect(shipped.restored).toBe(true);
         // As found: 2 for the ring, 3 with a group to find.
         expect(shipped.work.count("document.tree")).toBe(0);
-        // REPLY — an SDK before plugin-sdk 0.2.38, whose outcome carries no
-        // `minted`: the ids off the raw reply. The same document, the same
-        // writes and the same reads as the shipped (outcome) lane.
-        const reply = await through("reply");
-        expect(reply.picture).toBe(shipped.picture);
-        expect(reply.work.mutations).toEqual(shipped.work.mutations);
-        expect(reply.undoSteps).toBe(shipped.undoSteps);
-        expect(reply.restored).toBe(true);
-        expect(reply.work.count("document.tree")).toBe(shipped.work.count("document.tree"));
-
-        for (const lane of ["diff", "unlisted"] as const) {
-          const run = await through(lane);
-          expect(run.picture, lane).toBe(shipped.picture);
-          expect(run.undoSteps, lane).toBe(2);
-          expect(run.restored, lane).toBe(true);
-          // The diff around batch 1, and around batch 2 when it groups
-          // (as found that second pair was ONE lookup — the fallback lane
-          // pays one more read; the shipped lane pays none).
-          expect(run.work.count("document.tree"), lane).toBe(diffReads);
-        }
       });
     }
 
