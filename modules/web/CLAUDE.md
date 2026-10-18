@@ -74,8 +74,11 @@ fragmentation → the bundle's engine wasm).
   uppercase kickers, mono tabular code, hairline borders, no hardcoded
   chrome hexes. Content colours (the preview's paper white) stay
   literal by design.
-- **Contract pins:** `@paged-media/plugin-api` / `plugin-sdk` are exact npm
-  devDependency pins (peers keep a `>=` floor); `sdk-pin.spec.ts` checks it.
+- **Contract:** `@paged-media/plugin-api` / `plugin-sdk` come from the
+  workspace (`workspace:*`, dev and peer); the repo-wide
+  `tooling/js/check-workspace-deps.mjs` checks it. Every door of the in-tree
+  contract exists at this revision, so call it directly; probe
+  `host.supports()` only for a backend a host may not wire.
 - **Engine wasm freshness:** after any Rust change run
   `bash scripts/build-wasm.sh --engine` (wasm-bindgen-cli must equal the
   version in `packages/web-render/Cargo.lock`); `wasm-fresh.spec.ts` fails on
