@@ -53,6 +53,7 @@ requireBlitz("web conformance — baked faces after a reopen");
 
 type Reply = { kind: string; payload?: any };
 type Send = (m: { kind: string; payload?: unknown }) => Promise<Reply>;
+type RegisterDocumentFont = (family: string, bytes: Uint8Array, style: string | null) => Promise<Reply>;
 type FontRow = { family: string; isMissing: boolean };
 
 /** Shaped in the bundled face: the CSS names a family no document holds. */
@@ -93,12 +94,21 @@ async function editorLikeHost(sent: Reply[]): Promise<HeadlessHost> {
       },
     },
   });
-  const client = clientOf(h);
+  const client = clientOf(h) as { send: Send; registerDocumentFont?: RegisterDocumentFont };
   const raw = client.send.bind(client);
   client.send = (m) => {
     if (m.kind === "registerFont" && (m.payload as { scope?: string }).scope === "document") sent.push(m as Reply);
     return raw(m);
   };
+  // A client that scopes faces to the open document (plugin SDK ADR 330)
+  // registers them through its own method, not `send`: record those too.
+  const scoped = client.registerDocumentFont?.bind(client);
+  if (scoped) {
+    client.registerDocumentFont = (family, bytes, style) => {
+      sent.push({ kind: "registerFont", payload: { family, style, scope: "document" } });
+      return scoped(family, bytes, style);
+    };
+  }
   return h;
 }
 

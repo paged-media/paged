@@ -14,7 +14,7 @@
     "build": "tsup src/index.ts --format esm --dts"
   },
   "dependencies": {
-    "@paged-media/plugin-api": "0.2.45-canary.0"
+    "@paged-media/plugin-api": "workspace:*"
   },
   "devDependencies": {
     "tsup": "^8.5.1",

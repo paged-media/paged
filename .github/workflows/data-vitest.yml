@@ -9,6 +9,20 @@ on:
     branches: [main]
     paths:
       - "modules/data/**"
+      # The extension contract the bundle builds against (workspace:*).
+      - "platform/extensions/packages/plugin-api/**"
+      - "platform/extensions/packages/plugin-sdk/**"
+      # The engine wasm packages this workflow builds against (workspace:*),
+      # and what builds them, so an engine change re-tests its consumers.
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
       - ".github/workflows/data-vitest.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -18,6 +32,20 @@ on:
   pull_request:
     paths:
       - "modules/data/**"
+      # The extension contract the bundle builds against (workspace:*).
+      - "platform/extensions/packages/plugin-api/**"
+      - "platform/extensions/packages/plugin-sdk/**"
+      # The engine wasm packages this workflow builds against (workspace:*),
+      # and what builds them, so an engine change re-tests its consumers.
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
       - ".github/workflows/data-vitest.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -39,9 +67,9 @@ jobs:
   vitest:
     runs-on: ubuntu-latest
     steps:
-      # The plugin contract comes from npm (exact pins, test/sdk-pin.spec.ts);
-      # the sibling plugin-sdk checkout this lane used to make for a `link:`
-      # chain is no longer read by anything.
+      # The plugin contract and the engine come from the workspace
+      # (`workspace:*`): plugin-api and plugin-sdk as source, the engine's
+      # wasm packages from the engine-wasm step below.
       - uses: actions/checkout@v4
       # Bun and Node at the versions in /.prototools, installed by proto.
       - uses: moonrepo/setup-toolchain@v0.6.4
@@ -85,6 +113,10 @@ jobs:
       # prebuilt, never compiled in-tree), which also stages the eh variant
       # as the governed bin/duckdb-engine.wasm. REQUIRE_REAL_DUCKDB=1 below
       # turns every "DuckDB not vendored" skip into a failure.
+      # The engine's wasm packages (canvas-wasm and the rest, workspace:*),
+      # which the real-engine specs boot.
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
       # One install for the whole root workspace (bun.lock).
       - name: bun install (root workspace)
         working-directory: .

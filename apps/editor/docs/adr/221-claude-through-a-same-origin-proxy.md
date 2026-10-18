@@ -88,6 +88,8 @@ bounds cost; Turnstile would only reduce how fast an abuser reaches it.
 - `@paged-media/ai` is vendored in `packages/ai` (a byte-for-byte copy of plugin-sdk `97d40f5`)
   until its first npm publish; then the copy is deleted and the package pinned like every other
   `@paged-media` package (`packages/ai/README.md` says how). Change it upstream, never here.
+  (Since the monorepo's step B3 the copy is gone: the editor depends on
+  `platform/extensions/packages/ai` through `workspace:*`.)
 - Haiku 5.5 has no server-side refusal fallback: a declined request ends the run, and each
   surface says Claude declined.
 

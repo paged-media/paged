@@ -11,10 +11,9 @@ project:
   title: 'platform/extensions'
   description: 'Extension contract (plugin-api), runtime SDK, manifest CLI, ai and cli packages.'
 
-# scripts/sync-catalog.mjs reads engine/core's catalog.json.
-# (scripts/sync-wire.mjs falls back to the canvas-wasm installed under
-# apps/editor; that lookup is not modelled, it would make a cycle through
-# the modules the editor links.)
+# plugin-sdk's harness specs boot the engine's canvas-wasm (workspace:*);
+# scripts/sync-catalog.mjs reads engine/core's catalog.json and
+# scripts/sync-wire.mjs the .d.ts of the canvas-wasm workspace package.
 dependsOn:
   - id: 'core'
     scope: 'development'
@@ -39,6 +38,4 @@ tasks:
       - 'packages/plugin-api/src/catalog.json'
       - project: 'core'
         filter: ['crates/paged-introspect/catalog.json']
-    options:
-      # No CI workflow runs it today, and it currently reports drift.
-      runInCI: false
+    # extensions-vitest runs it with sync-wire.mjs --check.
