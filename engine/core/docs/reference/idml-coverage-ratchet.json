@@ -1,6 +1,6 @@
 {
   "census": {
-    "file": "tools/idml-coverage/census.json",
+    "file": "crates/idml-coverage/census.json",
     "schema": "paged.idml-census/2",
     "generatedAt": "2026-10-12",
     "sha256": "7b2c1243971d15753736627c8ba172be36a03427fba2e71cecfb0221395fa48d",
