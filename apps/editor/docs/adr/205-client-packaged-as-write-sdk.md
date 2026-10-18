@@ -1,6 +1,9 @@
 # ADR 205 — The editor's wasm client is packaged as the write SDK
 
 - **Status:** Accepted. Recorded retroactively on 2026-10-02 from the code at `28dc764`.
+  Amended 2026-10-18 by [PM-0008](../../../../docs/adr/PM-0008-npm-packages-and-release.md):
+  `packages/client` is a private workspace package; the write surface ships in
+  `@paged-media/canvas-wasm`.
 - **Scope:** `packages/client` (`package.json`, `tsconfig.build.json`, `README.md`, `api-catalog.json`), `scripts/client-api-catalog.mjs`
 
 ## Context

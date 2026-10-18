@@ -17,7 +17,7 @@
  */
 
 // The engine's capability catalog (`paged describe`, `describeCatalog()`,
-// `catalog.json` in @paged-media/introspect-wasm) as the model reads it.
+// `introspect/catalog.json` in @paged-media/canvas-wasm) as the model reads it.
 // Generated from the engine, so it never drifts; where it and the authoring
 // guide disagree, the catalog wins.
 

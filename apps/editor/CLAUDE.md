@@ -63,9 +63,9 @@ barrel is React-free by lint), or deep-import the specific module —
 
 The engine's wasm packages are **workspace packages** of the root Bun
 workspace: `packages/client` and `apps/canvas` depend on
-`@paged-media/canvas-wasm`, `apps/devtools` on
-`@paged-media/introspect-wasm`, all through `workspace:*`
-(`engine/core/packages/*`, engine/core ADR 185). Their generated files
+`@paged-media/canvas-wasm`, `packages/repository` on its `./repo` entry and
+`apps/devtools` on its `./introspect` entry, all through `workspace:*`
+(`engine/core/packages/canvas-wasm`, engine/core ADR 185, PM-0008). Their generated files
 (the glue, the `.d.ts`, the wasm) are gitignored and built from the engine
 in the same checkout: `moon run core:wasm-pkg`, or
 `bash engine/core/scripts/build-wasm-packages.sh --workspace`

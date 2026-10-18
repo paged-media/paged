@@ -3,7 +3,7 @@
   "source": "core",
   "rev": "524b08ea4",
   "targetsProtocol": 74,
-  "publishedPackage": "@paged-media/introspect-wasm",
+  "publishedPackage": "@paged-media/canvas-wasm",
   "aheadOfPublished": true,
-  "why": "LEADS @paged-media/introspect-wasm@0.73.4 by design: protocol 74 (tracked deletions accepted and rejected, engine ADR 184, monorepo commit 524b08ea4) is in the tree and not yet published. First-party packages take the engine from the workspace (`workspace:*`), so this copy follows engine/core/crates/paged-introspect/catalog.json, which `sync-catalog.mjs --check` compares it with. Prior: in sync as of introspect-wasm@0.73.4 (core@8eb9e21, protocol 73)."
+  "why": "LEADS @paged-media/introspect-wasm@0.73.4 (from protocol 74 the ./introspect entry of @paged-media/canvas-wasm, PM-0008) by design: protocol 74 (tracked deletions accepted and rejected, engine ADR 184, monorepo commit 524b08ea4) is in the tree and not yet published. First-party packages take the engine from the workspace (`workspace:*`), so this copy follows engine/core/crates/paged-introspect/catalog.json, which `sync-catalog.mjs --check` compares it with. Prior: in sync as of introspect-wasm@0.73.4 (core@8eb9e21, protocol 73)."
 }

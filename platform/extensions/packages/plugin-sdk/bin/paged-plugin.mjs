@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-// @paged-media/plugin-cli — `paged-plugin validate <manifest.json>`.
+// `paged-plugin`, the bin of @paged-media/plugin-sdk (it was the
+// @paged-media/plugin-cli package until PM-0008) —
+// `paged-plugin validate <manifest.json>`.
 //
-// Plain ESM, zero dependencies, no build step. Validates a plugin
-// manifest against the contract in
-// `../../plugin-api/src/manifest.schema.json` — hand-rolled checks
+// Plain ESM, zero dependencies, no build step: the published package ships
+// this file as it is. Validates a plugin manifest against the contract in
+// plugin-api's `src/manifest.schema.json` — hand-rolled checks
 // rather than a generic JSON-schema engine, so the CLI stays
 // dependency-free; the schema file remains the formal artifact and
 // the two are kept in sync by the checks below mirroring it 1:1.

@@ -1,6 +1,8 @@
 # ADR 185 — The engine's wasm packages are workspace packages
 
-- **Status:** Accepted 2026-10-18.
+- **Status:** Accepted 2026-10-18. Amended 2026-10-18 by
+  [PM-0008](../../../../docs/adr/PM-0008-npm-packages-and-release.md) (see the amendment at the
+  end): two packages carry the four builds.
 - **Scope:**
   - `packages/{canvas-wasm,introspect-wasm,repo-wasm,sdk}/`: one directory per npm package,
     each a member of the repository's root Bun workspace.
@@ -95,3 +97,31 @@ protocol in its version too.
 - `moon.yml` — `wasm-pkg`, `wasm-pkg-version`, `check`
 - `.github/workflows/core-ci.yml` — `protocol-tag-guard`
 - `.github/workflows/core-publish-wasm.yml` — build, stage, publish
+
+## Amendment (2026-10-18): two packages carry the four builds
+
+[PM-0008](../../../../docs/adr/PM-0008-npm-packages-and-release.md) cuts the public npm set to
+four packages. For the engine that means two, and the decisions above apply to them as follows.
+
+- **`packages/canvas-wasm/` is the only directory under `packages/`.** It holds the canvas build
+  at its root and two more builds in subdirectories: `introspect/` (the introspection wasm, with
+  `catalog.json`) and `repo/` (the document repository). Its manifest gains an `exports` map:
+  `.`, `./introspect`, `./introspect/catalog.json` and `./repo`, each wasm by its own subpath
+  (`./paged_canvas_wasm_bg.wasm`, `./introspect/paged_introspect_wasm_bg.wasm`,
+  `./repo/paged_repo_wasm_bg.wasm`), and `./package.json`. Decision 2's "no `exports`" is
+  replaced: a subpath entry needs one, and the map lists every subpath a consumer imports.
+- **The viewer session ships inside `@paged-media/idml-viewer`** as its `./session` entry, built
+  into `web/idml-viewer/wasm/` (gitignored). `packages/sdk/`, `packages/introspect-wasm/` and
+  `packages/repo-wasm/` are deleted; their npm packages are deprecated by the owner.
+- **Versions (decision 3, 4):** `scripts/check-wasm-package-versions.mjs` checks canvas-wasm and
+  idml-viewer, both at `0.<PROTOCOL_VERSION>.0-dev`.
+- **The build (decision 5):** `scripts/build-wasm-packages.sh` builds four parts, `canvas`,
+  `introspect`, `repo` and `session` (the former package names are accepted too). Without
+  `--workspace` it writes `dist/canvas-wasm/` (a standalone canvas-wasm) and `dist/session/`.
+  `scripts/check-wasm-packages-built.mjs` checks that every generated file the two manifests ship
+  is present; the `engine-wasm` action runs it.
+- **The release (decision 6):** `.github/workflows/release.yml` replaces
+  `core-publish-wasm.yml`. It builds the four parts without the cache, sets the tag's version in
+  the four public manifests of its checkout (never committed), packs them with the workspace
+  resolved and publishes the tarballs. `scripts/viewer-subset-audit.mjs` is the subset audit: the
+  crate graph of `paged-sdk` and the packed viewer's files.

@@ -31,7 +31,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "bun:test";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const CLI = resolve(here, "../../plugin-cli/bin/paged-plugin.mjs");
+const CLI = resolve(here, "../bin/paged-plugin.mjs");
 // The 8-byte empty module.
 const WASM = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
 const SRI = "sha384-" + createHash("sha384").update(WASM).digest("base64");

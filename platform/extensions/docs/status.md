@@ -10,9 +10,11 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
 
 ## Shipped
 
-- **Five packages, three of them on npm.** `plugin-api`, `plugin-sdk` and `plugin-cli` are
-  published under the `canary` tag on a push to `main`. `ai` and `cli` are built and tested
-  in the same workflow but are not on npm (see the limits below).
+- **Four packages, two of them public on npm** (PM-0008, 2026-10-18). `plugin-api` and
+  `plugin-sdk` are published by `.github/workflows/release.yml` from a `v0.<protocol>.<patch>`
+  tag, at the tag's version; `plugin-sdk` carries the `paged-plugin` bin, which was
+  `@paged-media/plugin-cli` (0.1.6, deprecated). `ai` and `cli` are private workspace
+  packages. The notes below about the canary lane describe the state before the change.
 - **The contract** (`plugin-api`, types only): the manifest types and their JSON Schema
   (exported as `./manifest.schema.json`), `PagedBundle`, `BundleHost` with 31 members, the
   contribution shapes, the panel schema, binding providers, the object-model types, and the
@@ -126,7 +128,7 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
   the host's selection mirror, so the selection box follows a selection a bundle makes
   (0.2.54-canary.0).
 - **The gesture test kit (0.2.73-canary.0; its own entry point `@paged-media/plugin-sdk/gesture-kit`
-  since 0.2.74-canary.0):** `createFakeEditor` (a recording `PagedEditor`), the gesture DSL
+  since 0.2.76-canary.0):** `createFakeEditor` (a recording `PagedEditor`), the gesture DSL
   `gestures()` with its unit backend (a tool's handler driven in document points, against the
   fake or the headless engine), pointer tapes (`parseTape` / `replayTape`) and the invariants
   (`expectOneCommit`, `expectNoCommit`, `checkUndoRedo`, `checkCancel`, `engineModelChannel`).
@@ -197,10 +199,9 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
   or caret backend. The engine text shaper is opt-in (`engineShaper`). Menu entries are not
   recorded. Gestures replay through the gesture test kit's DSL against
   `host.editor` (0.2.73-canary.0); the headless host itself drives no pointer.
-- **Two packages are not on npm.** `@paged-media/ai` and `@paged-media/cli` have never been
-  published. `publish.yml` publishes through trusted publishing, which cannot make a
-  package's first publish: every run publishes the contract packages whose version changed
-  and then fails at `@paged-media/ai` (`ENEEDAUTH`), so `@paged-media/cli` is never reached.
+- **Two packages are not on npm, by decision.** `@paged-media/ai` and `@paged-media/cli` are
+  private workspace packages (PM-0008); `release.yml` publishes only `plugin-api` and
+  `plugin-sdk` of this directory.
 - **Gaps in the test and version gates.** The version-bump guard covers `plugin-api` and
   `plugin-sdk` only, so a change to `plugin-cli`, `ai` or `cli` without a bump publishes
   nothing. `vitest.yml` runs the `plugin-sdk` and `ai` suites on every pull request; the
@@ -208,14 +209,15 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
 - **Doors without a first-party user.** None of the nine first-party bundle manifests
   declares `secrets`. The editor passes no `journal` option to `loadBundle`
   (`editor: apps/canvas/src/main.tsx:1579-1626`), so `host.journal` records nothing there.
-- **Present but unused.** `scripts/assert-dist-tags.mjs` is run by no workflow.
-  `PluginApiNotImplemented` is exported and never thrown. `plugin-cli` has no test suite of
-  its own; specs in `plugin-sdk` run it as a subprocess. The vendored `catalog.json` is not
+- **Present but unused.** `PluginApiNotImplemented` is exported and never thrown. (The
+  unused `scripts/assert-dist-tags.mjs` is gone; `tooling/release/assert-dist-tags.mjs` runs
+  in `release.yml`.) The `paged-plugin` bin has no test suite of its own; specs in
+  `plugin-sdk` run it as a subprocess. The vendored `catalog.json` is not
   in the published `plugin-api`; the `plugin-sdk` build inlines its `propertySchemas` and
   `pathAliases`.
 - **Text in this repo that lags the code.**
   - The code under `packages/*/src`, the tests, the CLI's untyped baseline (`"adr": "323"`),
-    `packages/plugin-cli/bin/paged-plugin.mjs`, two scripts and a `contract-guard` step name
+    `packages/plugin-sdk/bin/paged-plugin.mjs`, two scripts and a `contract-guard` step name
     cite the object model as "ADR 323", its proposal number. The record is
     [ADR 329](adr/329-plugins-contribute-a-typed-object-model.md); 323 is page navigation
     and page images. A comment change under `packages/*/src` needs a version bump, so these

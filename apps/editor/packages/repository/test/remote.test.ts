@@ -25,7 +25,7 @@ import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-import { initSync, Repository } from "@paged-media/repo-wasm";
+import { initSync, Repository } from "@paged-media/canvas-wasm/repo";
 
 import { memoryFs } from "../src/fs.ts";
 import { Library, RemoteError } from "../src/library.ts";
@@ -33,7 +33,8 @@ import { Library, RemoteError } from "../src/library.ts";
 initSync({
   module: readFileSync(
     new URL(
-      import.meta.resolve("@paged-media/repo-wasm/paged_repo_wasm_bg.wasm"),
+      import.meta
+        .resolve("@paged-media/canvas-wasm/repo/paged_repo_wasm_bg.wasm"),
     ),
   ),
 });

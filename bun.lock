@@ -25,7 +25,6 @@
         "@paged-media/plugin-api": "workspace:*",
         "@paged-media/plugin-sdk": "workspace:*",
         "@paged-media/publish": "workspace:*",
-        "@paged-media/repo-wasm": "workspace:*",
         "@paged-media/repository": "workspace:*",
         "@paged-media/sheet": "workspace:*",
         "@paged-media/shell": "workspace:*",
@@ -59,7 +58,7 @@
       "name": "paged-devtools",
       "version": "0.0.0",
       "dependencies": {
-        "@paged-media/introspect-wasm": "workspace:*",
+        "@paged-media/canvas-wasm": "workspace:*",
         "@radix-ui/react-accordion": "^1.2.20",
         "@radix-ui/react-dialog": "^1.1.23",
         "@radix-ui/react-label": "^2.1.15",
@@ -121,7 +120,7 @@
       "name": "@paged-media/repository",
       "version": "0.0.0",
       "dependencies": {
-        "@paged-media/repo-wasm": "workspace:*",
+        "@paged-media/canvas-wasm": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "catalog:node25",
@@ -214,21 +213,9 @@
       "name": "@paged-media/canvas-wasm",
       "version": "0.74.0-dev",
     },
-    "engine/core/packages/introspect-wasm": {
-      "name": "@paged-media/introspect-wasm",
-      "version": "0.74.0-dev",
-    },
-    "engine/core/packages/repo-wasm": {
-      "name": "@paged-media/repo-wasm",
-      "version": "0.74.0-dev",
-    },
-    "engine/core/packages/sdk": {
-      "name": "@paged-media/sdk",
-      "version": "0.74.0-dev",
-    },
     "engine/core/web/idml-viewer": {
       "name": "@paged-media/idml-viewer",
-      "version": "0.1.0-canary.0",
+      "version": "0.74.0-dev",
       "devDependencies": {
         "@types/bun": "catalog:",
         "typescript": "catalog:",
@@ -616,7 +603,7 @@
     },
     "platform/extensions/packages/plugin-api": {
       "name": "@paged-media/plugin-api",
-      "version": "0.2.73-canary.0",
+      "version": "0.2.76-canary.0",
       "dependencies": {
         "@types/react": "catalog:",
       },
@@ -624,16 +611,12 @@
         "typescript": "catalog:",
       },
     },
-    "platform/extensions/packages/plugin-cli": {
-      "name": "@paged-media/plugin-cli",
-      "version": "0.1.6",
+    "platform/extensions/packages/plugin-sdk": {
+      "name": "@paged-media/plugin-sdk",
+      "version": "0.2.76-canary.0",
       "bin": {
         "paged-plugin": "./bin/paged-plugin.mjs",
       },
-    },
-    "platform/extensions/packages/plugin-sdk": {
-      "name": "@paged-media/plugin-sdk",
-      "version": "0.2.73-canary.0",
       "dependencies": {
         "@paged-media/plugin-api": "workspace:*",
       },
@@ -850,23 +833,15 @@
 
     "@paged-media/image-manifest": ["@paged-media/image-manifest@workspace:modules/image/manifest"],
 
-    "@paged-media/introspect-wasm": ["@paged-media/introspect-wasm@workspace:engine/core/packages/introspect-wasm"],
-
     "@paged-media/pdf": ["@paged-media/pdf@workspace:modules/publish/packages/pdf-bundle"],
 
     "@paged-media/plugin-api": ["@paged-media/plugin-api@workspace:platform/extensions/packages/plugin-api"],
-
-    "@paged-media/plugin-cli": ["@paged-media/plugin-cli@workspace:platform/extensions/packages/plugin-cli"],
 
     "@paged-media/plugin-sdk": ["@paged-media/plugin-sdk@workspace:platform/extensions/packages/plugin-sdk"],
 
     "@paged-media/publish": ["@paged-media/publish@workspace:modules/publish/packages/publish-bundle"],
 
-    "@paged-media/repo-wasm": ["@paged-media/repo-wasm@workspace:engine/core/packages/repo-wasm"],
-
     "@paged-media/repository": ["@paged-media/repository@workspace:apps/editor/packages/repository"],
-
-    "@paged-media/sdk": ["@paged-media/sdk@workspace:engine/core/packages/sdk"],
 
     "@paged-media/sheet": ["@paged-media/sheet@workspace:modules/sheet/packages/sheet-bundle"],
 
