@@ -94,9 +94,10 @@ runs:
       uses: rui314/setup-mold@v1
 
     # One dependency cache for every job that builds the packages, so an
-    # engine change rebuilds the engine's crates, not its dependencies.
+    # engine change rebuilds the engine's crates, not its dependencies. A
+    # release (cache: "false") builds its dependencies too.
     - name: engine wasm — Rust dependency cache
-      if: steps.restore.outputs.cache-hit != 'true'
+      if: inputs.cache == 'true' && steps.restore.outputs.cache-hit != 'true'
       uses: Swatinem/rust-cache@v2
       with:
         workspaces: engine/core -> target
