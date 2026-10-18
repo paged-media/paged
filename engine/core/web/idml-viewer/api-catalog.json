@@ -1,5 +1,5 @@
 {
-  "$comment": "Canonical SDK API catalog for @paged-media/idml-viewer (plus the underlying paged-sdk ViewerSession and introspect-wasm Inspector). The docs site pulls this file (docs sources.pin → sdk-catalog) to render the SDK reference, so this is the source of truth that lives next to the API. The co-located vitest test (test/api-catalog.test.ts) asserts every export of src/index.ts appears here — update this file in the SAME PR as any public API change, or that test fails.",
+  "$comment": "Canonical SDK API catalog for @paged-media/idml-viewer (plus the underlying paged-sdk ViewerSession and introspect-wasm Inspector). The docs site pulls this file (docs sources.pin → sdk-catalog) to render the SDK reference, so this is the source of truth that lives next to the API. The co-located unit test (test/api-catalog.test.ts) asserts every export of src/index.ts appears here — update this file in the SAME PR as any public API change, or that test fails.",
   "package": "@paged-media/idml-viewer",
   "groups": [
     {

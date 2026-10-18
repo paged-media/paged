@@ -1,7 +1,7 @@
 $schema: '../../.moon/cache/schemas/project.json'
 
 # paged.slide: a Cargo workspace (pptx-*, slide-* crates, vendored
-# paged-ooxml) and a pnpm workspace (slide-bundle). apps/editor links
+# paged-ooxml) and a JS package (slide-bundle). apps/editor builds
 # slide-bundle from source.
 language: 'rust'
 layer: 'library'
@@ -18,16 +18,12 @@ project:
 dependsOn:
   - id: 'extensions'
     scope: 'development'
+  - id: 'test-kit'
+    scope: 'development'
 
 tasks:
-  js-lint:
-    description: 'The contract-import guard (scripts/check-contract-imports.mjs).'
-    command: 'pnpm run lint:contract'
-    inputs:
-      - '@group(js-sources)'
-
   js-test:
-    # slide-bundle builds the engine wasm before vitest.
+    # slide-bundle's bun test boots the engine wasm; build it first.
     deps: ['~:wasm']
 
   vendor-check:
@@ -50,5 +46,5 @@ tasks:
       - 'packages/slide-bundle/bin/slide_js*'
     options:
       # Needs wasm-bindgen-cli at the Cargo.lock version; slide-bundle and
-      # the editor's from-source action build it in CI.
+      # the editor's module-wasm action (.github/actions/module-wasm) build it in CI.
       runInCI: 'skip'

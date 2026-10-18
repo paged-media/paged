@@ -29,7 +29,7 @@
 //      `shell.pickFile@1` which rides the whole shell's presence;
 //   4. a declined save is a RESULT (false), not a rejection.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PluginManifest, SaveFileOptions } from "@paged-media/plugin-api";
 

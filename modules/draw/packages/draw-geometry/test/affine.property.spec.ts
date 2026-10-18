@@ -21,7 +21,7 @@
 // a page-space click into a path's local frame, and `invertAffine`, the
 // matrix itself (a nested group's parent frame is conjugated with it).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   IDENTITY_AFFINE,

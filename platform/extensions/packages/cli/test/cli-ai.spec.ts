@@ -20,7 +20,7 @@
 // page renders), the catalog it reads, and the argument checks that fire
 // before any network call. The live model run is a manual smoke test.
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { loadCatalog, parsePageSize, sessionEngine } from "../src/ai";
 import { openSession } from "../src/session";

@@ -25,10 +25,10 @@
 //     declares in `capabilities.wasm`.
 //
 // A package installed from npm is immutable per version, so its host
-// version is its npm version. One linked from a source checkout (`link:`,
-// e.g. @paged-media/doc until its first publish) is not — its bytes change
-// under the same version — so its host version carries the file's content
-// hash: `<version>+<sha256 prefix>`.
+// version is its npm version. A workspace package of this repository
+// (`workspace:`, e.g. @paged-media/doc until its first publish) is not — its
+// bytes change under the same version — so its host version carries the
+// file's content hash: `<version>+<sha256 prefix>`.
 
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
@@ -55,7 +55,10 @@ export function walkWasm(dir, out = [], skipNodeModules = true) {
 }
 
 /** The installed @paged-media packages: `{ name, version, root, published }`,
- *  one per real directory (pnpm links one store entry from many places). */
+ *  one per real directory (Bun's isolated linker links one store entry from
+ *  many places). A package is published when its real directory is in the
+ *  store, `<repo root>/node_modules/.bun/`; a workspace package resolves to
+ *  its own directory in the repository. */
 export function pagedPackages(app = APP) {
   const roots = new Set();
   for (const base of [join(app, "node_modules", "@paged-media"), join(app, "..", "..", "node_modules", "@paged-media")]) {
@@ -73,7 +76,7 @@ export function pagedPackages(app = APP) {
     const pkgFile = join(root, "package.json");
     if (!existsSync(pkgFile)) continue;
     const { name, version } = JSON.parse(readFileSync(pkgFile, "utf8"));
-    out.push({ name, version, root, published: toPosix(root).includes("/node_modules/.pnpm/") });
+    out.push({ name, version, root, published: toPosix(root).includes("/node_modules/.bun/") });
   }
   return out;
 }
@@ -109,20 +112,26 @@ export function packageIndex(app = APP) {
  *   }
  *
  * Only the wasm artifacts a plugin DECLARES are listed (the door resolves
- * nothing else); a declared file the package does not ship is left out, so
- * the door answers null for it. With `dev`, each file also carries its
- * absolute path (`fs`), which the dev server serves under `/@fs/`.
+ * nothing else). A published package that does not ship a declared file
+ * leaves it out, so the door answers null for it. A workspace package is
+ * built in this repository, so a declared file it lacks was not built: that
+ * throws, naming the files and the Moon task that builds them, instead of
+ * shipping an editor whose module door silently answers null (ADR 223). With
+ * `dev`, each file also carries its absolute path (`fs`), which the dev
+ * server serves under `/@fs/`.
  */
 export function buildModuleManifest({ app = APP, host = null, dev = false } = {}) {
   const packages = {};
   const plugins = {};
+  const unbuilt = [];
   for (const pkg of pagedPackages(app)) {
     const manifestFile = join(pkg.root, "manifest.json");
     if (!existsSync(manifestFile)) continue;
     let manifest;
     try {
       manifest = JSON.parse(readFileSync(manifestFile, "utf8"));
-    } catch {
+    } catch (e) {
+      if (!pkg.published) throw new Error(`${pkg.name}: manifest.json does not parse: ${e.message}`);
       continue;
     }
     const wasm = manifest?.capabilities?.wasm;
@@ -134,7 +143,10 @@ export function buildModuleManifest({ app = APP, host = null, dev = false } = {}
       const path = posix.normalize(posix.join(base, a.path));
       if (path.startsWith("..")) continue;
       const file = join(pkg.root, ...path.split("/"));
-      if (!existsSync(file)) continue;
+      if (!existsSync(file)) {
+        if (!pkg.published) unbuilt.push({ pkg, path });
+        continue;
+      }
       const bytes = readFileSync(file);
       files[path] = {
         integrity: `sha384-${sha("sha384", bytes)}`,
@@ -146,5 +158,27 @@ export function buildModuleManifest({ app = APP, host = null, dev = false } = {}
     plugins[manifest.id] = { package: pkg.name, base };
     packages[pkg.name] = { version: pkg.version, files };
   }
+  if (unbuilt.length > 0) throw new Error(unbuiltMessage(unbuilt));
   return { host, packages, plugins };
+}
+
+/** The error for declared wasm that a workspace package lacks: each file, and
+ *  the Moon task that builds it. A module's `wasm` task builds its own engine
+ *  (`modules/<name>/…` → `<name>:wasm`); data's DuckDB build is vendored by
+ *  `data:duckdb`. */
+function unbuiltMessage(unbuilt) {
+  const lines = unbuilt.map(({ pkg, path }) => `  ${pkg.name}: ${path}`);
+  const tasks = new Set();
+  for (const { pkg, path } of unbuilt) {
+    const m = /\/modules\/([^/]+)\//.exec(toPosix(pkg.root) + "/");
+    if (!m) tasks.add(`build ${pkg.name}'s wasm`);
+    else tasks.add(m[1] === "data" && path.includes("duckdb") ? "data:duckdb" : `${m[1]}:wasm`);
+  }
+  const moon = [...tasks].filter((t) => !t.startsWith("build "));
+  const other = [...tasks].filter((t) => t.startsWith("build "));
+  return [
+    "module manifest: declared wasm was not built (ADR 223):",
+    ...lines,
+    `build it first: ${[...(moon.length ? [`moon run ${moon.join(" ")}`] : []), ...other].join("; ")}`,
+  ].join("\n");
 }

@@ -1,7 +1,7 @@
 $schema: '../../.moon/cache/schemas/project.json'
 
-# paged.publish: a Cargo workspace (IDML import/export, PDF import) and a
-# pnpm workspace without a root package.json (packages/pdf-bundle,
+# paged.publish: a Cargo workspace (IDML import/export, PDF import) and JS
+# packages without a component package.json (packages/pdf-bundle,
 # packages/publish-bundle).
 language: 'rust'
 layer: 'library'
@@ -18,6 +18,13 @@ project:
 dependsOn:
   - id: 'core'
     scope: 'production'
+
+# Moon detects the JS toolchains from a package.json in the project root,
+# and this one has none (only packages/*), so they are named here.
+toolchains:
+  javascript: true
+  bun: true
+  node: true
 
 # Path dependencies into the engine: its crates are inputs here too, so
 # `moon ci` re-runs this project when an engine crate it builds changes.
@@ -50,17 +57,20 @@ tasks:
       cargo build --workspace --all-targets
       && cargo build -p pdf-import --target wasm32-unknown-unknown
     options:
-      runInCI: true
+      # publish-ci.yml builds the same; `moon ci` runs no Rust task.
+      runInCI: false
 
   js-check:
-    command: 'pnpm -r --filter ./packages/* run typecheck'
+    command: "bun run --filter './packages/*' typecheck"
 
   js-test:
-    description: 'vitest in the packages that declare a test script.'
-    command: 'pnpm -r --filter ./packages/* run test'
+    description: 'bun test in the packages that declare a test script.'
+    command: "bun run --filter './packages/*' test"
+    # pdf-bundle's mapper specs load bin/pdf_import*; publish-ci builds it.
+    deps: ['~:wasm']
 
   js-build:
-    command: 'pnpm -r --filter ./packages/* run build'
+    command: "bun run --filter './packages/*' build"
     outputs:
       - 'packages/*/dist/**/*'
     options:
@@ -73,7 +83,9 @@ tasks:
     inputs:
       - '@group(rust-sources)'
       - 'scripts/build-wasm.sh'
+    outputs:
+      - 'packages/pdf-bundle/bin/pdf_import*'
     options:
-      # The artifact is committed, so it is not a cached output.
-      cache: false
+      # Needs wasm-bindgen-cli at the Cargo.lock version; publish-ci builds
+      # it (.github/actions/module-wasm).
       runInCI: 'skip'

@@ -22,7 +22,7 @@
 // a label names, and every part written this session (undo may return to
 // it), stay.
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

@@ -36,7 +36,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 
 import type { CommandContribution, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -135,6 +135,23 @@ const TEXT_DOC = buildIdml([
 type Op = { op: string; args: Record<string, unknown> };
 const opsOf = (m: unknown): Op[] => (m as { args: { ops: Op[] } }).args.ops;
 
+// Whether the engine answers requestTextOutlines (protocol 66), probed once
+// while the file loads: bun:test has no runtime skip (vitest's ctx.skip()),
+// so the two engine-dependent cases below are skipIf'd on it instead.
+const V66 = await (async () => {
+  const p = await openHost();
+  try {
+    await p.host.editor.client.send({
+      kind: "registerFont",
+      payload: { family: "Lora", style: null, bytes: Array.from(LORA) },
+    } as never);
+    await p.load(TEXT_DOC);
+    return (await rawTextOutlines(p.host, { kind: "textFrame", id: "tf" } as ElementId)) !== null;
+  } finally {
+    p.dispose();
+  }
+})();
+
 describe("draw conformance — create outlines (C-69, protocol 66)", () => {
   describe("the pure batch", () => {
     it("one path per colour, first contour inserted then re-merged, grouped, the frame deleted LAST", () => {
@@ -228,11 +245,8 @@ describe("draw conformance — create outlines (C-69, protocol 66)", () => {
     });
     afterAll(() => h?.dispose());
 
-    it("protocol 66: the frame becomes paths inside its own box, in ONE batch; one undo brings the frame back", async (ctx) => {
-      if (!v66) {
-        if (process.env.PAGED_REQUIRE_V66 === "1") throw new Error("PAGED_REQUIRE_V66=1 but the engine does not answer requestTextOutlines");
-        ctx.skip();
-      }
+    it.skipIf(!V66 && process.env.PAGED_REQUIRE_V66 !== "1")("protocol 66: the frame becomes paths inside its own box, in ONE batch; one undo brings the frame back", async () => {
+      if (!v66) throw new Error("PAGED_REQUIRE_V66=1 but the engine does not answer requestTextOutlines");
       const read = (await rawTextOutlines(h.host, frame))!;
       expect(read.runs.reduce((n, r) => n + r.glyphs, 0)).toBe(3);
       expect(read.runs).toHaveLength(2);
@@ -283,8 +297,7 @@ describe("draw conformance — create outlines (C-69, protocol 66)", () => {
       expect(await leafKinds()).toEqual(before);
     });
 
-    it("an OLDER engine: the command refuses and the frame is left as text", async (ctx) => {
-      if (v66) ctx.skip();
+    it.skipIf(V66)("an OLDER engine: the command refuses and the frame is left as text", async () => {
       const before = await leafKinds();
       await h.host.selection.set([frame]);
       await commandFor(CREATE_OUTLINES_COMMAND_ID).handler(undefined);

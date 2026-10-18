@@ -28,7 +28,7 @@ per spec §4): `sheet-core` (frozen types + AST), `sheet-parser`,
 `sheet-grid` (windowed GridScene — the in-frame surface), `sheet-chart`
 (plotters + a custom paged.draw `DrawingBackend` → a frozen ChartGeometry
 IR — NOT charming, NOT hand-rolled SVG), `sheet-js` (wasm-bindgen
-surface), `sheet-conformance` (TEST-ONLY). TS packages (pnpm `packages/*`,
+surface), `sheet-conformance` (TEST-ONLY). TS packages (`packages/*`, in the root Bun workspace,
 draw/web convention): `sheet-host-model` (pure LoweredContent→Mutation
 translation) + `sheet-bundle` (manifest + `activate(host)` + workbook
 panel + grid panel + datasets panel + 12 commands + engine boot).
@@ -95,8 +95,8 @@ Rules for every code change in this repo:
   `plugin-api`, `plugin-sdk`, and published package contracts — never
   `plugin-image` or any other plugin, not at build time, runtime, or via
   side channels, even co-installed. (`paged.draw` chart lowering in T2
-  is a CORE SDK surface, not a plugin.) TS guard:
-  `scripts/check-contract-imports.mjs`; Rust guard: `deny.toml`
+  is a CORE SDK surface, not a plugin.) TS guard: the
+  contract-import lint rule (`/bunfig.toml`, PM-0003); Rust guard: `deny.toml`
   [sources] + the cargo-tree CI guards. SDK gaps become
   RFI §6 entries / plugin-platform RFCs — NEVER core
   modifications from this project.
@@ -199,7 +199,7 @@ Rules for every code change in this repo:
 ## Commands
 
 ```bash
-moon run sheet:test     # Rust (nextest + doctests), then wasm + vitest, from anywhere
+moon run sheet:test     # Rust (nextest + doctests), then wasm + bun test, from anywhere
 # Rust (the engine) without Moon
 cargo build --workspace && cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
@@ -214,8 +214,8 @@ cargo deny check
 bash scripts/build-wasm.sh
 
 # TS (the bundle) — install order: editor → plugin-sdk → plugin-sheets
-pnpm install && pnpm test && pnpm typecheck
-pnpm validate:manifest
+bun install && bun run test && bun run typecheck
+bun run validate:manifest
 
 # Excel differential oracle — CI compares against the committed recordings:
 cargo test -p sheet-conformance --test it excel_oracle::

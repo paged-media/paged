@@ -21,7 +21,7 @@
 // results (errors, overset) go back, refusals and bad inputs stop safely.
 
 import type Anthropic from "@anthropic-ai/sdk";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import { complete, runAgent, type AiTransport, type ApiCatalog, type TurnRequest } from "../src";
 import { headlessEngine } from "./engine-fixture";

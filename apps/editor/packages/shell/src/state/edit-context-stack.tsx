@@ -59,7 +59,6 @@ import {
   type PropsWithChildren,
 } from "react";
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { ElementId, PageId } from "@paged-media/client";
 
 import type {

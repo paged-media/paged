@@ -21,7 +21,7 @@
 // save; what a label names, what this session wrote, and anything that is
 // not a source part stays; without the delete door nothing goes.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import { DEFAULT_SOURCE, storeSource, type WebFrameSource } from "@paged-media/web-model";
@@ -34,10 +34,8 @@ const big = (tag: string): WebFrameSource => ({
   html: `<p>${tag}</p>` + "<p>lorem ipsum dolor</p>".repeat(5000),
 });
 
-function modelHost(opts: { canDelete?: boolean; didOpen?: boolean; docMeta?: boolean } = {}) {
-  // A host with `document.onDidOpen` (the default) announces an opened
-  // document there; an older one only on the raw client broadcast.
-  const didOpen = opts.didOpen !== false;
+function modelHost(opts: { canDelete?: boolean; docMeta?: boolean } = {}) {
+  // The host announces an opened document through `document.onDidOpen`.
   const opened: (() => void)[] = [];
   const parts = new Map<string, Uint8Array>();
   const labels = new Map<string, unknown>();
@@ -50,7 +48,7 @@ function modelHost(opts: { canDelete?: boolean; didOpen?: boolean; docMeta?: boo
     supports: (f: string) =>
       f === "storage.parts@1" ||
       (f === "storage.parts@2" && opts.canDelete !== false) ||
-      (f === "document.onDidOpen@1" && didOpen) ||
+      f === "document.onDidOpen@1" ||
       (f === "document.documentMetadata@1" && opts.docMeta !== false),
     document: {
       tree: async () =>
@@ -70,14 +68,10 @@ function modelHost(opts: { canDelete?: boolean; didOpen?: boolean; docMeta?: boo
         willSave = l;
         return { dispose() {} };
       },
-      ...(didOpen
-        ? {
-            onDidOpen: (l: () => void) => {
-              opened.push(l);
-              return { dispose: () => void opened.splice(opened.indexOf(l), 1) };
-            },
-          }
-        : {}),
+      onDidOpen: (l: () => void) => {
+        opened.push(l);
+        return { dispose: () => void opened.splice(opened.indexOf(l), 1) };
+      },
     },
     parts: {
       read: async (p: string) => parts.get(p) ?? null,
@@ -98,8 +92,7 @@ function modelHost(opts: { canDelete?: boolean; didOpen?: boolean; docMeta?: boo
       docMeta.now = docMeta.undo.pop() ?? null;
     },
     open: async () => {
-      if (didOpen) opened.forEach((l) => l());
-      else loaded.forEach((l) => l({ kind: "documentLoaded" }));
+      opened.forEach((l) => l());
       await new Promise((r) => setTimeout(r, 0));
     },
     save: () => willSave!(),
@@ -161,19 +154,17 @@ describe("source-part collector (modelled host)", () => {
     await m.save();
     expect(m.parts.has("sources/00000000deadbeef.json")).toBe(true);
   });
-  for (const didOpen of [true, false]) {
-    it(`a file opened after activation is collected (${didOpen ? "document.onDidOpen" : "raw client broadcast"})`, async () => {
-      const m = modelHost({ didOpen });
-      startPartsCollector(m.host);
-      // The opened file brings an orphan the activation mark never saw.
-      m.parts.set("sources/00000000deadbeef.json", enc("{}"));
-      await m.open();
-      await m.save();
-      expect(m.parts.has("sources/00000000deadbeef.json")).toBe(false);
-      // The door replaces the raw subscription; it is the fallback only.
-      expect(m.rawSubscribers()).toBe(didOpen ? 0 : 1);
-    });
-  }
+  it("a file opened after activation is collected (document.onDidOpen)", async () => {
+    const m = modelHost();
+    startPartsCollector(m.host);
+    // The opened file brings an orphan the activation mark never saw.
+    m.parts.set("sources/00000000deadbeef.json", enc("{}"));
+    await m.open();
+    await m.save();
+    expect(m.parts.has("sources/00000000deadbeef.json")).toBe(false);
+    // Nothing holds a raw client subscription.
+    expect(m.rawSubscribers()).toBe(0);
+  });
 });
 
 describe("the migrated document-values part", () => {

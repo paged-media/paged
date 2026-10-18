@@ -72,7 +72,7 @@ import { ovalToPath, type Affine } from "@paged-media/draw-geometry";
 
 import { bindMinted, mutateMinting } from "../commands/minted";
 import { insertRawPathOps } from "../commands/shape-build";
-import { batchMutationFor, handleElementId } from "../commands/v59-wire";
+import { batchMutationFor, handleElementId } from "../commands/batch-handles";
 import { pageOriginOf, SPREAD_ORIGIN, storedTransformOf, type PageOrigin } from "../page-origin";
 
 /** A live stand-in probe: the ids to ask the arrangement about (the

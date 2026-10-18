@@ -25,7 +25,7 @@
 //   3. a path escaping the namespace (`..`) is rejected before any send;
 //   4. supports("storage.parts@1") is true (the engine is the writer).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PluginManifest } from "@paged-media/plugin-api";
 

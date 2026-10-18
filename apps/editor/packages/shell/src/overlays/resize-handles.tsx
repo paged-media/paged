@@ -19,7 +19,6 @@
 
 import type { ReactNode } from "react";
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type {
   ElementGeometryItem,
   ResizeHandle,

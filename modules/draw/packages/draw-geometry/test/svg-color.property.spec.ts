@@ -23,7 +23,7 @@
 // "resolves to `null` — never a throw", and the defect block at the end
 // is where that contract did not hold until it was fixed.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { cmykToRgb, parseCssColor, rgbToHex, type Rgb } from "../src";
 import {

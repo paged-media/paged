@@ -53,14 +53,8 @@ already-computed output into committed host mutations.
 
 ## Setup
 
-Components of the monorepo; install order matters (`link:` chain):
-
-```
-<repo root>/
-├── apps/editor/           pnpm install   (1st)
-├── platform/extensions/   pnpm install   (2nd)
-└── modules/sheet/         pnpm install   (3rd)
-```
+Components of the monorepo, all packages of the one root Bun workspace:
+`bun install` at the repository root installs them together.
 
 ```bash
 moon run sheet:test               # engine and bundle tests, building the wasm first
@@ -69,7 +63,7 @@ cargo build --workspace && cargo test --workspace
 bash scripts/build-wasm.sh        # → packages/sheet-bundle/bin/ (100 MB app wasm budget)
 
 # TS bundle
-pnpm install && pnpm test && pnpm typecheck
+bun install && bun run test && bun run typecheck
 node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/sheet-bundle/manifest.json
 ```
 

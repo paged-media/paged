@@ -13,7 +13,7 @@
 // REQUIRE_REAL_CORE=1 / REQUIRE_REAL_ENGINE=1 / REQUIRE_REAL_DUCKDB=1, where
 // a missing piece fails.
 
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
@@ -28,7 +28,7 @@ import {
   type CountedDuck,
 } from "./perf/harness";
 
-vi.setConfig({ testTimeout: BUDGET_TIMEOUT_MS });
+setDefaultTimeout(BUDGET_TIMEOUT_MS);
 
 interface Flow {
   frames: { frame: string; blocks: unknown[] }[];

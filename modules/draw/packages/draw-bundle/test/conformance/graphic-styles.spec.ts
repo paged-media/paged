@@ -41,7 +41,7 @@
 //   (6) the honest refusals (a BAKED appearance, a host with no
 //       container writer) and the panel's registration + inline note.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type {
   BundleHost,

@@ -1,6 +1,6 @@
 $schema: '../../.moon/cache/schemas/project.json'
 
-# paged.data: a Cargo workspace (data-* crates) and a pnpm workspace
+# paged.data: a Cargo workspace (data-* crates) and JS packages
 # (data-bundle, data-host-model).
 language: 'rust'
 layer: 'library'
@@ -15,16 +15,12 @@ project:
 dependsOn:
   - id: 'extensions'
     scope: 'development'
+  - id: 'test-kit'
+    scope: 'development'
 
 tasks:
-  js-lint:
-    description: 'The contract-import guard (scripts/check-contract-imports.mjs).'
-    command: 'pnpm run lint:contract'
-    inputs:
-      - '@group(js-sources)'
-
   js-test:
-    # data-vitest builds the engine wasm and vendors DuckDB before vitest.
+    # data-vitest.yml builds the engine wasm and vendors DuckDB before bun test.
     deps: ['~:wasm', '~:duckdb']
 
   duckdb:
@@ -34,7 +30,7 @@ tasks:
       - 'scripts/vendor-duckdb.sh'
       - 'scripts/bundle-duckdb-api.mjs'
       - 'packages/data-bundle/manifest.json'
-      - 'pnpm-lock.yaml'
+      - '/bun.lock'
     options:
       # Downloads from npm; data-vitest runs it in CI.
       runInCI: 'skip'

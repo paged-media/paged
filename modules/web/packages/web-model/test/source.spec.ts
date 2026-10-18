@@ -19,7 +19,7 @@
 // The metadata envelope helpers — the bundle's single
 // (de)serialization point for the W-02 carrier (core protocol v33).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   contentHash,

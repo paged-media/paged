@@ -931,13 +931,24 @@ export interface SecretsSurface {
  *  `ParentStory`, else `null`). Present whenever the engine reported it
  *  (it is additive on the wire; an older engine omits it), so a bundle
  *  placing a frame + table + chart in ONE mutate reads back every id here
- *  instead of re-discovering them with a scene walk. */
+ *  instead of re-discovering them with a scene walk.
+ *
+ *  A page is not an element, so neither `createdId` nor `minted` names one:
+ *  `createdPages` lists the pages the mutation created. */
 export type MutationOutcome =
   | {
       applied: true;
       createdId: ElementId | null;
       pageIds: PageId[];
       minted?: MintedElement[];
+      /** The pages the mutation created, in the order it created them: an
+       *  `insertPage`'s page and a `duplicatePage`'s copy, alone or inside
+       *  a `batch` (a page the batch deleted again is not listed). Absent
+       *  when it created none. Read the new page here instead of diffing
+       *  the `pages` collection around the write, which takes two reads
+       *  and yields the new pages in document order rather than per
+       *  insert. */
+      createdPages?: PageId[];
       /** The engine's sequence number of this write (the wire's
        *  `mutationApplied.appliedSeq`), when the host knows it. A script
        *  host bridge reports it back as `HostObjectsResult.committed` so

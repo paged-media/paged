@@ -28,7 +28,8 @@
 // Gate: skips without canvas-wasm, DuckDB or the built data-js wasm, EXCEPT
 // under REQUIRE_REAL_CORE=1 / REQUIRE_REAL_DUCKDB=1.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi, mock } from "bun:test";
+import { waitFor, importActual } from "@paged-media/test-kit";
 import { existsSync } from "node:fs";
 
 import type { BundleHost } from "@paged-media/plugin-api";
@@ -40,6 +41,12 @@ import { BIND, OBJECTS_PANEL_ID } from "../src/panels/objects-panel";
 import { labelledElements } from "../src/labels";
 import { undoMark, undoSteps } from "./perf/harness";
 
+// bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
+// real exports are taken once, before anything is mocked, and mock.module
+// patches the loaded module in place (every importer sees the change).
+const actualEngine = await importActual(() => import("../src/engine"));
+const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
+
 const CSV = "sku,weight_mm\nA-1,2\nB-2,4\n";
 const BINDING = "plugin:media.paged.data/binding/weight";
 
@@ -48,13 +55,12 @@ const ready = ENGINE_ANCHOR !== null && probe.handle !== undefined && existsSync
 const required = REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB;
 
 async function loadBundleModule() {
-  vi.resetModules();
-  vi.doMock("../src/engine", async (orig) => ({
-    ...(await orig<typeof import("../src/engine")>()),
+  mock.module("../src/engine", () => ({
+    ...actualEngine,
     bootEngine: (today: number) => bootRealEngine(today),
   }));
-  vi.doMock("../src/query/duckdb", async (orig) => ({
-    ...(await orig<typeof import("../src/query/duckdb")>()),
+  mock.module("../src/query/duckdb", () => ({
+    ...actualDuckdb,
     bootDuckDB: async () => {
       const b = await bootRealDuckDB();
       if (!b.handle) throw new Error(b.error);
@@ -180,12 +186,12 @@ describe.skipIf(!ready && !required)("Data objects panel, real core + engine + D
 
     // Undo: the label AND the session go back.
     await host.document.undo();
-    await vi.waitFor(async () => expect(await h.objects.get(BINDING, "expr")).toEqual({ kind: "value", value: "MM(weight_mm)" }), { timeout: 10_000 });
+    await waitFor(async () => expect(await h.objects.get(BINDING, "expr")).toEqual({ kind: "value", value: "MM(weight_mm)" }), { timeout: 10_000 });
     expect(await labelExpr(host, "urect", "weight")).toBe("MM(weight_mm)");
 
     // Redo: both come forward again.
     await host.document.redo();
-    await vi.waitFor(async () => expect(await h.objects.get(BINDING, "expr")).toEqual({ kind: "value", value: "MM(weight_mm + 1)" }), { timeout: 10_000 });
+    await waitFor(async () => expect(await h.objects.get(BINDING, "expr")).toEqual({ kind: "value", value: "MM(weight_mm + 1)" }), { timeout: 10_000 });
     expect(await labelExpr(host, "urect", "weight")).toBe("MM(weight_mm + 1)");
 
     // The engine took exactly the one step host.objects reported.
@@ -214,10 +220,10 @@ describe.skipIf(!ready && !required)("Data objects panel, real core + engine + D
     expect(await labelExpr(host, "urect", "weight")).toBe("MM(weight_mm)");
 
     await host.document.undo();
-    await vi.waitFor(() => expect(s.listBindings().map((b) => b.id)).toEqual([]), { timeout: 10_000 });
+    await waitFor(() => expect(s.listBindings().map((b) => b.id)).toEqual([]), { timeout: 10_000 });
     expect(await labelExpr(host, "urect", "weight")).toBeNull();
     await host.document.redo();
-    await vi.waitFor(() => expect(s.listBindings().map((b) => b.id)).toEqual(["weight"]), { timeout: 10_000 });
+    await waitFor(() => expect(s.listBindings().map((b) => b.id)).toEqual(["weight"]), { timeout: 10_000 });
     expect(await undoSteps(h, mark)).toBe(1);
   }, 60_000);
 

@@ -33,8 +33,7 @@
 //
 // When it runs:
 //   · on activation, and when another document opens
-//     (`document.onDidOpen`; the editor's raw `documentLoaded` broadcast on
-//     an older host — document-opened.ts);
+//     (`document.onDidOpen` — document-opened.ts);
 //   · after every committed document change (`document.onDidChange`: a
 //     mutation, an undo/redo, a canvas gesture's commit — a frame resized by
 //     its handles — and a script run), debounced, so a save, an undo/redo of

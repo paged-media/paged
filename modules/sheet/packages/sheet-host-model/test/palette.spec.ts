@@ -20,7 +20,7 @@
 // derivation, plus the property the whole slice rests on: the ids the
 // panel SHOWS are the ids the lowering MINTS.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { Mutation, SwatchSpec } from "@paged-media/plugin-api";
 

@@ -19,7 +19,7 @@
 // The op vocabulary's lowering, and the index-addressed anchor planners
 // the Pen's add / delete clicks ride.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { cornerAnchor, type AnchorTable } from "@paged-media/draw-geometry";
 import type { ElementId } from "@paged-media/plugin-api";

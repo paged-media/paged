@@ -22,7 +22,7 @@
 // context the hooks decline.
 
 import { act, type ReactTestRenderer } from "react-test-renderer";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { ElementId } from "@paged-media/plugin-api";
 

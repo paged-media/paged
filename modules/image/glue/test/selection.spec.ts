@@ -26,7 +26,7 @@
 // lives in Rust (image-conformance selection_pipeline.rs + the mask-ABI
 // suite selection_mask.rs); these specs pin the GLUE.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type {

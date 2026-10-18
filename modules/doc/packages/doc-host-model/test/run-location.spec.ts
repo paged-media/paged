@@ -19,7 +19,7 @@
 // bodyRunLocation: which native paragraph a lowered body run landed in, per
 // section story, and the text around it — the pour's own count, read back.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { bodyRunLocation, type LoweredDoc } from "../src";
 

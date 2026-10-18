@@ -59,7 +59,6 @@
 import type { BundleHost, ElementId, Mutation, MutationOutcome, PageId } from "@paged-media/plugin-api";
 
 import { BINDING_KEY, makeEnvelope, type IdmlFit } from "../../data-host-model/src";
-import { measureStringsDoor } from "./doors";
 
 // ── the engine contract (data-lower/src/merge.rs, camelCase serde) ──────────
 
@@ -877,16 +876,15 @@ async function writeInTwoSteps(
   return { outcome: o, pages, mutateCalls };
 }
 
-/** Every template frame's words measured at its font. With the batch door
- *  (D-27, `text.measureStrings`) one host call per distinct face and size;
- *  without it one `measureString` per word, as before. */
+/** Every template frame's words measured at its font. Where the host serves
+ *  the batch in one round trip (D-27, `text.measureStrings@1`) one host call
+ *  per distinct face and size; otherwise one `measureString` per word. */
 export async function measureWords(
   host: BundleHost,
   template: Pick<MergeTemplate, "frames">,
   words: readonly (readonly string[] | undefined)[],
 ): Promise<FrameMetrics[]> {
-  const batch = measureStringsDoor(host);
-  if (batch) {
+  if (host.supports("text.measureStrings@1")) {
     // Group the words by face + size: one call per group.
     const groups = new Map<string, { font: TemplateFrameInfo["font"]; words: Set<string> }>();
     template.frames.forEach((f, i) => {
@@ -898,7 +896,8 @@ export async function measureWords(
     const advance = new Map<string, Map<string, number>>();
     for (const [key, g] of groups) {
       const list = [...g.words];
-      const measured = list.length > 0 ? await batch(g.font.family, g.font.style, list, g.font.sizePt) : [];
+      const measured =
+        list.length > 0 ? await host.text.measureStrings(g.font.family, g.font.style, list, g.font.sizePt) : [];
       advance.set(key, new Map(list.map((w, k) => [w, measured[k]?.advance ?? 0])));
     }
     return template.frames.map((f, i) => {

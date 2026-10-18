@@ -1,20 +1,38 @@
 name: doc / rust
+concurrency:
+  # A newer push to a pull request cancels the older run. Main pushes share
+  # one group per event type: a running main run always finishes, and a newer
+  # push replaces the one still waiting, so direct pushes queue at most one.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # MONOREPO (step A3): ported from paged-media/plugin-doc
-# .github/workflows/rust.yml; runs in modules/doc. Push-only, as before.
+# .github/workflows/rust.yml; runs in modules/doc. The old repository ran it
+# on push only; in the monorepo it also gates pull requests (step A10), like
+# every other module's Rust lane.
 on:
   push:
     branches: [main]
     paths:
       - "modules/doc/**"
       - ".github/workflows/doc-rust.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/doc/docs/**/*.md"
+  pull_request:
+    paths:
+      - "modules/doc/**"
+      - ".github/workflows/doc-rust.yml"
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/doc/docs/**/*.md"
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: doc-rust-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:
@@ -37,6 +55,8 @@ jobs:
         with:
           workspaces: modules/doc -> target
           prefix-key: v0-rust-doc
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: isolation guard (no core/plugin reach-around into docx-js wasm)
@@ -60,6 +80,8 @@ jobs:
         with:
           workspaces: modules/doc -> target
           prefix-key: v0-rust-doc
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@nextest
       # Red results must still upload (the state matrix wants the ✗), so the
       # run does not abort here — the gate at the end fails the job once the
@@ -113,6 +135,8 @@ jobs:
         with:
           workspaces: modules/doc -> target
           prefix-key: v0-rust-doc
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: install pinned wasm-bindgen-cli (Cargo.lock version)
         run: |
           V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)

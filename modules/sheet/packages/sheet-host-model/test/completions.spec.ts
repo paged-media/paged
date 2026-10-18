@@ -22,7 +22,7 @@
 // splices a chosen completion. The matching/token/apply contract is pinned
 // here; the panel just renders the result.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   applyCompletion,

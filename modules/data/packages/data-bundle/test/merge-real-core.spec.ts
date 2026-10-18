@@ -23,7 +23,7 @@
 // Gate: skips without canvas-wasm or the data-js wasm, EXCEPT under
 // REQUIRE_REAL_CORE=1, where a missing piece is a failure.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,8 +33,7 @@ import { createHeadlessHost, defineBundle, type HeadlessHost } from "@paged-medi
 
 import manifestJson from "../manifest.json";
 import { mergeRecords, pageElements, readMergeTemplate, type RecordsPerPage } from "../src/merge";
-import { documentLabelDoors, engineHasDocumentLabels } from "../src/doors";
-import { ENGINE_ANCHOR, ENGINE_PROTOCOL, fixedFrom, REQUIRE_REAL_CORE } from "./real-core";
+import { ENGINE_ANCHOR, fixedFrom, REQUIRE_REAL_CORE } from "./real-core";
 import { bootRealEngine, DATA_JS_WASM } from "./real-duckdb";
 
 const LANE = fileURLToPath(new URL("../../../conformance/indesign-merge/", import.meta.url));
@@ -96,7 +95,7 @@ function textRecordSet(id: string) {
   };
 }
 
-const normalise = (s: string) => s.replace(/\r/g, "\n").replace(/﻿/g, "");
+const normalise = (s: string) => s.replace(/\r/g, "\n").replace(/\uFEFF/g, "");
 const near = (a: number[], b: number[]) => a.every((v, i) => Math.abs(v - b[i]) <= TOL);
 
 /** A host in this plugin's namespace (labels go under x-paged:media.paged.data). */
@@ -201,10 +200,9 @@ describe.skipIf(!ready && !REQUIRE_REAL_CORE)(
           textFrame.content = { kind: "text", text: expected };
         }
 
-        // Page handles: detected as the session detects them (a v69 engine
-        // behind an SDK with the label doors), and right about the engine.
-        const pageHandles = await engineHasDocumentLabels(host);
-        expect(pageHandles).toBe(ENGINE_PROTOCOL >= 69 && documentLabelDoors(host) !== null);
+        // Page handles: the in-tree engine (protocol >= 69) places pages by
+        // in-batch handle, as the session does by default.
+        const pageHandles = true;
         const result = await mergeRecords(host, engine, template!, {
           query: "q",
           ...mergeOptions(fx),

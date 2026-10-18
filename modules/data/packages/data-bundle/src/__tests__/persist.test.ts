@@ -2,7 +2,7 @@
 // container parts — no real engine needed (the round trip through a real
 // `.paged` is test/persist-real-core.spec.ts).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   INLINE_DATA_MAX_BYTES,
@@ -77,7 +77,7 @@ describe("a host without container parts [data.plugin.persistence]", () => {
         },
         read: async () => null,
       },
-      document: {},
+      document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }) },
     } as never;
     const s = createSession(host, 0);
     await s.restore();

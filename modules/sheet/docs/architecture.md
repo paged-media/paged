@@ -72,8 +72,9 @@ only package that touches the host.
 The bundle imports the model by relative source path (`../../sheet-host-model/src`) and
 `tsup` inlines it, so the published package does not depend on the private one.
 `@paged-media/plugin-api`, `@paged-media/plugin-sdk` and `react` are peer dependencies, and
-`scripts/check-contract-imports.mjs` fails on a package import in `packages/*/src` that is none of
-these and not one of this repo's own `@paged-media/sheet-*` packages ([ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md)).
+the contract-import lint rule (`/bunfig.toml`, PM-0003) fails on a package import in `packages/*/src` that is none of
+these, not an internal shared package (`platform/shared/*`) and not one of this repo's own
+`@paged-media/sheet-*` packages ([ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md)).
 
 ## The wasm boundary
 
@@ -215,7 +216,7 @@ The manifest declares `document` (read `broad`, write `scoped`), `rendering` (`h
   `coverage-gate`, which fails when a registry row marked `implemented` names no test or
   one that is not on disk ([ADR 507](adr/507-golden-corpora-coverage-gate.md)). A third job
   builds the wasm.
-- TypeScript lane: `pnpm test` runs the import lint, then vitest in both packages (29 spec
+- TypeScript lane: `pnpm test` runs the import lint, then `bun test` in both packages (29 spec
   files; the bundle specs use hand-built fake hosts). `.github/workflows/vitest.yml` runs on
   pushes to `main` and on manual dispatch, not on pull requests. It builds the wasm first and sets
   `REQUIRE_REAL_ENGINE=1`, so the real-engine spec fails instead of skipping when the

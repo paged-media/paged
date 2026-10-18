@@ -1,0 +1,19 @@
+{
+  "name": "@paged-media/sdk",
+  "version": "0.74.0-dev",
+  "description": "The paged renderer-core viewer session (wasm-bindgen, WebGPU): the engine the IDML viewer wraps.",
+  "type": "module",
+  "main": "paged_sdk.js",
+  "types": "paged_sdk.d.ts",
+  "files": [
+    "paged_sdk.js",
+    "paged_sdk_bg.wasm",
+    "paged_sdk.d.ts"
+  ],
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paged-media/paged.git",
+    "directory": "engine/core/packages/sdk"
+  }
+}

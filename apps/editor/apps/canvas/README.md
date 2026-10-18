@@ -19,45 +19,25 @@ spec lives at `core: docs/design/canvas.md`.
 
 ## Setup
 
-One-time:
+The engine's wasm comes from `engine/core` in the same checkout, as the
+workspace package `@paged-media/canvas-wasm` (engine/core ADR 185). One-time,
+from the repository root:
 
 ```bash
-rustup target add wasm32-unknown-unknown
-cargo install wasm-bindgen-cli --version <pinned>   # match Cargo.lock
-brew install binaryen   # optional, for wasm-opt -Oz
+tooling/bootstrap.sh --check   # wasm-bindgen-cli at the Cargo.lock version, binaryen
+bun install
+moon run core:wasm-pkg         # or: bash engine/core/scripts/build-wasm-packages.sh --workspace
 ```
 
-The `<pinned>` version is detected and reported by `build-wasm.sh`
-if the installed `wasm-bindgen` is missing or mismatched.
-
-## Build the wasm bundle
-
-```bash
-cd apps/canvas
-bash build-wasm.sh
-```
-
-Outputs `src/wasm/paged_canvas_wasm.{js,d.ts}` and the binary
-`paged_canvas_wasm_bg.wasm` (~4.5 MB optimised). The `.js` loader
-and the `.wasm` binary are `.gitignore`'d; the `.d.ts` is
-**vendored** because the tsify-generated type contract is review-
-visible and a CI check (`.github/workflows/protocol-version.yml`)
-fails any PR that changes it without bumping `PROTOCOL_VERSION` in
-`crates/paged-canvas/src/channel.rs`. Regenerate the .d.ts and
-commit it in the same PR as any Rust-side type change:
-
-```bash
-cd apps/canvas
-bash build-wasm.sh
-git add src/wasm/paged_canvas_wasm.d.ts
-```
+Rebuild the packages after an engine change. `src/protocol.ts` reads the
+wire protocol from the package version (`0.<protocol>.0-dev`), and the worker
+refuses a wasm whose protocol differs.
 
 ## Run
 
 ```bash
-cd apps/canvas
-npm install
-npm run dev
+cd apps/editor/apps/canvas
+bun run dev
 ```
 
 Opens at <http://localhost:5173/>. The Vite dev server sets the
@@ -66,7 +46,7 @@ COOP / COEP headers required by `SharedArrayBuffer`.
 ## Production build
 
 ```bash
-npm run build
+bun run build
 ```
 
 Emits `dist/`. The same COOP / COEP headers must be set in
@@ -145,8 +125,8 @@ src/
 # Rust unit tests on the canvas crates
 cargo test -p paged-canvas -p paged-canvas-wasm -p paged-renderer -p paged-scene
 
-# TypeScript typecheck
-npx tsc --noEmit
+# TypeScript typecheck (bun check: tsc's errors, on every core)
+bun run typecheck
 
 # Production bundle
 npx vite build

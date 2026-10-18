@@ -34,7 +34,7 @@
 // Real engine: skipped without the wasm artifact, FAILS under
 // REQUIRE_REAL_ENGINE=1 (the engine-real.spec.ts dual gate).
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import type { BundleHost, ElementId, SceneTreeNode } from "@paged-media/plugin-api";
 import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
@@ -99,7 +99,7 @@ function nodes(roots: readonly SceneTreeNode[]): Map<string, { id: ElementId; pa
 const overlaps = (a: Box, b: Box) => a[1] < b[3] && b[1] < a[3] && a[0] < b[2] && b[0] < a[2];
 
 describe.skipIf(!ENGINE_BUILT)("a placed chart is one sized, legible object", () => {
-  vi.setConfig({ testTimeout: 90_000 });
+  setDefaultTimeout(90_000);
   let h: HeadlessHost;
   let host: BundleHost;
   let s: WorkbookSession | null = null;

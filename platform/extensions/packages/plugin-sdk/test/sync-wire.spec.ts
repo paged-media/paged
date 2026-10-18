@@ -35,12 +35,12 @@ import { Module } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 // Run `fn` with NODE_PATH neutralised. The unresolvable-source
 // assertions verify ANCHOR-RELATIVE resolution: the package must NOT be
-// found via the temp anchor's node_modules. But vitest seeds NODE_PATH
-// with pnpm's flat `.pnpm/node_modules`, and since the headless harness
+// found via the temp anchor's node_modules. But a runner can seed NODE_PATH
+// (vitest did, with pnpm's flat `.pnpm/node_modules`), and since the headless harness
 // devDepends on @paged-media/canvas-wasm it now lives there — Node's
 // resolver ALWAYS consults NODE_PATH (the `paths` option can't exclude
 // it), so a bare anchor would "resolve" the package by environment
@@ -167,6 +167,52 @@ describe("sync-wire: --check", () => {
     const res = withoutNodePath(() => checkVendored({ resolveFrom: tmp, target }));
     expect(res.ok).toBe(false);
     expect(res.reason).toMatch(/not resolvable|--source/);
+  });
+
+  it("a build on another host (closure trampoline names) is not drift; a changed signature is", () => {
+    // wasm-bindgen names its closure trampolines after rustc symbol hashes,
+    // which differ between a macOS and a Linux build of one revision, and so
+    // does their order.
+    const trampoline = (hash: string, sig: string) =>
+      `    readonly wasm_bindgen__convert__closures_____invoke__h${hash}: ${sig};\n`;
+    const initOutput = (...lines: string[]) => `export interface InitOutput {\n${lines.join("")}}\n`;
+    const two = "(a: number, b: number) => void";
+    const one = "(a: number) => void";
+    writePackage("0.34.0", DTS_BODY + initOutput(trampoline("1111111111111111", two), trampoline("2222222222222222", one)));
+    const target = join(tmp, "wire.d.ts");
+    writeFileSync(target, buildVendored(resolveSource({ resolveFrom: tmp })));
+
+    // Same signatures under other hashes, in another order: in sync.
+    writePackage("0.34.0", DTS_BODY + initOutput(trampoline("bbbbbbbbbbbbbbbb", one), trampoline("aaaaaaaaaaaaaaaa", two)));
+    expect(checkVendored({ resolveFrom: tmp, target }).ok).toBe(true);
+
+    // A trampoline whose signature changed is drift.
+    writePackage("0.34.0", DTS_BODY + initOutput(trampoline("aaaaaaaaaaaaaaaa", "(a: number, b: number, c: any) => void"), trampoline("bbbbbbbbbbbbbbbb", one)));
+    const res = checkVendored({ resolveFrom: tmp, target });
+    expect(res.ok).toBe(false);
+    expect(res.reason).toMatch(/drift/);
+  });
+
+  it("a Rust 1.99 build (crate-hashed trampoline names, another export order) is not drift", () => {
+    // Since Rust 1.99 the trampolines are named `wasm_bindgen_<crate hash>___…`,
+    // and the raw exports' order follows the link order.
+    const old = (hash: string, sig: string) =>
+      `    readonly wasm_bindgen__convert__closures_____invoke__h${hash}: ${sig};\n`;
+    const v99 = (types: string, sig: string) =>
+      `    readonly wasm_bindgen_cb391a3e032f37a7___convert__closures_____invoke___${types}_true_: ${sig};\n`;
+    const exp = (name: string) => `    readonly ${name}: (a: number) => number;\n`;
+    const initOutput = (...lines: string[]) => `export interface InitOutput {\n${lines.join("")}}\n`;
+    const sig = "(a: number, b: number, c: any) => void";
+    writePackage("0.34.0", DTS_BODY + initOutput(exp("alpha"), old("1111111111111111", sig), exp("beta")));
+    const target = join(tmp, "wire.d.ts");
+    writeFileSync(target, buildVendored(resolveSource({ resolveFrom: tmp })));
+
+    writePackage("0.34.0", DTS_BODY + initOutput(exp("beta"), v99("wasm_bindgen_cb391a3e032f37a7___JsValue_____", sig), exp("alpha")));
+    expect(checkVendored({ resolveFrom: tmp, target }).ok).toBe(true);
+
+    // An export that disappeared is still drift.
+    writePackage("0.34.0", DTS_BODY + initOutput(v99("x", sig), exp("alpha")));
+    expect(checkVendored({ resolveFrom: tmp, target }).ok).toBe(false);
   });
 
   it("VERSION-stamp drift FAILS even when the body is byte-identical", () => {

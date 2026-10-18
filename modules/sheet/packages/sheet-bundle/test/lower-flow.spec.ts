@@ -24,7 +24,8 @@
 // explicit/runtime fallback. A fake host captures the mutate calls; a
 // fake engine returns a small LoweredContent.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
+import { advanceTimersByTimeAsync } from "@paged-media/test-kit";
 
 import type {
   BundleHost,
@@ -130,22 +131,26 @@ function fakeHost(createdId: ElementId, storyId: string | null) {
         // insertTable mints the table id; everything else (the cell
         // batch, the text pour) creates nothing.
         if (m.op === "batch") {
-          const ops = (m as { args: { ops: Array<{ op: string }> } }).args.ops;
+          const ops = (m as { args: { ops: Array<{ op: string; args?: { handle?: string } }> } }).args.ops;
           if (ops.some((o) => o.op === "insertTextFrame")) {
             frameInserted = true;
+            // What the batch made, in mint order, with the handles that
+            // named them (`minted`).
+            const bound = (h: string) => (ops.some((o) => o.op === "bindCreated" && o.args?.handle === h) ? h : null);
+            const table = {
+              kind: "table",
+              id: { story_id: storyId ?? "Story/u9", table_id: "table1" },
+            } as ElementId;
+            const minted = [
+              { handle: bound("f"), element: createdId, storyId },
+              ...(ops.some((o) => o.op === "insertTable") ? [{ handle: bound("t"), element: table, storyId }] : []),
+            ];
             // The one-batch placement (frame + table, C-15 handles) reports
             // the LAST id it minted — the table, carrying the frame's story.
             if (ops.some((o) => o.op === "insertTable")) {
-              return {
-                applied: true,
-                createdId: {
-                  kind: "table",
-                  id: { story_id: storyId ?? "Story/u9", table_id: "table1" },
-                } as ElementId,
-                pageIds: ["Page/u1"],
-              };
+              return { applied: true, createdId: table, pageIds: ["Page/u1"], minted };
             }
-            return { applied: true, createdId, pageIds: ["Page/u1"] };
+            return { applied: true, createdId, pageIds: ["Page/u1"], minted };
           }
           return { applied: true, createdId: null, pageIds: ["Page/u1"] };
         }
@@ -190,6 +195,19 @@ function fakeHost(createdId: ElementId, storyId: string | null) {
 
 const CREATED: ElementId = { kind: "textFrame", id: "frame1" };
 
+/** An engine that refuses the ONE-CALL placement (a batch naming the table
+ *  by handle, `$h:t`): record the refusal, apply the rest. */
+function refuseOneCall(host: BundleHost, mutations: Mutation[]): void {
+  const realMutate = host.document.mutate.bind(host.document);
+  host.document.mutate = async (m: Mutation) => {
+    if (JSON.stringify(m).includes('"$h:t"')) {
+      mutations.push(m);
+      return { applied: false, error: "unresolved handle $h:t" } as MutationOutcome;
+    }
+    return realMutate(m);
+  };
+}
+
 /** A host without C-15 handles: refuse (and record) any batch carrying a
  *  `bindCreated` — the one-batch placement — and apply the rest. */
 function refuseHandles(host: BundleHost, mutations: Mutation[]): void {
@@ -205,17 +223,19 @@ function refuseHandles(host: BundleHost, mutations: Mutation[]): void {
 }
 
 describe("sheet_plugin_lower_mutations: native-table host flow", () => {
-  it("one batch places frame + binding + table, one batch pours the content", async () => {
+  it("refused in one call: one batch places frame + binding + table, one batch pours the content", async () => {
     const { host, mutations, selections } = fakeHost(CREATED, "Story/u9");
+    refuseOneCall(host, mutations);
     const id = await lowerSelectionToFrame(host, fakeEngine(), 0, "A1:B1");
 
     expect(id).toBe("frame1");
-    // The placement batch + the content batch — nothing per cell.
-    expect(mutations).toHaveLength(2);
+    // The refused one-call batch, then the placement batch + the content
+    // batch — nothing per cell.
+    expect(mutations).toHaveLength(3);
     // Batch 1 — frame + binding + native table (NO drawn rules: the table
     // draws borders). The table addresses the frame's story by handle.
-    expect(mutations[0].op).toBe("batch");
-    const ops = (mutations[0] as {
+    expect(mutations[1].op).toBe("batch");
+    const ops = (mutations[1] as {
       args: { ops: Array<{ op: string; args: Record<string, any> }> };
     }).args.ops;
     expect(ops.map((o) => o.op)).toEqual([
@@ -235,7 +255,7 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
     // Batch 2 — the cell text (TextCellAddr) and the decor in ONE batch
     // (core takes text ops in a batch since v0.61): the engine's h-rule at
     // the bottom boundary → tableCell-scoped bottom-edge strokes.
-    const content = mutations[1] as {
+    const content = mutations[2] as {
       op: string;
       args: { ops: Array<{ op: string; args: Record<string, any> }> };
     };
@@ -262,7 +282,7 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
       kind: "tableCell",
       id: { story_id: "Story/u9", table_id: "table1", row: 0, col: 0 },
     });
-    // The new frame (read back off the table's story) is selected.
+    // The new frame (named in the batch's `minted`) is selected.
     expect(selections).toEqual([[CREATED]]);
   });
 
@@ -272,12 +292,13 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
     const id = await lowerSelectionToFrame(host, fakeEngine(), 0, "A1:B1");
     expect(id).toBe("frame1");
     expect(mutations.map((m) => m.op)).toEqual([
+      "batch", // refused one-call placement (rolled back whole)
       "batch", // refused one-batch placement (rolled back whole)
       "batch", // phase 1 — frame + binding
       "insertTable", // phase 2 — into the story the stories diff resolved
       "batch", // phase 3 — the content
     ]);
-    expect((mutations[2] as { args: { storyId: string } }).args.storyId).toBe("Story/u9");
+    expect((mutations[3] as { args: { storyId: string } }).args.storyId).toBe("Story/u9");
     expect(selections).toEqual([[CREATED]]);
   });
 
@@ -323,12 +344,13 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
     const id = await lowerSelectionToFrame(host, fakeEngine(), 0, "A1:B1");
     expect(id).toBe("frame1"); // frame stands
     expect(mutations.map((m) => m.op)).toEqual([
+      "batch", // the one-call placement — refused (it carries insertTable)
       "batch", // the one-batch placement — refused (it carries insertTable)
       "batch", // phased: frame + binding
       "insertTable", // rejected
       "insertText", // the runtime tab-text fallback pour
     ]);
-    const pour = mutations[3] as { args: { text: string; cell?: unknown } };
+    const pour = mutations[4] as { args: { text: string; cell?: unknown } };
     expect(pour.args.text).toBe("Item\tQty");
     expect(pour.args.cell).toBeUndefined();
   });
@@ -352,7 +374,8 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
     refuseHandles(host, mutations);
     const id = await lowerSelectionToFrame(host, fakeEngine(), 0, "A1:B1");
     expect(id).toBe("frame1"); // frame placed, honest about the gap
-    expect(mutations.map((m) => m.op)).toEqual(["batch", "batch"]); // no insertTable
+    // The refused one-call and one-batch placements, the phased frame; no insertTable.
+    expect(mutations.map((m) => m.op)).toEqual(["batch", "batch", "batch"]);
   });
 
   it("returns null when the phase-1 batch is rejected", async () => {
@@ -383,8 +406,8 @@ describe("sheet_plugin_lower_mutations: native-table host flow", () => {
     } as unknown as BundleHost;
     const id = await lowerSelectionToFrame(host, fakeEngine(), 0, "A1:B1");
     expect(id).toBeNull();
-    // The one-batch placement, then the phased frame batch — both refused.
-    expect(mutations.map((m) => m.op)).toEqual(["batch", "batch"]);
+    // The one-call, the one-batch and the phased frame batch — all refused.
+    expect(mutations.map((m) => m.op)).toEqual(["batch", "batch", "batch"]);
   });
 });
 
@@ -469,10 +492,14 @@ function fakeHostWithSwatches(
 const FILL_SWATCH = "Color/uPagedSheetCellFillFFFF00";
 
 describe("sheet_lower_native_table: the driver mints the fills it references", () => {
-  const decorOf = (mutations: Mutation[]) =>
-    (mutations[mutations.length - 1] as {
+  // The content of the one-call placement: what follows the table's bind.
+  const decorOf = (mutations: Mutation[]) => {
+    const ops = (mutations[mutations.length - 1] as {
       args: { ops: Array<{ op: string; args: Record<string, any> }> };
     }).args.ops;
+    const at = ops.findIndex((o) => o.op === "bindCreated" && o.args.handle === "t");
+    return at >= 0 ? ops.slice(at + 1) : ops;
+  };
 
   it("the decor batch LEADS with the createSwatch its cellFillColor names", async () => {
     const { host, mutations } = fakeHostWithSwatches(CREATED, "Story/u9", []);
@@ -1002,7 +1029,7 @@ describe("sheet_plugin_lower_chain: live multi-frame pagination", () => {
 
       // (a) A change with NO reflow is the §8.5 transform case — IGNORED.
       fire({ kind: "mutationApplied", pageIds: ["Page/u1"] });
-      await vi.advanceTimersByTimeAsync(500);
+      await advanceTimersByTimeAsync(vi, 500);
       expect(paginateCalls).toHaveLength(0);
 
       // (b) A BURST of reflows for chain frames re-paginates ONCE, after the
@@ -1019,10 +1046,10 @@ describe("sheet_plugin_lower_chain: live multi-frame pagination", () => {
           pageIds: ["Page/u1"],
           reflow: { frameId: "f0", contentBox: [0, 0, 36 + i, 50] },
         });
-        await vi.advanceTimersByTimeAsync(30);
+        await advanceTimersByTimeAsync(vi, 30);
       }
       expect(paginateCalls).toHaveLength(0); // still settling
-      await vi.advanceTimersByTimeAsync(200);
+      await advanceTimersByTimeAsync(vi, 200);
       await sub.refresh(); // serialised behind the debounced pass
       expect(paginateCalls.length).toBeGreaterThanOrEqual(1);
       expect(mutations.filter((m) => m.op === "insertTable")).toHaveLength(tablesBefore);
@@ -1053,7 +1080,7 @@ describe("sheet_plugin_lower_chain: live multi-frame pagination", () => {
         pageIds: ["Page/u1"],
         reflow: { frameId: "fOTHER", contentBox: [0, 0, 10, 10] },
       });
-      await vi.advanceTimersByTimeAsync(500);
+      await advanceTimersByTimeAsync(vi, 500);
       expect(paginateCalls).toHaveLength(calls);
 
       sub.dispose();
@@ -1084,7 +1111,7 @@ describe("sheet_plugin_lower_chain: live multi-frame pagination", () => {
     expect(pass?.tables.map((t) => t.tableId)).toEqual(["tbl1"]);
   });
 
-  it("a pre-66 host is asked for deleteTable ONCE, then tables are emptied [sheet.lower.paginate]", async () => {
+  it("an engine that refuses deleteTable: the spare tables are emptied [sheet.lower.paginate]", async () => {
     const { host, mutations } = fakeChainHost(CHAIN);
     const { engine } = fakeChainEngine();
     const first = await lowerPaginatedToChain(host, engine, 0, "A1:A6", "Story/f0");
@@ -1100,7 +1127,8 @@ describe("sheet_plugin_lower_chain: live multi-frame pagination", () => {
     const asked = mutations
       .flatMap((m) => (m.op === "batch" ? m.args.ops : [m]))
       .filter((m) => (m.op as string) === "deleteTable");
-    expect(asked).toHaveLength(1);
+    // Asked on each shrink (a refusal is about that batch, not the host).
+    expect(asked).toHaveLength(2);
     expect(last?.tables.map((t) => t.blank)).toEqual([false, true]);
   });
 

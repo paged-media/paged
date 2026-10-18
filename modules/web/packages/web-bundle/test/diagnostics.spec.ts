@@ -27,7 +27,7 @@
 // the §6.1 policy ERROR for `<script>` — reach the sink keyed by the
 // plugin id + source key, and clearing removes them.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { Diagnostic, PagedEditor } from "@paged-media/plugin-api";
 import { createBundleHost } from "@paged-media/plugin-sdk";

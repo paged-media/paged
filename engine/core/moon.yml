@@ -30,6 +30,7 @@ fileGroups:
     - '!docs/**'
     - '!**/*.md'
     - '!web/**'
+    - '!packages/**'
     - '!spikes/blitz-wasm/**'
     - '/.cargo/*.toml'
 
@@ -43,6 +44,8 @@ tasks:
       - 'scripts/regen-fixtures.sh'
     options:
       cache: false
+      # Only rust-test reads them, and `moon ci` runs no Rust task.
+      runInCI: false
 
   rust-test:
     deps: ['~:fixtures']
@@ -57,13 +60,14 @@ tasks:
       -- -D warnings
 
   wasm:
-    description: 'The npm wasm packages (canvas-wasm, introspect-wasm, repo-wasm, sdk) into dist/.'
+    description: 'Standalone copies of the npm wasm packages in dist/, at 0.<protocol>.0-local.'
     toolchains: ['rust']
     command: 'bash scripts/build-wasm-packages.sh'
     inputs:
       - '@group(rust-sources)'
       - 'crates/paged-introspect/catalog.json'
       - 'scripts/build-wasm-packages.sh'
+      - 'packages/*/{package.json,README.md,LICENSE,LICENSE.md}'
     outputs:
       - 'dist/canvas-wasm/**/*'
       - 'dist/introspect-wasm/**/*'
@@ -73,6 +77,40 @@ tasks:
       # Needs wasm-bindgen-cli at the Cargo.lock version and binaryen;
       # core-publish-wasm.yml builds these in CI.
       runInCI: 'skip'
+
+  wasm-pkg:
+    description: 'The npm wasm packages built into their workspace packages, packages/<pkg>/ (ADR 185).'
+    toolchains: ['rust']
+    command: 'bash scripts/build-wasm-packages.sh --workspace'
+    inputs:
+      - '@group(rust-sources)'
+      - 'crates/paged-introspect/catalog.json'
+      - 'scripts/build-wasm-packages.sh'
+      - 'packages/*/package.json'
+    # Only the generated files: package.json, README and the licence files in
+    # the same directories are committed and must never be cleaned or restored.
+    outputs:
+      - 'packages/canvas-wasm/paged_canvas_wasm*'
+      - 'packages/introspect-wasm/paged_introspect_wasm*'
+      - 'packages/introspect-wasm/catalog.json'
+      - 'packages/repo-wasm/paged_repo_wasm*'
+      - 'packages/sdk/paged_sdk*'
+    options:
+      # As `wasm`: wasm-bindgen-cli at the Cargo.lock version and binaryen.
+      # core-publish-wasm.yml runs the same build in CI.
+      runInCI: 'skip'
+
+  wasm-pkg-version:
+    description: 'Every workspace wasm package is versioned 0.<PROTOCOL_VERSION>.0-dev (scripts/check-wasm-package-versions.mjs).'
+    toolchains: ['system']
+    command: 'node scripts/check-wasm-package-versions.mjs'
+    inputs:
+      - 'scripts/check-wasm-package-versions.mjs'
+      - 'crates/paged-canvas/src/channel.rs'
+      - 'packages/*/package.json'
+
+  check:
+    deps: ['~:wasm-pkg-version']
 
   wasm-test:
     description: 'wasm-bindgen tests, Node-hosted (scripts/test-wasm.sh).'

@@ -30,7 +30,7 @@
 
 import { createElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { GridScene } from "@paged-media/sheet-host-model";
@@ -144,6 +144,9 @@ function fakeEngine() {
 function fakeHost(): BundleHost {
   return {
     log: { debug() {}, info() {}, warn() {}, error() {} },
+    supports: () => false,
+    // The document doors every host has; nothing here fires them.
+    document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
   } as unknown as BundleHost;
 }
 

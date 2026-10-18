@@ -23,7 +23,7 @@
 // one undo restores the baseline. This is the B-13 "fixture CORPUS
 // replay harness" the RESOLVED entry named as the next step.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 

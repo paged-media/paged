@@ -25,7 +25,7 @@
 // `pathfinderFaces { keep }` builds one result and drops every other face):
 // the centre, the right arm and the bottom arm vanished.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   ShapeBuilderMachine,

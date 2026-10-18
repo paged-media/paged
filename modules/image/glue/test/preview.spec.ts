@@ -24,7 +24,8 @@
 // after the sliders rest, and the layout always at full-resolution size.
 // The kernels themselves are covered natively (image-js/tests).
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, mock } from "bun:test";
+import { advanceTimersByTimeAsync, waitFor, importActual } from "@paged-media/test-kit";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type { ElementGeometryItem, PluginManifest } from "@paged-media/plugin-api";
@@ -40,8 +41,9 @@ let realEncode: ((rgba: Uint8Array, w: number, h: number, f: "png") => Uint8Arra
 const dims = new Map<number, [number, number]>();
 let sourceDims: [number, number] = [0, 0];
 
-vi.mock("../src/engine", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/engine")>();
+const actualEngine = await importActual(() => import("../src/engine"));
+mock.module("../src/engine", () => {
+  const actual = actualEngine;
   return {
     ...actual,
     bootEngine: async () => {
@@ -116,13 +118,13 @@ describe("live preview", () => {
     vi.useFakeTimers();
 
     for (let i = 1; i <= 20; i++) session.setParams({ exposureEv: i / 20 });
-    await vi.waitFor(() => expect(calls.adjust.length).toBe(2));
+    await waitFor(() => expect(calls.adjust.length).toBe(2), { clock: vi });
     expect(calls.resize).toEqual([[100, 50]]);
     expect(calls.adjust.every((h) => h !== src.handle)).toBe(true);
 
     // The sliders rest → one full-resolution pass, on the source itself.
-    await vi.advanceTimersByTimeAsync(400);
-    await vi.waitFor(() => expect(calls.adjust).toContain(src.handle));
+    await advanceTimersByTimeAsync(vi, 400);
+    await waitFor(() => expect(calls.adjust).toContain(src.handle), { clock: vi });
     expect(calls.adjust.filter((h) => h === src.handle)).toHaveLength(1);
 
     // Every submit is laid out at the SOURCE's size, proxy or not.
@@ -141,7 +143,7 @@ describe("live preview", () => {
   it("a source no larger than the frame previews directly (no proxy)", async () => {
     const { handle, session } = await open(40, 20, [0, 0, 25, 50]);
     session.setParams({ exposureEv: 0.5 });
-    await vi.waitFor(() => expect(calls.adjust.length).toBe(1));
+    await waitFor(() => expect(calls.adjust.length).toBe(1));
     expect(calls.resize).toEqual([]);
     expect(calls.adjust[0]).toBe(session.state().source!.handle);
     session.dispose();

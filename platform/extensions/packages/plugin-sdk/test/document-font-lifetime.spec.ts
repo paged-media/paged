@@ -36,7 +36,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import type { BundleHost, ElementId, PagedBundle, PluginManifest } from "@paged-media/plugin-api";
 

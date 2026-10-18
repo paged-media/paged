@@ -22,7 +22,7 @@
 // testable). The tag-position SCAN itself is web-model's tagOutline
 // (covered in outline.spec.ts); this proves the selection mapping.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import { tagOutline } from "@paged-media/web-model";
 

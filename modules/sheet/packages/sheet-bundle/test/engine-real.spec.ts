@@ -23,16 +23,16 @@
 //
 // DUAL-GATED (audit P3): when packages/sheet-bundle/bin/sheet_js_bg.wasm
 // has not been built (scripts/build-wasm.sh), the suite SKIPS locally —
-// the pure-TS vitest lane stays green without a Rust toolchain. In CI the
-// vitest workflow BUILDS the artifact and sets REQUIRE_REAL_ENGINE=1,
+// the pure-TS unit lane stays green without a Rust toolchain. In CI the
+// unit-test workflow BUILDS the artifact and sets REQUIRE_REAL_ENGINE=1,
 // under which a missing artifact FAILS the suite instead of skipping it —
 // the skip gate can never silently drop the real boot out of CI again.
-// (The rust lane builds the artifact too, but never runs vitest; before
+// (The rust lane builds the artifact too, but never runs bun test; before
 // this gate the real boot ran on NOBODY's CI.)
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   chartGeometryToMutations,
@@ -69,7 +69,7 @@ if (process.env.REQUIRE_REAL_ENGINE === "1" && !built) {
       throw new Error(
         `REQUIRE_REAL_ENGINE=1 but ${WASM} is missing — ` +
           "build it with `bash scripts/build-wasm.sh` (CI must build the " +
-          "artifact before running vitest; skipping is not allowed here)",
+          "artifact before running bun test; skipping is not allowed here)",
       );
     });
   });

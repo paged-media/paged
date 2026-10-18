@@ -46,7 +46,7 @@
 //    `createdId`, so a flow that inserts several paths reads the whole
 //    scene tree before the batch and again after it, and diffs.
 
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { metadataReadsPerLeaf } from "../engine-reads";
 
@@ -200,7 +200,7 @@ function nodesOf(roots: readonly SceneTreeNode[]): ElementId[] {
 const nodeIds = (roots: readonly SceneTreeNode[]): string[] =>
   nodesOf(roots).map((id) => String(id.id));
 
-vi.setConfig({ testTimeout: BUDGET_TIMEOUT_MS });
+setDefaultTimeout(BUDGET_TIMEOUT_MS);
 
 describe("perf budgets — commands over a busy document", () => {
   let w: Workload;
@@ -930,7 +930,7 @@ describe("perf budgets — commands over a busy document", () => {
 // tree diff, behind the one flow that needs a placed image, so it runs
 // on its own document: the F7 fixture (an inline PNG ring) under the
 // same 500 plain shapes. The plan is a REAL trace of the fixture's own
-// pixels by the committed tracer wasm.
+// pixels by the built tracer wasm.
 describe("perf budgets — Image Trace over a busy document", () => {
   let w: Workload;
 

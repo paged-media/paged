@@ -27,6 +27,8 @@ export const CORE_WIRE_OPS: Readonly<Record<string, CoreWireOpRow>> = {
   "insertNote": { args: {"kind":"struct","fields":{"storyId":{"kind":"ref","to":"story"},"offset":{"kind":"number"},"paragraph":{"kind":"number","optional":true},"text":{"kind":"text","optional":true},"user":{"kind":"text","optional":true},"date":{"kind":"text","optional":true}}}, nullFill: [] },
   "editNote": { args: {"kind":"struct","fields":{"noteId":{"kind":"text"},"text":{"kind":"text"},"date":{"kind":"text","optional":true}}}, nullFill: [] },
   "deleteNote": { args: {"kind":"struct","fields":{"noteId":{"kind":"text"}}}, nullFill: [] },
+  "acceptTrackedChange": { args: {"kind":"struct","fields":{"storyId":{"kind":"ref","to":"story"},"offset":{"kind":"number"}}}, nullFill: [] },
+  "rejectTrackedChange": { args: {"kind":"struct","fields":{"storyId":{"kind":"ref","to":"story"},"offset":{"kind":"number"}}}, nullFill: [] },
   "convertNoteToText": { args: {"kind":"struct","fields":{"noteId":{"kind":"text"}}}, nullFill: [] },
   "createBookmark": { args: {"kind":"struct","fields":{"name":{"kind":"text"},"page":{"kind":"ref","to":"page","optional":true},"destination":{"kind":"text","optional":true},"parent":{"kind":"text","optional":true},"index":{"kind":"number","optional":true}}}, nullFill: [] },
   "deleteBookmark": { args: {"kind":"struct","fields":{"bookmarkId":{"kind":"text"}}}, nullFill: [] },

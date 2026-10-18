@@ -184,7 +184,7 @@ export function makeAppearancePanel(host: BundleHost): {
     // SDK adapter has not stored the new selection yet — and so showed
     // the PREVIOUS selection's stack until something else changed.
     //
-    // WHAT A RELOAD COSTS (`test/panels/appearance-panel.spec.tsx`, and
+    // WHAT A RELOAD COSTS (`test/panels/appearance-panel.dom.test.tsx`, and
     // it may only go down): nothing with nothing selected, and otherwise
     // ONE metadata read per document revision — resolving the carrier
     // and reading its stack are the same element's envelope, which the

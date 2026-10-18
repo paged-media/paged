@@ -32,7 +32,7 @@
 // for a group today — nothing, and the old write — is pinned in
 // `conformance/transform.spec.ts`.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import {

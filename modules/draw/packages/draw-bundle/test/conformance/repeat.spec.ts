@@ -44,7 +44,7 @@
 //       wording and the registration surface (including the tool that
 //       deliberately carries NO shortcut).
 
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, beforeEach } from "bun:test";
 
 import type {
   BundleHost,
@@ -65,6 +65,7 @@ import {
   applySelectRepeatInstances,
   applyUpdateRepeat,
   bindCreatedMutationFor,
+  engineOpVocabulary,
   findRepeatRecord,
   handleRef,
   mintRepeatId,
@@ -95,8 +96,6 @@ import {
   repeatSourceOf,
   resolveRepeat,
   serializeRepeatLibrary,
-  supportsBindCreated,
-  supportsPasteInto,
   upsertRepeatRecord,
   withRepeatKey,
   writeRepeatLibrary,
@@ -557,8 +556,9 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
     });
 
     it("the engine speaks C-15 and B-18 — the two doors this row is built on", async () => {
-      expect(await supportsBindCreated(h.host)).toBe(true);
-      expect(await supportsPasteInto(h.host)).toBe(true);
+      const vocab = await engineOpVocabulary(h.host);
+      expect(vocab).not.toBeNull();
+      for (const op of ["bindCreated", "pasteInto", "releaseFrom"]) expect(vocab!.has(op)).toBe(true);
     });
 
     it("C-15 RULE 1 — a bind BEFORE its creating child is refused BY NAME", async () => {
@@ -778,23 +778,6 @@ describe("draw conformance — REPEATS (radial / grid / mirror, §12.4)", () => 
         // As found: 3 for a make (the diff and the group lookup; 2 for a
         // clipped one, which has no group); an update's walk on top.
         expect(shipped.work.count("document.tree")).toBe(trees);
-        // REPLY — an SDK before plugin-sdk 0.2.38, whose outcome carries no
-        // `minted`: the ids off the raw reply. The same document, the same
-        // writes and the same reads as the shipped (outcome) lane.
-        const reply = await through("reply");
-        expect(reply.picture).toBe(shipped.picture);
-        expect(reply.work.mutations).toEqual(shipped.work.mutations);
-        expect(reply.undoSteps).toBe(shipped.undoSteps);
-        expect(reply.restored).toBe(true);
-        expect(reply.work.count("document.tree")).toBe(shipped.work.count("document.tree"));
-
-        for (const lane of ["diff", "unlisted"] as const) {
-          const other = await through(lane);
-          expect(other.picture, lane).toBe(shipped.picture);
-          expect(other.result, lane).toHaveLength((shipped.result as ElementId[]).length);
-          expect(other.undoSteps, lane).toBe(undoSteps);
-          expect(other.restored, lane).toBe(true);
-        }
         expect(await sortedLeafIds(h)).toEqual(PRISTINE);
       });
     }

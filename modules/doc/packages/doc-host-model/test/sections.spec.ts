@@ -1,6 +1,6 @@
 // ADR 029 — standalone open pours each Word section into its own story and
 // save-back merges them back into one body.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { mergeSectionContents, pouredParagraphCount, sectionBlocks } from "../src/index.js";
 import type { LoweredBlock, LoweredDoc, LoweredSection } from "../src/index.js";

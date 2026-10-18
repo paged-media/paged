@@ -58,13 +58,13 @@ bash scripts/vendor-duckdb.sh   # acquire the MIT DuckDB-WASM artifact
 bash scripts/build-wasm.sh
 
 # TS (the bundle); the plugin contract comes from npm at an exact pin
-pnpm install && pnpm typecheck && pnpm test
-pnpm validate:manifest   # uses the in-repo platform/extensions plugin-cli
+bun install && bun run typecheck && bun run test
+bun run validate:manifest   # uses the in-repo platform/extensions plugin-cli
 
 # End-to-end harness (needs the built wasm + vendored DuckDB above):
 # real DuckDB-WASM CSV→Arrow→RecordSet → the real data-js wasm engine →
 # resolve → lower, asserting DuckDB↔engine parity.
-pnpm --filter @paged-media/data test:e2e
+bun run --filter @paged-media/data test:e2e
 ```
 
 ## License

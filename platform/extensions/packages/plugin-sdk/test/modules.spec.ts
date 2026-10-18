@@ -23,7 +23,7 @@
 // the feature probe, integrity passthrough (manifest stamp wins, a
 // contradicting host digest is refused), and the fallback paths.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 
 import type { PluginManifest, WasmArtifact } from "@paged-media/plugin-api";
 
@@ -81,7 +81,15 @@ const hosted = (_: string, a: WasmArtifact) => ({
   integrity: SRI_A,
 });
 
-afterEach(() => vi.unstubAllGlobals());
+// The public SDK's specs do not import the built-ins' internal test kit
+// (docs/adr/PM-0002), so the one global this file stubs is put back by hand.
+const realFetch = globalThis.fetch;
+function stubFetch(fake: unknown): void {
+  globalThis.fetch = fake as typeof fetch;
+}
+afterEach(() => {
+  globalThis.fetch = realFetch;
+});
 
 describe("host.modules", () => {
   it("resolves a declared artifact through the backend", async () => {
@@ -149,7 +157,7 @@ describe("host.modules", () => {
 
   it("fetches with { integrity } when one is known", async () => {
     const fetchMock = vi.fn(async () => new Response("wasm"));
-    vi.stubGlobal("fetch", fetchMock);
+    stubFetch(fetchMock);
     const host = hostWith([ENGINE], recordingBackend(hosted).backend);
     const res = await host.modules.fetch("engine");
     expect(await res!.text()).toBe("wasm");
@@ -203,7 +211,7 @@ describe("resolveWasm / fetchWasm (bundle side)", () => {
 
   it("fetchWasm fetches the resolved URL with its integrity", async () => {
     const fetchMock = vi.fn(async () => new Response("wasm"));
-    vi.stubGlobal("fetch", fetchMock);
+    stubFetch(fetchMock);
     await fetchWasm(hostWith([{ ...ENGINE, integrity: SRI_B }]), "engine", FALLBACK);
     expect(fetchMock).toHaveBeenLastCalledWith(FALLBACK, { integrity: SRI_B });
     await fetchWasm(hostWith([ENGINE]), "engine", FALLBACK);

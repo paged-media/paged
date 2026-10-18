@@ -21,7 +21,7 @@
 // manifest schema, every schema row of every kind has one, and the address
 // forms are well-formed (plugin-sdk validatePanelSchema). [data.object-model]
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { propertyRowsOf, validatePanelSchema } from "@paged-media/plugin-sdk";
 import type { PropertySchema } from "@paged-media/plugin-api";

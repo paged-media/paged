@@ -1,7 +1,7 @@
 // ADR 559's InDesign lane: do the bindings survive InDesign, and does
 // InDesign merge our Data Merge template?
 //
-//   PAGED_RECORD_INDESIGN_FIXTURES=1 vitest run test/indesign-binding.spec.ts
+//   PAGED_RECORD_INDESIGN_FIXTURES=1 bun test test/indesign-binding.spec.ts
 //     writes conformance/indesign-binding/fixtures/ (paged authors them on the
 //     real stack): bound.idml — a document with property, visibility and
 //     variable bindings, saved by paged then stripped of its container parts —
@@ -18,7 +18,8 @@
 // The REPLAY (this spec, always): paged opens InDesign's re-save and rebuilds
 // every binding from the labels; the recorded merge is what the data says.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, mock } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +29,12 @@ import type { BundleHost } from "@paged-media/plugin-api";
 import { dataFields, ENGINE_ANCHOR, ENGINE_PROTOCOL, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
 import { bootRealDuckDB, bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_DUCKDB } from "./real-duckdb";
 import { stripContainerParts } from "./zip";
+
+// bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
+// real exports are taken once, before anything is mocked, and mock.module
+// patches the loaded module in place (every importer sees the change).
+const actualEngine = await importActual(() => import("../src/engine"));
+const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 
 const LANE = fileURLToPath(new URL("../../../conformance/indesign-binding/", import.meta.url));
 const STAGE = "/tmp/paged-data-binding-stage";
@@ -41,10 +48,10 @@ const ready = ENGINE_ANCHOR !== null && probe.handle !== undefined && existsSync
 const recorded = (id: string) => join(LANE, "recorded", `${id}.json`);
 
 async function bundle() {
-  vi.resetModules();
-  vi.doMock("../src/engine", async (orig) => ({ ...(await orig<typeof import("../src/engine")>()), bootEngine: (t: number) => bootRealEngine(t) }));
-  vi.doMock("../src/query/duckdb", async (orig) => ({
-    ...(await orig<typeof import("../src/query/duckdb")>()),
+  mock.module("../src/engine", () => ({
+    ...actualEngine, bootEngine: (t: number) => bootRealEngine(t) }));
+  mock.module("../src/query/duckdb", () => ({
+    ...actualDuckdb,
     bootDuckDB: async () => (await bootRealDuckDB()).handle!,
   }));
   return import("../src/index");

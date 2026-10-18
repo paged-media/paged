@@ -307,9 +307,7 @@ function errorText(error: unknown): string {
 function readCaret(host: BundleHost): { storyId: string; offset: number } | null {
   try {
     if (!host.supports("text.caret@1")) return null;
-    const text = host.text as BundleHost["text"] | undefined;
-    if (!text || typeof text.caret !== "function") return null;
-    return text.caret() ?? null;
+    return host.text.caret() ?? null;
   } catch {
     return null;
   }

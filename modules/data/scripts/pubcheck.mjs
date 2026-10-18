@@ -16,8 +16,8 @@
 //   - no vendor/ file and no other DuckDB variant (mvp/coi);
 //   - the bin/SOURCE_HASH stamp, and with --release also bin/PACKAGE_HASH.
 //
-// Run it after `pnpm run build`, `bash scripts/build-wasm.sh` and
-// `bash scripts/vendor-duckdb.sh` — `pnpm --filter @paged-media/data pubcheck`.
+// Run it after `bun run build`, `bash scripts/build-wasm.sh` and
+// `bash scripts/vendor-duckdb.sh` — `bun run --filter @paged-media/data pubcheck`.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -42,7 +42,7 @@ const errors = [];
 const need = (path, why) => {
   if (!files.has(path)) errors.push(`missing ${path} (${why})`);
 };
-need("dist/index.js", "the bundle — run `pnpm run build`");
+need("dist/index.js", "the bundle — run `bun run build`");
 need("manifest.json", "the plugin manifest");
 need("bin/data_js.js", "data-js glue — run `bash scripts/build-wasm.sh`");
 need("bin/data_js_bg.wasm", "data-js engine — run `bash scripts/build-wasm.sh`");

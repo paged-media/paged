@@ -42,7 +42,7 @@
 // pointer-up commits. We poll for the landed mutation (the host-handler
 // fire-and-forget idiom).
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type {
   CanvasPointerEvent,

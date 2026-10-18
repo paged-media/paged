@@ -29,7 +29,7 @@
 // and is never consulted is the failure this seam exists to prevent,
 // and only the registry path can see it.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   createBindingProviderRegistry,

@@ -25,7 +25,7 @@
 // Rust; setCell re-types each string); the session is thin glue: read the
 // range → host.clipboard.write, and host.clipboard.read → journaled cells.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, ClipboardPayload } from "@paged-media/plugin-api";
 
@@ -86,6 +86,8 @@ function fakeHost() {
   const writes: ClipboardPayload[] = [];
   const host = {
     log: { debug() {}, info() {}, warn() {}, error() {} },
+    // The document doors every host has; nothing here fires them.
+    document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
     supports: (f: string) => f === "clipboard@1",
     clipboard: {
       async read() {

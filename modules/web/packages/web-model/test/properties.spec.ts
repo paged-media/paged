@@ -27,7 +27,7 @@
 // few hundred runs instead of hoping a random string spells `<script`.
 
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { sanitizeHtml } from "../src/sanitize";
 import { envelopeFor, sourceFromEnvelope, type WebFrameSource } from "../src/source";
@@ -119,21 +119,21 @@ describe("sanitizeHtml pinned defects", () => {
   // `<a ON onclick="x"A=y>` becomes `<a ONA=y>`, a new handler;
   // ` href=javascript:a() javascript:` becomes ` href= javascript:`.
   // Found by the property hunt (fast-check, 5000 unseeded runs).
-  it.fails("DEFECT S-02: a removal splices its neighbours into a new <script> tag @feat:plugin-web.source-model", () => {
+  it.failing("DEFECT S-02: a removal splices its neighbours into a new <script> tag @feat:plugin-web.source-model", () => {
     expect(sanitizeHtml("<scr<script>ipt>alert(1)</scr<script>ipt>").html).not.toMatch(SCRIPT_TAG);
   });
-  it.fails("DEFECT S-02: a removal splices its neighbours into a new javascript: URL @feat:plugin-web.source-model", () => {
+  it.failing("DEFECT S-02: a removal splices its neighbours into a new javascript: URL @feat:plugin-web.source-model", () => {
     const out = sanitizeHtml("<a href=javascript:alert(1) javascript:x>").html;
     expect(out).toBe(sanitizeHtml(out).html);
   });
-  it.fails("DEFECT S-02: a removal splices its neighbours into a new event handler @feat:plugin-web.source-model", () => {
+  it.failing("DEFECT S-02: a removal splices its neighbours into a new event handler @feat:plugin-web.source-model", () => {
     const out = sanitizeHtml('<a ON onclick="go()"A=x>link</a>').html;
     expect(out).toBe(sanitizeHtml(out).html);
   });
   // DEFECT S-03: an event handler with an EMPTY unquoted value (`<img
   // onerror=>`) is kept — the pattern needs at least one value character.
   // Inert today (an empty handler runs nothing), but not removed.
-  it.fails("DEFECT S-03: an empty on…= handler is not removed @feat:plugin-web.source-model", () => {
+  it.failing("DEFECT S-03: an empty on…= handler is not removed @feat:plugin-web.source-model", () => {
     expect(sanitizeHtml("<img onerror=>").html).not.toMatch(/\sonerror\s*=/i);
   });
 
@@ -146,12 +146,12 @@ describe("sanitizeHtml pinned defects", () => {
   // (the element is unclosed at EOF and the preview is sandbox=""), but it
   // breaks the documented "never reaches the source" property. Flip to
   // `it` when the scanner strips a trailing open `<script`.
-  it.fails("DEFECT S-01: a trailing unterminated <script survives sanitizing @feat:plugin-web.source-model", () => {
+  it.failing("DEFECT S-01: a trailing unterminated <script survives sanitizing @feat:plugin-web.source-model", () => {
     for (const s of ["<script", "<p>x</p><script ", "<SCRIPT src=https://example.invalid/x.js "]) {
       expect(sanitizeHtml(s).html).not.toMatch(/<\s*script\b/i);
     }
   });
-  it.fails("DEFECT S-01: an unclosed javascript: attribute survives, and what follows the paste can close it @feat:plugin-web.source-model", () => {
+  it.failing("DEFECT S-01: an unclosed javascript: attribute survives, and what follows the paste can close it @feat:plugin-web.source-model", () => {
     // Sanitized alone the quote is open, so the pattern (which needs the
     // closing quote) misses it; pasted ahead of existing source that
     // contains a `'`, the link becomes a closed javascript: href.

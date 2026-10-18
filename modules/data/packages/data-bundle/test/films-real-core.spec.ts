@@ -12,7 +12,8 @@
 // Gate: skips without canvas-wasm, DuckDB or the built data-js wasm, EXCEPT
 // under REQUIRE_REAL_CORE=1 / REQUIRE_REAL_DUCKDB=1.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, mock } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 import { existsSync } from "node:fs";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
@@ -20,6 +21,12 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { ENGINE_ANCHOR, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
 import { bootRealDuckDB, bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_DUCKDB } from "./real-duckdb";
+
+// bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
+// real exports are taken once, before anything is mocked, and mock.module
+// patches the loaded module in place (every importer sees the change).
+const actualEngine = await importActual(() => import("../src/engine"));
+const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 
 /** The first rows of the films' product list, in file order: the first row is
  *  not the first by content ("Bookmark set" sorts before it). */
@@ -38,13 +45,12 @@ const ready = ENGINE_ANCHOR !== null && probe.handle !== undefined && existsSync
 const required = REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB;
 
 async function loadBundleModule() {
-  vi.resetModules();
-  vi.doMock("../src/engine", async (orig) => ({
-    ...(await orig<typeof import("../src/engine")>()),
+  mock.module("../src/engine", () => ({
+    ...actualEngine,
     bootEngine: (today: number) => bootRealEngine(today),
   }));
-  vi.doMock("../src/query/duckdb", async (orig) => ({
-    ...(await orig<typeof import("../src/query/duckdb")>()),
+  mock.module("../src/query/duckdb", () => ({
+    ...actualDuckdb,
     bootDuckDB: async () => {
       const b = await bootRealDuckDB();
       if (!b.handle) throw new Error(b.error);

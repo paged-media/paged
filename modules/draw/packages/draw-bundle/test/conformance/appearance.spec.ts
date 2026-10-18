@@ -34,7 +34,7 @@
 // blend of all fills. The test pins that contract so a future engine
 // multi-paint model fails it loudly.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { ElementId, Mutation } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

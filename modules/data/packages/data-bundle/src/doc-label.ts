@@ -56,7 +56,7 @@ export function labelMutation(hash: string, key: string = BINDING_KEY, recipe?: 
   return {
     op: "setDocumentMetadata",
     args: { key, value: asciiJson(labelEnvelope(hash, recipe)) },
-  } as unknown as Mutation;
+  };
 }
 
 /** The label key of `host`'s plugin. */

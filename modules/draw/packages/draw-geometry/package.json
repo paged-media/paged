@@ -9,16 +9,17 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
+    "typecheck": "bun check -p tsconfig.json",
+    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts",
     "build": "tsup src/index.ts --format esm --dts --out-dir dist --clean",
-    "prepublishOnly": "pnpm run build",
-    "bench": "vitest bench --run"
+    "prepublishOnly": "bun run build",
+    "bench": "bun ./test/bezier.bench.ts && bun ./test/compound.bench.ts && bun ./test/polygon.bench.ts && bun ./test/rdp.bench.ts && bun ./test/svg-doc.bench.ts"
   },
   "devDependencies": {
     "fast-check": "^4.10.2",
-    "typescript": "^5.9.3",
-    "vitest": "^2.1.9"
+    "typescript": "catalog:",
+    "@types/bun": "catalog:",
+    "mitata": "^1.0.34"
   },
   "files": [
     "dist"

@@ -19,22 +19,30 @@
 // @feat: plugin-platform.object-model.node-cli
 //
 // ADR 324 — `paged merge` / `paged apply` over TODAY's paged.data session
-// (@paged-media/data canary.10): the real data-js engine, DuckDB in-process
+// (@paged-media/data, the workspace bundle): the real data-js engine, DuckDB in-process
 // (Node blocking build + the bundle's shipped engine wasm) and real core.
 // The merge is compared with InDesign's own Data Merge recording of the
 // long-record-set fixture (vendored from plugin-data
 // conformance/indesign-merge): 57 records, 2 columns, columns first, 3 pages.
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import { openSession } from "../src/session";
 import { cli, FIXTURES, tempDir, writeFixture } from "./helpers";
 
 const LANE = join(FIXTURES, "indesign-merge");
 const DATA = "--plugins=@paged-media/data";
+// The version of the @paged-media/data this package resolves (the
+// workspace bundle), read beside its exported manifest.
+const DATA_VERSION = (
+  JSON.parse(
+    readFileSync(join(dirname(createRequire(import.meta.url).resolve("@paged-media/data/manifest.json")), "package.json"), "utf8"),
+  ) as { version: string }
+).version;
 
 let tmp: ReturnType<typeof tempDir>;
 let fx: Awaited<ReturnType<typeof writeFixture>>;
@@ -162,7 +170,7 @@ describe("paged plugins", () => {
     expect(r.code).toBe(0);
     expect(r.json.protocol).toBe(Number(r.json.engine.split(".")[1]));
     expect(r.json.plugins.map((p: { id: string }) => p.id)).toEqual(["media.paged.data"]);
-    expect(r.json.plugins[0].version).toBe("0.1.0-canary.10");
+    expect(r.json.plugins[0].version).toBe(DATA_VERSION);
   });
 
   it("auto discovery finds first-party bundles resolvable from the cwd", async () => {
