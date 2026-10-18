@@ -344,6 +344,9 @@ export function browserBackend(
         } else {
           await page.mouse.move(x, y);
           await page.mouse.up({ button });
+          // The gesture is over: let go of its modifiers. A held Cmd would
+          // spring-load another tool for whatever comes next.
+          await holdMods([]);
         }
         return;
       }
