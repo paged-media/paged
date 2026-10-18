@@ -7,7 +7,7 @@
   "description": "Correctness oracles for paged.web: Chrome layout recordings (replayed against Blitz in web-render's Rust tests) and the InDesign bake lane.",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test --parallel",
+    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts",
     "record": "node chrome/record.mjs",
     "record:flow": "node chrome/record-flow.mjs"
   },

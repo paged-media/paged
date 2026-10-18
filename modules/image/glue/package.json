@@ -12,7 +12,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test --parallel",
+    "test": "bun test --parallel --preload ../../../tooling/js/bun-test-setup.ts",
     "build": "tsup",
     "prepublishOnly": "cp ../NOTICE.md ./NOTICE.md && bun run build"
   },
