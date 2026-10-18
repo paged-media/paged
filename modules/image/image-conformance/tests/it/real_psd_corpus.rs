@@ -47,10 +47,12 @@
 //! exercised at all. It is no longer alone: **77 of the 157 are CMYK**,
 //! 80 RGB, every one of them 8-bit.
 //!
-//! OPT-IN — the assets live in the private corpus checkout:
+//! OPT-IN — the assets live in the private corpus checkout (`#[ignore]`d;
+//! without the corpus the tests report `unavailable`, and
+//! `PAGED_REQUIRE_CORPUS=1` makes that a failure):
 //!
 //! ```text
-//! PAGED_PSD_CORPUS=1 cargo test -p image-conformance --test real_psd_corpus -- --ignored --nocapture
+//! PAGED_CORPUS_DIR=<corpus root> cargo nextest run --profile corpus --run-ignored only real_psd_corpus::
 //! ```
 
 use image_conformance::psd_corpus::{corpus_root, psds_by_magic, CorpusFile};
@@ -58,15 +60,18 @@ use image_psd::{model::ColorMode, PsdFile};
 use std::collections::BTreeSet;
 
 /// Every corpus file whose CONTENT is a PSD/PSB (`8BPS` magic), or
-/// `None` with a printed reason. Selected by content, never by
+/// `None` after reporting the corpus as unavailable. Selected by content, never by
 /// extension, and named by its path relative to the corpus root.
 fn corpus_psds() -> Option<Vec<CorpusFile>> {
     let root = corpus_root("PAGED_PSD_CORPUS")?;
     let out = psds_by_magic(&root);
     if out.is_empty() {
-        eprintln!(
-            "SKIP psd corpus lane: no PSD content under {} — run corpus/harness/unpack.sh",
-            root.display()
+        image_conformance::corpus::missing(
+            "psd",
+            format_args!(
+                "no PSD content under {} — run corpus/harness/unpack.sh",
+                root.display()
+            ),
         );
         return None;
     }
@@ -74,7 +79,7 @@ fn corpus_psds() -> Option<Vec<CorpusFile>> {
 }
 
 #[test]
-#[ignore = "psd corpus lane: opt-in (PAGED_PSD_CORPUS=1 + the private corpus mount)"]
+#[ignore = "corpus: psd"]
 fn every_real_psd_parses_with_a_sane_header() {
     let Some(files) = corpus_psds() else {
         return;
@@ -138,7 +143,7 @@ fn every_real_psd_parses_with_a_sane_header() {
 }
 
 #[test]
-#[ignore = "psd corpus lane: opt-in (PAGED_PSD_CORPUS=1 + the private corpus mount)"]
+#[ignore = "corpus: psd"]
 fn the_corpus_covers_cmyk_which_no_synthesised_fixture_does() {
     let Some(files) = corpus_psds() else {
         return;

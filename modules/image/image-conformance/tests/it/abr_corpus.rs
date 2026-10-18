@@ -17,11 +17,12 @@
  */
 
 //! **LANE B** — the corpus gate (spec §14.3.1). **ANALYST-owned**,
-//! opt-in, `#[ignore]`d, and it needs the clean-room mount.
+//! opt-in, `#[ignore]`d, and it needs the clean-room mount — which is NOT
+//! the private corpus under `PAGED_CORPUS_DIR`, so the lane has a nextest
+//! profile of its own and keeps its explicit switch (the role guard):
 //!
 //! ```text
-//! PAGED_ABR_CORPUS=1 cargo test -p image-conformance --test abr_corpus \
-//!     -- --ignored --nocapture
+//! PAGED_ABR_CORPUS=1 cargo nextest run --profile abr --run-ignored only
 //! ```
 //!
 //! It parses the nine licensed `.abr` files at `references/abr-fixtures/`
@@ -30,8 +31,9 @@
 //! and `corpus-record-ledger.tsv`. Mirrors the existing opt-in
 //! `PAGED_PSD_ORACLE` lane (`tests/it/psd_ecosystem.rs`) in shape and in
 //! posture: `#[ignore]` keeps it out of the ordinary run, and each test
-//! additionally no-ops with a clean `eprintln!` skip when the switch is
-//! off or the mount is absent.
+//! additionally reports `unavailable: private corpus: abr lane: …`
+//! (paged-test-resources) when the switch is off or the mount is absent;
+//! `PAGED_REQUIRE_CORPUS=1` turns that report into a failure.
 //!
 //! **It is skipped on every machine that is not an analyst's, and that is
 //! the design, not a defect.** `references/` is gitignored, CI has no
@@ -128,20 +130,25 @@ fn png_dir() -> PathBuf {
 /// skip says exactly what is missing.
 fn corpus(gate: &str) -> Option<Vec<(String, Vec<u8>)>> {
     if std::env::var_os(SWITCH).as_deref() != Some(std::ffi::OsStr::new("1")) {
-        eprintln!(
-            "SKIP {gate}: {SWITCH} != 1. This lane is ANALYST-owned and needs the \
-             clean-room mount; the always-on half of the gate is tests/it/abr_lane_a.rs. \
-             Enable with: {SWITCH}=1 cargo test -p image-conformance --test abr_corpus \
-             -- --ignored --nocapture"
+        image_conformance::corpus::missing(
+            "abr",
+            format_args!(
+                "{gate}: {SWITCH} != 1. This lane is ANALYST-owned and needs the \
+                 clean-room mount; the always-on half of the gate is tests/it/abr_lane_a.rs. \
+                 Enable with: {SWITCH}=1 cargo nextest run --profile abr --run-ignored only"
+            ),
         );
         return None;
     }
     let dir = corpus_dir();
     if !dir.is_dir() {
-        eprintln!(
-            "SKIP {gate}: the corpus mount {} is absent (gitignored by design; \
-             point PAGED_ABR_CORPUS_DIR elsewhere if it lives somewhere else)",
-            dir.display()
+        image_conformance::corpus::missing(
+            "abr",
+            format_args!(
+                "{gate}: the clean-room mount {} is absent (gitignored by design; \
+                 point PAGED_ABR_CORPUS_DIR elsewhere if it lives somewhere else)",
+                dir.display()
+            ),
         );
         return None;
     }
@@ -159,10 +166,13 @@ fn corpus(gate: &str) -> Option<Vec<(String, Vec<u8>)>> {
                 out.push((shape.file.clone(), bytes));
             }
             Err(e) => {
-                eprintln!(
-                    "SKIP {gate}: the mount is incomplete — {} could not be read ({e}). \
-                     A partial corpus would gate on a subset and report green for it.",
-                    path.display()
+                image_conformance::corpus::missing(
+                    "abr",
+                    format_args!(
+                        "{gate}: the mount is incomplete — {} could not be read ({e}). \
+                         A partial corpus would gate on a subset and report green for it.",
+                        path.display()
+                    ),
                 );
                 return None;
             }
@@ -287,7 +297,7 @@ fn is_structural(w: &AbrWarning) -> bool {
 }
 
 #[test]
-#[ignore = "ABR corpus gate: ANALYST-owned, opt-in (PAGED_ABR_CORPUS=1 + the clean-room mount)"]
+#[ignore = "clean-room: abr (ANALYST-owned mount; PAGED_ABR_CORPUS=1, nextest profile abr)"]
 fn image_abr_corpus_b1_every_file_matches_its_profile_row() {
     let Some(files) = corpus("B1 (per-file profile rows)") else {
         return;
@@ -348,7 +358,7 @@ fn image_abr_corpus_b1_every_file_matches_its_profile_row() {
 // ── B2 — the record ledger, digest included ──────────────────────────
 
 #[test]
-#[ignore = "ABR corpus gate: ANALYST-owned, opt-in (PAGED_ABR_CORPUS=1 + the clean-room mount)"]
+#[ignore = "clean-room: abr (ANALYST-owned mount; PAGED_ABR_CORPUS=1, nextest profile abr)"]
 fn image_abr_corpus_b2_every_record_matches_the_ledger_including_its_digest() {
     let Some(files) = corpus("B2 (record ledger + digests)") else {
         return;
@@ -441,18 +451,21 @@ fn png_alpha(bytes: &[u8], ctx: &str) -> (u32, u32, Vec<u8>) {
 }
 
 #[test]
-#[ignore = "ABR corpus gate: ANALYST-owned, opt-in (PAGED_ABR_CORPUS=1 + the clean-room mount)"]
+#[ignore = "clean-room: abr (ANALYST-owned mount; PAGED_ABR_CORPUS=1, nextest profile abr)"]
 fn image_abr_corpus_b3_the_published_png_alpha_settles_the_polarity() {
     let Some(_files) = corpus("B3 (published-PNG polarity oracle)") else {
         return;
     };
     let dir = png_dir();
     if !dir.is_dir() {
-        eprintln!(
-            "SKIP B3 (published-PNG polarity oracle): {} is absent. The 238 published \
-             PNGs are part of the mount, not of this repo; point PAGED_ABR_PNG_DIR at \
-             them to run this gate. B1/B2/B4 are unaffected.",
-            dir.display()
+        image_conformance::corpus::missing(
+            "abr",
+            format_args!(
+                "B3 (published-PNG polarity oracle): {} is absent. The 238 published \
+                 PNGs are part of the mount, not of this repo; point PAGED_ABR_PNG_DIR at \
+                 them to run this gate. B1/B2/B4 are unaffected.",
+                dir.display()
+            ),
         );
         return;
     }
@@ -543,7 +556,7 @@ impl Tally {
 }
 
 #[test]
-#[ignore = "ABR corpus gate: ANALYST-owned, opt-in (PAGED_ABR_CORPUS=1 + the clean-room mount)"]
+#[ignore = "clean-room: abr (ANALYST-owned mount; PAGED_ABR_CORPUS=1, nextest profile abr)"]
 fn image_abr_corpus_b4_the_aggregates_match_the_published_tables() {
     let Some(files) = corpus("B4 (corpus aggregates)") else {
         return;
