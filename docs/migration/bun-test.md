@@ -306,7 +306,8 @@ node:test scripts and the module tasks' contract lints are under a second either
   `wasm-fresh.spec` (a synchronous walk of the Rust sources) past the 5 s default, with sixteen
   workers reading at once. Warm, the same walk takes 9 ms under Bun (34 ms under Node). It is the
   first read of many files on this machine's external disk, under its endpoint scanner; CI's
-  runners start from a fresh disk without one.
+  runners start from a fresh disk without one. The four `wasm-fresh.spec` files, which do nothing but that walk and two
+  reads, run with a 30 s per-test timeout for it.
 - **JavaScriptCore runs the heavy wasm slower than V8.** data-bundle, which boots DuckDB's 35 MB
   engine, the data engine and the core per test, takes about twice vitest's wall time and three
   times its summed test time; everything else is faster (the table above).
