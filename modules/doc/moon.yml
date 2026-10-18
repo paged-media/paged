@@ -11,7 +11,7 @@ project:
   title: "modules/doc"
   description: "Word/DOCX module: import, lowering, save-back."
 
-# validate:manifest runs the in-tree plugin-cli.
+# validate:manifest runs the in-tree paged-plugin bin (plugin-sdk).
 dependsOn:
   - id: "extensions"
     scope: "development"

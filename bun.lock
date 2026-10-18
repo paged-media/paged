@@ -599,7 +599,7 @@
     },
     "platform/extensions/packages/plugin-api": {
       "name": "@paged-media/plugin-api",
-      "version": "0.2.74-canary.0",
+      "version": "0.2.75-canary.0",
       "dependencies": {
         "@types/react": "catalog:",
       },
@@ -607,16 +607,12 @@
         "typescript": "catalog:",
       },
     },
-    "platform/extensions/packages/plugin-cli": {
-      "name": "@paged-media/plugin-cli",
-      "version": "0.1.6",
+    "platform/extensions/packages/plugin-sdk": {
+      "name": "@paged-media/plugin-sdk",
+      "version": "0.2.75-canary.0",
       "bin": {
         "paged-plugin": "./bin/paged-plugin.mjs",
       },
-    },
-    "platform/extensions/packages/plugin-sdk": {
-      "name": "@paged-media/plugin-sdk",
-      "version": "0.2.74-canary.0",
       "dependencies": {
         "@paged-media/plugin-api": "workspace:*",
       },
@@ -836,8 +832,6 @@
     "@paged-media/pdf": ["@paged-media/pdf@workspace:modules/publish/packages/pdf-bundle"],
 
     "@paged-media/plugin-api": ["@paged-media/plugin-api@workspace:platform/extensions/packages/plugin-api"],
-
-    "@paged-media/plugin-cli": ["@paged-media/plugin-cli@workspace:platform/extensions/packages/plugin-cli"],
 
     "@paged-media/plugin-sdk": ["@paged-media/plugin-sdk@workspace:platform/extensions/packages/plugin-sdk"],
 

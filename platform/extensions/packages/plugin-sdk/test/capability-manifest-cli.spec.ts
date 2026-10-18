@@ -30,7 +30,7 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "bun:test";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const CLI = resolve(here, "../../plugin-cli/bin/paged-plugin.mjs");
+const CLI = resolve(here, "../bin/paged-plugin.mjs");
 
 let dir: string | null = null;
 afterEach(() => {

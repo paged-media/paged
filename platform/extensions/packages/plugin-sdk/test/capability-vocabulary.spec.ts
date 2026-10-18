@@ -21,7 +21,7 @@
 // The closed plugin-capability vocabularies (rendering surfaces, clipboard
 // grants, wasm purposes, …) were hand-mirrored in three places: the TS unions
 // in plugin-api `manifest.ts`, the JSON enums in `manifest.schema.json`, and the
-// runtime `Set`s in the zero-dep `plugin-cli`. The hard constraints (plugin-api
+// runtime `Set`s in the zero-dep `paged-plugin` bin. The hard constraints (plugin-api
 // is type-only → no runtime const; the CLI is zero-dep, no build step → can't
 // import either) rule out a single literal feeding all three at runtime. So the
 // single source of truth is **manifest.schema.json**, and this test GATES the
@@ -35,14 +35,7 @@ import { describe, expect, it } from "bun:test";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const API = join(here, "..", "..", "plugin-api", "src");
-const CLI_PATH = join(
-  here,
-  "..",
-  "..",
-  "plugin-cli",
-  "bin",
-  "paged-plugin.mjs",
-);
+const CLI_PATH = join(here, "..", "bin", "paged-plugin.mjs");
 
 const schema = JSON.parse(
   readFileSync(join(API, "manifest.schema.json"), "utf8"),

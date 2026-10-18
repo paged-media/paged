@@ -10,9 +10,11 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
 
 ## Shipped
 
-- **Five packages, three of them on npm.** `plugin-api`, `plugin-sdk` and `plugin-cli` are
-  published under the `canary` tag on a push to `main`. `ai` and `cli` are built and tested
-  in the same workflow but are not on npm (see the limits below).
+- **Four packages, two of them public on npm** (PM-0008, 2026-10-18). `plugin-api` and
+  `plugin-sdk` are published by `.github/workflows/release.yml` from a `v0.<protocol>.<patch>`
+  tag, at the tag's version; `plugin-sdk` carries the `paged-plugin` bin, which was
+  `@paged-media/plugin-cli` (0.1.6, deprecated). `ai` and `cli` are private workspace
+  packages. The notes below about the canary lane describe the state before the change.
 - **The contract** (`plugin-api`, types only): the manifest types and their JSON Schema
   (exported as `./manifest.schema.json`), `PagedBundle`, `BundleHost` with 31 members, the
   contribution shapes, the panel schema, binding providers, the object-model types, and the

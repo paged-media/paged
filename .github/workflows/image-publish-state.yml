@@ -15,7 +15,7 @@
 # .github/workflows/publish-state.yml. It publishes evidence ARTIFACTS only
 # (nothing to npm), so it stays enabled. The unit-test job's sibling
 # paged-media/plugin-sdk checkout is gone: only the manifest package's
-# scripts read the plugin-cli, and this job runs `bun test` directly.
+# scripts read the paged-plugin bin, and this job runs `bun test` directly.
 name: image / publish-state
 concurrency:
   # A newer push to a pull request cancels the older run. Main pushes share

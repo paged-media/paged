@@ -8,7 +8,7 @@
     "typecheck": "bun run --filter './glue' --filter './manifest' typecheck",
     "build": "bun run --filter './glue' --filter './manifest' typecheck",
     "test": "bun run --filter './glue' --filter './manifest' test",
-    "validate:manifest": "bun ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate manifest/manifest.json"
+    "validate:manifest": "bun ../../platform/extensions/packages/plugin-sdk/bin/paged-plugin.mjs validate manifest/manifest.json"
   },
   "devDependencies": {
     "typescript": "catalog:"
