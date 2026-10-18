@@ -35,7 +35,7 @@ true standalone open are on the roadmap. See [`docs/status.md`](docs/status.md).
 ## Layout
 
 - `paged-ooxml/` — shared OPC container + carry-through + `ooxmlsdk` typed DOM
-  (MPL-2.0 OR PMEL).
+  (AGPL-3.0-only OR PMEL).
 - `docx-core/`, `docx-import/`, `docx-lower/`, `docx-js/`, `docx-conformance/` —
   the Word engine (AGPL-3.0-only OR PMEL).
 - `packages/doc-host-model/`, `packages/doc-bundle/` — the TS glue + the
@@ -53,5 +53,5 @@ pnpm install && pnpm test       # the bundle glue
 ## License
 
 Dual-licensed **AGPL-3.0-only OR PMEL** (the Paged Media Enterprise License, a
-commercial license from And The Next GmbH). The shared `paged-ooxml` library is
-**MPL-2.0 OR PMEL**. See [`LICENSE.md`](LICENSE.md).
+commercial license from And The Next GmbH), the shared `paged-ooxml` library
+included. See [`LICENSE.md`](LICENSE.md).

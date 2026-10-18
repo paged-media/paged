@@ -11,7 +11,7 @@ not an Excel replacement.**
 Concept (the authority):
 [`docs/concept.md`](./docs/concept.md) (v0.3). SDK gap punch
 list: [`BREAKAGE_LOG.md`](./BREAKAGE_LOG.md) (S-NN). Dual-licensed
-MPL-2.0 OR PMEL (see [`LICENSE.md`](./LICENSE.md)). First-party in
+AGPL-3.0-only OR PMEL (see [`LICENSE.md`](./LICENSE.md)). First-party in
 authorship, third-party in discipline: the only dependency surface is
 the published plugin SDK.
 
@@ -122,9 +122,8 @@ RFI (the internal gap register).
 ## License
 
 Dual-licensed **AGPL-3.0 OR the Paged Media Enterprise License (PMEL)** —
-the same as the paged editor (a plugin is part of the editor app). The engine
-(`paged-media/core`) and the plugin SDK (`paged-media/plugin-sdk`) it builds on
-are MPL-2.0 OR PMEL. See [`LICENSE.md`](./LICENSE.md), [`LICENSE`](./LICENSE),
+the same as the paged editor (a plugin is part of the editor app), the engine
+and the extension SDK it builds on (ADR PM-0001). See [`LICENSE.md`](./LICENSE.md), [`LICENSE`](./LICENSE),
 and [`CONTRIBUTING.md`](./CONTRIBUTING.md) (contributions under a CLA).
 
 `SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-PMEL`

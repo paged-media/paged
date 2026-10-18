@@ -2,9 +2,8 @@
 
 Thanks for your interest in the **paged** editor — the React/TypeScript
 frontend on top of the open render engine (`paged-media/core`). This
-repository is **open**, dual-licensed AGPL-3.0 OR PMEL. (The engine itself
-is MPL-2.0 OR PMEL — more permissive, because it's meant to be embedded;
-the editor is AGPL because it's a networked application.)
+repository is **open**, dual-licensed AGPL-3.0 OR PMEL, like the engine and
+every other part of the paged repository (ADR PM-0001).
 
 ## License of contributions
 

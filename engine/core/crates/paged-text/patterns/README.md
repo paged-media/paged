@@ -16,7 +16,8 @@ it agrees on 24 against 16 for the pattern trie we used before, because
 it carries the TUGboat hyphenation-exception log that the trie omits.
 
 Only languages whose upstream licence is compatible with this repo's
-MPL-2.0 OR PMEL dual licence are vendored:
+AGPL-3.0-only OR PMEL dual licence (on both sides, so no copyleft-only
+terms) are vendored:
 
 | language | file | licence |
 |---|---|---|

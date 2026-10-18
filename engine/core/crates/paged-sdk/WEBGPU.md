@@ -1,6 +1,6 @@
 <!--
   Design note for the renderer roadmap. Part of paged (https://paged.media),
-  dual-licensed MPL-2.0 OR PMEL like the rest of this crate. This is a target
+  dual-licensed AGPL-3.0 OR PMEL like the rest of this crate. This is a target
   spec, not yet implemented — see "Status" below.
 -->
 

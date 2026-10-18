@@ -27,11 +27,12 @@ How the engine is designed and built is in [`docs/`](./docs/README.md):
 
 ## License
 
-Dual-licensed: **MPL-2.0 OR the Paged Media Enterprise License (PMEL)**
-(commercial, from And The Next GmbH). MPL's file-level copyleft keeps the
-engine freely embeddable while requiring changes to the engine's own files
-to flow back. See [`LICENSE.md`](./LICENSE.md), [`LICENSE`](./LICENSE), and
-[`CONTRIBUTING.md`](./CONTRIBUTING.md) (contributions are under a CLA).
+Dual-licensed: **AGPL-3.0-only OR the Paged Media Enterprise License (PMEL)**
+(commercial, from And The Next GmbH), like the rest of the repository (ADR
+PM-0001). Versions published before the relicense remain available under
+MPL-2.0 OR PMEL. See [`LICENSE.md`](./LICENSE.md), the full AGPL-3.0 text in
+[`LICENSE`](../../LICENSE), and [`CONTRIBUTING.md`](./CONTRIBUTING.md)
+(contributions are under a CLA).
 
 ## Pipeline
 

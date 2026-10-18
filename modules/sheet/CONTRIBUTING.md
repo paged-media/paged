@@ -2,8 +2,8 @@
 
 Thanks for your interest in this **paged plugin**. It's open, dual-licensed
 **AGPL-3.0 OR PMEL** — the same as the paged editor (a plugin is part of the
-editor app). The engine (`paged-media/core`) and the plugin SDK
-(`paged-media/plugin-sdk`) it builds on are MPL-2.0 OR PMEL.
+editor app). The engine and the extension SDK it builds on are under the
+same terms (ADR PM-0001).
 
 ## License of contributions
 

@@ -1,8 +1,8 @@
 # CLAUDE.md — paged-media/plugin-slide
 
 paged.slide: presentations on the paged engine, a `.pptx` reader and writer, and an editor
-slideshow. Dual-licensed AGPL-3.0-only OR PMEL (And The Next GmbH); `vendor/paged-ooxml` is
-MPL-2.0 OR PMEL.
+slideshow. Dual-licensed AGPL-3.0-only OR PMEL (And The Next GmbH), `vendor/paged-ooxml`
+included.
 
 Read first: [docs/concept.md](docs/concept.md), [docs/architecture.md](docs/architecture.md),
 [docs/status.md](docs/status.md), [docs/adr/](docs/adr/README.md) (range 700–749).

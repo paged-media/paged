@@ -49,4 +49,6 @@ this with a fake.
 
 ## License
 
-MPL-2.0 OR LicenseRef-PMEL — see the repository `LICENSE.md`.
+AGPL-3.0-only OR LicenseRef-PMEL — see `LICENSE.md` and `LICENSE` in this
+package. Versions published before the relicense (ADR PM-0001) remain
+available under MPL-2.0 OR LicenseRef-PMEL.

@@ -7,8 +7,7 @@ panel/shell machinery that turns the engine into an editable
 InDesign-class application.
 
 > **Dual-licensed: AGPL-3.0 OR the Paged Media Enterprise License (PMEL).**
-> © And The Next GmbH. (The engine, `paged-media/core`, is MPL-2.0 OR PMEL —
-> more permissive, for embedding.) See [`LICENSE.md`](./LICENSE.md),
+> © And The Next GmbH. (The engine is under the same terms.) See [`LICENSE.md`](./LICENSE.md),
 > [`LICENSE`](./LICENSE), and [`CONTRIBUTING.md`](./CONTRIBUTING.md)
 > (contributions are under a CLA).
 
@@ -16,7 +15,7 @@ InDesign-class application.
 
 `paged-media/core` is the engine: the Rust render pipeline (IDML parse
 → scene → text layout → compose → GPU/CPU raster), dual-licensed
-MPL-2.0 OR PMEL, publishing the `@paged-media/*` SDK + wasm packages.
+AGPL-3.0 OR PMEL, publishing the `@paged-media/*` SDK + wasm packages.
 
 This repo is everything **above** that boundary — where the product
 and the revenue live. It consumes the engine strictly as a published
@@ -170,8 +169,7 @@ Dual-licensed: **AGPL-3.0 OR the Paged Media Enterprise License (PMEL)**
 so the open-source option is the AGPL — its §13 network clause requires a
 modified hosted version to share its source. The PMEL is the commercial
 escape hatch (closed/hosted derivatives, warranty, support). The render
-engine it builds on (`paged-media/core`) is instead **MPL-2.0 OR PMEL** —
-deliberately more permissive, for embedding. See [`LICENSE.md`](./LICENSE.md),
+engine it builds on is under the same terms (ADR PM-0001). See [`LICENSE.md`](./LICENSE.md),
 [`LICENSE`](./LICENSE), and [`CONTRIBUTING.md`](./CONTRIBUTING.md)
 (contributions are under a CLA).
 
