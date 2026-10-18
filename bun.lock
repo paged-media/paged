@@ -177,8 +177,11 @@
         "@paged-media/shell": "workspace:*",
       },
       "devDependencies": {
+        "@paged-media/test-kit": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/react": "catalog:",
         "@types/react-dom": "catalog:",
+        "fast-check": "^4.10.2",
         "typescript": "catalog:",
       },
       "peerDependencies": {
