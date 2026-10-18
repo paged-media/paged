@@ -111,6 +111,13 @@ formatted in one mechanical pass; the workaround is retired.
   workflow's subset audit stops (it did, on v0.63.0). Check the off path with
   `cargo check -p paged-renderer` alone; a `--workspace` build unifies features
   and never compiles it.
+  A third, off-by-default feature, `schema`, derives `schemars::JsonSchema`
+  next to every `Tsify` derive `Mutation` reaches and writes the committed
+  `crates/paged-wire/schema/mutation.schema.json` (ADR 187; the plugin SDK's
+  typed core commands are generated from it). After changing a type the wire
+  carries: `cargo run -p paged-wire --features schema --example emit-schema >
+  crates/paged-wire/schema/mutation.schema.json`; `cargo test -p paged-wire
+  --features schema` checks it is current and agrees with tsify.
 - `crates/paged-gen/` — IDML fixture generator (the `paged-gen` bin).
 - `crates/paged-sdk/` — published SDK wasm surface: a WebGPU
   `ViewerSession` (load IDML → present to OffscreenCanvas/Canvas via

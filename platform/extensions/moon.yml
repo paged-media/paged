@@ -12,15 +12,21 @@ project:
   description: 'Extension contract (plugin-api), runtime SDK, manifest CLI, ai and cli packages.'
 
 # plugin-sdk's harness specs boot the engine's canvas-wasm (workspace:*);
-# scripts/sync-catalog.mjs reads engine/core's catalog.json and
-# scripts/sync-wire.mjs the .d.ts of the canvas-wasm workspace package.
+# scripts/sync-catalog.mjs reads engine/core's catalog.json,
+# scripts/sync-wire.mjs the .d.ts of the canvas-wasm workspace package and
+# scripts/gen-core-commands.mjs the wire schema in crates/paged-wire/schema.
 dependsOn:
   - id: 'core'
     scope: 'development'
 
 tasks:
+  # The npm builds: plugin-api's declarations, plugin-sdk's bun build plus
+  # declarations (TypeScript 7), and the CLI's plain-Node bin.
   js-build:
-    description: 'Every package `build` script (tsup/tsc to dist/). extensions-vitest builds before testing.'
+    description: 'Every package `build` script (bun build / tsc to dist/). extensions-vitest builds before testing.'
+    command: "bun run --filter './packages/*' build"
+    inputs:
+      - '@group(js-sources)'
     outputs:
       - 'packages/*/dist/**/*'
     options:
@@ -38,4 +44,15 @@ tasks:
       - 'packages/plugin-api/src/catalog.json'
       - project: 'core'
         filter: ['crates/paged-introspect/catalog.json']
+    # extensions-vitest runs it with sync-wire.mjs --check.
+
+  core-commands-check:
+    description: 'The typed core commands match the engine wire schema (scripts/gen-core-commands.mjs --check, engine ADR 187).'
+    toolchains: ['system']
+    command: 'bun scripts/gen-core-commands.mjs --check'
+    inputs:
+      - 'scripts/gen-core-commands.mjs'
+      - 'packages/plugin-sdk/src/core-commands.generated.ts'
+      - project: 'core'
+        filter: ['crates/paged-wire/schema/mutation.schema.json']
     # extensions-vitest runs it with sync-wire.mjs --check.

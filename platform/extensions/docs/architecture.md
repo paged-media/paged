@@ -231,9 +231,11 @@ for a lazy registration and allowances that must give a reason.
 
 ## Build, test, release
 
-- `pnpm install && pnpm -r typecheck` checks all packages. `pnpm -r build` emits
-  declarations for `plugin-api` (`tsc`) and an ES2020 ESM bundle for `plugin-sdk` (`tsup`).
-  In development the packages resolve to `src`; `publishConfig` switches them to `dist`.
+- `bun install && bun run typecheck` checks all packages. `bun run build` in a package emits
+  declarations for `plugin-api` (TypeScript 7 `tsc`), an ESM bundle (`bun build`) plus
+  declarations (`tsc`) for `plugin-sdk`, and the CLI's plain-Node bin (`bun build`); `ai` has
+  no build. In development the packages resolve to `src`; `publishConfig` switches the two
+  public ones to `dist`.
 - Tests run under `bun test`, all in `packages/plugin-sdk/test` (35 spec files): the adapter against
   a fake editor, the harness against the real engine, the CLI as a subprocess, the two sync
   scripts, and the built `dist`. `.github/workflows/extensions-vitest.yml` runs them.
