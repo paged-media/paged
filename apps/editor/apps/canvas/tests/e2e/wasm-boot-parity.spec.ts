@@ -49,7 +49,18 @@ import { expect, test } from "@playwright/test";
 import { buildModuleManifest } from "../../scripts/module-index.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ENGINE_PACKAGES = resolve(HERE, "..", "..", "..", "..", "..", "..", "engine", "core", "packages");
+const ENGINE_PACKAGES = resolve(
+  HERE,
+  "..",
+  "..",
+  "..",
+  "..",
+  "..",
+  "..",
+  "engine",
+  "core",
+  "packages",
+);
 
 interface WasmFile {
   owner: string;
@@ -63,12 +74,19 @@ function sha384(path: string): string {
 }
 
 const files: WasmFile[] = [];
-for (const dir of existsSync(ENGINE_PACKAGES) ? readdirSync(ENGINE_PACKAGES) : []) {
+for (const dir of existsSync(ENGINE_PACKAGES)
+  ? readdirSync(ENGINE_PACKAGES)
+  : []) {
   const pkgDir = join(ENGINE_PACKAGES, dir);
   for (const name of existsSync(pkgDir) ? readdirSync(pkgDir) : []) {
     if (!name.endsWith("_bg.wasm")) continue;
     const fs = join(pkgDir, name);
-    files.push({ owner: `engine/${dir}`, file: name, fs, integrity: sha384(fs) });
+    files.push({
+      owner: `engine/${dir}`,
+      file: name,
+      fs,
+      integrity: sha384(fs),
+    });
   }
 }
 const manifest = buildModuleManifest({ host: null, dev: true });
@@ -81,9 +99,12 @@ for (const [pkg, entry] of Object.entries(manifest.packages)) {
 
 test.describe("wasm boot parity — every shipped wasm boots in V8", () => {
   test("the parity list covers the engine and every module the manifest declares @level:smoke", () => {
-    expect(files.filter((f) => f.owner.startsWith("engine/")).length).toBeGreaterThan(0);
+    expect(
+      files.filter((f) => f.owner.startsWith("engine/")).length,
+    ).toBeGreaterThan(0);
     const owners = new Set(files.map((f) => f.owner));
-    for (const pkg of Object.keys(manifest.packages)) expect(owners.has(pkg), pkg).toBe(true);
+    for (const pkg of Object.keys(manifest.packages))
+      expect(owners.has(pkg), pkg).toBe(true);
   });
 
   for (const f of files) {
@@ -98,13 +119,21 @@ test.describe("wasm boot parity — every shipped wasm boots in V8", () => {
           const bytes = await res.arrayBuffer();
           if (viaGlue) {
             const mod = (await import(/* @vite-ignore */ `/@fs${glue}`)) as {
-              default: (init: { module_or_path: ArrayBuffer }) => Promise<WebAssembly.Exports>;
+              default: (init: {
+                module_or_path: ArrayBuffer;
+              }) => Promise<WebAssembly.Exports>;
             };
             const exports = await mod.default({ module_or_path: bytes });
-            return { exports: Object.keys(exports).length, isolated: self.crossOriginIsolated };
+            return {
+              exports: Object.keys(exports).length,
+              isolated: self.crossOriginIsolated,
+            };
           }
           const compiled = await WebAssembly.compile(bytes);
-          return { exports: WebAssembly.Module.exports(compiled).length, isolated: self.crossOriginIsolated };
+          return {
+            exports: WebAssembly.Module.exports(compiled).length,
+            isolated: self.crossOriginIsolated,
+          };
         },
         { wasm: f.fs, glue, integrity: f.integrity, viaGlue },
       );
