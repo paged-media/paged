@@ -15,7 +15,8 @@
       "modules/*/packages/*",
       "modules/image/glue",
       "modules/image/manifest",
-      "engine/core/web/idml-viewer"
+      "engine/core/web/idml-viewer",
+      "engine/core/packages/*"
     ],
     "catalog": {
       "@types/node": "20.19.39",
