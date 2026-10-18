@@ -3,14 +3,9 @@
  *
  * A top-level `Web` menu for the render/flow/bake verbs, plus the insert verb in the host's `Object` menu where minting a page item lives.
  *
- * Registered through `contribute.menu()` (plugin-api 0.2.33). Before it
- * there was no menu door at all, so every verb here lived behind Cmd+K
- * and nowhere else.
- *
- * `Object ▸ Insert web frame…` is the SAME path the host curates as a
- * courtesy, deliberately: `fallbackFor` lets this entry supersede it, so
- * the item stays where the user already found it while the host stops
- * naming this bundle by hand.
+ * Registered through `contribute.menu()`. `Object ▸ Insert web frame…`
+ * is the path the host once curated for this bundle, so the item stays
+ * where the user already found it.
  * */
 
 import type { BundleHost, Disposable } from "@paged-media/plugin-api";

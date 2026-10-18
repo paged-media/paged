@@ -984,26 +984,12 @@ export function buildInsertCommands(
  *  honest-stub convention doing its job); "Add page" heads Layout.
  *  Each item carries the same `when` as its command so the menu greys
  *  where the palette hides. */
-/** C1 — an Insert entry for a PLUGIN content type.
- *
- *  The plugin contract has twelve contribution types and `menu` is not
- *  one of them, so a plugin command's only host-wide home is Cmd+K —
- *  where the palette shows the raw command id rather than a shortcut,
- *  and where nobody ever sees two creation verbs side by side. That is
- *  why the six content types teach six different idioms (Insert / Place
- *  / Import / and sheet's `lowerToFrame`, which is compiler vocabulary
- *  for the step that actually puts the sheet on the page).
- *
- *  Until the contract grows a menu door, the host curates. It already
- *  special-cases one plugin this way — `File > Open PDF…` is a host
- *  menu item written for media.paged.pdf, which never asked for it — so
- *  the precedent is set and the alternative is leaving four content
- *  types undiscoverable.
+/** A host menu entry for a PLUGIN's command (today: the Data panels).
  *
  *  Gated on the command being REGISTERED, not on a hardcoded list of
- *  bundles: a build without paged.sheet shows no Spreadsheet entry
- *  rather than a dead one, which is the tool-rail rule ("worse than an
- *  empty slot") applied to the menu.
+ *  bundles: a build without paged.data shows no Data entry rather than a
+ *  dead one, which is the tool-rail rule ("worse than an empty slot")
+ *  applied to the menu.
  */
 function pluginInsert(command: string) {
   return (state: unknown): boolean => {
@@ -1016,60 +1002,19 @@ function pluginInsert(command: string) {
   };
 }
 
-/** F1 — the host's COURTESY entries for plugin commands.
- *
- *  C1 curated these because the contract had no menu door: a plugin's
- *  creation verb was reachable only through Cmd+K, so the host named
- *  four bundles by hand and gave them a front door. `contribute.menu()`
- *  (plugin-api 0.2.33) ended that necessity, and each entry now carries
- *  `fallbackFor` — it stands down the moment its plugin contributes its
- *  own entry for the same command, wherever the plugin chooses to put
- *  it.
- *
- *  They are NOT deleted. A bundle that declares no menu still needs a
- *  front door, and the host naming a few plugins is a smaller cost than
- *  a user who cannot find how to insert a spreadsheet. A fallback is
- *  removed when someone walks through the door, not when the door opens.
- *
- *  The three `Data/…` rows are a different case and deliberately keep no
- *  `fallbackFor`: they raise PANELS through the registry-derived
+/** The host's own entries that raise a PLUGIN's panels. Every in-tree
+ *  bundle files its creation verbs through `contribute.menu()` itself (the
+ *  host's courtesy `Object ▸ Insert …` entries for four of them, kept for a
+ *  bundle on a host without the door, went in B3b), so what remains are
+ *  the three `Data/…` rows: they raise PANELS through the registry-derived
  *  panel-show commands, which no plugin command supersedes. */
 const PLUGIN_INSERT_ENTRIES: {
   path: string;
   command: string;
   order: number;
-  fallbackFor?: string;
   icon?: string;
 }[] =
   [
-    {
-      path: "Object/Insert web frame…",
-      command: "media.paged.web.command.insertWebFrame",
-      icon: "ui-web",
-      fallbackFor: "media.paged.web.command.insertWebFrame",
-      order: 30,
-    },
-    {
-      path: "Object/Insert spreadsheet…",
-      command: "media.paged.sheet.command.importXlsx",
-      icon: "ui-grid",
-      fallbackFor: "media.paged.sheet.command.importXlsx",
-      order: 31,
-    },
-    {
-      path: "Object/Insert Word document…",
-      command: "media.paged.doc.command.placeDoc",
-      icon: "ui-doc",
-      fallbackFor: "media.paged.doc.command.placeDoc",
-      order: 32,
-    },
-    {
-      path: "Object/Insert data binding…",
-      command: "media.paged.data.command.defineBinding",
-      icon: "ui-database",
-      fallbackFor: "media.paged.data.command.defineBinding",
-      order: 33,
-    },
     // The three Data-menu entries raise the same panels the Data-mode
     // pills do, named as the panels are named. They were "Connect
     // source…", "Field mapping…" and "Generate pages…" — three names for
@@ -1172,11 +1117,6 @@ export const INSERT_MENU_ITEMS: MenuItemContribution[] = [
     order: e.order,
     group: "insert-plugin",
     when: pluginInsert(e.command),
-    // Carried through explicitly. This map names every field, so a new
-    // one on the source type is dropped in silence — `fallbackFor` was,
-    // and the courtesy entries stayed permanent while every other part
-    // of the mechanism worked.
-    fallbackFor: e.fallbackFor,
     icon: e.icon,
   })),
 ];

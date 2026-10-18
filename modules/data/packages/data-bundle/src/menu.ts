@@ -25,12 +25,8 @@ const C = "media.paged.data.command";
 
 /** `[path, command suffix, group]`. */
 const ENTRIES: [path: string, suffix: string, group: string][] = [
-  // KEEPS THE HOST'S PATH. C1 curated `Object ▸ Insert data binding…`
-  // and a spec pins it; filing this verb under `Data/` instead made the
-  // Insert entry VANISH, because a courtesy stands down as soon as its
-  // command is claimed anywhere. Declaring the same path supersedes the
-  // courtesy in place, so the item stays exactly where users and the
-  // spec already found it — and paged.data owns it now.
+  // KEEPS THE PATH users and a spec know (`Object ▸ Insert data
+  // binding…`, where the host once curated it), and paged.data owns it.
   ["Object/Insert data binding…", "defineBinding", "insert-plugin"],
   ["Data/Data query…", "editQuery", "panel"],
   ["Data/Refresh from sources", "resolveBindings", "resolve"],

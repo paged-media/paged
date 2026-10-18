@@ -651,15 +651,15 @@ test.describe("plugin surface · paged.web", () => {
     // `contribute.menu()` (plugin-api 0.2.33) is what changed: paged.web
     // now files its render / thread / bake verbs under a `Web` top level
     // and keeps `Object ▸ Insert web frame…` where users already found
-    // it. The host's courtesy entry at that same path STOOD DOWN — see
-    // `fallbackFor` — so the insert verb appears once, not twice.
+    // it. (The host's courtesy entry at that path is gone since B3b.) The
+    // insert verb appears once, not twice.
     expect(
       reach.menuItems.length,
       "paged.web contributes its own menu entries now",
     ).toBeGreaterThanOrEqual(6);
     expect(
       reach.menuItems.filter((p) => p === "Object/Insert web frame…"),
-      "the insert verb appears exactly once — the host's courtesy stood down",
+      "the insert verb appears exactly once",
     ).toEqual(["Object/Insert web frame…"]);
     expect(
       reach.menuItems.some((p) => p.startsWith("Web/")),
