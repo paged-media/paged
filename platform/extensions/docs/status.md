@@ -128,7 +128,7 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
   the host's selection mirror, so the selection box follows a selection a bundle makes
   (0.2.54-canary.0).
 - **The gesture test kit (0.2.73-canary.0; its own entry point `@paged-media/plugin-sdk/gesture-kit`
-  since 0.2.76-canary.0):** `createFakeEditor` (a recording `PagedEditor`), the gesture DSL
+  since 0.2.77-canary.0):** `createFakeEditor` (a recording `PagedEditor`), the gesture DSL
   `gestures()` with its unit backend (a tool's handler driven in document points, against the
   fake or the headless engine), pointer tapes (`parseTape` / `replayTape`) and the invariants
   (`expectOneCommit`, `expectNoCommit`, `checkUndoRedo`, `checkCancel`, `engineModelChannel`).
