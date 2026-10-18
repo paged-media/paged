@@ -1,0 +1,25 @@
+# Default owner for everything.
+*                                   @drietsch
+
+# Protected paths: changes here need an explicit owner review, whoever wrote them
+# (including agents). Keep this list in step with docs/adr PM-0006.
+/.github/                           @drietsch
+/.moon/                             @drietsch
+/.claude/                           @drietsch
+/.mcp.json                          @drietsch
+/.prototools                        @drietsch
+/.protolock                         @drietsch
+/.cargo/                            @drietsch
+/tooling/                           @drietsch
+/docs/adr/                          @drietsch
+**/Cargo.lock                       @drietsch
+**/pnpm-lock.yaml                   @drietsch
+/bun.lock                           @drietsch
+/LICENSE                            @drietsch
+/LICENSE.md                         @drietsch
+/CLA.md                             @drietsch
+
+# Wire protocol, WASM ABI and the public extension contract.
+/engine/core/crates/paged-canvas/src/channel.rs   @drietsch
+/engine/core/crates/paged-canvas-wasm/            @drietsch
+/platform/extensions/packages/plugin-api/         @drietsch
