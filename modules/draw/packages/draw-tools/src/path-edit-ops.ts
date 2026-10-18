@@ -26,10 +26,9 @@
 //     flat-indexed across contours, positions in the path's OWN (inner)
 //     coordinate space. `TargetedPathOp` is the same thing carrying its
 //     element, for the Pen, whose plans can span two paths.
-//   · the `*Wire` shapes — hand-declared mirrors of the engine's
-//     `Mutation` variants. `wire-compat.ts` asserts every one of them
-//     against the vendored union, so a protocol change that moves a
-//     field fails `pnpm typecheck` HERE rather than at the first drag.
+//   · the `*Wire` shapes — the engine's own `Mutation` variants (the
+//     contract's union, `Extract`ed by `op`), so a protocol change that
+//     moves a field fails the typecheck of the lowering below.
 //
 // ORDER IS PART OF THE PLAN. Ops apply sequentially and indices are
 // resolved against the table as the PREVIOUS op left it: a
@@ -41,14 +40,18 @@
 // ONE BATCH = ONE UNDO STEP. Every lowering here returns a `batch`, even
 // for a single op, so a gesture is always exactly one Cmd-Z.
 
-import type { ElementId } from "@paged-media/plugin-api";
+import type { ElementId, Mutation, PathPointRole } from "@paged-media/plugin-api";
 import type { AnchorTriple } from "@paged-media/draw-geometry";
 
 import type { AnchorEditPlan } from "./anchor-machine";
 
 /** Which control point of an anchor: the on-curve point or one of its
- *  two Bézier handles (`left` = incoming, `right` = outgoing). */
-export type PathPointRole = "anchor" | "left" | "right";
+ *  two Bézier handles (`left` = incoming, `right` = outgoing). The wire's
+ *  own vocabulary. */
+export type { PathPointRole };
+
+/** The contract's `Mutation` variant whose `op` is `K`. */
+export type WireOp<K extends Mutation["op"]> = Extract<Mutation, { op: K }>;
 
 /** One planned edit on ONE path. Positions are path-inner coordinates. */
 export type PathPointOp =
@@ -80,57 +83,15 @@ export type PathPointOp =
  *  may touch the continued path AND the path it joins. */
 export type TargetedPathOp = PathPointOp & { elementId: ElementId };
 
-// ---- wire shapes (asserted against `Mutation` in wire-compat.ts) ------
+// ---- wire shapes (the contract's variants) ------------------------------
 
-export interface PathPointSetWire {
-  op: "pathPointSet";
-  args: {
-    elementId: ElementId;
-    index: number;
-    role: PathPointRole;
-    position: [number, number];
-  };
-}
-
-export interface PathPointInsertWire {
-  op: "pathPointInsert";
-  args: {
-    elementId: ElementId;
-    index: number;
-    anchor: AnchorTriple;
-    prevSubpathStarts?: number[];
-  };
-}
-
-export interface PathPointRemoveWire {
-  op: "pathPointRemove";
-  args: { elementId: ElementId; index: number };
-}
-
-export interface PathPointCurveTypeWire {
-  op: "pathPointCurveType";
-  args: { elementId: ElementId; index: number; smooth: boolean };
-}
-
-export interface ClosePathWire {
-  op: "closePath";
-  args: { elementId: ElementId; subpath: number };
-}
-
-export interface JoinPathsWire {
-  op: "joinPaths";
-  args: { elementId: ElementId; otherId: ElementId };
-}
-
-export interface InsertPathWire {
-  op: "insertPath";
-  args: {
-    pageId: string;
-    anchors: AnchorTriple[];
-    open: boolean;
-    smooth: boolean;
-  };
-}
+export type PathPointSetWire = WireOp<"pathPointSet">;
+export type PathPointInsertWire = WireOp<"pathPointInsert">;
+export type PathPointRemoveWire = WireOp<"pathPointRemove">;
+export type PathPointCurveTypeWire = WireOp<"pathPointCurveType">;
+export type ClosePathWire = WireOp<"closePath">;
+export type JoinPathsWire = WireOp<"joinPaths">;
+export type InsertPathWire = WireOp<"insertPath">;
 
 export type PathEditWireOp =
   | PathPointSetWire

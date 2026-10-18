@@ -36,8 +36,9 @@ The TypeScript code was cut into three packages with one direction of dependency
 Two checks hold the boundary. `scripts/check-contract-imports.mjs` runs first in the root `test`
 script and fails on a static `import … from` or `export … from` in `packages/*/src` whose specifier
 is non-relative and outside `@paged-media/plugin-api`, `@paged-media/plugin-sdk`,
-`@paged-media/draw-` and `react`. `packages/draw-tools/src/wire-compat.ts` asserts at type level
-that machine output is assignable to the engine wire types.
+`@paged-media/draw-` and `react`. The machines' wire shapes are the contract's `Mutation`
+variants (`packages/draw-tools/src/path-edit-ops.ts`), so machine output is the engine wire type
+by construction (until B3b a separate module asserted it).
 
 Inside the bundle the UI form follows the shape of the value. Scalar properties go in two schema
 panels (stroke, fill) that are data only; their gates are booleans the bundle computes and
@@ -51,7 +52,7 @@ panels registered with `host.contribute.panel`.
   `dependencies` block in the first; exactly `draw-geometry` and `plugin-api` in the second
 - `packages/draw-tools/src/index.ts:19-20` — "host-agnostic tool state machines." and
   "Events in (page-local pt), intents/previews/commits out."
-- `packages/draw-tools/src/wire-compat.ts:26-44` — the type-only import, two `Assert` aliases
+- `packages/draw-tools/src/path-edit-ops.ts` — the type-only import, the `WireOp` aliases
 - `packages/draw-bundle/src/handlers/anchors.ts:62-113`, `:126-162` — plan to `Mutation`
   (`mutationFor`); the handler factory, its px tolerance converted by `host.viewport.pxToPt`;
   `packages/draw-bundle/src/handlers/pencil.ts:57-73` — machine, preview and `mutate` in one shim

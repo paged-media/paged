@@ -1,13 +1,12 @@
-// The module door probe (plugin-sdk ADR 326) and bootEngine's use of it:
-// an older host, a host without a module backend, a refusing or throwing
-// door all answer null (load bin/); a host's copy that fails to load falls
-// back to the glue's own; DuckDB's pre-fetch names why a host copy is unusable.
+// The module door (plugin-sdk ADR 326) and bootEngine's use of it: a host
+// without a module backend answers null (load bin/), as does a refusing door
+// (the boot catches it); a host's copy that fails to load falls back to the
+// glue's own; DuckDB's pre-fetch names why a host copy is unusable.
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { hostWasm } from "../bin-url";
 import { initEngineGlue } from "../engine";
 import { preflightHostedWasm } from "../query/duckdb";
-
-import { hostedWasm, wasmResolver } from "../module-door";
 
 const SRI = "sha384-" + "A".repeat(64);
 
@@ -15,36 +14,20 @@ function host(supports: boolean, modules?: unknown) {
   return { supports: (f: string) => supports && f === "modules@1", modules } as never;
 }
 
-describe("hostedWasm", () => {
+describe("hostWasm", () => {
   it("answers the host's URL + integrity when the door is wired", async () => {
     const resolve = vi.fn(async (name: string) => ({ url: `https://modules.example/${name}.wasm`, integrity: SRI }));
-    expect(await hostedWasm(host(true, { resolve }), "duckdb-engine")).toEqual({
+    expect(await hostWasm(host(true, { resolve }))("duckdb-engine")).toEqual({
       url: "https://modules.example/duckdb-engine.wasm",
       integrity: SRI,
     });
     expect(resolve).toHaveBeenCalledWith("duckdb-engine");
   });
 
-  it("is null on a host that predates the door, or does not wire it", async () => {
-    expect(await hostedWasm(host(false), "duckdb-engine")).toBeNull();
-    expect(await hostedWasm(host(true), "duckdb-engine")).toBeNull();
-    // the flag off: the member is never called
+  it("is null on a host without a module backend, and the door is not called", async () => {
     const resolve = vi.fn();
-    expect(await hostedWasm(host(false, { resolve }), "duckdb-engine")).toBeNull();
+    expect(await hostWasm(host(false, { resolve }))("duckdb-engine")).toBeNull();
     expect(resolve).not.toHaveBeenCalled();
-  });
-
-  it("is null when the door refuses, throws, or answers nothing", async () => {
-    expect(await hostedWasm(host(true, { resolve: async () => null }), "x")).toBeNull();
-    expect(await hostedWasm(host(true, { resolve: async () => Promise.reject(new Error("undeclared")) }), "x")).toBeNull();
-    expect(await hostedWasm(host(true, { resolve: async () => ({ integrity: SRI }) }), "x")).toBeNull();
-    const throwingSupports = { supports: () => { throw new Error("old host"); } } as never;
-    expect(await hostedWasm(throwingSupports, "x")).toBeNull();
-  });
-
-  it("normalises a missing integrity to null", async () => {
-    const r = await wasmResolver(host(true, { resolve: async () => ({ url: "https://m.example/x.wasm" }) }))("x");
-    expect(r).toEqual({ url: "https://m.example/x.wasm", integrity: null });
   });
 });
 
@@ -90,11 +73,12 @@ describe("initEngineGlue (bootEngine through the door)", () => {
     expect(fallbacks[0]).toMatch(/using the bundle's own/);
   });
 
-  it("loads the glue's own copy without a door, or when the door answers null", async () => {
+  it("loads the glue's own copy without a door, or when the door answers null or refuses", async () => {
     const init = vi.fn(async () => {});
     await run(init);
     await run(init, async () => null);
-    expect(init.mock.calls).toEqual([[], []]);
+    await run(init, async () => Promise.reject(new Error("undeclared")));
+    expect(init.mock.calls).toEqual([[], [], []]);
   });
 });
 

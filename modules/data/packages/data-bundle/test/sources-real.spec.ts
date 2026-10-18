@@ -47,7 +47,8 @@ const stubHost = {
   supports: () => false,
   parts: { write: async () => {}, read: async () => null, list: async () => [] },
   network: { consentedOrigins: () => [], requestConsent: async () => ({ granted: [], denied: [], remembered: false }) },
-  document: {},
+  // The document doors every host has; nothing here fires them.
+  document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }) },
 } as never;
 
 describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(

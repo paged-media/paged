@@ -234,7 +234,7 @@ import {
   batchMutationFor,
   bindCreatedMutationFor,
   handleElementId,
-} from "./v59-wire";
+} from "./batch-handles";
 import { insertPathMutationFor } from "../handlers/insert-path";
 import { resolveTargetPage } from "../io/svg";
 import { SPREAD_ORIGIN, spreadTableOf, type PageOrigin } from "../page-origin";

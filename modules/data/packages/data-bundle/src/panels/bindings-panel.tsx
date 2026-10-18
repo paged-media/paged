@@ -45,9 +45,8 @@ import type {
   StyleOption,
   SyncStatus,
 } from "../review";
-import { documentsDoors } from "../doors";
 import { defineBinding } from "../object-model";
-import { NO_NEW_DOCUMENT_DOOR } from "../session";
+import { hasDocumentsDoors, NO_NEW_DOCUMENT_DOOR } from "../session";
 import { DiagnosticsList } from "./diagnostics";
 import { useSessionSnapshot } from "./use-session";
 
@@ -987,7 +986,7 @@ export function makeBindingsPanel(
               </label>
               <label
                 title={
-                  documentsDoors(host)
+                  hasDocumentsDoors(host)
                     ? "Copy this document, open the copy and merge into it, consuming the template (the current document is kept as it is)"
                     : NO_NEW_DOCUMENT_DOOR
                 }
@@ -995,7 +994,7 @@ export function makeBindingsPanel(
                 <input
                   type="checkbox"
                   data-data-merge-new-doc
-                  disabled={!documentsDoors(host)}
+                  disabled={!hasDocumentsDoors(host)}
                   checked={mergeNewDoc}
                   onChange={(e) => setMergeNewDoc(e.target.checked)}
                 />{" "}

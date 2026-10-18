@@ -17,7 +17,6 @@ import { defineBundle, type HeadlessHost } from "@paged-media/plugin-sdk";
 import manifestJson from "../manifest.json";
 
 import { labelledVersion, sessionVersionPath } from "../src/doc-label";
-import { documentLabelDoors, engineHasDocumentLabels } from "../src/doors";
 import type { DataEngineLike } from "../src/engine";
 import { commitLoweredVariable } from "../src/lower";
 import { ENGINE_ANCHOR, ENGINE_PROTOCOL, fixedFrom, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
@@ -91,11 +90,6 @@ describe.skipIf(!run)(`protocol-69 doors on the real engine (protocol ${ENGINE_P
     expect(await storyText(h.host, story)).toBe("abc\ndeXf");
   });
 
-  it("the engine probe agrees with the engine: page handles and labels on 69 only [data.plugin.persistence]", async () => {
-    h = await openRealHost();
-    const detected = await engineHasDocumentLabels(h.host);
-    expect(detected).toBe(ENGINE_PROTOCOL >= 69 && documentLabelDoors(h.host) !== null);
-  });
 });
 
 // ── the session label on the real engine ────────────────────────────────────
@@ -168,10 +162,10 @@ describe.skipIf(!run)(`the session label on the real engine (protocol ${ENGINE_P
     h = null;
   });
 
-  it("names the live version in the document label on 69, writes session.json alone before [data.plugin.persistence]", async () => {
+  it("names the live version in the document label [data.plugin.persistence]", async () => {
     h = await openRealHost();
     const host = bundleHost(h);
-    const labels = (await engineHasDocumentLabels(host)) ? documentLabelDoors(host) : null;
+    const labels = host.document;
     const s = await sessionOver(host, fakeEngine());
     // A placed field for the refresh to rewrite.
     const story = await storyWith(host, "");
@@ -183,11 +177,7 @@ describe.skipIf(!run)(`the session label on the real engine (protocol ${ENGINE_P
     expect(await s.refreshFields()).toBe(1);
     await s.flushPersist();
     const parts = await host.parts.list("");
-    if (!labels) {
-      expect(parts.some((p) => p.includes("sessions/"))).toBe(false);
-      expect(parts.some((p) => p.endsWith("session.json"))).toBe(true);
-      return;
-    }
+    expect(parts.some((p) => p.endsWith("session.json"))).toBe(true);
     // The refresh's write carried the label naming the version it wrote.
     const first = labelledVersion(await labels.getDocumentMetadata());
     expect(first).not.toBeNull();
@@ -214,8 +204,7 @@ describe.skipIf(!run)(`the session label on the real engine (protocol ${ENGINE_P
     try {
       await copy.load(bytes);
       const copyHost = bundleHost(copy);
-      const doors = documentLabelDoors(copyHost)!;
-      expect(labelledVersion(await doors.getDocumentMetadata())).toBe(first);
+      expect(labelledVersion(await copyHost.document.getDocumentMetadata())).toBe(first);
       expect(await copyHost.parts.read(sessionVersionPath(first!))).not.toBeNull();
     } finally {
       copy.dispose();

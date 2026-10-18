@@ -77,7 +77,7 @@ describe("a host without container parts [data.plugin.persistence]", () => {
         },
         read: async () => null,
       },
-      document: {},
+      document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }) },
     } as never;
     const s = createSession(host, 0);
     await s.restore();

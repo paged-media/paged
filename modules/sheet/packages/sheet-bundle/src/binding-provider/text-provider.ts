@@ -126,7 +126,7 @@ import type {
   BindingTarget,
   PropertyPath,
   Value,
-} from "./adr023-seam";
+} from "@paged-media/plugin-api";
 
 /** What the provider needs from the workbook session. Narrowed to two
  *  methods so it is unit-testable without an engine or a host, and so

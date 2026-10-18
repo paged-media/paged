@@ -34,7 +34,7 @@ extensions into `bin/duckdb-ext/<engine>/wasm_eh/` — the eh build has neither,
 `bootDuckDB` points `custom_extension_repository` there so nothing loads from
 extensions.duckdb.org; the runtime loads only `bin/` — except that the two engine
 wasm files (`data-engine`, `duckdb-engine`) are first asked of the host's module
-door (plugin-sdk ADR 326, `src/module-door.ts`): an editor may serve them from the
+door (plugin-sdk ADR 326, `hostWasm` in `src/bin-url.ts`): an editor may serve them from the
 first-party module host, with integrity; no door or no answer → `bin/`. The DuckDB
 worker and JS API always load from `bin/`, same-origin (D-05). The Node test lanes
 load the same files with every other URL refused, `test/duckdb-node-ext.ts`).
@@ -216,8 +216,9 @@ cargo deny check
 bash scripts/vendor-duckdb.sh   # the MIT DuckDB-WASM artifact; stages bin/duckdb-engine.wasm
 bash scripts/build-wasm.sh
 
-# TS (the bundle). The contract comes from npm at an exact pin
-# (test/sdk-pin.spec.ts); CI runs with REQUIRE_REAL_ENGINE=1 REQUIRE_REAL_DUCKDB=1.
+# TS (the bundle). The contract comes from the workspace (workspace:*, checked
+# repo-wide by tooling/js/check-workspace-deps.mjs); CI runs with
+# REQUIRE_REAL_ENGINE=1 REQUIRE_REAL_DUCKDB=1.
 bun install && bun run typecheck && bun run test
 bun run validate:manifest
 

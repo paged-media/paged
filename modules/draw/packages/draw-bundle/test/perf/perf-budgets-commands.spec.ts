@@ -930,7 +930,7 @@ describe("perf budgets — commands over a busy document", () => {
 // tree diff, behind the one flow that needs a placed image, so it runs
 // on its own document: the F7 fixture (an inline PNG ring) under the
 // same 500 plain shapes. The plan is a REAL trace of the fixture's own
-// pixels by the committed tracer wasm.
+// pixels by the built tracer wasm.
 describe("perf budgets — Image Trace over a busy document", () => {
   let w: Workload;
 

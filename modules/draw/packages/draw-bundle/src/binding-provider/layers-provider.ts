@@ -71,22 +71,43 @@
 // requirement it cannot enforce; this is the compliance.
 
 import type {
+  BindingCollection,
+  BindingProvider,
+  BindingProviderScope,
+  BindingRead,
+  BindingWrite,
   BundleHost,
   ElementId,
+  Mutation,
+  MutationInput,
   PropertyPath,
   SceneTreeNode,
-  MutationInput,
-  BindingProviderScope,
 } from "@paged-media/plugin-api";
 
-import {
-  reorderElementMutationFor,
-  setBoolPropertyMutationFor,
-  type BindingCollection,
-  type BindingProvider,
-  type BindingRead,
-  type BindingWrite,
-} from "./adr023-seam";
+/**
+ * `reorderElement` in its ABSOLUTE `{ index }` form — `to` is the
+ * element's FINAL slot among its siblings, which is exactly what a drop
+ * position means. Index 0 is the BACKMOST sibling (the first-painted). An
+ * index the engine finds out of range is REJECTED, not clamped —
+ * deliberately not pre-clamped here, because a stale row set should
+ * produce a loud refusal rather than a plausible wrong move.
+ */
+export function reorderElementMutationFor(elementId: ElementId, index: number): Mutation {
+  return { op: "reorderElement", args: { elementId, to: { index } } };
+}
+
+/** `setElementProperty` for a boolean path — the lane that carries a
+ *  row's visible / locked flag. */
+export function setBoolPropertyMutationFor(
+  elementId: ElementId,
+  path: PropertyPath,
+  value: boolean,
+): Mutation {
+  return {
+    op: "setElementProperty",
+    args: { elementId, path, value: { type: "bool", value } },
+  };
+}
 
 /**
  * The row shape, structurally `LayerSummary` (the vocabulary rule

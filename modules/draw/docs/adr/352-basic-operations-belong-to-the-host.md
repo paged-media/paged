@@ -48,7 +48,8 @@ Tests assert that the retired Layers panel and group commands are absent.
 - `packages/draw-bundle/src/activate.ts:197-216`, `:348-353`, `:515-535` — the Layers panel is
   gone; no group commands; the edit context, then the provider
 - `packages/draw-bundle/src/binding-provider/layers-provider.ts:32-43` — what the provider serves
-- `packages/draw-bundle/src/binding-provider/adr023-seam.ts:104-115` — the two-part probe
+- `packages/draw-bundle/src/activate.ts` (`bindings.provider@1`) — the provider is registered
+  where the host wires a registry (until B3b a seam module probed the door as well)
 - `packages/draw-bundle/test/activate.spec.ts:184-189`, `:340-345`;
   `packages/draw-bundle/test/headless-conformance.spec.ts:153-156`, `:191-197` — absence asserted
 - `editor: apps/canvas/src/object-commands.ts:82-85`,
@@ -80,8 +81,8 @@ The division is not complete, and some files lag behind it:
   The repository does not record why.
 - `PenMachine` stays in `draw-tools` with no consumer except its own test, and
   `panels/layers.panel.json` stays in the repo root as a prototype of the retired panel.
-- `packages/draw-bundle/src/binding-provider/adr023-seam.ts:20-45` still describes local mirrors
-  and casts toward an unpublished contract; the code below imports the published types.
+- The provider's types come from the contract (`@paged-media/plugin-api`); the module that
+  mirrored them was deleted in B3b.
 
 ## Related
 

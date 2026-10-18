@@ -76,8 +76,8 @@ repository reads nothing in `modules/publish` and is not an edge.
   `engine/core/scripts/build-wasm-packages.sh` for the engine's npm packages.
 - Inputs decide what a change affects. Test tasks are not cached. Outputs are declared only
   for deterministic, gitignored artifacts (wasm package directories, tsup `dist/`); `target/`
-  is never an output, and the committed wasm artifacts of draw, image and publish are not
-  cached outputs.
+  is never an output. (The wasm of draw, image and publish was committed when this was
+  decided and so was not an output; since B3b it is build output like every other module's.)
 - Moon does not modify tracked files: `syncPackageManagerField`,
   `syncProjectWorkspaceDependencies`, `dedupeOnLockfileChange`, the rust toolchain sync, VCS
   hooks and CODEOWNERS sync are off, the `typescript` toolchain is not enabled, and pnpm

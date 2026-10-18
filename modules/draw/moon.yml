@@ -29,9 +29,14 @@ tasks:
     inputs:
       - '@group(js-sources)'
 
+  js-test:
+    # The image-trace specs boot the wasm; draw-vitest builds it first.
+    deps: ['~:wasm']
+
   manifest:
-    description: 'plugin-cli validate of the bundle manifest (measures the committed wasm).'
+    description: 'plugin-cli validate of the bundle manifest (measures the built wasm).'
     toolchains: ['system']
+    deps: ['~:wasm']
     command: 'node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json'
     inputs:
       - 'packages/draw-bundle/manifest.json'
@@ -47,7 +52,9 @@ tasks:
       - '@group(rust-sources)'
       - 'scripts/build-wasm.sh'
       - 'packages/draw-bundle/manifest.json'
+    outputs:
+      - 'packages/draw-bundle/wasm/trace_js*'
     options:
-      # The artifact is committed, so it is not a cached output.
-      cache: false
+      # Needs wasm-bindgen-cli at the Cargo.lock version; draw-rust and
+      # draw-vitest build it in CI (.github/actions/module-wasm).
       runInCI: 'skip'

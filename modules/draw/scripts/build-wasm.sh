@@ -10,10 +10,10 @@
 # import resolve to the SAME directory. There is nothing to mirror and
 # therefore nothing to drift.
 #
-# The artifact is COMMITTED (paged.image's convention for the copy the
-# bundle imports): `bun run test` and `bun run typecheck` must pass on a
-# fresh checkout without a Rust toolchain, and the plugin-cli size gate
-# only measures a file that exists.
+# The output is BUILD OUTPUT (gitignored): `moon run draw:wasm` runs this
+# script, and CI builds it with .github/actions/module-wasm before the
+# specs and the plugin-cli size gate read it. The typecheck does not need
+# it.
 #
 # wasm-opt: CI pins binaryen (an old apt binaryen breaks wasm-bindgen
 # externref table grow — the "Table.grow failed" gotcha); locally it is

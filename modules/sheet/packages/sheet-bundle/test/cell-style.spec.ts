@@ -109,6 +109,8 @@ function fakeHost(opts?: { rejectApply?: boolean; cellEntries?: unknown[] }) {
     log: { debug() {}, info() {}, warn() {}, error() {} },
     supports: () => false,
     document: {
+      onDidChange: () => ({ dispose() {} }),
+      onDidOpen: () => ({ dispose() {} }),
       async meta() {
         return { activePage: "Page/u1" } as never;
       },
@@ -125,14 +127,20 @@ function fakeHost(opts?: { rejectApply?: boolean; cellEntries?: unknown[] }) {
           const ops = (m as { args: { ops: Array<{ op: string }> } }).args.ops;
           if (ops.some((o) => o.op === "insertTextFrame")) {
             frameInserted = true;
-            // The one-batch placement reports the LAST id it minted: the
-            // table (its structured id carries the frame's story).
+            const frame = { kind: "textFrame", id: "frame1" } as ElementId;
+            const table = { kind: "table", id: { story_id: "Story/s1", table_id: "table1" } } as ElementId;
+            const hasTable = ops.some((o) => o.op === "insertTable");
+            // The placement reports the LAST id it minted (the table: its
+            // structured id carries the frame's story) and, in `minted`,
+            // everything it made with the handles that named it.
             return {
               applied: true,
-              createdId: ops.some((o) => o.op === "insertTable")
-                ? ({ kind: "table", id: { story_id: "Story/s1", table_id: "table1" } } as ElementId)
-                : ({ kind: "textFrame", id: "frame1" } as ElementId),
+              createdId: hasTable ? table : frame,
               pageIds: ["Page/u1"],
+              minted: [
+                { handle: "f", element: frame, storyId: "Story/s1" },
+                ...(hasTable ? [{ handle: "t", element: table, storyId: "Story/s1" }] : []),
+              ],
             };
           }
           return { applied: true, createdId: null, pageIds: ["Page/u1"] };

@@ -66,6 +66,7 @@ function fakeHost() {
       importer: noop,
       exporter: noop,
       objectType: noop,
+      menu: noop,
       editContext(c: EditContextContribution): Disposable {
         editContexts.push(c);
         return noop();

@@ -1,9 +1,9 @@
-// The engine-protocol-69 consumers, each over fake hosts on both sides of its
-// door: with the door, the protocol-69 path; without it, what the bundle did
-// before (src/doors.ts lists the checks).
+// The engine-protocol-69 consumers, each over fake hosts. The doors are the
+// in-tree contract's; where a host may wire no backend (documents, the batch
+// measure), both sides of the capability are covered.
 //
 //  1. the session version named in the document label (persistence follows
-//     undo), else the session part alone;
+//     undo);
 //  2. insertField at the caret sends `contentOffset` too;
 //  3. merge to a new document through `host.documents`, else refused with
 //     the documented gap;
@@ -15,7 +15,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { BundleHost, Mutation } from "@paged-media/plugin-api";
 
 import { labelMutation, labelRider, labelledVersion, sessionVersionPath } from "../doc-label";
-import { documentLabelDoors, documentsDoors, engineHasDocumentLabels, measureStringsDoor } from "../doors";
 import type { DataEngineLike } from "../engine";
 import { commitLoweredVariable } from "../lower";
 import {
@@ -29,50 +28,14 @@ import {
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
-// ── door detection ──────────────────────────────────────────────────────────
-
-describe("protocol-69 doors are detected without a host call on an older SDK [data.plugin.persistence]", () => {
-  it("a 0.2.40-shaped host has none of them and is never asked [data.plugin.persistence]", async () => {
-    const calls: string[] = [];
-    const host = {
-      supports: (f: string) => (calls.push(`supports:${f}`), true),
-      document: { meta: async () => (calls.push("meta"), { pluginMetadata: [] }) },
-      text: { measureString: async () => ({ advance: 1 }) },
-    } as unknown as BundleHost;
-    expect(documentLabelDoors(host)).toBeNull();
-    expect(documentsDoors(host)).toBeNull();
-    expect(measureStringsDoor(host)).toBeNull();
-    expect(await engineHasDocumentLabels(host)).toBe(false);
-    expect(calls).toEqual([]);
-  });
-
-  it("a v69 SDK on a v69 engine has them; on a v68 engine the label is off [data.plugin.persistence]", async () => {
-    const v69 = (pluginMetadata: unknown) =>
-      ({
-        supports: () => true,
-        document: {
-          meta: async () => ({ activePage: "p1", ...(pluginMetadata ? { pluginMetadata } : {}) }),
-          getDocumentMetadata: async () => null,
-          setDocumentMetadata: async () => ({ applied: true }),
-        },
-        documents: { exportPaged: async () => new Uint8Array(), open: async () => ({ opened: true, pageIds: [] }) },
-        text: { measureStrings: async () => [] },
-      }) as unknown as BundleHost;
-    expect(documentLabelDoors(v69([]))).not.toBeNull();
-    expect(documentsDoors(v69([]))).not.toBeNull();
-    expect(measureStringsDoor(v69([]))).not.toBeNull();
-    expect(await engineHasDocumentLabels(v69([]))).toBe(true);
-    // The SDK forwards the doors, the engine predates them: no pluginMetadata.
-    expect(await engineHasDocumentLabels(v69(null))).toBe(false);
-  });
-});
-
 // ── 1. the session label ────────────────────────────────────────────────────
 
 function recordingDoc(reply?: (m: Mutation) => { applied: boolean; error?: unknown }) {
   const sent: Mutation[] = [];
   const host = {
     document: {
+      onWillSave: () => ({ dispose() {} }),
+      onDidChange: () => ({ dispose() {} }),
       mutate: async (m: Mutation) => {
         sent.push(m);
         return reply ? reply(m) : { applied: true, pageIds: [], minted: [] };
@@ -261,17 +224,6 @@ describe("the session version is named in the document label (protocol 69) [data
     expect(sessionVersionPath(h.label()!)).toBe(versions[0]);
   });
 
-  it("without the doors: the session part alone, the write as before [data.plugin.persistence]", async () => {
-    const h = labelHost({ v69: false });
-    const s = await sessionWith(h.host, fakeEngine({ resolve_lowered: () => variable("new") }));
-    s.addVariableBinding("v", "anchor", "q", "a");
-    await s.refreshFields();
-    await s.flushPersist();
-    expect([...h.parts.keys()].filter((p) => p.startsWith("sessions/"))).toEqual([]);
-    expect(h.parts.has("session.json")).toBe(true);
-    expect(h.mutations.at(-1)).toEqual({ op: "setFieldValue", args: { storyId: "s1", offset: 0, value: "new" } });
-  });
-
   it("a change no write carried takes no undo step: the part records the label it extends [data.plugin.persistence]", async () => {
     const h = labelHost({ v69: true });
     const s = await sessionWith(h.host, fakeEngine({ resolve_lowered: () => variable("new") }));
@@ -312,13 +264,6 @@ describe("the session version is named in the document label (protocol 69) [data
     expect(h.reads).toEqual(["session.json", sessionVersionPath(hash)]);
   });
 
-  it("restore without the doors reads the session part [data.plugin.persistence]", async () => {
-    const h = labelHost({ v69: false, parts: { "session.json": JSON.stringify({ v: 1, engine: {} }) } });
-    const s = await sessionWith(h.host, fakeEngine());
-    await s.restore();
-    expect(h.reads).toEqual(["session.json"]);
-  });
-
   it("an undo that takes the label back reloads the version it names, keeping the engines [data.plugin.persistence]", async () => {
     const h = labelHost({ v69: true });
     let freed = 0;
@@ -357,6 +302,8 @@ describe("a field placed at the caret carries contentOffset (protocol 69) [data.
       text: { caret: () => caret },
       selection: { get: () => [] },
       document: {
+        onWillSave: () => ({ dispose() {} }),
+        onDidChange: () => ({ dispose() {} }),
         mutate: async (m: Mutation) => (sent.push(m), { applied: true, pageIds: [], minted: [{ handle: "frame", element: { kind: "textFrame", id: "u1" }, storyId: "s9" }] }),
         meta: async () => ({ activePage: "p1" }),
       },
@@ -391,7 +338,8 @@ describe("merge to a new document (D-26) [data.lower.merge-writer]", () => {
     const host = {
       manifest: { id: "media.paged.data", version: "0.0.1" },
       log: silent,
-      supports: () => true,
+      // Without `docs` the host wires no documents backend.
+      supports: (f: string) => !!docs || !f.startsWith("documents."),
       selection: { get: () => [], set: async () => [] },
       // The copy carries the session part (the query `q`), as an exported
       // `.paged` does.
@@ -402,6 +350,8 @@ describe("merge to a new document (D-26) [data.lower.merge-writer]", () => {
         delete: async () => {},
       },
       document: {
+        onWillSave: () => ({ dispose() {} }),
+        onDidChange: () => ({ dispose() {} }),
         mutate: async () => ({ applied: true, pageIds: [] }),
         meta: async () => ({ activePage: "p1", documentName: "Catalog" }),
         collection: async () => [{ selfId: "p1" }],
@@ -497,7 +447,11 @@ describe("overset words are measured in one call per face (D-27) [data.lower.mer
 
   it("without it: one measureString per word, as before [data.lower.merge-writer]", async () => {
     let n = 0;
-    const host = { supports: () => true, text: { measureString: async (_f: string, _s: string | null, t: string) => (n++, { advance: t.length }) } } as unknown as BundleHost;
+    // A host that serves no batch (`text.measureStrings@1` false).
+    const host = {
+      supports: (f: string) => f !== "text.measureStrings@1",
+      text: { measureString: async (_f: string, _s: string | null, t: string) => (n++, { advance: t.length }) },
+    } as unknown as BundleHost;
     const m = await measureWords(host, tpl, words);
     expect(n).toBe(5);
     expect(m[0]!.advances).toEqual({ a: 1, bb: 2 });
@@ -531,6 +485,8 @@ describe("a merge that adds pages is one batch with page handles (protocol 69) [
       supports: () => true,
       text: { measureString: async () => ({ advance: 1 }) },
       document: {
+        onWillSave: () => ({ dispose() {} }),
+        onDidChange: () => ({ dispose() {} }),
         mutate: async (m: Mutation) => {
           sent.push(m);
           const ops = (m.args as { ops: Mutation[] }).ops;

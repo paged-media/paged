@@ -57,8 +57,9 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 // payload + sync_report (+2 wasm) where nothing flushed before.
 // W6: the debounced session write lands inside the 200-event window, and
 // writes the version part too (+1). W7: the restore reads the document label
-// first (getDocumentMetadata) and the session probes the engine once per
-// document (supports + meta): +4 calls, +2 reads.
+// first (getDocumentMetadata): +1 call, +2 reads. (Until B3b the session also
+// probed the engine for labels once per document and asked supports() before
+// each label read: 3 calls more.)
 describe.skipIf(!RUN_BUDGETS)("perf budgets — boot and reflow [data.perf.gates]", () => {
   let h: HeadlessHost | null = null;
   let duck: CountedDuck | null = null;
@@ -212,7 +213,7 @@ describe.skipIf(!RUN_BUDGETS)("perf budgets — boot and reflow [data.perf.gates
     keyAllocs: 0,
     fingerprints: 0,
     duckQueries: 0,
-  }, { hostCalls: 43, hostReads: 4 });
+  }, { hostCalls: 40, hostReads: 4 });
   it("W7 activates without booting either engine [data.perf.gates]", async () => {
     h = await openRealHost();
     let work: WorkLog | null = null;

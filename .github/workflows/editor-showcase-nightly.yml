@@ -84,8 +84,8 @@ jobs:
 
       # The engine's wasm packages and the bundles' engine wasm (build
       # outputs; the editor consumes the workspace packages). Without them
-      # the dev server cannot resolve sheet's, web's and doc's
-      # `../bin/<glue>.js`, the app never boots (`__canvas` times out at
+      # the dev server cannot resolve the bundles' relative wasm glue (sheet,
+      # web, doc, draw, image, pdf), the app never boots (`__canvas` times out at
       # 30 s) and every chapter fails, as every night from 2026-09-11 until
       # doc's wasm was built here.
       - name: engine wasm packages
@@ -106,6 +106,15 @@ jobs:
       - name: module wasm (web)
         uses: ./.github/actions/module-wasm
         with: { module: web }
+      - name: module wasm (draw)
+        uses: ./.github/actions/module-wasm
+        with: { module: draw }
+      - name: module wasm (image)
+        uses: ./.github/actions/module-wasm
+        with: { module: image }
+      - name: module wasm (publish)
+        uses: ./.github/actions/module-wasm
+        with: { module: publish }
 
       - name: install real Chrome
         run: npx playwright install chrome

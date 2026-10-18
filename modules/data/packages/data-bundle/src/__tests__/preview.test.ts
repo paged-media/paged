@@ -67,6 +67,7 @@ function fakeHost() {
     selection: { get: () => [], set: async () => [] },
     network: { consentedOrigins: () => [], requestConsent: async () => ({ granted: [], denied: [] }) },
     document: {
+      onWillSave: () => ({ dispose() {} }),
       mutate: async (batch: Mutation) => applyBatch(batch, async (m: Mutation) => {
         mutations.push(m);
         if (m.op === "insertTextFrame") {

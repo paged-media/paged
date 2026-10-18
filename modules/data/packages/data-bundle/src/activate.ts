@@ -83,17 +83,9 @@ export function activate(host: BundleHost): BundleHandle {
   // boots DuckDB or fetches a remote source by itself.
   void session.restore();
   // Activation runs once, at app start; documents come and go after it. On
-  // every load the client broadcasts `documentLoaded`: the session drops the
-  // previous document's state and restores the new one's.
-  let unsubscribeDocs: (() => void) | null = null;
-  try {
-    unsubscribeDocs = host.editor.client.subscribe((msg) => {
-      if (msg.kind === "documentLoaded") void session.documentOpened();
-    });
-  } catch {
-    // no raw client (a headless or older host): the activate-time restore
-    // is the only one
-  }
+  // every open (`document.onDidOpen`) the session drops the previous
+  // document's state and restores the new one's.
+  const documentOpenedSub = host.document.onDidOpen(() => void session.documentOpened());
 
   contributePanel(host, {
     id: SOURCES_PANEL_ID,
@@ -321,13 +313,12 @@ export function activate(host: BundleHost): BundleHandle {
 
   host.log.info(`activated (apiVersion ${manifest.apiVersion})`);
 
-  // F1 — the menu bar. Before plugin-api 0.2.33 there was no menu door,
-  // so every command in this bundle lived behind Cmd+K and nowhere else.
+  // F1 — the menu bar.
   const menuSub = contributeMenu(host);
 
   return {
     dispose() {
-      unsubscribeDocs?.();
+      documentOpenedSub.dispose();
       sessions.delete(host);
       session.dispose();
       menuSub.dispose();

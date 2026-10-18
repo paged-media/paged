@@ -81,8 +81,6 @@ import {
   sheetHost,
   testClipboard,
   withSceneChannel,
-  withTableHandles66,
-  withoutDoors66,
   type TestClipboard,
 } from "./workload";
 
@@ -200,78 +198,15 @@ describe.skipIf(!ENGINE_BUILT)("perf budgets — work counted at the doors", () 
     return e;
   };
 
-  // COVERS: lower.ts placement — ONE batch for the frame + binding + table
-  // (C-15 handles: the table's storyId is `$h:f`), the frame read back off
-  // the table's story chain, column measurement, then ONE batch for the
-  // whole content (pour + decor + text styles; core takes text ops in a
-  // batch since v0.61, one rebuild per batch since v0.63). Was 1003
-  // mutates: one awaited round trip — and one rebuild — per cell.
+  // COVERS: lower.ts placeInOneCall — core resolves `$h:t` in a tableId
+  // position (0eff96b), so the frame, binding, table, pour, decor and text
+  // styles are ONE batch, the frame and table named by the outcome's
+  // `minted`. (Until B3b a two-batch scenario measured the lane a pre-66
+  // host took: 2 mutates and a frame-chain read.)
   it("place a 50×20 range as a native table [sheet.lower.page]", async () => {
-    // The two-batch lane: a host without the 66 doors (the engine under
-    // test has them; the next scenario is the one-call lane).
     const s = await open(
       await authorWorkbook(50, 20, (r, c) => `r${r}c${c}`),
       "A1:T50",
-      withoutDoors66,
-    );
-    const frame = await s.lowerSelection();
-    await settle();
-    const work = take("place 50x20");
-    // Behaviour: a frame landed, every cell's text was poured once, and
-    // the document the core exports holds exactly that text, cell by cell.
-    expect(frame).not.toBeNull();
-    const childOps = (op: string) =>
-      work.mutations.reduce((n, m) => n + (m.kinds[op] ?? 0), 0);
-    expect(childOps("insertText")).toBe(1000);
-    expect(childOps("insertTable")).toBe(1);
-    const tables = await exportedTableCells(h);
-    expect(tables).toHaveLength(1);
-    expect(tables[0].size).toBe(1000);
-    for (const [r, c] of [[0, 0], [0, 19], [49, 0], [49, 19], [17, 7]]) {
-      expect(tables[0].get(`${r}:${c}`)).toBe(`r${r}c${c}`);
-    }
-    expectBudget("place 50x20", work, {
-      "document.meta": 1,
-      "document.frameChain": 1, // the frame, read back off the table's story
-      "text.measureString": 20,
-      // 1 on a protocol-66 host (core 0eff96b): see the next scenario. A
-      // 0.64 host never gets the one-call batch (no 66 door answered).
-      "document.mutate": 2,
-      "selection.set": 1,
-      // Wave 4: the PAGE door (styles + conditional formatting) replaces the
-      // key-0 door one for one; the placement reads the selection (an
-      // in-memory read, no document round trip) to land the frame there.
-      "engine.getRangePage": 1,
-      "selection.get": 1,
-      "engine.listSheets": 1,
-      "document.collection": 1, // the swatch read before the fill mints
-      "=mutations": 2,
-      "=engineCalls": 2,
-      "=reads": 3,
-      "=bytesWritten": 0,
-      "=sceneItems": 0,
-      "=rejected": 0,
-    });
-    // Undo: the content is ONE step (all 1000 cells at once), the frame
-    // and its table the other — two steps where it was 1003.
-    await raw.document.undo();
-    const emptied = await exportedTableCells(h);
-    expect(emptied).toHaveLength(1);
-    expect([...emptied[0].values()].every((t) => t === "")).toBe(true);
-    await raw.document.undo();
-    expect(await exportedTableCells(h)).toHaveLength(0);
-  });
-
-  // COVERS: lower.ts placeInOneCall — on a protocol-66 host (core resolves
-  // `$h:t` in a tableId position, 0eff96b) the frame, binding, table, pour,
-  // decor and text styles are ONE batch, the frame and table named by the
-  // outcome's `minted`. The host: `withTableHandles66` over the real core
-  // (the engine applies it in two batches; the bundle makes one call).
-  it("place a 50×20 range on a protocol-66 host [sheet.lower.page]", async () => {
-    const s = await open(
-      await authorWorkbook(50, 20, (r, c) => `r${r}c${c}`),
-      "A1:T50",
-      (x) => withTableHandles66(h, x),
     );
     const frame = await s.lowerSelection();
     await settle();

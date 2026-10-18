@@ -29,7 +29,7 @@ function registeredModel(): ObjectModelContribution {
         return { dispose() {}, changed() {} };
       },
     },
-    document: {},
+    document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
     log: { debug() {}, info() {}, warn() {}, error() {} },
   } as unknown as BundleHost;
   const session = {

@@ -81,6 +81,8 @@ function fakeHost(grant: string[]): BundleHost {
   return {
     manifest: { id: "media.paged.data", name: "d", version: "0.0.1", apiVersion: "^0.2" },
     log: { debug() {}, info() {}, warn() {}, error() {} },
+    // The document doors every host has; nothing here fires them.
+    document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
     supports: (f: string) => f === "network.consent@1",
     network: {
       async requestConsent(origins: readonly string[]): Promise<ConsentResult> {

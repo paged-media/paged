@@ -10,7 +10,7 @@
  */
 import type { BundleHost, Disposable } from "@paged-media/plugin-api";
 import { GRADIENT_KINDS, type GradientKind } from "./engine";
-import { toolSettings, type ToolSettingValue } from "./host66";
+import type { ToolSettingValue } from "@paged-media/plugin-api";
 import type { ImageSession } from "./session";
 
 type ToolOptionField =
@@ -92,8 +92,8 @@ export function bindToolSettings(
   session: ImageSession,
   tools: Record<string, "brush" | "wand" | "gradient">,
 ): Disposable | null {
-  const surface = toolSettings(host);
-  if (!surface) return null;
+  if (!host.supports("tools.settings@1")) return null;
+  const surface = host.tools;
   const subs = Object.entries(tools).map(([id, kind]) => {
     applyToolSettings(session, kind, surface.settings(id));
     return surface.onDidChangeSettings(id, (v) => applyToolSettings(session, kind, v));

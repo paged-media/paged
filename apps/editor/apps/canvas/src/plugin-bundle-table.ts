@@ -92,11 +92,7 @@ export const PLUGIN_BUNDLES: readonly BundleEntry<PluginBundle>[] = [
   {
     id: "media.paged.doc",
     lane: "boot",
-    // The cast: @paged-media/doc is a `link:` to a checkout that resolves its
-    // own (older) plugin-api, so its bundle type is a structurally different
-    // copy of the same contract until its first publish.
-    load: () =>
-      import("@paged-media/doc").then((m) => m.docBundle as unknown as PluginBundle),
+    load: () => import("@paged-media/doc").then((m) => m.docBundle),
   },
   // paged.slide — PowerPoint: a .pptx/.ppsx/.potx opens as native slides (the
   // bundle writes the deck as one IDML package with PowerPoint's inheritance
@@ -106,8 +102,6 @@ export const PLUGIN_BUNDLES: readonly BundleEntry<PluginBundle>[] = [
   {
     id: "media.paged.slide",
     lane: "boot",
-    // The cast: a `link:` checkout until its first publish (see doc above).
-    load: () =>
-      import("@paged-media/slide").then((m) => m.slideBundle as unknown as PluginBundle),
+    load: () => import("@paged-media/slide").then((m) => m.slideBundle),
   },
 ];

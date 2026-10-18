@@ -47,6 +47,8 @@ function fakeHost() {
   const host = {
     manifest: dataBundle.manifest,
     log: { debug() {}, info() {}, warn() {}, error() {} },
+    // The document doors every host has; nothing here fires them.
+    document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
     // ADR 024 — this fake had NO `supports`, which is why adding the
     // first `host.supports(...)` call to `activate` broke six tests at
     // once. That is the fake telling the truth about its own coverage:
@@ -68,6 +70,7 @@ function fakeHost() {
         commands.push(c);
         return track();
       },
+      menu: (): Disposable => ({ dispose() {} }),
     },
     shell: {
       openPanel(id: string) {
