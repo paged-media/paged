@@ -1,0 +1,11 @@
+#!/bin/sh
+# Linux link driver (.cargo/config.toml): the C compiler with mold when mold is
+# installed, rustc's default otherwise (rust-lld on x86_64 since Rust 1.90).
+# PAGED_LINKER=ld forces the default. `-fuse-ld=mold` goes LAST: rustc passes
+# its own `-fuse-ld=lld`, and the driver takes the last one.
+# A binary records its linker: `readelf -p .comment <bin>` lists "mold" when
+# mold linked it (CI checks this, so a silent fallback fails the job).
+if [ "${PAGED_LINKER:-mold}" = mold ] && command -v mold >/dev/null 2>&1; then
+  exec cc "$@" -fuse-ld=mold
+fi
+exec cc "$@"

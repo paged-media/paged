@@ -13,12 +13,19 @@
 rustc-wrapper = "tooling/rust/rustc-wrapper"
 
 # macOS: link with the toolchain's own lld (ships with every rustup toolchain),
-# Apple's ld when it is missing. wasm32 keeps rust-lld; Linux is unchanged.
+# Apple's ld when it is missing. Linux: mold when installed (CI installs it).
+# wasm32 keeps rust-lld.
 [target.aarch64-apple-darwin]
 linker = "tooling/rust/cc-lld"
 
 [target.x86_64-apple-darwin]
 linker = "tooling/rust/cc-lld"
+
+[target.x86_64-unknown-linux-gnu]
+linker = "tooling/rust/cc-mold"
+
+[target.aarch64-unknown-linux-gnu]
+linker = "tooling/rust/cc-mold"
 
 # Debug and test builds. The opt-level and codegen-units values are Cargo's
 # defaults, stated so the whole profile reads in one place.
