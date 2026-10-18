@@ -1,0 +1,394 @@
+{
+  "apps/editor/apps/canvas/src/cockpit/control-bar.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/core-command-dialog.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/main.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    },
+    "react-hooks/refs": {
+      "count": 7
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/canvas-panel.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    },
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/cell-styles-panel.tsx": {
+    "react-hooks/purity": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/cockpit/document-map-panel.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/cockpit/separations-panel.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/cockpit/stories-panel.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/color-panel.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/concept/anchored-panel.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/concept/tabs-panel.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/gradient-editor.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/gradients-panel.tsx": {
+    "react-hooks/purity": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/inspector-panel.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/layers-panel.tsx": {
+    "react-hooks/refs": {
+      "count": 2
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/object-options-panels.tsx": {
+    "react-hooks/purity": {
+      "count": 1
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 3
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/page-position.ts": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/properties-panel.tsx": {
+    "react-hooks/refs": {
+      "count": 3
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/schema-list-demo-panel.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/schema-sections.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/style-options-panel.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/swatch-row.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/table-panel.tsx": {
+    "react-hooks/rules-of-hooks": {
+      "count": 1
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 3
+    }
+  },
+  "apps/editor/apps/canvas/src/panels/table-styles-panel.tsx": {
+    "react-hooks/purity": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/playground/PlaygroundController.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 5
+    }
+  },
+  "apps/editor/apps/canvas/src/ui/useAnimatedCamera.ts": {
+    "react-hooks/refs": {
+      "count": 2
+    }
+  },
+  "apps/editor/apps/canvas/src/ui/useGestureSpine.ts": {
+    "react-hooks/refs": {
+      "count": 5
+    }
+  },
+  "apps/editor/apps/canvas/src/ui/usePathEditMode.ts": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/canvas/src/ui/useTextEditing.ts": {
+    "react-hooks/refs": {
+      "count": 5
+    }
+  },
+  "apps/editor/apps/devtools/src/App.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/apps/devtools/src/RenderPane.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/shell/src/PagedShell.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/shell/src/actions/actions-context.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/shell/src/catalog/binding-hook.ts": {
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "apps/editor/packages/shell/src/catalog/binding-providers.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 3
+    }
+  },
+  "apps/editor/packages/shell/src/catalog/object-field.tsx": {
+    "react-hooks/rules-of-hooks": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/shell/src/catalog/object-model.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 5
+    }
+  },
+  "apps/editor/packages/shell/src/catalog/object-property-field.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "apps/editor/packages/shell/src/catalog/property-field.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "apps/editor/packages/shell/src/catalog/use-collection.ts": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/shell/src/chrome/CommandPalette.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/shell/src/chrome/FillStrokeCluster.tsx": {
+    "react-hooks/refs": {
+      "count": 7
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 2
+    }
+  },
+  "apps/editor/packages/shell/src/chrome/MenuBar.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/shell/src/chrome/SoftProofToggle.tsx": {
+    "react-hooks/refs": {
+      "count": 12
+    }
+  },
+  "apps/editor/packages/shell/src/chrome/ToolRail.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 4
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/shell/src/cockpit/canvas-frame/GuideDragController.tsx": {
+    "react-hooks/refs": {
+      "count": 7
+    }
+  },
+  "apps/editor/packages/shell/src/cockpit/canvas-frame/ThreadingController.tsx": {
+    "react-hooks/refs": {
+      "count": 6
+    }
+  },
+  "apps/editor/packages/shell/src/cockpit/cockpit-state-context.tsx": {
+    "react-hooks/refs": {
+      "count": 7
+    }
+  },
+  "apps/editor/packages/shell/src/gestures/use-scrub-gesture.ts": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/shell/src/overlays/thread-lines.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/shell/src/state/content-selection-context.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/shell/src/state/edit-context-controller.tsx": {
+    "react-hooks/refs": {
+      "count": 6
+    }
+  },
+  "apps/editor/packages/shell/src/state/edit-context-stack.tsx": {
+    "react-hooks/refs": {
+      "count": 2
+    }
+  },
+  "apps/editor/packages/shell/src/state/guide-drag-context.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/shell/src/state/page-thumbnails.ts": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/shell/src/state/paged-editor.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/shell/src/state/registries-context.tsx": {
+    "react-hooks/refs": {
+      "count": 2
+    }
+  },
+  "apps/editor/packages/shell/src/state/selection-context.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/shell/src/state/threading-context.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/shell/src/state/tool-context.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/shell/src/state/tool-settings-context.tsx": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/shell/src/state/use-selection-object-type.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 3
+    }
+  },
+  "apps/editor/packages/ui/src/color/ColorWheel.tsx": {
+    "react-hooks/refs": {
+      "count": 8
+    }
+  },
+  "apps/editor/packages/ui/src/color/use-color-compute.ts": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
+  "apps/editor/packages/ui/src/inputs/ScrubField.tsx": {
+    "react-hooks/refs": {
+      "count": 5
+    }
+  },
+  "apps/editor/packages/ui/src/inputs/SmartDialMicro.tsx": {
+    "react-hooks/refs": {
+      "count": 4
+    }
+  },
+  "modules/data/packages/data-bundle/src/panels/dataset-panel.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "modules/draw/packages/draw-bundle/src/panels/use-panel-reload.ts": {
+    "react-hooks/refs": {
+      "count": 1
+    }
+  },
+  "modules/sheet/packages/sheet-bundle/src/panels/grid-panel.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 3
+    }
+  },
+  "modules/sheet/packages/sheet-bundle/src/panels/workbook-panel.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "modules/slide/packages/slide-bundle/src/panels/slides-panel.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "modules/web/packages/web-bundle/src/panels/web-source-panel.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 14
+    }
+  }
+}

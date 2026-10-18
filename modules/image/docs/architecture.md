@@ -43,9 +43,9 @@ every call to the host and to the engine; `tile-provider.ts`, which it calls, al
 `engine.ts` is a typed facade over the wasm exports. The interaction state machines
 (`crop-machine.ts`, `selection-machine.ts`, `brush-machine.ts`), the image-to-page transform
 (`frame-fit.ts`) and the growth rule of the quick-selection tool (`quick-select.ts`) are
-TypeScript. `scripts/check-contract-imports.mjs` rejects any static import or re-export whose
-specifier is not `@paged-media/plugin-api`, `@paged-media/plugin-sdk`, one of this repository's
-own packages, `react` or a relative path: the plugin takes no code from the engine or the editor
+TypeScript. The contract-import lint rule (`/bunfig.toml`, PM-0003) rejects any import or re-export whose
+specifier is not `@paged-media/plugin-api`, `@paged-media/plugin-sdk`, an internal shared package
+(`platform/shared/*`), one of this repository's own packages, `react` or a relative path: the plugin takes no code from the engine or the editor
 ([plugin-sdk ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md)).
 
 There are two manifest files with the same content. `glue/manifest.json` is the one the

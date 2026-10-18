@@ -25,9 +25,7 @@
 // callbacks (typically the setters from DocumentContext). It does
 // NOT depend on React; pass it the setters and it dispatches.
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { CanvasClient } from "@paged-media/client";
-// eslint-disable-next-line import/no-relative-parent-imports
 import type {
   DocumentHandle,
   PageId,
