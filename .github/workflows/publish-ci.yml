@@ -22,6 +22,7 @@ on:
       - "tooling/bootstrap.sh"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/wasm-tools/**"
+      - ".github/actions/module-wasm/**"
       - "platform/extensions/packages/plugin-api/**"
       - "platform/extensions/packages/plugin-sdk/**"
       - ".github/workflows/publish-ci.yml"
@@ -46,6 +47,7 @@ on:
       - "tooling/bootstrap.sh"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/wasm-tools/**"
+      - ".github/actions/module-wasm/**"
       - "platform/extensions/packages/plugin-api/**"
       - "platform/extensions/packages/plugin-sdk/**"
       - ".github/workflows/publish-ci.yml"
@@ -215,6 +217,11 @@ jobs:
       # bundles' command specs boot.
       - name: engine wasm packages
         uses: ./.github/actions/engine-wasm
+      # The pdf-import mapper wasm (packages/pdf-bundle/bin/pdf_import*,
+      # build output), which pdf-bundle's mapper specs load.
+      - name: module wasm (publish)
+        uses: ./.github/actions/module-wasm
+        with: { module: publish }
       # One install for the whole root workspace (bun.lock).
       - name: bun install (root workspace)
         working-directory: .

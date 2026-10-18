@@ -33,6 +33,10 @@ jobs:
           proto-version: "0.63.1"
       - name: upgrade npm (OIDC needs >= 11.5.1)
         run: npm install -g npm@latest
+      # The image-trace wasm the bundle ships in `wasm/` (build output).
+      - name: module wasm (draw)
+        uses: ./.github/actions/module-wasm
+        with: { module: draw }
       # One install for the whole root workspace (bun.lock).
       - name: bun install (root workspace)
         working-directory: .

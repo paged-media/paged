@@ -74,7 +74,8 @@ jobs:
 
       # The engine's wasm packages and the bundles' engine wasm (build
       # outputs; the editor consumes the workspace packages). Vite resolves
-      # sheet's, web's and doc's `../bin/<glue>.js` at build time.
+      # the bundles' relative wasm glue (sheet, web, doc, draw, image, pdf)
+      # at build time.
       - name: engine wasm packages
         uses: ./.github/actions/engine-wasm
         with: { artifact: "false" }
@@ -93,6 +94,15 @@ jobs:
       - name: module wasm (web)
         uses: ./.github/actions/module-wasm
         with: { module: web }
+      - name: module wasm (draw)
+        uses: ./.github/actions/module-wasm
+        with: { module: draw }
+      - name: module wasm (image)
+        uses: ./.github/actions/module-wasm
+        with: { module: image }
+      - name: module wasm (publish)
+        uses: ./.github/actions/module-wasm
+        with: { module: publish }
 
       # PAGED_MODULES_HOSTED: the module door (ADR 223) answers the module
       # host, because the next step hosts every module the build lists.

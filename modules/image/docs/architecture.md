@@ -55,9 +55,10 @@ in the private package `@paged-media/image-manifest`: `pnpm validate:manifest` a
 "validate manifest" step of CI check this file, and 14 of the 19 spec files in `glue/test/`
 import it. No script copies one to the other; the test "is byte-identical to the validated
 manifest" in `glue/test/activate.spec.ts` fails when they differ. The wasm artefact is
-doubled the same way: `scripts/build-wasm.sh` writes it to `glue/wasm/` (committed; the
-bundle loads it from there) and copies it to `manifest/wasm/` (gitignored), where the
-manifest's path `wasm/image_js_bg.wasm` resolves from `manifest/`.
+doubled the same way: `scripts/build-wasm.sh` writes it to `glue/wasm/` (the bundle loads
+it from there) and copies it to `manifest/wasm/`, where the manifest's path
+`wasm/image_js_bg.wasm` resolves from `manifest/`. Both are build output (gitignored;
+`moon run image:wasm`, and in CI `.github/actions/module-wasm`).
 
 ## The wasm boundary
 

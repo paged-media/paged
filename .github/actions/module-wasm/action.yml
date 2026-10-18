@@ -1,15 +1,20 @@
 name: module wasm
 description: >-
-  Builds the engine wasm of one built-in module (doc, slide, sheet, data or
-  web) into its bundle's gitignored bin/, or restores it from the cache when
-  the module's Rust sources are unchanged.
+  Builds the engine wasm of one built-in module (doc, slide, sheet, data,
+  web, draw, image or publish) into its bundle's gitignored output
+  directory, or restores it from the cache when the module's Rust sources
+  are unchanged.
 
 # The editor depends on every bundle through `workspace:*` and consumes its
 # source, so a job that runs the editor's Vite (Playwright, the playground and
-# showcase builds) or measures its wasm needs each bundle's build output. For
-# sheet, web and doc, Vite's import analysis resolves `../bin/<glue>.js` at
-# transform time, and the app does not boot without it; data and slide load
-# theirs at runtime. draw, image and pdf commit theirs.
+# showcase builds), typechecks it or measures its wasm needs each bundle's
+# build output. For sheet, web, doc, draw, image and pdf, Vite's import
+# analysis resolves the glue's relative path at transform time, and the app
+# does not boot without it; data and slide load theirs at runtime. Where it
+# lands: `packages/<m>-bundle/bin/` for doc, slide, sheet, data and web;
+# draw's `packages/draw-bundle/wasm/`; image's `glue/wasm/` (and the copy in
+# `manifest/wasm/`); publish's `packages/pdf-bundle/bin/pdf_import*` (pdfium,
+# a third-party prebuilt, stays committed beside it).
 #
 # Replaces the plugin-doc-from-source and plugin-slide-from-source stopgaps.
 #
@@ -19,12 +24,13 @@ description: >-
 #
 # The cache key hashes the module's tracked files except its JS packages and docs
 # (git's blob ids, so it costs no reads) plus web's Rust crate under
-# packages/web-render, .cargo/config.toml, the wasm-bindgen/binaryen pins and,
-# for data, the apache-arrow resolution in bun.lock.
+# packages/web-render, the engine crates publish's pdf-import builds against,
+# .cargo/config.toml, the wasm-bindgen/binaryen pins and, for data, the
+# apache-arrow resolution in bun.lock.
 
 inputs:
   module:
-    description: "The module: doc, slide, sheet, data or web."
+    description: "The module: doc, slide, sheet, data, web, draw, image or publish."
     required: true
 
 runs:
@@ -38,7 +44,11 @@ runs:
       run: |
         set -euo pipefail
         BUILD_ARGS=""
-        PATHS="modules/$M/packages/$M-bundle/bin"
+        OUT="modules/$M/packages/$M-bundle/bin"
+        PATHS="$OUT"
+        # JS packages and docs are not build inputs; image keeps its JS in
+        # glue/ and manifest/ instead of packages/.
+        JS_DIRS="packages"
         case "$M" in
           doc)   GLUE=docx_js.js ;;
           slide) GLUE=slide_js.js ;;
@@ -46,7 +56,12 @@ runs:
           data)  GLUE=data_js.js; PATHS="$PATHS"$'\n'"modules/data/vendor/duckdb-wasm" ;;
           # The Blitz engine build, as web-vitest and web-publish build it.
           web)   GLUE=blitz_web.js; BUILD_ARGS=--engine ;;
-          *) echo "::error::module-wasm: unknown module '$M' (doc, slide, sheet, data, web)"; exit 1 ;;
+          draw)  OUT=modules/draw/packages/draw-bundle/wasm; PATHS="$OUT"; GLUE=trace_js.js ;;
+          image) OUT=modules/image/glue/wasm; PATHS="$OUT"$'\n'"modules/image/manifest/wasm"; GLUE=image_js.js; JS_DIRS="glue manifest" ;;
+          # The pdf-import mapper only; pdfium.esm.* in the same directory is
+          # committed and must not be cached over.
+          publish) OUT=modules/publish/packages/pdf-bundle/bin; PATHS="$OUT/pdf_import*"; GLUE=pdf_import.js ;;
+          *) echo "::error::module-wasm: unknown module '$M' (doc, slide, sheet, data, web, draw, image, publish)"; exit 1 ;;
         esac
         CRATE="modules/$M"
         [ "$M" = web ] && CRATE=modules/web/packages/web-render
@@ -57,8 +72,12 @@ runs:
           TOOLCHAIN=$(sed -nE 's/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "modules/$M/rust-toolchain.toml" | head -1)
         fi
         inputs() {
-          git ls-files -s -- "modules/$M" ":(exclude)modules/$M/packages" ":(exclude)modules/$M/docs"
+          EXCLUDES=(":(exclude)modules/$M/docs")
+          for d in $JS_DIRS; do EXCLUDES+=(":(exclude)modules/$M/$d"); done
+          git ls-files -s -- "modules/$M" "${EXCLUDES[@]}"
           if [ "$M" = web ]; then git ls-files -s -- modules/web/packages/web-render; fi
+          # pdf-import's path dependencies into the engine.
+          if [ "$M" = publish ]; then git ls-files -s -- engine/core/crates engine/core/Cargo.toml engine/core/Cargo.lock; fi
           git ls-files -s -- .cargo/config.toml
           grep -E '^(WASM_BINDGEN|BINARYEN)=' tooling/bootstrap.sh
           if [ "$M" = data ]; then grep -E '"apache-arrow"' bun.lock; fi
@@ -70,7 +89,7 @@ runs:
           process.stdin.on("data", (d) => h.update(d)).on("end", () => console.log(h.digest("hex").slice(0, 40)));
         ')
         {
-          echo "glue=modules/$M/packages/$M-bundle/bin/$GLUE"
+          echo "glue=$OUT/$GLUE"
           echo "crate=$CRATE"
           echo "args=$BUILD_ARGS"
           echo "toolchain=$TOOLCHAIN"

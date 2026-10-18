@@ -29,6 +29,9 @@ tasks:
       - '@group(js-sources)'
 
   js-test:
+    # The specs boot glue/wasm and wasm-fresh.spec.ts checks it; image-ci
+    # builds it first.
+    deps: ['~:wasm']
     inputs:
       - project: 'extensions'
         filter: ['packages/plugin-cli/**/*', 'packages/plugin-api/src/manifest.schema.json']
@@ -45,7 +48,12 @@ tasks:
       - '@group(rust-sources)'
       - 'scripts/build-wasm.sh'
       - 'scripts/source-hash.mjs'
+      - 'registry/**/*.yaml'
+    outputs:
+      - 'glue/wasm/image_js*'
+      - 'glue/wasm/SOURCE_HASH'
+      - 'manifest/wasm/image_js*'
     options:
-      # glue/wasm/ is committed, so it is not a cached output.
-      cache: false
+      # Needs wasm-bindgen-cli at the Cargo.lock version; image-ci builds it
+      # (.github/actions/module-wasm).
       runInCI: 'skip'

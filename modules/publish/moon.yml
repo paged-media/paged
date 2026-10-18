@@ -65,6 +65,8 @@ tasks:
   js-test:
     description: 'vitest in the packages that declare a test script.'
     command: "bun run --filter './packages/*' test"
+    # pdf-bundle's mapper specs load bin/pdf_import*; publish-ci builds it.
+    deps: ['~:wasm']
 
   js-build:
     command: "bun run --filter './packages/*' build"
@@ -80,7 +82,9 @@ tasks:
     inputs:
       - '@group(rust-sources)'
       - 'scripts/build-wasm.sh'
+    outputs:
+      - 'packages/pdf-bundle/bin/pdf_import*'
     options:
-      # The artifact is committed, so it is not a cached output.
-      cache: false
+      # Needs wasm-bindgen-cli at the Cargo.lock version; publish-ci builds
+      # it (.github/actions/module-wasm).
       runInCI: 'skip'

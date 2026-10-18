@@ -2,7 +2,7 @@
 //
 // paged.image's object model (ADR 323) on the REAL plugin and the REAL
 // engines: the bundle booted in the SDK's headless host (published
-// canvas-wasm in Node) with its own committed image wasm for the CPU
+// canvas-wasm in Node) with its own built image wasm for the CPU
 // codec. Every property is set through `host.objects` and read back the
 // same way; each write is one engine undo step; a 10-op batch is held to
 // a count budget. No GPU is involved — the object model does not need

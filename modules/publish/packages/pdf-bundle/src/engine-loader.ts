@@ -74,8 +74,8 @@ function isNode(): boolean {
  *  instantiate from the bundler's `?url` asset URL. NODE: instantiate from
  *  the wasm bytes read beside the glue. */
 async function importBundledGlue(): Promise<PdfMapperGlue> {
-  // @ts-ignore — bin/pdf_import.js is the committed wasm-bindgen glue (built
-  // by scripts/build-wasm.sh from crates/pdf-import); tsup bundles it as a
+  // @ts-ignore — bin/pdf_import.js is the wasm-bindgen glue (build output of
+  // scripts/build-wasm.sh from crates/pdf-import); tsup bundles it as a
   // sibling dist chunk. tsc doesn't typecheck the JS — typed via PdfMapperGlue.
   const glue = (await import("../bin/pdf_import.js")) as unknown as PdfMapperGlue;
   if (isNode()) {

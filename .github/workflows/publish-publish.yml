@@ -48,6 +48,11 @@ jobs:
           proto-version: "0.63.1"
       - name: upgrade npm (OIDC needs >= 11.5.1)
         run: npm install -g npm@latest
+      # The pdf-import mapper wasm pdf-bundle ships in `bin/` (build output;
+      # pdfium beside it is committed).
+      - name: module wasm (publish)
+        uses: ./.github/actions/module-wasm
+        with: { module: publish }
       # One install for the whole root workspace (bun.lock).
       - name: bun install (root workspace)
         working-directory: .

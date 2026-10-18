@@ -60,7 +60,8 @@ out, over the `visioncortex` crate. No wasm-bindgen dependency.
   published package. `scripts/check-contract-imports.mjs` runs before the tests and fails on any
   static `import … from` or `export … from` that is not one of those three, a package of this repo,
   or relative. It does not check dynamic `import()` (three `node:` modules in `trace-engine.ts`).
-- The built wasm is committed in `packages/draw-bundle/wasm/`. That directory is both the
+- The wasm is build output in `packages/draw-bundle/wasm/` (gitignored; `scripts/build-wasm.sh`,
+  `moon run draw:wasm`, and in CI `.github/actions/module-wasm`). That directory is both the
   path the manifest declares (`wasm/trace_js_bg.wasm`) and the path `trace-engine.ts`
   imports, so there is one copy.
 

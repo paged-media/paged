@@ -14,9 +14,9 @@ import type { ImageWasmModule } from "../src/engine";
  * zero executions through the real module anywhere in CI: a build that
  * exported every name but computed garbage would have shipped green.
  *
- * This spec boots the COMMITTED artifact (glue/wasm — the copy the
- * published package ships; manifest/wasm holds the same bytes but is
- * gitignored build output) via initSync in Node, the same glue path
+ * This spec boots the BUILT artifact (glue/wasm — the copy the published
+ * package ships; manifest/wasm holds the same bytes; both are gitignored
+ * build output of scripts/build-wasm.sh) via initSync in Node, the same glue path
  * engine.ts uses, and drives a representative slice of the surface on a
  * synthetic 16×16 RGBA buffer, asserting real outputs.
  *
@@ -39,16 +39,16 @@ const built = existsSync(WASM);
 
 // The CI half of the dual gate (the sheets engine-real pattern):
 // REQUIRE_REAL_WASM=1 turns "artifact missing" from a skip into a hard
-// failure. The artifact is COMMITTED, so CI needs no build step — this
-// guard exists so a future .gitignore/LFS/checkout regression cannot
-// silently drop the only real-execution lane back to zero.
+// failure. image-ci builds the artifact first (.github/actions/module-wasm),
+// so a missing one there is a regression that must not silently drop the
+// only real-execution lane back to zero.
 if (process.env.REQUIRE_REAL_WASM === "1" && !built) {
   describe("real wasm execution — REQUIRED", () => {
     it("FAILS: REQUIRE_REAL_WASM=1 but the wasm artifact is missing", () => {
       throw new Error(
-        `REQUIRE_REAL_WASM=1 but ${WASM} is missing — the committed ` +
-          "artifact should be present in any checkout; rebuild with " +
-          "scripts/build-wasm.sh (skipping is not allowed here)",
+        `REQUIRE_REAL_WASM=1 but ${WASM} is missing — build it with ` +
+          "scripts/build-wasm.sh or `moon run image:wasm` (skipping is " +
+          "not allowed here)",
       );
     });
   });

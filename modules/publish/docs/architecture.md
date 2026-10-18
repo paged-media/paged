@@ -38,8 +38,10 @@ and an `.idml` exporter and forwards both to the engine.
 (`dist`, `bin` and `manifest.json`). It holds the PDF reader (`src/pdfium.ts`), the text
 reconstruction heuristics (`src/extract.ts`), the TypeScript copy of the intermediate
 representation (`src/ir.ts`), the wasm loader (`src/engine-loader.ts`), the image fallback
-(`src/idml-fallback.ts`) and the importer (`src/io/pdf.ts`). `bin/` holds two committed wasm
-modules with their JavaScript glue: the built `pdf-import` mapper and a prebuilt PDFium. The
+(`src/idml-fallback.ts`) and the importer (`src/io/pdf.ts`). `bin/` holds two wasm modules
+with their JavaScript glue: the `pdf-import` mapper, build output of `scripts/build-wasm.sh`
+(gitignored; `moon run publish:wasm`, and in CI `.github/actions/module-wasm`), and a
+committed prebuilt PDFium. The
 two bundles do not import each other and the editor loads them as two plugins
 ([ADR 657](adr/657-one-bundle-per-format.md)).
 
