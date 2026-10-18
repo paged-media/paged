@@ -13,20 +13,33 @@
 # refuses to resolve a private repo's action from a public workflow, which
 # killed every wire that tried. We upload the JUnit; state PULLS it
 # (siblings-pull.yml, driven by state's ingest/artifacts.yaml).
-name: vitest
+#
+# MONOREPO (step A3): ported from paged-media/plugin-sdk
+# .github/workflows/vitest.yml; runs in platform/extensions.
+name: extensions / vitest
 
 on:
   push:
     branches: [main]
+    paths:
+      - "platform/extensions/**"
+      - ".github/workflows/extensions-vitest.yml"
   pull_request:
+    paths:
+      - "platform/extensions/**"
+      - ".github/workflows/extensions-vitest.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: vitest-${{ github.ref }}
+  group: extensions-vitest-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: platform/extensions
 
 jobs:
   vitest:
@@ -44,6 +57,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+          cache-dependency-path: platform/extensions/pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
 
@@ -81,7 +95,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vitest-junit
-          path: packages/plugin-sdk/junit.xml
+          path: platform/extensions/packages/plugin-sdk/junit.xml
           if-no-files-found: error
           retention-days: 14
 

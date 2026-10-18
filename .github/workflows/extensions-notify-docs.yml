@@ -1,15 +1,21 @@
-name: notify-docs
+name: extensions / notify-docs
 
 # When the plugin manifest SCHEMA (the source docs generates its plugin reference
 # from) changes on main, ping docs.paged.media to rebuild (repository_dispatch:
 # source-updated). Path-filtered to the exact file docs consumes. Nightly is the
 # backstop. Needs DOCS_DISPATCH_TOKEN (Contents:write on paged-media/docs; org
 # secret recommended); unset → skip.
+#
+# MONOREPO (step A3): ported from paged-media/plugin-sdk
+# .github/workflows/notify-docs.yml. The path filter stays the one file docs
+# consumes (now under platform/extensions); the job checks nothing out, so it
+# carries no working-directory default. The payload still says repo
+# "plugin-sdk": docs keys its rebuild reason on it.
 on:
   push:
     branches: [main]
     paths:
-      - "packages/plugin-api/src/manifest.schema.json"
+      - "platform/extensions/packages/plugin-api/src/manifest.schema.json"
   workflow_dispatch:
 
 permissions:

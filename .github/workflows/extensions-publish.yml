@@ -12,14 +12,28 @@
 # One-time npm setup per package (plugin-api, plugin-sdk, plugin-cli, cli):
 #   npmjs.com → package → Trusted Publisher → GitHub Actions →
 #     org: paged-media, repo: plugin-sdk, workflow: publish.yml, action: npm publish
+#
+# MONOREPO (step A3): ported from paged-media/plugin-sdk
+# .github/workflows/publish.yml; runs in platform/extensions. MANUAL
+# (workflow_dispatch) ONLY for now: the npm Trusted Publishers of
+# plugin-api, plugin-sdk, plugin-cli, ai and cli are registered for
+# repo plugin-sdk / workflow publish.yml, and this run presents repo `paged`
+# / workflow `extensions-publish.yml`, so OIDC publishing fails until each
+# package's Trusted Publisher is re-registered for paged-media/paged +
+# extensions-publish.yml (a USER action on npmjs.com). Restore
+# `push: branches: [main]` (with a platform/extensions/** path filter) after.
+name: extensions / publish
+
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   id-token: write   # OIDC token for trusted publishing
   contents: read
+
+defaults:
+  run:
+    working-directory: platform/extensions
 
 jobs:
   verify-and-publish:

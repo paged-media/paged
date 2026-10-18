@@ -5,12 +5,28 @@
 # WITHOUT a version bump, which publish.yml then silently no-ops. Runs on
 # every push to main and on PRs (so it catches the miss before merge if
 # PRs are used, and immediately after if not).
-name: contract-guard
+#
+# MONOREPO (step A3): ported from paged-media/plugin-sdk
+# .github/workflows/contract-guard.yml; runs in platform/extensions. Both
+# scripts read old revisions with `git show <rev>:./<path>` (cwd-relative);
+# the bare `<rev>:<path>` they used resolved from the repository root, which
+# in the monorepo made every lookup fail and the guard pass vacuously.
+name: extensions / contract-guard
 on:
   push:
     branches: [main]
+    paths:
+      - "platform/extensions/**"
+      - ".github/workflows/extensions-contract-guard.yml"
   pull_request:
+    paths:
+      - "platform/extensions/**"
+      - ".github/workflows/extensions-contract-guard.yml"
   workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: platform/extensions
 
 jobs:
   bump-on-contract-change:
