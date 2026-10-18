@@ -8,14 +8,14 @@
   },
   "metrics": {
     "weightedImport": {
-      "covered": 132374,
+      "covered": 133526,
       "total": 633952,
-      "value": 0.208808
+      "value": 0.210625
     },
     "impactImport": {
-      "covered": 26498,
+      "covered": 26564,
       "total": 54667,
-      "value": 0.484717
+      "value": 0.485924
     },
     "weightedExport": {
       "covered": 92130,
@@ -23,7 +23,7 @@
       "value": 0.145326
     },
     "misplacedReads": 30,
-    "unseenReads": 402,
+    "unseenReads": 405,
     "unjustifiedUnseenReads": 0
   },
   "coveredImport": [
@@ -1124,6 +1124,10 @@
     "Stories|TextFrame@StrokeWeight|attr",
     "Stories|TextVariableInstance@AssociatedTextVariable|attr",
     "Stories|TextVariableInstance@ResultText|attr",
+    "XML|XMLElement@MarkupTag|attr",
+    "XML|XMLElement@Self|attr",
+    "XML|XMLTag@Name|attr",
+    "XML|XMLTag@Self|attr",
     "designmap|Bookmark@Destination|attr",
     "designmap|Bookmark@Name|attr",
     "designmap|Bookmark@Self|attr",

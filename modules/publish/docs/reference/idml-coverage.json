@@ -27,28 +27,28 @@
     "propertiesChild": 61,
     "importerReadSites": 1075,
     "exporterWriteSites": 1075,
-    "unresolved": 2,
+    "unresolved": 0,
     "partRows": 4150,
-    "misplaced": 34,
+    "misplaced": 30,
     "unseen": 405
   },
   "metrics": {
     "weightedImport": {
-      "covered": 132374,
+      "covered": 133526,
       "total": 633952,
-      "value": 0.208808
+      "value": 0.210625
     },
     "impactImport": {
-      "covered": 26498,
+      "covered": 26564,
       "total": 54667,
-      "value": 0.484717
+      "value": 0.485924
     },
     "weightedExport": {
       "covered": 92130,
       "total": 633952,
       "value": 0.145326
     },
-    "misplacedReads": 34,
+    "misplacedReads": 30,
     "unseenReads": 405,
     "unjustifiedUnseenReads": 0
   },
@@ -35720,7 +35720,8 @@
       "imported": true,
       "exported": false,
       "importParts": [
-        "Stories"
+        "Stories",
+        "XML"
       ],
       "exportParts": [],
       "source": {
@@ -35738,7 +35739,8 @@
       "imported": true,
       "exported": false,
       "importParts": [
-        "Stories"
+        "Stories",
+        "XML"
       ],
       "exportParts": [],
       "source": {
@@ -35756,7 +35758,8 @@
       "imported": true,
       "exported": false,
       "importParts": [
-        "Stories"
+        "Stories",
+        "XML"
       ],
       "exportParts": [],
       "source": {
@@ -35774,7 +35777,8 @@
       "imported": true,
       "exported": false,
       "importParts": [
-        "Stories"
+        "Stories",
+        "XML"
       ],
       "exportParts": [],
       "source": {
@@ -35792,7 +35796,8 @@
       "imported": true,
       "exported": false,
       "importParts": [
-        "Stories"
+        "Stories",
+        "XML"
       ],
       "exportParts": [],
       "source": {
@@ -35809,7 +35814,9 @@
       "coarseType": "string",
       "imported": true,
       "exported": false,
-      "importParts": [],
+      "importParts": [
+        "XML"
+      ],
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/xml_structure.rs",
@@ -35825,7 +35832,9 @@
       "coarseType": "string",
       "imported": true,
       "exported": false,
-      "importParts": [],
+      "importParts": [
+        "XML"
+      ],
       "exportParts": [],
       "source": {
         "file": "crates/idml-import/src/xml_structure.rs",
@@ -36334,46 +36343,6 @@
       ],
       "censusParts": [
         "Resources/Preferences"
-      ]
-    },
-    {
-      "element": "XMLElement",
-      "attribute": "MarkupTag",
-      "kind": "attr",
-      "readParts": [
-        "Stories"
-      ],
-      "censusParts": [
-        "XML"
-      ]
-    },
-    {
-      "element": "XMLElement",
-      "attribute": "Self",
-      "kind": "attr",
-      "readParts": [
-        "Stories"
-      ],
-      "censusParts": [
-        "XML"
-      ]
-    },
-    {
-      "element": "XMLTag",
-      "attribute": "Name",
-      "kind": "attr",
-      "readParts": [],
-      "censusParts": [
-        "XML"
-      ]
-    },
-    {
-      "element": "XMLTag",
-      "attribute": "Self",
-      "kind": "attr",
-      "readParts": [],
-      "censusParts": [
-        "XML"
       ]
     }
   ],
@@ -38809,24 +38778,7 @@
       "reason": "A document's XML structure (D-02). InDesign 20.0.1 writes <XMLElement XMLContent> for an element that tags a story or a page item, and <XMLAttribute Name Value> for its attributes (asked of InDesign: core tools/indesign-export/xml-structure-probe). The census documents carry an XML structure without content references or attributes."
     }
   ],
-  "unresolved": [
-    {
-      "file": "crates/idml-import/src/xml_structure.rs",
-      "line": 38,
-      "side": "import",
-      "item": "parse_tags",
-      "literal": "Self",
-      "reason": "read in a function no [[part_entry]] reaches"
-    },
-    {
-      "file": "crates/idml-import/src/xml_structure.rs",
-      "line": 39,
-      "side": "import",
-      "item": "parse_tags",
-      "literal": "Name",
-      "reason": "read in a function no [[part_entry]] reaches"
-    }
-  ],
+  "unresolved": [],
   "partRows": [
     {"part":"designmap","element":"ABullet","attribute":"BulletsFont","kind":"properties-child","docCount":271,"nonModalDocs":271,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"designmap","element":"ABullet","attribute":"BulletsFontStyle","kind":"properties-child","docCount":271,"nonModalDocs":271,"imported":false,"exported":false,"readElsewhere":false},
@@ -42900,8 +42852,8 @@
     {"part":"Resources/Styles","element":"WavyStrokeStyle","attribute":"Self","kind":"attr","docCount":1,"nonModalDocs":0,"imported":true,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"WavyStrokeStyle","attribute":"Wavelength","kind":"attr","docCount":1,"nonModalDocs":0,"imported":true,"exported":false,"readElsewhere":false},
     {"part":"Resources/Styles","element":"WavyStrokeStyle","attribute":"Width","kind":"attr","docCount":1,"nonModalDocs":0,"imported":true,"exported":false,"readElsewhere":false},
-    {"part":"XML","element":"XMLElement","attribute":"MarkupTag","kind":"attr","docCount":271,"nonModalDocs":2,"imported":false,"exported":false,"readElsewhere":true},
-    {"part":"XML","element":"XMLElement","attribute":"Self","kind":"attr","docCount":271,"nonModalDocs":26,"imported":false,"exported":false,"readElsewhere":true},
+    {"part":"XML","element":"XMLElement","attribute":"MarkupTag","kind":"attr","docCount":271,"nonModalDocs":2,"imported":true,"exported":false,"readElsewhere":false},
+    {"part":"XML","element":"XMLElement","attribute":"Self","kind":"attr","docCount":271,"nonModalDocs":26,"imported":true,"exported":false,"readElsewhere":false},
     {"part":"Resources/Preferences","element":"XMLExportPreference","attribute":"AllowTransform","kind":"attr","docCount":271,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Preferences","element":"XMLExportPreference","attribute":"CharacterReferences","kind":"attr","docCount":271,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Preferences","element":"XMLExportPreference","attribute":"CopyFormattedImages","kind":"attr","docCount":271,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
@@ -42941,8 +42893,8 @@
     {"part":"Resources/Preferences","element":"XMLPreference","attribute":"DefaultTableTagColor","kind":"properties-child","docCount":271,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Preferences","element":"XMLPreference","attribute":"DefaultTableTagName","kind":"attr","docCount":271,"nonModalDocs":7,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"Resources/Preferences","element":"XMLPreference","attribute":"DeleteElementOnContentDeletion","kind":"attr","docCount":84,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
-    {"part":"XML","element":"XMLTag","attribute":"Name","kind":"attr","docCount":305,"nonModalDocs":2,"imported":false,"exported":false,"readElsewhere":true},
-    {"part":"XML","element":"XMLTag","attribute":"Self","kind":"attr","docCount":305,"nonModalDocs":36,"imported":false,"exported":false,"readElsewhere":true},
+    {"part":"XML","element":"XMLTag","attribute":"Name","kind":"attr","docCount":305,"nonModalDocs":2,"imported":true,"exported":false,"readElsewhere":false},
+    {"part":"XML","element":"XMLTag","attribute":"Self","kind":"attr","docCount":305,"nonModalDocs":36,"imported":true,"exported":false,"readElsewhere":false},
     {"part":"XML","element":"XMLTag","attribute":"TagColor","kind":"properties-child","docCount":271,"nonModalDocs":2,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"XML","element":"XmlStory","attribute":"AppliedNamedGrid","kind":"attr","docCount":271,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},
     {"part":"XML","element":"XmlStory","attribute":"AppliedTOCStyle","kind":"attr","docCount":271,"nonModalDocs":0,"imported":false,"exported":false,"readElsewhere":false},

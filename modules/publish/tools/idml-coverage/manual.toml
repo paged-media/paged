@@ -695,6 +695,18 @@ file = "crates/idml-import/src/graphic.rs"
 name = "parse_graphic"
 parts = ["Resources/Graphic"]
 
+# D-02 — XML/Tags.xml, and the element trees of XML/BackingStory.xml and
+# of each story.
+[[part_entry]]
+file = "crates/idml-import/src/xml_structure.rs"
+name = "parse_tags"
+parts = ["XML"]
+
+[[part_entry]]
+file = "crates/idml-import/src/xml_structure.rs"
+name = "parse_elements"
+parts = ["XML", "Stories"]
+
 # Colour groups: InDesign writes them in designmap.xml.
 [[part_entry]]
 file = "crates/idml-import/src/graphic.rs"
