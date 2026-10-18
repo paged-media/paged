@@ -141,18 +141,21 @@ them from secrets and proxy fetches, Postgres included through Hyperdrive.
 - A session bridge (WebSocket) that runs relayed calls through the existing AI tool engine.
 - The `/api/ai` Pages proxy stays; it may later move behind the same Worker.
 
-## 9. Phases
+## 9. Phases and status (2026-10-18)
 
-| Phase | Delivers | Gate |
+| Phase | Delivers | Status |
 |---|---|---|
-| P0 | ADR 180, format spec, this concept | — |
-| P1 | `paged-repo` crate (core) | round-trip, determinism, dedup, kernel, bundle tests; wasm32 check |
-| P2 | editor local repository (save = commit, history, branches, releases, linked file) | browser-only journeys green |
-| P3 | server M1: Worker + Repo DO + R2 + OIDC/OAuth + sync + projections; editor remote | miniflare tests; CAS race; tampered object rejected |
-| P4 | Workspace DO, roles, policy, change requests, server evidence | refusal matrix |
-| P5 | MCP store tools on `/mcp`; `paged mcp` stdio | MCP Inspector; Claude connector |
-| P6 | live relay: Session DO, editor bridge, MCP App | relayed `run_script` visible + undoable |
-| P7 | element-level model storage (core), headless lane, Hyperdrive, encryption, dataset repos | each its own decision |
+| P0 | core ADR 180, the format spec, this concept | done |
+| P1 | `paged-repo` (core) | done: round trip of 34 IDMLs; engine digests equal for 93 documents after a repository round trip |
+| P2 | editor local library: save = version, history, restore, releases | done (editor ADR 225) |
+| P3 | Worker + Repo DO + R2, push/pull, OIDC/OAuth sign-in, editor push/pull | done (ADR 950, 951) |
+| P4 | Workspace DO, policy as governed data, change requests | done |
+| P5 | MCP on `/mcp`, `paged mcp` on stdio | done (ADR 952) |
+| P6 | live relay (Session DO, editor bridge), MCP App view | done |
+| P7 | headless engine lane; sealed, deflated storage; collection, snapshots, erasure; datasets and `paged://` | done (ADR 953). Element-level model storage is proposal 181. Hyperdrive data sources are deferred (proposal 954) |
+
+All of it is local: nothing is deployed and no branch is pushed. Production still needs a
+Cloudflare account, the bucket, the container image, an OpenID provider and secrets.
 
 Every externally visible step (repo creation, Cloudflare resources, deploys, npm publishes,
 archiving editor-server) waits for an explicit OK.
