@@ -39,7 +39,7 @@ too_many_arguments = "allow"
 [workspace.dependencies]
 thiserror = "2"
 smallvec = { version = "1", features = ["serde"] }
-compact_str = { version = "0.8", features = ["serde"] }
+compact_str = { version = "0.10", features = ["serde"] }
 rustc-hash = "2"
 serde = { version = "1", features = ["derive"] }
 # YAML for the registry rows (build scripts + the coverage gate). The

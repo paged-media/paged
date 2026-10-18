@@ -33,8 +33,8 @@ quick-xml = "0.41"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-compact_str = { version = "0.8", features = ["serde"] }
-base64 = "0.22"
+compact_str = { version = "0.10", features = ["serde"] }
+base64 = "0.23"
 # wasm boundary (slide-js only).
 wasm-bindgen = "0.2"
 
