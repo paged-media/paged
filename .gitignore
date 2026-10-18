@@ -7,6 +7,10 @@
 !/.vscode/settings.json
 .idea/
 
+# JavaScript dependencies: the root Bun workspace installs into node_modules/
+# here and in every package (bun.lock is tracked).
+node_modules/
+
 # Local symlinks to private resources (corpus, shared build targets).
 # Private assets never live in this public repository.
 /corpus
