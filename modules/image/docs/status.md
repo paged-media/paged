@@ -153,7 +153,7 @@ landed. How the parts fit is in
   `psd_cmyk_photoshop.rs`): every case agrees, differs by a stated convention, or is declined
   on a measured disagreement; none is a defect. libvips's answers for the rows that name it are replayed by
   `oracle_vips.rs`; the GEGL-only rows have no runner.
-- **Tests.** Device tests skip without a GPU adapter unless `REQUIRE_GPU=1` is set, which
+- **Tests.** Device tests skip without a GPU adapter unless `PAGED_REQUIRE_GPU=1` is set, which
   turns the skip into a failure (`image-gpu/src/test_support.rs`). CI runs them on a software
   Vulkan adapter for every pull request and on Apple silicon after merges to main
   (`.github/workflows/ci.yml`, jobs `gpu-sw` and `gpu-metal`). The bundle specs run against a

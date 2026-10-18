@@ -24,6 +24,10 @@ image-graph = { path = "../image-graph" }
 half = { workspace = true }
 pollster = { workspace = true }
 bytemuck = { workspace = true }
+# The corpus lanes (src/corpus.rs) report through the one convention for
+# optional test resources (`unavailable: <reason>`, PAGED_REQUIRE_<X>=1,
+# PAGED_CORPUS_DIR). This crate is test-only, like the helper.
+paged-test-resources = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

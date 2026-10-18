@@ -49,28 +49,14 @@ pub struct CorpusFile {
     pub path: PathBuf,
 }
 
-/// Resolve the corpus root from the opt-in switch `var` (`1` = the
-/// monorepo's `<repo root>/corpus`, anything else = an explicit root). `None`, with a
-/// printed reason, when the switch is unset or the root is missing.
-pub fn corpus_root(var: &str) -> Option<PathBuf> {
-    let Some(switch) = std::env::var_os(var) else {
-        eprintln!(
-            "SKIP psd corpus lane: {var} unset (set it to 1, or to a corpus root, \
-             and run with --ignored)"
-        );
-        return None;
-    };
-    let switch = switch.to_string_lossy().into_owned();
-    let root = if switch == "1" || switch.is_empty() {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../corpus")
-    } else {
-        PathBuf::from(switch)
-    };
-    if !root.is_dir() {
-        eprintln!("SKIP psd corpus lane: no corpus at {}", root.display());
-        return None;
-    }
-    Some(root)
+/// The corpus root for a PSD lane (`PAGED_CORPUS_DIR`, else the
+/// gitignored `<repo root>/corpus` link; `legacy` is the lane's old
+/// switch, still read with a deprecation warning). `None` after
+/// reporting `unavailable: private corpus` ([`crate::corpus::root`]);
+/// `PAGED_REQUIRE_CORPUS=1` makes that a failure.
+#[track_caller]
+pub fn corpus_root(legacy: &str) -> Option<PathBuf> {
+    crate::corpus::root("psd", legacy)
 }
 
 /// Does the file at `path` start with the PSD signature?

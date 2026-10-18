@@ -42,6 +42,10 @@ serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 tracing = "0.1"
 pollster = "0.4"
+# The one convention for optional test resources (GPU, corpus, …):
+# `unavailable: <reason>`, PAGED_REQUIRE_<X>=1, PAGED_CORPUS_DIR. Test-only:
+# a dev-dependency, or image-gpu's `test-support` feature.
+paged-test-resources = { path = "../../platform/shared/test-resources" }
 wgpu = "29.0.1"
 naga = { version = "29", features = ["wgsl-in"] }
 wasm-bindgen = "0.2"
