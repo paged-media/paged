@@ -17,6 +17,11 @@
 # paged-media/plugin-sdk checkout is gone: only the manifest package's
 # scripts read the plugin-cli, and this job runs `bun test` directly.
 name: image / publish-state
+concurrency:
+  # A newer push to a pull request cancels the older run. Every other run
+  # (main, dispatch) has a group of its own: never cancelled, never queued.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
   push:
@@ -27,13 +32,14 @@ on:
       - "bun.lock"
       - "bunfig.toml"
       - "package.json"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/image/docs/**/*.md"
 
 permissions:
   contents: read
-
-concurrency:
-  group: image-publish-state-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:
