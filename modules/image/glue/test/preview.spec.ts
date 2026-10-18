@@ -24,18 +24,40 @@
 // after the sliders rest, and the layout always at full-resolution size.
 // The kernels themselves are covered natively (image-js/tests).
 
-import { afterEach, beforeEach, describe, expect, it, vi, mock } from "bun:test";
-import { advanceTimersByTimeAsync, waitFor, importActual } from "@paged-media/test-kit";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  mock,
+} from "bun:test";
+import {
+  advanceTimersByTimeAsync,
+  waitFor,
+  importActual,
+} from "@paged-media/test-kit";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
-import type { ElementGeometryItem, PluginManifest } from "@paged-media/plugin-api";
+import type {
+  ElementGeometryItem,
+  PluginManifest,
+} from "@paged-media/plugin-api";
 import manifestJson from "@paged-media/image-manifest/manifest.json";
 
 import { createImageSession } from "../src/session";
-import { makeFakeEditor, mapBacking, shellStub, silentConsole } from "./helpers";
+import {
+  makeFakeEditor,
+  mapBacking,
+  shellStub,
+  silentConsole,
+} from "./helpers";
 
 const calls = { resize: [] as Array<[number, number]>, adjust: [] as number[] };
-let realEncode: ((rgba: Uint8Array, w: number, h: number, f: "png") => Uint8Array) | null = null;
+let realEncode:
+  ((rgba: Uint8Array, w: number, h: number, f: "png") => Uint8Array) | null =
+  null;
 // The fake `adjust` answers pixels of the image's real size: the host's
 // scene-image door rejects a buffer that is not `width*height*4` bytes.
 const dims = new Map<number, [number, number]>();
@@ -60,7 +82,13 @@ mock.module("../src/engine", () => {
               const handle = next++;
               fake.add(handle);
               dims.set(handle, [w, h]);
-              return { handle, width: w, height: h, display: "assumedSrgb", depthReduced: false };
+              return {
+                handle,
+                width: w,
+                height: h,
+                display: "assumedSrgb",
+                depthReduced: false,
+              };
             };
           if (prop === "adjust")
             return async (h: number) => {
@@ -69,9 +97,12 @@ mock.module("../src/engine", () => {
               return new Uint8Array(w * ht * 4);
             };
           if (prop === "freeImage")
-            return (h: number) => (fake.has(h) ? fake.delete(h) : t.freeImage(h));
+            return (h: number) =>
+              fake.has(h) ? fake.delete(h) : t.freeImage(h);
           const v = Reflect.get(t, prop, r) as unknown;
-          return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(t) : v;
+          return typeof v === "function"
+            ? (v as (...a: unknown[]) => unknown).bind(t)
+            : v;
         },
       });
     },
@@ -81,20 +112,33 @@ mock.module("../src/engine", () => {
 const geom = (bounds: [number, number, number, number]): ElementGeometryItem =>
   ({ id: { kind: "rectangle", id: "u1" }, pageId: "pg1", bounds }) as never;
 
-async function open(sourceW: number, sourceH: number, frame: [number, number, number, number]) {
+async function open(
+  sourceW: number,
+  sourceH: number,
+  frame: [number, number, number, number],
+) {
   sourceDims = [sourceW, sourceH];
   const fake = makeFakeEditor();
-  const handle = createBundleHost(() => fake.editor, manifestJson as PluginManifest, {
-    console: silentConsole,
-    storage: mapBacking(),
-    shell: shellStub(),
-  });
+  const handle = createBundleHost(
+    () => fake.editor,
+    manifestJson as PluginManifest,
+    {
+      console: silentConsole,
+      storage: mapBacking(),
+      shell: shellStub(),
+    },
+  );
   const session = createImageSession(handle.host);
   // Boot once to reach the real encoder for the fixture.
   if (!realEncode) {
     await session.importBytes("boot.png", new Uint8Array(0));
   }
-  const png = realEncode!(new Uint8Array(sourceW * sourceH * 4).fill(128), sourceW, sourceH, "png");
+  const png = realEncode!(
+    new Uint8Array(sourceW * sourceH * 4).fill(128),
+    sourceW,
+    sourceH,
+    "png",
+  );
   fake.placed.set("u1", png);
   fake.geometry.set("u1", geom(frame));
   fake.emitSelection([{ kind: "rectangle", id: "u1" }]);
@@ -124,13 +168,17 @@ describe("live preview", () => {
 
     // The sliders rest → one full-resolution pass, on the source itself.
     await advanceTimersByTimeAsync(vi, 400);
-    await waitFor(() => expect(calls.adjust).toContain(src.handle), { clock: vi });
+    await waitFor(() => expect(calls.adjust).toContain(src.handle), {
+      clock: vi,
+    });
     expect(calls.adjust.filter((h) => h === src.handle)).toHaveLength(1);
 
     // Every submit is laid out at the SOURCE's size, proxy or not.
-    const items = (fake.sceneLayers.submit.mock.calls as unknown as Array<[string, { items: Array<{ w: number; h: number; width: number }> }]>).map(
-      (c) => c[1].items[0],
-    );
+    const items = (
+      fake.sceneLayers.submit.mock.calls as unknown as Array<
+        [string, { items: Array<{ w: number; h: number; width: number }> }]
+      >
+    ).map((c) => c[1].items[0]);
     expect(items.length).toBe(3);
     for (const it of items) expect([it.w, it.h]).toEqual([50, 25]);
     expect(items.map((it) => it.width)).toEqual([100, 100, 400]);

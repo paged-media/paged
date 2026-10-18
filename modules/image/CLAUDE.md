@@ -35,7 +35,7 @@ Rules for every code change in this repo:
    ending in `__feat__<id_with_underscores>` or containing `[<id>]`. Otherwise an entry in
    `cockpit/test-map.yaml`.
 3. STATUS CHANGE → `claims:` in the feature file, never prose. "X is now shipped/partial" is a
-   claim edit; whether it *works* is computed from evidence and cannot be written.
+   claim edit; whether it _works_ is computed from evidence and cannot be written.
 4. BEFORE claiming a feature done: `cockpit feature <id> --json` (or its page in
    `cockpit serve`) — done means the linked tests are green and were produced after the
    latest implementation commit.
@@ -48,7 +48,7 @@ Rules for every code change in this repo:
 
 - **CLEAN-ROOM / TWO-ROLE (§3.1).** `references/gegl` + `references/libvips`
   are read-only inspiration mounts. ANALYST agents may read `references/`
-  and produce *behavior specs* into `thoughts/` (facts about behavior,
+  and produce _behavior specs_ into `thoughts/` (facts about behavior,
   never expression). IMPLEMENTER agents — everyone writing kernel,
   engine, PSD, or codec code — **MUST NOT read `references/`**, ever.
   Never paste, transliterate, or closely paraphrase reference code or
@@ -67,7 +67,7 @@ Rules for every code change in this repo:
   `image-conformance`'s dev-dependency); a wasm32 release build must
   prove by `cargo tree` that no reference code is reachable. What stays
   on CPU is inherently CPU work: codec entropy coding, PSD structural
-  parse/write, CMS transform *compilation*, orchestration.
+  parse/write, CMS transform _compilation_, orchestration.
 - **PRESERVATION INVARIANT (§10.4).** "Paged never destroys a PSD."
   Every unmodeled block is retained as opaque bytes attached to its
   owner node and re-emitted verbatim; zero-edit round-trip is

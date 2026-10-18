@@ -33,7 +33,11 @@ import type {
   CommandContribution,
   Disposable,
 } from "@paged-media/plugin-api";
-import { contributePanel, contributeSchemaPanel, contributeTool } from "@paged-media/plugin-sdk";
+import {
+  contributePanel,
+  contributeSchemaPanel,
+  contributeTool,
+} from "@paged-media/plugin-sdk";
 import {
   IMAGE_PROPERTIES_PANEL,
   PROPERTIES_PANEL_ID,
@@ -57,7 +61,10 @@ import { makeBrushGesture, PAINT_CURSOR } from "./brush-tool";
 import { makeTypeGesture } from "./type-tool";
 import { makeLayersBindingProvider } from "./binding-provider/layers-provider";
 import { makeTextBindingProvider } from "./binding-provider/text-provider";
-import { contributeImageObjectModel, type UntypedCommand } from "./object-model/contribute";
+import {
+  contributeImageObjectModel,
+  type UntypedCommand,
+} from "./object-model/contribute";
 
 const PANEL_ID = "media.paged.image.panel.adjustments";
 const CROP_TOOL_ID = "media.paged.image.tool.crop";
@@ -136,7 +143,9 @@ export function activate(host: BundleHost): BundleHandle {
       void session.ingestSelection().then(async (ok) => {
         const el = session.sourceElement();
         if (ok && el && host.supports("shell.enterEditContext@1")) {
-          await host.shell.enterEditContext("rasterImage", el).catch(() => false);
+          await host.shell
+            .enterEditContext("rasterImage", el)
+            .catch(() => false);
         }
       });
     },
@@ -187,7 +196,9 @@ export function activate(host: BundleHost): BundleHandle {
       })
     : null;
   const optionsFor = (toolId: string) =>
-    toolFields?.[toolId] ? { options: { toolId, fields: toolFields[toolId] } } : {};
+    toolFields?.[toolId]
+      ? { options: { toolId, fields: toolFields[toolId] } }
+      : {};
 
   contributeTool(host, {
     id: CROP_TOOL_ID,
@@ -592,11 +603,27 @@ export function activate(host: BundleHost): BundleHandle {
     ["median", "Median (3×3)", () => session.applyMedian()],
     ["maximum", "Maximum (3×3)", () => session.applyMorph("max")],
     ["minimum", "Minimum (3×3)", () => session.applyMorph("min")],
-    ["fillForeground", "Fill with the foreground colour", () => session.fillForeground()],
-    ["rotateCw", "Rotate canvas 90° clockwise", () => session.canvasOp("rotate-cw")],
-    ["rotateCcw", "Rotate canvas 90° counter-clockwise", () => session.canvasOp("rotate-ccw")],
+    [
+      "fillForeground",
+      "Fill with the foreground colour",
+      () => session.fillForeground(),
+    ],
+    [
+      "rotateCw",
+      "Rotate canvas 90° clockwise",
+      () => session.canvasOp("rotate-cw"),
+    ],
+    [
+      "rotateCcw",
+      "Rotate canvas 90° counter-clockwise",
+      () => session.canvasOp("rotate-ccw"),
+    ],
     ["rotate180", "Rotate canvas 180°", () => session.canvasOp("rotate-180")],
-    ["flipHorizontal", "Flip canvas horizontal", () => session.canvasOp("flip-h")],
+    [
+      "flipHorizontal",
+      "Flip canvas horizontal",
+      () => session.canvasOp("flip-h"),
+    ],
     ["flipVertical", "Flip canvas vertical", () => session.canvasOp("flip-v")],
   ] as const) {
     command({

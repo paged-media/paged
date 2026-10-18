@@ -389,7 +389,7 @@ describe("the panel's Layers section", () => {
         onUngroup: () => {},
         onGroupVisible: () => {},
         onGroupOpacity: () => {},
-      onGroupPassThrough: () => {},
+        onGroupPassThrough: () => {},
         onMaskClear: () => {},
         onBake: () => {},
         onUndo: () => {},
@@ -475,7 +475,9 @@ describe("the panel's Layers section", () => {
       "Export and save-back write the flattened composite, not the layers",
     );
     // The PSD lane's exact condition.
-    expect(LAYERS_SCOPE_NOTE).toContain("8- or 16-bit RGB, with no groups and no layer masks");
+    expect(LAYERS_SCOPE_NOTE).toContain(
+      "8- or 16-bit RGB, with no groups and no layer masks",
+    );
     expect(LAYERS_SCOPE_NOTE).toContain("says why");
   });
 });
@@ -543,7 +545,7 @@ describe("the layer row's clip toggle", () => {
         onUngroup: () => {},
         onGroupVisible: () => {},
         onGroupOpacity: () => {},
-      onGroupPassThrough: () => {},
+        onGroupPassThrough: () => {},
         onMaskClear: () => {},
         onBake: () => {},
         onUndo: () => {},

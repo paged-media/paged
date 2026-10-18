@@ -71,7 +71,16 @@ import { MoveSection } from "./sections/move-section";
 import { PatternSection } from "./sections/pattern-section";
 import { SmartObjectSection } from "./sections/smart-object-section";
 import { About, Section } from "./sections/disclosure";
-import { actionBar, kicker, mono, note, panelTitle, row, sectionTitle, swatch } from "./sections/styles";
+import {
+  actionBar,
+  kicker,
+  mono,
+  note,
+  panelTitle,
+  row,
+  sectionTitle,
+  swatch,
+} from "./sections/styles";
 
 interface SliderSpec {
   label: string;
@@ -483,7 +492,10 @@ export const LAYERS_SCOPE_NOTE =
  * composite, so a file with more than one layer is flattened to one when
  * they are set: the note must not promise the layers then.
  */
-export function psdLayersNote(params: AdjustParams, layerCount: number): string {
+export function psdLayersNote(
+  params: AdjustParams,
+  layerCount: number,
+): string {
   if (!isIdentity(params) && layerCount > 1) {
     return (
       "While adjustments are set, the PSD export writes the adjusted image " +
@@ -530,10 +542,13 @@ export function BrushSection({
       c.rgba[3] === brush.color[3],
   );
   return (
-    <Section title={`Brush${masked ? ", clipped to the selection" : ""}`} data-image-brush-section>
+    <Section
+      title={`Brush${masked ? ", clipped to the selection" : ""}`}
+      data-image-brush-section
+    >
       <div style={note}>
-        Settings for the paint, pencil and eraser tools; size, hardness,
-        opacity and flow are also in the tool options bar.
+        Settings for the paint, pencil and eraser tools; size, hardness, opacity
+        and flow are also in the tool options bar.
       </div>
       <Slider
         label="Size (px)"
@@ -612,7 +627,9 @@ export function BrushSection({
             value={colorIndex < 0 ? 0 : colorIndex}
             disabled={disabled}
             onChange={(e) =>
-              onChange({ color: [...BRUSH_COLORS[Number(e.target.value)].rgba] })
+              onChange({
+                color: [...BRUSH_COLORS[Number(e.target.value)].rgba],
+              })
             }
           >
             {BRUSH_COLORS.map((c, i) => (
@@ -658,12 +675,14 @@ export function BrushSection({
           Painting needs WebGPU, so the paint tools are disabled here.
         </div>
       ) : null}
-      <div style={note}>Strokes paint the active layer, and Undo takes them back.</div>
+      <div style={note}>
+        Strokes paint the active layer, and Undo takes them back.
+      </div>
       <About>
         <p data-image-brush-note>{BRUSH_SCOPE_NOTE}</p>
         <p>
-          The colours are a shortlist, and the blend list comes from the
-          engine itself. Settings are fixed for a stroke when it starts.
+          The colours are a shortlist, and the blend list comes from the engine
+          itself. Settings are fixed for a stroke when it starts.
         </p>
       </About>
     </Section>
@@ -687,7 +706,9 @@ export function TypeSection({
 }: {
   type: { text: string; family: string; sizePx: number };
   disabled: boolean;
-  onChange: (patch: Partial<{ text: string; family: string; sizePx: number }>) => void;
+  onChange: (
+    patch: Partial<{ text: string; family: string; sizePx: number }>,
+  ) => void;
 }) {
   return (
     <Section title="Type" data-image-type-section>
@@ -724,24 +745,24 @@ export function TypeSection({
         onChange={(sizePx) => onChange({ sizePx })}
       />
       <div style={note} data-image-type-note>
-        Click the canvas to set the baseline and paint the text as pixels in
-        the brush colour; the Character panel styles it.
+        Click the canvas to set the baseline and paint the text as pixels in the
+        brush colour; the Character panel styles it.
       </div>
       <About>
         <p>
-          Glyphs are shaped by the font&apos;s own tables — joining,
-          reordering, ligatures and kerning. Only fonts the document already
-          embeds can be used, and nothing is fetched from the network. A
-          character with no glyph in the chosen face is reported and left
-          undrawn rather than replaced with a box.
+          Glyphs are shaped by the font&apos;s own tables — joining, reordering,
+          ligatures and kerning. Only fonts the document already embeds can be
+          used, and nothing is fetched from the network. A character with no
+          glyph in the chosen face is reported and left undrawn rather than
+          replaced with a box.
         </p>
         <p>
           This paints pixels, not a text object. The Character panel applies
-          family, style, size, tracking, leading, case, scale, slant,
-          baseline shift, super/subscript, underline, strikethrough,
-          ligatures and line alignment. Anything that needs a text column —
-          wrapping, indents, hyphenation — is absent: a line ends where you
-          end it. For live, editable, wrapping text use a text frame.
+          family, style, size, tracking, leading, case, scale, slant, baseline
+          shift, super/subscript, underline, strikethrough, ligatures and line
+          alignment. Anything that needs a text column — wrapping, indents,
+          hyphenation — is absent: a line ends where you end it. For live,
+          editable, wrapping text use a text frame.
         </p>
       </About>
     </Section>
@@ -794,15 +815,14 @@ export function RetouchSection({
       </div>
       <About>
         <p>
-          The source survives between strokes, and Aligned keeps a fixed
-          offset from the cursor so the copy moves with it instead of
-          repeating.
+          The source survives between strokes, and Aligned keeps a fixed offset
+          from the cursor so the copy moves with it instead of repeating.
         </p>
         <p data-image-heal-limit>
           The healing brush fits its correction to the mismatch around the
-          dab&apos;s edge, so it follows a ramp instead of shifting the patch
-          by one number. Where the sampled area runs off the image there is no
-          edge to fit, and it falls back to a plain clone.
+          dab&apos;s edge, so it follows a ramp instead of shifting the patch by
+          one number. Where the sampled area runs off the image there is no edge
+          to fit, and it falls back to a plain clone.
         </p>
       </About>
       <div style={row}>
@@ -889,8 +909,8 @@ export function PathsSection({
         </button>
       </div>
       <div style={note}>
-        Turns the selection into a vector shape on the page, or a selected
-        shape back into a selection.
+        Turns the selection into a vector shape on the page, or a selected shape
+        back into a selection.
       </div>
       <About>
         <p>
@@ -900,8 +920,8 @@ export function PathsSection({
           paths.
         </p>
         <p>
-          The trace follows pixel edges and its corners carry no handles;
-          smooth it with the Pen once it is a path.
+          The trace follows pixel edges and its corners carry no handles; smooth
+          it with the Pen once it is a path.
         </p>
       </About>
     </Section>
@@ -932,7 +952,9 @@ export function ChannelsSection({
   return (
     <Section title="Channels" data-image-channels-section>
       {channels === null ? (
-        <div style={note}>Choose Use selected frame to read the image&apos;s channels.</div>
+        <div style={note}>
+          Choose Use selected frame to read the image&apos;s channels.
+        </div>
       ) : (
         <>
           <div data-image-channels>
@@ -956,7 +978,8 @@ export function ChannelsSection({
             ))}
           </div>
           <div style={note}>
-            Click a channel to load it as the selection, replacing the current one.
+            Click a channel to load it as the selection, replacing the current
+            one.
           </div>
           <About>
             <p>
@@ -965,9 +988,9 @@ export function ChannelsSection({
               Rec.709 luminance, the usual luminosity mask.
             </p>
             <p>
-              Viewing one channel on its own is not offered: the frame shows
-              the composited image, and faking a channel view would mean
-              writing a greyscale image into the document.
+              Viewing one channel on its own is not offered: the frame shows the
+              composited image, and faking a channel view would mean writing a
+              greyscale image into the document.
             </p>
           </About>
         </>
@@ -1035,7 +1058,12 @@ export function BrushPresetsSection({
     <>
       <div style={sectionTitle}>Brush presets</div>
       <div style={row}>
-        <button type="button" data-image-abr-load onClick={onLoad} disabled={disabled}>
+        <button
+          type="button"
+          data-image-abr-load
+          onClick={onLoad}
+          disabled={disabled}
+        >
           Load .abr…
         </button>
         {library ? (
@@ -1051,13 +1079,15 @@ export function BrushPresetsSection({
             <span style={mono} data-image-abr-summary>
               v{library.version}.{library.minorVersion} · {library.presetCount}{" "}
               preset{library.presetCount === 1 ? "" : "s"}
-              {library.sampleCount > 0 ? ` · ${library.sampleCount} bitmap` : ""}
+              {library.sampleCount > 0
+                ? ` · ${library.sampleCount} bitmap`
+                : ""}
             </span>
           </div>
           {library.presetCount === 0 ? (
             <div style={note}>
-              The library parsed and contains no presets — a real state, and
-              not the same as a file that failed to read.
+              The library parsed and contains no presets — a real state, and not
+              the same as a file that failed to read.
             </div>
           ) : null}
           <div data-image-abr-presets>
@@ -1099,8 +1129,8 @@ export function BrushPresetsSection({
         </>
       ) : (
         <div style={note}>
-          No library loaded. Photoshop `.abr` files carry brush parameters,
-          not pixels — loading one changes nothing until a preset is applied.
+          No library loaded. Photoshop `.abr` files carry brush parameters, not
+          pixels — loading one changes nothing until a preset is applied.
         </div>
       )}
     </>
@@ -1213,7 +1243,9 @@ export function LayersSection({
       data-image-layers-section
     >
       {layers.length === 0 ? (
-        <div style={note}>Choose Use selected frame to open the image&apos;s layers.</div>
+        <div style={note}>
+          Choose Use selected frame to open the image&apos;s layers.
+        </div>
       ) : (
         <div style={note}>
           While you edit the image, the Layers panel and Image properties show
@@ -1231,7 +1263,10 @@ export function LayersSection({
             ? (() => {
                 const g = groups.find((x) => x.id === l.group);
                 return g ? (
-                  <div style={{ ...row, fontWeight: 600 }} data-image-group-row={g.id}>
+                  <div
+                    style={{ ...row, fontWeight: 600 }}
+                    data-image-group-row={g.id}
+                  >
                     <input
                       type="checkbox"
                       data-image-group-visible={g.id}
@@ -1277,222 +1312,228 @@ export function LayersSection({
                 ) : null;
               })()
             : null}
-        <div
-          data-image-layer-row={l.index}
-          style={{
-            ...row,
-            paddingLeft: l.group !== null ? "var(--space-3, 12px)" : undefined,
-            background:
-              l.index === active
-                ? "var(--pg-accent-soft, rgba(127,127,255,0.12))"
-                : undefined,
-          }}
-        >
-          <span
+          <div
+            data-image-layer-row={l.index}
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-              minWidth: 0,
+              ...row,
+              paddingLeft:
+                l.group !== null ? "var(--space-3, 12px)" : undefined,
+              background:
+                l.index === active
+                  ? "var(--pg-accent-soft, rgba(127,127,255,0.12))"
+                  : undefined,
             }}
           >
-            <input
-              type="checkbox"
-              title="Visible"
-              data-image-layer-visible={l.index}
-              checked={l.visible}
-              disabled={disabled}
-              onChange={(e) => onVisible(l.index, e.target.checked)}
-            />
-            <button
-              type="button"
-              data-image-layer-select={l.index}
-              disabled={disabled}
-              onClick={() => onSelect(l.index)}
+            <span
               style={{
-                font: "12px var(--font-sans, sans-serif)",
-                fontWeight: l.index === active ? 600 : 400,
-                background: "none",
-                border: "none",
-                padding: 0,
-                cursor: "pointer",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                minWidth: 0,
               }}
             >
-              {l.name}
-              {l.index === active ? " ●" : ""}
-            </button>
-          </span>
-          <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <select
-              data-image-layer-blend={l.index}
-              value={l.blend}
-              disabled={disabled || blendModes.length === 0}
-              title="Blend mode"
-              onChange={(e) => onBlend(l.index, e.target.value)}
-              style={{
-                font: "11px var(--font-sans, sans-serif)",
-                maxWidth: 96,
-              }}
-            >
-              {(blendModes.length > 0 ? blendModes : [l.blend]).map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              title="Opacity"
-              data-image-layer-opacity={l.index}
-              value={l.opacity}
-              disabled={disabled}
-              onChange={(e) => onOpacity(l.index, Number(e.target.value))}
-              style={{ width: 56 }}
-            />
-            <input
-              type="checkbox"
-              title="Lock pixels (paint, fills and bakes refuse; properties still move)"
-              data-image-layer-lock={l.index}
-              checked={l.locked}
-              disabled={disabled}
-              onChange={(e) => onLock(l.index, e.target.checked)}
-            />
-            {/* MASK. Three states in two controls, because "no mask",
+              <input
+                type="checkbox"
+                title="Visible"
+                data-image-layer-visible={l.index}
+                checked={l.visible}
+                disabled={disabled}
+                onChange={(e) => onVisible(l.index, e.target.checked)}
+              />
+              <button
+                type="button"
+                data-image-layer-select={l.index}
+                disabled={disabled}
+                onClick={() => onSelect(l.index)}
+                style={{
+                  font: "12px var(--font-sans, sans-serif)",
+                  fontWeight: l.index === active ? 600 : 400,
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  cursor: "pointer",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {l.name}
+                {l.index === active ? " ●" : ""}
+              </button>
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <select
+                data-image-layer-blend={l.index}
+                value={l.blend}
+                disabled={disabled || blendModes.length === 0}
+                title="Blend mode"
+                onChange={(e) => onBlend(l.index, e.target.value)}
+                style={{
+                  font: "11px var(--font-sans, sans-serif)",
+                  maxWidth: 96,
+                }}
+              >
+                {(blendModes.length > 0 ? blendModes : [l.blend]).map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                title="Opacity"
+                data-image-layer-opacity={l.index}
+                value={l.opacity}
+                disabled={disabled}
+                onChange={(e) => onOpacity(l.index, Number(e.target.value))}
+                style={{ width: 56 }}
+              />
+              <input
+                type="checkbox"
+                title="Lock pixels (paint, fills and bakes refuse; properties still move)"
+                data-image-layer-lock={l.index}
+                checked={l.locked}
+                disabled={disabled}
+                onChange={(e) => onLock(l.index, e.target.checked)}
+              />
+              {/* MASK. Three states in two controls, because "no mask",
                 "masked" and "masked but disabled" are genuinely
                 different and collapsing them would lose the one users
                 rely on: a disabled mask KEEPS its coverage. */}
-            {l.hasMask ? (
-              <>
-                {/* THE EDIT TARGET: pixels or mask. Photoshop's two
+              {l.hasMask ? (
+                <>
+                  {/* THE EDIT TARGET: pixels or mask. Photoshop's two
                     thumbnails, as one toggle — bold M means the paint
                     tools write the mask of this (active) layer. */}
-                <button
-                  type="button"
-                  title={
-                    l.index === active && editTarget === "mask"
-                      ? "Painting the MASK (brush = foreground grey, eraser reveals) — click to paint the pixels"
-                      : "Paint this layer's mask instead of its pixels"
-                  }
-                  data-image-layer-edit-target={l.index}
-                  data-target={l.index === active ? editTarget : "pixels"}
-                  disabled={disabled || !onEditTarget}
-                  onClick={() =>
-                    onEditTarget?.(
-                      l.index,
-                      l.index === active && editTarget === "mask" ? "pixels" : "mask",
-                    )
-                  }
-                  style={{
-                    fontWeight: l.index === active && editTarget === "mask" ? 700 : undefined,
-                  }}
-                >
-                  M
-                </button>
-                <input
-                  type="checkbox"
-                  title={
-                    l.maskEnabled
-                      ? "Mask is applying — uncheck to disable it (the coverage is kept)"
-                      : "Mask is disabled but retained — check to apply it again"
-                  }
-                  data-image-layer-mask={l.index}
-                  checked={l.maskEnabled}
-                  disabled={disabled}
-                  onChange={(e) => onMaskToggle(l.index, e.target.checked)}
-                />
-                <button
-                  type="button"
-                  title="Delete this layer's mask (the coverage is lost)"
-                  data-image-layer-mask-clear={l.index}
-                  disabled={disabled}
-                  onClick={() => onMaskClear(l.index)}
-                >
-                  ⌫
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  title="Make the current selection this layer's mask"
-                  data-image-layer-mask-add={l.index}
-                  disabled={disabled}
-                  onClick={() => onMaskFromSelection(l.index)}
-                >
-                  ⬚
-                </button>
-                <button
-                  type="button"
-                  title="Add layer mask — reveal all (Alt-click: hide all)"
-                  data-image-layer-mask-new={l.index}
-                  disabled={disabled || !onAddMask}
-                  onClick={(e) => onAddMask?.(l.index, !e.altKey)}
-                >
-                  ◐
-                </button>
-              </>
-            )}
-            <button
-              type="button"
-              title={
-                l.clipped
-                  ? "Clipped to the layer below — click to release"
-                  : "Clip to the layer below (an adjustment clipped to a smart object is a smart filter)"
-              }
-              data-image-layer-clip={l.index}
-              disabled={disabled || l.index === 0}
-              onClick={() => onClip(l.index, !l.clipped)}
-              style={{ fontWeight: l.clipped ? 700 : undefined }}
-            >
-              ⌐
-            </button>
-            <button
-              type="button"
-              title="Move up"
-              data-image-layer-up={l.index}
-              disabled={disabled || l.index === layers.length - 1}
-              onClick={() => onMove(l.index, l.index + 1)}
-            >
-              ↑
-            </button>
-            <button
-              type="button"
-              title="Move down"
-              data-image-layer-down={l.index}
-              disabled={disabled || l.index === 0}
-              onClick={() => onMove(l.index, l.index - 1)}
-            >
-              ↓
-            </button>
-            <button
-              type="button"
-              title="Duplicate"
-              data-image-layer-duplicate={l.index}
-              disabled={disabled}
-              onClick={() => onDuplicate(l.index)}
-            >
-              ⧉
-            </button>
-            <button
-              type="button"
-              title={
-                multi
-                  ? "Remove layer (Undo brings it back)"
-                  : "A document keeps at least one layer"
-              }
-              data-image-layer-remove={l.index}
-              disabled={disabled || !multi}
-              onClick={() => onRemove(l.index)}
-            >
-              ✕
-            </button>
-          </span>
-        </div>
+                  <button
+                    type="button"
+                    title={
+                      l.index === active && editTarget === "mask"
+                        ? "Painting the MASK (brush = foreground grey, eraser reveals) — click to paint the pixels"
+                        : "Paint this layer's mask instead of its pixels"
+                    }
+                    data-image-layer-edit-target={l.index}
+                    data-target={l.index === active ? editTarget : "pixels"}
+                    disabled={disabled || !onEditTarget}
+                    onClick={() =>
+                      onEditTarget?.(
+                        l.index,
+                        l.index === active && editTarget === "mask"
+                          ? "pixels"
+                          : "mask",
+                      )
+                    }
+                    style={{
+                      fontWeight:
+                        l.index === active && editTarget === "mask"
+                          ? 700
+                          : undefined,
+                    }}
+                  >
+                    M
+                  </button>
+                  <input
+                    type="checkbox"
+                    title={
+                      l.maskEnabled
+                        ? "Mask is applying — uncheck to disable it (the coverage is kept)"
+                        : "Mask is disabled but retained — check to apply it again"
+                    }
+                    data-image-layer-mask={l.index}
+                    checked={l.maskEnabled}
+                    disabled={disabled}
+                    onChange={(e) => onMaskToggle(l.index, e.target.checked)}
+                  />
+                  <button
+                    type="button"
+                    title="Delete this layer's mask (the coverage is lost)"
+                    data-image-layer-mask-clear={l.index}
+                    disabled={disabled}
+                    onClick={() => onMaskClear(l.index)}
+                  >
+                    ⌫
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    title="Make the current selection this layer's mask"
+                    data-image-layer-mask-add={l.index}
+                    disabled={disabled}
+                    onClick={() => onMaskFromSelection(l.index)}
+                  >
+                    ⬚
+                  </button>
+                  <button
+                    type="button"
+                    title="Add layer mask — reveal all (Alt-click: hide all)"
+                    data-image-layer-mask-new={l.index}
+                    disabled={disabled || !onAddMask}
+                    onClick={(e) => onAddMask?.(l.index, !e.altKey)}
+                  >
+                    ◐
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                title={
+                  l.clipped
+                    ? "Clipped to the layer below — click to release"
+                    : "Clip to the layer below (an adjustment clipped to a smart object is a smart filter)"
+                }
+                data-image-layer-clip={l.index}
+                disabled={disabled || l.index === 0}
+                onClick={() => onClip(l.index, !l.clipped)}
+                style={{ fontWeight: l.clipped ? 700 : undefined }}
+              >
+                ⌐
+              </button>
+              <button
+                type="button"
+                title="Move up"
+                data-image-layer-up={l.index}
+                disabled={disabled || l.index === layers.length - 1}
+                onClick={() => onMove(l.index, l.index + 1)}
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                title="Move down"
+                data-image-layer-down={l.index}
+                disabled={disabled || l.index === 0}
+                onClick={() => onMove(l.index, l.index - 1)}
+              >
+                ↓
+              </button>
+              <button
+                type="button"
+                title="Duplicate"
+                data-image-layer-duplicate={l.index}
+                disabled={disabled}
+                onClick={() => onDuplicate(l.index)}
+              >
+                ⧉
+              </button>
+              <button
+                type="button"
+                title={
+                  multi
+                    ? "Remove layer (Undo brings it back)"
+                    : "A document keeps at least one layer"
+                }
+                data-image-layer-remove={l.index}
+                disabled={disabled || !multi}
+                onClick={() => onRemove(l.index)}
+              >
+                ✕
+              </button>
+            </span>
+          </div>
         </Fragment>
       ))}
       {groups.length > 0 ? (
@@ -1500,8 +1541,8 @@ export function LayersSection({
           Groups pass through by default, as in Photoshop.
           <About>
             A pass-through group&apos;s members composite straight into the
-            stack below, so an adjustment inside reaches everything beneath
-            it. Switch it to isolated and the members composite into their own
+            stack below, so an adjustment inside reaches everything beneath it.
+            Switch it to isolated and the members composite into their own
             buffer first — that makes group opacity fade the result rather than
             each member, and confines an adjustment to its group. Opacity below
             100% forces isolation either way. Groups nest up to eight deep.
@@ -1641,8 +1682,8 @@ export function LayersSection({
       ) : null}
       {!gpu && layers.length > 1 ? (
         <div style={note}>
-          Compositing more than one layer needs WebGPU; without it only a
-          single visible layer at full opacity in Normal mode can be shown.
+          Compositing more than one layer needs WebGPU; without it only a single
+          visible layer at full opacity in Normal mode can be shown.
         </div>
       ) : null}
       <About>
@@ -1659,7 +1700,12 @@ export function makeImagePanel(session: ImageSession) {
     const [curveChannel, setCurveChannel] = useState<CurveChannel>("rgb");
     const [curvePointsBy, setCurvePointsBy] = useState<
       Record<CurveChannel, Array<[number, number]>>
-    >({ rgb: IDENTITY_CURVE, r: IDENTITY_CURVE, g: IDENTITY_CURVE, b: IDENTITY_CURVE });
+    >({
+      rgb: IDENTITY_CURVE,
+      r: IDENTITY_CURVE,
+      g: IDENTITY_CURVE,
+      b: IDENTITY_CURVE,
+    });
     const curvePoints = curvePointsBy[curveChannel];
     const [aspect, setAspect] = useState<AspectPreset>("free");
     const [angle, setAngle] = useState(0);
@@ -1698,7 +1744,11 @@ export function makeImagePanel(session: ImageSession) {
     useEffect(() => {
       setResizeW(s.source?.width ?? 0);
       setResizeH(s.source?.height ?? 0);
-      setCanvasSize((c) => ({ ...c, width: s.source?.width ?? 0, height: s.source?.height ?? 0 }));
+      setCanvasSize((c) => ({
+        ...c,
+        width: s.source?.width ?? 0,
+        height: s.source?.height ?? 0,
+      }));
     }, [s.source?.handle, s.source?.width, s.source?.height]);
     // A NEW image starts from identity in the session (its params are
     // reset on ingest), so the pickers this panel keeps for itself follow:
@@ -1845,17 +1895,23 @@ export function makeImagePanel(session: ImageSession) {
               a stated reason there is none. Addressable so a journey can
               assert the app answered at all: silence here is what an
               unhandled throw looks like from the outside. */}
-          <div style={{ ...note, opacity: 0.85 }} data-image-status role="status">
+          <div
+            style={{ ...note, opacity: 0.85 }}
+            data-image-status
+            role="status"
+          >
             {s.status}
           </div>
           {s.engine === "ready" && !s.gpu ? (
             <div style={note} data-image-no-gpu>
-              WebGPU is not available here, so adjustments, filters and painting are disabled.
+              WebGPU is not available here, so adjustments, filters and painting
+              are disabled.
             </div>
           ) : null}
           {s.engine === "unavailable" ? (
             <div style={note} data-image-engine-unavailable>
-              The image engine could not start. Diagnostics, at the bottom of the panel, has the reason.
+              The image engine could not start. Diagnostics, at the bottom of
+              the panel, has the reason.
             </div>
           ) : null}
         </div>
@@ -1894,8 +1950,8 @@ export function makeImagePanel(session: ImageSession) {
               The conversion follows Photoshop&apos;s default view: relative
               colorimetric with black-point compensation, approximated by the
               profile&apos;s perceptual table. Layers that use a blend mode
-              other than Normal are not imported, because Photoshop blends
-              them in CMYK.
+              other than Normal are not imported, because Photoshop blends them
+              in CMYK.
             </About>
           </div>
         ) : null}
@@ -1913,7 +1969,8 @@ export function makeImagePanel(session: ImageSession) {
         ) : null}
         {s.source?.depthReduced ? (
           <div style={note}>
-            Layers, edits and save-back work in 8 bits, so the extra precision is not kept.
+            Layers, edits and save-back work in 8 bits, so the extra precision
+            is not kept.
           </div>
         ) : null}
 
@@ -1922,7 +1979,9 @@ export function makeImagePanel(session: ImageSession) {
         {s.histogram ? (
           <HistogramView hist={s.histogram} />
         ) : (
-          <div style={note}>Choose Use selected frame to see the histogram.</div>
+          <div style={note}>
+            Choose Use selected frame to see the histogram.
+          </div>
         )}
         <div
           style={{
@@ -2451,7 +2510,10 @@ export function makeImagePanel(session: ImageSession) {
                 </option>
               ))}
             </select>
-            <span style={swatch(stopCss(STOPS[stop0].rgba))} aria-hidden="true" />
+            <span
+              style={swatch(stopCss(STOPS[stop0].rgba))}
+              aria-hidden="true"
+            />
             <select
               data-image-gradient-stop0
               value={stop0}
@@ -2465,7 +2527,10 @@ export function makeImagePanel(session: ImageSession) {
                 </option>
               ))}
             </select>
-            <span style={swatch(stopCss(STOPS[stop1].rgba))} aria-hidden="true" />
+            <span
+              style={swatch(stopCss(STOPS[stop1].rgba))}
+              aria-hidden="true"
+            />
             <select
               data-image-gradient-stop1
               value={stop1}
@@ -2552,7 +2617,9 @@ export function makeImagePanel(session: ImageSession) {
         <MoveSection
           session={session}
           hasSelection={!!s.selection && s.selection.w > 0}
-          size={s.source ? { width: s.source.width, height: s.source.height } : null}
+          size={
+            s.source ? { width: s.source.width, height: s.source.height } : null
+          }
           gpu={s.gpu}
           disabled={disabled}
         />
@@ -2852,7 +2919,9 @@ export function makeImagePanel(session: ImageSession) {
             data-image-texturizer
             disabled={s.busy || !s.gpu || !s.source}
             title="Procedural surface texture modulating shading; kind picks Canvas / Burlap / Brick rather than a kernel per material."
-            onClick={() => void session.galleryTexturizer(1, 0, 24, 0.6, 135, 1)}
+            onClick={() =>
+              void session.galleryTexturizer(1, 0, 24, 0.6, 135, 1)
+            }
           >
             Texturizer
           </button>
@@ -2923,11 +2992,11 @@ export function makeImagePanel(session: ImageSession) {
           </button>
         </div>
         <div style={note}>
-          One-click defaults, not a parameter surface: each of these is a
-          single kernel and every one has an identity setting, so a slider
-          adds nothing a designer cannot get by applying twice. Emboss and
-          find edges share one 3&times;3 neighbourhood read; the two radial
-          modes are one kernel, where zoom is the degenerate arc.
+          One-click defaults, not a parameter surface: each of these is a single
+          kernel and every one has an identity setting, so a slider adds nothing
+          a designer cannot get by applying twice. Emboss and find edges share
+          one 3&times;3 neighbourhood read; the two radial modes are one kernel,
+          where zoom is the degenerate arc.
         </div>
 
         {/* LAYERS — the layer graph itself: order, visibility, opacity,
@@ -2979,7 +3048,11 @@ export function makeImagePanel(session: ImageSession) {
           onRedo={() => void session.redo()}
         />
 
-        <ColorSection session={session} colors={s.colors} gradientKind={s.gradientKind} />
+        <ColorSection
+          session={session}
+          colors={s.colors}
+          gradientKind={s.gradientKind}
+        />
 
         {/* BRUSH — the paint tools' frozen-at-pointer-down parameters
             (paged.image's RASTER brush/pencil/eraser, distinct from
@@ -3348,13 +3421,14 @@ export function makeImagePanel(session: ImageSession) {
           </>
         ) : (
           <div style={note}>
-            Writes the adjustments into a copy of the source file at full resolution.
+            Writes the adjustments into a copy of the source file at full
+            resolution.
             <About>
               A single-layer PSD gets its channel pixels written back; a
               multi-layer PSD is flattened into a new single-layer PSD, and the
-              panel says so. A PNG or JPEG is re-encoded. Save… hands the
-              result to the editor&apos;s file saver; where there is none, the
-              Export Center delivers the same bytes.
+              panel says so. A PNG or JPEG is re-encoded. Save… hands the result
+              to the editor&apos;s file saver; where there is none, the Export
+              Center delivers the same bytes.
             </About>
           </div>
         )}
@@ -3362,7 +3436,10 @@ export function makeImagePanel(session: ImageSession) {
         {/* DIAGNOSTICS — the developer readout (bundle, engine, source),
             collapsed at the bottom. The Source row keeps its exact
             span/span shape: journeys read it by text. */}
-        <details style={{ ...note, marginTop: "var(--space-3, 12px)" }} data-image-diagnostics>
+        <details
+          style={{ ...note, marginTop: "var(--space-3, 12px)" }}
+          data-image-diagnostics
+        >
           <summary style={{ cursor: "pointer" }}>Diagnostics</summary>
           <div style={row}>
             <span>Bundle</span>
@@ -3387,8 +3464,8 @@ export function makeImagePanel(session: ImageSession) {
             Apply shows a preview layer in the frame; the document and the
             placed file stay unchanged until Apply to file. A crop cuts the
             image itself, straightening first when the angle is not zero
-            (straightening needs WebGPU). The paint tools preview every
-            pointer sample; the adjustment sliders preview when Live is on.
+            (straightening needs WebGPU). The paint tools preview every pointer
+            sample; the adjustment sliders preview when Live is on.
           </p>
         </details>
       </div>

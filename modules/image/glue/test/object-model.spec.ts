@@ -16,13 +16,24 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, beforeAll, describe, expect, it } from "bun:test";
-import { createHeadlessHost, defineBundle, type HeadlessHost } from "@paged-media/plugin-sdk";
+import {
+  createHeadlessHost,
+  defineBundle,
+  type HeadlessHost,
+} from "@paged-media/plugin-sdk";
 import type { BundleHost, PluginManifest } from "@paged-media/plugin-api";
 
 import { imageBundle } from "../src/index";
-import { bootEngine, freshIdentityParams, type ImageEngine } from "../src/engine";
+import {
+  bootEngine,
+  freshIdentityParams,
+  type ImageEngine,
+} from "../src/engine";
 import manifestJson from "../manifest.json";
-import { contributeImageObjectModel, engineCodec } from "../src/object-model/contribute";
+import {
+  contributeImageObjectModel,
+  engineCodec,
+} from "../src/object-model/contribute";
 import { readPgil, writePgil } from "../src/object-model/pgil";
 import { readAdjust } from "../src/object-model/adjust";
 import { IMAGE_PANEL_FIELDS } from "../src/panels/properties-panel";
@@ -38,7 +49,9 @@ const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 const HERE = dirname(fileURLToPath(import.meta.url));
 const built = existsSync(join(HERE, "..", "wasm", "image_js_bg.wasm"));
 if (process.env.REQUIRE_REAL_WASM === "1" && !built) {
-  throw new Error("REQUIRE_REAL_WASM=1 but glue/wasm/image_js_bg.wasm is missing");
+  throw new Error(
+    "REQUIRE_REAL_WASM=1 but glue/wasm/image_js_bg.wasm is missing",
+  );
 }
 const lane = built ? describe : describe.skip;
 
@@ -59,36 +72,57 @@ afterEach(() => {
 });
 
 /** A W×H straight-RGBA8 image of one colour. */
-const solid = (w: number, h: number, rgba: [number, number, number, number]) => {
+const solid = (
+  w: number,
+  h: number,
+  rgba: [number, number, number, number],
+) => {
   const px = new Uint8Array(w * h * 4);
   for (let i = 0; i < w * h; i++) px.set(rgba, i * 4);
   return px;
 };
-const png = (w: number, h: number, rgba: [number, number, number, number]) => engine.encode(solid(w, h, rgba), w, h, "png");
-const dataUrl = (bytes: Uint8Array) => `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`;
+const png = (w: number, h: number, rgba: [number, number, number, number]) =>
+  engine.encode(solid(w, h, rgba), w, h, "png");
+const dataUrl = (bytes: Uint8Array) =>
+  `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`;
 const decode = (bytes: Uint8Array) => {
   const d = engine.decode(bytes);
   try {
-    return { w: d.width, h: d.height, px: engine.tile(d.handle, 0, 0, d.width, d.height) };
+    return {
+      w: d.width,
+      h: d.height,
+      px: engine.tile(d.handle, 0, 0, d.width, d.height),
+    };
   } finally {
     engine.freeImage(d.handle);
   }
 };
 
 /** A document with one 4×4 grey image placed in the rectangle `urect`. */
-async function imageDoc(bundle = imageBundle, opts: { capabilityMode?: "warn" } = {}) {
-  const h = (live = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR, console: silent, ...opts }));
+async function imageDoc(
+  bundle = imageBundle,
+  opts: { capabilityMode?: "warn" } = {},
+) {
+  const h = (live = await createHeadlessHost({
+    resolveFrom: ENGINE_ANCHOR,
+    console: silent,
+    ...opts,
+  }));
   await h.load(minimalIdml());
   h.loadBundle(bundle);
   const out = await h.host.document.mutate({
     op: "replaceImageBytes",
-    args: { elementId: FRAME, bytes: Array.from(png(4, 4, [128, 128, 128, 255])) },
+    args: {
+      elementId: FRAME,
+      bytes: Array.from(png(4, 4, [128, 128, 128, 255])),
+    },
   } as never);
   expect(out.applied).toBe(true);
   return h;
 }
 
-const placedSha = async (h: HeadlessHost) => sha256Hex((await h.host.assets.getPlacedImage(FRAME))!.bytes);
+const placedSha = async (h: HeadlessHost) =>
+  sha256Hex((await h.host.assets.getPlacedImage(FRAME))!.bytes);
 
 lane("the PGIL codec is the engine's", () => {
   it("re-encodes a real engine export byte for byte, every layer kind included", async () => {
@@ -114,12 +148,18 @@ lane("the PGIL codec is the engine's", () => {
       ]);
       expect(stack.layers[1]!.blend).toBe("compose.multiply");
       expect(readAdjust(stack.layers[2]!.adjust!, "exposure.ev")).toBe(0.5);
-      expect(readAdjust(stack.layers[2]!.adjust!, "posterize.enabled")).toBe(true);
+      expect(readAdjust(stack.layers[2]!.adjust!, "posterize.enabled")).toBe(
+        true,
+      );
       expect(readAdjust(stack.layers[2]!.adjust!, "posterize.levels")).toBe(4);
       const again = writePgil(stack);
       expect(again.length).toBe(buffers.length + 1);
       expect(Buffer.from(again[0]!).equals(Buffer.from(manifest!))).toBe(true);
-      again.slice(1).forEach((b, i) => expect(Buffer.from(b).equals(Buffer.from(buffers[i]!))).toBe(true));
+      again
+        .slice(1)
+        .forEach((b, i) =>
+          expect(Buffer.from(b).equals(Buffer.from(buffers[i]!))).toBe(true),
+        );
     } finally {
       engine.layersClose();
       engine.freeImage(img.handle);
@@ -130,27 +170,56 @@ lane("the PGIL codec is the engine's", () => {
 lane("the object model on the real plugin, headless", () => {
   it("registers five kinds with schemas and a typed twin of every command", async () => {
     const h = await imageDoc();
-    const kinds = (await h.objects.kinds()).filter((k) => k.owner === "media.paged.image").map((k) => k.kind);
-    expect(kinds).toEqual([`${P}/image`, `${P}/layer`, `${P}/mask`, `${P}/adjustment`, `${P}/smartObject`]);
+    const kinds = (await h.objects.kinds())
+      .filter((k) => k.owner === "media.paged.image")
+      .map((k) => k.kind);
+    expect(kinds).toEqual([
+      `${P}/image`,
+      `${P}/layer`,
+      `${P}/mask`,
+      `${P}/adjustment`,
+      `${P}/smartObject`,
+    ]);
     const adj = await h.objects.schema(`${P}/adjustment`);
     expect(adj.length).toBeGreaterThan(80);
-    expect(adj.find((r) => r.path === "exposure.ev")).toMatchObject({ type: { kind: "number" }, default: 0 });
+    expect(adj.find((r) => r.path === "exposure.ev")).toMatchObject({
+      type: { kind: "number" },
+      default: 0,
+    });
     const layer = await h.objects.schema(`${P}/layer`);
-    expect(layer.find((r) => r.path === "blendMode")!.type).toMatchObject({ kind: "enum" });
-    expect((await h.objects.commands()).filter((c) => c.owner === "media.paged.image")).toHaveLength(40);
+    expect(layer.find((r) => r.path === "blendMode")!.type).toMatchObject({
+      kind: "enum",
+    });
+    expect(
+      (await h.objects.commands()).filter(
+        (c) => c.owner === "media.paged.image",
+      ),
+    ).toHaveLength(40);
   });
 
   it("an unedited frame reads as its one Background layer", async () => {
     const h = await imageDoc();
-    expect(await h.objects.query(`${P}/image`)).toEqual([`${P}/image/${FRAME}`]);
-    expect(await h.objects.query(`${P}/layer`)).toEqual([`${P}/layer/${FRAME}/1`]);
+    expect(await h.objects.query(`${P}/image`)).toEqual([
+      `${P}/image/${FRAME}`,
+    ]);
+    expect(await h.objects.query(`${P}/layer`)).toEqual([
+      `${P}/layer/${FRAME}/1`,
+    ]);
     const L = `${P}/layer/${FRAME}/1`;
     expect(await h.objects.get(L, "name")).toEqual(value("Background"));
     expect(await h.objects.get(L, "opacity")).toEqual(value(100));
-    expect(await h.objects.get(`${P}/image/${FRAME}`, "width")).toEqual(value(4));
-    expect(await h.objects.get(`${P}/image/${FRAME}`, "revision")).toEqual(value(0));
+    expect(await h.objects.get(`${P}/image/${FRAME}`, "width")).toEqual(
+      value(4),
+    );
+    expect(await h.objects.get(`${P}/image/${FRAME}`, "revision")).toEqual(
+      value(0),
+    );
     // Scoped by its frame, and selected by name.
-    expect(await h.objects.query(`rectangle:${FRAME} > ${P}/layer[name="Background"]`)).toEqual([L]);
+    expect(
+      await h.objects.query(
+        `rectangle:${FRAME} > ${P}/layer[name="Background"]`,
+      ),
+    ).toEqual([L]);
   });
 
   it("set → get round-trips each layer property, one undo step each, and undo restores the frame", async () => {
@@ -169,13 +238,17 @@ lane("the object model on the real plugin, headless", () => {
       expect(r, path).toMatchObject({ applied: true, undoSteps: 1 });
       expect(await h.objects.get(L, path), path).toEqual(value(v));
     }
-    expect(await h.objects.get(`${P}/image/${FRAME}`, "revision")).toEqual(value(6));
+    expect(await h.objects.get(`${P}/image/${FRAME}`, "revision")).toEqual(
+      value(6),
+    );
     expect(await h.objects.query(`${P}/layer[name="Logo"]`)).toEqual([L]);
     // Six undos — one per write — land back on the untouched document.
     for (let i = 0; i < 6; i++) await h.host.document.undo();
     expect(await h.objects.get(L, "name")).toEqual(value("Background"));
     expect(await h.objects.get(L, "opacity")).toEqual(value(100));
-    expect(await h.objects.get(`${P}/image/${FRAME}`, "revision")).toEqual(value(0));
+    expect(await h.objects.get(`${P}/image/${FRAME}`, "revision")).toEqual(
+      value(0),
+    );
     expect(await placedSha(h)).toBe(before);
     // Redo walks forward again (the parts of every revision are kept).
     await h.host.document.redo();
@@ -190,32 +263,56 @@ lane("the object model on the real plugin, headless", () => {
     await h.objects.set(L, "visible", false);
     const hidden = decode((await h.host.assets.getPlacedImage(FRAME))!.bytes);
     expect(Array.from(hidden.px.subarray(0, 4))).toEqual([0, 0, 0, 0]);
-    expect(await h.objects.get(`${P}/image/${FRAME}`, "pending")).toEqual(value(false));
+    expect(await h.objects.get(`${P}/image/${FRAME}`, "pending")).toEqual(
+      value(false),
+    );
     await h.host.document.undo();
     expect(await placedSha(h)).toBe(before);
     // 40 % opacity is a blend (a GPU fold): the frame keeps its image.
     await h.objects.set(L, "opacity", 40);
     expect(await placedSha(h)).toBe(before);
-    expect(await h.objects.get(`${P}/image/${FRAME}`, "pending")).toEqual(value(true));
+    expect(await h.objects.get(`${P}/image/${FRAME}`, "pending")).toEqual(
+      value(true),
+    );
     expect(await h.objects.get(L, "opacity")).toEqual(value(40));
   });
 
   it("refuses values outside the schema, and read-only paths, without writing", async () => {
     const h = await imageDoc();
     const L = `${P}/layer/${FRAME}/1`;
-    expect(await h.objects.set(L, "opacity", 140)).toMatchObject({ applied: false, code: "invalidValue" });
-    expect(await h.objects.set(L, "blendMode", "plasma")).toMatchObject({ applied: false, code: "invalidValue" });
-    expect(await h.objects.set(L, "kind", "smart")).toMatchObject({ applied: false, code: "readOnly" });
-    expect(await h.objects.set(`${P}/layer/${FRAME}/9`, "name", "x")).toMatchObject({ applied: false });
-    expect(await h.objects.set(L, "pixelSource", "https://example.com/a.png")).toMatchObject({ applied: false });
-    expect(await h.objects.get(`${P}/image/${FRAME}`, "revision")).toEqual(value(0));
+    expect(await h.objects.set(L, "opacity", 140)).toMatchObject({
+      applied: false,
+      code: "invalidValue",
+    });
+    expect(await h.objects.set(L, "blendMode", "plasma")).toMatchObject({
+      applied: false,
+      code: "invalidValue",
+    });
+    expect(await h.objects.set(L, "kind", "smart")).toMatchObject({
+      applied: false,
+      code: "readOnly",
+    });
+    expect(
+      await h.objects.set(`${P}/layer/${FRAME}/9`, "name", "x"),
+    ).toMatchObject({ applied: false });
+    expect(
+      await h.objects.set(L, "pixelSource", "https://example.com/a.png"),
+    ).toMatchObject({ applied: false });
+    expect(await h.objects.get(`${P}/image/${FRAME}`, "revision")).toEqual(
+      value(0),
+    );
   });
 
   it("pixel replacement: bytes, a data: URL or a placed image, placed as is and centred", async () => {
     const h = await imageDoc();
     const L = `${P}/layer/${FRAME}/1`;
     const red = dataUrl(png(2, 2, [255, 0, 0, 255]));
-    expect(await h.objects.invoke("media.paged.image.command.replaceLayerPixels", { layer: L, source: red })).toMatchObject({
+    expect(
+      await h.objects.invoke("media.paged.image.command.replaceLayerPixels", {
+        layer: L,
+        source: red,
+      }),
+    ).toMatchObject({
       applied: true,
       undoSteps: 1,
     });
@@ -223,82 +320,150 @@ lane("the object model on the real plugin, headless", () => {
     expect(await h.objects.get(L, "pixelSource")).toEqual(value(red));
     // One plain layer: the frame shows exactly the replacement.
     const shown = decode((await h.host.assets.getPlacedImage(FRAME))!.bytes);
-    expect(Array.from(shown.px.subarray((1 * 4 + 1) * 4, (1 * 4 + 1) * 4 + 4))).toEqual([255, 0, 0, 255]);
+    expect(
+      Array.from(shown.px.subarray((1 * 4 + 1) * 4, (1 * 4 + 1) * 4 + 4)),
+    ).toEqual([255, 0, 0, 255]);
     expect(Array.from(shown.px.subarray(0, 4))).toEqual([0, 0, 0, 0]);
     // `content` takes bytes; reading it answers the layer as PNG.
-    expect(await h.objects.set(L, "content", png(4, 4, [0, 0, 255, 255]))).toMatchObject({ applied: true });
+    expect(
+      await h.objects.set(L, "content", png(4, 4, [0, 0, 255, 255])),
+    ).toMatchObject({ applied: true });
     const content = await h.objects.get(L, "content");
-    expect(decode((content as { value: Uint8Array }).value).px.subarray(0, 4)).toEqual(new Uint8Array([0, 0, 255, 255]));
+    expect(
+      decode((content as { value: Uint8Array }).value).px.subarray(0, 4),
+    ).toEqual(new Uint8Array([0, 0, 255, 255]));
     // A locked layer's pixels are locked.
     await h.objects.set(L, "locked", true);
-    expect(await h.objects.set(L, "pixelSource", red)).toMatchObject({ applied: false });
+    expect(await h.objects.set(L, "pixelSource", red)).toMatchObject({
+      applied: false,
+    });
   });
 
   it("layers, adjustment layers, masks and smart objects through batches and typed commands", async () => {
     const h = await imageDoc();
     const image = `${P}/image/${FRAME}`;
-    expect(await h.objects.invoke("media.paged.image.command.addLayer", { image, name: "Text" })).toMatchObject({ undoSteps: 1 });
-    expect(await h.objects.query(`${P}/layer`)).toEqual([`${P}/layer/${FRAME}/2`, `${P}/layer/${FRAME}/1`]);
+    expect(
+      await h.objects.invoke("media.paged.image.command.addLayer", {
+        image,
+        name: "Text",
+      }),
+    ).toMatchObject({ undoSteps: 1 });
+    expect(await h.objects.query(`${P}/layer`)).toEqual([
+      `${P}/layer/${FRAME}/2`,
+      `${P}/layer/${FRAME}/1`,
+    ]);
     // An adjustment layer, created with its parameters in one batch.
     expect(
       await h.objects.batch([
-        { op: "create", kind: `${P}/adjustment`, within: image, props: { "exposure.ev": 0.75, "posterize.enabled": true } },
+        {
+          op: "create",
+          kind: `${P}/adjustment`,
+          within: image,
+          props: { "exposure.ev": 0.75, "posterize.enabled": true },
+        },
       ]),
     ).toMatchObject({ applied: true, undoSteps: 1 });
     const A = `${P}/adjustment/${FRAME}/3`;
     expect(await h.objects.query(`${P}/adjustment`)).toEqual([A]);
     expect(await h.objects.get(A, "exposure.ev")).toEqual(value(0.75));
-    expect(await h.objects.set(A, "hueSaturation.ranges[2][1]", -0.5)).toMatchObject({ applied: true });
-    expect(await h.objects.get(A, "hueSaturation.ranges[2][1]")).toEqual(value(-0.5));
-    expect(await h.objects.set(A, "curves.composite", Array.from({ length: 256 }, (_, i) => 255 - i))).toMatchObject({ applied: true });
-    expect(((await h.objects.get(A, "curves.composite")) as { value: number[] }).value[0]).toBe(255);
+    expect(
+      await h.objects.set(A, "hueSaturation.ranges[2][1]", -0.5),
+    ).toMatchObject({ applied: true });
+    expect(await h.objects.get(A, "hueSaturation.ranges[2][1]")).toEqual(
+      value(-0.5),
+    );
+    expect(
+      await h.objects.set(
+        A,
+        "curves.composite",
+        Array.from({ length: 256 }, (_, i) => 255 - i),
+      ),
+    ).toMatchObject({ applied: true });
+    expect(
+      ((await h.objects.get(A, "curves.composite")) as { value: number[] })
+        .value[0],
+    ).toBe(255);
     // A hide-all mask on the background.
     const L1 = `${P}/layer/${FRAME}/1`;
-    await h.objects.invoke("media.paged.image.command.addLayerMaskHideAll", { layer: L1 });
+    await h.objects.invoke("media.paged.image.command.addLayerMaskHideAll", {
+      layer: L1,
+    });
     const M = `${P}/mask/${FRAME}/1`;
     expect(await h.objects.get(L1, "hasMask")).toEqual(value(true));
-    const mask = decode(((await h.objects.get(M, "content")) as { value: Uint8Array }).value);
+    const mask = decode(
+      ((await h.objects.get(M, "content")) as { value: Uint8Array }).value,
+    );
     expect(Array.from(mask.px.subarray(0, 4))).toEqual([0, 0, 0, 255]);
-    expect(await h.objects.set(M, "enabled", false)).toMatchObject({ applied: true });
+    expect(await h.objects.set(M, "enabled", false)).toMatchObject({
+      applied: true,
+    });
     expect(await h.objects.get(M, "enabled")).toEqual(value(false));
     // Smart object: convert, then replace its contents.
-    await h.objects.invoke("media.paged.image.command.convertLayerToSmart", { layer: L1 });
+    await h.objects.invoke("media.paged.image.command.convertLayerToSmart", {
+      layer: L1,
+    });
     const S = `${P}/smartObject/${FRAME}/1`;
     expect(await h.objects.get(L1, "kind")).toEqual(value("smart"));
     expect(await h.objects.get(S, "renderPending")).toEqual(value(false));
-    expect(await h.objects.set(S, "source", dataUrl(png(6, 3, [0, 255, 0, 255])))).toMatchObject({ applied: true });
+    expect(
+      await h.objects.set(S, "source", dataUrl(png(6, 3, [0, 255, 0, 255]))),
+    ).toMatchObject({ applied: true });
     expect(await h.objects.get(S, "sourceWidth")).toEqual(value(6));
     expect(await h.objects.get(S, "renderPending")).toEqual(value(true));
     // Delete a layer; the last one is refused.
-    expect(await h.objects.batch([{ op: "delete", address: `${P}/layer/${FRAME}/2` }])).toMatchObject({ applied: true });
+    expect(
+      await h.objects.batch([
+        { op: "delete", address: `${P}/layer/${FRAME}/2` },
+      ]),
+    ).toMatchObject({ applied: true });
     expect(await h.objects.get(image, "layerCount")).toEqual(value(2));
   });
 
   it("every adjustment field of the properties panel writes through host.objects: one batch, one undo step", async () => {
     const h = await imageDoc();
     const image = `${P}/image/${FRAME}`;
-    await h.objects.batch([{ op: "create", kind: `${P}/adjustment`, within: image, props: {} }]);
+    await h.objects.batch([
+      { op: "create", kind: `${P}/adjustment`, within: image, props: {} },
+    ]);
     const [A] = await h.objects.query(`${P}/adjustment`);
     const rows = await h.objects.schema(`${P}/adjustment`);
-    const table = (k: number) => Array.from({ length: 256 }, (_, i) => (i * k) % 256);
+    const table = (k: number) =>
+      Array.from({ length: 256 }, (_, i) => (i * k) % 256);
     const want = new Map<string, unknown>();
     for (const f of IMAGE_PANEL_FIELDS.filter((x) => x.kind === "adjustment")) {
       const t = rows.find((r) => r.path === f.path)!.type;
       want.set(
         f.path,
-        t.kind === "bool" ? true : t.kind === "number" ? 0.25 : f.path === "curves.composite" ? table(3) : [table(5), table(7), table(11)],
+        t.kind === "bool"
+          ? true
+          : t.kind === "number"
+            ? 0.25
+            : f.path === "curves.composite"
+              ? table(3)
+              : [table(5), table(7), table(11)],
       );
     }
     expect(want.size).toBe(89);
-    const out = await h.objects.batch([...want].map(([path, v]) => ({ op: "set" as const, address: A!, path, value: v })));
+    const out = await h.objects.batch(
+      [...want].map(([path, v]) => ({
+        op: "set" as const,
+        address: A!,
+        path,
+        value: v,
+      })),
+    );
     expect(out).toMatchObject({ applied: true, undoSteps: 1 });
-    for (const [path, v] of want) expect(await h.objects.get(A!, path), path).toEqual(value(v));
+    for (const [path, v] of want)
+      expect(await h.objects.get(A!, path), path).toEqual(value(v));
   });
 
   it("a Photoshop-style data set is one host.objects batch per record (visibility + pixel replacement)", async () => {
     const h = await imageDoc();
     const image = `${P}/image/${FRAME}`;
-    await h.objects.invoke("media.paged.image.command.addLayer", { image, name: "Badge" });
+    await h.objects.invoke("media.paged.image.command.addLayer", {
+      image,
+      name: "Badge",
+    });
     const records = [
       { badge: true, photo: dataUrl(png(4, 4, [255, 0, 0, 255])) },
       { badge: false, photo: dataUrl(png(4, 4, [0, 0, 255, 255])) },
@@ -314,7 +479,9 @@ lane("the object model on the real plugin, headless", () => {
       ]);
       expect(res).toMatchObject({ applied: true, undoSteps: 1 });
       expect(await h.objects.get(badge!, "visible")).toEqual(value(r.badge));
-      expect(await h.objects.get(photo!, "pixelSource")).toEqual(value(r.photo));
+      expect(await h.objects.get(photo!, "pixelSource")).toEqual(
+        value(r.photo),
+      );
     }
     // The second record hides the (empty) badge: one plain layer is left,
     // so the frame shows the record's photo.
@@ -329,7 +496,10 @@ lane("the object model on the real plugin, headless", () => {
     const L = `${P}/layer/${FRAME}/1`;
     await h.objects.set(L, "name", "Kept");
     const bytes = await h.host.documents.exportPaged();
-    const h2 = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR, console: silent });
+    const h2 = await createHeadlessHost({
+      resolveFrom: ENGINE_ANCHOR,
+      console: silent,
+    });
     try {
       await h2.load(bytes);
       h2.loadBundle(imageBundle);
@@ -343,14 +513,25 @@ lane("the object model on the real plugin, headless", () => {
 /** The object model alone, under the same manifest, so its counters
  *  (and a part-write count) are reachable. */
 async function omDoc() {
-  const probe = { om: null as ReturnType<typeof contributeImageObjectModel>, partWrites: 0 };
+  const probe = {
+    om: null as ReturnType<typeof contributeImageObjectModel>,
+    partWrites: 0,
+  };
   const bundle = defineBundle({
     manifest: manifestJson as PluginManifest,
     activate(host: BundleHost) {
       const write = host.parts.write.bind(host.parts);
-      (host.parts as { write: typeof write }).write = (p, b) => (probe.partWrites++, write(p, b));
+      (host.parts as { write: typeof write }).write = (p, b) => (
+        probe.partWrites++,
+        write(p, b)
+      );
       probe.om = contributeImageObjectModel(host, [], engineCodec());
-      return { dispose: () => (probe.om?.objects.dispose(), probe.om?.handle.dispose()) } as never;
+      return {
+        dispose: () => (
+          probe.om?.objects.dispose(),
+          probe.om?.handle.dispose()
+        ),
+      } as never;
     },
   });
   const h = await imageDoc(bundle);
@@ -361,7 +542,11 @@ lane("SDK 0.2.43 contract fix-ups (DESIGN.md §21.8)", () => {
   it("one batch writing a layer AND an adjustment on one frame keeps both, in one planner call and one undo step", async () => {
     const { h, probe } = await omDoc();
     const image = `${P}/image/${FRAME}`;
-    expect(await h.objects.batch([{ op: "create", kind: `${P}/adjustment`, within: image }])).toMatchObject({ applied: true });
+    expect(
+      await h.objects.batch([
+        { op: "create", kind: `${P}/adjustment`, within: image },
+      ]),
+    ).toMatchObject({ applied: true });
     const L = `${P}/layer/${FRAME}/1`;
     const A = `${P}/adjustment/${FRAME}/2`;
     const c = probe.om!.objects.counters;
@@ -391,8 +576,13 @@ lane("SDK 0.2.43 contract fix-ups (DESIGN.md §21.8)", () => {
     const labels = await h.objects.get(`rectangle:${FRAME}`, "labels");
     expect(labels.kind).toBe("value");
     const map = (labels as { value: Record<string, string> }).value;
-    expect(Object.keys(map).filter((k) => k.startsWith("x-paged:media.paged.image"))).toEqual(["x-paged:media.paged.image"]);
-    const env = JSON.parse(map["x-paged:media.paged.image"]!) as { v: number; data: { rev: number } };
+    expect(
+      Object.keys(map).filter((k) => k.startsWith("x-paged:media.paged.image")),
+    ).toEqual(["x-paged:media.paged.image"]);
+    const env = JSON.parse(map["x-paged:media.paged.image"]!) as {
+      v: number;
+      data: { rev: number };
+    };
     expect(env.v).toBeGreaterThanOrEqual(1);
     expect(env.data.rev).toBe(1);
     // hostOf answers the canonical address (async: the item kind comes
@@ -406,8 +596,12 @@ lane("SDK 0.2.43 contract fix-ups (DESIGN.md §21.8)", () => {
     const h = await imageDoc();
     const L = `${P}/layer/${FRAME}/1`;
     expect(await h.objects.query(`page:#1 > ${P}/layer`)).toEqual([L]);
-    expect(await h.objects.query(`page:#1 > ${P}/layer[name="Background"]`)).toEqual([L]);
-    expect(await h.objects.query(`page:#1 > ${P}/image`)).toEqual([`${P}/image/${FRAME}`]);
+    expect(
+      await h.objects.query(`page:#1 > ${P}/layer[name="Background"]`),
+    ).toEqual([L]);
+    expect(await h.objects.query(`page:#1 > ${P}/image`)).toEqual([
+      `${P}/image/${FRAME}`,
+    ]);
     expect(await h.objects.query(`doc > ${P}/layer`)).toEqual([L]);
     expect(await h.objects.query(`page:#2 > ${P}/layer`)).toEqual([]);
   });
@@ -417,7 +611,11 @@ lane("SDK 0.2.43 contract fix-ups (DESIGN.md §21.8)", () => {
     const L = `${P}/layer/${FRAME}/1`;
     const schema = await h.objects.schema(`${P}/layer`);
     expect(schema.find((r) => r.path === "pixelSource")!.heavy).toBe(true);
-    expect((await h.objects.schema(`${P}/smartObject`)).find((r) => r.path === "source")!.heavy).toBe(true);
+    expect(
+      (await h.objects.schema(`${P}/smartObject`)).find(
+        (r) => r.path === "source",
+      )!.heavy,
+    ).toBe(true);
     const light = await h.objects.getAll(L);
     expect(light["name"]).toEqual(value("Background"));
     expect("content" in light).toBe(false);
@@ -433,7 +631,10 @@ lane("count budgets", () => {
     const { h, probe } = await omDoc();
     const om = probe.om;
     const image = `${P}/image/${FRAME}`;
-    await h.objects.invoke("media.paged.image.command.addLayer", { image, name: "Two" });
+    await h.objects.invoke("media.paged.image.command.addLayer", {
+      image,
+      name: "Two",
+    });
     const A = `${P}/layer/${FRAME}/1`;
     const B = `${P}/layer/${FRAME}/2`;
     let changes = 0;
@@ -442,15 +643,32 @@ lane("count budgets", () => {
     const start = { ...c };
     probe.partWrites = 0;
     const ops = [
-      ["name", "A"], ["opacity", 90], ["blendMode", "multiply"], ["locked", true], ["clipped", false],
+      ["name", "A"],
+      ["opacity", 90],
+      ["blendMode", "multiply"],
+      ["locked", true],
+      ["clipped", false],
     ].flatMap(([path, v]) => [
       { op: "set" as const, address: A, path: path as string, value: v },
-      { op: "set" as const, address: B, path: path as string, value: path === "name" ? "B" : v },
+      {
+        op: "set" as const,
+        address: B,
+        path: path as string,
+        value: path === "name" ? "B" : v,
+      },
     ]);
     expect(ops).toHaveLength(10);
-    expect(await h.objects.batch(ops)).toMatchObject({ applied: true, undoSteps: 1 });
+    expect(await h.objects.batch(ops)).toMatchObject({
+      applied: true,
+      undoSteps: 1,
+    });
     sub.dispose();
-    const spent = Object.fromEntries(Object.entries(c).map(([k, v]) => [k, v - start[k as keyof typeof start]]));
+    const spent = Object.fromEntries(
+      Object.entries(c).map(([k, v]) => [
+        k,
+        v - start[k as keyof typeof start],
+      ]),
+    );
     // One commit, observed as one document change.
     expect(changes).toBe(1);
     // Reads: one tree; one placed-image read to re-validate the stack the
@@ -458,7 +676,14 @@ lane("count budgets", () => {
     // stored-session read and no decode (that stack is cached under its
     // marker); no encode (two blended layers: the bake is pending).
     // One planner call for the whole batch (the plugin-level `batch`).
-    expect(spent).toEqual({ treeReads: 1, placedReads: 1, sessionReads: 0, decodes: 0, encodes: 0, plans: 1 });
+    expect(spent).toEqual({
+      treeReads: 1,
+      placedReads: 1,
+      sessionReads: 0,
+      decodes: 0,
+      encodes: 0,
+      plans: 1,
+    });
     // Parts: the changed manifest + the record (unchanged pixels are
     // stored once, by content).
     expect(probe.partWrites).toBe(2);
