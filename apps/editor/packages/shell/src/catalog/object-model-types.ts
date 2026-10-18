@@ -21,7 +21,9 @@
 //
 // Same reason as `binding-providers.tsx` and `schema-panel-types.ts`:
 // `@paged-media/shell` sits below `apps/canvas` and does not depend on
-// `@paged-media/plugin-api` / `plugin-sdk`. The app builds the ONE shared
+// `plugin-sdk`, whose runtime the registry is. (It depends on the
+// type-only `plugin-api` since ADR 226, for the contribution types; this
+// mirror predates that.) The app builds the ONE shared
 // registry (`createObjectRegistry({ core: createCoreObjects(…) })`),
 // asserts it satisfies `ShellObjectsSurface` at the injection point, and
 // hands it down through `<PagedShell objectModel>`. A contract change then

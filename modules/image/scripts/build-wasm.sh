@@ -26,7 +26,7 @@ BUDGET=$((100 * 1000 * 1000))
 # from one built from older ones. The output is BUILD OUTPUT (gitignored):
 # `moon run image:wasm` runs this script, and CI builds it with
 # .github/actions/module-wasm.
-SOURCE_HASH=$(node scripts/source-hash.mjs)
+SOURCE_HASH=$(bun scripts/source-hash.mjs)
 IMAGE_JS_SOURCE_HASH=$SOURCE_HASH \
   cargo build --release --target wasm32-unknown-unknown -p image-js
 

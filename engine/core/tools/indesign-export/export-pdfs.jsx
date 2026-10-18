@@ -52,7 +52,7 @@
     // Where the generated fixtures live. Derived from the script's own
     // location so the tool follows the repo (it pointed at the
     // pre-split `~/idml` checkout for months, which made every run a
-    // silent no-op); `PAGED_CORPUS_DIR` overrides for an out-of-tree
+    // silent no-op); `PAGED_EXPORT_DIR` overrides for an out-of-tree
     // corpus.
     // Where the generated fixtures live. Derived from the script's own
     // location so the tool follows the repo — it pointed at the
@@ -60,8 +60,8 @@
     // silent no-op. `run-export.sh` overrides it by setting the global
     // before it evaluates this file; InDesign is a separate, already
     // running process, so a shell variable never reaches `$.getenv`.
-    var INPUT_DIR = $.global.PAGED_CORPUS_DIR
-        ? String($.global.PAGED_CORPUS_DIR)
+    var INPUT_DIR = $.global.PAGED_EXPORT_DIR
+        ? String($.global.PAGED_EXPORT_DIR)
         : File($.fileName).parent.parent.parent.fsName + "/corpus/generated";
     // Re-export ONE fixture rather than the whole corpus. Reference
     // PDFs are baked evidence: rewriting all of them at once

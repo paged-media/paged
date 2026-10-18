@@ -22,54 +22,66 @@
 //!
 //! A machine without an adapter SKIPS the device tests, which is right
 //! for a laptop without a GPU and wrong for a lane that exists to run
-//! them: there, a skip is a pass that proved nothing. `REQUIRE_GPU=1`
-//! turns the skip into a panic, so a lane that sets it cannot go green
-//! without executing every GPU test. There used to be four copies of
-//! this helper (conformance, layers, stroke, the ingest tests), each
-//! skipping on its own, which is why none of them could be made strict.
+//! them: there, a skip is a pass that proved nothing. The skip goes
+//! through `paged-test-resources` (platform/shared/test-resources): it
+//! prints `unavailable: GPU adapter: …`, lands in `$PAGED_SKIP_LOG`, and
+//! `PAGED_REQUIRE_GPU=1` turns it into a panic, so a lane that sets it
+//! cannot go green without executing every GPU test. (`REQUIRE_GPU=1`,
+//! the old spelling, is still read, with a deprecation warning.)
+//! `PAGED_FORCE_NO_GPU=1` makes a machine with an adapter behave as if
+//! it had none, which proves that path locally. There used to be four
+//! copies of this helper (conformance, layers, stroke, the ingest
+//! tests), each skipping on its own, which is why none of them could be
+//! made strict.
 
 use std::sync::OnceLock;
 
+use paged_test_resources::Resource;
+
 use crate::GpuContext;
 
-static DEVICE: OnceLock<Option<GpuContext>> = OnceLock::new();
+static DEVICE: OnceLock<Result<GpuContext, String>> = OnceLock::new();
 
-/// True when the environment demands a device (`REQUIRE_GPU=1`).
+/// True when the environment demands a device (`PAGED_REQUIRE_GPU=1`, or
+/// the deprecated `REQUIRE_GPU=1`).
 pub fn gpu_required() -> bool {
-    std::env::var("REQUIRE_GPU").is_ok_and(|v| v == "1")
+    paged_test_resources::required(Resource::Gpu)
 }
 
 /// The process-wide test device, or `None` when the machine has no
-/// usable adapter. `who` names the caller in the one log line.
+/// usable adapter (or `PAGED_FORCE_NO_GPU=1` says to act as if it had
+/// none). `who` names the caller in the `unavailable:` line.
 ///
 /// # Panics
 ///
-/// When no adapter is available and `REQUIRE_GPU=1` is set.
+/// When no adapter is available and `PAGED_REQUIRE_GPU=1` is set.
+#[track_caller]
 pub fn device_or_skip(who: &str) -> Option<&'static GpuContext> {
-    let ctx = DEVICE
-        .get_or_init(|| match pollster::block_on(GpuContext::new()) {
+    let ctx = DEVICE.get_or_init(|| {
+        if paged_test_resources::gpu_forced_off() {
+            return Err(format!(
+                "{} is set, so no adapter is requested",
+                paged_test_resources::FORCE_NO_GPU
+            ));
+        }
+        match pollster::block_on(GpuContext::new()) {
             Ok(ctx) => {
                 eprintln!(
                     "test GPU: {} ({:?})",
                     ctx.adapter_info.name, ctx.adapter_info.backend
                 );
-                Some(ctx)
+                Ok(ctx)
             }
-            Err(e) => {
-                eprintln!("test GPU unavailable: {e}");
-                None
-            }
-        })
-        .as_ref();
-    if ctx.is_none() {
-        assert!(
-            !gpu_required(),
-            "{who}: REQUIRE_GPU=1 but no GPU adapter is available — this lane exists to \
-             run the device tests, so it fails instead of skipping them"
-        );
-        eprintln!("{who}: no GPU adapter — device test skipped");
+            Err(e) => Err(e.to_string()),
+        }
+    });
+    match ctx {
+        Ok(ctx) => Some(ctx),
+        Err(why) => {
+            paged_test_resources::unavailable(Resource::Gpu, format_args!("{who}: {why}"));
+            None
+        }
     }
-    ctx
 }
 
 #[cfg(test)]

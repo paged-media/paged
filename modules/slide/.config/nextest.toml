@@ -3,3 +3,20 @@
 # pulls it as this plugin's test evidence.
 [profile.ci.junit]
 path = "junit.xml"
+
+# The opt-in corpus lane: every `#[ignore = "corpus: pptx"]` test, which
+# reads the private corpus (docs/development/testing.md).
+#
+#   PAGED_CORPUS_DIR=<corpus root> PAGED_REQUIRE_CORPUS=1 \
+#     cargo nextest run --profile corpus --run-ignored only
+[profile.corpus]
+default-filter = """
+(binary_id(pptx-import::it) & test(=corpus::every_corpus_deck_reads))
+| (binary_id(pptx-export::roundtrip) & (
+    test(=notes_are_rewritten_where_a_deck_has_them_and_created_where_it_does_not)
+    | test(=notes_with_markup_characters_and_lines_round_trip)))
+| (binary_id(slide-resolve::it) & (
+    test(=oracle_charts::corpus_chart_bars_land_where_powerpoint_draws_them)
+    | test(=oracle_geometry::corpus_decks_land_where_powerpoint_puts_them)))
+"""
+fail-fast = false

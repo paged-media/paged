@@ -546,11 +546,27 @@ fn objects_have_one_encoding() {
     assert_ne!(address(Kind::Blob, b"x"), address(Kind::Tree, b"x"));
 }
 
-/// Real files: `PAGED_REPO_CORPUS=<dir>` round-trips every `.idml`/`.paged` in it.
+/// Real files: round-trips every `.idml`/`.paged` in the corpus's
+/// `idml/samples` (or, for one deprecation period, in the directory
+/// `PAGED_REPO_CORPUS` names). The `corpus: idml/samples` lane:
+/// `PAGED_CORPUS_DIR=<corpus root> cargo nextest run --profile corpus --run-ignored only`.
 #[test]
+#[ignore = "corpus: idml/samples"]
 fn corpus_files_round_trip() {
-    let Ok(dir) = std::env::var("PAGED_REPO_CORPUS") else {
-        return;
+    let dir = match std::env::var_os("PAGED_REPO_CORPUS") {
+        Some(dir) => {
+            eprintln!(
+                "warning: PAGED_REPO_CORPUS is deprecated; this lane reads \
+                 <PAGED_CORPUS_DIR>/idml/samples"
+            );
+            std::path::PathBuf::from(dir)
+        }
+        None => {
+            let Some(dir) = paged_test_resources::corpus("idml/samples", &[]) else {
+                return;
+            };
+            dir
+        }
     };
     let mut n = 0;
     for e in std::fs::read_dir(dir).unwrap() {
@@ -568,6 +584,7 @@ fn corpus_files_round_trip() {
         assert_eq!(a, b, "{}", p.display());
         n += 1;
     }
+    assert!(n > 0, "no .idml/.paged file in the lane directory");
     eprintln!("round-tripped {n} files");
 }
 

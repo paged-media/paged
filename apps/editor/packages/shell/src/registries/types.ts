@@ -19,25 +19,31 @@
 
 // Cross-registry shared types. Kept in their own module so each
 // registry file can be read top-down without forward references.
+//
+// ONE DEFINITION (ADR 226). Every contribution type a plugin can author
+// is defined once, in `@paged-media/plugin-api`. The shell's registry
+// types import it and either USE it as is (an alias) or EXTEND it with
+// shell-internal fields (`interface X extends Api.X { … }`). The shell
+// never keeps a copy of a contract shape, so the two cannot drift.
+
+import type * as Api from "@paged-media/plugin-api";
 
 /**
  * Returned by every `register` call so callers can clean up at
- * unmount time. Stable shape — the matching `dispose()` is the
- * only API surface this exposes.
+ * unmount time. The contract's `Disposable`.
  */
-export interface Disposable {
-  dispose(): void;
-}
+export type Disposable = Api.Disposable;
 
 /**
  * Initial dock edge for a panel. Users may rearrange after mount;
- * this is initial-placement-only.
+ * this is initial-placement-only. The contract's `DockEdge`.
  */
-export type DockEdge = "left" | "right" | "top" | "bottom" | "center";
+export type DockEdge = Api.DockEdge;
 
 /**
  * Predicate evaluated against application state to decide whether
- * a contribution is visible / enabled.
+ * a contribution is visible / enabled. The contract's
+ * `VisibilityPredicate`.
  *
  * The string form (e.g. `"selection.hasType('TextFrame')"`) is the
  * future bundle-friendly DSL; today only the function form is
@@ -45,9 +51,26 @@ export type DockEdge = "left" | "right" | "top" | "bottom" | "center";
  * predicate so contributions that use the DSL are inert until the
  * evaluator lands.
  */
-export type VisibilityPredicate =
-  | string
-  | ((state: unknown) => boolean);
+export type VisibilityPredicate = Api.VisibilityPredicate;
+
+/**
+ * Holds when a contribution authored against the contract (`Contract`)
+ * registers in the shell's registry (`Shell`) unchanged; a reference
+ * whose `Contract` does not satisfy `Shell` fails the typecheck.
+ *
+ * `interface Shell extends Contract` proves only the other direction: a
+ * shell contribution is a contract contribution. A plugin's contribution
+ * reaches the shell registry typed as the CONTRACT type, so the shell's
+ * additions must stay optional and its narrowings must still accept what
+ * the contract allows. Each extended contribution type states that
+ * beside its definition:
+ *
+ *     export type _XRegistrable = Registrable<X, Api.X>;
+ *
+ * (The registries' `register` methods cannot catch it on their own:
+ * TypeScript compares method parameters bivariantly.)
+ */
+export type Registrable<Shell, Contract extends Shell> = Contract;
 
 /**
  * Evaluate a {@link VisibilityPredicate} against application state.

@@ -43,7 +43,7 @@ documents recorded in `docs/reference/acceptance-real-docx.md`
   without a repair prompt.
 
 Real documents are checked separately and outside CI. Two ignored test lanes
-(`PAGED_DOC_CORPUS`, `PAGED_DOCX_CORPUS`) run the importer over real Word files that are not
+(`PAGED_DOC_CORPUS`, `PAGED_DOCX_CORPUS`; both lanes now read the corpus under `PAGED_CORPUS_DIR`) run the importer over real Word files that are not
 in this repository; "What it asserts is deliberately structural, not fidelity"
 (`docx-conformance/tests/it/real_word_corpus.rs:39`). `scripts/real-docx-acceptance.sh`
 compares the editor's pagination of real documents with Word's PDF.

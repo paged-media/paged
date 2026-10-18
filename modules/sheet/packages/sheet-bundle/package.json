@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/sheet",
-  "private": false,
+  "private": true,
   "version": "0.1.0-canary.24",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "type": "module",
@@ -12,9 +12,7 @@
   },
   "scripts": {
     "typecheck": "bun check -p tsconfig.json",
-    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts",
-    "build": "tsup",
-    "prepublishOnly": "bun run build"
+    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts"
   },
   "peerDependencies": {
     "@paged-media/plugin-api": "workspace:*",
@@ -41,19 +39,6 @@
     "manifest.json",
     "object-model"
   ],
-  "publishConfig": {
-    "access": "public",
-    "tag": "canary",
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "./manifest.json": "./manifest.json"
-    }
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paged-media/paged.git",

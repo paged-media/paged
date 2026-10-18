@@ -18,3 +18,46 @@ fail-fast = false
 path = "junit.xml"
 # Keep the report self-describing for the converter.
 report-name = "paged-core-nextest"
+
+# The opt-in corpus lanes: every `#[ignore = "corpus: <lane>"]` test, which
+# reads `<PAGED_CORPUS_DIR>/<lane>` (docs/development/testing.md):
+#
+#   PAGED_CORPUS_DIR=<corpus root> PAGED_REQUIRE_CORPUS=1 \
+#     cargo nextest run --profile corpus --run-ignored only
+#
+# Without PAGED_REQUIRE_CORPUS a missing lane reports `unavailable: private
+# corpus` and returns; with it, the run fails. A new corpus lane joins this
+# filter.
+[profile.corpus]
+fail-fast = false
+default-filter = """
+    (binary_id(idml-export::it) & (
+        test(=graphic_line_fill_roundtrip::corpus_graphic_line_fills_survive_an_unmutated_save)
+      | test(=item_transform_precision::a_corpus_template_saves_back_byte_identically)
+      | test(=label_roundtrip::corpus_sample_3_labels_survive_an_unmutated_save)
+      | test(=master_spread_roundtrip::corpus_master_spreads_rewrite_byte_identically)
+      | test(=nested_group_roundtrip::corpus_catalog_spread_does_not_inflate)
+      | test(=path_contour_roundtrip::corpus_templates_survive_an_unmutated_save)
+      | test(=story_precision::corpus_stories_keep_their_numbers_and_stay_well_formed)
+      | test(=stroke_weight_precision::a_corpus_template_saves_back_byte_identically)
+      | test(=tint_sentinel_roundtrip::corpus_sentinel_tints_survive_an_unmutated_save)
+      | test(=unmodelled_item_roundtrip::corpus_brand_guidelines_keeps_its_two_anchorless_polygons)
+    ))
+  | (binary_id(paged-scene::grid_matrix_corpus) & test(=every_grid_layout_parses_at_every_page_size))
+  | (binary_id(paged-canvas::it) & test(=ruler_guides_handle::document_handle_exposes_ruler_guides_from_real_idml))
+  | (binary_id(paged-repo::it) & test(=repo::corpus_files_round_trip))
+"""
+
+# The other opt-in lanes (`#[ignore = "lane: <name> (<VAR>)"]`): each reads a
+# file a variable names, and reports `unavailable` without it.
+#
+#   PAGED_DIGEST_GATE_ANNUAL=<file> cargo nextest run --profile lanes --run-ignored only
+[profile.lanes]
+fail-fast = false
+default-filter = """
+    (binary_id(paged-canvas::it) & (
+        test(=digest_gate::the_annual_stays_equal_to_a_cold_build)
+      | test(=late_fonts::the_annual_late_registration_cost)
+    ))
+  | (binary_id(idml-export::it) & test(=package_diff_probe::unmutated_export_of_the_named_package_is_entry_identical))
+"""

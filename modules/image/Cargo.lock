@@ -677,6 +677,7 @@ dependencies = [
  "image-kernels",
  "image-pipeline",
  "image-psd",
+ "paged-test-resources",
  "png",
  "pollster",
  "proptest",
@@ -695,6 +696,7 @@ dependencies = [
  "half",
  "image-core",
  "image-kernels",
+ "paged-test-resources",
  "pollster",
  "thiserror",
  "wgpu",
@@ -732,6 +734,7 @@ dependencies = [
  "image-psd",
  "jpeg-encoder",
  "js-sys",
+ "paged-test-resources",
  "pollster",
  "skrifa",
  "thiserror",
@@ -1150,6 +1153,10 @@ checksum = "8c7c9e0d9b23589f26070720bac724174bfec1083e82f7854cdd0267518343c0"
 dependencies = [
  "num-traits",
 ]
+
+[[package]]
+name = "paged-test-resources"
+version = "0.0.0"
 
 [[package]]
 name = "parking_lot"

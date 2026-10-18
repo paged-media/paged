@@ -238,11 +238,11 @@ fn an_edit_to_the_second_contour_lands_on_the_second_contour() {
 /// gitignored, so this no-ops cleanly wherever it is absent.
 ///
 /// ```text
-/// PAGED_IDML_CORPUS=1 cargo test -p idml-export --test path_contour_roundtrip \
-///     -- --ignored --nocapture
+/// PAGED_CORPUS_DIR=<corpus root> cargo test -p idml-export --test it -- \
+///     --ignored --nocapture path_contour_roundtrip::
 /// ```
 #[test]
-#[ignore = "private corpus: opt-in (PAGED_IDML_CORPUS=1 + the corpus mount)"]
+#[ignore = "corpus: idml"]
 fn corpus_templates_survive_an_unmutated_save() {
     let Some(root) = corpus::root() else { return };
     let mut checked = 0usize;

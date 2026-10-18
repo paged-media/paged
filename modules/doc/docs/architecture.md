@@ -34,8 +34,8 @@ after the table gives the dependency direction.
   `@paged-media/plugin-sdk`, the internal shared packages (`platform/shared/*`), this repo's
   packages and `react`
   ([ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md)).
-- `doc-bundle` takes the two contract packages and `react` as peer dependencies; tsup
-  inlines `doc-host-model` into the built bundle. The split into Rust semantics, a
+- `doc-bundle` takes the two contract packages and `react` as peer dependencies and
+  imports `doc-host-model` through the workspace; the editor builds both from source. The split into Rust semantics, a
   forwarding wasm class and a translating TypeScript package is the shape of
   [ADR 314](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/314-plugin-shape.md).
 - Third-party Rust: `ooxmlsdk` 0.12 (feature `mce`), `zip` 2, `quick-xml` 0.41, `wasm-bindgen`
@@ -216,8 +216,10 @@ code uses `readNative` or the declared part type `docLowered`.
   wasm build. Most tests are in `docx-conformance/tests/` and call the crates natively. The
   tests of layout rules read Word's recorded answers and need neither Word nor the host
   engine ([ADR 604](adr/604-word-is-the-oracle.md)). Two lanes over real Word files are
-  ignored by default and need a corpus outside this repo: `real_word_corpus.rs`
-  (`PAGED_DOC_CORPUS`) and `poi_corpus.rs` (`PAGED_DOCX_CORPUS`).
+  ignored by default (`#[ignore = "corpus: docx"]`) and need the private corpus:
+  `real_word_corpus.rs` and `poi_corpus.rs`. `PAGED_CORPUS_DIR=<corpus root> cargo nextest
+  run --profile corpus --run-ignored only` runs them (`docs/development/testing.md` at the
+  repository root).
 - TypeScript lane: `pnpm test` runs the import lint, then `bun test` in both packages;
   `.github/workflows/vitest.yml` adds a typecheck and a manifest check with the published
   `@paged-media/plugin-cli`. The tests use recording hosts and stub engines, not the wasm.

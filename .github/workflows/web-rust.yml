@@ -91,7 +91,7 @@ jobs:
       # (the step below runs under !cancelled()). `--features blitz` is the
       # superset — the default-feature tests run in it too.
       - name: cargo nextest (blitz — lowering, capture, flow fragmentation)
-        run: cargo nextest run --features blitz --profile ci
+        run: cargo nextest run --features blitz --profile ci --no-tests=fail
       - name: cargo test (default features — the pure lowering build)
         run: cargo test --no-fail-fast
       # Count budgets (docs/design/perf-baseline-2026-10-05.md): a pinned

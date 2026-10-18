@@ -37,7 +37,7 @@ binds every implemented registry row to tests that exist.
 - **XLSX fixtures.** The 15 workbooks in `corpus/xlsx-corpus/` are built by two Python scripts
   that use the standard library only and a fixed timestamp, so the bytes are reproducible.
 - **Real workbooks.** `sheet-conformance/tests/it/real_xlsx_corpus.rs` holds four tests over
-  workbooks kept outside this repository. They are `#[ignore]`d and need `PAGED_XLSX_CORPUS`.
+  workbooks kept outside this repository. They are `#[ignore]`d and need `PAGED_XLSX_CORPUS` (now the corpus under `PAGED_CORPUS_DIR`).
   The bar differs by source: files from Apache POI's test corpus must never panic the parser,
   and their open rate is printed, not gated; workbooks written by Excel must all open; legacy
   `.xls` files must be refused.

@@ -22,7 +22,11 @@ tasks:
   # js-check and js-test are the inherited `bun run typecheck` and
   # `bun run test`; a single package builds with its own script.
   js-build:
-    description: 'tsc to dist/.'
+    description: 'tsc (TypeScript 7) to dist/: JavaScript and declarations.'
     command: 'bun run build'
+    inputs:
+      - '@group(js-sources)'
     outputs:
       - 'dist/**/*'
+    options:
+      runInCI: false

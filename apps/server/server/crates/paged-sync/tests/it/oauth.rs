@@ -157,9 +157,16 @@ fn exchange(url: &str, form: &[(&str, &str)]) -> Result<serde_json::Value, (u16,
     }
 }
 
+/// `PAGED_SERVER_URL`, or `None` after reporting the server unavailable
+/// (`PAGED_REQUIRE_SERVER=1` makes that a failure).
+fn server() -> Option<String> {
+    paged_test_resources::env_var(paged_test_resources::Resource::Server, "PAGED_SERVER_URL")
+}
+
 #[test]
+#[ignore = "server: a running paged.server (PAGED_SERVER_URL)"]
 fn an_mcp_client_signs_in_and_calls_the_api() {
-    let Ok(url) = std::env::var("PAGED_SERVER_URL") else {
+    let Some(url) = server() else {
         return;
     };
     idp();
@@ -250,8 +257,9 @@ fn an_mcp_client_signs_in_and_calls_the_api() {
 }
 
 #[test]
+#[ignore = "server: a running paged.server (PAGED_SERVER_URL)"]
 fn a_wrong_verifier_or_redirect_gets_no_token() {
-    let Ok(url) = std::env::var("PAGED_SERVER_URL") else {
+    let Some(url) = server() else {
         return;
     };
     idp();

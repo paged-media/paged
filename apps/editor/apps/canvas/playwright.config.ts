@@ -97,7 +97,8 @@ export default defineConfig({
     viewport: { width: 1600, height: 1000 },
   },
   webServer: {
-    command: `npx vite --port ${PORT} --strictPort`,
+    // Vite under Bun (`--bun`), as `bun run dev` starts it.
+    command: `bunx --bun vite --port ${PORT} --strictPort`,
     cwd: __dirname,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,

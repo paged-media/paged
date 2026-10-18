@@ -328,7 +328,7 @@ fn image_editor_ingest_adjust_exposure_doubles_the_light_on_gpu() {
 }
 
 /// The shared test device; skips where there is no adapter unless
-/// `REQUIRE_GPU=1` is set (then it fails instead).
+/// `PAGED_REQUIRE_GPU=1` is set (then it fails instead).
 fn device() -> Option<&'static GpuContext> {
     image_gpu::test_support::device_or_skip("ingest")
 }

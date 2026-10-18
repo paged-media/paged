@@ -40,7 +40,9 @@ Tailwind.
   command/panel catalog (bindings + composition nodes). Deps: client.
 - `packages/shell` (`@paged-media/shell`) — editor shell: state
   contexts, registries, dockview docking substrate, overlays, command
-  palette, `PagedShell`. Deps: client + catalog + ui.
+  palette, `PagedShell`. Deps: client + catalog + ui, and the type-only
+  `plugin-api`: its registry types extend the contract's contribution
+  types instead of copying them (ADR 226).
 - `packages/ui` (`@paged-media/ui`) — input primitives. Deps: shell.
 
 Consumer→producer: `canvas → shell → catalog → client → [wasm]`;
