@@ -107,11 +107,11 @@ jobs:
         working-directory: .
         run: bun install --frozen-lockfile
       - name: contract-import lint
-        run: node scripts/check-contract-imports.mjs
+        run: bun scripts/check-contract-imports.mjs
       - name: typecheck
         run: bun run --filter './packages/*' typecheck
       - name: validate manifest
-        run: node "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs" validate packages/slide-bundle/manifest.json
+        run: bun "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs" validate packages/slide-bundle/manifest.json
       # Red results still upload (the cockpit wants the failures too); the
       # last step fails the job.
       - name: bun test (importer + conformance against the real engine)

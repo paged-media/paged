@@ -242,7 +242,7 @@ jobs:
       # The committed versions are 0.<protocol>.0-dev; the release version is
       # set in the staged copies below, never in the tree.
       - name: the workspace wasm packages carry PROTOCOL_VERSION
-        run: node scripts/check-wasm-package-versions.mjs
+        run: bun scripts/check-wasm-package-versions.mjs
 
       - name: Build @paged-media/canvas-wasm
         run: bash scripts/build-wasm-packages.sh --workspace canvas-wasm
@@ -358,7 +358,7 @@ jobs:
           printf '%s\n' "//registry.npmjs.org/:_authToken=\${NODE_AUTH_TOKEN}" "registry=https://registry.npmjs.org/" > "$NPM_CONFIG_USERCONFIG"
           # The viewer is a workspace package: publish its packed tarball, in
           # which `bun pm pack` has resolved its catalog: devDependencies.
-          VIEWER_TGZ=$(node "$GITHUB_WORKSPACE/tooling/js/pack.mjs" ./web/idml-viewer "$RUNNER_TEMP")
+          VIEWER_TGZ=$(bun "$GITHUB_WORKSPACE/tooling/js/pack.mjs" ./web/idml-viewer "$RUNNER_TEMP")
           npm publish --loglevel verbose --access public --tag "$TAG" "$RUNNER_TEMP/npm/canvas-wasm"
           npm publish --loglevel verbose --access public --tag "$TAG" "$RUNNER_TEMP/npm/introspect-wasm"
           npm publish --loglevel verbose --access public --tag "$TAG" "$RUNNER_TEMP/npm/sdk"

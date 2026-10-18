@@ -7,32 +7,16 @@
 // spec `tests/object-model.spec.ts`; everything here is the logic those
 // lean on, run without a browser.
 //
-// Run: `node --experimental-strip-types scripts/object-model.test.mjs`
+// Run: `bun test ./scripts/object-model.test.mjs`
 // (root `test:object-model` npm script).
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
-import { existsSync } from "node:fs";
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-// House style is extensionless imports (vite); node's type-stripping loader
-// wants a real specifier. Same hook as `journal.test.mjs`.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith(".") && !/\.[cm]?[jt]sx?$/.test(specifier)) {
-      const parent = context.parentURL
-        ? dirname(fileURLToPath(context.parentURL))
-        : process.cwd();
-      const candidate = resolvePath(parent, `${specifier}.ts`);
-      if (existsSync(candidate)) {
-        return { url: pathToFileURL(candidate).href, shortCircuit: true };
-      }
-    }
-    return nextResolve(specifier, context);
-  },
-});
+// House style is extensionless imports (vite); Bun resolves `./foo` to
+// `./foo.ts` itself (Node needed a module.registerHooks resolver here).
 
 const here = dirname(fileURLToPath(import.meta.url));
 const shell = (p) =>
