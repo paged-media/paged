@@ -1,5 +1,12 @@
-name: publish
+name: slide / publish
 
+# Disabled in the monorepo: built-in modules are no longer published separately (PM-0008). Kept for reference until wave D.
+#
+# MONOREPO (step A3): ported from paged-media/plugin-slide .github/workflows/
+# publish.yml with `on: workflow_dispatch` only (it already was dispatch-only). Paths are ported so the
+# file stays readable as a reference; the npm Trusted Publisher it names is
+# bound to the OLD repo and file name, so a dispatch could not publish anyway.
+#
 # Publish @paged-media/slide to npm via OIDC TRUSTED PUBLISHING (tokenless).
 # Requires a Trusted Publisher on npm: org paged-media, this repo, workflow
 # publish.yml. Pre-1.0 -canary.N under the `canary` dist-tag; unchanged skip.
@@ -16,6 +23,10 @@ permissions:
   id-token: write # OIDC token for trusted publishing
   contents: read
 
+defaults:
+  run:
+    working-directory: modules/slide
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -26,6 +37,9 @@ jobs:
           toolchain: 1.93.0
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/slide -> target
+          prefix-key: v0-rust-slide
       - name: install pinned wasm-bindgen-cli (Cargo.lock version)
         run: |
           V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
@@ -37,6 +51,8 @@ jobs:
       - name: build wasm
         run: bash scripts/build-wasm.sh
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: modules/slide/package.json
       - uses: actions/setup-node@v4
         with:
           node-version: 22 # >= 22.14 for OIDC trusted publishing

@@ -5,20 +5,32 @@
 # One checkout: the bundle resolves @paged-media/plugin-api / plugin-sdk
 # from npm (exact devDependency pins, asserted by test/sdk-pin.spec.ts), so
 # no sibling repository is needed.
-name: vitest
+name: web / vitest
+# MONOREPO (step A3): ported from paged-media/plugin-web
+# .github/workflows/vitest.yml; runs in modules/web.
 on:
   push:
     branches: [main]
+    paths:
+      - "modules/web/**"
+      - ".github/workflows/web-vitest.yml"
   # Pre-merge gate: a PR that breaks the bundle goes red BEFORE it lands.
   pull_request:
+    paths:
+      - "modules/web/**"
+      - ".github/workflows/web-vitest.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: vitest-${{ github.ref }}
+  group: web-vitest-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: modules/web
 
 jobs:
   vitest:
@@ -43,7 +55,8 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: packages/web-render
+          workspaces: modules/web/packages/web-render -> target
+          prefix-key: v0-rust-web
       - name: install pinned wasm-bindgen-cli (web-render Cargo.lock version)
         run: |
           V=$(grep -A1 '^name = "wasm-bindgen"$' packages/web-render/Cargo.lock | grep version | head -1 | cut -d'"' -f2)
@@ -83,6 +96,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vitest-junit
-          path: junit-all.xml
+          path: modules/web/junit-all.xml
           if-no-files-found: error
           retention-days: 14

@@ -1,31 +1,40 @@
-name: vitest
+name: sheet / vitest
+# MONOREPO (step A3): ported from paged-media/plugin-sheets
+# .github/workflows/vitest.yml. The old lane checked the repo out under
+# plugin-sheets/ beside a paged-media/sdk checkout and ran from their parent.
+# Nothing read the sdk sibling any more (the bundle takes the published
+# contract), so that checkout is gone; the lane runs in modules/sheet and
+# `plugin-sheets/<x>` / `--dir plugin-sheets` became cwd-relative.
 on:
   push:
     branches: [main]
+    paths:
+      - "modules/sheet/**"
+      - ".github/workflows/sheet-vitest.yml"
   # Pre-merge gate: a PR that breaks the bundle goes red BEFORE it lands
   # (this lane used to run on push to main only).
   pull_request:
+    paths:
+      - "modules/sheet/**"
+      - ".github/workflows/sheet-vitest.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: vitest-${{ github.ref }}
+  group: sheet-vitest-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: modules/sheet
 
 jobs:
   vitest:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          path: plugin-sheets
-      - uses: actions/checkout@v4
-        with:
-          repository: paged-media/sdk
-          path: sdk
-          token: ${{ secrets.STATE_DISPATCH_TOKEN || github.token }}
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -46,26 +55,27 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: plugin-sheets
+          workspaces: modules/sheet -> target
+          prefix-key: v0-rust-sheet
       - name: install pinned wasm-bindgen-cli (Cargo.lock version)
         run: |
-          V=$(grep -A1 '^name = "wasm-bindgen"$' plugin-sheets/Cargo.lock | grep version | head -1 | cut -d'"' -f2)
+          V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
           cargo install wasm-bindgen-cli --version "$V" --locked
       - name: install pinned binaryen (reftypes-safe; old apt binaryen breaks externref table grow)
         run: |
           curl -sL https://github.com/WebAssembly/binaryen/releases/download/version_119/binaryen-version_119-x86_64-linux.tar.gz | tar xz
           echo "$PWD/binaryen-version_119/bin" >> "$GITHUB_PATH"
       - name: build the engine wasm artifact (100 MB app wasm budget gate)
-        run: bash plugin-sheets/scripts/build-wasm.sh
+        run: bash scripts/build-wasm.sh
       # Fail-not-skip belt at the JOB level too: a missing artifact reddens
       # the job HERE, before any spec can skip.
       - name: real-engine artifact guard (fail, never skip)
-        run: test -f plugin-sheets/packages/sheet-bundle/bin/sheet_js_bg.wasm
+        run: test -f packages/sheet-bundle/bin/sheet_js_bg.wasm
       # ------------------------------------------------------------------
-      - name: install (sdk sibling satisfies the link chain)
-        run: pnpm install --frozen-lockfile --dir plugin-sheets
+      - name: install (published contract; no sibling checkout needed)
+        run: pnpm install --frozen-lockfile
       - name: contract-import lint (fail fast)
-        run: node plugin-sheets/scripts/check-contract-imports.mjs
+        run: node scripts/check-contract-imports.mjs
       # A red spec FAILS this job. It used to end in `|| true` (so red
       # results would still be published as evidence), which also meant the
       # TS lane could never go red: a failing spec merged green. Evidence
@@ -78,12 +88,12 @@ jobs:
           # gate silently pass a vacuous run.
           REQUIRE_REAL_ENGINE: "1"
         run: |
-          pnpm -r --no-bail --dir plugin-sheets exec \
+          pnpm -r --no-bail exec \
             vitest run --reporter=default --reporter=junit --outputFile.junit=junit.xml
       - name: collect junit
         if: ${{ !cancelled() }}
         run: |
-          cat plugin-sheets/packages/*/junit.xml > junit-all.xml
+          cat packages/*/junit.xml > junit-all.xml
           [ -s junit-all.xml ]
       # Evidence hand-off, INVERTED (2026-07-25). This step used to call
       # paged-media/state/actions/publish-results@main, but that action lives in the
@@ -100,6 +110,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vitest-junit
-          path: junit-all.xml
+          path: modules/sheet/junit-all.xml
           if-no-files-found: error
           retention-days: 14

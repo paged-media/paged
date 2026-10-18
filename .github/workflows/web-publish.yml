@@ -1,5 +1,12 @@
-name: publish
+name: web / publish
 
+# Disabled in the monorepo: built-in modules are no longer published separately (PM-0008). Kept for reference until wave D.
+#
+# MONOREPO (step A3): ported from paged-media/plugin-web .github/workflows/
+# publish.yml with `on: workflow_dispatch` only (its workflow_run trigger on `vitest` is removed). Paths are ported so the
+# file stays readable as a reference; the npm Trusted Publisher it names is
+# bound to the OLD repo and file name, so a dispatch could not publish anyway.
+#
 # Publish @paged-media/web to npm via OIDC TRUSTED PUBLISHING (tokenless).
 # Requires a Trusted Publisher on npm: org paged-media, this repo, workflow
 # publish.yml (keep this FILE NAME: the trusted publisher is bound to it).
@@ -15,16 +22,16 @@ name: publish
 # scripts/package-hash.mjs --check FAILS the run when the sources differ
 # from the published version's PACKAGE_HASH.
 on:
-  workflow_run:
-    workflows: [vitest]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   id-token: write   # OIDC token for trusted publishing
   contents: read
   actions: read     # look up the rust run for the same commit
+
+defaults:
+  run:
+    working-directory: modules/web
 
 jobs:
   publish:
@@ -40,12 +47,14 @@ jobs:
       # `rust` (fmt, clippy, cargo test) must be green for the same commit
       # too. Wait for it if it is still running.
       - name: rust CI green for this commit
+        # Runs before the checkout, when the module directory does not exist yet.
+        working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           for _ in $(seq 1 90); do
-            run=$(gh api "repos/${{ github.repository }}/actions/workflows/rust.yml/runs?head_sha=$SHA&event=push&per_page=1" \
+            run=$(gh api "repos/${{ github.repository }}/actions/workflows/web-rust.yml/runs?head_sha=$SHA&event=push&per_page=1" \
                     --jq '.workflow_runs[0] | "\(.status) \(.conclusion)"' || true)
             echo "rust @ $SHA: ${run:-none}"
             case "$run" in
@@ -64,7 +73,8 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: packages/web-render
+          workspaces: modules/web/packages/web-render -> target
+          prefix-key: v0-rust-web
       # The version is READ FROM the crate's lockfile, so the CLI and the
       # crate cannot disagree (build-wasm.sh refuses a mismatch anyway).
       - name: wasm-bindgen (prebuilt; version from the web-render lockfile)

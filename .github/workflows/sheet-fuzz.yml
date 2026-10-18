@@ -1,4 +1,4 @@
-name: fuzz
+name: sheet / fuzz
 # Nightly only — never on PRs. cargo-fuzz targets live in fuzz/ (its own
 # workspace, so the main build and nextest never compile them):
 #   parse_formula     parse -> print -> reparse must be a fixpoint
@@ -7,6 +7,9 @@ name: fuzz
 # Seeds: corpus/xlsx-corpus, corpus/xlsx-recalc and the fn-corpus formulas,
 # plus every reproducer committed under fuzz/regressions/. A crash uploads
 # its artifact and fails the run.
+#
+# MONOREPO (step A3): ported from paged-media/plugin-sheets
+# .github/workflows/fuzz.yml; runs in modules/sheet (schedule + dispatch only).
 on:
   schedule:
     - cron: "17 2 * * *"
@@ -14,6 +17,10 @@ on:
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    working-directory: modules/sheet
 
 jobs:
   fuzz:
@@ -38,7 +45,7 @@ jobs:
             cp fuzz/regressions/xlsx_* fuzz/corpus/${{ matrix.target }}/
           fi
       - name: fuzz ${{ matrix.target }} (20 min)
-        working-directory: fuzz
+        working-directory: modules/sheet/fuzz
         run: >
           cargo +nightly fuzz run ${{ matrix.target }} --
           -max_total_time=1200 -rss_limit_mb=2048 -max_len=1048576
@@ -46,4 +53,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fuzz-${{ matrix.target }}
-          path: fuzz/artifacts/
+          path: modules/sheet/fuzz/artifacts/

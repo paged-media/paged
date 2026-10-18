@@ -1,18 +1,30 @@
-name: rust
+name: sheet / rust
+# MONOREPO (step A3): ported from paged-media/plugin-sheets
+# .github/workflows/rust.yml; runs in modules/sheet.
 on:
   push:
     branches: [main]
+    paths:
+      - "modules/sheet/**"
+      - ".github/workflows/sheet-rust.yml"
   # Pre-merge gate (audit finding: this lane was push-main-only, so a PR
   # could land red and only redden main afterwards).
   pull_request:
+    paths:
+      - "modules/sheet/**"
+      - ".github/workflows/sheet-rust.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: rust-${{ github.ref }}
+  group: sheet-rust-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: modules/sheet
 
 jobs:
   check:
@@ -25,6 +37,9 @@ jobs:
           targets: wasm32-unknown-unknown
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/sheet -> target
+          prefix-key: v0-rust-sheet
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       # Each guard fails explicitly. They used to be two `! (… | grep …)`
@@ -40,6 +55,8 @@ jobs:
             echo "LEAK: the wasm tree pulls a test-only crate"; exit 1
           fi
       - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: modules/sheet/Cargo.toml
 
   test:
     runs-on: ubuntu-latest
@@ -49,6 +66,9 @@ jobs:
         with:
           toolchain: 1.93.0
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/sheet -> target
+          prefix-key: v0-rust-sheet
       - uses: taiki-e/install-action@nextest
       # No `|| true` here (audit P2 / June V18): a red suite must redden the
       # job. The junit artifact still publishes on failure — the upload step
@@ -73,7 +93,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nextest-junit
-          path: target/nextest/ci/junit.xml
+          path: modules/sheet/target/nextest/ci/junit.xml
           if-no-files-found: error
           retention-days: 14
 
@@ -86,6 +106,9 @@ jobs:
           toolchain: 1.93.0
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/sheet -> target
+          prefix-key: v0-rust-sheet
       - name: install pinned wasm-bindgen-cli (Cargo.lock version)
         run: |
           V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)

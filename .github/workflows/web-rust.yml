@@ -1,4 +1,4 @@
-name: rust
+name: web / rust
 
 # The web-render crate (packages/web-render): formatting, clippy and the Rust
 # test suite. Until this workflow the crate's tests (the lowering, the
@@ -7,22 +7,31 @@ name: rust
 #
 # The crate is its own workspace with its own Cargo.lock (the Blitz tree pins
 # its own kurbo/peniko/stylo), so every step runs inside it.
+#
+# MONOREPO (step A3): ported from paged-media/plugin-web
+# .github/workflows/rust.yml; the crate is now modules/web/packages/web-render.
 on:
   push:
     branches: [main]
+    paths:
+      - "modules/web/**"
+      - ".github/workflows/web-rust.yml"
   pull_request:
+    paths:
+      - "modules/web/**"
+      - ".github/workflows/web-rust.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: rust-${{ github.ref }}
+  group: web-rust-${{ github.ref }}
   cancel-in-progress: true
 
 defaults:
   run:
-    working-directory: packages/web-render
+    working-directory: modules/web/packages/web-render
 
 jobs:
   check:
@@ -35,7 +44,8 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: packages/web-render
+          workspaces: modules/web/packages/web-render -> target
+          prefix-key: v0-rust-web
       - run: cargo fmt --check
       # Both feature sets: the default build is the pure lowering lane, the
       # `blitz` build adds the capture layer and the flow fragmentation.
@@ -52,7 +62,8 @@ jobs:
           toolchain: 1.93.0
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: packages/web-render
+          workspaces: modules/web/packages/web-render -> target
+          prefix-key: v0-rust-web
       - uses: taiki-e/install-action@nextest
       # No `|| true`: a red test reddens the job; the JUnit still uploads
       # (the step below runs under !cancelled()). `--features blitz` is the
@@ -70,6 +81,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nextest-junit
-          path: packages/web-render/target/nextest/ci/junit.xml
+          path: modules/web/packages/web-render/target/nextest/ci/junit.xml
           if-no-files-found: error
           retention-days: 14

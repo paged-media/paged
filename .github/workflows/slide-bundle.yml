@@ -1,16 +1,28 @@
-name: bundle
+name: slide / bundle
+# MONOREPO (step A3): ported from paged-media/plugin-slide
+# .github/workflows/bundle.yml; runs in modules/slide.
 on:
   push:
     branches: [main]
+    paths:
+      - "modules/slide/**"
+      - ".github/workflows/slide-bundle.yml"
   pull_request:
+    paths:
+      - "modules/slide/**"
+      - ".github/workflows/slide-bundle.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: bundle-${{ github.ref }}
+  group: slide-bundle-${{ github.ref }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: modules/slide
 
 jobs:
   bundle:
@@ -22,6 +34,9 @@ jobs:
           toolchain: 1.93.0
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/slide -> target
+          prefix-key: v0-rust-slide
       - name: install pinned wasm-bindgen-cli (Cargo.lock version)
         run: |
           V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
@@ -34,7 +49,11 @@ jobs:
         run: bash scripts/build-wasm.sh
       # pnpm's version comes from package.json's packageManager field;
       # naming it here as well fails the action (two versions specified).
+      # The field lives in modules/slide/package.json (uses: steps ignore
+      # the working-directory default; the monorepo root has no package.json).
       - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: modules/slide/package.json
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -62,7 +81,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vitest-junit
-          path: junit-all.xml
+          path: modules/slide/junit-all.xml
           if-no-files-found: error
           retention-days: 14
       - name: tests failed

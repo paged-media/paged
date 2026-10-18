@@ -1,5 +1,12 @@
-name: publish
+name: sheet / publish
 
+# Disabled in the monorepo: built-in modules are no longer published separately (PM-0008). Kept for reference until wave D.
+#
+# MONOREPO (step A3): ported from paged-media/plugin-sheets .github/workflows/
+# publish.yml with `on: workflow_dispatch` only (its workflow_run trigger on `vitest` is removed). Paths are ported so the
+# file stays readable as a reference; the npm Trusted Publisher it names is
+# bound to the OLD repo and file name, so a dispatch could not publish anyway.
+#
 # Publish @paged-media/sheet to npm via OIDC TRUSTED PUBLISHING (tokenless).
 # Requires a Trusted Publisher on npm: org paged-media, this repo, workflow
 # publish.yml (keep this FILE NAME: the trusted publisher is bound to it).
@@ -15,16 +22,16 @@ name: publish
 # fix sat behind canary.8), scripts/package-hash.mjs --check now FAILS the
 # run when the sources differ from the published version's PACKAGE_HASH.
 on:
-  workflow_run:
-    workflows: [vitest]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   id-token: write   # OIDC token for trusted publishing
   contents: read
   actions: read     # look up the rust run for the same commit
+
+defaults:
+  run:
+    working-directory: modules/sheet
 
 jobs:
   publish:
@@ -40,12 +47,14 @@ jobs:
       # `rust` (fmt, clippy, nextest, coverage gate) must be green for the
       # same commit too. Wait for it if it is still running.
       - name: rust CI green for this commit
+        # Runs before the checkout, when the module directory does not exist yet.
+        working-directory: .
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           for _ in $(seq 1 90); do
-            run=$(gh api "repos/${{ github.repository }}/actions/workflows/rust.yml/runs?head_sha=$SHA&event=push&per_page=1" \
+            run=$(gh api "repos/${{ github.repository }}/actions/workflows/sheet-rust.yml/runs?head_sha=$SHA&event=push&per_page=1" \
                     --jq '.workflow_runs[0] | "\(.status) \(.conclusion)"' || true)
             echo "rust @ $SHA: ${run:-none}"
             case "$run" in
@@ -60,6 +69,9 @@ jobs:
           ref: ${{ env.SHA }}
       - run: rustup target add wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: modules/sheet -> target
+          prefix-key: v0-rust-sheet
       # The version is READ FROM Cargo.lock, not written here. It used to
       # be hardcoded three times in this step with a comment saying it
       # "must match Cargo.lock", which is a rule a comment cannot keep:
