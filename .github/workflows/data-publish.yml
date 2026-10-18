@@ -31,9 +31,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  id-token: write   # OIDC token for trusted publishing
+  id-token: write # OIDC token for trusted publishing
   contents: read
-  actions: read     # look up the rust run for the same commit
+  actions: read # look up the rust run for the same commit
 
 defaults:
   run:

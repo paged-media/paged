@@ -235,12 +235,12 @@ jobs:
             echo "::warning title=wasm budget::raw image_js.wasm ($RAW bytes) exceeds the 100 MB app wasm budget — see BREAKAGE I-07"
           fi
 
-  # The GPU device tests on a SOFTWARE Vulkan adapter (Mesa lavapipe),
-  # on every PR. WGPU_FALLBACK=1 selects the CPU-type adapter, which is
-  # lavapipe; PAGED_REQUIRE_GPU=1 makes a missing adapter fail every device
-  # test instead of skipping it (image-gpu/src/test_support.rs,
-  # paged-test-resources). The first test step prints the adapter, so the
-  # log says what the tests ran on.
+      # The GPU device tests on a SOFTWARE Vulkan adapter (Mesa lavapipe),
+      # on every PR. WGPU_FALLBACK=1 selects the CPU-type adapter, which is
+      # lavapipe; PAGED_REQUIRE_GPU=1 makes a missing adapter fail every device
+      # test instead of skipping it (image-gpu/src/test_support.rs,
+      # paged-test-resources). The first test step prints the adapter, so the
+      # log says what the tests ran on.
       # A silent fallback to the default linker fails here: mold stamps
       # the .comment section of what it links.
       - name: mold linked the test binaries

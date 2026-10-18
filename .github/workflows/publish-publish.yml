@@ -29,7 +29,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  id-token: write   # OIDC token for trusted publishing
+  id-token: write # OIDC token for trusted publishing
   contents: read
 
 defaults:
