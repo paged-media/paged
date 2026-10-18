@@ -248,6 +248,9 @@ jobs:
             files: ['paged_canvas_wasm.js','paged_canvas_wasm_bg.wasm','paged_canvas_wasm.d.ts'],
             license: 'AGPL-3.0-only OR LicenseRef-PMEL'
           }, null, 2))"
+          # The licence ships with the package: the AGPL-3.0 text and the
+          # dual-licence notice (npm packs LICENSE* whatever `files` says).
+          cp ../../LICENSE web/idml-viewer/LICENSE.md "$OUT/"
 
       - name: Build @paged-media/introspect-wasm
         run: |
@@ -272,6 +275,9 @@ jobs:
             files: ['paged_introspect_wasm.js','paged_introspect_wasm_bg.wasm','paged_introspect_wasm.d.ts','catalog.json'],
             license: 'AGPL-3.0-only OR LicenseRef-PMEL'
           }, null, 2))"
+          # The licence ships with the package: the AGPL-3.0 text and the
+          # dual-licence notice (npm packs LICENSE* whatever `files` says).
+          cp ../../LICENSE web/idml-viewer/LICENSE.md "$OUT/"
 
       - name: Build @paged-media/repo-wasm
         run: |
@@ -294,6 +300,9 @@ jobs:
             files: ['paged_repo_wasm.js','paged_repo_wasm_bg.wasm','paged_repo_wasm.d.ts'],
             license: 'AGPL-3.0-only OR LicenseRef-PMEL'
           }, null, 2))"
+          # The licence ships with the package: the AGPL-3.0 text and the
+          # dual-licence notice (npm packs LICENSE* whatever `files` says).
+          cp ../../LICENSE web/idml-viewer/LICENSE.md "$OUT/"
 
       - name: Subset audit — paged-sdk must not link editor crates
         run: |
@@ -330,6 +339,9 @@ jobs:
             files: ['paged_sdk.js','paged_sdk_bg.wasm','paged_sdk.d.ts'],
             license: 'AGPL-3.0-only OR LicenseRef-PMEL'
           }, null, 2))"
+          # The licence ships with the package: the AGPL-3.0 text and the
+          # dual-licence notice (npm packs LICENSE* whatever `files` says).
+          cp ../../LICENSE web/idml-viewer/LICENSE.md "$OUT/"
           rm -f "$OUT/paged_sdk_bg.wasm.br"
 
       - name: Build @paged-media/idml-viewer (TS wrapper + bundled wasm)
