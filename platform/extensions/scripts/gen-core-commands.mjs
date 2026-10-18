@@ -30,7 +30,10 @@ import { resolve } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-import ts from "typescript";
+// The JavaScript compiler API. TypeScript 7 (the workspace's `typescript`)
+// ships only the native compiler, so the API comes from the 6.x line under
+// its own name (a devDependency of this workspace package).
+import ts from "@typescript/typescript6";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 export const WIRE = resolve(ROOT, "packages/plugin-api/src/wire.d.ts");

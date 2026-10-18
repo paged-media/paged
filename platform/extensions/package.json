@@ -10,8 +10,7 @@
     "test": "bun run --filter './packages/*' test"
   },
   "devDependencies": {
-    "dts-bundle-generator": "^9.5.1",
-    "tsup": "^8.5.1",
+    "@typescript/typescript6": "6.0.2",
     "typescript": "catalog:"
   }
 }

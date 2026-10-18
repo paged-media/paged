@@ -30,8 +30,8 @@ import type {
 import {
   createBundleHost,
   type CreateBundleHostOptions,
-} from "./host-impl";
-import { API_VERSION, satisfiesApiVersion } from "./version";
+} from "./host-impl.js";
+import { API_VERSION, satisfiesApiVersion } from "./version.js";
 
 const ID_PATTERN = /^[a-z][a-z0-9]*(\.[a-z][a-z0-9-]*)+$/;
 

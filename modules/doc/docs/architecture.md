@@ -33,8 +33,8 @@ after the table gives the dependency direction.
   source files that is outside the contract packages `@paged-media/plugin-api` and
   `@paged-media/plugin-sdk`, this repo's packages and `react`
   ([ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md)).
-- `doc-bundle` takes the two contract packages and `react` as peer dependencies; tsup
-  inlines `doc-host-model` into the built bundle. The split into Rust semantics, a
+- `doc-bundle` takes the two contract packages and `react` as peer dependencies and
+  imports `doc-host-model` through the workspace; the editor builds both from source. The split into Rust semantics, a
   forwarding wasm class and a translating TypeScript package is the shape of
   [ADR 314](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/314-plugin-shape.md).
 - Third-party Rust: `ooxmlsdk` 0.12 (feature `mce`), `zip` 2, `quick-xml` 0.41, `wasm-bindgen`

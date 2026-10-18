@@ -12,7 +12,6 @@
     "validate:manifest": "node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/doc-bundle/manifest.json"
   },
   "devDependencies": {
-    "tsup": "^8.5.1",
     "typescript": "catalog:"
   }
 }

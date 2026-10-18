@@ -38,10 +38,6 @@ tasks:
       - project: 'extensions'
         filter: ['packages/plugin-cli/**/*', 'packages/plugin-api/src/manifest.schema.json']
 
-  js-build:
-    # The packages are glue/ and manifest/, not packages/*.
-    command: "bun run --filter './glue' --filter './manifest' build"
-
   wasm:
     description: 'image-js wasm into glue/wasm/ and manifest/wasm/ (scripts/build-wasm.sh).'
     toolchains: ['rust']

@@ -12,7 +12,6 @@
     "bench": "bun run --filter './packages/*' bench"
   },
   "devDependencies": {
-    "tsup": "^8.5.1",
     "typescript": "catalog:"
   }
 }

@@ -42,7 +42,7 @@ import type {
   ValueType,
 } from "@paged-media/plugin-api";
 
-import { validateValue } from "./object-schema";
+import { validateValue } from "./object-schema.js";
 
 type Ok<T> = { ok: true } & T;
 type No = { ok: false; code: ObjectErrorCode; reason: string };
