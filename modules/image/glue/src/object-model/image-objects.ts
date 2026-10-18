@@ -259,7 +259,7 @@ export function createImageObjects(host: BundleHost, codec: () => Promise<ImageC
     notImages.clear();
     treeMemo = null;
   };
-  const sub = host.document.onDidChange?.(() => invalidate());
+  const sub = host.document.onDidChange(() => invalidate());
 
   const tree = () => {
     if (!treeMemo) {
