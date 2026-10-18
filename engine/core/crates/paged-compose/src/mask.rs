@@ -123,7 +123,7 @@ impl MaskRaster {
                 }
             }
             xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-            for pair in xs.chunks_exact(2) {
+            for pair in xs.as_chunks::<2>().0 {
                 if pair[1] < 0.0 || pair[0] > w as f32 {
                     continue;
                 }

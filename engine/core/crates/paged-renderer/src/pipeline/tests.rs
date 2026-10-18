@@ -1752,7 +1752,7 @@ fn track_1a_oversized_jpeg_routes_through_streaming_decoder() {
         (decoded.width as usize) * (decoded.height as usize) * 4
     );
     // Alpha channel filled to opaque — JPEGs carry no alpha.
-    assert!(decoded.rgba.chunks_exact(4).all(|p| p[3] == 255));
+    assert!(decoded.rgba.as_chunks::<4>().0.iter().all(|p| p[3] == 255));
 }
 
 // Track 1a: small JPEGs (longest edge ≤ cap) skip the streaming

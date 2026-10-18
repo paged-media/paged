@@ -42,7 +42,7 @@ pub(crate) fn bake_from_exact(t: &dyn ExactTransform, dim: u32) -> GpuLut {
     let mut row: Vec<u8> = vec![0; n * 4];
     for b in 0..n {
         for g in 0..n {
-            for (r, px) in row.chunks_exact_mut(4).enumerate() {
+            for (r, px) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
                 px[0] = lattice_coord(r, n);
                 px[1] = lattice_coord(g, n);
                 px[2] = lattice_coord(b, n);

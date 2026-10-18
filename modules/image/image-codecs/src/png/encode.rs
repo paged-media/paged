@@ -213,11 +213,13 @@ impl ImageTarget for PngTarget {
         let mut cs = *colorspace;
         if self.drop_opaque_alpha
             && *colorspace == ColorSpace::RGBA
-            && buffer.chunks_exact(4).all(|px| px[3] == 255)
+            && buffer.as_chunks::<4>().0.iter().all(|px| px[3] == 255)
         {
             packed = Some(
                 buffer
-                    .chunks_exact(4)
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
                     .flat_map(|px| [px[0], px[1], px[2]])
                     .collect(),
             );

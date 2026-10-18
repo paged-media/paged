@@ -1017,15 +1017,14 @@ pub(super) fn node_exists(doc: &Document, node: &NodeId) -> bool {
                     return true;
                 }
             }
-            NodeId::Oval(_) => {
+            NodeId::Oval(_)
                 if parsed
                     .spread
                     .ovals
                     .iter()
-                    .any(|o| o.self_id.as_deref() == Some(target))
-                {
-                    return true;
-                }
+                    .any(|o| o.self_id.as_deref() == Some(target)) =>
+            {
+                return true;
             }
             _ => {}
         }

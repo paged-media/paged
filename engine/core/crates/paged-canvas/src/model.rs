@@ -12209,7 +12209,7 @@ impl CanvasModel {
         };
         let (iw, ih) = (*width as u64, *height as u64);
         let mut need: u64 = 0;
-        for r in rects.chunks_exact(4) {
+        for r in rects.as_chunks::<4>().0 {
             let (x, y, w, h) = (r[0] as u64, r[1] as u64, r[2] as u64, r[3] as u64);
             if w == 0 || h == 0 || x + w > iw || y + h > ih {
                 return fail(format!("tile {x},{y} {w}x{h} outside the {iw}x{ih} image"));
@@ -12229,7 +12229,7 @@ impl CanvasModel {
         };
         let stride = iw as usize * 4;
         let mut src = 0usize;
-        for r in rects.chunks_exact(4) {
+        for r in rects.as_chunks::<4>().0 {
             let (x, y, w, h) = (r[0] as usize, r[1] as usize, r[2] as usize, r[3] as usize);
             let row = w * 4;
             for j in 0..h {

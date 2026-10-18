@@ -4149,7 +4149,7 @@ mod tests {
         );
         // Nowhere on the page may the red artwork itself show. A
         // channel-imbalanced pixel is the signature of leaked red.
-        for chunk in gpu.chunks_exact(4) {
+        for chunk in gpu.as_chunks::<4>().0 {
             assert!(
                 chunk[0].abs_diff(chunk[1]) <= 2 && chunk[1].abs_diff(chunk[2]) <= 2,
                 "mask artwork leaked colour onto the page: {chunk:?}"
@@ -4595,7 +4595,7 @@ mod tests {
         let cpu = crate::CpuRasterizer.rasterize(list, opts);
         let mut worst = 0u8;
         let mut ndiff = 0usize;
-        for (g, c) in gpu.chunks_exact(4).zip(cpu.chunks_exact(4)) {
+        for (g, c) in gpu.as_chunks::<4>().0.iter().zip(cpu.as_chunks::<4>().0) {
             let d = (0..4).map(|i| g[i].abs_diff(c[i])).max().unwrap_or(0);
             worst = worst.max(d);
             if d > 2 {

@@ -137,8 +137,10 @@ fn gpu_premultiply_then_unpremultiply_round_trips__feat__image_kernel_family_t0(
                 &pre,
             );
             let worst = bytes
-                .chunks_exact(2)
-                .zip(back.chunks_exact(2))
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .zip(back.as_chunks::<2>().0)
                 .map(|(a, b)| {
                     f16_ulp_distance(
                         u16::from_le_bytes([a[0], a[1]]),

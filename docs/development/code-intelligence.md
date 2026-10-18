@@ -46,8 +46,8 @@ proto install                                 # node 24.22.0 (and npm) for the T
 
 - **rust-analyzer.** Serena 2.0.0 finds it with `rustup which rust-analyzer`,
   run in the repository root. The root has no `rust-toolchain.toml`, so that is
-  the default toolchain's component, not the one of `engine/core` (1.94.1) or
-  the modules (1.93.0). If rustup is installed but the component is missing,
+  the default toolchain's component, not the one the Cargo workspaces pin
+  (1.99.1). If rustup is installed but the component is missing,
   Serena runs `rustup component add rust-analyzer` by itself; installing it
   first keeps that step explicit.
 - **TypeScript.** Serena installs typescript-language-server and typescript

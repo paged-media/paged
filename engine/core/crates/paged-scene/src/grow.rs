@@ -162,8 +162,7 @@ impl Document {
             return;
         };
         let mut prev_at = first_link;
-        let mut insert_at = spread_idx + 1;
-        for k in 1..=n {
+        for (insert_at, k) in (spread_idx + 1..).zip(1..=n) {
             let page_id = generated_page_id(story, k);
             let frame_id = generated_frame_id(story, k);
 
@@ -240,7 +239,6 @@ impl Document {
                 },
             );
             prev_at = (insert_at, 0);
-            insert_at += 1;
         }
         // Once per story, not per page: the next story's chain lookup needs
         // the shifted spread indices.

@@ -8,7 +8,7 @@ applies. A bare file name is in `packages/draw-bundle/src/` unless another packa
 ## Packages and crates
 
 The repo is two workspaces at one root: a pnpm workspace (`packages/*`, TypeScript) and a
-Cargo workspace (`crates/draw-trace`, `crates/trace-js`, Rust pinned to 1.93.0 with the
+Cargo workspace (`crates/draw-trace`, `crates/trace-js`, Rust pinned to 1.99.1 with the
 `wasm32-unknown-unknown` target in `rust-toolchain.toml`).
 
 **`packages/draw-geometry`** — private, no dependencies, no import other than relative

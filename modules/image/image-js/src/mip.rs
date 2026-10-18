@@ -264,7 +264,7 @@ mod tests {
     /// preserves the colour exactly and assertions are unambiguous.
     fn solid(w: u32, h: u32, rgba: [u8; 4]) -> Vec<u8> {
         let mut v = vec![0u8; (w * h * 4) as usize];
-        for px in v.chunks_exact_mut(4) {
+        for px in v.as_chunks_mut::<4>().0 {
             px.copy_from_slice(&rgba);
         }
         v
@@ -285,9 +285,9 @@ mod tests {
         let (bytes, w, h) = pyr.window_rgba8(1, 0, 0, 4, 4);
         assert_eq!((w, h), (4, 4));
         assert_eq!(bytes.len(), 4 * 4 * 4);
-        for px in bytes.chunks_exact(4) {
+        for px in bytes.as_chunks::<4>().0 {
             // f16(v/255) round-trip is exact for the 8-bit codes here.
-            assert_eq!(px, color, "solid colour preserved through level 1");
+            assert_eq!(*px, color, "solid colour preserved through level 1");
         }
     }
 
@@ -301,8 +301,8 @@ mod tests {
         // Ask for a 4x4 window at level 2; it clips to the 2x2 extent.
         let (bytes, w, h) = pyr.window_rgba8(2, 0, 0, 4, 4);
         assert_eq!((w, h), (2, 2), "level-2 extent is 2x2");
-        for px in bytes.chunks_exact(4) {
-            assert_eq!(px, color);
+        for px in bytes.as_chunks::<4>().0 {
+            assert_eq!(*px, color);
         }
     }
 
