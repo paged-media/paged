@@ -277,12 +277,12 @@
         "@paged-media/doc-host-model": "workspace:*",
         "@paged-media/plugin-api": "workspace:*",
         "@paged-media/plugin-sdk": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@types/react": "catalog:",
         "react": "catalog:",
         "tsup": "^8.5.1",
         "typescript": "catalog:",
-        "vitest": "catalog:",
       },
       "peerDependencies": {
         "@paged-media/plugin-api": "workspace:*",
@@ -297,9 +297,9 @@
         "@paged-media/plugin-api": "workspace:*",
       },
       "devDependencies": {
+        "@types/bun": "catalog:",
         "tsup": "^8.5.1",
         "typescript": "catalog:",
-        "vitest": "catalog:",
       },
     },
     "modules/draw": {

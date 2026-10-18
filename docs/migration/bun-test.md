@@ -49,3 +49,5 @@ package. It is gated on
 | pdf-bundle | 26 | 26 | yes | codemod only |
 | idml-viewer | 27 | 27 | yes | codemod only |
 | slide-bundle | 59 | 59 | yes | `vi.waitFor` → test kit (2 files) |
+| doc-bundle | 41 | 41 | yes | codemod only (`it.fails` → `it.failing`) |
+| doc-host-model | 44 | 44 | yes | codemod only |
