@@ -9,13 +9,15 @@
     "bindings": [
       { "name": "REPO", "class_name": "RepoObject" },
       { "name": "AUTH", "class_name": "AuthObject" },
-      { "name": "WORKSPACE", "class_name": "WorkspaceObject" }
+      { "name": "WORKSPACE", "class_name": "WorkspaceObject" },
+      { "name": "SESSION", "class_name": "SessionObject" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["RepoObject"] },
     { "tag": "v2", "new_sqlite_classes": ["AuthObject"] },
-    { "tag": "v3", "new_sqlite_classes": ["WorkspaceObject"] }
+    { "tag": "v3", "new_sqlite_classes": ["WorkspaceObject"] },
+    { "tag": "v4", "new_sqlite_classes": ["SessionObject"] }
   ],
   "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "paged-objects" }]
 }

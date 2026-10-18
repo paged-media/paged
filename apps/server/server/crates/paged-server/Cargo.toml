@@ -16,6 +16,8 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 base64 = "0.22"
+futures-channel = "0.3"
+futures-util = { version = "0.3", default-features = false }
 getrandom = { version = "0.2", features = ["js"] }
 hmac = "0.12"
 worker = "0.8.7"

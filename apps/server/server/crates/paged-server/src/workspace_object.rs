@@ -41,7 +41,8 @@ use crate::{ACTOR_HEADER, ROUTE_HEADER};
 
 const SCHEMA: &str = "CREATE TABLE IF NOT EXISTS policy_log (seq INTEGER PRIMARY KEY,
   policy TEXT NOT NULL, actor TEXT NOT NULL, ts INTEGER NOT NULL, prev TEXT, hash TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS repos (name TEXT PRIMARY KEY, created INTEGER NOT NULL, updated INTEGER NOT NULL);";
+CREATE TABLE IF NOT EXISTS repos (name TEXT PRIMARY KEY, created INTEGER NOT NULL, updated INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS live (session TEXT PRIMARY KEY, document TEXT NOT NULL, title TEXT NOT NULL, since INTEGER NOT NULL);";
 
 /// The route a repository uses to read its workspace's policy. The Worker
 /// never forwards a client path under `internal/`.
@@ -174,6 +175,45 @@ impl DurableObject for WorkspaceObject {
         }
         if route == "internal/repos" {
             return Response::from_json(&self.repos()?);
+        }
+        // A person's connected editor tabs (their home directory only).
+        if route == "internal/live" {
+            let sql = self.state.storage().sql();
+            if req.method() == Method::Post {
+                let b: Value = req.json().await?;
+                let session = b["session"].as_str().unwrap_or("").to_string();
+                if b["connected"] == true {
+                    sql.exec(
+                        "INSERT OR REPLACE INTO live (session, document, title, since) VALUES (?, ?, ?, ?)",
+                        vec![
+                            V::String(session),
+                            V::String(b["document"].as_str().unwrap_or("").into()),
+                            V::String(b["title"].as_str().unwrap_or("").into()),
+                            V::Integer(worker::Date::now().as_millis() as i64),
+                        ],
+                    )?;
+                } else {
+                    sql.exec(
+                        "DELETE FROM live WHERE session = ?",
+                        vec![V::String(session)],
+                    )?;
+                }
+                return Response::from_json(&json!({ "ok": true }));
+            }
+            let rows: Vec<Value> = sql
+                .exec("SELECT session, document, title, since FROM live ORDER BY since DESC", None)?
+                .raw()
+                .filter_map(|r| r.ok())
+                .map(|r| {
+                    let v = |x: &V| match x {
+                        V::String(s) => json!(s),
+                        V::Integer(i) => json!(i),
+                        _ => Value::Null,
+                    };
+                    json!({ "session": v(&r[0]), "document": v(&r[1]), "title": v(&r[2]), "since": v(&r[3]) })
+                })
+                .collect();
+            return Response::from_json(&rows);
         }
         if actor.is_empty() {
             return problem(401, "Unauthenticated", "no actor");

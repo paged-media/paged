@@ -93,6 +93,22 @@ POST, no server-initiated stream; `GET` answers 405). The tools are core's
 - Tools with a view declare `_meta.ui.resourceUri = ui://paged/view` (MCP Apps),
   served by `resources/read`.
 
+## Live relay
+
+An editor tab connects so a model's engine tools act in it:
+
+1. `POST /v1/live` (signed in) `{document, title}` → `{session, url}`, where `url`
+   holds a one-minute signed ticket. A browser cannot put a bearer token on a
+   WebSocket, so it trades one for the ticket.
+2. `GET /v1/live/{session}/ws?ticket=…` upgrades to the tab's WebSocket, held by
+   that tab's `SessionObject`. It hibernates, so an idle tab costs nothing.
+3. A model's `run_script`, `render_page`, `open_document` and `save_document`
+   reach the tab as `{type:"call", id, tool, args, agent, run}`. The tab answers
+   `{type:"result", id, result}` once it has shown the call, and once the person
+   has allowed it if the tab asks. Calls wait two minutes.
+4. Only the tab's owner's model may call it. `list_live_sessions` lists the
+   caller's own tabs, from their home directory.
+
 ## Local
 
 ```bash
@@ -112,5 +128,5 @@ deliberate acts.
 
 ## Not yet
 
-The Session DO relay to an open editor tab. `paged-repo` is a path dependency
-into a sibling core checkout until core's `feat/paged-repo` is on origin.
+`paged-repo` and `paged-mcp` are path dependencies into a sibling core checkout
+until core's `feat/paged-repo` is on origin. Nothing has been deployed.

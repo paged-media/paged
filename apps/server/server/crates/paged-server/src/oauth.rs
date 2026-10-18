@@ -487,3 +487,33 @@ pub async fn token(mut req: Request, env: &Env, cfg: &Config) -> Result<Response
         ),
     }
 }
+
+/// A one-minute ticket for an editor tab's live connection: a browser cannot
+/// put a bearer token on a WebSocket, so it trades one for this first.
+pub fn mint_ticket(
+    cfg: &Config,
+    session: &str,
+    actor: &str,
+    document: &str,
+    title: &str,
+) -> String {
+    let claims =
+        json!({ "s": session, "a": actor, "d": document, "t": title, "exp": now_s() + 60 });
+    let body = b64(claims.to_string().as_bytes());
+    let tag = b64(&hmac(&cfg.secret, format!("live.{body}").as_bytes()));
+    format!("{body}.{tag}")
+}
+
+/// (session, actor, document, title) of a genuine, current ticket.
+pub fn verify_ticket(cfg: &Config, ticket: &str) -> Option<(String, String, String, String)> {
+    let (body, tag) = ticket.split_once('.')?;
+    if !hmac_ok(&cfg.secret, format!("live.{body}").as_bytes(), &unb64(tag)?) {
+        return None;
+    }
+    let c: Value = serde_json::from_slice(&unb64(body)?).ok()?;
+    if c["exp"].as_i64()? <= now_s() {
+        return None;
+    }
+    let s = |k: &str| c[k].as_str().unwrap_or("").to_string();
+    Some((s("s"), s("a"), s("d"), s("t")))
+}

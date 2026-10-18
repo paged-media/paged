@@ -46,12 +46,14 @@ mod oauth;
 mod problem;
 mod repo_object;
 mod session;
+mod session_object;
 mod store;
 mod view;
 mod workspace_object;
 
 pub use auth_object::AuthObject;
 pub use repo_object::RepoObject;
+pub use session_object::SessionObject;
 pub use workspace_object::WorkspaceObject;
 
 use worker::{event, Context, Env, Headers, Method, Request, RequestInit, Response, Result};
@@ -106,6 +108,9 @@ async fn route(mut req: Request, env: Env) -> Result<Response> {
     }
     if let Some(token) = path.strip_prefix("/v1/dl/") {
         return download(token, &env).await;
+    }
+    if path == "/v1/live" || path.starts_with("/v1/live/") {
+        return live(req, &env).await;
     }
     if let Some(route) = path.strip_prefix("/oauth/") {
         let Some(cfg) = oauth::Config::from(&env) else {
@@ -251,4 +256,72 @@ async fn download(token: &str, env: &Env) -> Result<Response> {
         &format!("attachment; filename=\"{name}.paged\""),
     )?;
     Ok(resp.with_headers(headers))
+}
+
+/// An editor tab connecting for the relay. `POST /v1/live` (signed in) trades
+/// the bearer token for a one-minute ticket; `GET /v1/live/{session}/ws?ticket=`
+/// upgrades to the tab's WebSocket.
+async fn live(mut req: Request, env: &Env) -> Result<Response> {
+    let Some(cfg) = oauth::Config::from(env) else {
+        return problem(503, "Not configured", "this server signs no tickets");
+    };
+    let url = req.url()?;
+    let path = url.path().to_string();
+    if path == "/v1/live" && req.method() == Method::Post {
+        let actor = match auth::actor(&req, env) {
+            Ok(a) => a,
+            Err(_) => return problem(401, "Unauthenticated", "sign in first"),
+        };
+        let body: serde_json::Value = req.json().await.unwrap_or_default();
+        let session = crypto::random(12).to_lowercase().replace('_', "-");
+        let ticket = oauth::mint_ticket(
+            &cfg,
+            &session,
+            &actor,
+            body["document"].as_str().unwrap_or(""),
+            body["title"].as_str().unwrap_or(""),
+        );
+        return Response::from_json(&serde_json::json!({
+            "session": session,
+            "url": format!("/v1/live/{session}/ws?ticket={ticket}"),
+        }));
+    }
+    let Some(session) = path
+        .strip_prefix("/v1/live/")
+        .and_then(|r| r.strip_suffix("/ws"))
+    else {
+        return problem(404, "Not found", "no such route");
+    };
+    if req.headers().get("upgrade")?.as_deref() != Some("websocket") {
+        return problem(426, "Upgrade required", "this is a WebSocket");
+    }
+    let ticket = url
+        .query_pairs()
+        .find(|(k, _)| k == "ticket")
+        .map(|(_, v)| v.to_string())
+        .unwrap_or_default();
+    let Some((sid, actor, document, title)) = oauth::verify_ticket(&cfg, &ticket) else {
+        return problem(403, "Ticket expired or forged", "ask for a new one");
+    };
+    if sid != session {
+        return problem(403, "Ticket is for another session", "ask for a new one");
+    }
+    let headers = Headers::new();
+    for (k, v) in req.headers().entries() {
+        if !k.starts_with("x-paged-") {
+            headers.set(&k, &v)?;
+        }
+    }
+    headers.set(ACTOR_HEADER, &actor)?;
+    headers.set("x-paged-session", &sid)?;
+    headers.set("x-paged-document", &document)?;
+    headers.set("x-paged-title", &title)?;
+    let mut init = RequestInit::new();
+    init.with_method(Method::Get).with_headers(headers);
+    let forwarded = Request::new_with_init(&format!("https://session/v1/live/{sid}/ws"), &init)?;
+    let stub = env
+        .durable_object("SESSION")?
+        .id_from_name(&sid)?
+        .get_stub()?;
+    stub.fetch_with_request(forwarded).await
 }

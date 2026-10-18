@@ -67,7 +67,3 @@ pub fn unb64_std(s: &str) -> Option<Vec<u8>> {
         .decode(s.trim())
         .ok()
 }
-
-pub fn b64_std(bytes: &[u8]) -> String {
-    base64::engine::general_purpose::STANDARD.encode(bytes)
-}

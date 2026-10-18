@@ -18,3 +18,4 @@ tiny_http = "0.12"
 sha2 = { workspace = true }
 base64 = "0.22"
 url = "2"
+tungstenite = "0.24"
