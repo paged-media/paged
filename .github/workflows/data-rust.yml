@@ -98,7 +98,7 @@ jobs:
       # could never go red. Evidence still ships: the coverage gate and the
       # JUnit upload below run under `!cancelled()`.
       - name: nextest (junit)
-        run: cargo nextest run --workspace --profile ci --no-fail-fast
+        run: cargo nextest run --workspace --profile ci --no-fail-fast --no-tests=fail
       # The §12.2 invariant, both halves: every `implemented` registry row
       # names a test that exists, AND (with --junit) that test ran in the
       # nextest run above and passed. An #[ignore]d skeleton or a red test is
@@ -159,5 +159,10 @@ jobs:
         run: |
           curl -sL https://github.com/WebAssembly/binaryen/releases/download/version_126/binaryen-version_126-x86_64-linux.tar.gz | tar xz
           echo "$PWD/binaryen-version_126/bin" >> "$GITHUB_PATH"
+      # Bun at the version in /.prototools (build-wasm.sh runs source-hash.mjs on it).
+      - uses: moonrepo/setup-toolchain@v0.6.4
+        with:
+          auto-install: true
+          proto-version: "0.63.1"
       - name: build + budget gate (100 MB app-wide)
         run: bash scripts/build-wasm.sh

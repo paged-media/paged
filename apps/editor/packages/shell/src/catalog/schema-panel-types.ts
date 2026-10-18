@@ -20,9 +20,11 @@
 // Local STRUCTURAL mirror of the plugin-api schema-panel contract
 // (`@paged-media/plugin-api` `PanelSchema` / `BindingsSurface` / …).
 //
-// Why a mirror, not an import: `@paged-media/shell` is one layer below
-// `apps/canvas` in the consumer chain and does NOT depend on
-// `@paged-media/plugin-api` (only `apps/canvas` links it). The shell
+// Why a mirror, not an import: when this was written, `@paged-media/shell`
+// did NOT depend on `@paged-media/plugin-api` (only `apps/canvas` linked
+// it). It does now, for the contribution types (ADR 226), so this mirror
+// can derive from the contract the same way; until it does, the seam
+// assertion below is what keeps it honest. The shell
 // renders the schema; the bundle host (in apps/canvas) injects this
 // renderer into `createBundleHost({ schemaPanelRenderer })`. The
 // INJECTION POINT (apps/canvas `main.tsx`) asserts this renderer

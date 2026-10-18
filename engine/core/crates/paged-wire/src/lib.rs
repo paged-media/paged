@@ -59,6 +59,8 @@ use serde::{Deserialize, Serialize};
 use tsify_next::Tsify;
 
 mod address;
+#[cfg(all(feature = "schema", feature = "mutations"))]
+pub mod schema;
 pub use address::{address_forms, Address, AddressForm, AddressKind, GrammarError, StyleFamily};
 pub mod selector;
 pub use selector::Selector;
@@ -81,6 +83,7 @@ pub mod query;
     serde::Deserialize,
     tsify_next::Tsify,
 )]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 pub struct PageId(pub String);
 
@@ -110,6 +113,7 @@ impl std::fmt::Display for PageId {
 /// existing `Mutation::SetElementProperty` wire shape — see
 /// the editor's client-SDK implementation plan §3c.1 (not published).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(tag = "kind", content = "id", rename_all = "camelCase")]
 pub enum ElementId {
@@ -664,6 +668,7 @@ mod tests {
 /// an explicit, type-checked decision. Undo is trivially correct
 /// because the inverse op carries the same `cell` qualifier.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(rename_all = "camelCase")]
 pub struct TextCellAddr {
@@ -975,6 +980,7 @@ pub mod address_wire {
 /// JSON renders an array of numbers; future binary protocols (CBOR
 /// / messagepack) render a real bytes blob without code change.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(transparent)]
 pub struct ByteBuf(pub Vec<u8>);
@@ -1004,6 +1010,7 @@ impl From<Vec<u8>> for ByteBuf {
 /// See the crate docs.
 #[cfg(feature = "mutations")]
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[tsify(into_wasm_abi, from_wasm_abi, missing_as_null)]
 #[serde(
     rename_all = "camelCase",
@@ -1073,6 +1080,9 @@ pub enum Mutation {
         /// against the story at apply time and ignores `offset` (send 0).
         /// An older engine ignores the field, so gate it on `protocol >= 68`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
+        // schemars drops a default that `skip_serializing_if` skips; say it,
+        // so the schema reads this as optional, not as required-or-null.
+        #[cfg_attr(feature = "schema", schemars(extend("default" = null)))]
         content_offset: Option<u32>,
     },
     /// v52 — insert an image-bearing anchored Rectangle into a story, anchored
@@ -1975,6 +1985,7 @@ pub enum Mutation {
     Set {
         #[serde(with = "address_wire")]
         #[tsify(type = "string")]
+        #[cfg_attr(feature = "schema", schemars(with = "String"))]
         address: Address,
         path: String,
         value: paged_mutate::Value,

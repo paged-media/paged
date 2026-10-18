@@ -56,7 +56,7 @@ if [[ "$LOCKED" != "$CLI" ]]; then
   exit 1
 fi
 
-SOURCE_HASH=$(node "$HERE/scripts/source-hash.mjs")
+SOURCE_HASH=$(bun "$HERE/scripts/source-hash.mjs")
 # The crate's `wasm-release` profile (Cargo.toml): release + fat LTO in one
 # codegen unit, which the shipped size depends on.
 PROFILE="wasm-release"
@@ -92,7 +92,7 @@ ls -la "$OUT"
 # is a reviewed change. The app-wide sum is the editor's concern (its
 # scripts/wasm-budget.mjs).
 BG="$OUT/blitz_web_bg.wasm"
-BUDGET_BYTES=$(node -e '
+BUDGET_BYTES=$(bun -e '
   const m = require(process.argv[1]);
   const w = (m.capabilities.wasm || []).find((x) => x.name === "blitz");
   if (!w || !(w.maxBytes > 0)) process.exit(1);

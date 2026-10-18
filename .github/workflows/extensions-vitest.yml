@@ -108,18 +108,21 @@ jobs:
       # Both sources are in this checkout now: the wire is the .d.ts of the
       # canvas-wasm workspace package built above, the catalog is
       # engine/core's catalog.json. A wire or catalog change in the engine
-      # without a resync fails here.
-      - name: vendored wire and catalog match the engine
+      # without a resync fails here. The typed core commands are generated
+      # from the engine's wire schema (crates/paged-wire/schema, ADR 187).
+      - name: vendored wire, catalog and core commands match the engine
         run: |
-          node scripts/sync-wire.mjs --check
-          node scripts/sync-catalog.mjs --check
+          bun scripts/sync-wire.mjs --check
+          bun scripts/sync-catalog.mjs --check
+          bun scripts/gen-core-commands.mjs --check
 
       # Build BEFORE the suite: react-free-import.spec.ts asserts on the
       # SHIPPED artifact (no static react import, no AWAITED react import),
       # and skips itself when `dist` is absent — so without this the guard
-      # was inert in CI. The build is also the top-level-await gate: tsup
-      # pins `--target es2020` (Vite's dep-optimizer floor), which esbuild
-      # cannot emit a top-level await into. See DESIGN.md §5.1.
+      # was inert in CI. The build is also the top-level-await gate: its
+      # declaration compile runs at `"module": "ES2020"` (Vite's
+      # dep-optimizer floor), where TypeScript rejects a top-level await
+      # (TS1378). See DESIGN.md §5.1.
       - run: bun run --filter @paged-media/plugin-sdk build
 
       # The harness specs boot canvas-wasm, the workspace package the step

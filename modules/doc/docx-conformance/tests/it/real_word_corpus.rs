@@ -28,12 +28,13 @@
 //! binary CFB/OLE `.doc`, and one that is RTF despite its extension.
 //! This lane runs the importer over all of them.
 //!
-//! OPT-IN, like the sibling corpus lanes (`PAGED_IDML_CORPUS`,
-//! `PAGED_PSD_ORACLE`, `PAGED_ABR_CORPUS`): the assets live in the
-//! private corpus checkout, which CI does not have.
+//! OPT-IN, like the sibling corpus lanes: the assets live in the private
+//! corpus (`corpus: docx`, docs/development/testing.md), which CI does not
+//! have.
 //!
 //! ```text
-//! PAGED_DOC_CORPUS=1 cargo test -p docx-conformance --test real_word_corpus -- --ignored --nocapture
+//! PAGED_CORPUS_DIR=<corpus root> PAGED_REQUIRE_CORPUS=1 \
+//!     cargo nextest run --profile corpus --run-ignored only
 //! ```
 //!
 //! What it asserts is deliberately structural, not fidelity: a real
@@ -45,25 +46,15 @@
 use std::path::PathBuf;
 
 use docx_import::import_docx;
+use paged_test_resources::{unavailable, Resource};
 
-/// Every `assets/word/*` file across the extracted packs, or `None` with
-/// a printed reason when this machine has no corpus.
+/// Every `assets/word/*` file across the extracted packs, or `None` after
+/// reporting the corpus unavailable when this machine has none.
 fn corpus_word_files() -> Option<Vec<PathBuf>> {
-    let Some(switch) = std::env::var_os("PAGED_DOC_CORPUS") else {
-        eprintln!(
-            "SKIP doc corpus lane: PAGED_DOC_CORPUS unset \
-             (set it to 1, or to a corpus root, and run with --ignored)"
-        );
-        return None;
-    };
-    let switch = switch.to_string_lossy().into_owned();
-    let root = if switch == "1" || switch.is_empty() {
-        // Default: the monorepo's <repo root>/corpus (gitignored; a
-        // local symlink to the private corpus).
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../corpus")
-    } else {
-        PathBuf::from(switch)
-    };
+    // The lane is the corpus's `docx/`; the walk below also reads the
+    // other groups' packs, which sit beside it under the corpus root.
+    let docx = paged_test_resources::corpus("docx", &["PAGED_DOC_CORPUS"])?;
+    let root = docx.parent().map_or_else(|| docx.clone(), PathBuf::from);
     // Walk EVERY group's packs, not just idml's. Since 2026-08-20 a pack
     // is filed under its PRIMARY format, so the 13 real Word packs live
     // at `docx/packs/<pack>/primary.docx`. Globbing only
@@ -106,17 +97,20 @@ fn corpus_word_files() -> Option<Vec<PathBuf>> {
         }
     }
     if !any_group {
-        eprintln!(
-            "SKIP doc corpus lane: no <group>/packs under {}",
-            root.display()
+        unavailable(
+            Resource::Corpus,
+            format_args!("no <group>/packs under {}", root.display()),
         );
         return None;
     }
     out.sort();
     if out.is_empty() {
-        eprintln!(
-            "SKIP doc corpus lane: no Word documents under {} — run corpus/harness/unpack.sh",
-            root.display()
+        unavailable(
+            Resource::Corpus,
+            format_args!(
+                "no Word documents under {} — run corpus/harness/unpack.sh",
+                root.display()
+            ),
         );
         return None;
     }
@@ -130,7 +124,7 @@ fn ext_of(p: &std::path::Path) -> String {
 }
 
 #[test]
-#[ignore = "doc corpus lane: opt-in (PAGED_DOC_CORPUS=1 + the private corpus mount)"]
+#[ignore = "corpus: docx"]
 fn every_real_word_document_imports_or_fails_cleanly() {
     let Some(files) = corpus_word_files() else {
         return;
@@ -205,15 +199,14 @@ fn every_real_word_document_imports_or_fails_cleanly() {
 }
 
 #[test]
-#[ignore = "doc corpus lane: opt-in (PAGED_DOC_CORPUS=1 + the private corpus mount)"]
+#[ignore = "corpus: docx"]
 fn dotx_templates_import_like_documents() {
     let Some(files) = corpus_word_files() else {
         return;
     };
     let dotx: Vec<_> = files.iter().filter(|p| ext_of(p) == "dotx").collect();
     if dotx.is_empty() {
-        eprintln!("SKIP: no .dotx in the corpus");
-        return;
+        paged_test_resources::skip!(Resource::Corpus, "no .dotx in the corpus");
     }
     // A .dotx is a template: same OPC shape as .docx with a different
     // content type. Nothing in the importer should care, and this is the

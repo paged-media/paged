@@ -306,11 +306,11 @@ fn a_new_stroke_weight_is_still_appended_to_an_item_that_had_none() {
 /// cleanly wherever it is absent.
 ///
 /// ```text
-/// PAGED_IDML_CORPUS=1 cargo test -p idml-export --test stroke_weight_precision \
-///     -- --ignored --nocapture
+/// PAGED_CORPUS_DIR=<corpus root> cargo test -p idml-export --test it -- \
+///     --ignored --nocapture stroke_weight_precision::
 /// ```
 #[test]
-#[ignore = "private corpus: opt-in (PAGED_IDML_CORPUS=1 + the corpus mount)"]
+#[ignore = "corpus: idml"]
 fn a_corpus_template_saves_back_byte_identically() {
     let Some(root) = corpus::root() else { return };
     let package = corpus::package(&root, "idml/packs/furniture-product-catalog/template.idml");

@@ -17,9 +17,11 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+import type * as Api from "@paged-media/plugin-api";
+
 import type { CommandRegistry } from "./command";
 import { isEnabled } from "./types";
-import type { Disposable, VisibilityPredicate } from "./types";
+import type { Disposable, Registrable } from "./types";
 
 /**
  * Declarative keybinding manifest. `key` uses the modifier-prefixed
@@ -34,11 +36,11 @@ import type { Disposable, VisibilityPredicate } from "./types";
  * Step 4 wires this up as a real listener; the existing
  * `useKeyboardShortcuts` hook stays as the canvas-app navigation
  * provider until that migration is done in its own slice.
+ *
+ * The contract's `KeybindingContribution` (key, command, when — one
+ * definition, `@paged-media/plugin-api`) plus the shell's `precedence`.
  */
-export interface KeybindingContribution {
-  key: string;
-  command: string;
-  when?: VisibilityPredicate;
+export interface KeybindingContribution extends Api.KeybindingContribution {
   /**
    * Rank among the ENABLED bindings on the same key, read with the same
    * state `when` is. Absent: 1 for a guarded binding, 0 for an
@@ -49,7 +51,13 @@ export interface KeybindingContribution {
   precedence?: (state: unknown) => number;
 }
 
-export interface KeybindingRegistry {
+/** A contract-authored keybinding registers here unchanged. */
+export type _KeybindingRegistrable = Registrable<
+  KeybindingContribution,
+  Api.KeybindingContribution
+>;
+
+export interface KeybindingRegistry extends Api.KeybindingRegistry {
   register(contribution: KeybindingContribution): Disposable;
   /** Listing for diagnostics + the future "Show keybindings" panel. */
   list(): KeybindingContribution[];

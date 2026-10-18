@@ -165,11 +165,11 @@ fn a_real_insert_still_lands_at_its_anchor() {
 /// (mirrors plugin-image's `PAGED_PSD_ORACLE` lane).
 ///
 /// ```text
-/// PAGED_IDML_CORPUS=1 cargo test -p idml-export --test nested_group_roundtrip \
-///     -- --ignored --nocapture
+/// PAGED_CORPUS_DIR=<corpus root> cargo test -p idml-export --test it -- \
+///     --ignored --nocapture nested_group_roundtrip::
 /// ```
 #[test]
-#[ignore = "private corpus: opt-in (PAGED_IDML_CORPUS=1 + the corpus mount)"]
+#[ignore = "corpus: idml"]
 fn corpus_catalog_spread_does_not_inflate() {
     let Some(root) = corpus::root() else { return };
     let package = corpus::package(&root, "idml/packs/catalog/template.idml");

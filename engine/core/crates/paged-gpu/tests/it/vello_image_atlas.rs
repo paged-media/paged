@@ -35,6 +35,7 @@ use paged_compose::{
     Transform as XF,
 };
 use paged_gpu::{vello_rs::VelloRasterizer, PathRasterizer, RasterOptions};
+use paged_test_resources::{skip, Resource};
 
 fn px(buf: &[u8], w: u32, x: u32, y: u32) -> [u8; 4] {
     let i = ((y * w + x) * 4) as usize;
@@ -91,9 +92,14 @@ fn an_image_still_paints_after_a_frame_without_images() {
     let images = page_with_image();
 
     let first = v.rasterize(&images, &opts);
+    if paged_test_resources::gpu_forced_off() {
+        skip!(Resource::Gpu, "PAGED_FORCE_NO_GPU=1");
+    }
     if first.iter().all(|b| *b == 0) {
-        eprintln!("no GPU available; skipping");
-        return;
+        skip!(
+            Resource::Gpu,
+            "no wgpu adapter: Vello returned its zero-fill fallback"
+        );
     }
     let (w, _) = opts.pixel_size();
     let red = px(&first, w, 20, 20);

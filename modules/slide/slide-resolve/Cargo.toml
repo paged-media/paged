@@ -17,5 +17,6 @@ slide-chart.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
+paged-test-resources.workspace = true
 serde_json.workspace = true
 pptx-import.workspace = true
