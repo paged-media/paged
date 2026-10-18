@@ -24,10 +24,13 @@
 //! save. Now the wrapper's start and end ride the run as pieces at their
 //! character offsets: the edit is written, the inserted text stays
 //! wrapped, and the deletion stays where it stood. InDesign reads the
-//! saved package as "ZZ Alpha beta INSERTED delta." with both changes.
+//! saved package as format!("ZZ Alpha beta INSERTED {D}delta.") with both changes.
 
 use idml_export::rewrite::rewrite_story;
 use idml_import::parse_story;
+
+/// The deletion's place in the model's text (D-01).
+const D: char = paged_model::TRACKED_DELETION_MARKER;
 
 const SRC: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <idPkg:Story xmlns:idPkg="http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging" DOMVersion="20.0">
@@ -55,8 +58,11 @@ const SRC: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 /// The story with its single run's text replaced, saved and read back.
 fn save_with(text: &str) -> String {
     let mut st = parse_story(SRC.as_bytes()).expect("parse");
-    assert_eq!(st.paragraphs[0].runs[0].text, "Alpha beta INSERTED delta.");
-    st.paragraphs[0].runs[0].text = text.to_string();
+    assert_eq!(
+        st.paragraphs[0].runs[0].text,
+        format!("Alpha beta INSERTED {D}delta.")
+    );
+    st.paragraphs[0].runs[0].text = text.replace('|', &D.to_string());
     String::from_utf8(rewrite_story(SRC.as_bytes(), &st).expect("rewrite")).expect("utf-8")
 }
 
@@ -73,7 +79,7 @@ fn an_unmutated_save_is_identical() {
 
 #[test]
 fn an_edit_before_the_insertion_is_written_and_the_changes_stay() {
-    let out = save_with("ZZ Alpha beta INSERTED delta.");
+    let out = save_with("ZZ Alpha beta INSERTED |delta.");
     let flat = squash(&out);
     assert!(flat.contains("<Content>ZZ Alpha beta</Content>"), "{out}");
     assert!(
@@ -87,13 +93,13 @@ fn an_edit_before_the_insertion_is_written_and_the_changes_stay() {
     let back = parse_story(out.as_bytes()).expect("reparse");
     assert_eq!(
         back.paragraphs[0].runs[0].text,
-        "ZZ Alpha beta INSERTED delta."
+        format!("ZZ Alpha beta INSERTED {D}delta.")
     );
 }
 
 #[test]
 fn an_edit_inside_the_insertion_stays_inside_it() {
-    let out = save_with("Alpha beta INSXERTED delta.");
+    let out = save_with("Alpha beta INSXERTED |delta.");
     let flat = squash(&out);
     assert!(
         flat.contains("<Content> INSXERTED</Content></Change>"),
@@ -102,7 +108,7 @@ fn an_edit_inside_the_insertion_stays_inside_it() {
     let back = parse_story(out.as_bytes()).expect("reparse");
     assert_eq!(
         back.paragraphs[0].runs[0].text,
-        "Alpha beta INSXERTED delta."
+        format!("Alpha beta INSXERTED {D}delta.")
     );
 }
 
@@ -110,9 +116,46 @@ fn an_edit_inside_the_insertion_stays_inside_it() {
 fn removing_the_inserted_text_is_written() {
     // Which space the wrapper keeps is the diff's choice; the text and
     // the deletion are what must hold.
-    let out = save_with("Alpha beta delta.");
+    let out = save_with("Alpha beta |delta.");
     assert!(!out.contains("INSERTED"), "{out}");
     assert!(out.contains("DeletedText"), "the deletion stays: {out}");
     let back = parse_story(out.as_bytes()).expect("reparse");
-    assert_eq!(back.paragraphs[0].runs[0].text, "Alpha beta delta.");
+    assert_eq!(
+        back.paragraphs[0].runs[0].text,
+        format!("Alpha beta {D}delta.")
+    );
+}
+
+#[test]
+fn a_deletion_is_read_with_its_change() {
+    let st = parse_story(SRC.as_bytes()).expect("parse");
+    let d = &st.paragraphs[0].tracked_deletions;
+    assert_eq!(d.len(), 1);
+    assert_eq!(d[0].change_type, "DeletedText");
+    assert_eq!(d[0].user_name.as_deref(), Some("$ID/Unknown User Name"));
+    assert_eq!(d[0].date.as_deref(), Some("2026-10-18T05:38:08"));
+    assert_eq!(d[0].document_user.as_deref(), Some("dDocumentUser0"));
+    assert_eq!(d[0].deleted_text.as_deref(), Some("gamma "));
+}
+
+#[test]
+fn an_edit_writes_the_deletion_back_as_it_was() {
+    let out = save_with("Alpha beta INSERTED |delta. More.");
+    let source_change = &SRC[SRC
+        .find(r#"<Change Date="2026-10-18T05:38:08" ChangeType="DeletedText""#)
+        .unwrap()..];
+    let source_change = &source_change[..source_change.find("</Change>").unwrap() + 9];
+    assert!(out.contains(source_change), "{out}");
+    let back = parse_story(out.as_bytes()).expect("reparse");
+    assert_eq!(back.paragraphs[0].tracked_deletions.len(), 1);
+}
+
+#[test]
+fn a_deletion_removed_from_the_model_is_not_written() {
+    let mut st = parse_story(SRC.as_bytes()).expect("parse");
+    st.paragraphs[0].runs[0].text = "Alpha beta INSERTED delta.".to_string();
+    st.paragraphs[0].tracked_deletions.clear();
+    let out = String::from_utf8(rewrite_story(SRC.as_bytes(), &st).expect("rewrite")).unwrap();
+    assert!(!out.contains("DeletedText"), "{out}");
+    assert!(!out.contains("gamma"), "{out}");
 }

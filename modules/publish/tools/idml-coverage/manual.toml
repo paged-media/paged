@@ -14,6 +14,12 @@ name = "make_anchored_frame"
 # `anchored_kind_from_name`: the inline-anchored page items.
 elements = ["TextFrame", "Rectangle", "Group"]
 
+# A tracked change's attributes (D-01).
+[[fn]]
+file = "crates/idml-import/src/story.rs"
+name = "tracked_change"
+elements = ["Change"]
+
 [[fn]]
 file = "crates/idml-import/src/util.rs"
 name = "record_item_name"
@@ -287,6 +293,11 @@ elements = ["Gradient"]
 file = "crates/idml-export/src/preferences.rs"
 name = "page_setup"
 elements = ["DocumentPreference"]
+
+[[fn]]
+file = "crates/idml-export/src/rewrite.rs"
+name = "write_tracked_deletion"
+elements = ["Change"]
 
 [[fn]]
 file = "crates/idml-export/src/rewrite.rs"
@@ -1509,4 +1520,13 @@ elements = ["Note"]
 reason = "A table row's Start Row option: no census document sets one. Its spelling was asked of InDesign 20.0.1 (core table-start-row-probe, 2026-10-17): <Row StartRow=\"NextEvenPage\"/>, the StartParagraph values; core ADR 175."
 keys = [
   "Row@StartRow",
+]
+
+[[unseen]]
+reason = "A tracked change (D-01). InDesign 20.0.1 writes <Change ChangeType UserName Date AppliedDocumentUser> around tracked text in a story (asked of InDesign: core tools/indesign-export/track-changes-probe). No census document was saved with Track Changes on."
+keys = [
+  "Change@AppliedDocumentUser",
+  "Change@ChangeType",
+  "Change@Date",
+  "Change@UserName",
 ]

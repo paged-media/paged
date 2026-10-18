@@ -56,7 +56,7 @@ pub use paged_model::{
 pub use paged_model::{
     AUTO_PAGE_NUMBER_MARKER, ENDNOTE_NUMBER_MARKER, ENDNOTE_REFERENCE_MARKER,
     FOOTNOTE_REFERENCE_MARKER, NEXT_PAGE_NUMBER_MARKER, NOTE_MARKER, PREVIOUS_PAGE_NUMBER_MARKER,
-    SECTION_MARKER,
+    SECTION_MARKER, TRACKED_DELETION_MARKER,
 };
 
 pub use paged_model::Story;
@@ -228,6 +228,53 @@ fn is_tracked_deletion(e: &quick_xml::events::BytesStart) -> bool {
             .any(|a| a.key.as_ref() == b"ChangeType" && a.value.as_ref() == b"DeletedText")
 }
 
+/// A `<Change>`'s attributes (D-01).
+fn tracked_change(e: &quick_xml::events::BytesStart) -> paged_model::TrackedChange {
+    paged_model::TrackedChange {
+        change_type: attr(e, b"ChangeType").unwrap_or_default(),
+        user_name: attr(e, b"UserName"),
+        document_user: attr(e, b"AppliedDocumentUser"),
+        date: attr(e, b"Date"),
+        ..Default::default()
+    }
+}
+
+/// A deletion's text as InDesign's `contents` reads it: its `<Content>`s,
+/// a `<Br/>` as U+000D.
+fn deleted_text(inner: &[u8]) -> String {
+    let mut reader = quick_xml::Reader::from_reader(inner);
+    reader.config_mut().trim_text(false);
+    let mut buf = Vec::new();
+    let mut out = String::new();
+    let mut in_content = false;
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(quick_xml::events::Event::Start(e)) if e.name().as_ref() == b"Content" => {
+                in_content = true
+            }
+            Ok(quick_xml::events::Event::End(e)) if e.name().as_ref() == b"Content" => {
+                in_content = false
+            }
+            Ok(quick_xml::events::Event::Empty(e)) if e.name().as_ref() == b"Br" => out.push('\r'),
+            Ok(quick_xml::events::Event::Text(t)) if in_content => {
+                if let Ok(t) = t.decode() {
+                    out.push_str(&t);
+                }
+            }
+            Ok(quick_xml::events::Event::GeneralRef(r)) if in_content => {
+                let name = String::from_utf8_lossy(r.as_ref()).into_owned();
+                if let Ok(c) = quick_xml::escape::unescape(&format!("&{name};")) {
+                    out.push_str(&c);
+                }
+            }
+            Ok(quick_xml::events::Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+        buf.clear();
+    }
+    out
+}
+
 pub fn parse_story(xml: &[u8]) -> Result<Story, ParseError> {
     parse_story_with_provenance(xml).map(|(story, _)| story)
 }
@@ -370,6 +417,9 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
     // story's notes for their ids.
     let mut note: Option<paged_model::Note> = None;
     let mut note_content = false;
+    // D-01 — the tracked deletion being read: the change and the byte
+    // offset its content starts at, so its children are kept verbatim.
+    let mut deletion: Option<(paged_model::TrackedChange, usize)> = None;
     let mut notes_read = 0usize;
     // Parallel to `anchored_stack`: tracks whether the top frame's
     // `bounds` were derived from a `<PathPointType>` chain (`true`)
@@ -593,6 +643,16 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
                         &mut pending_breaks,
                         &mut notes_read,
                     ));
+                }
+                // A tracked deletion (D-01) is a character of the text where
+                // it stands, which prints nothing; the deleted ranges are
+                // kept verbatim so a save writes the change back.
+                if is_tracked_deletion(&e) {
+                    let _ = anchor_here(&current_paragraph, &mut current_run, &mut pending_breaks);
+                    if let Some(run) = current_run.as_mut() {
+                        run.text.push(TRACKED_DELETION_MARKER);
+                        deletion = Some((tracked_change(&e), reader.buffer_position() as usize));
+                    }
                 }
                 if matches!(name, b"HiddenText" | b"Note") || is_tracked_deletion(&e) {
                     suppress_depth = 1;
@@ -1303,6 +1363,14 @@ pub fn parse_story_with_provenance(xml: &[u8]) -> Result<(Story, StoryProvenance
                     if suppress_depth == 0 {
                         if let (Some(n), Some(p)) = (note.take(), current_paragraph.as_mut()) {
                             p.notes.push(n);
+                        }
+                        if let (Some((mut change, from)), Some(p)) =
+                            (deletion.take(), current_paragraph.as_mut())
+                        {
+                            let inner = &xml[from..(event_pos as usize).max(from)];
+                            change.deleted_text = Some(deleted_text(inner));
+                            change.deleted_xml = Some(String::from_utf8_lossy(inner).into_owned());
+                            p.tracked_deletions.push(change);
                         }
                     }
                     buf.clear();
