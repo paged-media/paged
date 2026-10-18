@@ -1,0 +1,17 @@
+#!/bin/sh
+# macOS link driver (.cargo/config.toml): clang with the active toolchain's
+# lld (`gcc-ld/ld64.lld`, shipped with every rustup toolchain and matched to
+# its LLVM), Apple's ld when that is missing. PAGED_LINKER=ld forces Apple's ld.
+# A binary records its linker: `otool -l <bin>` shows LC_BUILD_VERSION tool 4
+# for LLD, tool 3 for Apple's ld.
+if [ "${PAGED_LINKER:-lld}" = lld ] && [ -n "${CARGO:-}" ]; then
+  case "$(uname -m)" in
+    arm64) host=aarch64-apple-darwin ;;
+    *) host=x86_64-apple-darwin ;;
+  esac
+  lld="$(dirname "$CARGO")/../lib/rustlib/$host/bin/gcc-ld/ld64.lld"
+  if [ -x "$lld" ]; then
+    exec cc --ld-path="$lld" "$@"
+  fi
+fi
+exec cc "$@"

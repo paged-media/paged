@@ -1,0 +1,8 @@
+#!/bin/sh
+# Cargo's rustc wrapper (.cargo/config.toml): compiles through sccache when it
+# is installed, with plain rustc otherwise. Cargo calls it as
+# `rustc-wrapper <rustc> <args>…`. PAGED_SCCACHE=0 bypasses sccache.
+if [ "${PAGED_SCCACHE:-1}" != 0 ] && command -v sccache >/dev/null 2>&1; then
+  exec sccache "$@"
+fi
+exec "$@"
