@@ -25,7 +25,6 @@ import {
   type PropsWithChildren,
 } from "react";
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type { LayoutCacheStats } from "@paged-media/client";
 
 /**

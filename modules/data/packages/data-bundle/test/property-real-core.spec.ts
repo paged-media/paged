@@ -207,6 +207,7 @@ describe.skipIf(!ready && !required)("universal property binding, real core + en
     const spread = text(readZip(saved).find((e) => e.name.startsWith("Spreads/")));
     const kvp = [...spread.matchAll(/<KeyValuePair Key="([^"]+)"/g)].map((m) => m[1]);
     expect(kvp).toEqual([KEY]);
+    // eslint-disable-next-line no-control-regex -- an ASCII check: the range starts at NUL on purpose
     expect(spread).not.toMatch(/[^\x00-\x7f]/);
 
     // 1. a paged reopen (parts present).

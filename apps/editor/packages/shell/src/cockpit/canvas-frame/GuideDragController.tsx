@@ -53,7 +53,6 @@
 
 import { useCallback, useEffect, useRef } from "react";
 
-// eslint-disable-next-line import/no-relative-parent-imports
 import type {
   GuideSummary,
   Mutation,

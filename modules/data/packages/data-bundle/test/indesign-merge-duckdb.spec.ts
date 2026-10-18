@@ -32,7 +32,7 @@ const PINS: Record<string, { agree: number; why?: string }> = {
 };
 
 function normalise(s: string): string {
-  return s.replace(/\r/g, "\n").replace(/﻿/g, "");
+  return s.replace(/\r/g, "\n").replace(/\uFEFF/g, "");
 }
 
 function indesignTexts(id: string): Array<{ text: string; overset: boolean }> {
