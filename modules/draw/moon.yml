@@ -1,6 +1,6 @@
 $schema: '../../.moon/cache/schemas/project.json'
 
-# paged.draw: a Cargo workspace (image trace) and a pnpm workspace
+# paged.draw: a Cargo workspace (image trace) and JS packages
 # (draw-geometry, draw-tools, draw-bundle).
 language: 'rust'
 layer: 'library'
@@ -25,7 +25,7 @@ tasks:
 
   js-lint:
     description: 'The contract-import guard (scripts/check-contract-imports.mjs).'
-    command: 'pnpm run lint:contract'
+    command: 'bun run lint:contract'
     inputs:
       - '@group(js-sources)'
 

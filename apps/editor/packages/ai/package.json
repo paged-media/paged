@@ -1,5 +1,5 @@
 {
-  "name": "@paged-media/ai",
+  "name": "@paged-media/ai-vendored",
   "version": "0.1.0-vendored.0",
   "private": true,
   "type": "module",
@@ -20,6 +20,6 @@
     "@paged-media/plugin-api": "0.2.62-canary.0"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "catalog:"
   }
 }

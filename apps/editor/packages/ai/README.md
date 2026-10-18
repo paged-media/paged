@@ -11,6 +11,11 @@ publish has not happened yet, and the editor must build from its own repository.
   editor pins) instead of reaching into a sibling package.
 - Licence: AGPL-3.0-only OR PMEL, as upstream (the file headers say so).
 - **Do not edit here.** Change plugin-sdk, then re-copy.
+- Package name: `@paged-media/ai-vendored`. The root Bun workspace cannot hold
+  two packages named `@paged-media/ai`, so this copy is renamed, and
+  `packages/shell` and `apps/canvas` depend on it by path
+  (`"@paged-media/ai": "file:../ai"` and `"file:../../packages/ai"`), which
+  links this directory under the import name `@paged-media/ai`.
 
 ## Removing it
 
@@ -18,5 +23,6 @@ Once `@paged-media/ai` is on npm:
 
 1. delete `packages/ai/`;
 2. in `packages/shell/package.json` and `apps/canvas/package.json`, replace
-   `"@paged-media/ai": "workspace:*"` with the published version;
-3. `pnpm install`, then the editor checks.
+   the `"@paged-media/ai": "file:…"` dependency with the published version (or
+   `workspace:*`, the in-tree `platform/extensions/packages/ai`);
+3. `bun install` at the repository root, then the editor checks.

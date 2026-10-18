@@ -21,6 +21,13 @@
 // file's tests — booting per test would dominate the runtime.
 
 import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
+import { fileURLToPath } from "node:url";
+
+// The engine is this package's own @paged-media/canvas-wasm devDependency.
+// Without an anchor the headless harness resolves it from plugin-sdk's
+// install location, which in the root Bun workspace is whichever version the
+// store hoists, not the one this package pins.
+const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
 export const silent = {
   debug: () => {},
@@ -40,4 +47,4 @@ export const mapBacking = () => {
 };
 
 export const openHost = (): Promise<HeadlessHost> =>
-  createHeadlessHost({ console: silent, storage: mapBacking() });
+  createHeadlessHost({ resolveFrom: ENGINE_ANCHOR, console: silent, storage: mapBacking() });

@@ -83,7 +83,7 @@ export function collect() {
     pkgs = readdirSync(scope);
   } catch {
     throw new Error(
-      `no ${relative(ROOT, scope)} — run \`pnpm install\` before the wasm budget check`,
+      `no ${relative(ROOT, scope)} — run \`bun install\` before the wasm budget check`,
     );
   }
 

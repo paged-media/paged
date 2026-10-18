@@ -48,6 +48,13 @@ import importResult from "../schema/import-result.json";
 import exportPdfArgsFile from "../schema/export-pdf.args.json";
 import exportIdmlArgsFile from "../schema/export-idml.args.json";
 import importIdmlArgsFile from "../schema/import-idml.args.json";
+import { fileURLToPath } from "node:url";
+
+// The engine is this package's own @paged-media/canvas-wasm devDependency.
+// Without an anchor the headless harness resolves it from plugin-sdk's
+// install location, which in the root Bun workspace is whichever version the
+// store hoists, not the one this package pins.
+const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
 const IDML = new URL("../../../../../engine/core/crates/idml-export/tests/fixtures/indesign-20.0.1-navigation.idml", import.meta.url);
 
@@ -55,7 +62,7 @@ let h: HeadlessHost;
 let pageCount: number;
 
 beforeEach(async () => {
-  h = await createHeadlessHost();
+  h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
   h.loadBundle(publishBundle);
   const out = (await h.objects.invoke(IMPORT_IDML_COMMAND, {
     bytes: new Uint8Array(readFileSync(IDML)),

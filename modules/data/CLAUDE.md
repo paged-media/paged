@@ -24,7 +24,7 @@ types + Expr AST), `data-expr` (the binding DSL), `data-sources`, `data-query`,
 `data-bind` (resolution/sync engine), `data-lower`, `data-js` (wasm-bindgen
 surface), `data-conformance` (TEST-ONLY), plus the §10 automation lane —
 `data-automation` (batch plan/run), `data-cli` (headless native CLI), and
-`data-script` (sandboxed Boa surface). TS packages (pnpm `packages/*`):
+`data-script` (sandboxed Boa surface). TS packages (`packages/*`, in the root Bun workspace):
 `data-host-model` (pure LoweredContent→Mutation translation) + `data-bundle`
 (manifest + `activate(host)` + three panels [sources/bindings/dataset] + five
 commands + DuckDB-WASM query integration). Vendored MIT engine:
@@ -218,8 +218,8 @@ bash scripts/build-wasm.sh
 
 # TS (the bundle). The contract comes from npm at an exact pin
 # (test/sdk-pin.spec.ts); CI runs with REQUIRE_REAL_ENGINE=1 REQUIRE_REAL_DUCKDB=1.
-pnpm install && pnpm typecheck && pnpm test
-pnpm validate:manifest
+bun install && bun run typecheck && bun run test
+bun run validate:manifest
 
 # Publishing (publish.yml, after green CI): a version already on npm must be
 # bumped when its inputs changed, and the tarball must carry DuckDB.

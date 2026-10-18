@@ -1,0 +1,16 @@
+# Bun configuration for the root workspace (see package.json `workspaces`).
+# Bun's version is pinned in /.prototools and in package.json `packageManager`.
+
+[install]
+# Every package gets its own node_modules with exactly what it declares
+# (like pnpm): an undeclared import fails instead of resolving through a
+# hoisted copy. Packages live once under node_modules/.bun/.
+linker = "isolated"
+
+# A dependency resolves to a workspace package only when it says
+# `workspace:`. Without this, Bun links a workspace package whenever its
+# version satisfies the range, so the editor's exact canary pins (for
+# example @paged-media/draw@0.1.0-canary.20, which is also the version in
+# modules/draw) would run the in-tree source instead of the published
+# package. This keeps pnpm's behaviour; B3 switches the pins to `workspace:*`.
+linkWorkspacePackages = false

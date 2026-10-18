@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "build": "tsup src/index.ts --format esm --target es2020 --dts --out-dir dist --clean",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
     "@paged-media/plugin-api": "workspace:*"
@@ -26,12 +26,12 @@
   },
   "devDependencies": {
     "@paged-media/canvas-wasm": "0.73.4",
-    "@types/node": "20.19.39",
-    "@types/react": "^18.3.31",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
     "fast-check": "^4.10.2",
-    "react": "^18.3.1",
-    "typescript": "^5.9.3",
-    "vitest": "^2.1.9"
+    "react": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "description": "The Paged plugin runtime: loadBundle, the in-process BundleHost adapter, the gesture kit, and version negotiation.",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",

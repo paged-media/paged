@@ -2,8 +2,8 @@
 # workspace). Each runs in the project root, so rustup picks that
 # workspace's rust-toolchain.toml and cargo that workspace's target/.
 #
-# Names carry a `rust-` prefix because a module can hold a Cargo and a pnpm
-# workspace in one project; the shared vocabulary (`fmt`, `check`, `lint`,
+# Names carry a `rust-` prefix because a module can hold a Cargo workspace and
+# JS packages in one project; the shared vocabulary (`fmt`, `check`, `lint`,
 # `test`, `build`) is in all.yml and runs both halves.
 #
 # Nothing here declares `target/` as an output: Moon never caches it.

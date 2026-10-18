@@ -6,7 +6,7 @@
 # runtime loads only bin/; vendor/ is for local work and the Node test lane.
 # Attribution + the MIT license text are preserved in vendor/duckdb-wasm/SOURCE.md.
 #
-# Requires `pnpm install` first: the JS API is re-bundled with esbuild (via
+# Requires `bun install` first: the JS API is re-bundled with esbuild (via
 # tsup) and apache-arrow from packages/data-bundle/node_modules.
 #
 # This is the deliberate vendoring step (like sync-wasm.sh / build-wasm.sh

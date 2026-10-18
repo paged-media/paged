@@ -18,7 +18,7 @@
 // A previously-recorded single-plugin skew was read as a one-off slip; it
 // was not, because nothing checked.
 //
-// This is deliberately a RELEASE-TIME gate, not part of `pnpm test`: while
+// This is deliberately a RELEASE-TIME gate, not part of `bun run test`: while
 // a plugin campaign is in flight the repo being ahead of the pin is the
 // normal, correct intermediate state. Run it when publishing or when
 // reconciling what the editor actually runs.
@@ -88,15 +88,14 @@ const canvasPkg = readJson(join(ROOT, "apps", "canvas", "package.json"));
 const pins = { ...canvasPkg.dependencies, ...canvasPkg.devDependencies };
 const repos = repoVersions();
 
-// A local `link:`/`file:` override in the ROOT package.json's pnpm.overrides
-// makes this checkout resolve straight to the sibling repo, so the pin is NOT
-// what runs here — it is only what SHIPS. Reporting those as drift would be
-// wrong in the more misleading direction: it would send someone chasing a
-// skew their own editor does not have. Call them out separately instead, and
-// keep them out of the failure count.
-const overrides = readJsonSafe(join(ROOT, "package.json"))?.pnpm?.overrides ?? {};
+// A `workspace:`/`file:` dependency in apps/canvas resolves straight to the
+// module in this repository, so there is no pin: what runs here is the
+// repo, not a published canary. Reporting those as drift would be wrong in
+// the more misleading direction: it would send someone chasing a skew their
+// own editor does not have. Call them out separately instead, and keep them
+// out of the failure count.
 const isLocallyLinked = (name) =>
-  typeof overrides[name] === "string" && /^(link|file):/.test(overrides[name]);
+  typeof pins[name] === "string" && /^(workspace|file|link):/.test(pins[name]);
 
 if (repos.size === 0) {
   console.log(
@@ -125,7 +124,7 @@ for (const [name, info] of [...repos].sort()) {
 
 const width = Math.max(...rows.map((r) => r.name.length), 8);
 for (const r of rows) {
-  const mark = r.linked ? "linked (local override)" : r.drift ? "DRIFT" : "ok";
+  const mark = r.linked ? "linked (workspace)" : r.drift ? "DRIFT" : "ok";
   console.log(
     `${r.name.padEnd(width)}  pin ${r.pinned.padEnd(16)} repo ${r.repo.padEnd(16)} ${mark}`,
   );
@@ -134,9 +133,8 @@ for (const r of rows) {
 const linkedRows = rows.filter((r) => r.linked);
 if (linkedRows.length > 0) {
   console.log(
-    `\n${linkedRows.length} bundle(s) are overridden to a local path, so THIS checkout runs\n` +
-      `the repo, not the pin. That hides pin drift from you locally — the pin is\n` +
-      `still what a fresh clone and the published app get.`,
+    `\n${linkedRows.length} bundle(s) resolve to the workspace, so the editor runs the\n` +
+      `repo, not a published canary, and there is no pin to drift.`,
   );
 }
 

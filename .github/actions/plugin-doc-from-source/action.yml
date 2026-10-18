@@ -1,28 +1,24 @@
 name: plugin-doc from source
 description: >-
-  STOPGAP until @paged-media/doc is consumed without a link. The editor reaches
-  it through a pnpm `link:` override to the in-tree modules/doc bundle, so
-  every workflow that installs the editor needs modules/doc's deps installed
-  and its engine wasm built. DELETE this action (and every `uses:` of it) once
-  the editor stops consuming a build output of modules/doc.
+  STOPGAP until @paged-media/doc is consumed without a build output. The
+  editor depends on the workspace package modules/doc/packages/doc-bundle
+  (`workspace:*`), so every workflow that runs the editor needs its engine
+  wasm built. DELETE this action (and every `uses:` of it) once the editor
+  stops consuming a build output of modules/doc.
 
 # Monorepo layout (step A3): modules/doc is part of this repository, so there
 # is no checkout here; the caller's `actions/checkout` of the repository root
 # already put it in place. (Pre-monorepo this action checked out
 # paged-media/plugin-doc at plugins/plugin-doc beside an editor under editor/.)
 # Composite steps do not inherit the caller's `defaults.run.working-directory`,
-# so every step names its directory. Needs rustup + pnpm + node on PATH (every
-# caller already has them).
+# so every step names its directory. Needs rustup + node on PATH, and the
+# caller's `bun install --frozen-lockfile` at the root first (it installs
+# modules/doc's packages with the rest of the workspace).
 
 runs:
   using: composite
   steps:
-    - name: install modules/doc (the link target needs its own deps)
-      shell: bash
-      working-directory: modules/doc
-      run: pnpm install --frozen-lockfile
-
-    # The wasm is not produced by `pnpm install`, and
+    # The wasm is not produced by `bun install`, and
     # `packages/doc-bundle/bin/*.js` is gitignored. main.tsx imports
     # @paged-media/doc at module scope, and Vite resolves `../bin/docx_js.js`
     # at TRANSFORM time, so without the build the whole app fails to boot

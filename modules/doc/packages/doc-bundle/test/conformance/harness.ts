@@ -36,6 +36,13 @@ import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
 import { docBundle } from "../../src";
 import { DocEngine } from "../../src/engine";
 import { finishStandalone, type Opened } from "../../src/open";
+import { fileURLToPath } from "node:url";
+
+// The engine is this package's own @paged-media/canvas-wasm devDependency.
+// Without an anchor the headless harness resolves it from plugin-sdk's
+// install location, which in the root Bun workspace is whichever version the
+// store hoists, not the one this package pins.
+const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
 const WASM = new URL("../../bin/docx_js_bg.wasm", import.meta.url);
 
@@ -62,7 +69,7 @@ export interface OpenedDoc {
 /** A headless host with the bundle loaded and `name` opened standalone. */
 export async function openDoc(name: string): Promise<OpenedDoc> {
   const bytes = fixture(name);
-  const h = await createHeadlessHost({ console: silent });
+  const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR, console: silent });
   const engine = await DocEngine.boot();
   try {
     engine.loadDocx(bytes);

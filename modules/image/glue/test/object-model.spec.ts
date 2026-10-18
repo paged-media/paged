@@ -29,6 +29,12 @@ import { IMAGE_PANEL_FIELDS } from "../src/panels/properties-panel";
 import { sha256Hex } from "../src/session-store";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
+// The engine is this package's own @paged-media/canvas-wasm devDependency.
+// Without an anchor the headless harness resolves it from plugin-sdk's
+// install location, which in the root Bun workspace is whichever version the
+// store hoists, not the one this package pins.
+const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const built = existsSync(join(HERE, "..", "wasm", "image_js_bg.wasm"));
 if (process.env.REQUIRE_REAL_WASM === "1" && !built) {
@@ -71,7 +77,7 @@ const decode = (bytes: Uint8Array) => {
 
 /** A document with one 4×4 grey image placed in the rectangle `urect`. */
 async function imageDoc(bundle = imageBundle, opts: { capabilityMode?: "warn" } = {}) {
-  const h = (live = await createHeadlessHost({ console: silent, ...opts }));
+  const h = (live = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR, console: silent, ...opts }));
   await h.load(minimalIdml());
   h.loadBundle(bundle);
   const out = await h.host.document.mutate({
@@ -323,7 +329,7 @@ lane("the object model on the real plugin, headless", () => {
     const L = `${P}/layer/${FRAME}/1`;
     await h.objects.set(L, "name", "Kept");
     const bytes = await h.host.documents.exportPaged();
-    const h2 = await createHeadlessHost({ console: silent });
+    const h2 = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR, console: silent });
     try {
       await h2.load(bytes);
       h2.loadBundle(imageBundle);

@@ -10,7 +10,7 @@
 // wasm next to it.
 //
 // esbuild comes from tsup (a root devDependency); apache-arrow from the
-// bundle's own node_modules. Both exist after `pnpm install`.
+// bundle's own node_modules. Both exist after `bun install`.
 //
 // usage: node scripts/bundle-duckdb-api.mjs <in.mjs> <out.mjs>
 import { createRequire } from "node:module";
@@ -30,13 +30,13 @@ let esbuild;
 try {
   esbuild = createRequire(rootRequire.resolve("tsup"))("esbuild");
 } catch (err) {
-  console.error(`bundle-duckdb-api: esbuild (via tsup) not found — run \`pnpm install\` first (${err.message})`);
+  console.error(`bundle-duckdb-api: esbuild (via tsup) not found — run \`bun install\` first (${err.message})`);
   process.exit(1);
 }
 try {
   createRequire(resolve(BUNDLE, "package.json")).resolve("apache-arrow");
 } catch {
-  console.error("bundle-duckdb-api: apache-arrow not installed in packages/data-bundle — run `pnpm install` first");
+  console.error("bundle-duckdb-api: apache-arrow not installed in packages/data-bundle — run `bun install` first");
   process.exit(1);
 }
 

@@ -46,6 +46,13 @@ import { W1_EMPTY_PAGE } from "../fixtures/corpus";
 import { renamedFace } from "../fixtures/fonts";
 import { blitzPresent, primeBlitz, requireBlitz } from "./blitz";
 import { mapBacking, silent } from "./host";
+import { fileURLToPath } from "node:url";
+
+// The engine is this package's own @paged-media/canvas-wasm devDependency.
+// Without an anchor the headless harness resolves it from plugin-sdk's
+// install location, which in the root Bun workspace is whichever version the
+// store hoists, not the one this package pins.
+const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
 requireBlitz("web conformance — baked faces");
 
@@ -77,6 +84,7 @@ describe.skipIf(!blitzPresent)("web conformance — baked text names a face the 
   beforeEach(async () => {
     sent.length = 0;
     h = await createHeadlessHost({
+      resolveFrom: ENGINE_ANCHOR,
       console: silent,
       storage: mapBacking(),
       // The editor's asset source: document face bytes from the engine's

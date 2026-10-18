@@ -1,24 +1,20 @@
 name: plugin-slide from source
 description: >-
-  STOPGAP until @paged-media/slide is consumed without a link. The editor
-  reaches it through a pnpm `link:` override to the in-tree modules/slide
-  bundle, so every workflow that installs the editor needs modules/slide's deps
-  installed and its engine wasm built. DELETE this action (and every `uses:` of
-  it) once the editor stops consuming a build output of modules/slide.
+  STOPGAP until @paged-media/slide is consumed without a build output. The
+  editor depends on the workspace package modules/slide/packages/slide-bundle
+  (`workspace:*`), so every workflow that runs the editor needs its engine wasm
+  built. DELETE this action (and every `uses:` of it) once the editor stops
+  consuming a build output of modules/slide.
 
 # Same layout and prerequisites as plugin-doc-from-source: the repository
 # checked out at the workspace root (modules/slide in place, no checkout here),
-# rustup + pnpm + node on PATH. Pre-monorepo this action checked out
+# rustup + node on PATH, the root workspace installed by the caller.
+# Pre-monorepo this action checked out
 # paged-media/plugin-slide at plugins/plugin-slide.
 
 runs:
   using: composite
   steps:
-    - name: install modules/slide (the link target needs its own deps)
-      shell: bash
-      working-directory: modules/slide
-      run: pnpm install --frozen-lockfile
-
     # Its own root, not ~/.cargo/bin: modules/doc pins a different
     # wasm-bindgen, and sharing the binary would make the two actions
     # reinstall each other's version on every run.

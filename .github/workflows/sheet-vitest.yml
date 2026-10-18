@@ -11,12 +11,18 @@ on:
     paths:
       - "modules/sheet/**"
       - ".github/workflows/sheet-vitest.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
   # Pre-merge gate: a PR that breaks the bundle goes red BEFORE it lands
   # (this lane used to run on push to main only).
   pull_request:
     paths:
       - "modules/sheet/**"
       - ".github/workflows/sheet-vitest.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
   workflow_dispatch:
 
 permissions:
@@ -35,12 +41,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+          auto-install: true
+          proto-version: "0.63.1"
       # ------------------------------------------------------------------
       # REAL-ENGINE artifact (audit P3). This lane used to run vitest with
       # no wasm artifact, so sheet-bundle's engine-real.spec.ts skipIf gate
@@ -75,8 +80,10 @@ jobs:
       - name: real-engine artifact guard (fail, never skip)
         run: test -f packages/sheet-bundle/bin/sheet_js_bg.wasm
       # ------------------------------------------------------------------
-      - name: install (published contract; no sibling checkout needed)
-        run: pnpm install --frozen-lockfile
+      # One install for the whole root workspace (bun.lock).
+      - name: bun install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
       - name: contract-import lint (fail fast)
         run: node scripts/check-contract-imports.mjs
       # A red spec FAILS this job. It used to end in `|| true` (so red
@@ -91,8 +98,8 @@ jobs:
           # gate silently pass a vacuous run.
           REQUIRE_REAL_ENGINE: "1"
         run: |
-          pnpm -r --no-bail exec \
-            vitest run --reporter=default --reporter=junit --outputFile.junit=junit.xml
+          bun run --filter './packages/*' test \
+            --reporter=default --reporter=junit --outputFile.junit=junit.xml
       - name: collect junit
         if: ${{ !cancelled() }}
         run: |

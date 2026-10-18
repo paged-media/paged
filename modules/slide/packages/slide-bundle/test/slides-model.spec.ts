@@ -39,6 +39,13 @@ import {
   setStateMutation,
   SlidesStore,
 } from "../src/slides-model";
+import { fileURLToPath } from "node:url";
+
+// The engine is this package's own @paged-media/canvas-wasm devDependency.
+// Without an anchor the headless harness resolves it from plugin-sdk's
+// install location, which in the root Bun workspace is whichever version the
+// store hoists, not the one this package pins.
+const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
 const until = async (ok: () => boolean, ms = 5000) => {
   const end = Date.now() + ms;
@@ -72,7 +79,7 @@ describe("the slides store on the engine", () => {
       readFileSync(new URL(`../../../slide-conformance/fixtures/${name}.pptx`, import.meta.url)),
     );
     const { idml } = (await slideEngine()).importPptx(bytes, name);
-    const h = await createHeadlessHost();
+    const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
     await h.load(idml);
     // The slide plugin's own host: a page label is written under the
     // writer's own id, so the store runs as media.paged.slide.
@@ -167,7 +174,7 @@ describe("a new slide from a layout", () => {
       readFileSync(new URL(`../../../slide-conformance/fixtures/${name}.pptx`, import.meta.url)),
     );
     const { idml } = (await slideEngine()).importPptx(bytes, name);
-    const h = await createHeadlessHost();
+    const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
     await h.load(idml);
     let host!: BundleHost;
     h.loadBundle({
