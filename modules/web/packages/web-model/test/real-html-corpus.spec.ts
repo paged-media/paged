@@ -49,7 +49,12 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 
-import { namedFlowDiagnostics, parseFlowFrom, parseFlowInto, flowThreadOptions } from "../src/css-flow";
+import {
+  namedFlowDiagnostics,
+  parseFlowFrom,
+  parseFlowInto,
+  flowThreadOptions,
+} from "../src/css-flow";
 import { diagnoseHtml } from "../src/diagnose";
 import { familiesUsed } from "../src/fonts";
 import { sourceFromHtmlFile } from "../src/import-html";
@@ -148,9 +153,10 @@ describe.skipIf(!gated)("real HTML corpus", () => {
         `${hadSomethingToStrip} carried something to strip`,
     );
 
-    expect(threw, `sanitizeHtml THREW — it is documented total:\n  ${threw.join("\n  ")}`).toEqual(
-      [],
-    );
+    expect(
+      threw,
+      `sanitizeHtml THREW — it is documented total:\n  ${threw.join("\n  ")}`,
+    ).toEqual([]);
     expect(
       leftScript,
       `<script> survived sanitization in ${leftScript.length} real template(s):\n  ` +
@@ -324,9 +330,10 @@ describe.skipIf(scripts.length === 0)("real JavaScript corpus", () => {
 
     console.log(`real JS corpus: ${scripts.length} script payload(s)`);
 
-    expect(threw, `sanitizeHtml THREW on a real script payload:\n  ${threw.join("\n  ")}`).toEqual(
-      [],
-    );
+    expect(
+      threw,
+      `sanitizeHtml THREW on a real script payload:\n  ${threw.join("\n  ")}`,
+    ).toEqual([]);
     expect(
       leftScript,
       `a <script> tag survived for ${leftScript.length} payload(s):\n  ` +
@@ -361,8 +368,12 @@ describe.skipIf(scripts.length === 0)("real JavaScript corpus", () => {
     // then run through the handler and `javascript:` passes in its own
     // right. Four of these files carry a `javascript:` URL, so that is a
     // real assertion and not a vacuous one.
-    const withCloseTag = scripts.filter(({ text }) => /<\s*\/\s*script\s*>/i.test(text));
-    const withJsUrl = scripts.filter(({ text }) => /javascript\s*:/i.test(text));
+    const withCloseTag = scripts.filter(({ text }) =>
+      /<\s*\/\s*script\s*>/i.test(text),
+    );
+    const withJsUrl = scripts.filter(({ text }) =>
+      /javascript\s*:/i.test(text),
+    );
 
     expect(
       withCloseTag.length,
@@ -396,7 +407,9 @@ describe.skipIf(scripts.length === 0)("real JavaScript corpus", () => {
       const once = sanitizeHtml(`<div><script>${text}</script></div>`);
       const twice = sanitizeHtml(once.html);
       if (twice.html !== once.html || twice.removed.length > 0) {
-        notIdempotent.push(`${short(path)} (second pass: ${JSON.stringify(twice.removed)})`);
+        notIdempotent.push(
+          `${short(path)} (second pass: ${JSON.stringify(twice.removed)})`,
+        );
       }
     }
     expect(
@@ -537,8 +550,14 @@ describe.skipIf(fontFiles.size === 0)("real webfont corpus", () => {
         `${notShipped.length} declared-but-absent`,
     );
 
-    expect(rules, "the corpus templates declare @font-face rules").toBeGreaterThan(0);
-    expect(declaredFamilies.size, "familiesUsed reads the families out of them").toBeGreaterThan(0);
+    expect(
+      rules,
+      "the corpus templates declare @font-face rules",
+    ).toBeGreaterThan(0);
+    expect(
+      declaredFamilies.size,
+      "familiesUsed reads the families out of them",
+    ).toBeGreaterThan(0);
     expect(
       blindToFaces,
       `these stylesheets declare @font-face and familiesUsed returned nothing ` +
@@ -561,9 +580,12 @@ describe.skipIf(fontFiles.size === 0)("real webfont corpus", () => {
     for (const [key, file] of fontFiles) {
       const bytes = readFileSync(file);
       const ok = FONT_MAGIC.some((m) => m.head(bytes));
-      if (!ok) notAFont.push(`${key} (${bytes.subarray(0, 4).toString("hex")})`);
+      if (!ok)
+        notAFont.push(`${key} (${bytes.subarray(0, 4).toString("hex")})`);
     }
-    console.log(`  ${fontFiles.size} font binary/binaries, ${notAFont.length} unrecognised`);
+    console.log(
+      `  ${fontFiles.size} font binary/binaries, ${notAFont.length} unrecognised`,
+    );
     expect(
       notAFont,
       `these are filed as fonts but carry no font signature — a template that ` +

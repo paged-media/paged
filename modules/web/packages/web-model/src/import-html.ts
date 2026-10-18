@@ -36,7 +36,17 @@ import { DEFAULT_SOURCE, type WebFrameSource } from "./source";
 
 /** Elements whose content is text up to their end tag (HTML raw-text and
  *  escapable raw-text elements). */
-const RAW_TEXT = new Set(["script", "style", "title", "textarea", "xmp", "iframe", "noembed", "noframes", "plaintext"]);
+const RAW_TEXT = new Set([
+  "script",
+  "style",
+  "title",
+  "textarea",
+  "xmp",
+  "iframe",
+  "noembed",
+  "noframes",
+  "plaintext",
+]);
 
 const TAG_NAME = /^<(\/?)([a-zA-Z][a-zA-Z0-9:-]*)/;
 
@@ -77,7 +87,8 @@ function endTagAt(lower: string, name: string, from: number): number {
   let at = lower.indexOf(needle, from);
   while (at >= 0) {
     const next = lower[at + needle.length];
-    if (next === undefined || next === ">" || next === "/" || /\s/.test(next)) return at;
+    if (next === undefined || next === ">" || next === "/" || /\s/.test(next))
+      return at;
     at = lower.indexOf(needle, at + 1);
   }
   return -1;
@@ -99,14 +110,18 @@ function scan(text: string): Scan {
     const m = TAG_NAME.exec(text.slice(lt, lt + 64));
     if (!m) {
       // `<!doctype …>`, `<?…>`, a stray `<`: not a tag we act on.
-      i = text[lt + 1] === "!" || text[lt + 1] === "?" ? tagEnd(text, lt) : lt + 1;
+      i =
+        text[lt + 1] === "!" || text[lt + 1] === "?"
+          ? tagEnd(text, lt)
+          : lt + 1;
       continue;
     }
     const closing = m[1] === "/";
     const name = m[2].toLowerCase();
     const end = tagEnd(text, lt);
     if (closing) {
-      if (name === "body" && out.bodyStart !== null && out.bodyEnd === null) out.bodyEnd = lt;
+      if (name === "body" && out.bodyStart !== null && out.bodyEnd === null)
+        out.bodyEnd = lt;
       i = end;
       continue;
     }
@@ -115,7 +130,12 @@ function scan(text: string): Scan {
       const close = endTagAt(lower, name, end);
       const contentEnd = close < 0 ? text.length : close;
       const after = close < 0 ? text.length : tagEnd(text, close);
-      if (name === "style") out.styles.push({ start: lt, end: after, css: text.slice(end, contentEnd) });
+      if (name === "style")
+        out.styles.push({
+          start: lt,
+          end: after,
+          css: text.slice(end, contentEnd),
+        });
       i = after;
       continue;
     }
@@ -133,7 +153,8 @@ export function sourceFromHtmlFile(text: string): HtmlFileImport {
   // The html is the body's inner content (to the end of the file when the
   // body never closes), else the whole text — with its style blocks cut.
   const from = found.bodyStart ?? 0;
-  let to = found.bodyStart === null ? text.length : (found.bodyEnd ?? text.length);
+  let to =
+    found.bodyStart === null ? text.length : (found.bodyEnd ?? text.length);
   if (found.bodyStart !== null && found.bodyEnd === null) {
     const tail = /<\/html\s*>\s*$/i.exec(text.slice(from, to));
     if (tail) to = from + tail.index;
@@ -148,7 +169,11 @@ export function sourceFromHtmlFile(text: string): HtmlFileImport {
   raw += text.slice(at, Math.max(at, to));
   const { html, removed } = sanitizeHtml(raw.trim());
   return {
-    source: { html, css: css.join("\n\n"), options: { ...DEFAULT_SOURCE.options } },
+    source: {
+      html,
+      css: css.join("\n\n"),
+      options: { ...DEFAULT_SOURCE.options },
+    },
     removed,
   };
 }

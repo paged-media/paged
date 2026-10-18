@@ -29,7 +29,10 @@ import type { BundleHost } from "@paged-media/plugin-api";
 
 /** Call `listener` whenever another document opens; the returned function
  *  stops listening. Not called for the document already open. */
-export function onDocumentOpened(host: BundleHost, listener: () => void): () => void {
+export function onDocumentOpened(
+  host: BundleHost,
+  listener: () => void,
+): () => void {
   const sub = host.document.onDidOpen(() => listener());
   return () => sub.dispose();
 }
