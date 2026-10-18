@@ -896,7 +896,7 @@ mod wasm {
                 let Some(job) = job else {
                     return Ok(JsValue::UNDEFINED);
                 };
-                Ok(match job.finish().await {
+                Ok(match finish_snapshot(job).await {
                     Some(json) => JsValue::from_str(&json),
                     None => JsValue::UNDEFINED,
                 })
@@ -1027,46 +1027,44 @@ mod wasm {
         },
     }
 
+    /// The reply envelope's JSON for a finished `job`, or `None` when the
+    /// readback failed (the worker then falls back to the CPU path). A
+    /// free function: the job owns everything the future needs, and no
+    /// `async fn` here takes a receiver (`tests/it/no_async_exports.rs`).
     #[cfg(feature = "gpu")]
-    impl SnapshotJob {
-        /// The reply envelope's JSON, or `None` when the readback failed
-        /// (the worker then falls back to the CPU path).
-        async fn finish(self) -> Option<String> {
-            let (seq, kind) = match self {
-                SnapshotJob::Failed { seq, error } => {
-                    (seq, WorkerToMainKind::SnapshotFailed { error })
-                }
-                SnapshotJob::Pending {
-                    seq,
-                    pending,
+    async fn finish_snapshot(job: SnapshotJob) -> Option<String> {
+        let (seq, kind) = match job {
+            SnapshotJob::Failed { seq, error } => (seq, WorkerToMainKind::SnapshotFailed { error }),
+            SnapshotJob::Pending {
+                seq,
+                pending,
+                page_id,
+                width_px,
+                height_px,
+                layout_generation,
+                numbering_generation,
+            } => {
+                let rgba = pending.into_rgba().await.ok()?;
+                let snap = paged_canvas::Snapshot {
                     page_id,
                     width_px,
                     height_px,
                     layout_generation,
                     numbering_generation,
-                } => {
-                    let rgba = pending.into_rgba().await.ok()?;
-                    let snap = paged_canvas::Snapshot {
-                        page_id,
-                        width_px,
-                        height_px,
-                        layout_generation,
-                        numbering_generation,
-                        rgba,
-                    };
-                    match paged_canvas::encode_snapshot_png(snap) {
-                        Ok(png) => (seq, WorkerToMainKind::SnapshotReady(png)),
-                        Err(error) => (seq, WorkerToMainKind::SnapshotFailed { error }),
-                    }
+                    rgba,
+                };
+                match paged_canvas::encode_snapshot_png(snap) {
+                    Ok(png) => (seq, WorkerToMainKind::SnapshotReady(png)),
+                    Err(error) => (seq, WorkerToMainKind::SnapshotFailed { error }),
                 }
-            };
-            serde_json::to_string(&WorkerToMain {
-                seq: Some(seq),
-                protocol: PROTOCOL_VERSION,
-                kind,
-            })
-            .ok()
-        }
+            }
+        };
+        serde_json::to_string(&WorkerToMain {
+            seq: Some(seq),
+            protocol: PROTOCOL_VERSION,
+            kind,
+        })
+        .ok()
     }
 
     impl Default for CanvasWorker {
