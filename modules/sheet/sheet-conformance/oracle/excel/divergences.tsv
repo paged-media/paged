@@ -1,4 +1,4 @@
-# Engine-vs-Excel disagreements over the fn-corpus (tests/excel_oracle.rs).
+# Engine-vs-Excel disagreements over the fn-corpus (tests/it/excel_oracle.rs).
 # kind: defect = the engine is wrong (fixing it must delete the row);
 #       diverges = a recorded ruling or a harness artifact, with its reason.
 # engine/excel are typed tokens (n: s: b: e: blank). The lane fails on an unlisted

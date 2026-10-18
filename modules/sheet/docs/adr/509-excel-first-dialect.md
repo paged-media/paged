@@ -58,7 +58,7 @@ language: a locale is a table of separators and names read by the number-format 
 OpenFormula is named as a later mapping onto the same AST; no OpenFormula parser exists in
 the repository. Teaching the parser `;` as an argument separator was not done: goldens written
 that way are rewritten to `,` by the test runner before they reach the engine
-(`sheet-conformance/tests/corpus_runner.rs:34-41`). Japanese and Chinese locales are a
+(`sheet-conformance/tests/it/corpus_runner.rs:34-41`). Japanese and Chinese locales are a
 registry row with `status: planned`: era calendars and their own AM/PM strings need rendering
 code and verification against Excel, not a table row (`registry/features/locale.yaml:134-152`).
 

@@ -37,12 +37,12 @@
 # `corpus-profile.json` and `corpus-record-ledger.tsv`, both
 # implementer-legal — and the gate splits:
 #
-#   LANE A  image-conformance/tests/abr_lane_a.rs — always on, needs NO
+#   LANE A  image-conformance/tests/it/abr_lane_a.rs — always on, needs NO
 #           corpus. Drives the synthesised-fixture emitter
 #           `image-conformance/src/abr_builder` from those tables, so
 #           every expectation was measured on 3,215 real presets while
 #           every byte fed to the reader is synthetic.
-#   LANE B  image-conformance/tests/abr_corpus.rs — ANALYST-owned,
+#   LANE B  image-conformance/tests/it/abr_corpus.rs — ANALYST-owned,
 #           #[ignore]d, opt-in behind PAGED_ABR_CORPUS=1, and it opens
 #           the real files. Skips loudly wherever the mount is absent,
 #           which is CI and every implementer's machine.
@@ -73,7 +73,7 @@
   tests:
     rust:
       - "image-psd/src/abr/mod.rs (unit: image_abr_container_version_set_is_matched_explicitly, _legacy_versions_are_refused_by_name, _an_empty_modern_file_parses_clean, _unknown_minor_version_warns_but_parses)"
-      - "image-conformance/tests/abr_reader.rs (image_abr_container_reads_a_file_with_every_section_type, image_abr_container_survives_a_missing_pad_after_the_last_section, image_abr_container_empty_samp_and_patt_sections_are_normal, image_abr_container_unknown_section_is_retained_not_fatal, image_abr_container_accumulates_repeated_sections, image_abr_container_version_10_parses_identically_to_6, image_abr_container_descriptor_version_other_than_16_warns_but_parses)"
+      - "image-conformance/tests/it/abr_reader.rs (image_abr_container_reads_a_file_with_every_section_type, image_abr_container_survives_a_missing_pad_after_the_last_section, image_abr_container_empty_samp_and_patt_sections_are_normal, image_abr_container_unknown_section_is_retained_not_fatal, image_abr_container_accumulates_repeated_sections, image_abr_container_version_10_parses_identically_to_6, image_abr_container_descriptor_version_other_than_16_warns_but_parses)"
 
 - id: image.abr.samp
   state_row: image.psd.abr
@@ -90,7 +90,7 @@
   # boundary (VmSamples::to_eight_lossy) and nowhere else.
   tests:
     rust:
-      - "image-conformance/tests/abr_reader.rs (image_abr_samp_record_is_a_vm_array_list_not_a_264_byte_skip, image_abr_samp_bounds_are_y_first_and_the_tip_is_not_transposed, image_abr_samp_origin_is_provenance_not_a_stamping_offset, image_abr_samp_values_are_coverage_and_are_never_inverted, image_abr_samp_rle_row_lengths_are_an_up_front_table, image_abr_samp_raw_and_rle_produce_identical_pixels, image_abr_samp_record_lengths_are_rounded_up_before_the_end_is_computed)"
+      - "image-conformance/tests/it/abr_reader.rs (image_abr_samp_record_is_a_vm_array_list_not_a_264_byte_skip, image_abr_samp_bounds_are_y_first_and_the_tip_is_not_transposed, image_abr_samp_origin_is_provenance_not_a_stamping_offset, image_abr_samp_values_are_coverage_and_are_never_inverted, image_abr_samp_rle_row_lengths_are_an_up_front_table, image_abr_samp_raw_and_rle_produce_identical_pixels, image_abr_samp_record_lengths_are_rounded_up_before_the_end_is_computed)"
 
 - id: image.abr.join
   state_row: image.psd.abr
@@ -109,7 +109,7 @@
   # retry is also omitted: it was never once needed in 3,205 references.
   tests:
     rust:
-      - "image-conformance/tests/abr_reader.rs (image_abr_join_is_exact_string_equality, image_abr_join_shares_one_sample_between_several_presets, image_abr_join_has_no_positional_fallback, image_abr_join_runs_over_the_dual_brush_tip_as_well)"
+      - "image-conformance/tests/it/abr_reader.rs (image_abr_join_is_exact_string_equality, image_abr_join_shares_one_sample_between_several_presets, image_abr_join_has_no_positional_fallback, image_abr_join_runs_over_the_dual_brush_tip_as_well)"
 
 - id: image.abr.brush-model
   state_row: image.psd.abr
@@ -166,7 +166,7 @@
     rust:
       - "image-psd/src/abr/model.rs (unit: image_abr_brush_model_percent_scale_splits_bristle_keys_from_the_rest, _percent_results_are_not_clamped, _bristle_shape_table_is_bounds_checked, _control_source_table_is_bounds_checked, _absent_percent_default_is_a_named_constant; image_abr_height_map_is_little_endian_float32, image_abr_height_map_size_mismatch_is_reported)"
       - "image-psd/src/abr/blend.rs (unit: image_abr_brush_model_blend_accepts_both_dialects_for_the_same_mode, _legacy_wins_on_a_four_byte_key, _abr_only_modes_are_present, _modes_born_long_form_have_no_legacy_code, _unknown_identifier_is_reported_not_guessed, _there_is_no_dotted_form)"
-      - "image-conformance/tests/abr_reader.rs (image_abr_brush_model_tip_variant_is_selected_by_class_id_alone, image_abr_brush_model_tip_bristle_percents_are_fractions_while_siblings_are_0_to_100, image_abr_brush_model_tip_computed_carries_roundness_and_hardness_as_0_to_100, image_abr_height_map_erodible_tip_retains_both_ordinals_and_the_le_map, image_abr_brush_model_scatter_count_is_a_double_and_reading_four_bytes_would_desync, image_abr_brush_model_gate_false_means_the_group_is_absent_entirely, image_abr_brush_model_flip_flags_do_not_collide_across_the_two_levels, image_abr_brush_model_texture_identity_nests_while_its_parameters_do_not, image_abr_brush_model_blend_modes_arrive_in_both_dialects_in_one_file, image_abr_brush_model_color_dynamics_parses_but_announces_that_it_is_unverified, image_abr_brush_model_transfer_is_gated_by_use_paint_dynamics, image_abr_brush_model_brush_pose_angles_are_bare_longs, image_abr_brush_model_tool_options_class_id_names_the_tool_and_unknown_ids_fall_back, image_abr_brush_model_unmodelled_keys_survive_on_the_descriptor)"
+      - "image-conformance/tests/it/abr_reader.rs (image_abr_brush_model_tip_variant_is_selected_by_class_id_alone, image_abr_brush_model_tip_bristle_percents_are_fractions_while_siblings_are_0_to_100, image_abr_brush_model_tip_computed_carries_roundness_and_hardness_as_0_to_100, image_abr_height_map_erodible_tip_retains_both_ordinals_and_the_le_map, image_abr_brush_model_scatter_count_is_a_double_and_reading_four_bytes_would_desync, image_abr_brush_model_gate_false_means_the_group_is_absent_entirely, image_abr_brush_model_flip_flags_do_not_collide_across_the_two_levels, image_abr_brush_model_texture_identity_nests_while_its_parameters_do_not, image_abr_brush_model_blend_modes_arrive_in_both_dialects_in_one_file, image_abr_brush_model_color_dynamics_parses_but_announces_that_it_is_unverified, image_abr_brush_model_transfer_is_gated_by_use_paint_dynamics, image_abr_brush_model_brush_pose_angles_are_bare_longs, image_abr_brush_model_tool_options_class_id_names_the_tool_and_unknown_ids_fall_back, image_abr_brush_model_unmodelled_keys_survive_on_the_descriptor)"
 
 - id: image.abr.height-map
   state_row: image.psd.abr
@@ -183,7 +183,7 @@
   tests:
     rust:
       - "image-psd/src/abr/model.rs (unit: image_abr_height_map_is_little_endian_float32, image_abr_height_map_size_mismatch_is_reported)"
-      - "image-conformance/tests/abr_reader.rs (image_abr_height_map_erodible_tip_retains_both_ordinals_and_the_le_map)"
+      - "image-conformance/tests/it/abr_reader.rs (image_abr_height_map_erodible_tip_retains_both_ordinals_and_the_le_map)"
 
 - id: image.abr.phry
   state_row: image.psd.abr
@@ -201,7 +201,7 @@
   tests:
     rust:
       - "image-psd/src/abr/phry.rs (unit: image_abr_phry_binds_presets_positionally, _count_mismatch_falls_back_to_flat, _unbalanced_is_reported, _present_but_empty_is_not_an_error)"
-      - "image-conformance/tests/abr_reader.rs (image_abr_phry_is_a_flat_open_close_token_stream_bound_positionally, image_abr_phry_count_mismatch_refuses_to_bind, image_abr_phry_present_but_empty_does_not_hide_the_brushes)"
+      - "image-conformance/tests/it/abr_reader.rs (image_abr_phry_is_a_flat_open_close_token_stream_bound_positionally, image_abr_phry_count_mismatch_refuses_to_bind, image_abr_phry_present_but_empty_does_not_hide_the_brushes)"
 
 - id: image.abr.patt
   state_row: image.psd.abr
@@ -214,7 +214,7 @@
   # tolerates that, and Texture::pattern_id carries the unresolved value.
   tests:
     rust:
-      - "image-conformance/tests/abr_reader.rs (image_abr_container_reads_a_file_with_every_section_type asserts the body is retained verbatim; image_abr_container_empty_samp_and_patt_sections_are_normal asserts a zero-length section is not an error)"
+      - "image-conformance/tests/it/abr_reader.rs (image_abr_container_reads_a_file_with_every_section_type asserts the body is retained verbatim; image_abr_container_empty_samp_and_patt_sections_are_normal asserts a zero-length section is not an error)"
 
 - id: image.abr.engine-bridge
   state_row: image.psd.abr
@@ -245,7 +245,7 @@
   tests:
     rust:
       - "image-gpu/src/dab.rs (unit, all image_abr_engine_bridge_sampled_tip_*: _rejects_a_bitmap_whose_length_disagrees_with_its_bounds, _stored_values_are_coverage_and_are_never_inverted, _defaults_its_diameter_to_the_larger_dimension, _scales_the_bitmap_to_the_preset_diameter, _is_not_transposed_by_a_non_square_bitmap, _roundness_squashes_the_minor_axis, _flips_mirror_the_bitmap, _is_sub_pixel_positionable_like_the_round_tip, _rides_the_same_accumulation_rule_as_the_round_tip, _walks_a_stroke_through_plan_segment_unchanged, _outside_the_field_stamps_nothing)"
-      - "image-conformance/tests/abr_reader.rs (image_abr_engine_bridge_sampled_tip_becomes_a_stampable_coverage_field — the end-to-end path: RLE-encoded .abr bytes -> decoded coverage -> SampledTip at the preset's Dmtr -> StrokeAccumulator)"
+      - "image-conformance/tests/it/abr_reader.rs (image_abr_engine_bridge_sampled_tip_becomes_a_stampable_coverage_field — the end-to-end path: RLE-encoded .abr bytes -> decoded coverage -> SampledTip at the preset's Dmtr -> StrokeAccumulator)"
 
 - id: image.abr.corpus-gate
   state_row: image.psd.abr
@@ -272,5 +272,5 @@
   tests:
     rust:
       - "image-conformance/src/abr_corpus/ (unit: image_abr_corpus_profile_loads_with_its_headline_totals, image_abr_corpus_ledger_loads_one_row_per_record, image_abr_corpus_json_* x4, image_abr_corpus_sha256_* x2 — the loader and its dependency-free JSON/SHA-256 primitives, the latter checked against the published FIPS 180-4 vectors)"
-      - "image-conformance/tests/abr_lane_a.rs (LANE A, always on: image_abr_lane_a1_* x3, _a2_* x4, _a3_* x3, _a4_* x4, _a5_* x3, _a6_* x4, _a7_* x2)"
-      - "image-conformance/tests/abr_corpus.rs (LANE B, #[ignore]d + PAGED_ABR_CORPUS=1: image_abr_corpus_b1_every_file_matches_its_profile_row, _b2_every_record_matches_the_ledger_including_its_digest, _b3_the_published_png_alpha_settles_the_polarity, _b4_the_aggregates_match_the_published_tables)"
+      - "image-conformance/tests/it/abr_lane_a.rs (LANE A, always on: image_abr_lane_a1_* x3, _a2_* x4, _a3_* x3, _a4_* x4, _a5_* x3, _a6_* x4, _a7_* x2)"
+      - "image-conformance/tests/it/abr_corpus.rs (LANE B, #[ignore]d + PAGED_ABR_CORPUS=1: image_abr_corpus_b1_every_file_matches_its_profile_row, _b2_every_record_matches_the_ledger_including_its_digest, _b3_the_published_png_alpha_settles_the_polarity, _b4_the_aggregates_match_the_published_tables)"

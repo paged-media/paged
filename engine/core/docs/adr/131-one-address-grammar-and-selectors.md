@@ -98,10 +98,10 @@ selector, never by a raw `Self`.
 
 - `crates/paged-wire` unit and property tests: every form parses, formats back canonically, and
   `parse` never panics.
-- `crates/paged-canvas/tests/address_grammar.rs`: every form in the published grammar parses,
+- `crates/paged-canvas/tests/it/address_grammar.rs`: every form in the published grammar parses,
   formats back byte-identically and resolves on ONE document holding an object of every kind,
   and every core address maps to an engine target (ADR 132).
-- `every_published_id_form_actually_parses` (`crates/paged-script/tests/script_surface.rs`).
+- `every_published_id_form_actually_parses` (`crates/paged-script/tests/it/script_surface.rs`).
 
 ## Implemented (protocol 71)
 

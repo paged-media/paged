@@ -164,7 +164,7 @@ The exporter `media.paged.doc.exporter.docx` runs `exportDocx` in `activate.ts`
   removes a block and does not read read-back paragraphs beyond those the baseline's blocks
   take (`docx-export/src/overlay.rs:96-140`). The differ and the patcher also handle
   paragraph insert and delete, paragraph properties, table-cell runs, rows and columns; the
-  tests in `docx-conformance/tests/save_back.rs` reach those through lowerings or edit sets
+  tests in `docx-conformance/tests/it/save_back.rs` reach those through lowerings or edit sets
   built in the test, and no test of the read-back path adds or removes a paragraph.
 
 ## Where data is stored

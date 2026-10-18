@@ -2,7 +2,7 @@
 # math.yaml. All 30 rows status: implemented — the M1 stat track (TRACK
 # FN/STAT) wired the kernels under sheet-fn/src/families/stat.rs. Provenance:
 # ECMA-376 §18.17.7 + public Microsoft function docs. Tests:
-# sheet-conformance/tests/fn_stat.rs; corpus: corpus/fn-corpus/stat/.
+# sheet-conformance/tests/it/fn_stat.rs; corpus: corpus/fn-corpus/stat/.
 # Excel rulings documented in the stat.rs module doc + per-row provenance.
 
 - id: sheet.fn.stat.median
@@ -15,7 +15,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (MEDIAN)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_median"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_median"]
     corpus: ["corpus/fn-corpus/stat/median.golden.tsv"]
 
 - id: sheet.fn.stat.mode
@@ -28,7 +28,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (MODE) — legacy MODE = MODE.SNGL"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_mode"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_mode"]
     corpus: ["corpus/fn-corpus/stat/mode.golden.tsv"]
 
 - id: sheet.fn.stat.stdev-s
@@ -41,7 +41,7 @@
   status: implemented
   provenance: ["Microsoft STDEV.S (public docs) — sample standard deviation"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_stdev_s"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_stdev_s"]
     corpus: ["corpus/fn-corpus/stat/stdev_s.golden.tsv"]
 
 - id: sheet.fn.stat.stdev-p
@@ -54,7 +54,7 @@
   status: implemented
   provenance: ["Microsoft STDEV.P (public docs) — population standard deviation"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_stdev_p"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_stdev_p"]
     corpus: ["corpus/fn-corpus/stat/stdev_p.golden.tsv"]
 
 - id: sheet.fn.stat.var-s
@@ -67,7 +67,7 @@
   status: implemented
   provenance: ["Microsoft VAR.S (public docs) — sample variance"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_var_s"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_var_s"]
     corpus: ["corpus/fn-corpus/stat/var_s.golden.tsv"]
 
 - id: sheet.fn.stat.var-p
@@ -80,7 +80,7 @@
   status: implemented
   provenance: ["Microsoft VAR.P (public docs) — population variance"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_var_p"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_var_p"]
     corpus: ["corpus/fn-corpus/stat/var_p.golden.tsv"]
 
 - id: sheet.fn.stat.stdev
@@ -93,7 +93,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (STDEV) — legacy alias of STDEV.S semantics (sample)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_stdev"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_stdev"]
     corpus: ["corpus/fn-corpus/stat/stdev.golden.tsv"]
 
 - id: sheet.fn.stat.stdevp
@@ -106,7 +106,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (STDEVP) — legacy alias of STDEV.P (population)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_stdevp"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_stdevp"]
     corpus: ["corpus/fn-corpus/stat/stdevp.golden.tsv"]
 
 - id: sheet.fn.stat.var
@@ -119,7 +119,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (VAR) — legacy VAR is SAMPLE variance (= VAR.S)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_var"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_var"]
     corpus: ["corpus/fn-corpus/stat/var.golden.tsv"]
 
 - id: sheet.fn.stat.varp
@@ -132,7 +132,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (VARP) — legacy alias of VAR.P (population)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_varp"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_varp"]
     corpus: ["corpus/fn-corpus/stat/varp.golden.tsv"]
 
 - id: sheet.fn.stat.percentile-inc
@@ -145,7 +145,7 @@
   status: implemented
   provenance: ["Microsoft PERCENTILE.INC (public docs) — inclusive k in 0..1"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_percentile_inc"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_percentile_inc"]
     corpus: ["corpus/fn-corpus/stat/percentile_inc.golden.tsv"]
 
 - id: sheet.fn.stat.quartile-inc
@@ -158,7 +158,7 @@
   status: implemented
   provenance: ["Microsoft QUARTILE.INC (public docs) — quart 0..4"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_quartile_inc"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_quartile_inc"]
     corpus: ["corpus/fn-corpus/stat/quartile_inc.golden.tsv"]
 
 - id: sheet.fn.stat.rank-eq
@@ -171,7 +171,7 @@
   status: implemented
   provenance: ["Microsoft RANK.EQ (public docs) — ties share the top rank"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_rank_eq"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_rank_eq"]
     corpus: ["corpus/fn-corpus/stat/rank_eq.golden.tsv"]
 
 - id: sheet.fn.stat.rank
@@ -184,7 +184,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (RANK) — legacy alias of RANK.EQ"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_rank"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_rank"]
     corpus: ["corpus/fn-corpus/stat/rank.golden.tsv"]
 
 - id: sheet.fn.stat.large
@@ -197,7 +197,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (LARGE) — k-th largest"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_large"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_large"]
     corpus: ["corpus/fn-corpus/stat/large.golden.tsv"]
 
 - id: sheet.fn.stat.small
@@ -210,7 +210,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (SMALL) — k-th smallest"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_small"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_small"]
     corpus: ["corpus/fn-corpus/stat/small.golden.tsv"]
 
 - id: sheet.fn.stat.countifs
@@ -223,7 +223,7 @@
   status: implemented
   provenance: ["Microsoft COUNTIFS (public docs) — variadic (range, criteria) pairs"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_countifs"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_countifs"]
     corpus: ["corpus/fn-corpus/stat/countifs.golden.tsv"]
 
 - id: sheet.fn.stat.sumifs
@@ -236,7 +236,7 @@
   status: implemented
   provenance: ["Microsoft SUMIFS (public docs) — sum_range then variadic (range, criteria) pairs"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_sumifs"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_sumifs"]
     corpus: ["corpus/fn-corpus/stat/sumifs.golden.tsv"]
 
 - id: sheet.fn.stat.averageifs
@@ -249,7 +249,7 @@
   status: implemented
   provenance: ["Microsoft AVERAGEIFS (public docs) — average_range then variadic pairs"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_averageifs"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_averageifs"]
     corpus: ["corpus/fn-corpus/stat/averageifs.golden.tsv"]
 
 - id: sheet.fn.stat.maxifs
@@ -262,7 +262,7 @@
   status: implemented
   provenance: ["Microsoft MAXIFS (public docs) — max_range then variadic pairs"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_maxifs"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_maxifs"]
     corpus: ["corpus/fn-corpus/stat/maxifs.golden.tsv"]
 
 - id: sheet.fn.stat.minifs
@@ -275,7 +275,7 @@
   status: implemented
   provenance: ["Microsoft MINIFS (public docs) — min_range then variadic pairs"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_minifs"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_minifs"]
     corpus: ["corpus/fn-corpus/stat/minifs.golden.tsv"]
 
 - id: sheet.fn.stat.sumproduct
@@ -288,7 +288,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (SUMPRODUCT)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_sumproduct"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_sumproduct"]
     corpus: ["corpus/fn-corpus/stat/sumproduct.golden.tsv"]
 
 - id: sheet.fn.stat.geomean
@@ -301,7 +301,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (GEOMEAN)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_geomean"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_geomean"]
     corpus: ["corpus/fn-corpus/stat/geomean.golden.tsv"]
 
 - id: sheet.fn.stat.harmean
@@ -314,7 +314,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (HARMEAN)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_harmean"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_harmean"]
     corpus: ["corpus/fn-corpus/stat/harmean.golden.tsv"]
 
 - id: sheet.fn.stat.avedev
@@ -327,7 +327,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (AVEDEV) — mean absolute deviation"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_avedev"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_avedev"]
     corpus: ["corpus/fn-corpus/stat/avedev.golden.tsv"]
 
 - id: sheet.fn.stat.devsq
@@ -340,7 +340,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DEVSQ) — sum of squared deviations"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_devsq"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_devsq"]
     corpus: ["corpus/fn-corpus/stat/devsq.golden.tsv"]
 
 - id: sheet.fn.stat.correl
@@ -353,7 +353,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (CORREL) — Pearson correlation of two arrays"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_correl"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_correl"]
     corpus: ["corpus/fn-corpus/stat/correl.golden.tsv"]
 
 - id: sheet.fn.stat.slope
@@ -366,7 +366,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (SLOPE) — linear-regression slope (known_y, known_x)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_slope"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_slope"]
     corpus: ["corpus/fn-corpus/stat/slope.golden.tsv"]
 
 - id: sheet.fn.stat.intercept
@@ -379,7 +379,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (INTERCEPT) — linear-regression intercept"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_intercept"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_intercept"]
     corpus: ["corpus/fn-corpus/stat/intercept.golden.tsv"]
 
 - id: sheet.fn.stat.rsq
@@ -392,7 +392,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (RSQ) — square of the Pearson correlation"]
   tests:
-    rust: ["sheet-conformance/tests/fn_stat.rs::sheet_fn_stat_rsq"]
+    rust: ["sheet-conformance/tests/it/fn_stat.rs::sheet_fn_stat_rsq"]
     corpus: ["corpus/fn-corpus/stat/rsq.golden.tsv"]
 
 # ---- Wave 7 (data & functions) additions ----
@@ -407,7 +407,7 @@
   status: implemented
   provenance: ["Microsoft PERCENTILE (public docs) — legacy alias of PERCENTILE.INC"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_stat_percentile"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_stat_percentile"]
     corpus: ["corpus/fn-corpus/stat/percentile.golden.tsv"]
 
 - id: sheet.fn.stat.quartile
@@ -420,7 +420,7 @@
   status: implemented
   provenance: ["Microsoft QUARTILE (public docs) — legacy alias of QUARTILE.INC"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_stat_quartile"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_stat_quartile"]
     corpus: ["corpus/fn-corpus/stat/quartile.golden.tsv"]
 
 - id: sheet.fn.stat.percentile-exc
@@ -433,7 +433,7 @@
   status: implemented
   provenance: ["Microsoft PERCENTILE.EXC (public docs) — exclusive k in (0,1), rank k*(n+1)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_stat_percentile_exc"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_stat_percentile_exc"]
     corpus: ["corpus/fn-corpus/stat/percentile_exc.golden.tsv"]
 
 - id: sheet.fn.stat.quartile-exc
@@ -446,7 +446,7 @@
   status: implemented
   provenance: ["Microsoft QUARTILE.EXC (public docs) — quart 1..3 = PERCENTILE.EXC(quart/4)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_stat_quartile_exc"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_stat_quartile_exc"]
     corpus: ["corpus/fn-corpus/stat/quartile_exc.golden.tsv"]
 
 - id: sheet.fn.stat.mode-sngl
@@ -459,7 +459,7 @@
   status: implemented
   provenance: ["Microsoft MODE.SNGL (public docs) — most frequent value; none repeats -> #N/A"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_stat_mode_sngl"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_stat_mode_sngl"]
     corpus: ["corpus/fn-corpus/stat/mode_sngl.golden.tsv"]
 
 - id: sheet.fn.stat.forecast
@@ -472,7 +472,7 @@
   status: implemented
   provenance: ["Microsoft FORECAST (public docs) — x, known_ys, known_xs; least-squares a + b*x"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_stat_forecast"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_stat_forecast"]
     corpus: ["corpus/fn-corpus/stat/forecast.golden.tsv"]
 
 - id: sheet.fn.stat.forecast-linear
@@ -485,7 +485,7 @@
   status: implemented
   provenance: ["Microsoft FORECAST.LINEAR (public docs) — same as FORECAST"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_stat_forecast_linear"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_stat_forecast_linear"]
     corpus: ["corpus/fn-corpus/stat/forecast_linear.golden.tsv"]
 
 - id: sheet.fn.stat.frequency
@@ -499,7 +499,7 @@
   status: implemented
   provenance: ["Microsoft FREQUENCY (public docs) — vertical bins+1 count array"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_stat_frequency"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_stat_frequency"]
     corpus: ["corpus/fn-corpus/stat/frequency.golden.tsv"]
 
 - id: sheet.fn.stat.trend
@@ -513,7 +513,7 @@
   status: implemented
   provenance: ["Microsoft TREND (public docs) — known_ys, [known_xs], [new_xs], [const]; single-regressor fit (multiple regression is a recorded #VALUE! scope limit)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_stat_trend"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_stat_trend"]
     corpus: ["corpus/fn-corpus/stat/trend.golden.tsv"]
 
 - id: sheet.fn.stat.norm-dist
@@ -526,7 +526,7 @@
   status: implemented
   provenance: ["Microsoft NORM.DIST (public docs) — x, mean, standard_dev, cumulative; sd <= 0 -> #NUM!"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_stat_norm_dist"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_stat_norm_dist"]
     corpus: ["corpus/fn-corpus/stat/norm_dist.golden.tsv"]
 
 - id: sheet.fn.stat.norm-inv
@@ -539,7 +539,7 @@
   status: implemented
   provenance: ["Microsoft NORM.INV (public docs) — probability in (0,1), mean, standard_dev > 0"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_stat_norm_inv"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_stat_norm_inv"]
     corpus: ["corpus/fn-corpus/stat/norm_inv.golden.tsv"]
 
 - id: sheet.fn.stat.norm-s-dist
@@ -552,7 +552,7 @@
   status: implemented
   provenance: ["Microsoft NORM.S.DIST (public docs) — z, cumulative"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_stat_norm_s_dist"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_stat_norm_s_dist"]
     corpus: ["corpus/fn-corpus/stat/norm_s_dist.golden.tsv"]
 
 - id: sheet.fn.stat.norm-s-inv
@@ -565,7 +565,7 @@
   status: implemented
   provenance: ["Microsoft NORM.S.INV (public docs) — probability in (0,1)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_stat_norm_s_inv"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_stat_norm_s_inv"]
     corpus: ["corpus/fn-corpus/stat/norm_s_inv.golden.tsv"]
 
 - id: sheet.fn.stat.percentrank
@@ -578,7 +578,7 @@
   status: implemented
   provenance: ["Microsoft PERCENTRANK (public docs) — legacy name of PERCENTRANK.INC; values recorded on Excel 16 (oracle lane)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_oracle_added.rs::sheet_fn_stat_percentrank"]
+    rust: ["sheet-conformance/tests/it/fn_oracle_added.rs::sheet_fn_stat_percentrank"]
     corpus: ["corpus/fn-corpus/stat/percentrank.golden.tsv"]
 
 - id: sheet.fn.stat.percentrank-inc
@@ -591,7 +591,7 @@
   status: implemented
   provenance: ["Microsoft PERCENTRANK.INC (public docs) — inclusive rank fraction, linear interpolation, truncated to significance digits; values recorded on Excel 16"]
   tests:
-    rust: ["sheet-conformance/tests/fn_oracle_added.rs::sheet_fn_stat_percentrank"]
+    rust: ["sheet-conformance/tests/it/fn_oracle_added.rs::sheet_fn_stat_percentrank"]
     corpus: ["corpus/fn-corpus/stat/percentrank_inc.golden.tsv"]
 
 - id: sheet.fn.stat.percentrank-exc
@@ -604,7 +604,7 @@
   status: implemented
   provenance: ["Microsoft PERCENTRANK.EXC (public docs) — exclusive rank fraction (position/(n+1)), truncated; values recorded on Excel 16"]
   tests:
-    rust: ["sheet-conformance/tests/fn_oracle_added.rs::sheet_fn_stat_percentrank"]
+    rust: ["sheet-conformance/tests/it/fn_oracle_added.rs::sheet_fn_stat_percentrank"]
     corpus: ["corpus/fn-corpus/stat/percentrank_exc.golden.tsv"]
 
 - id: sheet.fn.stat.linest
@@ -618,5 +618,5 @@
   status: implemented
   provenance: ["Microsoft LINEST (public docs) — least squares over one or more regressors, [const], [stats]; collinear regressors #NUM! (Excel drops them; not modelled); values recorded on Excel 16"]
   tests:
-    rust: ["sheet-conformance/tests/fn_oracle_added.rs::sheet_fn_stat_linest"]
+    rust: ["sheet-conformance/tests/it/fn_oracle_added.rs::sheet_fn_stat_linest"]
     corpus: ["corpus/fn-corpus/stat/linest.golden.tsv"]

@@ -18,7 +18,7 @@
 
 // Conformance — gradient ASSIGNMENT through the bundle's document door
 // (B-03, resolved engine-side; core pins the render truth in
-// `paged-mutate/tests/gradient_fill.rs` — display list carries a
+// `paged-mutate/tests/it/gradient_fill.rs` — display list carries a
 // gradient paint). THIS file pins the PLUGIN-side path: a bundle can
 // create the gradient, point a frame fill at it and steer the gradient
 // axis, all through `host.document.mutate` against the real published

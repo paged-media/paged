@@ -1,7 +1,7 @@
 # sheet.format.locale.* — Western-European Latin tier rendering goldens
 # (fr-FR / es-ES / it-IT). Spec §9; ECMA-376 §18.8.31. Driven through
 # FormatCtx::new(Date1900, Locale::{FrFr,EsEs,ItIt}) by
-# sheet-conformance/tests/locale.rs (sheet_format_locale_latin_tier). The
+# sheet-conformance/tests/it/locale.rs (sheet_format_locale_latin_tier). The
 # format CODE is locale-NEUTRAL (same `#,##0.00` / `mmmm` / `AM/PM` tokens as
 # the en/de goldens); only the RENDERED separators, month/day names, and AM/PM
 # strings differ. The en-US goldens (number/datetime.golden.tsv) and the de

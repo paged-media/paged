@@ -32,6 +32,6 @@ OSA
     rm -f "$shim"
 }
 run_jsx "$HERE/base.jsx"
-PAGED_INDESIGN_PROBE="$OUT" cargo test -p idml-export --test indesign_object_model -- --ignored --nocapture
+PAGED_INDESIGN_PROBE="$OUT" cargo test -p idml-export --test it -- --ignored --nocapture indesign_object_model::
 run_jsx "$HERE/verify.jsx"
 echo "==> $OUT/verify.json"

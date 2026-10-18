@@ -49,7 +49,7 @@ without the save-back when no adjustment is set.
 - `image-psd/src/lib.rs:31-53` — the three strategies and the guard
 - `image-psd/src/model/mod.rs:47-51` — `Raw`: `Some` is re-emitted, `None` is re-encoded
 - `image-psd/src/edit.rs:19-36`, `:58-64` — the dirtying rule, and one edit that applies it
-- `image-psd/tests/roundtrip.rs:283-303`, `:367-441` — the byte-identity tests, and the
+- `image-psd/tests/it/roundtrip.rs:283-303`, `:367-441` — the byte-identity tests, and the
   tests that clear every guard, write, parse again and compare
 - `image-conformance/src/psd_builder/mod.rs:19-23` — fixtures come from a separate emitter
 - `image-js/src/lib.rs:3629-3649`, `:3706-3720` — the retained parse and `psd_save`
@@ -78,8 +78,8 @@ The merged composite is rewritten in both cases, and document-level blocks are k
 
 The byte-identity tests run on files the repo builds itself. The test over real Photoshop
 files is opt-in and asserts that they parse with sane headers, not that they round-trip
-(`image-conformance/tests/real_psd_corpus.rs:127-129`). The check that an outside reader
-(psd-tools) opens what the writer emits is also opt-in (`image-conformance/tests/psd_ecosystem.rs:48-51`).
+(`image-conformance/tests/it/real_psd_corpus.rs:127-129`). The check that an outside reader
+(psd-tools) opens what the writer emits is also opt-in (`image-conformance/tests/it/psd_ecosystem.rs:48-51`).
 One comment is behind the code: `image-psd/src/layer_pixels.rs:39-44` lists 16-bit files and
 clipping layers as refused; the depth gate admits 16-bit (`:131-137`) and clipping is carried (`:199`).
 

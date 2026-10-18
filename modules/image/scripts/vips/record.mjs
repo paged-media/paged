@@ -6,7 +6,7 @@
 //   node scripts/vips/record.mjs math.add   # just these ids
 //
 // Maintainer-only (needs the `vips` CLI). CI never runs this: it replays
-// the committed fixtures through image-conformance/tests/oracle_vips.rs.
+// the committed fixtures through image-conformance/tests/it/oracle_vips.rs.
 //
 // For each row this writes the deterministic float stimuli (formula
 // below; the replay regenerates them bit-identically), runs the row's
@@ -444,7 +444,7 @@ function writeYaml() {
 # \`oracle\` is \`vips\` or \`both\`. Each row is a vips command chain
 # (recorded by scripts/vips/record.mjs into image-conformance/fixtures/vips/)
 # or \`diverges: <reason>\` where libvips implements a different formula.
-# Replayed by image-conformance/tests/oracle_vips.rs; the tolerances are
+# Replayed by image-conformance/tests/it/oracle_vips.rs; the tolerances are
 # MEASURED there (max |ours - vips| over the compared region, rounded up)
 # and written back with PAGED_VIPS_TOLERANCE=write. GENERATED — edit
 # scripts/vips/record.mjs, not this file.

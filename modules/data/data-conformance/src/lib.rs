@@ -18,7 +18,7 @@
 
 //! Conformance harness (spec §12) — the TEST-ONLY crate. The shared helpers
 //! used by the per-family / per-subsystem tier tests; the coverage gate
-//! (`bin/coverage-gate`) lives alongside, and `tests/oracle.rs` replays the
+//! (`bin/coverage-gate`) lives alongside, and `tests/it/oracle.rs` replays the
 //! recorded InDesign Data Merge oracle (docs/design/oracles.md). Determinism: expression eval + binding resolution are
 //! CPU/`f64` bit-stable (no GPU, no tolerance).
 

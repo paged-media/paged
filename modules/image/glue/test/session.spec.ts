@@ -19,7 +19,7 @@
 // The M4 ingest loop, end to end over the REAL engine wasm (Node = no
 // navigator.gpu, so the GPU degrades honestly and only the IDENTITY
 // composite runs — exactly the no-WebGPU contract; the GPU adjustments
-// chain is covered natively in image-js/tests/ingest.rs and the
+// chain is covered natively in image-js/tests/it/ingest.rs and the
 // conformance async-parity suite). What this pins: C-5 read → wasm
 // decode → the v41 image scene-item submit sized to the frame, the
 // Stage-A commit semantics, clear-on-deselect, and reset.

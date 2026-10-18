@@ -120,7 +120,7 @@ band-count paths answer "no such readable path" on an older engine, which is the
 
 ## Tests
 
-`crates/paged-canvas-wasm/tests/committed_change_reports.rs`, through the worker dispatch the wasm canvas runs:
+`crates/paged-canvas-wasm/tests/it/committed_change_reports.rs`, through the worker dispatch the wasm canvas runs:
 - a handle resize of a frame threaded into a second frame reports the reflow a `resizeFrame` to
   the same bounds reports; a handle move reports none;
 - a read-only script reports `writes: 0` and no page; two text edits of the story on page 2

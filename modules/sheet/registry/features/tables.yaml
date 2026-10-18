@@ -10,14 +10,14 @@
   status: implemented
   provenance: ["spec §6.4", "ECMA-376 §18.5 (table part)"]
   tests:
-    rust: ["sheet-conformance/tests/tables.rs::sheet_table_model"]
+    rust: ["sheet-conformance/tests/it/tables.rs::sheet_table_model"]
 
 - id: sheet.table.xlsx-part
   title: Parse + preserve the xl/tables/tableN.xml part into the table model (round-trip safe)
   status: implemented
   provenance: ["ECMA-376 §18.5 (table)", "spec §10.2 preservation invariant"]
   tests:
-    rust: ["sheet-conformance/tests/tables.rs::sheet_table_xlsx_part"]
+    rust: ["sheet-conformance/tests/it/tables.rs::sheet_table_xlsx_part"]
     corpus: ["corpus/xlsx-corpus/07-tables.xlsx"]
 
 - id: sheet.table.structured-ref.parse
@@ -25,25 +25,25 @@
   status: implemented
   provenance: ["spec §6.4", "ECMA-376 §18.17.2.4 (structured references)"]
   tests:
-    rust: ["sheet-conformance/tests/tables.rs::sheet_table_structured_ref_parse"]
+    rust: ["sheet-conformance/tests/it/tables.rs::sheet_table_structured_ref_parse"]
 
 - id: sheet.table.structured-ref.eval
   title: Evaluate a structured reference to its addressed area (resolve table + column + #-area)
   status: implemented
   provenance: ["spec §6.4", "ECMA-376 §18.17.2.4"]
   tests:
-    rust: ["sheet-conformance/tests/tables.rs::sheet_table_structured_ref_eval"]
+    rust: ["sheet-conformance/tests/it/tables.rs::sheet_table_structured_ref_eval"]
 
 - id: sheet.table.structured-ref.print
   title: Print a StructuredRef back to canonical Excel text (parse-print fixpoint)
   status: implemented
   provenance: ["spec §6.4", "Microsoft structured-reference syntax (public docs)"]
   tests:
-    rust: ["sheet-conformance/tests/tables.rs::sheet_table_structured_ref_print"]
+    rust: ["sheet-conformance/tests/it/tables.rs::sheet_table_structured_ref_print"]
 
 - id: sheet.table.rewrite
   title: Structured refs survive row/col insert/delete unchanged (name-anchored, not geometry-shifted)
   status: implemented
   provenance: ["spec §6.1/§6.4 — structured refs are name-anchored"]
   tests:
-    rust: ["sheet-conformance/tests/tables.rs::sheet_table_rewrite"]
+    rust: ["sheet-conformance/tests/it/tables.rs::sheet_table_rewrite"]

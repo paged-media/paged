@@ -47,7 +47,7 @@ A client sends a `Mutation`; the canvas model lowers it onto an `Operation`, whi
 
 ## Evidence
 
-- `crates/paged-wire/src/lib.rs:614-630` — `Mutation` and its `{op, args}` tagging; `:1690-1809` the roster; `crates/paged-script/tests/script_surface.rs:153` asserts 118 names
+- `crates/paged-wire/src/lib.rs:614-630` — `Mutation` and its `{op, args}` tagging; `:1690-1809` the roster; `crates/paged-script/tests/it/script_surface.rs:153` asserts 118 names
 - `crates/paged-mutate/src/operation.rs:2787-2794` — `Operation`: "The canonical mutation primitive. A closed set, extended only with deliberation"; the enum body runs to `:3830`
 - `crates/paged-canvas/src/model.rs:2120-2127` — routing through the bridge; `:2651-2664` the translation function and `mint_offset`; `:4111-4157` `apply_operation`
 - `crates/paged-canvas/src/model.rs:2204-2242` — a text edit "has no `paged_mutate::Operation` form"; the `TextOp` lane; `:1902-2119` the five mutations handled inline

@@ -689,14 +689,14 @@ provenance:
   - "design: an internal design note"
   - "EasyCatalog studied as product reference (no code)"
 tests:
-  rust: ["data-conformance/tests/recordflow.rs::grouped"]
+  rust: ["data-conformance/tests/it/recordflow.rs::grouped"]
   playwright: ["@feat:data.lower.recordflow.grouped"]
   corpus: ["data-corpus/catalog/grouped/*"]
 ```
 
 ### 12.4 Oracles and harnesses (`data-conformance`, test-only)
 
-*Status note (2026-10-02): this section predates the implementation; the native-DuckDB oracle is an unimplemented skeleton in `data-conformance/tests/oracle.rs`; see `status.md`.*
+*Status note (2026-10-02): this section predates the implementation; the native-DuckDB oracle is an unimplemented skeleton in `data-conformance/tests/it/oracle.rs`; see `status.md`.*
 
 - **DuckDB itself** is the query oracle: expected result sets are computed
   by DuckDB native and diffed against DuckDB-WASM (parity across the two
@@ -760,7 +760,7 @@ tests:
 
 ## 15. Milestones
 
-*Status note (2026-10-02): this section predates the implementation; see `status.md` (what is shipped and what is not). The DuckDB oracle harness named under M0 is an unimplemented skeleton (`data-conformance/tests/oracle.rs`), and the headless generation named under M2 is the `data-cli` binary ([ADR 555](adr/555-batch-reuses-the-engine.md)).*
+*Status note (2026-10-02): this section predates the implementation; see `status.md` (what is shipped and what is not). The DuckDB oracle harness named under M0 is an unimplemented skeleton (`data-conformance/tests/it/oracle.rs`), and the headless generation named under M2 is the `data-cli` binary ([ADR 555](adr/555-batch-reuses-the-engine.md)).*
 
 **M0 — Spine + safe data + first bindings.**
 Phase 0 (serial): **A-0 audit** (SDK surface for tagged placeholders, table

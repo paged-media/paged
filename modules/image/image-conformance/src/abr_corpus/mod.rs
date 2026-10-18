@@ -34,11 +34,11 @@
 //!
 //! # The two lanes they make possible
 //!
-//! * **LANE A** — `tests/abr_lane_a.rs`. IMPLEMENTER-owned, always on,
+//! * **LANE A** — `tests/it/abr_lane_a.rs`. IMPLEMENTER-owned, always on,
 //!   **needs no corpus**: it drives [`crate::abr_builder`] from these
 //!   tables, so every fixture is synthesised and every expectation was
 //!   measured against 3,215 real presets rather than invented.
-//! * **LANE B** — `tests/abr_corpus.rs`. ANALYST-owned, `#[ignore]`d and
+//! * **LANE B** — `tests/it/abr_corpus.rs`. ANALYST-owned, `#[ignore]`d and
 //!   opt-in, and it parses the real files. It skips loudly wherever the
 //!   mount is absent, which is every machine that is not an analyst's.
 //!

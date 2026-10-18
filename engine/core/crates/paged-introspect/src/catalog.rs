@@ -886,7 +886,7 @@ property_paths! {
         // underline, the indents, the drop cap, the tab stops, the
         // hyphenation, the bullets.
         //
-        // `paged-script/tests/story_range_text_paths.rs` is the probe the
+        // `paged-script/tests/it/story_range_text_paths.rs` is the probe the
         // old reason asked for: it sets every one of them through
         // `paged.set` and reads it back.
         CharacterFontFamily => "characterFontFamily" : reference(RefKind::Font).idml(idml![attr(CharacterStyleRange | ParagraphStyle | CharacterStyle, AppliedFont), child(CharacterStyleRange | ParagraphStyle | CharacterStyle, AppliedFont)]),

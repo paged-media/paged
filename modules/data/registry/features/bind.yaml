@@ -7,7 +7,7 @@
   status: implemented
   provenance: ["own code; eval via data-expr"]
   tests:
-    rust: ["data-conformance/tests/bind.rs::data_bind_resolve_variable"]
+    rust: ["data-conformance/tests/it/bind.rs::data_bind_resolve_variable"]
 
 - id: data.bind.preview-step
   title: Record-preview stepper — resolve a binding against a chosen record index N (§9)
@@ -19,7 +19,7 @@
       "bundle: session.recordCount(query) + session.previewRecord(binding, record) drive a prev/next/jump stepper in the bindings panel; previewRecord commits through the normal lower lanes (variable field re-set, image place, barcode re-encode via lower_barcode_at) and falls back to the record-0 resolve on an engine wasm predating the lane",
     ]
   tests:
-    rust: ["data-conformance/tests/bind.rs::data_bind_preview_step_record"]
+    rust: ["data-conformance/tests/it/bind.rs::data_bind_preview_step_record"]
     vitest: ["packages/data-bundle/src/__tests__/preview.test.ts"]
 
 - id: data.bind.field-mapping
@@ -32,7 +32,7 @@
       "bundle: session.queryMappings(query) returns the suggestions; the field-mapping wizard panel renders the header -> binding mapping UI and, on confirm, generates each variable binding from the engine-computed expr (the data semantics stay in Rust; the bundle never decides the mapping)",
     ]
   tests:
-    rust: ["data-conformance/tests/mapping.rs::data_bind_field_mapping"]
+    rust: ["data-conformance/tests/it/mapping.rs::data_bind_field_mapping"]
     vitest: ["packages/data-bundle/src/__tests__/mapping.test.ts"]
 
 - id: data.bind.resolve-table
@@ -41,7 +41,7 @@
   status: implemented
   provenance: ["own code; stabilised record order"]
   tests:
-    rust: ["data-conformance/tests/bind.rs::data_bind_resolve_table"]
+    rust: ["data-conformance/tests/it/bind.rs::data_bind_resolve_table"]
 
 - id: data.bind.sync-states
   title: Sync states (Linked/Pinned/Overridden/Stale/Error) — non-destructive refresh
@@ -49,7 +49,7 @@
   status: implemented
   provenance: ["refresh never clobbers pinned/overridden; sync report"]
   tests:
-    rust: ["data-conformance/tests/bind.rs::data_bind_sync_states"]
+    rust: ["data-conformance/tests/it/bind.rs::data_bind_sync_states"]
 
 - id: data.bind.identity-diff
   title: Record-identity stable diff (minimal insert/update/remove deltas)
@@ -57,7 +57,7 @@
   status: implemented
   provenance: ["declared-key diff; minimal deltas keep pagination stable"]
   tests:
-    rust: ["data-conformance/tests/bind.rs::data_bind_identity_diff"]
+    rust: ["data-conformance/tests/it/bind.rs::data_bind_identity_diff"]
 
 - id: data.bind.change-report
   title: Change-highlighting on refresh — per-binding "what changed since last sync" report (§8)
@@ -69,7 +69,7 @@
       "data-js: DataSession.refresh_change_report() holds the last fingerprint snapshot, diffs current vs prior, updates it (first call = baseline added); does not drive the sync-state machine (it reports the delta, never clobbers); bundle session.refreshDiff() returns the report the panel renders as a change list",
     ]
   tests:
-    rust: ["data-conformance/tests/bind.rs::data_bind_change_report"]
+    rust: ["data-conformance/tests/it/bind.rs::data_bind_change_report"]
     vitest: ["packages/data-bundle/src/__tests__/change-report.test.ts"]
 
 - id: data.bind.invalidation
@@ -82,8 +82,8 @@
     ]
   tests:
     rust:
-      - "data-conformance/tests/bind.rs::data_bind_invalidation"
-      - "data-conformance/tests/bind.rs::data_bind_invalidation_cross_query_cut"
+      - "data-conformance/tests/it/bind.rs::data_bind_invalidation"
+      - "data-conformance/tests/it/bind.rs::data_bind_invalidation_cross_query_cut"
 
 - id: data.bind.recordflow
   title: Resolve a record flow — grouped template instances in stable order (§9.4)
@@ -91,7 +91,7 @@
   status: implemented
   provenance: ["one template instance per record; group-by sectioning; measured atomic heights"]
   tests:
-    rust: ["data-conformance/tests/recordflow.rs::data_bind_record_flow"]
+    rust: ["data-conformance/tests/it/recordflow.rs::data_bind_record_flow"]
 
 - id: data.bind.recordflow-nested
   title: Record-flow multi-level nested grouping — hierarchical section headers (§9.4)
@@ -102,7 +102,7 @@
       "group_by [a,b,...] nests: parent levels are header-only sections preceding their leaf sections; each carries a `level` (0=outermost) for host indent/style; single-level/ungrouped unchanged (level 0); driven off the resolved key so a missing group column degrades to one section",
     ]
   tests:
-    rust: ["data-conformance/tests/recordflow.rs::data_bind_record_flow_nested"]
+    rust: ["data-conformance/tests/it/recordflow.rs::data_bind_record_flow_nested"]
 
 - id: data.bind.recordflow-footer
   title: Record-flow section footers — per-group subtotal/count rows (§9.4)
@@ -113,7 +113,7 @@
       "GroupFooter spec ({count} substitution + an agg of sum_field: sum/avg/min/max, locale-aware); resolve accumulates per group from RAW values; paginate emits an atomic GroupFooter block at the group end",
     ]
   tests:
-    rust: ["data-conformance/tests/recordflow.rs::data_bind_record_flow_footer"]
+    rust: ["data-conformance/tests/it/recordflow.rs::data_bind_record_flow_footer"]
 
 - id: data.bind.image
   title: Resolve an image binding — classify uri/path/assetId/bytes + missing policy (§9.2)
@@ -121,7 +121,7 @@
   status: implemented
   provenance: ["scheme classification; skip/flag/fallback on absent; never plugin-image (§2.1)"]
   tests:
-    rust: ["data-conformance/tests/image.rs::data_bind_image"]
+    rust: ["data-conformance/tests/it/image.rs::data_bind_image"]
 
 - id: data.bind.rule
   title: Evaluate a data-driven formatting rule — which records fire which document style (§9.5)
@@ -129,7 +129,7 @@
   status: implemented
   provenance: ["per-record `when` evaluation (stabilized order) -> fired indices + StyleAction; styling is always a document-style ref, never a literal; host application gated on D-13"]
   tests:
-    rust: ["data-conformance/tests/rule.rs::data_bind_rule"]
+    rust: ["data-conformance/tests/it/rule.rs::data_bind_rule"]
 
 - id: data.bind.row-diff
   title: Row diff since the document was last written — added, removed, changed rows and the bindings they reach (§8)
@@ -143,8 +143,8 @@
     ]
   tests:
     rust:
-      - "data-conformance/tests/sync_review.rs::data_bind_row_diff_lists_rows_and_the_bindings_they_reach__feat__data_bind_row_diff"
-      - "data-conformance/tests/sync_review.rs::data_bind_row_diff_honours_a_declared_key__feat__data_bind_row_diff"
+      - "data-conformance/tests/it/sync_review.rs::data_bind_row_diff_lists_rows_and_the_bindings_they_reach__feat__data_bind_row_diff"
+      - "data-conformance/tests/it/sync_review.rs::data_bind_row_diff_honours_a_declared_key__feat__data_bind_row_diff"
     vitest:
       - "packages/data-bundle/src/__tests__/sync-panel.test.ts"
       - "packages/data-bundle/src/__tests__/review.test.ts"
@@ -162,8 +162,8 @@
     ]
   tests:
     rust:
-      - "data-conformance/tests/sync_review.rs::data_bind_unresolvable_binding_is_error_unless_frozen__feat__data_bind_sync_review"
-      - "data-conformance/tests/sync_review.rs::data_bind_accept_source_relinks_an_overridden_binding__feat__data_bind_sync_review"
+      - "data-conformance/tests/it/sync_review.rs::data_bind_unresolvable_binding_is_error_unless_frozen__feat__data_bind_sync_review"
+      - "data-conformance/tests/it/sync_review.rs::data_bind_accept_source_relinks_an_overridden_binding__feat__data_bind_sync_review"
     vitest:
       - "packages/data-bundle/src/__tests__/sync-panel.test.ts"
       - "packages/data-bundle/src/__tests__/review.test.ts"
@@ -181,7 +181,7 @@
     ]
   tests:
     rust:
-      - "data-conformance/tests/sync_review.rs::data_rule_preview_agrees_with_the_applied_rule__feat__data_rule_authoring"
+      - "data-conformance/tests/it/sync_review.rs::data_rule_preview_agrees_with_the_applied_rule__feat__data_rule_authoring"
     vitest:
       - "packages/data-bundle/src/__tests__/sync-panel.test.ts"
       - "packages/data-host-model/src/__tests__/fields.test.ts"

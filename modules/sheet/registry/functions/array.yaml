@@ -16,7 +16,7 @@
   status: implemented
   provenance: ["Microsoft SEQUENCE (public docs) — rows, [columns], [start], [step]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_array.rs::sheet_fn_array_sequence"]
+    rust: ["sheet-conformance/tests/it/fn_array.rs::sheet_fn_array_sequence"]
     corpus: ["corpus/fn-corpus/array/sequence.golden.tsv"]
 
 - id: sheet.fn.array.transpose
@@ -30,7 +30,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (TRANSPOSE) — transpose an array/range"]
   tests:
-    rust: ["sheet-conformance/tests/fn_array.rs::sheet_fn_array_transpose"]
+    rust: ["sheet-conformance/tests/it/fn_array.rs::sheet_fn_array_transpose"]
     corpus: ["corpus/fn-corpus/array/transpose.golden.tsv"]
 
 - id: sheet.fn.array.unique
@@ -44,7 +44,7 @@
   status: implemented
   provenance: ["Microsoft UNIQUE (public docs) — array, [by_col], [exactly_once]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_array.rs::sheet_fn_array_unique"]
+    rust: ["sheet-conformance/tests/it/fn_array.rs::sheet_fn_array_unique"]
     corpus: ["corpus/fn-corpus/array/unique.golden.tsv"]
 
 - id: sheet.fn.array.sort
@@ -58,7 +58,7 @@
   status: implemented
   provenance: ["Microsoft SORT (public docs) — array, [sort_index], [sort_order], [by_col]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_array.rs::sheet_fn_array_sort"]
+    rust: ["sheet-conformance/tests/it/fn_array.rs::sheet_fn_array_sort"]
     corpus: ["corpus/fn-corpus/array/sort.golden.tsv"]
 
 - id: sheet.fn.array.sortby
@@ -72,7 +72,7 @@
   status: implemented
   provenance: ["Microsoft SORTBY (public docs) — array, then variadic (by_array, [sort_order]) pairs"]
   tests:
-    rust: ["sheet-conformance/tests/fn_array.rs::sheet_fn_array_sortby"]
+    rust: ["sheet-conformance/tests/it/fn_array.rs::sheet_fn_array_sortby"]
     corpus: ["corpus/fn-corpus/array/sortby.golden.tsv"]
 
 - id: sheet.fn.array.filter
@@ -86,7 +86,7 @@
   status: implemented
   provenance: ["Microsoft FILTER (public docs) — array, include, [if_empty]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_array.rs::sheet_fn_array_filter"]
+    rust: ["sheet-conformance/tests/it/fn_array.rs::sheet_fn_array_filter"]
     corpus: ["corpus/fn-corpus/array/filter.golden.tsv"]
 
 - id: sheet.fn.array.textsplit
@@ -100,7 +100,7 @@
   status: implemented
   provenance: ["Microsoft TEXTSPLIT (public docs) — text, col_delimiter, [row_delimiter], [ignore_empty], [match_mode], [pad_with]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_array.rs::sheet_fn_array_textsplit"]
+    rust: ["sheet-conformance/tests/it/fn_array.rs::sheet_fn_array_textsplit"]
     corpus: ["corpus/fn-corpus/array/textsplit.golden.tsv"]
 
 - id: sheet.fn.array.randarray
@@ -114,7 +114,7 @@
   status: implemented
   provenance: ["Microsoft RANDARRAY (public docs) — [rows], [columns], [min], [max], [integer]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_array.rs::sheet_fn_array_randarray"]
+    rust: ["sheet-conformance/tests/it/fn_array.rs::sheet_fn_array_randarray"]
     corpus: []
 
 # ---- Wave 7 (data & functions) additions ----
@@ -130,7 +130,7 @@
   status: implemented
   provenance: ["Microsoft VSTACK (public docs) — append arrays vertically, pad with #N/A"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_array_vstack"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_array_vstack"]
     corpus: ["corpus/fn-corpus/array/vstack.golden.tsv"]
 
 - id: sheet.fn.array.hstack
@@ -144,7 +144,7 @@
   status: implemented
   provenance: ["Microsoft HSTACK (public docs) — append arrays horizontally, pad with #N/A"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_array_hstack"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_array_hstack"]
     corpus: ["corpus/fn-corpus/array/hstack.golden.tsv"]
 
 - id: sheet.fn.array.take
@@ -158,7 +158,7 @@
   status: implemented
   provenance: ["Microsoft TAKE (public docs) — rows, [columns]; negative counts from the end"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_array_take"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_array_take"]
     corpus: ["corpus/fn-corpus/array/take.golden.tsv"]
 
 - id: sheet.fn.array.drop
@@ -172,7 +172,7 @@
   status: implemented
   provenance: ["Microsoft DROP (public docs) — rows, [columns]; negative counts from the end"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_array_drop"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_array_drop"]
     corpus: ["corpus/fn-corpus/array/drop.golden.tsv"]
 
 - id: sheet.fn.array.choosecols
@@ -186,7 +186,7 @@
   status: implemented
   provenance: ["Microsoft CHOOSECOLS (public docs) — 1-based, negative from the end, 0/out of range -> #VALUE!"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_array_choosecols"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_array_choosecols"]
     corpus: ["corpus/fn-corpus/array/choosecols.golden.tsv"]
 
 - id: sheet.fn.array.chooserows
@@ -200,7 +200,7 @@
   status: implemented
   provenance: ["Microsoft CHOOSEROWS (public docs) — 1-based, negative from the end, 0/out of range -> #VALUE!"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_array_chooserows"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_array_chooserows"]
     corpus: ["corpus/fn-corpus/array/chooserows.golden.tsv"]
 
 - id: sheet.fn.array.tocol
@@ -214,7 +214,7 @@
   status: implemented
   provenance: ["Microsoft TOCOL (public docs) — array, [ignore 0-3], [scan_by_column]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_array_tocol"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_array_tocol"]
     corpus: ["corpus/fn-corpus/array/tocol.golden.tsv"]
 
 - id: sheet.fn.array.torow
@@ -228,7 +228,7 @@
   status: implemented
   provenance: ["Microsoft TOROW (public docs) — array, [ignore 0-3], [scan_by_column]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_array_torow"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_array_torow"]
     corpus: ["corpus/fn-corpus/array/torow.golden.tsv"]
 
 - id: sheet.fn.array.mmult
@@ -242,5 +242,5 @@
   status: implemented
   provenance: ["Microsoft MMULT (public docs) — matrix product; cols(a) != rows(b) or a non-number -> #VALUE!"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_array_mmult"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_array_mmult"]
     corpus: ["corpus/fn-corpus/array/mmult.golden.tsv"]

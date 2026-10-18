@@ -12,7 +12,7 @@
   status: implemented
   provenance: ["Microsoft TEXTJOIN (public docs) — delimiter, ignore_empty, then variadic text/ranges"]
   tests:
-    rust: ["sheet-conformance/tests/fn_text2.rs::sheet_fn_text2_textjoin"]
+    rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_textjoin"]
     corpus: ["corpus/fn-corpus/text2/textjoin.golden.tsv"]
 
 - id: sheet.fn.text.exact
@@ -25,7 +25,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (EXACT) — case-sensitive text equality"]
   tests:
-    rust: ["sheet-conformance/tests/fn_text2.rs::sheet_fn_text2_exact"]
+    rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_exact"]
     corpus: ["corpus/fn-corpus/text2/exact.golden.tsv"]
 
 - id: sheet.fn.text.proper
@@ -38,7 +38,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (PROPER) — title-case each word"]
   tests:
-    rust: ["sheet-conformance/tests/fn_text2.rs::sheet_fn_text2_proper"]
+    rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_proper"]
     corpus: ["corpus/fn-corpus/text2/proper.golden.tsv"]
 
 - id: sheet.fn.text.char
@@ -51,7 +51,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (CHAR) — code point 1..255 to character"]
   tests:
-    rust: ["sheet-conformance/tests/fn_text2.rs::sheet_fn_text2_char"]
+    rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_char"]
     corpus: ["corpus/fn-corpus/text2/char.golden.tsv"]
 
 - id: sheet.fn.text.code
@@ -64,7 +64,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (CODE) — first character's code point"]
   tests:
-    rust: ["sheet-conformance/tests/fn_text2.rs::sheet_fn_text2_code"]
+    rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_code"]
     corpus: ["corpus/fn-corpus/text2/code.golden.tsv"]
 
 - id: sheet.fn.text.unichar
@@ -77,7 +77,7 @@
   status: implemented
   provenance: ["Microsoft UNICHAR (public docs) — Unicode code point to character"]
   tests:
-    rust: ["sheet-conformance/tests/fn_text2.rs::sheet_fn_text2_unichar"]
+    rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_unichar"]
     corpus: ["corpus/fn-corpus/text2/unichar.golden.tsv"]
 
 - id: sheet.fn.text.unicode
@@ -90,7 +90,7 @@
   status: implemented
   provenance: ["Microsoft UNICODE (public docs) — first character's Unicode code point"]
   tests:
-    rust: ["sheet-conformance/tests/fn_text2.rs::sheet_fn_text2_unicode"]
+    rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_unicode"]
     corpus: ["corpus/fn-corpus/text2/unicode.golden.tsv"]
 
 - id: sheet.fn.text.clean
@@ -103,7 +103,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (CLEAN) — strip non-printable characters"]
   tests:
-    rust: ["sheet-conformance/tests/fn_text2.rs::sheet_fn_text2_clean"]
+    rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_clean"]
     corpus: ["corpus/fn-corpus/text2/clean.golden.tsv"]
 
 - id: sheet.fn.text.t
@@ -116,7 +116,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (T) — value if text else empty string"]
   tests:
-    rust: ["sheet-conformance/tests/fn_text2.rs::sheet_fn_text2_t"]
+    rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_t"]
     corpus: ["corpus/fn-corpus/text2/t.golden.tsv"]
 
 - id: sheet.fn.text.numbervalue
@@ -129,7 +129,7 @@
   status: implemented
   provenance: ["Microsoft NUMBERVALUE (public docs) — text, [decimal_separator], [group_separator]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_text2.rs::sheet_fn_text2_numbervalue"]
+    rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_numbervalue"]
     corpus: ["corpus/fn-corpus/text2/numbervalue.golden.tsv"]
 
 - id: sheet.fn.text.fixed
@@ -142,7 +142,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (FIXED) — number, [decimals], [no_commas]. Rulings (text2.rs module docs): negative decimals round left of the point and format at 0 decimals; the negative number uses the simple leading-minus form (-1,235), not Excel's parenthesized form"]
   tests:
-    rust: ["sheet-conformance/tests/fn_text2.rs::sheet_fn_text2_fixed"]
+    rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_fixed"]
     corpus: ["corpus/fn-corpus/text2/fixed.golden.tsv"]
 
 - id: sheet.fn.text.dollar
@@ -155,7 +155,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DOLLAR) — number, [decimals] with currency format. Rulings (text2.rs module docs): currency symbol is the T0 '$' literal (D-8, no locale tailoring); a negative value uses the en-US currency negative pattern (($1,235)), as Excel 16 (recorded)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_text2.rs::sheet_fn_text2_dollar"]
+    rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_dollar"]
     corpus: ["corpus/fn-corpus/text2/dollar.golden.tsv"]
 
 - id: sheet.fn.text.replace
@@ -168,7 +168,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (REPLACE) — old_text, start_num, num_chars, new_text"]
   tests:
-    rust: ["sheet-conformance/tests/fn_text2.rs::sheet_fn_text2_replace"]
+    rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_replace"]
     corpus: ["corpus/fn-corpus/text2/replace.golden.tsv"]
 
 - id: sheet.fn.text.textbefore
@@ -181,7 +181,7 @@
   status: implemented
   provenance: ["Microsoft TEXTBEFORE (public docs) — text, delimiter, [instance], [match_mode], [match_end], [if_not_found]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_text2.rs::sheet_fn_text2_textbefore"]
+    rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_textbefore"]
     corpus: ["corpus/fn-corpus/text2/textbefore.golden.tsv"]
 
 - id: sheet.fn.text.textafter
@@ -194,5 +194,5 @@
   status: implemented
   provenance: ["Microsoft TEXTAFTER (public docs) — text, delimiter, [instance], [match_mode], [match_end], [if_not_found]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_text2.rs::sheet_fn_text2_textafter"]
+    rust: ["sheet-conformance/tests/it/fn_text2.rs::sheet_fn_text2_textafter"]
     corpus: ["corpus/fn-corpus/text2/textafter.golden.tsv"]

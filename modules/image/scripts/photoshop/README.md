@@ -13,7 +13,7 @@ bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/layer-stacks.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/cmyk-stacks.jsx
 bash scripts/photoshop/run-probe.sh scripts/photoshop/probes/vector-masks.jsx
 # then re-measure and review the ledger diff:
-PAGED_PHOTOSHOP_LEDGER=write cargo test -p image-conformance --test oracle_photoshop
+PAGED_PHOTOSHOP_LEDGER=write cargo test -p image-conformance --test it oracle_photoshop::
 ```
 
 | file | role |
@@ -24,13 +24,13 @@ PAGED_PHOTOSHOP_LEDGER=write cargo test -p image-conformance --test oracle_photo
 | `lib/write-fixture.mjs` | judges the reply and the files, then copies them into `image-conformance/fixtures/photoshop/` with provenance |
 | `probes/*.jsx` | one probe per family |
 
-Replays: `image-conformance/tests/oracle_photoshop.rs` (blend modes,
+Replays: `image-conformance/tests/it/oracle_photoshop.rs` (blend modes,
 adjustments, filters → `fixtures/photoshop/ledger.json`, every case
 classified `agreement` / `convention` / `defect` / `no-counterpart`) and
-`image-conformance/tests/psd_composite_photoshop.rs` (the layered PSDs) and
-`image-conformance/tests/psd_cmyk_photoshop.rs` (the CMYK PSDs, each with
+`image-conformance/tests/it/psd_composite_photoshop.rs` (the layered PSDs) and
+`image-conformance/tests/it/psd_cmyk_photoshop.rs` (the CMYK PSDs, each with
 Photoshop's own sRGB conversions under three intent/BPC settings).
-`image-conformance/tests/psd_vector_masks_photoshop.rs` (vector masks: the
+`image-conformance/tests/it/psd_vector_masks_photoshop.rs` (vector masks: the
 merged composite, and the render Photoshop caches in each masked layer's
 channel −2).
 

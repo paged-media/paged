@@ -32,7 +32,7 @@
   status: implemented
   provenance: ["spec §8.4", "sheet-chart/src/model.rs (frozen IR)"]
   tests:
-    rust: ["sheet-conformance/tests/chart.rs::sheet_chart_model"]
+    rust: ["sheet-conformance/tests/it/chart.rs::sheet_chart_model"]
 
 - id: sheet.chart.xlsx-part
   title: XLSX chart part (/charts/chartN.xml) parse + preserve into the chart model (preservation invariant, spec §10.2)
@@ -41,8 +41,8 @@
   provenance: ["ECMA-376 §21.2 (DrawingML charts)", "spec §8.4, §10.2", "sheet-xlsx/src/parts/chart.rs"]
   tests:
     rust:
-      - "sheet-conformance/tests/chart.rs::sheet_chart_xlsx_part"
-      - "sheet-conformance/tests/chart.rs::sheet_chart_xlsx_part_kind_battery"
+      - "sheet-conformance/tests/it/chart.rs::sheet_chart_xlsx_part"
+      - "sheet-conformance/tests/it/chart.rs::sheet_chart_xlsx_part_kind_battery"
 
 - id: sheet.chart.geometry.bar-column
   title: "Geometry: bar/column — axis frame + per-bar Rects with linear value scaling + tick/category labels"
@@ -50,7 +50,7 @@
   status: implemented
   provenance: ["spec §8.4", "sheet-chart/src/geometry.rs"]
   tests:
-    rust: ["sheet-conformance/tests/chart.rs::sheet_chart_geometry_bar_column"]
+    rust: ["sheet-conformance/tests/it/chart.rs::sheet_chart_geometry_bar_column"]
 
 - id: sheet.chart.geometry.line-area
   title: "Geometry: line/area — polyline series + area fill polygons over the cartesian frame"
@@ -58,7 +58,7 @@
   status: implemented
   provenance: ["spec §8.4", "sheet-chart/src/geometry.rs"]
   tests:
-    rust: ["sheet-conformance/tests/chart.rs::sheet_chart_geometry_line_area"]
+    rust: ["sheet-conformance/tests/it/chart.rs::sheet_chart_geometry_line_area"]
 
 - id: sheet.chart.geometry.pie-donut
   title: "Geometry: pie/donut — Wedge primitives (donut = pie with a center hole)"
@@ -66,7 +66,7 @@
   status: implemented
   provenance: ["spec §8.4", "sheet-chart/src/geometry.rs"]
   tests:
-    rust: ["sheet-conformance/tests/chart.rs::sheet_chart_geometry_pie_donut"]
+    rust: ["sheet-conformance/tests/it/chart.rs::sheet_chart_geometry_pie_donut"]
 
 - id: sheet.chart.geometry.scatter
   title: "Geometry: scatter — point markers in (x,y) value space (no category axis)"
@@ -74,7 +74,7 @@
   status: implemented
   provenance: ["spec §8.4", "ECMA-376 §21.2 (c:scatterChart)", "sheet-chart/src/geometry.rs"]
   tests:
-    rust: ["sheet-conformance/tests/chart.rs::sheet_chart_geometry_scatter"]
+    rust: ["sheet-conformance/tests/it/chart.rs::sheet_chart_geometry_scatter"]
 
 - id: sheet.chart.geometry.stacked
   title: "Geometry: stacked column / stacked bar — segments share one bar per category over a totals-based value scale"
@@ -92,7 +92,7 @@
   status: implemented
   provenance: ["Illustrator capability catalog §16.4 (Stacked Column / Stacked Bar)", "spec §8.4", "sheet-chart/src/geometry.rs::generate_column / generate_bar"]
   tests:
-    rust: ["sheet-conformance/tests/chart.rs::sheet_chart_geometry_stacked"]
+    rust: ["sheet-conformance/tests/it/chart.rs::sheet_chart_geometry_stacked"]
 
 - id: sheet.chart.geometry.radar
   title: "Geometry: radar — a polar grid (rings + spokes) with one closed polyline per series"
@@ -111,7 +111,7 @@
   status: implemented
   provenance: ["Illustrator capability catalog §16.4 (Radar Graph tool)", "spec §8.4", "sheet-chart/src/geometry.rs::generate_radar"]
   tests:
-    rust: ["sheet-conformance/tests/chart.rs::sheet_chart_geometry_radar"]
+    rust: ["sheet-conformance/tests/it/chart.rs::sheet_chart_geometry_radar"]
 
 - id: sheet.chart.axis-titles
   title: Axis titles reach the geometry (cat_axis.title / val_axis.title were modelled but never drawn)
@@ -129,7 +129,7 @@
   status: implemented
   provenance: ["Illustrator capability catalog §16.4 (labels, axes)", "spec §8.4", "sheet-chart/src/geometry.rs::draw_axis_titles"]
   tests:
-    rust: ["sheet-conformance/tests/chart.rs::sheet_chart_axis_titles"]
+    rust: ["sheet-conformance/tests/it/chart.rs::sheet_chart_axis_titles"]
 
 - id: sheet.chart.xlsx.grouping
   title: XLSX chart part — c:grouping selects the stacked kind; c:radarChart parses
@@ -146,7 +146,7 @@
   status: implemented
   provenance: ["ECMA-376 §21.2.2.78 (c:grouping), §21.2.2.153 (c:radarChart)", "spec §8.4, §10.2", "sheet-xlsx/src/parts/chart.rs"]
   tests:
-    rust: ["sheet-conformance/tests/chart.rs::sheet_chart_xlsx_grouping"]
+    rust: ["sheet-conformance/tests/it/chart.rs::sheet_chart_xlsx_grouping"]
 
 - id: sheet.chart.kind-set
   title: The advertised chart-kind set is a superset of Illustrator's nine graph types
@@ -161,7 +161,7 @@
   status: implemented
   provenance: ["Illustrator capability catalog §16.4", "sheet-js/src/core.rs::CHART_KIND_TAGS"]
   tests:
-    rust: ["sheet-conformance/tests/chart.rs::sheet_chart_kind_set"]
+    rust: ["sheet-conformance/tests/it/chart.rs::sheet_chart_kind_set"]
 
 - id: sheet.chart.authoring
   title: Chart AUTHORING over live data (add_chart) — the model stopped being import-only
@@ -176,7 +176,7 @@
   status: implemented
   provenance: ["spec §8.4", "sheet-js/src/core.rs::add_chart"]
   tests:
-    rust: ["sheet-conformance/tests/chart.rs::sheet_chart_authoring"]
+    rust: ["sheet-conformance/tests/it/chart.rs::sheet_chart_authoring"]
 
 - id: sheet.chart.series-orientation
   title: "Transpose rows/columns — read the values block as one series per column OR per row"
@@ -192,7 +192,7 @@
   status: implemented
   provenance: ["Illustrator capability catalog §16.4 (transpose rows/columns)", "sheet-js/src/core.rs::add_chart"]
   tests:
-    rust: ["sheet-conformance/tests/chart.rs::sheet_chart_series_orientation"]
+    rust: ["sheet-conformance/tests/it/chart.rs::sheet_chart_series_orientation"]
 
 - id: sheet.chart.data-editor
   title: "The graph data editor IS the workbook — no second grid is built"
@@ -209,7 +209,7 @@
   status: implemented
   provenance: ["Illustrator capability catalog §16.4 (graph data editor)", "spec §8.1/§8.4", "packages/sheet-bundle/src/panels/grid-panel.tsx"]
   tests:
-    rust: ["sheet-conformance/tests/chart.rs::sheet_chart_recalc_live"]
+    rust: ["sheet-conformance/tests/it/chart.rs::sheet_chart_recalc_live"]
     vitest: ["packages/sheet-bundle/test/grid-panel.spec.ts", "packages/sheet-bundle/test/formula-bar.spec.ts"]
 
 - id: sheet.chart.design-markers
@@ -242,7 +242,7 @@
   status: implemented
   provenance: ["spec §8.4, §2.1 (paged.draw is core, not a plugin)", "packages/sheet-host-model/src/chart.ts"]
   tests:
-    rust: ["sheet-conformance/tests/chart.rs::sheet_chart_lower_paged_draw"]
+    rust: ["sheet-conformance/tests/it/chart.rs::sheet_chart_lower_paged_draw"]
     vitest: ["packages/sheet-host-model/test/chart.spec.ts"]
 
 - id: sheet.chart.grid-view
@@ -251,7 +251,7 @@
   status: implemented
   provenance: ["spec §8.4, §8.1", "sheet-js/src/core.rs"]
   tests:
-    rust: ["sheet-conformance/tests/chart.rs::sheet_chart_grid_view"]
+    rust: ["sheet-conformance/tests/it/chart.rs::sheet_chart_grid_view"]
 
 - id: sheet.chart.recalc-live
   title: Charts are live to recalculation (series ranges re-resolve and the geometry regenerates)
@@ -259,4 +259,4 @@
   status: implemented
   provenance: ["spec §8.4 (charts live to recalculation)", "sheet-js/src/core.rs"]
   tests:
-    rust: ["sheet-conformance/tests/chart.rs::sheet_chart_recalc_live"]
+    rust: ["sheet-conformance/tests/it/chart.rs::sheet_chart_recalc_live"]

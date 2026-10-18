@@ -77,7 +77,7 @@ from the CPU rasteriser's plane state (`crates/paged-gpu/src/lib.rs:90-95`); wit
 On Vello, `DropShadow` is skipped and `PathShadow` is a multi-stamp approximation
 (`crates/paged-gpu/src/vello_rs.rs:1043-1082`). The Vello lane is not measured against
 InDesign: its tests run on a software Vulkan driver (`.github/workflows/gpu.yml:100-108`),
-and `crates/paged-gpu/tests/vello_effects.rs` pins it against the CPU rasteriser.
+and `crates/paged-gpu/tests/it/vello_effects.rs` pins it against the CPU rasteriser.
 
 Several comments are stale. `crates/paged-gpu/src/lib.rs:29-30` and
 `crates/paged-cli/src/session.rs:67` call the Vello backend a stub; it is implemented, and

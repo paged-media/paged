@@ -9,7 +9,7 @@
   status: implemented
   provenance: ["absolute value; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_math.rs::data_expr_math_abs"]
+    rust: ["data-conformance/tests/it/expr_math.rs::data_expr_math_abs"]
 
 - id: data.expr.math.round
   name: ROUND
@@ -19,7 +19,7 @@
   status: implemented
   provenance: ["round half away from zero; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_math.rs::data_expr_math_round"]
+    rust: ["data-conformance/tests/it/expr_math.rs::data_expr_math_round"]
 
 - id: data.expr.math.floor
   name: FLOOR
@@ -29,7 +29,7 @@
   status: implemented
   provenance: ["floor; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_math.rs::data_expr_math_floor"]
+    rust: ["data-conformance/tests/it/expr_math.rs::data_expr_math_floor"]
 
 - id: data.expr.math.ceiling
   name: CEILING
@@ -39,7 +39,7 @@
   status: implemented
   provenance: ["ceiling; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_math.rs::data_expr_math_ceiling"]
+    rust: ["data-conformance/tests/it/expr_math.rs::data_expr_math_ceiling"]
 
 - id: data.expr.math.min
   name: MIN
@@ -49,7 +49,7 @@
   status: implemented
   provenance: ["minimum; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_math.rs::data_expr_math_min"]
+    rust: ["data-conformance/tests/it/expr_math.rs::data_expr_math_min"]
 
 - id: data.expr.math.max
   name: MAX
@@ -59,7 +59,7 @@
   status: implemented
   provenance: ["maximum; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_math.rs::data_expr_math_max"]
+    rust: ["data-conformance/tests/it/expr_math.rs::data_expr_math_max"]
 
 - id: data.expr.math.sum
   name: SUM
@@ -69,7 +69,7 @@
   status: implemented
   provenance: ["sum; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_math.rs::data_expr_math_sum"]
+    rust: ["data-conformance/tests/it/expr_math.rs::data_expr_math_sum"]
 
 - id: data.expr.math.mod
   name: MOD
@@ -79,7 +79,7 @@
   status: implemented
   provenance: ["remainder, sign follows divisor; #DIV/0 on zero; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_math.rs::data_expr_math_mod"]
+    rust: ["data-conformance/tests/it/expr_math.rs::data_expr_math_mod"]
 
 - id: data.expr.math.power
   name: POWER
@@ -89,7 +89,7 @@
   status: implemented
   provenance: ["base^exp; #VALUE on non-finite; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_math.rs::data_expr_math_power"]
+    rust: ["data-conformance/tests/it/expr_math.rs::data_expr_math_power"]
 
 - id: data.expr.math.trunc
   name: TRUNC
@@ -99,7 +99,7 @@
   status: implemented
   provenance: ["truncate toward zero to digits; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_math.rs::data_expr_math_trunc"]
+    rust: ["data-conformance/tests/it/expr_math.rs::data_expr_math_trunc"]
 
 - id: data.expr.math.sign
   name: SIGN
@@ -109,4 +109,4 @@
   status: implemented
   provenance: ["-1/0/1; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_math.rs::data_expr_math_sign"]
+    rust: ["data-conformance/tests/it/expr_math.rs::data_expr_math_sign"]

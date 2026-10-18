@@ -9,7 +9,7 @@
   status: implemented
   provenance: ["conditional selection; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_logic.rs::data_expr_logic_if"]
+    rust: ["data-conformance/tests/it/expr_logic.rs::data_expr_logic_if"]
 
 - id: data.expr.logic.and
   name: AND
@@ -19,7 +19,7 @@
   status: implemented
   provenance: ["boolean conjunction; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_logic.rs::data_expr_logic_and"]
+    rust: ["data-conformance/tests/it/expr_logic.rs::data_expr_logic_and"]
 
 - id: data.expr.logic.or
   name: OR
@@ -29,7 +29,7 @@
   status: implemented
   provenance: ["boolean disjunction; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_logic.rs::data_expr_logic_or"]
+    rust: ["data-conformance/tests/it/expr_logic.rs::data_expr_logic_or"]
 
 - id: data.expr.logic.not
   name: NOT
@@ -39,7 +39,7 @@
   status: implemented
   provenance: ["boolean negation; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_logic.rs::data_expr_logic_not"]
+    rust: ["data-conformance/tests/it/expr_logic.rs::data_expr_logic_not"]
 
 - id: data.expr.logic.isblank
   name: ISBLANK
@@ -49,7 +49,7 @@
   status: implemented
   provenance: ["null/empty predicate; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_logic.rs::data_expr_logic_isblank"]
+    rust: ["data-conformance/tests/it/expr_logic.rs::data_expr_logic_isblank"]
 
 - id: data.expr.logic.iserror
   name: ISERROR
@@ -59,7 +59,7 @@
   status: implemented
   provenance: ["error predicate; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_logic.rs::data_expr_logic_iserror"]
+    rust: ["data-conformance/tests/it/expr_logic.rs::data_expr_logic_iserror"]
 
 - id: data.expr.logic.coalesce
   name: COALESCE
@@ -69,7 +69,7 @@
   status: implemented
   provenance: ["first non-null; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_logic.rs::data_expr_logic_coalesce"]
+    rust: ["data-conformance/tests/it/expr_logic.rs::data_expr_logic_coalesce"]
 
 - id: data.expr.logic.switch
   name: SWITCH
@@ -79,7 +79,7 @@
   status: implemented
   provenance: ["multi-branch by display-match; odd trailing arg = default; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_logic.rs::data_expr_logic_switch"]
+    rust: ["data-conformance/tests/it/expr_logic.rs::data_expr_logic_switch"]
 
 - id: data.expr.logic.iferror
   name: IFERROR
@@ -89,4 +89,4 @@
   status: implemented
   provenance: ["fallback on error; graceful degradation; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_logic.rs::data_expr_logic_iferror"]
+    rust: ["data-conformance/tests/it/expr_logic.rs::data_expr_logic_iferror"]

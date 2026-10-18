@@ -19,7 +19,7 @@
   status: implemented
   provenance: ["Microsoft LET (public docs) — name1, value1, [name2, value2, …], calculation; names scoped to later values and the calculation"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lambda.rs::sheet_fn_lambda_let"]
+    rust: ["sheet-conformance/tests/it/fn_lambda.rs::sheet_fn_lambda_let"]
     corpus: ["corpus/fn-corpus/lambda/let.golden.tsv"]
 
 - id: sheet.fn.lambda.lambda
@@ -32,7 +32,7 @@
   status: implemented
   provenance: ["Microsoft LAMBDA (public docs) — [parameter1, …,] calculation; invoked as LAMBDA(...)(args) or through a LET name; a lambda as a cell value is #CALC! (grounded #VALUE!)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lambda.rs::sheet_fn_lambda_lambda"]
+    rust: ["sheet-conformance/tests/it/fn_lambda.rs::sheet_fn_lambda_lambda"]
     corpus: ["corpus/fn-corpus/lambda/lambda.golden.tsv"]
 
 - id: sheet.fn.lambda.map
@@ -46,7 +46,7 @@
   status: implemented
   provenance: ["Microsoft MAP (public docs) — array1, [array2, …], lambda; element-wise"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lambda.rs::sheet_fn_lambda_map"]
+    rust: ["sheet-conformance/tests/it/fn_lambda.rs::sheet_fn_lambda_map"]
     corpus: ["corpus/fn-corpus/lambda/map.golden.tsv"]
 
 - id: sheet.fn.lambda.reduce
@@ -60,7 +60,7 @@
   status: implemented
   provenance: ["Microsoft REDUCE (public docs) — initial_value, array, lambda(accumulator, value)"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lambda.rs::sheet_fn_lambda_reduce"]
+    rust: ["sheet-conformance/tests/it/fn_lambda.rs::sheet_fn_lambda_reduce"]
     corpus: ["corpus/fn-corpus/lambda/reduce.golden.tsv"]
 
 - id: sheet.fn.lambda.scan
@@ -74,7 +74,7 @@
   status: implemented
   provenance: ["Microsoft SCAN (public docs) — initial_value, array, lambda(accumulator, value); every intermediate value"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lambda.rs::sheet_fn_lambda_scan"]
+    rust: ["sheet-conformance/tests/it/fn_lambda.rs::sheet_fn_lambda_scan"]
     corpus: ["corpus/fn-corpus/lambda/scan.golden.tsv"]
 
 - id: sheet.fn.lambda.byrow
@@ -88,7 +88,7 @@
   status: implemented
   provenance: ["Microsoft BYROW (public docs) — array, lambda(row); one result per row"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lambda.rs::sheet_fn_lambda_byrow"]
+    rust: ["sheet-conformance/tests/it/fn_lambda.rs::sheet_fn_lambda_byrow"]
     corpus: ["corpus/fn-corpus/lambda/byrow.golden.tsv"]
 
 - id: sheet.fn.lambda.bycol
@@ -102,7 +102,7 @@
   status: implemented
   provenance: ["Microsoft BYCOL (public docs) — array, lambda(column); one result per column"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lambda.rs::sheet_fn_lambda_bycol"]
+    rust: ["sheet-conformance/tests/it/fn_lambda.rs::sheet_fn_lambda_bycol"]
     corpus: ["corpus/fn-corpus/lambda/bycol.golden.tsv"]
 
 - id: sheet.fn.lambda.makearray
@@ -116,5 +116,5 @@
   status: implemented
   provenance: ["Microsoft MAKEARRAY (public docs) — rows, cols, lambda(row, col); 1-based indices"]
   tests:
-    rust: ["sheet-conformance/tests/fn_lambda.rs::sheet_fn_lambda_makearray"]
+    rust: ["sheet-conformance/tests/it/fn_lambda.rs::sheet_fn_lambda_makearray"]
     corpus: ["corpus/fn-corpus/lambda/makearray.golden.tsv"]

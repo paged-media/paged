@@ -11,7 +11,7 @@
   status: implemented
   provenance: ["ADR 558 §3; channels 0-255; own code"]
   tests:
-    rust: ["data-conformance/tests/property.rs::colour_functions_make_canonical_literals__feat__data_bind_property"]
+    rust: ["data-conformance/tests/it/property.rs::colour_functions_make_canonical_literals__feat__data_bind_property"]
 
 - id: data.expr.color.cmyk
   name: CMYK
@@ -21,7 +21,7 @@
   status: implemented
   provenance: ["ADR 558 §3; channels 0-100 percent; own code"]
   tests:
-    rust: ["data-conformance/tests/property.rs::colour_functions_make_canonical_literals__feat__data_bind_property"]
+    rust: ["data-conformance/tests/it/property.rs::colour_functions_make_canonical_literals__feat__data_bind_property"]
 
 - id: data.expr.color.hex
   name: HEX
@@ -31,7 +31,7 @@
   status: implemented
   provenance: ["ADR 558 §3; #rgb / #rrggbb; own code"]
   tests:
-    rust: ["data-conformance/tests/property.rs::colour_functions_make_canonical_literals__feat__data_bind_property"]
+    rust: ["data-conformance/tests/it/property.rs::colour_functions_make_canonical_literals__feat__data_bind_property"]
 
 - id: data.expr.color.swatch
   name: SWATCH
@@ -41,7 +41,7 @@
   status: implemented
   provenance: ["ADR 558 §3; a document swatch by name; own code"]
   tests:
-    rust: ["data-conformance/tests/property.rs::colour_functions_make_canonical_literals__feat__data_bind_property"]
+    rust: ["data-conformance/tests/it/property.rs::colour_functions_make_canonical_literals__feat__data_bind_property"]
 
 - id: data.expr.color.enum
   name: ENUM
@@ -51,4 +51,4 @@
   status: implemented
   provenance: ["ADR 558 §3 enum check (lives with colour: both are target-typed values); own code"]
   tests:
-    rust: ["data-conformance/tests/property.rs::enum_checks_members__feat__data_bind_property"]
+    rust: ["data-conformance/tests/it/property.rs::enum_checks_members__feat__data_bind_property"]

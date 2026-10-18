@@ -47,7 +47,7 @@ not enough that `idml-import` reads it back.
 - `crates/idml-export/src/navigation.rs:64-70` — byte identity for InDesign's spelling;
   the older spelling is rewritten on every export
 - `crates/idml-export/src/lib.rs:193-202`, `:577-584` — the two exceptions to byte identity
-- `crates/idml-export/tests/indesign_canonical.rs:19-25`, `:117-126` — the fixture and the
+- `crates/idml-export/tests/it/indesign_canonical.rs:19-25`, `:117-126` — the fixture and the
   byte-identity test over it
 - `crates/idml-import/src/lib.rs:214-220`, `:260-263`;
   `crates/idml-import/src/designmap.rs:233-236`, `:356-357` — both spellings are read

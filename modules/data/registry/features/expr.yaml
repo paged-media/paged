@@ -8,7 +8,7 @@
   status: implemented
   provenance: ["own publishing DSL; not an Excel-grammar dialect (D-9)"]
   tests:
-    rust: ["data-conformance/tests/expr_engine.rs::data_expr_parse"]
+    rust: ["data-conformance/tests/it/expr_engine.rs::data_expr_parse"]
 
 - id: data.expr.eval
   title: Tree-walking evaluator (fields/params, error propagation, coercion)
@@ -16,7 +16,7 @@
   status: implemented
   provenance: ["own code; bit-stable f64"]
   tests:
-    rust: ["data-conformance/tests/expr_engine.rs::data_expr_eval"]
+    rust: ["data-conformance/tests/it/expr_engine.rs::data_expr_eval"]
 
 - id: data.expr.dispatch
   title: Registry-driven dispatch — unregistered functions uncallable by construction
@@ -24,7 +24,7 @@
   status: implemented
   provenance: ["FnId parity codegen; no row -> no dispatch"]
   tests:
-    rust: ["data-conformance/tests/expr_engine.rs::data_expr_dispatch"]
+    rust: ["data-conformance/tests/it/expr_engine.rs::data_expr_dispatch"]
 
 - id: data.expr.idempotent
   title: Idempotent re-evaluation (bit-stable; resolve twice -> identical)
@@ -32,4 +32,4 @@
   status: implemented
   provenance: ["CPU f64, no tolerance"]
   tests:
-    rust: ["data-conformance/tests/expr_engine.rs::data_expr_idempotent"]
+    rust: ["data-conformance/tests/it/expr_engine.rs::data_expr_idempotent"]

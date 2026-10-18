@@ -26,7 +26,7 @@
 //! exactly as `execute_tile_once` builds them, so the per-tile result is
 //! identical to the single-tile path; only the encoder/pass/submit are
 //! shared. That equivalence is the conformance gate
-//! (`image-conformance/tests/dispatch_batch.rs`).
+//! (`image-conformance/tests/it/dispatch_batch.rs`).
 
 use image_kernels::abi;
 

@@ -472,7 +472,7 @@ The long story is `docx-pagination` + 2 000 paragraphs of 6 lines: **227** Lette
 (§1's was 232). The machine was shared with other builds during every run (load average
 20–70), so numbers carry roughly ±10 % noise; each row compares binaries run back to back.
 
-Correctness net for every row: `crates/paged-canvas/tests/digest_gate.rs` (step 0) gates
+Correctness net for every row: `crates/paged-canvas/tests/it/digest_gate.rs` (step 0) gates
 every scripted op on reflow, docx-pagination, keeps, span-columns, footnotes, numbering,
 variables, navigation and a growing DOCX-shaped story, and the annual with
 `PAGED_DIGEST_GATE_ANNUAL=<.paged>`.

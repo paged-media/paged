@@ -1,5 +1,5 @@
 {
-  "generatedBy": "image-js/tests/object_schema.rs",
+  "generatedBy": "image-js/tests/it/object_schema.rs",
   "wireLength": 1113,
   "kernels": ["adjust.black_white","adjust.brightness_contrast","adjust.channel_mixer","adjust.color_balance","adjust.exposure","adjust.hue_rotate","adjust.hue_saturation","adjust.invert_rgb","adjust.levels","adjust.levels_rgb","adjust.photo_filter","adjust.posterize","adjust.saturation","adjust.threshold","adjust.vibrance","adjust.white_balance","conv.gaussian_h","conv.unsharp"],
   "blendModes": ["color","color_burn","color_dodge","darken","darker_color","difference","divide","exclusion","hard_light","hard_mix","hue","lighten","lighter_color","linear_burn","linear_dodge","linear_light","luminosity","multiply","normal","overlay","pin_light","saturation","screen","soft_light","subtract","vivid_light"],

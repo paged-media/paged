@@ -19,7 +19,7 @@
 // InDesign's view of a document, `paged.indesign-view/1`: what InDesign
 // holds once it has opened a package, read back through its DOM. The
 // InDesign round-trip lane (lane.jsx) records it for every scenario, and
-// crates/paged-canvas/tests/indesign_lane.rs computes the same view from
+// crates/paged-canvas/tests/it/indesign_lane.rs computes the same view from
 // the engine's import and compares the fields a scenario declares.
 //
 //   document        page size, facing pages, bleed (top, bottom, inside,

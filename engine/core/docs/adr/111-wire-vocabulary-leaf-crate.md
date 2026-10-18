@@ -54,7 +54,7 @@ default feature.
 - `crates/paged-wire/src/lib.rs:161-222` — `ElementId::parse` and its doc ("It was a private function in the Boa bridge")
 - `crates/paged-canvas/src/channel.rs:3360`, `crates/paged-canvas/src/element_selection.rs:38`, `crates/paged-renderer/src/pipeline/mod.rs:664-668` — the re-exports
 - `crates/paged-introspect/src/catalog.rs:96-106`, `:198-205` — `ApiCatalog.operations`, built from `MUTATION_NAMES`
-- `crates/paged-canvas/tests/wire_vocabulary.rs:60-77` — the roster is compared with the variant list in serde's own error message
+- `crates/paged-canvas/tests/it/wire_vocabulary.rs:60-77` — the roster is compared with the variant list in serde's own error message
 
 ## Alternatives considered
 

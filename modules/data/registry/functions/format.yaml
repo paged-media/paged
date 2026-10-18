@@ -13,7 +13,7 @@
   status: implemented
   provenance: ["publishing format-code engine; own code (sheet §9 in spirit)"]
   tests:
-    rust: ["data-conformance/tests/expr_format.rs::data_expr_format_number"]
+    rust: ["data-conformance/tests/it/expr_format.rs::data_expr_format_number"]
 
 - id: data.expr.format.currency
   name: CURRENCY
@@ -23,7 +23,7 @@
   status: implemented
   provenance: ["publishing format-code engine; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_format.rs::data_expr_format_currency"]
+    rust: ["data-conformance/tests/it/expr_format.rs::data_expr_format_currency"]
 
 - id: data.expr.format.percent
   name: PERCENT
@@ -33,7 +33,7 @@
   status: implemented
   provenance: ["publishing format-code engine; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_format.rs::data_expr_format_percent"]
+    rust: ["data-conformance/tests/it/expr_format.rs::data_expr_format_percent"]
 
 - id: data.expr.format.datefmt
   name: DATEFMT
@@ -43,4 +43,4 @@
   status: implemented
   provenance: ["YYYY/MM/DD pattern engine; own code"]
   tests:
-    rust: ["data-conformance/tests/expr_format.rs::data_expr_format_datefmt"]
+    rust: ["data-conformance/tests/it/expr_format.rs::data_expr_format_datefmt"]

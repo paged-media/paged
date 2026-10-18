@@ -11,7 +11,7 @@
   status: implemented
   provenance: ["spec §8.2, §2.2 degradation clause"]
   tests:
-    rust: ["sheet-conformance/tests/lower.rs::sheet_lower_range_single_frame"]
+    rust: ["sheet-conformance/tests/it/lower.rs::sheet_lower_range_single_frame"]
 
 - id: sheet.lower.text.formatted
   title: Lowered cell text IS the number-formatted value (sheet-format output, spec §8.3)
@@ -19,7 +19,7 @@
   status: implemented
   provenance: ["spec §8.3 — the lowered text is the formatted value"]
   tests:
-    rust: ["sheet-conformance/tests/lower.rs::sheet_lower_text_formatted"]
+    rust: ["sheet-conformance/tests/it/lower.rs::sheet_lower_text_formatted"]
 
 - id: sheet.lower.rules.grid
   title: Grid rules (h/v lines) emitted in frame-content coordinates
@@ -27,7 +27,7 @@
   status: implemented
   provenance: ["spec §8.2, §8.5 content-space principle"]
   tests:
-    rust: ["sheet-conformance/tests/lower.rs::sheet_lower_rules_grid"]
+    rust: ["sheet-conformance/tests/it/lower.rs::sheet_lower_rules_grid"]
 
 - id: sheet.lower.merges
   title: Merged spans carried in the IR
@@ -35,7 +35,7 @@
   status: implemented
   provenance: ["spec §8.2"]
   tests:
-    rust: ["sheet-conformance/tests/lower.rs::sheet_lower_merges"]
+    rust: ["sheet-conformance/tests/it/lower.rs::sheet_lower_merges"]
 
 - id: sheet.lower.deterministic
   title: Lowering is deterministic (same model+range+options -> identical IR)
@@ -43,7 +43,7 @@
   status: implemented
   provenance: ["spec §12.4 determinism"]
   tests:
-    rust: ["sheet-conformance/tests/lower.rs::sheet_lower_deterministic"]
+    rust: ["sheet-conformance/tests/it/lower.rs::sheet_lower_deterministic"]
 
 - id: sheet.lower.native-table
   title: "Page lowering emits a NATIVE Paged <Table>: insertTable (widths/heights inline) + per-cell insertText via TextCellAddr + setCellSpan per merge + tableCell-scoped cellFillColor / cell*EdgeStrokeWeight for style fills/borders and grid rules"

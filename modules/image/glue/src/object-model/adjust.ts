@@ -2,7 +2,7 @@
 // written to the block the engine stores (`AdjustParams::to_wire`).
 //
 // Nothing here is a hand list: the rows come from
-// `generated/image-schema.json`, which image-js/tests/object_schema.rs
+// `generated/image-schema.json`, which image-js/tests/it/object_schema.rs
 // emits from the kernels' `ParamsLayout` and the wire layout, and checks
 // against both (every kernel field bound or internal, every wire slot
 // covered once and live). Regenerate it there.

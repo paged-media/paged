@@ -45,7 +45,7 @@ accepts refresh; `Pinned` and `Overridden` do not.
 - `data-bind/src/lib.rs:406-425` — `resolve_at` sets `Linked` and stamps
 - `data-query/src/lib.rs:116-120`, `:185-188`, `:234-249`, `:274-282` — order, hash, stamp
 - `data-bind/src/diff.rs:19-32`, `:69-102` — the keyed row diff and the change report
-- `data-conformance/tests/bind.rs:106-145` — a pinned binding survives a changed result
+- `data-conformance/tests/it/bind.rs:106-145` — a pinned binding survives a changed result
 
 ## Alternatives considered
 

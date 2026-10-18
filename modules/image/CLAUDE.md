@@ -161,5 +161,5 @@ python3 -m venv .venv && .venv/bin/pip install psd-tools
 # not a barrier — the switch is not a credential. Running it is harmless:
 # it discloses only aggregates the committed artifacts already publish.
 # Do not build a gate that tries to detect who ran it.
-PAGED_ABR_CORPUS=1 cargo test -p image-conformance --test abr_corpus -- --ignored --nocapture
+PAGED_ABR_CORPUS=1 cargo test -p image-conformance --test it -- --ignored --nocapture abr_corpus::
 ```

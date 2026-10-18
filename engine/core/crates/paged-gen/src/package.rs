@@ -33,7 +33,7 @@
 //! * No extra fields beyond what `zip` adds for stored entries.
 //!
 //! Two consecutive emissions of the same `Sample` must produce
-//! byte-identical archives — the `tests/snapshot.rs` SHA-256 check
+//! byte-identical archives — the `tests/it/snapshot.rs` SHA-256 check
 //! gates this.
 
 use anyhow::{Context, Result};

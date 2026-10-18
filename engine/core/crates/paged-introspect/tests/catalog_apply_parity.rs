@@ -68,11 +68,11 @@ const OUT_OF_SCOPE: &[(&str, &str)] = &[
     ),
     (
         "Layer",
-        "a layer has no element address: its paths live on the `layer` kind and are probed through `Mutation::Set` by paged-canvas/tests/virtual_paths.rs",
+        "a layer has no element address: its paths live on the `layer` kind and are probed through `Mutation::Set` by paged-canvas/tests/it/virtual_paths.rs",
     ),
     (
         "Page",
-        "structural here; its settable paths (bounds, margins, columns, master, labels) live on the `page` kind and are probed by paged-canvas/tests/virtual_paths.rs",
+        "structural here; its settable paths (bounds, margins, columns, master, labels) live on the `page` kind and are probed by paged-canvas/tests/it/virtual_paths.rs",
     ),
     ("Spread", "structural; not a paged.set target"),
 ];

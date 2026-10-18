@@ -33,7 +33,7 @@
 //! (`abi::assemble` docs): exposure (exp2), brightness_contrast,
 //! levels (pow), saturation, hue_rotate (cos/sin matrix). exp2/pow/cos/sin
 //! are WGSL builtins mirrored EXACTLY by their `f32::*` Rust twins (the
-//! scalar references live in `image-conformance/tests/family_adjust.rs`);
+//! scalar references live in `image-conformance/tests/it/family_adjust.rs`);
 //! the last-ulp f32 divergence of these transcendentals is absorbed by the
 //! f16 output quantization (per-kernel tolerances below).
 //!
@@ -656,7 +656,7 @@ fn adjust(a: vec4<f32>) -> vec4<f32> {
 // Levels) re-derived from standard image-processing literature — the
 // exact formulas are DEFINED in the per-kernel comments below and are
 // mirrored term-for-term by the scalar references in
-// `image-conformance/tests/family_adjust.rs`. No reference reading.
+// `image-conformance/tests/it/family_adjust.rs`. No reference reading.
 
 // ───────────────────────────── vibrance ────────────────────────────
 //

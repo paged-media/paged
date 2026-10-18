@@ -8,7 +8,7 @@
   status: implemented
   provenance: ["ECMA-376 implicit conversion rules", "OpenFormula §6.3"]
   tests:
-    rust: ["sheet-conformance/tests/coerce.rs::sheet_fn_coerce_to_number"]
+    rust: ["sheet-conformance/tests/it/coerce.rs::sheet_fn_coerce_to_number"]
     corpus: ["corpus/fn-corpus/coerce/to_number.golden.tsv"]
 
 - id: sheet.fn.coerce.to-text
@@ -16,7 +16,7 @@
   status: implemented
   provenance: ["ECMA-376 implicit conversion rules"]
   tests:
-    rust: ["sheet-conformance/tests/coerce.rs::sheet_fn_coerce_to_text"]
+    rust: ["sheet-conformance/tests/it/coerce.rs::sheet_fn_coerce_to_text"]
     corpus: ["corpus/fn-corpus/coerce/to_text.golden.tsv"]
 
 - id: sheet.fn.coerce.to-bool
@@ -24,7 +24,7 @@
   status: implemented
   provenance: ["ECMA-376 implicit conversion rules"]
   tests:
-    rust: ["sheet-conformance/tests/coerce.rs::sheet_fn_coerce_to_bool"]
+    rust: ["sheet-conformance/tests/it/coerce.rs::sheet_fn_coerce_to_bool"]
     corpus: ["corpus/fn-corpus/coerce/to_bool.golden.tsv"]
 
 - id: sheet.fn.coerce.error-propagation
@@ -32,7 +32,7 @@
   status: implemented
   provenance: ["ECMA-376 error semantics"]
   tests:
-    rust: ["sheet-conformance/tests/coerce.rs::sheet_fn_coerce_error_propagation"]
+    rust: ["sheet-conformance/tests/it/coerce.rs::sheet_fn_coerce_error_propagation"]
     corpus: ["corpus/fn-corpus/coerce/errors.golden.tsv"]
 
 - id: sheet.fn.coerce.empty-semantics
@@ -40,7 +40,7 @@
   status: implemented
   provenance: ["Excel observed behavior (oracle-verified later)", "OpenFormula §6.3"]
   tests:
-    rust: ["sheet-conformance/tests/coerce.rs::sheet_fn_coerce_empty_semantics"]
+    rust: ["sheet-conformance/tests/it/coerce.rs::sheet_fn_coerce_empty_semantics"]
     corpus: ["corpus/fn-corpus/coerce/empty.golden.tsv"]
 
 - id: sheet.fn.coerce.comparison
@@ -49,5 +49,5 @@
   status: implemented
   provenance: ["Excel observed behavior (documented)", "OpenFormula §6.3"]
   tests:
-    rust: ["sheet-conformance/tests/coerce.rs::sheet_fn_coerce_comparison"]
+    rust: ["sheet-conformance/tests/it/coerce.rs::sheet_fn_coerce_comparison"]
     corpus: ["corpus/fn-corpus/coerce/comparison.golden.tsv"]

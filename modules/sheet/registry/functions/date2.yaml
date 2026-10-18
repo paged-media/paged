@@ -1,7 +1,7 @@
 # sheet.fn.date.* (M1 additions) — date/time arithmetic family. Schema: see
 # math.yaml. Rust kernels under sheet-fn/src/families/date2.rs (the M1
 # date track). Provenance: ECMA-376 §18.17.7 + public Microsoft function
-# docs. Conformance: sheet-conformance/tests/fn_date2.rs +
+# docs. Conformance: sheet-conformance/tests/it/fn_date2.rs +
 # corpus/fn-corpus/date2/. Excel-compat rulings (DAYS360 US end-of-month,
 # DATEDIF reversed-range #NUM!, YEARFRAC actual/actual denominator) are
 # documented bug-for-bug in the date2.rs module docs.
@@ -16,7 +16,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (EDATE) — start_date, months"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_edate"]
+    rust: ["sheet-conformance/tests/it/fn_date2.rs::sheet_fn_date_edate"]
     corpus: ["corpus/fn-corpus/date2/edate.golden.tsv"]
 
 - id: sheet.fn.date.eomonth
@@ -29,7 +29,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (EOMONTH) — end of month n months from start"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_eomonth"]
+    rust: ["sheet-conformance/tests/it/fn_date2.rs::sheet_fn_date_eomonth"]
     corpus: ["corpus/fn-corpus/date2/eomonth.golden.tsv"]
 
 - id: sheet.fn.date.datedif
@@ -42,7 +42,7 @@
   status: implemented
   provenance: ["Microsoft DATEDIF (public docs) — start_date, end_date, unit"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_datedif"]
+    rust: ["sheet-conformance/tests/it/fn_date2.rs::sheet_fn_date_datedif"]
     corpus: ["corpus/fn-corpus/date2/datedif.golden.tsv"]
 
 - id: sheet.fn.date.days
@@ -55,7 +55,7 @@
   status: implemented
   provenance: ["Microsoft DAYS (public docs) — end_date, start_date"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_days"]
+    rust: ["sheet-conformance/tests/it/fn_date2.rs::sheet_fn_date_days"]
     corpus: ["corpus/fn-corpus/date2/days.golden.tsv"]
 
 - id: sheet.fn.date.days360
@@ -68,7 +68,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DAYS360) — start_date, end_date, [method]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_days360"]
+    rust: ["sheet-conformance/tests/it/fn_date2.rs::sheet_fn_date_days360"]
     corpus: ["corpus/fn-corpus/date2/days360.golden.tsv"]
 
 - id: sheet.fn.date.networkdays
@@ -81,7 +81,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (NETWORKDAYS) — start, end, [holidays]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_networkdays"]
+    rust: ["sheet-conformance/tests/it/fn_date2.rs::sheet_fn_date_networkdays"]
     corpus: ["corpus/fn-corpus/date2/networkdays.golden.tsv"]
 
 - id: sheet.fn.date.workday
@@ -94,7 +94,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (WORKDAY) — start_date, days, [holidays]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_workday"]
+    rust: ["sheet-conformance/tests/it/fn_date2.rs::sheet_fn_date_workday"]
     corpus: ["corpus/fn-corpus/date2/workday.golden.tsv"]
 
 - id: sheet.fn.date.yearfrac
@@ -107,7 +107,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (YEARFRAC) — start_date, end_date, [basis]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_yearfrac"]
+    rust: ["sheet-conformance/tests/it/fn_date2.rs::sheet_fn_date_yearfrac"]
     corpus: ["corpus/fn-corpus/date2/yearfrac.golden.tsv"]
 
 - id: sheet.fn.date.datevalue
@@ -120,7 +120,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (DATEVALUE) — parse a date string to a serial"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_datevalue"]
+    rust: ["sheet-conformance/tests/it/fn_date2.rs::sheet_fn_date_datevalue"]
     corpus: ["corpus/fn-corpus/date2/datevalue.golden.tsv"]
 
 - id: sheet.fn.date.timevalue
@@ -133,7 +133,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (TIMEVALUE) — parse a time string to a fraction"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_timevalue"]
+    rust: ["sheet-conformance/tests/it/fn_date2.rs::sheet_fn_date_timevalue"]
     corpus: ["corpus/fn-corpus/date2/timevalue.golden.tsv"]
 
 - id: sheet.fn.date.weeknum
@@ -146,7 +146,7 @@
   status: implemented
   provenance: ["ECMA-376 §18.17.7 (WEEKNUM) — serial_number, [return_type]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_weeknum"]
+    rust: ["sheet-conformance/tests/it/fn_date2.rs::sheet_fn_date_weeknum"]
     corpus: ["corpus/fn-corpus/date2/weeknum.golden.tsv"]
 
 - id: sheet.fn.date.isoweeknum
@@ -159,7 +159,7 @@
   status: implemented
   provenance: ["Microsoft ISOWEEKNUM (public docs) — ISO-8601 week number"]
   tests:
-    rust: ["sheet-conformance/tests/fn_date2.rs::sheet_fn_date_isoweeknum"]
+    rust: ["sheet-conformance/tests/it/fn_date2.rs::sheet_fn_date_isoweeknum"]
     corpus: ["corpus/fn-corpus/date2/isoweeknum.golden.tsv"]
 
 # ---- Wave 7 (data & functions) additions ----
@@ -174,7 +174,7 @@
   status: implemented
   provenance: ["Microsoft NETWORKDAYS.INTL (public docs) — start, end, [weekend number/mask], [holidays]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_date_networkdays_intl"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_date_networkdays_intl"]
     corpus: ["corpus/fn-corpus/date2/networkdays_intl.golden.tsv"]
 
 - id: sheet.fn.date.workday-intl
@@ -187,5 +187,5 @@
   status: implemented
   provenance: ["Microsoft WORKDAY.INTL (public docs) — start, days, [weekend number/mask], [holidays]"]
   tests:
-    rust: ["sheet-conformance/tests/fn_wave7.rs::sheet_fn_date_workday_intl"]
+    rust: ["sheet-conformance/tests/it/fn_wave7.rs::sheet_fn_date_workday_intl"]
     corpus: ["corpus/fn-corpus/date2/workday_intl.golden.tsv"]

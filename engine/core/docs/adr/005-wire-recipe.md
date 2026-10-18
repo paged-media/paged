@@ -129,7 +129,7 @@ outside this repository. Three tests here now guard the published names:
 - `crates/paged-introspect/tests/catalog_apply_parity.rs:187-188` — every (element, settable
   path) pair the catalog advertises on a page-item kind is applied to a fixture node and must
   succeed; the list of known failures is empty (`:47-50`).
-- `crates/paged-script/tests/advertised_paths_apply.rs:65-66` — every advertised path must be
+- `crates/paged-script/tests/it/advertised_paths_apply.rs:65-66` — every advertised path must be
   named somewhere in the apply layer's source.
 - `crates/paged-introspect/src/catalog.rs:1347-1356` — the committed `catalog.json` must equal
   the generated one.

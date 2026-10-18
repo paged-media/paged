@@ -22,7 +22,7 @@ chosen over a hand-written table is not argued. The repository does not record w
 
 plugin-image records what its gate was written to stop: six kernels "were written,
 compiled, and passed the whole suite while absent from the registry"
-(`plugin-image: image-conformance/tests/registry_drift.rs:28-31`).
+(`plugin-image: image-conformance/tests/it/registry_drift.rs:28-31`).
 
 ## Decision
 
@@ -65,7 +65,7 @@ plugin-publish have no registry.
 - `plugin-image: image-kernels/build.rs:19-28`, `:40-51`;
   `plugin-image: image-kernels/src/lib.rs:117-125` — the generated table and `lookup`
 - `plugin-image: image-kernels/src/lib.rs:141-152`,
-  `plugin-image: image-conformance/tests/registry_drift.rs:83-120`, `:38-41`,
+  `plugin-image: image-conformance/tests/it/registry_drift.rs:83-120`, `:38-41`,
   `plugin-image: .github/workflows/ci.yml:60-61` — the set equality tests; why no YAML
   crate; the test step
 - `plugin-image: image-js/src/lib.rs:1724`, `plugin-image: image-js/src/stroke.rs:141-150`,

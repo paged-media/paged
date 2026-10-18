@@ -44,15 +44,15 @@ InDesign's own output is the reference for the engine's behaviour. It is obtaine
 ## Evidence
 
 - `crates/paged-gen/src/samples.rs:93-153`, `:242-249` — the sample list; its length pinned at 62
-- `crates/paged-gen/src/package.rs:29-37`, `crates/paged-gen/tests/snapshot.rs:45-50`,
+- `crates/paged-gen/src/package.rs:29-37`, `crates/paged-gen/tests/it/snapshot.rs:45-50`,
   `crates/paged-gen/Cargo.toml:13-22` — determinism, its test, and the dependencies
 - `tools/indesign-export/export-pdfs.jsx:117-142`, `corpus/generated/.gitignore:1-4` — the export
   loop and its metadata record; IDMLs ignored, PDFs committed
 - `corpus/generated/diff.sh:6-16` — the five steps of the gate
 - `tools/indesign-export/reflow-probe.jsx:1-14`,
   `tools/indesign-export/inline-objects-probe.jsx:19-25` — the two probes;
-  `crates/paged-renderer/tests/reflow_pipeline.rs:19-28`,
-  `crates/paged-renderer/tests/inline_objects_pipeline.rs:19-22` — tests that pin their answers
+  `crates/paged-renderer/tests/it/reflow_pipeline.rs:19-28`,
+  `crates/paged-renderer/tests/it/inline_objects_pipeline.rs:19-22` — tests that pin their answers
 - `crates/paged-text/src/single_line.rs:22-25`, `crates/paged-renderer/src/pipeline/keeps.rs:28-29`
   — measurement notes that name the fixture holding the rule
 

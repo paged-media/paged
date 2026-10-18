@@ -25,7 +25,7 @@
     slice; the part still round-trips verbatim (see external-link.preserve).
   provenance: ["ECMA-376 §18.14 (externalLink)", "spec §13 M3 (external-link reads)", "spec §1.1 (no network)"]
   tests:
-    rust: ["sheet-conformance/tests/extlink.rs::sheet_xlsx_external_link_part_parse"]
+    rust: ["sheet-conformance/tests/it/extlink.rs::sheet_xlsx_external_link_part_parse"]
     corpus: ["corpus/xlsx-corpus/10-extlink.xlsx"]
 
 - id: sheet.xlsx.external-link.cached-value-read
@@ -47,7 +47,7 @@
     out of this minimal slice.
   provenance: ["ECMA-376 §18.14.5 (externalSheetData)", "spec §1.1 (cached only, no network)", "spec §13 M3"]
   tests:
-    rust: ["sheet-conformance/tests/extlink.rs::sheet_xlsx_external_link_cached_value_read"]
+    rust: ["sheet-conformance/tests/it/extlink.rs::sheet_xlsx_external_link_cached_value_read"]
 
 - id: sheet.xlsx.external-link.preserve
   title: "External-link parts round-trip preserved (byte-identical when untouched)"
@@ -62,7 +62,7 @@
     parts). Verified per-part byte-identical on a zero-edit round-trip.
   provenance: ["spec §10.2 (preservation invariant)", "ECMA-376 §18.14", "spec §13 M3"]
   tests:
-    rust: ["sheet-conformance/tests/extlink.rs::sheet_xlsx_external_link_preserve"]
+    rust: ["sheet-conformance/tests/it/extlink.rs::sheet_xlsx_external_link_preserve"]
     corpus: ["corpus/xlsx-corpus/10-extlink.xlsx"]
 
 - id: sheet.xlsx.external-link.no-network
@@ -81,4 +81,4 @@
     deferral.
   provenance: ["spec §1.1 (no network — cached only)", "spec §1 (publishing-first scope, permanent)"]
   tests:
-    rust: ["sheet-conformance/tests/extlink.rs::sheet_xlsx_external_link_no_network"]
+    rust: ["sheet-conformance/tests/it/extlink.rs::sheet_xlsx_external_link_no_network"]

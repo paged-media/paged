@@ -18,7 +18,7 @@
 
 // The §8 change report ("what changed since last sync") wired through the
 // SESSION against a fake engine (the fingerprint + diff kernel is proven in
-// Rust: data-conformance/tests/bind.rs::data_bind_change_report). This pins the
+// Rust: data-conformance/tests/it/bind.rs::data_bind_change_report). This pins the
 // bundle ORCHESTRATION: refreshDiff surfaces the engine's per-binding report,
 // primeChangeBaseline swallows the initial baseline, and the session degrades
 // honestly when the engine wasm predates the lane.

@@ -46,7 +46,7 @@ happens after the host has recorded consent for that origin.
 - `data-js/src/core.rs:763-780` — `payload()` redacts every source
 - `packages/data-bundle/src/session.ts:766-828`, `:1467-1490` — gate, `fetch`, consent request
 - `packages/data-bundle/manifest.json:15-18` — the network capability and its purpose text
-- `data-conformance/tests/security.rs:49-186` — six tests of the gate and of the saved payload
+- `data-conformance/tests/it/security.rs:49-186` — six tests of the gate and of the saved payload
 
 ## Alternatives considered
 

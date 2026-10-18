@@ -19,9 +19,9 @@
   tests:
     rust:
       [
-        "data-conformance/tests/barcode.rs::data_barcode_encode_ean13_golden",
-        "data-conformance/tests/barcode.rs::data_barcode_encode_upca_golden",
-        "data-conformance/tests/properties.rs::data_prop_barcode_ean13_checksum_round_trips",
+        "data-conformance/tests/it/barcode.rs::data_barcode_encode_ean13_golden",
+        "data-conformance/tests/it/barcode.rs::data_barcode_encode_upca_golden",
+        "data-conformance/tests/it/properties.rs::data_prop_barcode_ean13_checksum_round_trips",
       ]
 
 - id: data.barcode.code128
@@ -35,8 +35,8 @@
   tests:
     rust:
       [
-        "data-conformance/tests/barcode.rs::data_barcode_encode_code128_general",
-        "data-conformance/tests/properties.rs::data_prop_barcode_code128_total_on_printable",
+        "data-conformance/tests/it/barcode.rs::data_barcode_encode_code128_general",
+        "data-conformance/tests/it/properties.rs::data_prop_barcode_code128_total_on_printable",
       ]
 
 - id: data.barcode.qr
@@ -50,8 +50,8 @@
   tests:
     rust:
       [
-        "data-conformance/tests/barcode.rs::data_barcode_encode_qr_byte_mode",
-        "data-conformance/tests/properties.rs::data_prop_barcode_qr_total_and_deterministic",
+        "data-conformance/tests/it/barcode.rs::data_barcode_encode_qr_byte_mode",
+        "data-conformance/tests/it/properties.rs::data_prop_barcode_qr_total_and_deterministic",
       ]
 
 - id: data.barcode.bind
@@ -65,8 +65,8 @@
   tests:
     rust:
       [
-        "data-conformance/tests/barcode.rs::data_barcode_bind_resolves_field_value",
-        "data-conformance/tests/barcode.rs::data_barcode_bind_missing_policy",
+        "data-conformance/tests/it/barcode.rs::data_barcode_bind_resolves_field_value",
+        "data-conformance/tests/it/barcode.rs::data_barcode_bind_missing_policy",
       ]
 
 - id: data.barcode.lower
@@ -80,8 +80,8 @@
   tests:
     rust:
       [
-        "data-conformance/tests/barcode.rs::data_barcode_lower_scales_to_content_box",
-        "data-conformance/tests/barcode.rs::data_barcode_lower_qr_modules_are_square_cells",
+        "data-conformance/tests/it/barcode.rs::data_barcode_lower_scales_to_content_box",
+        "data-conformance/tests/it/barcode.rs::data_barcode_lower_qr_modules_are_square_cells",
       ]
     vitest:
       ["packages/data-host-model/src/__tests__/barcode.test.ts"]

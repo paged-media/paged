@@ -21,7 +21,7 @@
 //!
 //! Shared by the CI lane over the committed subset (`corpus/xlsx-recalc/`)
 //! and the opt-in full lane over the private corpus (`PAGED_XLSX_CORPUS`),
-//! both in `tests/xlsx_recalc_corpus.rs`. The engine values come from the
+//! both in `tests/it/xlsx_recalc_corpus.rs`. The engine values come from the
 //! product loader itself (`sheet-js`'s `SheetSession::load_xlsx`); this
 //! module keeps the cached values that load overwrites.
 //!

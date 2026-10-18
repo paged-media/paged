@@ -8,7 +8,7 @@
 # apart: the case order IS the sheet order, derived from the same walk.
 #
 # The TSV grammar mirrors `sheet-conformance/src/lib.rs::parse_corpus` and the
-# setup grammar mirrors `tests/corpus_runner.rs::apply_setup` (which in turn
+# setup grammar mirrors `tests/it/corpus_runner.rs::apply_setup` (which in turn
 # mirrors `sheet_calc::literal_of`). If either changes, change this file in
 # the same commit — the Rust lane re-checks every recorded formula against
 # the live golden, so drift surfaces as a STALE row, never as a silent pass.
@@ -203,7 +203,7 @@ FORMAT_FAMILY = "format"
 
 def format_formula(code: str) -> str:
     """The probe for a number-format case: Excel's TEXT() over the seeded
-    value (tests/excel_oracle.rs builds the identical string)."""
+    value (tests/it/excel_oracle.rs builds the identical string)."""
     return '=TEXT(A1,"' + code.replace('"', '""') + '")'
 
 

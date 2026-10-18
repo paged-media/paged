@@ -20,9 +20,9 @@
 //! dependency of any shipping crate (§4 rule 5). Provides:
 //!
 //! - the golden-corpus loader ([`load_corpus`]) shared by the Phase-2
-//!   per-family runners (`tests/fn_*.rs`, `tests/format.rs`, …);
+//!   per-family runners (`tests/fn_*.rs`, `tests/it/format.rs`, …);
 //! - the shared golden-case replay path ([`runner`]) used by the hand-golden
-//!   gate and the Excel differential oracle (`tests/excel_oracle.rs`, §12.4,
+//!   gate and the Excel differential oracle (`tests/it/excel_oracle.rs`, §12.4,
 //!   values recorded from desktop Excel under `oracle/excel/`);
 //! - the coverage gate (`bin/coverage-gate`, the §12.2 verification
 //!   invariant).

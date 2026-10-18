@@ -81,7 +81,7 @@ source manifest.
   caller of `redact_credentials`.
 - `data-sources/src/lib.rs:273-284` — the source manifest shows a database target through
   `redact_dsn` when only the legacy `dsn` is present.
-- Tests: `data-conformance/tests/security.rs:89-117`, `:133-157` and `:176-200` assert on the
+- Tests: `data-conformance/tests/it/security.rs:89-117`, `:133-157` and `:176-200` assert on the
   serialised payload; `data-sources/src/lib.rs:537-555` asserts on the manifest. The registry row
   is `data.security.credentials-absent`, "Credentials never serialized into the document payload"
   (`registry/features/security.yaml:22-32`).

@@ -677,7 +677,7 @@ the project's IDML corpus `Links`; this matrix is adjusted by data, not taste.
 
 ### 10.4 PSD core (`image-psd`) — round-trip first
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 458](adr/458-psd-preservation.md). The ecosystem oracle that exists is `psd-tools`, run locally on request (`image-conformance/tests/psd_ecosystem.rs`); it does not run in CI, and there is no GIMP lane.*
+*Status note (2026-10-02): this section predates the implementation; see [ADR 458](adr/458-psd-preservation.md). The ecosystem oracle that exists is `psd-tools`, run locally on request (`image-conformance/tests/it/psd_ecosystem.rs`); it does not run in CI, and there is no GIMP lane.*
 
 PSD support is engineered the way IDML was: **full structural parse +
 lossless preservation + byte-faithful re-write first; semantic fidelity

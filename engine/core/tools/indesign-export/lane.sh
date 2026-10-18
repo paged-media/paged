@@ -44,7 +44,7 @@ SCENARIOS="$(echo "${*:-}" | tr ' ' ',')"
 
 cd "$ROOT"
 PAGED_INDESIGN_LANE="$WORK" PAGED_LANE_SCENARIOS="$SCENARIOS" \
-    cargo test -q -p paged-canvas --test indesign_lane -- --ignored write_lane_inputs
+    cargo test -q -p paged-canvas --test it -- --ignored indesign_lane::write_lane_inputs
 NAMES="$(ls "$WORK" | paste -sd, -)"
 [ -n "$NAMES" ] || { echo "no scenario matched: ${*:-}" >&2; exit 2; }
 

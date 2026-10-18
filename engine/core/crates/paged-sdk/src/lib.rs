@@ -74,7 +74,7 @@ mod wasm {
     /// methods that wait on the browser return a `js_sys::Promise` whose
     /// future owns this `Rc` and no borrow of the session, and the
     /// `RefCell` is only ever borrowed synchronously.
-    /// (`tests/no_async_exports.rs` keeps it that way.)
+    /// (`tests/it/no_async_exports.rs` keeps it that way.)
     type GpuSlot = Rc<RefCell<Option<SurfacePresenter>>>;
 
     /// A page scene scaled for an off-surface readback, with its pixel

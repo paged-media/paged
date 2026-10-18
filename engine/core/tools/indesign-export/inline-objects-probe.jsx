@@ -22,7 +22,7 @@
 // ruler at the page origin, then the same pages under variants that pin
 // what the rules depend on (auto leading 150 %, space above, point size,
 // fixed leading, the face). The answers are pinned in
-// crates/paged-renderer/tests/inline_objects_pipeline.rs.
+// crates/paged-renderer/tests/it/inline_objects_pipeline.rs.
 (function () {
     var IDML = $.global.PROBE_IDML, OUT = $.global.PROBE_OUT;
     function q(s) { s = String(s); return '"' + s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/[\r\n\u2029\u2028\uFFFC]/g, "~") + '"'; }

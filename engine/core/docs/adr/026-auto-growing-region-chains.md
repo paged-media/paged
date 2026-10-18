@@ -127,7 +127,7 @@ while it oversets, drops trailing generated frames with no line, and carries
 counts between builds (`PipelineOptions::grow_hint`). Documents without
 rules take the old single build. `paged-inspect --grow-story`.
 
-**Verified against InDesign:** `crates/paged-renderer/tests/reflow_pipeline.rs` (one page added, 14
+**Verified against InDesign:** `crates/paged-renderer/tests/it/reflow_pipeline.rs` (one page added, 14
 lines on page 3, paragraph 67 opens it, margin-box frame, stable ids, a fitting
 story generates nothing, the hint settles and shrinks). The fidelity gate
 renders the fixture with growth against InDesign's REFLOWED PDF: all three
@@ -162,7 +162,7 @@ generation" and "The consumer is blocked"; "The seam exists but is unused" still
   `crates/paged-canvas/src/model.rs:1273-1276`, `:8552`.
 - An IDML export writes generated pages as real pages:
   `crates/paged-canvas/src/model.rs:4440-4447`; test
-  `crates/paged-renderer/tests/reflow_pipeline.rs:227`.
+  `crates/paged-renderer/tests/it/reflow_pipeline.rs:227`.
 - Scripts: `paged.setFlowGrowRule` (`crates/paged-script/src/lib.rs:3134-3160`), listed in the
   catalog (`crates/paged-introspect/catalog.json:634`, `:1370`).
 - The consumer sends the rule when it opens a document:

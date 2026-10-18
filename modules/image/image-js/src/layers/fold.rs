@@ -41,7 +41,7 @@
 //! Every recorded dispatch is the dispatch the CPU round-trip fold made
 //! (same kernels, params, masks, extents), and rgba16float textures hold
 //! exactly the bytes that round trip re-uploaded, so the result is byte
-//! for byte the same (`image-conformance/tests/prop_layer_cache.rs`
+//! for byte the same (`image-conformance/tests/it/prop_layer_cache.rs`
 //! compares the two). The one rewrite that is not a pure relocation:
 //! the old fold skipped its final unpremultiply when the whole canvas
 //! was opaque (it could look at the bytes); the resident fold cannot
