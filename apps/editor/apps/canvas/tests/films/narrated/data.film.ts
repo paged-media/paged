@@ -36,7 +36,7 @@ import { hover, press, screenPoint } from "../kit/ui";
 
 const MEDIA = process.env.PAGED_MEDIA_ROOT ?? "";
 const CSV = join(MEDIA, "assets", "catalogue.csv");
-const FONTS = join(import.meta.dirname, "..", "..", "..", "..", "..", "..", "core", "corpus", "fonts");
+const FONTS = join(import.meta.dirname, "..", "..", "..", "..", "..", "..", "..", "engine", "core", "corpus", "fonts");
 const RECORDS = 24;
 
 /** Page 2's top in document space: pages stack 24 pt apart (ui/layout.ts). */

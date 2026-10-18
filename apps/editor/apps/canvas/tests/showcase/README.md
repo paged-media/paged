@@ -4,7 +4,7 @@ One sixteen-page reference document that exercises the engine and every
 wired plugin, built by driving the real editor.
 
 ```bash
-cd ~/paged/editor/apps/canvas
+cd apps/editor/apps/canvas
 npx playwright test --project=showcase
 ```
 
@@ -15,7 +15,7 @@ Output lands in `apps/canvas/showcase/`:
 | `showcase.paged`         | the live document — plugin frames keep their `x-paged:<id>` metadata envelopes and their `paged/<plugin>/…` container parts, so reopening in the editor rehydrates them |
 | `showcase.idml`          | the baked twin: every native page item, none of the `paged/` namespace. What a reader without the plugins sees                                                          |
 | `showcase.pdf`           | the same document through the engine's PDF writer                                                                                                                       |
-| `showcase.coverage.json` | which registry rows each page demonstrates, checked against `state/registry/features`                                                                                   |
+| `showcase.coverage.json` | which registry rows each page demonstrates, checked against the private feature registry (`PAGED_FEATURE_REGISTRY`; `unavailable` when unset) |
 | `pages/page-NN.png`      | one render per page                                                                                                                                                     |
 
 ## Why it exists

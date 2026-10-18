@@ -63,7 +63,7 @@ not re-convert on top of the helpers.
    refs (`removeRefs`) and note `demonstrated, not resident` in the
    spec label.
 6. **Claims discipline**: `covers` ids must exist in
-   `~/paged/state/registry/features/*.yaml` AND be shipped — grep
+   the feature registry (`$PAGED_FEATURE_REGISTRY/*.yaml`, private) AND be shipped — grep
    before claiming; an unknown or unshipped row fails assembly for
    everyone. Claim what the page VISIBLY exercises, nothing more.
    Known trap: `plugin-web.bake-to-native` is NOT shipped — do not
@@ -94,7 +94,7 @@ not re-convert on top of the helpers.
 ## Verifying your chapter (solo mode)
 
 ```bash
-cd ~/paged/editor/apps/canvas
+cd apps/editor/apps/canvas
 pnpm typecheck:showcase                      # first — the tree has its own tsconfig
 SHOWCASE_SOLO=<your-id> npx playwright test --project=showcase --grep "<your-id>"
 ```

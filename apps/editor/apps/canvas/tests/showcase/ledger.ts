@@ -29,9 +29,9 @@
 // `state`'s completeness gate trusts, re-seeded against the engine's
 // declared op list by capability-matrix.spec.ts, so this ledger can
 // never invent an op the engine does not declare. Axis c's universe is
-// core's `paged-introspect` catalog, read from the SIBLING CHECKOUT at
-// run time (the same sibling the base fixture already requires) — no
-// committed copy to drift.
+// core's `paged-introspect` catalog, read from the in-repo engine
+// (`engine/core`) at run time (the same tree the base fixture comes
+// from) — no committed copy to drift.
 //
 // Every chapter writes one fragment (claims + notes + tallies); the
 // assembly spec merges them and diffs against the universes. An op used
@@ -72,7 +72,7 @@ export function propertyPathUniverse(coreCheckout: string): string[] {
   if (!existsSync(catalog)) {
     throw new Error(
       `paged-introspect catalog not found at ${catalog} — the ledger needs ` +
-        `the core checkout beside the editor (same requirement as the base fixture).`,
+        `the in-repo engine at engine/core (same requirement as the base fixture).`,
     );
   }
   const text = readFileSync(catalog, "utf8");

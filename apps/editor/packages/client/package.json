@@ -6,8 +6,8 @@
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/paged-media/editor.git",
-    "directory": "packages/client"
+    "url": "git+https://github.com/paged-media/paged.git",
+    "directory": "apps/editor/packages/client"
   },
   "homepage": "https://paged.media",
   "main": "./src/index.ts",

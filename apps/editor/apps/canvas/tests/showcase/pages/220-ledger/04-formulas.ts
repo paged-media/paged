@@ -30,7 +30,7 @@
 // The lowered table below prints the computed values, because the
 // formatted value IS the value on both surfaces — one render path.
 //
-// The roster: `plugin-sheets/registry/functions/*.yaml` is the
+// The roster: `modules/sheet/registry/functions/*.yaml` is the
 // build-consumed source of truth (no row, no dispatch), read here with
 // the same splitter discipline the coverage gate uses. The counts on
 // the page are whatever the registry says on the day the book is built.
@@ -70,13 +70,13 @@ const WORKBOOK = pathResolve(
   "harness",
   "sheet-02-formulas.xlsx",
 );
-/** `~/paged/plugins/plugin-sheets/registry/functions` — the sibling
- *  checkout. The roster degrades to a note when it is absent. */
+/** `<repo root>/modules/sheet/registry/functions` — the in-repo paged.sheet
+ *  module. The roster degrades to a note when it is absent. */
 const FN_REGISTRY = pathResolve(
   __dirname,
-  ...Array(7).fill(".."),
-  "plugins",
-  "plugin-sheets",
+  ...Array(8).fill(".."),
+  "modules",
+  "sheet",
   "registry",
   "functions",
 );
@@ -221,7 +221,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const families = readFamilies();
   if (!families) {
     notes.push(
-      `the plugin-sheets checkout is absent at ${FN_REGISTRY} — the roster ` +
+      `the paged.sheet function registry is absent at ${FN_REGISTRY} — the roster ` +
         "table was not built on this run",
     );
   } else {

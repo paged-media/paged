@@ -33,7 +33,7 @@
 // megabytes of checkpoint.
 //
 // Below the tiles, the ROSTER: every kernel id the plugin's dispatch
-// registry declares, read from plugin-image/registry/kernels.yaml at
+// registry declares, read from modules/image/registry/kernels.yaml at
 // build time (Node fs) and printed with per-family counts. 128 rows at
 // the 2026-08-09 wave; if the number on the page disagrees with this
 // comment, believe the page — it read the registry today.
@@ -460,11 +460,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     }
     notes.push(
       `kernel roster: ${roster.total} ids across ${families.length} ` +
-        "families, read from plugin-image/registry/kernels.yaml",
+        "families, read from modules/image/registry/kernels.yaml",
     );
   } else {
     notes.push(
-      "plugin-image/registry/kernels.yaml not readable from this checkout " +
+      "modules/image/registry/kernels.yaml not readable from this checkout " +
         "— the roster block was omitted rather than hand-typed",
     );
   }

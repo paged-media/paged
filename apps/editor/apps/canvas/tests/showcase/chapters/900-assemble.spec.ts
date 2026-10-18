@@ -52,6 +52,7 @@ import {
   zipEntryNames,
 } from "../../e2e/harness/read-zip";
 import {
+  CORE,
   CORPUS_FONTS,
   LEDGER_DIR,
   OUT,
@@ -70,8 +71,6 @@ import {
   readFragments,
 } from "../ledger";
 import { ANNUAL_PAGES } from "../names-annual";
-
-const CORE = pathResolve(OUT, "..", "..", "..", "..", "core");
 
 /**
  * The working CMYK space this document names (set by Ch.11's colour-
@@ -505,6 +504,24 @@ test.describe("annual assembly", () => {
     }
 
     // ── axis a: registry rows ───────────────────────────────────────
+    // The feature registry is private (outside this repository) and is
+    // reached through PAGED_FEATURE_REGISTRY. Unset, the axis is reported
+    // UNAVAILABLE — in the log, the test annotations and the report notes —
+    // never as a pass. Set but missing is a configuration error.
+    if (REGISTRY === null) {
+      const msg =
+        "feature registry unavailable (set PAGED_FEATURE_REGISTRY to its " +
+        "registry/features directory) — registry axis NOT checked";
+      // eslint-disable-next-line no-console
+      console.log(`[assemble] ${msg}`);
+      test.info().annotations.push({ type: "unavailable", description: msg });
+      notes.push(msg);
+    } else {
+      expect(
+        existsSync(REGISTRY),
+        `PAGED_FEATURE_REGISTRY points at ${REGISTRY}, which does not exist`,
+      ).toBe(true);
+    }
     const coverage = buildCoverage(REGISTRY, merged.claims);
     expect(
       coverage.unknown,

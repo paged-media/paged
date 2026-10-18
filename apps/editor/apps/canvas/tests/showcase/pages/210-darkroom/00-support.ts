@@ -59,14 +59,14 @@ export const photo = (name: string): string =>
 /** `/@fs` URL for an absolute path (vite serves it read-only). */
 export const fsUrl = (absPath: string): string => `/@fs${absPath}`;
 
-/** `~/paged` — seven levels up from this module. Used ONLY to read the
- *  plugin's own kernel registry for the roster page; absent checkouts
- *  degrade to a note, never to a hand-typed list. */
-export const WORKSPACE = pathResolve(__dirname, "..", "..", "..", "..", "..", "..", "..");
+/** The monorepo root — eight levels up from this module. Used ONLY to read
+ *  the in-repo paged.image module's own kernel registry for the roster page;
+ *  an absent registry degrades to a note, never to a hand-typed list. */
+export const REPO_ROOT = pathResolve(__dirname, ...Array(8).fill(".."));
 export const KERNELS_YAML = pathResolve(
-  WORKSPACE,
-  "plugins",
-  "plugin-image",
+  REPO_ROOT,
+  "modules",
+  "image",
   "registry",
   "kernels.yaml",
 );

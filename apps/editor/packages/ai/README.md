@@ -1,8 +1,8 @@
 # @paged-media/ai — vendored copy
 
 This directory is a **temporary copy** of `@paged-media/ai`, whose home is
-[paged-media/plugin-sdk `packages/ai`](https://github.com/paged-media/plugin-sdk/tree/main/packages/ai)
-(ADR 325 there; ADR 221 here). It is vendored because the package's first npm
+[`platform/extensions/packages/ai`](../../../../platform/extensions/packages/ai) in this
+repository (formerly paged-media/plugin-sdk; ADR 325 there; ADR 221 here). It is vendored because the package's first npm
 publish has not happened yet, and the editor must build from its own repository.
 
 - Source: plugin-sdk `df58d0e`, `packages/ai/src/*.ts`, byte for byte, except
