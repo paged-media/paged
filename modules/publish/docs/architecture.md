@@ -207,7 +207,7 @@ engine uses for the plugin namespace of container parts (`core: crates/paged-can
 - `.github/workflows/ci.yml` has three jobs: format check, clippy, a native build and a
   `wasm32` build of all three crates; typecheck and build of both bundles plus manifest
   validation with `@paged-media/plugin-cli`; and `cargo nextest` over the workspace plus
-  vitest in each package that declares a test script, which fails if any test failed.
+  `bun test` in each package that declares a test script, which fails if any test failed.
   `.github/workflows/publish.yml` runs on every push to `main` and publishes each package
   whose version is not yet on npm under the dist-tag `canary`. No crate is published.
 - Rust tests: unit tests inside `idml-import` and `idml-export`; three integration files in
@@ -216,5 +216,5 @@ engine uses for the plugin namespace of container parts (`core: crates/paged-can
   `crates/idml-export/tests/fixtures/indesign-20.0.1-navigation.idml`. Ten tests in
   `idml-export` are `#[ignore]`d: they read a private document corpus when
   `PAGED_IDML_CORPUS` is set and do not run in CI.
-- TypeScript tests: two vitest files in `packages/pdf-bundle/test/` cover the text heuristics
+- TypeScript tests (`bun test`): two files in `packages/pdf-bundle/test/` cover the text heuristics
   and the fallback builder. The PDFium path is browser-only and untested; the IDML bundle has no tests.

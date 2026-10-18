@@ -32,7 +32,7 @@
 // engine at `scope: "document"`: through the client's `registerDocumentFont`
 // where it has one (plugin SDK ADR 330), else a `registerFont` message.
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";

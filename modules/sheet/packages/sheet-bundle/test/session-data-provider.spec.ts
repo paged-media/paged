@@ -37,7 +37,8 @@ import {
   type ReactTestInstance,
   type ReactTestRenderer,
 } from "react-test-renderer";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, mock } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 
 import type {
   BundleHost,
@@ -58,7 +59,7 @@ import {
 // bootEmptyEngine() is what sourceFromDataset boots a fresh workbook with;
 // we replace it with a fake that records every setCell so we can assert the
 // seeded header + rows without any real wasm. setCellCalls is a hoist-safe
-// module-level sink the mock factory closes over (vi.mock is hoisted).
+// module-level sink the mock factory closes over.
 
 const setCellCalls: Array<[number, number, number, string]> = [];
 let bootShouldThrow = false;
@@ -103,10 +104,9 @@ function makeFakeEngine(): SheetEngine {
   };
 }
 
-vi.mock("../src/engine", async () => {
-  const actual = await vi.importActual<typeof import("../src/engine")>(
-    "../src/engine",
-  );
+const actualEngine = await importActual(() => import("../src/engine"));
+mock.module("../src/engine", () => {
+  const actual = actualEngine;
   return {
     ...actual,
     bootEmptyEngine: vi.fn(async () => {

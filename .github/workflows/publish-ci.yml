@@ -162,7 +162,7 @@ jobs:
   # `check` covers fmt/clippy/build and `bundle` covers typecheck/build, so a
   # green run said nothing about whether the Rust tests (pdf-import; the
   # idml-import ones run in core-ci.yml since the adapter moved to
-  # engine/core) or the pdf-bundle vitest specs still passed. The state matrix
+  # engine/core) or the pdf-bundle unit specs (bun test) still passed. The state matrix
   # read plugin.publish "never published" for the same reason.
   #
   # Evidence hand-off is INVERTED (2026-07-26): this repo is PUBLIC and the
@@ -232,20 +232,20 @@ jobs:
         working-directory: .
         run: bun install --frozen-lockfile
 
-      # Only packages that DECLARE a test script. Running vitest in every package
-      # runs it everywhere, and vitest exits non-zero in a package with no
-      # test files ("No test files found") — which set the failure flag on the
-      # first run here even though all 170 Rust and 18 TS tests passed. A gate
-      # that fires on a package having no tests is a gate nobody will believe.
-      - name: vitest → JUnit
+      # Only packages that DECLARE a test script (both do today). bun test
+      # writes its own JUnit shape; tooling/js/bun-junit.mjs rewrites it into
+      # the vitest shape the evidence has always had (classname = spec path,
+      # name = "describe > title"), so the uploaded test ids stay the same.
+      - name: bun test → JUnit
         run: |
           set -uo pipefail
           for d in packages/*/; do
-            node -e "process.exit(require('./${d}package.json').scripts?.test ? 0 : 1)" \
+            bun -e "process.exit(require('./${d}package.json').scripts?.test ? 0 : 1)" \
               2>/dev/null || continue
-            echo "== vitest in $d"
-            (cd "$d" && bunx --no-install vitest run --reporter=default \
-              --reporter=junit --outputFile=junit.xml) \
+            echo "== bun test in $d"
+            (cd "$d" && bun run test --reporter=junit --reporter-outfile=junit.bun.xml) \
+              || echo "TS_FAILED=1" >> "$GITHUB_ENV"
+            bun ../../tooling/js/bun-junit.mjs --out "${d}junit.xml" "${d}junit.bun.xml" \
               || echo "TS_FAILED=1" >> "$GITHUB_ENV"
           done
           ls packages/*/junit.xml
@@ -256,7 +256,7 @@ jobs:
       # publish-bundle one and its declared plugin-pdf/vitest lane sat
       # "never published" (state ingest/artifacts.yaml, 2026-08-17 audit).
       # Artifact names pair with state's pull table: vitest-junit-<package>.
-      - name: upload pdf-bundle vitest artifact
+      - name: upload pdf-bundle JUnit artifact
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
@@ -265,16 +265,15 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # publish-bundle declares no test script yet, so this uploads nothing
-      # today (warn, not error) — the lane starts feeding the day its first
-      # vitest lands, with no workflow change.
-      - name: upload publish-bundle vitest artifact
+      # The artifact names keep their `vitest-` prefix: the evidence pull
+      # addresses them by name.
+      - name: upload publish-bundle JUnit artifact
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: vitest-junit-publish-bundle
           path: modules/publish/packages/publish-bundle/junit.xml
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 14
 
       - name: tests failed

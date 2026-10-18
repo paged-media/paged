@@ -8,7 +8,7 @@
 //   still agree when the caret meets them.
 // - A plain `<w:br/>` is U+2028 in the run text: one char in the contiguous
 //   style space, three bytes in insertText's.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { buildStoryBlocks, buildTextPour } from "../src/index.js";
 import type { LoweredBlock, LoweredParagraph } from "../src/index.js";

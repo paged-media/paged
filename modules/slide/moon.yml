@@ -18,6 +18,8 @@ project:
 dependsOn:
   - id: 'extensions'
     scope: 'development'
+  - id: 'test-kit'
+    scope: 'development'
 
 tasks:
   js-lint:
@@ -27,7 +29,7 @@ tasks:
       - '@group(js-sources)'
 
   js-test:
-    # slide-bundle builds the engine wasm before vitest.
+    # slide-bundle's bun test boots the engine wasm; build it first.
     deps: ['~:wasm']
 
   vendor-check:

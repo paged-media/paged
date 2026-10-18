@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import fc from "fast-check";
 
 import { editTextNode, scanTextNodes } from "../src/source-text";

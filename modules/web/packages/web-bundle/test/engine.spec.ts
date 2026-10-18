@@ -34,7 +34,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it, beforeEach, vi } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "bun:test";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import {
@@ -172,7 +172,7 @@ describe("bakeWebFrame with the engine — parse + submit (injected fixture)", (
 // DUAL-GATED on the artifact being present (it's gitignored generated
 // output; build it with `bash scripts/build-wasm.sh --engine`): locally a
 // missing artifact SKIPS with a clear note rather than failing the default
-// gate, but in CI the vitest workflow builds the artifact and sets
+// gate, but in CI the unit-test workflow builds the artifact and sets
 // REQUIRE_REAL_ENGINE=1, under which a missing artifact FAILS instead of
 // skipping — so the real-engine smoke can never silently fall out of CI.
 
@@ -188,7 +188,7 @@ if (process.env.REQUIRE_REAL_ENGINE === "1" && !artifactPresent) {
       throw new Error(
         `REQUIRE_REAL_ENGINE=1 but ${wasmPath} (or its glue) is missing — ` +
           "build it with `bash scripts/build-wasm.sh --engine` (CI must " +
-          "build the artifact before running vitest; skipping is not allowed here)",
+          "build the artifact before running bun test; skipping is not allowed here)",
       );
     });
   });

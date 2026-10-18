@@ -24,7 +24,8 @@
 // explicit/runtime fallback. A fake host captures the mutate calls; a
 // fake engine returns a small LoweredContent.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
+import { advanceTimersByTimeAsync } from "@paged-media/test-kit";
 
 import type {
   BundleHost,
@@ -1028,7 +1029,7 @@ describe("sheet_plugin_lower_chain: live multi-frame pagination", () => {
 
       // (a) A change with NO reflow is the §8.5 transform case — IGNORED.
       fire({ kind: "mutationApplied", pageIds: ["Page/u1"] });
-      await vi.advanceTimersByTimeAsync(500);
+      await advanceTimersByTimeAsync(vi, 500);
       expect(paginateCalls).toHaveLength(0);
 
       // (b) A BURST of reflows for chain frames re-paginates ONCE, after the
@@ -1045,10 +1046,10 @@ describe("sheet_plugin_lower_chain: live multi-frame pagination", () => {
           pageIds: ["Page/u1"],
           reflow: { frameId: "f0", contentBox: [0, 0, 36 + i, 50] },
         });
-        await vi.advanceTimersByTimeAsync(30);
+        await advanceTimersByTimeAsync(vi, 30);
       }
       expect(paginateCalls).toHaveLength(0); // still settling
-      await vi.advanceTimersByTimeAsync(200);
+      await advanceTimersByTimeAsync(vi, 200);
       await sub.refresh(); // serialised behind the debounced pass
       expect(paginateCalls.length).toBeGreaterThanOrEqual(1);
       expect(mutations.filter((m) => m.op === "insertTable")).toHaveLength(tablesBefore);
@@ -1079,7 +1080,7 @@ describe("sheet_plugin_lower_chain: live multi-frame pagination", () => {
         pageIds: ["Page/u1"],
         reflow: { frameId: "fOTHER", contentBox: [0, 0, 10, 10] },
       });
-      await vi.advanceTimersByTimeAsync(500);
+      await advanceTimersByTimeAsync(vi, 500);
       expect(paginateCalls).toHaveLength(calls);
 
       sub.dispose();

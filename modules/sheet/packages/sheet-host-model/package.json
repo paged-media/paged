@@ -10,7 +10,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
+    "test": "bun test --parallel",
     "build": "tsup src/index.ts --format esm --dts --out-dir dist --clean",
     "prepublishOnly": "bun run build"
   },
@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "@types/bun": "catalog:"
   },
   "files": [
     "dist"

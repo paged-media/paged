@@ -38,7 +38,7 @@
 // nothing` in `image-js/src/stroke.rs` runs on a real adapter and
 // asserts the pixels are untouched.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type {

@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 
 import { createElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, ClipboardPayload, SceneLayer } from "@paged-media/plugin-api";
 

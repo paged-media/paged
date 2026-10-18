@@ -2,13 +2,13 @@
 // and what cockpit's object matrix reads (ADR 323 rule 4): it must say
 // exactly what the bundle registers at runtime. The schema rows live in
 // `object-model/<kind>.schema.json` (bundle-relative); the typed commands'
-// args inline. `UPDATE_OBJECT_MODEL=1 vitest run object-model-manifest`
+// args inline. `UPDATE_OBJECT_MODEL=1 bun test object-model-manifest`
 // regenerates both from the source.
 
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, ObjectModelContribution } from "@paged-media/plugin-api";
 

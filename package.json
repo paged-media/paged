@@ -16,9 +16,11 @@
       "modules/image/glue",
       "modules/image/manifest",
       "engine/core/web/idml-viewer",
-      "engine/core/packages/*"
+      "engine/core/packages/*",
+      "platform/shared/*"
     ],
     "catalog": {
+      "@types/bun": "1.4.3",
       "@types/node": "20.19.39",
       "@types/react": "^18.3.31",
       "@types/react-dom": "^18.3.7",

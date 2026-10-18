@@ -23,7 +23,7 @@
 
 import { readFileSync } from "node:fs";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import { createHeadlessHost } from "@paged-media/plugin-sdk";

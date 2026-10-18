@@ -21,7 +21,7 @@
 // re-render after a save, an undo and a resize (never after a move or an
 // unrelated edit), and a frame that leaves a flow or is deleted is cleared.
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import type { BundleHost, CommandContribution, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

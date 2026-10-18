@@ -28,7 +28,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests",
+    "test": "bun test --parallel",
     "build": "tsup src/index.ts --format esm --dts"
   },
   "peerDependencies": {
@@ -46,6 +46,6 @@
     "react": "catalog:",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "@types/bun": "catalog:"
   }
 }

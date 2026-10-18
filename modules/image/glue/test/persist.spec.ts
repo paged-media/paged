@@ -21,7 +21,7 @@
 // frame's placed bytes. The stacks here fold without a GPU (an empty
 // layer contributes nothing), so the whole round trip runs in Node.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type { PluginManifest } from "@paged-media/plugin-api";

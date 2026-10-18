@@ -3,14 +3,14 @@
 // The manifest's `contributes.objectModel` and the schema files it names
 // are GENERATED from what the bundle registers at runtime, so the two
 // cannot drift (the runtime check compares inline schemas only; these are
-// files). Regenerate with `UPDATE_OBJECT_MODEL=1 pnpm vitest run
+// files). Regenerate with `UPDATE_OBJECT_MODEL=1 bun test
 // test/object-model-manifest.spec.ts`.
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { imageBundle } from "../src/index";

@@ -21,7 +21,7 @@
 // commit, one undo restores) live in Rust (image-js/src/layers.rs,
 // `…__feat__image_editor_mask_painting`).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type { PluginManifest } from "@paged-media/plugin-api";

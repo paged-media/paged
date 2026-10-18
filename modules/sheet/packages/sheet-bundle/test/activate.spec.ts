@@ -22,7 +22,7 @@
 // session down cleanly (the honesty smoke test). Engine behavior is NOT
 // exercised here — this is wiring only.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type {
   BundleHost,

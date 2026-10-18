@@ -32,7 +32,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "bun:test";
+import { advanceTimersByTimeAsync, waitFor } from "@paged-media/test-kit";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
@@ -138,9 +139,9 @@ describe.skipIf(!built)("sheet edits persist [sheet.plugin.persistence]", () => 
     expect(s1.editCell(0, 9, 1, "=A10*2")).toBe(true);
     // Debounced: two edits in quick succession are ONE write, after the delay.
     expect(doc.workbookWrites()).toBe(1);
-    await vi.advanceTimersByTimeAsync(5_000);
+    await advanceTimersByTimeAsync(vi, 5_000);
     vi.useRealTimers();
-    await vi.waitFor(() => expect(doc.workbookWrites()).toBe(2));
+    await waitFor(() => expect(doc.workbookWrites()).toBe(2));
 
     const s2 = await reload(doc.host);
     expect(s2.state().engine!.getCellInput(0, 9, 0)).toBe("42");
@@ -156,7 +157,7 @@ describe.skipIf(!built)("sheet edits persist [sheet.plugin.persistence]", () => 
     await s1.import(new Uint8Array(readFileSync(FIXTURE)), "minimal.xlsx");
     expect(s1.editCell(0, 9, 0, "flushed")).toBe(true);
     s1.dispose(); // the bundle deactivates (or the editor closes the doc)
-    await vi.waitFor(() => expect(doc.workbookWrites()).toBe(2));
+    await waitFor(() => expect(doc.workbookWrites()).toBe(2));
 
     const s2 = await reload(doc.host);
     expect(s2.state().engine!.getCellInput(0, 9, 0)).toBe("flushed");
@@ -177,7 +178,7 @@ describe.skipIf(!built)("sheet edits persist [sheet.plugin.persistence]", () => 
     expect(s1.editCell(0, 9, 0, "on exit")).toBe(true);
     s1.hideGridInFrame(); // the context exits (Esc) — no timer has run
     vi.useRealTimers();
-    await vi.waitFor(() => expect(doc.workbookWrites()).toBe(2));
+    await waitFor(() => expect(doc.workbookWrites()).toBe(2));
 
     const s2 = await reload(doc.host);
     expect(s2.state().engine!.getCellInput(0, 9, 0)).toBe("on exit");
@@ -193,7 +194,7 @@ describe.skipIf(!built)("sheet edits persist [sheet.plugin.persistence]", () => 
     expect(s1.editCell(0, 0, 0, "changed")).toBe(true);
     expect(s1.undoCellEdit()).toBe(true);
     s1.dispose();
-    await vi.waitFor(() => expect(doc.workbookWrites()).toBe(2));
+    await waitFor(() => expect(doc.workbookWrites()).toBe(2));
 
     const s2 = await reload(doc.host);
     expect(s2.state().engine!.getCellInput(0, 0, 0)).toBe(before);
@@ -265,9 +266,9 @@ describe.skipIf(!built)("a save waits for the workbook [sheet.plugin.persistence
     expect(s1.editCell(0, 9, 0, "debounced")).toBe(true);
     await doc.save(); // no listener: the save cannot wait for the edit
     expect(doc.workbookWrites()).toBe(1);
-    await vi.advanceTimersByTimeAsync(5_000);
+    await advanceTimersByTimeAsync(vi, 5_000);
     vi.useRealTimers();
-    await vi.waitFor(() => expect(doc.workbookWrites()).toBe(2));
+    await waitFor(() => expect(doc.workbookWrites()).toBe(2));
     s1.dispose();
   });
 });

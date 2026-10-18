@@ -27,7 +27,7 @@
 //      write: one metadata mutation per call, never a preview side
 //      effect.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "bun:test";
 
 import type {
   BundleHost,

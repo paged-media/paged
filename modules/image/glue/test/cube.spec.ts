@@ -18,7 +18,7 @@
 
 // .cube parsing and the resample to the lookup kernel's 9×9×9 cube.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { KERNEL_EDGE, parseCube, toKernelCube } from "../src/cube";
 

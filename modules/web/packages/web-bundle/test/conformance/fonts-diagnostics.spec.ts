@@ -29,7 +29,7 @@
 //      panel publishes them. Here the diagnostics are computed by the
 //      pure web-model functions over the REAL fonts-door projection.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import {

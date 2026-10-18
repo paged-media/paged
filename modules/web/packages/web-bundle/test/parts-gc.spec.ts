@@ -21,7 +21,7 @@
 // save; what a label names, what this session wrote, and anything that is
 // not a source part stays; without the delete door nothing goes.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import { DEFAULT_SOURCE, storeSource, type WebFrameSource } from "@paged-media/web-model";

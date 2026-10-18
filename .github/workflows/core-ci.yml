@@ -266,13 +266,13 @@ jobs:
         run: make test-wasm
 
   # The TypeScript viewer wrapper (web/idml-viewer, published as
-  # @paged-media/idml-viewer) ran its vitest only inside publish-wasm.yml,
+  # @paged-media/idml-viewer) ran its unit tests only inside publish-wasm.yml,
   # i.e. at release time, and no run ever reached cockpit: the
   # `core/idml-viewer-vitest` lane and the features it evidences
   # (the-renderer.viewer-wrapper, the-renderer.gpu-backend) stayed
   # "no evidence". The tests need no wasm (a fake session stands in).
   viewer-vitest:
-    name: idml-viewer vitest
+    name: idml-viewer bun test
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -287,9 +287,17 @@ jobs:
       - name: bun install (root workspace)
         working-directory: .
         run: bun install --frozen-lockfile
-      - name: vitest → JUnit
+      # bun's report, rewritten into the vitest shape the evidence has
+      # always had (tooling/js/bun-junit.mjs), so the artifact keeps its
+      # name and its test ids.
+      - name: bun test → JUnit
         working-directory: engine/core/web/idml-viewer
-        run: bun run test --reporter=default --reporter=junit --outputFile.junit=junit.xml
+        run: |
+          set -uo pipefail
+          status=0
+          bun run test --reporter=junit --reporter-outfile=junit.bun.xml || status=$?
+          bun ../../../../tooling/js/bun-junit.mjs --out junit.xml junit.bun.xml || status=1
+          exit $status
       - name: upload JUnit artifact
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4

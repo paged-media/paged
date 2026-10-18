@@ -20,7 +20,7 @@
 // source taller than its frame is clipped, shrunk to fit, grows the frame,
 // or (thread) is reported as continuing past an unthreaded frame.
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import type { BundleHost, CommandContribution, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

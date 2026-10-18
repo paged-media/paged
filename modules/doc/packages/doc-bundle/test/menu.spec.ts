@@ -13,7 +13,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { MENU_COMMAND_PREFIX, MENU_ENTRIES } from "../src/menu";
 import { createDocStore } from "../src/panels/outline-model.js";

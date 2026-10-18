@@ -23,7 +23,7 @@
 // through the host; renderWebFlow runs cleanly (the Blitz engine is not
 // loaded in Node → the honest not-loaded path); unthread removes the chain.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import type { CommandContribution, ElementId } from "@paged-media/plugin-api";

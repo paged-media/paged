@@ -23,7 +23,7 @@
 // face — without the document's own fonts seeing it. The same holds for a
 // face a source's `@font-face` rule loads from the container.
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";

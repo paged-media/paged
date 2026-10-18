@@ -25,7 +25,7 @@
 // Rust; setCell re-types each string); the session is thin glue: read the
 // range → host.clipboard.write, and host.clipboard.read → journaled cells.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, ClipboardPayload } from "@paged-media/plugin-api";
 
