@@ -359,3 +359,26 @@ impl Workspace {
         )
     }
 }
+
+impl Remote {
+    /// Collects what no ref reaches (owner only).
+    pub fn collect(&self) -> Result<serde_json::Value, Error> {
+        self.json(ureq::post(&self.url("gc")), Some(serde_json::json!({})))
+    }
+
+    /// Erases the repository: its key first, then its bytes (owner only).
+    pub fn erase(&self) -> Result<serde_json::Value, Error> {
+        let url = self.url("").trim_end_matches('/').to_string();
+        self.json(ureq::delete(&url), None)
+    }
+
+    /// Moves `ref_name` from `expected` to nothing.
+    pub fn delete_ref(&self, ref_name: &str, expected: Hash) -> Result<(), Error> {
+        let body = serde_json::json!({ "expected": expected.to_hex(), "new": null });
+        Self::answer(
+            self.call(ureq::post(&self.url(&format!("refs/{ref_name}"))))
+                .send_json(body),
+        )?;
+        Ok(())
+    }
+}

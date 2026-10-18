@@ -93,6 +93,23 @@ POST, no server-initiated stream; `GET` answers 405). The tools are core's
 - Tools with a view declare `_meta.ui.resourceUri = ui://paged/view` (MCP Apps),
   served by `resources/read`.
 
+## Keeping a repository
+
+- **Sealed at rest.** R2 bytes are AES-256-GCM sealed under the repository's own key,
+  with a nonce derived from the key and the object's address. One address is one
+  plaintext, so a nonce never meets two. Objects written before keys existed are
+  read in plain from `r/…`, still checked by address.
+- **Collected.** `POST …/gc` (owner) removes what no ref reaches. An object
+  recorded in the last hour (`PAGED_GC_GRACE_MS`) is kept, because a push uploads
+  before it moves its ref. The maintenance alarm also collects, ten minutes after a
+  ref moves (`PAGED_MAINTENANCE_DELAY_S`).
+- **Snapshotted.** The same alarm writes a write-once snapshot of the refs and the
+  evidence head to `b/<repo>/<ts>.json`.
+- **Erased.** `DELETE /v1/r/{repo}` (owner) destroys the key first, so whatever R2
+  still holds is unreadable from that moment. It then deletes the bytes, the rows
+  and the directory entry. This is crypto-shredding: an erasure that fails halfway
+  still erased.
+
 ## Live relay
 
 An editor tab connects so a model's engine tools act in it:

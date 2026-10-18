@@ -173,6 +173,14 @@ impl DurableObject for WorkspaceObject {
             )?;
             return Response::from_json(&json!({ "ok": true }));
         }
+        if route == "internal/unregister" {
+            let body: Value = req.json().await?;
+            self.state.storage().sql().exec(
+                "DELETE FROM repos WHERE name = ?",
+                vec![V::String(body["name"].as_str().unwrap_or("").into())],
+            )?;
+            return Response::from_json(&json!({ "ok": true }));
+        }
         if route == "internal/repos" {
             return Response::from_json(&self.repos()?);
         }

@@ -22,6 +22,7 @@
 //! Operations are safe to run again: nothing moves before every read succeeded.
 
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 use paged_repo::{
     reachable, read_records, Actor, ActorKind, Ctx, Error, Hash, Kind, Policy, Refusal, Repo, Store,
@@ -107,6 +108,100 @@ impl RepoObject {
         }
     }
 
+    /// After a ref moves: collection and a backup snapshot, ten minutes on.
+    async fn schedule(&self, store: &DoStore, name: &str, workspace: Option<&str>) {
+        store.set_meta("name", name.as_bytes());
+        if let Some(ws) = workspace {
+            store.set_meta("workspace", ws.as_bytes());
+        }
+        let storage = self.state.storage();
+        let delay = self
+            .env
+            .var("PAGED_MAINTENANCE_DELAY_S")
+            .ok()
+            .and_then(|v| v.to_string().parse().ok())
+            .unwrap_or(600);
+        if matches!(storage.get_alarm().await, Ok(None)) {
+            let _ = storage.set_alarm(Duration::from_secs(delay)).await;
+        }
+    }
+
+    /// Removes what no ref reaches, except what arrived in the last hour (a
+    /// push in flight uploads before it moves its ref). R2 bytes go too.
+    async fn collect(&self, store: &DoStore) -> Result<serde_json::Value> {
+        let heads: Vec<Hash> = store.refs().into_iter().map(|(_, h)| h).collect();
+        let live: std::collections::BTreeSet<Hash> = match reachable(store, &heads, |_| false) {
+            Ok(r) => r.into_iter().map(|(_, h)| h).collect(),
+            Err(e) => return Ok(serde_json::json!({ "error": e.to_string() })),
+        };
+        let grace = self
+            .env
+            .var("PAGED_GC_GRACE_MS")
+            .ok()
+            .and_then(|v| v.to_string().parse().ok())
+            .unwrap_or(3_600_000);
+        let recent = store.recent(grace);
+        let bucket = self.bucket()?;
+        let (mut rows, mut r2) = (0, 0);
+        for (h, in_r2) in store.rows_all() {
+            if live.contains(&h) || recent.contains(&h) {
+                continue;
+            }
+            if in_r2 {
+                bucket.delete(store.r2_key(&h)).await?;
+                bucket.delete(store.r2_plain_key(&h)).await?;
+                r2 += 1;
+            }
+            let mut s = DoStore::new(self.state.storage().sql(), "");
+            s.remove(&h);
+            rows += 1;
+        }
+        Ok(serde_json::json!({ "removed": rows, "r2_removed": r2, "kept": live.len() }))
+    }
+
+    /// Deletes every R2 object under this repository's prefixes.
+    async fn erase_r2(&self, store: &DoStore) -> Result<usize> {
+        let bucket = self.bucket()?;
+        let mut removed = 0;
+        for prefix in store.r2_prefixes() {
+            loop {
+                let listed = bucket
+                    .list()
+                    .prefix(prefix.clone())
+                    .limit(1000)
+                    .execute()
+                    .await?;
+                let keys: Vec<String> = listed.objects().iter().map(|o| o.key()).collect();
+                if keys.is_empty() {
+                    break;
+                }
+                removed += keys.len();
+                bucket.delete_multiple(keys).await?;
+            }
+        }
+        Ok(removed)
+    }
+
+    async fn unregister(&self, workspace: Option<&str>, name: &str, principal: &str) {
+        let directory = match workspace {
+            Some(ws) => ws.to_string(),
+            None => format!("home:{principal}"),
+        };
+        let Ok(ns) = self.env.durable_object("WORKSPACE") else {
+            return;
+        };
+        let Ok(stub) = ns.id_from_name(&directory).and_then(|id| id.get_stub()) else {
+            return;
+        };
+        let mut init = worker::RequestInit::new();
+        init.with_method(Method::Post)
+            .with_body(Some(serde_json::json!({ "name": name }).to_string().into()));
+        let url = format!("https://workspace/v1/w/{directory}/internal/unregister");
+        if let Ok(req) = Request::new_with_init(&url, &init) {
+            let _ = stub.fetch_with_request(req).await;
+        }
+    }
+
     async fn workspace_policy(&self, ws: &str) -> std::result::Result<Policy, Refusal> {
         let none = || Refusal::PolicyInvalid(format!("workspace `{ws}` has no readable policy"));
         let Ok(ns) = self.env.durable_object("WORKSPACE") else {
@@ -138,12 +233,25 @@ impl RepoObject {
                 continue;
             }
             let missing = || worker::Error::from(format!("object {h} is recorded but not in R2"));
-            let obj = bucket
-                .get(store.r2_key(&h))
-                .execute()
-                .await?
-                .ok_or_else(missing)?;
-            let bytes = obj.body().ok_or_else(missing)?.bytes().await?;
+            let bytes = match bucket.get(store.r2_key(&h)).execute().await? {
+                Some(obj) => {
+                    let sealed = obj.body().ok_or_else(missing)?.bytes().await?;
+                    store.unseal(&h, &sealed).ok_or_else(|| {
+                        worker::Error::from(format!(
+                            "object {h} does not open with this repository's key"
+                        ))
+                    })?
+                }
+                // Written before repositories had keys: plain, still checked by address.
+                None => {
+                    let obj = bucket
+                        .get(store.r2_plain_key(&h))
+                        .execute()
+                        .await?
+                        .ok_or_else(missing)?;
+                    obj.body().ok_or_else(missing)?.bytes().await?
+                }
+            };
             store
                 .provide(h, bytes)
                 .map_err(|e| worker::Error::from(e.to_string()))?;
@@ -169,6 +277,38 @@ impl RepoObject {
 }
 
 impl DurableObject for RepoObject {
+    /// Maintenance: collection, then a write-once backup snapshot of the refs
+    /// and the evidence head (`b/<repo>/<ts>.json`; never overwritten).
+    async fn alarm(&self) -> Result<Response> {
+        let name = DoStore::new(self.state.storage().sql(), "")
+            .meta("name")
+            .map(|b| String::from_utf8_lossy(&b).to_string());
+        let Some(name) = name else {
+            return Response::ok("nothing to do");
+        };
+        let store = DoStore::new(self.state.storage().sql(), &name);
+        let report = self.collect(&store).await?;
+        let refs: BTreeMap<String, String> = store
+            .refs()
+            .into_iter()
+            .map(|(k, v)| (k, v.to_hex()))
+            .collect();
+        let evidence = store.evidence();
+        let head = evidence
+            .last()
+            .map(|b| paged_repo::address(Kind::Evidence, b).to_hex());
+        let ts = now();
+        let snapshot = serde_json::json!({ "repo": name, "ts": ts, "refs": refs, "evidence": { "entries": evidence.len(), "head": head }, "collected": report });
+        self.bucket()?
+            .put(
+                format!("b/{name}/{ts}.json"),
+                snapshot.to_string().into_bytes(),
+            )
+            .execute()
+            .await?;
+        Response::ok("maintained")
+    }
+
     fn new(state: State, env: Env) -> Self {
         if let Err(e) = state.storage().sql().exec(SCHEMA, None) {
             worker::console_error!("schema: {e}");
@@ -270,7 +410,7 @@ impl DurableObject for RepoObject {
                     if kind == Kind::Blob && bytes.len() > INLINE_MAX {
                         // R2 first, then the row: a row never names bytes that are not there.
                         bucket
-                            .put(store.r2_key(&hash), bytes.clone())
+                            .put(store.r2_key(&hash), store.seal(&hash, &bytes))
                             .execute()
                             .await?;
                         store.record(kind, &hash, None, bytes.len() as u64);
@@ -359,6 +499,8 @@ impl DurableObject for RepoObject {
                 match r {
                     Ok(()) => {
                         self.register(workspace.as_deref(), &name, &principal).await;
+                        self.schedule(&repo.store, &name, workspace.as_deref())
+                            .await;
                         Response::from_json(&serde_json::json!({ "ref": ref_name, "at": mv.new }))
                     }
                     Err(e) => answer(e),
@@ -641,7 +783,7 @@ impl DurableObject for RepoObject {
                     if kind == Kind::Blob && bytes.len() > INLINE_MAX {
                         if !store.has(&h) {
                             bucket
-                                .put(store.r2_key(&h), bytes.clone())
+                                .put(store.r2_key(&h), store.seal(&h, &bytes))
                                 .execute()
                                 .await?;
                             store.record(kind, &h, None, bytes.len() as u64);
@@ -666,12 +808,36 @@ impl DurableObject for RepoObject {
                 match r {
                     Ok(h) => {
                         self.register(workspace.as_deref(), &name, &principal).await;
+                        self.schedule(&repo.store, &name, workspace.as_deref())
+                            .await;
                         Response::from_json(
                             &serde_json::json!({ "ref": c.branch, "at": h.to_hex() }),
                         )
                     }
                     Err(e) => answer(e),
                 }
+            }
+            (Method::Post, "gc") | (Method::Delete, "") => {
+                let owner = matches!(&policy, Some(Ok(p)) if p.role(&principal) == Some(paged_repo::Role::Owner));
+                if !owner || ctx.actor.kind == ActorKind::Agent {
+                    return problem(
+                        403,
+                        "Refused",
+                        "only an owner collects or erases a repository",
+                    );
+                }
+                if req.method() == Method::Post {
+                    let report = self.collect(&store).await?;
+                    return Response::from_json(&report);
+                }
+                // Erasure: the key first, so whatever R2 still holds is unreadable
+                // from this moment; then the bytes, the rows and the listing.
+                store.set_meta("key", &[]);
+                let removed = self.erase_r2(&store).await?;
+                store.wipe();
+                self.unregister(workspace.as_deref(), &name, &principal)
+                    .await;
+                Response::from_json(&serde_json::json!({ "erased": name, "r2_objects": removed }))
             }
             (Method::Get, "cr") => {
                 if !may_read {

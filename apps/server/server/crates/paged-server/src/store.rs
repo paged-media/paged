@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v BLOB NOT NULL);
 CREATE TABLE IF NOT EXISTS change_requests (id INTEGER PRIMARY KEY, source TEXT NOT NULL,
   target TEXT NOT NULL, title TEXT NOT NULL, author TEXT NOT NULL, status TEXT NOT NULL,
   created INTEGER NOT NULL, merged TEXT);
+CREATE TABLE IF NOT EXISTS recent (hash BLOB PRIMARY KEY, ts INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS approvals (cr INTEGER NOT NULL, actor TEXT NOT NULL, head TEXT NOT NULL,
   ts INTEGER NOT NULL, PRIMARY KEY (cr, actor));
 ";
@@ -87,8 +88,39 @@ impl DoStore {
         }
     }
 
+    /// Where a blob's sealed bytes are in R2.
     pub fn r2_key(&self, hash: &Hash) -> String {
+        format!("e/{}/{}", self.repo, hash.to_hex())
+    }
+
+    /// Where a blob written before repositories had keys is, in plain.
+    pub fn r2_plain_key(&self, hash: &Hash) -> String {
         format!("r/{}/{}", self.repo, hash.to_hex())
+    }
+
+    pub fn r2_prefixes(&self) -> [String; 2] {
+        [format!("e/{}/", self.repo), format!("r/{}/", self.repo)]
+    }
+
+    /// The repository's key, made on first use. Destroying it (erasure) leaves
+    /// every sealed object in R2 unreadable.
+    pub fn key(&self) -> Vec<u8> {
+        if let Some(k) = self.meta("key") {
+            return k;
+        }
+        let k = crate::crypto::random_bytes(32);
+        self.set_meta("key", &k);
+        k
+    }
+
+    /// The R2 bytes for a blob, sealed.
+    pub fn seal(&self, hash: &Hash, bytes: &[u8]) -> Vec<u8> {
+        crate::crypto::seal(&self.key(), &hash.0, bytes)
+    }
+
+    /// Sealed bytes from R2, opened; None without the key (after erasure).
+    pub fn unseal(&self, hash: &Hash, stored: &[u8]) -> Option<Vec<u8>> {
+        crate::crypto::open(&self.meta("key")?, &hash.0, stored)
     }
 
     /// The kind and size of an object whose bytes are in R2, if `hash` is one.
@@ -121,7 +153,16 @@ impl DoStore {
     }
 
     /// Records an object the upload verified. Large blobs must already be in R2.
+    /// It counts as recent for an hour, so a push in flight survives collection.
     pub fn record(&self, kind: Kind, hash: &Hash, bytes: Option<&[u8]>, size: u64) {
+        rows(
+            &self.sql,
+            "INSERT OR REPLACE INTO recent (hash, ts) VALUES (?, ?)",
+            vec![
+                V::Blob(hash.0.to_vec()),
+                V::Integer(worker::Date::now().as_millis() as i64),
+            ],
+        );
         rows(
             &self.sql,
             "INSERT OR IGNORE INTO objects (hash, kind, size, data) VALUES (?, ?, ?, ?)",
@@ -132,6 +173,46 @@ impl DoStore {
                 bytes.map_or(V::Null, |b| V::Blob(b.to_vec())),
             ],
         );
+    }
+
+    /// Every object row: address, and whether its bytes are in R2.
+    pub fn rows_all(&self) -> Vec<(Hash, bool)> {
+        rows(&self.sql, "SELECT hash, data IS NULL FROM objects", vec![])
+            .iter()
+            .filter_map(|r| {
+                let r2 = matches!(r[1], V::Integer(1)) || matches!(r[1], V::Boolean(true));
+                hash_of(&r[0]).map(|h| (h, r2))
+            })
+            .collect()
+    }
+
+    /// Objects recorded within `ms` milliseconds.
+    pub fn recent(&self, ms: i64) -> std::collections::BTreeSet<Hash> {
+        let since = worker::Date::now().as_millis() as i64 - ms;
+        rows(
+            &self.sql,
+            "DELETE FROM recent WHERE ts < ?",
+            vec![V::Integer(since)],
+        );
+        rows(&self.sql, "SELECT hash FROM recent", vec![])
+            .iter()
+            .filter_map(|r| hash_of(&r[0]))
+            .collect()
+    }
+
+    /// Forgets everything this repository holds in SQLite, the key first.
+    pub fn wipe(&self) {
+        for t in [
+            "meta",
+            "objects",
+            "refs",
+            "evidence",
+            "change_requests",
+            "approvals",
+            "recent",
+        ] {
+            rows(&self.sql, &format!("DELETE FROM {t}"), vec![]);
+        }
     }
 
     pub fn meta(&self, k: &str) -> Option<Vec<u8>> {

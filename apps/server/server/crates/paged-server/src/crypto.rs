@@ -67,3 +67,31 @@ pub fn unb64_std(s: &str) -> Option<Vec<u8>> {
         .decode(s.trim())
         .ok()
 }
+
+/// Seals an object for R2 under a repository's key (AES-256-GCM). The nonce is
+/// derived from the key and the object's address: one address is one
+/// plaintext, so a nonce never meets two plaintexts.
+pub fn seal(key: &[u8], address: &[u8], plaintext: &[u8]) -> Vec<u8> {
+    use aes_gcm::aead::{Aead, KeyInit};
+    let cipher = aes_gcm::Aes256Gcm::new_from_slice(key).expect("a 32-byte key");
+    let nonce = sha256(&[key, address].concat());
+    cipher
+        .encrypt(aes_gcm::Nonce::from_slice(&nonce[..12]), plaintext)
+        .expect("encryption does not fail")
+}
+
+/// Opens what `seal` sealed; None when the key or the bytes are wrong.
+pub fn open(key: &[u8], address: &[u8], sealed: &[u8]) -> Option<Vec<u8>> {
+    use aes_gcm::aead::{Aead, KeyInit};
+    let cipher = aes_gcm::Aes256Gcm::new_from_slice(key).ok()?;
+    let nonce = sha256(&[key, address].concat());
+    cipher
+        .decrypt(aes_gcm::Nonce::from_slice(&nonce[..12]), sealed)
+        .ok()
+}
+
+pub fn random_bytes(n: usize) -> Vec<u8> {
+    let mut buf = vec![0u8; n];
+    getrandom::getrandom(&mut buf).expect("the platform has a CSPRNG");
+    buf
+}
