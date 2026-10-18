@@ -20,7 +20,7 @@
     "runtime"
   ],
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "bun check -p tsconfig.json",
     "build": "tsup",
     "test": "vitest run",
     "prepublishOnly": "bun run build"

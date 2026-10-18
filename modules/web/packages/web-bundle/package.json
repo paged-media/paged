@@ -11,7 +11,7 @@
     "./manifest.json": "./manifest.json"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --parallel",
     "build": "tsup",
     "prepublishOnly": "bun run build"

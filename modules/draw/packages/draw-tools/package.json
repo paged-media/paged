@@ -9,7 +9,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "bun check -p tsconfig.json",
     "test": "vitest run",
     "build": "tsup src/index.ts --format esm --dts --out-dir dist --clean",
     "prepublishOnly": "bun run build",

@@ -11,7 +11,7 @@
     "./manifest.json": "./manifest.json"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "bun check -p tsconfig.json",
     "test": "vitest run",
     "test:e2e": "vitest run test/pipeline-real.spec.ts test/duckdb-real.spec.ts",
     "test:duckdb": "REQUIRE_REAL_DUCKDB=1 vitest run test/duckdb-real.spec.ts",
