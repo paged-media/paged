@@ -159,7 +159,10 @@ export {
   coreCommandInfos,
   isCoreCommand,
 } from "./core-commands.js";
-export { CORE_WIRE_OPS, type CoreWireOpRow } from "./core-commands.generated.js";
+export {
+  CORE_WIRE_OPS,
+  type CoreWireOpRow,
+} from "./core-commands.generated.js";
 export {
   CORE_CATALOG_ROWS,
   CORE_PATHS,
@@ -217,7 +220,12 @@ export {
   type ValidatePanelSchemaOptions,
 } from "./panel-schema-check.js";
 // §12.8 — list / struct values on property rows: edits lowered to `set`s.
-export { applyValueEdit, defaultValueOf, editValue, planValueEdit } from "./value-edit.js";
+export {
+  applyValueEdit,
+  defaultValueOf,
+  editValue,
+  planValueEdit,
+} from "./value-edit.js";
 export {
   publishObjectList,
   type ObjectListRow,

@@ -21,7 +21,13 @@
 // on drift. (The published-package resolution path is exercised live in CI once
 // @paged-media/introspect-wasm ships catalog.json; here we pin the pure logic.)
 
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
@@ -118,7 +124,10 @@ describe("sync-catalog — leading the published engine", () => {
     dir = mkdtempSync(join(tmpdir(), "sync-catalog-ahead-"));
     pkgDir = join(dir, "consumer");
     mkdirSync(pkgDir, { recursive: true });
-    writeFileSync(join(pkgDir, "package.json"), JSON.stringify({ name: "consumer" }));
+    writeFileSync(
+      join(pkgDir, "package.json"),
+      JSON.stringify({ name: "consumer" }),
+    );
     target = join(dir, "vendored.json");
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -126,7 +135,12 @@ describe("sync-catalog — leading the published engine", () => {
   it("passes when the recorded lead explains the difference", () => {
     publish("0.62.0", '{"hostFunctions":[]}\n');
     writeFileSync(target, CATALOG);
-    const res = checkVendored({ resolveFrom: pkgDir, target, core: null, provenance: AHEAD });
+    const res = checkVendored({
+      resolveFrom: pkgDir,
+      target,
+      core: null,
+      provenance: AHEAD,
+    });
     expect(res.ok).toBe(true);
     expect(res.ahead).toMatch(/protocol 62.*targeting protocol 63/s);
   });
@@ -134,7 +148,12 @@ describe("sync-catalog — leading the published engine", () => {
   it("fails once the publish has caught up and the marker is stale", () => {
     publish("0.63.0", CATALOG);
     writeFileSync(target, CATALOG);
-    const res = checkVendored({ resolveFrom: pkgDir, target, core: null, provenance: AHEAD });
+    const res = checkVendored({
+      resolveFrom: pkgDir,
+      target,
+      core: null,
+      provenance: AHEAD,
+    });
     expect(res.ok).toBe(false);
     expect(res.reason).toMatch(/still claims it LEADS/);
   });
@@ -172,4 +191,3 @@ describe("sync-catalog — leading the published engine", () => {
     expect(String(p.why).length).toBeGreaterThan(120);
   });
 });
-

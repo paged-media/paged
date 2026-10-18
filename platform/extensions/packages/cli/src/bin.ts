@@ -23,7 +23,9 @@ import { main } from "./main";
 // stdout carries the verb's JSON only: the engine and the bundles log through
 // console.log / info / debug, so those go to stderr.
 const toStderr = (...parts: unknown[]): void =>
-  void process.stderr.write(`${parts.map((p) => (typeof p === "string" ? p : String(p))).join(" ")}\n`);
+  void process.stderr.write(
+    `${parts.map((p) => (typeof p === "string" ? p : String(p))).join(" ")}\n`,
+  );
 console.log = toStderr;
 console.info = toStderr;
 console.debug = toStderr;
@@ -33,7 +35,9 @@ main(process.argv.slice(2)).then(
     process.exitCode = code;
   },
   (err) => {
-    process.stderr.write(`${BIN}: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
+    process.stderr.write(
+      `${BIN}: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`,
+    );
     process.exitCode = 2;
   },
 );

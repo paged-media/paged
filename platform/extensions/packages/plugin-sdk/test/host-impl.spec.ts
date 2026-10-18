@@ -76,7 +76,13 @@ function mapBacking() {
 }
 
 const tool = (id: string): ToolContribution =>
-  ({ id, title: "T", icon: "i", group: "g", section: "drawType" }) as ToolContribution;
+  ({
+    id,
+    title: "T",
+    icon: "i",
+    group: "g",
+    section: "drawType",
+  }) as ToolContribution;
 
 describe("contribute — namespace rule + teardown", () => {
   it("accepts namespaced ids and registers", () => {
@@ -158,14 +164,29 @@ describe("document surface", () => {
   it("copies the engine's minted list onto the outcome (a batch's every creation)", async () => {
     const h = host();
     const minted = [
-      { handle: "f", element: { kind: "textFrame", id: "u10" }, storyId: "u11" },
-      { handle: null, element: { kind: "rectangle", id: "u12" }, storyId: null },
+      {
+        handle: "f",
+        element: { kind: "textFrame", id: "u10" },
+        storyId: "u11",
+      },
+      {
+        handle: null,
+        element: { kind: "rectangle", id: "u12" },
+        storyId: null,
+      },
     ];
     h.fake.setNextMutateReply({
       kind: "mutationApplied",
-      payload: { createdId: { kind: "rectangle", id: "u12" }, minted, pageIds: ["p1"] },
+      payload: {
+        createdId: { kind: "rectangle", id: "u12" },
+        minted,
+        pageIds: ["p1"],
+      },
     });
-    const out = await h.host.document.mutate({ op: "batch", args: { ops: [] } } as never);
+    const out = await h.host.document.mutate({
+      op: "batch",
+      args: { ops: [] },
+    } as never);
     expect(out).toEqual({
       applied: true,
       createdId: { kind: "rectangle", id: "u12" },
@@ -180,7 +201,10 @@ describe("document surface", () => {
       kind: "mutationApplied",
       payload: { createdId: null, pageIds: ["p1"] },
     });
-    const out = await h.host.document.mutate({ op: "batch", args: { ops: [] } } as never);
+    const out = await h.host.document.mutate({
+      op: "batch",
+      args: { ops: [] },
+    } as never);
     expect(out.applied).toBe(true);
     expect("minted" in out).toBe(false);
   });
@@ -498,7 +522,10 @@ describe("document.getMetadata / setMetadata (protocol v33)", () => {
 
   it("setMetadata(null) clears the entry", async () => {
     const h = host();
-    await h.host.document.setMetadata({ kind: "textFrame", id: "u10" } as never, null);
+    await h.host.document.setMetadata(
+      { kind: "textFrame", id: "u10" } as never,
+      null,
+    );
     expect(
       (h.fake.mutations[0] as { args: { value: unknown } }).args.value,
     ).toBeNull();
@@ -619,9 +646,7 @@ describe("raw-mutate namespace gate (v34)", () => {
 // declared → allowed, undeclared → typed error (or non-applied outcome
 // for the write doors), warn-mode → logs + proceeds.
 
-const baseManifest = (
-  overrides: Partial<PluginManifest>,
-): PluginManifest => ({
+const baseManifest = (overrides: Partial<PluginManifest>): PluginManifest => ({
   id: "media.paged.cap",
   name: "cap",
   version: "1.0.0",
@@ -644,14 +669,22 @@ const capHost = (
 };
 
 const cTool = (id: string): ToolContribution =>
-  ({ id, title: "T", icon: "i", group: "g", section: "drawType" }) as ToolContribution;
+  ({
+    id,
+    title: "T",
+    icon: "i",
+    group: "g",
+    section: "drawType",
+  }) as ToolContribution;
 
 describe("capability gate — contribution doors", () => {
   it("contribute.tool: declared id allowed", () => {
     const h = capHost(
       baseManifest({ contributes: { tools: ["media.paged.cap.tool.pen"] } }),
     );
-    expect(() => h.host.contribute.tool(cTool("media.paged.cap.tool.pen"))).not.toThrow();
+    expect(() =>
+      h.host.contribute.tool(cTool("media.paged.cap.tool.pen")),
+    ).not.toThrow();
     expect(h.fake.tools.ids()).toEqual(["media.paged.cap.tool.pen"]);
   });
 
@@ -674,10 +707,18 @@ describe("capability gate — contribution doors", () => {
   it("contribute.tool: warn mode logs and proceeds", () => {
     const warns: string[] = [];
     const log = { ...silent, warn: (m: string) => void warns.push(m) };
-    const h = capHost(baseManifest({ contributes: { tools: [] } }), "warn", log);
-    expect(() => h.host.contribute.tool(cTool("media.paged.cap.tool.pen"))).not.toThrow();
+    const h = capHost(
+      baseManifest({ contributes: { tools: [] } }),
+      "warn",
+      log,
+    );
+    expect(() =>
+      h.host.contribute.tool(cTool("media.paged.cap.tool.pen")),
+    ).not.toThrow();
     expect(h.fake.tools.ids()).toEqual(["media.paged.cap.tool.pen"]);
-    expect(warns.some((w) => /contribute\.tool used without declaring/.test(w))).toBe(true);
+    expect(
+      warns.some((w) => /contribute\.tool used without declaring/.test(w)),
+    ).toBe(true);
   });
 
   it("contribute.panel: declared allowed / undeclared throws", () => {
@@ -711,16 +752,24 @@ describe("capability gate — contribution doors", () => {
   it("contribute.keybinding: gated on capabilities.keybindings", () => {
     const ok = capHost(baseManifest({ capabilities: { keybindings: true } }));
     expect(() =>
-      ok.host.contribute.keybinding({ key: "p", command: "media.paged.cap.cmd.x" }),
+      ok.host.contribute.keybinding({
+        key: "p",
+        command: "media.paged.cap.cmd.x",
+      }),
     ).not.toThrow();
     const bad = capHost(baseManifest({}));
     expect(() =>
-      bad.host.contribute.keybinding({ key: "p", command: "media.paged.cap.cmd.x" }),
+      bad.host.contribute.keybinding({
+        key: "p",
+        command: "media.paged.cap.cmd.x",
+      }),
     ).toThrow(/capabilities\.keybindings must be true/);
   });
 
   it("contribute.overlay: gated on rendering 'overlay'", () => {
-    const ok = capHost(baseManifest({ capabilities: { rendering: ["overlay"] } }));
+    const ok = capHost(
+      baseManifest({ capabilities: { rendering: ["overlay"] } }),
+    );
     expect(() =>
       ok.host.contribute.overlay({ id: "media.paged.cap.overlay.x" } as never),
     ).not.toThrow();
@@ -742,7 +791,9 @@ describe("capability gate — contribution doors", () => {
 
 describe("capability gate — document doors", () => {
   it("write doors: declared write allowed", async () => {
-    const h = capHost(baseManifest({ capabilities: { document: { write: "broad" } } }));
+    const h = capHost(
+      baseManifest({ capabilities: { document: { write: "broad" } } }),
+    );
     const out = await h.host.document.mutate({
       op: "insertFrame",
       args: { pageId: "p1", bounds: [0, 0, 1, 1] },
@@ -751,14 +802,18 @@ describe("capability gate — document doors", () => {
   });
 
   it("mutate without document.write → non-applied outcome (never throws)", async () => {
-    const h = capHost(baseManifest({ capabilities: { document: { read: "broad" } } }));
+    const h = capHost(
+      baseManifest({ capabilities: { document: { read: "broad" } } }),
+    );
     const out = await h.host.document.mutate({
       op: "insertFrame",
       args: { pageId: "p1", bounds: [0, 0, 1, 1] },
     } as never);
     expect(out.applied).toBe(false);
     if (!out.applied) {
-      expect(String(out.error)).toMatch(/document\.mutate requires capabilities\.document\.write/);
+      expect(String(out.error)).toMatch(
+        /document\.mutate requires capabilities\.document\.write/,
+      );
     }
     // The engine never saw the mutation.
     expect(h.fake.mutations).toHaveLength(0);
@@ -777,18 +832,24 @@ describe("capability gate — document doors", () => {
   });
 
   it("undo/redo gated on document.write (throw when undeclared)", async () => {
-    const h = capHost(baseManifest({ capabilities: { document: { read: "broad" } } }));
+    const h = capHost(
+      baseManifest({ capabilities: { document: { read: "broad" } } }),
+    );
     await expect(h.host.document.undo()).rejects.toThrow(PluginCapabilityError);
     await expect(h.host.document.redo()).rejects.toThrow(PluginCapabilityError);
   });
 
   it("read doors: declared read allowed / undeclared throws", async () => {
-    const ok = capHost(baseManifest({ capabilities: { document: { read: "broad" } } }));
+    const ok = capHost(
+      baseManifest({ capabilities: { document: { read: "broad" } } }),
+    );
     await expect(ok.host.document.meta()).resolves.toBeDefined();
     await expect(ok.host.document.collection("pages")).resolves.toBeDefined();
     await expect(ok.host.document.tree()).resolves.toBeDefined();
 
-    const bad = capHost(baseManifest({ capabilities: { document: { write: "broad" } } }));
+    const bad = capHost(
+      baseManifest({ capabilities: { document: { write: "broad" } } }),
+    );
     // meta/collection/elementGeometry map 1:1 to the client and gate
     // synchronously (a thrown error, the door-mechanics shape); tree is
     // async and rejects. Both forms name the missing read declaration.
@@ -833,7 +894,9 @@ describe("capability gate — document doors", () => {
   });
 
   it("setMetadata rides the write gate (non-applied when undeclared)", async () => {
-    const h = capHost(baseManifest({ capabilities: { document: { read: "broad" } } }));
+    const h = capHost(
+      baseManifest({ capabilities: { document: { read: "broad" } } }),
+    );
     const out = await h.host.document.setMetadata(
       { kind: "rectangle", id: "u1" } as never,
       { v: 1, data: {} },
@@ -851,14 +914,20 @@ describe("capability gate — selection / overlay", () => {
   });
 
   it("selection.set gated on document.write", async () => {
-    const ok = capHost(baseManifest({ capabilities: { document: { write: "broad" } } }));
+    const ok = capHost(
+      baseManifest({ capabilities: { document: { write: "broad" } } }),
+    );
     await expect(ok.host.selection.set([])).resolves.toEqual([]);
     const bad = capHost(baseManifest({}));
-    await expect(bad.host.selection.set([])).rejects.toThrow(PluginCapabilityError);
+    await expect(bad.host.selection.set([])).rejects.toThrow(
+      PluginCapabilityError,
+    );
   });
 
   it("overlay.setToolPreview gated on rendering 'overlay'", () => {
-    const ok = capHost(baseManifest({ capabilities: { rendering: ["overlay"] } }));
+    const ok = capHost(
+      baseManifest({ capabilities: { rendering: ["overlay"] } }),
+    );
     expect(() => ok.host.overlay.setToolPreview(null)).not.toThrow();
     const bad = capHost(baseManifest({}));
     expect(() => bad.host.overlay.setToolPreview(null)).toThrow(
@@ -931,9 +1000,7 @@ describe("contribute.menu — the menu door", () => {
     // A bundle built against a newer contract must still LOAD on an older
     // host, with the contribution simply absent — never throwing on a
     // registry the host has not wired yet.
-    const h = capHost(
-      baseManifest({ contributes: { commands: [cmd] } }),
-    );
+    const h = capHost(baseManifest({ contributes: { commands: [cmd] } }));
     delete (h.fake.editor.registries as { menus?: unknown }).menus;
     expect(() =>
       h.host.contribute.menu({ path: "Object/Insert thing…", command: cmd }),

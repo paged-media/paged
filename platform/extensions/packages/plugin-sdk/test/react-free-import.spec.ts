@@ -62,10 +62,13 @@ function readPkg(): {
 
 /** TypeScript `module` settings that ALLOW top-level await (TS1378 names
  *  them). Compiling at anything else is what makes it a build error. */
-const TLA_CAPABLE = /^(es2022|esnext|system|node16|node18|node20|nodenext|preserve)$/i;
+const TLA_CAPABLE =
+  /^(es2022|esnext|system|node16|node18|node20|nodenext|preserve)$/i;
 
 function readBuildModule(): string | undefined {
-  const config = JSON.parse(readFileSync(resolve(HERE, "../tsconfig.build.json"), "utf8")) as {
+  const config = JSON.parse(
+    readFileSync(resolve(HERE, "../tsconfig.build.json"), "utf8"),
+  ) as {
     compilerOptions?: { module?: string };
   };
   return config.compilerOptions?.module;
@@ -80,7 +83,8 @@ describe("the published bundle keeps React optional", () => {
       return;
     }
     const bundle = readFileSync(DIST, "utf8");
-    const statics = bundle.match(/^\s*import[^;]*?from\s*["']react["']/gm) ?? [];
+    const statics =
+      bundle.match(/^\s*import[^;]*?from\s*["']react["']/gm) ?? [];
     expect(
       statics,
       "a static react import makes the whole package unloadable without React",
@@ -108,9 +112,14 @@ describe("the published bundle keeps React optional", () => {
     // rather than a consumer's dev server. This asserts the gate is still
     // configured and on the build's path — the build asserts the rest.
     const build = readPkg().scripts?.build ?? "";
-    expect(build, "the build must run the declaration compile").toContain("tsc -p tsconfig.build.json");
+    expect(build, "the build must run the declaration compile").toContain(
+      "tsc -p tsconfig.build.json",
+    );
     const moduleSetting = readBuildModule();
-    expect(moduleSetting, "tsconfig.build.json must pin an explicit module").toBeDefined();
+    expect(
+      moduleSetting,
+      "tsconfig.build.json must pin an explicit module",
+    ).toBeDefined();
     expect(
       TLA_CAPABLE.test(moduleSetting ?? ""),
       `module "${moduleSetting}" allows top-level await; Vite's dep-optimizer ` +

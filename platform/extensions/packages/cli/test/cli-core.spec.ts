@@ -47,35 +47,90 @@ const NP = "--no-plugins";
 describe("get / set", () => {
   it("set story content, save to .paged, get it back from the file", async () => {
     const out = join(tmp.dir, "content.paged");
-    const set = await cli(["set", fx.paged, "story", "content", "Price: 12 €", "-o", out, NP]);
+    const set = await cli([
+      "set",
+      fx.paged,
+      "story",
+      "content",
+      "Price: 12 €",
+      "-o",
+      out,
+      NP,
+    ]);
     expect(set.code).toBe(0);
     expect(set.json.result).toMatchObject({ applied: true, undoSteps: 1 });
     expect(set.json.saved.path).toBe(out);
     const got = await cli(["get", out, "story", "content", NP]);
     expect(got.code).toBe(0);
-    expect(got.json.results[0]).toMatchObject({ path: "content", value: "Price: 12 €" });
+    expect(got.json.results[0]).toMatchObject({
+      path: "content",
+      value: "Price: 12 €",
+    });
     // The input is untouched (-o wrote elsewhere).
-    expect((await cli(["get", fx.paged, fx.story, "content", NP])).json.value).toBe("Hello");
+    expect(
+      (await cli(["get", fx.paged, fx.story, "content", NP])).json.value,
+    ).toBe("Hello");
   });
 
   it("values parse through the schema: a length with a unit becomes points", async () => {
     const out = join(tmp.dir, "stroke.paged");
-    const set = await cli(["set", fx.paged, "rectangle:urect", "frameStrokeWeight", "2mm", "-o", out, NP]);
+    const set = await cli([
+      "set",
+      fx.paged,
+      "rectangle:urect",
+      "frameStrokeWeight",
+      "2mm",
+      "-o",
+      out,
+      NP,
+    ]);
     expect(set.code).toBe(0);
     expect(set.json.value).toBeCloseTo((2 * 72) / 25.4, 6);
-    const got = await cli(["get", out, "rectangle:urect", "frameStrokeWeight", NP]);
+    const got = await cli([
+      "get",
+      out,
+      "rectangle:urect",
+      "frameStrokeWeight",
+      NP,
+    ]);
     expect(got.json.value).toBeCloseTo((2 * 72) / 25.4, 3);
   });
 
   it("no silent coercion: a bad value is refused naming the path and the expected type (exit 1)", async () => {
-    const bad = await cli(["set", fx.paged, "rectangle:urect", "frameStrokeWeight", "thick", "--no-save", NP]);
+    const bad = await cli([
+      "set",
+      fx.paged,
+      "rectangle:urect",
+      "frameStrokeWeight",
+      "thick",
+      "--no-save",
+      NP,
+    ]);
     expect(bad.code).toBe(1);
     expect(bad.json.error.message).toMatch(/frameStrokeWeight/);
     expect(bad.json.error.message).toMatch(/expected length/);
-    const en = await cli(["set", fx.paged, "swatch:Black", "space", "Pantone", "--no-save", NP]);
+    const en = await cli([
+      "set",
+      fx.paged,
+      "swatch:Black",
+      "space",
+      "Pantone",
+      "--no-save",
+      NP,
+    ]);
     expect(en.code).toBe(1);
-    expect(en.json.error.message).toMatch(/space.*expected enum \(CMYK \| RGB \| LAB \| Gray\)/);
-    const ro = await cli(["set", fx.paged, "doc", "pageCount", "3", "--no-save", NP]);
+    expect(en.json.error.message).toMatch(
+      /space.*expected enum \(CMYK \| RGB \| LAB \| Gray\)/,
+    );
+    const ro = await cli([
+      "set",
+      fx.paged,
+      "doc",
+      "pageCount",
+      "3",
+      "--no-save",
+      NP,
+    ]);
     expect(ro.code).toBe(1);
     expect(ro.json.error.message).toMatch(/pageCount: is derived/);
   });
@@ -83,37 +138,83 @@ describe("get / set", () => {
   it("get without a path reads every row; a refused read exits 1", async () => {
     const all = await cli(["get", fx.paged, "swatch:Black", NP]);
     expect(all.code).toBe(0);
-    expect(all.json.values).toMatchObject({ name: "Black", value: [0, 0, 0, 100] });
+    expect(all.json.values).toMatchObject({
+      name: "Black",
+      value: [0, 0, 0, 100],
+    });
     const miss = await cli(["get", fx.paged, "page:#9", "index", NP]);
     expect(miss.code).toBe(1);
-    expect(miss.json.result).toMatchObject({ kind: "refused", code: "unknownAddress" });
+    expect(miss.json.result).toMatchObject({
+      kind: "refused",
+      code: "unknownAddress",
+    });
   });
 
   it("a selector sets every match in one write", async () => {
     const out = join(tmp.dir, "sel.paged");
-    const set = await cli(["set", fx.paged, "swatch[name=Black]", "value", "[0,0,0,40]", "-o", out, NP]);
+    const set = await cli([
+      "set",
+      fx.paged,
+      "swatch[name=Black]",
+      "value",
+      "[0,0,0,40]",
+      "-o",
+      out,
+      NP,
+    ]);
     expect(set.code).toBe(0);
     expect(set.json.targets).toEqual(["swatch:Color/Black"]);
-    expect((await cli(["get", out, "swatch:Black", "value", NP])).json.value).toEqual([0, 0, 0, 40]);
+    expect(
+      (await cli(["get", out, "swatch:Black", "value", NP])).json.value,
+    ).toEqual([0, 0, 0, 40]);
   });
 });
 
 describe("query / schema", () => {
   it("query by name and by label", async () => {
-    expect((await cli(["query", fx.paged, "swatch[name=Black]", NP])).json.addresses).toEqual(["swatch:Color/Black"]);
-    const byLabel = await cli(["query", fx.paged, "frame[label.x-paged:media.paged.harness*=hero]", NP]);
+    expect(
+      (await cli(["query", fx.paged, "swatch[name=Black]", NP])).json.addresses,
+    ).toEqual(["swatch:Color/Black"]);
+    const byLabel = await cli([
+      "query",
+      fx.paged,
+      "frame[label.x-paged:media.paged.harness*=hero]",
+      NP,
+    ]);
     expect(byLabel.code).toBe(0);
     expect(byLabel.json.addresses).toEqual(["rectangle:urect"]);
-    expect((await cli(["query", fx.paged, "frame[label.x-paged:media.paged.harness*=villain]", NP])).json.addresses).toEqual([]);
-    expect((await cli(["query", fx.paged, "page:#1 > frame", NP])).json.addresses).toEqual(expect.arrayContaining(["rectangle:urect", fx.frame]));
+    expect(
+      (
+        await cli([
+          "query",
+          fx.paged,
+          "frame[label.x-paged:media.paged.harness*=villain]",
+          NP,
+        ])
+      ).json.addresses,
+    ).toEqual([]);
+    expect(
+      (await cli(["query", fx.paged, "page:#1 > frame", NP])).json.addresses,
+    ).toEqual(expect.arrayContaining(["rectangle:urect", fx.frame]));
   });
 
   it("schema lists kinds and a kind's typed rows", async () => {
     const kinds = await cli(["schema", fx.paged, NP]);
-    expect(kinds.json.kinds.map((k: { kind: string }) => k.kind)).toEqual(expect.arrayContaining(["doc", "frame", "story", "swatch", "style"]));
+    expect(kinds.json.kinds.map((k: { kind: string }) => k.kind)).toEqual(
+      expect.arrayContaining(["doc", "frame", "story", "swatch", "style"]),
+    );
     const story = await cli(["schema", fx.paged, "story", NP]);
-    expect(story.json.rows.find((r: { path: string }) => r.path === "content")).toMatchObject({ type: { kind: "text" } });
-    const text = await cli(["schema", fx.paged, "swatch", "--format", "text", NP]);
+    expect(
+      story.json.rows.find((r: { path: string }) => r.path === "content"),
+    ).toMatchObject({ type: { kind: "text" } });
+    const text = await cli([
+      "schema",
+      fx.paged,
+      "swatch",
+      "--format",
+      "text",
+      NP,
+    ]);
     expect(text.out).toMatch(/space\s+enum \(CMYK \| RGB \| LAB \| Gray\)/);
   });
 });
@@ -127,39 +228,74 @@ describe("batch", () => {
         label: "two writes",
         ops: [
           { op: "set", address: fx.story, path: "content", value: "Batched" },
-          { op: "set", address: "swatch:Black", path: "value", value: [0, 0, 0, 70] },
+          {
+            op: "set",
+            address: "swatch:Black",
+            path: "value",
+            value: [0, 0, 0, 70],
+          },
         ],
       }),
     );
     // In-process with a kept session, so the undo history is observable.
     let s: CliSession | null = null;
     const verb = VERBS.find((v) => v.name === "batch")!;
-    const args = parseArgs([fx.paged, ops, "--no-save"], [...verb.options, ...GLOBAL_OPTIONS]);
-    const res = await verb.run({ args, cwd: tmp.dir, session: async (doc) => (s ??= await openSession(doc, { plugins: [] })) });
+    const args = parseArgs(
+      [fx.paged, ops, "--no-save"],
+      [...verb.options, ...GLOBAL_OPTIONS],
+    );
+    const res = await verb.run({
+      args,
+      cwd: tmp.dir,
+      session: async (doc) => (s ??= await openSession(doc, { plugins: [] })),
+    });
     expect(res.exit ?? 0).toBe(0);
-    expect(res.json).toMatchObject({ ops: 2, result: { applied: true, undoSteps: 1 }, saved: null });
+    expect(res.json).toMatchObject({
+      ops: 2,
+      result: { applied: true, undoSteps: 1 },
+      saved: null,
+    });
     const o = s!.h.objects;
-    expect(await o.get(fx.story, "content")).toEqual({ kind: "value", value: "Batched" });
+    expect(await o.get(fx.story, "content")).toEqual({
+      kind: "value",
+      value: "Batched",
+    });
     await s!.driver.document.undo();
-    expect(await o.get(fx.story, "content")).toEqual({ kind: "value", value: "Hello" });
-    expect(await o.get("swatch:Black", "value")).toEqual({ kind: "value", value: [0, 0, 0, 100] });
+    expect(await o.get(fx.story, "content")).toEqual({
+      kind: "value",
+      value: "Hello",
+    });
+    expect(await o.get("swatch:Black", "value")).toEqual({
+      kind: "value",
+      value: [0, 0, 0, 100],
+    });
     s!.dispose();
 
     const out = join(tmp.dir, "batched.paged");
     const viaCli = await cli(["batch", fx.paged, ops, "-o", out, NP]);
     expect(viaCli.code).toBe(0);
-    expect((await cli(["get", out, "swatch:Black", "value", NP])).json.value).toEqual([0, 0, 0, 70]);
+    expect(
+      (await cli(["get", out, "swatch:Black", "value", NP])).json.value,
+    ).toEqual([0, 0, 0, 70]);
   });
 
   it("a refused op applies nothing and exits 1", async () => {
     const ops = join(tmp.dir, "bad-ops.json");
-    writeFileSync(ops, JSON.stringify([
-      { op: "set", address: fx.story, path: "content", value: "never" },
-      { op: "set", address: "swatch:Black", path: "space", value: "Pantone" },
-    ]));
+    writeFileSync(
+      ops,
+      JSON.stringify([
+        { op: "set", address: fx.story, path: "content", value: "never" },
+        { op: "set", address: "swatch:Black", path: "space", value: "Pantone" },
+      ]),
+    );
     const r = await cli(["batch", fx.paged, ops, "--no-save", NP]);
     expect(r.code).toBe(1);
-    expect(r.json.result).toMatchObject({ applied: false, code: "invalidValue", index: 1, undoSteps: 0 });
+    expect(r.json.result).toMatchObject({
+      applied: false,
+      code: "invalidValue",
+      index: 1,
+      undoSteps: 0,
+    });
   });
 });
 
@@ -176,17 +312,32 @@ describe("run", () => {
       }`,
     );
     const out = join(tmp.dir, "ran.paged");
-    const r = await cli(["run", fx.paged, script, "-o", out, NP, "--", "a", "b"]);
+    const r = await cli([
+      "run",
+      fx.paged,
+      script,
+      "-o",
+      out,
+      NP,
+      "--",
+      "a",
+      "b",
+    ]);
     expect(r.code).toBe(0);
     expect(r.json.result).toBe("From a script a,b");
     expect(r.json.writes).toBe(1);
     expect(r.json.logs[0]).toMatch(/^kinds \d+/);
-    expect((await cli(["get", out, "story", "content", NP])).json.results[0].value).toBe("From a script a,b");
+    expect(
+      (await cli(["get", out, "story", "content", NP])).json.results[0].value,
+    ).toBe("From a script a,b");
   });
 
   it("a throwing script exits 1 with its message", async () => {
     const script = join(tmp.dir, "boom.mjs");
-    writeFileSync(script, "export default async (paged) => { await paged.value('page:#9', 'index'); };");
+    writeFileSync(
+      script,
+      "export default async (paged) => { await paged.value('page:#9', 'index'); };",
+    );
     const r = await cli(["run", fx.paged, script, "--no-save", NP]);
     expect(r.code).toBe(1);
     expect(r.json.error.message).toMatch(/unknownAddress/);
@@ -202,7 +353,9 @@ describe("get without a path (getAll)", () => {
     const full = await cli(["get", fx.paged, fx.story, "--content", NP]);
     expect(full.code).toBe(0);
     expect(full.json.values.content).toBe("Hello");
-    expect(Object.keys(full.json.values)).toEqual(expect.arrayContaining(Object.keys(lean.json.values)));
+    expect(Object.keys(full.json.values)).toEqual(
+      expect.arrayContaining(Object.keys(lean.json.values)),
+    );
   });
 });
 
@@ -225,14 +378,28 @@ describe("export", () => {
     const bytes = readFileSync(out);
     expect(bytes.subarray(0, 2).toString("latin1")).toBe("PK");
     expect(bytes.subarray(30, 38).toString("latin1")).toBe("mimetype");
-    expect(bytes.toString("latin1")).toContain("application/vnd.adobe.indesign-idml-package");
-    expect((await cli(["get", out, "story", "content", NP])).json.results[0].value).toBe("Hello");
+    expect(bytes.toString("latin1")).toContain(
+      "application/vnd.adobe.indesign-idml-package",
+    );
+    expect(
+      (await cli(["get", out, "story", "content", NP])).json.results[0].value,
+    ).toBe("Hello");
   });
 
   it("an unknown format names the known ones (exit 2)", async () => {
-    const r = await cli(["export", fx.paged, "--format", "psd", "-o", join(tmp.dir, "x.psd"), NP]);
+    const r = await cli([
+      "export",
+      fx.paged,
+      "--format",
+      "psd",
+      "-o",
+      join(tmp.dir, "x.psd"),
+      NP,
+    ]);
     expect(r.code).toBe(2);
-    expect(r.json.error.message).toMatch(/no exporter for "psd" — known: pdf, idml, paged/);
+    expect(r.json.error.message).toMatch(
+      /no exporter for "psd" — known: pdf, idml, paged/,
+    );
   });
 });
 
@@ -249,17 +416,37 @@ describe("usage, help and exit codes", () => {
     expect((await cli(["frobnicate"])).code).toBe(2);
     expect((await cli(["get", fx.paged])).code).toBe(2);
     expect((await cli(["get", fx.paged, "doc", "--bogus"])).code).toBe(2);
-    expect((await cli(["get", join(tmp.dir, "missing.paged"), "doc", NP])).code).toBe(2);
-    expect((await cli(["get", join(tmp.dir, "x.txt"), "doc", NP])).code).toBe(2);
+    expect(
+      (await cli(["get", join(tmp.dir, "missing.paged"), "doc", NP])).code,
+    ).toBe(2);
+    expect((await cli(["get", join(tmp.dir, "x.txt"), "doc", NP])).code).toBe(
+      2,
+    );
     expect((await cli(["query", fx.paged, "]]", NP])).code).toBe(2);
     const text = await cli(["get", fx.paged, "doc", "--format", "yaml", NP]);
     expect(text.code).toBe(2);
   });
 
   it("--text renders for humans and errors go to stderr", async () => {
-    const r = await cli(["get", fx.paged, "swatch:Black", "value", "--text", NP]);
+    const r = await cli([
+      "get",
+      fx.paged,
+      "swatch:Black",
+      "value",
+      "--text",
+      NP,
+    ]);
     expect(r.out).toBe("swatch:Black value = [0,0,0,100]");
-    const e = await cli(["set", fx.paged, "swatch:Black", "space", "X", "--text", "--no-save", NP]);
+    const e = await cli([
+      "set",
+      fx.paged,
+      "swatch:Black",
+      "space",
+      "X",
+      "--text",
+      "--no-save",
+      NP,
+    ]);
     expect(e.code).toBe(1);
     expect(e.out).toBe("");
     expect(e.err).toMatch(/^paged-node: swatch:Black space/);
@@ -268,17 +455,25 @@ describe("usage, help and exit codes", () => {
   // The command is `paged-node`: core's Rust CLI installs `paged`, and the
   // two would shadow each other on one PATH (ADR 324 §5).
   it("the command is named paged-node: bin, help, usage and error lines", async () => {
-    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+    const pkg = JSON.parse(
+      readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+    );
     expect(pkg.bin).toEqual({ "paged-node": "./dist/bin.js" });
     expect(BIN).toBe("paged-node");
     const help = await cli(["--help"]);
-    expect(help.out.split("\n")[0]).toMatch(/^paged-node \S+ — the paged Node CLI/);
+    expect(help.out.split("\n")[0]).toMatch(
+      /^paged-node \S+ — the paged Node CLI/,
+    );
     expect(help.out).toContain("usage: paged-node <verb> [args] [options]");
     expect(help.out).toContain("Run `paged-node <verb> --help`");
     expect(help.out).toContain("(`paged-node commands` lists them;");
     // No line names the command `paged` on its own.
-    expect(help.out).not.toMatch(/(^|[\s`])paged (<verb>|commands|[a-z]+ --help)/m);
-    expect((await cli(["get", "--help"])).out.split("\n")[0]).toBe(`paged-node get ${VERBS.find((v) => v.name === "get")!.usage}`);
+    expect(help.out).not.toMatch(
+      /(^|[\s`])paged (<verb>|commands|[a-z]+ --help)/m,
+    );
+    expect((await cli(["get", "--help"])).out.split("\n")[0]).toBe(
+      `paged-node get ${VERBS.find((v) => v.name === "get")!.usage}`,
+    );
     const usage = await cli(["get", fx.paged]);
     expect(usage.code).toBe(2);
     expect(usage.json.error.message).toMatch(/^usage: paged-node get /);
@@ -292,7 +487,11 @@ describe("cli_surface — every host.objects member is reached by a verb", () =>
       // `register` and `tracked` are the registry's host-side members
       // (not `ObjectsSurface`): plugins register, the script bridge listens.
       const internal = new Set(["register", "tracked"]);
-      const members = Object.keys(s.h.objects).filter((k) => typeof (s.h.objects as unknown as Record<string, unknown>)[k] === "function" && !internal.has(k));
+      const members = Object.keys(s.h.objects).filter(
+        (k) =>
+          typeof (s.h.objects as unknown as Record<string, unknown>)[k] ===
+            "function" && !internal.has(k),
+      );
       const reached = new Set(VERBS.flatMap((v) => v.reaches));
       expect(members.filter((m) => !reached.has(m))).toEqual([]);
       expect([...reached].filter((m) => !members.includes(m))).toEqual([]);

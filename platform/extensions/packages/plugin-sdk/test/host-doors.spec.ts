@@ -107,11 +107,15 @@ describe("host doors — measurement / picker / widgets / frame-chain / scene-la
   // silently fell back to the unedited source because supports() said false.
   it("document.storyContent forwards requestStoryContent and is advertised", async () => {
     const fake = makeFakeEditor();
-    const { host } = createBundleHost(() => fake.editor, manifest({ document: { read: "broad" } }), {
-      console: silent,
-      storage: mapBacking(),
-      capabilityMode: "enforce",
-    });
+    const { host } = createBundleHost(
+      () => fake.editor,
+      manifest({ document: { read: "broad" } }),
+      {
+        console: silent,
+        storage: mapBacking(),
+        capabilityMode: "enforce",
+      },
+    );
     expect(host.supports("document.readStory@1")).toBe(true);
     // The fake engine does not answer the kind, so the honest result is null.
     expect(await host.document.storyContent("story-1")).toBeNull();

@@ -120,7 +120,8 @@ export interface WidgetSurface {
  *  `kind` when given), a selector, or explicit addresses. (A schema row
  *  can also name a published binding; a React panel has its state at hand
  *  and passes the addresses.) */
-export type PropertyFieldTarget = "selection" | Selector | { addresses: readonly Address[] };
+export type PropertyFieldTarget =
+  "selection" | Selector | { addresses: readonly Address[] };
 
 /** Props of {@link WidgetSurface.PropertyField}. */
 export interface PropertyFieldProps {

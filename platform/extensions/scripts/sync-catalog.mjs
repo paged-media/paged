@@ -51,10 +51,9 @@ const RESOLVE_FROM =
 const CORE_CANDIDATES = [
   resolve(ROOT, "../../engine/core/crates/paged-introspect/catalog.json"),
 ];
-const CORE_CATALOG =
-  process.env.CORE_REPO
-    ? resolve(process.env.CORE_REPO, "crates/paged-introspect/catalog.json")
-    : CORE_CANDIDATES.find((c) => existsSync(c));
+const CORE_CATALOG = process.env.CORE_REPO
+  ? resolve(process.env.CORE_REPO, "crates/paged-introspect/catalog.json")
+  : CORE_CANDIDATES.find((c) => existsSync(c));
 const PKG = "@paged-media/introspect-wasm";
 const CATALOG_FILE = "catalog.json";
 
@@ -78,10 +77,13 @@ export function provenance() {
 /** The claims a provenance record must actually make. */
 export function validateProvenance(p) {
   for (const key of ["source", "targetsProtocol", "aheadOfPublished", "why"]) {
-    if (p[key] === undefined) throw new Error(`sync-catalog: provenance is missing "${key}"`);
+    if (p[key] === undefined)
+      throw new Error(`sync-catalog: provenance is missing "${key}"`);
   }
   if (p.aheadOfPublished && String(p.why).length < 120) {
-    throw new Error("sync-catalog: leading the published engine costs a real explanation, not a phrase");
+    throw new Error(
+      "sync-catalog: leading the published engine costs a real explanation, not a phrase",
+    );
   }
   return p;
 }
@@ -96,7 +98,8 @@ function protocolOf(version) {
 export function resolveSource(opts = {}) {
   if (opts.source) {
     const path = resolve(opts.source);
-    if (!existsSync(path)) throw new Error(`sync-catalog: --source not found: ${path}`);
+    if (!existsSync(path))
+      throw new Error(`sync-catalog: --source not found: ${path}`);
     return { path, version: "unknown" };
   }
   const from = opts.resolveFrom ?? RESOLVE_FROM;
@@ -104,7 +107,9 @@ export function resolveSource(opts = {}) {
   try {
     req = createRequire(pathToFileURL(resolve(from, "package.json")));
   } catch (err) {
-    throw new Error(`sync-catalog: cannot anchor require at ${from} (${String(err)})`);
+    throw new Error(
+      `sync-catalog: cannot anchor require at ${from} (${String(err)})`,
+    );
   }
   let pkgJsonPath;
   try {
@@ -158,7 +163,10 @@ export function checkVendored(opts = {}) {
     if (opts.provenance) prov = validateProvenance(opts.provenance);
     else if (vendored) prov = provenance();
   } catch (err) {
-    return { ok: false, reason: String(err.message ?? err).replace(/^sync-catalog:\s*/, "") };
+    return {
+      ok: false,
+      reason: String(err.message ?? err).replace(/^sync-catalog:\s*/, ""),
+    };
   }
 
   // Strictest available comparison: core's own generated catalog, which
@@ -177,14 +185,21 @@ export function checkVendored(opts = {}) {
           "core is the source the published package is built from, so this comparison is the strict one.",
       };
     }
-    return { ok: true, version: `core (protocol ${prov.targetsProtocol})`, against: "core" };
+    return {
+      ok: true,
+      version: `core (protocol ${prov.targetsProtocol})`,
+      against: "core",
+    };
   }
 
   let src;
   try {
     src = resolveSource(opts);
   } catch (err) {
-    return { ok: false, reason: String(err.message ?? err).replace(/^sync-catalog:\s*/, "") };
+    return {
+      ok: false,
+      reason: String(err.message ?? err).replace(/^sync-catalog:\s*/, ""),
+    };
   }
   const fresh = buildVendored(src);
   const publishedProtocol = protocolOf(src.version);
@@ -203,7 +218,11 @@ export function checkVendored(opts = {}) {
     return { ok: true, version: src.version, against: "npm" };
   }
 
-  if (prov?.aheadOfPublished && publishedProtocol !== null && prov.targetsProtocol > publishedProtocol) {
+  if (
+    prov?.aheadOfPublished &&
+    publishedProtocol !== null &&
+    prov.targetsProtocol > publishedProtocol
+  ) {
     return {
       ok: true,
       version: src.version,
@@ -239,7 +258,8 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a === "--check") out.check = true;
     else if (a === "--source") out.source = argv[++i];
-    else if (a.startsWith("--source=")) out.source = a.slice("--source=".length);
+    else if (a.startsWith("--source="))
+      out.source = a.slice("--source=".length);
   }
   return out;
 }

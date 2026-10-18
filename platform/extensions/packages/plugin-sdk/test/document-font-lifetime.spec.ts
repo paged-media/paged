@@ -38,7 +38,12 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "bun:test";
 
-import type { BundleHost, ElementId, PagedBundle, PluginManifest } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  PagedBundle,
+  PluginManifest,
+} from "@paged-media/plugin-api";
 
 import { createBundleHost } from "../src";
 import { createHeadlessHost, type HeadlessHost } from "../src/harness";
@@ -48,7 +53,9 @@ import { minimalIdml } from "./fixtures/minimal-idml";
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const FACE = new Uint8Array(readFileSync(join(HERE, "fixtures", "fonts", "SpaceGrotesk-VF.ttf")));
+const FACE = new Uint8Array(
+  readFileSync(join(HERE, "fixtures", "fonts", "SpaceGrotesk-VF.ttf")),
+);
 const FAMILY = "Space Grotesk";
 
 const manifest = (id = "media.paged.test"): PluginManifest => ({
@@ -56,7 +63,10 @@ const manifest = (id = "media.paged.test"): PluginManifest => ({
   name: "test",
   version: "1.0.0",
   apiVersion: "^0.2",
-  capabilities: { assets: ["fonts"], document: { read: "broad", write: "broad" } },
+  capabilities: {
+    assets: ["fonts"],
+    document: { read: "broad", write: "broad" },
+  },
 });
 
 type FontRow = { family: string; isMissing: boolean };
@@ -70,11 +80,17 @@ async function openNaming(h: HeadlessHost, family = FAMILY): Promise<string> {
       ops: [
         { op: "insertTextFrame", args: { pageId, bounds: [72, 72, 200, 400] } },
         { op: "bindCreated", args: { handle: "t" } },
-        { op: "insertText", args: { storyId: "$h:t", offset: 0, text: "Grotesk" } },
+        {
+          op: "insertText",
+          args: { storyId: "$h:t", offset: 0, text: "Grotesk" },
+        },
         {
           op: "setElementProperty",
           args: {
-            elementId: { kind: "storyRange", id: { story_id: "$h:t", start: 0, end: 7 } } as unknown as ElementId,
+            elementId: {
+              kind: "storyRange",
+              id: { story_id: "$h:t", start: 0, end: 7 },
+            } as unknown as ElementId,
             path: "characterFontFamily",
             value: { type: "text", value: family },
           },
@@ -87,14 +103,23 @@ async function openNaming(h: HeadlessHost, family = FAMILY): Promise<string> {
 }
 
 /** Whether the open document reports `family` missing (its Fonts row). */
-async function missing(host: BundleHost, family = FAMILY): Promise<boolean | undefined> {
+async function missing(
+  host: BundleHost,
+  family = FAMILY,
+): Promise<boolean | undefined> {
   const rows = await host.document.collection<FontRow>("fonts");
   return rows.find((f) => f.family === family)?.isMissing;
 }
 
 /** Whether the engine's document registry holds a face of `family`. */
-async function registryHolds(host: BundleHost, family: string): Promise<boolean> {
-  const reply = await host.editor.client.send({ kind: "requestFontFaceBytes", payload: { family, style: null } });
+async function registryHolds(
+  host: BundleHost,
+  family: string,
+): Promise<boolean> {
+  const reply = await host.editor.client.send({
+    kind: "requestFontFaceBytes",
+    payload: { family, style: null },
+  });
   return reply.kind === "fontFaceBytes" && reply.payload.found;
 }
 
@@ -115,7 +140,9 @@ describe("a document face lives as long as its document (ADR 330, headless host)
     h = await createHeadlessHost({ console: silent });
     await openNaming(h);
     expect(await missing(h.host)).toBe(true);
-    expect((await h.host.assets.registerDocumentFont(FACE, FAMILY)).status).toBe("registered");
+    expect(
+      (await h.host.assets.registerDocumentFont(FACE, FAMILY)).status,
+    ).toBe("registered");
     expect(await missing(h.host)).toBe(false);
 
     // Close it: another document that names the family but holds no face.
@@ -123,14 +150,18 @@ describe("a document face lives as long as its document (ADR 330, headless host)
     expect(await missing(h.host)).toBe(true);
     expect(await registryHolds(h.host, FAMILY)).toBe(false);
     // So the door gives it to this document again, rather than answering held.
-    expect((await h.host.assets.registerDocumentFont(FACE, FAMILY)).status).toBe("registered");
+    expect(
+      (await h.host.assets.registerDocumentFont(FACE, FAMILY)).status,
+    ).toBe("registered");
     expect(await missing(h.host)).toBe(false);
   });
 
   it("File ▸ New drops it too", async () => {
     h = await createHeadlessHost({ console: silent });
     await openNaming(h);
-    expect((await h.host.assets.registerDocumentFont(FACE, FAMILY)).status).toBe("registered");
+    expect(
+      (await h.host.assets.registerDocumentFont(FACE, FAMILY)).status,
+    ).toBe("registered");
     await h.newBlank(612, 792);
     expect(await registryHolds(h.host, FAMILY)).toBe(false);
   });
@@ -144,7 +175,8 @@ describe("a document face lives as long as its document (ADR 330, headless host)
       activate(host) {
         // The bundle's load path: the faces the document needs, given on open.
         host.document.onDidOpen(() => {
-          if (reRegister) given.push(host.assets.registerDocumentFont(FACE, FAMILY));
+          if (reRegister)
+            given.push(host.assets.registerDocumentFont(FACE, FAMILY));
         });
         return { dispose() {} };
       },
@@ -152,7 +184,9 @@ describe("a document face lives as long as its document (ADR 330, headless host)
     h.loadBundle(bundle);
     const host = h.host;
     await openNaming(h);
-    expect((await host.assets.registerDocumentFont(FACE, FAMILY)).status).toBe("registered");
+    expect((await host.assets.registerDocumentFont(FACE, FAMILY)).status).toBe(
+      "registered",
+    );
 
     // Reopened by a bundle that does not give the face again: missing.
     await openNaming(h);
@@ -161,7 +195,9 @@ describe("a document face lives as long as its document (ADR 330, headless host)
     // Reopened by one that does: the face is back, in this document only.
     reRegister = true;
     await openNaming(h);
-    expect(await Promise.all(given)).toEqual([expect.objectContaining({ status: "registered" })]);
+    expect(await Promise.all(given)).toEqual([
+      expect.objectContaining({ status: "registered" }),
+    ]);
     expect(await missing(host)).toBe(false);
   });
 
@@ -170,10 +206,17 @@ describe("a document face lives as long as its document (ADR 330, headless host)
     await openNaming(h);
     const sessionFace = await h.host.editor.client.send({
       kind: "registerFont",
-      payload: { family: "Session Face", style: null, bytes: Array.from(FACE), scope: "document" },
+      payload: {
+        family: "Session Face",
+        style: null,
+        bytes: Array.from(FACE),
+        scope: "document",
+      },
     });
     expect(sessionFace.kind).toBe("fontRegistered");
-    expect((await h.host.assets.registerDocumentFont(FACE, FAMILY)).status).toBe("registered");
+    expect(
+      (await h.host.assets.registerDocumentFont(FACE, FAMILY)).status,
+    ).toBe("registered");
 
     await openNaming(h);
     expect(await registryHolds(h.host, "Session Face")).toBe(true);
@@ -183,7 +226,9 @@ describe("a document face lives as long as its document (ADR 330, headless host)
   it("a load that fails leaves the open document with its faces", async () => {
     h = await createHeadlessHost({ console: silent });
     await openNaming(h);
-    expect((await h.host.assets.registerDocumentFont(FACE, FAMILY)).status).toBe("registered");
+    expect(
+      (await h.host.assets.registerDocumentFont(FACE, FAMILY)).status,
+    ).toBe("registered");
     await expect(h.load(new Uint8Array([1, 2, 3, 4]))).rejects.toThrow();
     expect(await registryHolds(h.host, FAMILY)).toBe(true);
     expect(await missing(h.host)).toBe(false);
@@ -193,7 +238,9 @@ describe("a document face lives as long as its document (ADR 330, headless host)
     h = await createHeadlessHost({ console: silent });
     const out = await h.host.assets.registerDocumentFont(FACE, FAMILY);
     expect(out.status).toBe("refused");
-    expect(out.status === "refused" && out.reason).toMatch(/no document is open/);
+    expect(out.status === "refused" && out.reason).toMatch(
+      /no document is open/,
+    );
     expect(await registryHolds(h.host, FAMILY)).toBe(false);
   });
 });
@@ -205,32 +252,62 @@ describe("registerDocumentFont through the host's document-scoped registration (
     return b;
   };
 
-  function fakeHost(scoped?: (family: string, bytes: Uint8Array, style: string | null) => Promise<unknown>) {
+  function fakeHost(
+    scoped?: (
+      family: string,
+      bytes: Uint8Array,
+      style: string | null,
+    ) => Promise<unknown>,
+  ) {
     const fake = makeFakeEditor();
     fake.onSend("requestFontFaceBytes", (payload) => {
-      const { family, style } = payload as { family: string; style: string | null };
+      const { family, style } = payload as {
+        family: string;
+        style: string | null;
+      };
       return {
         kind: "fontFaceBytes",
-        payload: { found: false, family, style, postscriptName: null, format: "", bytes: [] },
+        payload: {
+          found: false,
+          family,
+          style,
+          postscriptName: null,
+          format: "",
+          bytes: [],
+        },
       };
     });
     fake.onSend("registerFont", (payload) => ({
       kind: "fontRegistered",
-      payload: { family: (payload as { family: string }).family, pageIds: ["p1"] },
+      payload: {
+        family: (payload as { family: string }).family,
+        pageIds: ["p1"],
+      },
     }));
-    if (scoped) (fake.editor.client as unknown as { registerDocumentFont: typeof scoped }).registerDocumentFont = scoped;
-    const { host } = createBundleHost(() => fake.editor as never, manifest(), { console: silent });
+    if (scoped)
+      (
+        fake.editor.client as unknown as { registerDocumentFont: typeof scoped }
+      ).registerDocumentFont = scoped;
+    const { host } = createBundleHost(() => fake.editor as never, manifest(), {
+      console: silent,
+    });
     return { fake, host };
   }
 
   it("forwards to the client's registration, so the host scopes it, and advertises @2", async () => {
-    const calls: Array<{ family: string; bytes: number; style: string | null }> = [];
+    const calls: Array<{
+      family: string;
+      bytes: number;
+      style: string | null;
+    }> = [];
     const { fake, host } = fakeHost(async (family, bytes, style) => {
       calls.push({ family, bytes: bytes.byteLength, style });
       return { kind: "fontRegistered", payload: { family, pageIds: ["p2"] } };
     });
     expect(host.supports("assets.documentFont@2")).toBe(true);
-    expect(await host.assets.registerDocumentFont(ttf(), "Brand", "Bold")).toEqual({
+    expect(
+      await host.assets.registerDocumentFont(ttf(), "Brand", "Bold"),
+    ).toEqual({
       status: "registered",
       pageIds: ["p2"],
     });
@@ -252,7 +329,9 @@ describe("registerDocumentFont through the host's document-scoped registration (
     const { fake, host } = fakeHost();
     expect(host.supports("assets.documentFont@1")).toBe(true);
     expect(host.supports("assets.documentFont@2")).toBe(false);
-    expect((await host.assets.registerDocumentFont(ttf(), "Brand")).status).toBe("registered");
+    expect(
+      (await host.assets.registerDocumentFont(ttf(), "Brand")).status,
+    ).toBe("registered");
     expect(fake.sent.filter((m) => m.kind === "registerFont")).toHaveLength(1);
   });
 });

@@ -43,33 +43,83 @@ describe.skipIf(!existsSync(BIN))("dist/bin.js", () => {
   afterAll(() => tmp.done());
 
   it("prints clean JSON on stdout and exits 0", () => {
-    const out = execFileSync(process.execPath, [BIN, "get", fx.paged, "swatch:Black", "value", "--no-plugins"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-    expect(JSON.parse(out)).toEqual({ address: "swatch:Black", path: "value", value: [0, 0, 0, 100] });
+    const out = execFileSync(
+      process.execPath,
+      [BIN, "get", fx.paged, "swatch:Black", "value", "--no-plugins"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    );
+    expect(JSON.parse(out)).toEqual({
+      address: "swatch:Black",
+      path: "value",
+      value: [0, 0, 0, 100],
+    });
   });
 
   it("exits 1 on a refused write and 2 on a usage error", () => {
-    const refused = spawnSync(process.execPath, [BIN, "set", fx.paged, "swatch:Black", "space", "X", "--no-save", "--no-plugins"], { encoding: "utf8" });
+    const refused = spawnSync(
+      process.execPath,
+      [
+        BIN,
+        "set",
+        fx.paged,
+        "swatch:Black",
+        "space",
+        "X",
+        "--no-save",
+        "--no-plugins",
+      ],
+      { encoding: "utf8" },
+    );
     expect(refused.status).toBe(1);
     expect(JSON.parse(refused.stdout).error.exit).toBe(1);
-    expect(spawnSync(process.execPath, [BIN, "nope"], { encoding: "utf8" }).status).toBe(2);
+    expect(
+      spawnSync(process.execPath, [BIN, "nope"], { encoding: "utf8" }).status,
+    ).toBe(2);
   });
 
   it("introduces itself as paged-node, the name package.json installs it under", () => {
-    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+    const pkg = JSON.parse(
+      readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+    );
     expect(Object.keys(pkg.bin)).toEqual(["paged-node"]);
-    expect(join(fileURLToPath(new URL("..", import.meta.url)), pkg.bin["paged-node"])).toBe(BIN);
-    const help = spawnSync(process.execPath, [BIN, "--help"], { encoding: "utf8" });
+    expect(
+      join(
+        fileURLToPath(new URL("..", import.meta.url)),
+        pkg.bin["paged-node"],
+      ),
+    ).toBe(BIN);
+    const help = spawnSync(process.execPath, [BIN, "--help"], {
+      encoding: "utf8",
+    });
     expect(help.status).toBe(0);
     expect(help.stdout).toMatch(/^paged-node \S+ — the paged Node CLI/);
     expect(help.stdout).toContain("usage: paged-node <verb> [args] [options]");
-    const refused = spawnSync(process.execPath, [BIN, "set", fx.paged, "swatch:Black", "space", "X", "--text", "--no-save", "--no-plugins"], { encoding: "utf8" });
+    const refused = spawnSync(
+      process.execPath,
+      [
+        BIN,
+        "set",
+        fx.paged,
+        "swatch:Black",
+        "space",
+        "X",
+        "--text",
+        "--no-save",
+        "--no-plugins",
+      ],
+      { encoding: "utf8" },
+    );
     expect(refused.status).toBe(1);
     expect(refused.stderr).toMatch(/^paged-node: swatch:Black space/m);
   });
 
   it("exports a PDF", () => {
     const out = join(tmp.dir, "bin.pdf");
-    const r = spawnSync(process.execPath, [BIN, "export", fx.paged, "-o", out, "--no-plugins"], { encoding: "utf8" });
+    const r = spawnSync(
+      process.execPath,
+      [BIN, "export", fx.paged, "-o", out, "--no-plugins"],
+      { encoding: "utf8" },
+    );
     expect(r.status).toBe(0);
     expect(JSON.parse(r.stdout).format).toBe("pdf");
   });
