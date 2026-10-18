@@ -168,5 +168,6 @@ deliberate acts.
 
 ## Not yet
 
-`paged-repo` and `paged-mcp` are pinned to a core rev in `server/Cargo.toml` (move both
-together). Nothing has been deployed.
+Nothing has been deployed. (`paged-repo` and `paged-mcp` are path dependencies on
+`engine/core/crates/` in this repository, so the server always builds against the
+engine at the same commit.)
