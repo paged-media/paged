@@ -1,0 +1,426 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// activate(host) for paged.doc — thin glue: engine boot, importer/exporter,
+// objectType + editContext, an insert command, and an outline panel. All DOCX
+// semantics live in the docx-js wasm; this file only drives host surfaces.
+
+import type {
+  BundleHandle,
+  BundleHost,
+  ElementId,
+} from "@paged-media/plugin-api";
+
+import { DocEngine } from "./engine.js";
+import { contributeMenu } from "./menu";
+import { createDocStore, paragraphRange } from "./panels/outline-model.js";
+import { INSERT_LABEL, NO_PICKER_REASON, makeOutlinePanel } from "./panels/outline-panel.js";
+import { placeEmbedded } from "./place.js";
+import { openStandalone } from "./open.js";
+import { discoverDocs, readDocBytes, readLowered, type DocState } from "./doc-state.js";
+import { contributeDocObjectModel } from "./object-model.js";
+import {
+  DOC_PROPERTIES_PANEL,
+  PROPERTIES_PANEL_ID,
+  publishPropertyLists,
+} from "./panels/properties-panel.js";
+import { mergeSectionContents, pouredParagraphCount, sectionBlocks } from "@paged-media/doc-host-model";
+import type { StoryContentLike } from "@paged-media/doc-host-model";
+
+const PANEL_ID = "media.paged.doc.panel.outline";
+const DOCX_MIME =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+/** The last-imported document: its source bytes (the preservation carrier the
+ *  exporter re-emits) plus the story it was poured into — the address the DOC-03
+ *  read-back uses to pull the EDITED content for save-back. */
+interface LastDoc {
+  fileName: string;
+  /** The frame carrying the document's label (its persisted state). */
+  frameId: ElementId | null;
+  source: Uint8Array;
+  /** The story or stories the document lives in: one when placed embedded,
+   *  one per Word section when opened standalone (ADR 029), in order. */
+  storyIds: string[];
+  /** Paragraph blocks poured per story (save-back trims join artifacts). */
+  pouredParagraphs: number[];
+  /** The lowering used span/split columns (ADR 029); save-back lowers its
+   *  baseline the same way. */
+  midPageColumns: boolean;
+}
+
+export function activate(host: BundleHost): BundleHandle {
+  let last: LastDoc | null = null;
+  const disposers: Array<() => void> = [];
+  // The panel's document store: the RETAINED LoweredDoc (plain JSON — the
+  // engine itself is disposed after placement) + the placement record.
+  const docStore = createDocStore();
+
+  // Load bytes -> engine -> lowering -> embedded placement.
+  // `open` is File ▸ Open / drop (the importer): the Word document BECOMES
+  // the document. `place` is Insert Word document… (the command and the
+  // panel button): it lands IN the current document, which must survive —
+  // routing a place through the standalone open replaced the whole open
+  // document with the Word file (the annual's manuscript chapter).
+  async function ingest(
+    name: string,
+    bytes: Uint8Array,
+    mode: "open" | "place",
+  ): Promise<{ frame: ElementId; story: string | null } | null> {
+    const engine = await DocEngine.boot();
+    try {
+      engine.loadDocx(bytes);
+      const ir = engine.lowered();
+      const paragraphCounts = sectionBlocks(ir).map(pouredParagraphCount);
+      // ADR 029 — a Word document opens as the WHOLE document: a page per
+      // section that grows like Word's. Hosts without the native-open door
+      // get the embedded placement instead.
+      const opened =
+        mode === "open"
+          ? await openStandalone(host, engine, ir, bytes, name)
+          : null;
+      if (opened) {
+        // The open may have lowered again for an engine without span/split
+        // columns (another story per column change): count what it poured.
+        last = {
+          fileName: name,
+          frameId: opened.frameId,
+          source: bytes,
+          storyIds: opened.storyIds,
+          pouredParagraphs: sectionBlocks(opened.ir).map(pouredParagraphCount),
+          midPageColumns: opened.midPageColumns,
+        };
+        docStore.set({
+          fileName: name,
+          ir: opened.ir,
+          frameId: opened.frameId,
+          storyId: opened.storyIds[0] ?? null,
+        });
+      } else {
+        const placed = await placeEmbedded(host, ir, bytes, name);
+        last = {
+          fileName: name,
+          frameId: placed?.frameId ?? null,
+          source: bytes,
+          storyIds: placed?.storyId ? [placed.storyId] : [],
+          pouredParagraphs: [paragraphCounts.reduce((a, b) => a + b, 0)],
+          midPageColumns: true,
+        };
+        docStore.set({
+          fileName: name,
+          ir,
+          frameId: placed?.frameId ?? null,
+          storyId: placed?.storyId ?? null,
+        });
+        if (mode === "open") {
+          host.log.info(
+            "paged.doc: host has no openNative door — placed as embedded content",
+          );
+        }
+      }
+      host.shell.openPanel(PANEL_ID);
+      return last.frameId ? { frame: last.frameId, story: last.storyIds[0] ?? null } : null;
+    } finally {
+      engine.dispose();
+    }
+  }
+
+  /**
+   * A document's bytes for export, from its PERSISTED state (the label's
+   * .docx part, which object-model writes advance): the edited story read
+   * back, overlaid on that baseline and saved as a targeted patch; the part
+   * verbatim when the host has no story read. Null when the part is missing.
+   */
+  async function exportState(state: DocState): Promise<Uint8Array | null> {
+    const source = await readDocBytes(host, state);
+    if (!source) return null;
+    const sections = state.data.sections ?? [];
+    if (!host.supports("document.readStory@1") || sections.length === 0) return source;
+    const ir = await readLowered(host, state);
+    if (!ir) return source;
+    const readStory = host.document.storyContent;
+    const contents: StoryContentLike[] = [];
+    for (const id of sections) {
+      const c = (await readStory.call(host.document, id)) as StoryContentLike | null;
+      if (!c) return source;
+      contents.push(c);
+    }
+    const content = mergeSectionContents(contents, sectionBlocks(ir).map(pouredParagraphCount));
+    const engine = await DocEngine.boot();
+    try {
+      engine.loadDocx(source);
+      engine.setMidPageColumns(state.data.midPageColumns ?? true);
+      const bytes = engine.saveEditedFromContent(content);
+      host.diagnostics.set(
+        "media.paged.doc/save-back",
+        engine.lastSaveSkips().map((message) => ({ severity: "warning" as const, message })),
+      );
+      return bytes;
+    } finally {
+      engine.dispose();
+    }
+  }
+
+  /**
+   * Produce the bytes to save. M2 edited save-back (DOC-03): when the host has
+   * the structured story read, pull the EDITED story back, let the engine overlay
+   * it on the import baseline, diff, and write a TARGETED patch (only changed
+   * `w:t`/`w:rPr` rewritten; every other part + untouched subtree byte-identical).
+   *
+   * Degrades honestly at every step — no read door, no story id, or a failing
+   * save all fall back to the verbatim source rather than exporting something
+   * wrong. (A host without the v54 read reports `readStory@1` false; the SDK's
+   * reserved member is never called.)
+   */
+  async function exportDocx(): Promise<{
+    bytes: Uint8Array;
+    fileName: string;
+  } | null> {
+    if (!last) return null;
+    const verbatim = { bytes: last.source, fileName: last.fileName };
+    // The persisted state wins: object-model writes advance the label's .docx.
+    const frame = last.frameId ? (last.frameId as { id: string }).id : null;
+    const state = frame ? (await discoverDocs(host)).find((d) => (d.frame as { id: string }).id === frame) : undefined;
+    if (state) {
+      try {
+        const bytes = await exportState(state);
+        if (bytes) return { bytes, fileName: last.fileName };
+      } catch (err) {
+        host.log.warn(`paged.doc: edited save-back failed, exporting the unedited source: ${String(err)}`);
+        return verbatim;
+      }
+    }
+    if (!host.supports("document.readStory@1") || last.storyIds.length === 0) {
+      return verbatim;
+    }
+    try {
+      // `storyContent` is a v54 read, typed by the plugin-api canary this
+      // bundle builds against. Guarded by the `readStory@1` probe above, so an
+      // older host never reaches this.
+      const readStory = host.document.storyContent;
+      // One read per story, merged in order into the one body the import
+      // baseline is (a standalone document has a story per Word section).
+      const contents: StoryContentLike[] = [];
+      for (const id of last.storyIds) {
+        const c = (await readStory.call(host.document, id)) as StoryContentLike | null;
+        if (!c) return verbatim;
+        contents.push(c);
+      }
+      const content = mergeSectionContents(contents, last.pouredParagraphs);
+      const engine = await DocEngine.boot();
+      try {
+        engine.loadDocx(last.source);
+        engine.setMidPageColumns(last.midPageColumns);
+        const bytes = engine.saveEditedFromContent(content);
+        // Save-back refusal feedback (ADR-007 posture): the patcher's skip
+        // ledger — edits refused rather than risking corruption (gridSpan
+        // column ops, non-patchable runs) — reaches the Problems panel
+        // instead of dying silently in the engine.
+        const skips = engine.lastSaveSkips();
+        host.diagnostics.set(
+          "media.paged.doc/save-back",
+          skips.map((message) => ({ severity: "warning" as const, message })),
+        );
+        return { bytes, fileName: last.fileName };
+      } finally {
+        engine.dispose();
+      }
+    } catch (err) {
+      host.log.warn(
+        `paged.doc: edited save-back failed, exporting the unedited source: ${String(err)}`,
+      );
+      return verbatim;
+    }
+  }
+
+  // Pick a .docx and place it (shared by the command + the panel button).
+  // A refusal or a failed read reaches the panel inline: `host.log` is never
+  // shown to the user.
+  async function pickAndIngest(): Promise<void> {
+    if (!host.supports("shell.pickFile@1")) {
+      host.log.warn("paged.doc: this host cannot pick files");
+      docStore.setNotice({ severity: "warning", message: NO_PICKER_REASON });
+      host.shell.openPanel(PANEL_ID);
+      return;
+    }
+    const picked = await host.shell.pickFile({ accept: [".docx", ".dotx"] });
+    const file = picked[0];
+    if (!file) return;
+    try {
+      await ingest(file.name, file.bytes, "place");
+    } catch (err) {
+      host.log.warn(`paged.doc: could not insert ${file.name}: ${String(err)}`);
+      docStore.setNotice({
+        severity: "error",
+        message: `${file.name} could not be read as a Word document.`,
+      });
+      host.shell.openPanel(PANEL_ID);
+    }
+  }
+
+  disposers.push(
+    host.contribute.panel({
+      id: PANEL_ID,
+      ...makeOutlinePanel(docStore, {
+        insert: () => void pickAndIngest(),
+        canInsert: () => host.supports("shell.pickFile@1"),
+        selectFrame: (frameId) => void host.selection.set([frameId as ElementId]),
+        readiness: () => ({ readStory: host.supports("document.readStory@1") }),
+        // A heading click goes to the heading's text in the placed story.
+        // `revealText` is newer than the plugin-api this bundle builds
+        // against, so it is reached through the probe, not the type.
+        ...(host.supports("viewport.revealText@1") && host.supports("document.readStory@1")
+          ? {
+              revealHeading: async (text: string, occurrence: number) => {
+                const storyId = docStore.get()?.storyId;
+                if (!storyId) return false;
+                const content = await host.document.storyContent(storyId);
+                const range = content ? paragraphRange(content.paragraphs, text, occurrence) : null;
+                if (!range) return false;
+                const viewport = host.viewport as typeof host.viewport & {
+                  revealText(r: { storyId: string; start: number; end: number }): Promise<boolean>;
+                };
+                return viewport.revealText({ storyId, ...range });
+              },
+            }
+          : {}),
+      }),
+    }).dispose,
+  );
+
+  // Command: pick + place a .docx into the current document.
+  disposers.push(
+    host.contribute.command({
+      id: "media.paged.doc.command.placeDoc",
+      title: INSERT_LABEL,
+      handler: () => void pickAndIngest(),
+    }).dispose,
+  );
+
+  // Importer: File/Open + drag-drop of a .docx routes its bytes here.
+  if (host.supports("contribute.importer@1")) {
+    disposers.push(
+      host.contribute.importer({
+        id: "media.paged.doc.importer.docx",
+        title: "Word document (.docx)",
+        extensions: [".docx", ".dotx"],
+        mimeTypes: [DOCX_MIME],
+        import: async ({ name, bytes }) => {
+          await ingest(name, bytes, "open");
+        },
+      }).dispose,
+    );
+  }
+
+  // Exporter: zero-edit save-back (verbatim carry-through of the retained OPC).
+  if (host.supports("contribute.exporter@1")) {
+    disposers.push(
+      host.contribute.exporter({
+        id: "media.paged.doc.exporter.docx",
+        title: "Word document (.docx)",
+        extension: ".docx",
+        mimeType: DOCX_MIME,
+        export: () => exportDocx(),
+      }).dispose,
+    );
+  }
+
+  // objectType: a frame carrying our binding envelope is a wordDocument.
+  if (host.supports("contribute.objectType@1")) {
+    disposers.push(
+      host.contribute.objectType({
+        type: "wordDocument",
+        bakedFallback: "group",
+        editContextType: "wordDocument",
+        matches: (candidate) =>
+          candidate.metadata != null &&
+          typeof candidate.metadata.data?.part === "string",
+      }).dispose,
+    );
+  }
+
+  // editContext: double-click enters native text editing scoped to the frame;
+  // the editor owns the caret (native text tools — this sidesteps C-9), so the
+  // context mainly opens the doc panel and bounds the edit scope.
+  if (host.supports("contribute.editContext@1")) {
+    disposers.push(
+      host.contribute.editContext({
+        type: "wordDocument",
+        entry: "doubleClick",
+        // ADR 024 — and paged.doc is the case that proves the rule is
+        // not "plugins get an empty rail".
+        //
+        // A DOCX is lowered to NATIVE content: real host text frames,
+        // real stories, real styles. So the editor genuinely owns the
+        // caret here (the note above), and the HOST'S OWN text tools are
+        // the right tools — unlike a spreadsheet or a web frame, where
+        // no canvas tool has anything to act on and the honest
+        // declaration is empty.
+        //
+        // Naming host built-in ids from plugin code is explicitly
+        // sanctioned by the contract ("plus host built-ins it names").
+        // It sits in tension with the rule that keeps HOST PANEL ids out
+        // of plugin code, and that tension is recorded in the RFI rather
+        // than resolved here.
+        toolIds: ["paged.tool.type", "paged.tool.select"],
+        panelIds: [PANEL_ID],
+        // No `onEnter` openPanel: the declaration above already opens
+        // it, and it is the only path that can WITHHOLD a raise which
+        // would displace a shared panel this context's providers serve
+        // (ADR 023). The SDK door takes no options and always raises.
+      }).dispose,
+    );
+  }
+
+  // ADR 323 — the object model: the placed document, its blocks, runs and
+  // mail-merge fields through `host.objects`, plus the typed commands.
+  // Headless (no panel, no selection, no edit context).
+  const objectModel = contributeDocObjectModel(host, {
+    place: (name, bytes) => ingest(name, bytes, "place"),
+    exportBytes: (state) => exportState(state),
+  });
+
+  // ADR 323 — the object properties as host-rendered PropertyFields (a
+  // schema panel of property rows; needs the object model + bindings).
+  if (objectModel && host.supports("contribute.schemaPanel@1")) {
+    disposers.push(
+      host.contribute.schemaPanel({
+        id: PROPERTIES_PANEL_ID,
+        title: DOC_PROPERTIES_PANEL.title,
+        icon: DOC_PROPERTIES_PANEL.icon,
+        defaultDock: "right",
+        schema: DOC_PROPERTIES_PANEL,
+      }).dispose,
+    );
+    const lists = publishPropertyLists(host);
+    disposers.push(() => lists.dispose());
+  }
+
+  host.log.info("paged.doc activated");
+  // F1 — the menu bar. Before plugin-api 0.2.33 there was no menu door,
+  // so every command in this bundle lived behind Cmd+K and nowhere else.
+  const menuSub = contributeMenu(host);
+
+  return {
+    dispose() {
+      menuSub.dispose();
+      objectModel?.dispose();
+      for (const d of disposers) d();
+    },
+  };
+}

@@ -1,0 +1,700 @@
+# paged.doc — status
+
+## Object model and merge fields (ADR 605, `om/object-model` branch, plugin-api 0.2.43)
+
+- `MERGEFIELD` parsed in both field forms (name, switches, instruction), carried on runs and
+  through the lowering.
+- `host.objects` kinds `docxDocument`, `block`, `run`, `mergeField`; `run.text` (body) and
+  `mergeField.value` writable as one undo step (save-back patch + poured text + label).
+  Typed commands `placeDoc`, `exportDocx`, `fillMergeFields`.
+- The bundle runs in the SDK's headless host (`test/conformance/`, real engine + real
+  docx-js); a 10-op batch costs 1 commit, 2 engine boots and 3 host reads.
+- Open: table-cell runs are not writable; the embedded place needs engine 0.70
+  (`insertTextFrame` is `notImplemented` on 0.69, so "Place Word document…" fails there);
+  exporting a document with coalesced runs duplicates text (pinned as an expected failure).
+
+## This pass: M0 (foundation) + M1 Tier-0 read path
+
+**DONE + verified (all green):**
+
+- **DOC-02 `ooxmlsdk` → wasm32 spike — GREEN.** `ooxmlsdk` 0.12 (+ `zip`,
+  `quick-xml`, `bytes`, `flate2`) compiles to `wasm32-unknown-unknown`; the
+  foundation is safe to build on the typed DOM.
+- **`paged-ooxml`** — OPC container over `zip` + `quick-xml`, `[Content_Types].xml`
+  + `_rels` graph, verbatim carry-through preservation, `ooxmlsdk` typed-DOM bridge.
+- **Tier-0 read path** — `docx-import` (WordprocessingML body + styles + section →
+  `docx-core`) → `docx-lower` (→ `LoweredDoc` IR with synthesized direct-format
+  styles + minted swatches) → `docx-js` (one wasm module).
+- **`@paged-media/doc-host-model`** — pure IR → `Mutation[]` (styles, swatches,
+  offset-tracked pour), unit-tested.
+- **`@paged-media/doc` bundle** — manifest (`media.paged.doc`, CLI-valid),
+  `activate` registering importer/exporter/objectType/editContext/command/panel,
+  wasm boot, embedded placement wiring.
+- **Conformance** — a real in-memory `.docx` imports + lowers correctly, and the
+  OPC package round-trips **byte-identical** including an unknown part; malformed
+  input errors without panicking.
+
+**Verification gates, all green:** `cargo build/nextest` (11 tests),
+`cargo clippy -D warnings`, `cargo fmt --check`, `cargo deny check`, the wasm
+build (7.5 MiB, under the 100 MB app wasm budget — unoptimized; CI runs `wasm-opt -Oz`),
+`pnpm typecheck`, `pnpm test` (host-model), the contract-import lint, and
+`paged-plugin validate`.
+
+## Tier-1a (added after the initial pass)
+
+- **`docDefaults`** — the document-wide base run/paragraph properties become a
+  `docx-Default` base paragraph style that every un-based style + un-styled
+  paragraph inherits (closes the "font/size falls back to engine default" gap).
+- **Tab stops** — `w:tabs` → `paragraphTabStops` (position pt + alignment; `clear`
+  stops dropped; leader glyphs are a later refinement).
+- **keep-with-next / keep-lines-together** — `w:keepNext`/`w:keepLines` lowered.
+- **Underline correctness** — `w:u w:val="none"` now lowers to `underline:false`
+  rather than being read as "on".
+
+All Tier-1a lowering is verified through the real wasm artifact (the `tier1_docx`
+conformance fixture).
+
+## Tier-1b — lists / numbering
+
+- **Bullet + numbered lists** — `w:numPr` (numId/ilvl) is resolved through
+  `numbering.xml` (numId → abstractNumId → level → numFmt/lvlText) at import, then
+  lowered to native list paragraphs: `paragraphListType` (`BulletList`/
+  `NumberedList` — the field the renderer gates marker emission + auto-numbering
+  on), `paragraphBulletCharacter` (Wingdings/Symbol glyphs normalized to Unicode,
+  e.g. F0B7 → •), `paragraphNumberingFormat` (Word `numFmt` → the IDML sample
+  string the engine's `format_number` reads: decimal/upper-lower Roman/alpha), and
+  a per-level left indent. Identical list paragraphs share one synthesized style.
+- **No core change was required** — the `paragraphListType` PropertyPath already
+  existed; the engine already renders bullets + auto-counts numbered lists. So
+  lists lower fully plugin-side (isolation-clean) and render through the existing
+  renderer. Verified end-to-end through the real wasm artifact (`list_docx`).
+- Not yet: multi-level list indent metrics from the list definition (a fixed
+  18 pt/level default is used), list continuation/restart nuances, and bullet
+  leader/suffix text.
+
+## Tier-2 — tables
+
+- **`w:tbl` → native tables.** The grid (`w:tblGrid/w:gridCol` widths), rows, and
+  cells are parsed; `gridSpan` (horizontal) and `vMerge` (vertical) are resolved
+  into positioned cells with row/col spans (a `vMerge`-continue cell is absorbed
+  into its restart cell above and not emitted). The story IR is now
+  **block-structured** (`LoweredBlock` = paragraph | table) so tables interleave
+  with body paragraphs in document order.
+- **Lowering → mutations.** `doc-host-model` emits `insertTable` (grid + column
+  widths), then per cell an `insertText` addressed by `TextCellAddr{tableId,row,
+  col}` and a `setCellSpan` for merged cells — mirroring the proven `sheet`
+  table lane. Because `insertTable`'s outcome mints the table id, the host-model
+  exposes a **phased story plan** (`buildStory`): text steps + table steps
+  (`{insert, cells(tableId)}`), which the bundle executes in order.
+- Verified end-to-end through the real wasm artifact (`table_docx`): block order,
+  grid, widths, gridSpan, and vMerge all lower correctly.
+- **Cell-internal styling — CLOSED (core door, protocol 55).** `applyStyle` used
+  to carry no cell qualifier, so cell text could only pour at the default
+  formatting. `Mutation::ApplyStyle` (and `Operation::ApplyStyle`) now take an
+  optional `cell` address, and the appliers walk that cell's own paragraph stream
+  instead of the story body; `buildTableCells` emits cell-qualified `applyStyle`
+  ops for each cell run/paragraph, offsets cell-local. A host below v55 rejects
+  the op and cell text keeps its default formatting (honest degrade — never wrong
+  styling).
+- **Blank cell lines are styled (core `65cf615`).** An empty Word paragraph in a
+  cell is styled by a cell-addressed caret (`applyStyle`, `start == end`) in the
+  cell's own offset space, last one per cell offset (`buildTableCellCarets`),
+  applied in the story's final caret step after every cell is poured, so a
+  refusing engine costs no cell its text. A cell of ONE empty paragraph gets no
+  `insertText` and no caret (the engine has no paragraph there to name), and
+  keeps the default style. Blank lines of one cell that share an offset with
+  different Word styles are diagnosed by `docx-lower`.
+- **Honest limitation:** the exact story offset past a table (`TABLE_FOOTPRINT`)
+  is still a conservative constant refined during editor integration.
+
+## Tier-2 — inline images (with a core door)
+
+- **`w:drawing` inline images → native anchored frames.** A drawing run is parsed
+  (typed: `wp:inline`/`wp:anchor` → `a:graphic` → `graphicData` → `pic:pic` →
+  `blipFill` → `blip@r:embed`), the `r:embed` rel resolved to its `word/media/…`
+  bytes, and the intrinsic `wp:extent` (EMU) converted to points. `docx-lower`
+  emits a per-paragraph image placement with a self-contained `data:<mime>;base64`
+  URI; `doc-host-model` turns each into an **`insertAnchoredFrame`** at the
+  paragraph's story offset. Verified end-to-end through the real wasm artifact
+  (`image_docx`).
+- **This required a core door (opened): `InsertAnchoredFrame`.** The anchored-image
+  model, inline render path (`paged-renderer` `anchored.rs`), and property edits
+  already existed, but there was no *mutation to create* an anchored frame —
+  `InsertFrame` is page-positioned only. Added `InsertAnchoredFrame` /
+  `RemoveAnchoredFrame` (paged-mutate + wire + protocol **51 → 52**): it pushes an
+  image-bearing anchored Rectangle onto the paragraph at a story offset
+  (`setting: None` ⇒ the renderer's default `InlinePosition`), so the frame draws
+  inline via the existing path — no renderer change. (This is a cross-repo change;
+  `plugin-doc` stays isolation-clean, `core` carries the door.)
+- **Honest limitations:** large images embed as inline base64 (a part reference is
+  the later refinement); anchored frames position at the paragraph level (not a
+  precise intra-paragraph offset — the renderer's own current behavior).
+
+## Tier-3 — hyperlinks (now native clickable, with a core door)
+
+- **`w:hyperlink` → native clickable link.** A hyperlink's `r:id` is resolved
+  through the document rels to its external URL (or `#anchor` for an internal
+  bookmark) and carried on the run. Two things happen at lowering: (1) the
+  conventional *look* — blue (`0000FF`) + underline — rides on a synthesized
+  character style (unless the run sets those directly); (2) the external URL is
+  carried on `LoweredRun.hyperlink_url`, and `doc-host-model` emits an
+  **`insertHyperlink`** over the run's story range so the span is genuinely
+  clickable. Verified end-to-end through the real wasm artifact (`hyperlink_docx`:
+  the linked run carries the URL + the diagnostic reports it became a native link).
+- **This required a core door (opened): `InsertHyperlink`.** The IDML hyperlink
+  model — a `HyperlinkTextSource` run tag + a designmap `Hyperlink{source,
+  destination}` + a `HyperlinkURLDestination` — parsed and rendered
+  (`links.rs`), but had no *create* mutation. Added `InsertHyperlink` /
+  `RemoveHyperlink` (paged-mutate + wire + protocol **52 → 53**): it splits runs
+  over `[start, end)`, tags the middle `hyperlink_source`, and registers the two
+  designmap resources; the engine mints the three cross-referencing ids so the
+  wire stays `{storyId, start, end, url}`. (Cross-repo, like the anchored-frame
+  door: `plugin-doc` stays isolation-clean, `core` carries the door.)
+- **Both of Word's hyperlink forms.** Word writes links two ways: the
+  `w:hyperlink` element (above) AND a `HYPERLINK` *field* — either the complex
+  `fldChar begin / instrText / separate / result / end` run sequence (instruction
+  may be split across several `w:instrText` runs) or the one-shot `w:fldSimple`.
+  docx-import runs a field state machine over the paragraph's runs: control runs
+  (`fldChar`/`instrText`) carry no display text and are dropped; result runs of a
+  `HYPERLINK` field inherit the URL. Both forms then flow through the SAME
+  `hyperlink_url` → `insertHyperlink` path — **no docx-lower / host-model / core
+  change, purely a parse addition.** Verified through the real wasm (`fieldlink`
+  fixture: two field links, one with a split instruction, both native-clickable).
+- **Honest limitations:** internal `#anchor` / `HYPERLINK \l` bookmark targets
+  keep the blue+underline look but are not yet native links (the core door
+  registers URL destinations, not text anchors, and the renderer resolves a
+  text-destination best-effort to the story's first page — useless for a
+  multi-page story's mid-doc jumps; both are labelled, not faked). The diagnostic
+  reports how many became clickable vs styled-only.
+
+## Offset convention (correctness note)
+
+Story character offsets in `doc-host-model` are **contiguous** across paragraphs:
+the engine consumes the paragraph-break `\n` on `insertText` split — it is not a
+stored character — so `applyStyle` / `insertAnchoredFrame` / `insertHyperlink`
+ranges must NOT count it. (Fixed a latent off-by-one where the pour advanced the
+offset past the separator; it was invisible in IR/wasm tests and would only have
+bitten a live multi-paragraph apply.) NB: this matches core's range-styling apply
+ops (`apply::character`/`paragraph`/`hyperlink`, all char-contiguous); it is
+deliberately NOT the `mutate::locate`/`InsertText` byte+`\n` address space — those
+two conventions diverge inside core today (a pre-existing split worth an RFI note).
+paged.doc issues a single `insertText` at the base offset then contiguous-char
+range ops, so it sits entirely on the contiguous side.
+
+## M2 — edited save-back, Increment 1 (the targeted-patch spine)
+
+- **The engine exists and is proven.** `docx-js` `save_edited(EditSet)` writes run
+  edits back into the retained `.docx` as a **byte-level targeted patch**: only the
+  changed `<w:t>`/`<w:rPr>` subtrees are rewritten; every other part AND every
+  untouched subtree of `word/document.xml` stays **byte-identical**. New crate
+  `docx-export` (`splice.rs`) uses quick-xml purely as a *locator* — it computes
+  the source byte ranges to replace, raw-copies everything outside them, and splices
+  hand-built fragments into the holes (byte-identity by construction). It never
+  calls the ooxmlsdk serializer (`build-wasm.sh` guards this — linking `write_to`
+  would blow the budget; wasm is 8.12 MiB / 100 MB app wasm budget).
+- **Provenance.** `docx-import` stamps each run's source `<w:r>` ordinal
+  (`Run.source`) and each paragraph's body ordinal (`Paragraph.source_para_ord`);
+  `docx-export::build_bindings` projects them onto lowered story `(block, run)`
+  coordinates (replaying lowering's empty-run filter — a conformance test guards
+  against drift). `DocSession` now retains the `OpcPackage` + bindings.
+- **Style round-trip.** A synthesized `docx-auto-cN` style projects back to a
+  **direct `<w:rPr>`** on save (so Word gets no synthetic-style clutter);
+  `rpr.rs` renders `RunProps → <w:rPr>` as the exact inverse of the import parse.
+- **The differ (`diff.rs`).** `diff(base, edited) → EditSet` — the seam the live
+  readback door will target (it will re-lower the edited native model to a
+  `LoweredDoc` and diff it against the import baseline). Runs are compared on their
+  RESOLVED effective formatting, not lowered style-id strings (synth `docx-auto-cN`
+  ids are positional and renumber between two lowerings); it inverts a synth style's
+  props back to `RunProps` and recovers a real `<w:rStyle>` via an import-built
+  `token → styleId` map. Structure-preserving edits only (count mismatch → skipped).
+- **Verified end-to-end** (`docx-conformance/tests/save_back.rs`): import the memo
+  fixture, change one run's text + toggle bold off another, save, and assert the
+  targets changed, every other part + untouched subtree byte-identical, and the
+  edits survive a re-import round-trip. Plus `splice`/`rpr` unit tests (exact
+  byte-identity) and the drift guard.
+- **Covered (Increment 1):** run text change + run property change on direct
+  `<w:r>` children.
+  **Deferred (labelled):** table structure;
+  editing hyperlink/field runs and table-cell content (non-patchable bindings);
+  and — the one platform seam —
+  the LIVE editor wiring (below).
+
+## DOC-03 — structured read + the LIVE save-back path (built; awaits the wasm publish)
+
+The live path now exists end-to-end in code. **Core** (branch) ships a structured
+read — `RequestStoryContent` → `StoryContent` (protocol 54): a story's paragraphs →
+runs → text + applied styles + direct overrides, `CanvasModel::story_content`.
+**paged.doc** consumes it: `docx-export::overlay_story_content` overlays the
+read-back onto the import baseline lowering (a run's `characterStyle` IS the
+plugin's own `char_style_id` token, since paged.doc created every style via
+`applyStyle`), then `diff → EditSet → save_edited`.
+`DocSession::save_edited_from_content(json)` + the wasm shim expose the one-call
+live path. **Verified end-to-end with a MOCK read** (`doc03_read_overlay_diff_save_
+round_trips`): read → overlay → diff → save → re-import reflects the edits; an
+identity read is a verbatim no-op.
+
+The one remaining seam is a RELEASE step, not code: core publishes
+`@paged-media/canvas-wasm` v54, plugin-sdk `sync-wire.mjs` pulls the new wire types
+and exposes `host.document.storyContent()` + `supports("document.readStory@1")`, and
+the bundle calls it → `save_edited_from_content`. Until then the SDK method is a
+reserved seam and the bundle degrades honestly (as it does for `openNative`).
+Structure-preserving edits only; table-cell content not yet round-tripped.
+
+**That release step is pre-verified (2026-07-25).** canvas-wasm was built locally
+from the core DOC-03 branch (`sync-wasm.sh`'s path, the documented tool for
+unpublished engine changes) and the generated `.d.ts` was checked to carry
+`requestStoryContent`/`storyContentResult` with `selfId`/`characterStyle`/
+`fontStyle`/`pointSize` — **matching both the hand-written plugin-api contract and
+paged.doc's serde twin** (the real cross-layer drift risk, since three layers are
+hand-maintained). The vendored `wire.d.ts` was then temporarily synced from that
+build and the SDK adapter's reserved throw swapped for the real
+`requestStoryContent` forward: **both packages typecheck**. Both changes were
+reverted (a wire sync from an unpublished build must never be committed — the gate
+compares against the published package), so the shipped state stays honest. Net:
+when v54 publishes, the adapter is a proven ~6-line swap.
+
+**The bundle is wired for it.** The exporter now attempts the live path: probe
+`supports("document.readStory@1")` → `host.document.storyContent(storyId)` →
+`engine.saveEditedFromContent(content)` (the storyId is captured at placement and
+carried on `LastDoc`). It degrades honestly at every step — no read door, no story
+id, or a failing save all fall back to the verbatim source rather than exporting
+something wrong. (The `storyContent` call goes through a narrow cast until the
+plugin-api canary carrying it publishes — the same pattern the v52/v53 mutation
+ops use.)
+
+## Deferred (labelled, never faked)
+
+- **Edited save-back — LIVE editor run**: the full chain is built and wired; the
+  engine side is verified with a mock read and the SDK adapter swap is
+  pre-verified against a local v54 build. The in-browser round-trip lands with the
+  canvas-wasm v54 publish + SDK sync (a release step, not code).
+- **Standalone true-open** — degrades to embedded placement + a diagnostic when
+  `document.openNative@1` is unwired (the common case today); the `docx →
+  native-bytes` producer is a future `plugin-publish` sibling.
+- **Constructs still past the tier line** — tracked changes, floating
+  (anchored-with-wrap) images and internal `#anchor` links (a renderer door) →
+  surfaced as honest ADR-007 diagnostics on open, not silently dropped.
+  (Page/column breaks, `w:pageBreakBefore` and odd/even sections now lower to
+  the engine's break-before rule `paragraphStartParagraph`, core protocol 64,
+  matched against Word's own page map `docx-conformance/fixtures/
+  breaks.word.json`; an older engine refuses the rule and loses only the
+  breaks, with a warning. `continuous` / `nextColumn` sections now join the
+  story of the page they continue, matched against Word's page map
+  `docx-conformance/fixtures/continuous.word.json` (rules in
+  `docx-lower/src/sections.rs`): same geometry joins invisibly; other
+  left/right margins join as paragraph indents; other top/bottom margins join
+  with a diagnostic (later pages keep the earlier margins); another page size
+  is Word's own new page. A COLUMN change mid-page (count or gap) lowers to
+  the engine's span/split columns (IDML `SpanColumnType`, core protocol 64),
+  matched against Word's maps `continuous.word.json` and
+  `columns.word.json`: a story whose last section Word leaves unbalanced keeps
+  the frame's columns and its one-column sections span them; every other
+  story keeps one column and its multi-column sections split it. A
+  multi-column section right after another with another count or gap is a
+  second split block (core `d4311c7` ends a block where the count or a gutter
+  changes), balanced on its own as Word does. Still different from Word: two
+  multi-column sections in a row with the SAME count and gap share one column
+  flow (Word balances each; the engine has no boundary there, warned);
+  unequal columns are laid out equal; a split section that ends its story is
+  balanced where Word is not.
+  An engine that refuses the properties is detected by the refused style
+  batch on open; the bundle then lowers with a page break per column change
+  and reopens.)
+  (Numbering/lists, tables, inline images and hyperlinks have SHIPPED — see
+  the tier sections above. Footnotes and headers/footers are PARSED, carried
+  in the IR and diagnosed, not placed.)
+- **Headers, footnote numbering, floating drawings (RFI DOC-05/06/07,
+  ADR 033/034/035)** — every section's header/footer references are
+  read (default/first/even, `titlePg`, `evenAndOddHeaders`, `pgNumType`,
+  header/footer distances) with Word's inheritance, checked page by page
+  against Word's PDF (`fixtures/headers.word.json`, which also found Word's
+  blank page before a numbering restart under even/odd headers). Footnote
+  numbering (`w:footnotePr`) is parsed per section and from `settings.xml`;
+  Word numbers by the section's own settings alone, which
+  `NoteProps::note_number` reproduces for every mark in
+  `fixtures/footnote-numbering.word.json`. Floating drawings (`wp:anchor`)
+  carry their position and wrap in the IR (`LoweredImage.float`), stay
+  placed inline, and each gets a warning; every drawing in a run is kept.
+  None of the three is placed on the page yet: that needs core (ADR 033
+  work item 6 / C-36, ADR 034 C-43, ADR 035 C-47/C-48).
+- **In-editor live render / real `host.nativeDocument`** — the bundle is written to
+  the shipped contract and exercised to the seam; full end-to-end is
+  host-integration-verified in a later milestone (needs the editor checkout + a
+  wired `NativeDocumentBackend`).
+
+## Platform doors (RFI)
+
+- **DOC-01** `host.nativeDocument.open(bytes)` and **DOC-03**
+  `readModel/readComposition/listParts` now **exist** in the SDK contract
+  (conditional — live only when the editor injects a `NativeDocumentBackend`). The
+  concept paper (`concept.md`) listed them as missing; they landed after it was drafted. The importer
+  declares `openNative`/`readNative` and probes `host.supports(...)`.
+- **DOC-03 — structured whole-document read (NEW ask, M2 blocker).** `readModel`
+  returns the core-owned `.pgm` model bytes, which an isolation-clean plugin cannot
+  parse or diff. Edited save-back needs the edited stories' **text + styles** back
+  in a structured form (JSON, or re-lowered to the plugin's `LoweredDoc`), so the
+  plugin can diff against its import baseline and produce an `EditSet`. Until then
+  the save-back engine (proven) runs test-driven only.
+- **DOC-04** (Word-reference fidelity harness), **DOC-05** (ratify embed-or-open as
+  a platform pattern), **DOC-06** (C-1 per-glyph faithful text) remain open.
+
+## M2 Increment 2 — structural edits (insert / delete)
+
+Save-back is no longer limited to in-place edits. `EditSet` gains a `structural`
+lane — `DeleteRun`, `InsertRun` (after a run, or at the paragraph start),
+`DeleteParagraph`, `InsertParagraph` — and the splicer grew the matching
+byte-level moves: dropping a `<w:r>`/`<w:p>` subtree (skip its byte range) and
+emitting a rendered fragment at an anchor. All coordinates address the BASELINE,
+so ops never shift each other's addresses; one pass over the unmodified source
+applies them all, and untouched bytes stay verbatim as before.
+
+`diff` derives them automatically: when a paragraph's run count changes it runs an
+**LCS alignment** over the runs' `(text, style)` identity — matched runs are left
+alone, unmatched baseline runs become `DeleteRun`, unmatched edited runs become
+`InsertRun` anchored after the preceding match. Paragraph count changes map to
+`DeleteParagraph` / `InsertParagraph`. The DOC-03 overlay now replaces a
+paragraph's run list wholesale when it changed, so the live editor path drives
+structural edits too.
+
+Verified: splice unit tests (delete run, insert-after, prepend, paragraph
+delete+append) and two end-to-end conformance tests — one through the DOC-03
+overlay (delete a run + append a run, other parts byte-identical), one via a
+hand-authored `EditSet` (delete the heading, append a paragraph).
+
+**Still deferred:** table STRUCTURE (rows/cells), and a paragraph↔table swap.
+
+## Table-cell round-trip
+
+Cell content is no longer non-patchable. `docx-import` stamps each cell paragraph
+with a **`CellPath`** (`w:tbl` / `w:tr` / `w:tc` / `w:p` ordinals);
+`docx-export::build_bindings` projects those onto lowered cell coordinates,
+replaying `lower_table`'s emission order exactly (a vMerge-continue cell is
+absorbed, not emitted) so cell indices line up with `LoweredTable.cells`. The
+splicer gained a second locator path — `tbl → tr → tc → p → r` counters that run
+alongside the body-paragraph counters (each ignores the other's runs) — and
+`EditSet.cells` carries `CellRunEdit { block, cell, para, run, … }`. `diff` emits
+them automatically when a table's cell text or style changes.
+
+Verified: a direct cell text edit and a diff-driven one both round-trip, with the
+other cells, the row/column spans, the grid widths, and every other part
+unchanged.
+
+**Nested tables:** the locator is depth-aware (see Increment 3g) — a nested
+table's rows/cells never affect the outer table's addressing. Nested-table CONTENT
+is still not itself addressable (the bindings only model top-level tables).
+
+## Read-path fidelity — footnotes / endnotes
+
+`w:footnoteReference` / `w:endnoteReference` runs were silently dropped (they fell
+into the importer's catch-all with no diagnostic). Now they are modelled:
+`docx-import` resolves the `footnotes`/`endnotes` parts through the document rels,
+parses each note's body paragraphs into `docx-core::Note` (skipping Word's
+`separator` / `continuationSeparator` pseudo-notes), and stamps the referencing
+run with `note_ref` (the `w:id`).
+
+Lowering emits an **honest diagnostic** naming the footnote/endnote counts and the
+number of in-text references, and states plainly that the note text is preserved
+in the source `.docx` (so it round-trips on save) but is **not placed on the page**
+— the native model has no footnote construct and there is no "insert footnote"
+mutation. Note text is deliberately NOT inlined into the flow; a conformance test
+asserts it never appears there, so the gap stays visible rather than faked.
+
+Verified through the real wasm artifact (`footnote` fixture).
+
+## M2 Increment 3 — paragraph properties (`<w:pPr>`)
+
+Increment 1 noted `<w:pPr>` edits as a fast-follow and Increment 2 did not land
+them, so a paragraph's own formatting never round-tripped — and the differ did not
+even LOOK at paragraph styles (it compared runs only, so repointing a paragraph at
+a different style produced an empty EditSet).
+
+- `EditSet.paragraphs` (`ParaEdit { block, new_props, pstyle }`), the paragraph
+  twin of the run lane: a synthesized paragraph style is projected into direct
+  `<w:pPr>` formatting, and a REAL Word style id is recovered through a new
+  `para_token_to_style_id` map (the lowered token is lossy, exactly as for runs).
+- `rpr.rs::render_ppr` emits `<w:pPr>` in WML `CT_PPr` child order, packing the
+  indents into one `<w:ind>` and before/after into one `<w:spacing>`, and emitting
+  a hanging indent as `w:hanging` rather than a negative `firstLine`.
+- The splicer replaces a targeted paragraph's `<w:pPr>`, or INSERTS one before the
+  first run when the paragraph has none.
+- `diff` now compares each paragraph's effective style + direct formatting and
+  emits a `ParaEdit`, so the live DOC-03 path carries paragraph changes too.
+
+Verified: a paragraph gains a centred `<w:pPr>` where it had none, a heading's
+`pStyle` is dropped, run text is untouched, every other part stays byte-identical,
+and the differ detects a paragraph-style repoint end-to-end.
+
+## M2 Increment 3b — hyperlink / field runs are editable
+
+Runs inside a link or field were marked non-patchable outright, on the assumption
+that editing them would desync the target. That was too broad — in every form the
+target lives somewhere OTHER than the run being edited:
+
+- `<w:hyperlink>` — the `r:id` is on the WRAPPER, so the run's `<w:t>`/`<w:rPr>`
+  are free to change. `RunSource::Hyperlink` now carries `{link_ord, run_ord}` and
+  the splicer counts `<w:hyperlink>` children + the runs inside the open one,
+  exactly as the table-cell path does.
+- `w:fldSimple` — the instruction is a wrapper ATTRIBUTE; same treatment
+  (`RunSource::Field { field_ord, run_ord }`).
+- the complex `fldChar` **result** run — a plain direct `<w:r>` child whose URL
+  lives in a separate `instrText` run. It was already addressable; only an
+  over-broad `hyperlink.is_some()` check was rejecting it.
+
+Verified: editing the display text of all three forms keeps the link target
+(`https://paged.media/`, `…/complex`, `…/simple`) and leaves siblings untouched.
+
+**Multi-`<w:t>` runs were never actually a limitation** — a run whose text is split
+across several `<w:t>` children (Word does this after edits) already collapses
+correctly into one on a text replacement, because `LoweredRun.text` is the
+concatenation. A unit test now pins that, and the stale "deferred" claim is gone.
+
+Still deferred: nested tables, a wrapped run INSIDE a table cell (it needs both
+locator paths at once), and paragraph↔table swap.
+
+## M2 Increment 3c — table row structure
+
+Rows can now be added and removed, not just re-texted. `StructuralEdit::DeleteRow`
+/ `InsertRow` address `(block, row)`; bindings carry the table's `<w:tbl>` ordinal
+so a row resolves to `(table_ord, row)`, and the splicer drops a `<w:tr>` subtree
+or emits a rendered one after a given row's `</w:tr>` — the same byte-splice
+machinery as paragraphs, so untouched bytes stay verbatim. `render_table_row`
+emits one `<w:tc>` per cell, each with the `<w:p>` a cell is required to contain.
+
+`diff` derives them: a table whose row count shrank yields `DeleteRow` for the
+trailing rows, one that grew yields `InsertRow` carrying the new rows' cell text
+(superseded — rows are now identity-aligned too, see Increment 3e).
+
+Verified on the table fixture — which has both a `gridSpan` header row and a
+`vMerge` pair — that deleting the merge-continue row and inserting a fresh 2-cell
+row leaves the spanning row, the surrounding body paragraphs and every other part
+untouched; plus a diff-derived deletion end-to-end.
+
+**Cell-level** add/remove within a row is not a coherent operation on its own —
+see Increment 3f, which does it as a COLUMN op.
+
+## M2 Increment 3d — block alignment (a preservation fix)
+
+The structural diff paired story blocks BY INDEX, which quietly violated the
+preservation invariant on a very ordinary edit. Deleting a paragraph in the
+MIDDLE of a document produced the right text but kept the wrong `<w:p>`: with
+`[Plain, Heading, Mix]` → `[Plain, Mix]`, it deleted the trailing paragraph and
+rewrote the *heading's* node with Mix's runs — so the surviving paragraph still
+carried `<w:pStyle w:val="Heading1"/>`, and the third paragraph's own node (its
+`<w:pPr>`, rsids and any unmodelled children) was destroyed.
+
+Blocks are now aligned by an **LCS over a block identity key** (a paragraph's
+style + full text; a table's shape) rather than by position, so a deletion deletes
+that block and the survivors keep their own nodes. One post-pass matters: an
+adjacent Del+Ins is coalesced into a MATCH — without it, *editing* a paragraph's
+text changes its key and the pair would be reported as delete-then-insert,
+destroying the very `<w:p>` we want to patch in place. Coalescing keeps an edit an
+edit and leaves a true deletion a deletion.
+
+Regression-tested by the case that exposed it (the survivor must NOT inherit the
+deleted heading's style), and every pre-existing save-back test still passes.
+
+## M2 Increment 3e — row alignment (the same preservation fix, one level down)
+
+Rows had the defect the block alignment had just fixed: the row diff deleted
+TRAILING rows and let the cell comparison rewrite the rest by index. Deleting a
+MIDDLE row therefore produced the right text while destroying the wrong `<w:tr>`.
+
+Rows are now aligned by an LCS over a row identity key (its cells' text), reusing
+the same `lcs_align` (including the Del+Ins→Match coalescing that keeps an edit an
+edit). Cell content is compared only within MATCHED row pairs, so an edit can
+never land on a row that is about to be deleted.
+
+The regression test is the interesting part: the fixture gives each row a distinct
+**unmodelled** `w:trHeight`. paged never reads it, so it is the only thing that can
+prove WHICH node survived — asserting on cell text alone passes even when the
+wrong row is kept. The test now asserts row 2's marker (`w:val="102"`) is intact
+and the middle row's (`101`) is the one that went.
+
+## M2 Increment 3f — table columns
+
+"Add/remove a cell" turned out not to be a well-defined operation: a table's
+columns are declared by `<w:tblGrid><w:gridCol>`, and each row's cells must sum to
+that width, so inserting a bare `<w:tc>` leaves the row inconsistent with the
+grid. The coherent operation is a **column** — grid entry and every row's cell
+together — and that is what shipped.
+
+- `StructuralEdit::DeleteColumn { block, col }` removes the `<w:gridCol>` and each
+  row's matching `<w:tc>`; `InsertColumn { block, after_col, text }` duplicates the
+  reference `<w:gridCol>` (so the new column keeps a sensible width) and appends a
+  fresh `<w:tc>` per row.
+- **Guarded, not guessed.** Both are applied only when the table's grid is
+  UNIFORM (no `gridSpan`), which `build_bindings` records per table. With a span
+  present, whether a new column widens the span or splits it is genuinely
+  ambiguous, so the op is SKIPPED — a test asserts the `gridSpan` fixture comes
+  back byte-identical rather than subtly corrupted.
+- At most one column action per table per save: two would shift each other's
+  indices and the second would need re-resolving against the patched grid.
+
+Verified: inserting after column 0 of the 3x2 fixture yields `cols == 3` with
+`["R0C0", "NEW", "R0C1"]`, deleting column 1 yields `cols == 1` with column 1 gone
+from every row, and the span table is refused untouched.
+
+## M2 Increment 3g — nested tables (a cross-table corruption fix)
+
+The locator counted `<w:tr>` by parent element, so a NESTED table's rows — which
+sit under their own `<w:tbl>` — were counted against the OUTER table. An edit
+aimed at an outer row therefore landed INSIDE the nested table, silently
+overwriting its content. The docs called nested tables "unsupported"; they were
+actually a corruption hazard in a perfectly valid Word document.
+
+The locator now tracks `<w:tbl>` nesting depth and addresses only depth 1, so
+nested rows, cells, cell paragraphs, cell runs and `<w:gridCol>` entries no longer
+disturb the outer table's counters. Regression-tested with a new
+`nested_table_docx` fixture: editing the outer table's second row patches that
+cell and leaves the nested table's `INNER` text intact.
+
+Nested-table CONTENT is still not addressable (the bindings model only top-level
+tables) — but it is now safely ignored rather than accidentally rewritten.
+
+## M2 Increment 3h — the table footprint was in the wrong address space
+
+An audit of the doc's remaining prose-only claims found the admitted fudge
+(`TABLE_FOOTPRINT = 1`, "a conservative constant refined during editor
+integration") was not conservative — it was in the wrong space, and one counter
+was serving two.
+
+`insertTable` pushes a host paragraph carrying the table with **no runs**
+(`Paragraph { table: Some(..), ..Default::default() }` in core's
+`apply_insert_table`). The contiguous style space counts only `CharacterRun`
+text, so a table contributes **0** there — every `applyStyle` /
+`insertAnchoredFrame` / `insertHyperlink` range after a table was shifted by one
+per preceding table. In `insertText`'s space it does contribute 1 (the synthetic
+inter-paragraph break the host paragraph still has).
+
+So `place.ts` now tracks the two spaces separately (`styleOffset` / `textOffset`,
+footprints 0 and 1), and `buildTextPour` takes both bases and reports `byteLength`
+(UTF-8, because insertText's space counts BYTES) alongside the contiguous
+`length`. Pinned by vitest: distinct bases land on the right ops, and `"é\nb"` is
+2 contiguous code points but 4 bytes.
+
+Honest note: the contiguous side is proven by unit test and by reading core's
+apply path; the exact byte-space arithmetic across many steps is still only
+verifiable against a live host, so it stays flagged for the in-editor run.
+
+## Tier-3b — headers / footers + non-HYPERLINK fields
+
+Two more silent drops closed. Both were consumed by the importer with no model
+and no diagnostic, so a reader could not tell they had been lost.
+
+- **Headers / footers.** `sectPr`'s `headerReference` / `footerReference` are
+  resolved through the document rels and their `w:hdr` / `w:ftr` parts parsed into
+  `docx-core::HeaderFooter` (kind + paragraphs). They are NOT placed — the native
+  model has no header/footer story — and the diagnostic says exactly that. Their
+  text is deliberately kept OUT of the body flow; a test asserts it never leaks in.
+- **Non-HYPERLINK fields.** A field's name (the instruction's first token:
+  `PAGE`, `DATE`, `REF`, …) is now carried on the result run, for both the
+  `fldSimple` and complex `fldChar` forms. Word stores the value it last computed
+  as the field's RESULT, and that text is preserved — so the document still reads
+  correctly — but the diagnostic names the kinds and says plainly that the value is
+  a FROZEN snapshot nothing recomputes.
+
+Why not lower `PAGE` to the native `insertField(PageNumber)`? The door exists, but
+a field marker occupies one character in the story, which would fragment the pour
+into several `insertText` ops and complicate the offset lanes — and in real
+documents `PAGE` lives overwhelmingly in headers/footers, which are not placed
+anyway. Recorded as the natural follow-on once headers/footers can be poured.
+
+Verified through the real wasm (`headerfield` fixture): flow reads
+`"Printed on 23 July 2026, page 7."`, both diagnostics precise, header/footer text
+absent from the body.
+
+## HOST INTEGRATION — the round-trip runs in the editor (2026-07-26)
+
+The plugin had never been loaded by the editor. Everything above was verified in
+Rust against in-memory packages and, for save-back, a MOCK story read. This pass
+wired `@paged-media/doc` into `apps/canvas` and drove the whole chain — importer
+→ native lowering → engine mutation → DOC-03 structured read → diff → byte-splice
+patch → exporter — in a real browser, against a locally built canvas-wasm at
+protocol 55.
+
+**It did not work.** Three defects, none of which any Rust test could have caught,
+because each lives exactly at the host seam:
+
+1. **Nothing was ever placed.** `placeEmbedded` read `pages[0].id`, but the pages
+   collection carries `selfId`. The id was `undefined` on every real host, so
+   placement bailed with "no page to place into" — on the FIRST line of the first
+   host call. Now resolves `meta.activePage ?? pages[0].selfId`, the same way
+   paged.web and paged.sheet do.
+2. **`hitTest` was undeclared.** The manifest never listed
+   `capabilities.rendering: ["hitTest"]`, and manifest capabilities are ENFORCED
+   (trust-line W0.11) — so resolving the frame's story threw
+   `PluginCapabilityError`. Declared.
+3. **The text pour was rejected, silently.** The engine answered
+   `notImplemented: Mutation::Batch`: text ops and element ops live in two lanes,
+   and `Batch` only translates the element one (RFI **C-14**). The pour now runs
+   op-by-op — which costs atomicity and one-undo-step, and says so — and a
+   rejected op is now reported instead of leaving an empty frame that looks
+   placed.
+
+With those fixed the round-trip is REAL, and pinned by a DTP journey in the
+editor (`tests/journey/plugins/doc.journey.spec.ts`): open `doc-memo.docx`
+(docx-conformance's `memo_docx()`, dumped by the new `dump-fixture` example),
+assert it lowers into a native story (66 characters, 3 paragraphs) and paints,
+edit it with a real `insertText` engine mutation, save it back through the host
+exporter, and assert BOTH halves of the promise —
+
+- the edit reached `word/document.xml`, and the heading, the direct-formatted
+  bold-red run and `<w:sectPr>` are all still there, and
+- `customXml/unknown.txt` and `word/styles.xml` are **byte-identical** to the
+  source: the preservation invariant, measured rather than asserted.
+
+The journey was mutation-tested (drop `document.readStory@1` from the SDK's
+feature set → the exporter degrades to verbatim → the test goes red), so it is
+proving the save-back rather than passing by construction.
+
+STILL LOCAL, not committed: the editor wiring depends on two publishes — the
+canvas-wasm v55 release (DOC-03 read + cell-qualified applyStyle) and a
+`@paged-media/doc` canary. Until both land, this runs only under
+`sync-wasm.sh` + `link:` overrides.
+
+## Save-back: tabs, non-breaking hyphens and run content the text cannot place
+
+The import turns these run children into a character of the run's text:
+`<w:tab/>` and `<w:ptab>` → `\t`, `<w:noBreakHyphen/>` → U+2011,
+`<w:softHyphen/>` → U+00AD, a plain `<w:br/>` / `<w:cr/>` → U+2028, and a
+`<w:sym>` → its Unicode equivalent (`docx-core::symbols`: Word's `symbol.ttf`
+through its Adobe glyph names; the unambiguous part of `Wingdings.ttf`; where
+Word's own PDF names a glyph, that name). An edited run writes each character
+back the way the source run wrote its k-th one (the element bytes verbatim,
+or a literal character inside `<w:t>` where the source had one); a new one is
+Word's element (a new symbol character is text). The text goes where the
+run's first text-bearing child was. A `<w:sym>` with NO Unicode equivalent
+(Wingdings' Windows logo, an unknown symbol font's private code) has no
+character in the text: it is not shown (a warning names its font and code),
+and an edit to its run is refused into the skip ledger (the run keeps its
+bytes), as is an edit to a run with any other child (a page break, a
+footnote reference, a drawing) BETWEEN its pieces of text, which would move
+behind the edited text. Word opened the edited save without repair and put
+every piece of text after a tab at its tab stop
+(`fixtures/run-specials.word.json`, `scripts/word-run-specials-probe.sh`).
+
+On open (`fixtures/symbols.word.json`, `scripts/word-symbols-probe.sh`):
+
+- **Optional hyphens.** Word breaks a long word at one and draws a hyphen
+  there; elsewhere nothing shows. The engine's composer takes U+00AD as the
+  only break its word gets and shapes a hyphen at it (core `paged-text`
+  `hyphenate.rs`), but only in a paragraph whose hyphenation is on. The
+  lowering never turns it off, so it is; but that also means the engine
+  hyphenates every other word by its dictionary, which Word (automatic
+  hyphenation off by default) does not: Word breaks an over-long word with no
+  optional hyphen where the line is full, with no hyphen. Not modelled yet.
+- **Absolute-position tabs.** Word puts the text after a ptab at the
+  left/centre/right of the margins or of the indents. A paragraph whose only
+  tab is one ptab gets exactly that tab stop (with its leader). Other tabs in
+  the paragraph, a table cell, or a multi-column section: it stays a plain tab
+  to the next stop, with a diagnostic.
+- **Empty table cells.** Word lays a cell of one empty paragraph on that
+  paragraph's line height. `insertTable` mints its cells with NO paragraph, so
+  a caret there is refused (`caret offset 0 addresses no paragraph (story
+  length 0)`); the pour seeds the paragraph with an empty `insertText` and
+  then styles it with the cell caret.
+
+Editing several adjacent paragraphs in one save now patches each in place: the
+block diff pairs a stretch of deleted keys with the stretch of inserted ones
+that follows it, where it used to pair only the last with the first and
+delete-then-insert the rest.

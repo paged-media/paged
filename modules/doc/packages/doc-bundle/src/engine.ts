@@ -1,0 +1,198 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// The typed engine FACADE + boot. The Rust wasm (docx-js) does ALL the DOCX
+// work — OPC parse, WordprocessingML -> native lowering, preservation. This is
+// a thin TS shape over its snake_case wasm-bindgen methods (CLAUDE.md hard rule:
+// no DOCX semantics in TS).
+//
+// BOOT. The artifact is the wasm-bindgen `--target web` glue (bin/docx_js.js +
+// bin/docx_js_bg.wasm, produced by scripts/build-wasm.sh). We DON'T use the
+// host's loadBundleWasm (it instantiates a RAW module — no wbindgen imports); we
+// load the glue in the bundle realm exactly like @paged-media/canvas-wasm does,
+// branching browser vs Node like plugin-sdk's wasm-loader.ts. Until the artifact
+// exists the dynamic import REJECTS — bootEngine surfaces that honestly.
+
+import type { LoweredDoc } from "@paged-media/doc-host-model";
+import { parseLoweredDoc } from "@paged-media/doc-host-model";
+
+const ENGINE_NOT_BUILT =
+  "paged.doc engine wasm not built — run scripts/build-wasm.sh";
+
+/** The wasm-bindgen `DocEngine` (snake_case surface from docx-js/src/lib.rs). */
+interface WasmDocEngine {
+  load_docx(bytes: Uint8Array): void;
+  lowered_json(): string;
+  block_count(): number;
+  save_verbatim(): Uint8Array;
+  save_object_edits(editsJson: string): Uint8Array;
+  save_edited_from_content(contentJson: string): Uint8Array;
+  last_save_skips(): string;
+  skeleton_idml(name: string): Uint8Array;
+  skeleton_stories(): string;
+  set_mid_page_columns(on: boolean): void;
+  uses_mid_page_columns(): boolean;
+  free(): void;
+}
+
+/** The `--target web` glue module shape. */
+interface DocWasmModule {
+  default(init: {
+    module_or_path: string | URL | BufferSource | WebAssembly.Module;
+  }): Promise<unknown>;
+  initSync(module: { module: BufferSource | WebAssembly.Module }): unknown;
+  DocEngine: new () => WasmDocEngine;
+}
+
+/** A stable camelCase facade the rest of the bundle codes against. */
+export class DocEngine {
+  private constructor(private readonly inner: WasmDocEngine) {}
+
+  static async boot(): Promise<DocEngine> {
+    const mod = await loadModule();
+    return new DocEngine(new mod.DocEngine());
+  }
+
+  /** Load a `.docx`; throws with the engine's message on a hard failure. */
+  loadDocx(bytes: Uint8Array): void {
+    this.inner.load_docx(bytes);
+  }
+
+  /** The Tier-0 lowering (the host-model input). */
+  lowered(): LoweredDoc {
+    return parseLoweredDoc(this.inner.lowered_json());
+  }
+
+  /** ADR 029 — the page skeleton for standalone open, as an IDML package:
+   *  a page, a margin-box frame and an empty story per Word section, for
+   *  `host.nativeDocument.open`. The bundle sets the grow rules on the wire
+   *  and the pour fills the stories afterwards. */
+  skeletonIdml(name: string): Uint8Array {
+    return this.inner.skeleton_idml(name);
+  }
+
+  /** The skeleton's section story ids, in section order (the pour targets). */
+  skeletonStories(): string[] {
+    return JSON.parse(this.inner.skeleton_stories()) as string[];
+  }
+
+  /** ADR 029 — lower a mid-page column change to span/split columns
+   *  (`true`, the default: protocol 64) or to a page break (`false`: the
+   *  engine refused them). The lowering, the skeleton and save-back follow
+   *  it, so set it the same way before each. */
+  setMidPageColumns(on: boolean): void {
+    this.inner.set_mid_page_columns(on);
+  }
+
+  /** Whether the lowering uses span/split columns anywhere. */
+  usesMidPageColumns(): boolean {
+    return this.inner.uses_mid_page_columns();
+  }
+
+  /** Number of top-level body blocks. */
+  blockCount(): number {
+    return this.inner.block_count();
+  }
+
+  /** Zero-edit save-back (verbatim carry-through of the retained package). */
+  saveVerbatim(): Uint8Array {
+    return this.inner.save_verbatim();
+  }
+
+  /**
+   * The object model's writes, saved as a targeted patch: run texts and merge
+   * field results, addressed in lowered story coordinates. The engine picks
+   * the runs a merge field's result spans and never touches its field code;
+   * only the changed `w:t` are rewritten. Throws with the engine's reason
+   * (no such block / run / field, a table cell). `skips` is the patcher's
+   * refusal ledger.
+   */
+  saveObjectEdits(edits: {
+    runs?: ReadonlyArray<{ block: number; run: number; text: string }>;
+    mergeFields?: ReadonlyArray<{ block: number; occurrence: number; value: string }>;
+  }): { bytes: Uint8Array; skips: string[] } {
+    const bytes = this.inner.save_object_edits(JSON.stringify(edits));
+    return { bytes, skips: this.lastSaveSkips() };
+  }
+
+  /**
+   * M2 edited save-back (DOC-03): hand the host's structured read-back of the
+   * story (`host.document.storyContent(storyId)`) to the engine, which overlays
+   * it on the import baseline, diffs, and writes a TARGETED patch — only the
+   * changed `w:t`/`w:rPr` are rewritten, every other part and untouched subtree
+   * stays byte-identical.
+   */
+  saveEditedFromContent(content: unknown): Uint8Array {
+    return this.inner.save_edited_from_content(JSON.stringify(content));
+  }
+
+  /** The refusal ledger of the last `saveEditedFromContent` — every edit
+   *  the patcher SKIPPED rather than risk corrupting the document
+   *  (non-patchable runs, gridSpan column ops, …). Empty when clean. */
+  lastSaveSkips(): string[] {
+    try {
+      return JSON.parse(this.inner.last_save_skips()) as string[];
+    } catch {
+      return [];
+    }
+  }
+
+  dispose(): void {
+    this.inner.free();
+  }
+}
+
+function isNode(): boolean {
+  return (
+    typeof process !== "undefined" &&
+    process.versions != null &&
+    process.versions.node != null
+  );
+}
+
+async function loadModule(): Promise<DocWasmModule> {
+  let mod: DocWasmModule;
+  try {
+    // @ts-ignore — the artifact (bin/docx_js.js, the wasm-bindgen --target web
+    // glue) is produced by scripts/build-wasm.sh and is intentionally absent
+    // from the source tree; the dynamic import resolves at runtime once built.
+    mod = (await import("../bin/docx_js.js")) as DocWasmModule;
+  } catch (cause) {
+    throw new Error(ENGINE_NOT_BUILT, { cause });
+  }
+
+  if (isNode()) {
+    const { readFile } = await import("node:fs/promises");
+    const { fileURLToPath } = await import("node:url");
+    const wasmPath = fileURLToPath(
+      new URL("../bin/docx_js_bg.wasm", import.meta.url),
+    );
+    const bytes = await readFile(wasmPath);
+    mod.initSync({
+      module: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+    });
+  } else {
+    // @ts-ignore — `?url` is a bundler affordance, untyped (the editor's
+    // wasm-loading convention; tsup marks `?url` external).
+    const wasmUrl = (await import("../bin/docx_js_bg.wasm?url")) as {
+      default: string;
+    };
+    await mod.default({ module_or_path: wasmUrl.default });
+  }
+  return mod;
+}

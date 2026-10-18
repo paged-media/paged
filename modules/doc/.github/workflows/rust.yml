@@ -1,0 +1,87 @@
+name: rust
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.93.0
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: isolation guard (no core/plugin reach-around into docx-js wasm)
+        run: |
+          ! (cargo tree -p docx-js --target wasm32-unknown-unknown | grep -E 'docx-conformance|proptest')
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.93.0
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+      # Red results must still upload (the state matrix wants the ✗), so the
+      # run does not abort here — the gate at the end fails the job once the
+      # artifact is safely uploaded.
+      - name: nextest (junit; red results still upload)
+        run: |
+          set -uo pipefail
+          cargo nextest run --workspace --profile ci \
+            || echo "RUST_FAILED=1" >> "$GITHUB_ENV"
+          test -s target/nextest/ci/junit.xml
+      # plugin-doc is a PUBLIC repo and the publish-results action lives in the
+      # PRIVATE paged-media/state repo. GitHub refuses to resolve a private
+      # repo's action from a public workflow ("Unable to resolve action
+      # paged-media/state, not found"), which failed this job at SET-UP — before
+      # any step ran — on all 18 runs since the workflow was added. So we follow
+      # core/ci.yml's inverted pattern: upload the JUnit as an artifact, and let
+      # state pull it (private state CAN read a public repo's artifacts).
+      - name: upload nextest JUnit artifact
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-junit
+          path: target/nextest/ci/junit.xml
+          if-no-files-found: error
+          retention-days: 14
+      - name: tests failed
+        if: ${{ env.RUST_FAILED == '1' }}
+        run: exit 1
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.93.0
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: install pinned wasm-bindgen-cli (Cargo.lock version)
+        run: |
+          V=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
+          cargo install wasm-bindgen-cli --version "$V" --locked
+      - name: install pinned binaryen (reftypes-safe; old apt binaryen breaks externref table grow)
+        run: |
+          curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_119/binaryen-version_119-x86_64-linux.tar.gz | tar xz
+          echo "$PWD/binaryen-version_119/bin" >> "$GITHUB_PATH"
+      - name: build + budget gate (100 MB app-wide)
+        run: bash scripts/build-wasm.sh

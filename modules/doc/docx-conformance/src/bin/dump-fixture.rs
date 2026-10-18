@@ -1,0 +1,64 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Write a conformance fixture to a path, so the wasm-boundary smoke harness
+//! (a Node script booting the real docx-js artifact) has a real `.docx`.
+//! `cargo run -p docx-conformance --bin dump-fixture -- <path> [memo|tier1|one|pagination|line-spacing|breaks|continuous|columns|line-breaks|run-specials|cell-blank-lines|symbols|headers|footnote-numbering|floats|real-docx|keeps|merge|…]`
+
+fn main() {
+    let path = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "memo.docx".into());
+    let which = std::env::args().nth(2).unwrap_or_else(|| "memo".into());
+    let bytes = match which.as_str() {
+        "tier1" => docx_conformance::tier1_docx(),
+        "list" => docx_conformance::list_docx(),
+        "image" => docx_conformance::image_docx(),
+        "hyperlink" => docx_conformance::hyperlink_docx(),
+        "fieldlink" => docx_conformance::field_hyperlink_docx(),
+        "footnote" => docx_conformance::footnote_docx(),
+        "nested" => docx_conformance::nested_table_docx(),
+        "anchorlink" => docx_conformance::internal_anchor_docx(),
+        "headerfield" => docx_conformance::header_field_docx(),
+        "simpletable" => docx_conformance::simple_table_docx(),
+        "table" => docx_conformance::table_docx(),
+        "one" => docx_conformance::one_paragraph_docx(),
+        "pagination" => docx_conformance::pagination_docx(),
+        "line-spacing" => docx_conformance::line_spacing_docx(),
+        "paragraph-spacing" => docx_conformance::paragraph_spacing_docx(Some(15)),
+        "paragraph-spacing-11" => docx_conformance::paragraph_spacing_docx(Some(11)),
+        "paragraph-spacing-none" => docx_conformance::paragraph_spacing_docx(None),
+        "paragraph-spacing-sum" => docx_conformance::paragraph_spacing_docx_with(Some(11), true),
+        "breaks" => docx_conformance::breaks_docx(),
+        "continuous" => docx_conformance::continuous_docx(),
+        "columns" => docx_conformance::columns_docx(),
+        "line-breaks" => docx_conformance::line_breaks_docx(),
+        "run-specials" => docx_conformance::run_specials_docx(),
+        "cell-blank-lines" => docx_conformance::cell_blank_lines_docx(),
+        "symbols" => docx_conformance::symbols_docx(),
+        "headers" => docx_conformance::headers_docx(),
+        "footnote-numbering" => docx_conformance::footnote_numbering_docx(),
+        "floats" => docx_conformance::floats_docx(),
+        "real-docx" => docx_conformance::real_docx_docx(),
+        "keeps" => docx_conformance::keeps_docx(),
+        "merge" => docx_conformance::merge_field_docx(),
+        _ => docx_conformance::memo_docx(),
+    };
+    std::fs::write(&path, bytes).expect("write fixture");
+    eprintln!("wrote {which} -> {path}");
+}
