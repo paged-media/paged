@@ -32,7 +32,7 @@
 // DOM). The provider is driven directly; its registration through the
 // headless host's door is asserted first.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import type {

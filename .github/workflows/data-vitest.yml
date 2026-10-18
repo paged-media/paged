@@ -1,8 +1,9 @@
-name: data / vitest
+name: data / bun test
 concurrency:
-  # A newer push to a pull request cancels the older run. Every other run
-  # (main, dispatch) has a group of its own: never cancelled, never queued.
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  # A newer push to a pull request cancels the older run. Main pushes share
+  # one group per event type: a running main run always finishes, and a newer
+  # push replaces the one still waiting, so direct pushes queue at most one.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # MONOREPO (step A3): ported from paged-media/plugin-data
@@ -71,6 +72,7 @@ defaults:
 
 jobs:
   vitest:
+    name: bun test
     runs-on: ubuntu-latest
     steps:
       # The plugin contract and the engine come from the workspace
@@ -83,7 +85,7 @@ jobs:
           auto-install: true
           proto-version: "0.63.1"
       # ------------------------------------------------------------------
-      # REAL-ENGINE artifact (audit P4). This lane used to run vitest with
+      # REAL-ENGINE artifact (audit P4). This lane used to run its unit tests with
       # no wasm artifact, so data-bundle's engine-real.spec.ts skipIf gate
       # skipped the real boot on EVERY CI — every other bundle test runs
       # against fake hosts/engines. Build it here (the exact recipe of
@@ -153,7 +155,7 @@ jobs:
           CHROME=$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)
           test -n "$CHROME"
           echo "PAGED_CHROMIUM=$CHROME" >> "$GITHUB_ENV"
-      - name: vitest (junit per package)
+      - name: bun test (junit per package)
         env:
           # The spec-level half of the dual gate (engine-real.spec.ts,
           # wasm-fresh.spec.ts): under this env a missing artifact FAILS the
@@ -165,11 +167,13 @@ jobs:
           REQUIRE_REAL_BROWSER: "1"
         run: |
           bun run --filter './packages/*' test \
-            --reporter=default --reporter=junit --outputFile.junit=junit.xml
+            --reporter=junit --reporter-outfile=junit.bun.xml
+      # bun's reports, rewritten into the vitest shape the evidence has always
+      # had (tooling/js/bun-junit.mjs): the artifact keeps its name and test ids.
       - name: collect junit
         if: ${{ !cancelled() }}
         run: |
-          cat packages/*/junit.xml > junit-all.xml
+          bun ../../tooling/js/bun-junit.mjs --out junit-all.xml packages/*/junit.bun.xml
           [ -s junit-all.xml ]
       # Evidence hand-off, INVERTED (2026-07-25). This step used to call
       # paged-media/state/actions/publish-results@main, but that action lives in the
@@ -181,7 +185,7 @@ jobs:
       # and let state PULL it (private state can read a public repo's artifacts).
       # Consumer: state/.github/workflows/siblings-pull.yml (source=plugin-data,
       # suite=vitest, format=nextest-junit).
-      - name: upload vitest results artifact
+      - name: upload JUnit results artifact
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:

@@ -7,7 +7,7 @@
   "scripts": {
     "typecheck": "bun run --filter './packages/*' typecheck",
     "build": "bun run --filter './packages/*' typecheck",
-    "test": "bun run --filter './packages/*' test",
+    "test": "bun run --filter './packages/*' test && bun run --filter './packages/draw-bundle' test:dom",
     "bench": "bun run --filter './packages/*' bench"
   },
   "devDependencies": {

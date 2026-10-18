@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ADR 559's InDesign lane: InDesign 2025 opens every fixture paged wrote
-# (fixtures/*.idml, made by `PAGED_RECORD_INDESIGN_FIXTURES=1 vitest run
-# test/indesign-binding.spec.ts` in packages/data-bundle), records what it
+# (fixtures/*.idml, made by `PAGED_RECORD_INDESIGN_FIXTURES=1 bun test
+# ./test/indesign-binding.spec.ts` in packages/data-bundle), records what it
 # sees and re-saves it (recorded/). Local only (needs InDesign; takes the GUI
 # for a few seconds). CI replays the recordings (test/indesign-binding.spec.ts).
 #

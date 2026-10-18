@@ -22,7 +22,7 @@
 // the slice-count contract (a 360° arc → 4 cubics) and the degenerate
 // cases (coincident endpoints, zero radius).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { arcToCubics, evalCubic, type ArcCubic, type Vec2 } from "../src";
 

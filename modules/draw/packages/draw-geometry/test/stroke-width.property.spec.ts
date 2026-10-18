@@ -22,7 +22,7 @@
 // profile). One file because they share one contract: a stop is a finite,
 // non-negative width.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   MIN_BRUSH_WIDTH_RATIO,

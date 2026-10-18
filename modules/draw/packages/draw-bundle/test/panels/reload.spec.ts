@@ -26,7 +26,7 @@
 // whether or not anything enforces it. Here the reloads are promises the
 // spec resolves by hand, in the order that used to go wrong.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 

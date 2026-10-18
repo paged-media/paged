@@ -16,9 +16,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// @vitest-environment jsdom
 
-// The OBJECTS ON PATH panel, RENDERED (jsdom) against the real engine:
+// The OBJECTS ON PATH panel, RENDERED (happy-dom) against the real engine:
 // behaviour first (empty state, records, buttons asserted on the
 // DOCUMENT), then its reload budgets as counts at the host doors — the
 // perf-budgets.spec.ts rules: MEASURED, target beside it, only lowered.
@@ -31,7 +30,7 @@
 // (`src/link-index.ts`), one part read per reload, the newest reload
 // wins.
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 
 import { metadataReadsPerLeaf } from "../engine-reads";
 
@@ -221,7 +220,7 @@ describe("Objects on path panel — rendered against the engine", () => {
       expect(panel.text()).toContain("offset 10 pt");
     });
 
-    // WAS A BUG (measured, then fixed) — the same one blend-panel.spec.tsx
+    // WAS A BUG (measured, then fixed) — the same one blend-panel.dom.test.tsx
     // pins, in this panel's copy of the code. With EXACTLY ONE record in
     // the library `resolveObjectsOnPath` answers that record whatever is
     // selected, and every reload ended in `if (saved)
@@ -261,7 +260,7 @@ describe("Objects on path panel — rendered against the engine", () => {
       // The contrast case, as it was found. Five of this panel's siblings
       // went stale when a record was made or removed by the command
       // instead of the panel's button (a recipe write is not an event —
-      // see blend-panel.spec.tsx). This one was followed both ways even
+      // see blend-panel.dom.test.tsx). This one was followed both ways even
       // then, because both verbs end in a selection change that lands
       // AFTER the recipe write. A recipe write announces itself now, so
       // it no longer depends on that — pinned so it stays true.
@@ -385,7 +384,7 @@ describe("Objects on path panel — rendered against the engine", () => {
 
     // WAS A BUG (measured, then fixed) — the last reload to FINISH won,
     // not the last to start, and the panel showed "" with an object of
-    // op-1 selected; see blend-panel.spec.tsx for the mechanism.
+    // op-1 selected; see blend-panel.dom.test.tsx for the mechanism.
     it(
       "the panel ends on the LATEST selection when a slower, older reload is still in flight",
       async () => {

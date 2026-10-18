@@ -29,7 +29,7 @@
 // the loader throws by design (no warn-skip) — so a green run here means
 // a real engine actually replayed the operations.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import type {
   BundleHost,

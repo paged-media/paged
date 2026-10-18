@@ -9,7 +9,8 @@
 //   write, an undo takes it back, and a reopened copy restores the labelled
 //   version; on 68 nothing is labelled and session.json alone is written.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, mock } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 
 import type { BundleHost, Mutation } from "@paged-media/plugin-api";
 import { defineBundle, type HeadlessHost } from "@paged-media/plugin-sdk";
@@ -20,6 +21,12 @@ import { labelledVersion, sessionVersionPath } from "../src/doc-label";
 import type { DataEngineLike } from "../src/engine";
 import { commitLoweredVariable } from "../src/lower";
 import { ENGINE_ANCHOR, ENGINE_PROTOCOL, fixedFrom, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
+
+// bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
+// real exports are taken once, before anything is mocked, and mock.module
+// patches the loaded module in place (every importer sees the change).
+const actualEngine = await importActual(() => import("../src/engine"));
+const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 
 const run = ENGINE_ANCHOR !== null || REQUIRE_REAL_CORE;
 const PLUGIN = "media.paged.data";
@@ -137,13 +144,12 @@ function fakeEngine(over: Partial<DataEngineLike> = {}): DataEngineLike {
 }
 
 async function sessionOver(host: BundleHost, engine: DataEngineLike) {
-  vi.resetModules();
-  vi.doMock("../src/engine", async (orig) => ({
-    ...(await orig<typeof import("../src/engine")>()),
+  mock.module("../src/engine", () => ({
+    ...actualEngine,
     bootEngine: async () => engine,
   }));
-  vi.doMock("../src/query/duckdb", async (orig) => ({
-    ...(await orig<typeof import("../src/query/duckdb")>()),
+  mock.module("../src/query/duckdb", () => ({
+    ...actualDuckdb,
     bootDuckDB: async () => ({
       registerCsv: async () => {},
       registerFileBuffer: async () => {},

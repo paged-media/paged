@@ -197,7 +197,7 @@ Rules for every code change in this repo:
 ## Commands
 
 ```bash
-# Everything (Rust nextest + doctests, then wasm + DuckDB + vitest), from anywhere:
+# Everything (Rust nextest + doctests, then wasm + DuckDB + bun test), from anywhere:
 moon run data:test
 # Rust (the engine) without Moon. CARGO_INCREMENTAL=0 keeps target/ small.
 cargo build --workspace

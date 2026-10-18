@@ -30,7 +30,7 @@
 //   5. machine.apply(ops) — a plan's ops previewed on the machine's own
 //                          table.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { AnchorTable, AnchorTriple } from "@paged-media/draw-geometry";
 

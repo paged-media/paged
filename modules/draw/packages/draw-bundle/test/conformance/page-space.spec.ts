@@ -30,7 +30,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 
 import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -136,6 +136,20 @@ const apply = (m: Affine, [x, y]: readonly number[]): Vec => [
   m[1] * x! + m[3] * y! + m[5],
 ];
 
+// Whether the engine reports a page's origin in elementGeometry, probed once
+// while the file loads: bun:test has no runtime skip (vitest's ctx.skip()),
+// so the cases that need it are skipIf'd on it instead.
+const PAGE_ORIGIN = await (async () => {
+  const p = await openHost();
+  try {
+    await p.load(DOC());
+    const [g] = await p.host.document.elementGeometry([poly("tri")]);
+    return (g as { pageOrigin?: unknown } | undefined)?.pageOrigin !== undefined;
+  } finally {
+    p.dispose();
+  }
+})();
+
 describe("draw conformance — page space on a page that does not start at its spread's origin", () => {
   let h: HeadlessHost;
 
@@ -238,12 +252,11 @@ describe("draw conformance — page space on a page that does not start at its s
     near(await spreadOutline(poly("o1")), home);
   });
 
-  it("Objects on a path: the ARTBOARD fit holds the objects on THIS page (an engine that reports the origin)", async (ctx) => {
+  it.skipIf(!PAGE_ORIGIN)("Objects on a path: the ARTBOARD fit holds the objects on THIS page (an engine that reports the origin)", async () => {
     // The published engine reads spread space here and reports no origin,
     // so its artboard fit compares against the wrong rect and refuses;
     // that is the engine fix's to correct, and the bundle uses the origin
     // as soon as it is reported.
-    if (!pageSpaceEngine) ctx.skip();
     await h.host.selection.set([poly("o1"), poly("o2"), poly("spine")]);
     const moved = await applyMakeObjectsOnPath(h.host, { alignToPath: false });
     expect(moved).toHaveLength(2);
@@ -342,12 +355,10 @@ describe("draw conformance — Create Outlines on a page that does not start at 
   });
   afterAll(() => h?.dispose());
 
-  it("the outlines, holes and all, land inside the frame's box on its page (an engine that reports the origin)", async (ctx) => {
+  it.skipIf(!PAGE_ORIGIN)("the outlines, holes and all, land inside the frame's box on its page (an engine that reports the origin)", async () => {
     // The outlines door answers page space on every engine; only an engine
     // that reports the page origin lets the re-merged runs get it back.
     const frame = { kind: "textFrame", id: "tf" } as ElementId;
-    const [g] = await h.host.document.elementGeometry([frame]);
-    if ((g as { pageOrigin?: unknown } | undefined)?.pageOrigin === undefined) ctx.skip();
     const before = new Set(((await h.host.document.tree()) as { id?: ElementId }[]).map((n) => String(n.id?.id)));
     await h.host.selection.set([frame]);
     expect(await applyCreateOutlines(h.host)).toEqual([frame]);

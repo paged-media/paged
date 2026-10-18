@@ -32,7 +32,7 @@
 //     still registers (a tracked no-op), never a throw;
 //   · the matcher + hooks survive verbatim (the shell calls them).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type {
   ContentWheelEvent,

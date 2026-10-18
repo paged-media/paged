@@ -35,12 +35,12 @@ import { Module } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 // Run `fn` with NODE_PATH neutralised. The unresolvable-source
 // assertions verify ANCHOR-RELATIVE resolution: the package must NOT be
-// found via the temp anchor's node_modules. But vitest seeds NODE_PATH
-// with pnpm's flat `.pnpm/node_modules`, and since the headless harness
+// found via the temp anchor's node_modules. But a runner can seed NODE_PATH
+// (vitest did, with pnpm's flat `.pnpm/node_modules`), and since the headless harness
 // devDepends on @paged-media/canvas-wasm it now lives there — Node's
 // resolver ALWAYS consults NODE_PATH (the `paths` option can't exclude
 // it), so a bare anchor would "resolve" the package by environment

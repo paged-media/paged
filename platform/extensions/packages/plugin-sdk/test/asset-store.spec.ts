@@ -29,7 +29,7 @@
 //   5. the recordable fake (`createRecordableAssetSource`) records
 //      every request and matches case-insensitively / by style.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "bun:test";
 
 import type { FontFaceAsset, PluginManifest } from "@paged-media/plugin-api";
 

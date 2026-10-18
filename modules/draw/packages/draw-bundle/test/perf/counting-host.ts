@@ -251,7 +251,7 @@ export function countingHost(host: BundleHost): {
 /** The per-test timeout the budget specs set (`vi.setConfig`). A count
  *  does not get slower on a loaded CI runner; the wall clock around it
  *  does, and the slowest scenario here is ~2.5 s on a quiet laptop —
- *  half of vitest's 5 s default. No budget is a duration, so a generous
+ *  half of the runner's 5 s default. No budget is a duration, so a generous
  *  timeout hides nothing. */
 export const BUDGET_TIMEOUT_MS = 60_000;
 

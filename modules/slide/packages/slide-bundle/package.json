@@ -29,7 +29,7 @@
   },
   "scripts": {
     "typecheck": "bun check",
-    "test": "bun test --parallel",
+    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts",
     "build": "tsup"
   },
   "peerDependencies": {

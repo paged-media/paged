@@ -11,13 +11,20 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, mock } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { ENGINE_ANCHOR, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
 import { bootRealDuckDB, bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_DUCKDB } from "./real-duckdb";
+
+// bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
+// real exports are taken once, before anything is mocked, and mock.module
+// patches the loaded module in place (every importer sees the change).
+const actualEngine = await importActual(() => import("../src/engine"));
+const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(HERE, "..", "..", "..", "conformance", "sources");
@@ -29,13 +36,12 @@ const ready = ENGINE_ANCHOR !== null && probe.handle !== undefined && existsSync
 const required = REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB;
 
 async function loadBundleModule() {
-  vi.resetModules();
-  vi.doMock("../src/engine", async (orig) => ({
-    ...(await orig<typeof import("../src/engine")>()),
+  mock.module("../src/engine", () => ({
+    ...actualEngine,
     bootEngine: (today: number) => bootRealEngine(today),
   }));
-  vi.doMock("../src/query/duckdb", async (orig) => ({
-    ...(await orig<typeof import("../src/query/duckdb")>()),
+  mock.module("../src/query/duckdb", () => ({
+    ...actualDuckdb,
     bootDuckDB: async () => {
       const b = await bootRealDuckDB();
       if (!b.handle) throw new Error(b.error);

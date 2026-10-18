@@ -16,9 +16,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// @vitest-environment jsdom
 
-// The PATH OPTIONS panel, RENDERED (jsdom) against the real engine.
+// The PATH OPTIONS panel, RENDERED (happy-dom) against the real engine.
 //
 // What it has to prove is one sentence: A NUMBER TYPED INTO A FIELD
 // REACHES THE ENGINE. So every behaviour test types into the form,
@@ -34,7 +33,7 @@
 // the reload budget — this panel keeps no records, so a reload reads at
 // most the selected path's own stroke.
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 
 import type {
   BundleHost,

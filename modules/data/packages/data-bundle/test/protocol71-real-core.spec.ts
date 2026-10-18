@@ -19,7 +19,8 @@
 // skipped (the 0.70 lane keeps the placeholder field, the two-step swatch and
 // the setElementProperty rule path — covered by the other real-core specs).
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi, mock, setDefaultTimeout } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 import { existsSync } from "node:fs";
 
 import type { BundleHost } from "@paged-media/plugin-api";
@@ -28,6 +29,12 @@ import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import { ENGINE_ANCHOR, ENGINE_PROTOCOL, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
 import { bootRealDuckDB, bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_DUCKDB } from "./real-duckdb";
 import { readZip, stripContainerParts, text } from "./zip";
+
+// bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
+// real exports are taken once, before anything is mocked, and mock.module
+// patches the loaded module in place (every importer sees the change).
+const actualEngine = await importActual(() => import("../src/engine"));
+const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 
 const CSV = "sku,name,weight_mm,tint\nA-1,Alpha,2,#ff0000\nB-2,Beta,4,Black\nC-3,Gamma,1,Black\n";
 const CSV2 = "sku,name,weight_mm,tint\nA-1,Alpha Two,2,#ff0000\nB-2,Beta,4,Black\nC-3,Gamma,1,Black\n";
@@ -39,13 +46,12 @@ const required = REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB;
 const v71 = ENGINE_PROTOCOL >= 71;
 
 async function loadBundleModule() {
-  vi.resetModules();
-  vi.doMock("../src/engine", async (orig) => ({
-    ...(await orig<typeof import("../src/engine")>()),
+  mock.module("../src/engine", () => ({
+    ...actualEngine,
     bootEngine: (today: number) => bootRealEngine(today),
   }));
-  vi.doMock("../src/query/duckdb", async (orig) => ({
-    ...(await orig<typeof import("../src/query/duckdb")>()),
+  mock.module("../src/query/duckdb", () => ({
+    ...actualDuckdb,
     bootDuckDB: async () => {
       const b = await bootRealDuckDB();
       if (!b.handle) throw new Error(b.error);
@@ -67,9 +73,11 @@ async function exportPaged(host: BundleHost): Promise<Uint8Array> {
 }
 
 // Each case boots the real engine, data-js and DuckDB and exports IDML: under
-// a second each on a quiet machine, but past vitest's 5 s default on a shared
+// a second each on a quiet machine, but past the 5 s default on a shared
 // 4-core runner when the whole suite runs in parallel (the publish job).
-describe.skipIf(!v71 || (!ready && !required))("engine protocol 71: text variables, creates in the batch, cell addresses [data.bind.property]", { timeout: 30_000 }, () => {
+// (bun's describe takes no options; the file's one block gets 30 s this way.)
+setDefaultTimeout(30_000);
+describe.skipIf(!v71 || (!ready && !required))("engine protocol 71: text variables, creates in the batch, cell addresses [data.bind.property]", () => {
   const hosts: HeadlessHost[] = [];
   afterEach(() => {
     while (hosts.length) hosts.pop()!.dispose();

@@ -25,7 +25,7 @@
 // the headless host over the real engine (export → open round-trip, the
 // documentLoaded broadcast, the keep/discard decision, the engine shaper).
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import type { PluginManifest, WorkerToMain } from "@paged-media/plugin-api";
 

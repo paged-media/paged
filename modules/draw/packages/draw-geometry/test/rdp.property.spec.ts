@@ -19,7 +19,7 @@
 // Property tests for rdp.ts — the Ramer-Douglas-Peucker simplifier under
 // the Pencil (and its pressure lane, which rides the kept INDICES).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { segmentDistance, simplifyRdp, simplifyRdpIndices } from "../src";
 import {

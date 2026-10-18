@@ -23,7 +23,7 @@
 // data in, mutations out. RASTER is BLOCKED (placeImage needs a uri), so a
 // barcode never lowers to an image — the VECTOR lane is the honest path.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   barcodeModuleCount,

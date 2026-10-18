@@ -46,7 +46,7 @@
 //       shapes, the bucket/selection GESTURES driven with synthetic
 //       pointer events, and the z-order fact a fill inherits.
 
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, beforeEach } from "bun:test";
 
 import type {
   BundleHost,

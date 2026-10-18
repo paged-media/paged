@@ -38,7 +38,7 @@
 //   · the tool drives NO mutations (read-only proof: the document is
 //     untouched).
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type {
   BundleHost,

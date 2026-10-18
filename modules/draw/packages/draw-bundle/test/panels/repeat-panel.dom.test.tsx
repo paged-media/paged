@@ -16,9 +16,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// @vitest-environment jsdom
 
-// The REPEAT OPTIONS panel, RENDERED (jsdom) against the real engine:
+// The REPEAT OPTIONS panel, RENDERED (happy-dom) against the real engine:
 // behaviour first (empty state, records, buttons asserted on the
 // DOCUMENT), then its reload budgets as counts at the host doors — the
 // perf-budgets.spec.ts rules: MEASURED, target beside it, only lowered.
@@ -31,7 +30,7 @@
 // (`src/link-index.ts`), one part read per reload, the newest reload
 // wins.
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
 
 import { metadataReadsPerLeaf } from "../engine-reads";
 
@@ -206,7 +205,7 @@ describe("Repeat options panel — rendered against the engine", () => {
       expect(panel.text()).toContain("Grid · 3 × 1 (2 copies placed)");
     });
 
-    // WAS A BUG (measured, then fixed) — the same one blend-panel.spec.tsx
+    // WAS A BUG (measured, then fixed) — the same one blend-panel.dom.test.tsx
     // pins, in this panel's copy of the code. With EXACTLY ONE record in
     // the library `resolveRepeat` answers that record whatever is
     // selected, and every reload ended in `if (saved)
@@ -240,7 +239,7 @@ describe("Repeat options panel — rendered against the engine", () => {
       expect(panel.count("[data-draw-repeat-row]")).toBe(0);
     });
 
-    // WAS A BUG (measured, then fixed) — the one blend-panel.spec.tsx
+    // WAS A BUG (measured, then fixed) — the one blend-panel.dom.test.tsx
     // explains: a recipe write is not an event, and `applyMakeRepeat`
     // saves the recipe AFTER its batch, so the reload the batch triggered
     // read the library too early. The panel's own make buttons hid it
@@ -264,7 +263,7 @@ describe("Repeat options panel — rendered against the engine", () => {
       },
     );
 
-    // The same, in the order the EDITOR has (see blend-panel.spec.tsx):
+    // The same, in the order the EDITOR has (see blend-panel.dom.test.tsx):
     // the recipe write lands a task after the reload the batch started.
     // This is the case that fails without the announcement.
     it("…and when the recipe write lands AFTER the reload its batch started", async () => {
@@ -389,7 +388,7 @@ describe("Repeat options panel — rendered against the engine", () => {
     });
 
     // WAS A BUG (measured, then fixed) — the last reload to FINISH won,
-    // not the last to start; see blend-panel.spec.tsx for the mechanism.
+    // not the last to start; see blend-panel.dom.test.tsx for the mechanism.
     // Here the older reload's `setActive(null)` landed after the newer
     // one resolved the selected source to rep-1, and the panel showed "".
     it(

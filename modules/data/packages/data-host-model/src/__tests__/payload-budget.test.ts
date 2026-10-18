@@ -29,7 +29,7 @@
 // If product reality ever pushes past these shapes, this test is the alarm
 // that re-opens D-08.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { makeEnvelope } from "../index";
 

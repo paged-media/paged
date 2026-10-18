@@ -30,7 +30,7 @@
 //     batch has to keep — the two that were known, and the one that
 //     decides how many rebuilds one batch may carry.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 
 import type {
   BundleHost,
