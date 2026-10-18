@@ -495,7 +495,7 @@ describe("one gesture is one undo step; cancel commits nothing (model dumps)", (
 // gesture begins), which the second test of each pair keeps true; the
 // first is the behaviour the engine should have, an expected failure
 // until it does.
-describe("fuzzer findings", () => {
+describe("findings: the fuzzer's (GF) and the gesture matrix's (GM)", () => {
   const groupWidth = async () => {
     const b = box(await corners(GROUP));
     return b.right - b.left;
@@ -620,6 +620,44 @@ describe("fuzzer findings", () => {
     } finally {
       reload.dispose();
     }
+  });
+
+  // Found by the gesture matrix (gesture-matrix.json, GM-1): the pointer
+  // turns 90° about the group's centre and the group turns ~37° about
+  // (260, 90) — the mean of its members' centres AND a phantom point at
+  // the origin: (0 + 340 + 440) / 3, (0 + 130 + 140) / 3. A frame or a
+  // single member turns about its own centre.
+  test.failing(
+    "[GM-1] a group turns about its centre, as a frame does @level:gesture",
+    async () => {
+      const centre = (cs: Pt[]): Pt => [
+        (cs[0][0] + cs[2][0]) / 2,
+        (cs[0][1] + cs[2][1]) / 2,
+      ];
+      const c0 = centre(await corners(GROUP));
+      const reply = await gesture({
+        nodes: [GROUP],
+        gesture: { kind: "rotate" },
+        anchor: { pageId: PAGE, pointInPage: [c0[0] + 100, c0[1]] },
+        deltas: [[-100, 100]],
+      });
+      expect(reply.kind).toBe("gestureCommitted");
+      const c1 = centre(await corners(GROUP));
+      expect(c1[0]).toBeCloseTo(c0[0], 1);
+      expect(c1[1]).toBeCloseTo(c0[1], 1);
+    },
+  );
+
+  it("a frame turns about its own centre (the GM-1 control) @level:gesture", async () => {
+    const centre = (cs: Pt[]): Pt => [
+      (cs[0][0] + cs[2][0]) / 2,
+      (cs[0][1] + cs[2][1]) / 2,
+    ];
+    const c0 = centre(await corners(FRAME));
+    await rotateBy(90);
+    const c1 = centre(await corners(FRAME));
+    expect(c1[0]).toBeCloseTo(c0[0], 3);
+    expect(c1[1]).toBeCloseTo(c0[1], 3);
   });
 
   it("the failing commits are atomic: nothing changes and the next gesture begins @level:gesture", async () => {
