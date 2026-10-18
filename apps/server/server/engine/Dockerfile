@@ -5,7 +5,10 @@
 #
 # The build context is the REPOSITORY ROOT (the Dockerfile copies engine/core
 # out of it; Dockerfile.dockerignore beside this file keeps build outputs and
-# node_modules out of the context):
+# node_modules out of the context). engine/core is the whole build input:
+# every crate `paged` depends on, the IDML adapter (crates/idml-import,
+# crates/idml-export) included, is a path dependency inside it; the engine's
+# only git dependencies are its vello and flo_curves pins. Build with:
 #
 #   docker build -f apps/server/server/engine/Dockerfile -t paged-engine .
 #

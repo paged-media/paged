@@ -2,8 +2,9 @@
 # Run:  cargo deny check
 # Docs: https://embarkstudios.github.io/cargo-deny/
 #
-# The same policy as the engine (paged-media/core): these crates are linked
-# into the engine's wasm, so their dependencies meet its license terms.
+# The same policy as the engine (engine/core): pdf-import ships as wasm in
+# the pdf bundle and builds on the engine's model crates, so its
+# dependencies meet the engine's license terms.
 
 [advisories]
 version = 2
@@ -41,6 +42,6 @@ allow-wildcard-paths = true
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-# The shared model crates (paged-model, paged-scene, paged-store) are
-# git-depended from the public engine repo at a pinned revision.
-allow-git = ["https://github.com/paged-media/core"]
+# No git sources: the shared model crates (paged-model, paged-scene,
+# paged-store) and idml-import are path dependencies on engine/core.
+allow-git = []
