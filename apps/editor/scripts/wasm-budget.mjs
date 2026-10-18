@@ -27,21 +27,28 @@
 //
 // What it measures: every `.wasm` the canvas app can resolve through its
 // own `node_modules`, deduplicated BY REAL PATH. The dedupe is
-// load-bearing — pnpm gives each workspace package its own
-// `node_modules/@paged-media/canvas-wasm` symlink into one store entry,
-// so a naive walk counts the same 19.9 MiB engine five times and reports
-// ~286 MiB for an app that ships far less. Distinct files are what the
-// bundler emits and what the browser downloads.
+// load-bearing — every package that depends on canvas-wasm links the same
+// directory, so a naive walk counts the same 19.9 MiB engine five times and
+// reports ~286 MiB for an app that ships far less. Distinct files are what
+// the bundler emits and what the browser downloads.
+//
+// Only what a package SHIPS counts: the entries of its package.json `files`
+// (a package without `files` is walked whole). The @paged-media packages are
+// workspace packages, linked to their source directories, which also hold
+// tests and fixtures; the published tarballs never had those. The bundles'
+// engine wasm (doc, slide, sheet, data, web) and the engine's packages are
+// build outputs, so CI builds them before this runs.
 //
 // Usage:  node scripts/wasm-budget.mjs [--json]
 // Exit 1 when over budget; prints the full inventory either way.
 
-import { readdirSync, statSync, realpathSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync, realpathSync, writeFileSync } from "node:fs";
 import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const APP = join(ROOT, "apps/canvas");
+const REPO = join(ROOT, "..", "..");
 
 /** The app-wide ceiling. 100 MB decimal, as a download is quoted. */
 export const APP_WASM_BUDGET_BYTES = 100 * 1000 * 1000;
@@ -59,7 +66,7 @@ function wasmFilesUnder(dir, depth = 0, out = []) {
     const p = join(dir, e.name);
     let st;
     try {
-      st = statSync(p); // statSync follows symlinks; pnpm links everything
+      st = statSync(p); // statSync follows symlinks; Bun links every package
     } catch {
       continue;
     }
@@ -72,6 +79,33 @@ function wasmFilesUnder(dir, depth = 0, out = []) {
     } else if (e.name.endsWith(".wasm")) {
       out.push(p);
     }
+  }
+  return out;
+}
+
+/** The paths a package ships: its `files` entries, or the whole package. */
+function shippedPaths(pkgDir) {
+  let files;
+  try {
+    files = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8")).files;
+  } catch {
+    files = undefined;
+  }
+  return Array.isArray(files) ? files.map((f) => join(pkgDir, f)) : [pkgDir];
+}
+
+/** Every `.wasm` a package ships. */
+function shippedWasm(pkgDir) {
+  const out = [];
+  for (const p of shippedPaths(pkgDir)) {
+    let st;
+    try {
+      st = statSync(p);
+    } catch {
+      continue; // a listed build output that is not built
+    }
+    if (st.isDirectory()) wasmFilesUnder(p, 0, out);
+    else if (p.endsWith(".wasm")) out.push(p);
   }
   return out;
 }
@@ -91,7 +125,7 @@ export function collect() {
   // packages link to it, is one download.
   const byReal = new Map();
   for (const pkg of pkgs.sort()) {
-    for (const f of wasmFilesUnder(join(scope, pkg))) {
+    for (const f of shippedWasm(join(scope, pkg))) {
       let real;
       try {
         real = realpathSync(f);
@@ -109,7 +143,7 @@ export function collect() {
 
   const artifacts = [...byReal.entries()]
     .map(([real, v]) => ({
-      file: real.replace(/^.*\/node_modules\//, ""),
+      file: real.includes("/node_modules/") ? real.replace(/^.*\/node_modules\//, "") : relative(REPO, real),
       bytes: v.bytes,
       owners: v.owners,
     }))
