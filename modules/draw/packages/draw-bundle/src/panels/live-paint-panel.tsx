@@ -133,7 +133,7 @@ export function makeLivePaintPanel(host: BundleHost): {
     const [portable, setPortable] = React.useState(true);
     const [painted, setPainted] = React.useState<Record<string, string[]>>({});
 
-    // WHAT A RELOAD COSTS (`test/panels/live-paint-panel.spec.tsx`, and
+    // WHAT A RELOAD COSTS (`test/panels/live-paint-panel.dom.test.tsx`, and
     // it may only go down): the recipe part once, and — once per document
     // REVISION, not per reload — the links (out of the walk every panel
     // shares) and the swatch collection. A selection change cannot have

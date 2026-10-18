@@ -22,7 +22,7 @@
 // panels, and dispose tears the session down cleanly (the honesty smoke test).
 // Engine/DuckDB behavior is NOT exercised here — this is wiring only.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type {
   BundleHost,

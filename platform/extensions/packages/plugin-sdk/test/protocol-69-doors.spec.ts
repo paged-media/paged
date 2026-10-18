@@ -23,7 +23,7 @@
 //   · the raw-mutate namespace gate covers setDocumentMetadata, also inside
 //     a batch.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PluginManifest } from "@paged-media/plugin-api";
 

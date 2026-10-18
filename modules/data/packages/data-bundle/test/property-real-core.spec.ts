@@ -15,7 +15,8 @@
 // Gate: skips without canvas-wasm, DuckDB or the built data-js wasm, EXCEPT
 // under REQUIRE_REAL_CORE=1 / REQUIRE_REAL_DUCKDB=1.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi, mock } from "bun:test";
+import { waitFor, importActual } from "@paged-media/test-kit";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -26,6 +27,12 @@ import { ENGINE_ANCHOR, fixedFrom, openRealHost, REQUIRE_REAL_CORE } from "./rea
 import { bootRealDuckDB, bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_DUCKDB } from "./real-duckdb";
 import { readZip, stripContainerParts, text } from "./zip";
 
+// bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
+// real exports are taken once, before anything is mocked, and mock.module
+// patches the loaded module in place (every importer sees the change).
+const actualEngine = await importActual(() => import("../src/engine"));
+const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
+
 const KEY = "x-paged:media.paged.data";
 const CSV = "sku,weight_mm,tint,shown\nA-1,2,#ff0000,yes\nB-2,4,Black,no\nC-3,,\"cmyk(0,100,0,0)\",yes\n";
 
@@ -34,13 +41,12 @@ const ready = ENGINE_ANCHOR !== null && probe.handle !== undefined && existsSync
 const required = REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB;
 
 async function loadBundleModule() {
-  vi.resetModules();
-  vi.doMock("../src/engine", async (orig) => ({
-    ...(await orig<typeof import("../src/engine")>()),
+  mock.module("../src/engine", () => ({
+    ...actualEngine,
     bootEngine: (today: number) => bootRealEngine(today),
   }));
-  vi.doMock("../src/query/duckdb", async (orig) => ({
-    ...(await orig<typeof import("../src/query/duckdb")>()),
+  mock.module("../src/query/duckdb", () => ({
+    ...actualDuckdb,
     bootDuckDB: async () => {
       const b = await bootRealDuckDB();
       if (!b.handle) throw new Error(b.error);
@@ -246,7 +252,7 @@ describe.skipIf(!ready && !required)("universal property binding, real core + en
     expect(set.applied, set.reason).toBe(true);
     expect(set.undoSteps).toBe(1);
     await a.host.document.undo();
-    await vi.waitFor(async () => expect((await a.s.bindingDefinition("weight"))?.expr).toBe("MM(weight_mm)"), { timeout: 10_000 });
+    await waitFor(async () => expect((await a.s.bindingDefinition("weight"))?.expr).toBe("MM(weight_mm)"), { timeout: 10_000 });
     // The save writes no label: the undone session and the labels agree
     // (and a write here would cost the redo below).
     const mutate = vi.spyOn(a.host.document, "mutate");
@@ -259,7 +265,7 @@ describe.skipIf(!ready && !required)("universal property binding, real core + en
     expect((await c.s.bindingDefinition("weight"))?.expr).toBe("MM(weight_mm)");
     // …and redone instead: the edit comes back from the labels.
     await a.host.document.redo();
-    await vi.waitFor(async () => expect((await a.s.bindingDefinition("weight"))?.expr).toBe("MM(weight_mm + 1)"), { timeout: 10_000 });
+    await waitFor(async () => expect((await a.s.bindingDefinition("weight"))?.expr).toBe("MM(weight_mm + 1)"), { timeout: 10_000 });
     await a.h.willSave.fire();
     const d = await open(mod, stripContainerParts(await exportPaged(a.host)));
     expect((await d.s.bindingDefinition("weight"))?.expr).toBe("MM(weight_mm + 1)");

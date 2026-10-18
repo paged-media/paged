@@ -1,11 +1,11 @@
 // The real-wasm pipeline parts (test/pipeline-parts.mjs, formerly the
 // standalone test-integration/pipeline.e2e.mjs that no runner executed),
-// now inside vitest under the same dual gate as engine-real.spec.ts:
+// now inside bun test under the same dual gate as engine-real.spec.ts:
 // skip locally without the built artifact, FAIL under REQUIRE_REAL_ENGINE=1.
 // Part B (real DuckDB) lives in duckdb-real.spec.ts.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { describe, it } from "vitest";
+import { describe, it } from "bun:test";
 import { BIN, partA, partC, partD, partE } from "./pipeline-parts.mjs";
 
 const WASM = join(BIN, "data_js_bg.wasm");

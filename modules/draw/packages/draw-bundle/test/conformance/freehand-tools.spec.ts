@@ -25,7 +25,7 @@
 // host (the host-handler.spec pattern) to prove the wiring, preview
 // channel included.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type {
   CanvasPointerEvent,

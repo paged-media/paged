@@ -27,7 +27,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 // The generator is a plain .mjs (no .d.ts).
 // @ts-expect-error — JS module, no types; it exports pure fns and paths.

@@ -33,7 +33,7 @@
 //
 // Each scenario names the expensive path it exercises (AS FOUND).
 
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
@@ -62,7 +62,7 @@ import {
   type Measured,
 } from "./harness";
 
-vi.setConfig({ testTimeout: BUDGET_TIMEOUT_MS });
+setDefaultTimeout(BUDGET_TIMEOUT_MS);
 
 const PLUGIN = "media.paged.data";
 

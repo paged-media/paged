@@ -1,6 +1,6 @@
 // bun:test's matchers, typed as loosely as vitest's were.
 //
-// bun-types declares `toBe(expected: T)` and `toEqual(expected: T)` against
+// bun-types declares `toBe(expected: T)`, `toEqual(expected: T)` and `toContain` against
 // the received value's type, so `expect(value).toEqual({ kind: "x" })`
 // fails to typecheck wherever `value` is a union or a branded type. vitest
 // typed the expected value as anything (`toEqual<E>(expected: E)`). The
@@ -20,6 +20,7 @@ declare module "bun:test" {
     toBe(expected: unknown): void;
     toEqual(expected: unknown): void;
     toStrictEqual(expected: unknown): void;
+    toContain(expected: unknown): void;
     toContainEqual(expected: unknown): void;
     toBeOneOf(expected: Iterable<unknown>): void;
     toHaveBeenCalledOnce(): void;

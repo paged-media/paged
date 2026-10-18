@@ -22,7 +22,7 @@
 // Tested against a fake host implementing the plugin-api NetworkSurface (the
 // real host-impl is tested in plugin-sdk).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, ConsentResult } from "@paged-media/plugin-api";
 

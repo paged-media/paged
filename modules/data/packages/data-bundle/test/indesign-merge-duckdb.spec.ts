@@ -10,7 +10,7 @@
 // REQUIRE_REAL_DUCKDB=1 (duckdb-sql-oracle.spec.ts carries the boot gate).
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { BIN, PKG, tryBootNodeDuckDB } from "./duckdb-node-boot";
 import { bootEngine } from "./pipeline-parts.mjs";
 

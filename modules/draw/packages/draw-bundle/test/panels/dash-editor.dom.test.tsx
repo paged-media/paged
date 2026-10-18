@@ -16,9 +16,8 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// @vitest-environment jsdom
 
-// The STROKE DASHES section of the Path Options panel, RENDERED (jsdom)
+// The STROKE DASHES section of the Path Options panel, RENDERED (happy-dom)
 // against the real engine. The sentence it has to prove: the pairs TYPED
 // are the dash the engine HOLDS, and the dash the engine holds is what
 // the section SHOWS for the selection. So every test types, applies,
@@ -26,7 +25,7 @@
 // restores; and the section follows the selected path — without
 // throwing away what was typed on a reload that changed nothing.
 
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

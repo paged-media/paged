@@ -86,8 +86,8 @@ Every finding is written up, with both values and a sentence, in
 
 ```bash
 # 1. the IDML (only when the authoring or the engine changed)
-(cd packages/draw-bundle && PAGED_ROUNDTRIP_WRITE=pen-closed bunx vitest \
-  run test/roundtrip/generate.spec.ts)
+(cd packages/draw-bundle && PAGED_ROUNDTRIP_WRITE=pen-closed bun test \
+  ./test/roundtrip/generate.spec.ts)
 
 # 2. ask InDesign (takes the app for a few seconds)
 F=packages/draw-bundle/test/fixtures/roundtrip
@@ -98,7 +98,7 @@ PAGED_RT_REEXPORT=$F/pen-closed.indesign.idml \
   bash scripts/indesign/run-roundtrip.sh $F/pen-closed.idml $F/pen-closed.indesign.json
 
 # 3. replay
-(cd packages/draw-bundle && bunx vitest run test/roundtrip)
+(cd packages/draw-bundle && bun test test/roundtrip)
 ```
 
 The runner prints where it left the PDF InDesign exported of the page —

@@ -15,6 +15,8 @@ project:
 dependsOn:
   - id: 'extensions'
     scope: 'development'
+  - id: 'test-kit'
+    scope: 'development'
 
 tasks:
   rust-lint:
@@ -30,7 +32,7 @@ tasks:
       - '@group(js-sources)'
 
   js-test:
-    # The image-trace specs boot the wasm; draw-vitest builds it first.
+    # The image-trace specs boot the wasm; draw-vitest.yml builds it first.
     deps: ['~:wasm']
 
   manifest:

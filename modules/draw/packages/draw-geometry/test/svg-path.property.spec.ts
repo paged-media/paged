@@ -28,7 +28,7 @@
 //     POINT, stated three ways below (exact input, canonical table,
 //     arbitrary input after one normalising pass).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   parsePathData,

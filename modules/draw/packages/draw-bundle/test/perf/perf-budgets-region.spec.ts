@@ -28,7 +28,7 @@
 // engine enumerates), a two-input pair of ~300 faces (past its 256-face
 // cap), a 1 000-anchor comb and a 10 000-anchor spiral.
 
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import { metadataReadsPerLeaf } from "../engine-reads";
 
@@ -79,7 +79,7 @@ import {
   type Workload,
 } from "./workload";
 
-vi.setConfig({ testTimeout: BUDGET_TIMEOUT_MS });
+setDefaultTimeout(BUDGET_TIMEOUT_MS);
 
 describe("perf budgets — the tools that read as they move", () => {
   let w: Workload;

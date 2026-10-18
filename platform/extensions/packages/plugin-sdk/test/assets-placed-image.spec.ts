@@ -25,7 +25,7 @@
 // placed image — that lands with the image-plugin M4 conformance corpus
 // (campaign Phase 2a); THIS file proves the door, the gate and the wire.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import type { PagedBundle, PluginManifest } from "@paged-media/plugin-api";
 

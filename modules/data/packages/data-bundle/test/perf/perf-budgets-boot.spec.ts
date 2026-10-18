@@ -20,7 +20,8 @@
 // `data.perf.gates`. The rules are in
 // `perf-budgets-commands.spec.ts` and bind here too.
 
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, setDefaultTimeout, mock } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -45,7 +46,13 @@ import {
   type Measured,
 } from "./harness";
 
-vi.setConfig({ testTimeout: BUDGET_TIMEOUT_MS });
+// bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
+// real exports are taken once, before anything is mocked, and mock.module
+// patches the loaded module in place (every importer sees the change).
+const actualEngine = await importActual(() => import("../../src/engine"));
+const actualDuckdb = await importActual(() => import("../../src/query/duckdb"));
+
+setDefaultTimeout(BUDGET_TIMEOUT_MS);
 
 const settle = () => new Promise((r) => setTimeout(r, 0));
 
@@ -218,16 +225,15 @@ describe.skipIf(!RUN_BUDGETS)("perf budgets — boot and reflow [data.perf.gates
     h = await openRealHost();
     let work: WorkLog | null = null;
     const boots = { engine: 0, duck: 0 };
-    vi.resetModules();
-    vi.doMock("../../src/engine", async (orig) => ({
-      ...(await orig<typeof import("../../src/engine")>()),
+    mock.module("../../src/engine", () => ({
+    ...actualEngine,
       bootEngine: async () => {
         boots.engine += 1;
         throw new Error("activate must not boot the engine");
       },
     }));
-    vi.doMock("../../src/query/duckdb", async (orig) => ({
-      ...(await orig<typeof import("../../src/query/duckdb")>()),
+    mock.module("../../src/query/duckdb", () => ({
+    ...actualDuckdb,
       bootDuckDB: async () => {
         boots.duck += 1;
         throw new Error("activate must not boot DuckDB");

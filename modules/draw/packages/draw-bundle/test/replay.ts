@@ -42,7 +42,7 @@
 // facades) — recorded as a residual on B-13. This harness proves the
 // PLAN→engine contract, which is the load-bearing half.
 
-import { expect } from "vitest";
+import { expect } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import type { AnchorTable } from "@paged-media/draw-geometry";

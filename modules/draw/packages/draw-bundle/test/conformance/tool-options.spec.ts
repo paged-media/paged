@@ -42,7 +42,7 @@
 //      and a host with no store (the headless harness, an older editor)
 //      runs on the defaults.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type {
   CanvasPointerEvent,

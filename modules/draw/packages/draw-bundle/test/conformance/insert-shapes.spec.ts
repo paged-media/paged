@@ -22,7 +22,7 @@
 // (leaf counts + spot geometry read back via pathAnchors), (3) one
 // undo returning the whole grid (the one-batch promise).
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { CommandContribution, Mutation } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";

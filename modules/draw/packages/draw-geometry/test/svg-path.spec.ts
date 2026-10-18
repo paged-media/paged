@@ -22,7 +22,7 @@
 // re-parse STABILITY (the geometry must not drift across a round-trip
 // once it's in the cubic model).
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   parsePathData,

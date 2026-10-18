@@ -21,7 +21,7 @@
 // exact: an InDesign save (every part gone, the label kept), an undone
 // first write, a command write after an object-model write.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PluginMetadataEnvelope } from "@paged-media/plugin-api";
 

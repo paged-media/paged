@@ -171,7 +171,7 @@ export function makeBlendPanel(host: BundleHost): {
     const [draft, setDraft, followDraft] =
       useFollowedDraft<BlendParams>(BLEND_DEFAULTS);
 
-    // WHAT A RELOAD COSTS (`test/panels/blend-panel.spec.tsx`, and it may
+    // WHAT A RELOAD COSTS (`test/panels/blend-panel.dom.test.tsx`, and it may
     // only go down): the recipe part once, and the document's links once
     // per document REVISION — one unfiltered `blendLinks`, tallied for
     // every record at once, out of the walk every panel shares. It used
