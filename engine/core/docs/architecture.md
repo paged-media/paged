@@ -195,7 +195,10 @@ writes are `Mutation` values passed to `CanvasModel::apply_mutation`.
 
 **Surface descriptions.** `crates/paged-introspect/catalog.json` (host functions, settable
 paths, operations, elements) and `crates/paged-cli/cli.json` are generated and committed; a
-test fails when either differs from the code. `web/idml-viewer/api-catalog.json` is written
+test fails when either differs from the code. `crates/paged-wire/schema/mutation.schema.json`
+is the JSON Schema of `Mutation` and every type it carries, written by `schemars` beside the
+`Tsify` derives under `paged-wire`'s `schema` feature; its tests fail when it is stale or
+disagrees with tsify's declaration ([ADR 187](adr/187-the-wire-describes-itself-as-json-schema.md)). `web/idml-viewer/api-catalog.json` is written
 by hand, and a test fails when an export is missing from it
 ([ADR 019](adr/019-capability-catalog-one-contract.md)). Two more tests pin what a surface
 cannot reach: the command line sends 32 of the 62 message kinds
@@ -241,6 +244,12 @@ three. CI fails a push to `main` that changes `PROTOCOL_VERSION` without the mat
 ([ADR 006](adr/006-protocol-coupled-versioning.md)). The consuming half is the editor's
 [ADR 200](https://github.com/paged-media/editor/blob/main/docs/adr/200-engine-as-npm-wasm-packages.md)
 and [ADR 202](https://github.com/paged-media/editor/blob/main/docs/adr/202-render-worker-owns-the-canvas.md).
+
+*Amendment (2026-10-18): the wasm packages, `@paged-media/repo-wasm` among them, now have
+directories in the tree: `packages/<pkg>/`, members of the root Bun workspace, each with a
+committed `package.json` at `0.<protocol>.0-dev`. `scripts/build-wasm-packages.sh --workspace`
+builds into them, and `.github/workflows/core-publish-wasm.yml` publishes copies at the tag's
+version ([ADR 185](adr/185-the-wasm-packages-are-workspace-packages.md)).*
 
 ## Build and test
 

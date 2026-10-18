@@ -158,7 +158,7 @@ import {
   batchMutationFor,
   bindCreatedMutationFor,
   handleElementId,
-} from "./v59-wire";
+} from "./batch-handles";
 
 import { registerCommand } from "../command-registry";
 export const COMPOUND_PATH_COMMAND_CATEGORY = "Path";

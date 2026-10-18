@@ -1,10 +1,10 @@
 # JavaScript/TypeScript tasks, inherited by every project tagged `node`
-# (one per pnpm workspace root). They call the workspace's own package.json
-# scripts through pnpm; Moon installs the workspace (`pnpm install
-# --frozen-lockfile`) before the first of them runs.
+# (one per JS component root). They call the component's own package.json
+# scripts through Bun; Moon installs the root Bun workspace (`bun install
+# --frozen-lockfile`) once, before the first of them runs.
 #
-# Names carry a `js-` prefix because a module can hold a Cargo and a pnpm
-# workspace in one project; the shared vocabulary is in all.yml.
+# Names carry a `js-` prefix because a module can hold a Cargo workspace and
+# JS packages in one project; the shared vocabulary is in all.yml.
 $schema: '../cache/schemas/tasks.json'
 
 inheritedBy:
@@ -14,8 +14,9 @@ fileGroups:
   js-sources:
     - '**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}'
     - '**/*.{json,css,html,svg}'
-    - '**/pnpm-workspace.yaml'
-    - '**/pnpm-lock.yaml'
+    - '/package.json'
+    - '/bunfig.toml'
+    - '/bun.lock'
     - '!docs/**'
   # Tests may read anything in the workspace (fixtures, manifests, the
   # built wasm, corpora): everything but docs.
@@ -32,22 +33,27 @@ taskOptions:
 tasks:
   js-check:
     description: 'The workspace `typecheck` script.'
-    command: 'pnpm run typecheck'
+    command: 'bun run typecheck'
     inputs:
       - '@group(js-sources)'
 
+  js-lint:
+    description: >-
+      bun lint over the project with the root config (/bunfig.toml [lint]),
+      through the pinned canary (tooling/js/bun-canary.sh).
+    toolchains: ['system']
+    command: 'bash $workspaceRoot/tooling/js/bun-canary.sh lint --no-script .'
+    inputs:
+      - '@group(js-sources)'
+      - '/eslint-suppressions.json'
+      - '/tooling/js/bun-canary.sh'
+      - '/tooling/js/bun-canary-version'
+
   js-test:
     description: 'The workspace `test` script.'
-    command: 'pnpm run test'
+    command: 'bun run test'
     inputs:
       - '@group(js-tests)'
     options:
       cache: false
 
-  js-build:
-    description: 'Every package `build` script (tsup/tsc to dist/). Local only unless the project says otherwise.'
-    command: 'pnpm -r run build'
-    inputs:
-      - '@group(js-sources)'
-    options:
-      runInCI: false

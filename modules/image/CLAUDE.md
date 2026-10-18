@@ -58,7 +58,7 @@ Rules for every code change in this repo:
 - **ISOLATION CONTRACT (§2.1).** Zero core contact. No imports from
   `core/` or `editor/` internals; the only `@paged-media/*` dependencies
   are `plugin-api`, `plugin-sdk`, and published package contracts
-  (TS: `scripts/check-contract-imports.mjs`; Rust: `deny.toml` sources +
+  (TS: the contract-import lint rule in `/bunfig.toml`, PM-0003; Rust: `deny.toml` sources +
   the cargo-tree CI guards). SDK gaps become RFI §6 entries /
   plugin-platform RFCs — NEVER core modifications from this project.
 - **GPU-ONLY EXECUTION (§6/§9).** One production backend: WGSL compute
@@ -138,8 +138,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 # select a backend explicitly with WGPU_BACKEND=metal|vulkan|gl.
 
 # TS (the bundle) — install order: editor → plugin-sdk → plugin-image
-pnpm install && pnpm test && pnpm typecheck
-pnpm validate:manifest
+bun install && bun run test && bun run typecheck
+bun run validate:manifest
 
 # Dependency guards (CI runs these; run before claiming green)
 cargo tree -p image-kernels --edges normal | grep -E 'image-(pipeline|graph|gpu|cms|js)' && echo LEAK

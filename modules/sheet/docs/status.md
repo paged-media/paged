@@ -17,8 +17,8 @@ each published canary added is under [Releases](#releases).
   has one. Every committed edit re-saves the workbook after a short quiet period, and
   deactivation flushes, so a reload restores the edited workbook. Where the host announces saves
   (`document.onWillSave`), the workbook is written before the save takes the document's bytes.
-  Where the host reports opens (`document.onDidOpen`), a reopened document restores its workbook
-  there; an older host is followed through the editor's load broadcast.
+  A reopened document restores its workbook when the host reports the open
+  (`document.onDidOpen`).
 - **Calculation.** 263 registered functions, all implemented, among them `LET`, `LAMBDA` and its
   helpers; dynamic arrays that spill and nest; Excel tables with structured references;
   incremental recalculation with an interval index for range dependencies; dependents of
@@ -140,10 +140,10 @@ each published canary added is under [Releases](#releases).
   and table, then content), because one write needs the engine to resolve a table handle inside
   a batch; and each in-frame grid change invalidates every page cache. Core v0.66.0 and later
   resolve the handle, and a grid change re-encodes only the pages that show its frame.
-- **Protocol-66 doors are feature-detected.** Every published engine since core v0.66.0 has
-  them. With them, a shrinking pagination deletes the tables it no longer needs (otherwise they
-  are emptied and kept), placed elements are read back from the batch's own list (otherwise from
-  a scene-tree difference), and a frame's story is one read (otherwise a walk over the stories).
+- **The protocol-66 doors are used directly** (the in-tree engine has them): a shrinking
+  pagination deletes the tables it no longer needs (should the engine refuse, they are emptied
+  and kept), placed elements are read back from the batch's own `minted` list, and a frame's
+  story is one geometry read.
 - **Engines before core v0.71.8** leave a blank line above a table placed in a fresh frame. The
   frame is sized without that line, so on those engines a freshly placed table's frame is one
   line short.

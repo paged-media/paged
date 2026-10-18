@@ -46,7 +46,9 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
   them ([ADR 130](adr/130-plugin-faces-shadows-and-batch-handles.md), protocol 70).
 - **Pages in a batch.** `bindCreated` names a page that `insertPage` or `duplicatePage` minted, so
   pages and their content are one batch and one undo step. Every batch lane reports each mint's
-  handle in `minted[].handle` ([ADR 130](adr/130-plugin-faces-shadows-and-batch-handles.md)). A duplicated page owns copies of its
+  handle in `minted[].handle` ([ADR 130](adr/130-plugin-faces-shadows-and-batch-handles.md)), and the
+  reply names every page a mutation created, in creation order (`createdPages`,
+  [ADR 186](adr/186-a-mutation-names-the-pages-it-created.md)). A duplicated page owns copies of its
   stories, including their hyperlink sources, and keeps its margins. An inserted page takes its
   master's margins. `duplicateElements` copies a story that holds hyperlink sources
   ([ADR 128](adr/128-pages-a-merge-can-make.md), protocol 69).

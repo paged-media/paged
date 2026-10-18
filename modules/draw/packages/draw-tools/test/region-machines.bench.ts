@@ -39,9 +39,10 @@
 // script. This package does not declare one yet (its package.json is not
 // this change's to edit), so run it directly:
 //
-//   pnpm --filter @paged-media/draw-tools exec vitest bench --run
+//   bun run --filter @paged-media/draw-tools bench
 
-import { bench, describe } from "vitest";
+// mitata (not a test runner): `bun <this file>` runs the benches.
+import { bench, group as describe, run } from "mitata";
 
 import type { Vec2 } from "@paged-media/draw-geometry";
 
@@ -168,3 +169,5 @@ describe("LivePaintMachine — the same lookup, the bucket's hover and drag", ()
     machine.handle({ type: "up", point: DRAG_1000[DRAG_1000.length - 1] });
   });
 });
+
+await run();

@@ -6,7 +6,8 @@
 // stubs here — the fetch → DuckDB → engine path runs for real in
 // test/sources-real.spec.ts and duckdb-real.spec.ts.
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "bun:test";
+import { advanceTimersByTimeAsync, stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
 import type { BundleHost } from "@paged-media/plugin-api";
 
 import { encodeSession, SESSION_PART, type PersistedSession } from "../persist";
@@ -99,13 +100,13 @@ function fakeHost(consented: Set<string>, saved?: PersistedSession): BundleHost 
         return { granted: [...origins], denied: [], remembered: true };
       },
     },
-    document: {},
+    document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }) },
   } as unknown as BundleHost;
 }
 
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.stubGlobal("fetch", fetchMock);
+  stubGlobal("fetch", fetchMock);
   fetchMock.mockClear();
   ingests.length = 0;
   defined.length = 0;
@@ -113,7 +114,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.useRealTimers();
-  vi.unstubAllGlobals();
+  unstubAllGlobals();
 });
 
 describe("refresh policies [data.source.adapters]", () => {
@@ -149,7 +150,7 @@ describe("refresh policies [data.source.adapters]", () => {
     expect(s.setRefreshPolicy("feed", { policy: "interval", secs: 60 })).toBeNull();
     // No consent: nothing polls, nothing fetches.
     expect(s.getState().polling).toEqual([]);
-    await vi.advanceTimersByTimeAsync(120_000);
+    await advanceTimersByTimeAsync(vi, 120_000);
     expect(fetchMock).not.toHaveBeenCalled();
 
     await s.requestConsentForRemote("feed");
@@ -159,22 +160,22 @@ describe("refresh policies [data.source.adapters]", () => {
     expect(s.getState().polling).toEqual(["feed"]);
 
     // Same bytes: fetched, nothing re-run.
-    await vi.advanceTimersByTimeAsync(60_000);
+    await advanceTimersByTimeAsync(vi, 60_000);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(ingests).toEqual([]);
 
     // Changed bytes: the queries run again.
     body = "a,b\n1,2\n3,4\n";
-    await vi.advanceTimersByTimeAsync(60_000);
+    await advanceTimersByTimeAsync(vi, 60_000);
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(ingests).toEqual(["q"]);
 
     // Consent withdrawn: the next tick stops the timer without fetching.
     consented.clear();
-    await vi.advanceTimersByTimeAsync(60_000);
+    await advanceTimersByTimeAsync(vi, 60_000);
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(s.getState().polling).toEqual([]);
-    await vi.advanceTimersByTimeAsync(600_000);
+    await advanceTimersByTimeAsync(vi, 600_000);
     expect(fetchMock).toHaveBeenCalledTimes(3);
     s.dispose();
   });
@@ -218,11 +219,11 @@ describe("refresh policies [data.source.adapters]", () => {
         }),
     );
     sched.sync(new Map([["a", 20]]));
-    await vi.advanceTimersByTimeAsync(20_000);
-    await vi.advanceTimersByTimeAsync(20_000);
+    await advanceTimersByTimeAsync(vi, 20_000);
+    await advanceTimersByTimeAsync(vi, 20_000);
     expect(runs).toBe(1);
     release();
-    await vi.advanceTimersByTimeAsync(20_000);
+    await advanceTimersByTimeAsync(vi, 20_000);
     expect(runs).toBe(2);
     sched.sync(new Map());
     expect(sched.running().size).toBe(0);

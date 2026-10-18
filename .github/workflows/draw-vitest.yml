@@ -1,15 +1,22 @@
 # The test gate for this repo, and the CI evidence for the feature
-# registry (plugin.draw stage). It runs every package's vitest — the
+# registry (plugin.draw stage). It runs every package's bun test — the
 # draw-bundle suite boots the REAL engine wasm, pinned as its own
 # devDependency — then the contract-import lint and the typecheck, and
 # FAILS when any of them is red. The JUnit is uploaded first either way,
 # for the registry to pull (see the step comment for why the direction is
-# inverted); vitest's JUnit carries no @feat: tags, the registry applies
+# inverted); the JUnit carries no @feat: tags, the registry applies
 # its test-map bridge at convert time.
 #
 # Runs on pull requests too. It used to run on push to main only, with a
 # red suite reported as a green job.
-name: draw / vitest
+name: draw / bun test
+concurrency:
+  # A newer push to a pull request cancels the older run. Main pushes share
+  # one group per event type: a running main run always finishes, and a newer
+  # push replaces the one still waiting, so direct pushes queue at most one.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # MONOREPO (step A3): ported from paged-media/plugin-draw
 # .github/workflows/vitest.yml. The old lane checked the repo out under
 # plugin-draw/ and ran some commands from its parent; it now runs in
@@ -20,19 +27,55 @@ on:
     branches: [main]
     paths:
       - "modules/draw/**"
+      # The extension contract the bundle builds against (workspace:*).
+      - "platform/extensions/packages/plugin-api/**"
+      - "platform/extensions/packages/plugin-sdk/**"
+      # The engine wasm packages this workflow builds against (workspace:*),
+      # and what builds them, so an engine change re-tests its consumers.
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
+      - ".github/actions/module-wasm/**"
       - ".github/workflows/draw-vitest.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/draw/docs/**/*.md"
   pull_request:
     paths:
       - "modules/draw/**"
+      # The extension contract the bundle builds against (workspace:*).
+      - "platform/extensions/packages/plugin-api/**"
+      - "platform/extensions/packages/plugin-sdk/**"
+      # The engine wasm packages this workflow builds against (workspace:*),
+      # and what builds them, so an engine change re-tests its consumers.
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/wasm-tools/**"
+      - ".github/actions/module-wasm/**"
       - ".github/workflows/draw-vitest.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/draw/docs/**/*.md"
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: draw-vitest-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:
@@ -40,6 +83,7 @@ defaults:
 
 jobs:
   vitest:
+    name: bun test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,26 +101,44 @@ jobs:
       # anchors)" while passing on any developer machine that happened to
       # have an editor checkout next door. draw-bundle now carries its
       # own canvas-wasm devDependency and the harness probes it first.
-      - uses: pnpm/action-setup@v4
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: install (published contract; no sibling checkout needed)
-        run: pnpm install --frozen-lockfile
+          auto-install: true
+          proto-version: "0.63.1"
+      # The engine's wasm packages (canvas-wasm and the rest, workspace:*),
+      # which the real-engine specs boot.
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
+      # The image-trace wasm (packages/draw-bundle/wasm/, build output),
+      # which the image-trace specs boot.
+      - name: module wasm (draw)
+        uses: ./.github/actions/module-wasm
+        with: { module: draw }
+      # One install for the whole root workspace (bun.lock).
+      - name: bun install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
       # Red results must still upload (the registry wants the failure), so
       # the run does not abort here. It records the failure instead, and the
       # gate at the END of the job fails it once the artifact is safe. This
       # step used to end in `|| true` with no such gate, so a red suite was
       # a green job — and `publish.yml` shipped from it.
-      - name: vitest (junit per package; red results still upload)
+      # bun's reports (the main task per package, then draw-bundle's DOM
+      # task, which preloads happy-dom for the *.dom.test.tsx panel specs),
+      # rewritten into the vitest shape the evidence has always had
+      # (tooling/js/bun-junit.mjs): the artifact keeps its name and ids.
+      - name: bun test (junit per package; red results still upload)
         run: |
           set -uo pipefail
-          pnpm -r --no-bail exec \
-            vitest run --reporter=junit --outputFile=junit.xml \
+          bun run --filter './packages/*' test \
+            --reporter=junit --reporter-outfile=junit.bun.xml \
             || echo "TS_FAILED=1" >> "$GITHUB_ENV"
-          cat packages/*/junit.xml > junit-all.xml 2>/dev/null || true
+          ( cd packages/draw-bundle && bun run test:dom \
+            --reporter=junit --reporter-outfile=junit-dom.bun.xml ) \
+            || echo "TS_FAILED=1" >> "$GITHUB_ENV"
+          bun ../../tooling/js/bun-junit.mjs --out junit-all.xml packages/*/junit.bun.xml packages/draw-bundle/junit-dom.bun.xml \
+            || echo "TS_FAILED=1" >> "$GITHUB_ENV"
           [ -s junit-all.xml ] # at least one package must have produced results
       # Evidence hand-off, INVERTED (2026-07-25). This step used to call
       # paged-media/state/actions/publish-results@main, but that action lives in the
@@ -88,7 +150,7 @@ jobs:
       # and let state PULL it (private state can read a public repo's artifacts).
       # Consumer: state/.github/workflows/siblings-pull.yml (source=plugin-draw,
       # suite=vitest, format=nextest-junit).
-      - name: upload vitest results artifact
+      - name: upload JUnit results artifact
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
@@ -96,16 +158,13 @@ jobs:
           path: modules/draw/junit-all.xml
           if-no-files-found: error
           retention-days: 14
-      # The two gates the root `pnpm test` / `pnpm typecheck` scripts carry
-      # and this job used to bypass by calling vitest directly: the
-      # contract-import lint (plugin-api is the ONLY sanctioned contract
-      # import) and the typecheck that holds `wire-compat.ts`.
-      - name: contract-import lint
-        if: ${{ !cancelled() }}
-        run: node scripts/check-contract-imports.mjs
+      # The gate the root `bun run typecheck` script carries and this job used
+      # to bypass by calling the runner directly: the machines' wire shapes are the
+      # contract's `Mutation` variants. (The contract-import check is a lint
+      # rule now; the lint workflow runs it for every module.)
       - name: typecheck
         if: ${{ !cancelled() }}
-        run: pnpm -r typecheck
+        run: bun run --filter './packages/*' typecheck
       - name: tests failed
         if: ${{ !cancelled() && env.TS_FAILED == '1' }}
         run: exit 1

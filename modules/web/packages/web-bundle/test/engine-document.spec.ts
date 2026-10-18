@@ -20,7 +20,7 @@
 // content when the source has `vars`, and the cached result is what a fresh
 // composition would give.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   composeSrcdoc,

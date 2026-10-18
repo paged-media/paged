@@ -24,7 +24,8 @@
 // path is one call per segment, so the row to read is the 1 000-segment
 // one — a click on the perf workload's 1 000-anchor path.
 
-import { bench, describe } from "vitest";
+// mitata (not a test runner): `bun <this file>` runs the benches.
+import { bench, group as describe, run } from "mitata";
 
 import { closestTOnCubic } from "../src/bezier";
 import { cubicRun } from "./bench-data";
@@ -45,3 +46,5 @@ describe("closestTOnCubic", () => {
     }
   });
 });
+
+await run();

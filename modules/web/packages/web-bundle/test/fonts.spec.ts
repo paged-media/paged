@@ -35,7 +35,7 @@
 // panel effect runs) → a data-url `@font-face` inside the srcdoc +
 // the substitution badge clearing. `null` answers keep the badge.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type {
   Diagnostic,

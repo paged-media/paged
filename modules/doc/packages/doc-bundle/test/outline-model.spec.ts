@@ -17,7 +17,7 @@
  */
 
 import type { LoweredDoc } from "@paged-media/doc-host-model";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   createDocStore,

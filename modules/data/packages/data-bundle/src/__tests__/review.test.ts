@@ -4,12 +4,19 @@
 // now unless the binding is frozen; the row diff gets the rule→query map and
 // the chosen keys; a lower records what the document was written from.
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, mock } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 
 import type { BundleHost, Mutation } from "@paged-media/plugin-api";
 
 import type { DataEngineLike } from "../engine";
 import { decodeSession, encodeSession, emptyTargets } from "../persist";
+
+// bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
+// real exports are taken once, before anything is mocked, and mock.module
+// patches the loaded module in place (every importer sees the change).
+const actualEngine = await importActual(() => import("../engine"));
+const actualDuckdb = await importActual(() => import("../query/duckdb"));
 
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
@@ -24,6 +31,7 @@ function fakeHost(opts?: { placeholders?: () => Field[] | Promise<Field[]> }) {
     selection: { get: () => [], set: async () => [] },
     network: { consentedOrigins: () => [], requestConsent: async () => ({ granted: [], denied: [] }) },
     document: {
+      onWillSave: () => ({ dispose() {} }),
       mutate: async (m: Mutation) => {
         mutations.push(m);
         return { applied: true, createdId: null, pageIds: [] };
@@ -76,13 +84,12 @@ async function sessionWith(
   engine: DataEngineLike | (() => Promise<DataEngineLike>),
   duck?: { registerCsv: (n: string, t: string) => Promise<void> },
 ) {
-  vi.resetModules();
-  vi.doMock("../engine", async (orig) => ({
-    ...(await orig<typeof import("../engine")>()),
+  mock.module("../engine", () => ({
+    ...actualEngine,
     bootEngine: typeof engine === "function" ? engine : async () => engine,
   }));
-  vi.doMock("../query/duckdb", async (orig) => ({
-    ...(await orig<typeof import("../query/duckdb")>()),
+  mock.module("../query/duckdb", () => ({
+    ...actualDuckdb,
     bootDuckDB: async () => ({
       registerCsv: duck?.registerCsv ?? (async () => {}),
       registerFileBuffer: async () => {},

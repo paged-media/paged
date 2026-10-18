@@ -193,7 +193,7 @@ export interface LoadEngineOptions {
   importGlue?: () => Promise<BlitzGlue>;
 }
 
-/** True when running under Node (vitest / headless conformance), false in
+/** True when running under Node (bun test / headless conformance), false in
  *  the browser (the editor). Branches the glue's wasm-instantiation path. */
 function isNode(): boolean {
   return (
@@ -203,9 +203,10 @@ function isNode(): boolean {
 }
 
 /** The default glue importer: the bundle-relative wasm-bindgen ESM. The
- *  relative `import()` lets tsup bundle the glue as a sibling dist chunk (so
- *  its `import.meta.url` survives Vite dep-optimization) while `tsc` still
- *  doesn't resolve it (the gitignored artifact need not exist at typecheck).
+ *  relative `import()` keeps the glue its own module (so its
+ *  `import.meta.url` is its own when Vite builds the editor) while the type
+ *  checker still doesn't resolve it (the gitignored artifact need not exist
+ *  at typecheck).
  *
  *  BROWSER: instantiate the wasm here from the bundler's `?url` asset URL
  *  (the reliable path — see the module header). NODE: leave the glue
@@ -220,8 +221,8 @@ async function importBundledGlue(): Promise<BlitzGlue> {
   // the dynamic import resolves at runtime once built. Typed via BlitzGlue.
   const glue = (await import("../bin/blitz_web.js")) as unknown as BlitzGlue;
   if (isNode()) return glue;
-  // @ts-ignore — `?url` is a bundler affordance (untyped), kept external by
-  // tsup so Vite resolves it to a served asset URL.
+  // @ts-ignore — `?url` is a bundler affordance (untyped); Vite resolves it
+  // to a served asset URL.
   const wasmUrl = (await import("../bin/blitz_web_bg.wasm?url")) as {
     default: string;
   };

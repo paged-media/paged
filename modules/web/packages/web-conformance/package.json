@@ -6,15 +6,15 @@
   "type": "module",
   "description": "Correctness oracles for paged.web: Chrome layout recordings (replayed against Blitz in web-render's Rust tests) and the InDesign bake lane.",
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
-    "record": "node chrome/record.mjs",
-    "record:flow": "node chrome/record-flow.mjs"
+    "typecheck": "bun check -p tsconfig.json",
+    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts",
+    "record": "bun chrome/record.mjs",
+    "record:flow": "bun chrome/record-flow.mjs"
   },
   "devDependencies": {
-    "@types/node": "20.19.39",
+    "@types/node": "catalog:",
     "playwright": "1.63.0",
-    "typescript": "^5.9.3",
-    "vitest": "^2.1.9"
+    "typescript": "catalog:",
+    "@types/bun": "catalog:"
   }
 }

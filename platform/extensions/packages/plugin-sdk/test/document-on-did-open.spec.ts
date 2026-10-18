@@ -23,7 +23,7 @@
 // listener is contained; the static flag; and the headless harness
 // fires it on `load()` against the real engine.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { DocumentOpenedEvent, PluginManifest } from "@paged-media/plugin-api";
 

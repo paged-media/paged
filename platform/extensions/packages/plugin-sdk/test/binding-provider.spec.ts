@@ -34,7 +34,7 @@
 // precedence, the typed refusals that make fall-through-to-core
 // distinguishable from an empty answer, and teardown.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type {
   BindingProvider,

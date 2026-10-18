@@ -120,6 +120,38 @@ export function buildHeader(version) {
   );
 }
 
+// `export interface InitOutput { … }` lists the wasm module's raw exports: its
+// internal ABI, not wire types. Two things in it depend on the build rather
+// than on the source: the closure trampolines are named after rustc symbols
+// (`wasm_bindgen__convert__closures_____invoke__h<hash>` before Rust 1.99,
+// `wasm_bindgen_<crate hash>___convert__closures_____invoke___<types>` since),
+// which differ between hosts and toolchains, and the order of the exports
+// follows the link order. So the check compares that block by signature: every
+// trampoline name is blanked and the block's lines are sorted. Any other
+// difference, a trampoline signature or an export added or dropped included,
+// is still drift, and everything outside the block compares byte for byte.
+const TRAMPOLINE = /wasm_bindgen(?:_[0-9a-f]+_)?__convert__closures_____invoke\w*(?=\s*:)/;
+const INIT_OUTPUT_START = /^export interface InitOutput \{\s*$/;
+
+/** `content` with InitOutput's build-dependent parts normalized (see above). */
+export function normalizeWire(content) {
+  const out = [];
+  let block = null;
+  for (const line of content.split("\n")) {
+    if (block === null) {
+      out.push(line);
+      if (INIT_OUTPUT_START.test(line)) block = [];
+    } else if (line === "}") {
+      out.push(...block.sort(), line);
+      block = null;
+    } else {
+      block.push(line.replace(TRAMPOLINE, "wasm_bindgen__convert__closures_____invoke…"));
+    }
+  }
+  if (block !== null) out.push(...block);
+  return out.join("\n");
+}
+
 /** The full freshly-vendored content for a given source. */
 export function buildVendored({ path, version }) {
   return buildHeader(version) + readFileSync(path, "utf8");
@@ -153,7 +185,7 @@ export function checkVendored(opts = {}) {
   const fresh = buildVendored(src);
   const target = opts.target ?? TARGET;
   const current = existsSync(target) ? readFileSync(target, "utf8") : "";
-  if (current !== fresh) {
+  if (normalizeWire(current) !== normalizeWire(fresh)) {
     const actualVersion = readStampedVersion(current);
     const versionDrift = actualVersion !== src.version;
     return {

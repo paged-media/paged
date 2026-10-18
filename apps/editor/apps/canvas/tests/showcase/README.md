@@ -98,9 +98,9 @@ absent, and `REQUIRE_REAL_INDESIGN=1` turns that skip into a failure.
   compare against that raster scores the renderer against an artefact.
 
   ```bash
-  pnpm showcase:indesign-render                       # gate
-  SHOWCASE_RENDER_PAGES=59,60 pnpm showcase:indesign-render   # two pages
-  pnpm showcase:indesign-render:capture               # re-bake the ceilings
+  bun run showcase:indesign-render                       # gate
+  SHOWCASE_RENDER_PAGES=59,60 bun run showcase:indesign-render   # two pages
+  bun run showcase:indesign-render:capture               # re-bake the ceilings
   ```
 
   Knobs: `SHOWCASE_RENDER_MODE` (`gate`|`capture`|`advisory`),

@@ -20,9 +20,10 @@ until 2026-06-22, when it was opened.)
   published `@paged-media` wasm/SDK packages — **never** a Rust path
   dependency, and never reaches into core's source tree.
 
-## Workspace layout (pnpm)
+## Workspace layout (Bun)
 
-`pnpm-workspace.yaml` → `apps/*` + `packages/*`. React 18 + Vite + TS +
+`apps/*` + `packages/*`, members of the repository's root Bun workspace
+(`/package.json` `workspaces`, one `/bun.lock`). React 18 + Vite + TS +
 Tailwind.
 
 - `apps/canvas` (`paged-canvas`) — the editor app. React shell →
@@ -56,29 +57,36 @@ protocol / primitive symbols directly from `@paged-media/client` (its
 barrel is React-free by lint), or deep-import the specific module —
 **never** route worker imports through `@paged-media/shell`.
 
-### wasm / SDK boundary (Decision B — LIVE since v0.33.0)
+### wasm / SDK boundary (workspace packages)
 
-The engine arrives as **published npm packages**: `packages/client`
-depends on `@paged-media/canvas-wasm`, `apps/devtools` on
-`@paged-media/introspect-wasm` (apps/canvas also direct-depends on
-canvas-wasm — the worker DEEP-IMPORTS it). `pnpm install` suffices;
-there is no build-from-core step and no vendored `.d.ts` (types come
-from the package).
+The engine's wasm packages are **workspace packages** of the root Bun
+workspace: `packages/client` and `apps/canvas` depend on
+`@paged-media/canvas-wasm`, `apps/devtools` on
+`@paged-media/introspect-wasm`, all through `workspace:*`
+(`engine/core/packages/*`, engine/core ADR 185). Their generated files
+(the glue, the `.d.ts`, the wasm) are gitignored and built from the engine
+in the same checkout: `moon run core:wasm-pkg`, or
+`bash engine/core/scripts/build-wasm-packages.sh --workspace`
+(wasm-bindgen-cli at the Cargo.lock version and binaryen;
+`tooling/bootstrap.sh` checks both). CI restores them with
+`.github/actions/engine-wasm`.
 
-- **Version convention**: package `0.<protocol>.<patch>` — the minor
-  IS the wire protocol, and `protocol.ts` READS `PROTOCOL_VERSION` from
-  the installed package's version (no hand-kept copy, so nothing to
-  drift; the old `check-protocol-version.sh` is retired). The worker
-  handshake still refuses a wasm whose own protocol differs
-  (`protocolMismatch`, fatal). Local engine builds go through
-  `~/paged/sync-wasm.sh`, which stamps `0.<protocol>.0-local`.
-- **Engine bumps**: core tags `v0.<protocol>.<patch>` → its
-  publish-wasm workflow ships the packages → bump the three pins +
-  `PROTOCOL_VERSION` here in one change.
-- **Local dev against UNPUBLISHED core changes**: build the package
-  dirs locally (`~/paged/sync-wasm.sh` — rewritten as the local
-  override tool) and point the deps at them via `file:` overrides;
-  never commit the override.
+- **Version convention**: the packages are versioned
+  `0.<protocol>.0-dev`, with the protocol taken from
+  `crates/paged-canvas/src/channel.rs`; `protocol.ts` READS
+  `PROTOCOL_VERSION` from the package version's minor (no hand-kept copy).
+  The worker handshake still refuses a wasm whose own protocol differs
+  (`protocolMismatch`, fatal).
+- **Engine changes** reach the editor in the same commit: change the
+  engine, rebuild the packages, and the editor typechecks and runs against
+  them. A protocol bump moves the package versions
+  (`node engine/core/scripts/check-wasm-package-versions.mjs --write`)
+  and `bun.lock`.
+- **Plugin bundles** (`@paged-media/draw`, `image`, `sheet`, `data`,
+  `web`, `doc`, `slide`, `pdf`, `publish`) and the contract
+  (`plugin-api`, `plugin-sdk`) are workspace packages too, consumed from
+  source. A bundle whose engine wasm is a build output (doc, slide, sheet,
+  data, web) needs its module's `scripts/build-wasm.sh` before the app boots.
 - The wasm asset loads in vite via explicit `?url` imports passed to
   the loader's `default({ module_or_path })` — don't revert to the
   bare loader default (it resolves relative to node_modules and
@@ -101,10 +109,10 @@ an end-to-end **fidelity** suite (per-page PNG diff, ΔE2000/SSIM,
 against InDesign reference PDFs).
 
 ```bash
-cd apps/canvas                  # engine wasm arrives via npm (Decision B);
-                                # no build step — `pnpm install` suffices
-pnpm test:fidelity              # full gate
-BACKEND=gpu pnpm test:fidelity  # WebGPU/Vello path (headed; CPU fallback)
+cd apps/canvas                  # after `bun install` and `moon run core:wasm-pkg`
+                                # (the engine wasm is built from the tree)
+bun run test:fidelity              # full gate
+BACKEND=gpu bun run test:fidelity  # WebGPU/Vello path (headed; CPU fallback)
 ```
 
 The Vite dev server (spawned/reused by Playwright) sets the COOP/COEP
@@ -149,8 +157,11 @@ the clean-room icon system, and the cockpit UI kit
   (`corpus/envato/canvas-fidelity-thresholds.json`) are sized to
   measurements + headroom. Fix the regression; tighten after, never
   before.
-- **Format only files you touched** — repo-wide `prettier`/`fmt` drifts
-  unrelated files.
+- **`bun fmt` formats everything; CI checks it.** Run
+  `tooling/js/fmt.sh` (or let the pre-commit hook format what you stage);
+  `/.prettierignore` lists what it leaves alone, with the reasons. Until
+  the one-time mass format is on main (docs/migration/bun-fmt.md), run it
+  on the files you change only.
 - **Comments earn their place** — narrate the WHY for a non-obvious
   IDML/wasm/SAB constraint or a worked-around upstream bug; otherwise
   let the code speak.

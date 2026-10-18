@@ -1,41 +1,55 @@
 name: editor / playground
+concurrency:
+  # Deploys run one at a time and are never cancelled; a newer deploy that
+  # arrives while one runs waits, and replaces any older one still waiting.
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 
 # Build the live-demo PLAYGROUND (apps/canvas `demo` build) and deploy it to
 # Cloudflare Pages at play.paged.media — the real editor that the docs and
 # paged.media embed.
 #
-# The editor consumes the engine and the plugin bundles as PUBLISHED
-# @paged-media packages — except @paged-media/doc and @paged-media/slide, still
-# pnpm `link:`s to their bundles. So, like editor-tests.yml, the shared stopgap
-# actions build those bundles before the editor installs. Without that every
-# deploy since July failed on
-# "Cannot find module '@paged-media/doc'". DROP the stopgap once the package
-# publishes and a pin replaces the link.
+# The editor consumes the engine and every plugin bundle as workspace
+# packages (`workspace:*`), so the engine-wasm and module-wasm actions build
+# their wasm (or restore it from the cache) before the build.
 #
 # MONOREPO (step A3): ported from paged-media/editor .github/workflows/
-# playground.yml. One repository checkout at the root; the doc/slide link
-# targets are the in-tree modules/doc and modules/slide, built by the two
-# composite actions — so a change there redeploys the playground too.
+# playground.yml. One repository checkout at the root; a change to anything
+# the editor consumes redeploys the playground too.
 on:
   push:
     branches: [main]
     paths:
       - "apps/editor/**"
-      - "modules/doc/**"
-      - "modules/slide/**"
-      - ".github/actions/plugin-doc-from-source/**"
-      - ".github/actions/plugin-slide-from-source/**"
+      # Everything the editor consumes through the workspace (see
+      # editor-tests.yml): the module bundles, the extension contract and
+      # ai, and the engine's wasm packages with what builds them.
+      - "modules/**"
+      - "platform/extensions/packages/**"
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/module-wasm/**"
+      - ".github/actions/wasm-tools/**"
       - ".github/workflows/editor-playground.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!apps/editor/docs/**/*.md"
+      # Module prose (B3a made every module an editor input).
+      - "!modules/*/docs/**/*.md"
   workflow_dispatch:
   repository_dispatch:
     types: [engine-updated]
 
 permissions:
   contents: read
-
-concurrency:
-  group: editor-playground
-  cancel-in-progress: true
 
 defaults:
   run:
@@ -47,46 +61,60 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: rust toolchain (for the paged.doc engine wasm)
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: cache cargo + plugin-doc build
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
+        with:
+          auto-install: true
+          proto-version: "0.63.1"
+      - name: cache Bun's package cache
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/bin
-            modules/doc/target
-          key: playground-rust-${{ runner.os }}-${{ github.sha }}
-          restore-keys: playground-rust-${{ runner.os }}-
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
 
-      # The monorepo root has no package.json, so action-setup cannot read
-      # `packageManager`: pin the editor's pnpm major explicitly.
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - name: install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-          cache-dependency-path: apps/editor/pnpm-lock.yaml
-
-      - name: plugin-doc from source (in-tree modules/doc)
-        uses: ./.github/actions/plugin-doc-from-source
-      - name: plugin-slide from source (in-tree modules/slide)
-        uses: ./.github/actions/plugin-slide-from-source
-
-      - name: install editor
-        run: pnpm install --frozen-lockfile
+      # The engine's wasm packages and the bundles' engine wasm (build
+      # outputs; the editor consumes the workspace packages). Vite resolves
+      # the bundles' relative wasm glue (sheet, web, doc, draw, image, pdf)
+      # at build time.
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
+        with: { artifact: "false" }
+      - name: module wasm (doc)
+        uses: ./.github/actions/module-wasm
+        with: { module: doc }
+      - name: module wasm (slide)
+        uses: ./.github/actions/module-wasm
+        with: { module: slide }
+      - name: module wasm (sheet)
+        uses: ./.github/actions/module-wasm
+        with: { module: sheet }
+      - name: module wasm (data)
+        uses: ./.github/actions/module-wasm
+        with: { module: data }
+      - name: module wasm (web)
+        uses: ./.github/actions/module-wasm
+        with: { module: web }
+      - name: module wasm (draw)
+        uses: ./.github/actions/module-wasm
+        with: { module: draw }
+      - name: module wasm (image)
+        uses: ./.github/actions/module-wasm
+        with: { module: image }
+      - name: module wasm (publish)
+        uses: ./.github/actions/module-wasm
+        with: { module: publish }
 
       # PAGED_MODULES_HOSTED: the module door (ADR 223) answers the module
       # host, because the next step hosts every module the build lists.
       - name: build the demo
         env:
           PAGED_MODULES_HOSTED: "1"
-        run: pnpm --filter paged-canvas build:demo
+        run: bun run --filter paged-canvas build:demo
 
       # Wasm modules are hosted, not deployed (ADR 220): every .wasm in the
       # build is uploaded to modules.paged.media (R2, brotli, immutable per
@@ -99,7 +127,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: node scripts/modules-sync.mjs dist-demo
+        run: bun scripts/modules-sync.mjs dist-demo
 
       - name: every file fits the Pages size limit
         working-directory: apps/editor/apps/canvas/dist-demo
@@ -108,7 +136,7 @@ jobs:
           if [ -n "$big" ]; then echo "::error::over Cloudflare Pages' 25 MiB limit: $big"; exit 1; fi
 
       - name: deploy to Cloudflare Pages
-        # npx (not wrangler-action) — its `pnpm add wrangler` fails in a pnpm workspace.
+        # npx (not wrangler-action, which adds wrangler to the workspace).
         # Deployed from apps/canvas so wrangler picks up apps/canvas/functions:
         # the same-origin Claude proxy at /api/ai (ADR 221). Its secret and
         # KV binding live on the Pages project, not here.

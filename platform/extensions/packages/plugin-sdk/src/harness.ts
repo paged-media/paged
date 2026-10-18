@@ -107,17 +107,17 @@ import {
   type CreateBundleHostOptions,
   type ToolSettingsBackend,
   type WillSaveBackend,
-} from "./host-impl";
-import { satisfiesApiVersion, API_VERSION } from "./version";
-import { createCoreObjects } from "./core-objects";
-import { documentChangeOf } from "./document-change";
-import { createObjectRegistry, type ObjectRegistry } from "./object-registry";
-import { runScriptWithObjects, type ScriptRunResult, type ScriptSend } from "./script-bridge";
+} from "./host-impl.js";
+import { satisfiesApiVersion, API_VERSION } from "./version.js";
+import { createCoreObjects } from "./core-objects.js";
+import { documentChangeOf } from "./document-change.js";
+import { createObjectRegistry, type ObjectRegistry } from "./object-registry.js";
+import { runScriptWithObjects, type ScriptRunResult, type ScriptSend } from "./script-bridge.js";
 import {
   loadHeadlessEngine,
   type HeadlessCanvasWorker,
   type LoadHeadlessEngineOptions,
-} from "./wasm-loader";
+} from "./wasm-loader.js";
 
 /** One captured contribution — the assertable conformance log entry.
  *  `kind` is the surface; `value` is the contribution object verbatim

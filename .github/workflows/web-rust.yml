@@ -1,4 +1,10 @@
 name: web / rust
+concurrency:
+  # A newer push to a pull request cancels the older run. Main pushes share
+  # one group per event type: a running main run always finishes, and a newer
+  # push replaces the one still waiting, so direct pushes queue at most one.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # The web-render crate (packages/web-render): formatting, clippy and the Rust
 # test suite. Until this workflow the crate's tests (the lowering, the
@@ -16,18 +22,24 @@ on:
     paths:
       - "modules/web/**"
       - ".github/workflows/web-rust.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/web/docs/**/*.md"
   pull_request:
     paths:
       - "modules/web/**"
       - ".github/workflows/web-rust.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!modules/web/docs/**/*.md"
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: web-rust-${{ github.ref }}
-  cancel-in-progress: true
 
 defaults:
   run:
@@ -49,6 +61,8 @@ jobs:
         with:
           workspaces: modules/web/packages/web-render -> target
           prefix-key: v0-rust-web
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo fmt --check
       # Both feature sets: the default build is the pure lowering lane, the
       # `blitz` build adds the capture layer and the flow fragmentation.
@@ -70,6 +84,8 @@ jobs:
         with:
           workspaces: modules/web/packages/web-render -> target
           prefix-key: v0-rust-web
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: taiki-e/install-action@nextest
       # No `|| true`: a red test reddens the job; the JUnit still uploads
       # (the step below runs under !cancelled()). `--features blitz` is the

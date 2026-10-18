@@ -47,7 +47,7 @@ import {
   planAnchorAdd,
   type AnchorEditPlan,
 } from "./anchor-machine";
-import { anchorEditOps, lowerPathOp, type PathEditWireOp } from "./path-edit-ops";
+import { anchorEditOps, lowerPathOp, type PathEditWireOp, type WireOp } from "./path-edit-ops";
 
 /** Where a scissors click cuts. `index` is the flat index `pathOpenAt`
  *  receives — of the existing anchor, or of the anchor the insert lands. */
@@ -59,11 +59,8 @@ export type ScissorsPlan =
       index: number;
     };
 
-/** `pathOpenAt` on the wire (asserted in `wire-compat.ts`). */
-export interface PathOpenAtWire {
-  op: "pathOpenAt";
-  args: { elementId: ElementId; index: number };
-}
+/** `pathOpenAt` on the wire (the contract's variant). */
+export type PathOpenAtWire = WireOp<"pathOpenAt">;
 
 /** The ONE batch a scissors cut is. */
 export interface ScissorsBatchWire {

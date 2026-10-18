@@ -1,6 +1,6 @@
 // A refused style batch must not cost the document every style: the
 // bundle falls back to op-by-op and reports what the engine refused.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { applyStyleOps, STYLE_DIAGNOSTICS_KEY } from "../src/pour.js";
 

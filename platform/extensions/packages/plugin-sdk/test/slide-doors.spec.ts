@@ -22,7 +22,7 @@
 // The snapshot runs once against the real engine; the page members
 // against a scripted backend, since the camera is the editor's.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import type { PluginManifest } from "@paged-media/plugin-api";
 

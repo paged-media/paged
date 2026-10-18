@@ -22,7 +22,8 @@
 // Real engine wasm, counted (Node has no GPU, so the recomposite after
 // each edit declines — the edit itself is CPU and lands).
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, mock } from "bun:test";
+import { importActual } from "@paged-media/test-kit";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type { PluginManifest } from "@paged-media/plugin-api";
@@ -35,8 +36,9 @@ import { countingEngine, type EngineLog } from "./perf/counting-engine";
 let log: EngineLog | null = null;
 const setCalls: Array<[number, number]> = [];
 
-vi.mock("../src/engine", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/engine")>();
+const actualEngine = await importActual(() => import("../src/engine"));
+mock.module("../src/engine", () => {
+  const actual = actualEngine;
   return {
     ...actual,
     bootEngine: async () => {

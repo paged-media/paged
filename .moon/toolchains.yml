@@ -1,4 +1,4 @@
-# Moon toolchains (wave A: Node + pnpm + Rust).
+# Moon toolchains (Node + Bun + Rust).
 #
 # Moon must not rewrite tracked files. Every sync that would touch a
 # package.json, lockfile, tsconfig.json or rust-toolchain.toml is off, and
@@ -7,8 +7,9 @@
 $schema: './cache/schemas/toolchains.json'
 
 javascript:
-  packageManager: 'pnpm'
-  # Each pnpm workspace is installed in its own root, like the component CI.
+  packageManager: 'bun'
+  # One Bun workspace at the repository root (package.json `workspaces`,
+  # bun.lock): Moon installs it once, at the root, like the component CI.
   installDependencies: true
   inferTasksFromScripts: false
   syncPackageManagerField: false
@@ -16,16 +17,13 @@ javascript:
   dedupeOnLockfileChange: false
 
 node:
-  # 24.22.0, from /.prototools.
+  # 24.22.0, from /.prototools. Package scripts run through Bun; their
+  # `node`, Playwright's runner, wrangler and npm publish run on Node.
   versionFromPrototools: true
 
-pnpm:
-  # The modules and the extension SDK use pnpm 10 (modules/slide pins
-  # 10.28.0 in `packageManager`; their CI uses pnpm 10). apps/editor
-  # overrides this with its own `packageManager` version (9.0.0) in
-  # apps/editor/moon.yml. pnpm is not in /.prototools: it stays per
-  # component until wave B replaces it with Bun.
-  version: '10.28.0'
+bun:
+  # 1.4.3, from /.prototools.
+  versionFromPrototools: true
   # A stale lockfile fails the install instead of being rewritten.
   installArgs: ['--frozen-lockfile']
 

@@ -97,23 +97,25 @@ jobs:
         run: |
           curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_126/binaryen-version_126-x86_64-linux.tar.gz | tar xz
           echo "$PWD/binaryen-version_126/bin" >> "$GITHUB_PATH"
-      - uses: pnpm/action-setup@v4
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22   # >= 22.14 for OIDC trusted publishing
+          auto-install: true
+          proto-version: "0.63.1"
       - name: upgrade npm (OIDC needs >= 11.5.1)
         run: npm install -g npm@latest
       # Fail BEFORE building when the sources changed but the version did
       # not: the publish below would skip it and ship nothing.
       - name: version bumped when the sources changed
-        run: node scripts/package-hash.mjs --check
+        run: bun scripts/package-hash.mjs --check
       - name: build wasm (stamps bin/SOURCE_HASH)
         run: bash scripts/build-wasm.sh
       # install first: vendor-duckdb.sh bundles the DuckDB JS API with the
       # installed apache-arrow (scripts/bundle-duckdb-api.mjs)
-      - run: pnpm install --frozen-lockfile
+      # One install for the whole root workspace (bun.lock).
+      - name: bun install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
       - name: vendor DuckDB-WASM (stages bin/duckdb-engine.wasm)
         run: bash scripts/vendor-duckdb.sh
       # The TS suite against the wasm built above (wasm-fresh.spec.ts proves
@@ -128,7 +130,7 @@ jobs:
           test -n "$CHROME"
           echo "PAGED_CHROMIUM=$CHROME" >> "$GITHUB_ENV"
       - name: test
-        run: node scripts/check-contract-imports.mjs && pnpm -r typecheck && pnpm -r test
+        run: bun run --filter './packages/*' typecheck && bun run --filter './packages/*' test
         env:
           REQUIRE_REAL_ENGINE: "1"
           REQUIRE_REAL_DUCKDB: "1"
@@ -138,7 +140,7 @@ jobs:
       # integrity stamp below changes it: the next run's bump check hashes
       # the checkout, which never carries the stamp.
       - name: stamp bin/PACKAGE_HASH (read by the next run's bump check)
-        run: node scripts/package-hash.mjs --stamp
+        run: bun scripts/package-hash.mjs --stamp
       # The module door (plugin-sdk ADR 326): every declared wasm artifact
       # carries its sha384 in the PUBLISHED manifest, so a host that serves
       # the module elsewhere (modules.paged.media) is held to these bytes.
@@ -146,7 +148,7 @@ jobs:
       # Never committed — a committed stamp goes stale with every wasm build.
       - name: stamp wasm integrity into the manifest
         run: npx -y @paged-media/plugin-cli@0.1.6 integrity packages/data-bundle
-      - run: pnpm -r build
+      - run: bun run --filter './packages/*' build
       - name: pack + pubcheck + publish via OIDC (canary)
         run: |
           set -euo pipefail
@@ -157,13 +159,13 @@ jobs:
               echo "skip $name@$version (already published)"; continue
             fi
             tgz="$RUNNER_TEMP/$(echo "$name" | sed 's#@##; s#/#-#')-${version}.tgz"
-            ( cd "$dir" && pnpm pack --pack-destination "$RUNNER_TEMP" )
+            bun "$GITHUB_WORKSPACE/tooling/js/pack.mjs" "$dir" "$RUNNER_TEMP" >/dev/null
             # pubcheck: the tarball carries the engine wasm, DuckDB
             # (bin/duckdb-engine.wasm) and both stamps, or nothing ships.
             bash scripts/pubcheck.sh "$tgz"
             # contents beyond presence: one DuckDB variant, no vendor/,
             # every wasm within its manifest maxBytes
-            node scripts/pubcheck.mjs --release
+            bun scripts/pubcheck.mjs --release
             echo "publish $name@$version via OIDC"
             npm publish "$tgz" --tag canary --access public
           done

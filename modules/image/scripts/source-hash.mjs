@@ -3,10 +3,10 @@
 //
 // build-wasm.sh stamps it into the wasm (`engine_source_hash()`) and next
 // to it (glue/wasm/SOURCE_HASH); glue/test/wasm-fresh.spec.ts recomputes
-// it and fails when the committed wasm was built from different sources.
-// Without that check every vitest run exercised whatever wasm was last
-// committed: on 2026-10-04 that was a build from 2026-08-09 that predated
-// two PSD parser fixes, and nothing said so.
+// it and fails when the built wasm came from different sources. Without
+// that check every unit-test run exercised whatever wasm was last built (it
+// used to be committed): on 2026-10-04 that was a build from 2026-08-09
+// that predated two PSD parser fixes, and nothing said so.
 //
 // Inputs: image-js and every crate it reaches through `path = "../…"`
 // dependencies (src/, build.rs, Cargo.toml), the build-consumed

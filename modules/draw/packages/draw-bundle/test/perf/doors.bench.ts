@@ -31,7 +31,8 @@
 // `vitest bench` exits 1 on a package with no bench file, which took
 // the root `pnpm bench` down with it.
 
-import { bench, describe } from "vitest";
+// mitata (not a test runner): `bun <this file>` runs the benches.
+import { bench, group as describe, run } from "mitata";
 
 import { blendLinks, leafIdsOf, selectSameMatches } from "../../src";
 import { buildLinkedWorkload } from "./workload";
@@ -54,3 +55,5 @@ describe("the document walks, over the 1 403-leaf linked workload", () => {
     await selectSameMatches(w.h.host, w.plain[0]!, "fill");
   });
 });
+
+await run();

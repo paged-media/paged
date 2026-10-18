@@ -24,7 +24,7 @@
 
 import { readFileSync } from "node:fs";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createHeadlessHost } from "@paged-media/plugin-sdk";
 import type { ElementId } from "@paged-media/plugin-api";
@@ -33,6 +33,13 @@ import { IMPORTER_ID } from "../src/activate";
 import { slideEngine } from "../src/engine";
 import { giveDocumentEmbeddedFonts } from "../src/fonts";
 import { slideBundle } from "../src/index";
+import { fileURLToPath } from "node:url";
+
+// The engine is this package's own @paged-media/canvas-wasm devDependency.
+// Without an anchor the headless harness resolves it from plugin-sdk's
+// install location, which in the root Bun workspace is whichever version the
+// store hoists, not the one this package pins.
+const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
 const FIXTURES = ["geometry", "placeholders", "text", "motion", "baselines"];
 
@@ -61,7 +68,7 @@ describe.each(FIXTURES)("fixture %s in the engine", (name) => {
       readFileSync(new URL(`../../../slide-conformance/fixtures/${name}.pptx`, import.meta.url)),
     );
     const { idml, report } = (await slideEngine()).importPptx(bytes, name);
-    const h = await createHeadlessHost();
+    const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
     try {
       const pageIds = await h.load(idml);
       expect(pageIds).toEqual(report.slides.map((s) => s.pageId));
@@ -107,7 +114,7 @@ describe("slide state rides the pages", () => {
       readFileSync(new URL(`../../../slide-conformance/fixtures/${name}.pptx`, import.meta.url)),
     );
     const { idml, report } = (await slideEngine()).importPptx(bytes, name);
-    const h = await createHeadlessHost();
+    const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
     try {
       await h.load(idml);
       const pages = await h.host.document.collection<{
@@ -155,7 +162,7 @@ describe("a deck's embedded fonts", () => {
     expect(report.embeddedFonts.every((f) => f.use === "editable" && f.length > 0)).toBe(true);
     expect(report.diagnostics.filter((d) => d.includes("embedded font"))).toEqual([]);
 
-    const h = await createHeadlessHost();
+    const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
     try {
       // The bundle's own host: its manifest declares the fonts asset.
       h.loadBundle(slideBundle);
@@ -202,7 +209,7 @@ describe("File \u25b8 Open of a deck with embedded fonts", () => {
     const bytes = new Uint8Array(
       readFileSync(new URL("../../../slide-conformance/fixtures/fonts-full.pptx", import.meta.url)),
     );
-    const h = await createHeadlessHost();
+    const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
     try {
       h.loadBundle(slideBundle);
       const importer = h.importersContributed().find((i) => i.id === IMPORTER_ID)!;

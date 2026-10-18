@@ -22,9 +22,11 @@ OUT=glue/wasm
 BUDGET=$((100 * 1000 * 1000))
 
 # Stamp the source hash into the wasm and beside it, so
-# glue/test/wasm-fresh.spec.ts can tell a committed wasm built from these
-# sources from one built from older ones.
-SOURCE_HASH=$(node scripts/source-hash.mjs)
+# glue/test/wasm-fresh.spec.ts can tell a wasm built from these sources
+# from one built from older ones. The output is BUILD OUTPUT (gitignored):
+# `moon run image:wasm` runs this script, and CI builds it with
+# .github/actions/module-wasm.
+SOURCE_HASH=$(bun scripts/source-hash.mjs)
 IMAGE_JS_SOURCE_HASH=$SOURCE_HASH \
   cargo build --release --target wasm32-unknown-unknown -p image-js
 
@@ -37,6 +39,7 @@ if [ "$LOCKED" != "$CLI" ]; then
   exit 1
 fi
 
+mkdir -p "$OUT"
 wasm-bindgen target/wasm32-unknown-unknown/release/image_js.wasm \
   --target web --out-dir "$OUT"
 

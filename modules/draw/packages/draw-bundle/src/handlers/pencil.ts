@@ -52,7 +52,7 @@ import {
   batchMutationFor,
   bindCreatedMutationFor,
   handleElementId,
-} from "../commands/v59-wire";
+} from "../commands/batch-handles";
 import { PENCIL_OPTIONS, createToolOptionsReader } from "../tool-options";
 
 // The three numbers this tool used to run on as constants are OPTIONS

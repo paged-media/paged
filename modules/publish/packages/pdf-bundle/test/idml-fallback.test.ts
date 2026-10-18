@@ -20,7 +20,7 @@ import { writeFileSync } from "node:fs";
 import { Buffer } from "node:buffer";
 
 import JSZip from "jszip";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 import { buildIdmlFromRasters, type PdfPageRaster } from "../src/idml-fallback";
 

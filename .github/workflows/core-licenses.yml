@@ -1,4 +1,10 @@
 name: core / licenses
+concurrency:
+  # A newer push to a pull request cancels the older run. Main pushes share
+  # one group per event type: a running main run always finishes, and a newer
+  # push replaces the one still waiting, so direct pushes queue at most one.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Dependency-license + supply-chain audit. paged is AGPL-3.0-only OR PMEL
 # (ADR PM-0001); the commercial PMEL side means every transitive dependency
@@ -14,10 +20,14 @@ on:
     paths:
       - "engine/core/**"
       - ".github/workflows/core-licenses.yml"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!engine/core/docs/**/*.md"
   pull_request:
     paths:
       - "engine/core/**"
       - ".github/workflows/core-licenses.yml"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!engine/core/docs/**/*.md"
 
 jobs:
   cargo-deny:

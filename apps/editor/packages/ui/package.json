@@ -9,8 +9,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint src"
+    "typecheck": "bun check -p tsconfig.json"
   },
   "dependencies": {
     "@paged-media/client": "workspace:*",
@@ -23,8 +22,8 @@
     "react-dom": "^18.3.0"
   },
   "devDependencies": {
-    "@types/react": "^18.3.31",
-    "@types/react-dom": "^18.3.7",
-    "typescript": "^5.9.3"
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "typescript": "catalog:"
   }
 }

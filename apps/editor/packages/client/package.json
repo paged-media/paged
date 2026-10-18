@@ -1,6 +1,7 @@
 {
   "name": "@paged-media/client",
   "version": "0.64.0-canary.0",
+  "private": true,
   "type": "module",
   "description": "The programmable Paged SDK: a CanvasClient over the @paged-media/canvas-wasm engine — load, mutate, read, render and export a document from code, with the same wire the editor uses.",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
@@ -18,42 +19,14 @@
     "./journal": "./src/journal/index.ts",
     "./api-catalog.json": "./api-catalog.json"
   },
-  "files": [
-    "dist",
-    "api-catalog.json",
-    "README.md"
-  ],
-  "publishConfig": {
-    "access": "public",
-    "tag": "canary",
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "./sab/*": {
-        "types": "./dist/sab/*.d.ts",
-        "default": "./dist/sab/*.js"
-      },
-      "./journal": {
-        "types": "./dist/journal/index.d.ts",
-        "default": "./dist/journal/index.js"
-      },
-      "./api-catalog.json": "./api-catalog.json"
-    }
-  },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "catalog": "node ../../scripts/client-api-catalog.mjs",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint src"
+    "catalog": "bun ../../scripts/client-api-catalog.mjs",
+    "typecheck": "bun check -p tsconfig.json"
   },
   "dependencies": {
-    "@paged-media/canvas-wasm": "0.73.3"
+    "@paged-media/canvas-wasm": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "catalog:"
   }
 }

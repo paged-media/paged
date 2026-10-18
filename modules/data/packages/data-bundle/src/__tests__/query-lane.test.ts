@@ -2,7 +2,7 @@
 // DuckDB error text → diagnostics, file naming and quoting. The same SQL is
 // run against real DuckDB in test/sources-real.spec.ts.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { buildSql, valueLiteral } from "../query/builder";
 import {

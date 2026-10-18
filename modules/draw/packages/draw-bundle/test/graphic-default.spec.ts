@@ -21,7 +21,7 @@
 // stub host answers `document.meta` and the raw `requestStyleProperties`
 // read; the real-engine half is `conformance/tool-graphic-default.spec.ts`.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, MutationInput } from "@paged-media/plugin-api";
 
@@ -38,7 +38,7 @@ import {
   batchMutationFor,
   bindCreatedMutationFor,
   handleElementId,
-} from "../src/commands/v59-wire";
+} from "../src/commands/batch-handles";
 
 type Defaults = {
   defaultFillColor?: string | null;

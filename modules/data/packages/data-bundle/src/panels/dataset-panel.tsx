@@ -233,16 +233,16 @@ export function makeDatasetPanel(
         setError("nothing to export (no variables defined)");
         return;
       }
-      // Write the file through the host's own save door when it has one. K-10
-      // (`shell.saveFile`) is BUILT in plugin-sdk main but is not in any
-      // published contract yet, so the probe is structural and the fallback is
-      // real: show the XML for the user to copy, rather than reaching for a DOM
-      // download the bundle realm may not have — or pretending nothing happened.
-      const shell = host.shell as unknown as {
-        saveFile?(spec: { name: string; bytes: Uint8Array }): Promise<unknown>;
-      };
-      if (host.supports("shell.saveFile@1") && typeof shell.saveFile === "function") {
-        await shell.saveFile({ name: "variables.xml", bytes: new TextEncoder().encode(xml) });
+      // Write the file through the host's own save door when it has one
+      // (K-10, `shell.saveFile@1`); without it show the XML for the user to
+      // copy, rather than reaching for a DOM download the bundle realm may
+      // not have — or pretending nothing happened.
+      if (host.supports("shell.saveFile@1")) {
+        await host.shell.saveFile({
+          suggestedName: "variables.xml",
+          bytes: new TextEncoder().encode(xml),
+          mimeType: "application/xml",
+        });
         return;
       }
       setExportedXml(xml);

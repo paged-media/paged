@@ -109,9 +109,10 @@ import {
 
 import type {
   BindingCollection,
+  BindingOp,
   BindingProvider,
   BindingWrite,
-} from "./adr023-seam";
+} from "@paged-media/plugin-api";
 
 /** What the provider needs from the workbook session — narrowed to one
  *  method so the provider is unit-testable without an engine, and so the
@@ -126,7 +127,7 @@ export interface WorkbookPaletteSource {
  *  host Swatches panel can send stays undeclared, which is the
  *  contract's own way to make the host disable a control rather than let
  *  it write somewhere the user is not looking. */
-export const SERVED_OPS: readonly string[] = ["editSwatch"];
+export const SERVED_OPS: readonly BindingOp[] = ["editSwatch"];
 
 export interface SwatchesBindingProvider {
   provider: BindingProvider;

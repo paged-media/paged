@@ -66,13 +66,13 @@ import type {
   ValueType,
 } from "@paged-media/plugin-api";
 
-import type { CoreObjects } from "./core-objects";
-import { CommandRefusal, createCoreCommands, isCoreCommand, type CoreCommandPlan } from "./core-commands";
-import { codeOfEngineError } from "./core-objects-v71";
-import { canonicalCorePath } from "./core-schema";
-import { addressKindOf, formatAddress, parseAddress, parseSelector, type SelectorStep } from "./object-address";
-import { applyDefaults, checkSchemaRows, checkValueType, findRow, validateValue } from "./object-schema";
-import { toDisposable } from "./disposables";
+import type { CoreObjects } from "./core-objects.js";
+import { CommandRefusal, createCoreCommands, isCoreCommand, type CoreCommandPlan } from "./core-commands.js";
+import { codeOfEngineError } from "./core-objects-v71.js";
+import { canonicalCorePath } from "./core-schema.js";
+import { addressKindOf, formatAddress, parseAddress, parseSelector, type SelectorStep } from "./object-address.js";
+import { applyDefaults, checkSchemaRows, checkValueType, findRow, validateValue } from "./object-schema.js";
+import { toDisposable } from "./disposables.js";
 
 /** What a plugin host hands the registry at registration. */
 export interface ObjectModelRegistration {
@@ -581,7 +581,7 @@ export function createObjectRegistry(options: CreateObjectRegistryOptions = {}):
         result.created = names.map((n) => n ?? "");
       }
       if (fresh) {
-        const take = await fresh();
+        const take = await fresh(outcome);
         const minted = (outcome.applied ? outcome.minted : undefined) ?? [];
         result.commands = [];
         for (const c of commandPlans) {

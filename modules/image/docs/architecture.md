@@ -43,9 +43,9 @@ every call to the host and to the engine; `tile-provider.ts`, which it calls, al
 `engine.ts` is a typed facade over the wasm exports. The interaction state machines
 (`crop-machine.ts`, `selection-machine.ts`, `brush-machine.ts`), the image-to-page transform
 (`frame-fit.ts`) and the growth rule of the quick-selection tool (`quick-select.ts`) are
-TypeScript. `scripts/check-contract-imports.mjs` rejects any static import or re-export whose
-specifier is not `@paged-media/plugin-api`, `@paged-media/plugin-sdk`, one of this repository's
-own packages, `react` or a relative path: the plugin takes no code from the engine or the editor
+TypeScript. The contract-import lint rule (`/bunfig.toml`, PM-0003) rejects any import or re-export whose
+specifier is not `@paged-media/plugin-api`, `@paged-media/plugin-sdk`, an internal shared package
+(`platform/shared/*`), one of this repository's own packages, `react` or a relative path: the plugin takes no code from the engine or the editor
 ([plugin-sdk ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md)).
 
 There are two manifest files with the same content. `glue/manifest.json` is the one the
@@ -55,9 +55,10 @@ in the private package `@paged-media/image-manifest`: `pnpm validate:manifest` a
 "validate manifest" step of CI check this file, and 14 of the 19 spec files in `glue/test/`
 import it. No script copies one to the other; the test "is byte-identical to the validated
 manifest" in `glue/test/activate.spec.ts` fails when they differ. The wasm artefact is
-doubled the same way: `scripts/build-wasm.sh` writes it to `glue/wasm/` (committed; the
-bundle loads it from there) and copies it to `manifest/wasm/` (gitignored), where the
-manifest's path `wasm/image_js_bg.wasm` resolves from `manifest/`.
+doubled the same way: `scripts/build-wasm.sh` writes it to `glue/wasm/` (the bundle loads
+it from there) and copies it to `manifest/wasm/`, where the manifest's path
+`wasm/image_js_bg.wasm` resolves from `manifest/`. Both are build output (gitignored;
+`moon run image:wasm`, and in CI `.github/actions/module-wasm`).
 
 ## The wasm boundary
 
@@ -233,7 +234,7 @@ of at most 8 MiB. No code in `glue/src` calls a hit-test door or uses shared mem
   found (`image-conformance/src/device.rs`). CI runs on `ubuntu-latest`, which per the
   comment in `ci.yml` has none, so GPU output is compared with the scalar reference only
   on a machine with an adapter ([ADR 453](adr/453-tolerance-not-golden-bytes.md)).
-- TypeScript: `pnpm test` runs the import lint, then vitest in `glue/` against the SDK's
+- TypeScript: `pnpm test` runs the import lint, then `bun test` in `glue/` against the SDK's
   `createBundleHost` and a fake editor. `glue/test/wasm-exec.spec.ts` loads the committed
   module in Node and drives the CPU lanes; CI sets `REQUIRE_REAL_WASM=1`, which turns a
   missing module from a skip into a failure. The manifest validator is the `plugin-cli` of

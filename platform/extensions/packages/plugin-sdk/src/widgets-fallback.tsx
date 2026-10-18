@@ -41,7 +41,7 @@ import type {
   WidgetSurface,
 } from "@paged-media/plugin-api";
 
-import { type CreateElement, requireCreateElement } from "./react-optional";
+import { type CreateElement, requireCreateElement } from "./react-optional.js";
 
 function TextareaCodeEditor(
   props: CodeEditorProps,

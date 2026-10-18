@@ -20,7 +20,7 @@
 // D-13 rules): the engine's resolved values → host Mutations. No host calls —
 // data in, mutations out.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   FIELD_PLUGIN,

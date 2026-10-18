@@ -6,7 +6,12 @@ next to the code you change. This file holds only what crosses components.
 
 ## Layout
 - `engine/core` — Rust engine (own Cargo workspace and `rust-toolchain.toml`).
-- `modules/<name>` — built-in modules; each keeps its own Cargo/JS workspace for now.
+- `modules/<name>` — built-in modules; each keeps its own Cargo workspace for now.
+- JavaScript: ONE Bun workspace at the root (`package.json` `workspaces`, `bun.lock`,
+  `bunfig.toml`; Bun from `.prototools`). `bun install` at the root installs every
+  package; component scripts run with `bun run <script>` in the component's directory.
+  The isolated linker makes an undeclared import fail; only `workspace:` links a
+  workspace package (the editor's exact canary pins resolve from npm).
 - `platform/extensions` — the public extension contract (`plugin-api`) and SDK.
   Built-in-only code must not leak into it: community extensions consume it.
 - `apps/editor`, `apps/server` — applications.
@@ -14,16 +19,34 @@ next to the code you change. This file holds only what crosses components.
 
 ## Tasks (Moon)
 Moon (`.moon/`, version pinned in `.prototools`) runs every component's tasks
-from anywhere in the repository. One project per Cargo/pnpm workspace:
+from anywhere in the repository. One project per Cargo workspace and JS component root:
 `core`, `core-idml-viewer`, `publish`, `image`, `draw`, `sheet`, `data`, `doc`,
 `slide`, `web`, `web-render`, `extensions`, `editor`, `server`.
 - `moon run <project>:test` — also `:fmt`, `:check`, `:lint`, `:build`, and
   `:wasm` where the component ships a wasm artifact. `moon run :lint` runs it
   everywhere. The language halves are `rust-*` and `js-*` (`moon tasks <project>`).
 - `moon ci --base origin/main --head HEAD` — only what a change affects.
-- The component's own commands (cargo, pnpm) still work in its directory.
+- The component's own commands (cargo, `bun run`) still work in its directory.
+- Formatting: `cargo fmt` for Rust; `tooling/js/fmt.sh` (`bun fmt` on the
+  pinned canary, Prettier 3 defaults, `/.prettierignore`) for everything
+  else, checked in CI by `.github/workflows/fmt.yml`. Never format a file
+  `/.prettierignore` lists; regenerate it instead.
 - Moon must not modify tracked files (package.json, lockfiles, tsconfig.json,
   rust-toolchain.toml). A change in `git status` after a Moon run is a bug in `.moon/`.
+
+## Lint
+- `bun run lint` (root): `bun lint` over the whole repository with the one config,
+  `bunfig.toml` `[lint]` (docs/adr/PM-0003). It runs an exact canary build through
+  `tooling/js/bun-canary.sh`; plain `bun` stays at the `.prototools` version. Never add
+  ESLint, a per-package lint config or an `eslint.config.*`.
+- It holds correctness rules, the import boundaries (the editor's zones; the module and
+  extension contracts of PM-0002) and the Rules of React. Formatting is not lint.
+- `bun run lint:selftest` proves every boundary fires. A new boundary, module or
+  `platform/shared/*` package needs its cases (it fails until the config names a new
+  shared package).
+- `eslint-suppressions.json` records the Rules-of-React findings that predate the rules.
+  Never add to it; fix a finding and run `--prune-suppressions` in the same commit.
+  A one-line exception says why: `// eslint-disable-next-line <rule> -- <reason>`.
 
 ## Agent tools (MCP)
 `.mcp.json` registers two servers; `.claude/settings.json` allows their read

@@ -54,8 +54,7 @@ export function downloadBytes(
 }
 
 /** What `host.shell.saveFile` hands over (the plugin-api `SaveFileOptions`
- *  shape, restated locally so this module stays contract-independent — the
- *  editor pins a published plugin-api canary). */
+ *  shape, restated locally so this module stays contract-independent). */
 export interface SaveFileRequest {
   suggestedName: string;
   bytes: Uint8Array;

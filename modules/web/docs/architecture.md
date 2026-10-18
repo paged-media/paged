@@ -37,14 +37,15 @@ face). See [ADR 400](adr/400-pure-lowering-and-capture-layer.md).
 Dependency direction (`web-model` and `web-render` import nothing from this repo):
 
 - `web-bundle` imports `web-model` by relative source path (`../../web-model/src`), and in
-  one file by package name (`packages/web-bundle/src/bake-plan.ts:37`); tsup inlines it
-  either way, so the published package does not depend on the private one.
+  one file by package name (`packages/web-bundle/src/bake-plan.ts:37`). Both are private
+  workspace packages (PM-0008); the editor builds them from source.
 - `web-bundle` reaches `web-render` only as a built artefact, `bin/blitz_web.js` and
   `bin/blitz_web_bg.wasm`, loaded at run time. No TypeScript is generated from the Rust
   types: the scene-layer shape is written by hand in `packages/web-render/src/wire.rs` and
   again in `packages/web-model/src/render.ts`.
 - Towards the host, `@paged-media/plugin-api`, `@paged-media/plugin-sdk` and `react` are
-  peer dependencies. `scripts/check-contract-imports.mjs` fails on any other package import.
+  peer dependencies. The contract-import lint rule (`/bunfig.toml`, PM-0003) fails on any other
+  package import.
 
 The layout engine is the Blitz stack, pinned to `=0.3.0-alpha.4` in
 `packages/web-render/Cargo.toml` (the lockfile resolves Stylo 0.17.0, Taffy
@@ -214,12 +215,12 @@ The manifest declares the matching capabilities: `document` (read `broad`, write
   writes `packages/web-bundle/bin/` (gitignored). It fails if the wasm exceeds the manifest's
   `maxBytes` for it.
   Without `--engine` the crate is built without the engine and has neither export.
-  `pnpm -r build` then runs tsup; `.github/workflows/publish.yml` does both in that order
-  and publishes `@paged-media/web` under the `canary` tag.
-- TypeScript lane: `pnpm test` runs the import lint, then vitest in both packages. The
+  The bundle has no build step of its own; `.github/workflows/web-publish.yml` stays,
+  dispatch-only, until the npm deprecation.
+- TypeScript lane: `pnpm test` runs the import lint, then `bun test` in both packages. The
   engine tests in `web-bundle` replay a captured engine output through a stub loader and,
   when `bin/` is built, also load the real wasm in Node. With `REQUIRE_REAL_ENGINE=1`, set
-  by `.github/workflows/vitest.yml` after it builds the wasm, a missing artefact fails
+  by `.github/workflows/web-vitest.yml` after it builds the wasm, a missing artefact fails
   instead of skipping. `test/conformance/` runs the bundle against `createHeadlessHost`.
 - Rust lane: `cargo test` in `packages/web-render` covers `lower` and `wire` without the
   engine; `cargo test --features blitz` adds `capture`, `flow` and `fonts`. No workflow in

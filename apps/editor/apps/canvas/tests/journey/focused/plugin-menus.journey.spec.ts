@@ -130,9 +130,8 @@ test.describe("journey · plugin menu contributions", () => {
     const paths = plugin.map((m) => m.path);
     expect(paths.length).toBe(new Set(paths).size);
 
-    // F1's fallback: the host curates `Object ▸ Insert …` courtesies for
-    // bundles that cannot reach the bar. web, sheet and data now DO, so
-    // their courtesy must have stood down — exactly one entry per
+    // Each plugin files its `Object ▸ Insert …` verb itself (the host's
+    // courtesy copies are gone since B3b) — exactly one entry per
     // command, not two.
     for (const cmd of [
       "media.paged.web.command.insertWebFrame",

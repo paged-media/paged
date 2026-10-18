@@ -68,7 +68,9 @@ repository reads nothing in `modules/publish` and is not an edge.
   nextest profile under CI. `rust-lint` is clippy with the flags the component's workflow
   uses; `core`, `draw` and `web-render` override it with their workflow's exact invocations.
 - `.moon/tasks/node.yml` (tag `node`): `js-check`, `js-test`, `js-build`, calling the
-  workspace's own `typecheck`, `test` and `build` scripts through pnpm. `js-lint` is
+  workspace's own `typecheck`, `test` and `build` scripts through pnpm. (Amended 2026-10-18,
+  TypeScript 7: `js-build` left `node.yml`; it is defined by the projects that still build,
+  extensions, idml-viewer and the editor, `docs/migration/typescript-7.md`.) `js-lint` is
   defined where a component has a lint script.
 - `.moon/tasks/all.yml`: the vocabulary `fmt`, `check`, `lint`, `test`, `build` for every
   project, as aggregates that depend on the Rust and JS halves the project has. `wasm` is
@@ -76,8 +78,8 @@ repository reads nothing in `modules/publish` and is not an edge.
   `engine/core/scripts/build-wasm-packages.sh` for the engine's npm packages.
 - Inputs decide what a change affects. Test tasks are not cached. Outputs are declared only
   for deterministic, gitignored artifacts (wasm package directories, tsup `dist/`); `target/`
-  is never an output, and the committed wasm artifacts of draw, image and publish are not
-  cached outputs.
+  is never an output. (The wasm of draw, image and publish was committed when this was
+  decided and so was not an output; since B3b it is build output like every other module's.)
 - Moon does not modify tracked files: `syncPackageManagerField`,
   `syncProjectWorkspaceDependencies`, `dedupeOnLockfileChange`, the rust toolchain sync, VCS
   hooks and CODEOWNERS sync are off, the `typescript` toolchain is not enabled, and pnpm
@@ -91,7 +93,7 @@ non-blocking (`continue-on-error`); the component workflows stay the gates. A la
 step compares the two (the workflow uploads `.moon/cache/ciReport.json`; the baseline is in
 `ci-port.md`) before anything switches. Under `moon ci`, `rust-fmt`, `rust-lint`,
 `rust-test`, `js-check`, `js-lint` and `js-test` run when affected, with the extra checks
-the component workflows run (publish's and extensions' builds, `slide:vendor-check`,
+the component workflows run (extensions' builds, `slide:vendor-check`,
 `draw:manifest`, core's fixture generation);
 the wasm builds are `runInCI: skip` (each needs its workspace's Cargo.lock version of
 wasm-bindgen-cli), so JS suites skip their real-engine specs there; local-only tasks

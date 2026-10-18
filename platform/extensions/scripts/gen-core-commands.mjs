@@ -1,25 +1,39 @@
 #!/usr/bin/env node
-// Typed CORE COMMANDS, generated from the vendored engine wire (ADR 323
-// §21.12): every arm of `Mutation` in packages/plugin-api/src/wire.d.ts
-// becomes one row — the op name and its argument STRUCT as a plugin-api
-// `ValueType`, derived from the arm's TypeScript type, never a hand list.
+// Typed CORE COMMANDS, generated from the engine wire's JSON Schema (ADR 323
+// §21.12, engine ADR 187): every arm of `Mutation` in
+// engine/core/crates/paged-wire/schema/mutation.schema.json becomes one row —
+// the op name and its argument STRUCT as a plugin-api `ValueType`, derived
+// from the arm's schema, never a hand list.
 //
 //   node scripts/gen-core-commands.mjs           # write the generated file
 //   node scripts/gen-core-commands.mjs --check   # fail if it drifted
 //
-// Type mapping (the wire's own TypeScript, read with the compiler API):
+// The schema is written by the engine (`schemars`, next to the `Tsify` derive
+// that writes the vendored wire.d.ts) and checked there twice: the committed
+// file against the Rust types, and every op's fields and optionality against
+// tsify's own declaration. So this script reads plain JSON and needs no
+// TypeScript parser. CORE_REPO=<engine/core checkout> points it elsewhere.
+//
+// Type mapping (JSON Schema → ValueType):
 //   string → text, or `ref` when the field is an id position (the wire
 //   spells ids `…Id` / `page` / `master` / `from` / `to` / …; the ref's
 //   `to` names the ADR 131 address kind the command also accepts there —
 //   `frame` for a page item's raw id);
-//   number → number; boolean → bool; [n,n] → point; [n,n,n,n] → bounds;
-//   [a,b,c,d,tx,ty] → transform; T[] → list; a string-literal union →
-//   enum; an interface / inline object → struct (open, `shape` = its wire
-//   name); `ElementId` → ref to `item` (the wire's {kind, id} object; the
-//   command takes an address);
-//   any other union (`FieldKind`, `ZOrderTarget`, `Value`) → an OPAQUE
-//   struct (`shape` named, no fields): core validates it.
-//   `?` → optional; `X | null` without `?` → optional, sent as null.
+//   integer / number → number; boolean → bool; a fixed-length array of
+//   numbers (a Rust tuple or `[f32; N]`) of 2 / 4 / 6 → point / bounds /
+//   transform; any other array → list; a string enum of two or more members
+//   (`enum`, or `oneOf` of `const`s) → enum; a named struct (a `$defs` object
+//   with `properties`) / an inline object → struct (open, `shape` = its
+//   `$defs` name); `ElementId` → ref to `item` (the wire's {kind, id}
+//   object; the command takes an address);
+//   any other union (`FieldKind`, `ZOrderTarget`, `Value`, `Mutation`) → an
+//   OPAQUE struct (`shape` named, no fields): core validates it.
+//   Not `required` → optional. A field the wire takes absent but whose
+//   TypeScript type is `X | null` without `?` (an `Option` with no serde
+//   default: nullable, not required, no `default`) → optional and listed in
+//   `nullFill`, sent as null.
+// A schema form this mapping does not know fails the run rather than
+// guessing.
 //
 // Which ops are commands, which are excluded and why, and what each one
 // creates, live in packages/plugin-sdk/src/core-commands.ts (the guard spec
@@ -30,10 +44,11 @@ import { resolve } from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 
-import ts from "typescript";
-
 const ROOT = new URL("..", import.meta.url).pathname;
-export const WIRE = resolve(ROOT, "packages/plugin-api/src/wire.d.ts");
+const SCHEMA_IN_CORE = "crates/paged-wire/schema/mutation.schema.json";
+export const SCHEMA = process.env.CORE_REPO
+  ? resolve(process.env.CORE_REPO, SCHEMA_IN_CORE)
+  : resolve(ROOT, "../../engine/core", SCHEMA_IN_CORE);
 export const TARGET = resolve(ROOT, "packages/plugin-sdk/src/core-commands.generated.ts");
 
 /** Id positions: field name → ADR 131 address kind (`item` = any page item). */
@@ -74,103 +89,137 @@ function idKind(op, field) {
   return ID_FIELDS[field] ?? null;
 }
 
-export function generate(wireText) {
-  const sf = ts.createSourceFile("wire.d.ts", wireText, ts.ScriptTarget.Latest, true);
-  /** name → declaration node (type alias type, or interface). */
-  const decls = new Map();
-  for (const st of sf.statements) {
-    if (ts.isTypeAliasDeclaration(st)) decls.set(st.name.text, st.type);
-    else if (ts.isInterfaceDeclaration(st)) decls.set(st.name.text, st);
+const DEFS = "#/$defs/";
+const OPAQUE = () => ({ kind: "struct", fields: {}, open: true });
+
+/** `schemaText`: the JSON text of mutation.schema.json. */
+export function generate(schemaText) {
+  const schema = JSON.parse(schemaText);
+  const defs = schema.$defs ?? {};
+
+  /** The `$defs` name a `$ref` points at (the schema is self-contained). */
+  function refName(s, at) {
+    if (!s.$ref.startsWith(DEFS)) throw new Error(`${at}: $ref ${s.$ref} does not point into $defs`);
+    const name = s.$ref.slice(DEFS.length);
+    if (!(name in defs)) throw new Error(`${at}: $ref ${s.$ref} names no definition`);
+    return name;
   }
-  const mutation = decls.get("Mutation");
-  if (!mutation || !ts.isUnionTypeNode(mutation)) throw new Error("wire.d.ts has no `Mutation` union");
+  const isNullSchema = (s) => s.type === "null" || (s.const === null && Object.keys(s).length === 1);
+  /** A named struct: what tsify writes as an `interface`. */
+  const isStruct = (s) => s.type === "object" && s.properties !== undefined && !s.oneOf && !s.anyOf && !s.allOf;
+  /** The members of a string enum schema (`enum` / `const`), else null. */
+  function stringMembers(s) {
+    if (Array.isArray(s.enum) && s.enum.every((m) => typeof m === "string")) return s.enum;
+    if (typeof s.const === "string") return [s.const];
+    return null;
+  }
 
-  const isNull = (t) =>
-    (ts.isLiteralTypeNode(t) && t.literal.kind === ts.SyntaxKind.NullKeyword) || t.kind === ts.SyntaxKind.UndefinedKeyword;
-  const isNumber = (t) => t.kind === ts.SyntaxKind.NumberKeyword;
-  const strLit = (t) => (ts.isLiteralTypeNode(t) && ts.isStringLiteral(t.literal) ? t.literal.text : null);
+  /** Split `X | null` → { rest: X, nullable }. */
+  function stripNull(s) {
+    if (Array.isArray(s.type) && s.type.includes("null")) {
+      const types = s.type.filter((t) => t !== "null");
+      const rest = { ...s, type: types.length === 1 ? types[0] : types };
+      if (Array.isArray(rest.enum)) rest.enum = rest.enum.filter((m) => m !== null);
+      return { rest, nullable: true };
+    }
+    for (const key of ["anyOf", "oneOf"]) {
+      if (!Array.isArray(s[key]) || !s[key].some(isNullSchema)) continue;
+      const arms = s[key].filter((x) => !isNullSchema(x));
+      const { [key]: _drop, ...annotations } = s;
+      const rest = arms.length === 1 ? { ...annotations, ...arms[0] } : { ...annotations, [key]: arms };
+      return { rest, nullable: true };
+    }
+    return { rest: s, nullable: false };
+  }
 
-  function members(node, depth, shape) {
+  function members(node, depth, at) {
     const fields = {};
     const nullFill = [];
-    for (const m of node.members) {
-      if (!ts.isPropertySignature(m) || !m.type) continue;
-      const name = m.name.getText(sf);
-      const { type, nullable } = typeOf(m.type, depth + 1);
+    const required = new Set(node.required ?? []);
+    for (const [name, prop] of Object.entries(node.properties)) {
+      const { type, nullable } = typeOf(prop, depth + 1, `${at}.${name}`);
       const field = { ...type };
-      if (m.questionToken) field.optional = true;
-      else if (nullable) {
+      if (!required.has(name)) {
+        field.optional = true;
+        if (nullable && !("default" in prop)) nullFill.push(name);
+      } else if (nullable) {
         field.optional = true;
         nullFill.push(name);
       }
       fields[name] = field;
     }
-    return { fields, nullFill, shape };
+    return { fields, nullFill };
   }
 
   /** → { type: ValueType, nullable } */
-  function typeOf(t, depth) {
-    if (ts.isParenthesizedTypeNode(t)) return typeOf(t.type, depth);
-    if (ts.isUnionTypeNode(t)) {
-      const rest = t.types.filter((x) => !isNull(x));
-      const nullable = rest.length < t.types.length;
-      if (rest.length === 1) return { type: typeOf(rest[0], depth).type, nullable };
-      const lits = rest.map(strLit);
-      if (lits.every((l) => l !== null)) return { type: { kind: "enum", members: lits }, nullable };
-      return { type: { kind: "struct", fields: {}, open: true }, nullable };
-    }
-    switch (t.kind) {
-      case ts.SyntaxKind.StringKeyword:
-        return { type: { kind: "text" }, nullable: false };
-      case ts.SyntaxKind.NumberKeyword:
-        return { type: { kind: "number" }, nullable: false };
-      case ts.SyntaxKind.BooleanKeyword:
-        return { type: { kind: "bool" }, nullable: false };
-      default:
-        break;
-    }
-    if (ts.isTupleTypeNode(t) && t.elements.every(isNumber)) {
-      const n = t.elements.length;
-      if (n === 2) return { type: { kind: "point" }, nullable: false };
-      if (n === 4) return { type: { kind: "bounds" }, nullable: false };
-      if (n === 6) return { type: { kind: "transform" }, nullable: false };
-    }
-    if (ts.isArrayTypeNode(t)) return { type: { kind: "list", of: typeOf(t.elementType, depth).type }, nullable: false };
-    if (ts.isTypeLiteralNode(t)) {
-      if (depth > 4) return { type: { kind: "struct", fields: {}, open: true }, nullable: false };
-      const { fields } = members(t, depth);
-      return { type: { kind: "struct", fields, open: true }, nullable: false };
-    }
-    if (ts.isTypeReferenceNode(t)) {
-      const name = t.typeName.getText(sf);
-      if (name === "ElementId") return { type: { kind: "ref", to: "item" }, nullable: false };
-      const d = decls.get(name);
-      if (!d) return { type: { kind: "struct", fields: {}, shape: name, open: true }, nullable: false };
-      if (ts.isInterfaceDeclaration(d)) {
-        if (depth > 4) return { type: { kind: "struct", fields: {}, shape: name, open: true }, nullable: false };
-        const { fields } = members(d, depth);
-        return { type: { kind: "struct", fields, shape: name, open: true }, nullable: false };
+  function typeOf(input, depth, at) {
+    const { rest: s, nullable } = stripNull(input);
+    if (typeof s.$ref === "string") {
+      const name = refName(s, at);
+      if (name === "ElementId") return { type: { kind: "ref", to: "item" }, nullable };
+      const d = defs[name];
+      if (isStruct(d)) {
+        if (depth > 4) return { type: { kind: "struct", fields: {}, shape: name, open: true }, nullable };
+        const { fields } = members(d, depth, name);
+        return { type: { kind: "struct", fields, shape: name, open: true }, nullable };
       }
-      const inner = typeOf(d, depth);
+      const inner = typeOf(d, depth, name);
       if (inner.type.kind === "struct" && inner.type.shape === undefined) inner.type = { ...inner.type, shape: name };
-      return inner;
+      return { type: inner.type, nullable: nullable || inner.nullable };
     }
-    return { type: { kind: "struct", fields: {}, open: true }, nullable: false };
+    const union = s.oneOf ?? s.anyOf;
+    if (union) {
+      if (!Array.isArray(union) || s.allOf) throw new Error(`${at}: unsupported union schema`);
+      const lits = union.map(stringMembers);
+      const all = lits.every((l) => l !== null) ? lits.flat() : null;
+      if (all && all.length > 1) return { type: { kind: "enum", members: all }, nullable };
+      return { type: OPAQUE(), nullable };
+    }
+    const lits = stringMembers(s);
+    if (lits) return { type: lits.length > 1 ? { kind: "enum", members: lits } : OPAQUE(), nullable };
+    switch (s.type) {
+      case "string":
+        return { type: { kind: "text" }, nullable };
+      case "integer":
+      case "number":
+        return { type: { kind: "number" }, nullable };
+      case "boolean":
+        return { type: { kind: "bool" }, nullable };
+      case "array": {
+        const fixed = s.minItems !== undefined && s.minItems === s.maxItems;
+        if (fixed || s.prefixItems) {
+          // A tuple: `prefixItems` (a Rust tuple) or `items` of a fixed length (`[T; N]`).
+          const elems = s.prefixItems ?? Array.from({ length: s.minItems }, () => s.items);
+          const numeric = elems.every((e) => e && (e.type === "number" || e.type === "integer"));
+          const n = elems.length;
+          if (numeric && n === 2) return { type: { kind: "point" }, nullable };
+          if (numeric && n === 4) return { type: { kind: "bounds" }, nullable };
+          if (numeric && n === 6) return { type: { kind: "transform" }, nullable };
+          return { type: OPAQUE(), nullable };
+        }
+        if (!s.items) throw new Error(`${at}: an array schema without items`);
+        return { type: { kind: "list", of: typeOf(s.items, depth, `${at}[]`).type }, nullable };
+      }
+      case "object":
+        if (s.properties === undefined) throw new Error(`${at}: an object schema without properties`);
+        if (depth > 4) return { type: OPAQUE(), nullable };
+        return { type: { kind: "struct", fields: members(s, depth, at).fields, open: true }, nullable };
+      default:
+        throw new Error(`${at}: unsupported schema ${JSON.stringify(s).slice(0, 200)}`);
+    }
   }
 
+  const mutation = schema.$ref ? defs[refName(schema, "Mutation")] : null;
+  if (!mutation || !Array.isArray(mutation.oneOf)) throw new Error("the schema's root is not the `Mutation` union");
+
   const rows = [];
-  for (const arm of mutation.types) {
-    if (!ts.isTypeLiteralNode(arm)) throw new Error("a Mutation arm is not an object type");
-    let op = null;
-    let argsNode = null;
-    for (const m of arm.members) {
-      if (!ts.isPropertySignature(m) || !m.type) continue;
-      const n = m.name.getText(sf);
-      if (n === "op") op = strLit(m.type);
-      if (n === "args") argsNode = m.type;
+  for (const arm of mutation.oneOf) {
+    const op = arm.properties?.op?.const;
+    const argsNode = arm.properties?.args;
+    if (typeof op !== "string" || !argsNode || !isStruct(argsNode)) {
+      throw new Error(`Mutation arm ${op}: no literal op / args`);
     }
-    if (!op || !argsNode || !ts.isTypeLiteralNode(argsNode)) throw new Error(`Mutation arm ${op}: no literal op / args`);
-    const { fields, nullFill } = members(argsNode, 0);
+    const { fields, nullFill } = members(argsNode, 0, op);
     // Id positions become refs (the command also takes an address there).
     for (const [name, f] of Object.entries(fields)) {
       const k = idKind(op, name);
@@ -182,6 +231,9 @@ export function generate(wireText) {
   const body = rows
     .map((r) => `  ${JSON.stringify(r.op)}: { args: ${JSON.stringify(r.args)}, nullFill: ${JSON.stringify(r.nullFill)} },`)
     .join("\n");
+  // The header still names wire.d.ts: the output is plugin-contract source
+  // (a changed byte needs a contract version bump), and it declares what
+  // wire.d.ts declares (the engine's parity test). It moves with the next bump.
   return `// GENERATED by scripts/gen-core-commands.mjs from packages/plugin-api/src/wire.d.ts
 // (the vendored engine wire). Do not edit: run \`node scripts/gen-core-commands.mjs\`.
 // One row per \`Mutation\` arm: its argument struct as a plugin-api ValueType, and
@@ -202,7 +254,7 @@ ${body}
 
 const isMain = process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url;
 if (isMain) {
-  const out = generate(readFileSync(WIRE, "utf8"));
+  const out = generate(readFileSync(SCHEMA, "utf8"));
   if (process.argv.includes("--check")) {
     const cur = readFileSync(TARGET, "utf8");
     if (cur !== out) {

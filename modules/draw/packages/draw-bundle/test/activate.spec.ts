@@ -24,7 +24,7 @@
 // registries empty). Engine behavior is NOT faked here (that's the
 // reserved harness's job); this exercises wiring only.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { PagedEditor } from "@paged-media/plugin-api";
 import { loadBundle } from "@paged-media/plugin-sdk";

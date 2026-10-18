@@ -27,11 +27,11 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 // The generator is a plain .mjs (no .d.ts).
 // @ts-expect-error — JS module, no types; it exports pure fns and paths.
-import { generate, TARGET, WIRE } from "../../../scripts/gen-core-commands.mjs";
+import { generate, SCHEMA, TARGET } from "../../../scripts/gen-core-commands.mjs";
 import {
   CORE_COMMAND_CREATES,
   CORE_COMMAND_EXCLUSIONS,
@@ -40,6 +40,7 @@ import {
 } from "../src/core-commands";
 import { CORE_WIRE_OPS } from "../src/core-commands.generated";
 import { createHeadlessHost, type HeadlessHost } from "../src/harness";
+import { protocolFromVersion, readVendoredWireVersion } from "../src/wasm-loader";
 import { checkValueType } from "../src/object-schema";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
@@ -67,7 +68,7 @@ describe("guard — every catalog operation is a typed command or excluded with 
 
   it("the wire and the catalog list the same ops, and the generated file is current", () => {
     expect(Object.keys(CORE_WIRE_OPS).sort()).toEqual([...catalog.operations].sort());
-    expect(readFileSync(TARGET, "utf8")).toBe(generate(readFileSync(WIRE, "utf8")));
+    expect(readFileSync(TARGET, "utf8")).toBe(generate(readFileSync(SCHEMA, "utf8")));
   });
 
   it("every command has a well-formed args and result schema; the creates table names commands", () => {
@@ -98,7 +99,8 @@ describe("guard — every catalog operation is a typed command or excluded with 
 
 async function boot() {
   const h = (live = await createHeadlessHost({ console: silent }));
-  expect(h.protocolVersion).toBe(73);
+  // The engine the contract's wire was synced from (no skew), not a fixed number.
+  expect(h.protocolVersion).toBe(protocolFromVersion((await readVendoredWireVersion())!));
   await h.load(minimalIdml());
   const made = await h.objects.batch([
     { op: "create", kind: "textFrame", within: "page:#1", props: { frameBounds: [10, 10, 100, 200] }, handle: "t" },
@@ -182,6 +184,37 @@ describe("core commands on the real engine", () => {
     const frame = r.commands![1]!.created[0]!;
     expect(await h.objects.query(`${page} > rectangle`)).toEqual([frame]);
     expect(await h.objects.get(frame, "itemName")).toEqual(value("on the new page"));
+  });
+
+  it("structure: two page inserts in one batch — each command names the page it made", async () => {
+    const { h } = await boot();
+    // Both go right after page 1, so the second one ends up FIRST in the
+    // document: the pages new since the batch, in document order, would
+    // hand each command the other's page.
+    const r = await h.objects.batch([
+      { op: "invoke", command: "core.insertPage", args: { afterPageId: "page:#1", handle: "a" } },
+      { op: "invoke", command: "core.insertPage", args: { afterPageId: "page:#1", handle: "b" } },
+    ]);
+    expect(r, r.reason).toMatchObject({ applied: true, undoSteps: 1 });
+    const pages = await h.objects.query("page");
+    expect(pages).toHaveLength(3);
+    expect(r.commands![0]!.created).toEqual([pages[2]]);
+    expect(r.commands![1]!.created).toEqual([pages[1]]);
+    // The outcome names them, in creation order.
+    const outcome = r.outcome!;
+    expect(outcome.applied && outcome.createdPages?.map((id) => `page:${id}`)).toEqual([pages[2], pages[1]]);
+  });
+
+  it("the host's mutate outcome names the pages a write created, and only then", async () => {
+    const { h } = await boot();
+    const [first] = (await h.host.document.collection<{ selfId: string }>("pages")).map((p) => p.selfId);
+    const made = await h.host.document.mutate({ op: "duplicatePage", args: { page: first! } });
+    expect(made.applied).toBe(true);
+    const pages = (await h.host.document.collection<{ selfId: string }>("pages")).map((p) => p.selfId);
+    expect(made.applied && made.createdPages).toEqual(pages.filter((p) => p !== first));
+    const moved = await h.host.document.mutate({ op: "movePage", args: { page: pages[1]!, after: null } });
+    expect(moved.applied).toBe(true);
+    expect(moved.applied && "createdPages" in moved, "a move creates nothing").toBe(false);
   });
 
   it("structure: duplicate elements, group, z-order, layer insert — addresses in, addresses out", async () => {

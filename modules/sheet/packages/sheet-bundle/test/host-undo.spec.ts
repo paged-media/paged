@@ -12,7 +12,7 @@
 // Real engine: skipped without the wasm artifact, FAILS under
 // REQUIRE_REAL_ENGINE=1 (the engine-real.spec.ts dual gate).
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -40,7 +40,7 @@ if (process.env.REQUIRE_REAL_ENGINE === "1" && !ENGINE_BUILT) {
 }
 
 describe.skipIf(!ENGINE_BUILT)("host undo reaches the workbook [sheet.edit.undo]", () => {
-  vi.setConfig({ testTimeout: 60_000 });
+  setDefaultTimeout(60_000);
   let h: HeadlessHost;
   let host: BundleHost;
   let s: WorkbookSession | null = null;

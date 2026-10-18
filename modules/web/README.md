@@ -55,10 +55,10 @@ Everything about how the plugin is designed and built is in [`docs/`](./docs/REA
 no sibling checkout is needed.
 
 ```bash
-pnpm install
+bun install
 bash scripts/build-wasm.sh --engine   # the engine wasm the tests boot (needs the
                                       # wasm-bindgen-cli version in web-render's Cargo.lock)
-pnpm -r typecheck && REQUIRE_REAL_ENGINE=1 pnpm -r test
+bun run typecheck && REQUIRE_REAL_ENGINE=1 bun run test
 (cd packages/web-render && cargo test --features blitz)
 # or, through Moon from anywhere in the repository:
 moon run web:test web-render:test

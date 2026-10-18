@@ -62,6 +62,8 @@ pub mod orientation;
 pub mod path_math;
 pub mod pathfinder;
 pub mod planar;
+#[cfg(feature = "schema")]
+pub mod schema;
 
 pub use apply::apply;
 pub use apply::is_locked;

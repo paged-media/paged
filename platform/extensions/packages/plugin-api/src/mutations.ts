@@ -102,11 +102,9 @@ export type {
 // the union stayed sound throughout.
 //
 // The aliases below are therefore REDUNDANT — and they stay anyway,
-// because removing exported contract types is a breaking change and
-// paged.draw imports them by name (`RegionMutation`,
-// `OpacityMaskMutation`, in draw-bundle's index.ts and v58-wire.ts).
-// Retiring them is a deliberate two-repo change: move paged.draw onto
-// the vendored `Mutation` members first, then delete these.
+// because removing exported contract types is a breaking change for the
+// bundles outside this repository that may import them. No in-tree bundle
+// does: paged.draw builds these ops as plain `Mutation`s (since B3b).
 //
 // K-12 (2026-08-07) — they are now aliases IN FACT, not just in this
 // comment: each is `Extract<Mutation, { op: "…" }>` rather than a

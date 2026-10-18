@@ -70,7 +70,7 @@ test.describe("Phase 5 — Wave 1 structural panels", () => {
     );
   });
 
-  test("AC-WAVE1-1b — Pages list toolbar: New inserts, Delete removes the selected page @feat:editor-shell.panels.master-pages @feat:editor-shell.panels.pages-list @feat:editor-shell.panels.spreads @level:happy", async ({
+  test("AC-WAVE1-1b — Pages list toolbar: New inserts and selects its page, Delete removes the selected page @feat:editor-shell.panels.master-pages @feat:editor-shell.panels.pages-list @feat:editor-shell.panels.spreads @level:happy", async ({
     page,
   }) => {
     await openPanel(page, "paged.pages-list");
@@ -78,17 +78,45 @@ test.describe("Phase 5 — Wave 1 structural panels", () => {
     await expect.poll(() => rows.count()).toBeGreaterThanOrEqual(1);
     const before = await rows.count();
     // New rides insertPage (after the document end with nothing
-    // selected).
+    // selected) and selects the page the engine reports it made.
     await page.locator('[data-toolbar-btn="ui-plus"]').click();
     await expect.poll(() => rows.count()).toBe(before + 1);
-    // Select the new last page, then Delete rides deletePage.
-    await rows.last().click();
+    await expect(rows.last()).toHaveAttribute("data-selected", "true");
+    await expect(page.locator('[data-page-list] [data-selected="true"]')).toHaveCount(1);
+    // Delete rides deletePage, on that page, with nothing else clicked.
     await page.locator('[data-toolbar-btn="ui-x"]').click();
     await expect.poll(() => rows.count()).toBe(before);
-    // Duplicate is an honest seam until its Operation ships.
+    // Nothing is selected after a delete, so Duplicate has nothing to copy.
     await expect(
       page.locator('[data-toolbar-btn="ui-component"]'),
     ).toBeDisabled();
+  });
+
+  test("AC-WAVE1-1c — Pages list toolbar: Duplicate selects the copy it made @feat:editor-shell.panels.pages-list @level:happy", async ({
+    page,
+  }) => {
+    await openPanel(page, "paged.pages-list");
+    const rows = page.locator("[data-page-list] [data-list-row]");
+    const selected = page.locator('[data-page-list] [data-selected="true"]');
+    await expect.poll(() => rows.count()).toBeGreaterThanOrEqual(1);
+    const before = await rows.count();
+    // New makes an empty page and selects it.
+    await page.locator('[data-toolbar-btn="ui-plus"]').click();
+    await expect.poll(() => rows.count()).toBe(before + 1);
+    await expect(selected).toHaveCount(1);
+    const made = await selected.getAttribute("data-list-row");
+    // Duplicate copies the selected page; the copy is the selection now.
+    await page.locator('[data-toolbar-btn="ui-component"]').click();
+    await expect.poll(() => rows.count()).toBe(before + 2);
+    await expect(selected).toHaveCount(1);
+    const copy = await selected.getAttribute("data-list-row");
+    expect(copy).not.toBe(made);
+    // Delete takes the copy away; the page it was copied from stays.
+    await page.locator('[data-toolbar-btn="ui-x"]').click();
+    await expect.poll(() => rows.count()).toBe(before + 1);
+    const ids = await rows.evaluateAll((els) => els.map((e) => e.getAttribute("data-list-row")));
+    expect(ids).toContain(made);
+    expect(ids).not.toContain(copy);
   });
 
   test("AC-WAVE1-2 — Spreads panel mounts @feat:editor-shell.panels.master-pages @feat:editor-shell.panels.pages-list @feat:editor-shell.panels.spreads @level:smoke", async ({ page }) => {

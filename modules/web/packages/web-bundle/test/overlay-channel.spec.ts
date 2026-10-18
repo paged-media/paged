@@ -22,7 +22,7 @@
 // the other and neither erases the active tool's preview. A host without
 // layers gets the shared tool-preview slot, as before.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { BundleHost, ToolPreviewShape } from "@paged-media/plugin-api";
 

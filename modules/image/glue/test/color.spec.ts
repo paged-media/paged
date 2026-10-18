@@ -19,7 +19,7 @@
 // Foreground / background colour and the eyedropper. Real engine wasm:
 // the sample reads the composite through the CPU tile window.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type { PluginManifest } from "@paged-media/plugin-api";

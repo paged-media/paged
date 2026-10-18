@@ -21,14 +21,14 @@
 // frame's placed bytes. The stacks here fold without a GPU (an empty
 // layer contributes nothing), so the whole round trip runs in Node.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { createBundleHost } from "@paged-media/plugin-sdk";
 import type { PluginManifest } from "@paged-media/plugin-api";
 import manifestJson from "@paged-media/image-manifest/manifest.json";
 
 import { createImageSession } from "../src/session";
-import { sha256Hex } from "../src/session-store";
+import { collectGarbage, recordPath, sha256Hex } from "../src/session-store";
 import { layeredPsdBytes, makeFakeEditor, mapBacking, psdBytes, shellStub, silentConsole } from "./helpers";
 
 function open(fake: ReturnType<typeof makeFakeEditor>) {
@@ -267,5 +267,34 @@ describe("commit to the document, and reopen", () => {
     expect(a.session.state().status).toMatch(/ingested from a frame/);
     a.session.dispose();
     a.handle.dispose();
+  });
+});
+
+describe("old revisions are collected", () => {
+  it("drops records past the kept window and the buffers only they named", async () => {
+    const store = new Map<string, Uint8Array>();
+    const parts = {
+      write: async (p: string, b: Uint8Array) => void store.set(p, b),
+      read: async (p: string) => store.get(p) ?? null,
+      list: async (prefix = "") => [...store.keys()].filter((k) => k.startsWith(prefix)),
+    };
+    const del = async (p: string) => store.delete(p);
+    const rec = (manifest: string, buffers: string[]) =>
+      new TextEncoder().encode(JSON.stringify({ v: 1, width: 1, height: 1, manifest, buffers, baked: "x" }));
+    for (const sha of ["m1", "m2", "m3", "shared", "old"]) store.set(`px/${sha}.bin`, new Uint8Array([1]));
+    store.set(recordPath("u1", 1), rec("m1", ["old", "shared"]));
+    store.set(recordPath("u1", 2), rec("m2", ["shared"]));
+    store.set(recordPath("u1", 3), rec("m3", ["shared"]));
+
+    const out = await collectGarbage(parts as never, del, "u1", 3, 2);
+
+    expect(out).toEqual({ records: 1, buffers: 2 });
+    expect(store.has(recordPath("u1", 1))).toBe(false);
+    expect(store.has(recordPath("u1", 2))).toBe(true);
+    expect([...store.keys()].filter((k) => k.startsWith("px/")).sort()).toEqual([
+      "px/m2.bin",
+      "px/m3.bin",
+      "px/shared.bin",
+    ]);
   });
 });

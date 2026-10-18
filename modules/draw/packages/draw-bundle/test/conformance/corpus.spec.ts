@@ -22,7 +22,7 @@
 // specs stand on: if a fixture's geometry doesn't round-trip, a plan
 // replayed against it would be meaningless.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 

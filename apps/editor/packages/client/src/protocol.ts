@@ -20,25 +20,25 @@
 // Wire-format types for the main↔worker message channel.
 //
 // Every type in this file is a re-export of a tsify-generated type
-// from Rust, surfaced through the published `@paged-media/canvas-wasm`
-// package (Decision-B package boundary). To add a new type, derive
-// `Tsify` in `crates/paged-canvas/src/channel.rs` (or the appropriate
-// crate) in `paged-media/core`, cut a new `@paged-media/canvas-wasm`
-// release, bump the dependency pin in `packages/client/package.json`,
-// then re-export the new symbol here. Do not hand-write types in this
-// file — the package's `paged_canvas_wasm.d.ts` is the source of truth;
-// this barrel exists so consumers don't have to learn the wasm import
-// path.
+// from Rust, surfaced through the `@paged-media/canvas-wasm` workspace
+// package (engine/core/packages/canvas-wasm, `workspace:*`). To add a new
+// type, derive `Tsify` in `engine/core/crates/paged-canvas/src/channel.rs`
+// (or the appropriate crate), rebuild the package (`moon run
+// core:wasm-pkg`), then re-export the new symbol here. Do not hand-write
+// types in this file — the package's `paged_canvas_wasm.d.ts` is the
+// source of truth; this barrel exists so consumers don't have to learn the
+// wasm import path.
 //
-// `PROTOCOL_VERSION` is READ from the installed engine package, not
-// copied. The package version IS the protocol by convention (thoughts
-// ADR 006: `@paged-media/canvas-wasm` publishes as `0.<protocol>.<patch>`,
-// from the Rust constant in `paged-canvas/src/channel.rs`). It used to be
-// a hand-kept `63` plus a CI script comparing it with the package; now
-// moving the pin is the whole protocol bump on this side. The worker
-// still checks it against the wasm it loads and refuses to attach on a
-// mismatch (ADR 031). The main thread needs the value without loading
-// the wasm, hence the package.json rather than the module.
+// `PROTOCOL_VERSION` is READ from the engine package's version, not
+// copied. The package version IS the protocol by convention (engine/core
+// ADR 006 and ADR 185: the workspace package is `0.<protocol>.0-dev`, from
+// the Rust constant in `paged-canvas/src/channel.rs`, and a release
+// publishes `0.<protocol>.<patch>`). It used to be a hand-kept `63` plus a
+// CI script comparing it with the package; now a protocol bump in the
+// engine is the whole protocol bump on this side. The worker still checks
+// it against the wasm it loads and refuses to attach on a mismatch
+// (ADR 031). The main thread needs the value without loading the wasm,
+// hence the package.json rather than the module.
 import canvasWasmPackage from "@paged-media/canvas-wasm/package.json" with { type: "json" };
 
 export const PROTOCOL_VERSION: number = protocolFromVersion(canvasWasmPackage.version);

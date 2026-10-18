@@ -33,7 +33,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "bun:test";
+import { advanceTimersByTimeAsync, stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
 
 import type {
   BundleHost,
@@ -97,11 +98,18 @@ function fakeDoc(opts: {
         return frame ? ([{ frameId: frame, next: null, overflow: false }] as never) : [];
       },
       async elementGeometry(ids: ElementId[]) {
+        // A text frame's item names its story.
+        const storyOf = (id: ElementId): string | undefined => {
+          if (id.kind !== "textFrame") return undefined;
+          if (opts.chain?.links.some((l) => l.frameId === id.id)) return opts.chain.storyId;
+          return [...frameOfStory].find(([, frame]) => frame === id.id)?.[0];
+        };
         return ids.map((id) => ({
           id,
           pageId: "Page/u1",
           bounds: opts.selectionGeom?.bounds ?? [0, 0, 300, 200],
           itemTransform: opts.selectionGeom?.t ?? null,
+          ...(storyOf(id) ? { storyId: storyOf(id) } : {}),
         })) as never;
       },
       async mutate(m: Mutation): Promise<MutationOutcome> {
@@ -120,6 +128,9 @@ function fakeDoc(opts: {
           const handles = new Map<string, string>();
           let lastStory: string | null = null;
           let last: ElementId | null = null;
+          // What the batch made, in mint order, each with the handle a
+          // following `bindCreated` named it by (`minted`).
+          const minted: { handle: string | null; element: ElementId; storyId: string | null }[] = [];
           for (const o of m.args.ops) {
             if (o.op === "insertTextFrame") {
               const id = created("textFrame");
@@ -128,22 +139,30 @@ function fakeDoc(opts: {
               lastStory = `Story/s${seq}`;
               stories.push(lastStory);
               frameOfStory.set(lastStory, id.id as string);
+              minted.push({ handle: null, element: id, storyId: lastStory });
             } else if (o.op === "insertPath") {
-              first ??= created("polygon");
+              const id = created("polygon");
+              first ??= id;
+              minted.push({ handle: null, element: id, storyId: null });
             } else if (o.op === "bindCreated" && lastStory) {
               handles.set(`$h:${o.args.handle}`, lastStory);
+              const latest = minted.at(-1);
+              if (latest) latest.handle = o.args.handle;
             } else if (o.op === "insertTable") {
               seq += 1;
+              const story = handles.get(o.args.storyId) ?? o.args.storyId;
               last = {
                 kind: "table",
-                id: { story_id: handles.get(o.args.storyId) ?? o.args.storyId, table_id: `t${seq}` },
+                id: { story_id: story, table_id: `t${seq}` },
               } as ElementId;
+              minted.push({ handle: null, element: last, storyId: story });
             }
           }
           return {
             applied: true,
             createdId: handles.size > 0 ? last : first,
             pageIds: ["Page/u1"],
+            minted,
           };
         }
         if (m.op === "insertTable") {
@@ -184,7 +203,7 @@ const ops = (ms: Mutation[]): Mutation[] =>
 
 afterEach(() => {
   vi.useRealTimers();
-  vi.unstubAllGlobals();
+  unstubAllGlobals();
 });
 
 describe.skipIf(!built)("placed tables: styled door + refresh in place [sheet.lower.page]", () => {
@@ -239,7 +258,7 @@ describe.skipIf(!built)("placed tables: styled door + refresh in place [sheet.lo
     const mark = mutations.length;
 
     session.editCell(0, 0, 0, "10");
-    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS + 50);
+    await advanceTimersByTimeAsync(vi, REFRESH_DEBOUNCE_MS + 50);
     await session.refreshPlacements();
 
     const after = ops(mutations.slice(mark));
@@ -295,13 +314,13 @@ describe.skipIf(!built)("placed charts refresh after edits [sheet.chart.engine]"
 
     // An edit OUTSIDE the chart's series redraws nothing.
     session.editCell(0, 49, 25, "unrelated");
-    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS + 50);
+    await advanceTimersByTimeAsync(vi, REFRESH_DEBOUNCE_MS + 50);
     await session.refreshPlacements();
     expect(ops(mutations.slice(firstBatch)).filter((m) => m.op === "deleteFrame")).toHaveLength(0);
 
     // An edit to a series value (B2) replaces the chart.
     session.editCell(0, 1, 1, "999");
-    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS + 50);
+    await advanceTimersByTimeAsync(vi, REFRESH_DEBOUNCE_MS + 50);
     await session.refreshPlacements();
 
     const after = mutations.slice(firstBatch);
@@ -423,7 +442,7 @@ describe.skipIf(!built)("insert/delete rows and columns [sheet.calc.rewrite.stru
 
 describe.skipIf(!built)("CSV / TSV import [sheet.import.csv]", () => {
   it("a German CSV becomes a typed one-sheet workbook", async () => {
-    vi.stubGlobal("navigator", { language: "de-DE" });
+    stubGlobal("navigator", { language: "de-DE" });
     const { host } = fakeDoc();
     const session = createWorkbookSession(host);
     await session.importCsv("Region;Umsatz;Datum\nNord;1.234,50;04.10.2026\n", "umsatz.csv");

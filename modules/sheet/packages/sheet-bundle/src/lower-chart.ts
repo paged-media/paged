@@ -29,9 +29,9 @@
 // per label + the binding metadata on the first created element + each
 // label's text, poured through the frame's C-15 handle — and, on a refresh,
 // the deletes of the chart it replaces. The elements it made come back in
-// the 66 `minted` list (a scene-tree diff on an older host). A host that
-// refuses in-batch handles gets the two-phase lane: the plain batch, then
-// the labels poured into the stories the batch minted (a stories diff).
+// the outcome's `minted` list. Should the engine refuse the one batch, the
+// two-phase lane runs: the plain batch, then the labels poured into the
+// stories the batch minted (a stories diff).
 
 import type {
   BundleHost,
@@ -53,7 +53,6 @@ import {
 
 import type { SheetEngine } from "./engine";
 import { selectionBox, selectionIsInView, storyIdsSnapshot } from "./lower";
-import { doors66, noteMinted, readTreeIds } from "./protocol66";
 import { readKnownSwatchIds } from "./swatch-mints";
 
 /** The default chart-frame content box, pt (a sensible publishing size; the
@@ -404,11 +403,7 @@ export async function lowerChartToFrame(
       : [];
 
   // Wave 4: a refresh REPLACES the chart, so it needs every element the
-  // batch made. The 66 `minted` list names them; a host that does not send
-  // it gets the scene-tree diff (read before, read after).
-  const doors = doors66(host);
-  const treeBefore =
-    opts?.onLowered && doors.minted !== true ? await readTreeIds(host) : null;
+  // batch made: the outcome's `minted` list names them.
   const removals = opts?.replaces ? chartRemovalOps(opts.replaces) : [];
   const place = [...withHandles, ...group, ...pours];
   let outcome = await host.document.mutate({
@@ -432,19 +427,8 @@ export async function lowerChartToFrame(
     }
     await pourLabels(host, storiesBefore, texts);
   }
-  const minted = noteMinted(host, outcome);
   if (opts?.onLowered) {
-    let made: ElementId[] = [];
-    if (minted) {
-      made = minted.map((m) => m.element);
-    } else {
-      const before = treeBefore ?? null;
-      const treeAfter = before ? await readTreeIds(host) : null;
-      made =
-        before && treeAfter
-          ? [...treeAfter].filter(([k]) => !before.has(k)).map(([, id]) => id)
-          : [];
-    }
+    const made: ElementId[] = outcome.applied ? (outcome.minted ?? []).map((m) => m.element) : [];
     const groupId = made.find((id) => id.kind === "group")?.id ?? null;
     opts.onLowered({
       chartIndex,

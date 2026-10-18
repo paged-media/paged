@@ -41,7 +41,7 @@
 // The in-flight budgets do not depend on it — and say so, by asserting
 // zero reads — the lasso's release and the commits do.
 
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
 
 import type {
   BundleHost,
@@ -145,7 +145,7 @@ const KEPT_OF_2000 = 1860;
 /** 2 + 3 + … + KEPT_OF_2000: what its preview hands across the door. */
 const PEN_2000_PREVIEW_POINTS = 1_730_729;
 
-vi.setConfig({ testTimeout: BUDGET_TIMEOUT_MS });
+setDefaultTimeout(BUDGET_TIMEOUT_MS);
 
 describe("perf budgets — the freehand tools", () => {
   let w: Workload;

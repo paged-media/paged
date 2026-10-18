@@ -593,7 +593,7 @@ export async function applyImageTracePlan(
   const grouped = keeps.length >= 2;
   const finished = grouped
     ? await mutateMinting(host, finish)
-    : { outcome: await host.document.mutate(finish), minted: [], lane: "reply" as const };
+    : { outcome: await host.document.mutate(finish), minted: [] };
   if (!finished.outcome.applied) {
     host.log.warn(
       `${label}: paint/group batch rejected by engine: ${JSON.stringify(

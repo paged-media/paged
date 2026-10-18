@@ -27,7 +27,8 @@
 // its source — the only thing that says which face its text was set in — is
 // gone, and the face still comes back.
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
+import { waitFor } from "@paged-media/test-kit";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
@@ -41,11 +42,19 @@ import { W1_EMPTY_PAGE } from "../fixtures/corpus";
 import { renamedFace } from "../fixtures/fonts";
 import { blitzPresent, primeBlitz, requireBlitz } from "./blitz";
 import { mapBacking, silent } from "./host";
+import { fileURLToPath } from "node:url";
+
+// The engine is this package's own @paged-media/canvas-wasm devDependency.
+// Without an anchor the headless harness resolves it from plugin-sdk's
+// install location, which in the root Bun workspace is whichever version the
+// store hoists, not the one this package pins.
+const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
 requireBlitz("web conformance — baked faces after a reopen");
 
 type Reply = { kind: string; payload?: any };
 type Send = (m: { kind: string; payload?: unknown }) => Promise<Reply>;
+type RegisterDocumentFont = (family: string, bytes: Uint8Array, style: string | null) => Promise<Reply>;
 type FontRow = { family: string; isMissing: boolean };
 
 /** Shaped in the bundled face: the CSS names a family no document holds. */
@@ -69,6 +78,7 @@ const clientOf = (h: HeadlessHost) => (h.host.editor as unknown as { client: { s
  *  `sent` records every document-font registration. */
 async function editorLikeHost(sent: Reply[]): Promise<HeadlessHost> {
   const h: HeadlessHost = await createHeadlessHost({
+    resolveFrom: ENGINE_ANCHOR,
     console: silent,
     storage: mapBacking(),
     assetSource: {
@@ -85,12 +95,21 @@ async function editorLikeHost(sent: Reply[]): Promise<HeadlessHost> {
       },
     },
   });
-  const client = clientOf(h);
+  const client = clientOf(h) as { send: Send; registerDocumentFont?: RegisterDocumentFont };
   const raw = client.send.bind(client);
   client.send = (m) => {
     if (m.kind === "registerFont" && (m.payload as { scope?: string }).scope === "document") sent.push(m as Reply);
     return raw(m);
   };
+  // A client that scopes faces to the open document (plugin SDK ADR 330)
+  // registers them through its own method, not `send`: record those too.
+  const scoped = client.registerDocumentFont?.bind(client);
+  if (scoped) {
+    client.registerDocumentFont = (family, bytes, style) => {
+      sent.push({ kind: "registerFont", payload: { family, style, scope: "document" } });
+      return scoped(family, bytes, style);
+    };
+  }
   return h;
 }
 
@@ -148,7 +167,7 @@ describe.skipIf(!blitzPresent)("web conformance — the faces a bake gave the do
     const saved = await bakeAndSave(MAILER);
     const { row, sent } = await reopen(saved);
     expect(await row(BUNDLED_FAMILY), "the baked text names the bundled face").toBeTruthy();
-    await vi.waitFor(async () => expect((await row(BUNDLED_FAMILY))?.isMissing).toBe(false), { timeout: 3_000 });
+    await waitFor(async () => expect((await row(BUNDLED_FAMILY))?.isMissing).toBe(false), { timeout: 3_000 });
     expect(sent.map((m) => m.payload.family)).toEqual([BUNDLED_FAMILY]);
   });
 
@@ -156,7 +175,7 @@ describe.skipIf(!blitzPresent)("web conformance — the faces a bake gave the do
     const saved = await bakeAndSave(BRANDED, { deleteFrame: true });
     const { row } = await reopen(saved);
     expect((await row("Brand"))?.isMissing === undefined, "the baked text still names Brand").toBe(false);
-    await vi.waitFor(async () => expect((await row("Brand"))?.isMissing).toBe(false), { timeout: 3_000 });
+    await waitFor(async () => expect((await row("Brand"))?.isMissing).toBe(false), { timeout: 3_000 });
   });
 
   it("a face no text names any more is not given back, and its record is dropped on the next save", async () => {

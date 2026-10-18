@@ -7,7 +7,7 @@
 //
 // Skips without a reachable canvas-wasm; REQUIRE_REAL_CORE=1 fails instead.
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 

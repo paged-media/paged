@@ -25,17 +25,8 @@
 // this repo's no-second-copy rule exists to prevent.
 //
 // ---------------------------------------------------------- the door
-// ESCAPE HATCH, named rather than hidden: the installed
-// `@paged-media/plugin-api` (0.2.25-canary.0, vendoring protocol 51) has
-// no `document.planarRegions` facade, so the read goes wire-level through
-// `host.editor.client.send({ kind: "requestPlanarRegions" })` — the
-// DESIGN.md §4.9 / `measure.ts` precedent. The facade EXISTS in
-// plugin-sdk HEAD (RFI K-11, `host.document.planarRegions(elementIds,
-// point?)` returning the full `PlanarRegionsResult`) but is UNPUBLISHED,
-// so it is unreachable from a repin-able contract. When K-11 publishes,
-// `readPlanarRegions` below is the ONE function to rewrite and the local
-// `PlanarFaceWire` / `PlanarRegionsWire` copies are the ONE pair to
-// delete.
+// `host.document.planarRegions(elementIds, point?)` (RFI K-11), which
+// answers the full `PlanarRegionsResult`.
 //
 // THREE ANSWERS, NEVER FLATTENED (the shape K-11 also settled on):
 //   · `found: false` + `reason`  — a REFUSAL. The caps are 12 inputs and

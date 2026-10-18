@@ -37,7 +37,7 @@
 
 import { readFileSync } from "node:fs";
 
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
 import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -129,7 +129,7 @@ for (const id of REIMPORT_CASES) {
         });
         continue;
       }
-      it.fails(`DEFECT (${f.owner}) — ${f.title}: ${bothValues(entries, "re-imported")}`, () => {
+      it.failing(`DEFECT (${f.owner}) — ${f.title}: ${bothValues(entries, "re-imported")}`, () => {
         for (const k of entries) {
           expect(diffs.find((d) => d.at === k.at && d.field === k.field)).toBeUndefined();
         }

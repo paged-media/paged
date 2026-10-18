@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/data",
-  "private": false,
+  "private": true,
   "version": "0.1.0-canary.17",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "type": "module",
@@ -11,31 +11,29 @@
     "./manifest.json": "./manifest.json"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run",
-    "test:e2e": "vitest run test/pipeline-real.spec.ts test/duckdb-real.spec.ts",
-    "test:duckdb": "REQUIRE_REAL_DUCKDB=1 vitest run test/duckdb-real.spec.ts",
-    "pubcheck": "pnpm run build && node ../../scripts/pubcheck.mjs",
-    "build": "tsup",
-    "prepublishOnly": "pnpm run build"
+    "typecheck": "bun check -p tsconfig.json",
+    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --timeout 30000",
+    "test:e2e": "bun test --preload ../../../../tooling/js/bun-test-setup.ts --timeout 30000 ./test/pipeline-real.spec.ts ./test/duckdb-real.spec.ts",
+    "test:duckdb": "REQUIRE_REAL_DUCKDB=1 bun test --preload ../../../../tooling/js/bun-test-setup.ts --timeout 30000 ./test/duckdb-real.spec.ts"
   },
   "peerDependencies": {
-    "@paged-media/plugin-api": ">=0.2.45-canary.0",
-    "@paged-media/plugin-sdk": ">=0.2.45-canary.0",
+    "@paged-media/plugin-api": "workspace:*",
+    "@paged-media/plugin-sdk": "workspace:*",
     "react": "^18.3.0"
   },
   "devDependencies": {
-    "@paged-media/canvas-wasm": "0.71.13",
+    "@paged-media/canvas-wasm": "workspace:*",
     "@paged-media/data-host-model": "workspace:*",
-    "@paged-media/plugin-api": "0.2.58-canary.0",
-    "@paged-media/plugin-sdk": "0.2.58-canary.0",
-    "@types/node": "20.19.39",
-    "@types/react": "^18.3.31",
+    "@paged-media/plugin-api": "workspace:*",
+    "@paged-media/plugin-sdk": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
     "apache-arrow": "^17.0.0",
     "playwright-core": "1.63.0",
-    "react": "^18.3.1",
-    "typescript": "^5.9.3",
-    "vitest": "^2.1.9"
+    "react": "catalog:",
+    "typescript": "catalog:",
+    "@paged-media/test-kit": "workspace:*",
+    "@types/bun": "catalog:"
   },
   "files": [
     "dist",
@@ -52,19 +50,6 @@
     "bin/PACKAGE_HASH",
     "manifest.json"
   ],
-  "publishConfig": {
-    "access": "public",
-    "tag": "canary",
-    "main": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "./manifest.json": "./manifest.json"
-    }
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/paged-media/paged.git",

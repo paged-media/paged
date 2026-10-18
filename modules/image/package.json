@@ -5,14 +5,12 @@
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "type": "module",
   "scripts": {
-    "typecheck": "pnpm -r run typecheck",
-    "build": "pnpm -r run typecheck",
-    "lint:contract": "node scripts/check-contract-imports.mjs",
-    "test": "node scripts/check-contract-imports.mjs && pnpm -r run test",
-    "validate:manifest": "node ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate manifest/manifest.json"
+    "typecheck": "bun run --filter './glue' --filter './manifest' typecheck",
+    "build": "bun run --filter './glue' --filter './manifest' typecheck",
+    "test": "bun run --filter './glue' --filter './manifest' test",
+    "validate:manifest": "bun ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate manifest/manifest.json"
   },
   "devDependencies": {
-    "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
+    "typescript": "catalog:"
   }
 }

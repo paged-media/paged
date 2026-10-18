@@ -35,7 +35,7 @@
 //    host-agnostic repo that has no business installing React).
 //
 // 2. The first fix for (1) resolved React with a TOP-LEVEL
-//    `await import("react")`. tsup emits that verbatim, and Vite's
+//    `await import("react")`. The bundler emits that verbatim, and Vite's
 //    dep-optimizer compiles pre-bundled dependencies down to its ES2020
 //    floor ("chrome87", "edge88", "es2020", "firefox78", "safari14"),
 //    where top-level await does not exist — so pre-bundling the
@@ -60,9 +60,11 @@
 // that (the brand-honesty rule: a visible seam, never fake UI, never a
 // half-real element hand-built from React's internal symbols).
 //
-// The build pins `--target es2020` (the same floor Vite's dep-optimizer
-// uses) so a future top-level await fails OUR build loudly instead of a
-// consumer's dev server silently. Do not raise it without reading this.
+// The declaration build compiles at `"module": "ES2020"` (the same floor
+// Vite's dep-optimizer uses; tsconfig.build.json), where TypeScript refuses
+// a top-level await (TS1378), so a future one fails OUR build loudly
+// instead of a consumer's dev server silently. Do not raise it without
+// reading this.
 
 export type CreateElement = typeof import("react").createElement;
 
@@ -77,7 +79,7 @@ void import("react").then(
   },
   () => {
     // React-free consumer (headless tests, Node-side conformance, a
-    // host-agnostic plugin repo's vitest run). The render paths that
+    // host-agnostic plugin repo's unit-test run). The render paths that
     // call `requireCreateElement` are never reached there.
     state = "absent";
   },

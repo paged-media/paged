@@ -1,0 +1,130 @@
+# What `bun fmt` leaves alone, and why. Reasons and measurements:
+# docs/migration/bun-fmt.md. Gitignore syntax; a comment must be on its own
+# line.
+#
+# Run the formatter through tooling/js/fmt.sh. bun fmt reads this file and
+# the root .gitignore only, not the nested .gitignore files, so the wrapper
+# hands it git's own file list. The build-output section at the end repeats
+# the nested ignores for a direct `bun fmt` run.
+
+# --- Generated files that a check compares byte for byte with their -------
+# --- generator. Regenerate them; never format them by hand. ---------------
+# scripts/sync-wire.mjs --check, scripts/gen-core-commands.mjs --check
+platform/extensions/packages/plugin-api/src/wire.d.ts
+platform/extensions/packages/plugin-sdk/src/core-commands.generated.ts
+# scripts/sync-catalog.mjs --check (the vendored engine catalog + provenance)
+platform/extensions/packages/plugin-api/src/catalog.json
+**/catalog.provenance.json
+# scripts/client-api-catalog.mjs --check
+apps/editor/packages/client/api-catalog.json
+# vendored from the feature registry; that repository's sync --check
+apps/editor/scripts/feat-vocabulary.json
+# hand-kept public API listing, read by docs tooling and api-catalog.test.ts
+engine/core/web/idml-viewer/api-catalog.json
+# Rust tests compare these with serde_json's output (paged-cli,
+# paged-introspect, paged-wire --features schema, idml-coverage)
+engine/core/crates/paged-cli/cli.json
+engine/core/crates/paged-introspect/catalog.json
+engine/core/crates/paged-wire/schema/mutation.schema.json
+**/census.json
+**/idml-coverage*.json
+# image-js tests/it/object_schema.rs, glue/test/object-model-manifest.spec.ts
+modules/image/glue/src/object-model/generated/
+modules/image/glue/object-model/
+modules/image/manifest/object-model/
+# web-conformance test/indesign-bake.spec.ts (scripts and expected answers)
+modules/web/packages/web-conformance/indesign/scripts/
+
+# --- Machine-written records: a tool rewrites them on every run. ----------
+# showcase ledgers and coverage, written by the showcase chapters
+apps/editor/apps/canvas/showcase/
+# measured tables between GENERATED markers (chrome/parity-table.mjs)
+modules/web/packages/web-conformance/chrome/PARITY.md
+# the recorded Rules-of-React findings, written by bun lint --suppress-all /
+# --prune-suppressions (docs/migration/bun-lint.md)
+eslint-suppressions.json
+
+# --- Test data: inputs, recorded answers, oracles, snapshots, baselines. --
+# Their bytes are the test.
+**/fixtures/
+**/*-fixtures/
+**/corpus/
+**/golden/
+**/recorded/
+**/recorded-*/
+**/answers/
+**/__snapshots__/
+**/*.baselines.json
+**/*baseline*.json
+**/*.expected.json
+**/*.snap
+# rewritten by the showcase's own capture run
+apps/editor/apps/canvas/tests/showcase/indesign-render-thresholds.json
+# the conformance suites' case lists and fixture specs
+modules/*/conformance/**/*.json
+# InDesign probe answers, written by the probes (tools/indesign-export)
+engine/core/tools/indesign-export/*.json
+# showcase inputs (HTML/CSS rendered by the web module) and recorded batches
+apps/editor/apps/canvas/tests/showcase/assets/
+apps/editor/apps/canvas/tests/e2e/harness/data-merge/
+
+# --- Adobe ExtendScript (ES3, run inside InDesign/Illustrator/Photoshop). --
+# Prettier writes ES5+ syntax (trailing commas in object literals and calls)
+# that ExtendScript may not parse, and nothing in CI can run them. Every
+# .jsx file here is ExtendScript; React code is .tsx.
+**/*.jsx
+
+# --- Registries read by build scripts and drift tests ---------------------
+# image-kernels/build.rs and registry_drift.rs parse kernels.yaml line by
+# line; the sheet/data build scripts deserialize functions/*.yaml; all of
+# them feed the wasm SOURCE_HASH.
+modules/*/registry/
+
+# --- Third-party code and data, lockfiles ---------------------------------
+modules/data/vendor/
+modules/slide/vendor/
+modules/publish/packages/pdf-bundle/bin/
+engine/core/crates/paged-text/patterns/
+bun.lock
+**/Cargo.lock
+.protolock
+
+# --- Legal texts ----------------------------------------------------------
+**/LICENSE*
+**/NOTICE*
+CLA.md
+
+# --- History: records are not rewritten -----------------------------------
+**/docs/adr/
+docs/migration/
+tooling/import/
+
+# --- TOML: every TOML file here belongs to Rust tooling (Cargo.toml,
+# --- rust-toolchain.toml, .cargo/config.toml, deny.toml, nextest.toml) or
+# --- to a Rust tool's data, except bunfig.toml. ---------------------------
+# cargo and toml_edit write 4-space arrays; source-hash.mjs reads Cargo.toml
+# line by line.
+*.toml
+!/bunfig.toml
+
+# --- Build outputs (gitignored in nested .gitignore files) ----------------
+**/dist/
+**/dist-demo/
+**/target/
+**/pkg/
+**/*.tsbuildinfo
+**/playwright-report/
+**/test-results/
+**/.wrangler/
+**/.venv/
+**/__pycache__/
+engine/core/packages/*/paged_*
+engine/core/packages/introspect-wasm/catalog.json
+engine/core/web/idml-viewer/wasm/
+apps/editor/apps/canvas/src/wasm/
+apps/editor/apps/canvas/public/pdfs/
+modules/*/packages/*/bin/
+modules/draw/packages/draw-bundle/wasm/
+modules/image/glue/wasm/
+modules/image/manifest/wasm/
+modules/image/glue/NOTICE.md

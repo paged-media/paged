@@ -1,0 +1,162 @@
+name: module wasm
+description: >-
+  Builds the engine wasm of one built-in module (doc, slide, sheet, data,
+  web, draw, image or publish) into its bundle's gitignored output
+  directory, or restores it from the cache when the module's Rust sources
+  are unchanged.
+
+# The editor depends on every bundle through `workspace:*` and consumes its
+# source, so a job that runs the editor's Vite (Playwright, the playground and
+# showcase builds), typechecks it or measures its wasm needs each bundle's
+# build output. For sheet, web, doc, draw, image and pdf, Vite's import
+# analysis resolves the glue's relative path at transform time, and the app
+# does not boot without it; data and slide load theirs at runtime. Where it
+# lands: `packages/<m>-bundle/bin/` for doc, slide, sheet, data and web;
+# draw's `packages/draw-bundle/wasm/`; image's `glue/wasm/` (and the copy in
+# `manifest/wasm/`); publish's `packages/pdf-bundle/bin/pdf_import*` (pdfium,
+# a third-party prebuilt, stays committed beside it).
+#
+# Replaces the plugin-doc-from-source and plugin-slide-from-source stopgaps.
+#
+# Prerequisites: the repository checked out at the workspace root, Node on
+# PATH, and for `data` the root `bun install` first (scripts/vendor-duckdb.sh
+# bundles the DuckDB JS API with the installed apache-arrow).
+#
+# The cache key hashes the module's tracked files except its JS packages and docs
+# (git's blob ids, so it costs no reads) plus web's Rust crate under
+# packages/web-render, the engine crates publish's pdf-import builds against,
+# .cargo/config.toml, the wasm-bindgen/binaryen pins and, for data, the
+# apache-arrow resolution in bun.lock.
+
+inputs:
+  module:
+    description: "The module: doc, slide, sheet, data, web, draw, image or publish."
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: module wasm (${{ inputs.module }}) — resolve
+      id: m
+      shell: bash
+      env:
+        M: ${{ inputs.module }}
+      run: |
+        set -euo pipefail
+        BUILD_ARGS=""
+        OUT="modules/$M/packages/$M-bundle/bin"
+        PATHS="$OUT"
+        # JS packages and docs are not build inputs; image keeps its JS in
+        # glue/ and manifest/ instead of packages/.
+        JS_DIRS="packages"
+        case "$M" in
+          doc)   GLUE=docx_js.js ;;
+          slide) GLUE=slide_js.js ;;
+          sheet) GLUE=sheet_js.js ;;
+          data)  GLUE=data_js.js; PATHS="$PATHS"$'\n'"modules/data/vendor/duckdb-wasm" ;;
+          # The Blitz engine build, as web-vitest and web-publish build it.
+          web)   GLUE=blitz_web.js; BUILD_ARGS=--engine ;;
+          draw)  OUT=modules/draw/packages/draw-bundle/wasm; PATHS="$OUT"; GLUE=trace_js.js ;;
+          image) OUT=modules/image/glue/wasm; PATHS="$OUT"$'\n'"modules/image/manifest/wasm"; GLUE=image_js.js; JS_DIRS="glue manifest" ;;
+          # The pdf-import mapper only; pdfium.esm.* in the same directory is
+          # committed and must not be cached over.
+          publish) OUT=modules/publish/packages/pdf-bundle/bin; PATHS="$OUT/pdf_import*"; GLUE=pdf_import.js ;;
+          *) echo "::error::module-wasm: unknown module '$M' (doc, slide, sheet, data, web, draw, image, publish)"; exit 1 ;;
+        esac
+        CRATE="modules/$M"
+        [ "$M" = web ] && CRATE=modules/web/packages/web-render
+        # modules/<m>/rust-toolchain.toml; web-render has none, and web-vitest
+        # pins 1.93.0 for it.
+        TOOLCHAIN=1.93.0
+        if [ -f "modules/$M/rust-toolchain.toml" ]; then
+          TOOLCHAIN=$(sed -nE 's/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "modules/$M/rust-toolchain.toml" | head -1)
+        fi
+        inputs() {
+          EXCLUDES=(":(exclude)modules/$M/docs")
+          for d in $JS_DIRS; do EXCLUDES+=(":(exclude)modules/$M/$d"); done
+          git ls-files -s -- "modules/$M" "${EXCLUDES[@]}"
+          if [ "$M" = web ]; then git ls-files -s -- modules/web/packages/web-render; fi
+          # pdf-import's path dependencies into the engine.
+          if [ "$M" = publish ]; then git ls-files -s -- engine/core/crates engine/core/Cargo.toml engine/core/Cargo.lock; fi
+          git ls-files -s -- .cargo/config.toml
+          grep -E '^(WASM_BINDGEN|BINARYEN)=' tooling/bootstrap.sh
+          if [ "$M" = data ]; then grep -E '"apache-arrow"' bun.lock; fi
+          echo "$BUILD_ARGS $TOOLCHAIN"
+        }
+        # Bun, not sha256sum: the showcase nightly runs on macOS.
+        KEY=$(inputs | bun -e '
+          const h = require("crypto").createHash("sha256");
+          process.stdin.on("data", (d) => h.update(d)).on("end", () => console.log(h.digest("hex").slice(0, 40)));
+        ')
+        {
+          echo "glue=$OUT/$GLUE"
+          echo "crate=$CRATE"
+          echo "args=$BUILD_ARGS"
+          echo "toolchain=$TOOLCHAIN"
+          echo "key=module-wasm-v1-$M-${{ runner.os }}-${{ runner.arch }}-$KEY"
+          echo "paths<<EOF"
+          echo "$PATHS"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: module wasm (${{ inputs.module }}) — restore
+      id: restore
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ steps.m.outputs.paths }}
+        key: ${{ steps.m.outputs.key }}
+
+    # ---- a miss: build ------------------------------------------------------
+    - name: module wasm (${{ inputs.module }}) — Rust toolchain
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ steps.m.outputs.toolchain }}
+        targets: wasm32-unknown-unknown
+
+    - name: module wasm (${{ inputs.module }}) — mold (Linux)
+      if: steps.restore.outputs.cache-hit != 'true' && runner.os == 'Linux'
+      uses: rui314/setup-mold@v1
+
+    - name: module wasm (${{ inputs.module }}) — Rust dependency cache
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: ${{ steps.m.outputs.crate }} -> target
+        prefix-key: v0-rust-${{ inputs.module }}-wasm
+        shared-key: module-wasm
+
+    - name: module wasm (${{ inputs.module }}) — wasm-bindgen-cli and binaryen
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: ./.github/actions/wasm-tools
+
+    - name: module wasm (${{ inputs.module }}) — build
+      if: steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      working-directory: modules/${{ inputs.module }}
+      env:
+        ARGS: ${{ steps.m.outputs.args }}
+        # The same flags in every job (the cache entry is shared; see engine-wasm).
+        RUSTFLAGS: ""
+      run: |
+        set -euo pipefail
+        # shellcheck disable=SC2086 # ARGS is empty or one flag
+        bash scripts/build-wasm.sh $ARGS
+        if [ "${{ inputs.module }}" = data ]; then
+          bash scripts/vendor-duckdb.sh
+        fi
+
+    - name: module wasm (${{ inputs.module }}) — save
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ steps.m.outputs.paths }}
+        key: ${{ steps.m.outputs.key }}
+
+    # ---- always -------------------------------------------------------------
+    - name: module wasm (${{ inputs.module }}) — present
+      shell: bash
+      run: |
+        test -f "${{ steps.m.outputs.glue }}" \
+          || { echo "::error::${{ steps.m.outputs.glue }} is absent after the build"; exit 1; }
+        ls -la "$(dirname "${{ steps.m.outputs.glue }}")"

@@ -36,7 +36,7 @@
 //   (6) the TOOL: click attaches, alt+click detaches, a text frame under
 //       the click is refused with the reason, empty canvas is a no-op.
 
-import { describe, expect, it, beforeAll, beforeEach, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from "bun:test";
 
 import type {
   CanvasPointerEvent,
@@ -60,13 +60,12 @@ import {
   pathTypeAlignmentOf,
   resolveAttachStory,
   setTextOnPathStory,
-  supportsTextOnPath,
   textOnPathAttachBatchFor,
   textOnPathDetachBatchFor,
   textOnPathLinks,
   textOnPathOf,
   textPathSpecOf,
-  v58RefusalReason,
+  maskOrPathRefusalReason,
   withTextOnPathKey,
   drawBundle,
   ATTACH_TEXT_TO_PATH_COMMAND_ID,
@@ -375,7 +374,6 @@ describe("draw conformance — type on a path (C-29, engine protocol v58)", () =
       expect(vocab).not.toBeNull();
       expect(vocab!.has("attachTextToPath")).toBe(true);
       expect(vocab!.has("detachTextFromPath")).toBe(true);
-      expect(await supportsTextOnPath(h.host)).toBe(true);
     });
 
     it("registers the two commands with titles that name the honest scope", () => {
@@ -476,7 +474,7 @@ describe("draw conformance — type on a path (C-29, engine protocol v58)", () =
         detachTextFromPathMutationFor(POLY),
       );
       if (reDetach.applied) throw new Error("expected the engine to refuse");
-      expect(v58RefusalReason(reDetach.error)).toBe(
+      expect(maskOrPathRefusalReason(reDetach.error)).toBe(
         "the element hosts no text-on-a-path",
       );
       // …and the SECOND undo takes the PREVIOUS mutation (the mint's

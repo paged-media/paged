@@ -34,7 +34,7 @@
 //       be softened — the note now states that canvas and export
 //       AGREE, which is what the Vello mask work made true.
 
-import { describe, expect, it, beforeAll, beforeEach, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from "bun:test";
 
 import type { CommandContribution, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -50,8 +50,7 @@ import {
   opacityMaskReleaseBatchFor,
   releaseOpacityMaskMutationFor,
   resolveMaskTarget,
-  supportsOpacityMask,
-  v58RefusalReason,
+  maskOrPathRefusalReason,
   withOpacityMaskKey,
   drawBundle,
   BIND_OPACITY_MASK_STATUS,
@@ -191,7 +190,7 @@ describe("draw conformance — opacity masks (C-28, engine protocol v58)", () =>
 
     it("the refusal reader peels the engine's two envelopes and the RFI tag", () => {
       expect(
-        v58RefusalReason({
+        maskOrPathRefusalReason({
           error: {
             kind: "notImplemented",
             details: {
@@ -202,7 +201,7 @@ describe("draw conformance — opacity masks (C-28, engine protocol v58)", () =>
           },
         }),
       ).toBe("an item cannot mask itself");
-      expect(v58RefusalReason(null)).toBeNull();
+      expect(maskOrPathRefusalReason(null)).toBeNull();
     });
 
     it("the kind mirror matches core's gate on BOTH sides of a mask", () => {
@@ -260,7 +259,6 @@ describe("draw conformance — opacity masks (C-28, engine protocol v58)", () =>
       expect(vocab).not.toBeNull();
       expect(vocab!.has("applyOpacityMask")).toBe(true);
       expect(vocab!.has("releaseOpacityMask")).toBe(true);
-      expect(await supportsOpacityMask(h.host)).toBe(true);
     });
 
     it("registers the two commands, and the TITLES carry the renderer gap", () => {
@@ -376,7 +374,7 @@ describe("draw conformance — opacity masks (C-28, engine protocol v58)", () =>
         applyOpacityMaskMutationFor({ targetId: A, maskId: B }),
       );
       if (again.applied) throw new Error("expected the engine to refuse");
-      expect(v58RefusalReason(again.error)).toBe(
+      expect(maskOrPathRefusalReason(again.error)).toBe(
         "the item already carries an opacity mask (release it first)",
       );
     });

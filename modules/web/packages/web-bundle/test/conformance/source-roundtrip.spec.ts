@@ -35,7 +35,7 @@
 // Label read path is a future engine target. The pinned-gap test below
 // documents it so a fix flips the assert.
 
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import {

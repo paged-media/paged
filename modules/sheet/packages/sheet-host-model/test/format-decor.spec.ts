@@ -20,7 +20,7 @@
 // vertical alignment, border line weight + colour) reach the document as
 // native cell / character properties.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import type { Mutation } from "@paged-media/plugin-api";
 

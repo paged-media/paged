@@ -36,7 +36,7 @@ How the editor is designed and built is in [`docs/`](./docs/README.md):
 
 ## Architecture
 
-A **pnpm workspace** (`pnpm-workspace.yaml` → `apps/*`, `packages/*`),
+Packages of the repository's root **Bun workspace** (`apps/*`, `packages/*`),
 TypeScript + React 18 + Vite, Tailwind for styling.
 
 ### Apps
@@ -93,10 +93,10 @@ end-to-end.
 ## Dev setup
 
 ```bash
-pnpm install            # workspace deps resolve via symlinks (see .npmrc)
+bun install             # at the repository root; workspace deps resolve via symlinks (isolated linker, /bunfig.toml)
 ```
 
-### wasm prerequisite (read this before `pnpm dev`)
+### wasm prerequisite (read this before `bun run dev`)
 
 A fresh clone has the tracked `.d.ts` but **not** the gitignored
 `.wasm`/`.js` — so the editor **cannot build or run until the engine
@@ -111,7 +111,7 @@ rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli --version <pinned>   # matches core's Cargo.lock; build script prints it
 # optional: brew install binaryen   (wasm-opt size pass)
 
-pnpm --filter paged-canvas wasm     # runs apps/canvas/build-wasm.sh → packages/client/src/wasm/
+bun run --filter paged-canvas wasm     # runs apps/canvas/build-wasm.sh → packages/client/src/wasm/
 ```
 
 This produces `paged_canvas_wasm.{js,d.ts}` + `paged_canvas_wasm_bg.wasm`.
@@ -121,13 +121,13 @@ This produces `paged_canvas_wasm.{js,d.ts}` + `paged_canvas_wasm_bg.wasm`.
 `paged-media/core` publishes `@paged-media/canvas-wasm` (and
 `@paged-media/introspect-wasm`) to npm, `packages/client` is pointed
 at the published package and the build-from-core step disappears —
-`pnpm install` alone is sufficient. **This is not yet wired**; until
+`bun install` alone is sufficient. **This is not yet wired**; until
 then, local dev requires the core-checkout wasm build above.
 
 ### Run
 
 ```bash
-pnpm --filter paged-canvas dev      # Vite dev server, http://localhost:5173/
+bun run --filter paged-canvas dev      # Vite dev server, http://localhost:5173/
 ```
 
 The Vite dev server sets the COOP/COEP headers required by
@@ -137,8 +137,8 @@ be set in any production deployment.
 ### Build / typecheck
 
 ```bash
-pnpm typecheck      # tsc across apps/*
-pnpm build          # vite build across apps/*
+bun run typecheck      # tsc across apps/*
+bun run build          # vite build across apps/*
 ```
 
 ## Tests
@@ -150,15 +150,15 @@ InDesign-exported reference PDFs from the corpus.
 
 ```bash
 cd apps/canvas
-pnpm wasm                       # ensure the wasm bundle is built first
-pnpm test:fidelity              # full gate
-pnpm test:fidelity:capture      # record metrics + thresholds
-pnpm test:fidelity:ui           # interactive Playwright UI
-BACKEND=gpu pnpm test:fidelity  # WebGPU/Vello path (headed; CPU fallback if no adapter)
+bun run wasm                       # ensure the wasm bundle is built first
+bun run test:fidelity              # full gate
+bun run test:fidelity:capture      # record metrics + thresholds
+bun run test:fidelity:ui           # interactive Playwright UI
+BACKEND=gpu bun run test:fidelity  # WebGPU/Vello path (headed; CPU fallback if no adapter)
 ```
 
 Playwright spawns (or reuses) the Vite dev server; it does **not**
-rebuild the wasm — build it out of band with `pnpm wasm` first.
+rebuild the wasm — build it out of band with `bun run wasm` first.
 See `apps/canvas/tests/README.md` for the fidelity harness details and
 `apps/canvas/README.md` for the canvas app architecture.
 
