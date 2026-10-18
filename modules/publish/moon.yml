@@ -63,7 +63,7 @@ tasks:
     command: "bun run --filter './packages/*' typecheck"
 
   js-test:
-    description: 'vitest in the packages that declare a test script.'
+    description: 'bun test in the packages that declare a test script.'
     command: "bun run --filter './packages/*' test"
     # pdf-bundle's mapper specs load bin/pdf_import*; publish-ci builds it.
     deps: ['~:wasm']

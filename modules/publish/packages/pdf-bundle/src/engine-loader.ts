@@ -62,7 +62,7 @@ export interface LoadMapperOptions {
   importGlue?: () => Promise<PdfMapperGlue>;
 }
 
-/** True under Node (vitest), false in the browser (the editor). */
+/** True under Node or Bun (the unit tests; Bun sets `process.versions.node`), false in the browser (the editor). */
 function isNode(): boolean {
   return (
     typeof process !== "undefined" &&
