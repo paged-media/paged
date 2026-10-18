@@ -110,6 +110,28 @@ POST, no server-initiated stream; `GET` answers 405). The tools are core's
   and the directory entry. This is crypto-shredding: an erasure that fails halfway
   still erased.
 
+## Headless engine
+
+With no editor tab connected, engine tools run headless:
+
+- One `EngineObject` per MCP run holds the run's working document, sealed in R2 under a
+  per-run key, and calls `paged engine-serve`. The service is stateless: each call brings
+  the document and takes back what the engine made of it.
+- `open_document` reads the version's projection as the agent. `run_script` and
+  `render_page` go through the engine. `save_document` commits the working copy as the
+  agent's version on `agent/<run>/headless` (route `commit-file`), so `main` does not move.
+- **Locally**, `PAGED_ENGINE_URL` names a `paged engine-serve --port 8793` (core's binary).
+- **In production**, a Cloudflare Container runs `server/engine/Dockerfile`, attached to
+  `EngineObject`, with `PAGED_ENGINE_CONTAINER=1`. Add to `wrangler.jsonc` at deploy time:
+
+  ```jsonc
+  "containers": [{ "class_name": "EngineObject", "image": "../../engine/Dockerfile", "max_instances": 4 }],
+  "vars": { "PAGED_ENGINE_CONTAINER": "1" }
+  ```
+
+  It is not in the local config, because `wrangler dev` would then need a Docker daemon.
+  The image has not been built yet.
+
 ## Live relay
 
 An editor tab connects so a model's engine tools act in it:

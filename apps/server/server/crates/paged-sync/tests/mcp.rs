@@ -241,10 +241,14 @@ fn a_model_proposes_and_a_person_merges() {
         .tool("lookup_api", json!({ "query": "paged.set" }))
         .unwrap();
     assert!(api["matches"].as_u64().unwrap() > 0);
-    assert!(mcp
+    // No tab, and nothing open in the headless engine (where one is configured).
+    let early = mcp
         .tool("run_script", json!({ "source": "1" }))
-        .unwrap_err()
-        .contains("No editor tab"));
+        .unwrap_err();
+    assert!(
+        early.contains("No editor tab") || early.contains("open a document first"),
+        "{early}"
+    );
     let view = mcp.rpc("resources/read", json!({ "uri": "ui://paged/view" }));
     assert_eq!(
         view["result"]["contents"][0]["mimeType"],

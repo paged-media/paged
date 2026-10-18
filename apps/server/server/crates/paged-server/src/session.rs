@@ -20,7 +20,7 @@ use serde_json::{json, Value};
 use worker::{Env, Method, Request, RequestInit};
 
 /// The person's connected tabs, from their home directory.
-async fn live_sessions(env: &Env, principal: &str) -> Vec<Value> {
+pub(crate) async fn live_sessions(env: &Env, principal: &str) -> Vec<Value> {
     let home = format!("home:{principal}");
     let Ok(ns) = env.durable_object("WORKSPACE") else {
         return vec![];

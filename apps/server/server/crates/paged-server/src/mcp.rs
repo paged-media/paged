@@ -24,7 +24,7 @@
 //! a model writes reaches `main` only through a change request a person
 //! approves. Engine tools act in the person's open editor tab (`session`).
 
-use paged_mcp::{tools, Host, Outcome};
+use paged_mcp::{tools, Content, Host, Outcome};
 use serde_json::{json, Value};
 use worker::{Env, Headers, Method, Request, RequestInit, Response, Result};
 
@@ -200,6 +200,200 @@ impl WorkerHost<'_> {
     }
 }
 
+impl WorkerHost<'_> {
+    /// One raw call into this run's engine object.
+    async fn engine_op(
+        &self,
+        op: &str,
+        extra: &[(&str, &str)],
+        body: Option<Vec<u8>>,
+    ) -> std::result::Result<(Option<String>, Option<String>, Vec<u8>), String> {
+        let h = Headers::new();
+        let base = [
+            ("x-paged-engine-op", op),
+            ("x-paged-run", self.run.as_str()),
+            (ON_BEHALF_HEADER, self.principal.as_str()),
+        ];
+        for (k, v) in base.iter().chain(extra.iter()) {
+            h.set(k, v).map_err(|e| e.to_string())?;
+        }
+        let mut init = RequestInit::new();
+        init.with_method(Method::Post).with_headers(h);
+        if let Some(b) = body {
+            init.with_body(Some(worker::js_sys::Uint8Array::from(b.as_slice()).into()));
+        }
+        let req = Request::new_with_init("https://engine/op", &init).map_err(|e| e.to_string())?;
+        let ns = self
+            .env
+            .durable_object("ENGINE")
+            .map_err(|e| e.to_string())?;
+        let stub = ns
+            .id_from_name(&self.run)
+            .and_then(|id| id.get_stub())
+            .map_err(|e| e.to_string())?;
+        let mut resp = stub
+            .fetch_with_request(req)
+            .await
+            .map_err(|e| e.to_string())?;
+        let doc = resp.headers().get("x-paged-document").ok().flatten();
+        let r = resp.headers().get("x-paged-ref").ok().flatten();
+        let status = resp.status_code();
+        let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+        if status >= 400 {
+            let p: Value = serde_json::from_slice(&bytes).unwrap_or_default();
+            return Err(format!(
+                "{} — {}",
+                p["title"].as_str().unwrap_or("refused"),
+                p["detail"].as_str().unwrap_or("")
+            ));
+        }
+        Ok((doc, r, bytes))
+    }
+
+    /// Engine tools with no tab: the run's working copy, in the headless engine.
+    async fn headless(&self, tool: &str, args: &Value) -> Outcome {
+        let json = |b: &[u8]| serde_json::from_slice::<Value>(b).unwrap_or_default();
+        match tool {
+            "open_document" => {
+                let reference = reference(args, "ref");
+                let file = match self
+                    .repo(args, Method::Get, &format!("file/{reference}"), "", None)
+                    .await
+                {
+                    Ok(f) => f,
+                    Err(e) => return Outcome::error(e),
+                };
+                let (_, name) = match document(args) {
+                    Ok(d) => d,
+                    Err(e) => return Outcome::error(e),
+                };
+                match self
+                    .engine_op(
+                        "open",
+                        &[("x-paged-document", &name), ("x-paged-ref", &reference)],
+                        Some(file),
+                    )
+                    .await
+                {
+                    Ok((_, _, b)) => {
+                        Outcome::json(json!({ "opened": json(&b), "engine": "headless" }))
+                    }
+                    Err(e) => Outcome::error(e),
+                }
+            }
+            "run_script" | "render_page" => {
+                let call = if tool == "run_script" {
+                    json!({ "script": args["source"] })
+                } else {
+                    json!({ "render": { "page": args["page"].as_u64().unwrap_or(1) } })
+                };
+                match self
+                    .engine_op("run", &[], Some(call.to_string().into_bytes()))
+                    .await
+                {
+                    Ok((_, _, b)) => {
+                        let out = json(&b);
+                        if let Some(png) = out["png"].as_str() {
+                            return Outcome {
+                                content: vec![Content::Image {
+                                    data: png.to_string(),
+                                    mime: "image/png".into(),
+                                }],
+                                ..Default::default()
+                            };
+                        }
+                        let failed = out["error"].is_string();
+                        Outcome {
+                            is_error: failed,
+                            ..Outcome::json(
+                                json!({ "output": out["output"], "error": out["error"] }),
+                            )
+                        }
+                    }
+                    Err(e) => Outcome::error(e),
+                }
+            }
+            "save_document" => {
+                let (doc, base, file) = match self.engine_op("file", &[], None).await {
+                    Ok((Some(d), Some(r), b)) => (d, r, b),
+                    Ok(_) => return Outcome::error("open a document first"),
+                    Err(e) => return Outcome::error(e),
+                };
+                let branch = format!("agent/{}/headless", self.run);
+                let message = args["message"].as_str().unwrap_or("Save");
+                let q = format!(
+                    "branch={}&base={}&message={}",
+                    enc(&branch),
+                    enc(&base),
+                    enc(message)
+                );
+                match self.repo_bytes(&json!({ "document": doc }), &q, file).await {
+                    Ok(b) => Outcome::json(json!({
+                        "saved": json(&b),
+                        "next": "On your branch; propose_change asks for it to reach main.",
+                    })),
+                    Err(e) => Outcome::error(e),
+                }
+            }
+            other => Outcome::error(format!("no tool {other}")),
+        }
+    }
+
+    /// POSTs a whole file to the repository's `commit-file` route, as this agent.
+    async fn repo_bytes(
+        &self,
+        args: &Value,
+        query: &str,
+        file: Vec<u8>,
+    ) -> std::result::Result<Vec<u8>, String> {
+        let (ws, name) = document(args)?;
+        let agent = self.agent();
+        let h = Headers::new();
+        let mut pairs = vec![
+            (ACTOR_HEADER, agent.as_str()),
+            (ON_BEHALF_HEADER, self.principal.as_str()),
+            (RUN_HEADER, self.run.as_str()),
+            (CLIENT_HEADER, self.client.as_str()),
+            (ROUTE_HEADER, "commit-file"),
+            (REPO_HEADER, name.as_str()),
+        ];
+        if let Some(ws) = &ws {
+            pairs.push((WORKSPACE_HEADER, ws.as_str()));
+        }
+        for (k, v) in pairs {
+            h.set(k, v).map_err(|e| e.to_string())?;
+        }
+        let mut init = RequestInit::new();
+        init.with_method(Method::Post)
+            .with_headers(h)
+            .with_body(Some(
+                worker::js_sys::Uint8Array::from(file.as_slice()).into(),
+            ));
+        let req = Request::new_with_init(&format!("https://repo/mcp?{query}"), &init)
+            .map_err(|e| e.to_string())?;
+        let ns = self.env.durable_object("REPO").map_err(|e| e.to_string())?;
+        let stub = ns
+            .id_from_name(&name)
+            .and_then(|id| id.get_stub())
+            .map_err(|e| e.to_string())?;
+        let mut resp = stub
+            .fetch_with_request(req)
+            .await
+            .map_err(|e| e.to_string())?;
+        let status = resp.status_code();
+        let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+        if status >= 400 {
+            let p: Value = serde_json::from_slice(&bytes).unwrap_or_default();
+            return Err(format!(
+                "{} — {}",
+                p["title"].as_str().unwrap_or("refused"),
+                p["detail"].as_str().unwrap_or("")
+            ));
+        }
+        Ok(bytes)
+    }
+}
+
 impl Host for WorkerHost<'_> {
     fn name(&self) -> &str {
         "paged.server"
@@ -316,6 +510,28 @@ impl Host for WorkerHost<'_> {
             }
             "lookup_api" => {
                 Outcome::json(paged_mcp::lookup(args["query"].as_str().unwrap_or(""), 12))
+            }
+            t if tools::ENGINE.contains(&t)
+                && args.get("session").is_none()
+                && crate::engine_object::available(self.env) =>
+            {
+                // No tab named: the person's tab when one is connected, else the headless engine.
+                if crate::session::live_sessions(self.env, &self.principal)
+                    .await
+                    .is_empty()
+                {
+                    self.headless(t, &args).await
+                } else {
+                    crate::session::engine_call(
+                        self.env,
+                        &self.principal,
+                        &self.agent(),
+                        &self.run,
+                        t,
+                        args,
+                    )
+                    .await
+                }
             }
             t if tools::ENGINE.contains(&t) || tools::LIVE.contains(&t) => {
                 crate::session::engine_call(

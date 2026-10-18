@@ -41,6 +41,7 @@ mod auth;
 mod auth_object;
 mod cors;
 mod crypto;
+mod engine_object;
 mod mcp;
 mod oauth;
 mod problem;
@@ -52,6 +53,7 @@ mod view;
 mod workspace_object;
 
 pub use auth_object::AuthObject;
+pub use engine_object::EngineObject;
 pub use repo_object::RepoObject;
 pub use session_object::SessionObject;
 pub use workspace_object::WorkspaceObject;

@@ -839,6 +839,65 @@ impl DurableObject for RepoObject {
                     .await;
                 Response::from_json(&serde_json::json!({ "erased": name, "r2_objects": removed }))
             }
+            (Method::Post, "commit-file") => {
+                // A whole saved file as a version on `branch` (started at `base`
+                // when new): how the headless lane keeps what the engine made.
+                if !may_write {
+                    return problem(403, "Refused", "writing needs write access");
+                }
+                let q: BTreeMap<String, String> = url.query_pairs().into_owned().collect();
+                let branch = q.get("branch").cloned().unwrap_or_default();
+                let base = q.get("base").cloned().unwrap_or_else(|| "main".into());
+                let message = q.get("message").cloned().unwrap_or_else(|| "Save".into());
+                let file = req.bytes().await?;
+                let snap = match paged_repo::import(&file, "save") {
+                    Ok(s) => s,
+                    Err(e) => return answer(e),
+                };
+                let policy =
+                    policy.unwrap_or_else(|| Err(Refusal::PolicyInvalid("no policy".into())));
+                let mut repo = Repo::new(store, policy);
+                if repo.head(&branch).is_none() {
+                    let Some(start) = repo.head(&base).or_else(|| parse(&base)) else {
+                        return problem(404, "Not found", "no such base");
+                    };
+                    if let Err(e) =
+                        repo.receive(BTreeMap::new(), &branch, None, Some(start), &ctx, false)
+                    {
+                        return answer(e);
+                    }
+                }
+                let bucket = self.bucket()?;
+                let mut small = BTreeMap::new();
+                for (h, (kind, bytes)) in snap.objects {
+                    if kind == Kind::Blob && bytes.len() > INLINE_MAX {
+                        if !repo.store.has(&h) {
+                            bucket
+                                .put(repo.store.r2_key(&h), repo.store.seal(&h, &bytes))
+                                .execute()
+                                .await?;
+                            repo.store.record(kind, &h, None, bytes.len() as u64);
+                        }
+                    } else {
+                        small.insert(h, (kind, bytes));
+                    }
+                }
+                let tree = snap.tree;
+                let r = self
+                    .faulting(&mut repo, |r| {
+                        r.commit(small.clone(), tree, &branch, &ctx, &message, None)
+                    })
+                    .await?;
+                match r {
+                    Ok(h) => {
+                        self.register(workspace.as_deref(), &name, &principal).await;
+                        self.schedule(&repo.store, &name, workspace.as_deref())
+                            .await;
+                        Response::from_json(&serde_json::json!({ "ref": branch, "at": h.to_hex() }))
+                    }
+                    Err(e) => answer(e),
+                }
+            }
             (Method::Get, "cr") => {
                 if !may_read {
                     return problem(404, "Not found", "no such repository");
