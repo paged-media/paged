@@ -244,6 +244,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "paged-test-resources"
+version = "0.0.0"
+
+[[package]]
 name = "pptx-core"
 version = "0.0.0"
 dependencies = [
@@ -255,6 +259,7 @@ name = "pptx-export"
 version = "0.0.0"
 dependencies = [
  "paged-ooxml",
+ "paged-test-resources",
  "pptx-core",
  "pptx-import",
  "quick-xml",
@@ -277,6 +282,7 @@ name = "pptx-import"
 version = "0.0.0"
 dependencies = [
  "paged-ooxml",
+ "paged-test-resources",
  "pptx-core",
  "pptx-fonts",
  "quick-xml",
@@ -445,6 +451,7 @@ dependencies = [
 name = "slide-resolve"
 version = "0.0.0"
 dependencies = [
+ "paged-test-resources",
  "pptx-core",
  "pptx-import",
  "serde",

@@ -1573,6 +1573,7 @@ dependencies = [
  "idml-import",
  "paged-model",
  "paged-scene",
+ "paged-test-resources",
  "quick-xml",
  "serde_json",
  "thiserror",
@@ -2357,6 +2358,7 @@ dependencies = [
  "paged-renderer",
  "paged-scene",
  "paged-store",
+ "paged-test-resources",
  "paged-text",
  "paged-wire",
  "serde",
@@ -2413,6 +2415,7 @@ dependencies = [
  "paged-mutate",
  "paged-repo",
  "paged-script",
+ "paged-test-resources",
  "paged-wire",
  "serde",
  "serde_json",
@@ -2424,6 +2427,7 @@ name = "paged-color"
 version = "0.0.0"
 dependencies = [
  "lcms2",
+ "paged-test-resources",
  "qcms",
  "thiserror",
  "tracing",
@@ -2484,6 +2488,7 @@ dependencies = [
  "paged-model",
  "paged-renderer",
  "paged-scene",
+ "paged-test-resources",
  "pdf-writer",
  "subsetter",
  "thiserror",
@@ -2539,6 +2544,7 @@ dependencies = [
  "image",
  "naga",
  "paged-compose",
+ "paged-test-resources",
  "pollster",
  "thiserror",
  "tiny-skia 0.12.0",
@@ -2661,6 +2667,7 @@ dependencies = [
  "paged-mutate",
  "paged-scene",
  "paged-store",
+ "paged-test-resources",
  "paged-text",
  "paged-wire",
  "resvg",
@@ -2684,6 +2691,7 @@ dependencies = [
  "fastcdc",
  "flate2",
  "miniz_oxide 0.9.1",
+ "paged-test-resources",
  "serde",
  "serde_json",
  "sha2",
@@ -2720,6 +2728,7 @@ dependencies = [
  "paged-composition",
  "paged-flow",
  "paged-model",
+ "paged-test-resources",
  "serde",
  "serde_json",
  "thiserror",
@@ -2754,6 +2763,7 @@ dependencies = [
  "paged-compose",
  "paged-gpu",
  "paged-renderer",
+ "paged-test-resources",
  "serde",
  "tsify-next",
  "wasm-bindgen",
@@ -2777,6 +2787,10 @@ dependencies = [
  "serde_json",
  "zip",
 ]
+
+[[package]]
+name = "paged-test-resources"
+version = "0.0.0"
 
 [[package]]
 name = "paged-text"

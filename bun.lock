@@ -39,6 +39,7 @@
       },
       "devDependencies": {
         "@playwright/test": "^1.63.0",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:node25",
         "@types/pngjs": "^6.0.5",
         "@types/react": "catalog:",
@@ -136,6 +137,7 @@
         "@paged-media/ai": "workspace:*",
         "@paged-media/catalog": "workspace:*",
         "@paged-media/client": "workspace:*",
+        "@paged-media/plugin-api": "workspace:*",
         "@paged-media/repository": "workspace:*",
         "@paged-media/ui": "workspace:*",
         "@radix-ui/react-dialog": "^1.1.23",
@@ -610,7 +612,7 @@
     },
     "platform/extensions/packages/plugin-api": {
       "name": "@paged-media/plugin-api",
-      "version": "0.2.71-canary.0",
+      "version": "0.2.72-canary.0",
       "dependencies": {
         "@types/react": "catalog:",
       },
@@ -627,7 +629,7 @@
     },
     "platform/extensions/packages/plugin-sdk": {
       "name": "@paged-media/plugin-sdk",
-      "version": "0.2.71-canary.0",
+      "version": "0.2.72-canary.0",
       "dependencies": {
         "@paged-media/plugin-api": "workspace:*",
       },

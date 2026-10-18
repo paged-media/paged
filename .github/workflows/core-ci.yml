@@ -18,6 +18,8 @@ on:
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
       - "tooling/rust/**"
+      # The test-resources dev-dependency (the skip convention).
+      - "platform/shared/test-resources/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!engine/core/docs/**/*.md"
   pull_request:
@@ -27,6 +29,8 @@ on:
       # The root Cargo config and its linker/wrapper scripts apply to every build.
       - ".cargo/config.toml"
       - "tooling/rust/**"
+      # The test-resources dev-dependency (the skip convention).
+      - "platform/shared/test-resources/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!engine/core/docs/**/*.md"
 
@@ -37,6 +41,8 @@ defaults:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -Dwarnings
+  # A nextest lane whose filter selects no test fails (exit 4).
+  NEXTEST_NO_TESTS: fail
   # The workspace builds several hundred debug test binaries; with full debug
   # info they filled a 72 GB runner even after the disk cleanup below
   # (2026-10-18, once the IDML crates joined the workspace). Line tables keep
@@ -95,6 +101,24 @@ jobs:
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      # The skip convention every Rust workspace's tests use
+      # (docs/development/testing.md). It is a path dev-dependency, so
+      # neither its own tests nor its lints run in a consumer's workspace.
+      - name: test-resources (fmt, clippy, tests)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          m=../../platform/shared/test-resources/Cargo.toml
+          cargo fmt --manifest-path "$m" --check
+          cargo clippy --manifest-path "$m" --target-dir target/test-resources --all-targets -- -D warnings
+          cargo test --manifest-path "$m" --target-dir target/test-resources
+
+      # Tests that miss a resource print `unavailable: <resource>: <reason>`
+      # and append it here; the lane report below turns the lines into
+      # skipped JUnit rows and the job summary (skipped ≠ passed).
+      - name: skip log
+        run: echo "PAGED_SKIP_LOG=$RUNNER_TEMP/paged-skips.tsv" >> "$GITHUB_ENV"
+
       # core is PUBLIC and must build standalone, so it keeps its own
       # copies of the shared OFL faces rather than depending on the
       # private corpus. That duplication drifted the first day it
@@ -109,8 +133,13 @@ jobs:
       # (inspector_wire, round-trip, conformance) and panic with "read
       # fixture: NotFound" if they're absent — CI must regenerate them, the
       # same `paged-gen emit` dance local dev does before running tests.
+      # This lane has them now, so a test that cannot find a generated
+      # fixture fails instead of reporting it unavailable
+      # (PAGED_REQUIRE_FIXTURES, docs/development/testing.md).
       - name: regenerate fixtures
-        run: bash scripts/regen-fixtures.sh
+        run: |
+          bash scripts/regen-fixtures.sh
+          echo "PAGED_REQUIRE_FIXTURES=1" >> "$GITHUB_ENV"
 
       # Colour tests need a CMYK profile or they skip. Before 2026-08-19 no
       # .icc existed anywhere in the workspace and ~8 tests across the qcms
@@ -120,9 +149,16 @@ jobs:
       # paged-canvas/tests/it/render_effect_sweep.rs panics reading
       # corpus/profiles/default_cmyk.icc. Not a hard failure: if the fetch
       # dies the tests degrade to the loud skip they had before, rather than
-      # turning an upstream outage into a red build.
+      # turning an upstream outage into a red build. When the fetch works
+      # the lane has a profile and claims it: PAGED_REQUIRE_ICC=1 makes a
+      # colour test that still finds none fail instead of skipping.
       - name: fetch CMYK profile for the colour tests
-        run: bash scripts/fetch-profiles.sh || echo "::warning title=colour tests degraded::profile fetch failed — colour tests will skip this run"
+        run: |
+          if bash scripts/fetch-profiles.sh; then
+            echo "PAGED_REQUIRE_ICC=1" >> "$GITHUB_ENV"
+          else
+            echo "::warning title=unavailable: CMYK profile::profile fetch failed — the colour tests report unavailable (skipped) this run"
+          fi
 
       # idml-coverage's tests run `cargo metadata --offline`, which needs
       # every crate of the graph on disk; rust-cache prunes the ones the
@@ -137,8 +173,17 @@ jobs:
       # 2026-08-18 (coverage campaign, suite-integrity rule). The step's own
       # exit code is the gate; never pipe this through tail/grep.
       - name: test
+        id: cargo_test
         if: runner.os == 'macOS'
-        run: cargo test --workspace --no-fail-fast
+        run: |
+          set -o pipefail
+          cargo test --workspace --no-fail-fast 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
+
+      # What the macOS leg executed: a leg that ran nothing fails, and the
+      # tests that reported a resource unavailable are listed, not counted.
+      - name: lane report (macOS)
+        if: ${{ !cancelled() && steps.cargo_test.outcome != 'skipped' && runner.os == 'macOS' }}
+        run: python3 ../../tooling/rust/skip-report.py --lane "core cargo test (macOS)" --cargo-log "$RUNNER_TEMP/cargo-test.log"
 
       - name: nextest (workspace) → JUnit
         id: nextest
@@ -149,6 +194,13 @@ jobs:
         # and it does: the upload below runs `if: !cancelled()`. So the job
         # FAILS on a failing test instead of `|| true` reporting green.
         run: cargo nextest run --workspace --profile ci --no-fail-fast
+
+      # Before the upload: tests that reported a resource unavailable become
+      # <skipped> rows in the JUnit cockpit reads, and a run that executed
+      # nothing fails.
+      - name: lane report (Linux)
+        if: ${{ !cancelled() && steps.nextest.outcome != 'skipped' && runner.os == 'Linux' }}
+        run: python3 ../../tooling/rust/skip-report.py --lane "core nextest (Linux)" --junit target/nextest/ci/junit.xml
 
       # The wire's JSON Schema (ADR 187) exists only under paged-wire's
       # `schema` feature, which no workspace build turns on, so the steps

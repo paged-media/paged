@@ -20,7 +20,7 @@
 //! (Metal on macOS); CI selects the software adapter via
 //! `WGPU_BACKEND` / `WGPU_FALLBACK=1` (spec §9.3). Tests that need a
 //! device call [`test_device`] and SKIP when no adapter exists — unless
-//! `REQUIRE_GPU=1`, which the GPU lanes set, and which turns the skip
+//! `PAGED_REQUIRE_GPU=1`, which the GPU lanes set, and which turns the skip
 //! into a failure (`image_gpu::test_support`).
 
 use image_gpu::GpuContext;

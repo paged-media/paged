@@ -164,12 +164,7 @@ fn effect_pages_paint_something_other_than_paper() {
     // The honest end of the test: rasterise the exported PDF and the
     // renderer's own page, and require the exporter to have put ink
     // where the canvas does. Skipped without poppler.
-    if std::process::Command::new("pdftoppm")
-        .arg("-v")
-        .output()
-        .is_err()
-    {
-        eprintln!("pdftoppm not on PATH — skipping the pixel check");
+    if paged_test_resources::tool("pdftoppm").is_none() {
         return;
     }
     let built = build_effects();

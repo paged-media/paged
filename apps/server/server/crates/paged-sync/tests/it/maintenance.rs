@@ -84,9 +84,16 @@ fn r2_raw(url: &str, key: &str) -> Vec<u8> {
     out
 }
 
+/// `PAGED_SERVER_URL`, or `None` after reporting the server unavailable
+/// (`PAGED_REQUIRE_SERVER=1` makes that a failure).
+fn server() -> Option<String> {
+    paged_test_resources::env_var(paged_test_resources::Resource::Server, "PAGED_SERVER_URL")
+}
+
 #[test]
+#[ignore = "server: a running paged.server (PAGED_SERVER_URL)"]
 fn a_repository_is_sealed_collected_snapshotted_and_erased() {
-    let Ok(url) = std::env::var("PAGED_SERVER_URL") else {
+    let Some(url) = server() else {
         return;
     };
     let name = format!(

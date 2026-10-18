@@ -34,6 +34,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use paged_color::{lab, Cmyk, IccTransform, LinearRgb};
+use paged_test_resources::{skip, Resource};
 
 /// Patch set: IDML-style CMYK percentages.
 const PATCHES: &[[f32; 4]] = &[
@@ -185,8 +186,11 @@ fn profile_stem(source: &paged_color::test_profiles::ProfileSource) -> String {
 fn lcms2_and_qcms_agree_on_cmyk_patches() {
     let Some(found) = paged_color::test_profiles::find_cmyk_profile(env!("CARGO_MANIFEST_DIR"))
     else {
-        eprintln!("parity: {}", paged_color::test_profiles::NO_PROFILE_HINT);
-        return;
+        skip!(
+            Resource::Icc,
+            "{}",
+            paged_color::test_profiles::NO_PROFILE_HINT
+        );
     };
     let stem = profile_stem(&found);
     let unsuitable = UNSUITABLE_FOR_PARITY
@@ -201,10 +205,9 @@ fn lcms2_and_qcms_agree_on_cmyk_patches() {
              parity:   Set PAGED_CMYK_PROFILE to a press profile to enforce the {MAX_DELTA_E} ΔE gate."
         );
     }
-    let Ok(profile) = std::fs::read(found.path()) else {
-        eprintln!("parity: profile unreadable — skipping");
-        return;
-    };
+    // The resolver found this file, so failing to read it is a failure.
+    let profile =
+        std::fs::read(found.path()).unwrap_or_else(|e| panic!("{}: {e}", found.path().display()));
     let lcms = IccTransform::cmyk_to_linear_rgb(&profile).expect("lcms2 transform");
     let qcms = QcmsNative::new(&profile).expect("qcms transform");
 
@@ -242,8 +245,11 @@ fn lcms2_and_qcms_agree_on_cmyk_patches() {
 #[test]
 fn pure_black_stays_black_on_both_cmms() {
     let Some(profile) = find_profile() else {
-        eprintln!("parity: no CMYK profile — skipping");
-        return;
+        skip!(
+            Resource::Icc,
+            "{}",
+            paged_color::test_profiles::NO_PROFILE_HINT
+        );
     };
     let black = Cmyk {
         c: 0.0,
@@ -273,8 +279,11 @@ fn pure_black_stays_black_on_both_cmms() {
 fn convert_to_destination_over_real_profile() {
     use paged_color::{Cmm, DisplaySetup, ExportPolicy, IccCmm, WorkingColor};
     let Some(profile) = find_profile() else {
-        eprintln!("parity: no CMYK profile — skipping");
-        return;
+        skip!(
+            Resource::Icc,
+            "{}",
+            paged_color::test_profiles::NO_PROFILE_HINT
+        );
     };
     let mut cmm = IccCmm::new(Some(&profile), DisplaySetup::default());
     cmm.configure_export(Some(&profile), ExportPolicy::ConvertToDestination);

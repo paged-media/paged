@@ -35,6 +35,7 @@
 //! paper white), while the CMYK alternate stays on the paint's channels
 //! so separations and overprint are unaffected.
 
+use paged_test_resources::{skip, Resource};
 use std::io::Write;
 
 use paged_compose::{Color, DisplayCommand, Paint};
@@ -215,11 +216,11 @@ fn standard_lab_for_spots_paints_the_lab_primary_not_the_cmyk_alternate() {
 fn standard_lab_for_spots_leaves_the_separation_channels_alone() {
     let Some(profile) = paged_color::test_profiles::read_cmyk_profile(env!("CARGO_MANIFEST_DIR"))
     else {
-        eprintln!(
-            "skipping standard_lab_for_spots_leaves_the_separation_channels_alone: {}",
+        skip!(
+            Resource::Icc,
+            "{}",
             paged_color::test_profiles::NO_PROFILE_HINT
         );
-        return;
     };
     let bytes = build_spot_tint_idml();
     let document = idml_import::import_idml_doc(&bytes).unwrap();

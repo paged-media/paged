@@ -1358,8 +1358,11 @@ mod tests {
         let Some(profile) =
             paged_color::test_profiles::read_cmyk_profile(env!("CARGO_MANIFEST_DIR"))
         else {
-            eprintln!("{}", paged_color::test_profiles::NO_PROFILE_HINT);
-            return;
+            paged_test_resources::skip!(
+                paged_test_resources::Resource::Icc,
+                "{}",
+                paged_color::test_profiles::NO_PROFILE_HINT
+            );
         };
         let xform = paged_color::IccTransform::cmyk_to_linear_rgb(&profile).expect("transform");
         let ctx = ColorCtx::icc(Some(&xform));
@@ -1434,8 +1437,11 @@ mod tests {
         let Some(profile) =
             paged_color::test_profiles::read_cmyk_profile(env!("CARGO_MANIFEST_DIR"))
         else {
-            eprintln!("{}", paged_color::test_profiles::NO_PROFILE_HINT);
-            return;
+            paged_test_resources::skip!(
+                paged_test_resources::Resource::Icc,
+                "{}",
+                paged_color::test_profiles::NO_PROFILE_HINT
+            );
         };
         let xform = paged_color::IccTransform::cmyk_to_linear_rgb(&profile).expect("transform");
         let ctx = ColorCtx::icc(Some(&xform));

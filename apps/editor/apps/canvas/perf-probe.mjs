@@ -13,10 +13,12 @@ const PACK = process.argv[2] ?? process.env.PROBE_PACK ?? "digital-bridesmaid-pl
 // checkout — the hardcoded `/Users/drietsch/idml/...` paths here were the
 // ARCHIVED monorepo layout and had been dead since the 2026-05-30 split.
 // `editor/corpus` is a symlink to the private corpus checkout; override
-// with PAGED_CORPUS when it lives elsewhere.
-const CORPUS =
-  process.env.PAGED_CORPUS ??
-  new URL("../../corpus/", import.meta.url).pathname;
+// with PAGED_CORPUS_DIR (the corpus root every test lane reads,
+// docs/development/testing.md) when it lives elsewhere. PAGED_CORPUS is
+// the old name, still read for now.
+const CORPUS = process.env.PAGED_CORPUS_DIR
+  ? `${process.env.PAGED_CORPUS_DIR.replace(/\/$/, "")}/`
+  : (process.env.PAGED_CORPUS ?? new URL("../../corpus/", import.meta.url).pathname);
 const IDML = `${CORPUS}envato/packs/${PACK}/template.idml`;
 const FONT = `${CORPUS}fonts/Inter.ttf`;
 const ICC  = "/Library/Application Support/Adobe/Color/Profiles/Recommended/CoatedFOGRA39.icc";

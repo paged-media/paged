@@ -1083,6 +1083,93 @@ Unmapped tests per suite, by test file (vitest, Playwright) or test binary (next
 | slide vitest (10) | `test/slides-model.spec.ts` 7, `test/export.spec.ts` 3 |
 | web vitest (39) | `test/transform.spec.ts` 31, `test/activate.spec.ts` 5, `test/panel-reach.spec.tsx` 3 |
 
+## T3: honest skips (after)
+
+T3 gave every Rust workspace one convention for optional resources
+([`docs/development/testing.md`](../development/testing.md)): the
+`platform/shared/test-resources` dev-dependency prints `unavailable: <resource>: <reason>`
+for every skip, `PAGED_REQUIRE_<X>=1` turns it into a failure, `PAGED_CORPUS_DIR` replaces
+the per-lane corpus variables, and tests that can never run without their resource are
+named `#[ignore]` lanes with a nextest profile. TypeScript is not converted yet (B7 is
+moving those tests to bun test); its nine silent skips are listed below.
+
+### Silent skips, before and after
+
+The same source scan as section 3 (`test_inventory.py skips`), extended so that a guard
+that goes through the helper (directly, or through a function that does) counts as a
+reported skip, not a silent one. Before: `2c033d49a` (main before T3). After: T3's last
+commit.
+
+| Module | Before | After | How the skips were converted |
+|---|---|---|---|
+| apps/server (Rust) | 6 | 0 | all 14 paged-sync tests (8 more behind helpers the scan does not follow) are the `server` lane |
+| engine/core (Rust) | 67 | 1 | GPU 18, CMYK profile 13, generated fixture / build output 8, tool 1 report through the helper; 21 that read committed inputs now assert; 2 became `corpus: idml` lanes and 3 named `lane:` lanes |
+| modules/image (Rust) | 236 | 2 | every device probe goes through `device_or_skip`; fonts 2, tools 3, the corpus lanes' empty-corpus returns |
+| modules/slide (Rust) | 4 | 0 | the five corpus tests are the `corpus: pptx` lane |
+| **Rust** | **313** | **3** | |
+| TypeScript | 9 | 9 | not converted (B7) |
+
+The three left are not skips: `advertised_paths_apply` returns from a `.filter` closure,
+and image's `oracle_photoshop` and `object_schema` return after writing their ledger or
+schema in update mode (`PAGED_PHOTOSHOP_LEDGER=write`, `UPDATE_IMAGE_SCHEMA=1`).
+
+The scan cannot count what runs. Measured on a machine with an adapter (Metal) and with
+`PAGED_FORCE_NO_GPU=1`: image reports **282** tests unavailable (more than the 232 the scan
+finds, because many reach the device through helpers), and with `PAGED_REQUIRE_GPU=1` the
+same 282 fail; core's vello tests report 18 and fail 18. With `PAGED_CORPUS_DIR` pointing
+at an empty directory and `PAGED_REQUIRE_CORPUS=1`, every corpus lane fails: core 13,
+image 13 (and the ABR lane's 4), doc 5, sheet 5, slide 5; without the flag they pass and
+say `unavailable: private corpus`.
+
+### `#[ignore]`d tests
+
+50 before, 74 after. Every corpus or oracle lane now says what it needs
+(`corpus: <lane>`, `clean-room: abr`, `server: …`, `lane: … (<VAR>)`, `tool: …`). The 24
+new ones: core's ruler-guides and repository round-trip (`corpus: idml`), its two annual
+measurements and the package-diff probe (`lane: …`); slide's five corpus tests
+(`corpus: pptx`); the server's 14 (`server: …`).
+
+### Same tests before and after
+
+`cargo nextest list --run-ignored all`, per workspace; the sets of test names are
+identical, only the ignored classification changed.
+
+| Workspace | Tests before | Tests after | Ignored before | Ignored after |
+|---|---|---|---|---|
+| engine/core | 3,821 | 3,821 | 18 | 23 |
+| engine/core, `paged-gpu --features vello-backend` | 85 | 85 | 0 | 0 |
+| modules/image | 1,213 | 1,213 | 21 | 21 |
+| modules/doc | 181 | 181 | 5 | 5 |
+| modules/sheet | 1,501 | 1,501 | 5 | 5 |
+| modules/slide | 73 | 73 | 1 | 6 |
+| apps/server/server | 14 | 14 | 0 | 14 |
+| platform/shared/test-resources (new) | — | 10 | — | 0 |
+
+### CI after T3
+
+- **Lanes that claim a resource require it:** core `vello on lavapipe` and image's lavapipe
+  and Metal lanes set `PAGED_REQUIRE_GPU=1`; core `check + test` sets `PAGED_REQUIRE_ICC=1`
+  after a successful profile fetch and `PAGED_REQUIRE_FIXTURES=1` after regenerating the
+  fixtures.
+- **Lanes without the resource say so:** image `rust engine` is "test (CPU only; device tests
+  are unavailable here)"; image's `publish-state` nextest evidence marks the device tests
+  `<skipped>` in the JUnit Cockpit reads (they were ~230 passes); core's fidelity pixel gate
+  reports `unavailable: FOGRA39 profile` in its step name, log, annotation and job summary
+  (`PAGED_REQUIRE_FOGRA39=1` would make it fail; no runner has the profile).
+- **A lane that executed nothing fails:** every nextest lane runs with `--no-tests=fail`, and
+  `tooling/rust/skip-report.py` fails a Rust lane whose executed count (run, minus reported
+  unavailable) is zero, for nextest JUnit and for `cargo test` output alike (core macOS,
+  image's three Rust lanes, the fidelity golden snapshot, which is a single named test).
+
+### Left for later
+
+- The nine TypeScript silent skips: `apps/editor/apps/canvas/tests/default-italic-face.spec.ts`
+  (1, font), `modules/image/glue/test/retouch-tools.spec.ts` (4, real wasm),
+  `modules/image/glue/test/type.spec.ts` (2, font),
+  `platform/extensions/packages/plugin-sdk/test/react-free-import.spec.ts` (2, build
+  output). They and the TS `REQUIRE_REAL_*` switches move to the convention after B7.
+- No CI lane runs the corpus lanes: the corpus is private.
+
 ## What could not be measured
 
 - **Monorepo editor Playwright:** still no run (missing `STATE_DISPATCH_TOKEN`); its numbers
@@ -1120,4 +1207,6 @@ python3 tooling/migration/test_inventory.py report --cache "$CACHE" \
   --features "$FEATURES" --cockpit-config "$COCKPIT_CONFIG"
 # 3. The tables in this file.
 python3 tooling/migration/test_inventory.py tables docs/migration/test-inventory.json --out tables.md
+# 4. T3's before/after: the source scan alone (no cache, no network), run in each checkout.
+python3 tooling/migration/test_inventory.py skips --out skips.json
 ```

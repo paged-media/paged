@@ -74,7 +74,6 @@
 //! no-op. Everything else in this file is derived from `KernelDef`.
 
 use half::f16;
-use image_conformance::device::test_device;
 use image_conformance::quantize::f16_ulp_distance;
 use image_gpu::{execute_tile_once, execute_windowed_once, GpuContext, TileInput};
 use image_kernels::families::adjust::{
@@ -1005,21 +1004,11 @@ fn is_mask_scoped(def: &KernelDef) -> bool {
     def.wgsl.contains("textureLoad(mask")
 }
 
-/// Loud skip. "No adapter" must never read as "passed".
+/// The device, or `None` after the shared test device reported
+/// `unavailable: GPU adapter: <what>: …` ("no adapter" never reads as
+/// "passed"; PAGED_REQUIRE_GPU=1 makes it a failure).
 fn ctx_or_skip(what: &str) -> Option<&'static GpuContext> {
-    match test_device() {
-        Some(c) => Some(c),
-        None => {
-            eprintln!("\n=================== GPU LANE SKIPPED ===================");
-            eprintln!("  {what}");
-            eprintln!("  NO GPU ADAPTER — this test asserted NOTHING about any");
-            eprintln!("  kernel. A green result here is NOT evidence of correct");
-            eprintln!("  behaviour. Run where an adapter exists (WGPU_BACKEND=");
-            eprintln!("  metal|vulkan|gl) before treating the lane as a gate.");
-            eprintln!("=======================================================\n");
-            None
-        }
-    }
+    image_gpu::test_support::device_or_skip(what)
 }
 
 /// Report every failure at once, named — one kernel at a time would hide

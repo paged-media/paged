@@ -31,8 +31,8 @@
 //! corpus is private.
 //!
 //! ```text
-//! PAGED_PSD_CORPUS=1 cargo test --release -p image-conformance \
-//!   --test psd_vector_mask_corpus -- --ignored --nocapture
+//! PAGED_CORPUS_DIR=<corpus root> cargo nextest run --profile corpus --run-ignored only \
+//!   --release psd_vector_mask_corpus::
 //! ```
 
 use image_conformance::psd_corpus::{corpus_root, psds_by_magic};
@@ -140,12 +140,19 @@ fn shape_alpha_matches(
 
 #[test]
 #[allow(non_snake_case)]
-#[ignore = "vector-mask corpus oracle: opt-in (PAGED_PSD_CORPUS=1 + the private corpus)"]
+#[ignore = "corpus: psd (vector-mask oracle)"]
 fn vector_masks_draw_as_photoshops_cached_renders__feat__image_psd_layer_import() {
     let Some(root) = corpus_root("PAGED_PSD_CORPUS") else {
         return;
     };
     let files = psds_by_magic(&root);
+    if files.is_empty() {
+        image_conformance::corpus::missing(
+            "psd",
+            format_args!("no PSD content under {}", root.display()),
+        );
+        return;
+    }
     let mut all = Tally::default();
     let mut with_user = Tally::default();
     let mut curved = Tally::default();

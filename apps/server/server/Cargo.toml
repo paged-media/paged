@@ -17,6 +17,8 @@ paged-mcp = { path = "../../../engine/core/crates/paged-mcp" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
+# Optional test resources (docs/development/testing.md): dev-dependency only.
+paged-test-resources = { path = "../../../platform/shared/test-resources" }
 
 [profile.release]
 opt-level = "s"

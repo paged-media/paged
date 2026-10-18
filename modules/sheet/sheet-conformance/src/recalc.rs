@@ -20,7 +20,8 @@
 //! the PRODUCER cached in `<v>` — Excel's own answer, recorded in the file.
 //!
 //! Shared by the CI lane over the committed subset (`corpus/xlsx-recalc/`)
-//! and the opt-in full lane over the private corpus (`PAGED_XLSX_CORPUS`),
+//! and the opt-in full lane over the private corpus (`corpus: xlsx`, under
+//! `PAGED_CORPUS_DIR`),
 //! both in `tests/it/xlsx_recalc_corpus.rs`. The engine values come from the
 //! product loader itself (`sheet-js`'s `SheetSession::load_xlsx`); this
 //! module keeps the cached values that load overwrites.

@@ -240,10 +240,11 @@ fn the_diagnostic_reads_answer_what_the_document_holds() {
 #[test]
 fn the_byte_reads_serve_what_is_registered_and_refuse_what_is_not() {
     let inter = fonts_dir().join("Inter.ttf");
-    if !inter.exists() {
-        eprintln!("skipping: corpus/fonts absent");
-        return;
-    }
+    assert!(
+        inter.is_file(),
+        "{} is committed at engine/core/corpus/fonts; a partial checkout?",
+        inter.display()
+    );
     let (d, doc) = seeded("bytes");
     let doc = doc.to_str().unwrap();
     let face = d.join("face.ttf");

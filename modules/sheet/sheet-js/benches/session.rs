@@ -23,8 +23,9 @@
 //! `cargo bench -p sheet-js` (add `-- --quick` for a fast pass).
 //!
 //! `load_corpus_largest_authored` loads the largest Excel-authored workbook
-//! of the private corpus (`<repo root>/corpus/xlsx/authored/`, or
-//! `$PAGED_XLSX_CORPUS/xlsx/authored/` when that names a corpus root). It
+//! of the private corpus (`$PAGED_CORPUS_DIR/xlsx/authored/`, else the
+//! deprecated `$PAGED_XLSX_CORPUS` when that names a corpus root, else
+//! `<repo root>/corpus/xlsx/authored/`). It
 //! is chosen by CONTENT, not by name or extension: every file that is a ZIP
 //! and opens as a workbook is loaded once, and the one with the most used
 //! cells wins. Without the corpus mount the bench is skipped with a note.
@@ -63,11 +64,23 @@ fn sort(c: &mut Criterion) {
     });
 }
 
-/// `$PAGED_XLSX_CORPUS` as a corpus root (any value but "1"), else the
-/// monorepo's `<repo root>/corpus` (gitignored; a local symlink).
+/// `$PAGED_CORPUS_DIR` (the corpus root, docs/development/testing.md),
+/// else the deprecated `$PAGED_XLSX_CORPUS` as a corpus root (any value but
+/// "1"), else the monorepo's `<repo root>/corpus` (gitignored; a local
+/// symlink). A bench is not a test, so this reads the variables itself.
 fn corpus_root() -> PathBuf {
+    if let Ok(v) = std::env::var("PAGED_CORPUS_DIR") {
+        if !v.is_empty() {
+            return PathBuf::from(v);
+        }
+    }
     match std::env::var("PAGED_XLSX_CORPUS") {
-        Ok(v) if v != "1" && !v.is_empty() => PathBuf::from(v),
+        Ok(v) if v != "1" && !v.is_empty() => {
+            eprintln!(
+                "warning: PAGED_XLSX_CORPUS is deprecated; set PAGED_CORPUS_DIR to the corpus root"
+            );
+            PathBuf::from(v)
+        }
         _ => PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../corpus"),
     }
 }

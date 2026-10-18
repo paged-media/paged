@@ -821,8 +821,9 @@ fn register_font_reaches_the_open_document() {
         std::fs::read(fonts.join("Inter.ttf")),
         std::fs::read(fonts.join("Lora.ttf")),
     ) else {
-        eprintln!("skip: Inter.ttf / Lora.ttf not present");
-        return;
+        panic!(
+            "Inter.ttf / Lora.ttf are committed at engine/core/corpus/fonts; a partial checkout?"
+        );
     };
     let mut core = WorkerCore::new();
     let loaded = roundtrip(
@@ -913,10 +914,12 @@ fn register_font_reaches_the_open_document() {
 fn request_font_face_bytes_round_trips_registered_face() {
     let font_path =
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../corpus/fonts/Inter.ttf");
-    let Ok(font) = std::fs::read(&font_path) else {
-        eprintln!("skip: Inter.ttf not present");
-        return;
-    };
+    let font = std::fs::read(&font_path).unwrap_or_else(|e| {
+        panic!(
+            "{}: {e} — committed at engine/core/corpus/fonts; a partial checkout?",
+            font_path.display()
+        )
+    });
     let mut core = WorkerCore::new();
     let reg = roundtrip(
         &mut core,

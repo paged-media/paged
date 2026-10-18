@@ -28,43 +28,31 @@
 // EXPORTER produces bytes on demand; the export panel lists the
 // registered exporters and pulls on save.
 //
-// These contribution shapes mirror @paged-media/plugin-api's
-// ImporterContribution / ExporterContribution 1:1, so a bundle's
-// contract-typed registration is assignable here (asserted through the
-// editor's plugin-api-compat.ts dev link).
+// The contribution shapes are @paged-media/plugin-api's, used as is (one
+// definition, ADR 226): a bundle's contract-typed registration IS the
+// shell's type.
+
+import type * as Api from "@paged-media/plugin-api";
 
 import type { Disposable } from "./types";
 
 /** A file handed to an importer — bytes already read at the host
- *  boundary (the contract never leaks a DOM `File`). */
-export interface ImportRequest {
-  name: string;
-  bytes: Uint8Array;
-  mimeType: string;
-}
+ *  boundary (the contract never leaks a DOM `File`). The contract's
+ *  `ImportRequest`. */
+export type ImportRequest = Api.ImportRequest;
 
-export interface ImporterContribution {
-  id: string;
-  title: string;
-  /** Extensions handled, leading dot, lowercased (`[".xlsx"]`). */
-  extensions: readonly string[];
-  mimeTypes?: readonly string[];
-  import(file: ImportRequest): void | Promise<void>;
-}
+/** An importer: its extensions (leading dot, lowercased — `[".xlsx"]`),
+ *  optional MIME types, and `import()`. The contract's
+ *  `ImporterContribution`. */
+export type ImporterContribution = Api.ImporterContribution;
 
-export interface ExportResult {
-  bytes: Uint8Array;
-  fileName: string;
-}
+/** What an exporter yields. The contract's `ExportResult`. */
+export type ExportResult = Api.ExportResult;
 
-export interface ExporterContribution {
-  id: string;
-  title: string;
-  /** The extension the produced file carries, leading dot (`".xlsx"`). */
-  extension: string;
-  mimeType?: string;
-  export(): Promise<ExportResult | null> | ExportResult | null;
-}
+/** An exporter: the extension the produced file carries (leading dot,
+ *  `".xlsx"`), an optional MIME type, and `export()`. The contract's
+ *  `ExporterContribution`. */
+export type ExporterContribution = Api.ExporterContribution;
 
 export type ImporterRegistryEvent =
   | { kind: "registered"; contribution: ImporterContribution }
@@ -73,7 +61,7 @@ export type ExporterRegistryEvent =
   | { kind: "registered"; contribution: ExporterContribution }
   | { kind: "unregistered"; id: string };
 
-export interface ImporterRegistry {
+export interface ImporterRegistry extends Api.ImporterRegistry {
   register(contribution: ImporterContribution): Disposable;
   unregister(id: string): void;
   list(): ImporterContribution[];
@@ -85,7 +73,7 @@ export interface ImporterRegistry {
   onChange(handler: (event: ImporterRegistryEvent) => void): Disposable;
 }
 
-export interface ExporterRegistry {
+export interface ExporterRegistry extends Api.ExporterRegistry {
   register(contribution: ExporterContribution): Disposable;
   unregister(id: string): void;
   list(): ExporterContribution[];

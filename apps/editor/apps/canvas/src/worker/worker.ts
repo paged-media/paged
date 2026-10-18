@@ -868,6 +868,34 @@ async function dispatch(data: IncomingMessage): Promise<void> {
   }
 }
 
+/**
+ * Whether the browser hands out a WebGPU adapter at all.
+ *
+ * `initGpu` gets the OffscreenCanvas's WebGPU context before it asks for
+ * an adapter, and a canvas with a WebGPU context never returns a 2D
+ * context afterwards. Where `navigator.gpu` exists but no adapter does
+ * (a blocklisted GPU, a virtual machine, `--disable-gpu`, Playwright's
+ * bundled Chromium), a failed `initGpu` therefore left the CPU fallback
+ * nothing to draw on: the viewport stayed blank under a "CPU" badge.
+ * Asking first keeps the canvas free for the 2D path when WebGPU cannot
+ * render. (A device or renderer failure after a granted adapter still
+ * binds the canvas; that case is left to the GPU surface itself.)
+ */
+async function webgpuAdapterAvailable(): Promise<boolean> {
+  const gpu = (navigator as unknown as { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
+  if (!gpu) {
+    console.warn("WebGPU: not available; the canvas renders on the CPU");
+    return false;
+  }
+  try {
+    if ((await gpu.requestAdapter()) != null) return true;
+  } catch {
+    // A throwing `requestAdapter` is no adapter, as a null one is.
+  }
+  console.warn("WebGPU: no adapter; the canvas renders on the CPU");
+  return false;
+}
+
 async function attachRenderer(
   canvas: OffscreenCanvas,
   dpr: number,
@@ -880,12 +908,14 @@ async function attachRenderer(
   }
 
   // GPU-first attempt: a successful `initGpu` claims the
-  // OffscreenCanvas's WebGPU context. If it fails, the canvas is
-  // still virgin and we can still grab a 2D context for the CPU
-  // path. The order matters — once `getContext("2d")` is called,
-  // requesting WebGPU on the same canvas is illegal.
+  // OffscreenCanvas's WebGPU context. The order matters — once
+  // `getContext("2d")` is called, requesting WebGPU on the same canvas
+  // is illegal. The reverse holds too: `initGpu` binds the canvas to
+  // WebGPU BEFORE it asks for an adapter, so a failed `initGpu` can
+  // leave the canvas with no 2D context for the CPU path. That is why
+  // the adapter is asked for first (see `webgpuAdapterAvailable`).
   let gpuActive = false;
-  if (worker.initGpu) {
+  if (worker.initGpu && (await webgpuAdapterAvailable())) {
     const w = Math.max(1, Math.round(cssWidth * dpr));
     const h = Math.max(1, Math.round(cssHeight * dpr));
     try {

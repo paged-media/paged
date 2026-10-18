@@ -168,7 +168,7 @@ function pluginSurface() {
   // where the resolved one declares 19). The app's symlink is the only
   // path that answers "what does this build actually inject".
   const BUNDLES_LOADED = [
-    "draw", "web", "sheet", "data", "image", "doc", "pdf", "publish",
+    "draw", "web", "sheet", "data", "image", "doc", "pdf", "publish", "slide",
   ];
   const items = [];
   const bundles = [];
@@ -178,9 +178,8 @@ function pluginSurface() {
     try {
       manifest = JSON.parse(read(manifestPath));
     } catch {
-      // Not a dependency of the canvas app (plugin-slide is an empty
-      // repo; doc may be link:-overridden pre-publish). Absent is not a
-      // gap — it contributes nothing because it is not there.
+      // Not a dependency of the canvas app. Absent is not a gap — it
+      // contributes nothing because it is not there.
       continue;
     }
     const c = manifest.contributes ?? manifest;
