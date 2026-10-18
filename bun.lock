@@ -625,7 +625,7 @@
     },
     "platform/extensions/packages/plugin-api": {
       "name": "@paged-media/plugin-api",
-      "version": "0.2.68-canary.0",
+      "version": "0.2.69-canary.0",
       "dependencies": {
         "@types/react": "catalog:",
       },
@@ -642,7 +642,7 @@
     },
     "platform/extensions/packages/plugin-sdk": {
       "name": "@paged-media/plugin-sdk",
-      "version": "0.2.68-canary.0",
+      "version": "0.2.69-canary.0",
       "dependencies": {
         "@paged-media/plugin-api": "workspace:*",
       },

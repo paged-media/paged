@@ -80,7 +80,7 @@ tasks:
       - '/tooling/js/lint-selftest.mjs'
       - '/tooling/js/lint-selftest/**/*'
       - '/tooling/js/bun-canary.sh'
-      - '/tooling/js/bun-canary.version'
+      - '/tooling/js/bun-canary-version'
       - '/platform/shared/*/package.json'
 
   js-test:

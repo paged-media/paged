@@ -13,7 +13,7 @@ concurrency:
 # proves each boundary fires (tooling/js/lint-selftest.mjs).
 #
 # bun lint is in Bun's canary builds only, so tooling/js/bun-canary.sh runs one
-# exact npm canary (tooling/js/bun-canary.version) through bunx. Bun itself,
+# exact npm canary (tooling/js/bun-canary-version) through bunx. Bun itself,
 # for bunx, is the version in /.prototools. There is no install step: the
 # config and its rules are native to bun lint, and a checkout without
 # node_modules lints exactly as an installed one does.
@@ -75,7 +75,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
-          key: bun-canary-${{ runner.os }}-${{ hashFiles('tooling/js/bun-canary.version') }}
+          key: bun-canary-${{ runner.os }}-${{ hashFiles('tooling/js/bun-canary-version') }}
 
       # Annotations on the diff (github), and the same run as JUnit for the
       # artifact. A clean run writes an empty <testsuites>.

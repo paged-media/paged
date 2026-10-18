@@ -47,7 +47,7 @@ tasks:
       - '@group(js-sources)'
       - '/eslint-suppressions.json'
       - '/tooling/js/bun-canary.sh'
-      - '/tooling/js/bun-canary.version'
+      - '/tooling/js/bun-canary-version'
 
   js-test:
     description: 'The workspace `test` script.'
