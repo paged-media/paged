@@ -13,8 +13,8 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/paged-media/plugin-sdk.git",
-    "directory": "packages/plugin-cli"
+    "url": "git+https://github.com/paged-media/paged.git",
+    "directory": "platform/extensions/packages/plugin-cli"
   },
   "publishConfig": {
     "access": "public",

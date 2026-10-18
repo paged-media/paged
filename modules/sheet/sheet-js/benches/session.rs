@@ -37,7 +37,7 @@
 //! `cargo bench -p sheet-js` (add `-- --quick` for a fast pass).
 //!
 //! `load_corpus_largest_authored` loads the largest Excel-authored workbook
-//! of the private corpus (`~/paged/corpus/xlsx/authored/`, or
+//! of the private corpus (`<repo root>/corpus/xlsx/authored/`, or
 //! `$PAGED_XLSX_CORPUS/xlsx/authored/` when that names a corpus root). It
 //! is chosen by CONTENT, not by name or extension: every file that is a ZIP
 //! and opens as a workbook is loaded once, and the one with the most used
@@ -78,7 +78,7 @@ fn sort(c: &mut Criterion) {
 }
 
 /// `$PAGED_XLSX_CORPUS` as a corpus root (any value but "1"), else the
-/// workspace layout's `~/paged/corpus`.
+/// monorepo's `<repo root>/corpus` (gitignored; a local symlink).
 fn corpus_root() -> PathBuf {
     match std::env::var("PAGED_XLSX_CORPUS") {
         Ok(v) if v != "1" && !v.is_empty() => PathBuf::from(v),

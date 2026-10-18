@@ -89,9 +89,8 @@ struct Variant {
     extra_transform: Option<Matrix>,
     /// Override LinkResourceURI for the variant. None ⇒ the default
     /// checker-128 fixture. The transform-focused variants point at
-    /// `corpus/samples/media/photo.webp` via an absolute file URI so
-    /// the diff harness picks the asset up without an extra
-    /// `--links-dir` flag.
+    /// `photo.webp` (see `PHOTO_URI`), resolved by basename under
+    /// `--links-dir` like the checker fixture.
     link_uri: Option<&'static str>,
     /// Native pixel dimensions of the variant's image — used for the
     /// inner `<Image>` PathGeometry. Defaults to `IMG_NATIVE_PX`
@@ -333,10 +332,14 @@ fn variants() -> Vec<Variant> {
     ]
 }
 
-/// Absolute path so the renderer's resolver can find photo.webp
-/// without an explicit `--links-dir`. Real InDesign exports use
-/// `file:` URIs of this same shape.
-const PHOTO_URI: &str = "file:/Users/drietsch/idml/corpus/samples/media/photo.webp";
+/// The photo, in the same shape as `LINK_URI`: the resolver strips the
+/// scheme, takes the basename and looks it up under `--links-dir`
+/// (render-diff passes `corpus/generated/images-Links/` when that folder
+/// exists). photo.webp is not part of this repository — it lives in the
+/// private corpus (`idml/samples/media/photo.webp`); without it the photo
+/// variants render their missing-link state. This used to be an absolute
+/// `file:` URI into a pre-split checkout, which resolved on no machine.
+const PHOTO_URI: &str = "file:photo.webp";
 
 pub fn build() -> Sample {
     let variants = variants();

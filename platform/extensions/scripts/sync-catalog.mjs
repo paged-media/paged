@@ -33,25 +33,23 @@ const TARGET = resolve(ROOT, "packages/plugin-api/src/catalog.json");
 // `files:` does not even ship, so putting it there would have made
 // every provenance edit look like a contract change.
 const PROVENANCE = resolve(ROOT, "packages/plugin-api/catalog.provenance.json");
-// TWO layouts, the same probe sync-wire.mjs carries: the plugin repos
-// moved under `~/paged/plugins/` on 2026-08-03, so a bare `../editor`
-// now points at `~/paged/plugins/editor`, which does not exist. First
-// existing candidate wins.
+// The same probe sync-wire.mjs carries: in the monorepo the editor sits at
+// `apps/editor`, two levels above this package's root
+// (`platform/extensions`). First existing candidate wins.
 const RESOLVE_CANDIDATES = [
-  resolve(ROOT, "../../editor/packages/client"), // ~/paged/editor — local
-  resolve(ROOT, "../editor/packages/client"), // sibling — CI checkout
+  resolve(ROOT, "../../apps/editor/packages/client"), // <repo root>/apps/editor
 ];
 const RESOLVE_FROM =
   process.env.PAGED_INTROSPECT_WASM_FROM ??
   RESOLVE_CANDIDATES.find((c) => existsSync(resolve(c, "package.json"))) ??
   RESOLVE_CANDIDATES[0];
-// core's own generated catalog, when a checkout is beside us. It is the
-// SOURCE the published package is built from, so comparing against it is
-// stricter than comparing against npm — and it is the only comparison
-// that can be made while the vendored copy legitimately leads a publish.
+// core's own generated catalog, from the in-repo engine (`engine/core`;
+// CORE_REPO overrides). It is the SOURCE the published package is built
+// from, so comparing against it is stricter than comparing against npm —
+// and it is the only comparison that can be made while the vendored copy
+// legitimately leads a publish.
 const CORE_CANDIDATES = [
-  resolve(ROOT, "../../core/crates/paged-introspect/catalog.json"),
-  resolve(ROOT, "../core/crates/paged-introspect/catalog.json"),
+  resolve(ROOT, "../../engine/core/crates/paged-introspect/catalog.json"),
 ];
 const CORE_CATALOG =
   process.env.CORE_REPO

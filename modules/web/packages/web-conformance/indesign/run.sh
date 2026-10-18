@@ -11,10 +11,15 @@
 # face the bake measured with. Judge by the artifact: a run that writes no
 # answer JSON failed, whatever osascript returned.
 #
-#   PAGED_BIN=~/paged/core/target/debug/paged bash indesign/run.sh [fixture…]
+#   bash indesign/run.sh [fixture…]
+#
+# PAGED_BIN defaults to the in-repo engine's debug build
+# (<repo root>/engine/core/target/debug/paged, or $CARGO_TARGET_DIR/debug/paged
+# when CARGO_TARGET_DIR is set); set PAGED_BIN to use another binary.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PAGED_BIN="${PAGED_BIN:-$HOME/paged/core/target/debug/paged}"
+REPO_ROOT="$(git -C "$HERE" rev-parse --show-toplevel)"
+PAGED_BIN="${PAGED_BIN:-${CARGO_TARGET_DIR:-$REPO_ROOT/engine/core/target}/debug/paged}"
 APP="${INDESIGN_APP:-Adobe InDesign 2025}"
 FONT="$HERE/../../web-render/assets/fonts/Inter.ttf"
 STAGE="${PAGED_INDESIGN_STAGE:-$(mktemp -d "${TMPDIR:-/tmp}/paged-web-indesign.XXXXXX")}"

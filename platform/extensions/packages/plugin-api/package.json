@@ -1,6 +1,6 @@
 {
   "name": "@paged-media/plugin-api",
-  "version": "0.2.63-canary.0",
+  "version": "0.2.64-canary.0",
   "description": "The Paged plugin contract: manifest, bundle lifecycle, the BundleHost surface, and the contribution + engine wire types. Type-only.",
   "license": "MPL-2.0 OR LicenseRef-PMEL",
   "type": "module",
@@ -16,8 +16,8 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/paged-media/plugin-sdk.git",
-    "directory": "packages/plugin-api"
+    "url": "git+https://github.com/paged-media/paged.git",
+    "directory": "platform/extensions/packages/plugin-api"
   },
   "publishConfig": {
     "access": "public",

@@ -6,8 +6,8 @@ settings:
 
 overrides:
   esbuild@>=0.27.3 <0.28.1: ^0.28.1
-  '@paged-media/doc': link:../plugins/plugin-doc/packages/doc-bundle
-  '@paged-media/slide': link:../plugins/plugin-slide/packages/slide-bundle
+  '@paged-media/doc': link:../../modules/doc/packages/doc-bundle
+  '@paged-media/slide': link:../../modules/slide/packages/slide-bundle
 
 importers:
 
@@ -44,8 +44,8 @@ importers:
         specifier: 0.1.0-canary.17
         version: 0.1.0-canary.17(@paged-media/plugin-api@0.2.62-canary.0)(@paged-media/plugin-sdk@0.2.62-canary.0(react@18.3.1))(react@18.3.1)
       '@paged-media/doc':
-        specifier: link:../../../plugins/plugin-doc/packages/doc-bundle
-        version: link:../../../plugins/plugin-doc/packages/doc-bundle
+        specifier: link:../../../../modules/doc/packages/doc-bundle
+        version: link:../../../../modules/doc/packages/doc-bundle
       '@paged-media/draw':
         specifier: 0.1.0-canary.20
         version: 0.1.0-canary.20(@paged-media/plugin-api@0.2.62-canary.0)(@paged-media/plugin-sdk@0.2.62-canary.0(react@18.3.1))(react@18.3.1)
@@ -71,8 +71,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shell
       '@paged-media/slide':
-        specifier: link:../../../plugins/plugin-slide/packages/slide-bundle
-        version: link:../../../plugins/plugin-slide/packages/slide-bundle
+        specifier: link:../../../../modules/slide/packages/slide-bundle
+        version: link:../../../../modules/slide/packages/slide-bundle
       '@paged-media/tools':
         specifier: workspace:*
         version: link:../../packages/tools

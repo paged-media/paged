@@ -18,11 +18,13 @@ is drawn by PowerPoint in Calibri, so the engine gets Calibri for it too.
 import argparse, glob, json, os, re, subprocess, sys, tempfile, statistics
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# The monorepo root (this module is modules/slide): the engine is
+# engine/core and the private corpus <repo root>/corpus (gitignored; a local
+# symlink); override with --core / --corpus.
+REPO_ROOT = os.path.normpath(os.path.join(ROOT, "../.."))
 ap = argparse.ArgumentParser()
-# Sibling checkouts in the workspace layout (plugins/plugin-slide beside core
-# and corpus); override with --core / --corpus.
-ap.add_argument("--core", default=os.path.normpath(os.path.join(ROOT, "../../core")))
-ap.add_argument("--corpus", default=os.path.normpath(os.path.join(ROOT, "../../corpus")))
+ap.add_argument("--core", default=os.path.join(REPO_ROOT, "engine", "core"))
+ap.add_argument("--corpus", default=os.path.join(REPO_ROOT, "corpus"))
 ap.add_argument("--dpi", default="48")
 ap.add_argument("--deck", default=None)
 ap.add_argument("--out", default=None)

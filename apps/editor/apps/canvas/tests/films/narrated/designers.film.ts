@@ -39,7 +39,7 @@ import { typeHuman } from "../kit/pointer";
 import { menu, press, screenPoint } from "../kit/ui";
 
 const MEDIA = process.env.PAGED_MEDIA_ROOT ?? "";
-const FONTS = join(import.meta.dirname, "..", "..", "..", "..", "..", "..", "core", "corpus", "fonts");
+const FONTS = join(import.meta.dirname, "..", "..", "..", "..", "..", "..", "..", "engine", "core", "corpus", "fonts");
 const PHOTO = join(MEDIA, "assets", "pexels-618833-dolomites.jpg");
 
 type Bounds = [number, number, number, number]; // top, left, bottom, right (pt)

@@ -213,8 +213,8 @@ where
 
 fn main() {
     let root = std::env::args().nth(1).unwrap_or_else(|| {
-        // The default sibling layout: ~/paged/corpus next to
-        // ~/paged/plugins/plugin-publish.
+        // The default: the monorepo's <repo root>/corpus (gitignored; a
+        // local symlink to the private corpus).
         format!("{}/../../../../corpus", env!("CARGO_MANIFEST_DIR"))
     });
     let opts = Opts {

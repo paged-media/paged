@@ -16,18 +16,21 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
-// repo root → corpus is a symlink to ~/paged/corpus.
+// The corpus: `apps/editor/corpus` (a local symlink) when present, else the
+// monorepo-root `corpus` (gitignored; a local symlink to the private corpus).
+const CORPUS = [
+  resolve(here, "..", "corpus"), // apps/editor/corpus
+  resolve(here, "..", "..", "..", "corpus"), // <repo root>/corpus
+].find((dir) => existsSync(dir)) ?? resolve(here, "..", "corpus");
 const THRESHOLDS_PATH = resolve(
-  here,
-  "..",
-  "corpus",
+  CORPUS,
   "config",
   "canvas-fidelity-thresholds.json",
 );
-const MANIFEST_PATH = resolve(here, "..", "corpus", "config", "manifest.json");
+const MANIFEST_PATH = resolve(CORPUS, "config", "manifest.json");
 
-// Both inputs live in the SEPARATE paged-media/corpus repo (locally a
-// `corpus` symlink → ~/paged/corpus). The corpus-free CI jobs (the static
+// Both inputs live in the SEPARATE, private corpus repository (locally a
+// `corpus` symlink at the repository root, or in apps/editor). The corpus-free CI jobs (the static
 // `checks` job; the playwright job's sparse checkout only pulls
 // `config/overrides`) don't carry these JSONs, so skip gracefully when
 // they're absent rather than ENOENT-failing — the guard still runs in

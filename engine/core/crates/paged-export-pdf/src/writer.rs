@@ -457,7 +457,8 @@ fn write_structure(
     // cell paragraphs' (ADR 182 amended, `tagged-tables-probe`: InDesign
     // sets them as `Table` > `TR` > `TH`/`TD` > `P` under the paragraph).
     type CellMarks = BTreeMap<(u32, u32, u32, bool), Vec<(usize, i32)>>;
-    let mut hosts: BTreeMap<(u32, u32, u32), (Vec<(usize, i32)>, CellMarks)> = BTreeMap::new();
+    type HostMarks = (Vec<(usize, i32)>, CellMarks);
+    let mut hosts: BTreeMap<(u32, u32, u32), HostMarks> = BTreeMap::new();
     for (key, marks) in &paragraphs {
         let host = hosts
             .entry((key.story, key.paragraph, key.sub))

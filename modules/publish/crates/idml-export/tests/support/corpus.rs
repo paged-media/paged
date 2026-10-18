@@ -14,7 +14,7 @@
 
 //! Shared plumbing for the OPT-IN corpus lanes.
 //!
-//! `paged-media/corpus` is a private, gitignored sibling checkout (Git
+//! The corpus is a private checkout at `<repo root>/corpus` (gitignored; Git
 //! LFS, and a 4.4 GB payload that is not even in the repo). Nothing here
 //! may hard-fail on a machine that has no copy — CI has none. Every
 //! caller is `#[ignore]`d as well, so the corpus lanes run only when
@@ -25,7 +25,7 @@
 //! ```
 //!
 //! `PAGED_IDML_CORPUS` may also name the corpus root directly, which is
-//! how a checkout somewhere other than the default sibling path is used.
+//! how a checkout somewhere other than the default path is used.
 //! Mirrors plugin-image's `PAGED_PSD_ORACLE` lane in shape and posture.
 
 #![allow(dead_code)]
@@ -45,8 +45,8 @@ pub fn root() -> Option<PathBuf> {
     };
     let switch = switch.to_string_lossy().into_owned();
     let path = if switch == "1" || switch.is_empty() {
-        // The default sibling layout: <workspace>/../../../corpus, i.e.
-        // ~/paged/corpus next to ~/paged/plugins/plugin-publish.
+        // The default: the monorepo's <repo root>/corpus (gitignored; a
+        // local symlink to the private corpus), four levels above this crate.
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../corpus")
     } else {
         PathBuf::from(switch)

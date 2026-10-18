@@ -59,12 +59,21 @@ import type { SpreadSpec } from "./types";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-/** `editor/apps/canvas` */
+/** `apps/editor/apps/canvas` */
 export const APP_ROOT = pathResolve(__dirname, "..", "..");
-/** `~/paged` — the workspace of side-by-side clones. */
-export const WORKSPACE = pathResolve(APP_ROOT, "..", "..", "..");
-export const CORE = pathResolve(WORKSPACE, "core");
-export const REGISTRY = pathResolve(WORKSPACE, "state", "registry", "features");
+/** The monorepo root — `apps/editor/apps/canvas` is four levels below it. */
+export const REPO_ROOT = pathResolve(APP_ROOT, "..", "..", "..", "..");
+/** The engine, in-repo at `engine/core`. */
+export const CORE = pathResolve(REPO_ROOT, "engine", "core");
+/**
+ * The feature registry (`registry/features/*.yaml`) is PRIVATE and not part
+ * of this repository. `PAGED_FEATURE_REGISTRY` names its directory; unset,
+ * this is `null` and the assembly reports the registry axis as
+ * UNAVAILABLE (never as a pass).
+ */
+export const REGISTRY: string | null = process.env.PAGED_FEATURE_REGISTRY
+  ? pathResolve(process.env.PAGED_FEATURE_REGISTRY)
+  : null;
 export const CORPUS_FONTS = pathResolve(CORE, "corpus", "fonts");
 export const OUT = pathResolve(APP_ROOT, "showcase");
 export const CHECKPOINTS = join(OUT, "checkpoints");
@@ -89,8 +98,8 @@ export function ensureBaseFixture(fixture: string): void {
   const script = pathResolve(CORE, "scripts", "regen-fixtures.sh");
   if (!existsSync(script)) {
     throw new Error(
-      `${fixture} is missing and core is not checked out at ${CORE}. ` +
-        `The showcase needs the engine repo beside the editor.`,
+      `${fixture} is missing and the engine is not at ${CORE}. ` +
+        `The showcase needs the in-repo engine (engine/core).`,
     );
   }
   // eslint-disable-next-line no-console

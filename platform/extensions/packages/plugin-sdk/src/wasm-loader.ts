@@ -191,11 +191,13 @@ export async function resolveCanvasWasm(resolveFrom?: string): Promise<{
     await nodeBuiltins();
   const { here } = await modulePaths();
   // Anchor candidates: this module first (standalone install), then the
-  // editor's packages/client (the sync-wire default), then the SDK root.
+  // editor's packages/client (the sync-wire default; in the monorepo at
+  // `apps/editor`, five levels above `packages/plugin-sdk/{src,dist}`),
+  // then the SDK root.
   const anchors = [
     resolveFrom,
     here,
-    resolve(here, "../../../../editor/packages/client"),
+    resolve(here, "../../../../../apps/editor/packages/client"),
     resolve(here, "../../.."),
   ].filter((a): a is string => Boolean(a));
 

@@ -29,14 +29,17 @@ import {
   rewriteHeadersCsp,
 } from "./src/boot/network-policy";
 
+// The monorepo root: apps/editor/apps/canvas → four levels up.
+const MONOREPO_ROOT = resolve(__dirname, "..", "..", "..", "..");
+
 // Resolve a corpus subdir, preferring a copy colocated in the editor
-// (`editor/corpus/<name>`) but falling back to the sibling workspace
-// checkout (`~/paged/corpus/<name>`) used in local side-by-side dev,
-// where `corpus` is a peer of `editor` rather than nested inside it.
+// (`apps/editor/corpus/<name>`, a local symlink) but falling back to the
+// repository-root corpus (`<repo root>/corpus/<name>`, gitignored; a local
+// symlink to the private corpus checkout).
 function resolveCorpusSubdir(name: string): string {
   const candidates = [
-    resolve(__dirname, "..", "..", "corpus", name), // editor/corpus/<name>
-    resolve(__dirname, "..", "..", "..", "corpus", name), // ~/paged/corpus/<name>
+    resolve(__dirname, "..", "..", "corpus", name), // apps/editor/corpus/<name>
+    resolve(MONOREPO_ROOT, "corpus", name), // <repo root>/corpus/<name>
   ];
   for (const dir of candidates) {
     try {
@@ -59,19 +62,16 @@ const CORPUS_ENVATO = resolveCorpusSubdir("idml");
 //   DATA_BIN     the installed package's bin/ — the source of truth, served by
 //                `duckdbDistRoute` in dev and copied into `dist/bin/` by
 //                `dataBundleBin` in a build.
-//   DUCKDB_DIST  a sibling plugin-data checkout's vendor/duckdb-wasm/dist —
-//                dev-only FALLBACK for a package that predates the shipped
-//                engine (@paged-media/data <= 0.1.0-canary.9 imported the dist
-//                from vendor/ and shipped no DuckDB). Locally plugin repos live
-//                under ~/paged/plugins/; a direct sibling is probed second.
-//                Nothing in CI checks plugin-data out; there the package is
+//   DUCKDB_DIST  the in-repo paged.data module's vendor/duckdb-wasm/dist
+//                (`<repo root>/modules/data`) — dev-only FALLBACK for a package
+//                that predates the shipped engine (@paged-media/data <=
+//                0.1.0-canary.9 imported the dist from vendor/ and shipped no
+//                DuckDB). vendor/ is staged locally by the module's
+//                scripts/vendor-duckdb.sh; where it is absent the package is
 //                the only source.
 const DATA_BIN = resolve(__dirname, "node_modules", "@paged-media", "data", "bin");
 const DUCKDB_DIST = (() => {
-  const candidates = [
-    resolve(__dirname, "..", "..", "..", "plugins", "plugin-data"),
-    resolve(__dirname, "..", "..", "..", "plugin-data"),
-  ];
+  const candidates = [resolve(MONOREPO_ROOT, "modules", "data")];
   for (const dir of candidates) {
     try {
       if (statSync(dir).isDirectory())
@@ -638,17 +638,18 @@ export default defineConfig({
       allow: [
         resolve(__dirname),
         resolve(__dirname, "..", ".."),
-        // Corpus root (resolved to the sibling `~/paged/corpus` in
-        // side-by-side dev, or `editor/corpus` if colocated) so the
+        // Corpus root (resolved to `<repo root>/corpus`, or
+        // `apps/editor/corpus` if colocated) so the
         // fidelity driver + ad-hoc `/@fs/` loads can fetch fixtures
         // under corpus/idml/generated/* and corpus/idml/samples/*, not just the
         // envato packs the /corpus/idml/ route serves.
         resolve(CORPUS_ENVATO, ".."),
-        // Sibling plugin checkouts (the pnpm `link:` chain): their
-        // bundles ship wasm artifacts (sheet-js, image-js, DuckDB) the
-        // dev server must serve via /@fs/ — without this the engine
-        // boot 403s (the K-1 live-validation e2e surfaced it).
-        resolve(__dirname, "..", "..", ".."),
+        // The in-repo modules (the pnpm `link:` chain, under
+        // `<repo root>/modules`): their bundles ship wasm artifacts
+        // (sheet-js, image-js, DuckDB) the dev server must serve via
+        // /@fs/ — without this the engine boot 403s (the K-1
+        // live-validation e2e surfaced it).
+        MONOREPO_ROOT,
         "/tmp",
         // System CMYK ICC profile dir — the fidelity suite fetches
         // CoatedFOGRA39.icc via /@fs/ to match `pdftoppm`'s output.

@@ -66,5 +66,10 @@ jobs:
       # install step above first; a malformed pin fails the script), and
       # `pnpm check:pins` is the local release-time gate where the
       # siblings DO exist.
-      - name: Check plugin pins (skips without sibling checkouts)
-        run: node scripts/check-plugin-pins.mjs
+      # In the monorepo the bundles are in-tree, so the check no longer skips.
+      # It is a release-time gate by design (an in-tree bundle ahead of the
+      # editor's npm pin is the normal in-flight state), so CI reports drift
+      # without failing, as the skipped check never failed before. Removed
+      # with the pins themselves when the editor moves to workspace:* (B3).
+      - name: Report plugin pin drift (release-time gate; report only in CI)
+        run: node scripts/check-plugin-pins.mjs --warn-only

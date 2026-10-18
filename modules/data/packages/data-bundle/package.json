@@ -67,7 +67,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/paged-media/plugin-data.git",
-    "directory": "packages/data-bundle"
+    "url": "git+https://github.com/paged-media/paged.git",
+    "directory": "modules/data/packages/data-bundle"
   }
 }
