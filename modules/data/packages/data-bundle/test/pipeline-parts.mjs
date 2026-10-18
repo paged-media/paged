@@ -1,0 +1,466 @@
+// The real-wasm pipeline parts (spec §12.4) — the seam the unit tests cannot
+// prove: the REAL data-js wasm engine driven through its serde-wasm-bindgen
+// boundary. Formerly test-integration/pipeline.e2e.mjs, a standalone script
+// that nothing ran; its parts are now called by vitest:
+//
+//   test/pipeline-real.spec.ts  Parts A, C, D, E (REQUIRE_REAL_ENGINE gate)
+//   test/duckdb-real.spec.ts    Part B: real DuckDB → Arrow → recordset.ts →
+//                               the same engine (REQUIRE_REAL_DUCKDB gate)
+//
+// Part A: hand-built RecordSet → wasm DataEngine → resolve → lower.
+// Part C: provider / governed catalog / batch plan shapes.
+// Part D: the v43 consumer lanes (variable / image / rule / live flow).
+// Part E: §9.8/§9.9 variables + data sets.
+//
+// Plain JS on purpose (types in pipeline-parts.d.mts): the parts poke at the
+// engine's JSON shapes exactly as they cross the boundary.
+
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+import assert from "node:assert/strict";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+export const BIN = resolve(HERE, "../bin");
+export const TODAY = 20613; // 2026-06-08, days since 1970-01-01
+
+function eq(actual, expected, label) {
+  assert.deepEqual(actual, expected, label);
+  console.log(`  ✓ ${label}`);
+}
+
+// The recipe both parts feed the engine — a tiny product catalog.
+export function defineCatalog(engine) {
+  engine.define_source({
+    id: "products",
+    kind: { kind: "inlineSeed", table: "products" },
+    capability: "inline",
+  });
+  engine.define_query({
+    id: "q1",
+    sql: "SELECT sku, price FROM products ORDER BY sku",
+    params: [],
+    shape: { shape: "recordStream" },
+  });
+  engine.define_binding({
+    id: "t1",
+    kind: "table",
+    region: "r1",
+    query: "q1",
+    columns: [
+      { header: "SKU", expr: "sku", style: null },
+      { header: "Price", expr: "CURRENCY(price)", style: null },
+    ],
+    options: { header_row: true, group_by: [] },
+  });
+}
+
+export function assertLowered(lowered, label) {
+  assert.equal(lowered.kind, "table", `${label}: kind`);
+  // header + 2 data rows.
+  assert.equal(lowered.rows.length, 3, `${label}: row count`);
+  assert.equal(lowered.rows[0].header, true, `${label}: header row`);
+  assert.equal(
+    lowered.text,
+    "SKU\tPrice\nA-1\t$9.99\nB-2\t$19.99",
+    `${label}: degraded text`,
+  );
+  console.log(`  ✓ ${label}: lowered to a 3-row table, "$9.99"/"$19.99" formatted`);
+  return lowered;
+}
+
+export async function bootEngine() {
+  const mod = await import(resolve(BIN, "data_js.js"));
+  await mod.default({ module_or_path: readFileSync(resolve(BIN, "data_js_bg.wasm")) });
+  return new mod.DataEngine(TODAY);
+}
+
+// ── Part A — the wasm engine boundary ───────────────────────────────────────
+export async function partA() {
+  console.log("\nPart A — real data-js wasm engine (hand-built RecordSet):");
+  const engine = await bootEngine();
+  defineCatalog(engine);
+
+  const recordSet = {
+    schema: {
+      fields: [
+        { name: "sku", ty: "text", nullable: true },
+        { name: "price", ty: "float", nullable: true },
+      ],
+    },
+    columns: [
+      [
+        { t: "text", v: "A-1" },
+        { t: "text", v: "B-2" },
+      ],
+      [
+        { t: "number", v: 9.99 },
+        { t: "number", v: 19.99 },
+      ],
+    ],
+    row_count: 2,
+  };
+  engine.ingest_result("q1", recordSet);
+  const lowered = engine.resolve_lowered("t1");
+  assertLowered(lowered, "Part A");
+
+  // The recipe round-trips through the wasm boundary with no credentials.
+  const meta = engine.metadata();
+  eq(meta.sourceCount, 1, "Part A: metadata.sourceCount");
+  eq(meta.bindingCount, 1, "Part A: metadata.bindingCount");
+  return lowered;
+}
+
+// ── Part C — the dataset surfaces through the wasm serde boundary ────────────
+// Proves the §7.1 provider / §7 governed catalog / §10 batch-plan methods
+// round-trip through serde-wasm-bindgen with the camelCase shapes the bundle
+// expects — the gap the unit tests (which mock the engine) cannot cover.
+export async function partC() {
+  console.log("\nPart C — provider / governed catalog / batch plan (real wasm serde):");
+  const engine = await bootEngine();
+  engine.define_query({ id: "q1", sql: "SELECT * FROM s", params: [], shape: { shape: "recordStream" } });
+  const recordSet = {
+    schema: {
+      fields: [
+        { name: "sku", ty: "text", nullable: true },
+        { name: "region", ty: "text", nullable: true },
+        { name: "price", ty: "float", nullable: true },
+      ],
+    },
+    columns: [
+      [{ t: "text", v: "B-2" }, { t: "text", v: "A-1" }, { t: "text", v: "A-3" }],
+      [{ t: "text", v: "west" }, { t: "text", v: "east" }, { t: "text", v: "east" }],
+      [{ t: "number", v: 19.99 }, { t: "number", v: 9.99 }, { t: "number", v: 5.0 }],
+    ],
+    row_count: 3,
+  };
+  engine.ingest_result("q1", recordSet);
+
+  // §7.1 — publish a provider snapshot (camelCase rowCount, an etag revision).
+  const pub1 = engine.publish_provider("q1", "catalog-dataset", "dataset");
+  eq(pub1.id, "catalog-dataset", "Part C: provider id");
+  eq(pub1.category, "dataset", "Part C: provider category");
+  eq(pub1.rowCount, 3, "Part C: provider rowCount (camelCase crossed)");
+  assert.equal(typeof pub1.revision, "string", "Part C: provider revision is a string");
+  assert.ok(pub1.revision.length > 0, "Part C: provider revision non-empty");
+  // The schema descriptor crosses with the Arrow-seam field shape (`ty`).
+  assert.notEqual(pub1.schema.fields[0].ty, undefined, "Part C: provider schema field uses `ty`");
+
+  // Permutation invariance through the real engine: the same rows in a different
+  // ingest order publish the SAME revision.
+  const engine2 = await bootEngine();
+  engine2.define_query({ id: "q1", sql: "x", params: [], shape: { shape: "recordStream" } });
+  engine2.ingest_result("q1", {
+    schema: recordSet.schema,
+    columns: [
+      [{ t: "text", v: "A-1" }, { t: "text", v: "A-3" }, { t: "text", v: "B-2" }],
+      [{ t: "text", v: "east" }, { t: "text", v: "east" }, { t: "text", v: "west" }],
+      [{ t: "number", v: 9.99 }, { t: "number", v: 5.0 }, { t: "number", v: 19.99 }],
+    ],
+    row_count: 3,
+  });
+  eq(engine2.publish_provider("q1", "catalog-dataset", "dataset").revision, pub1.revision,
+    "Part C: provider revision is permutation-invariant (real wasm)");
+  console.log("  ✓ provider snapshot stabilized; revision etag permutation-invariant");
+
+  // §7 — governed catalog: documented columns + drift (price documented int vs
+  // float data; region undocumented).
+  const cat = engine.governed_catalog("q1", {
+    columns: [
+      { name: "sku", label: "SKU", dataType: "text", provenance: "dim" },
+      { name: "price", dataType: "int" },
+    ],
+  });
+  eq(cat.columns.length, 3, "Part C: catalog column count");
+  eq(cat.columns[0].label, "SKU", "Part C: catalog label (documented)");
+  eq(cat.columns[0].dataType, "text", "Part C: catalog dataType (camelCase crossed)");
+  eq(cat.columns[2].dataType, "float", "Part C: catalog keeps the ACTUAL type (data wins)");
+  const kinds = cat.diagnostics.map((d) => d.kind);
+  assert.ok(kinds.includes("typeMismatch"), "Part C: catalog reports typeMismatch (price int↔float)");
+  assert.ok(kinds.includes("undocumentedColumn"), "Part C: catalog reports undocumented region");
+  console.log("  ✓ governed catalog: documented cols + drift diagnostics crossed");
+
+  // §10 — batch plan: per-group over region, and one catalog.
+  const perGroup = engine.plan_batch("q1", { mode: "perGroup", by: ["region"] });
+  eq(perGroup.mode, "perGroup", "Part C: batch mode");
+  eq(perGroup.units.length, 2, "Part C: per-group unit count (east, west)");
+  assert.ok(Array.isArray(perGroup.units[0].recordIndices), "Part C: unit.recordIndices (camelCase crossed)");
+  const one = engine.plan_batch("q1", { mode: "oneCatalog" });
+  eq(one.units.length, 1, "Part C: one-catalog single unit");
+  eq(one.totalRecords, 3, "Part C: batch totalRecords (camelCase crossed)");
+  console.log("  ✓ batch plan: per-group / one-catalog crossed");
+
+  // §9.1 — the locale shim + locale-aware formatting through the real wasm.
+  engine.set_locale("de");
+  engine.define_binding({
+    id: "v_price",
+    kind: "variable",
+    target: "ph",
+    query: "q1",
+    expr: "CURRENCY(price)",
+    missing: { missing: "blank" },
+  });
+  const v = engine.resolve_lowered("v_price");
+  // Record 0 of a scan of one table is its first row as delivered (B-2,
+  // price 19.99; ADR 553, amendment 2026-10-12 — only a result whose order
+  // the query leaves undefined is numbered by content, DP-4) → de "19,99 €"
+  // (trailing €, comma decimal) — proves set_locale("de") deserialized +
+  // threaded to the kernels.
+  eq(v.kind, "variable", "Part C: lowered variable kind");
+  eq(v.text, "19,99 €", "Part C: de locale via real wasm (CURRENCY → '19,99 €')");
+  console.log("  ✓ locale: set_locale('de') → CURRENCY formats '9,99 €' through real wasm");
+
+  // §10 — run a record-flow batch through real wasm (proves the chain shape:
+  // FrameCapacity crosses camelCase as `heightPt`, and the BatchRun output).
+  engine.define_template({
+    id: "tmpl",
+    fields: [{ label: "", expr: "sku" }],
+    lineHeightPt: 10,
+  });
+  engine.define_binding({
+    id: "rf",
+    kind: "recordFlow",
+    chain: "chain",
+    query: "q1",
+    template: "tmpl",
+    options: {
+      groupBy: ["region"],
+      repeatHeader: true,
+      continuedMarker: true,
+      // §9.4 section footer — proves FlowOpts.footer in + the groupFooter block out.
+      footer: { label: "Subtotal ({count})", sumField: "price" },
+    },
+  });
+  const chain = Array.from({ length: 6 }, (_, i) => ({
+    frame: `f${i}`,
+    page: `p${i}`,
+    heightPt: 200,
+  }));
+  const runs = engine.run_record_flow_batch("rf", { mode: "perGroup", by: ["region"] }, chain, undefined);
+  // 2 regions (east, west) → 2 documents; each paginates (chain `heightPt` parsed).
+  eq(runs.length, 2, "Part C: batch run → one document per region");
+  eq(runs[0].label, "east", "Part C: batch run label (stabilized group order)");
+  assert.ok(runs[0].flow.frames.length >= 1, "Part C: batch unit paginated (chain heightPt parsed)");
+  // §9.4 footer crossed real wasm: a groupFooter block with the {count} subtotal.
+  const blocks = runs[0].flow.frames.flatMap((f) => f.blocks);
+  const footer = blocks.find((b) => b.block === "groupFooter");
+  assert.ok(footer, "Part C: a groupFooter block crossed the boundary");
+  assert.ok(String(footer.cells[0]).startsWith("Subtotal ("), `Part C: footer label: ${footer.cells[0]}`);
+  // The group header carries its nesting `level` (0 here — single-level).
+  const header = blocks.find((b) => b.block === "groupHeader");
+  assert.ok(header && header.level === 0, "Part C: groupHeader.level crossed the boundary");
+  console.log(`  ✓ batch run: per-group → 2 docs, footer "${footer.cells[0]}" through real wasm`);
+}
+
+// ── Part D — the v43 consumer lanes through the real wasm serde boundary ─────
+// Proves the engine surface the four campaign-Phase-4 consumers drive crosses
+// serde-wasm-bindgen with the shapes the bundle's host-model translates:
+//   D-01 variable  → resolve_lowered → LoweredVariable {kind, target, text, hidden}
+//   D-14 image     → resolve_lowered → LoweredImage {kind, reference, fit, status}
+//   D-13 rule      → evaluate_rule   → RuleResult {scope, fires, apply{action,name}, total}
+//   D-12 flow live → lower_record_flow over a (live-shaped) FrameCapacity chain
+export async function partD() {
+  console.log("\nPart D — v43 consumer lanes (variable / image / rule / live flow):");
+  const engine = await bootEngine();
+  engine.define_query({ id: "q1", sql: "x", params: [], shape: { shape: "recordStream" } });
+  engine.ingest_result("q1", {
+    schema: {
+      fields: [
+        { name: "sku", ty: "text", nullable: true },
+        { name: "price", ty: "float", nullable: true },
+        { name: "stock", ty: "float", nullable: true },
+        { name: "photo", ty: "text", nullable: true },
+        { name: "region", ty: "text", nullable: true },
+      ],
+    },
+    columns: [
+      [{ t: "text", v: "A-1" }, { t: "text", v: "B-2" }, { t: "text", v: "C-3" }],
+      [{ t: "number", v: 9.99 }, { t: "number", v: 19.99 }, { t: "number", v: 4.5 }],
+      [{ t: "number", v: 2 }, { t: "number", v: 10 }, { t: "number", v: 0 }],
+      [{ t: "text", v: "https://x/a.png" }, { t: "text", v: "" }, { t: "text", v: "img/c.jpg" }],
+      [{ t: "text", v: "east" }, { t: "text", v: "west" }, { t: "text", v: "east" }],
+    ],
+    row_count: 3,
+  });
+
+  // D-01 — a variable binding lowers to a LoweredVariable (the field value the
+  // host places via insertField + re-resolves via setFieldValue).
+  engine.define_binding({
+    id: "v_price",
+    kind: "variable",
+    target: "ph_price",
+    query: "q1",
+    expr: "CURRENCY(price)",
+    missing: { missing: "blank" },
+  });
+  const v = engine.resolve_lowered("v_price");
+  eq(v.kind, "variable", "Part D: variable lowered kind");
+  eq(v.text, "$9.99", "Part D: variable resolved display (en CURRENCY) through real wasm");
+  assert.equal(v.hidden, false, "Part D: variable not hidden (Blank policy, value present)");
+  console.log(`  ✓ D-01 variable → LoweredVariable text "${v.text}" (host inserts a field, refresh re-resolves)`);
+
+  // D-14 — an image binding classifies the reference + applies the fit/missing
+  // policy; the host places it via placeImage onto the bound rectangle.
+  engine.define_binding({
+    id: "img1",
+    kind: "image",
+    target: "urect",
+    query: "q1",
+    expr: "photo",
+    policy: { fit: "fill", missing: "skip" },
+  });
+  const img = engine.resolve_lowered("img1");
+  eq(img.kind, "image", "Part D: image lowered kind");
+  eq(img.status, "present", "Part D: image status present (A-1 has a uri)");
+  eq(img.reference.ref, "uri", "Part D: image reference classified as uri");
+  eq(img.reference.uri, "https://x/a.png", "Part D: image uri crossed the boundary");
+  eq(img.fit, "fill", "Part D: image fit (ImgFit camelCase) crossed");
+  console.log(`  ✓ D-14 image → LoweredImage uri "${img.reference.uri}" fit "${img.fit}" (host placeImage)`);
+
+  // D-13 — a rule's `when` fires over stabilized records; the engine returns the
+  // fired indices + the document-style action (the host applies appliedCellStyle).
+  engine.define_binding({
+    id: "r_low",
+    kind: "rule",
+    scope: "table-region",
+    when: "stock < 5",
+    apply: { action: "tableStyle", name: "low-stock" },
+  });
+  const rule = engine.evaluate_rule("r_low", "q1");
+  eq(rule.scope, "table-region", "Part D: rule scope crossed");
+  eq(rule.total, 3, "Part D: rule evaluated all 3 records");
+  // sku A-1 stock 2, B-2 stock 10, C-3 stock 0 → fires < 5 on A-1, C-3 (idx 0, 2).
+  assert.deepEqual(rule.fires, [0, 2], "Part D: rule fired on the low-stock rows (stabilized idx)");
+  eq(rule.apply.action, "tableStyle", "Part D: rule apply action (tagged camelCase) crossed");
+  eq(rule.apply.name, "low-stock", "Part D: rule apply style name crossed");
+  console.log(`  ✓ D-13 rule → RuleResult fires [${rule.fires}] apply "${rule.apply.name}" (host appliedCellStyle)`);
+
+  // D-12 — a record flow paginates over a LIVE-shaped chain (FrameCapacity with
+  // `heightPt`, the exact shape readLiveChain builds from frameChain + geometry).
+  engine.define_template({ id: "tmpl", fields: [{ label: "", expr: "sku" }], lineHeightPt: 10 });
+  engine.define_binding({
+    id: "rf",
+    kind: "recordFlow",
+    chain: "chain",
+    query: "q1",
+    template: "tmpl",
+    options: { groupBy: [], repeatHeader: true, continuedMarker: true },
+  });
+  // Two short frames (live content-box heights) — the records spill across them.
+  const liveChain = [
+    { frame: "f0", page: "p1", heightPt: 25 },
+    { frame: "f1", page: "p2", heightPt: 25 },
+  ];
+  const flow = engine.lower_record_flow("rf", liveChain, undefined);
+  assert.ok(flow.frames.length >= 1, "Part D: record flow paginated over the live chain");
+  eq(flow.total, 3, "Part D: record flow total record count crossed");
+  // Every placed record landed in a frame whose id came from the live chain.
+  const frameIds = new Set(flow.frames.map((f) => f.frame));
+  assert.ok([...frameIds].every((id) => id === "f0" || id === "f1"), "Part D: flow used the live frame ids");
+  console.log(`  ✓ D-12 live flow → ${flow.placed}/${flow.total} records over ${flow.frames.length} live frame(s)`);
+}
+
+// Part E — §9.8/§9.9 variables + data sets through the REAL wasm. The unit
+// tests prove the Rust and the TS halves separately; this proves the shapes
+// actually cross serde-wasm-bindgen (camelCase renames, Option<bool> → null,
+// the XML as a plain string) — which is where every previous lane's surprises
+// have come from.
+export async function partE() {
+  console.log("\nPart E — §9.8/§9.9 variables + data sets:");
+  const engine = await bootEngine();
+
+  engine.define_query({ id: "q1", sql: "", params: [], shape: { shape: "recordStream" } });
+  engine.ingest_result("q1", {
+    schema: {
+      fields: [
+        { name: "sku", ty: "text", nullable: false },
+        { name: "photo", ty: "text", nullable: true },
+        { name: "in_stock", ty: "text", nullable: true },
+      ],
+    },
+    columns: [
+      [
+        { t: "text", v: "A-1" },
+        { t: "text", v: "B-2" },
+      ],
+      [
+        { t: "text", v: "https://x/a.png" },
+        { t: "text", v: "https://x/b.png" },
+      ],
+      [
+        { t: "text", v: "true" },
+        { t: "text", v: "false" },
+      ],
+    ],
+    row_count: 2,
+  });
+
+  // §9.8 — the visibility variable, the one Illustrator trait that was NOT met.
+  engine.define_binding({
+    id: "Badge",
+    kind: "visibility",
+    target: "u77",
+    query: "q1",
+    expr: "in_stock",
+    options: { invert: false, missing: "hide" },
+  });
+  const vis = engine.resolve_lowered("Badge");
+  eq(vis.kind, "visibility", "Part E: visibility lowered kind crossed");
+  eq(vis.visible, true, "Part E: record 0 in_stock=true → shown");
+  console.log(`  ✓ §9.8 visibility → LoweredVisibility visible=${vis.visible} (host setElementProperty elementVisible)`);
+
+  // §9.9 — declarations project from the bindings (all three bindable traits).
+  engine.define_binding({
+    id: "Sku",
+    kind: "variable",
+    target: "ph",
+    query: "q1",
+    expr: "sku",
+    missing: { missing: "blank" },
+  });
+  engine.define_binding({
+    id: "Photo",
+    kind: "image",
+    target: "urect",
+    query: "q1",
+    expr: "photo",
+    policy: { fit: "fit", missing: "skip" },
+  });
+  const vars = engine.variables();
+  const traits = Object.fromEntries(vars.variables.map((v) => [v.name, v.trait]));
+  eq(traits, { Badge: "visibility", Sku: "textcontent", Photo: "filereference" },
+    "Part E: the three bindable traits project from the bindings");
+
+  // Capture ONE data set per record — the whole palette from the data.
+  const names = engine.capture_every_record("q1", "Data Set", "sku");
+  eq(names, ["A-1", "B-2"], "Part E: capture_every_record named the sets from a column");
+
+  // Apply — the typed writes the bundle turns into ONE batch.
+  const applies = engine.apply_data_set("B-2");
+  const byName = Object.fromEntries(applies.map((a) => [a.variable, a]));
+  eq(byName.Sku.text, "B-2", "Part E: text value crossed");
+  eq(byName.Photo.href, "https://x/b.png", "Part E: file reference crossed");
+  eq(byName.Badge.visible, false, "Part E: visibility value crossed (record 1 → hidden)");
+  assert.ok(applies.every((a) => a.applicable), "Part E: all three rows applicable");
+  console.log(`  ✓ §9.9 apply_data_set("B-2") → ${applies.length} typed writes (bundle commits ONE batch = one undo step)`);
+
+  // The applied bindings went Overridden — the shipped sync state, so the next
+  // refresh cannot clobber a data set the user switched to.
+  eq(engine.sync_state("Sku").status, "overridden", "Part E: apply marked the binding Overridden");
+
+  // The Illustrator variable library, round-tripped through the real wasm.
+  const xml = engine.export_variable_library();
+  assert.ok(xml.includes('trait="visibility"'), "Part E: exported XML declares the visibility trait");
+  assert.ok(xml.includes("http://ns.adobe.com/Variables/1.0/"), "Part E: exported XML resolves the Adobe namespaces");
+  assert.ok(!xml.includes("&ns_"), "Part E: exported XML declares no undefined DTD entities");
+  const report = engine.import_variable_library(xml);
+  eq(report.variables, 3, "Part E: re-import saw all three variables");
+  eq(report.dataSets, 2, "Part E: re-import saw both data sets (camelCase crossed)");
+  eq(engine.list_data_sets(), ["A-1", "B-2"], "Part E: data sets survived the XML round trip");
+  console.log(`  ✓ §9.9 variable library → ${xml.length} bytes of well-formed XML, re-imported losslessly`);
+
+  // D-08: the payload half that grows with the record count is MEASURED.
+  const bytes = engine.data_set_payload_bytes();
+  assert.ok(bytes > 0 && bytes < 64 * 1024, `Part E: variable payload ${bytes} bytes is under the 64 KiB cap`);
+  console.log(`  ✓ D-08 variable payload measured at ${bytes} bytes (cap 65536)`);
+}

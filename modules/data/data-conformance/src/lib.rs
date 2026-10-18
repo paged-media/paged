@@ -1,0 +1,60 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Conformance harness (spec §12) — the TEST-ONLY crate. The shared helpers
+//! used by the per-family / per-subsystem tier tests; the coverage gate
+//! (`bin/coverage-gate`) lives alongside, and `tests/oracle.rs` replays the
+//! recorded InDesign Data Merge oracle (docs/design/oracles.md). Determinism: expression eval + binding resolution are
+//! CPU/`f64` bit-stable (no GPU, no tolerance).
+
+pub mod perf_workloads;
+
+use data_core::{FieldType, RecordSet, Schema, Value};
+use data_expr::{eval_str, EvalCtx, SimpleCtx};
+
+/// The injected eval clock for tests: 2026-06-08 (days since 1970-01-01).
+pub fn today() -> i32 {
+    data_core::temporal::days_from_civil(2026, 6, 8)
+}
+
+/// Parse + evaluate an expression against a context with the test clock.
+pub fn eval1(src: &str, ctx: &SimpleCtx) -> Value {
+    let ec = EvalCtx::new(ctx, today());
+    eval_str(src, &ec)
+}
+
+/// Evaluate against an empty context (literal-argument expressions).
+pub fn eval0(src: &str) -> Value {
+    eval1(src, &SimpleCtx::new())
+}
+
+/// Build a columnar [`RecordSet`] from `(name, type)` fields + columns.
+pub fn record_set(fields: &[(&str, FieldType)], columns: Vec<Vec<Value>>) -> RecordSet {
+    let schema = Schema::from_fields(fields.iter().map(|(n, t)| (n.to_string(), *t)));
+    RecordSet::new(schema, columns).expect("well-formed record set")
+}
+
+/// A text value (terser than `Value::text` at call sites).
+pub fn t(s: &str) -> Value {
+    Value::text(s)
+}
+
+/// A number value.
+pub fn n(x: f64) -> Value {
+    Value::Number(x)
+}

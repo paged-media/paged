@@ -1,0 +1,16 @@
+[package]
+name = "data-automation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.data print-automation / batch generation (spec §10). The batch-PLAN engine (partition a result into per-record / per-group / one-catalog generation units) is implemented; the napi-rs native execution binding + the Boa scripting surface are the remaining T2 work. Pure — depends only on data-core + data-query."
+
+[lints]
+workspace = true
+
+[dependencies]
+data-core = { path = "../data-core" }
+data-query = { path = "../data-query" }
+serde.workspace = true

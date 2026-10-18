@@ -1,0 +1,47 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+//! Frame-operation conformance (spec §9.6): the lowered IR is **content-space**
+//! (offsets from the region's own top-left), so core applies frame transforms
+//! (scale/rotate/skew/crop/reposition) for free. The IR must never encode
+//! display geometry — asserted here on the table lowering output.
+
+use data_core::FrameRef;
+use data_lower::{lower_table, LowerOpts};
+
+#[test]
+fn data_frame_transform_content_space() {
+    let headers = vec!["A".to_string(), "B".to_string()];
+    let rows = vec![vec!["1".to_string(), "2".to_string()]];
+    let t = lower_table(FrameRef::from("r1"), &headers, &rows, &LowerOpts::default());
+
+    // First column starts at content-space x = 0; first row at y = 0.
+    assert_eq!(t.columns[0].x_pt, 0.0);
+    assert_eq!(t.rows[0].y_pt, 0.0);
+
+    // Every rule coordinate is a non-negative content-space offset, and the
+    // top-left rule originates at (0,0) — never a page/display coordinate.
+    assert!(t
+        .rules
+        .iter()
+        .all(|r| r.x1_pt >= 0.0 && r.y1_pt >= 0.0 && r.x2_pt >= 0.0 && r.y2_pt >= 0.0));
+    assert!(t.rules.iter().any(|r| r.x1_pt == 0.0 && r.y1_pt == 0.0));
+
+    // The bounds are the content box size, not a placed position.
+    assert!(t.bounds.width_pt > 0.0 && t.bounds.height_pt > 0.0);
+}

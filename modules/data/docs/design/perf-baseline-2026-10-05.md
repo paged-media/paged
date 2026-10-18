@@ -1,0 +1,335 @@
+# Performance baseline, 2026-10-05
+
+**Measured, not read.** This record replaces the "read from code" performance table of
+[`analysis-2026-10-05.md`](analysis-2026-10-05.md) §7 with counts. Every count below comes
+from a test that runs on every CI build and is pinned as a budget. The exception is the 1M-row
+DuckDB lane, which is opt-in. The wall-clock figures beside the counts are trended only.
+
+## How it is measured
+
+Two harnesses, one per side of the wasm boundary.
+
+**The engine (Rust).** `data-query` has a `perf-counters` feature (`data-query/src/perf.rs`)
+that counts:
+
+- resolves;
+- `stabilize` sorts;
+- sort-key allocations, one fresh `Vec<u8>` per `value_key`;
+- fingerprints;
+- rows visited by `diff`;
+- cells ingested;
+- content hashes;
+- group-key comparisons.
+
+`data-bind` forwards the feature.
+
+When the feature is off, every count is an empty `#[inline(always)]` function. The counters
+are thread-local, so a native test reads only its own work.
+
+The workloads live in `data-conformance/src/perf_workloads.rs`. Two harnesses run them:
+
+- `data-conformance/tests/perf_counts.rs` pins the counts as budgets.
+- `data-conformance/benches/engine.rs` runs the criterion benches (trended).
+
+The input data is a deterministic shuffle, because sorted or reversed input lets the sort
+finish in n−1 comparisons.
+
+**The bundle (TypeScript), in `packages/data-bundle/test/perf/`.**
+
+- **The host.** The real core engine (`@paged-media/canvas-wasm` 0.67.0 through plugin-sdk's
+  headless host), scoped to this bundle's own manifest. It is wrapped in `countingHost`, which
+  is plugin-draw's Proxy, trimmed. The proxy counts:
+  - door calls;
+  - `mutate` calls and the ops inside each batch;
+  - fields and tree nodes read back.
+- **Undo steps.** These are counted by walking the history back to a marker. This is the
+  plugin-draw probe.
+- **The data engine.** The real `data-js` wasm, booted fresh per scenario and wrapped in a
+  counting Proxy. The proxy counts:
+  - wasm calls by method;
+  - cells and JSON bytes into `ingest_result`;
+  - JSON bytes of the IR that comes back;
+  - the engine's own `perfCounters()`.
+- **DuckDB.** Real DuckDB-WASM over the shipped `bin/duckdb-engine.wasm`, driven through the
+  bundle's own `duckdbHandle`.
+- **The session.** The bundle's own `createSession`. Only `bootEngine` and `bootDuckDB` are
+  pointed at the counted instances. Nothing in `src/` changed.
+
+To re-measure, run `PERF_SHOW=1 pnpm vitest run test/perf`. It prints:
+
+- every scenario's full door log;
+- the wasm calls and engine counters;
+- a table at the end of each file.
+
+Natively it is `PERF_SHOW=1 cargo nextest run -p data-conformance -E 'binary(perf_counts)'
+--no-capture`.
+
+### The counters ship in the wasm
+
+`data-js` enables `perf-counters` by default, so the budgets and the editor measure the same
+artifact. The `perfCounters()` and `resetPerfCounters()` exports are global to the wasm
+instance.
+
+| Build | Counters off | Counters on |
+|---|---|---|
+| `data_js_bg.wasm` (after `wasm-opt -Oz`) | 725,819 B | 726,223 B (+404 B, 0.06 %) |
+| 10k-row table resolve in wasm (Node, mean of 30; one-off comparison of two builds) | 30.7 ms | 30.5–31.1 ms |
+| criterion, native, table 10k / catalog 7k / diff 5k | 26.6 / 15.0 / 4.5 ms | 27.8 / 15.3 / 4.7 ms (+2–5 %) |
+
+In wasm the cost is inside the noise. Natively it is 2–5 %, so the library crates keep the
+feature off by default and only the boundary crate turns it on.
+
+The first version counted group-key comparisons one at a time, and that cost 33 % on the
+group-plan bench. They are now added once per row.
+
+## The counts
+
+### Bundle commands (pinned in `perf-budgets-commands.spec.ts`, `perf-budgets-boot.spec.ts`)
+
+| Scenario | Host calls | Reads | Mutates (ops) | Undo steps | Wasm calls | Cells in | Resolves | Sorts | Sort keys | Trend: ms · bytes in / out |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| W1 import a 500-row CSV | 0 | 0 | 0 | — | 2 | 0 | 0 | 0 | 0 | 36 ms (DuckDB load) |
+| W1 lower it as one table | 8 | 3 | 4 (1,506) | 4 | 2 | 1,500 | 1 | 1 | 9,840 | 88 ms · 41 KB / 81 KB |
+| W2 refresh 100 fields, one story | 102 | 1 | 100 (100) | 89, history exhausted | 200 | 0 | 100 | 0 | 0 | 16 ms · 0 / 7 KB |
+| W3 preview-step 20 records | 40 | 20 | 20 (20) | 20 | 20 | 0 | 20 | 0 | 0 | 2 ms |
+| W4 one QR barcode | 6 | 4 | 1 (673, was 670 before the DB-2 QR fix) | 1 | 1 | 0 | 1 | 0 | 0 | 11 ms · 0 / 23 KB |
+| W5 `lowerAll`, 20 variable bindings | 240 | 120 | 40 (40) | 40 | 21 | 150 | 20 | 0 | 0 | 10 ms |
+| W6 200 reflow events on a record flow | 400 | 400 | 0 | — | 200 | 0 | 200 | 200 | 665,600 | 262 ms · 0 / 2.17 MB |
+| W7 cold boot (activate) | 21 | 0 | 0 | — | 0 | 0 | 0 | 0 | 0 | engine boot 9 ms, DuckDB boot 408 ms |
+
+**After Step 2 (engine).** Only the engine-side counts moved; the host-call, mutate and undo
+budgets belong to the TS optimisation round.
+
+| Scenario | Sorts | Sort keys | Trend: ms |
+|---|---:|---:|---|
+| W1 lower it as one table | 1 | **0** (was 9,840) | 135 ms |
+| W3 preview-step 20 records | **1** (was 0 — RAISED, see below) | 0 | 2 ms |
+| W6 200 reflow events on a record flow | **1** (was 200) | **0** (was 665,600) | 329 ms |
+| C1 column door, 500 rows × 3 (new, `perf-budgets-columns.spec.ts`) | — | — | 5 wasm calls, 1,500 cells decoded, 0 `{t, v}` objects; re-delivery decodes 0 and hashes 0; 16.9 KB typed vs 41.5 KB JSON |
+
+**W3 was raised from 0 to 1 sort.** Oracle defect DP-4: record N was record N of DuckDB's
+delivery order, so the same rows delivered in another order previewed (and reported) a
+different record. Record N is now record N of the stabilized order, the numbering tables,
+flows and batch plans already used. That costs one sort per result content, cached and
+shared by all 20 steps. Record 0, the plain refresh path, is found by an O(n) scan, so W2 and
+W5 still sort nothing.
+
+W6's wall clock did not fall: its 200 events are dominated by 400 host reads and 2.17 MB of IR
+crossing out, which the TS round's debounce removes.
+
+Notes:
+
+- **W2 runs out of undo history.** It writes 100 separate undo steps. The engine's history is
+  bounded, and after a 200-step setup only 89 can be walked back. The user cannot undo past
+  the refresh.
+- **W5 starts from a fresh table.** `lowerAll` first re-queries DuckDB, which is one query
+  and a 150-cell re-ingest. Then it places each variable in a fresh frame. Each placement
+  costs 2 mutates, 2 undo steps and 6 reads (`meta`, `collection` ×2, `elementGeometry`,
+  `hitTest`, `selection.get`), plus 2 `supports` calls.
+- **W6 re-paginates every event.** It re-reads the chain (`frameChain` + `elementGeometry`)
+  and re-paginates the whole 200-record flow on every event: a full resolve and a full
+  stabilize sort. That is 3,328 sort keys and 10.8 KB of IR per event, and only the last of
+  the 200 results is ever shown.
+- **W7 boots nothing.** `activate` registers 3 panels, 7 commands, 7 menu entries and 1 edit
+  context, and boots no wasm. The first command pays both boots.
+
+### Engine workloads (pinned in `data-conformance/tests/perf_counts.rs`)
+
+| Workload | Resolves | Sorts | Sort keys | Fingerprints | Other | Criterion (trended) |
+|---|---:|---:|---:|---:|---|---:|
+| Table resolve, 10k rows × 3 columns | 1 | 1 | 288,478 | 0 | — | 27.8 ms |
+| Record-flow catalog lower, 7k records | 1 | 1 | 185,110 | 0 | — | 15.3 ms |
+| 50 bindings × `refresh_change_report` after a 1-cell change (1k rows; 10 tables, 40 variables) | 50 | 10 | 210,560 | 50 | 4,000 cells ingested, 1 content hash, 0 diff rows | 24.6 ms |
+| Row diff, 5k rows, 100-row delta | 0 | 0 | 0 | 0 | 10,000 diff rows | 4.7 ms |
+| Per-group batch plan, 2k rows in 100 groups | 0 | 1 | 48,166 | 0 | 100,900 group-key compares | 3.2 ms |
+
+**After Step 2 (engine), branch `wave2/rust`.** Every count below is the pin in
+`perf_counts.rs` as of that branch; each was lowered in the commit that earned it.
+Criterion is `cargo bench -p data-conformance --bench engine -- --baseline before`, where
+`before` was re-measured on the same machine at the branch head (it ran slower than the
+Step 1 figures above: 32.7 / 17.6 / 30.2 / 5.7 / 2.1 ms).
+
+| Workload | Resolves | Sorts | Sort keys | Fingerprints | Other | Criterion before → after |
+|---|---:|---:|---:|---:|---|---:|
+| Table resolve, 10k rows × 3 columns | 1 | 1 | **0** | 0 | — | 32.7 → 8.1 ms (−75 %) |
+| — the same table re-resolved over unchanged data (new pin) | 1 | **0** | 0 | 0 | — | — |
+| Record-flow catalog lower, 7k records | 1 | 1 | **0** | 0 | — | 17.6 → 4.5 ms (−74 %) |
+| 50 bindings × `refresh_change_report` after a 1-cell change | **10** | **1** | **0** | **10** | 4,000 cells ingested, 1 content hash | 30.2 → 7.6 ms (−75 %) |
+| Row diff, 5k rows, 100-row delta | 0 | 0 | 0 | 0 | 10,000 diff rows | 5.7 → 4.6 ms (−19 %) |
+| Per-group batch plan, 2k rows in 100 groups | 0 | 1 | **0** | 0 | **1,900** group-key compares | 2.1 → 0.37 ms (−82 %) |
+| Column door: an unchanged 1k-row result re-delivered (new pin) | 0 | 0 | 0 | 0 | **0** cells ingested, **0** content hashes | — |
+
+The bench repeats the same resolve, so after Step 2 the table and catalog benches hit the
+cached sort; with the in-place comparison alone (no cache), the table resolve measured
+20.5 ms and the catalog 10.9 ms. Two thirds of what is left is expression evaluation and
+lowering, now with each expression parsed once per resolve instead of once per cell.
+
+### DuckDB, 1M rows (trended, `PERF_DUCKDB_1M=1 pnpm vitest run test/perf/duckdb-1m.trend.spec.ts`)
+
+The CSV is 36.2 MB: 1,000,000 rows × 4 columns (`sku, name, price, cat`, with 100 categories).
+Two runs, Node 22, Apple silicon:
+
+| Step | ms |
+|---|---:|
+| Ingest: register the text and `insertCSVFromPath` | 326, 326 |
+| Grouped query (`GROUP BY cat`) to a 100-row RecordSet | 42, 42 |
+| **CSV to grouped RecordSet, the cited gate** | **369, 367** |
+| `SELECT *` materialised through `recordset.ts` (4M `{t, v}` cells) | 642, 683 |
+| `ingest_result` of those 4M cells (serde decode) | 1,449, 1,462 |
+
+The "1M-row CSV → grouped RecordSet < 1.5 s" figure that the records cited now has a
+measurement: 0.37 s. It is trended, not gated.
+
+A refresh that brings a 1M-row result into the engine costs about 2.1 s at the boundary
+today. About 70 % of that is the serde decode of per-cell objects.
+
+**After Step 2 (engine): the column door.** The same 1M rows, two runs:
+
+| Step | ms |
+|---|---:|
+| `SELECT *` through the new raw-buffer reader to `{t, v}` cells | 371, 441 |
+| `ingest_result` of those 4M cells (serde decode, unchanged path) | 1,481, 1,444 |
+| **The `{t, v}` boundary in total** | **1,852, 1,885** |
+| `SELECT *` read as typed column buffers (`arrowToColumns`) | 80, 73 |
+| `ingestColumnBatch` (one copy per column, decode in Rust) | 187, 131 |
+| **The column-door boundary in total** | **267, 204** |
+| The same result delivered again (recognised, nothing decoded) | 14, 14 |
+
+The session's `refreshData` still calls `ingest_result`; switching it to
+`ingestColumnBatch(e, q.id, await d.queryColumns(q.sql))` is one line in `session.ts`,
+left to the TS optimisation round.
+
+## What the counts found
+
+1. **A refresh can already be one undo step, with no protocol change.** On core 0.67, a
+   `batch` of `setFieldValue` ops written back to front applies atomically as one undo step.
+   The `PROBE` case in `perf-budgets-commands.spec.ts` shows it. A planned protocol change for
+   "setFieldValue inside a batch" is therefore not needed for the refresh. This is
+   plugin-only work.
+2. **The undo history is bounded.** A 100-field refresh (W2) puts the state before the
+   refresh out of reach.
+3. **Cost scales with how often the user acts, not with how much the data changed.**
+   - W6: 200 resize events cost 200 full re-paginations.
+   - The change report: a 1-cell change costs 50 resolves and 10 full sorts.
+   - W5: every `lowerAll` re-runs the query and re-ingests the result.
+4. **`stabilize` is the engine's hot spot.** Every resolve of a table or record flow sorts
+   from scratch. Every comparison builds two `Vec<u8>` keys per column it reaches: 28.8 keys
+   per row at 10k rows, 92 per record across the reflow stream.
+5. **The neutral harness host hid the binding metadata.** plugin-sdk's neutral headless host
+   rejects this bundle's `x-paged:media.paged.data` metadata writes as foreign. The barcode
+   batch and the table's `setPluginMetadata` were refused, and a refused write counts as free.
+   The budgets therefore run on a host scoped to the data manifest (`openDataHost`), which is
+   the host the bundle gets in the editor.
+6. **`resolveElementId` is never reached.** No workload walks the scene tree: the panel
+   supplies the kind for visibility bindings, and the other lanes take element ids directly.
+   The tree walk costs only for a visibility binding defined without a kind.
+
+## Ranked for the optimisation round
+
+Ranked by counts saved per user action. All rows are plugin-only unless marked.
+
+| # | Change | Budget it lowers (from → expected) | Side |
+|---:|---|---|---|
+| 1 | `refreshFields` (and the data-set apply path) writes **one** back-to-front `setFieldValue` batch | W2: mutates 100 → 1, undo 89 (exhausted) → 1; the preview step stays 1 per step | TS |
+| 2 | Debounce and coalesce the reflow subscription; re-paginate once per burst | W6: lower_record_flow 200 → 1 per burst, reads 400 → 2, sort keys 665,600 → 3,328, IR out 2.17 MB → 11 KB | TS |
+| 3 ✅ | `stabilize`: precompute the sort keys once per row (or compare `Value`s without allocating); cache the stabilized result per (result hash, keys) | table 10k: 288,478 → ≤ 30,000 keys; flow 7k: 185,110 → ≤ 21,000; W6 sorts 200 → 1 | Rust |
+| 4 ✅ | Change report: per-binding dependency on its query and result hash; `diff()` for row-level change; resolve only the bindings whose query changed | 50 bindings: resolves 50 → bindings on the changed query; sorts 10 → 0 with #3's cache | Rust |
+| 5 | Variable placement in `lowerAll`: read the active page once per command; one `insertTextFrame` + `insertField` batch using `minted[].story` (D-16) instead of `elementGeometry` + `hitTest` | W5: host calls 240 → ~60, undo steps 40 → 20 (or 1 with one batch), reads 120 → ~2 | TS |
+| 6 ◐ | Refresh skips work when the source did not change: no re-query when the source content key is unchanged; no re-convert or re-ingest when the result hash is unchanged | W5 / W1: `ingest_result` cells 150 / 1,500 → 0 on an unchanged source | TS + Rust |
+| 7 ◐ | Arrow → engine as typed column buffers (one copy per column), not `{t, v}` per cell | W1 1,500 cell objects → 3 column buffers; 1M rows: 2.1 s → expected < 0.5 s | TS + Rust |
+| 8 ✅ | `group_by` with a hash index | 2k × 100: compares 100,900 → 2,000 | Rust |
+| 9 | `resolveElementId` from a one-pass index or the known kind | not reached by any workload today | TS |
+
+Step 2 (engine) status: ✅ done on `wave2/rust`; ◐ the engine half is done and the
+session switch is the TS round's. #3: values compare in place (no keys at all) and the
+stabilized order is cached per result content and sort keys. #4: a per-binding dependency
+stamp (definition, rows read, content hash of every column its expressions name) decides
+which bindings re-resolve; a row-level `diff()` is not needed for that decision. #6: the
+column door recognises an unchanged re-delivery before decoding, and `result_token` gives
+the session a key; not re-running an unchanged query is TS work. #7: the door, `queryColumns`
+and `ingestColumnBatch` exist; `refreshData` does not use them yet.
+
+The wasm grew from 725,819 B to 792,617 B (+9 %), mostly the column door and the
+dependency stamps.
+
+The hitTest-versus-`minted[].story` row is folded into #5, where W5's `hitTest` and
+`elementGeometry` reads come from. The table lower (W1) pays it once per table.
+
+## Proof that a budget fails
+
+A single extra `host.document.placeholders()` was injected into `refreshFields`, then
+reverted. W2 failed:
+
+```
+Error: W2: hostCalls: measured 103 vs budget 102 (OVER budget); hostReads: measured 2 vs
+budget 1 (OVER budget); placeholdersRead: measured 200 vs budget 100 (OVER budget)
+```
+
+With the injection reverted it passes. A count that drops below its pin also fails, with
+"UNDER budget — lower the pin in this commit".
+
+## Re-pinned at the Step 4 merge (persistence)
+
+Saving the session into the document is new work, so five budgets moved up
+by exactly its cost; each pin in `test/perf/` names the added calls. Per
+command: one `parts.write` of the session part, plus one `payload` and one
+`sync_report` to build it (the merge also removed a second `payload` call
+that hashed the lowered label's definition: `stampFor` now reuses the recipe
+the flush serialised). On open: `parts.read` and the document-switch,
+flush-before-save and client subscriptions. A burst of 200 reflows writes the
+session once.
+
+## After Step 2 (TS)
+
+The bundle-side optimisations. Each pin moved in the commit that earned it, with a
+behaviour assertion beside it, and each was shown red with its change reverted.
+"Before" is the pin as of the Step 4 merge.
+
+| Scenario | Count | Before | After Step 2 (TS) | What earned it |
+|---|---|---:|---:|---|
+| W1 lower a 500-row table | host calls | 11 | 7 | frame, table, cells and label in one batch, addressed by core's batch handles (`$h:frame`, `$h:table`); the frame comes back in `minted`, so no `hitTest` |
+| | reads | 3 | 2 | |
+| | mutates | 4 | 1 | |
+| | undo steps | 4 | 1 | |
+| W2 refresh 100 fields | host calls | 102 | 3 | one back-to-front `setFieldValue` batch |
+| | mutates | 100 | 1 | |
+| | undo steps | 89 (see below) | 1, reached | |
+| | wasm calls | 200 | 1 | `refresh_field_values` decides every field in one call, Pinned/Overridden skipped before any resolve |
+| W3 preview 20 steps | host calls | 40 | 21 | the field read is re-used while the change count shows only the preview's own write |
+| | reads / fields read | 20 / 20 | 1 / 1 | |
+| W5 `lowerAll`, 20 variables | host calls | 240 | 102 | active page read once per command; frame + field in one batch per variable |
+| | reads | 120 | 2 | |
+| | mutates / undo steps | 40 / 40 | 20 / 20 | |
+| W6 200 reflow events | host calls | 402 | 4 | the burst is coalesced: one chain read and one pagination once it is quiet |
+| | reads | 400 | 2 | |
+| | wasm calls | 202 | 3 | |
+| | resolves / sorts | 200 / 200 | 1 / 1 | |
+| | sort keys | 665,600 | 3,328 | |
+
+`mutationOps` did not move: the counting host does not count `bindCreated` children,
+which name what the op before them minted and write nothing.
+
+`resolveElementId` (#9 in the ranked list) now reads the scene tree once per command
+into an index. No workload reaches it, so a unit test pins it instead of a budget.
+
+### Corrections to the Step 1 record
+
+- **W2 did not run out of a bounded history.** The core history holds 1,000 steps. The
+  fixture inserted each separator space at a field's start, and core 0.67 puts text
+  inserted there INTO the field's run. `setFieldValue` then replaces the run's text, so
+  the space is lost, and undoing that write fails with "undo log empty" and drops the
+  record. The fixture now inserts the spaces first and each field into them. The core
+  defect is pinned with `it.fails` in `test/field-offsets-real-core.spec.ts`. Finding 2
+  ("the undo history is bounded") is withdrawn.
+- **D-16 is closed by core's handles.** A `storyId` of `$h:<name>` resolves to the story
+  a text frame minted, so the frame and what goes into it ride one batch.
+
+### Found while doing it (for Step 8)
+
+- core: `insertText` at a placeholder run's start joins the run; a later field write
+  erases the text, and its undo fails ("undo log empty") and drops the history record.
+- core: `minted[].handle` is `null` even for an element a `bindCreated` named. The
+  bundle finds its frame by kind instead.
+- Variable placement in `lowerAll` is still one batch per variable (20 undo steps for
+  20 variables). One batch for the whole command is possible on the wire. It needs the
+  placements planned before any is sent.

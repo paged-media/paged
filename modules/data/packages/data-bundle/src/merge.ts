@@ -1,0 +1,929 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// The Data Merge writer (campaign Wave 5). The engine plans the merge
+// (`DataEngine.plan_merge`, data-lower/src/merge.rs: InDesign's closed-form
+// Single / Multiple Record layout, verified against the recordings in
+// conformance/indesign-merge); this file reads the record TEMPLATE off a page,
+// turns the plan into mutations and measures the result for overset.
+//
+// What the host lets a plugin do, measured against real core (protocol 67):
+//
+// - A frame, its text, its formatting and its metadata label go in ONE batch:
+//   `insertTextFrame` + `bindCreated` names it, and `$h:<handle>` addresses the
+//   frame AND its story in later children (insertText, a storyRange
+//   setElementProperty, setPluginMetadata).
+// - Before engine protocol 69 a page minted in a batch cannot be named
+//   (`bindCreated` refuses: "nothing to name"), so a merge that needs new pages
+//   costs TWO undo steps: the pages, then everything on them. Protocol 69 names
+//   them (`$h:<name>` as a page id), and the session asks for ONE batch
+//   (`pageHandles`), falling back to two if the engine refuses it.
+// - Template frames cannot be copied: `duplicateElements` refuses a story that
+//   holds a hyperlink, and every InDesign Data Merge placeholder IS a
+//   HyperlinkTextSource; `duplicatePage` copies a frame but SHARES its story
+//   with the original (a copy edited edits both). So merged frames are minted
+//   fresh at the planned bounds, and the template's story-level formatting is
+//   copied onto each (`setElementProperty` over the story range), and so is
+//   the frame's own formatting — object style, fill, stroke, inset, text
+//   frame options, corners, effects (`setElementProperty` on the frame;
+//   `isCopiedFramePath`). Per-run formatting inside the template is not
+//   copied yet.
+// - The merge writes into the current document, either CONSUMING the template
+//   page (its merge frames are replaced, the output starts on it — what
+//   InDesign's new document holds) or KEEPING it (the output goes on new pages
+//   after it). "Merge to a new document" copies the document through the
+//   documents door (D-26, `exportPaged` + `open`) and consumes the template in
+//   the copy (session.ts); a host without that door refuses it.
+// - Headless core reports no overset (it lays out without fonts), so overset is
+//   MEASURED (DM-7): the engine lists each template frame's words, the host
+//   measures them (`host.text.measureStrings`, one call per face and size;
+//   `measureString` per word on a host without it), and the engine wraps every
+//   merged text and compares its lines × leading with the frame. A host that
+//   does report a story overset is believed as well.
+
+import type { BundleHost, ElementId, Mutation, MutationOutcome, PageId } from "@paged-media/plugin-api";
+
+import { BINDING_KEY, makeEnvelope, type IdmlFit } from "../../data-host-model/src";
+import { measureStringsDoor } from "./doors";
+
+// ── the engine contract (data-lower/src/merge.rs, camelCase serde) ──────────
+
+/** `[top, left, bottom, right]`, page coordinates (pt). */
+export type Bounds = [number, number, number, number];
+
+export type RecordsPerPage =
+  | { mode: "single" }
+  | {
+      mode: "multiple";
+      arrange?: "rows" | "columns";
+      rowSpacingPt?: number;
+      columnSpacingPt?: number;
+    };
+
+export type MergeFrameContent = { kind: "text"; text: string } | { kind: "image"; field: string };
+
+export interface MergeTemplateFrame {
+  id: string;
+  bounds: Bounds;
+  content: MergeFrameContent;
+}
+
+export interface MergeSpec {
+  marginBox: Bounds;
+  frames: MergeTemplateFrame[];
+  recordsPerPage: RecordsPerPage;
+  removeBlankLines?: boolean;
+}
+
+export interface MergedFrame {
+  template: number;
+  bounds: Bounds;
+  text?: string;
+  image?: string;
+}
+
+export interface MergedRecord {
+  record: number;
+  page: number;
+  row: number;
+  column: number;
+  frames: MergedFrame[];
+}
+
+export interface MergePlan {
+  rows: number;
+  columns: number;
+  perPage: number;
+  pageCount: number;
+  records: MergedRecord[];
+  fields: string[];
+  missingFields: string[];
+  diagnostics: string[];
+}
+
+/** The slice of the wasm engine the merge needs. */
+export interface MergeEngine {
+  plan_merge(query: string, spec: unknown): unknown;
+  /** The distinct words of the plan's texts per template frame. */
+  merge_words(plan: unknown, frames: number): unknown;
+  /** `boolean[][]`: per record, per frame, overset (DM-7). */
+  merge_overset(plan: unknown, metrics: unknown): unknown;
+}
+
+/** One template frame's measured font, as `merge_overset` reads it. */
+export interface FrameMetrics {
+  leadingPt: number;
+  advances: Record<string, number>;
+}
+
+// ── the template, as read off a page ────────────────────────────────────────
+
+/** One story-level property copied from a template text frame onto every
+ *  merged copy (`setElementProperty` over the whole story range). */
+export interface CopiedProperty {
+  path: string;
+  value: unknown;
+}
+
+/** One template frame plus what the writer needs to reproduce it. */
+export interface TemplateFrameInfo {
+  element: ElementId;
+  /** The template's story (text frames). */
+  storyId: string | null;
+  /** Story-level formatting to copy, styles first. */
+  format: CopiedProperty[];
+  /** The frame's own formatting to copy (fill, stroke, inset, text frame
+   *  options, corners, effects), its object style first. Absent in a
+   *  template read before the merge copied it. */
+  frame?: CopiedProperty[];
+  /** The text's font, size and leading, for overset measurement. */
+  font: { family: string; style: string | null; sizePt: number; leadingPt: number };
+}
+
+export interface MergeTemplate {
+  pageId: PageId;
+  /** `frames[i]` describes `spec.frames[i]`. */
+  frames: TemplateFrameInfo[];
+  spec: Omit<MergeSpec, "recordsPerPage" | "removeBlankLines">;
+}
+
+/** The properties a merged copy takes over from its template story. Styles
+ *  come first so the overrides after them win. */
+export const COPIED_TEXT_PATHS = [
+  "appliedParagraphStyle",
+  "appliedCharacterStyle",
+  "characterFontFamily",
+  "characterFontStyle",
+  "characterFontSize",
+  "characterLeading",
+  "characterTracking",
+  "characterFillColor",
+  "paragraphJustification",
+  "paragraphSpaceBefore",
+  "paragraphSpaceAfter",
+  "paragraphLeftIndent",
+  "paragraphRightIndent",
+  "paragraphFirstLineIndent",
+] as const;
+
+/** Frame properties a merged copy does NOT take over: where the frame sits
+ *  (the plan places it), what it is threaded to, its layer, and whether it is
+ *  hidden or locked. An image placeholder's fitting comes from the merge's
+ *  own `fit`. Everything else the template frame sets is copied. */
+export const NOT_COPIED_FRAME_PATHS: ReadonlySet<string> = new Set([
+  "frameBounds",
+  "frameTransform",
+  "framePath",
+  "framePathPoint",
+  "frameRotationAngle",
+  "frameScaleX",
+  "frameScaleY",
+  "frameFlipH",
+  "frameFlipV",
+  "frameFittingType",
+  "frameFittingCrops",
+  "frameFittingReferencePoint",
+  "frameAutoFit",
+  "frameReflow",
+  "frameChainResult",
+  "nextTextFrame",
+  "previousTextFrame",
+  "itemLayer",
+  "elementVisible",
+  "elementLocked",
+]);
+
+/** Whether a frame-level property path is one a merged copy takes over. */
+export function isCopiedFramePath(path: string): boolean {
+  if (NOT_COPIED_FRAME_PATHS.has(path)) return false;
+  return (
+    path === "appliedObjectStyle" ||
+    path === "textWrapInvert" ||
+    path.startsWith("frame") ||
+    path.startsWith("textFrame")
+  );
+}
+
+/** Values a frame property takes when nothing sets it — what a fresh frame
+ *  already has, and what InDesign writes into every frame of a template
+ *  (`[Normal Text Frame]`, no wrap, one column, zero gradient angles, …).
+ *  Copying them would change nothing and cost an operation per record. */
+const FRESH_FRAME_DEFAULTS: Readonly<Record<string, readonly unknown[]>> = {
+  appliedObjectStyle: [
+    "ObjectStyle/$ID/[None]",
+    "ObjectStyle/$ID/[Normal Text Frame]",
+    "ObjectStyle/$ID/[Normal Graphics Frame]",
+  ],
+  frameTextWrapMode: ["None"],
+  frameGradientFillAngle: [0],
+  frameGradientFillLength: [0],
+  frameGradientStrokeAngle: [0],
+  frameGradientStrokeLength: [0],
+  // Core reads "Drop" on every frame; only `frameDropShadow` turns it on.
+  frameDropShadowMode: ["Drop"],
+  // Core reads a knocked-out shadow (InDesign's default) on every frame, a
+  // fresh one included: v0.71.13 does, v0.71.1 listed no such property.
+  frameDropShadowKnockedOut: [true],
+  textFrameColumnCount: [1],
+  textFrameVerticalJustification: ["TopAlign"],
+  textFrameFirstBaseline: ["AscentOffset"],
+  textFrameAutoSizing: ["Off"],
+  frameBlendMode: ["Normal"],
+  frameOpacity: [100],
+  frameStrokeType: ["StrokeStyle/$ID/Solid"],
+  frameCornerOptionTopLeft: ["None"],
+  frameCornerOptionTopRight: ["None"],
+  frameCornerOptionBottomLeft: ["None"],
+  frameCornerOptionBottomRight: ["None"],
+};
+
+/** Whether a read property value says something a fresh frame does not:
+ *  a colour, a length, a non-empty name, a list, an inset that is not zero,
+ *  a flag that is on — and not the property's default
+ *  ([`FRESH_FRAME_DEFAULTS`]). Unset and default values are left to the
+ *  fresh frame, so a plain template frame costs no extra operation per
+ *  record. */
+export function isSetValue(v: { type?: string; value?: unknown } | null | undefined, path?: string): boolean {
+  if (!v) return false;
+  const x = v.value;
+  if (x === null || x === undefined) return false;
+  if (path && FRESH_FRAME_DEFAULTS[path]?.includes(x)) return false;
+  if (typeof x === "boolean") return x;
+  if (typeof x === "string") return x !== "" && !/\[None\]$/.test(x);
+  if (Array.isArray(x)) return v.type === "bounds" ? x.some((n) => n !== 0) : x.length > 0;
+  return true;
+}
+
+/** InDesign's default when a story says nothing: 12 pt, auto leading 120 %. */
+const DEFAULT_SIZE_PT = 12;
+const AUTO_LEADING = 1.2;
+
+/** UTF-8 length — the host's text offsets are UTF-8 bytes of the runs plus one
+ *  per paragraph boundary, which is exactly the byte length of the text with
+ *  `\n` between paragraphs. */
+export function textOffsetLength(text: string): number {
+  return new TextEncoder().encode(text).length;
+}
+
+/** A story's text in the planner's convention: runs joined, paragraphs (and
+ *  forced line breaks, which arrive as `\n` inside runs) separated by `\n`. */
+export function storyText(content: { paragraphs: { runs: { text: string }[] }[] }): string {
+  return content.paragraphs.map((p) => p.runs.map((r) => r.text).join("")).join("\n");
+}
+
+/** Every element of one page, in z-order, from the scene tree. Pages are
+ *  addressed by document order (the tree's page rows carry no id). */
+export function pageElements(
+  tree: readonly { kind: string; id?: ElementId | null; children?: readonly unknown[] }[],
+  pageIndex: number,
+): ElementId[] {
+  let index = 0;
+  const out: ElementId[] = [];
+  type Node = { kind: string; id?: ElementId | null; children?: readonly Node[] };
+  const walkItems = (nodes: readonly Node[]) => {
+    for (const n of nodes) {
+      if (n.id) out.push(n.id);
+      else if (n.children) walkItems(n.children);
+    }
+  };
+  const walk = (nodes: readonly Node[]): boolean => {
+    for (const n of nodes) {
+      if (n.kind === "Page") {
+        if (index === pageIndex) {
+          walkItems(n.children ?? []);
+          return true;
+        }
+        index += 1;
+      } else if (n.children && walk(n.children)) {
+        return true;
+      }
+    }
+    return false;
+  };
+  walk(tree as readonly Node[]);
+  return out;
+}
+
+/** Apply an IDML item transform `[a b c d e f]` to bounds (axis-aligned). */
+function transformBounds(b: Bounds, t: number[] | null | undefined): Bounds {
+  if (!t) return b;
+  const [a, bb, c, d, e, f] = t;
+  const pts = [
+    [b[1], b[0]],
+    [b[3], b[0]],
+    [b[1], b[2]],
+    [b[3], b[2]],
+  ].map(([x, y]) => [a * x + c * y + e, bb * x + d * y + f]);
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  return [Math.min(...ys), Math.min(...xs), Math.max(...ys), Math.max(...xs)];
+}
+
+const HAS_PLACEHOLDER = /<<[^<>]+>>/;
+
+/** One row of the `pages` collection, as the template read uses it. */
+export interface TemplatePageRow {
+  selfId: string;
+  index: number;
+  sizePt: [number, number];
+  marginTopPt: number;
+  marginLeftPt: number;
+  marginBottomPt: number;
+  marginRightPt: number;
+}
+
+export interface ReadTemplateOptions {
+  /** The template page (default: the active page, else the first). */
+  pageId?: PageId;
+  /** The document's pages and scene tree when the caller has read them
+   *  already (the session reads them once for the template and the re-merge
+   *  plan); each is read here when absent. */
+  pages?: readonly TemplatePageRow[];
+  tree?: Awaited<ReturnType<BundleHost["document"]["tree"]>>;
+  /** Image placeholders: rectangle raw id → field name (`photo` / `@photo`). */
+  imageFields?: Record<string, string>;
+  /** Restrict the template to these frames (default: every text frame on the
+   *  page whose story holds a `<<field>>`, plus the image placeholders). */
+  frames?: ElementId[];
+}
+
+/**
+ * Read the record template off a page: its merge frames (page-local bounds,
+ * text, formatting) and its margin box.
+ *
+ * Page-local bounds: an engine that reports where a page sits in its spread
+ * (`ElementGeometryItem.pageOrigin`) answers the item transform with the
+ * page's origin folded in, so the transformed bounds are page-local already.
+ * An older one answers raw bounds plus an item transform in SPREAD space, and
+ * the spread origin of a page is not on any read door. It is recovered from
+ * one text frame: `hitTest` (page-local in, page-local `frameBounds` out) is
+ * asked at that frame's centre under the usual page placements (single page
+ * centred on the spread, left or right of a facing spread, spread origin),
+ * and the answer that names the frame back fixes the offset for the whole
+ * page.
+ */
+export async function readMergeTemplate(
+  host: BundleHost,
+  opts: ReadTemplateOptions = {},
+): Promise<{ template: MergeTemplate | null; diagnostics: string[] }> {
+  const diagnostics: string[] = [];
+  const pages = opts.pages ?? (await host.document.collection<TemplatePageRow>("pages"));
+  let pageId = opts.pageId;
+  if (!pageId) {
+    const meta = await host.document.meta();
+    pageId = (meta.activePage ?? pages[0]?.selfId) as PageId | undefined;
+  }
+  const pageIndex = pages.findIndex((p) => p.selfId === pageId);
+  if (!pageId || pageIndex < 0) {
+    return { template: null, diagnostics: ["merge: no template page"] };
+  }
+  const page = pages[pageIndex];
+  const [pw, ph] = page.sizePt;
+
+  const imageFields = opts.imageFields ?? {};
+  const candidates =
+    opts.frames ??
+    pageElements(opts.tree ?? (await host.document.tree()), pageIndex).filter(
+      (e) => e.kind === "textFrame" || (e.kind === "rectangle" && (e.id as string) in imageFields),
+    );
+  if (candidates.length === 0) {
+    return { template: null, diagnostics: ["merge: the template page has no frames"] };
+  }
+  const geoms = await host.document.elementGeometry(candidates);
+
+  // The text frames and their stories.
+  type Raw = { element: ElementId; spread: Bounds; storyId: string | null; text: string | null };
+  const raws: Raw[] = [];
+  // Every item of the page answers in page space when the engine names the
+  // page's origin.
+  const pageLocal = geoms.some((g) => (g as { pageOrigin?: unknown }).pageOrigin != null);
+  for (const g of geoms) {
+    const spread = transformBounds(g.bounds as Bounds, g.itemTransform as number[] | null);
+    if (g.id.kind === "textFrame") {
+      const storyId = (g as { storyId?: string | null }).storyId ?? null;
+      const content = storyId ? await host.document.storyContent(storyId) : null;
+      const text = content ? storyText(content) : "";
+      if (!opts.frames && !HAS_PLACEHOLDER.test(text)) continue;
+      raws.push({ element: g.id, spread, storyId, text });
+    } else if (g.id.kind === "rectangle" && (g.id.id as string) in imageFields) {
+      raws.push({ element: g.id, spread, storyId: null, text: null });
+    }
+  }
+  const firstText = raws.find((r) => r.text !== null);
+  if (!firstText) {
+    return { template: null, diagnostics: ["merge: no text frame with a <<field>> on the template page"] };
+  }
+
+  // Recover the page's spread origin from one confirmed hit (an older
+  // engine; a newer one answers in page space).
+  let origin: [number, number] | null = pageLocal ? [0, 0] : null;
+  const s = firstText.spread;
+  const cx = (s[1] + s[3]) / 2;
+  const cy = (s[0] + s[2]) / 2;
+  for (const [ox, oy] of origin ? [] : [
+    [-pw / 2, -ph / 2],
+    [-pw, -ph / 2],
+    [0, -ph / 2],
+    [0, 0],
+  ]) {
+    const hit = await host.document.hitTest(pageId, [cx - ox, cy - oy]);
+    if (hit?.frameId === (firstText.element.id as string) && hit.frameBounds) {
+      origin = [s[1] - hit.frameBounds.left, s[0] - hit.frameBounds.top];
+      break;
+    }
+  }
+  if (!origin) {
+    return {
+      template: null,
+      diagnostics: ["merge: could not locate the template frames on their page (hitTest found no frame)"],
+    };
+  }
+  const local = (b: Bounds): Bounds => [b[0] - origin![1], b[1] - origin![0], b[2] - origin![1], b[3] - origin![0]];
+
+  const frames: MergeTemplateFrame[] = [];
+  const infos: TemplateFrameInfo[] = [];
+  for (const r of raws) {
+    const frame = await copiedFrameProperties(host, r.element);
+    if (r.text !== null) {
+      const format = await copiedProperties(host, r.storyId, r.text);
+      frames.push({ id: r.element.id as string, bounds: local(r.spread), content: { kind: "text", text: r.text } });
+      infos.push({ element: r.element, storyId: r.storyId, format, frame, font: fontOf(format) });
+    } else {
+      const field = imageFields[r.element.id as string];
+      frames.push({ id: r.element.id as string, bounds: local(r.spread), content: { kind: "image", field } });
+      infos.push({
+        element: r.element,
+        storyId: null,
+        format: [],
+        frame,
+        font: { family: "", style: null, sizePt: DEFAULT_SIZE_PT, leadingPt: DEFAULT_SIZE_PT * AUTO_LEADING },
+      });
+    }
+  }
+  if (frames.length !== raws.length) diagnostics.push("merge: some template frames were skipped");
+  return {
+    template: {
+      pageId,
+      frames: infos,
+      spec: {
+        marginBox: [page.marginTopPt, page.marginLeftPt, ph - page.marginBottomPt, pw - page.marginRightPt],
+        frames,
+      },
+    },
+    diagnostics,
+  };
+}
+
+/** The story-level formatting of a template text frame (whole-story range;
+ *  a property that varies inside the story reads as mixed and is skipped). */
+async function copiedProperties(
+  host: BundleHost,
+  storyId: string | null,
+  text: string,
+): Promise<CopiedProperty[]> {
+  if (!storyId) return [];
+  const props = await host.document.elementProperties({
+    kind: "storyRange",
+    id: { story_id: storyId, start: 0, end: textOffsetLength(text) },
+  } as ElementId);
+  const entries = (props?.entries ?? []) as { path: string; value?: { value?: unknown } | null }[];
+  const out: CopiedProperty[] = [];
+  for (const path of COPIED_TEXT_PATHS) {
+    const e = entries.find((x) => x.path === path);
+    const v = e?.value;
+    if (!v || v.value === null || v.value === undefined || v.value === "") continue;
+    out.push({ path, value: v });
+  }
+  return out;
+}
+
+/** The frame-level formatting of a template frame: every property it sets
+ *  that a merged copy takes over ([`isCopiedFramePath`]), its object style
+ *  first so the frame's own overrides after it win. */
+async function copiedFrameProperties(host: BundleHost, element: ElementId): Promise<CopiedProperty[]> {
+  let props: Awaited<ReturnType<BundleHost["document"]["elementProperties"]>>;
+  try {
+    props = await host.document.elementProperties(element);
+  } catch {
+    return [];
+  }
+  const entries = (props?.entries ?? []) as { path: string; value?: { type?: string; value?: unknown } | null }[];
+  const out: CopiedProperty[] = [];
+  for (const e of entries) {
+    if (!isCopiedFramePath(e.path) || !isSetValue(e.value, e.path)) continue;
+    out.push({ path: e.path, value: e.value });
+  }
+  out.sort((a, b) => Number(b.path === "appliedObjectStyle") - Number(a.path === "appliedObjectStyle"));
+  return out;
+}
+
+function fontOf(format: CopiedProperty[]): TemplateFrameInfo["font"] {
+  const get = (p: string) => (format.find((f) => f.path === p)?.value as { value?: unknown } | undefined)?.value;
+  const size = typeof get("characterFontSize") === "number" ? (get("characterFontSize") as number) : DEFAULT_SIZE_PT;
+  const leading = typeof get("characterLeading") === "number" ? (get("characterLeading") as number) : size * AUTO_LEADING;
+  const family = typeof get("characterFontFamily") === "string" ? (get("characterFontFamily") as string) : "";
+  const style = typeof get("characterFontStyle") === "string" ? (get("characterFontStyle") as string) : null;
+  return { family, style, sizePt: size, leadingPt: leading };
+}
+
+// ── the writer (pure) ───────────────────────────────────────────────────────
+
+export interface MergeWriteOptions {
+  /** `consume`: the template page holds the first output page and its merge
+   *  frames are removed (InDesign's merged document). `keep`: the template
+   *  stays as it is and the output goes on new pages after it. */
+  template: "consume" | "keep";
+  /** Resolves a relative image reference (Data Merge reads it relative to
+   *  the data source). Absolute paths and URIs pass through. */
+  imageBase?: string;
+  /** IDML fitting for image fields (default `Proportionally`, centred by the
+   *  host, which is Data Merge's "fit proportionally, centre"). */
+  fit?: IdmlFit;
+  /** The id every merged element is labelled with, so a re-merge finds and
+   *  replaces them (`relower.ts`). */
+  mergeId: string;
+  /** Mutations that clear a previous run of this merge (`relower.ts`); they
+   *  ride the first batch, so a re-merge is no extra undo step. */
+  clear?: Mutation[];
+  /** False when a consumed template's frames are already gone (a re-merge
+   *  over the stored template): nothing of the template is left to remove. */
+  templatePresent?: boolean;
+  /** The engine names pages minted in a batch (protocol 69: `bindCreated`
+   *  after `insertPage` / `duplicatePage`, then `$h:<name>` as a page id), so
+   *  pages and content go in ONE batch: one undo step for any merge. */
+  pageHandles?: boolean;
+}
+
+/** The page mutations: what has to exist before anything can be placed.
+ *  `null` when the merge fits the template page (one undo step in all). */
+export function pageMutations(
+  plan: Pick<MergePlan, "pageCount">,
+  template: MergeTemplate,
+  opts: Pick<MergeWriteOptions, "template" | "clear" | "templatePresent">,
+): Mutation | null {
+  const ops: Mutation[] = [];
+  if (opts.template === "consume") {
+    if (plan.pageCount <= 1) return null;
+    ops.push(...(opts.clear ?? []));
+    // Remove the merge frames first so the page copies come out empty.
+    if (opts.templatePresent !== false) ops.push(...removeTemplateFrames(template));
+    for (let i = 1; i < plan.pageCount; i++) {
+      ops.push({ op: "duplicatePage", args: { page: template.pageId } });
+    }
+  } else {
+    ops.push(...(opts.clear ?? []));
+    for (let i = 0; i < plan.pageCount; i++) {
+      ops.push({ op: "insertPage", args: { afterPageId: template.pageId, masterId: null } });
+    }
+  }
+  return ops.length === 0 ? null : { op: "batch", args: { ops } };
+}
+
+function removeTemplateFrames(template: MergeTemplate): Mutation[] {
+  return template.frames.map((f) => ({ op: "deleteFrame", args: { frameId: f.element.id as string } }));
+}
+
+/** The whole merge as ONE batch, for an engine that names pages minted in a
+ *  batch (`pageHandles`): the page ops of [`pageMutations`], each new page
+ *  named `p<i>`, then the content of [`contentMutation`] addressing them as
+ *  `$h:p<i>`. Every page is inserted right after the template, so the i-th
+ *  of n new pages ends up (n-1-i)-th after it. `null` when the merge needs no
+ *  new page (the content batch alone is one step). */
+export function oneStepMutation(
+  plan: Pick<MergePlan, "pageCount" | "records">,
+  template: MergeTemplate,
+  opts: MergeWriteOptions,
+): Mutation | null {
+  const pagesOp = pageMutations(plan, template, opts);
+  if (!pagesOp) return null;
+  const ops: Mutation[] = [];
+  let minted = 0;
+  for (const op of (pagesOp.args as { ops: Mutation[] }).ops) {
+    ops.push(op);
+    if (op.op === "insertPage" || op.op === "duplicatePage") {
+      ops.push({ op: "bindCreated", args: { handle: `p${minted}` } } as Mutation);
+      minted += 1;
+    }
+  }
+  const handle = (k: number) => `$h:p${minted - 1 - (opts.template === "consume" ? k - 1 : k)}` as PageId;
+  const pages: PageId[] = Array.from({ length: plan.pageCount }, (_, k) =>
+    opts.template === "consume" && k === 0 ? template.pageId : handle(k),
+  );
+  const content = contentMutation(plan, template, pages, opts);
+  ops.push(...(content.args as { ops: Mutation[] }).ops);
+  return { op: "batch", args: { ops } };
+}
+
+/** Resolve an image reference against `imageBase`. */
+export function imageUri(ref: string, base?: string): string {
+  if (!base || /^[a-z][a-z0-9+.-]*:/i.test(ref) || ref.startsWith("/")) return ref;
+  return base.endsWith("/") ? base + ref : `${base}/${ref}`;
+}
+
+/** The content batch: every record's frames, text, formatting, images and
+ *  labels, on `pages[plan page]`. With `consume` and a single output page the
+ *  template frames are removed here too, so the whole merge is one step. */
+export function contentMutation(
+  plan: Pick<MergePlan, "pageCount" | "records">,
+  template: MergeTemplate,
+  pages: readonly PageId[],
+  opts: MergeWriteOptions,
+): Mutation {
+  const ops: Mutation[] = [];
+  if (opts.template === "consume" && plan.pageCount <= 1) {
+    ops.push(...(opts.clear ?? []), ...(opts.templatePresent !== false ? removeTemplateFrames(template) : []));
+  }
+  const fit = opts.fit ?? "Proportionally";
+  for (const rec of plan.records) {
+    const pageId = pages[rec.page];
+    for (const f of rec.frames) {
+      const h = `m${rec.record}f${f.template}`;
+      // `createdPage`: this frame sits on a page the merge added, so a
+      // re-merge may remove that page with it (relower.ts).
+      const createdPage = opts.template === "keep" || rec.page > 0;
+      const label = makeEnvelope({
+        kind: "merge",
+        merge: opts.mergeId,
+        record: rec.record,
+        frame: f.template,
+        ...(createdPage ? { createdPage } : {}),
+      });
+      const info = template.frames[f.template];
+      // The template frame's own formatting (fill, stroke, inset, text frame
+      // options, …) on the merged copy, as InDesign's merge keeps it.
+      const frameProps = (frame: ElementId): Mutation[] =>
+        (info?.frame ?? []).map(
+          (p) => ({ op: "setElementProperty", args: { elementId: frame, path: p.path, value: p.value } }) as Mutation,
+        );
+      if (f.text !== undefined) {
+        const frame: ElementId = { kind: "textFrame", id: `$h:${h}` } as ElementId;
+        ops.push({ op: "insertTextFrame", args: { pageId, bounds: f.bounds } });
+        ops.push({ op: "bindCreated", args: { handle: h } });
+        ops.push(...frameProps(frame));
+        if (f.text.length > 0) {
+          ops.push({ op: "insertText", args: { storyId: `$h:${h}`, offset: 0, text: f.text } });
+          const range = {
+            kind: "storyRange",
+            id: { story_id: `$h:${h}`, start: 0, end: textOffsetLength(f.text) },
+          } as ElementId;
+          for (const p of info?.format ?? []) {
+            ops.push({
+              op: "setElementProperty",
+              args: { elementId: range, path: p.path, value: p.value },
+            } as Mutation);
+          }
+        }
+        ops.push({ op: "setPluginMetadata", args: { elementId: frame, key: BINDING_KEY, value: label } });
+      } else {
+        const frame: ElementId = { kind: "rectangle", id: `$h:${h}` } as ElementId;
+        ops.push({ op: "insertFrame", args: { pageId, bounds: f.bounds } });
+        ops.push({ op: "bindCreated", args: { handle: h } });
+        ops.push(...frameProps(frame));
+        if (f.image) {
+          ops.push({ op: "placeImage", args: { elementId: `$h:${h}`, uri: imageUri(f.image, opts.imageBase), fit } });
+        }
+        ops.push({ op: "setPluginMetadata", args: { elementId: frame, key: BINDING_KEY, value: label } });
+      }
+    }
+  }
+  return { op: "batch", args: { ops } };
+}
+
+// ── the orchestration ───────────────────────────────────────────────────────
+
+export interface MergeOptions extends Omit<MergeWriteOptions, "mergeId"> {
+  query: string;
+  recordsPerPage: RecordsPerPage;
+  removeBlankLines?: boolean;
+  mergeId?: string;
+}
+
+export interface MergedFrameResult {
+  element: ElementId;
+  storyId: string | null;
+  overset: boolean;
+}
+
+export interface MergeResult {
+  ok: boolean;
+  plan: MergePlan | null;
+  /** The output pages, in plan order. */
+  pages: PageId[];
+  records: { record: number; page: number; frames: MergedFrameResult[] }[];
+  /** Records with an overset text frame. */
+  overset: number[];
+  /** `host.document.mutate` calls (= undo steps) the merge took. */
+  mutateCalls: number;
+  diagnostics: string[];
+}
+
+/** An applied `mutate` answer. */
+type AppliedOutcome = Extract<MutationOutcome, { applied: true }>;
+
+function failed(diagnostics: string[], mutateCalls = 0, plan: MergePlan | null = null): MergeResult {
+  return { ok: false, plan, pages: [], records: [], overset: [], mutateCalls, diagnostics };
+}
+
+/**
+ * Merge a query's records into the document through a template read with
+ * [`readMergeTemplate`]. Plans in the engine, writes in one mutate where the
+ * engine names pages minted in a batch (`pageHandles`) and at most two
+ * otherwise (pages, then content), then measures every merged text for
+ * overset.
+ */
+export async function mergeRecords(
+  host: BundleHost,
+  engine: MergeEngine,
+  template: MergeTemplate,
+  opts: MergeOptions,
+): Promise<MergeResult> {
+  const diagnostics: string[] = [];
+  let plan: MergePlan;
+  try {
+    plan = engine.plan_merge(opts.query, {
+      ...template.spec,
+      recordsPerPage: opts.recordsPerPage,
+      removeBlankLines: opts.removeBlankLines ?? false,
+    }) as MergePlan;
+  } catch (e) {
+    return failed([`merge: ${String(e)}`]);
+  }
+  diagnostics.push(...plan.diagnostics);
+  if (plan.records.length === 0) return { ...failed([...diagnostics, "merge: no records"], 0, plan), ok: true };
+  const mergeId = opts.mergeId ?? `merge-${opts.query}`;
+  const wopts: MergeWriteOptions = { ...opts, mergeId };
+
+  // 1. Pages and content: one batch where the engine names pages minted in
+  // a batch (protocol 69), else pages, then content.
+  let mutateCalls = 0;
+  let outcome: AppliedOutcome | null = null;
+  let pages: PageId[] = [];
+  const one = wopts.pageHandles ? oneStepMutation(plan, template, wopts) : null;
+  if (one) {
+    mutateCalls += 1;
+    const tried = await host.document.mutate(one);
+    if (tried.applied) {
+      outcome = tried;
+      pages = outputPages(await pageIds(host), template, wopts, plan.pageCount);
+    } else {
+      diagnostics.push(`merge: the one-step batch was refused (${errorText(tried.error)}); pages, then content`);
+    }
+  }
+  if (!outcome) {
+    const two = await writeInTwoSteps(host, plan, template, wopts);
+    mutateCalls += two.mutateCalls;
+    if ("error" in two) return failed([...diagnostics, two.error], mutateCalls, plan);
+    outcome = two.outcome;
+    pages = two.pages;
+  }
+  if (pages.length !== plan.pageCount) {
+    return failed([...diagnostics, `merge: expected ${plan.pageCount} output pages, found ${pages.length}`], mutateCalls, plan);
+  }
+  // Minted in creation order, one per record frame (pages a one-step batch
+  // minted are left out). The handle names each; where a host reports it
+  // null, the position does.
+  const order = plan.records.flatMap((rec) => rec.frames.map((f) => `m${rec.record}f${f.template}`));
+  const frames = (outcome.minted ?? []).filter((m) => !/page|spread/i.test(m.element.kind));
+  const minted = new Map(frames.map((m, i) => [m.handle ?? order[i] ?? "", m]));
+
+  // 3. Overset (DM-7): the engine lists the words, the host measures them at
+  // each template frame's font, the engine wraps and compares. A host that
+  // lays out with fonts and reports a story overset is believed as well.
+  const words = engine.merge_words(plan, template.frames.length) as string[][];
+  const metrics = await measureWords(host, template, words);
+  const measured = engine.merge_overset(plan, metrics) as boolean[][];
+  const reported = new Set(
+    (await host.document.collection<{ selfId: string; overset?: boolean }>("stories"))
+      .filter((s) => s.overset)
+      .map((s) => s.selfId),
+  );
+  const records: MergeResult["records"] = [];
+  const overset: number[] = [];
+  plan.records.forEach((rec, r) => {
+    const frames: MergedFrameResult[] = [];
+    rec.frames.forEach((f, k) => {
+      const m = minted.get(`m${rec.record}f${f.template}`);
+      if (!m) {
+        diagnostics.push(`merge: record ${rec.record} frame ${f.template} was not minted`);
+        return;
+      }
+      const over = (measured[r]?.[k] ?? false) || (m.storyId !== null && reported.has(m.storyId));
+      frames.push({ element: m.element, storyId: m.storyId, overset: over });
+    });
+    if (frames.some((f) => f.overset)) overset.push(rec.record);
+    records.push({ record: rec.record, page: rec.page, frames });
+  });
+  if (overset.length > 0) diagnostics.push(`merge: ${overset.length} record(s) overset`);
+  return { ok: true, plan, pages, records, overset, mutateCalls, diagnostics };
+}
+
+/** The document's page ids, in order. */
+async function pageIds(host: BundleHost): Promise<string[]> {
+  return (await host.document.collection<{ selfId: string }>("pages")).map((p) => p.selfId);
+}
+
+/** The merge's output pages: from the template on (`consume`) or after it
+ *  (`keep`). Not "the ids that are new": a re-merge deletes the pages it
+ *  added before adding them again, and core may hand the same ids out again. */
+function outputPages(
+  after: readonly string[],
+  template: MergeTemplate,
+  opts: Pick<MergeWriteOptions, "template">,
+  count: number,
+): PageId[] {
+  const at = after.indexOf(template.pageId);
+  return (opts.template === "consume" ? after.slice(at, at + count) : after.slice(at + 1, at + 1 + count)) as PageId[];
+}
+
+/** The merge as two steps: the pages (when it needs new ones), then the
+ *  content on them. */
+async function writeInTwoSteps(
+  host: BundleHost,
+  plan: MergePlan,
+  template: MergeTemplate,
+  wopts: MergeWriteOptions,
+): Promise<{ error: string; mutateCalls: number } | { outcome: AppliedOutcome; pages: PageId[]; mutateCalls: number }> {
+  let mutateCalls = 0;
+  const before = await pageIds(host);
+  const pagesOp = pageMutations(plan, template, wopts);
+  if (pagesOp) {
+    mutateCalls += 1;
+    const o = await host.document.mutate(pagesOp);
+    if (!o.applied) return { error: `merge: adding pages was refused: ${errorText(o.error)}`, mutateCalls };
+  }
+  const after = await pageIds(host);
+  const pages = outputPages(after, template, wopts, plan.pageCount);
+  if (pages.length !== plan.pageCount || (pagesOp === null && after.length !== before.length)) {
+    return { error: `merge: expected ${plan.pageCount} output pages, found ${pages.length}`, mutateCalls };
+  }
+  mutateCalls += 1;
+  const o = await host.document.mutate(contentMutation(plan, template, pages, wopts));
+  if (!o.applied) return { error: `merge: the content batch was refused: ${errorText(o.error)}`, mutateCalls };
+  return { outcome: o, pages, mutateCalls };
+}
+
+/** Every template frame's words measured at its font. With the batch door
+ *  (D-27, `text.measureStrings`) one host call per distinct face and size;
+ *  without it one `measureString` per word, as before. */
+export async function measureWords(
+  host: BundleHost,
+  template: Pick<MergeTemplate, "frames">,
+  words: readonly (readonly string[] | undefined)[],
+): Promise<FrameMetrics[]> {
+  const batch = measureStringsDoor(host);
+  if (batch) {
+    // Group the words by face + size: one call per group.
+    const groups = new Map<string, { font: TemplateFrameInfo["font"]; words: Set<string> }>();
+    template.frames.forEach((f, i) => {
+      const key = JSON.stringify([f.font.family, f.font.style, f.font.sizePt]);
+      const g = groups.get(key) ?? { font: f.font, words: new Set<string>() };
+      for (const w of words[i] ?? []) g.words.add(w);
+      groups.set(key, g);
+    });
+    const advance = new Map<string, Map<string, number>>();
+    for (const [key, g] of groups) {
+      const list = [...g.words];
+      const measured = list.length > 0 ? await batch(g.font.family, g.font.style, list, g.font.sizePt) : [];
+      advance.set(key, new Map(list.map((w, k) => [w, measured[k]?.advance ?? 0])));
+    }
+    return template.frames.map((f, i) => {
+      const byWord = advance.get(JSON.stringify([f.font.family, f.font.style, f.font.sizePt]))!;
+      const advances: Record<string, number> = {};
+      for (const w of words[i] ?? []) advances[w] = byWord.get(w) ?? 0;
+      return { leadingPt: f.font.leadingPt, advances };
+    });
+  }
+  const metrics: FrameMetrics[] = [];
+  for (let i = 0; i < template.frames.length; i++) {
+    const font = template.frames[i].font;
+    const advances: Record<string, number> = {};
+    for (const w of words[i] ?? []) {
+      advances[w] = (await host.text.measureString(font.family, font.style, w, font.sizePt)).advance;
+    }
+    metrics.push({ leadingPt: font.leadingPt, advances });
+  }
+  return metrics;
+}
+
+function errorText(e: unknown): string {
+  try {
+    return typeof e === "string" ? e : JSON.stringify(e);
+  } catch {
+    return String(e);
+  }
+}

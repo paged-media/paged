@@ -1,0 +1,357 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// The paged.data bundle entry. M0 scope (the honest slice): import a CSV into
+// the vendored DuckDB-WASM engine, define a query + binding, resolve through the
+// Rust engine, and lower to a page frame (variable replacement + single-region
+// dynamic table degraded to tab-text + rules, D-02). Remote/DB sources +
+// network consent, record flow, the data-provider contract are wired; the
+// session (sources, queries, bindings, data sets) is saved with the document as
+// this plugin's `session` container part and restored here.
+//
+// Wiring mirrors plugin-sheet: contributePanel for the two panels + the four
+// commands. The host tracks every registration; the session is the one thing
+// allocated OUTSIDE a facade-tracked registration, so dispose tears it down.
+
+import type { BundleHandle, BundleHost } from "@paged-media/plugin-api";
+import { contributeMenu } from "./menu";
+import { contributePanel, contributeSchemaPanel } from "@paged-media/plugin-sdk";
+
+import manifest from "../manifest.json";
+import { createSession, type DataSourceSession } from "./session";
+import { runMergeCommand } from "./merge-command";
+import { makeSourcesPanel } from "./panels/sources-panel";
+import { makeBindingsPanel } from "./panels/bindings-panel";
+import { makeDatasetPanel } from "./panels/dataset-panel";
+import { makeQueryPanel } from "./panels/query-panel";
+import { contributeObjectModel } from "./object-model";
+import { DATA_OBJECTS_PANEL, OBJECTS_PANEL_ID, publishObjectLists } from "./panels/objects-panel";
+
+const SOURCES_PANEL_ID = "media.paged.data.panel.sources";
+const BINDINGS_PANEL_ID = "media.paged.data.panel.bindings";
+const DATASET_PANEL_ID = "media.paged.data.panel.dataset";
+const QUERY_PANEL_ID = "media.paged.data.panel.query";
+const IMPORTER_ID = "media.paged.data.importer.table";
+
+/** The file types File ▸ Import and a drop route to this plugin.
+ *
+ *  CSV, TSV and XLSX are NOT claimed although the plugin imports them (Data
+ *  sources ▸ Import file…): paged.sheet claims the same extensions, and the
+ *  editor's importer registry gives a contested extension to whichever bundle
+ *  registered first (`registries/document-io.ts`: "multi-plugin contention
+ *  policy ships at P7") — paged.data loads before paged.sheet, so claiming
+ *  them here would silently take the spreadsheet import away from the sheet.
+ *  A per-file choice between importers is a host-UI gap; until it exists,
+ *  only the extensions no other bundle claims are routed here. */
+export const IMPORTER_EXTENSIONS = [".json", ".ndjson", ".jsonl", ".parquet"] as const;
+
+/** The injected eval clock for `TODAY()` (days since 1970-01-01). The host
+ *  supplies a real clock in production; M0 uses the load-time UTC day. */
+function todaySerial(): number {
+  return Math.floor(Date.now() / 86_400_000);
+}
+
+/** The session each activation created, by host — for tests and scripts that
+ *  drive a loaded bundle (the panels hold the same object). */
+const sessions = new WeakMap<BundleHost, DataSourceSession>();
+
+export function sessionFor(host: BundleHost): DataSourceSession | undefined {
+  return sessions.get(host);
+}
+
+export function activate(host: BundleHost): BundleHandle {
+  const session = createSession(host, todaySerial());
+  sessions.set(host, session);
+  // The document's saved session (the `session` container part) comes back
+  // in the background; the panels re-render when it lands. Opening a document
+  // boots the data engine only when the document carries a session, and never
+  // boots DuckDB or fetches a remote source by itself.
+  void session.restore();
+  // Activation runs once, at app start; documents come and go after it. On
+  // every load the client broadcasts `documentLoaded`: the session drops the
+  // previous document's state and restores the new one's.
+  let unsubscribeDocs: (() => void) | null = null;
+  try {
+    unsubscribeDocs = host.editor.client.subscribe((msg) => {
+      if (msg.kind === "documentLoaded") void session.documentOpened();
+    });
+  } catch {
+    // no raw client (a headless or older host): the activate-time restore
+    // is the only one
+  }
+
+  contributePanel(host, {
+    id: SOURCES_PANEL_ID,
+    title: "Data sources",
+    icon: "ui-database",
+    component: makeSourcesPanel(host, session),
+    defaultDock: "right",
+  });
+
+  contributePanel(host, {
+    id: BINDINGS_PANEL_ID,
+    title: "Bindings",
+    icon: "panel-links",
+    component: makeBindingsPanel(host, session),
+    defaultDock: "right",
+  });
+
+  contributePanel(host, {
+    id: DATASET_PANEL_ID,
+    // "Dataset preview", not "Dataset": the editor's Window menu already
+    // carries Data / Data Source / Data sources / Datasets — this title
+    // stays distinct from all of them.
+    title: "Dataset preview",
+    icon: "ui-rows",
+    component: makeDatasetPanel(host, session),
+    defaultDock: "right",
+  });
+
+  contributePanel(host, {
+    id: QUERY_PANEL_ID,
+    title: "Data query",
+    icon: "ui-filter",
+    component: makeQueryPanel(host, session),
+    defaultDock: "right",
+  });
+
+  // File ▸ Import / drop: a JSON or Parquet file becomes a data source (the
+  // contested spreadsheet types stay with paged.sheet — IMPORTER_EXTENSIONS).
+  if (host.supports("contribute.importer@1")) {
+    host.contribute.importer({
+      id: IMPORTER_ID,
+      title: "Data source (JSON, Parquet)",
+      extensions: IMPORTER_EXTENSIONS,
+      mimeTypes: ["application/json", "application/x-ndjson", "application/vnd.apache.parquet"],
+      async import(file) {
+        await session.whenRestored();
+        await session.importFile(file.name, file.bytes);
+        try {
+          host.shell.openPanel(SOURCES_PANEL_ID);
+        } catch {
+          // a headless host has no panels; the import itself is done
+        }
+      },
+    });
+  }
+
+  host.contribute.command({
+    id: "media.paged.data.command.importData",
+    title: "Data sources…",
+    category: "Data",
+    handler: () => host.shell.openPanel(SOURCES_PANEL_ID),
+  });
+  host.contribute.command({
+    id: "media.paged.data.command.defineBinding",
+    title: "Bindings…",
+    category: "Data",
+    handler: () => host.shell.openPanel(BINDINGS_PANEL_ID),
+  });
+  host.contribute.command({
+    id: "media.paged.data.command.resolveBindings",
+    title: "Refresh data from sources",
+    category: "Data",
+    handler: () => session.refreshData(),
+  });
+  host.contribute.command({
+    id: "media.paged.data.command.lowerBinding",
+    title: "Place bindings on the page",
+    category: "Data",
+    handler: () => session.lowerAll(),
+  });
+  host.contribute.command({
+    id: "media.paged.data.command.mergeRecords",
+    title: "Merge records into the document",
+    category: "Data",
+    // Payload: SessionMergeOptions; without one, the first query merges
+    // Single Record through the <<field>> frames on the active page. With no
+    // query yet the Bindings panel opens: it says what is missing (a data
+    // source) and holds the Data Merge options. Scripts take the same path
+    // through the typed command `media.paged.data.merge` (object-model.ts).
+    handler: (_paged, payload) =>
+      runMergeCommand(host, session, BINDINGS_PANEL_ID, (payload ?? {}) as Partial<import("./session").SessionMergeOptions>),
+  });
+  host.contribute.command({
+    id: "media.paged.data.command.openDataset",
+    title: "Dataset preview…",
+    category: "Data",
+    handler: () => host.shell.openPanel(DATASET_PANEL_ID),
+  });
+
+  // §9.9 — the two data-set verbs as COMMANDS, not just panel buttons.
+  //
+  // This is deliberate and it is the whole of what "batch output through
+  // actions/scripts" (the catalog's clause) needs from THIS side. The editor's
+  // Actions recorder taps `CommandRegistry.invoke`, so a recorded action is a
+  // list of command steps replayed against the replay-time selection. Given
+  // that, batch output over data sets composes as:
+  //
+  //     for (const name of listDataSets())
+  //       invoke("media.paged.data.command.applyDataSet", { name });
+  //       replay(<the recorded action>);
+  //
+  // — a data set switch is one recordable, replayable, payload-carrying command
+  // whose effect is ONE undo step. The loop itself is HOST-side (the recorder
+  // lives in the editor and this bundle must not depend on it); all this plugin
+  // owes it is a command that takes the set name as a payload and applies
+  // atomically. That is what these two are. Nothing here reaches for the
+  // recorder, and nothing here assumes it exists.
+  host.contribute.command({
+    id: "media.paged.data.command.captureDataSet",
+    title: "Capture the current values as a data set",
+    category: "Data",
+    handler: (_paged, payload) => {
+      const p = (payload ?? {}) as { name?: string; record?: number };
+      return session.captureDataSet(p.name ?? "Data Set", p.record ?? 0);
+    },
+  });
+  host.contribute.command({
+    id: "media.paged.data.command.applyDataSet",
+    title: "Apply a data set…",
+    category: "Data",
+    handler: (_paged, payload) => {
+      const p = (payload ?? {}) as { name?: string };
+      if (!p.name) {
+        // No set named (the menu row, the palette): picking one is the
+        // user's choice, made in the Dataset preview panel's data-set list.
+        host.shell.openPanel(DATASET_PANEL_ID);
+        return { applied: 0, skipped: {} };
+      }
+      return session.applyDataSet(p.name);
+    },
+  });
+
+  // Wave 6: the Data query panel (SQL, builders, preview grid).
+  host.contribute.command({
+    id: "media.paged.data.command.editQuery",
+    title: "Data query…",
+    category: "Data",
+    handler: () => host.shell.openPanel(QUERY_PANEL_ID),
+  });
+
+  // ADR 024 — the dataBinding edit context.
+  //
+  // paged.data was the one content-bearing plugin with NO context at
+  // all, which the context-sensitivity audit caught: it stamps its
+  // `x-paged:media.paged.data` envelope onto the frames it creates
+  // (`lower-to-mutations`, `barcode`), so those frames ARE plugin
+  // content — but double-clicking one fell through to group descent and
+  // the Properties panel showed no owned-type row, not even the
+  // "double-click to edit in place" hint every other content type gives.
+  //
+  // What it edits was never actually open: a bound frame's content IS
+  // its binding, and the Bindings panel is the surface that edits it.
+  //
+  // NO CANVAS TOOL, declared empty. A binding is an expression over a
+  // data source, not geometry — a brush or a pen has nothing to act on.
+  // Empty is a statement here, distinct from omitting the field, which
+  // reads as "unrestricted" and would leave the whole rail lit.
+  if (host.supports("contribute.editContext@1")) {
+    host.contribute.editContext({
+      type: "dataBinding",
+      entry: "doubleClick",
+      // Claimed by OUR OWN metadata envelope — the host pre-resolves
+      // this plugin's namespace and never a foreign one, so this cannot
+      // claim another plugin's frame. Matching by KIND would claim every
+      // rectangle in the document.
+      // Since ADR 559 a page item also carries our label when a PROPERTY
+      // binding targets it (`oid` / `bind`); that frame is the designer's
+      // own content, not ours — only lowered content (`binding`) enters the
+      // data context.
+      matches: (c) => isLoweredContent(c.metadata),
+      toolIds: [],
+      panelIds: [BINDINGS_PANEL_ID],
+    });
+  }
+
+  // ADR 323 — paged.data's own objects (sources, queries, bindings, data
+  // sets, variables) and typed commands, for scripts, the CLI and the
+  // editor's "Bind to data…". A host without the door skips it.
+  const objectModel = contributeObjectModel(host, session, { bindings: BINDINGS_PANEL_ID });
+  // ADR 323 §4 — the same objects as host-rendered PropertyFields: a schema
+  // panel of property rows ("Data objects"; needs the object model and the
+  // schema-panel door). The React panels above keep their features.
+  const objectLists =
+    objectModel && host.supports("contribute.schemaPanel@1")
+      ? (contributeSchemaPanel(host, {
+          id: OBJECTS_PANEL_ID,
+          title: DATA_OBJECTS_PANEL.title,
+          icon: DATA_OBJECTS_PANEL.icon,
+          defaultDock: "right",
+          schema: DATA_OBJECTS_PANEL,
+        }),
+        publishObjectLists(host, session))
+      : null;
+  // "Bind to data…" also as a plain command (the editor's command registry
+  // and the Actions recorder call commands by id; the typed twin is the
+  // object model's).
+  host.contribute.command({
+    id: "media.paged.data.bindProperty",
+    title: "Bind to data…",
+    category: "Data",
+    handler: (_paged, payload) => {
+      const p = (payload ?? {}) as { selector?: string; path?: string; schema?: string };
+      if (!p.selector || !p.path) {
+        // Without a named object and property there is nothing to draft;
+        // the Bindings panel is where a binding is made by hand.
+        host.log.warn("bindProperty: the payload needs { selector, path, schema }");
+        host.shell.openPanel(BINDINGS_PANEL_ID);
+        return null;
+      }
+      session.setPropertyDraft({ selector: p.selector, path: p.path, schema: p.schema ?? "" });
+      host.shell.openPanel(BINDINGS_PANEL_ID);
+      return { status: "draft", opened: true };
+    },
+  });
+
+  host.log.info(`activated (apiVersion ${manifest.apiVersion})`);
+
+  // F1 — the menu bar. Before plugin-api 0.2.33 there was no menu door,
+  // so every command in this bundle lived behind Cmd+K and nowhere else.
+  const menuSub = contributeMenu(host);
+
+  return {
+    dispose() {
+      unsubscribeDocs?.();
+      sessions.delete(host);
+      session.dispose();
+      menuSub.dispose();
+      objectLists?.dispose();
+      objectModel?.dispose();
+    },
+  };
+}
+
+/** Whether a label envelope (or its `data`) marks content this plugin
+ *  lowered — a table, a record flow, a barcode, a merge — rather than a
+ *  page item that only carries a binding (ADR 559). */
+export function isLoweredContent(metadata: unknown): boolean {
+  if (!metadata || typeof metadata !== "object") return false;
+  const m = metadata as { data?: unknown };
+  const data = (m.data && typeof m.data === "object" ? m.data : m) as Record<string, unknown>;
+  return "binding" in data || "merge" in data || "kind" in data || !("bind" in data || "oid" in data);
+}
+
+export {
+  manifest,
+  SOURCES_PANEL_ID,
+  BINDINGS_PANEL_ID,
+  DATASET_PANEL_ID,
+  QUERY_PANEL_ID,
+  IMPORTER_ID,
+};

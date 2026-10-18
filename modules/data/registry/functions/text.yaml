@@ -1,0 +1,132 @@
+# paged.data expression functions — text family (spec §9.1): concatenation and
+# derivation, the workhorse of variable replacement.
+
+- id: data.expr.text.concat
+  name: CONCAT
+  family: text
+  arity: { min: 1, max: null }
+  rust: text::concat
+  status: implemented
+  provenance: ["text concatenation; own code"]
+  tests:
+    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_concat"]
+
+- id: data.expr.text.upper
+  name: UPPER
+  family: text
+  arity: { min: 1, max: 1 }
+  rust: text::upper
+  status: implemented
+  provenance: ["uppercase; own code"]
+  tests:
+    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_upper"]
+
+- id: data.expr.text.lower
+  name: LOWER
+  family: text
+  arity: { min: 1, max: 1 }
+  rust: text::lower
+  status: implemented
+  provenance: ["lowercase; own code"]
+  tests:
+    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_lower"]
+
+- id: data.expr.text.trim
+  name: TRIM
+  family: text
+  arity: { min: 1, max: 1 }
+  rust: text::trim
+  status: implemented
+  provenance: ["whitespace trim; own code"]
+  tests:
+    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_trim"]
+
+- id: data.expr.text.len
+  name: LEN
+  family: text
+  arity: { min: 1, max: 1 }
+  rust: text::len
+  status: implemented
+  provenance: ["character length; own code"]
+  tests:
+    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_len"]
+
+- id: data.expr.text.left
+  name: LEFT
+  family: text
+  arity: { min: 2, max: 2 }
+  rust: text::left
+  status: implemented
+  provenance: ["prefix substring; own code"]
+  tests:
+    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_left"]
+
+- id: data.expr.text.right
+  name: RIGHT
+  family: text
+  arity: { min: 2, max: 2 }
+  rust: text::right
+  status: implemented
+  provenance: ["suffix substring; own code"]
+  tests:
+    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_right"]
+
+- id: data.expr.text.substitute
+  name: SUBSTITUTE
+  family: text
+  arity: { min: 3, max: 3 }
+  rust: text::substitute
+  status: implemented
+  provenance: ["find/replace; own code"]
+  tests:
+    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_substitute"]
+
+- id: data.expr.text.mid
+  name: MID
+  family: text
+  arity: { min: 3, max: 3 }
+  rust: text::mid
+  status: implemented
+  provenance: ["1-based char substring; own code"]
+  tests:
+    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_mid"]
+
+- id: data.expr.text.proper
+  name: PROPER
+  family: text
+  arity: { min: 1, max: 1 }
+  rust: text::proper
+  status: implemented
+  provenance: ["title-case; own code"]
+  tests:
+    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_proper"]
+
+- id: data.expr.text.find
+  name: FIND
+  family: text
+  arity: { min: 2, max: 3 }
+  rust: text::find
+  status: implemented
+  provenance: ["1-based char position; #VALUE if not found; own code"]
+  tests:
+    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_find"]
+
+- id: data.expr.text.textjoin
+  name: TEXTJOIN
+  family: text
+  arity: { min: 2, max: null }
+  rust: text::textjoin
+  status: implemented
+  provenance: ["join values with a delimiter, skipping null/empty; own code"]
+  tests:
+    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_textjoin"]
+
+- id: data.expr.text.rept
+  name: REPT
+  family: text
+  arity: { min: 2, max: 2 }
+  rust: text::rept
+  status: implemented
+  provenance: ["repeat text N times; #VALUE on negative; own code"]
+  tests:
+    rust: ["data-conformance/tests/expr_text.rs::data_expr_text_rept"]

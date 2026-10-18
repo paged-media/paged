@@ -1,0 +1,40 @@
+# paged.data feature registry — security + threat model (spec §11, §12.3
+# data.security.*). The largest attack surface in the suite; these are HARD
+# gates (a failure blocks release).
+
+- id: data.security.capability-gate
+  title: No file/network access without the granting capability (§11)
+  spec: plugin-data data-sources/src/lib.rs (base-idea §11)
+  status: implemented
+  provenance: ["a source cannot be created without its granted capability"]
+  tests:
+    rust: ["data-conformance/tests/security.rs::data_security_capability_gate"]
+
+- id: data.security.no-network-pre-consent
+  title: No resolution of remote sources pre-consent (no silent fetch, §11)
+  spec: plugin-data data-sources/src/lib.rs (base-idea §11)
+  status: implemented
+  provenance: ["per-origin consent; documents carrying queries treated as code; a saved document with a remote source reopens cold + inert (M1)"]
+  tests:
+    rust: ["data-conformance/tests/security.rs::data_security_no_network_pre_consent"]
+    vitest: ["packages/data-bundle/src/__tests__/remote.test.ts"]
+
+- id: data.security.credentials-absent
+  title: Credentials never serialized into the document payload (§11, D-11)
+  spec: plugin-data data-js + data-sources (base-idea §11, rfc-credential-store)
+  status: implemented
+  provenance:
+    - "round-trip: save -> inspect -> assert NO secret bytes; remote + DB-attach descriptors carry credentialRef STRINGS only (e.g. keychain:source-4) — the host resolves the ref + injects the live connection, never the document (rfc-credential-store)"
+    - "legacy pre-D-11 `dsn` connection strings are redacted to host-only on save (user:pass@ stripped) — the invariant holds for legacy shapes too"
+  tests:
+    rust:
+      - "data-conformance/tests/security.rs::data_security_credentials_absent"
+      - "data-conformance/tests/roundtrip.rs::data_plugin_payload_roundtrip"
+
+- id: data.security.network-consent
+  title: Network consent gate (host.network door consumed; per-origin, no silent fetch)
+  spec: plugin-data packages/data-bundle/src/session.ts (base-idea §11, D-03)
+  status: implemented
+  provenance: ["consumes the SDK host.network consent door (landed in plugin-sdk 0.2.7-canary); dormant at M0 (network:false); editor UI + CSP is the follow-up"]
+  tests:
+    vitest: ["packages/data-bundle/src/__tests__/consent.test.ts"]

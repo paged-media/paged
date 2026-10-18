@@ -1,0 +1,53 @@
+# paged.data feature registry — print automation / batch generation (spec §10,
+# data.automation.*). The batch-PLAN engine (partition a result into per-record /
+# per-group / one-catalog generation units) is built + tested; the napi-rs native
+# execution binding + the Boa scripting surface are the remaining T2 work.
+
+- id: data.automation.batch
+  title: Batch plan — partition a result into per-record / per-group / one-catalog generation units (§10)
+  spec: plugin-data data-automation/src/lib.rs (base-idea §10, D-7)
+  status: implemented
+  provenance:
+    [
+      "plans WHICH records feed WHICH document over the stabilized result (deterministic/permutation-invariant); the executor lowers each unit through the normal pipeline — nothing renders here (§10)",
+    ]
+  tests:
+    rust: ["data-conformance/tests/automation.rs::data_automation_batch"]
+
+- id: data.automation.run
+  title: Batch run — execute a plan per-document (resolve + paginate each unit, §10)
+  spec: plugin-data data-js/src/core.rs (base-idea §10, D-7)
+  status: implemented
+  provenance:
+    [
+      "partitions the RESOLVED flow by mode (per-record/per-group/one-catalog) + paginates each unit through the same data-lower path the live doc uses; nothing renders here (executor, not renderer)",
+    ]
+  tests:
+    rust: ["data-conformance/tests/batch_run.rs::data_automation_run"]
+
+- id: data.automation.cli
+  title: Headless batch CLI — drive a batch run server/CI from a JSON job (§10)
+  spec: plugin-data data-cli (base-idea §10, D-7)
+  status: implemented
+  provenance:
+    [
+      "plain-Rust binary (paged-data-batch) + run_job lib over the SAME engine the editor uses; reads recipe + pre-materialized results + a frame chain, emits the per-document lowered IR; query engine NOT embedded (§3); napi-rs node binding is a future packaging option over run_job",
+    ]
+  tests:
+    rust: ["data-cli/src/lib.rs::data_automation_cli"]
+
+- id: data.automation.native
+  title: napi-rs node binding — call the batch runner as a native Node library (§10)
+  spec: plugin-data (base-idea §10, D-7 — a future packaging option over data-cli's run_job)
+  status: planned
+
+- id: data.automation.script
+  title: Constrained Boa scripting surface — scriptable queries + templated runs (§10)
+  spec: plugin-data data-script (base-idea §10 — capability-gated)
+  status: implemented
+  provenance:
+    [
+      "sandboxed Boa (Rust JS); the script COMPUTES + RETURNS a build spec ({locale?,params?,build?}) — handed no host functions, so no fs/network/engine access (return-a-value, not call-the-host); consumed by data-cli (an optional job.script)",
+    ]
+  tests:
+    rust: ["data-script/src/lib.rs::data_automation_script"]

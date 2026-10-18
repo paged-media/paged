@@ -1,0 +1,141 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// @paged-media/data-host-model — the pure LoweredOutput → Mutation[] translator
+// (spec §9). ZERO binding/expression/sync semantics: those live in the Rust
+// engine (data-* crates → data-js wasm). This package is data-in, mutations-out.
+
+export type {
+  ContentBox,
+  GridRule,
+  ImageReference,
+  ImageStatus,
+  LoweredBarcode,
+  LoweredColumn,
+  LoweredImage,
+  LoweredOutput,
+  LoweredRow,
+  LoweredTable,
+  LoweredVariable,
+  LoweredVisibility,
+} from "./lowered";
+
+export {
+  visibilityTarget,
+  visibilityMutation,
+  visibilityToMutations,
+  dataSetPlan,
+  dataSetBatch,
+  type VisibilityTargetKind,
+  type DataSetApply,
+  type DataSetTargets,
+  type DataSetPlan,
+} from "./variables";
+
+export {
+  barcodeToMutations,
+  barcodeModuleCount,
+  type BarcodeModule,
+  type BarcodePlacement,
+} from "./barcode";
+
+export {
+  BINDING_KEY,
+  BINDING_VERSION,
+  makeEnvelope,
+  parseEnvelope,
+  type BindingEnvelope,
+} from "./binding";
+
+export { DEFAULT_INSET_PT, defaultPlacement, type Placement } from "./placement";
+
+export {
+  bindingMetadata,
+  tableToMutations,
+  tableInsertSpec,
+  tableInsertMutation,
+  tableCellInserts,
+  type TableInsertSpec,
+  type TableLowerResult,
+} from "./lower-to-mutations";
+
+export {
+  FIELD_PLUGIN,
+  insertFieldMutation,
+  setFieldValueMutation,
+  diffFields,
+  backToFront,
+  ownFields,
+  idmlFit,
+  placeableUri,
+  placeImageMutation,
+  ruleMutations,
+  paragraphRanges,
+  createRuleCellStyle,
+  type PlaceholderField,
+  type FieldRefresh,
+  type IdmlFit,
+  type RuleTarget,
+  type ParagraphRange,
+} from "./fields";
+
+export { toRuleApplication, type RuleResult, type RuleApplication } from "./rule";
+
+export {
+  DATA_LABEL_KEY,
+  PERSIST_KEYS,
+  asciiJson,
+  decodeAid,
+  findSwatch,
+  labelData,
+  mergeLabel,
+  mintSwatch,
+  oidOfSelector,
+  oidSelector,
+  planProperties,
+  targetSelector,
+  type ColorIntent,
+  type LoweredProperty,
+  type PropValue,
+  type PropertyApply,
+  type PropertyOutcome,
+  type PropertyPlan,
+  type SwatchRow,
+  type TargetRef,
+} from "./property";
+
+export {
+  OWN_TEXT_VARIABLES,
+  TEXT_VARIABLE_PREFIX,
+  TEXT_VARIABLE_SELF,
+  cellAddress,
+  cellStyleSelf,
+  createTextVariableMutation,
+  encodeAddressPart,
+  fieldWriteMutation,
+  insertTextVariableMutation,
+  keyOfTextVariable,
+  ruleCellOps,
+  setTextVariableMutation,
+  textVariableAddress,
+  textVariableContents,
+  textVariableField,
+  textVariableId,
+  textVariableName,
+  valueOfContents,
+} from "./text-variables";

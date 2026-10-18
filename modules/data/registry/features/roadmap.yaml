@@ -1,0 +1,13 @@
+# paged.data feature registry — roadmap namespace (spec §12.3). The provider,
+# automation, and governed roles now have their own gated files (provider.yaml,
+# automation.yaml, governed.yaml) as their engine sides landed. What remains here
+# is the broader end-to-end governed-extract path; the BREAKAGE_LOG carries the
+# SDK dependencies for the rest.
+
+# data.governed.catalog (the metadata-enrichment half) is implemented in its own
+# gated file (registry/features/governed.yaml); this row is the broader
+# end-to-end path (the bundle reading the table + sidecar from a file/URL/DB).
+- id: data.governed.extract
+  title: Governed-extract path (read governed tables + sidecar from a file/URL/DB location, §7)
+  spec: plugin-data data-sources (base-idea §7, D-1/D-5 — M2)
+  status: planned

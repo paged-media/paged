@@ -1,0 +1,120 @@
+// Shared boot for the specs that prove a defect against the REAL core engine
+// (the published @paged-media/canvas-wasm, booted in Node by plugin-sdk's
+// createHeadlessHost). The same pattern plugin-draw's conformance specs use.
+//
+// canvas-wasm is a devDependency of this package; the engine is found by
+// probing: PAGED_ENGINE_FROM first (a directory whose node_modules holds a
+// canvas-wasm build, e.g. a local sync-wasm build), then this package, then an editor
+// checkout above this repo (`~/paged/editor/packages/client` in the local
+// workspace layout, `../editor/packages/client` in the sibling CI layout).
+// When nothing is found the suite SKIPS — unless REQUIRE_REAL_CORE=1, under
+// which it fails instead, so a CI lane that opts in can never silently drop it.
+
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
+
+import { minimalIdml } from "./fixtures/minimal-idml";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const PKG = "node_modules/@paged-media/canvas-wasm/package.json";
+
+/** The directory to hand `createHeadlessHost({ resolveFrom })`, or null. */
+export function findEngineAnchor(): string | null {
+  const local = process.env.PAGED_ENGINE_FROM;
+  if (local) return existsSync(join(local, PKG)) ? local : null;
+  const own = resolve(HERE, "..");
+  if (existsSync(join(own, PKG))) return own;
+  // Walk up from this package looking for an editor checkout beside a parent.
+  let dir = own;
+  for (let i = 0; i < 8; i++) {
+    const candidate = join(dir, "editor/packages/client");
+    if (existsSync(join(candidate, PKG))) return candidate;
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+export const ENGINE_ANCHOR = findEngineAnchor();
+
+/** The engine protocol of the canvas-wasm the suite boots (the version's
+ *  minor: `0.<protocol>.<patch>`), or 0 when none is found. */
+export const ENGINE_PROTOCOL: number = (() => {
+  if (!ENGINE_ANCHOR) return 0;
+  try {
+    const v = (JSON.parse(readFileSync(join(ENGINE_ANCHOR, PKG), "utf8")) as { version: string }).version;
+    return Number(v.split(".")[1]) || 0;
+  } catch {
+    return 0;
+  }
+})();
+
+/** `it` from engine protocol `min` on, `it.fails` (a pinned defect) before
+ *  it: a defect a released engine fixes stays pinned against the older one. */
+export function fixedFrom<T extends { fails: unknown }>(min: number, it: T): T | T["fails"] {
+  return ENGINE_PROTOCOL >= min ? it : it.fails;
+}
+export const REQUIRE_REAL_CORE = process.env.REQUIRE_REAL_CORE === "1";
+
+const silent = { debug() {}, info() {}, warn() {}, error() {} };
+
+/** Boot a headless host over the real engine and load the minimal fixture
+ *  (one page, Self="usp"). */
+export async function openRealHost(extra: { engineShaper?: boolean } = {}): Promise<HeadlessHost> {
+  if (!ENGINE_ANCHOR) {
+    throw new Error(
+      "REQUIRE_REAL_CORE=1 but no @paged-media/canvas-wasm was found " +
+        "(set PAGED_ENGINE_FROM, or install an editor checkout beside this repo)",
+    );
+  }
+  const h = await createHeadlessHost({
+    console: silent,
+    resolveFrom: ENGINE_ANCHOR,
+    // The engine shaper (contract 0.2.41: `measureStrings` in one call);
+    // an older SDK ignores the option.
+    ...extra,
+  } as Parameters<typeof createHeadlessHost>[0]);
+  await h.load(minimalIdml());
+  return h;
+}
+
+/** One of paged.data's variable fields as a test reads it, whatever carries
+ *  it: a placeholder field (every engine) or, from protocol 71, a custom
+ *  text variable `paged:<key>` (ADR 559) — then `storyId` is its address,
+ *  `offset` 0 and `variable` its `Self`. */
+export interface DataField {
+  key: string;
+  storyId: string;
+  offset: number;
+  value: string | null;
+  variable?: string;
+}
+
+type FieldHost = {
+  document: { placeholders(): Promise<readonly { storyId: string; offset: number; plugin: string; key: string; value: string | null }[]> };
+  objects?: { query(s: string): Promise<string[]>; get(a: string, p: string): Promise<unknown> };
+};
+
+/** paged.data's fields in a document: placeholder fields first (story
+ *  order), then text variables (`<key>` contents = unresolved). */
+export async function dataFields(host: FieldHost): Promise<DataField[]> {
+  const out: DataField[] = (await host.document.placeholders())
+    .filter((p) => p.plugin === "media.paged.data")
+    .map((p) => ({ key: p.key, storyId: p.storyId, offset: p.offset, value: p.value }));
+  if (ENGINE_PROTOCOL >= 71 && host.objects) {
+    // Ours by NAME: an InDesign save re-spells the Self (`paged-v_name`).
+    for (const address of await host.objects.query('textVariable[name^="paged:"]')) {
+      const id = address.slice("textVariable:".length);
+      const name = (await host.objects.get(address, "textVariableName")) as { value?: unknown };
+      const key = String(name.value).slice("paged:".length);
+      const v = (await host.objects.get(address, "textVariableContents")) as { value?: unknown };
+      const contents = typeof v.value === "string" ? v.value : null;
+      out.push({ key, storyId: address, offset: 0, value: contents === `<${key}>` ? null : contents, variable: id });
+    }
+  }
+  return out;
+}

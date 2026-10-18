@@ -1,0 +1,75 @@
+# paged.data feature registry — source adapters (spec §6.2, §12.3
+# data.source.*). M0 implements inline + file; M1 adds remote (HTTP(S),
+# consent-gated, transport-agnostic); db/governed are M2+.
+
+- id: data.source.inline
+  title: Inline-seed source (data embedded in the doc; no capability)
+  spec: plugin-data data-sources/src/lib.rs (base-idea §6.2)
+  status: implemented
+  provenance: ["travels with the document"]
+  tests:
+    rust: ["data-conformance/tests/sources.rs::data_source_inline"]
+
+- id: data.source.file
+  title: File source (CSV/TSV/JSON/Parquet/Excel) — file-import capability
+  spec: plugin-data data-sources/src/lib.rs (base-idea §6.2)
+  status: implemented
+  provenance: ["DuckDB readers over OPFS-imported bytes; capability-gated"]
+  tests:
+    rust: ["data-conformance/tests/sources.rs::data_source_file"]
+
+- id: data.source.manifest
+  title: Visible data-source manifest (every origin/file a doc touches, §11)
+  spec: plugin-data data-sources/src/lib.rs (base-idea §11)
+  status: implemented
+  provenance: ["no silent fetch; credentials redacted"]
+  tests:
+    rust: ["data-conformance/tests/sources.rs::data_source_manifest"]
+
+- id: data.source.remote
+  title: Remote source (HTTP(S) CSV/JSON/Parquet) — network + per-origin consent
+  spec: plugin-data data-sources/src/remote.rs (base-idea §6.2, D-03)
+  status: implemented
+  provenance: ["descriptor {url, format, params} is transport-agnostic — the engine validates + keys, the bundle fetches edit-time post-consent; content-hash invalidation key; credentialRef strings only (D-11)"]
+  tests:
+    rust:
+      - "data-conformance/tests/sources.rs::data_source_remote"
+      - "data-sources/src/remote.rs::data_source_remote_validate"
+    vitest: ["packages/data-bundle/src/__tests__/remote.test.ts"]
+
+- id: data.source.db-attach
+  title: DB attach (SQLite/Postgres/MySQL) — credentialRef indirection + host-injection seam
+  spec: plugin-data data-sources/src/lib.rs (base-idea §6.2, D-11, rfc-credential-store)
+  status: implemented
+  provenance:
+    - "structured DbAttach { db, target, credentialRef } — NO connection string with secrets; the host resolves the ref + injects the live connection (pairs with the D-03 consent door)"
+    - "honest transport scoping: SQLite attach (file/OPFS) is pure-web-reachable; Postgres/MySQL over raw TCP is the headless/napi + proxy lane (a named deferral) — attach_plan().in_browser reports it; descriptor + ref indirection + host seam exist for all three"
+  tests:
+    rust:
+      - "data-sources/src/lib.rs::data_source_db_attach_credential_ref_only"
+      - "data-sources/src/lib.rs::data_source_db_attach_sqlite_is_file_tier"
+      - "data-sources/src/lib.rs::data_source_db_attach_plan_scopes_network_engines"
+
+- id: data.source.duckdb-engine
+  title: DuckDB-WASM loads first-class via the `engine` wasm purpose (64 MiB ceiling, D-07b)
+  spec: plugin-data packages/data-bundle/manifest.json + scripts/vendor-duckdb.sh (D-07b, D-11)
+  status: implemented
+  provenance:
+    - "the vendored MIT DuckDB-WASM (~36 MiB) is declared purpose:engine — it earns the governed 64 MiB per-artifact ceiling, NOT the 8 MiB compute/codec cap; the plugin-cli size-gate verifies it passes as engine and would REJECT it as compute"
+  tests:
+    rust: ["data-conformance/tests/sources.rs::data_source_duckdb_engine_purpose"]
+
+- id: data.source.refresh-policy
+  title: Source refresh-policy shape — Manual | OnOpen | Interval | Never (round-trips; honest interactive-vs-automation split, §5.1/§11)
+  spec: plugin-data data-core/src/model.rs (RefreshPolicy) (base-idea §5.1, §11)
+  status: implemented
+  provenance:
+    - "RefreshPolicy { Manual(default) | OnOpen | Interval{secs} | Never } is a field on every DataSource; serde round-trips so the recipe survives save/load (added fields default — pre-policy payloads still decode)"
+    - "POLICY SHAPE ONLY (not a live scheduler): a document never runs a wall-clock timer (§11 — carries data, not a daemon). honored_interactively() encodes the split — the interactive editor acts on Manual (explicit refresh), OnOpen (re-resolve once on open behind the §11 consent gate, never a silent auto-fetch) and Never (frozen snapshot); Interval is DEFERRED to the batch/automation lane (data-automation, the napi/headless track that owns the clock), which reads interval_secs(). The live interval scheduler is the recorded follow-up — no background-timer code lives in the document realm"
+  tests:
+    rust: ["data-conformance/tests/sources.rs::data_source_refresh_policy_roundtrip"]
+
+- id: data.source.governed-extract
+  title: Governed extract (governed tables + optional metadata sidecar, §7)
+  spec: plugin-data data-sources (base-idea §7)
+  status: planned

@@ -1,0 +1,367 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// The DuckDB-WASM integration (spec §6) — the MIT query/ingest engine. It
+// registers inline/file sources, runs SQL, and materialises the Arrow result
+// into the `RecordSetJson` the engine ingests (the swappable Arrow seam, §6.1).
+//
+// WHAT RUNS: the governed artifact set in the bundle's own `bin/`, staged by
+// scripts/vendor-duckdb.sh and shipped in the npm tarball ("files": bin):
+//
+//   bin/duckdb-engine.wasm           the manifest's `duckdb-engine` artifact,
+//                                    `purpose: "engine"`, maxBytes 48 MiB;
+//                                    the EH variant (exceptions, no threads)
+//   bin/duckdb-browser-eh.worker.js  the worker that instantiates it
+//   bin/duckdb-browser.mjs           the JS API, apache-arrow inlined
+//   bin/duckdb-ext/v1.1.1/wasm_eh/   DuckDB's json + parquet extensions,
+//                                    loaded same-origin (DUCKDB_EXTENSIONS)
+//
+// Exactly one variant ships: mvp (40.6 MB) is over the cap and coi needs
+// threads plus cross-origin isolation. Nothing here reads vendor/ any more;
+// vendor/ is the local fetch cache and the Node test lane's source.
+//
+// WHY NOT `loadBundleWasm`: the plugin-sdk loader instantiates a module with
+// only the imports the caller passes and no worker. DuckDB is an Emscripten
+// module that its own worker instantiates with its own imports, so the bundle
+// resolves the file URL and hands it to DuckDB's worker. The manifest
+// declaration stays the governance anchor: the plugin-cli size gate and
+// scripts/pubcheck.mjs check the shipped file against its maxBytes.
+//
+// WHERE THE ENGINE COMES FROM (plugin-sdk ADR 326, the module door): the
+// boot first asks the HOST where it serves the declared `duckdb-engine`
+// artifact (src/module-door.ts). A deployed editor answers with the
+// first-party module host — https://modules.paged.media/@paged-media/data/
+// <version>/bin/duckdb-engine.wasm, immutable per published version, brotli,
+// CORS * — and the worker's `instantiate` fetches it from there. A host
+// without the door (or one that does not serve it) answers null and the
+// engine comes from bin/ as before.
+//
+// Before DuckDB sees the host's URL, the boot fetches it once on this side
+// (`preflightHostedWasm`): with the module's Subresource Integrity when the
+// host vouches for it. A 404, a refused CORS read or a digest that differs
+// falls back to bin/ — DuckDB's worker does not reject on a missing module,
+// it hangs — and a successful pre-fetch leaves the verified bytes in the
+// HTTP cache (the module host serves them immutable for a year), where the
+// worker's own fetch of the same URL finds them. If the host's copy still
+// fails to instantiate, the boot retries once from bin/ with a fresh worker.
+//
+// What D-05 still forbids, and what it does not: the WORKER SCRIPT stays in
+// the bundle's own bin/, same-origin — a Worker on a cross-origin URL is a
+// SecurityError — and nothing loads from a CDN or a third-party origin. The
+// module host is first-party (the editor's own CSP connect-src lists it) and
+// serves only the bytes this package published. DuckDB's worker fetches the
+// URL itself, so the module's Subresource Integrity cannot reach THAT fetch;
+// the pre-fetch above verifies the same immutable URL. The json /
+// parquet extensions still load from bin/duckdb-ext/ (DUCKDB_EXTENSIONS).
+//
+// Absent (not staged, or the host does not serve bin/) → DUCKDB_NOT_VENDORED,
+// which the sources panel shows as "duckdb-missing" — never faked.
+
+import { binUrl } from "../bin-url";
+import { WASM_ARTIFACTS, type WasmResolver } from "../module-door";
+import {
+  arrowToColumns,
+  arrowToRecordSet,
+  needsText,
+  type ArrowLikeTable,
+  type ColumnBatch,
+  type RecordSetJson,
+} from "./recordset";
+
+export const DUCKDB_NOT_VENDORED =
+  "DuckDB-WASM not available — run `bash scripts/vendor-duckdb.sh` (stages packages/data-bundle/bin/duckdb-engine.wasm), and make sure the host serves the bundle's bin/";
+
+/** The shipped DuckDB files, by role, relative to the bundle's `bin/`. */
+export const DUCKDB_ARTIFACTS = {
+  module: "duckdb-engine.wasm",
+  worker: "duckdb-browser-eh.worker.js",
+  api: "duckdb-browser.mjs",
+} as const;
+
+/** The engine half of the query guard (query/sql.ts), run by every boot
+ *  right after connecting and before anything else: lock DuckDB's
+ *  configuration, so no statement can change a setting (`SET`, `RESET`,
+ *  `PRAGMA`) for the session's life. Boot cost, not a per-command query. */
+export const LOCKDOWN_SQL = "SET lock_configuration = true";
+
+/** DuckDB's own extensions the shipped engine needs, served from the bundle's
+ *  `bin/`. The eh build (DuckDB-WASM 1.29.0, engine v1.1.1) has neither json
+ *  nor parquet built in; DuckDB loads them on first use (`read_json`,
+ *  `read_parquet`) from `<repository>/<engine version>/<platform>/<name>.duckdb_extension.wasm`.
+ *  The default repository is extensions.duckdb.org, which a host CSP with
+ *  `connect-src 'self'` refuses — and the worker then traps. So the boot
+ *  points the repository at `bin/duckdb-ext/`, where
+ *  scripts/vendor-duckdb.sh stages the two signed files. */
+export const DUCKDB_EXTENSIONS = {
+  dir: "duckdb-ext",
+  engineVersion: "v1.1.1",
+  platform: "wasm_eh",
+  names: ["json", "parquet"],
+} as const;
+
+/** The bin/-relative path of one shipped extension. */
+export function extensionPath(name: (typeof DUCKDB_EXTENSIONS.names)[number]): string {
+  const e = DUCKDB_EXTENSIONS;
+  return `${e.dir}/${e.engineVersion}/${e.platform}/${name}.duckdb_extension.wasm`;
+}
+
+/** The boot statements that make DuckDB load extensions only from `repo`
+ *  (an absolute URL, no trailing slash), run before [`LOCKDOWN_SQL`] locks
+ *  them. Autoload stays on (that is how `read_json` finds json); autoinstall
+ *  is off, so nothing is installed from DuckDB's default repository. */
+export function extensionRepoSql(repo: string): string[] {
+  const r = repo.replace(/\/+$/, "").replace(/'/g, "''");
+  return [
+    `SET custom_extension_repository = '${r}'`,
+    `SET autoinstall_extension_repository = '${r}'`,
+    "SET autoinstall_known_extensions = false",
+    "SET autoload_known_extensions = true",
+  ];
+}
+
+/** Every statement a boot runs right after connecting, in order: the
+ *  extension repository, then the configuration lock (which freezes it). */
+export function bootSql(repo: string): string[] {
+  return [...extensionRepoSql(repo), LOCKDOWN_SQL];
+}
+
+/** A booted DuckDB session over the vendored engine. */
+export interface DuckDBHandle {
+  /** Register an inline CSV text as a named table (the InlineSeed / pasted path). */
+  registerCsv(name: string, csvText: string): Promise<void>;
+  /** Register imported file bytes under a virtual name (the file-import path). */
+  registerFileBuffer(name: string, bytes: Uint8Array): Promise<void>;
+  /** Run SQL and materialise the Arrow result as a RecordSet (`{t, v}` per
+   *  cell — the original seam). */
+  query(sql: string): Promise<RecordSetJson>;
+  /** Run SQL and read the result as display text: column names plus rows of
+   *  strings (`null` for SQL NULL). Values are `String(v)` of what Arrow
+   *  returns, so callers that show values cast to VARCHAR in SQL first and
+   *  let DuckDB render them. Independent of the RecordSet conversion. */
+  rows(sql: string): Promise<TextRows>;
+  /** Run a statement for its effect (CREATE TABLE …); the result is dropped
+   *  without converting it. */
+  exec(sql: string): Promise<void>;
+  /** Forget a registered virtual file, so the name can be registered again
+   *  (a re-import). A no-op when DuckDB does not know the name. */
+  dropFile(name: string): Promise<void>;
+  /** Run SQL and read the Arrow result as typed column buffers — the form
+   *  `ingestColumnBatch` sends to the engine with one copy per column. */
+  queryColumns(sql: string): Promise<ColumnBatch>;
+  /** Tear the session + worker down. */
+  close(): Promise<void>;
+}
+
+/** A result as text (see [`DuckDBHandle.rows`]). */
+export interface TextRows {
+  columns: string[];
+  rows: (string | null)[][];
+}
+
+/** An Arrow result as text rows. */
+export function arrowToTextRows(table: ArrowLikeTable): TextRows {
+  const columns = table.schema.fields.map((f) => f.name);
+  const cols = columns.map((_, i) => table.getChildAt(i));
+  const rows: (string | null)[][] = [];
+  for (let r = 0; r < table.numRows; r++) {
+    rows.push(
+      cols.map((c) => {
+        const v = c?.get ? c.get(r) : c?.toArray()[r];
+        return v === null || v === undefined ? null : String(v);
+      }),
+    );
+  }
+  return { columns, rows };
+}
+
+/** The DuckDB database surface the handle drives. Both the browser
+ *  `AsyncDuckDB` (promises) and the Node blocking build (plain values) fit:
+ *  every call is awaited, so the real-DuckDB test lane runs the SAME handle
+ *  code as the editor. */
+export interface DuckDBLike {
+  registerFileText(name: string, text: string): unknown;
+  registerFileBuffer(name: string, bytes: Uint8Array): unknown;
+  dropFile?(name: string): unknown;
+}
+export interface DuckDBConnectionLike {
+  insertCSVFromPath(path: string, opts: { name: string; schema: string; detect: boolean }): unknown;
+  query(sql: string): unknown;
+  close(): unknown;
+}
+
+/** A double-quoted SQL identifier. */
+function ident(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
+/** Run SQL; when the result has columns data-core has no kind for (TIME,
+ *  INTERVAL, LIST, STRUCT, MAP, …), run it again with exactly those columns
+ *  cast to VARCHAR, so they cross as DuckDB's own text rendering (oracle
+ *  defect DQ-4). Only such results pay the second query. */
+async function runQuery(conn: DuckDBConnectionLike, sql: string): Promise<ArrowLikeTable> {
+  const table = (await conn.query(sql)) as ArrowLikeTable;
+  const casts = table.schema.fields.filter(needsText);
+  if (casts.length === 0) return table;
+  const inner = sql.trim().replace(/;+\s*$/, "");
+  const replace = casts.map((f) => `CAST(${ident(f.name)} AS VARCHAR) AS ${ident(f.name)}`).join(", ");
+  try {
+    return (await conn.query(`SELECT * REPLACE (${replace}) FROM (${inner}) AS _paged_q`)) as ArrowLikeTable;
+  } catch {
+    // A shape the rewrite cannot wrap (e.g. duplicate column names): read the
+    // original, whose nested columns then fall back to per-row text.
+    return table;
+  }
+}
+
+/** Wrap a connected DuckDB (browser or Node) as the bundle's [`DuckDBHandle`]. */
+export function duckdbHandle(
+  db: DuckDBLike,
+  conn: DuckDBConnectionLike,
+  teardown: () => Promise<void> | void,
+): DuckDBHandle {
+  return {
+    async registerCsv(name: string, csvText: string) {
+      await db.registerFileText(`${name}.csv`, csvText);
+      // The CSV insert CREATES the table: a source imported again replaces it.
+      await conn.query(`DROP TABLE IF EXISTS ${ident(name)}`);
+      await conn.insertCSVFromPath(`${name}.csv`, { name, schema: "main", detect: true });
+    },
+    async registerFileBuffer(name: string, bytes: Uint8Array) {
+      // A copy: the browser AsyncDuckDB transfers the buffer to its worker,
+      // which would detach the caller's bytes — the bytes the session saves
+      // with the document.
+      await db.registerFileBuffer(name, bytes.slice());
+    },
+    async query(sql: string): Promise<RecordSetJson> {
+      return arrowToRecordSet(await runQuery(conn, sql));
+    },
+    async queryColumns(sql: string): Promise<ColumnBatch> {
+      return arrowToColumns(await runQuery(conn, sql));
+    },
+    async rows(sql: string): Promise<TextRows> {
+      return arrowToTextRows((await conn.query(sql)) as ArrowLikeTable);
+    },
+    async exec(sql: string) {
+      await conn.query(sql);
+    },
+    async dropFile(name: string) {
+      try {
+        await db.dropFile?.(name);
+      } catch {
+        // not registered: nothing to drop
+      }
+    },
+    async close() {
+      await conn.close();
+      await teardown();
+    },
+  };
+}
+
+/** Fetch the host's copy of a module once, with its integrity when known:
+ *  null when it is there (and its bytes match), else why not. The fetch
+ *  also leaves the bytes in the HTTP cache for DuckDB's worker. */
+export async function preflightHostedWasm(
+  url: string,
+  integrity: string | null,
+): Promise<string | null> {
+  try {
+    const res = integrity ? await fetch(url, { integrity }) : await fetch(url);
+    if (!res.ok) return `answered HTTP ${res.status}`;
+    // With an integrity the body is already read and verified; without one,
+    // read it so the cache entry is complete.
+    if (!integrity) await res.arrayBuffer();
+    return null;
+  } catch (err) {
+    return `could not be fetched${integrity ? " with its integrity" : ""} (${err instanceof Error ? err.message : String(err)})`;
+  }
+}
+
+/** Options for [`bootDuckDB`]. */
+export interface BootDuckDBOptions {
+  /** The module door (src/module-door.ts): where the HOST serves the
+   *  `duckdb-engine` artifact. Absent, or answering null: `bin/`. */
+  resolveWasm?: WasmResolver;
+  /** Told when the host's engine failed and `bin/` was used. */
+  onFallback?: (reason: string) => void;
+}
+
+/** Boot DuckDB-WASM: the engine wasm from the host's module door when it
+ *  serves it, else from the bundle's `bin/`; the worker and the JS API always
+ *  from `bin/`. Throws [`DUCKDB_NOT_VENDORED`] when the artifact is absent
+ *  (the panel renders that honestly). */
+export async function bootDuckDB(opts: BootDuckDBOptions = {}): Promise<DuckDBHandle> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let duckdb: any = null;
+  try {
+    duckdb = await import(/* @vite-ignore */ binUrl(DUCKDB_ARTIFACTS.api));
+  } catch {
+    throw new Error(DUCKDB_NOT_VENDORED);
+  }
+  if (!duckdb) throw new Error(DUCKDB_NOT_VENDORED);
+
+  // The engine wasm: the host's copy when the module door serves it, then
+  // the bundle's own. Each attempt gets a fresh worker.
+  const own = binUrl(DUCKDB_ARTIFACTS.module);
+  const hosted = opts.resolveWasm
+    ? await opts.resolveWasm(WASM_ARTIFACTS.duckdb).catch(() => null)
+    : null;
+  const candidates = [own];
+  if (hosted && hosted.url !== own) {
+    const why = await preflightHostedWasm(hosted.url, hosted.integrity);
+    if (why === null) candidates.unshift(hosted.url);
+    else opts.onFallback?.(`the host's DuckDB engine (${hosted.url}) ${why}; using bin/`);
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let db: any = null;
+  let worker: Worker | null = null;
+  let lastErr: unknown = null;
+  for (const moduleUrl of candidates) {
+    // Spawn the worker from the bundle's own bin/, same-origin. NOT
+    // getJsDelivrBundles(): a Worker on a cross-origin URL is a SecurityError,
+    // and the plugin never fetches its engine from a CDN (BREAKAGE D-05).
+    const w = new Worker(binUrl(DUCKDB_ARTIFACTS.worker));
+    const candidate = new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(), w);
+    try {
+      await candidate.instantiate(moduleUrl);
+      db = candidate;
+      worker = w;
+      break;
+    } catch (err) {
+      w.terminate();
+      lastErr = err;
+      if (moduleUrl !== own) {
+        opts.onFallback?.(
+          `the host's DuckDB engine (${moduleUrl}) did not instantiate (${err instanceof Error ? err.message : String(err)}); using bin/`,
+        );
+      }
+    }
+  }
+  if (!db || !worker) {
+    throw new Error(
+      `${DUCKDB_NOT_VENDORED} (instantiate failed: ${lastErr instanceof Error ? lastErr.message : String(lastErr)})`,
+    );
+  }
+  const liveWorker: Worker = worker;
+  const conn = await db.connect();
+  for (const sql of bootSql(binUrl(DUCKDB_EXTENSIONS.dir))) await conn.query(sql);
+  return duckdbHandle(db, conn, async () => {
+    await db.terminate();
+    liveWorker.terminate();
+  });
+}

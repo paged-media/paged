@@ -1,0 +1,753 @@
+/*
+ * This file is part of paged (https://paged.media).
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+//! # data-js — the wasm-bindgen surface (spec §4, the final Rust join)
+//!
+//! ALL binding/expression/sync/lowering semantics live in the Rust `data-*`
+//! crates (constitution hard rule). This crate is the THIN boundary that
+//! exposes one wasm class — `DataEngine` — over the plain-Rust
+//! [`core::DataSession`]. Every method forwards to the session and serialises
+//! its serde structs across the wasm door with `serde-wasm-bindgen`; nothing
+//! computes here.
+//!
+//! ## Two layers, one logic
+//!
+//! - [`core::DataSession`] — plain Rust, native-typed. The full engine lives
+//!   here, so `data-conformance` exercises it WITHOUT a wasm runtime.
+//! - `DataEngine` (below) — `#[cfg(target_arch = "wasm32")]` only, because
+//!   `JsValue`-returning `#[wasm_bindgen]` methods compile only for wasm32. A
+//!   forwarding shim with NO logic of its own.
+//!
+//! ## The TS consumer contract (`data-bundle/src/engine.ts`)
+//!
+//! The facade boots `new mod.DataEngine(today)`, then calls the snake_case
+//! instance methods `define_source` / `define_query` / `define_binding` /
+//! `define_placeholder` / `set_param` / `ingest_result` / `resolve_lowered` /
+//! `sync_state` / `pin` / `mark_overridden` / `relink` / `sync_report` /
+//! `source_manifest` / `authorize_report` / `payload` / `metadata` / `free`.
+//! The query engine itself is the vendored DuckDB-WASM (TS side); it converts
+//! its Arrow result to a `RecordSet` JSON which `ingest_result` decodes.
+
+pub mod columns;
+pub mod core;
+pub mod import;
+pub mod review;
+
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+    use crate::columns::ColumnBuf;
+    use crate::core::DataSession;
+    use data_core::{BindingId, QueryId};
+    use wasm_bindgen::prelude::*;
+
+    /// The wasm class the bundle consumes — a thin shim over [`DataSession`].
+    #[wasm_bindgen]
+    pub struct DataEngine {
+        session: DataSession,
+    }
+
+    #[wasm_bindgen]
+    impl DataEngine {
+        /// Construct a session with an injected `today` serial (days since
+        /// 1970-01-01) — deterministic; `TODAY()` reads it.
+        #[wasm_bindgen(constructor)]
+        pub fn new(today: i32) -> DataEngine {
+            DataEngine {
+                session: DataSession::new(today),
+            }
+        }
+
+        /// Define a data source (recipe; used for the §11 manifest + gate).
+        pub fn define_source(&mut self, source: JsValue) -> Result<(), JsValue> {
+            self.session.define_source(from_js(source)?);
+            Ok(())
+        }
+
+        /// Define a query.
+        pub fn define_query(&mut self, query: JsValue) -> Result<(), JsValue> {
+            self.session.define_query(from_js(query)?);
+            Ok(())
+        }
+
+        /// Define a binding (with its id).
+        pub fn define_binding(&mut self, def: JsValue) -> Result<(), JsValue> {
+            self.session.define_binding(from_js(def)?);
+            Ok(())
+        }
+
+        /// Define a per-record template (the "catalog cell", §9.4).
+        pub fn define_template(&mut self, template: JsValue) -> Result<(), JsValue> {
+            self.session.define_template(from_js(template)?);
+            Ok(())
+        }
+
+        /// Define a placeholder anchor.
+        pub fn define_placeholder(&mut self, placeholder: JsValue) -> Result<(), JsValue> {
+            self.session.define_placeholder(from_js(placeholder)?);
+            Ok(())
+        }
+
+        /// Bind a query parameter value.
+        pub fn set_param(&mut self, name: &str, value: JsValue) -> Result<(), JsValue> {
+            self.session.set_param(name, from_js(value)?);
+            Ok(())
+        }
+
+        /// Set the formatting locale for the display kernels (`"en"` | `"de"`).
+        pub fn set_locale(&mut self, locale: JsValue) -> Result<(), JsValue> {
+            self.session.set_locale(from_js(locale)?);
+            Ok(())
+        }
+
+        /// Deliver a query's result (the DuckDB-WASM Arrow result, converted to
+        /// a `RecordSet` by the TS query layer).
+        pub fn ingest_result(&mut self, query: &str, records: JsValue) -> Result<(), JsValue> {
+            self.session
+                .ingest_result(QueryId::from(query), from_js(records)?);
+            Ok(())
+        }
+
+        /// Start a typed-column ingest (the column door): `schema` is the
+        /// RecordSet schema JSON (`{fields: [{name, ty, nullable}]}`), then one
+        /// `push_*` per field in order, then `finish_columns`. Each buffer is
+        /// copied into wasm memory once; no per-cell objects cross.
+        pub fn begin_columns(
+            &mut self,
+            query: &str,
+            schema: JsValue,
+            rows: usize,
+        ) -> Result<(), JsValue> {
+            self.session
+                .begin_columns(QueryId::from(query), from_js(schema)?, rows);
+            Ok(())
+        }
+
+        /// Push a number column (`Float64Array`) + optional validity bitmap.
+        pub fn push_f64(
+            &mut self,
+            values: Vec<f64>,
+            valid: Option<Vec<u8>>,
+        ) -> Result<(), JsValue> {
+            self.push(ColumnBuf::F64 { values, valid })
+        }
+
+        /// Push a boolean column (`Uint8Array`, 0/1 per row).
+        pub fn push_bool(
+            &mut self,
+            values: Vec<u8>,
+            valid: Option<Vec<u8>>,
+        ) -> Result<(), JsValue> {
+            self.push(ColumnBuf::Bool { values, valid })
+        }
+
+        /// Push a date column (`Int32Array`, days since 1970-01-01).
+        pub fn push_date(
+            &mut self,
+            values: Vec<i32>,
+            valid: Option<Vec<u8>>,
+        ) -> Result<(), JsValue> {
+            self.push(ColumnBuf::Date { values, valid })
+        }
+
+        /// Push a datetime column (`Float64Array`, ms since the epoch).
+        pub fn push_datetime(
+            &mut self,
+            values: Vec<f64>,
+            valid: Option<Vec<u8>>,
+        ) -> Result<(), JsValue> {
+            self.push(ColumnBuf::DateTime { values, valid })
+        }
+
+        /// Push a text column: one UTF-8 buffer + `Int32Array` offsets
+        /// (`rows + 1`).
+        pub fn push_utf8(
+            &mut self,
+            bytes: Vec<u8>,
+            offsets: Vec<i32>,
+            valid: Option<Vec<u8>>,
+        ) -> Result<(), JsValue> {
+            self.push(ColumnBuf::Utf8 {
+                bytes,
+                offsets,
+                valid,
+            })
+        }
+
+        /// Push a binary column: one buffer + `Int32Array` offsets.
+        pub fn push_binary(
+            &mut self,
+            bytes: Vec<u8>,
+            offsets: Vec<i32>,
+            valid: Option<Vec<u8>>,
+        ) -> Result<(), JsValue> {
+            self.push(ColumnBuf::Binary {
+                bytes,
+                offsets,
+                valid,
+            })
+        }
+
+        /// Finish the column ingest: `"unchanged"` when the buffers equal the
+        /// last column ingest for the query (nothing decoded or delivered),
+        /// else `"changed"`.
+        pub fn finish_columns(&mut self) -> Result<String, JsValue> {
+            self.session
+                .finish_columns()
+                .map(|o| o.as_str().to_string())
+                .map_err(map_err)
+        }
+
+        /// The content token (hex content hash) of a query's ingested result,
+        /// or `undefined` before an ingest. Equal tokens = equal data.
+        pub fn result_token(&self, query: &str) -> Option<String> {
+            self.session.result_token(&QueryId::from(query))
+        }
+
+        /// Resolve a binding and return its lowered IR.
+        pub fn resolve_lowered(&mut self, binding: &str) -> Result<JsValue, JsValue> {
+            let out = self
+                .session
+                .resolve_lowered(&BindingId::from(binding))
+                .map_err(map_err)?;
+            to_js(&out)
+        }
+
+        /// The number of records ingested for a query — the §9 record-preview
+        /// stepper's "of N" upper bound (0 when no result is ingested yet).
+        pub fn query_record_count(&self, query: &str) -> usize {
+            self.session.query_record_count(&QueryId::from(query))
+        }
+
+        /// The §9 field-mapping wizard's column suggestions for a query's
+        /// ingested result: `ColumnMapping[]` (`{column, header, expr, fieldType,
+        /// mappable}`). The bundle renders the header → variable-binding mapping
+        /// UI and generates each binding from the engine-computed `expr`.
+        pub fn query_mappings(&self, query: &str) -> Result<JsValue, JsValue> {
+            let out = self
+                .session
+                .query_mappings(&QueryId::from(query))
+                .map_err(map_err)?;
+            to_js(&out)
+        }
+
+        /// The §8 refresh change report — "what changed since last sync".
+        /// Fingerprints every binding's current resolved content and diffs it
+        /// against the previous report's snapshot: `{ entries: [{binding, kind,
+        /// before?, after?}], changed, unchanged, added, removed }`. Call AFTER
+        /// re-ingesting the queries; the first call reports every binding as
+        /// `added` (the baseline). Does not mutate sync states.
+        pub fn refresh_change_report(&mut self) -> JsValue {
+            to_js(&self.session.refresh_change_report()).unwrap_or(JsValue::NULL)
+        }
+
+        /// Resolve a binding against a chosen RECORD INDEX and return its lowered
+        /// IR — the §9 record-preview stepper. Per-record kinds (variable/image)
+        /// evaluate over `records[record]`; a table renders in full.
+        pub fn resolve_lowered_at(
+            &mut self,
+            binding: &str,
+            record: usize,
+        ) -> Result<JsValue, JsValue> {
+            let out = self
+                .session
+                .resolve_lowered_at(&BindingId::from(binding), record)
+                .map_err(map_err)?;
+            to_js(&out)
+        }
+
+        /// Resolve a record-flow binding and paginate it over a caller-supplied
+        /// frame chain (§9.4). `chain` is `FrameCapacity[]`, `opts` is
+        /// `FlowLayoutOpts` (or undefined for defaults).
+        pub fn lower_record_flow(
+            &mut self,
+            binding: &str,
+            chain: JsValue,
+            opts: JsValue,
+        ) -> Result<JsValue, JsValue> {
+            let chain: Vec<data_lower::FrameCapacity> = from_js(chain)?;
+            let opts: data_lower::FlowLayoutOpts = if opts.is_undefined() || opts.is_null() {
+                data_lower::FlowLayoutOpts::default()
+            } else {
+                from_js(opts)?
+            };
+            let flow = self
+                .session
+                .lower_record_flow(&BindingId::from(binding), chain, opts)
+                .map_err(map_err)?;
+            to_js(&flow)
+        }
+
+        /// Resolve a barcode binding (§9.7) and lower it scaled to the bound
+        /// frame's content box (`box_w_pt` × `box_h_pt`, pt). Returns the
+        /// `LoweredBarcode` IR — filled-rect modules in content-space the bundle
+        /// emits as native `insertPath` rects (the VECTOR lane).
+        pub fn lower_barcode(
+            &mut self,
+            binding: &str,
+            box_w_pt: f64,
+            box_h_pt: f64,
+        ) -> Result<JsValue, JsValue> {
+            let out = self
+                .session
+                .lower_barcode_sized(&BindingId::from(binding), box_w_pt, box_h_pt)
+                .map_err(map_err)?;
+            to_js(&out)
+        }
+
+        /// Resolve a barcode binding against a chosen RECORD INDEX (the §9
+        /// preview stepper) and lower it scaled to the bound frame's content box.
+        pub fn lower_barcode_at(
+            &mut self,
+            binding: &str,
+            record: usize,
+            box_w_pt: f64,
+            box_h_pt: f64,
+        ) -> Result<JsValue, JsValue> {
+            let out = self
+                .session
+                .lower_barcode_at(&BindingId::from(binding), record, box_w_pt, box_h_pt)
+                .map_err(map_err)?;
+            to_js(&out)
+        }
+
+        /// Evaluate a data-driven formatting rule (§9.5) over a query's records:
+        /// `{ scope, fires, apply, total }`.
+        pub fn evaluate_rule(&self, rule: &str, query: &str) -> Result<JsValue, JsValue> {
+            let result = self
+                .session
+                .evaluate_rule(&BindingId::from(rule), &QueryId::from(query))
+                .map_err(map_err)?;
+            to_js(&result)
+        }
+
+        /// Run a §10 batch over a record-flow binding: resolve, partition by
+        /// `mode`, and paginate each unit. Returns `BatchRun[]`
+        /// (`{ label, flow }`). `chain` is `FrameCapacity[]`, `opts` is
+        /// `FlowLayoutOpts` (or undefined for defaults).
+        pub fn run_record_flow_batch(
+            &mut self,
+            binding: &str,
+            mode: JsValue,
+            chain: JsValue,
+            opts: JsValue,
+        ) -> Result<JsValue, JsValue> {
+            let mode = from_js(mode)?;
+            let chain: Vec<data_lower::FrameCapacity> = from_js(chain)?;
+            let opts: data_lower::FlowLayoutOpts = if opts.is_undefined() || opts.is_null() {
+                data_lower::FlowLayoutOpts::default()
+            } else {
+                from_js(opts)?
+            };
+            let runs = self
+                .session
+                .run_record_flow_batch(&BindingId::from(binding), mode, chain, opts)
+                .map_err(map_err)?;
+            to_js(&runs)
+        }
+
+        /// Plan an InDesign-style Data Merge (`spec` is `MergeSpec`) over a
+        /// query's result in delivered order: `MergePlan` — the grid, the page
+        /// of every record and each record's frames with their merged text or
+        /// image reference. The bundle's merge writer turns it into mutations.
+        pub fn plan_merge(&self, query: &str, spec: JsValue) -> Result<JsValue, JsValue> {
+            let spec: data_lower::merge::MergeSpec = from_js(spec)?;
+            let plan = self
+                .session
+                .plan_merge(&QueryId::from(query), &spec)
+                .map_err(map_err)?;
+            to_js(&plan)
+        }
+
+        /// The distinct words of a merge plan's texts per template frame
+        /// (`string[][]`, the space included) — what the writer measures
+        /// against the host's fonts before asking [`merge_overset`].
+        pub fn merge_words(&self, plan: JsValue, frames: usize) -> Result<JsValue, JsValue> {
+            let plan: data_lower::merge::MergePlan = from_js(plan)?;
+            to_js(&data_lower::merge::merge_words(&plan, frames))
+        }
+
+        /// Per record, per frame: is the merged text overset (DM-7)?
+        /// `metrics` is `FrameMetrics[]` (`{ leadingPt, advances }` per
+        /// template frame); answers `boolean[][]`.
+        pub fn merge_overset(&self, plan: JsValue, metrics: JsValue) -> Result<JsValue, JsValue> {
+            let plan: data_lower::merge::MergePlan = from_js(plan)?;
+            let metrics: Vec<data_lower::merge::FrameMetrics> = from_js(metrics)?;
+            to_js(&data_lower::merge::merge_overset(&plan, &metrics))
+        }
+
+        /// Plan a §10 batch run over a query's result (`mode` is `BatchMode`):
+        /// `{ mode, units: [{ label, recordIndices }], totalRecords }` — which
+        /// records feed which output document (per-record / per-group / one
+        /// catalog). The executor lowers each unit through the normal pipeline.
+        pub fn plan_batch(&self, query: &str, mode: JsValue) -> Result<JsValue, JsValue> {
+            let mode = from_js(mode)?;
+            let plan = self
+                .session
+                .plan_batch(&QueryId::from(query), mode)
+                .map_err(map_err)?;
+            to_js(&plan)
+        }
+
+        /// Build the §7 governed catalog for a query's result: enrich its schema
+        /// with a column-metadata sidecar (`metadata` is `DatasetMetadata`) and
+        /// return `{ columns, diagnostics }` — documented columns + governance
+        /// drift. The bundle reads the sidecar JSON from the source's
+        /// `metadata_sidecar` location and passes it here.
+        pub fn governed_catalog(&self, query: &str, metadata: JsValue) -> Result<JsValue, JsValue> {
+            let meta = from_js(metadata)?;
+            let catalog = self
+                .session
+                .governed_catalog(&QueryId::from(query), meta)
+                .map_err(map_err)?;
+            to_js(&catalog)
+        }
+
+        /// Publish a query's resolved result as a §7.1 data-provider snapshot
+        /// (`{ id, category, revision, schema, rowCount, records }`) — the
+        /// engine-side payload the bundle hands to the core data-provider
+        /// registry once that contract lands (D-09).
+        pub fn publish_provider(
+            &self,
+            query: &str,
+            provider_id: &str,
+            category: &str,
+        ) -> Result<JsValue, JsValue> {
+            let pub_ = self
+                .session
+                .publish_provider(&QueryId::from(query), provider_id, category)
+                .map_err(map_err)?;
+            to_js(&pub_)
+        }
+
+        /// The remote invalidation key (§6.2/§8): the content-addressed key for
+        /// a defined remote source over caller-supplied bytes (the bundle's
+        /// post-consent, edit-time fetch). Hex string; the engine never fetches.
+        pub fn remote_invalidation_key(
+            &self,
+            source: &str,
+            bytes: &[u8],
+        ) -> Result<String, JsValue> {
+            self.session
+                .remote_invalidation_key(&data_core::SourceId::from(source), bytes)
+                .map_err(map_err)
+        }
+
+        /// Remove a binding from the recipe; `true` when it existed.
+        pub fn remove_binding(&mut self, binding: &str) -> bool {
+            self.session.remove_binding(&BindingId::from(binding))
+        }
+
+        /// ADR 558 — every property binding's lowering over `record` (and
+        /// the visibility bindings re-expressed, with `with_visibility`),
+        /// for one apply. `bindings` narrows it (`undefined` = all).
+        pub fn resolve_properties_at(
+            &mut self,
+            record: usize,
+            with_visibility: bool,
+            bindings: Option<Vec<String>>,
+        ) -> Result<JsValue, JsValue> {
+            let ids: Option<Vec<BindingId>> =
+                bindings.map(|b| b.iter().map(|s| BindingId::from(s.as_str())).collect());
+            to_js(
+                &self
+                    .session
+                    .resolve_properties_at(record, with_visibility, ids.as_deref()),
+            )
+        }
+
+        /// The sync state of a binding.
+        pub fn sync_state(&self, binding: &str) -> JsValue {
+            to_js(&self.session.sync_state(&BindingId::from(binding))).unwrap_or(JsValue::NULL)
+        }
+
+        /// Pin a binding to its current snapshot.
+        pub fn pin(&mut self, binding: &str) {
+            self.session.pin(&BindingId::from(binding));
+        }
+
+        /// Mark a binding overridden.
+        pub fn mark_overridden(&mut self, binding: &str) {
+            self.session.mark_overridden(&BindingId::from(binding));
+        }
+
+        /// Re-link a pinned/overridden binding.
+        pub fn relink(&mut self, binding: &str) {
+            self.session.relink(&BindingId::from(binding));
+        }
+
+        /// Override one binding's formatting locale (a tag such as `"fr"`);
+        /// `null` clears the override.
+        pub fn set_binding_locale(
+            &mut self,
+            binding: &str,
+            locale: JsValue,
+        ) -> Result<(), JsValue> {
+            let locale = if locale.is_null() || locale.is_undefined() {
+                None
+            } else {
+                Some(from_js(locale)?)
+            };
+            self.session
+                .set_binding_locale(&BindingId::from(binding), locale);
+            Ok(())
+        }
+
+        /// The per-binding locale overrides (`{ binding: tag }`).
+        pub fn binding_locales(&self) -> JsValue {
+            to_js_json(self.session.binding_locales()).unwrap_or(JsValue::NULL)
+        }
+
+        /// Record every query's current result as the one the document was
+        /// written from (the "before" of `row_diff`).
+        pub fn mark_rows_applied(&mut self) {
+            self.session.mark_rows_applied();
+        }
+
+        /// The §8 row diff per query since `mark_rows_applied`
+        /// (`QueryRowDiff[]`). `opts` is `{ keys?, ruleQueries?, limit? }`.
+        pub fn row_diff(&self, opts: JsValue) -> Result<JsValue, JsValue> {
+            let opts = if opts.is_null() || opts.is_undefined() {
+                Default::default()
+            } else {
+                from_js(opts)?
+            };
+            to_js(&self.session.row_diff(&opts))
+        }
+
+        /// Check an expression (parse error, fields read, fields the query's
+        /// result lacks).
+        pub fn check_expression(&self, src: &str, query: Option<String>) -> JsValue {
+            let q = query.map(|q| QueryId::from(q.as_str()));
+            to_js(&self.session.check_expression(src, q.as_ref())).unwrap_or(JsValue::NULL)
+        }
+
+        /// Which records a condition fires on (`{ fires, total, error? }`).
+        pub fn preview_condition(&self, query: &str, when: &str) -> Result<JsValue, JsValue> {
+            let out = self
+                .session
+                .preview_condition(&QueryId::from(query), when)
+                .map_err(map_err)?;
+            to_js(&out)
+        }
+
+        /// A per-record binding's display text for a record, without
+        /// re-linking it (`null` for other kinds).
+        pub fn preview_display(&self, binding: &str, record: usize) -> Result<JsValue, JsValue> {
+            let out = self
+                .session
+                .preview_display(&BindingId::from(binding), record)
+                .map_err(map_err)?;
+            to_js(&out)
+        }
+
+        /// Every formatting locale with formatted samples (`LocaleInfo[]`).
+        pub fn locales(&self) -> JsValue {
+            to_js(&crate::review::locale_catalog()).unwrap_or(JsValue::NULL)
+        }
+
+        /// Wrap an expression in a display pattern (`{ kind, decimals?,
+        /// symbol?, pattern? }`).
+        pub fn format_expression(&self, inner: &str, pattern: JsValue) -> Result<String, JsValue> {
+            Ok(crate::review::format_expression(inner, from_js(pattern)?))
+        }
+
+        /// Split an expression into `{ inner, pattern }`.
+        pub fn split_expression(&self, src: &str) -> JsValue {
+            to_js(&crate::review::split_expression(src)).unwrap_or(JsValue::NULL)
+        }
+
+        /// The sync report (`[{binding,status}]`).
+        pub fn sync_report(&self) -> JsValue {
+            to_js(&self.session.sync_report()).unwrap_or(JsValue::NULL)
+        }
+
+        /// The field-refresh decision for each named binding, in one call
+        /// (`[{outcome, binding, …}]`; see `DataSession::refresh_field_values`).
+        /// A hidden value crosses as `null`.
+        pub fn refresh_field_values(&mut self, bindings: Vec<String>) -> Result<JsValue, JsValue> {
+            let ids: Vec<BindingId> = bindings.into_iter().map(BindingId::from).collect();
+            to_js_json(&self.session.refresh_field_values(&ids))
+        }
+
+        /// The visible data-source manifest (§11).
+        pub fn source_manifest(&self) -> JsValue {
+            to_js(&self.session.source_manifest()).unwrap_or(JsValue::NULL)
+        }
+
+        /// The capability/consent verdict per source (§11).
+        pub fn authorize_report(&self) -> JsValue {
+            to_js(&self.session.authorize_report()).unwrap_or(JsValue::NULL)
+        }
+
+        /// The document payload (recipe; credentials redacted, §11/D-11). Built
+        /// JSON-compatible (maps as plain objects): the bundle saves it with
+        /// `JSON.stringify`, and a flattened binding definition otherwise
+        /// crosses as a JS `Map`, which stringifies to `{}`.
+        pub fn payload(&self) -> JsValue {
+            to_js_json(&self.session.payload()).unwrap_or(JsValue::NULL)
+        }
+
+        /// Replace the recipe with a saved payload (the shape `payload()`
+        /// returns) — restoring a document's persisted session. Keeps `today`
+        /// and the locale; ingested results and sync states start fresh.
+        pub fn load_payload(&mut self, payload: JsValue) -> Result<(), JsValue> {
+            self.session.load_payload(from_js(payload)?);
+            Ok(())
+        }
+
+        /// Session metadata.
+        pub fn metadata(&self) -> JsValue {
+            to_js(&self.session.metadata()).unwrap_or(JsValue::NULL)
+        }
+
+        // ── §9.9 variables + data sets ──────────────────────────────────────
+
+        /// The declared variables + captured data sets (`VariableSet`).
+        pub fn variables(&mut self) -> JsValue {
+            to_js(self.session.variables()).unwrap_or(JsValue::NULL)
+        }
+
+        /// Capture the current resolved values as a named data set, resolved
+        /// against `record` (the §9 preview index).
+        pub fn capture_data_set(&mut self, name: &str, record: usize) -> JsValue {
+            to_js(&self.session.capture_data_set(name, record)).unwrap_or(JsValue::NULL)
+        }
+
+        /// Capture ONE data set per record of a query — the whole palette from
+        /// the data. Returns the captured names in record order.
+        pub fn capture_every_record(
+            &mut self,
+            query: &str,
+            prefix: &str,
+            name_column: Option<String>,
+        ) -> JsValue {
+            let names = self.session.capture_every_record(
+                &QueryId::from(query),
+                prefix,
+                name_column.as_deref(),
+            );
+            to_js(&names).unwrap_or(JsValue::NULL)
+        }
+
+        /// The named data sets, in palette order.
+        pub fn list_data_sets(&self) -> JsValue {
+            to_js(&self.session.list_data_sets()).unwrap_or(JsValue::NULL)
+        }
+
+        /// Delete a data set by name.
+        pub fn delete_data_set(&mut self, name: &str) -> bool {
+            self.session.delete_data_set(name)
+        }
+
+        /// Plan the application of a named data set — one `DataSetApply` per
+        /// captured variable. The BUNDLE commits the applicable rows as a single
+        /// batch (one undo step); this only decides the values.
+        pub fn apply_data_set(&mut self, name: &str) -> Result<JsValue, JsValue> {
+            to_js(&self.session.apply_data_set(name).map_err(map_err)?)
+        }
+
+        /// Export the variable set as an Illustrator-compatible variable
+        /// library (XML).
+        pub fn export_variable_library(&mut self) -> String {
+            self.session.export_variable_library()
+        }
+
+        /// Import a variable library (XML), replacing the current variable set.
+        /// Returns the `ImportReport` (what came in + what will not apply).
+        pub fn import_variable_library(&mut self, xml: &str) -> Result<JsValue, JsValue> {
+            to_js(&self.session.import_variable_library(xml).map_err(map_err)?)
+        }
+
+        /// The serialized byte size of the variable half of the payload — the
+        /// D-08 64 KiB budget check for per-record capture.
+        pub fn data_set_payload_bytes(&self) -> usize {
+            self.session.data_set_payload_bytes()
+        }
+    }
+
+    // ── wave 6: file imports DuckDB-WASM cannot read (data-xlsx) ─────────
+    #[wasm_bindgen]
+    impl DataEngine {
+        /// Read one worksheet of an `.xlsx` (`sheet` absent = the first) as
+        /// `{sheet, sheets, columns: [{name, type}], rows, errorCells, json}`;
+        /// the bundle hands `json` + `columns` to DuckDB's `read_json`.
+        pub fn xlsx_import(&self, bytes: &[u8], sheet: Option<String>) -> Result<JsValue, JsValue> {
+            let out = crate::import::xlsx_import(bytes, sheet.as_deref())
+                .map_err(|e| JsValue::from_str(&e))?;
+            to_js(&out)
+        }
+    }
+
+    impl DataEngine {
+        fn push(&mut self, col: ColumnBuf) -> Result<(), JsValue> {
+            self.session.push_column(col).map_err(map_err)
+        }
+    }
+
+    fn map_err(e: crate::core::SessionError) -> JsValue {
+        JsValue::from_str(&e.to_string())
+    }
+
+    fn from_js<T: serde::de::DeserializeOwned>(value: JsValue) -> Result<T, JsValue> {
+        serde_wasm_bindgen::from_value(value).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    fn to_js<T: serde::Serialize>(value: &T) -> Result<JsValue, JsValue> {
+        serde_wasm_bindgen::to_value(value).map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// The engine's work counters since the last reset (the perf
+    /// budgets) — `{enabled, resolves, stabilize_calls, key_allocs,
+    /// fingerprints, diff_rows, ingest_cells, content_hashes,
+    /// group_key_compares}`. Global to the wasm instance, not per engine.
+    #[wasm_bindgen(js_name = perfCounters)]
+    pub fn perf_counters() -> Result<JsValue, JsValue> {
+        to_js(&crate::core::perf_counters())
+    }
+
+    /// Zero the work counters.
+    #[wasm_bindgen(js_name = resetPerfCounters)]
+    pub fn reset_perf_counters() {
+        crate::core::reset_perf_counters();
+    }
+
+    /// Like [`to_js`], but every map crosses as a plain object, so the value
+    /// survives `JSON.stringify` (used for what the bundle persists).
+    fn to_js_json<T: serde::Serialize>(value: &T) -> Result<JsValue, JsValue> {
+        value
+            .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
+            .map_err(|e| JsValue::from_str(&e.to_string()))
+    }
+
+    /// The hash of the sources this wasm was built from
+    /// (`scripts/source-hash.mjs`, stamped by `scripts/build-wasm.sh`;
+    /// "unstamped" for any other build). `packages/data-bundle/test/
+    /// wasm-fresh.spec.ts` compares it with the checkout, so a stale wasm
+    /// fails the suite instead of being tested in place of the code.
+    #[wasm_bindgen]
+    pub fn engine_source_hash() -> String {
+        option_env!("DATA_JS_SOURCE_HASH")
+            .unwrap_or("unstamped")
+            .to_string()
+    }
+
+    #[wasm_bindgen(start)]
+    fn start() {
+        console_error_panic_hook::set_once();
+    }
+}

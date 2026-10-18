@@ -1,0 +1,30 @@
+# paged.data feature registry — the §7.1 data-provider role (data.provider.*):
+# paged.data publishes a resolved query as a named, discoverable dataset that
+# OTHER consumers (most importantly the sheets plugin) read through a CORE SDK
+# data-provider contract — never by inter-plugin coupling (§2.1/§7.1). The
+# engine-side publication is built + tested here; the core registry door (D-09)
+# has LANDED and the editor injects it, so registration is now live in the real
+# editor (RFC: thoughts/docs/paged/plugin-data/rfc-data-provider.md).
+
+- id: data.provider.publish
+  title: Publish a resolved query as a §7.1 data-provider snapshot (schema + stabilized RecordSet + revision etag)
+  spec: plugin-data data-js/src/core.rs (base-idea §7.1 — D-09)
+  status: implemented
+  provenance:
+    [
+      "engine-side payload ready for host.dataProviders.register; stabilized order + content-etag revision (permutation-invariant refresh token); exposes data, never the ability to drive paged.data's queries/sources (§7.1 security note)",
+      "transport is Arrow-aligned-by-SHAPE, not arrow-rs IPC (ADR-014): the publication carries the Schema descriptor (Arrow-aligned FieldType vocabulary) + the stabilized columnar RecordSet (Vec<Vec<Value>>), materialised from DuckDB-WASM's Arrow via recordset.ts and serde-decoded — JSON over the wasm boundary, not an arrow-rs byte buffer. The Schema already IS the Arrow descriptor on both RecordSet + ProviderPublication (no additive descriptor missing); a true arrow-rs IPC encode is a deferred v3 perf item ADR-014 explicitly declines, not a sweep change",
+    ]
+  tests:
+    rust: ["data-conformance/tests/provider.rs::data_provider_publish"]
+
+- id: data.provider.register
+  title: Register the published provider with the core SDK data-provider registry (consumed by others, §7.1)
+  spec: plugin-data packages/data-bundle/src/session.ts (base-idea §7.1 — core data-provider contract, D-09)
+  status: implemented
+  provenance:
+    [
+      "the core host.dataProviders door LANDED (plugin-sdk d03-network-consent); the bundle registers for real when the host registry is wired (session.publishProvider -> host.dataProviders.register, commit ed32771) and falls back to honest-deferred logging when no door is present — never fakes a register; the editor injects createDataProviderRegistry() into every host (editor main.tsx, d66bfeb), so registration is live in the real editor (D-09 RESOLVED; sheets consumer S-15 resolved 2026-06-11)",
+    ]
+  tests:
+    vitest: ["packages/data-bundle/src/__tests__/provider.test.ts"]
