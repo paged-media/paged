@@ -55,7 +55,7 @@ visioncortex = "0.9.1"
 # glue does not match the module. scripts/build-wasm.sh re-checks this
 # against Cargo.lock and refuses to build on a mismatch (paged.image's
 # guard, kept).
-wasm-bindgen = "=0.2.122"
+wasm-bindgen = "=0.2.129"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 console_error_panic_hook = "0.1"

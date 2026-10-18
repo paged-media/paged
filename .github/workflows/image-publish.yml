@@ -60,8 +60,8 @@ jobs:
           echo "$PWD/wasm-bindgen-$WB-x86_64-unknown-linux-musl" >> "$GITHUB_PATH"
       - name: binaryen (prebuilt wasm-opt; pinned — old apt binaryen breaks externref)
         run: |
-          curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_119/binaryen-version_119-x86_64-linux.tar.gz | tar xz
-          echo "$PWD/binaryen-version_119/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_126/binaryen-version_126-x86_64-linux.tar.gz | tar xz
+          echo "$PWD/binaryen-version_126/bin" >> "$GITHUB_PATH"
       - name: build wasm
         run: bash scripts/build-wasm.sh
       - uses: pnpm/action-setup@v4
