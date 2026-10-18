@@ -69,33 +69,33 @@ Read from the code on 2026-10-14.
 
 ## Verified
 
-| What | Against | Result |
-|---|---|---|
-| Shape geometry | PowerPoint's per-shape geometry, fixtures and corpus | 412 fixture and 1 504 corpus shapes within 1 pt |
-| First baseline and line pitch, percentage spacing | `baselines` fixture (5 fonts × 3 sizes × 4 spacings) | within the PDF's 0.96 pt quantum + 1 % of the size |
-| Chart bars | PowerPoint's PDF, 44 bars in 4 corpus charts | within 3 pt (label widths are not measured at import) |
-| Table styles | `tables` and `tablestyles` fixtures: 150 tables, all 74 built-in styles | every cell's fill within 4 RGB units, text weight and colour exact, every border by colour and width |
-| SmartArt | `smartart` fixture | every block within 1 pt, text colours exact |
-| Engine placement | the published canvas-wasm, headless, all five fixtures | a page per slide; every drawn item within 0.5 pt of the import |
-| Export of slide order, duplicates, deletions, hidden slides, notes | PowerPoint 16.113.3 opening the written decks (a fixture and a corpus deck) | opens without a repair prompt; every page pixel-identical to the expected original slide, in the planned order; notes read back by PowerPoint, line breaks kept |
-| Embedded fonts, whole faces | `fonts-full` fixture: PowerPoint embedding Lato (4 styles) and Gloria Hallelujah | every glyph's outline and program, every advance and every other table identical to the source fonts |
-| Embedded fonts, subsets | `fonts` fixture: PowerPoint's default subsets, Caveat added | every glyph a subset holds is the source's; each holds every character of the deck's text |
-| Embedded fonts in the wild | 350 faces from 29 real-world decks (PowerPoint for Windows and Mac; TrueType and CFF; subsets and whole) | all decode and parse back; 12 faces matched to installed originals: 17 761 glyphs identical, `cvt `/`fpgm`/`prep`/`VDMX` identical, `hdmx` identical for every glyph a subset holds |
-| Embedded fonts in the engine | the published canvas-wasm and SDK 0.2.55-canary.0, headless | before: every embedded family missing; after the faces go through the document-font door: none, each style served as the deck's face; File ▸ Open of the deck opens it with nothing missing |
-| Export of an unedited deck | four fixtures (Rust), the importer→exporter path headless and in the editor | byte-identical to the original |
+| What                                                               | Against                                                                                                  | Result                                                                                                                                                                                      |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Shape geometry                                                     | PowerPoint's per-shape geometry, fixtures and corpus                                                     | 412 fixture and 1 504 corpus shapes within 1 pt                                                                                                                                             |
+| First baseline and line pitch, percentage spacing                  | `baselines` fixture (5 fonts × 3 sizes × 4 spacings)                                                     | within the PDF's 0.96 pt quantum + 1 % of the size                                                                                                                                          |
+| Chart bars                                                         | PowerPoint's PDF, 44 bars in 4 corpus charts                                                             | within 3 pt (label widths are not measured at import)                                                                                                                                       |
+| Table styles                                                       | `tables` and `tablestyles` fixtures: 150 tables, all 74 built-in styles                                  | every cell's fill within 4 RGB units, text weight and colour exact, every border by colour and width                                                                                        |
+| SmartArt                                                           | `smartart` fixture                                                                                       | every block within 1 pt, text colours exact                                                                                                                                                 |
+| Engine placement                                                   | the published canvas-wasm, headless, all five fixtures                                                   | a page per slide; every drawn item within 0.5 pt of the import                                                                                                                              |
+| Export of slide order, duplicates, deletions, hidden slides, notes | PowerPoint 16.113.3 opening the written decks (a fixture and a corpus deck)                              | opens without a repair prompt; every page pixel-identical to the expected original slide, in the planned order; notes read back by PowerPoint, line breaks kept                             |
+| Embedded fonts, whole faces                                        | `fonts-full` fixture: PowerPoint embedding Lato (4 styles) and Gloria Hallelujah                         | every glyph's outline and program, every advance and every other table identical to the source fonts                                                                                        |
+| Embedded fonts, subsets                                            | `fonts` fixture: PowerPoint's default subsets, Caveat added                                              | every glyph a subset holds is the source's; each holds every character of the deck's text                                                                                                   |
+| Embedded fonts in the wild                                         | 350 faces from 29 real-world decks (PowerPoint for Windows and Mac; TrueType and CFF; subsets and whole) | all decode and parse back; 12 faces matched to installed originals: 17 761 glyphs identical, `cvt `/`fpgm`/`prep`/`VDMX` identical, `hdmx` identical for every glyph a subset holds         |
+| Embedded fonts in the engine                                       | the published canvas-wasm and SDK 0.2.55-canary.0, headless                                              | before: every embedded family missing; after the faces go through the document-font door: none, each style served as the deck's face; File ▸ Open of the deck opens it with nothing missing |
+| Export of an unedited deck                                         | four fixtures (Rust), the importer→exporter path headless and in the editor                              | byte-identical to the original                                                                                                                                                              |
 
 Rendering against PowerPoint's PDF (local tool `scripts/fidelity-local.py`: the engine's CPU
 renderer with the fonts PowerPoint used, 48 dpi, SSIM per slide):
 
-| Corpus deck | Slides | Median SSIM | Worst slide |
-|---|---|---|---|
-| animation pitch deck | 20 | 0.941 | 0.908 |
-| black-pink business proposal | 20 | 0.917 | 0.878 |
-| creative agency profile | 20 | 0.939 | 0.900 |
-| green minimalist proposal | 20 | 0.882 | 0.818 |
-| orange creative pitch deck | 20 | 0.942 | 0.898 |
-| white company profile | 20 | 0.910 | 0.826 |
-| white-lime education | 4 | 0.995 | 0.995 |
+| Corpus deck                  | Slides | Median SSIM | Worst slide |
+| ---------------------------- | ------ | ----------- | ----------- |
+| animation pitch deck         | 20     | 0.941       | 0.908       |
+| black-pink business proposal | 20     | 0.917       | 0.878       |
+| creative agency profile      | 20     | 0.939       | 0.900       |
+| green minimalist proposal    | 20     | 0.882       | 0.818       |
+| orange creative pitch deck   | 20     | 0.942       | 0.898       |
+| white company profile        | 20     | 0.910       | 0.826       |
+| white-lime education         | 4      | 0.995       | 0.995       |
 
 These figures use an engine with master items painted in stacking order and radial gradients
 placed by `GradientFillStart`; both ship in canvas-wasm 0.70.0.

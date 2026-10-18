@@ -48,11 +48,18 @@ const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
 const manifest = JSON.parse(
   readFileSync(new URL("../manifest.json", import.meta.url), "utf8"),
-) as Parameters<Awaited<ReturnType<typeof createHeadlessHost>>["loadBundle"]>[0]["manifest"];
+) as Parameters<
+  Awaited<ReturnType<typeof createHeadlessHost>>["loadBundle"]
+>[0]["manifest"];
 
 async function withDeck(name: string) {
   const bytes = new Uint8Array(
-    readFileSync(new URL(`../../../slide-conformance/fixtures/${name}.pptx`, import.meta.url)),
+    readFileSync(
+      new URL(
+        `../../../slide-conformance/fixtures/${name}.pptx`,
+        import.meta.url,
+      ),
+    ),
   );
   const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
   let host!: BundleHost;
@@ -74,7 +81,10 @@ async function withDeck(name: string) {
 }
 
 async function pages(host: BundleHost) {
-  return host.document.collection<{ selfId: string; pluginMetadata?: PluginMetadataEntry[] }>("pages");
+  return host.document.collection<{
+    selfId: string;
+    pluginMetadata?: PluginMetadataEntry[];
+  }>("pages");
 }
 
 describe("PPTX export", () => {
@@ -106,10 +116,18 @@ describe("PPTX export", () => {
       await host.document.mutate(moveMutation(now, ids[ids.length - 1], 0)!);
       if (ids.length > 2) await host.document.mutate(deleteMutation(ids[1]));
       const first = (await pages(host)).find((p) => p.selfId === ids[0])!;
-      await host.document.mutate(setStateMutation(ids[0], { ...parseState(first.pluginMetadata), hidden: true }));
+      await host.document.mutate(
+        setStateMutation(ids[0], {
+          ...parseState(first.pluginMetadata),
+          hidden: true,
+        }),
+      );
       const dup = (await pages(host)).find((p) => p.selfId === copy)!;
       await host.document.mutate(
-        setStateMutation(copy, { ...parseState(dup.pluginMetadata), notes: "Copy & notes\nline two" }),
+        setStateMutation(copy, {
+          ...parseState(dup.pluginMetadata),
+          notes: "Copy & notes\nline two",
+        }),
       );
       now = (await pages(host)).map((p) => p.selfId);
 
@@ -117,15 +135,25 @@ describe("PPTX export", () => {
       expect(out).not.toBeNull();
       const back = (await slideEngine()).importPptx(out!.bytes, "back").report;
       expect(back.slides.length).toBe(now.length);
-      const state = new Map((await pages(host)).map((p) => [p.selfId, parseState(p.pluginMetadata)]));
+      const state = new Map(
+        (await pages(host)).map((p) => [
+          p.selfId,
+          parseState(p.pluginMetadata),
+        ]),
+      );
       back.slides.forEach((s, i) => {
         const want = state.get(now[i])!;
         expect(s.hidden, `slide ${i + 1} hidden`).toBe(!!want.hidden);
-        expect(s.notes ?? null, `slide ${i + 1} notes`).toBe(want.notes ?? null);
+        expect(s.notes ?? null, `slide ${i + 1} notes`).toBe(
+          want.notes ?? null,
+        );
       });
       // The copy is its own part; the deleted slide's part is gone.
-      expect(new Set(back.slides.map((s) => s.part)).size).toBe(back.slides.length);
-      if (ids.length > 2) expect(back.slides.some((s) => s.part === parts[1])).toBe(false);
+      expect(new Set(back.slides.map((s) => s.part)).size).toBe(
+        back.slides.length,
+      );
+      if (ids.length > 2)
+        expect(back.slides.some((s) => s.part === parts[1])).toBe(false);
     } finally {
       h.dispose();
     }
@@ -152,7 +180,9 @@ describe("PPTX export", () => {
       } as never);
       expect(moved.applied).toBe(true);
       const plan = await exportPlan(host, prints);
-      expect(plan.map((s) => s.contentEdited)).toEqual(plan.map((_, i) => i === 1));
+      expect(plan.map((s) => s.contentEdited)).toEqual(
+        plan.map((_, i) => i === 1),
+      );
     } finally {
       h.dispose();
     }
