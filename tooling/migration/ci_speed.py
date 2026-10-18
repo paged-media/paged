@@ -418,9 +418,10 @@ def job_record(side, repo, wf, run, j, cache):
     return rec
 
 
-def collect(cache, since, until):
+def collect(cache, since, until, branch=None):
     runs_new = [r for r in all_new_runs(cache, refresh=False)
-                if since <= ts(r["created_at"]) <= until]
+                if since <= ts(r["created_at"]) <= until
+                and (branch is None or r["head_branch"] == branch)]
     new = []
     for r in runs_new:
         try:
@@ -685,13 +686,14 @@ def report(args):
     cache = pc.Cache(args.cache)
     until = ts(args.until) if args.until else dt.datetime.now(dt.timezone.utc)
     since = until - dt.timedelta(hours=args.hours)
-    new, old = collect(cache, since, until)
+    new, old = collect(cache, since, until, args.branch)
     out = dict(
         description=("CI speed measurements (step A10), produced by "
                      "tooling/migration/ci_speed.py from read-only GitHub API data. "
                      "old = the A3 baseline runs (ci-timing-baseline.json); new = every "
                      "monorepo run created in the window."),
-        window=dict(since=since.isoformat(), until=until.isoformat(), hours=args.hours),
+        window=dict(since=since.isoformat(), until=until.isoformat(), hours=args.hours,
+                    branch=args.branch),
         collected_at=dt.datetime.now(dt.timezone.utc).isoformat())
 
     # --- per run (queue, wall, minutes) and per job records
@@ -785,9 +787,11 @@ def report(args):
         if j["workflow"] not in ("core/ci.yml", "core-ci.yml") or not j.get("log"):
             continue
         steps = {s["name"]: s["s"] for s in j["steps"]}
-        test_step = next((n for n in steps if n == "test" or n.startswith("nextest")
-                          or n.startswith("Run cargo test") or n.startswith("Run cargo nextest")),
-                         None)
+        # The test step that ran: macOS's `test`, Linux's nextest step (each leg
+        # skips the other's, which then reads 0 s).
+        cand = [n for n in steps if n == "test" or n.startswith("nextest")
+                or n.startswith("Run cargo test") or n.startswith("Run cargo nextest")]
+        test_step = max(cand, key=lambda n: steps[n] or 0) if cand else None
         fin_test = [f["seconds"] for f in j["finished"] if f["profile"] == "test"]
         fin_dev = [f["seconds"] for f in j["finished"] if f["profile"] == "dev"]
         if not test_step and not fin_dev:
@@ -883,7 +887,8 @@ def tables(d):
     o = []
     w = o.append
     w(f"Window: {d['window']['since'][:16]}Z to {d['window']['until'][:16]}Z "
-      f"({d['window']['hours']} h).\n")
+      f"({d['window']['hours']} h)"
+      + (f", branch {d['window']['branch']}" if d['window'].get('branch') else "") + ".\n")
     w("\n### Queue\n\n| Side | Runs | Run queue median / p90 / max | Jobs | "
       "Job queue median / p90 / max | macOS job queue median / p90 |\n|---|---|---|---|---|---|\n")
     for side, q in d["queue"].items():
@@ -1019,6 +1024,7 @@ def main():
                    help="git revision whose workflow files say which concurrency groups "
                         "cancelled main pushes")
     r.add_argument("--markdown")
+    r.add_argument("--branch", help="only monorepo runs of this head branch (a PR's own runs)")
     r.add_argument("--full", action="store_true",
                    help="also write every job record and the superseded/duplicate run lists")
     a = ap.parse_args()
