@@ -20,6 +20,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
+use std::sync::OnceLock;
 
 use paged_repo::{
     pack_of, reachable, read_records, Ctx, Error as RepoError, Hash, Kind, Repo, Store,
@@ -28,6 +29,51 @@ use paged_repo::{
 /// Packs above this are split, keeping each upload well under request limits.
 const PACK_MAX: usize = 32 * 1024 * 1024;
 const OFFER_BATCH: usize = 4096;
+
+type Response = ureq::http::Response<ureq::Body>;
+
+/// The one HTTP agent. An error status comes back as a response, so a
+/// problem's JSON body can be read (`Remote::answer`).
+fn agent() -> &'static ureq::Agent {
+    static AGENT: OnceLock<ureq::Agent> = OnceLock::new();
+    AGENT.get_or_init(|| {
+        ureq::Agent::config_builder()
+            .http_status_as_error(false)
+            .build()
+            .into()
+    })
+}
+
+/// A request to send: the method, and the JSON body for those that carry one.
+enum Call {
+    Get(String),
+    Delete(String),
+    Post(String, serde_json::Value),
+    Put(String, serde_json::Value),
+}
+
+impl Call {
+    fn send(self, token: &str) -> Result<Response, ureq::Error> {
+        let auth = format!("Bearer {token}");
+        let (req, body) = match self {
+            Call::Get(url) => return agent().get(&url).header("authorization", &auth).call(),
+            Call::Delete(url) => return agent().delete(&url).header("authorization", &auth).call(),
+            Call::Post(url, body) => (agent().post(&url), body),
+            Call::Put(url, body) => (agent().put(&url), body),
+        };
+        // Compact JSON, as ureq 2's `send_json` wrote it (ureq 3's pretty-prints).
+        req.header("authorization", &auth)
+            .header("content-type", "application/json")
+            .send(&body.to_string().into_bytes()[..])
+    }
+}
+
+/// The JSON a response carries. Read without the 10 MB cap ureq puts on
+/// `read_json`, as ureq 2 read it.
+fn read_json<T: serde::de::DeserializeOwned>(resp: Response) -> Result<T, Error> {
+    serde_json::from_reader(resp.into_body().into_reader())
+        .map_err(|e| Error::Transport(e.to_string()))
+}
 
 #[derive(Debug)]
 pub enum Error {
@@ -89,18 +135,8 @@ impl Remote {
         format!("{}/v1/{}/{}", self.base, self.prefix, route)
     }
 
-    fn json(
-        &self,
-        req: ureq::Request,
-        body: Option<serde_json::Value>,
-    ) -> Result<serde_json::Value, Error> {
-        let req = self.call(req);
-        let resp = match body {
-            Some(b) => Self::answer(req.send_json(b))?,
-            None => Self::answer(req.call())?,
-        };
-        resp.into_json()
-            .map_err(|e| Error::Transport(e.to_string()))
+    fn json(&self, call: Call) -> Result<serde_json::Value, Error> {
+        read_json(Self::answer(call.send(&self.token))?)
     }
 
     /// Opens a change request to merge `source` into `target`.
@@ -111,30 +147,29 @@ impl Remote {
         title: &str,
     ) -> Result<serde_json::Value, Error> {
         let body = serde_json::json!({ "source": source, "target": target, "title": title });
-        self.json(ureq::post(&self.url("cr")), Some(body))
+        self.json(Call::Post(self.url("cr"), body))
     }
 
     pub fn changes(&self) -> Result<serde_json::Value, Error> {
-        self.json(ureq::get(&self.url("cr")), None)
+        self.json(Call::Get(self.url("cr")))
     }
 
     /// `approve`, `merge` or `close` change request `id`.
     pub fn change(&self, id: i64, action: &str) -> Result<serde_json::Value, Error> {
-        self.json(
-            ureq::post(&self.url(&format!("cr/{id}/{action}"))),
-            Some(serde_json::json!({})),
-        )
+        self.json(Call::Post(
+            self.url(&format!("cr/{id}/{action}")),
+            serde_json::json!({}),
+        ))
     }
 
-    fn call(&self, req: ureq::Request) -> ureq::Request {
-        req.set("authorization", &format!("Bearer {}", self.token))
-    }
-
-    fn answer(r: Result<ureq::Response, ureq::Error>) -> Result<ureq::Response, Error> {
+    /// A response below 400 is the answer; from 400 up it is the server's
+    /// problem (as ureq 2 reported it), read from its JSON body.
+    fn answer(r: Result<Response, ureq::Error>) -> Result<Response, Error> {
         match r {
-            Ok(resp) => Ok(resp),
-            Err(ureq::Error::Status(status, resp)) => {
-                let p: serde_json::Value = resp.into_json().unwrap_or_default();
+            Ok(resp) if resp.status().as_u16() < 400 => Ok(resp),
+            Ok(resp) => {
+                let status = resp.status().as_u16();
+                let p: serde_json::Value = read_json(resp).unwrap_or_default();
                 let s = |k: &str| p.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
                 Err(Error::Server(status, s("title"), s("detail")))
             }
@@ -142,20 +177,19 @@ impl Remote {
         }
     }
 
-    fn bytes(resp: ureq::Response) -> Result<Vec<u8>, Error> {
+    fn bytes(resp: Response) -> Result<Vec<u8>, Error> {
         let mut out = Vec::new();
-        resp.into_reader()
+        resp.into_body()
+            .into_reader()
             .read_to_end(&mut out)
             .map_err(|e| Error::Transport(e.to_string()))?;
         Ok(out)
     }
 
     pub fn refs(&self) -> Result<BTreeMap<String, Hash>, Error> {
-        match Self::answer(self.call(ureq::get(&self.url("refs"))).call()) {
+        match Self::answer(Call::Get(self.url("refs")).send(&self.token)) {
             Ok(resp) => {
-                let m: BTreeMap<String, String> = resp
-                    .into_json()
-                    .map_err(|e| Error::Transport(e.to_string()))?;
+                let m: BTreeMap<String, String> = read_json(resp)?;
                 Ok(m.into_iter()
                     .filter_map(|(k, v)| Hash::from_hex(&v).map(|h| (k, h)))
                     .collect())
@@ -193,10 +227,10 @@ impl Remote {
         let mut missing = Vec::new();
         for batch in offer.chunks(OFFER_BATCH) {
             let hex: Vec<String> = batch.iter().map(|(_, h)| h.to_hex()).collect();
-            let resp = Self::answer(self.call(ureq::post(&self.url("have"))).send_json(hex))?;
-            let lacks: Vec<String> = resp
-                .into_json()
-                .map_err(|e| Error::Transport(e.to_string()))?;
+            let resp = Self::answer(
+                Call::Post(self.url("have"), serde_json::json!(hex)).send(&self.token),
+            )?;
+            let lacks: Vec<String> = read_json(resp)?;
             missing.extend(lacks.iter().filter_map(|h| Hash::from_hex(h)));
         }
 
@@ -211,9 +245,11 @@ impl Remote {
                 report.bytes += pack.len();
                 report.sent += objects.len();
                 Self::answer(
-                    self.call(ureq::put(&self.url("objects")))
-                        .set("content-type", "application/octet-stream")
-                        .send_bytes(&pack),
+                    agent()
+                        .put(self.url("objects"))
+                        .header("authorization", &format!("Bearer {}", self.token))
+                        .header("content-type", "application/octet-stream")
+                        .send(&pack[..]),
                 )?;
                 objects.clear();
                 Ok(())
@@ -233,10 +269,7 @@ impl Remote {
             "expected": expected.map(|h| h.to_hex()),
             "new": head.to_hex(),
         });
-        Self::answer(
-            self.call(ureq::post(&self.url(&format!("refs/{ref_name}"))))
-                .send_json(body),
-        )?;
+        Self::answer(Call::Post(self.url(&format!("refs/{ref_name}")), body).send(&self.token))?;
         Ok(report)
     }
 
@@ -267,7 +300,7 @@ impl Remote {
             .collect();
         let body = serde_json::json!({ "want": head.to_hex(), "have": have });
         let pack = Self::bytes(Self::answer(
-            self.call(ureq::post(&self.url("fetch"))).send_json(body),
+            Call::Post(self.url("fetch"), body).send(&self.token),
         )?)?;
         let objects: BTreeMap<Hash, (Kind, Vec<u8>)> = read_records(&pack)?
             .into_iter()
@@ -282,15 +315,14 @@ impl Remote {
     pub fn file(&self, ref_name: &str, history: bool) -> Result<Vec<u8>, Error> {
         let q = if history { "?history=1" } else { "" };
         Self::bytes(Self::answer(
-            self.call(ureq::get(&self.url(&format!("file/{ref_name}{q}"))))
-                .call(),
+            Call::Get(self.url(&format!("file/{ref_name}{q}"))).send(&self.token),
         )?)
     }
 
     pub fn evidence(&self) -> Result<Vec<serde_json::Value>, Error> {
-        Self::answer(self.call(ureq::get(&self.url("evidence"))).call())?
-            .into_json()
-            .map_err(|e| Error::Transport(e.to_string()))
+        read_json(Self::answer(
+            Call::Get(self.url("evidence")).send(&self.token),
+        )?)
     }
 }
 
@@ -310,33 +342,20 @@ impl Workspace {
         }
     }
 
-    fn send(
-        &self,
-        req: ureq::Request,
-        body: Option<serde_json::Value>,
-    ) -> Result<serde_json::Value, Error> {
-        let req = req.set("authorization", &format!("Bearer {}", self.token));
-        let resp = match body {
-            Some(b) => Remote::answer(req.send_json(b))?,
-            None => Remote::answer(req.call())?,
-        };
-        resp.into_json()
-            .map_err(|e| Error::Transport(e.to_string()))
+    fn send(&self, call: Call) -> Result<serde_json::Value, Error> {
+        read_json(Remote::answer(call.send(&self.token))?)
     }
 
     pub fn create(&self) -> Result<serde_json::Value, Error> {
-        self.send(
-            ureq::post(&format!("{}/v1/w/{}", self.base, self.ws)),
-            Some(serde_json::json!({})),
-        )
+        self.send(Call::Post(
+            format!("{}/v1/w/{}", self.base, self.ws),
+            serde_json::json!({}),
+        ))
     }
 
     /// `{seq, policy}`.
     pub fn policy(&self) -> Result<serde_json::Value, Error> {
-        self.send(
-            ureq::get(&format!("{}/v1/w/{}/policy", self.base, self.ws)),
-            None,
-        )
+        self.send(Call::Get(format!("{}/v1/w/{}/policy", self.base, self.ws)))
     }
 
     /// Replaces the policy at version `expected_seq`.
@@ -346,39 +365,36 @@ impl Workspace {
         policy: serde_json::Value,
     ) -> Result<serde_json::Value, Error> {
         let body = serde_json::json!({ "expected_seq": expected_seq, "policy": policy });
-        self.send(
-            ureq::put(&format!("{}/v1/w/{}/policy", self.base, self.ws)),
-            Some(body),
-        )
+        self.send(Call::Put(
+            format!("{}/v1/w/{}/policy", self.base, self.ws),
+            body,
+        ))
     }
 
     pub fn policy_log(&self) -> Result<serde_json::Value, Error> {
-        self.send(
-            ureq::get(&format!("{}/v1/w/{}/policy/log", self.base, self.ws)),
-            None,
-        )
+        self.send(Call::Get(format!(
+            "{}/v1/w/{}/policy/log",
+            self.base, self.ws
+        )))
     }
 }
 
 impl Remote {
     /// Collects what no ref reaches (owner only).
     pub fn collect(&self) -> Result<serde_json::Value, Error> {
-        self.json(ureq::post(&self.url("gc")), Some(serde_json::json!({})))
+        self.json(Call::Post(self.url("gc"), serde_json::json!({})))
     }
 
     /// Erases the repository: its key first, then its bytes (owner only).
     pub fn erase(&self) -> Result<serde_json::Value, Error> {
         let url = self.url("").trim_end_matches('/').to_string();
-        self.json(ureq::delete(&url), None)
+        self.json(Call::Delete(url))
     }
 
     /// Moves `ref_name` from `expected` to nothing.
     pub fn delete_ref(&self, ref_name: &str, expected: Hash) -> Result<(), Error> {
         let body = serde_json::json!({ "expected": expected.to_hex(), "new": null });
-        Self::answer(
-            self.call(ureq::post(&self.url(&format!("refs/{ref_name}"))))
-                .send_json(body),
-        )?;
+        Self::answer(Call::Post(self.url(&format!("refs/{ref_name}")), body).send(&self.token))?;
         Ok(())
     }
 }

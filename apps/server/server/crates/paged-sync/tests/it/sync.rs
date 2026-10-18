@@ -211,12 +211,12 @@ fn a_tampered_upload_is_refused() {
     let last = pack.len() - 1;
     pack[last] ^= 1;
     let r = ureq::put(&format!("{url}/v1/r/{name}/objects"))
-        .set("authorization", "Bearer dev-token")
-        .send_bytes(&pack);
-    assert!(matches!(r, Err(ureq::Error::Status(422, _))));
+        .header("authorization", "Bearer dev-token")
+        .send(&pack[..]);
+    assert!(matches!(r, Err(ureq::Error::StatusCode(422))));
     // And a ref cannot be moved to objects the server does not have.
     let r = ureq::post(&format!("{url}/v1/r/{name}/refs/main"))
-        .set("authorization", "Bearer dev-token")
+        .header("authorization", "Bearer dev-token")
         .send_json(serde_json::json!({ "expected": null, "new": head.to_hex() }));
-    assert!(matches!(r, Err(ureq::Error::Status(422, _))));
+    assert!(matches!(r, Err(ureq::Error::StatusCode(422))));
 }
