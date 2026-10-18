@@ -44,9 +44,9 @@ jobs:
           df -h /
 
       # proto, then every tool in /.prototools (moon, bun, node) at the
-      # pinned versions. Moon installs pnpm itself (10.28.0, and 9.0.0 for
-      # apps/editor) from .moon/toolchains.yml. Rust comes from rustup and
-      # each workspace's rust-toolchain.toml.
+      # pinned versions; Moon installs the root Bun workspace (bun.lock)
+      # once, before the first JS task. Rust comes from rustup and each
+      # workspace's rust-toolchain.toml.
       - uses: moonrepo/setup-toolchain@v0.6.4
         with:
           auto-install: true

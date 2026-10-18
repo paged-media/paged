@@ -16,11 +16,17 @@ on:
       - "modules/image/**"
       - "platform/extensions/packages/plugin-cli/**"
       - ".github/workflows/image-ci.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
   pull_request:
     paths:
       - "modules/image/**"
       - "platform/extensions/packages/plugin-cli/**"
       - ".github/workflows/image-ci.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
   workflow_dispatch:
 
 env:
@@ -258,15 +264,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
         with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+          auto-install: true
+          proto-version: "0.63.1"
 
-      - name: install (plugin-sdk sibling satisfies the link chain)
-        run: pnpm install --frozen-lockfile
+      - name: install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
 
       # Build the engine wasm from THIS commit before the specs boot it.
       # The committed glue/wasm is whatever was last rebuilt by hand;
@@ -303,14 +309,14 @@ jobs:
         run: node scripts/check-contract-imports.mjs
 
       - name: typecheck
-        run: pnpm -r typecheck
+        run: bun run --filter './glue' --filter './manifest' typecheck
 
       # REQUIRE_REAL_WASM turns wasm-exec.spec.ts's "artifact missing"
       # skip into a hard failure: the artifact was just built (and is
       # committed too), so its absence is a regression, and the only
       # real-execution lane must never silently drop back to skip.
       - name: test
-        run: pnpm -r test
+        run: bun run --filter './glue' --filter './manifest' test
         env:
           REQUIRE_REAL_WASM: "1"
 
