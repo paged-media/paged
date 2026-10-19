@@ -155,6 +155,8 @@
         "tailwindcss-animate": "^1.0.7",
       },
       "devDependencies": {
+        "@paged-media/test-kit": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/react": "catalog:",
         "@types/react-dom": "catalog:",
         "autoprefixer": "^10.5.5",
