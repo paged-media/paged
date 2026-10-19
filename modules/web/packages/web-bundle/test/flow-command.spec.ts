@@ -22,6 +22,7 @@
 // earlier ephemeral, selection-only chain) with a mock host — no editor.
 
 import { describe, expect, it } from "bun:test";
+import { covers } from "@paged-media/test-kit";
 
 import type { BundleHost, ElementId } from "@paged-media/plugin-api";
 import {
@@ -108,6 +109,7 @@ describe("resolveFlowChain — the persisted chain wins", () => {
 
 describe("threadSelectedIntoFlow — persist the region chain", () => {
   it("appends the selected targets to the source's flow and persists once", async () => {
+    covers("command:media.paged.web.command.threadWebFlow");
     const { host, writes } = makeHost({
       selection: [S, B, C],
       metadata: envelopeFor(DEFAULT_SOURCE),
@@ -166,6 +168,7 @@ describe("threadSelectedIntoFlow — persist the region chain", () => {
   });
 
   it("is a no-op (no persist) when every target is already threaded", async () => {
+    covers("command:media.paged.web.command.threadWebFlow");
     const already: WebFrameSource = {
       ...DEFAULT_SOURCE,
       flow: { recipients: [{ kind: "rectangle", id: "uB" }] },
@@ -185,6 +188,7 @@ describe("threadSelectedIntoFlow — persist the region chain", () => {
   });
 
   it("does not persist for a short (<2) selection", async () => {
+    covers("command:media.paged.web.command.threadWebFlow");
     const { host, writes } = makeHost({
       selection: [S],
       metadata: envelopeFor(DEFAULT_SOURCE),
@@ -206,6 +210,7 @@ describe("unthreadSelectedFromFlow — remove frames from the chain", () => {
   };
 
   it("removes the selected target from the chain and persists once", async () => {
+    covers("command:media.paged.web.command.unthreadWebFlow");
     const { host, writes } = makeHost({
       selection: [S, B],
       metadata: envelopeFor(threaded),
@@ -218,6 +223,7 @@ describe("unthreadSelectedFromFlow — remove frames from the chain", () => {
   });
 
   it("drops the flow entirely when the last recipient is removed", async () => {
+    covers("command:media.paged.web.command.unthreadWebFlow");
     const single: WebFrameSource = {
       ...DEFAULT_SOURCE,
       flow: { recipients: [{ kind: "rectangle", id: "uB" }] },
@@ -232,6 +238,7 @@ describe("unthreadSelectedFromFlow — remove frames from the chain", () => {
   });
 
   it("is a no-op (no persist) when the target is not in the flow", async () => {
+    covers("command:media.paged.web.command.unthreadWebFlow");
     const { host, writes } = makeHost({
       selection: [S, C],
       metadata: envelopeFor({
@@ -246,6 +253,7 @@ describe("unthreadSelectedFromFlow — remove frames from the chain", () => {
 
 describe("threadSelectedIntoNamedFlow — route into the secondary CSS flow", () => {
   it("routes targets into the source's SECOND flow-into (multi-flow authoring)", async () => {
+    covers("command:media.paged.web.command.threadWebFlowNamed");
     const twoFlow: WebFrameSource = {
       ...DEFAULT_SOURCE,
       css: "#story{flow-into:main} #notes{flow-into:side}",
@@ -262,6 +270,7 @@ describe("threadSelectedIntoNamedFlow — route into the secondary CSS flow", ()
   });
 
   it("is a no-op when the source declares no secondary named flow", async () => {
+    covers("command:media.paged.web.command.threadWebFlowNamed");
     const { host, writes } = makeHost({
       selection: [S, B],
       metadata: envelopeFor({
