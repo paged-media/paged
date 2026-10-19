@@ -50,6 +50,8 @@ const { contextPrefill, newMasterPrefill } = dialog;
 const { createHeadlessEditor } = await import("./harness");
 const { CORE_COMMAND_ENTRIES } = await import("../../src/core-command-entries");
 const { addressOfElement } = await import("../../src/object-model");
+const { STRUCTURE, structureIdml } =
+  await import("../../test/panels/support/structure");
 
 type Editor = Awaited<ReturnType<typeof createHeadlessEditor>>;
 
@@ -462,6 +464,45 @@ describe("document doors", () => {
       (await e.dump()).collections.sections as Array<{ selfId: string }>
     ).at(-1)!.selfId;
     await expectAppliedOnce(e, "deleteSection", { sectionId: section });
+  });
+
+  test("conditions: hide a visible condition, show a hidden one, each one undo step", async () => {
+    covers("command:paged.core.setConditionVisible");
+    // No mutation creates a condition, so the document is the structure
+    // fixture (built in code: Draft visible, Final hidden).
+    const e = (ed = await createHeadlessEditor({ idml: structureIdml() }));
+    const visible = async () =>
+      Object.fromEntries(
+        (
+          (await e.dump()).collections.conditions as Array<{
+            selfId: string;
+            visible: boolean;
+          }>
+        ).map((c) => [c.selfId, c.visible]),
+      );
+    expect(await visible()).toEqual({
+      [STRUCTURE.conditions.draft]: true,
+      [STRUCTURE.conditions.final]: false,
+    });
+    await expectAppliedOnce(e, "setConditionVisible", {
+      condition: STRUCTURE.conditions.draft,
+      visible: false,
+    });
+    const hidden = await throughDoor(e, "setConditionVisible", {
+      condition: STRUCTURE.conditions.draft,
+      visible: false,
+    });
+    expect(hidden.undoSteps).toBe(1);
+    expect(await visible()).toEqual({
+      [STRUCTURE.conditions.draft]: false,
+      [STRUCTURE.conditions.final]: false,
+    });
+    await e.invoke("paged.editor.undo");
+    await e.idle();
+    await expectAppliedOnce(e, "setConditionVisible", {
+      condition: STRUCTURE.conditions.final,
+      visible: true,
+    });
   });
 
   test("text variables, gradients, cell and table styles: create, then delete", async () => {
