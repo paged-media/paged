@@ -51,7 +51,7 @@
 // the spec asserts the two-op sequence. All on the same Operation
 // channel as every other edit.
 
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useEffectEvent } from "react";
 
 import type {
   ElementGeometryItem,
@@ -273,44 +273,34 @@ export function ThreadingController() {
   const { loaded, clearCursor, setChainState, setOversetFrames } =
     useThreading();
   const setToolPreview = useOptionalOverlaySignals()?.setToolPreview ?? null;
-  const setToolPreviewRef = useRef(setToolPreview);
-  useLayoutEffect(() => {
-    setToolPreviewRef.current = setToolPreview;
-  });
 
-  // Live refs so the once-per-load window listeners read fresh values
-  // without re-subscribing every render.
-  const cameraRef = useRef(camera);
-  useLayoutEffect(() => {
-    cameraRef.current = camera;
-  });
-  const handleRef = useRef(handle);
-  useLayoutEffect(() => {
-    handleRef.current = handle;
-  });
-  const loadedRef = useRef<LoadedCursor | null>(loaded);
-  useLayoutEffect(() => {
-    loadedRef.current = loaded;
-  });
+  // The once-per-load window listeners read the latest render's values
+  // through effect events, without re-subscribing every render.
+  const showToolPreview = useEffectEvent(
+    (preview: Parameters<NonNullable<typeof setToolPreview>>[0]) =>
+      setToolPreview?.(preview),
+  );
+  const currentLoaded = useEffectEvent(() => loaded);
+  const pageLayout = useEffectEvent(() => ({
+    rects: layoutPageRects(handle?.pageSizesPt ?? []),
+    pageIds: handle?.pageIds ?? [],
+  }));
 
   /** Convert a client (viewport) pointer position to a document-space
    *  point through the live camera + the viewport wrapper rect — the
    *  same inversion the GuideDragController uses (`data-paged-viewport`
    *  tags the wrapper). */
-  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
-  const clientToDoc = useCallback(
+  const clientToDoc = useEffectEvent(
     (clientX: number, clientY: number): [number, number] | null => {
       const wrap = document.querySelector("[data-paged-viewport]");
       if (!wrap) return null;
       const r = wrap.getBoundingClientRect();
-      const cam = cameraRef.current;
-      if (cam.scale <= 0) return null;
+      if (camera.scale <= 0) return null;
       return [
-        (clientX - r.left - cam.tx) / cam.scale,
-        (clientY - r.top - cam.ty) / cam.scale,
+        (clientX - r.left - camera.tx) / camera.scale,
+        (clientY - r.top - camera.ty) / camera.scale,
       ];
     },
-    [],
   );
 
   /** Hit-test the worker at a page-local point. Returns the hit's
@@ -319,20 +309,16 @@ export function ThreadingController() {
    *  engine's own precondition (linkFrames rejects a non-empty target),
    *  so the channel stays the authority and a rejection surfaces as a
    *  no-op. */
-  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
-  const hitFrame = useCallback(
-    (pageId: PageId, docX: number, docY: number, rect: ShellPageRect) =>
-      hitFrameAt(client, pageId, docX, docY, rect),
-    [client],
-  );
+  const hitFrame = (
+    pageId: PageId,
+    docX: number,
+    docY: number,
+    rect: ShellPageRect,
+  ) => hitFrameAt(client, pageId, docX, docY, rect);
 
   /** Fire one mutation; resolve the created id (if any) on success,
    *  `false` on failure. */
-  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
-  const dispatch = useCallback(
-    (mutation: Mutation) => dispatchVia(client, mutation),
-    [client],
-  );
+  const dispatch = (mutation: Mutation) => dispatchVia(client, mutation);
 
   /** Resolve a loaded-cursor drop. EITHER link an existing empty text
    *  frame (TH-01, one linkFrames) OR draw+link a new frame on empty
@@ -341,8 +327,7 @@ export function ThreadingController() {
    *
    *  `end` is where a DRAG was released (ED-5): the new frame is then the
    *  dragged box, like any frame tool draws, wherever the drag began. */
-  // eslint-disable-next-line no-restricted-syntax -- handed to a hook that compares it (ADR 229)
-  const settleDrop = useCallback(
+  const settleDrop = useEffectEvent(
     async (
       src: LoadedCursor,
       clientX: number,
@@ -351,8 +336,7 @@ export function ThreadingController() {
     ) => {
       const doc = clientToDoc(clientX, clientY);
       if (!doc) return;
-      const rects = layoutPageRects(handleRef.current?.pageSizesPt ?? []);
-      const pageIds = handleRef.current?.pageIds ?? [];
+      const { rects, pageIds } = pageLayout();
       const hit = pageForDoc(rects, pageIds, doc[0], doc[1]);
       const landingPage = hit?.pageId ?? src.sourcePageId ?? pageIds[0] ?? null;
       const landingRect =
@@ -430,12 +414,7 @@ export function ThreadingController() {
       }
       await drawAndLink([top, left, top + h, left + w]);
     },
-    [clientToDoc, hitFrame, dispatch],
   );
-  const settleRef = useRef(settleDrop);
-  useLayoutEffect(() => {
-    settleRef.current = settleDrop;
-  });
 
   // ── loaded-cursor window listeners (bound only while loaded) ──────
   const cursorLoaded = loaded != null;
@@ -471,7 +450,7 @@ export function ThreadingController() {
 
     const onDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
-      const src = loadedRef.current;
+      const src = currentLoaded();
       if (!src) return;
       // The ports' own pointerdown handlers stop propagation, so a
       // pointerdown reaching the window did NOT land on a port — it is
@@ -487,12 +466,12 @@ export function ThreadingController() {
         window.removeEventListener("pointermove", onMove, true);
         window.removeEventListener("pointerup", onUp, true);
         window.removeEventListener("pointercancel", onCancel, true);
-        setToolPreviewRef.current?.(null);
+        showToolPreview(null);
       };
       const onMove = (m: PointerEvent) => {
         // The canvas never saw the press; keep the moves from it too.
         m.stopPropagation();
-        if (!loadedRef.current) {
+        if (!currentLoaded()) {
           finish();
           return;
         }
@@ -504,8 +483,7 @@ export function ThreadingController() {
         if (!dragged) return;
         const a = clientToDoc(start.clientX, start.clientY);
         const b = clientToDoc(m.clientX, m.clientY);
-        const rects = layoutPageRects(handleRef.current?.pageSizesPt ?? []);
-        const pageIds = handleRef.current?.pageIds ?? [];
+        const { rects, pageIds } = pageLayout();
         if (!a || !b) return;
         const page =
           pageForDoc(rects, pageIds, a[0], a[1]) ??
@@ -516,7 +494,7 @@ export function ThreadingController() {
               }
             : null);
         if (!page?.rect) return;
-        setToolPreviewRef.current?.({
+        showToolPreview({
           pageId: page.pageId,
           rect: [
             Math.min(a[1], b[1]) - page.rect.y,
@@ -531,9 +509,9 @@ export function ThreadingController() {
         u.stopPropagation();
         finish();
         // Escape during the drag already unloaded the cursor.
-        if (!loadedRef.current) return;
+        if (!currentLoaded()) return;
         clearCursor();
-        void settleRef.current(
+        void settleDrop(
           src,
           start.clientX,
           start.clientY,
@@ -560,7 +538,7 @@ export function ThreadingController() {
       window.removeEventListener("pointerdown", onDown, true);
       window.removeEventListener("keydown", onKey, true);
     };
-  }, [cursorLoaded, clearCursor, clientToDoc]);
+  }, [cursorLoaded, clearCursor]);
 
   // ── overset frame set (engine-truth, live `stories` overset) ─────
   // StorySummary.overset is the only LIVE threading read on the wire,
@@ -571,22 +549,11 @@ export function ThreadingController() {
   // current selection (the only frames whose out-port renders) so we
   // never walk the whole document. Re-derives on selection change +
   // every Operation/stats push.
-  const geomRef = useRef(elementGeometry);
-  useLayoutEffect(() => {
-    geomRef.current = elementGeometry;
-  });
-
-  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
-  const refreshOverset = useCallback(async () => {
+  const refreshOverset = useEffectEvent(async () => {
     setOversetFrames(
-      await oversetFrameIds(
-        client,
-        handleRef.current,
-        geomRef.current,
-        hitFrame,
-      ),
+      await oversetFrameIds(client, handle, elementGeometry, hitFrame),
     );
-  }, [client, hitFrame, setOversetFrames]);
+  });
 
   // ── engine-truth chain state (W3.A2) ─────────────────────────────
   // Read `nextTextFrame` / `previousTextFrame` off the SELECTED text
@@ -595,10 +562,9 @@ export function ThreadingController() {
   // whole document. Re-runs on selection change + every Operation push,
   // so load-time chains AND undo/redo are reflected directly from the
   // engine — no session mirror.
-  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
-  const refreshChain = useCallback(async () => {
-    setChainState(await chainStateOf(client, geomRef.current));
-  }, [client, setChainState]);
+  const refreshChain = useEffectEvent(async () => {
+    setChainState(await chainStateOf(client, elementGeometry));
+  });
 
   useEffect(() => {
     void refreshOverset();
@@ -616,9 +582,9 @@ export function ThreadingController() {
       }
     });
     return off;
-    // `elementGeometry` is read through `geomRef`; list it so a
-    // selection change re-runs the resolve.
-  }, [client, refreshOverset, refreshChain, elementGeometry]);
+    // The refreshes read the selection's geometry as it is when they
+    // run; listing it re-runs the resolve on a selection change.
+  }, [client, elementGeometry]);
 
   return null;
 }

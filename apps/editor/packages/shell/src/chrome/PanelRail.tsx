@@ -25,11 +25,10 @@
 // (`<PagedShell panelRail={...}>`) — the shell renders, never
 // hardcodes the list.
 
-import { useEffect, useMemo, useReducer } from "react";
-
 import { hasIcon, Icon } from "../icons";
 import { PluginGlyph } from "../icons/plugin-glyph";
 import { useRegistries } from "../state/registries-context";
+import { useRegistryView } from "../state/live";
 import { useOptionalCockpitState } from "../cockpit/cockpit-state-context";
 
 export interface PanelRailItem {
@@ -47,26 +46,15 @@ export interface PanelRailItem {
 
 export function PanelRail({ items }: { items: PanelRailItem[] }) {
   const cockpit = useOptionalCockpitState();
-  const { panels } = useRegistries();
-
   // K-8 — the rail DOOR: registered panels that opted in (`rail: true`)
   // render as launcher items after the app's built-ins. Registry-derived
-  // + live (a bundle activating later appears; a disposed one drops).
-  const [version, bump] = useReducer((n: number) => n + 1, 0);
-  useEffect(() => {
-    const sub = panels.onChange(() => bump());
-    return () => sub.dispose();
-  }, [panels]);
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const pluginItems = useMemo(
-    () =>
-      panels
-        .list()
-        .filter((p) => p.rail)
-        .map((p) => ({ panelId: p.id, title: p.title, icon: p.icon ?? "" })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [panels, version],
-  );
+  // + live (a bundle activating later appears; a disposed one drops),
+  // read through a view that changes with the registry (state/live.ts).
+  const panels = useRegistryView(useRegistries().panels);
+  const pluginItems = panels
+    .list()
+    .filter((p) => p.rail)
+    .map((p) => ({ panelId: p.id, title: p.title, icon: p.icon ?? "" }));
 
   if (!cockpit || (items.length === 0 && pluginItems.length === 0)) return null;
 
