@@ -111,7 +111,7 @@ impl DocSession {
         &self.model
     }
 
-    /// ADR 029 — the page skeleton for standalone open: IDML bytes (a page,
+    /// ADR 029 — the page skeleton for standalone open: `.paged` bytes (a page,
     /// margin-box frame and empty story per Word section that starts a page;
     /// continuous sections can join the story before) plus the story ids, in
     /// order, for the grow rules and the pour.

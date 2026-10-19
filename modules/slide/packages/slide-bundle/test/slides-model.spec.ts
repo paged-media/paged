@@ -92,9 +92,9 @@ describe("the slides store on the engine", () => {
         ),
       ),
     );
-    const { idml } = (await slideEngine()).importPptx(bytes, name);
+    const { paged } = (await slideEngine()).importPptx(bytes, name);
     const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
-    await h.load(idml);
+    await h.load(paged);
     // The slide plugin's own host: a page label is written under the
     // writer's own id, so the store runs as media.paged.slide.
     let host!: BundleHost;
@@ -201,9 +201,9 @@ describe("a new slide from a layout", () => {
         ),
       ),
     );
-    const { idml } = (await slideEngine()).importPptx(bytes, name);
+    const { paged } = (await slideEngine()).importPptx(bytes, name);
     const h = await createHeadlessHost({ resolveFrom: ENGINE_ANCHOR });
-    await h.load(idml);
+    await h.load(paged);
     let host!: BundleHost;
     h.loadBundle({
       manifest: {

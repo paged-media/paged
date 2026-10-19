@@ -13,7 +13,11 @@ project:
   description: "PowerPoint/PPTX module: import, export, charts."
 
 # validate:manifest runs the in-tree paged-plugin bin (plugin-sdk).
+#
+# slide-native builds on the engine's model crates (ADR 708).
 dependsOn:
+  - id: "core"
+    scope: "production"
   - id: "extensions"
     scope: "development"
   - id: "test-kit"
@@ -22,14 +26,22 @@ dependsOn:
   - id: "ooxml"
     scope: "production"
 
+# Path dependencies into the engine (docx-skeleton / slide-native build on
+# paged-model, paged-scene, paged-store; ADR 606 / ADR 708) and into
+# platform/shared/ooxml (paged-ooxml, doc ADR 607): their crates are inputs
+# here too, so `moon ci` re-runs this project when one it builds changes.
+# (Project file groups replace the workspace ones, so the defaults are
+# restated.)
 fileGroups:
-  # The inherited groups plus the shared crates the workspace compiles.
   rust-sources:
     - "**/*.rs"
     - "**/Cargo.toml"
     - "Cargo.lock"
     - "rust-toolchain*"
     - "/.cargo/*.toml"
+    - "/engine/core/Cargo.toml"
+    - "/engine/core/crates/**/*.rs"
+    - "/engine/core/crates/**/Cargo.toml"
     - "/platform/shared/ooxml/src/**/*.rs"
     - "/platform/shared/ooxml/Cargo.toml"
   rust-tests:
@@ -37,6 +49,9 @@ fileGroups:
     - "!docs/**"
     - "!**/*.md"
     - "/.cargo/*.toml"
+    - "/engine/core/Cargo.toml"
+    - "/engine/core/crates/**/*.rs"
+    - "/engine/core/crates/**/Cargo.toml"
     - "/platform/shared/ooxml/src/**/*.rs"
     - "/platform/shared/ooxml/Cargo.toml"
 

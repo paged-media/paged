@@ -75,8 +75,8 @@ async function withDeck(name: string) {
   // The importer's own steps: the package as the document (the headless
   // host has no native-open backend, so it is loaded directly), then what
   // the importer keeps beside it.
-  const { idml, report } = (await slideEngine()).importPptx(bytes, name);
-  await h.load(idml);
+  const { paged, report } = (await slideEngine()).importPptx(bytes, name);
+  await h.load(paged);
   await keepSource(host, bytes, report);
   return { h, host, bytes, exporter };
 }

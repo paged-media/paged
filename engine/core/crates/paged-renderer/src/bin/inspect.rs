@@ -302,9 +302,14 @@ fn main() -> Result<()> {
         std::process::exit(if report.exit_ok { 0 } else { 1 });
     }
 
-    // The importer now lives in `paged-parse` (the IDML adapter) and returns the
-    // raw source archive alongside the model — the model no longer carries it (N9).
-    let (mut document, source_archive) = idml_import::import_idml(&bytes).context("open IDML")?;
+    // An IDML package, or a `.paged` container whose native model part is
+    // the document (what paged.doc and paged.slide open as): the one open
+    // path the canvas and the viewer share. The source archive rides
+    // alongside the model, which no longer carries it (N9).
+    let opened = paged_renderer::container::open_document(&bytes)
+        .map_err(anyhow::Error::msg)
+        .context("open IDML or .paged")?;
+    let (mut document, source_archive) = (opened.document, opened.archive);
     for id in &args.grow_story {
         match document.stories.iter_mut().find(|s| &s.self_id == id) {
             Some(s) => s.story.grow = Some(paged_model::FlowGrowRule::default()),

@@ -47,7 +47,7 @@ interface WasmDocEngine {
   save_object_edits(editsJson: string): Uint8Array;
   save_edited_from_content(contentJson: string): Uint8Array;
   last_save_skips(): string;
-  skeleton_idml(name: string): Uint8Array;
+  skeleton_paged(name: string): Uint8Array;
   skeleton_stories(): string;
   set_mid_page_columns(on: boolean): void;
   uses_mid_page_columns(): boolean;
@@ -78,12 +78,12 @@ export class DocEngine {
     return parseLoweredDoc(this.inner.lowered_json());
   }
 
-  /** ADR 029 — the page skeleton for standalone open, as an IDML package:
-   *  a page, a margin-box frame and an empty story per Word section, for
-   *  `host.nativeDocument.open`. The bundle sets the grow rules on the wire
-   *  and the pour fills the stories afterwards. */
-  skeletonIdml(name: string): Uint8Array {
-    return this.inner.skeleton_idml(name);
+  /** ADR 029 — the page skeleton for standalone open, as a native `.paged`
+   *  document (ADR 606): a page, a margin-box frame and an empty story per
+   *  Word section, for `host.nativeDocument.open`. The bundle sets the grow
+   *  rules on the wire and the pour fills the stories afterwards. */
+  skeletonPaged(name: string): Uint8Array {
+    return this.inner.skeleton_paged(name);
   }
 
   /** The skeleton's section story ids, in section order (the pour targets). */
