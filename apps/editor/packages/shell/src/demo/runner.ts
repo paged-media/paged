@@ -27,12 +27,17 @@
 // swap this for the engine's Boa sandbox (the script-author surface is the same).
 // The demo build's CSP must allow 'unsafe-eval' (or use the Boa path).
 
+import { trustedScript } from "@paged-media/helpers";
+
 import {
   buildAutomation,
   type CanvasHandleLike,
   type DemoGlobals,
 } from "./automation";
 import { demoResetOverlay } from "./overlay";
+
+/** The Trusted Types policy a playground script is compiled through. */
+export const DEMO_SCRIPT_POLICY = "paged-demo-script";
 
 export interface RunResult {
   ok: boolean;
@@ -49,10 +54,15 @@ export async function runDemoScript(
     (n) => (globals as unknown as Record<string, unknown>)[n],
   );
   try {
+    // A playground script runs on purpose: every argument goes through the
+    // Trusted Types policy for it (ADR 240), names and body alike.
     // eslint-disable-next-line no-new-func
     const factory = new Function(
-      ...names,
-      `"use strict"; return (async () => {\n${source}\n})();`,
+      ...names.map((n) => trustedScript(DEMO_SCRIPT_POLICY, n)),
+      trustedScript(
+        DEMO_SCRIPT_POLICY,
+        `"use strict"; return (async () => {\n${source}\n})();`,
+      ),
     ) as (...args: unknown[]) => Promise<unknown>;
     await factory(...values);
     return { ok: true };

@@ -2,7 +2,7 @@
 
 - **Status:** Accepted 2026-10-19.
 - **Scope:** `apps/canvas/src/clipboard-commands.ts`, `apps/canvas/src/main.tsx` (registration),
-  `apps/canvas/tests/headless/harness.ts`; engine ADR 190 (the snippet).
+  `apps/canvas/tests/headless/harness.ts`; engine ADR 193 (the snippet).
 
 ## Context
 
@@ -16,7 +16,7 @@ sheet cells did. InDesign's Edit menu has Cut, Copy, Paste, Paste in Place, Dupl
    (Cmd/Ctrl+X/C/V, +Alt+Shift+V, +Alt+Shift+D). They apply at the object level only
    (`objectVerbApplies`): with a text caret the keys stay the story's (`useTextEditing`), inside
    an edit context the context's.
-2. **The internal format is the engine's snippet** (ADR 190), held by the editor. The system
+2. **The internal format is the engine's snippet** (ADR 193), held by the editor. The system
    clipboard gets `text/plain` (the copied frames' text) and `text/html` carrying a marker of
    the copy and, up to 512 KB, the snippet itself (so another tab can paste it). Writing is best
    effort; the internal copy stands either way.

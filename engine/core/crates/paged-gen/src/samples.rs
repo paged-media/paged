@@ -90,6 +90,7 @@ pub mod stroke_inset;
 pub mod stroke_styles;
 pub mod strokes_fills;
 pub mod styles_cascade;
+pub mod svg_filters;
 pub mod swatches;
 pub mod tab_breaks;
 pub mod table_cell_baseline;
@@ -231,6 +232,7 @@ pub const SAMPLES: &[&str] = &[
     "xref",
     "endnotes",
     "notes",
+    "svg-filters",
 ];
 
 /// Build a sample by its CLI name, or `None` if the name is unknown.
@@ -339,6 +341,7 @@ pub fn build(name: &str) -> Option<crate::Sample> {
         "baseline-grid" => baseline_grid::build(),
         "baseline-grid-margin" => baseline_grid::build_margin(),
         "object-style-options" => object_style_options::build(),
+        "svg-filters" => svg_filters::build(),
         _ => return None,
     })
 }
@@ -367,7 +370,7 @@ mod tests {
     fn the_list_is_not_missing_a_sample() {
         assert_eq!(
             SAMPLES.len(),
-            102,
+            103,
             "sample count changed — add the new name to SAMPLES (and only then \
              update this number), or the editor's CI silently stops emitting it"
         );

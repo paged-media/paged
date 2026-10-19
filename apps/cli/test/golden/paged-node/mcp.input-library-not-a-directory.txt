@@ -1,0 +1,11 @@
+$ paged-node mcp --library <TMP>/notes.txt
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "--library: <TMP>/notes.txt is not a directory",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

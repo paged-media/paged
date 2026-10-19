@@ -9,10 +9,12 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
 
 ## Shipped
 
-- **Two engine npm packages per release tag** (PM-0008). `@paged-media/canvas-wasm` (with
-  the `./introspect` and `./repo` entries) and `@paged-media/viewer` (with the
-  `./session` entry), built and published by `.github/workflows/release.yml` together with
-  the extension contract's `@paged-media/plugin-api` and `@paged-media/plugin-sdk`.
+- **Two engine npm packages per release tag** (PM-0008, amendment 3). `@paged-media/paged`
+  (`packages/paged`: the files of the private workspace package `canvas-wasm`, with the
+  `./introspect` and `./repo` entries, and the `paged` bin, `paged mcp` included) and
+  `@paged-media/viewer` (with the `./session` entry), built and published by
+  `.github/workflows/release.yml` together with `@paged-media/plugin-sdk` (the contract as
+  its `./api`).
 - **Open and create.** `LoadDocument` opens an `.idml` package or a `.paged` container;
   `NewBlankDocument` and `paged new` make an empty document.
 - **Render.** One display list per page, drawn on the CPU with `vello_cpu` (`paged render`,
@@ -22,6 +24,11 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
   adjustment as Acrobat and poppler do (edges along the axes on pixel boundaries) and flattens
   filled curves to 0.1 device px, the same for both lanes; all 101 InDesign fidelity fixtures
   pass on it.
+- **Placed SVGs with their filters.** `usvg` parses a placed SVG and the engine draws it on
+  `vello_cpu` when the document is built, all seventeen filter primitives included, so both
+  lanes and the PDF export draw the same pixels. Eighteen fixtures hold it to the `resvg`
+  renders it replaced (`paged-gpu/tests/it/svg_reference.rs`) and the GPU lane to the CPU lane
+  (`svg-filters`; [ADR 190](adr/190-a-placed-svg-draws-its-filters.md)).
 - **Edit.** 137 mutation operations over the wire, batches that are atomic and cost one
   rebuild and one undo step, undo and redo, and engine-minted ids reported in the reply.
 - **Locks and deletes follow InDesign.** A locked item, and the content of a locked container,
@@ -208,8 +215,10 @@ rendered. How the parts fit is in [`architecture.md`](architecture.md).
 - **The CPU rasterizer is single-threaded**, natively too (ADR 189: `vello_cpu`'s threads
   cost more than they save on effect-heavy and sparse pages). Without the glyph-run table (the
   live canvas does not collect it) a glyph that is exactly a rectangle is stroke-adjusted like
-  a shape. A placed SVG is drawn without its filters and without its text (no font database
-  is given to `usvg`).
+  a shape.
+- **A placed SVG is a raster at one pixel per user unit**, decoded once, so it is scaled up at
+  higher zoom and print resolutions rather than drawn as vectors, and its text is not drawn
+  (`usvg` is built without fonts). Raster images inside an SVG are not decoded (ADR 190).
 - **No font and no colour profile is bundled.** Text for which neither a registered font
   nor a default font resolves is not shaped. Without a CMYK profile, CMYK is converted by a
   naive formula.

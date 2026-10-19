@@ -147,3 +147,9 @@ export const onDidChangeOf: Listen<{
 export const subscribeOf: Listen<{
   subscribe(listener: () => void): () => void;
 }> = (source, onChange) => source.subscribe(() => onChange());
+
+export {
+  useNearViewport,
+  type NearViewport,
+  type NearViewportOptions,
+} from "./near-viewport";

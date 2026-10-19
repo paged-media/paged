@@ -146,7 +146,7 @@ pub enum ReadCommand {
         /// `kind:id` address, e.g. `textFrame:u12`.
         id: String,
     },
-    /// A copy of page items for the clipboard (ADR 190): the snippet JSON
+    /// A copy of page items for the clipboard (ADR 193): the snippet JSON
     /// `pasteElements` takes back, in this document or another.
     Snippet {
         #[command(flatten)]

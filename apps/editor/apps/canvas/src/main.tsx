@@ -17,6 +17,9 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
+// First: the Trusted Types default policy, before anything starts a worker.
+import "./boot/install-trusted-types";
+
 import { StrictMode, useEffect, useEffectEvent, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {

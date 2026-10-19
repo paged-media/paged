@@ -725,7 +725,7 @@ property_paths! {
         FrameDropShadowColor => "frameDropShadowColor" : color().idml(idml![attr(DropShadowSetting, EffectColor)]),
         FramePath => "framePath" : structure("FramePath", Wire::FramePath).required(),
         FrameFillTint => "frameFillTint" : pct().default_num(100.0).idml(idml![attr(TextFrame | Rectangle | Oval | Polygon | ObjectStyle, FillTint)]),
-        FrameNonprinting => "frameNonprinting" : bool_().default_bool(false).idml(idml![attr(TextFrame | Rectangle, Nonprinting)]),
+        FrameNonprinting => "frameNonprinting" : bool_().default_bool(false).idml(idml![attr(TextFrame | Rectangle | Oval | Polygon | GraphicLine, Nonprinting)]),
         FrameGradientFillAngle => "frameGradientFillAngle" : deg().idml(idml![attr(TextFrame | Rectangle | Oval | Polygon, GradientFillAngle)]),
         FrameGradientFillLength => "frameGradientFillLength" : length_pos().idml(idml![attr(TextFrame | Rectangle | Oval | Polygon, GradientFillLength)]),
         FrameGradientStrokeAngle => "frameGradientStrokeAngle" : deg().idml(idml![attr(TextFrame | Rectangle | Oval | Polygon, GradientStrokeAngle)]),

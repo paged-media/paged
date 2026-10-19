@@ -38,6 +38,7 @@ import {
   SHELL,
   activeEditContext,
   blurAll,
+  engageCanvas,
   enterVectorGraphic,
   isPluginCommand,
   liveKeybindings,
@@ -91,6 +92,8 @@ const HOST_KEYS = [
   "ctrl+d→paged.insert.placeImage",
   "tab→paged.chrome.toggleAll",
   "shift+tab→paged.chrome.togglePanels",
+  "cmd+\\→paged.chrome.toggleAll",
+  "ctrl+\\→paged.chrome.toggleAll",
   "w→paged.view.toggleScreenPreview",
   "cmd+k→paged.palette.toggle",
   "ctrl+k→paged.palette.toggle",
@@ -225,6 +228,8 @@ test.describe("host keybindings", () => {
       "keybinding:ctrl+d→paged.insert.placeImage",
       "keybinding:tab→paged.chrome.toggleAll",
       "keybinding:shift+tab→paged.chrome.togglePanels",
+      "keybinding:cmd+\\→paged.chrome.toggleAll",
+      "keybinding:ctrl+\\→paged.chrome.toggleAll",
       "keybinding:w→paged.view.toggleScreenPreview",
       "keybinding:cmd+k→paged.palette.toggle",
       "keybinding:ctrl+k→paged.palette.toggle",
@@ -240,6 +245,8 @@ test.describe("host keybindings", () => {
     const wrong: string[] = [];
     for (const sig of HOST_KEYS) {
       const { key, command } = split(sig);
+      // Tab is the chrome toggle on the canvas the user clicked into.
+      if (key === "tab" || key === "shift+tab") await engageCanvas(page);
       await pressCombo(page, key);
       const got = await expect
         .poll(() => recorder.take().then((c) => c.join(",")), {

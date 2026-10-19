@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
-  "description": "Internal: a mutable source (a registry, a store, a host surface) as a React render value that changes with its contents, so memoized reads, the React Compiler's included, stay current (apps/editor ADR 229). Never published.",
+  "description": "Internal: a mutable source (a registry, a store, a host surface) as a React render value that changes with its contents, so memoized reads, the React Compiler's included, stay current (apps/editor ADR 229); and which items of a long list are near the viewport, from one observer on a Fragment ref (ADR 240). Never published.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

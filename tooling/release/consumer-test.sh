@@ -1,27 +1,33 @@
 #!/usr/bin/env bash
-# The clean-room consumer test of the four public npm packages (PM-0008):
-# install the packed tarballs into empty projects outside the repository, the
-# way a user would, and use them.
+# The clean-room consumer test of the three public npm packages (PM-0008,
+# amendment 3): install the packed tarballs into empty projects outside the
+# repository, the way a user would, and use them.
 #
-#   bash tooling/release/consumer-test.sh <dir with the four .tgz> [<work dir>]
+#   bash tooling/release/consumer-test.sh <dir with the three .tgz> [<work dir>]
 #
 # Two projects, one per package manager:
 #   npm  — `npm install` of the tarballs under Node;
 #   bun  — `bun add` of the tarballs under Bun.
 # In each:
-#   1. import every entry and subpath (viewer, ./session; canvas-wasm,
-#      ./introspect, ./repo; plugin-api, ./manifest.schema.json; plugin-sdk),
-#      instantiate the session, introspection and repository wasm, read
+#   1. import every entry and subpath (viewer, ./session; paged, ./introspect,
+#      ./repo; plugin-sdk, ./api, ./api/manifest.schema.json), instantiate the
+#      session, introspection and repository wasm, read
 #      ./introspect/catalog.json, and run the paged-plugin bin's `validate`;
-#   2. typecheck a small TypeScript consumer of all four with
+#   2. run the `paged` bin: --help and --version (its engine is the package's
+#      own), and `paged mcp` with a scripted initialize, tools/list (the 15
+#      tools of the Rust `paged mcp`), lookup_api and list_documents;
+#   3. typecheck a small TypeScript consumer of all three (types from
+#      @paged-media/plugin-sdk/api, values from @paged-media/plugin-sdk) with
 #      moduleResolution nodenext AND bundler, skipLibCheck off, under
-#      TypeScript 7 and 5.9.
+#      TypeScript 7 and 5.9;
+#   4. (npm) `paged-plugin init` a plugin, install the plugin-sdk tarball into
+#      it, and run its own test (node --test) and typecheck.
 #
 # Nothing is published and nothing is installed outside <work dir> (default: a
 # fresh temporary directory). Exit 1 on the first failure.
 set -euo pipefail
 
-TGZ_DIR=$(cd "${1:?usage: consumer-test.sh <dir with the four .tgz> [<work dir>]}" && pwd)
+TGZ_DIR=$(cd "${1:?usage: consumer-test.sh <dir with the three .tgz> [<work dir>]}" && pwd)
 WORK=${2:-$(mktemp -d "${TMPDIR:-/tmp}/paged-consumer-XXXXXX")}
 mkdir -p "$WORK"
 WORK=$(cd "$WORK" && pwd)
@@ -32,13 +38,12 @@ TYPES_REACT=19.3.0
 
 tgz() {
   local f
-  f=$(find "$TGZ_DIR" -maxdepth 1 -name "paged-media-$1-*.tgz" | head -1)
+  f=$(find "$TGZ_DIR" -maxdepth 1 -name "paged-media-$1-[0-9]*.tgz" | head -1)
   [ -n "$f" ] || { echo "consumer-test: no paged-media-$1-*.tgz in $TGZ_DIR" >&2; exit 1; }
   echo "$f"
 }
-CANVAS=$(tgz canvas-wasm)
+PAGED=$(tgz paged)
 VIEWER=$(tgz viewer)
-API=$(tgz plugin-api)
 SDK=$(tgz plugin-sdk)
 
 write_project() {
@@ -52,19 +57,20 @@ JSON
 { "id": "com.example.hello", "name": "Hello", "version": "0.1.0", "apiVersion": "^0.2" }
 JSON
   cat >"$dir/imports.mjs" <<'JS'
-// Every entry and subpath of the four packages, from a consumer's side.
+// Every entry and subpath of the three packages, from a consumer's side.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import * as viewer from "@paged-media/viewer";
 import * as session from "@paged-media/viewer/session";
-import * as canvas from "@paged-media/canvas-wasm";
-import * as introspect from "@paged-media/canvas-wasm/introspect";
-import * as repo from "@paged-media/canvas-wasm/repo";
-import * as api from "@paged-media/plugin-api";
+import * as canvas from "@paged-media/paged";
+import * as introspect from "@paged-media/paged/introspect";
+import * as repo from "@paged-media/paged/repo";
+import * as api from "@paged-media/plugin-sdk/api";
 import * as sdk from "@paged-media/plugin-sdk";
-import schema from "@paged-media/plugin-api/manifest.schema.json" with { type: "json" };
+import schema from "@paged-media/plugin-sdk/api/manifest.schema.json" with { type: "json" };
 import viewerPkg from "@paged-media/viewer/package.json" with { type: "json" };
-import canvasPkg from "@paged-media/canvas-wasm/package.json" with { type: "json" };
+import pagedPkg from "@paged-media/paged/package.json" with { type: "json" };
+import sdkPkg from "@paged-media/plugin-sdk/package.json" with { type: "json" };
 
 const failures = [];
 const check = (ok, what) => {
@@ -78,20 +84,20 @@ check(typeof viewer.createSessionFromBundledWasm === "function", "viewer: create
 check(typeof session.ViewerSession === "function", "viewer/session: ViewerSession");
 session.initSync({ module: bytes("@paged-media/viewer/session/paged_sdk_bg.wasm") });
 check(true, "viewer/session: the session wasm instantiates");
-check(typeof canvas.CanvasWorker === "function", "canvas-wasm: CanvasWorker");
-check(bytes("@paged-media/canvas-wasm/paged_canvas_wasm_bg.wasm").length > 1e6, "canvas-wasm: the canvas wasm resolves");
-check(typeof introspect.Inspector === "function", "canvas-wasm/introspect: Inspector");
-introspect.initSync({ module: bytes("@paged-media/canvas-wasm/introspect/paged_introspect_wasm_bg.wasm") });
+check(typeof canvas.CanvasWorker === "function", "paged: CanvasWorker");
+check(bytes("@paged-media/paged/paged_canvas_wasm_bg.wasm").length > 1e6, "paged: the canvas wasm resolves");
+check(typeof introspect.Inspector === "function", "paged/introspect: Inspector");
+introspect.initSync({ module: bytes("@paged-media/paged/introspect/paged_introspect_wasm_bg.wasm") });
 const live = JSON.parse(introspect.describeCatalog());
-const shipped = JSON.parse(readFileSync(fileURLToPath(import.meta.resolve("@paged-media/canvas-wasm/introspect/catalog.json")), "utf8"));
-check(JSON.stringify(live) === JSON.stringify(shipped), "canvas-wasm/introspect: describeCatalog() equals introspect/catalog.json");
-check(typeof repo.Repository === "function", "canvas-wasm/repo: Repository");
-repo.initSync({ module: bytes("@paged-media/canvas-wasm/repo/paged_repo_wasm_bg.wasm") });
+const shipped = JSON.parse(readFileSync(fileURLToPath(import.meta.resolve("@paged-media/paged/introspect/catalog.json")), "utf8"));
+check(JSON.stringify(live) === JSON.stringify(shipped), "paged/introspect: describeCatalog() equals introspect/catalog.json");
+check(typeof repo.Repository === "function", "paged/repo: Repository");
+repo.initSync({ module: bytes("@paged-media/paged/repo/paged_repo_wasm_bg.wasm") });
 const r = new repo.Repository("consumer-test");
-check(typeof r.free === "function", "canvas-wasm/repo: new Repository()");
+check(typeof r.free === "function" && typeof r.tree === "function", "paged/repo: new Repository()");
 r.free();
-check(Object.keys(api).length === 0, "plugin-api: type-only (no runtime exports)");
-check(schema?.required?.includes("apiVersion"), "plugin-api/manifest.schema.json");
+check(Object.keys(api).length === 0, "plugin-sdk/api: type-only (no runtime exports)");
+check(schema?.required?.includes("apiVersion"), "plugin-sdk/api/manifest.schema.json");
 check(typeof sdk.loadBundle === "function" && typeof sdk.defineBundle === "function", "plugin-sdk: loadBundle, defineBundle");
 check(sdk.satisfiesApiVersion(`^${sdk.API_VERSION.slice(0, 3)}`), "plugin-sdk: API_VERSION negotiates");
 const fake = sdk.createFakeEditor();
@@ -101,17 +107,44 @@ const loaded = sdk.loadBundle(() => fake.editor, sdk.defineBundle({
 }), { console: sdk.silentConsole, storage: sdk.mapBacking() });
 check(fake.ids("commands").join() === "com.example.hello.command.report", "plugin-sdk: an activation test over createFakeEditor, mapBacking, silentConsole");
 loaded.dispose();
-const minor = (v) => v.split(".")[1];
-check(minor(viewerPkg.version) === minor(canvasPkg.version), `one version: viewer ${viewerPkg.version}, canvas-wasm ${canvasPkg.version}`);
+check(viewerPkg.version === pagedPkg.version && pagedPkg.version === sdkPkg.version, `one version: viewer ${viewerPkg.version}, paged ${pagedPkg.version}, plugin-sdk ${sdkPkg.version}`);
 
 if (failures.length) {
   console.error(`${failures.length} import check(s) failed`);
   process.exit(1);
 }
 JS
+  # `paged mcp` over stdio: initialize, tools/list, lookup_api, list_documents.
+  cat >"$dir/mcp.mjs" <<'JS'
+import { spawnSync } from "node:child_process";
+import { mkdirSync } from "node:fs";
+const [runtime, bin] = process.argv.slice(2);
+mkdirSync("library", { recursive: true });
+const call = (id, name, args) => ({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });
+const input = [
+  { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {} } },
+  { jsonrpc: "2.0", method: "notifications/initialized" },
+  { jsonrpc: "2.0", id: 2, method: "tools/list" },
+  call(3, "lookup_api", { query: "paged.set" }),
+  call(4, "list_documents", {}),
+].map((m) => JSON.stringify(m)).join("\n") + "\n";
+const p = spawnSync(runtime, [bin, "mcp", "--library", "library"], { input, encoding: "utf8" });
+if (p.status !== 0) { console.error(p.stderr); process.exit(1); }
+const replies = p.stdout.trim().split("\n").map((l) => JSON.parse(l));
+const by = (id) => replies.find((r) => r.id === id);
+const fail = (m) => { console.error(`FAIL paged mcp: ${m}\n${p.stdout}`); process.exit(1); };
+if (replies.length !== 4) fail(`${replies.length} replies to 4 requests`);
+if (by(1).result.protocolVersion !== "2025-06-18") fail("initialize");
+const tools = by(2).result.tools.map((t) => t.name);
+const expected = ["list_documents", "describe_document", "read_part", "history", "diff", "create_branch", "commit_parts", "propose_change", "list_changes", "download_link", "open_document", "run_script", "render_page", "save_document", "lookup_api"];
+if (tools.join() !== expected.join()) fail(`tools/list: ${tools.join()}`);
+if (!(by(3).result.structuredContent.matches > 0)) fail("lookup_api found nothing");
+if (by(4).result.structuredContent.documents.length !== 0) fail("list_documents");
+console.log(`ok   paged mcp (${runtime}): initialize, tools/list (${tools.length} tools), lookup_api, list_documents`);
+JS
   cat >"$dir/consumer.ts" <<'TS'
-// A tiny extension and an embedder, typed against the four packages.
-import type { BundleHost, PagedBundle, PluginManifest } from "@paged-media/plugin-api";
+// A tiny extension and an embedder, typed against the three packages.
+import type { BundleHost, PagedBundle, PluginManifest } from "@paged-media/plugin-sdk/api";
 import {
   API_VERSION,
   createFakeEditor,
@@ -123,9 +156,9 @@ import {
 } from "@paged-media/plugin-sdk";
 import { createViewer, type Viewer } from "@paged-media/viewer";
 import initSession, { ViewerSession } from "@paged-media/viewer/session";
-import { Inspector, describeCatalog } from "@paged-media/canvas-wasm/introspect";
-import { Repository } from "@paged-media/canvas-wasm/repo";
-import { CanvasWorker } from "@paged-media/canvas-wasm";
+import { Inspector, describeCatalog } from "@paged-media/paged/introspect";
+import { Repository } from "@paged-media/paged/repo";
+import { CanvasWorker } from "@paged-media/paged";
 
 export const manifest: PluginManifest = {
   id: "com.example.hello",
@@ -195,31 +228,62 @@ typecheck() {
   done
 }
 
+paged_bin() {
+  local dir="$1" runtime="$2" bin="$3"
+  echo "== $runtime: paged --help, --version"
+  local first
+  first=$(cd "$dir" && "$runtime" "$bin" --help | head -1)
+  case "$first" in
+    "paged "*) echo "   $first" ;;
+    *) echo "consumer-test: paged --help says: $first" >&2; exit 1 ;;
+  esac
+  local version
+  version=$(cd "$dir" && "$runtime" "$bin" --version)
+  echo "   $version"
+  if ! node -e 'const v=JSON.parse(process.argv[1]); process.exit(v.cli && v.cli===v.engine ? 0 : 1)' "$version"; then
+    echo "consumer-test: paged --version does not find its own engine: $version" >&2
+    exit 1
+  fi
+  echo "== $runtime: paged mcp"
+  (cd "$dir" && node mcp.mjs "$runtime" "$bin")
+}
+
 echo "consumer-test: $WORK"
 
 # --- npm under Node ------------------------------------------------------------
 NPM_DIR="$WORK/npm"
 rm -rf "$NPM_DIR"
 write_project "$NPM_DIR"
-echo "== npm: install the four tarballs (node $(node --version), npm $(npm --version))"
+echo "== npm: install the three tarballs (node $(node --version), npm $(npm --version))"
 (cd "$NPM_DIR" && npm install --no-audit --no-fund --loglevel=error \
-  "$CANVAS" "$VIEWER" "$API" "$SDK" \
+  "$PAGED" "$VIEWER" "$SDK" \
   "typescript@$TS7" "ts5@npm:typescript@$TS5" "@types/node@$TYPES_NODE" "@types/react@$TYPES_REACT")
 echo "== npm: node imports.mjs"
 (cd "$NPM_DIR" && node imports.mjs)
 echo "== npm: npx paged-plugin validate"
 (cd "$NPM_DIR" && npx --no-install paged-plugin validate manifest.json)
+paged_bin "$NPM_DIR" node "$NPM_DIR/node_modules/.bin/paged"
 typecheck "$NPM_DIR" npm
+
+echo "== npm: paged-plugin init, then the plugin's own test and typecheck"
+(cd "$WORK" && "$NPM_DIR/node_modules/.bin/paged-plugin" init hello-plugin)
+# Before a publish the registry has no plugin-sdk at this version: the
+# scaffold's development dependency is pointed at the tarball.
+node -e '
+  const fs = require("node:fs");
+  const [file, tgz] = process.argv.slice(1);
+  const p = JSON.parse(fs.readFileSync(file, "utf8"));
+  p.devDependencies["@paged-media/plugin-sdk"] = "file:" + tgz;
+  fs.writeFileSync(file, JSON.stringify(p, null, 2) + "\n");
+' "$WORK/hello-plugin/package.json" "$SDK"
+(cd "$WORK/hello-plugin" && npm install --no-audit --no-fund --loglevel=error \
+  && npm test && npm run typecheck && npm run validate)
 
 # --- Bun -----------------------------------------------------------------------
 BUN_DIR="$WORK/bun"
 rm -rf "$BUN_DIR"
 write_project "$BUN_DIR"
-echo "== bun: install the four tarballs (bun $(bun --version))"
-# The tarballs as dependencies, and plugin-sdk's dependency on plugin-api
-# pointed at its tarball too: before a publish, the registry does not have the
-# version yet (npm dedupes against the tarball on its own; Bun needs the
-# override).
+echo "== bun: install the three tarballs (bun $(bun --version))"
 cat >"$BUN_DIR/package.json" <<JSON
 {
   "name": "paged-consumer-test",
@@ -227,23 +291,22 @@ cat >"$BUN_DIR/package.json" <<JSON
   "version": "0.0.0",
   "type": "module",
   "dependencies": {
-    "@paged-media/canvas-wasm": "$CANVAS",
+    "@paged-media/paged": "$PAGED",
     "@paged-media/viewer": "$VIEWER",
-    "@paged-media/plugin-api": "$API",
     "@paged-media/plugin-sdk": "$SDK",
     "typescript": "$TS7",
     "ts5": "npm:typescript@$TS5",
     "@types/node": "$TYPES_NODE",
     "@types/react": "$TYPES_REACT"
-  },
-  "overrides": { "@paged-media/plugin-api": "$API" }
+  }
 }
 JSON
 (cd "$BUN_DIR" && bun install --silent)
 echo "== bun: bun imports.mjs"
 (cd "$BUN_DIR" && bun imports.mjs)
-echo "== bun: bun x paged-plugin validate"
+echo "== bun: paged-plugin validate"
 (cd "$BUN_DIR" && ./node_modules/.bin/paged-plugin validate manifest.json)
+paged_bin "$BUN_DIR" bun "$BUN_DIR/node_modules/@paged-media/paged/dist/paged.js"
 typecheck "$BUN_DIR" bun
 
-echo "consumer-test OK — npm and bun, nodenext and bundler, TypeScript $TS7 and $TS5"
+echo "consumer-test OK — npm and bun, nodenext and bundler, TypeScript $TS7 and $TS5, the paged bin and paged mcp, paged-plugin init"

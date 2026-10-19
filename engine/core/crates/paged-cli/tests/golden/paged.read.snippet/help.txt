@@ -1,7 +1,7 @@
 $ paged read snippet --help
 --- exit: 0
 --- stdout
-A copy of page items for the clipboard (ADR 190): the snippet JSON `pasteElements` takes back, in this document or another
+A copy of page items for the clipboard (ADR 193): the snippet JSON `pasteElements` takes back, in this document or another
 
 Usage: paged read snippet [OPTIONS] <DOC> <IDS>...
 

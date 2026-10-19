@@ -19,6 +19,13 @@
 
 import type * as Api from "@paged-media/plugin-api";
 
+import {
+  WIDGET_KEYS,
+  insideKeyOwningContainer,
+  isActivatable,
+  isCanvasSurface,
+  isComposingKey,
+} from "../focus/key-ownership";
 import type { CommandRegistry } from "./command";
 import { isEnabled } from "./types";
 import type { Disposable, Registrable } from "./types";
@@ -156,7 +163,7 @@ function eventMatches(combo: KeyCombo, event: KeyEventLike): boolean {
  * The keys a focused WIDGET consumes itself, whatever modifiers ride
  * along: Backspace/Delete edit a field, the arrows move its caret (or
  * a menu's highlight, a slider's thumb, a tab strip's focus), Home/End
- * jump within it.
+ * jump within it (`WIDGET_KEYS`, focus/key-ownership.ts).
  *
  * WHY THIS SET EXISTS. The guard below used to know one fact — "a pure
  * letter typed into a field is text, not a shortcut" — and that was
@@ -170,27 +177,19 @@ function eventMatches(combo: KeyCombo, event: KeyEventLike): boolean {
  * belongs here, once, for every binding on these keys that ever
  * registers.
  *
- * Deliberately NOT in the set: Tab, Enter, Escape and the function
- * keys. Bindings on those exist (`tab` / `shift+tab`) and have always
- * fired from inside a field; widening the rule to them would change
- * shipped behaviour this change has no business touching.
+ * Tab is the focused control's too (F-49, ADR 234): it moves focus
+ * everywhere but on a canvas surface, so the chrome toggle bound to it
+ * fires only from the canvas. Enter, Escape and the function keys still
+ * reach bindings from a field.
  */
-const WIDGET_KEYS = new Set([
-  "backspace",
-  "delete",
-  "arrowleft",
-  "arrowright",
-  "arrowup",
-  "arrowdown",
-  "home",
-  "end",
-]);
 
 /**
  * ARIA composites that own the arrow keys (and, for a tree or a
  * listbox, Delete) while focus is inside them. `toolbar` is absent on
- * purpose: clicking a tool leaves focus on its rail button, and the
- * very next thing a user does is press an arrow to nudge.
+ * purpose: a toolbar is a roving-tabindex group (focus/roving-focus.ts)
+ * that prevents the default of every arrow it moves with, which the
+ * `defaultPrevented` rule below already honours; a click on a rail tool
+ * hands focus back to the canvas, so the next arrow nudges.
  */
 const WIDGET_KEY_OWNERS = [
   '[role="menu"]',
@@ -210,18 +209,24 @@ const WIDGET_KEY_OWNERS = [
  * Does the element the key was pressed in consume this key itself?
  * True ⇒ no binding may fire; the event is the widget's.
  *
- * Reads only `key`, the modifier flags and `target`, so the rule is
- * testable in Node with a plain object (it is exported for exactly
- * that; the five keyboard hooks that each carry a private
- * `isEditableTarget` are a consolidation this change does not attempt).
+ * Reads only `key`, the modifier flags, the composition flags and
+ * `target`, so the rule is testable in Node with a plain object (it is
+ * exported for exactly that). The canvas's own key handlers ask the
+ * sibling question, `canvasKeyYields` (focus/key-ownership.ts).
  */
 export function targetOwnsKey(
   event: Pick<
     KeyboardEvent,
     "key" | "metaKey" | "ctrlKey" | "altKey" | "target" | "defaultPrevented"
-  >,
+  > &
+    Partial<Pick<KeyboardEvent, "isComposing" | "keyCode">>,
 ): boolean {
-  const isWidgetKey = WIDGET_KEYS.has(event.key.toLowerCase());
+  // A key that belongs to an input method composition (F-36): the IME's,
+  // never a shortcut — the "v" of a romaji composition is not the
+  // Selection tool.
+  if (isComposingKey(event)) return true;
+  const key = event.key.toLowerCase();
+  const isWidgetKey = WIDGET_KEYS.has(key);
   // Something upstream already took this key. React's handlers run at
   // the root container, before this window listener, so a widget with
   // no telltale role still gets to say "mine" the ordinary way: a
@@ -232,6 +237,17 @@ export function targetOwnsKey(
   if (isWidgetKey && event.defaultPrevented) return true;
   const target = event.target as HTMLElement | null;
   if (!target || !target.tagName) return false;
+  // Tab moves focus (F-49): from a field, a button, a dialog, the page.
+  // Only the canvas's own surfaces hand it to a binding.
+  if (key === "tab") return !isCanvasSurface(target);
+  const chord = event.metaKey || event.ctrlKey;
+  // A dialog or an open menu owns every key but a Cmd/Ctrl chord: its
+  // typeahead letters, Enter, Space, Escape (R9).
+  if (!chord && insideKeyOwningContainer(target)) return true;
+  // Enter and Space activate the focused button, link or checkbox.
+  if (!chord && (key === "enter" || key === " ") && isActivatable(target)) {
+    return true;
+  }
   const tag = target.tagName;
   const isEditable =
     tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable;

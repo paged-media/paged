@@ -1,0 +1,6 @@
+# Assembled by scripts/assemble.mjs from the engine's workspace package
+# (engine/core/packages/canvas-wasm) and the CLI (apps/cli): build outputs.
+/paged_canvas_wasm*
+/introspect/
+/repo/
+/dist/

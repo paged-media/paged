@@ -194,14 +194,18 @@ test.describe("chrome surface — the keybindings, commands and panels nothing n
 
     // Focus mode. Note this hides the ONLY mode-switching affordance in
     // the app (the bottom mode bar goes too), and the way back is Tab
-    // again — which nothing on screen says once the chrome is gone.
+    // again — which nothing on screen says once the chrome is gone. Tab
+    // is the toggle on the canvas the user clicked into (ADR 234).
+    await page
+      .locator("[data-paged-canvas]")
+      .click({ position: { x: 8, y: 8 } });
     await page.keyboard.press("Tab");
     await expect(rail).toBeHidden();
     await page.keyboard.press("Tab");
     await expect(rail).toBeVisible();
 
     // Shift+Tab is the half-measure, and the two flags are NOT the same
-    // axis: `panelsHidden` unmounts the cockpit's dock COLUMNS, while
+    // axis: `panelsHidden` hides the cockpit's dock COLUMNS, while
     // `railHidden` hides the tool rail and the panel rail. So Shift+Tab
     // takes the left panel away and leaves BOTH rails standing — the
     // rails are navigation, the columns are content.

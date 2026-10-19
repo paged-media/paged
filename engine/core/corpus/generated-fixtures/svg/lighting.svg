@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160" viewBox="0 0 240 160">
+  <!-- A bevel as illustration programs write one: the alpha blurred into a height map, lit, laid over the art. -->
+  <filter id="bevel" x="-10%" y="-10%" width="120%" height="120%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="bump"/>
+    <feSpecularLighting in="bump" surfaceScale="5" specularConstant="0.9" specularExponent="18" lighting-color="#ffffff" result="spec">
+      <feDistantLight azimuth="225" elevation="45"/>
+    </feSpecularLighting>
+    <feComposite in="spec" in2="SourceAlpha" operator="in" result="shine"/>
+    <feComposite in="SourceGraphic" in2="shine" operator="arithmetic" k1="0" k2="1" k3="1" k4="0"/>
+  </filter>
+  <filter id="diffuse" x="0" y="0" width="1" height="1">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="bump"/>
+    <feDiffuseLighting in="bump" surfaceScale="6" diffuseConstant="1" lighting-color="white" result="lit">
+      <fePointLight x="30" y="20" z="40"/>
+    </feDiffuseLighting>
+    <feComposite in="lit" in2="SourceGraphic" operator="arithmetic" k1="1" k2="0" k3="0" k4="0"/>
+  </filter>
+  <filter id="spot" x="0" y="0" width="1" height="1">
+    <feSpecularLighting in="SourceAlpha" surfaceScale="2" specularConstant="1.2" specularExponent="6" lighting-color="white">
+      <feSpotLight x="180" y="20" z="60" pointsAtX="190" pointsAtY="120" pointsAtZ="0" specularExponent="4" limitingConeAngle="35"/>
+    </feSpecularLighting>
+  </filter>
+  <rect x="15" y="15" width="90" height="55" rx="12" fill="#3060c0" filter="url(#bevel)"/>
+  <circle cx="60" cy="115" r="35" fill="#c08030" filter="url(#diffuse)"/>
+  <rect x="130" y="15" width="100" height="130" fill="#000" filter="url(#spot)"/>
+</svg>

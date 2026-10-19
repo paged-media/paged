@@ -19,7 +19,7 @@
 // THE VERB TABLE. `--help`, argument checking and the cli_surface spec are
 // all generated from it: a verb exists iff it has a row here.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -62,6 +62,9 @@ import {
   type SessionOptions,
 } from "./session";
 import { describeType, parseCliValue } from "./values";
+import { defaultLibrary } from "./mcp/library";
+import { LocalHost } from "./mcp/host";
+import { serveStdio } from "./mcp/protocol";
 
 export interface VerbContext {
   args: ParsedArgs;
@@ -76,6 +79,9 @@ export interface VerbResult {
   text?: string;
   /** Exit code (default 0). */
   exit?: number;
+  /** The verb wrote its own output (`mcp` speaks JSON-RPC on stdout):
+   *  print nothing. */
+  silent?: boolean;
 }
 
 export interface Verb {
@@ -129,7 +135,7 @@ export const GLOBAL_OPTIONS: readonly OptionSpec[] = [
   {
     name: "engine-from",
     value: "dir",
-    help: "resolve @paged-media/canvas-wasm from this directory",
+    help: "resolve the engine (@paged-media/paged) from this directory",
   },
   { name: "text", help: "human-readable output instead of JSON" },
   { name: "help", short: "h", help: "show help" },
@@ -1223,7 +1229,7 @@ const plugins: Verb = {
         problems: s.pluginProblems,
       },
       text: [
-        `engine @paged-media/canvas-wasm@${s.engineVersion} (protocol ${s.protocol})`,
+        `engine ${s.engineVersion} (protocol ${s.protocol})`,
         ...list.map(
           (p) =>
             `${p.id} ${p.version ?? ""} (${p.source})${p.kinds.length ? ` kinds: ${p.kinds.join(", ")}` : ""}`,
@@ -1304,6 +1310,49 @@ const describe: Verb = {
   },
 };
 
+const mcp: Verb = {
+  name: "mcp",
+  usage: "",
+  summary:
+    "serve the paged MCP tools over stdio, as the engine's Rust `paged mcp` does: a library's documents (store tools), and the engine run here (open_document, run_script, render_page, save_document)",
+  min: 0,
+  max: 0,
+  options: [
+    {
+      name: "library",
+      value: "dir",
+      help: "the library directory (default: $PAGED_LIBRARY, else ~/.paged/library)",
+    },
+  ],
+  reaches: [],
+  async run({ args, cwd }) {
+    const library = resolve(cwd, flagStr(args, "library") ?? defaultLibrary());
+    if (existsSync(library) && !statSync(library).isDirectory())
+      throw new CliError(
+        EXIT.usage,
+        `--library: ${library} is not a directory`,
+      );
+    let host: LocalHost;
+    try {
+      host = await LocalHost.create({
+        library,
+        session: sessionOptions(args, cwd),
+      });
+    } catch (err) {
+      throw new CliError(
+        EXIT.usage,
+        `cannot boot the engine: ${(err as Error).message}`,
+      );
+    }
+    try {
+      await serveStdio(host);
+    } finally {
+      host.dispose();
+    }
+    return { json: null, silent: true };
+  },
+};
+
 export const VERBS: readonly Verb[] = [
   get,
   set,
@@ -1321,6 +1370,7 @@ export const VERBS: readonly Verb[] = [
   merge,
   plugins,
   describe,
+  mcp,
 ];
 
 export function sessionOptions(args: ParsedArgs, cwd: string): SessionOptions {

@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! ADR 190 on the WIRE — `exportElements` (Copy, Cut) and
+//! ADR 193 on the WIRE — `exportElements` (Copy, Cut) and
 //! `pasteElements { snippet, pageId, center? }` (Paste, Paste in Place),
 //! and the Alt-drag that commits as a paste (findings GF-2, GF-3).
 //!

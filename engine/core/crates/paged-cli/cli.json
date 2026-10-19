@@ -2351,7 +2351,7 @@
           "subcommands": []
         },
         {
-          "about": "A copy of page items for the clipboard (ADR 190): the snippet JSON `pasteElements` takes back, in this document or another",
+          "about": "A copy of page items for the clipboard (ADR 193): the snippet JSON `pasteElements` takes back, in this document or another",
           "args": [
             {
               "defaults": [],

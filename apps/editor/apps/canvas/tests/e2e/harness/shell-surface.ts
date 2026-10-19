@@ -139,6 +139,21 @@ export async function blurAll(page: Page): Promise<void> {
   );
 }
 
+/** Focus the canvas viewport as a click in it does (ADR 234): Tab is then
+ *  the chrome toggle. The pointerdown lands on the viewport element itself,
+ *  not on the document under it, so no selection changes. */
+export async function engageCanvas(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const viewport = document.querySelector<HTMLElement>(
+      '[data-canvas-surface="viewport"]',
+    );
+    if (!viewport) throw new Error("no canvas viewport surface");
+    viewport.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
+    );
+  });
+}
+
 interface CanvasHandle {
   client: {
     setElementSelection(ids: unknown[], mode: string): Promise<unknown[]>;

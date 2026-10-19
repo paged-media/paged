@@ -93,7 +93,7 @@ export function ContextToolbar({ paged, right }: ContextToolbarProps) {
         {right != null && <span style={sepStyle} />}
         <ViewPill
           name="ui-expand"
-          title="Focus mode (Tab)"
+          title="Focus mode (⌘\, or Tab on the canvas)"
           onClick={() => void commands.invoke("paged.chrome.toggleAll")}
         />
       </div>

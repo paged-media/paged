@@ -168,7 +168,7 @@ fn the_script_surface_reaches_150_of_151() {
     // renameBookmark and moveBookmark (ADR 173); v73 insertEndnote,
     // deleteEndnote and convertFootnoteToEndnote (ADR 174); v74
     // acceptTrackedChange and rejectTrackedChange (ADR 184), and
-    // pasteElements (ADR 190).
+    // pasteElements (ADR 193).
     assert_eq!(ops_the_bridge_names().len(), 150);
     assert_eq!(paged_wire::MUTATION_NAMES.len(), 151);
 }

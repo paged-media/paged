@@ -55,6 +55,7 @@ import {
   pullWorkerJournal,
 } from "../journal-sink";
 import { color, Disclosure, font, radius, space } from "@paged-media/panel-kit";
+import { FocusScope } from "@paged-media/shell";
 
 const DOT: Record<JournalSeverity, string> = {
   error: "var(--status-error)",
@@ -472,89 +473,97 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
           boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
         }}
       >
-        <h2
-          id="journal-export-title"
-          style={{ margin: "0 0 4px", fontSize: 15 }}
-        >
-          Export journal bundle
-        </h2>
-        <p style={{ margin: "0 0 12px", color: color.mutedFg }}>
-          {bundle.counters.recorded} entries. Nothing has been sent anywhere —
-          this writes a file to your machine. Below is exactly what it will
-          contain.
-        </p>
-
-        <div style={{ display: "grid", gap: 6, margin: "0 0 12px" }}>
-          <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-            <input
-              type="checkbox"
-              data-journal-include-crash
-              checked={includeCrash}
-              onChange={(e) => setIncludeCrash(e.target.checked)}
-            />
-            <span>
-              Include crash stack traces
-              <span style={{ color: color.mutedFg }}>
-                {" "}
-                — stack traces usually contain file paths from your disk.
-              </span>
-            </span>
-          </label>
-          <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-            <input
-              type="checkbox"
-              data-journal-include-shape
-              checked={includeShape}
-              onChange={(e) => setIncludeShape(e.target.checked)}
-            />
-            <span>
-              Include document shape
-              <span style={{ color: color.mutedFg }}>
-                {" "}
-                — page/story counts and font names. No document text.
-              </span>
-            </span>
-          </label>
-        </div>
-
-        <pre
-          data-journal-preview
-          style={{
-            ...mono,
-            flex: 1,
-            minHeight: 160,
-            overflow: "auto",
-            margin: "0 0 12px",
-            padding: 10,
-            background: color.bg,
-            border: `1px solid ${color.border}`,
-            borderRadius: radius.sm,
-            whiteSpace: "pre",
-          }}
-        >
-          {text}
-        </pre>
-
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button
-            type="button"
-            data-journal-export-cancel
-            onClick={onClose}
-            style={buttonStyle}
+        {/* ADR 234 — focus moves in on open, Tab stays inside, and
+            focus returns to the opener on close. */}
+        <FocusScope trap autoFocus restoreFocus>
+          <h2
+            id="journal-export-title"
+            style={{ margin: "0 0 4px", fontSize: 15 }}
           >
-            Cancel
-          </button>
-          <button
-            type="button"
-            data-journal-export-confirm
-            onClick={() => {
-              void exportJournalBundleAsync(options).then(onClose);
+            Export journal bundle
+          </h2>
+          <p style={{ margin: "0 0 12px", color: color.mutedFg }}>
+            {bundle.counters.recorded} entries. Nothing has been sent anywhere —
+            this writes a file to your machine. Below is exactly what it will
+            contain.
+          </p>
+
+          <div style={{ display: "grid", gap: 6, margin: "0 0 12px" }}>
+            <label
+              style={{ display: "flex", gap: 8, alignItems: "flex-start" }}
+            >
+              <input
+                type="checkbox"
+                data-journal-include-crash
+                checked={includeCrash}
+                onChange={(e) => setIncludeCrash(e.target.checked)}
+              />
+              <span>
+                Include crash stack traces
+                <span style={{ color: color.mutedFg }}>
+                  {" "}
+                  — stack traces usually contain file paths from your disk.
+                </span>
+              </span>
+            </label>
+            <label
+              style={{ display: "flex", gap: 8, alignItems: "flex-start" }}
+            >
+              <input
+                type="checkbox"
+                data-journal-include-shape
+                checked={includeShape}
+                onChange={(e) => setIncludeShape(e.target.checked)}
+              />
+              <span>
+                Include document shape
+                <span style={{ color: color.mutedFg }}>
+                  {" "}
+                  — page/story counts and font names. No document text.
+                </span>
+              </span>
+            </label>
+          </div>
+
+          <pre
+            data-journal-preview
+            style={{
+              ...mono,
+              flex: 1,
+              minHeight: 160,
+              overflow: "auto",
+              margin: "0 0 12px",
+              padding: 10,
+              background: color.bg,
+              border: `1px solid ${color.border}`,
+              borderRadius: radius.sm,
+              whiteSpace: "pre",
             }}
-            style={{ ...buttonStyle, borderColor: color.primary }}
           >
-            Save file
-          </button>
-        </div>
+            {text}
+          </pre>
+
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              data-journal-export-cancel
+              onClick={onClose}
+              style={buttonStyle}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              data-journal-export-confirm
+              onClick={() => {
+                void exportJournalBundleAsync(options).then(onClose);
+              }}
+              style={{ ...buttonStyle, borderColor: color.primary }}
+            >
+              Save file
+            </button>
+          </div>
+        </FocusScope>
       </div>
     </div>
   );

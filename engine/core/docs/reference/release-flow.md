@@ -13,7 +13,10 @@ _Superseded 2026-10-18 by [PM-0008](../../../../docs/adr/PM-0008-npm-packages-an
 the release is `.github/workflows/release.yml`. One root tag `v0.<protocol>.<patch>` publishes
 `@paged-media/canvas-wasm` (with `./introspect` and `./repo`), `@paged-media/viewer` (with
 `./session`), `@paged-media/plugin-api` and `@paged-media/plugin-sdk` at the tag's version,
-through npm trusted publishing with provenance. Steps 5 to 7 below are gone: first-party
+through npm trusted publishing with provenance. Since amendment 3 (2026-10-19) the tag
+publishes three: `@paged-media/paged` (assembled in `packages/paged` from canvas-wasm, which is
+private, with the `paged` bin), `@paged-media/viewer` and `@paged-media/plugin-sdk` (the contract
+as `./api`; plugin-api is private). Steps 5 to 7 below are gone: first-party
 consumers take the engine and the contract from the workspace. The owner's steps are in
 [the npm release runbook](../../../../docs/migration/npm-release-runbook.md). The record
 below is kept as it was._

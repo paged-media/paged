@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! ADR 190 — page-item snippets: `extract_snippet` (Copy, Cut) and
+//! ADR 193 — page-item snippets: `extract_snippet` (Copy, Cut) and
 //! `Operation::InsertSnippet` (Paste).
 //!
 //! What is pinned: a paste is the whole copy (a group with its members and
