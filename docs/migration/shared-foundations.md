@@ -4,7 +4,7 @@ Wave C moves code that every built-in module had its own copy of into one intern
 implementation under `platform/shared/*` (PM-0002: importable by the built-ins and the
 editor, never by `platform/extensions`), and slims what the public SDK carries. This page
 records the TypeScript items C6–C9, C11 and C12, measured on 2026-10-19, and after them the
-Rust items as they land (C2 and C5 at the end). C10 (`panel-kit`) is separate.
+Rust items as they land (C2, C5 and C4 at the end). C10 (`panel-kit`) is separate.
 
 How it was measured:
 
@@ -417,3 +417,73 @@ moxcms (0.8, held) and ooxmlsdk (0.12, held) are on one version wherever they ar
 The transitive duplicates are third-party crates' own requirements, none of them ours to
 move: in the engine, skrifa 0.42 (subsetter), 0.44 (vello) and 0.46 (hayro), and
 miniz_oxide 0.8 beside 0.9 (png 0.18, also in image's dev graph).
+
+## C4 — doc and slide build native documents (Rust)
+
+paged.doc's standalone-open skeleton and paged.slide's deck are built as
+`paged_scene::Document`s with the engine's model crates and packaged by core's one `.paged`
+writer (`paged_store::package::wrap_document`), as the PDF mapper already did. The
+hand-written IDML writers are gone: `docx-skeleton`'s IDML half (408 → 0 lines of IDML
+templates) and `slide-idml` (1,363 lines). Decisions: doc ADR 606, slide ADR 708 (amending
+doc ADR 603 and slide ADR 700).
+
+### Equivalence
+
+Before the writers were deleted, each module had a test that built the document both ways and
+compared the IDML importer's model of the old package with the new document, serialised as
+the model part (`paged_store::to_bytes`, maps in key order):
+
+| Module | Compared | Result |
+| --- | --- | --- |
+| doc | 30 conformance builders, `annual-report.docx`, `merge-letter.docx`; the docx corpus lane (273 of 292 files import); each with span/split columns on and off | equal; one field differs on one corpus file (below) |
+| slide | the 10 PowerPoint-authored fixtures, the 7 decks of the pptx corpus lane; also the report beside the package (stories, elements, diagnostics) and the package read back as the engine reads it | equal |
+
+The tests are in the history (`docx-skeleton/tests/equivalence.rs`,
+`slide-native/tests/equivalence.rs` at the commits that added the builders). Behaviour tests
+stay: the skeleton's page, margin, frame, story and determinism checks now assert the native
+document read back from the package; slide-idml's baselines test and unit tests moved to
+`slide-native`, beside new package tests (pages, masters, stories, elements, a picture's
+blob, crop transform and the not-a-picture diagnostic, determinism of the model).
+
+### What the old path got wrong, and the new one does not
+
+- **The document name kept its escapes.** idml-import reads the designmap's `Name`
+  attribute raw, so `a&b.docx` opened as a document named `a&amp;b.docx` (one corpus file).
+  The same raw read applies to ids and style names the writers escaped; no slide fixture or
+  corpus deck has one.
+
+### What the new path keeps from the old one
+
+- Lengths to the thousandth of a point (the IDML writers' number format), names without line
+  breaks (XML attribute normalisation), the `20.0` DOM version and the root XML tag, so a
+  document opens as it did.
+
+### Gaps recorded, not changed here
+
+- **The model part is not byte-stable for map fields.** `paged-store` writes the model's
+  `HashMap`s (a spread's labels and item names, master spreads) in iteration order, so two
+  native builds of the same deck are the same document but not always the same bytes (the
+  IDML writer's output was byte-stable). Sorting them is a core change. In wasm the hasher
+  keys are fixed, so the editor's imports are stable.
+- **The grow rule.** The model can carry a story's grow rule; the doc bundle still sets it on
+  the wire after the open.
+
+### wasm (wasm-release, `wasm-bindgen --target web`, `wasm-opt -Oz`)
+
+The plan expected both artifacts to shrink; both grow. A module that produces a native
+document carries the serializer of the whole engine model (the model part is JSON) and the
+content hash of image blobs; the IDML writer it replaces was small string formatting.
+
+| Artifact | Before | After C4 | Change |
+| --- | ---: | ---: | ---: |
+| `docx_js_bg.wasm` | 6,660,701 | 6,834,216 | +173,515 |
+| `slide_js_bg.wasm` | 1,559,562 | 1,808,272 | +248,710 |
+
+- Mitigations in the numbers: the model crates (and slide's builder) build at
+  `opt-level = "z"` (doc −17 KB, slide −23 KB); the derived caches are not rebuilt before
+  writing (doc −19 KB). The first doc build was +209,903.
+- App total: CI measured 98,601,399 B at `3ce59f523`; with C4 that is 99,023,624 B
+  (+422,225), under the 100,000,000 B budget by 976,376 B.
+- The structural fix is one binary for doc, slide and the PDF mapper (each now carries the
+  same serializer; deferred in the plan). The alternative, handing the engine an IR to build
+  the document from, needs a new host door and puts module code in the engine.
