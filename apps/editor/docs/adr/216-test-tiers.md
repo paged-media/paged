@@ -28,7 +28,7 @@ requests; the other tiers are local, nightly or advisory.
 | Behaviour | project `chromium`: all specs except `journey/**` and `showcase/**` | `playwright` job |
 | Journeys | project `journeys`: 80 spec files (44 for plugins), one of them ignored | `playwright` job |
 | Journeys on WebGPU | project `journeys-gpu` | local only, macOS |
-| Fidelity | `tests/fidelity.spec.ts` against InDesign reference PDFs | local only |
+| Fidelity | `/tests/fidelity/editor-packs.spec.ts` (root tests, project `fidelity`) against InDesign reference PDFs | local only |
 | Corpus mode | `tests/e2e/extensive-corpus.spec.ts` over real documents | local only, opt-in |
 | Showcase | project `showcase` ([ADR 217](217-showcase-reference-document.md)) | nightly on macOS; not on push |
 
