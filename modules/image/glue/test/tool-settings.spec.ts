@@ -16,7 +16,7 @@ import { describe, expect, it } from "bun:test";
 
 import type { ToolContribution } from "@paged-media/plugin-api";
 import { inMemoryToolSettings } from "@paged-media/plugin-sdk";
-import { covers } from "@paged-media/test-kit";
+import { covers, gestures } from "@paged-media/test-kit";
 
 import { bundleOnFake } from "./command-kit";
 
@@ -140,7 +140,7 @@ describe("wand and bucket options", () => {
       max: 255,
     });
     // Default: a click on red selects the red half.
-    const g = k.tools().tool(`${T}.magicWand`).settle();
+    const g = gestures(k.toolTarget).tool(`${T}.magicWand`).settle();
     await g.click([50, 50]).settle();
     expect(state().selection!.coverage).toBeCloseTo(0.5, 2);
     settings.set(`${T}.magicWand`, "tolerance", 255);
