@@ -244,7 +244,7 @@ test.describe("journey · paged.image layers", () => {
     await vis.click();
     await expect(applyBtn).toBeEnabled({ timeout: 10_000 });
     await applyBtn.click();
-    const after = await designer.renderBytes();
-    await designer.expectRenderChanged(before, after);
+    // The composite is a Stage-A push after the click: polled (ADR 228).
+    await designer.expectRenderChangesFrom(before);
   });
 });
