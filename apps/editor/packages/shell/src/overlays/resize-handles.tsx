@@ -19,10 +19,7 @@
 
 import type { ReactNode } from "react";
 
-import type {
-  ElementGeometryItem,
-  ResizeHandle,
-} from "@paged-media/client";
+import type { ElementGeometryItem, ResizeHandle } from "@paged-media/client";
 
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";
 import { useSelection } from "../state/selection-context";

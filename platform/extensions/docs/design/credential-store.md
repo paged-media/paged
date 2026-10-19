@@ -16,12 +16,12 @@ of plugin-readable persistent storage. D-11 is the id this door carries in
 
 ## Decision
 
-*Status note (2026-10-02): this section predates the implementation; see `DESIGN.md` §16.
+_Status note (2026-10-02): this section predates the implementation; see `DESIGN.md` §16.
 Layer 1 ships as written, except that a bundle passes the value to `set` and the editor asks
 the user to confirm it before storing. Of layer 2 the editor ships the WebCrypto-wrapped
 IndexedDB tier and the session-only fallback (`editor: apps/canvas/src/plugin-secret-store.ts`);
 the OS-keychain tier is not built. The host-side door that would resolve a `credentialRef` and
-inject the material is not built, and no shipped bundle declares `capabilities.secrets`.*
+inject the material is not built, and no shipped bundle declares `capabilities.secrets`._
 
 **A host-owned, reference-only secret store behind a new SDK door; plugins
 hold `credentialRef` strings, never secret material.** Three layers:
@@ -49,9 +49,9 @@ hold `credentialRef` strings, never secret material.** Three layers:
 
 ## What stays true (hard gates, already tested)
 
-*Status note (2026-10-02): the first two gates are tested in
+_Status note (2026-10-02): the first two gates are tested in
 `plugin-data: data-conformance/tests/it/security.rs`; the batch binary (`plugin-data: data-cli`)
-does not resolve credential references.*
+does not resolve credential references._
 
 - `credentials-absent` round-trip: save → inspect → assert no secret bytes
   in IDML/metadata. The ref strings ARE allowed in the source manifest

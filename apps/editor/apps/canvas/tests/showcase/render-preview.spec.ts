@@ -52,13 +52,19 @@ test.describe("render-preview", () => {
       .split(",")
       .map((s) => Number.parseInt(s.trim(), 10))
       .filter((n) => Number.isFinite(n) && n >= 1 && n <= count);
-    const pages = wanted.length > 0 ? wanted : [...Array(Math.min(10, count)).keys()].map((i) => i + 1);
+    const pages =
+      wanted.length > 0
+        ? wanted
+        : [...Array(Math.min(10, count)).keys()].map((i) => i + 1);
     const dir = join(OUT, "preview");
     mkdirSync(dir, { recursive: true });
     for (const physical of pages) {
       const png = await doc.renderPage(physical - 1, 1080);
       expect(png.length).toBeGreaterThan(0);
-      writeFileSync(join(dir, `page-${String(physical).padStart(3, "0")}.png`), png);
+      writeFileSync(
+        join(dir, `page-${String(physical).padStart(3, "0")}.png`),
+        png,
+      );
     }
     // eslint-disable-next-line no-console
     console.log(`[preview] wrote ${pages.length} page(s) to ${dir}`);

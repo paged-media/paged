@@ -23,7 +23,12 @@
 // membership secondary ("4 pages · 4–7") waits on SpreadSummary
 // carrying members (engine gap 7) — today it shows the count.
 
-import { ListRows, displayName, isIdLikeLabel, useCollection } from "@paged-media/shell";
+import {
+  ListRows,
+  displayName,
+  isIdLikeLabel,
+  useCollection,
+} from "@paged-media/shell";
 import type { SpreadSummary } from "@paged-media/client";
 
 export function SpreadsPanel() {
@@ -52,7 +57,9 @@ export function SpreadsPanel() {
               icon: "panel-spreads",
               // An unnamed spread's label is its id ("u630080", "us") or,
               // from engine 0.71.8, its folios ("2–3"): neither is a name.
-              primary: isIdLikeLabel(s.label, s.selfId) ? `Spread ${i + 1}` : displayName(s.label),
+              primary: isIdLikeLabel(s.label, s.selfId)
+                ? `Spread ${i + 1}`
+                : displayName(s.label),
               secondary: `${s.pageCount} page${s.pageCount === 1 ? "" : "s"}`,
             }))}
           />

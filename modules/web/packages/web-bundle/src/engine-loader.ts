@@ -52,30 +52,36 @@
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
-import { parseInspected, type InspectedRender, type SceneLayer } from "../../web-model/src";
+import {
+  parseInspected,
+  type InspectedRender,
+  type SceneLayer,
+} from "../../web-model/src";
 
 /** The minimal surface of the wasm-bindgen `--target web` glue we use —
  *  declared locally so typecheck never depends on the GENERATED (and
  *  gitignored) `bin/blitz_web.d.ts`. `default` is `__wbg_init`; `initSync`
  *  takes a compiled module or bytes. */
 export interface BlitzGlue {
-  default: (
-    init?: { module_or_path: unknown } | unknown,
-  ) => Promise<unknown>;
-  render_web_frame: (
-    html: string,
-    widthPx: number,
-    heightPx: number,
-  ) => string;
+  default: (init?: { module_or_path: unknown } | unknown) => Promise<unknown>;
+  render_web_frame: (html: string, widthPx: number, heightPx: number) => string;
   /** Thread a flow across N frames (ADR-020 rung 2). `framesJson` is
    *  `[{"widthPx":N,"heightPx":M}, …]` in chain order; `flowRoot` is a CSS
    *  `flow-into` selector (Regions syntax) or "" for the whole body; returns
    *  `{ frames: [{ layer, emitted }], overset }` as JSON. */
-  render_web_flow: (html: string, framesJson: string, flowRoot: string) => string;
+  render_web_flow: (
+    html: string,
+    framesJson: string,
+    flowRoot: string,
+  ) => string;
   /** One frame plus the map from paint back to the DOM (text clusters →
    *  text nodes, element boxes): `{ layer, text, boxes }` JSON. Absent in
    *  an artifact built before the export existed. */
-  render_web_frame_inspect?: (html: string, widthPx: number, heightPx: number) => string;
+  render_web_frame_inspect?: (
+    html: string,
+    widthPx: number,
+    heightPx: number,
+  ) => string;
   /** Register a face (TTF/OTF/WOFF/WOFF2 bytes) under `family` ("" = its own
    *  name); answers the registered family names as JSON. */
   register_font?: (bytes: Uint8Array, family: string) => string;
@@ -117,7 +123,11 @@ export interface WebEngine {
    *  outline highlight), or `null` on a wasm failure or an engine without
    *  the export. Optional so engines built for one purpose (test stubs)
    *  need not provide it. */
-  renderInspected?(html: string, widthPx: number, heightPx: number): InspectedRender | null;
+  renderInspected?(
+    html: string,
+    widthPx: number,
+    heightPx: number,
+  ): InspectedRender | null;
   /** Register a face with the engine; every later render shapes with it.
    *  Answers the registered family names (empty: not a face). Absent on an
    *  engine built before faces. */
@@ -139,9 +149,17 @@ export interface WebEngine {
 
 /** The optional engine methods over a wasm-bindgen glue — shared by the
  *  bundle's loader and the test glues so they cannot drift. */
-export function engineExtras(glue: Partial<BlitzGlue>, warn: (m: string) => void = () => {}): Pick<
+export function engineExtras(
+  glue: Partial<BlitzGlue>,
+  warn: (m: string) => void = () => {},
+): Pick<
   WebEngine,
-  "registerFont" | "bundledFont" | "registerResource" | "hasResource" | "takeResourceMisses" | "takeTextAdvances"
+  | "registerFont"
+  | "bundledFont"
+  | "registerResource"
+  | "hasResource"
+  | "takeResourceMisses"
+  | "takeTextAdvances"
 > {
   const json = <T>(f: (() => string) | undefined, fallback: T): T => {
     if (!f) return fallback;
@@ -154,7 +172,8 @@ export function engineExtras(glue: Partial<BlitzGlue>, warn: (m: string) => void
   };
   return {
     registerFont: glue.register_font
-      ? (bytes, family) => json(() => glue.register_font!(bytes, family), [] as string[])
+      ? (bytes, family) =>
+          json(() => glue.register_font!(bytes, family), [] as string[])
       : undefined,
     bundledFont: glue.bundled_font
       ? () => {
@@ -175,7 +194,9 @@ export function engineExtras(glue: Partial<BlitzGlue>, warn: (m: string) => void
           }
         }
       : undefined,
-    hasResource: glue.has_resource ? (url) => glue.has_resource!(url) : undefined,
+    hasResource: glue.has_resource
+      ? (url) => glue.has_resource!(url)
+      : undefined,
     takeResourceMisses: glue.take_resource_misses
       ? () => json(glue.take_resource_misses, [] as string[])
       : undefined,
@@ -288,7 +309,9 @@ export async function loadWebEngine(
         renderInspected(html, widthPx, heightPx): InspectedRender | null {
           if (typeof glue.render_web_frame_inspect !== "function") return null;
           try {
-            return parseInspected(glue.render_web_frame_inspect(html, widthPx, heightPx));
+            return parseInspected(
+              glue.render_web_frame_inspect(html, widthPx, heightPx),
+            );
           } catch (err) {
             host.log.warn(
               `web engine: render_web_frame_inspect threw — ${stringifyErr(err)}`,

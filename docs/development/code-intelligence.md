@@ -15,13 +15,13 @@ the build or CI depends on Serena.
 
 ## What is configured
 
-| File | What it does |
-|---|---|
-| [`.serena/project.yml`](../../.serena/project.yml) | Serena's project file: name `paged`, language servers `rust` and `typescript`, LSP backend, the `tools` agent interface, `encoding: utf-8`, ignored paths, no memories and no onboarding (`added_modes: ["no-memories"]`), no activation command, and the rust-analyzer options below. Keys as in Serena's `project.template.yml` for 2.0.0. |
-| [`.mcp.json`](../../.mcp.json) | `serena start-mcp-server --context claude-code --project-from-cwd`. `--project-from-cwd` activates the nearest ancestor with `.serena/project.yml` (or `.git`), so every worktree is its own Serena project with its own language servers. |
+| File                                                   | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`.serena/project.yml`](../../.serena/project.yml)     | Serena's project file: name `paged`, language servers `rust` and `typescript`, LSP backend, the `tools` agent interface, `encoding: utf-8`, ignored paths, no memories and no onboarding (`added_modes: ["no-memories"]`), no activation command, and the rust-analyzer options below. Keys as in Serena's `project.template.yml` for 2.0.0.                                                                                                                                                                                    |
+| [`.mcp.json`](../../.mcp.json)                         | `serena start-mcp-server --context claude-code --project-from-cwd`. `--project-from-cwd` activates the nearest ancestor with `.serena/project.yml` (or `.git`), so every worktree is its own Serena project with its own language servers.                                                                                                                                                                                                                                                                                      |
 | [`.claude/settings.json`](../../.claude/settings.json) | Serena's read tools (`initial_instructions`, `get_symbols_overview`, `find_symbol`, `find_referencing_symbols`, `find_implementations`, `find_declaration`, `get_diagnostics_for_file`) are allowed; its editing tools (`replace_content`, `replace_in_files`, `replace_symbol_body`, `insert_after_symbol`, `insert_before_symbol`, `rename_symbol`, `safe_delete_symbol`) ask first. Those 14 are what Serena 2.0.0 serves with this project file and the `claude-code` context, which removes Serena's file and shell tools. |
-| [`.vscode/settings.json`](../../.vscode/settings.json) | The same `rust-analyzer.linkedProjects` and `rust-analyzer.cargo.targetDir` for VS Code. |
-| `.gitignore` | `.serena/*` except `project.yml`: Serena's cache, memories and `project.local.yml` stay local. |
+| [`.vscode/settings.json`](../../.vscode/settings.json) | The same `rust-analyzer.linkedProjects` and `rust-analyzer.cargo.targetDir` for VS Code.                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `.gitignore`                                           | `.serena/*` except `project.yml`: Serena's cache, memories and `project.local.yml` stay local.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 `.serena/project.yml` is the only file Serena reads from the repository.
 Personal overrides go in `.serena/project.local.yml` (each top-level key there
@@ -55,7 +55,7 @@ proto install                                 # node 24.22.0 (and npm) for the T
   must be on `PATH` (proto provides both).
 - **Trust the checkout (required).** Serena applies a project's
   `ls_specific_settings`, which carry the rust-analyzer options below, only to
-  *trusted* projects, and a new Serena 2.0.0 configuration trusts none
+  _trusted_ projects, and a new Serena 2.0.0 configuration trusts none
   (`trusted_project_path_patterns: []`). Untrusted, rust-analyzer falls back to
   auto-discovery and finds no Cargo workspace at all. The pattern is matched
   against the project root, so give a checkout's path as it is, or the
@@ -64,8 +64,9 @@ proto install                                 # node 24.22.0 (and npm) for the T
   ```yaml
   # ~/.serena/serena_config.yml
   trusted_project_path_patterns:
-  - "/path/to/your/worktrees/**"
+    - "/path/to/your/worktrees/**"
   ```
+
 - **Dashboard.** Serena opens its web dashboard in the browser on every start
   by default (`web_dashboard_open_on_launch: true`), so every agent session in
   every worktree opens a tab. Set it to `false` in `~/.serena/serena_config.yml`
@@ -102,12 +103,12 @@ level below, so it would find none of them. It has to be told:
 
 Where those settings can live (from rust-analyzer's `config.rs`):
 
-- `linkedProjects` is a *global* setting. rust-analyzer reads it from the
+- `linkedProjects` is a _global_ setting. rust-analyzer reads it from the
   client's settings (VS Code's `settings.json`, or the LSP `initializationOptions`)
   or from the user-level `rust-analyzer.toml` in the OS config directory
   (`~/.config/rust-analyzer/` on Linux, `~/Library/Application Support/rust-analyzer/`
   on macOS). A `rust-analyzer.toml` in a project cannot set it.
-- `cargo.targetDir` is a *workspace* setting. Besides the client's settings it
+- `cargo.targetDir` is a _workspace_ setting. Besides the client's settings it
   can come from a `rust-analyzer.toml` at the root of a loaded Cargo workspace.
 - rust-analyzer only reads project `rust-analyzer.toml` files at loaded
   workspace roots and inside crates. A file at this repository's root is
@@ -142,15 +143,15 @@ scripts, proc macros and check-on-save: rust-analyzer loaded the workspaces with
 `cargo metadata` and never ran `cargo check`. The numbers are therefore a lower
 bound for memory and say nothing about the cost of build scripts.
 
-| What | Result |
-|---|---|
-| MCP `initialize` (protocol `2025-06-18`) | 0.7–2.8 s; `tools/list` immediate, 14 tools |
-| First start with a fresh Serena home | 47 s to the first tool answer: Serena installs the TypeScript server with npm, rust-analyzer's first load took 46 s |
-| Later starts | rust-analyzer ready (quiescent) after 4.4–7.7 s, TypeScript server after 0.1 s; first answer about 9 s after start |
-| Workspaces loaded | all ten (722 source roots); none of ten sampled `lib.rs` files, one per workspace, was outside the crate graph |
-| `find_symbol` | `Document` (engine/core, paged-scene), `CellValue` (modules/sheet, sheet-core), `PluginManifest` (platform/extensions, TypeScript): 0.1 s each once ready |
-| `find_referencing_symbols` | `CellValue`: 8.6 s, references across the sheet crates (766k characters of output); `Document`: 11.4 s, references across the engine crates (197k characters) |
-| RSS | rust-analyzer 0.9 GB after loading, 4.9 GB after the two reference searches; Serena 0.1–0.2 GB; tsserver 0.2–0.4 GB; typescript-language-server 0.06 GB; peak 5.4 GB in total |
+| What                                     | Result                                                                                                                                                                        |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MCP `initialize` (protocol `2025-06-18`) | 0.7–2.8 s; `tools/list` immediate, 14 tools                                                                                                                                   |
+| First start with a fresh Serena home     | 47 s to the first tool answer: Serena installs the TypeScript server with npm, rust-analyzer's first load took 46 s                                                           |
+| Later starts                             | rust-analyzer ready (quiescent) after 4.4–7.7 s, TypeScript server after 0.1 s; first answer about 9 s after start                                                            |
+| Workspaces loaded                        | all ten (722 source roots); none of ten sampled `lib.rs` files, one per workspace, was outside the crate graph                                                                |
+| `find_symbol`                            | `Document` (engine/core, paged-scene), `CellValue` (modules/sheet, sheet-core), `PluginManifest` (platform/extensions, TypeScript): 0.1 s each once ready                     |
+| `find_referencing_symbols`               | `CellValue`: 8.6 s, references across the sheet crates (766k characters of output); `Document`: 11.4 s, references across the engine crates (197k characters)                 |
+| RSS                                      | rust-analyzer 0.9 GB after loading, 4.9 GB after the two reference searches; Serena 0.1–0.2 GB; tsserver 0.2–0.4 GB; typescript-language-server 0.06 GB; peak 5.4 GB in total |
 
 Diagnostics in this mode were "proc-macro expansion is disabled" hints and
 "`OUT_DIR` not set" errors (modules/data): artefacts of the switched-off build
@@ -195,19 +196,19 @@ Serena disabled (grep, glob and file reads only). Prepare the answer key by
 hand first. Record tool calls, bytes of tool output read, wall time and
 correctness against the key.
 
-1. *Implementations in one workspace.* Every implementation of
+1. _Implementations in one workspace._ Every implementation of
    `AssetResolver` (`engine/core/crates/paged-renderer/src/asset.rs`) and
    where each is constructed.
-2. *Across Cargo workspaces.* The functions in `modules/publish` that take or
+2. _Across Cargo workspaces._ The functions in `modules/publish` that take or
    return `paged_scene::Document` (a git-dependency crate from another
    workspace).
-3. *Readers behind cfg.* Every place in `engine/core` that reads
+3. _Readers behind cfg._ Every place in `engine/core` that reads
    `PROTOCOL_VERSION`, including the wasm-only crates.
-4. *TypeScript across pnpm workspaces.* References to `PluginManifest`
+4. _TypeScript across pnpm workspaces._ References to `PluginManifest`
    (`platform/extensions/packages/plugin-api/src/manifest.ts`) in
    `platform/extensions` and in `modules/*/packages`, which import it from the
    published npm package rather than the source.
-5. *A rename.* Rename a helper that several files of one `modules/sheet` crate
+5. _A rename._ Rename a helper that several files of one `modules/sheet` crate
    use, with `rename_symbol` against manual edits; check with
    `cargo check -p <crate>` and compare the diffs.
 
@@ -220,16 +221,16 @@ or index time is the problem, try narrower `linkedProjects` per worktree (in
 `.serena/project.local.yml`) before dropping it. Record the results here and
 in a follow-up to PM-0006.
 
-| Measure | 1 worktree | 2 worktrees | 3 worktrees |
-|---|---|---|---|
-| Cold index (min) | | | |
-| Settled RSS, all servers (GB) | | | |
-| `target/rust-analyzer` total (GB) | | | |
+| Measure                           | 1 worktree | 2 worktrees | 3 worktrees |
+| --------------------------------- | ---------- | ----------- | ----------- |
+| Cold index (min)                  |            |             |             |
+| Settled RSS, all servers (GB)     |            |             |             |
+| `target/rust-analyzer` total (GB) |            |             |             |
 
 | Task | Serena: calls / bytes / time / correct | grep: calls / bytes / time / correct |
-|---|---|---|
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
-| 5 | | |
+| ---- | -------------------------------------- | ------------------------------------ |
+| 1    |                                        |                                      |
+| 2    |                                        |                                      |
+| 3    |                                        |                                      |
+| 4    |                                        |                                      |
+| 5    |                                        |                                      |

@@ -100,7 +100,9 @@ function flattenSceneTree(roots: SceneTreeNode[]): StructureRow[] {
       label: node.label,
       kind: node.id ? node.id.kind : "",
     });
-    (node.children ?? []).forEach((child, i) => walk(child, rowId, `${path}.${i}`));
+    (node.children ?? []).forEach((child, i) =>
+      walk(child, rowId, `${path}.${i}`),
+    );
   };
   roots.forEach((root, i) => walk(root, null, `node:${i}`));
   return out;
@@ -124,7 +126,9 @@ const DEMO_SCHEMA: ShellPanelSchema = {
             tree: { parentField: "parentId" },
             // The engine's z-order op — absolute index, within one
             // sibling list, rejected (not clamped) when stale.
-            reorder: { action: { kind: "reorderElement", elementKindField: "kind" } },
+            reorder: {
+              action: { kind: "reorderElement", elementKindField: "kind" },
+            },
           },
         },
       ],

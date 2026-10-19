@@ -108,8 +108,7 @@ function parseSet(args: string[]): ParsedCommand {
   if (args.length < 3) {
     return {
       kind: "error",
-      message:
-        'set: expected "<element-id> <path> <value>" (3 args)',
+      message: 'set: expected "<element-id> <path> <value>" (3 args)',
     };
   }
   const [nodeSpec, pathSpec, ...valueParts] = args;
@@ -307,10 +306,14 @@ function parseValue(raw: string): Value | null {
       if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) {
         return null;
       }
-      return { type: "bounds", value: parts as [number, number, number, number] } as Value;
+      return {
+        type: "bounds",
+        value: parts as [number, number, number, number],
+      } as Value;
     }
     case "transform": {
-      if (payload === "null") return { type: "transform", value: null } as Value;
+      if (payload === "null")
+        return { type: "transform", value: null } as Value;
       const parts = payload.split(",").map((s) => Number.parseFloat(s.trim()));
       if (parts.length !== 6 || parts.some((n) => !Number.isFinite(n))) {
         return null;

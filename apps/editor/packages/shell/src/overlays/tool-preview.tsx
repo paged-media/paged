@@ -34,11 +34,13 @@ const TEXT_PREVIEW_MAX_CHARS = 160;
  *  text child, so no markup ever executes; this strip is the rest of
  *  the plain-text guarantee for a plugin-supplied string. */
 function sanitizePreviewText(raw: string): string {
-  return String(raw)
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
-    .trim()
-    .slice(0, TEXT_PREVIEW_MAX_CHARS);
+  return (
+    String(raw)
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u001f\u007f-\u009f]/g, " ")
+      .trim()
+      .slice(0, TEXT_PREVIEW_MAX_CHARS)
+  );
 }
 
 /**
@@ -119,10 +121,7 @@ export function renderPreviewShape(
     // of the start anchor (`right`) and the incoming handle of the end
     // anchor (`left`) as the two control points — IDML PathPointType
     // semantics, identical to how the engine reads the committed path.
-    const seg = (
-      from: (typeof a)[number],
-      to: (typeof a)[number],
-    ): string =>
+    const seg = (from: (typeof a)[number], to: (typeof a)[number]): string =>
       `C ${pr.x + from.right[0]},${pr.y + from.right[1]} ` +
       `${pr.x + to.left[0]},${pr.y + to.left[1]} ` +
       `${pr.x + to.anchor[0]},${pr.y + to.anchor[1]}`;
@@ -197,9 +196,7 @@ export function renderPreviewShape(
   // Gradient axis). Same stroke as the rect rubber-band so every
   // tool preview reads as one visual family.
   if ("points" in p) {
-    const pts = p.points
-      .map(([x, y]) => `${pr.x + x},${pr.y + y}`)
-      .join(" ");
+    const pts = p.points.map(([x, y]) => `${pr.x + x},${pr.y + y}`).join(" ");
     const Tag = p.close ? "polygon" : "polyline";
     return (
       <Tag

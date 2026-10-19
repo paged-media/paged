@@ -16,8 +16,18 @@ import { existsSync } from "node:fs";
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
-import { dataFields, ENGINE_ANCHOR, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
-import { bootRealDuckDB, bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_DUCKDB } from "./real-duckdb";
+import {
+  dataFields,
+  ENGINE_ANCHOR,
+  openRealHost,
+  REQUIRE_REAL_CORE,
+} from "./real-core";
+import {
+  bootRealDuckDB,
+  bootRealEngine,
+  DATA_JS_WASM,
+  REQUIRE_REAL_DUCKDB,
+} from "./real-duckdb";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
@@ -29,7 +39,10 @@ const actualDuckdb = await importActual(() => import("../src/query/duckdb"));
 const CSV = "sku,price\nA-1,9.99\nB-2,19.99\nC-3,29.99\n";
 
 const probe = await bootRealDuckDB();
-const ready = ENGINE_ANCHOR !== null && probe.handle !== undefined && existsSync(DATA_JS_WASM);
+const ready =
+  ENGINE_ANCHOR !== null &&
+  probe.handle !== undefined &&
+  existsSync(DATA_JS_WASM);
 const required = REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB;
 
 /** The bundle module, with the two engine boots pointed at real Node builds. */
@@ -50,7 +63,10 @@ async function loadBundleModule() {
 }
 
 async function exportPaged(host: BundleHost): Promise<Uint8Array> {
-  const reply = (await host.editor.client.send({ kind: "exportPaged", payload: {} } as never)) as {
+  const reply = (await host.editor.client.send({
+    kind: "exportPaged",
+    payload: {},
+  } as never)) as {
     kind: string;
     payload: { bytes?: number[]; error?: string };
   };
@@ -80,7 +96,10 @@ describe.skipIf(!ready && !required)(
     }
 
     it("import, bind, save, reopen: the restored session refreshes the same field [data.plugin.persistence]", async () => {
-      expect(ready, "real core, DuckDB and the data-js wasm must all be available").toBe(true);
+      expect(
+        ready,
+        "real core, DuckDB and the data-js wasm must all be available",
+      ).toBe(true);
       const mod = await loadBundleModule();
 
       // ── session 1: import, query, bind, lower ────────────────────────────
@@ -89,11 +108,17 @@ describe.skipIf(!ready && !required)(
       const s1 = mod.sessionFor(h1.host)!;
       await s1.whenRestored();
       await s1.registerCsvSource("products", CSV);
-      s1.addQuery("q", "SELECT sku, price FROM products ORDER BY sku", "recordStream");
+      s1.addQuery(
+        "q",
+        "SELECT sku, price FROM products ORDER BY sku",
+        "recordStream",
+      );
       s1.addVariableBinding("v_sku", "anchor", "q", "sku");
       s1.setLocale("de");
       await s1.lowerAll();
-      expect((await ours(h1.host)).map((p) => [p.key, p.value])).toEqual([["v_sku", "A-1"]]);
+      expect((await ours(h1.host)).map((p) => [p.key, p.value])).toEqual([
+        ["v_sku", "A-1"],
+      ]);
 
       // A save runs the will-save listeners first; that is where pending
       // session state is written.
@@ -114,17 +139,23 @@ describe.skipIf(!ready && !required)(
       expect(st.diagnostics.filter((d) => d.level === "error")).toEqual([]);
 
       // The field came back with the document; the session knows it is placed.
-      expect((await ours(h2.host)).map((p) => [p.key, p.value])).toEqual([["v_sku", "A-1"]]);
+      expect((await ours(h2.host)).map((p) => [p.key, p.value])).toEqual([
+        ["v_sku", "A-1"],
+      ]);
 
       // Refresh works: the CSV re-registers in DuckDB on first use, the query
       // runs, and the preview writes the field in place.
       await s2.refreshData();
       await s2.previewRecord("v_sku", 1);
-      expect((await ours(h2.host)).map((p) => [p.key, p.value])).toEqual([["v_sku", "B-2"]]);
+      expect((await ours(h2.host)).map((p) => [p.key, p.value])).toEqual([
+        ["v_sku", "B-2"],
+      ]);
 
       // A re-lower re-resolves the existing field — it does not place a second.
       await s2.lowerAll();
-      expect((await ours(h2.host)).map((p) => [p.key, p.value])).toEqual([["v_sku", "A-1"]]);
+      expect((await ours(h2.host)).map((p) => [p.key, p.value])).toEqual([
+        ["v_sku", "A-1"],
+      ]);
 
       // Undo: the field write is a document mutation and undoes; the saved
       // session is container state, which undo does not touch.
@@ -133,7 +164,9 @@ describe.skipIf(!ready && !required)(
       expect((await ours(h2.host)).map((p) => p.value)).toEqual(["B-2"]);
       const partAfter = await h2.host.parts.read("session.json");
       expect(partAfter).not.toBeNull();
-      expect(new TextDecoder().decode(partAfter!)).toBe(new TextDecoder().decode(partBefore!));
+      expect(new TextDecoder().decode(partAfter!)).toBe(
+        new TextDecoder().decode(partBefore!),
+      );
     });
 
     it("a lowered table carries its binding in an undoable label; reopen checks it [data.plugin.persistence]", async () => {
@@ -144,7 +177,11 @@ describe.skipIf(!ready && !required)(
       const s1 = mod.sessionFor(h1.host)!;
       await s1.whenRestored();
       await s1.registerCsvSource("products", CSV);
-      s1.addQuery("q", "SELECT sku, price FROM products ORDER BY sku", "recordStream");
+      s1.addQuery(
+        "q",
+        "SELECT sku, price FROM products ORDER BY sku",
+        "recordStream",
+      );
       s1.addTableBinding("t", "region", "q", [{ header: "SKU", expr: "sku" }]);
       await s1.lowerAll();
 
@@ -176,7 +213,10 @@ describe.skipIf(!ready && !required)(
       // it. The session part is not undone. Reopen says the binding no longer
       // has labelled content.
       let undos = 0;
-      while ((await h1.host.document.getMetadata(frame)) !== null && undos < 8) {
+      while (
+        (await h1.host.document.getMetadata(frame)) !== null &&
+        undos < 8
+      ) {
         await h1.host.document.undo();
         undos++;
       }
@@ -188,9 +228,9 @@ describe.skipIf(!ready && !required)(
       const s2 = mod.sessionFor(h2.host)!;
       await s2.whenRestored();
       expect(s2.getState().bindings).toEqual(["t"]);
-      expect(s2.getState().diagnostics.map((d) => [d.source, d.binding, d.level])).toEqual([
-        ["restore", "t", "info"],
-      ]);
+      expect(
+        s2.getState().diagnostics.map((d) => [d.source, d.binding, d.level]),
+      ).toEqual([["restore", "t", "info"]]);
     });
 
     it("a record flow defines, previews, and comes back with its template [data.bind.authoring]", async () => {
@@ -200,21 +240,27 @@ describe.skipIf(!ready && !required)(
       h1.loadBundle(mod.dataBundle);
       const s1 = mod.sessionFor(h1.host)!;
       await s1.whenRestored();
-      await s1.registerCsvSource("stock", "sku,region\nA-1,North\nB-2,South\nC-3,North\n");
-      s1.addQuery("q", "SELECT sku, region FROM stock ORDER BY sku", "recordStream");
-      s1.defineRecordFlow("rf", "q", [{ expr: "sku" }], { groupBy: ["region"] });
+      await s1.registerCsvSource(
+        "stock",
+        "sku,region\nA-1,North\nB-2,South\nC-3,North\n",
+      );
+      s1.addQuery(
+        "q",
+        "SELECT sku, region FROM stock ORDER BY sku",
+        "recordStream",
+      );
+      s1.defineRecordFlow("rf", "q", [{ expr: "sku" }], {
+        groupBy: ["region"],
+      });
       await s1.refreshData();
       const before = await s1.previewRecordFlow("rf");
       expect(before?.total).toBe(3);
-      expect(before?.blocks.filter((b) => b.kind === "header").map((b) => b.text)).toEqual([
-        "North",
-        "South",
-      ]);
-      expect(before?.blocks.filter((b) => b.kind === "record").map((b) => b.text)).toEqual([
-        "A-1",
-        "C-3",
-        "B-2",
-      ]);
+      expect(
+        before?.blocks.filter((b) => b.kind === "header").map((b) => b.text),
+      ).toEqual(["North", "South"]);
+      expect(
+        before?.blocks.filter((b) => b.kind === "record").map((b) => b.text),
+      ).toEqual(["A-1", "C-3", "B-2"]);
       expect(s1.listBindings()).toEqual([{ id: "rf", kind: "recordFlow" }]);
 
       await h1.willSave.fire();
@@ -254,8 +300,12 @@ describe.skipIf(!ready && !required)(
       await new Promise((r) => setTimeout(r, 600)); // past the write debounce
       expect(sa.getState().sources).toEqual(["people"]);
       expect(sa.getState().queries).toEqual(["qb"]);
-      const part = JSON.parse(new TextDecoder().decode((await ha.host.parts.read("session.json"))!));
-      expect(part.engine.queries.map((q: { id: string }) => q.id)).toEqual(["qb"]);
+      const part = JSON.parse(
+        new TextDecoder().decode((await ha.host.parts.read("session.json"))!),
+      );
+      expect(part.engine.queries.map((q: { id: string }) => q.id)).toEqual([
+        "qb",
+      ]);
     });
 
     it("a large CSV is stored once as its own content-addressed part [data.plugin.persistence]", async () => {
@@ -276,7 +326,9 @@ describe.skipIf(!ready && !required)(
       s1.addQuery("q", "SELECT count(*) AS n FROM catalog", "scalar");
       await s1.flushPersist();
 
-      const dataParts = (await h1.host.parts.list("data/")).filter((p) => p.endsWith(".csv"));
+      const dataParts = (await h1.host.parts.list("data/")).filter((p) =>
+        p.endsWith(".csv"),
+      );
       expect(dataParts).toHaveLength(1);
       const head = JSON.parse(
         new TextDecoder().decode((await h1.host.parts.read("session.json"))!),
@@ -292,7 +344,9 @@ describe.skipIf(!ready && !required)(
       expect(s2.getState().sources).toEqual(["catalog"]);
       await s2.refreshData();
       expect(await s2.recordCount("q")).toBe(1);
-      expect(s2.getState().diagnostics.filter((d) => d.level === "error")).toEqual([]);
+      expect(
+        s2.getState().diagnostics.filter((d) => d.level === "error"),
+      ).toEqual([]);
     });
 
     it("a remote source comes back inert: nothing is fetched on open [data.security.gates]", async () => {
@@ -303,7 +357,9 @@ describe.skipIf(!ready && !required)(
       const s1 = mod.sessionFor(h1.host)!;
       await s1.whenRestored();
       await s1.registerCsvSource("products", CSV);
-      expect(s1.addRemoteSource("feed", "https://data.example.com/feed.csv", "csv")).toBeNull();
+      expect(
+        s1.addRemoteSource("feed", "https://data.example.com/feed.csv", "csv"),
+      ).toBeNull();
       await h1.willSave.fire();
 
       const fetchSpy = vi.spyOn(globalThis, "fetch");
@@ -311,9 +367,9 @@ describe.skipIf(!ready && !required)(
       h2.loadBundle(mod.dataBundle);
       const s2 = mod.sessionFor(h2.host)!;
       await s2.whenRestored();
-      expect(s2.getState().remote.map((r) => [r.name, r.status, r.consent])).toEqual([
-        ["feed", "inert", "required"],
-      ]);
+      expect(
+        s2.getState().remote.map((r) => [r.name, r.status, r.consent]),
+      ).toEqual([["feed", "inert", "required"]]);
       expect(fetchSpy).not.toHaveBeenCalled();
       fetchSpy.mockRestore();
     });

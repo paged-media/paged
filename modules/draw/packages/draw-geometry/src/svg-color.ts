@@ -129,12 +129,7 @@ export function rgbToHex(rgb: Rgb): string {
  *  RGB triple via the naive subtractive model — good enough for an
  *  interchange round-trip preview, NOT colour-managed (that lives in the
  *  engine; the SVG lane is sRGB). */
-export function cmykToRgb(
-  c: number,
-  m: number,
-  y: number,
-  k: number,
-): Rgb {
+export function cmykToRgb(c: number, m: number, y: number, k: number): Rgb {
   const cc = c / 100;
   const mm = m / 100;
   const yy = y / 100;

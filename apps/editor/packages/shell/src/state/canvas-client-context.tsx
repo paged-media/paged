@@ -17,11 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import {
-  createContext,
-  useContext,
-  type PropsWithChildren,
-} from "react";
+import { createContext, useContext, type PropsWithChildren } from "react";
 
 // Step 3b: cross-package type-only imports. Resolved at typecheck;
 // no runtime dep. Step 3-bindings (future) will extract

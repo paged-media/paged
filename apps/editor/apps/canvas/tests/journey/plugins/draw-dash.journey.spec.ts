@@ -79,32 +79,29 @@ async function dashArrayOf(
   page: import("@playwright/test").Page,
   ref: { kind: string; id: string },
 ): Promise<number[]> {
-  return page.evaluate(
-    async (r) => {
-      const c = (
-        globalThis as unknown as {
-          __canvas: {
-            client: {
-              elementProperties: (id: unknown) => Promise<{
-                entries?: Array<{
-                  path: string;
-                  value?: { type: string; value?: unknown } | null;
-                }>;
-              } | null>;
-            };
+  return page.evaluate(async (r) => {
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: {
+            elementProperties: (id: unknown) => Promise<{
+              entries?: Array<{
+                path: string;
+                value?: { type: string; value?: unknown } | null;
+              }>;
+            } | null>;
           };
-        }
-      ).__canvas;
-      const props = await c.client.elementProperties(r).catch(() => null);
-      for (const e of props?.entries ?? []) {
-        if (e.path === "frameStrokeDashArray" && e.value?.type === "lengths") {
-          return (e.value.value as number[]) ?? [];
-        }
+        };
       }
-      return [];
-    },
-    ref,
-  );
+    ).__canvas;
+    const props = await c.client.elementProperties(r).catch(() => null);
+    for (const e of props?.entries ?? []) {
+      if (e.path === "frameStrokeDashArray" && e.value?.type === "lengths") {
+        return (e.value.value as number[]) ?? [];
+      }
+    }
+    return [];
+  }, ref);
 }
 
 test.describe("journey · paged.draw stroke dash", () => {
@@ -123,7 +120,10 @@ test.describe("journey · paged.draw stroke dash", () => {
     // ── 1. AUTHOR — a rectangle with a thick black stroke so dash gaps
     //    are unmistakably visible (a stroke with a wide on/off run drops
     //    a lot of ink between dashes). ──
-    const ref = { kind: "rectangle", id: await designer.drawRectangle({ x0: 150, y0: 160, x1: 440, y1: 360 }) };
+    const ref = {
+      kind: "rectangle",
+      id: await designer.drawRectangle({ x0: 150, y0: 160, x1: 440, y1: 360 }),
+    };
     expect(ref.id, "drew a rectangle").not.toBe("");
     await designer.applyStroke("rectangle", ref.id, "Color/Black", 6);
     await designer.selectElement("rectangle", ref.id);
@@ -170,31 +170,44 @@ test.describe("journey · paged.draw stroke dash", () => {
     await designer.open();
     await designer.newDocument();
 
-    const ref = { kind: "rectangle", id: await designer.drawRectangle({ x0: 150, y0: 160, x1: 440, y1: 360 }) };
+    const ref = {
+      kind: "rectangle",
+      id: await designer.drawRectangle({ x0: 150, y0: 160, x1: 440, y1: 360 }),
+    };
     expect(ref.id, "drew a rectangle").not.toBe("");
     await designer.applyStroke("rectangle", ref.id, "Color/Black", 6);
     await designer.selectElement("rectangle", ref.id);
-    await expect.poll(() => dashArrayOf(page, ref), { timeout: 6_000 }).toEqual([]);
+    await expect
+      .poll(() => dashArrayOf(page, ref), { timeout: 6_000 })
+      .toEqual([]);
     const solid = await designer.renderBytes();
 
     // ── 1. THE "…" COMMAND RAISES THE PANEL AT ITS SECTION — and writes
     //    nothing on its own. ──
     await invokeCommand(page, "media.paged.draw.command.strokeDashOptions");
     const panel = page.locator('[data-draw-pathopts-panel="dash"]');
-    await expect(panel, "the Path Options panel opened at Stroke dashes").toBeVisible({
+    await expect(
+      panel,
+      "the Path Options panel opened at Stroke dashes",
+    ).toBeVisible({
       timeout: 8_000,
     });
     await expect(
-      page.locator('[data-draw-pathopts-section="dash"][data-draw-pathopts-open="true"]'),
+      page.locator(
+        '[data-draw-pathopts-section="dash"][data-draw-pathopts-open="true"]',
+      ),
     ).toBeVisible();
-    await expect(panel, "the panel counts the one selected path").toHaveAttribute(
-      "data-draw-pathopts-targets",
-      "1",
-    );
+    await expect(
+      panel,
+      "the panel counts the one selected path",
+    ).toHaveAttribute("data-draw-pathopts-targets", "1");
     // The section follows the selection: a solid path loads unticked.
     const dashed = page.locator('[data-draw-pathopts-toggle="dash.dashed"]');
     await expect(dashed).not.toBeChecked();
-    expect(await dashArrayOf(page, ref), "opening the panel changed nothing").toEqual([]);
+    expect(
+      await dashArrayOf(page, ref),
+      "opening the panel changed nothing",
+    ).toEqual([]);
 
     // ── 2. TYPE A PATTERN THE PRESETS DO NOT HAVE — 8 on / 4 off /
     //    2 on / 4 off — and Apply it. ──
@@ -205,11 +218,17 @@ test.describe("journey · paged.draw stroke dash", () => {
       ["dash.dash2", 2],
       ["dash.gap2", 4],
     ] as const) {
-      await page.locator(`[data-draw-pathopts-field="${field}"]`).fill(String(value));
+      await page
+        .locator(`[data-draw-pathopts-field="${field}"]`)
+        .fill(String(value));
     }
     // The readout shows the run an Apply will write before it is written.
-    await expect(page.locator("[data-draw-pathopts-dash-pattern]")).toContainText("8");
-    expect(await dashArrayOf(page, ref), "typing alone writes nothing").toEqual([]);
+    await expect(
+      page.locator("[data-draw-pathopts-dash-pattern]"),
+    ).toContainText("8");
+    expect(await dashArrayOf(page, ref), "typing alone writes nothing").toEqual(
+      [],
+    );
 
     const apply = page.locator('[data-draw-pathopts-apply="dash"]');
     await expect(apply).toBeEnabled();

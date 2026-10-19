@@ -105,21 +105,30 @@ describe("web conformance — unreachable source parts are dropped on save", () 
     await autoRendererFor(host)!.idle();
   }
 
-  it.skipIf(!engineDeletes)("drops the file's orphan parts and keeps the one a label names", async () => {
-    expect(host.supports("document.onDidOpen@1")).toBe(true);
-    const live = await frame();
-    expect((await writeWebSource(host, live, big("live"))).applied).toBe(true);
-    await openedWith(["sources/00000000deadbeef.json", "uGONE/source.json"]);
-    const named = (await host.parts.list("sources/")).filter((p) => p !== "sources/00000000deadbeef.json");
+  it.skipIf(!engineDeletes)(
+    "drops the file's orphan parts and keeps the one a label names",
+    async () => {
+      expect(host.supports("document.onDidOpen@1")).toBe(true);
+      const live = await frame();
+      expect((await writeWebSource(host, live, big("live"))).applied).toBe(
+        true,
+      );
+      await openedWith(["sources/00000000deadbeef.json", "uGONE/source.json"]);
+      const named = (await host.parts.list("sources/")).filter(
+        (p) => p !== "sources/00000000deadbeef.json",
+      );
 
-    await h.willSave.fire();
+      await h.willSave.fire();
 
-    const after = await host.parts.list("");
-    expect(after).not.toContain("sources/00000000deadbeef.json");
-    expect(after).not.toContain("uGONE/source.json");
-    for (const p of named) expect(after).toContain(p);
-    expect((await loadWebSource(host, live))?.html.startsWith("<p>live</p>")).toBe(true);
-  });
+      const after = await host.parts.list("");
+      expect(after).not.toContain("sources/00000000deadbeef.json");
+      expect(after).not.toContain("uGONE/source.json");
+      for (const p of named) expect(after).toContain(p);
+      expect(
+        (await loadWebSource(host, live))?.html.startsWith("<p>live</p>"),
+      ).toBe(true);
+    },
+  );
 
   it("keeps a part written this session that no label names any more, so undo still finds it", async () => {
     const id = await frame();
@@ -127,7 +136,9 @@ describe("web conformance — unreachable source parts are dropped on save", () 
     await writeWebSource(host, id, big("two"));
     await h.willSave.fire();
     await host.document.undo();
-    expect((await loadWebSource(host, id))?.html.startsWith("<p>one</p>")).toBe(true);
+    expect((await loadWebSource(host, id))?.html.startsWith("<p>one</p>")).toBe(
+      true,
+    );
   });
 
   it("keeps a legacy part whose frame still exists", async () => {
@@ -142,7 +153,8 @@ describe("web conformance — unreachable source parts are dropped on save", () 
     await openedWith(["sources/00000000deadbeef.json"]);
     await h.willSave.fire();
     const after = await host.parts.list("");
-    if (engineDeletes) expect(after).not.toContain("sources/00000000deadbeef.json");
+    if (engineDeletes)
+      expect(after).not.toContain("sources/00000000deadbeef.json");
     else expect(after).toContain("sources/00000000deadbeef.json");
   });
 
@@ -150,24 +162,35 @@ describe("web conformance — unreachable source parts are dropped on save", () 
     "the old document-values part stays through the migrating session and goes when a migrated file is opened",
     async () => {
       expect(host.supports("document.documentMetadata@1")).toBe(true);
-      await host.parts.write(DOCUMENT_VALUES_PART, enc(JSON.stringify({ edition: "Legacy" })));
+      await host.parts.write(
+        DOCUMENT_VALUES_PART,
+        enc(JSON.stringify({ edition: "Legacy" })),
+      );
       await openedWith([]);
       // The first change migrates the values into the document metadata.
       const values = await readDocumentValues(host);
-      expect((await writeDocumentValues(host, { ...values, year: "2026" })).applied).toBe(true);
+      expect(
+        (await writeDocumentValues(host, { ...values, year: "2026" })).applied,
+      ).toBe(true);
       await h.willSave.fire();
       expect(await host.parts.list("")).toContain(DOCUMENT_VALUES_PART);
       // Undo of the migration still finds the values.
       await host.document.undo();
       expect(await readDocumentValues(host)).toEqual({ edition: "Legacy" });
       await host.document.redo();
-      expect(await readDocumentValues(host)).toEqual({ edition: "Legacy", year: "2026" });
+      expect(await readDocumentValues(host)).toEqual({
+        edition: "Legacy",
+        year: "2026",
+      });
       // A file opened already migrated: its save drops the part.
       announceLoaded();
       await autoRendererFor(host)!.idle();
       await h.willSave.fire();
       expect(await host.parts.list("")).not.toContain(DOCUMENT_VALUES_PART);
-      expect(await readDocumentValues(host)).toEqual({ edition: "Legacy", year: "2026" });
+      expect(await readDocumentValues(host)).toEqual({
+        edition: "Legacy",
+        year: "2026",
+      });
     },
   );
 });

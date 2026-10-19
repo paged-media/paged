@@ -9,9 +9,7 @@
       "read": "broad",
       "write": "scoped"
     },
-    "rendering": [
-      "hitTest"
-    ],
+    "rendering": ["hitTest"],
     "network": {
       "origins": "consent",
       "purpose": "Fetch author-selected remote data sources (CSV/JSON/Parquet over HTTP(S)) at edit time, per-origin consented — never on document open."
@@ -48,9 +46,7 @@
       }
     ],
     "dataProviders": {
-      "publish": [
-        "dataset"
-      ]
+      "publish": ["dataset"]
     }
   },
   "contributes": {
@@ -73,9 +69,7 @@
       "media.paged.data.command.editQuery",
       "media.paged.data.bindProperty"
     ],
-    "importers": [
-      "media.paged.data.importer.table"
-    ],
+    "importers": ["media.paged.data.importer.table"],
     "editContexts": [
       {
         "type": "dataBinding",
@@ -165,11 +159,7 @@
               "path": "refresh",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "manual",
-                  "onOpen",
-                  "interval"
-                ]
+                "members": ["manual", "onOpen", "interval"]
               },
               "summary": "When it refreshes (interval: every 300 s)."
             },
@@ -199,11 +189,7 @@
               "path": "shape",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "recordStream",
-                  "singleRecord",
-                  "scalar"
-                ]
+                "members": ["recordStream", "singleRecord", "scalar"]
               },
               "summary": "How bindings read the result."
             },
@@ -273,10 +259,7 @@
               "path": "coerce",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "strict",
-                  "lenient"
-                ]
+                "members": ["strict", "lenient"]
               },
               "summary": "Property bindings: a value that does not fit fails (strict) or takes the missing policy (lenient)."
             },
@@ -284,12 +267,7 @@
               "path": "missing",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "keepLast",
-                  "clear",
-                  "default",
-                  "error"
-                ]
+                "members": ["keepLast", "clear", "default", "error"]
               },
               "summary": "Property bindings: what a missing value writes."
             },
@@ -297,13 +275,7 @@
               "path": "status",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "linked",
-                  "pinned",
-                  "overridden",
-                  "stale",
-                  "error"
-                ]
+                "members": ["linked", "pinned", "overridden", "stale", "error"]
               },
               "summary": "The sync state; set pinned to freeze it, linked to follow the data again."
             },

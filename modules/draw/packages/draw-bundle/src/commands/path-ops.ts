@@ -58,8 +58,7 @@ export const PATH_OPS_COMMAND_CATEGORY = "Path";
 export const OUTLINE_STROKE_COMMAND_ID =
   "media.paged.draw.command.outlineStroke";
 export const OFFSET_PATH_COMMAND_ID = "media.paged.draw.command.offsetPath";
-export const SIMPLIFY_PATH_COMMAND_ID =
-  "media.paged.draw.command.simplifyPath";
+export const SIMPLIFY_PATH_COMMAND_ID = "media.paged.draw.command.simplifyPath";
 
 /** The contributed command ids, in registration order. */
 export const PATH_OPS_COMMAND_IDS = [
@@ -301,8 +300,7 @@ export async function applySimplifyPath(
   host: BundleHost,
   payload?: PathOpPayload,
 ): Promise<void> {
-  const tolerance =
-    num(payload?.tolerance) ?? DEFAULT_SIMPLIFY_TOLERANCE_PT;
+  const tolerance = num(payload?.tolerance) ?? DEFAULT_SIMPLIFY_TOLERANCE_PT;
   await commitEach(
     host,
     SIMPLIFY_PATH_COMMAND_ID,

@@ -50,7 +50,10 @@ export interface AiCompleteBackend {
 /** The object-model contribution that gives scripts `paged.ai.complete`.
  *  Register it as the host's own: `registry.register({ plugin: "paged.ai",
  *  model: aiObjectModel(backend) })`. */
-export function aiObjectModel(complete: AiCompleteBackend, now: () => number = Date.now): ObjectModelContribution {
+export function aiObjectModel(
+  complete: AiCompleteBackend,
+  now: () => number = Date.now,
+): ObjectModelContribution {
   const recent: number[] = [];
   return {
     kinds: [],
@@ -58,18 +61,32 @@ export function aiObjectModel(complete: AiCompleteBackend, now: () => number = D
       {
         id: AI_COMPLETE_COMMAND,
         title: "Ask Claude for text",
-        args: { kind: "struct", fields: { prompt: { kind: "text", multiline: true, maxLength: AI_COMPLETE_MAX_PROMPT } } },
+        args: {
+          kind: "struct",
+          fields: {
+            prompt: {
+              kind: "text",
+              multiline: true,
+              maxLength: AI_COMPLETE_MAX_PROMPT,
+            },
+          },
+        },
         result: { kind: "text", multiline: true },
         async handler(_ctx, args) {
           const { prompt } = args as { prompt: string };
           const t = now();
           while (recent.length && t - recent[0]! > 60_000) recent.shift();
           if (recent.length >= AI_COMPLETE_PER_MINUTE) {
-            throw new Error(`rateLimited: at most ${AI_COMPLETE_PER_MINUTE} paged.ai.complete calls a minute`);
+            throw new Error(
+              `rateLimited: at most ${AI_COMPLETE_PER_MINUTE} paged.ai.complete calls a minute`,
+            );
           }
           recent.push(t);
           const answer = await complete(prompt);
-          if (answer.refusal) throw new Error(`refused: Claude declined this request${answer.refusal.category ? ` (${answer.refusal.category})` : ""}`);
+          if (answer.refusal)
+            throw new Error(
+              `refused: Claude declined this request${answer.refusal.category ? ` (${answer.refusal.category})` : ""}`,
+            );
           return answer.text;
         },
       },

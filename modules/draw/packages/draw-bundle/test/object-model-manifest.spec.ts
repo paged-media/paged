@@ -39,7 +39,10 @@ import {
 } from "../src/object-model";
 import { validSubpathStarts } from "../src/object-model/path-kind";
 
-const MANIFEST = join(dirname(fileURLToPath(import.meta.url)), "../manifest.json");
+const MANIFEST = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../manifest.json",
+);
 
 describe("paged.draw object model — the manifest block", () => {
   it("contributes.objectModel is generated from src/object-model", () => {
@@ -80,24 +83,39 @@ describe("paged.draw object model — the manifest block", () => {
     for (const k of DRAW_OBJECT_KINDS) {
       for (const row of k.schema) {
         if (row.default === undefined) continue;
-        expect(validateValue(row.type, row.default, row), `${k.kind}.${row.path}`).toBeNull();
+        expect(
+          validateValue(row.type, row.default, row),
+          `${k.kind}.${row.path}`,
+        ).toBeNull();
       }
     }
   });
 });
 
 describe("typed twins lower to the untyped payload", () => {
-  const twin = (name: string) => TWINS.find((t) => t.id === `media.paged.draw.command.${name}`)!;
+  const twin = (name: string) =>
+    TWINS.find((t) => t.id === `media.paged.draw.command.${name}`)!;
 
   it("targets never reach the payload; an empty recipe id means 'from the selection'", () => {
     expect(payloadFor(twin("updateRepeat"), { repeat: "" })).toBeUndefined();
-    expect(payloadFor(twin("updateRepeat"), { repeat: "plugin:media.paged.draw/repeat/rep-2" })).toEqual({
+    expect(
+      payloadFor(twin("updateRepeat"), {
+        repeat: "plugin:media.paged.draw/repeat/rep-2",
+      }),
+    ).toEqual({
       repeatId: "rep-2",
     });
-    expect(payloadFor(twin("selectSameStrokeWeight"), { targets: ["polygon:u1"], tolerance: 0.5 })).toEqual({
+    expect(
+      payloadFor(twin("selectSameStrokeWeight"), {
+        targets: ["polygon:u1"],
+        tolerance: 0.5,
+      }),
+    ).toEqual({
       tolerance: 0.5,
     });
-    expect(payloadFor(twin("strokeDashDashed"), { targets: [] })).toBeUndefined();
+    expect(
+      payloadFor(twin("strokeDashDashed"), { targets: [] }),
+    ).toBeUndefined();
     expect(
       payloadFor(twin("applyGraphicStyle"), { targets: [], style: "gs-3" }),
     ).toEqual({ styleId: "gs-3" });

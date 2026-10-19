@@ -36,7 +36,14 @@
 //   (6) the TOOL: click attaches, alt+click detaches, a text frame under
 //       the click is refused with the reason, empty canvas is a no-op.
 
-import { describe, expect, it, beforeAll, beforeEach, afterAll } from "bun:test";
+import {
+  describe,
+  expect,
+  it,
+  beforeAll,
+  beforeEach,
+  afterAll,
+} from "bun:test";
 
 import type {
   CanvasPointerEvent,
@@ -309,7 +316,9 @@ describe("draw conformance — type on a path (C-29, engine protocol v58)", () =
       expect(textOnPathOf(env)).toEqual(ref);
       expect(withTextOnPathKey(env, null)).toBeNull();
       expect(textOnPathOf(null)).toBeNull();
-      expect(textOnPathOf({ v: 1, data: { textOnPath: { story: "" } } })).toBeNull();
+      expect(
+        textOnPathOf({ v: 1, data: { textOnPath: { story: "" } } }),
+      ).toBeNull();
     });
 
     it("the host-kind mirror and the tool's pre-explanations match core's gate", () => {
@@ -391,7 +400,9 @@ describe("draw conformance — type on a path (C-29, engine protocol v58)", () =
     it("INV-REG-1: the tool takes shift+h — shift+t belongs to the INERT built-in", () => {
       const tools = h
         .toolsContributed()
-        .filter((t) => (TEXT_ON_PATH_TOOL_IDS as readonly string[]).includes(t.id));
+        .filter((t) =>
+          (TEXT_ON_PATH_TOOL_IDS as readonly string[]).includes(t.id),
+        );
       expect(tools.map((t) => t.id)).toEqual([...TEXT_ON_PATH_TOOL_IDS]);
       expect(tools[0]!.shortcut).toBe("shift+h");
       // It sits in the built-in `type` group, one slot past the editor's
@@ -415,7 +426,9 @@ describe("draw conformance — type on a path (C-29, engine protocol v58)", () =
 
     it("a story flowing into a FRAME is not free; deleting the frame frees it", async () => {
       expect(await freeStories(h.host)).toEqual([]);
-      const before = new Set((await documentStories(h.host)).map((s) => s.selfId));
+      const before = new Set(
+        (await documentStories(h.host)).map((s) => s.selfId),
+      );
       const frame = await h.host.document.mutate({
         op: "insertTextFrame",
         args: { pageId: F1_MULTI_SHAPE.pageId, bounds: [20, 20, 140, 80] },
@@ -456,7 +469,9 @@ describe("draw conformance — type on a path (C-29, engine protocol v58)", () =
         startBracket: 4,
         endBracket: 150,
       });
-      expect(textOnPathOf(await h.host.document.getMetadata(POLY))).toEqual(ref);
+      expect(textOnPathOf(await h.host.document.getMetadata(POLY))).toEqual(
+        ref,
+      );
       expect((await textOnPathLinks(h.host)).map((l) => l.ref.story)).toEqual([
         story,
       ]);
@@ -510,8 +525,12 @@ describe("draw conformance — type on a path (C-29, engine protocol v58)", () =
 
     it("a RECTANGLE hosts type on a path too (it carries text_paths)", async () => {
       await mintFreeStory(h, "On a rectangle");
-      expect(await applyAttachTextToPath(h.host, { elementId: RECT })).not.toBeNull();
-      expect(textOnPathOf(await h.host.document.getMetadata(RECT))).not.toBeNull();
+      expect(
+        await applyAttachTextToPath(h.host, { elementId: RECT }),
+      ).not.toBeNull();
+      expect(
+        textOnPathOf(await h.host.document.getMetadata(RECT)),
+      ).not.toBeNull();
     });
 
     // ---------------------------------------------------- the refusals
@@ -552,7 +571,9 @@ describe("draw conformance — type on a path (C-29, engine protocol v58)", () =
     });
 
     it("REFUSES a story that already flows into a text frame (one story, one flow)", async () => {
-      const before = new Set((await documentStories(h.host)).map((s) => s.selfId));
+      const before = new Set(
+        (await documentStories(h.host)).map((s) => s.selfId),
+      );
       await h.host.document.mutate({
         op: "insertTextFrame",
         args: { pageId: F1_MULTI_SHAPE.pageId, bounds: [20, 20, 140, 80] },
@@ -561,7 +582,10 @@ describe("draw conformance — type on a path (C-29, engine protocol v58)", () =
         (s) => !before.has(s.selfId),
       )!.selfId;
       expect(
-        await applyAttachTextToPath(h.host, { elementId: POLY, storyId: flowed }),
+        await applyAttachTextToPath(h.host, {
+          elementId: POLY,
+          storyId: flowed,
+        }),
       ).toBeNull();
       expect(String(h.host.bindings.get(BIND_TEXT_ON_PATH_STATUS))).toContain(
         "already flows into a text frame",
@@ -572,7 +596,10 @@ describe("draw conformance — type on a path (C-29, engine protocol v58)", () =
       const story = await mintFreeStory(h, "Only once");
       await applyAttachTextToPath(h.host, { elementId: POLY });
       expect(
-        await applyAttachTextToPath(h.host, { elementId: LINE, storyId: story }),
+        await applyAttachTextToPath(h.host, {
+          elementId: LINE,
+          storyId: story,
+        }),
       ).toBeNull();
       expect(String(h.host.bindings.get(BIND_TEXT_ON_PATH_STATUS))).toContain(
         "already attached to a path",
@@ -592,7 +619,9 @@ describe("draw conformance — type on a path (C-29, engine protocol v58)", () =
     });
 
     it("with NO free story, the refusal NAMES the workflow that makes one", async () => {
-      expect(await applyAttachTextToPath(h.host, { elementId: POLY })).toBeNull();
+      expect(
+        await applyAttachTextToPath(h.host, { elementId: POLY }),
+      ).toBeNull();
       expect(String(h.host.bindings.get(BIND_TEXT_ON_PATH_STATUS))).toBe(
         NO_FREE_STORY_NOTE,
       );
@@ -649,10 +678,13 @@ describe("draw conformance — type on a path (C-29, engine protocol v58)", () =
       handler.onPointerUp(click(F1_MULTI_SHAPE.pageId, [200, 200]));
       await until(
         async () =>
-          textOnPathOf(await h.host.document.getMetadata(RECT))?.story === story,
+          textOnPathOf(await h.host.document.getMetadata(RECT))?.story ===
+          story,
       );
       handler.onPointerUp(click(F1_MULTI_SHAPE.pageId, [200, 200], true));
-      await until(async () => (await h.host.document.getMetadata(RECT)) === null);
+      await until(
+        async () => (await h.host.document.getMetadata(RECT)) === null,
+      );
       // …and the story is free again, so the readout comes back.
       await until(
         async () => h.host.bindings.get(BIND_TEXT_ON_PATH_STORY) === story,

@@ -48,11 +48,7 @@ import {
 } from "./quick-select";
 
 export type SelectionShapeKind =
-  | "rect"
-  | "ellipse"
-  | "lasso"
-  | "polygon"
-  | "quick";
+  "rect" | "ellipse" | "lasso" | "polygon" | "quick";
 
 /** Minimum drag extent (image px) below which a marquee is treated as a
  *  no-op click (avoids committing invisible slivers). */
@@ -110,10 +106,7 @@ export interface SelectionMachine {
    *  gesture; later ones append. Unlike the freehand lasso this is
    *  CLICK-driven, so the gesture spans many clicks and only ends when
    *  the caller commits or cancels. */
-  polygonVertex(
-    point: [number, number],
-    mode: SelectionMode,
-  ): void;
+  polygonVertex(point: [number, number], mode: SelectionMode): void;
   /** Remove the last placed vertex (backspace / delete). Returns false
    *  when there was nothing to remove, so a caller can distinguish
    *  "undid a vertex" from "the gesture is already empty" — which is

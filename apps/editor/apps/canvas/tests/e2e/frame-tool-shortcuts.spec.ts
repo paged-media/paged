@@ -36,7 +36,9 @@ import { Designer } from "../journey/driver/designer";
 
 const HEAL = "media.paged.image.tool.heal";
 
-async function debug(page: Page): Promise<{ tool: string | null; context: string | null }> {
+async function debug(
+  page: Page,
+): Promise<{ tool: string | null; context: string | null }> {
   return page.evaluate(() => {
     const d = (
       globalThis as unknown as {
@@ -48,7 +50,10 @@ async function debug(page: Page): Promise<{ tool: string | null; context: string
         };
       }
     ).__canvas.debugContext?.();
-    return { tool: d?.tools?.base ?? null, context: d?.editContext?.type ?? null };
+    return {
+      tool: d?.tools?.base ?? null,
+      context: d?.editContext?.type ?? null,
+    };
   });
 }
 
@@ -58,21 +63,35 @@ async function enterRasterContext(page: Page): Promise<void> {
   const designer = new Designer(page);
   await designer.open();
   await designer.newDocument();
-  const frame = await designer.drawRectangle({ x0: 90, y0: 120, x1: 360, y1: 320 });
+  const frame = await designer.drawRectangle({
+    x0: 90,
+    y0: 120,
+    x1: 360,
+    y1: 320,
+  });
   const placed = await page.evaluate(async (elementId) => {
     const cv = new OffscreenCanvas(160, 120);
     const ctx = cv.getContext("2d")!;
     ctx.fillStyle = "#2050d0";
     ctx.fillRect(0, 0, 160, 120);
     const bytes = Array.from(
-      new Uint8Array(await (await cv.convertToBlob({ type: "image/png" })).arrayBuffer()),
+      new Uint8Array(
+        await (await cv.convertToBlob({ type: "image/png" })).arrayBuffer(),
+      ),
     );
     const c = (
       globalThis as unknown as {
-        __canvas: { client: { mutate: (m: unknown) => Promise<{ kind: string }> } };
+        __canvas: {
+          client: { mutate: (m: unknown) => Promise<{ kind: string }> };
+        };
       }
     ).__canvas;
-    return (await c.client.mutate({ op: "replaceImageBytes", args: { elementId, bytes } })).kind;
+    return (
+      await c.client.mutate({
+        op: "replaceImageBytes",
+        args: { elementId, bytes },
+      })
+    ).kind;
   }, frame);
   expect(placed).toBe("mutationApplied");
   await designer.selectElement("rectangle", frame);
@@ -91,7 +110,9 @@ test.describe("IMG-3 — frame tool shortcuts", () => {
     await page.locator("body").focus();
     await page.keyboard.press("j");
     await expect.poll(async () => (await debug(page)).tool).toBe(HEAL);
-    await expect.poll(async () => (await debug(page)).context).toBe("rasterImage");
+    await expect
+      .poll(async () => (await debug(page)).context)
+      .toBe("rasterImage");
   });
 
   test("AC-FRAMEKEY-2 — outside the frame J stays the host's and does not arm a frame tool @feat:editor-shell.tool-rail @level:edge", async ({

@@ -132,7 +132,9 @@ test.describe("ShowcaseDoc", () => {
     // hit test answer.
     for (const [i, b] of boxes.entries()) {
       if (i > 0) expect(doc.resolveStory(frames[i])).not.toBe(realStory);
-      expect(await doc.storyOf(pageId, b), `frame ${i} of the chain`).toBe(realStory);
+      expect(await doc.storyOf(pageId, b), `frame ${i} of the chain`).toBe(
+        realStory,
+      );
     }
   });
 

@@ -32,7 +32,10 @@ import { readZipText, zipEntryNames } from "../../e2e/harness/read-zip";
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const HARNESS = pathResolve(dirname(fileURLToPath(import.meta.url)), "../../e2e/harness");
+const HARNESS = pathResolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../e2e/harness",
+);
 
 /** sheet-02-formulas.xlsx — A1=2, B1="Sum", A2=3, B2="Product",
  *  A3=SUM(A1:A2) (5), B3=B1&B2 ("SumProduct"). */
@@ -53,8 +56,7 @@ export interface ElementRef {
 }
 
 export type WorkbookFile =
-  | string
-  | { name: string; mimeType: string; buffer: Buffer };
+  string | { name: string; mimeType: string; buffer: Buffer };
 
 interface CanvasHandle {
   __canvas: {
@@ -63,10 +65,13 @@ interface CanvasHandle {
       elementGeometry: (ids: unknown[]) => Promise<
         Array<{
           bounds: [number, number, number, number];
-          itemTransform?: [number, number, number, number, number, number] | null;
+          itemTransform?:
+            [number, number, number, number, number, number] | null;
         }>
       >;
-      executeScript: (s: string) => Promise<{ output: string[]; error: string | null }>;
+      executeScript: (
+        s: string,
+      ) => Promise<{ output: string[]; error: string | null }>;
       exportIdml: () => Promise<Uint8Array>;
       exportPaged: () => Promise<Uint8Array>;
     };
@@ -116,19 +121,27 @@ export async function elementScreenCenter(
 }
 
 /** Load a workbook through the workbook panel's picker (the K-5 door). */
-export async function importWorkbook(page: Page, file: WorkbookFile = FORMULAS_XLSX): Promise<void> {
+export async function importWorkbook(
+  page: Page,
+  file: WorkbookFile = FORMULAS_XLSX,
+): Promise<void> {
   await openPanel(page, WORKBOOK_PANEL);
   const pick = page.locator("[data-sheet-pick]");
   await expect(pick).toBeVisible();
   const chooser = page.waitForEvent("filechooser");
   await pick.click();
   await (await chooser).setFiles(file);
-  await expect(page.locator("[data-sheet-range]")).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator("[data-sheet-range]")).toBeVisible({
+    timeout: 20_000,
+  });
 }
 
 /** Set the panel's range and lower it to a new page frame; resolves to the
  *  frame the lowering selected. */
-export async function lowerRange(page: Page, range: string): Promise<ElementRef> {
+export async function lowerRange(
+  page: Page,
+  range: string,
+): Promise<ElementRef> {
   await page.locator("[data-sheet-range]").fill(range);
   await page.locator("[data-sheet-lower]").click();
   let frame: ElementRef | null = null;
@@ -212,7 +225,9 @@ function xmlText(s: string): string {
 /** Parse every native table out of an IDML package, in story order. */
 export function parsePlacedTables(idml: Buffer): PlacedDocument {
   const tables: PlacedTable[] = [];
-  for (const name of zipEntryNames(idml).filter((n) => n.startsWith("Stories/"))) {
+  for (const name of zipEntryNames(idml).filter((n) =>
+    n.startsWith("Stories/"),
+  )) {
     const story = readZipText(idml, name) ?? "";
     for (const t of story.matchAll(/<Table\b[^>]*>([\s\S]*?)<\/Table>/g)) {
       const rows: string[][] = [];
@@ -246,7 +261,11 @@ export function parsePlacedTables(idml: Buffer): PlacedDocument {
 /** Export the open document as IDML (in the page) and parse its tables. */
 export async function placedTables(page: Page): Promise<PlacedDocument> {
   const bytes = await page.evaluate(async () =>
-    Array.from(await (globalThis as unknown as CanvasHandle).__canvas.client.exportIdml()),
+    Array.from(
+      await (
+        globalThis as unknown as CanvasHandle
+      ).__canvas.client.exportIdml(),
+    ),
   );
   return parsePlacedTables(Buffer.from(bytes));
 }
@@ -260,26 +279,44 @@ export async function placedValues(page: Page): Promise<string[][]> {
 /** Save the open document as a `.paged` container (File ▸ Save's bytes). */
 export async function exportPaged(page: Page): Promise<Buffer> {
   const bytes = await page.evaluate(async () =>
-    Array.from(await (globalThis as unknown as CanvasHandle).__canvas.client.exportPaged()),
+    Array.from(
+      await (
+        globalThis as unknown as CanvasHandle
+      ).__canvas.client.exportPaged(),
+    ),
   );
   return Buffer.from(bytes);
 }
 
 /** The swatch a cell is filled with, as "R G B" (or the raw value), or null. */
-export function cellFill(doc: PlacedDocument, table: PlacedTable, row: number, col: number): string | null {
+export function cellFill(
+  doc: PlacedDocument,
+  table: PlacedTable,
+  row: number,
+  col: number,
+): string | null {
   const ref = attr(table.cellAttrs.get(`${row},${col}`) ?? "", "FillColor");
   if (!ref || ref === "Swatch/None") return null;
-  const tag = doc.graphic.match(new RegExp(`<Color\\b[^>]*Self="${ref.replace(/[$/]/g, "\\$&")}"[^>]*>`))?.[0];
+  const tag = doc.graphic.match(
+    new RegExp(`<Color\\b[^>]*Self="${ref.replace(/[$/]/g, "\\$&")}"[^>]*>`),
+  )?.[0];
   return tag ? attr(tag, "ColorValue") : ref;
 }
 
 /** Whether a cell's text runs are set in a bold face (through the character
  *  style the lowering minted). */
-export function cellIsBold(doc: PlacedDocument, table: PlacedTable, row: number, col: number): boolean {
+export function cellIsBold(
+  doc: PlacedDocument,
+  table: PlacedTable,
+  row: number,
+  col: number,
+): boolean {
   const styles = table.charStyles.get(`${row},${col}`) ?? [];
   return styles.some((s) => {
     const tag = doc.styles.match(
-      new RegExp(`<CharacterStyle\\b[^>]*Self="${s.replace(/[$/[\]]/g, "\\$&")}"[^>]*>`),
+      new RegExp(
+        `<CharacterStyle\\b[^>]*Self="${s.replace(/[$/[\]]/g, "\\$&")}"[^>]*>`,
+      ),
     )?.[0];
     return /bold/i.test((tag && attr(tag, "FontStyle")) ?? "");
   });

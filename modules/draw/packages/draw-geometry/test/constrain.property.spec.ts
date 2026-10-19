@@ -75,10 +75,18 @@ describe("constrain — constrainAngle (properties)", () => {
           const a = k * step * DEG;
           best = Math.min(
             best,
-            Math.hypot(out[0] - (o[0] + r * Math.cos(a)), out[1] - (o[1] + r * Math.sin(a))),
+            Math.hypot(
+              out[0] - (o[0] + r * Math.cos(a)),
+              out[1] - (o[1] + r * Math.sin(a)),
+            ),
           );
         }
-        assertClose(best, 0, 1e-9 * magnitude(o, p), "distance to the nearest multiple");
+        assertClose(
+          best,
+          0,
+          1e-9 * magnitude(o, p),
+          "distance to the nearest multiple",
+        );
       }),
     );
   });
@@ -104,7 +112,9 @@ describe("constrain — constrainAngle (properties)", () => {
         const uy = p[1] - o[1];
         const vx = out[0] - o[0];
         const vy = out[1] - o[1];
-        const turned = Math.abs(Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy));
+        const turned = Math.abs(
+          Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy),
+        );
         const tol = (1e-9 * magnitude(o, p)) / dist(o, p) + 1e-9;
         assertTrue(
           turned <= (step * DEG) / 2 + tol,
@@ -118,7 +128,11 @@ describe("constrain — constrainAngle (properties)", () => {
     fc.assert(
       fc.property(armed, niceStep, ([o, p], step) => {
         const once = constrainAngle(o, p, step);
-        assertVecClose(constrainAngle(o, once, step), once, 1e-9 * magnitude(o, p));
+        assertVecClose(
+          constrainAngle(o, once, step),
+          once,
+          1e-9 * magnitude(o, p),
+        );
       }),
     );
   });
@@ -223,17 +237,27 @@ describe("constrain — constrainAngle (properties)", () => {
     const p: Vec2 = [10 * Math.cos(a), 10 * Math.sin(a)];
     const once = constrainAngle([0, 0], p, 100);
     const twice = constrainAngle([0, 0], once, 100);
-    expect(Math.hypot(twice[0] - once[0], twice[1] - once[1])).toBeLessThan(1e-9);
+    expect(Math.hypot(twice[0] - once[0], twice[1] - once[1])).toBeLessThan(
+      1e-9,
+    );
     // And it is the 160° direction (−200°), 15° from the arm — not the
     // 200° one, 25° away.
-    assertVecClose(once, [10 * Math.cos(160 * DEG), 10 * Math.sin(160 * DEG)], 1e-9);
+    assertVecClose(
+      once,
+      [10 * Math.cos(160 * DEG), 10 * Math.sin(160 * DEG)],
+      1e-9,
+    );
   });
 
   it("FIXED DEFECT: is idempotent for ANY positive step", () => {
     fc.assert(
       fc.property(armed, real(0.5, 180), ([o, p], step) => {
         const once = constrainAngle(o, p, step);
-        assertVecClose(constrainAngle(o, once, step), once, 1e-9 * magnitude(o, p));
+        assertVecClose(
+          constrainAngle(o, once, step),
+          once,
+          1e-9 * magnitude(o, p),
+        );
       }),
     );
   });
@@ -322,7 +346,13 @@ describe("constrain — constrainAngle (properties)", () => {
       fc.property(
         vec2,
         vec2,
-        fc.constantFrom(0, -0, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY),
+        fc.constantFrom(
+          0,
+          -0,
+          Number.NaN,
+          Number.POSITIVE_INFINITY,
+          Number.NEGATIVE_INFINITY,
+        ),
         (o, point, step) => {
           const out = constrainAngle(o, point, step);
           assertVecClose(out, point, 0);

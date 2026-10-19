@@ -6,7 +6,7 @@
 # MONOREPO (step A3): ported from paged-media/plugin-image
 # .github/workflows/ci.yml; runs in modules/image. The ts job's sibling
 # paged-media/plugin-sdk checkout is gone: the manifest validate runs the
-# in-tree platform/extensions plugin-cli, so its sources join the filters.
+# in-tree `paged-plugin` bin of platform/extensions' plugin-sdk, so its sources join the filters.
 name: image / ci
 concurrency:
   # A newer push to a pull request cancels the older run. Main pushes share
@@ -29,13 +29,15 @@ on:
       - "engine/core/Cargo.*"
       - "engine/core/rust-toolchain.toml"
       - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/scripts/rust-channel.sh"
       - "engine/core/packages/**"
       - ".cargo/config.toml"
       - "tooling/bootstrap.sh"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/wasm-tools/**"
       - ".github/actions/module-wasm/**"
-      - "platform/extensions/packages/plugin-cli/**"
+      - "platform/extensions/packages/plugin-sdk/bin/**"
+      - "platform/extensions/packages/plugin-sdk/untyped-commands.baseline.json"
       - ".github/workflows/image-ci.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -59,13 +61,15 @@ on:
       - "engine/core/Cargo.*"
       - "engine/core/rust-toolchain.toml"
       - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/scripts/rust-channel.sh"
       - "engine/core/packages/**"
       - ".cargo/config.toml"
       - "tooling/bootstrap.sh"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/wasm-tools/**"
       - ".github/actions/module-wasm/**"
-      - "platform/extensions/packages/plugin-cli/**"
+      - "platform/extensions/packages/plugin-sdk/bin/**"
+      - "platform/extensions/packages/plugin-sdk/untyped-commands.baseline.json"
       - ".github/workflows/image-ci.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -93,10 +97,10 @@ defaults:
 jobs:
   # The Rust engine: fmt + clippy + test, the three isolation-contract
   # dependency guards (spec §2.1 / §4 dep rule 3), and the wasm size
-  # report against the 100 MB app wasm budget (BREAKAGE I-07). dtolnay/rust-toolchain
-  # reads the channel straight from rust-toolchain.toml (`channel = 1.93.0`)
-  # — same single-source-of-truth posture as core's resolved `toolchain`
-  # job, without a separate channel-resolver script in this repo.
+  # report against the 100 MB app wasm budget (BREAKAGE I-07). Every job
+  # reads its toolchain from modules/image/rust-toolchain.toml through
+  # engine/core/scripts/rust-channel.sh, as core's jobs do, so the pin has
+  # one source.
   rust:
     name: rust engine
     runs-on: ubuntu-latest
@@ -111,10 +115,13 @@ jobs:
       # the file is honoured by rustup at invocation time, not by the
       # installer). @master hard-fails the input check instead: "'toolchain'
       # is a required input", exit 1 — which is what has been killing this
-      # job. Pin it here and MIRROR rust-toolchain.toml; bump both together.
+      # job. It is read from rust-toolchain.toml here (it used to be a
+      # literal that had to mirror the file, and stopped mirroring it).
+      - id: pin
+        run: echo "channel=$(bash ../../engine/core/scripts/rust-channel.sh .)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.93.0" # mirrors rust-toolchain.toml
+          toolchain: ${{ steps.pin.outputs.channel }}
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
@@ -235,12 +242,12 @@ jobs:
             echo "::warning title=wasm budget::raw image_js.wasm ($RAW bytes) exceeds the 100 MB app wasm budget — see BREAKAGE I-07"
           fi
 
-  # The GPU device tests on a SOFTWARE Vulkan adapter (Mesa lavapipe),
-  # on every PR. WGPU_FALLBACK=1 selects the CPU-type adapter, which is
-  # lavapipe; PAGED_REQUIRE_GPU=1 makes a missing adapter fail every device
-  # test instead of skipping it (image-gpu/src/test_support.rs,
-  # paged-test-resources). The first test step prints the adapter, so the
-  # log says what the tests ran on.
+      # The GPU device tests on a SOFTWARE Vulkan adapter (Mesa lavapipe),
+      # on every PR. WGPU_FALLBACK=1 selects the CPU-type adapter, which is
+      # lavapipe; PAGED_REQUIRE_GPU=1 makes a missing adapter fail every device
+      # test instead of skipping it (image-gpu/src/test_support.rs,
+      # paged-test-resources). The first test step prints the adapter, so the
+      # log says what the tests ran on.
       # A silent fallback to the default linker fails here: mold stamps
       # the .comment section of what it links.
       - name: mold linked the test binaries
@@ -260,9 +267,12 @@ jobs:
       PAGED_REQUIRE_GPU: "1"
     steps:
       - uses: actions/checkout@v4
+      # The pin, read from rust-toolchain.toml (see the rust job).
+      - id: pin
+        run: echo "channel=$(bash ../../engine/core/scripts/rust-channel.sh .)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.93.0" # mirrors rust-toolchain.toml
+          toolchain: ${{ steps.pin.outputs.channel }}
       - name: mold (the Rust linker on Linux, .cargo/config.toml)
         if: runner.os == 'Linux'
         uses: rui314/setup-mold@v1
@@ -309,9 +319,12 @@ jobs:
       PAGED_REQUIRE_GPU: "1"
     steps:
       - uses: actions/checkout@v4
+      # The pin, read from rust-toolchain.toml (see the rust job).
+      - id: pin
+        run: echo "channel=$(bash ../../engine/core/scripts/rust-channel.sh .)" >> "$GITHUB_OUTPUT"
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.93.0" # mirrors rust-toolchain.toml
+          toolchain: ${{ steps.pin.outputs.channel }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: modules/image -> target
@@ -334,8 +347,8 @@ jobs:
   # The TS bundle: the contract-import lint (isolation §2.1), typecheck,
   # bun test, and manifest validation. Pre-monorepo this nested two checkouts
   # (plugin-image/ + a plugin-sdk/ sibling) because the manifest package's
-  # scripts reach the plugin-cli by a relative path; the plugin-cli is now
-  # in-tree at platform/extensions/packages/plugin-cli, so one checkout.
+  # scripts reach the paged-plugin bin by a relative path; it is in-tree at
+  # platform/extensions/packages/plugin-sdk/bin, so one checkout.
   ts:
     name: ts bundle
     runs-on: ubuntu-latest
@@ -375,9 +388,9 @@ jobs:
         env:
           REQUIRE_REAL_WASM: "1"
 
-      # Validate the bundle manifest with the in-tree plugin-cli (the same
+      # Validate the bundle manifest with the in-tree paged-plugin bin (the same
       # binary the package.json validate:manifest script invokes).
       - name: validate manifest
         run: >-
-          bun "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs"
+          bun "$GITHUB_WORKSPACE/platform/extensions/packages/plugin-sdk/bin/paged-plugin.mjs"
           validate manifest/manifest.json

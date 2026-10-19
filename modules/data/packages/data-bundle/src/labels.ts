@@ -122,9 +122,12 @@ const HOST = "$host";
 function relative(b: BindingJson, oid: string | null): BindingJson {
   if (b.kind === "property") {
     const sel = (b.target as { selector?: string } | null)?.selector;
-    return sel && oid && oidOfSelector(sel) === oid ? { ...b, target: "host" } : b;
+    return sel && oid && oidOfSelector(sel) === oid
+      ? { ...b, target: "host" }
+      : b;
   }
-  if (b.kind === "visibility" || b.kind === "barcode") return { ...b, target: HOST };
+  if (b.kind === "visibility" || b.kind === "barcode")
+    return { ...b, target: HOST };
   if (b.kind === "table") return { ...b, region: HOST };
   return b;
 }
@@ -142,17 +145,25 @@ function hostElementOf(
       // undo, a reopen) has none, so then the oid its selector names, then
       // the element whose label already carries it (it stays there).
       const sel = (b.target as { selector?: string } | null)?.selector;
-      const oid = facts.hostOids.get(b.id) ?? (typeof sel === "string" ? oidOfSelector(sel) : null);
+      const oid =
+        facts.hostOids.get(b.id) ??
+        (typeof sel === "string" ? oidOfSelector(sel) : null);
       return (
         (oid ? byOid.get(oid)?.element : undefined) ??
         facts.hostElements?.get(b.id) ??
-        elements.find((e) => Array.isArray(e.data?.bind) && (e.data!.bind as { id?: unknown }[]).some((x) => x?.id === b.id))?.element ??
+        elements.find(
+          (e) =>
+            Array.isArray(e.data?.bind) &&
+            (e.data!.bind as { id?: unknown }[]).some((x) => x?.id === b.id),
+        )?.element ??
         null
       );
     }
     case "visibility": {
       const t = facts.visibility.get(b.id);
-      return t ? ({ kind: t.kind ?? "rectangle", id: t.elementId } as ElementId) : null;
+      return t
+        ? ({ kind: t.kind ?? "rectangle", id: t.elementId } as ElementId)
+        : null;
     }
     case "image": {
       const t = facts.image.get(b.id);
@@ -178,9 +189,13 @@ function hostElementOf(
 function extraOf(b: BindingJson, facts: HostFacts): unknown {
   switch (b.kind) {
     case "visibility":
-      return facts.visibility.get(b.id)?.kind ? { kind: facts.visibility.get(b.id)!.kind } : undefined;
+      return facts.visibility.get(b.id)?.kind
+        ? { kind: facts.visibility.get(b.id)!.kind }
+        : undefined;
     case "image":
-      return facts.image.get(b.id)?.fit ? { fit: facts.image.get(b.id)!.fit } : undefined;
+      return facts.image.get(b.id)?.fit
+        ? { fit: facts.image.get(b.id)!.fit }
+        : undefined;
     case "variable":
     case "rule":
       return facts.storyHosted.get(b.id)?.extra;
@@ -191,7 +206,13 @@ function extraOf(b: BindingJson, facts: HostFacts): unknown {
 
 const sameId = (a: ElementId, b: ElementId) => a.id === b.id;
 
-type Patch = { oid: string; bind: BindingJson[]; queries: unknown[]; sources: unknown[]; extra: Record<string, unknown> };
+type Patch = {
+  oid: string;
+  bind: BindingJson[];
+  queries: unknown[];
+  sources: unknown[];
+  extra: Record<string, unknown>;
+};
 
 /** Add one binding to an element's patch: the binding (target made
  *  relative), the query it reads, the sources that query names. */
@@ -207,7 +228,13 @@ function addToPatch(
   // The sources a query reads: every source whose name its SQL mentions.
   const sql = typeof q?.sql === "string" ? q.sql : "";
   for (const s of sources) {
-    if (!p.sources.includes(s) && new RegExp(`\\b${s.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(sql)) {
+    if (
+      !p.sources.includes(s) &&
+      new RegExp(
+        `\\b${s.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+        "i",
+      ).test(sql)
+    ) {
       p.sources.push(s);
     }
   }
@@ -216,11 +243,25 @@ function addToPatch(
 /** The persistence keys a lowering writes into the label of the frame it
  *  creates (a table): the same patch a label sync would compute, so the
  *  save after it has nothing to add (no extra undo step). */
-export function contentPatch(payload: PayloadJson, binding: string): Record<string, unknown> | null {
+export function contentPatch(
+  payload: PayloadJson,
+  binding: string,
+): Record<string, unknown> | null {
   const b = (payload.bindings ?? []).find((x) => x.id === binding);
   if (!b) return null;
-  const p: Patch = { oid: mintOid(), bind: [], queries: [], sources: [], extra: {} };
-  addToPatch(p, b, new Map((payload.queries ?? []).map((q) => [q.id, q])), payload.sources ?? []);
+  const p: Patch = {
+    oid: mintOid(),
+    bind: [],
+    queries: [],
+    sources: [],
+    extra: {},
+  };
+  addToPatch(
+    p,
+    b,
+    new Map((payload.queries ?? []).map((q) => [q.id, q])),
+    payload.sources ?? [],
+  );
   const { extra: _extra, ...rest } = p;
   return rest;
 }
@@ -253,7 +294,10 @@ export function planLabels(
   const queries = new Map((payload.queries ?? []).map((q) => [q.id, q]));
   const sources = payload.sources ?? [];
   // element raw id → its patch
-  const patches = new Map<string, { element: ElementId; patch: Record<string, unknown> }>();
+  const patches = new Map<
+    string,
+    { element: ElementId; patch: Record<string, unknown> }
+  >();
   for (const b of payload.bindings ?? []) {
     const el = hostElementOf(b, facts, byOid, elements);
     if (!el || typeof el.id !== "string") {
@@ -270,8 +314,12 @@ export function planLabels(
       const oid =
         typeof current.data?.oid === "string"
           ? (current.data.oid as string)
-          : (b.kind === "property" ? facts.hostOids.get(b.id) : undefined) ?? mintOid();
-      entry = { element: current.element, patch: { oid, bind: [], queries: [], sources: [], extra: {} } };
+          : ((b.kind === "property" ? facts.hostOids.get(b.id) : undefined) ??
+            mintOid());
+      entry = {
+        element: current.element,
+        patch: { oid, bind: [], queries: [], sources: [], extra: {} },
+      };
       patches.set(el.id, entry);
     }
     addToPatch(entry.patch as Patch, b, queries, sources);
@@ -289,20 +337,27 @@ export function planLabels(
         patch = { ...patch, queries: [], sources: [] };
       }
       if ((mergeLabel(e.data, patch) ?? "").length > LABEL_BUDGET) {
-        for (const b of patch.bind as BindingJson[]) plan.documentOnly[b.id] = "its label would pass the 64 KiB cap";
+        for (const b of patch.bind as BindingJson[])
+          plan.documentOnly[b.id] = "its label would pass the 64 KiB cap";
         patch = null;
       }
     }
     const hadOurs = e.data !== null && PERSIST_KEYS.some((k) => k in e.data!);
     if (!patch && !hadOurs) continue;
-    const before = e.data ? Object.fromEntries(PERSIST_KEYS.filter((k) => k in e.data!).map((k) => [k, e.data![k]])) : {};
+    const before = e.data
+      ? Object.fromEntries(
+          PERSIST_KEYS.filter((k) => k in e.data!).map((k) => [k, e.data![k]]),
+        )
+      : {};
     if (patch && JSON.stringify(before) === JSON.stringify(patch)) continue;
     const value = mergeLabel(e.data, patch);
     plan.ops.push({
       op: "setPluginMetadata",
       args: { elementId: e.element, key: DATA_LABEL_KEY, value },
     } as Mutation);
-    if (patch) for (const b of patch.bind as BindingJson[]) plan.oids[b.id] = patch.oid as string;
+    if (patch)
+      for (const b of patch.bind as BindingJson[])
+        plan.oids[b.id] = patch.oid as string;
   }
   return plan;
 }
@@ -339,7 +394,9 @@ export function restoreFromLabels(
     queries: [...(documentRecipe?.queries ?? [])],
     templates: [...(documentRecipe?.templates ?? [])],
     bindings: [...(documentRecipe?.bindings ?? [])],
-    ...(documentRecipe?.variables ? { variables: documentRecipe.variables } : {}),
+    ...(documentRecipe?.variables
+      ? { variables: documentRecipe.variables }
+      : {}),
     ...(documentRecipe?.locales ? { locales: documentRecipe.locales } : {}),
   };
   const facts: RestoredRecipe["facts"] = {
@@ -359,15 +416,24 @@ export function restoreFromLabels(
   let fromElements = 0;
   for (const e of elements) {
     const d = e.data;
-    if (!d || !Array.isArray(d.bind) || typeof e.element.id !== "string") continue;
+    if (!d || !Array.isArray(d.bind) || typeof e.element.id !== "string")
+      continue;
     const raw = e.element.id;
     const oid = typeof d.oid === "string" ? d.oid : null;
-    const extra = (d.extra && typeof d.extra === "object" ? d.extra : {}) as Record<string, Record<string, unknown> | undefined>;
-    for (const s of (Array.isArray(d.sources) ? d.sources : []) as { id: string }[]) {
-      if (!payload.sources!.some((x) => x.id === s.id)) payload.sources!.push(s);
+    const extra = (
+      d.extra && typeof d.extra === "object" ? d.extra : {}
+    ) as Record<string, Record<string, unknown> | undefined>;
+    for (const s of (Array.isArray(d.sources) ? d.sources : []) as {
+      id: string;
+    }[]) {
+      if (!payload.sources!.some((x) => x.id === s.id))
+        payload.sources!.push(s);
     }
-    for (const q of (Array.isArray(d.queries) ? d.queries : []) as { id: string }[]) {
-      if (!payload.queries!.some((x) => x.id === q.id)) payload.queries!.push(q);
+    for (const q of (Array.isArray(d.queries) ? d.queries : []) as {
+      id: string;
+    }[]) {
+      if (!payload.queries!.some((x) => x.id === q.id))
+        payload.queries!.push(q);
     }
     for (const b0 of d.bind as BindingJson[]) {
       let b: BindingJson = b0;
@@ -381,13 +447,19 @@ export function restoreFromLabels(
         b = { ...b, target: raw };
         if (b.kind === "visibility") {
           const kind = extra[b.id]?.kind;
-          facts.visibility.set(b.id, { elementId: raw, kind: typeof kind === "string" ? kind : e.element.kind });
+          facts.visibility.set(b.id, {
+            elementId: raw,
+            kind: typeof kind === "string" ? kind : e.element.kind,
+          });
         } else {
           facts.barcode.set(b.id, { elementId: raw });
         }
       } else if (b.kind === "image") {
         const fit = extra[b.id]?.fit;
-        facts.image.set(b.id, { elementId: raw, ...(typeof fit === "string" ? { fit } : {}) });
+        facts.image.set(b.id, {
+          elementId: raw,
+          ...(typeof fit === "string" ? { fit } : {}),
+        });
       } else if (b.kind === "table") {
         b = { ...b, region: raw };
         facts.lowered.set(b.id, e.element);
@@ -404,9 +476,12 @@ export function restoreFromLabels(
 }
 
 /** The file sources of a restored recipe (whose bytes must be re-linked). */
-export function sourcesToRelink(payload: PayloadJson): { id: string; file: string | null; remote: boolean }[] {
+export function sourcesToRelink(
+  payload: PayloadJson,
+): { id: string; file: string | null; remote: boolean }[] {
   return (payload.sources ?? []).map((s) => {
-    const kind = s.kind as { kind?: string; name?: string; url?: string } | undefined;
+    const kind = s.kind as
+      { kind?: string; name?: string; url?: string } | undefined;
     return {
       id: s.id,
       file: kind?.kind === "file" ? (kind.name ?? null) : null,

@@ -25,7 +25,14 @@
 // `mode` option. handlers/lasso.ts documents both. F1's leaf centers:
 // rectangle (200, 200), polygon (250, 500), line (250, 675).
 
-import { describe, expect, it, beforeAll, beforeEach, afterAll } from "bun:test";
+import {
+  describe,
+  expect,
+  it,
+  beforeAll,
+  beforeEach,
+  afterAll,
+} from "bun:test";
 
 import type { CanvasPointerEvent, ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
@@ -81,7 +88,8 @@ function loop(
 ): void {
   handler.onActivate(undefined as never);
   handler.onPointerDown(pointer(pageId, points[0]));
-  for (const p of points.slice(1, -1)) handler.onPointerMove(pointer(pageId, p, 40));
+  for (const p of points.slice(1, -1))
+    handler.onPointerMove(pointer(pageId, p, 40));
   handler.onPointerUp(pointer(pageId, points[points.length - 1], 40));
 }
 
@@ -210,12 +218,15 @@ describe("draw conformance — lasso select (wave 2)", () => {
           : {
               toolSettings: {
                 getValue: (tool: string, key: string) =>
-                  tool === LASSO_OPTIONS.toolId && key === "mode" ? mode : undefined,
+                  tool === LASSO_OPTIONS.toolId && key === "mode"
+                    ? mode
+                    : undefined,
               },
             };
       handler.onActivate(paged as never);
       handler.onPointerDown(pointer(PAGE, ring[0]));
-      for (const p of ring.slice(1, -1)) handler.onPointerMove(pointer(PAGE, p, 40));
+      for (const p of ring.slice(1, -1))
+        handler.onPointerMove(pointer(PAGE, p, 40));
       handler.onPointerUp(pointer(PAGE, ring[ring.length - 1], 40));
       // Settle: the commit is a few awaited reads, then one selection set.
       for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 2));
@@ -407,7 +418,9 @@ describe("draw conformance — lasso select (wave 2)", () => {
         [115, 105],
         [105, 105],
       ];
-      expect(lassoIntersections(items, new Map(), ring).map((e) => e.id)).toEqual(["o"]);
+      expect(
+        lassoIntersections(items, new Map(), ring).map((e) => e.id),
+      ).toEqual(["o"]);
       expect(
         lassoIntersections(items, new Map(), [
           [5, -5],
@@ -423,10 +436,9 @@ describe("draw conformance — lasso select (wave 2)", () => {
       expect(LASSO_OPTIONS.toolId).toBe("media.paged.draw.tool.lassoSelect");
       const mode = LASSO_OPTIONS.fields[0];
       expect(mode.kind).toBe("select");
-      expect(mode.kind === "select" && mode.options.map((o) => o.value)).toEqual([
-        "intersect",
-        "centre",
-      ]);
+      expect(
+        mode.kind === "select" && mode.options.map((o) => o.value),
+      ).toEqual(["intersect", "centre"]);
     });
   });
 

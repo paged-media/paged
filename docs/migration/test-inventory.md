@@ -1161,6 +1161,22 @@ identical, only the ignored classification changed.
   unavailable) is zero, for nextest JUnit and for `cargo test` output alike (core macOS,
   image's three Rust lanes, the fidelity golden snapshot, which is a single named test).
 
+First runs on main (`205f7b115`, `07385f2ec`), as the lane reports say:
+
+| Lane | Executed | Reported unavailable |
+|---|---|---|
+| core `check + test`, Linux nextest | 3,797 | 1 (`effects_export`: `pdftoppm` is not on that runner) |
+| core `check + test`, macOS cargo test | 3,798 | 1 (the same) |
+| core `vello on lavapipe` (`PAGED_REQUIRE_GPU=1`) | 85 | 0 |
+| image `rust engine` (no GPU) | 910 | 282 (GPU adapter) |
+| image `publish-state` nextest evidence (no GPU) | 910 | 282, marked `<skipped>` in the JUnit |
+| image `rust GPU tests` lavapipe / Metal (`PAGED_REQUIRE_GPU=1`) | 1,192 / 1,192 | 0 / 0 |
+| sheet nextest | 1,496 | 0 |
+| core fidelity golden snapshot | 1 | — (the pixel gate: `unavailable: FOGRA39 profile`) |
+
+The editor's dispatch-only "journeys (GPU, advisory)" step, which ran the CPU fallback under
+a GPU name, is removed (GPU audit L-4).
+
 ### Left for later
 
 - The nine TypeScript silent skips: `apps/editor/apps/canvas/tests/default-italic-face.spec.ts`

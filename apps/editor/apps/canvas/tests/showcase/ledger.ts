@@ -39,7 +39,13 @@
 // with `transient` so the colophon can print it honestly: demonstrated,
 // not resident.
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
 import { join, resolve as pathResolve } from "node:path";
 
 import { CAPABILITIES } from "../e2e/harness/capabilities";
@@ -85,12 +91,13 @@ export function propertyPathUniverse(coreCheckout: string): string[] {
   if (invocation >= 0) {
     const open = text.indexOf("advertised", invocation);
     const block = text.slice(open, text.indexOf("}", open));
-    names = [...block.matchAll(/\b[A-Z][A-Za-z0-9]*\s*=>\s*"([A-Za-z0-9]+)"/g)].map(
-      (m) => m[1],
-    );
+    names = [
+      ...block.matchAll(/\b[A-Z][A-Za-z0-9]*\s*=>\s*"([A-Za-z0-9]+)"/g),
+    ].map((m) => m[1]);
   } else {
     const start = text.indexOf("pub const PROPERTY_PATHS");
-    if (start < 0) throw new Error("PROPERTY_PATHS table not found in catalog.rs");
+    if (start < 0)
+      throw new Error("PROPERTY_PATHS table not found in catalog.rs");
     const block = text.slice(start, text.indexOf("];", start));
     names = [...block.matchAll(/\(\s*"([A-Za-z0-9]+)"\s*,\s*P::/g)].map(
       (m) => m[1],

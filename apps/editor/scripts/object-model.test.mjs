@@ -48,10 +48,21 @@ test("every ValueType kind maps to a widget", () => {
 });
 
 test("a text row with presentation options renders as a select; enum members win", () => {
-  assert.equal(M.widgetFor({ kind: "text" }, { options: [{ value: "x" }] }), "select");
-  assert.equal(M.widgetFor({ kind: "text" }, { options: [{ value: "x" }], style: "segments" }), "segments");
+  assert.equal(
+    M.widgetFor({ kind: "text" }, { options: [{ value: "x" }] }),
+    "select",
+  );
+  assert.equal(
+    M.widgetFor(
+      { kind: "text" },
+      { options: [{ value: "x" }], style: "segments" },
+    ),
+    "segments",
+  );
   assert.deepEqual(
-    M.optionsFor({ kind: "enum", members: ["Solid", "Dashed"] }, undefined).map((o) => o.value),
+    M.optionsFor({ kind: "enum", members: ["Solid", "Dashed"] }, undefined).map(
+      (o) => o.value,
+    ),
     ["Solid", "Dashed"],
   );
 });
@@ -71,85 +82,223 @@ const FILLS = { kind: "list", of: FILL, maxItems: 3 };
 
 test("a list of records is an item editor, a struct with fields shows its fields", () => {
   assert.equal(M.widgetFor(FILLS), "items");
-  assert.equal(M.widgetFor({ kind: "list", of: { kind: "length" } }), "list", "scalars stay typed text");
-  assert.equal(M.widgetFor({ kind: "list", of: { kind: "length" } }, { items: {} }), "items", "unless presented as items");
+  assert.equal(
+    M.widgetFor({ kind: "list", of: { kind: "length" } }),
+    "list",
+    "scalars stay typed text",
+  );
+  assert.equal(
+    M.widgetFor({ kind: "list", of: { kind: "length" } }, { items: {} }),
+    "items",
+    "unless presented as items",
+  );
   assert.equal(M.widgetFor(FILL), "struct");
   assert.equal(M.widgetFor({ kind: "struct", fields: {} }), "json");
-  assert.equal(M.widgetFor({ kind: "struct", fields: {}, open: true }, { fields: ["stopColor"] }), "struct");
+  assert.equal(
+    M.widgetFor(
+      { kind: "struct", fields: {}, open: true },
+      { fields: ["stopColor"] },
+    ),
+    "struct",
+  );
 });
 
 test("list edits: add (default item), remove, move, itemSet of a field — validated, never coerced", () => {
-  const one = [{ color: "Color/Red", tint: 100, opacity: 100, blendMode: "Normal" }];
+  const one = [
+    { color: "Color/Red", tint: 100, opacity: 100, blendMode: "Normal" },
+  ];
   const added = M.applyValueEdit(one, { edit: "add" }, FILLS);
   assert.equal(added.ok, true);
-  assert.deepEqual(added.value[1], { color: "Color/Black", tint: 0, opacity: 0, blendMode: "Normal" });
-  const moved = M.applyValueEdit(added.value, { edit: "move", from: 1, to: 0 }, FILLS);
+  assert.deepEqual(added.value[1], {
+    color: "Color/Black",
+    tint: 0,
+    opacity: 0,
+    blendMode: "Normal",
+  });
+  const moved = M.applyValueEdit(
+    added.value,
+    { edit: "move", from: 1, to: 0 },
+    FILLS,
+  );
   assert.equal(moved.value[0].color, "Color/Black");
-  const set = M.applyValueEdit(moved.value, { edit: "itemSet", index: 1, field: "tint", value: 40 }, FILLS);
+  const set = M.applyValueEdit(
+    moved.value,
+    { edit: "itemSet", index: 1, field: "tint", value: 40 },
+    FILLS,
+  );
   assert.equal(set.value[1].tint, 40);
   assert.equal(set.value[1].color, "Color/Red", "the other fields stay");
-  assert.equal(M.applyValueEdit(one, { edit: "itemSet", index: 0, field: "tint", value: "40" }, FILLS).ok, false);
-  assert.equal(M.applyValueEdit(one, { edit: "itemSet", index: 0, field: "hue", value: 1 }, FILLS).ok, false);
-  assert.equal(M.applyValueEdit(one, { edit: "remove", index: 3 }, FILLS).ok, false);
+  assert.equal(
+    M.applyValueEdit(
+      one,
+      { edit: "itemSet", index: 0, field: "tint", value: "40" },
+      FILLS,
+    ).ok,
+    false,
+  );
+  assert.equal(
+    M.applyValueEdit(
+      one,
+      { edit: "itemSet", index: 0, field: "hue", value: 1 },
+      FILLS,
+    ).ok,
+    false,
+  );
+  assert.equal(
+    M.applyValueEdit(one, { edit: "remove", index: 3 }, FILLS).ok,
+    false,
+  );
   const removed = M.applyValueEdit(one, { edit: "remove", index: 0 }, FILLS);
   assert.deepEqual(removed.value, []);
   const full = [one[0], one[0], one[0]];
-  assert.equal(M.applyValueEdit(full, { edit: "add" }, FILLS).ok, false, "maxItems");
-  assert.deepEqual(M.listAffordances(FILLS, 3, true), { add: false, remove: true, reorder: true });
-  assert.deepEqual(M.listAffordances(FILLS, 1, true, { remove: false }), { add: true, remove: false, reorder: false });
-  assert.deepEqual(M.listAffordances(FILLS, 2, false), { add: false, remove: false, reorder: false });
+  assert.equal(
+    M.applyValueEdit(full, { edit: "add" }, FILLS).ok,
+    false,
+    "maxItems",
+  );
+  assert.deepEqual(M.listAffordances(FILLS, 3, true), {
+    add: false,
+    remove: true,
+    reorder: true,
+  });
+  assert.deepEqual(M.listAffordances(FILLS, 1, true, { remove: false }), {
+    add: true,
+    remove: false,
+    reorder: false,
+  });
+  assert.deepEqual(M.listAffordances(FILLS, 2, false), {
+    add: false,
+    remove: false,
+    reorder: false,
+  });
 });
 
 test("a stack lists top-first when reversed, but edits still name value indices", () => {
   const v = ["a", "b", "c"];
-  assert.deepEqual(M.listItems(v).map((x) => x.index), [0, 1, 2]);
-  assert.deepEqual(M.listItems(v, { reversed: true }).map((x) => [x.index, x.item]), [[2, "c"], [1, "b"], [0, "a"]]);
-  assert.equal(M.itemTitle({ name: "Shadow" }, 0, { itemLabel: "name" }), "Shadow");
+  assert.deepEqual(
+    M.listItems(v).map((x) => x.index),
+    [0, 1, 2],
+  );
+  assert.deepEqual(
+    M.listItems(v, { reversed: true }).map((x) => [x.index, x.item]),
+    [
+      [2, "c"],
+      [1, "b"],
+      [0, "a"],
+    ],
+  );
+  assert.equal(
+    M.itemTitle({ name: "Shadow" }, 0, { itemLabel: "name" }),
+    "Shadow",
+  );
   assert.equal(M.itemTitle({}, 1, { itemLabel: "name" }), "#2");
 });
 
 test("struct sub-fields follow the presentation; an open struct types its fields off the value", () => {
-  assert.deepEqual(M.subFieldsOf(FILL, undefined).map((f) => f.field), ["color", "tint", "opacity", "blendMode"]);
-  const two = M.subFieldsOf(FILL, ["blendMode", { field: "tint", label: "Tint" }]);
-  assert.deepEqual(two.map((f) => [f.field, f.label, f.type.kind]), [["blendMode", "blendMode", "enum"], ["tint", "Tint", "number"]]);
+  assert.deepEqual(
+    M.subFieldsOf(FILL, undefined).map((f) => f.field),
+    ["color", "tint", "opacity", "blendMode"],
+  );
+  const two = M.subFieldsOf(FILL, [
+    "blendMode",
+    { field: "tint", label: "Tint" },
+  ]);
+  assert.deepEqual(
+    two.map((f) => [f.field, f.label, f.type.kind]),
+    [
+      ["blendMode", "blendMode", "enum"],
+      ["tint", "Tint", "number"],
+    ],
+  );
   // A gradient stop as the catalog may describe it: an open struct.
   const stop = { kind: "struct", fields: {}, open: true };
-  const inferred = M.subFieldsOf(stop, ["stopColor", "locationPct"], { stopColor: "Color/Red", locationPct: 50 });
-  assert.deepEqual(inferred.map((f) => f.type), [{ kind: "color" }, { kind: "number", unit: "percent" }]);
-  const fs = M.applyValueEdit({ x: 1 }, { edit: "fieldSet", field: "x", value: 2 }, { kind: "struct", fields: { x: { kind: "number" } } });
+  const inferred = M.subFieldsOf(stop, ["stopColor", "locationPct"], {
+    stopColor: "Color/Red",
+    locationPct: 50,
+  });
+  assert.deepEqual(
+    inferred.map((f) => f.type),
+    [{ kind: "color" }, { kind: "number", unit: "percent" }],
+  );
+  const fs = M.applyValueEdit(
+    { x: 1 },
+    { edit: "fieldSet", field: "x", value: 2 },
+    { kind: "struct", fields: { x: { kind: "number" } } },
+  );
   assert.deepEqual(fs, { ok: true, value: { x: 2 } });
 });
 
 test("a nullable enum row keeps the panel's clear option first; a non-nullable one offers members only", () => {
   const type = { kind: "enum", members: ["Anywhere", "NextPage"] };
-  const pres = { options: [{ value: "", label: "[Style default]" }, { value: "NextPage", label: "On next page" }] };
+  const pres = {
+    options: [
+      { value: "", label: "[Style default]" },
+      { value: "NextPage", label: "On next page" },
+    ],
+  };
   assert.deepEqual(M.optionsFor(type, pres, true), [
     { value: "", label: "[Style default]" },
     { value: "Anywhere", label: "Anywhere" },
     { value: "NextPage", label: "On next page" },
   ]);
-  assert.deepEqual(M.optionsFor(type, pres).map((o) => o.value), ["Anywhere", "NextPage"]);
+  assert.deepEqual(
+    M.optionsFor(type, pres).map((o) => o.value),
+    ["Anywhere", "NextPage"],
+  );
 });
 
 test("a number row the panel names values for is a select; numeric options write numbers, the clear option null", () => {
   const count = { kind: "number", integer: true };
-  const pres = { options: [{ value: "", label: "[Style default]" }, { value: "All" }, { value: "2" }] };
+  const pres = {
+    options: [
+      { value: "", label: "[Style default]" },
+      { value: "All" },
+      { value: "2" },
+    ],
+  };
   assert.equal(M.widgetFor(count, pres), "select");
   assert.equal(M.widgetFor(count), "number");
-  assert.deepEqual(M.optionsFor(count, pres, true).map((o) => o.value), ["", "All", "2"]);
-  assert.deepEqual(M.optionsFor(count, pres, false).map((o) => o.value), ["All", "2"]);
+  assert.deepEqual(
+    M.optionsFor(count, pres, true).map((o) => o.value),
+    ["", "All", "2"],
+  );
+  assert.deepEqual(
+    M.optionsFor(count, pres, false).map((o) => o.value),
+    ["All", "2"],
+  );
   assert.equal(M.optionValue(count, "2", true), 2);
   assert.equal(M.optionValue(count, "", true), null);
-  assert.equal(M.optionValue(count, "All", true), "All", "a keyword is written as picked; the row validates it");
+  assert.equal(
+    M.optionValue(count, "All", true),
+    "All",
+    "a keyword is written as picked; the row validates it",
+  );
   assert.equal(M.optionValue({ kind: "enum", members: ["A"] }, "", true), null);
   assert.equal(M.optionValue({ kind: "enum", members: ["A"] }, "", false), "");
-  assert.equal(M.optionValue({ kind: "text" }, "", true), "", "a text row writes the empty string itself");
+  assert.equal(
+    M.optionValue({ kind: "text" }, "", true),
+    "",
+    "a text row writes the empty string itself",
+  );
 });
 
 test("a segmented enum keeps the panel's curated options; a select lists every member", () => {
-  const align = { kind: "enum", members: ["LeftAlign", "CenterAlign", "RightAlign", "ToBindingSide"] };
-  const pres = { style: "segments", options: [{ value: "LeftAlign", label: "L" }, { value: "CenterAlign" }, { value: "Gone" }] };
-  assert.deepEqual(M.optionsFor(align, pres).map((o) => o.value), ["LeftAlign", "CenterAlign"]);
+  const align = {
+    kind: "enum",
+    members: ["LeftAlign", "CenterAlign", "RightAlign", "ToBindingSide"],
+  };
+  const pres = {
+    style: "segments",
+    options: [
+      { value: "LeftAlign", label: "L" },
+      { value: "CenterAlign" },
+      { value: "Gone" },
+    ],
+  };
+  assert.deepEqual(
+    M.optionsFor(align, pres).map((o) => o.value),
+    ["LeftAlign", "CenterAlign"],
+  );
   assert.deepEqual(
     M.optionsFor(align, { options: pres.options }).map((o) => o.value),
     ["LeftAlign", "CenterAlign", "RightAlign", "ToBindingSide"],
@@ -165,13 +314,31 @@ test("a number row's keywords pass the arg check and text parsing", () => {
 // ───────────────────────────────────────────── parse + format
 
 test("parseInput coerces text against the type, never silently", () => {
-  assert.deepEqual(M.parseInput({ kind: "length" }, "1in"), { ok: true, value: 72 });
-  assert.deepEqual(M.parseInput({ kind: "length" }, "12"), { ok: true, value: 12 });
+  assert.deepEqual(M.parseInput({ kind: "length" }, "1in"), {
+    ok: true,
+    value: 72,
+  });
+  assert.deepEqual(M.parseInput({ kind: "length" }, "12"), {
+    ok: true,
+    value: 12,
+  });
   assert.equal(M.parseInput({ kind: "length" }, "wide").ok, false);
-  assert.deepEqual(M.parseInput({ kind: "number", integer: true }, "3"), { ok: true, value: 3 });
-  assert.equal(M.parseInput({ kind: "number", integer: true }, "3.5").ok, false);
-  assert.deepEqual(M.parseInput({ kind: "number", unit: "percent" }, "40%"), { ok: true, value: 40 });
-  assert.deepEqual(M.parseInput({ kind: "bool" }, "yes"), { ok: true, value: true });
+  assert.deepEqual(M.parseInput({ kind: "number", integer: true }, "3"), {
+    ok: true,
+    value: 3,
+  });
+  assert.equal(
+    M.parseInput({ kind: "number", integer: true }, "3.5").ok,
+    false,
+  );
+  assert.deepEqual(M.parseInput({ kind: "number", unit: "percent" }, "40%"), {
+    ok: true,
+    value: 40,
+  });
+  assert.deepEqual(M.parseInput({ kind: "bool" }, "yes"), {
+    ok: true,
+    value: true,
+  });
   assert.deepEqual(M.parseInput({ kind: "bounds" }, "0, 0, 100, 50"), {
     ok: true,
     value: [0, 0, 100, 50],
@@ -181,16 +348,24 @@ test("parseInput coerces text against the type, never silently", () => {
     ok: true,
     value: [1, 0, 0, 1, 10, 20],
   });
-  assert.deepEqual(M.parseInput({ kind: "list", of: { kind: "length" } }, "4, 2mm"), {
-    ok: true,
-    value: [4, 2 * (72 / 25.4)],
-  });
+  assert.deepEqual(
+    M.parseInput({ kind: "list", of: { kind: "length" } }, "4, 2mm"),
+    {
+      ok: true,
+      value: [4, 2 * (72 / 25.4)],
+    },
+  );
   assert.equal(M.parseInput({ kind: "enum", members: ["a"] }, "b").ok, false);
-  assert.deepEqual(M.parseInput({ kind: "text" }, " keep "), { ok: true, value: " keep " });
+  assert.deepEqual(M.parseInput({ kind: "text" }, " keep "), {
+    ok: true,
+    value: " keep ",
+  });
 });
 
 test("parseInput checks the row's range", () => {
-  const r = M.parseInput({ kind: "number", unit: "percent" }, "140", { range: { min: 0, max: 100 } });
+  const r = M.parseInput({ kind: "number", unit: "percent" }, "140", {
+    range: { min: 0, max: 100 },
+  });
   assert.equal(r.ok, false);
   assert.match(r.reason, /100/);
 });
@@ -216,41 +391,78 @@ test("reduceValues: one state per field, never a picked winner", () => {
   const v = (value) => ({ kind: "value", value });
   assert.deepEqual(M.reduceValues([]), { state: "none" });
   assert.deepEqual(M.reduceValues([v(2), v(2)]), { state: "value", value: 2 });
-  assert.deepEqual(M.reduceValues([v([1, 2]), v([1, 2])]), { state: "value", value: [1, 2] });
+  assert.deepEqual(M.reduceValues([v([1, 2]), v([1, 2])]), {
+    state: "value",
+    value: [1, 2],
+  });
   assert.deepEqual(M.reduceValues([v(2), v(3)]), { state: "mixed" });
-  assert.deepEqual(M.reduceValues([v(2), { kind: "mixed" }]), { state: "mixed" });
-  assert.deepEqual(M.reduceValues([{ kind: "absent" }, { kind: "absent" }]), { state: "absent" });
+  assert.deepEqual(M.reduceValues([v(2), { kind: "mixed" }]), {
+    state: "mixed",
+  });
+  assert.deepEqual(M.reduceValues([{ kind: "absent" }, { kind: "absent" }]), {
+    state: "absent",
+  });
   // An object the path does not apply to beside one it does: mixed, not the one value.
-  assert.deepEqual(M.reduceValues([v(2), { kind: "absent" }]), { state: "mixed" });
-  const r = M.reduceValues([{ kind: "refused", code: "unmapped", reason: "no wire form" }]);
+  assert.deepEqual(M.reduceValues([v(2), { kind: "absent" }]), {
+    state: "mixed",
+  });
+  const r = M.reduceValues([
+    { kind: "refused", code: "unmapped", reason: "no wire form" },
+  ]);
   assert.equal(r.state, "refused");
   assert.equal(r.code, "unmapped");
 });
 
 test("setOps writes every selected address in ONE batch", () => {
-  assert.deepEqual(M.setOps(["rectangle:a", "oval:b"], "frameStrokeWeight", 3), [
-    { op: "set", address: "rectangle:a", path: "frameStrokeWeight", value: 3 },
-    { op: "set", address: "oval:b", path: "frameStrokeWeight", value: 3 },
-  ]);
+  assert.deepEqual(
+    M.setOps(["rectangle:a", "oval:b"], "frameStrokeWeight", 3),
+    [
+      {
+        op: "set",
+        address: "rectangle:a",
+        path: "frameStrokeWeight",
+        value: 3,
+      },
+      { op: "set", address: "oval:b", path: "frameStrokeWeight", value: 3 },
+    ],
+  );
 });
 
 test("the binding badge asks paged.data's typed propertyBindings query, never parses labels", async () => {
   const calls = [];
   const objects = (offered, hits) => ({
-    commands: async () => (offered ? [{ id: M.PROPERTY_BINDINGS_COMMAND }] : []),
+    commands: async () =>
+      offered ? [{ id: M.PROPERTY_BINDINGS_COMMAND }] : [],
     invoke: async (id, args) => {
       calls.push([id, args]);
       return hits[args.address] ?? [];
     },
   });
-  assert.equal(M.PROPERTY_BINDINGS_COMMAND, "media.paged.data.propertyBindings");
-  assert.equal(await M.probeBound(objects(false, {}), ["rectangle:u1"], "frameStrokeWeight"), false);
+  assert.equal(
+    M.PROPERTY_BINDINGS_COMMAND,
+    "media.paged.data.propertyBindings",
+  );
+  assert.equal(
+    await M.probeBound(
+      objects(false, {}),
+      ["rectangle:u1"],
+      "frameStrokeWeight",
+    ),
+    false,
+  );
   assert.equal(calls.length, 0, "no data plugin: nothing asked");
   assert.equal(
-    await M.probeBound(objects(true, { "rectangle:u2": [{ binding: "b1" }] }), ["rectangle:u1", "rectangle:u2"], "frameStrokeWeight"),
+    await M.probeBound(
+      objects(true, { "rectangle:u2": [{ binding: "b1" }] }),
+      ["rectangle:u1", "rectangle:u2"],
+      "frameStrokeWeight",
+    ),
     true,
   );
-  assert.deepEqual(calls[0], [M.PROPERTY_BINDINGS_COMMAND, { address: "rectangle:u1", path: "frameStrokeWeight" }]);
+  assert.deepEqual(calls[0], [
+    M.PROPERTY_BINDINGS_COMMAND,
+    { address: "rectangle:u1", path: "frameStrokeWeight" },
+  ]);
   assert.equal(await M.probeBound(objects(true, {}), [], "x"), false);
 });
 
@@ -280,11 +492,17 @@ test("bind target: a Name that resolves to exactly this object is the selector",
     "rectangle:u1",
     { write: true },
   );
-  assert.deepEqual(r, { selector: 'frame[name="Hero"]', via: "name", wrote: false });
+  assert.deepEqual(r, {
+    selector: 'frame[name="Hero"]',
+    via: "name",
+    wrote: false,
+  });
 });
 
 test("bind target: an ambiguous or unmodelled Name falls back to an x-paged:oid label", async () => {
-  const objects = fakeObjects({ 'frame[name="Hero"]': ["rectangle:u1", "rectangle:u2"] });
+  const objects = fakeObjects({
+    'frame[name="Hero"]': ["rectangle:u1", "rectangle:u2"],
+  });
   const written = [];
   const r = await M.resolveBindTarget(
     {
@@ -303,7 +521,9 @@ test("bind target: an ambiguous or unmodelled Name falls back to an x-paged:oid 
     wrote: true,
   });
   // The engine gates label values to the `{v, data}` envelope.
-  assert.deepEqual(written, [["rectangle:u1", '{"v":1,"data":{"oid":"0f3c"}}']]);
+  assert.deepEqual(written, [
+    ["rectangle:u1", '{"v":1,"data":{"oid":"0f3c"}}'],
+  ]);
 });
 
 test("bind target: an existing oid is reused, and nothing is written without write:true", async () => {
@@ -348,16 +568,27 @@ test("bind target: a plugin address is its own durable key (ADR 559 §6)", async
     "plugin:media.paged.image/layer/L7",
     { write: true },
   );
-  assert.deepEqual(r, { selector: "plugin:media.paged.image/layer/L7", via: "plugin", wrote: false });
+  assert.deepEqual(r, {
+    selector: "plugin:media.paged.image/layer/L7",
+    via: "plugin",
+    wrote: false,
+  });
 });
 
 test("the bindProperty args are declared and checked", () => {
   assert.equal(M.BIND_PROPERTY_COMMAND, "media.paged.data.bindProperty");
-  const good = { selector: 'frame[name="a"]', path: "frameStrokeWeight", schema: "{}" };
+  const good = {
+    selector: 'frame[name="a"]',
+    path: "frameStrokeWeight",
+    schema: "{}",
+  };
   assert.equal(M.checkArgs(M.BIND_PROPERTY_ARGS, good), null);
   assert.match(M.checkArgs(M.BIND_PROPERTY_ARGS, { ...good, path: 3 }), /path/);
   assert.match(M.checkArgs(M.BIND_PROPERTY_ARGS, { selector: "x" }), /missing/);
-  assert.match(M.checkArgs(M.BIND_PROPERTY_ARGS, { ...good, extra: 1 }), /extra/);
+  assert.match(
+    M.checkArgs(M.BIND_PROPERTY_ARGS, { ...good, extra: 1 }),
+    /extra/,
+  );
 });
 
 // ───────────────────────────────────────────── editor.* automation
@@ -372,17 +603,30 @@ function fakeRegistry() {
     },
     async get(address, path) {
       log.push(["get", address, path]);
-      if (path === "nope") return { kind: "refused", code: "unknownPath", reason: "no nope" };
+      if (path === "nope")
+        return { kind: "refused", code: "unknownPath", reason: "no nope" };
       return { kind: "value", value: 4 };
     },
     async set(address, path, value) {
       log.push(["set", address, path, value]);
-      if (value === "bad") return { applied: false, undoSteps: 0, code: "invalidValue", reason: "bad value" };
+      if (value === "bad")
+        return {
+          applied: false,
+          undoSteps: 0,
+          code: "invalidValue",
+          reason: "bad value",
+        };
       return { applied: true, undoSteps: 1 };
     },
     async batch(ops) {
       log.push(["batch", ops.length]);
-      return { applied: false, undoSteps: 0, code: "readOnly", reason: "ro", index: 1 };
+      return {
+        applied: false,
+        undoSteps: 0,
+        code: "readOnly",
+        reason: "ro",
+        index: 1,
+      };
     },
     async schema(a) {
       log.push(["schema", a]);
@@ -395,15 +639,27 @@ test("editor.* object calls go straight to host.objects", async () => {
   const objects = fakeRegistry();
   const api = A.buildObjectAutomation(() => objects);
   assert.deepEqual(await api.query("frame"), ["rectangle:u1"]);
-  assert.deepEqual(await api.get("rectangle:u1", "frameStrokeWeight"), { kind: "value", value: 4 });
-  assert.deepEqual(await api.set("rectangle:u1", "frameStrokeWeight", 2), { applied: true, undoSteps: 1 });
+  assert.deepEqual(await api.get("rectangle:u1", "frameStrokeWeight"), {
+    kind: "value",
+    value: 4,
+  });
+  assert.deepEqual(await api.set("rectangle:u1", "frameStrokeWeight", 2), {
+    applied: true,
+    undoSteps: 1,
+  });
   assert.equal((await api.schema("rectangle:u1"))[0].path, "frameStrokeWeight");
 });
 
 test("editor.* surfaces refusals as errors carrying the code; batch returns its result", async () => {
   const api = A.buildObjectAutomation(() => fakeRegistry());
-  await assert.rejects(api.get("rectangle:u1", "nope"), (e) => e.code === "unknownPath" && /no nope/.test(e.message));
-  await assert.rejects(api.set("rectangle:u1", "frameStrokeWeight", "bad"), (e) => e.code === "invalidValue");
+  await assert.rejects(
+    api.get("rectangle:u1", "nope"),
+    (e) => e.code === "unknownPath" && /no nope/.test(e.message),
+  );
+  await assert.rejects(
+    api.set("rectangle:u1", "frameStrokeWeight", "bad"),
+    (e) => e.code === "invalidValue",
+  );
   const r = await api.batch([{ op: "set", address: "a", path: "p", value: 1 }]);
   assert.equal(r.applied, false);
   assert.equal(r.index, 1);
@@ -420,7 +676,10 @@ const { createCommandRegistry } = await import(shell("registries/command.ts"));
 
 test("the command registry declares bindProperty's args before any plugin registers it", () => {
   const reg = createCommandRegistry(() => null);
-  assert.deepEqual(reg.argsOf("media.paged.data.bindProperty"), M.BIND_PROPERTY_ARGS);
+  assert.deepEqual(
+    reg.argsOf("media.paged.data.bindProperty"),
+    M.BIND_PROPERTY_ARGS,
+  );
   assert.equal(reg.get("media.paged.data.bindProperty"), undefined);
   assert.equal(reg.argsOf("paged.view.zoomIn"), undefined);
 });
@@ -428,8 +687,15 @@ test("the command registry declares bindProperty's args before any plugin regist
 test("invoke refuses a payload that does not match the declared args, before the handler runs", async () => {
   const reg = createCommandRegistry(() => null);
   const seen = [];
-  reg.register({ id: "media.paged.data.bindProperty", title: "Bind", handler: (_p, payload) => seen.push(payload) });
-  await assert.rejects(reg.invoke("media.paged.data.bindProperty", { selector: "x" }), /invalidValue/);
+  reg.register({
+    id: "media.paged.data.bindProperty",
+    title: "Bind",
+    handler: (_p, payload) => seen.push(payload),
+  });
+  await assert.rejects(
+    reg.invoke("media.paged.data.bindProperty", { selector: "x" }),
+    /invalidValue/,
+  );
   assert.equal(seen.length, 0);
   const ok = { selector: "frame", path: "frameStrokeWeight", schema: "{}" };
   await reg.invoke("media.paged.data.bindProperty", ok);
@@ -438,36 +704,73 @@ test("invoke refuses a payload that does not match the declared args, before the
 
 test("a contribution's own args are checked too; untyped commands still take anything", async () => {
   const reg = createCommandRegistry(() => null);
-  reg.register({ id: "acme.typed", title: "T", args: { kind: "struct", fields: { n: { kind: "number" } } }, handler: (_p, a) => a });
+  reg.register({
+    id: "acme.typed",
+    title: "T",
+    args: { kind: "struct", fields: { n: { kind: "number" } } },
+    handler: (_p, a) => a,
+  });
   reg.register({ id: "acme.untyped", title: "U", handler: (_p, a) => a });
-  await assert.rejects(reg.invoke("acme.typed", { n: "1" }), /invalidValue: acme.typed/);
+  await assert.rejects(
+    reg.invoke("acme.typed", { n: "1" }),
+    /invalidValue: acme.typed/,
+  );
   assert.deepEqual(await reg.invoke("acme.typed", { n: 1 }), { n: 1 });
   assert.equal(await reg.invoke("acme.untyped", "anything"), "anything");
 });
 
 // ───────────────────────────────────────────── panel migration
 
-const { asPropertyFields, PAGED_INPUT_PROPERTY } = await import(shell("catalog/property-field-migrate.ts"));
+const { asPropertyFields, PAGED_INPUT_PROPERTY } = await import(
+  shell("catalog/property-field-migrate.ts")
+);
 
 test("asPropertyFields rewrites selection-bound leaves into schema-driven fields", () => {
-  const sel = (path, scope) => ({ value: { kind: "selectionProperty", path, ...(scope ? { scope } : {}) } });
+  const sel = (path, scope) => ({
+    value: { kind: "selectionProperty", path, ...(scope ? { scope } : {}) },
+  });
   const panel = {
     catalogId: "paged.layout.section",
     props: { title: "Stroke" },
     bindings: {},
     children: [
-      { catalogId: "paged.input.length", props: { label: "Weight", icon: "ui-size" }, bindings: sel("frameStrokeWeight", "element") },
-      { catalogId: "paged.input.toggle-group", props: { label: "Cap", options: [{ value: "ButtEndCap", label: "-" }] }, bindings: sel("frameStrokeEndCap") },
-      { catalogId: "paged.input.select", props: { label: "Type", options: [] }, bindings: sel("frameStrokeType") },
-      { catalogId: "paged.input.numeric-scrub", props: { seam: true, placeholder: "dash" }, bindings: {} },
-      { catalogId: "paged.input.select", props: { label: "Start", seam: true }, bindings: sel("frameStrokeStartArrowhead") },
+      {
+        catalogId: "paged.input.length",
+        props: { label: "Weight", icon: "ui-size" },
+        bindings: sel("frameStrokeWeight", "element"),
+      },
+      {
+        catalogId: "paged.input.toggle-group",
+        props: { label: "Cap", options: [{ value: "ButtEndCap", label: "-" }] },
+        bindings: sel("frameStrokeEndCap"),
+      },
+      {
+        catalogId: "paged.input.select",
+        props: { label: "Type", options: [] },
+        bindings: sel("frameStrokeType"),
+      },
+      {
+        catalogId: "paged.input.numeric-scrub",
+        props: { seam: true, placeholder: "dash" },
+        bindings: {},
+      },
+      {
+        catalogId: "paged.input.select",
+        props: { label: "Start", seam: true },
+        bindings: sel("frameStrokeStartArrowhead"),
+      },
     ],
   };
   const out = asPropertyFields(panel);
   assert.equal(out.catalogId, "paged.layout.section");
   const [w, cap, type, dash, start] = out.children;
   assert.equal(w.catalogId, PAGED_INPUT_PROPERTY);
-  assert.deepEqual(w.props, { label: "Weight", icon: "ui-size", path: "frameStrokeWeight", scope: "element" });
+  assert.deepEqual(w.props, {
+    label: "Weight",
+    icon: "ui-size",
+    path: "frameStrokeWeight",
+    scope: "element",
+  });
   assert.deepEqual(w.bindings, {});
   assert.equal(cap.props.style, "segments");
   assert.equal(cap.props.options.length, 1);
@@ -483,10 +786,24 @@ test("asPropertyFields rewrites selection-bound leaves into schema-driven fields
 // bundle host built with it reports `objects.shared@1`, a kind the bundle
 // contributes is visible through the APP's registry (and so to every
 // panel field), and its command is invokable from there.
-const APP = pathToFileURL(resolvePath(here, "..", "apps", "canvas", "src", "object-model.ts")).href;
+const APP = pathToFileURL(
+  resolvePath(here, "..", "apps", "canvas", "src", "object-model.ts"),
+).href;
 const { objectRegistry, editorObjectModel } = await import(APP);
 const { createBundleHost } = await import(
-  pathToFileURL(resolvePath(here, "..", "apps", "canvas", "node_modules", "@paged-media", "plugin-sdk", "dist", "index.js")).href
+  pathToFileURL(
+    resolvePath(
+      here,
+      "..",
+      "apps",
+      "canvas",
+      "node_modules",
+      "@paged-media",
+      "plugin-sdk",
+      "dist",
+      "index.js",
+    ),
+  ).href
 );
 
 test("the app registry is shared: a bundle's kinds and commands appear in it", async () => {
@@ -498,13 +815,27 @@ test("the app registry is shared: a bundle's kinds and commands appear in it", a
     capabilities: { document: { read: "broad", write: "broad" } },
     contributes: {
       objectModel: {
-        kinds: [{ kind: "thing", title: "Thing", schema: [{ path: "size", type: { kind: "length" } }] }],
-        commands: [{ id: "acme.om.ping", title: "Ping", args: { kind: "struct", fields: { n: { kind: "number" } } } }],
+        kinds: [
+          {
+            kind: "thing",
+            title: "Thing",
+            schema: [{ path: "size", type: { kind: "length" } }],
+          },
+        ],
+        commands: [
+          {
+            id: "acme.om.ping",
+            title: "Ping",
+            args: { kind: "struct", fields: { n: { kind: "number" } } },
+          },
+        ],
       },
     },
   };
   // A bare editor: the host probes optional members at construction.
-  const handle = createBundleHost(() => ({}), manifest, { objects: objectRegistry });
+  const handle = createBundleHost(() => ({}), manifest, {
+    objects: objectRegistry,
+  });
   assert.equal(handle.host.supports("objects.shared@1"), true);
   const reg = handle.host.contribute.objectModel({
     kinds: [
@@ -517,29 +848,79 @@ test("the app registry is shared: a bundle's kinds and commands appear in it", a
         get: () => ({ kind: "value", value: 7 }),
       },
     ],
-    commands: [{ id: "acme.om.ping", title: "Ping", args: { kind: "struct", fields: { n: { kind: "number" } } }, handler: (_c, a) => a.n + 1 }],
+    commands: [
+      {
+        id: "acme.om.ping",
+        title: "Ping",
+        args: { kind: "struct", fields: { n: { kind: "number" } } },
+        handler: (_c, a) => a.n + 1,
+      },
+    ],
   });
   const kinds = await editorObjectModel.objects.kinds();
-  assert.ok(kinds.some((k) => k.kind === "plugin:acme.om/thing"), JSON.stringify(kinds.map((k) => k.kind)));
-  assert.deepEqual(await editorObjectModel.objects.get("plugin:acme.om/thing/a", "size"), { kind: "value", value: 7 });
-  assert.equal(await editorObjectModel.objects.invoke("acme.om.ping", { n: 1 }), 2);
-  assert.equal((await editorObjectModel.objects.schema("plugin:acme.om/thing/a"))[0].path, "size");
+  assert.ok(
+    kinds.some((k) => k.kind === "plugin:acme.om/thing"),
+    JSON.stringify(kinds.map((k) => k.kind)),
+  );
+  assert.deepEqual(
+    await editorObjectModel.objects.get("plugin:acme.om/thing/a", "size"),
+    { kind: "value", value: 7 },
+  );
+  assert.equal(
+    await editorObjectModel.objects.invoke("acme.om.ping", { n: 1 }),
+    2,
+  );
+  assert.equal(
+    (await editorObjectModel.objects.schema("plugin:acme.om/thing/a"))[0].path,
+    "size",
+  );
   reg.dispose();
   handle.dispose();
 });
 
 test("the app model maps selections to canonical addresses and flags inferred core rows", () => {
-  assert.equal(editorObjectModel.addressOf({ kind: "rectangle", id: "u12" }), "rectangle:u12");
   assert.equal(
-    editorObjectModel.addressOf({ kind: "storyRange", id: { story_id: "u9", start: 0, end: 4 } }),
+    editorObjectModel.addressOf({ kind: "rectangle", id: "u12" }),
+    "rectangle:u12",
+  );
+  assert.equal(
+    editorObjectModel.addressOf({
+      kind: "storyRange",
+      id: { story_id: "u9", start: 0, end: 4 },
+    }),
     "storyRange:u9@0..4",
   );
   // Protocol 71: core publishes the schema rows, so the layer paths are
   // typed by the engine now; only the table counts stay inferred.
-  assert.equal(editorObjectModel.isInferred({ path: "layerVisible", type: { kind: "bool" } }), false);
-  assert.equal(editorObjectModel.isInferred({ path: "tableRowCount", type: { kind: "number" } }), true);
-  assert.equal(editorObjectModel.isInferred({ path: "frameStrokeWeight", type: { kind: "length" } }), false);
-  assert.equal(editorObjectModel.isInferred({ addressKind: "plugin:x/y", path: "tableRowCount", type: { kind: "number" } }), false);
+  assert.equal(
+    editorObjectModel.isInferred({
+      path: "layerVisible",
+      type: { kind: "bool" },
+    }),
+    false,
+  );
+  assert.equal(
+    editorObjectModel.isInferred({
+      path: "tableRowCount",
+      type: { kind: "number" },
+    }),
+    true,
+  );
+  assert.equal(
+    editorObjectModel.isInferred({
+      path: "frameStrokeWeight",
+      type: { kind: "length" },
+    }),
+    false,
+  );
+  assert.equal(
+    editorObjectModel.isInferred({
+      addressKind: "plugin:x/y",
+      path: "tableRowCount",
+      type: { kind: "number" },
+    }),
+    false,
+  );
   assert.equal(editorObjectModel.wireOf("frameStrokeWeight"), "length");
   assert.equal(editorObjectModel.wireOf("framePath"), null);
 });
@@ -550,7 +931,13 @@ test("a collection select migrates to a schema field that keeps its collection",
   const out = asPropertyFields({
     catalogId: "paged.input.collection-select",
     props: { label: "Fill", collectionName: "swatches", valueType: "colorRef" },
-    bindings: { value: { kind: "selectionProperty", scope: "element", path: "frameFillColor" } },
+    bindings: {
+      value: {
+        kind: "selectionProperty",
+        scope: "element",
+        path: "frameFillColor",
+      },
+    },
   });
   assert.equal(out.catalogId, PAGED_INPUT_PROPERTY);
   assert.equal(out.props.style, "collection");
@@ -560,18 +947,34 @@ test("a collection select migrates to a schema field that keeps its collection",
   // collection is a collection select; anything else keeps its widget.
   const pres = { style: "collection", collection: "swatches" };
   assert.equal(M.widgetFor({ kind: "color" }, pres), "collection");
-  assert.equal(M.widgetFor({ kind: "ref", to: "style:character" }, pres), "collection");
+  assert.equal(
+    M.widgetFor({ kind: "ref", to: "style:character" }, pres),
+    "collection",
+  );
   assert.equal(M.widgetFor({ kind: "length" }, pres), "length");
-  assert.equal(M.widgetFor({ kind: "color" }, { style: "collection" }), "color", "no collection named");
+  assert.equal(
+    M.widgetFor({ kind: "color" }, { style: "collection" }),
+    "color",
+    "no collection named",
+  );
 });
 
 test("the app model maps table cells and tables to addresses and back (story remembered)", () => {
-  const cell = { kind: "tableCell", id: { story_id: "u9", table_id: "t1", row: 2, col: 3 } };
+  const cell = {
+    kind: "tableCell",
+    id: { story_id: "u9", table_id: "t1", row: 2, col: 3 },
+  };
   const address = editorObjectModel.addressOf(cell);
   assert.equal(address, "cell:t1/2,3");
   assert.deepEqual(editorObjectModel.elementIdOf(address), cell);
-  assert.deepEqual(editorObjectModel.elementIdOf("table:t1"), { kind: "table", id: { story_id: "u9", table_id: "t1" } });
-  assert.deepEqual(editorObjectModel.elementIdOf("rectangle:u12"), { kind: "rectangle", id: "u12" });
+  assert.deepEqual(editorObjectModel.elementIdOf("table:t1"), {
+    kind: "table",
+    id: { story_id: "u9", table_id: "t1" },
+  });
+  assert.deepEqual(editorObjectModel.elementIdOf("rectangle:u12"), {
+    kind: "rectangle",
+    id: "u12",
+  });
   assert.equal(editorObjectModel.elementIdOf("cell:unknown/0,0"), null);
   // The inset rows write lengths (the SDK catalog types them so since 0.2.43).
   assert.equal(editorObjectModel.wireOf("cellInsetTop"), "length");
@@ -582,7 +985,11 @@ test("cell / table schema rows route through the app's table seam", async () => 
   const inset = rows.find((r) => r.path === "cellInsetTop");
   assert.deepEqual(inset?.type, { kind: "length" });
   assert.ok(rows.some((r) => r.path === "cellFillColor"));
-  assert.ok((await editorObjectModel.objects.schema("table:t1")).some((r) => r.path === "appliedTableStyle"));
+  assert.ok(
+    (await editorObjectModel.objects.schema("table:t1")).some(
+      (r) => r.path === "appliedTableStyle",
+    ),
+  );
 });
 
 test("layer addresses are core's grammar: the self id runs to the end, unescaped (ADR 131)", async () => {
@@ -594,7 +1001,9 @@ test("layer addresses are core's grammar: the self id runs to the end, unescaped
 });
 
 const ALIGN = await import(
-  pathToFileURL(resolvePath(here, "..", "apps", "canvas", "src", "align-plan.ts")).href
+  pathToFileURL(
+    resolvePath(here, "..", "apps", "canvas", "src", "align-plan.ts"),
+  ).href
 );
 
 test("align plans frameBounds writes: AABB edges and centres, already-aligned skipped", () => {
@@ -603,13 +1012,30 @@ test("align plans frameBounds writes: AABB edges and centres, already-aligned sk
     { address: "rectangle:b", bounds: [20, 30, 40, 50] },
   ];
   assert.deepEqual(ALIGN.planAlign("left", e), [
-    { op: "set", address: "rectangle:b", path: "frameBounds", value: [20, 0, 40, 20] },
+    {
+      op: "set",
+      address: "rectangle:b",
+      path: "frameBounds",
+      value: [20, 0, 40, 20],
+    },
   ]);
   assert.deepEqual(ALIGN.planAlign("bottom", e), [
-    { op: "set", address: "rectangle:a", path: "frameBounds", value: [30, 0, 40, 10] },
+    {
+      op: "set",
+      address: "rectangle:a",
+      path: "frameBounds",
+      value: [30, 0, 40, 10],
+    },
   ]);
-  assert.deepEqual(ALIGN.planAlign("centerH", e).map((o) => o.value[1]), [20, 15]);
-  assert.deepEqual(ALIGN.planAlign("left", e.slice(0, 1)), [], "align needs two objects");
+  assert.deepEqual(
+    ALIGN.planAlign("centerH", e).map((o) => o.value[1]),
+    [20, 15],
+  );
+  assert.deepEqual(
+    ALIGN.planAlign("left", e.slice(0, 1)),
+    [],
+    "align needs two objects",
+  );
 });
 
 test("distribute spaces centres evenly and needs three objects", () => {
@@ -625,7 +1051,10 @@ test("distribute spaces centres evenly and needs three objects", () => {
 });
 
 test("runAlign reads through host.objects and commits ONE batch; declared args check", async () => {
-  const bounds = { "rectangle:a": [0, 0, 10, 10], "rectangle:b": [20, 30, 40, 50] };
+  const bounds = {
+    "rectangle:a": [0, 0, 10, 10],
+    "rectangle:b": [20, 30, 40, 50],
+  };
   const batches = [];
   const objects = {
     get: async (a) => ({ kind: "value", value: bounds[a] }),
@@ -634,15 +1063,27 @@ test("runAlign reads through host.objects and commits ONE batch; declared args c
       return { applied: true, undoSteps: 1 };
     },
   };
-  const r = await ALIGN.runAlign(objects, { kind: "top", targets: ["rectangle:a", "rectangle:b"] });
+  const r = await ALIGN.runAlign(objects, {
+    kind: "top",
+    targets: ["rectangle:a", "rectangle:b"],
+  });
   assert.deepEqual(r, { applied: true, undoSteps: 1 });
   assert.equal(batches.length, 1);
   assert.deepEqual(batches[0][0].value, [0, 30, 20, 50]);
-  const nothing = await ALIGN.runAlign(objects, { kind: "top", targets: ["rectangle:a"] });
+  const nothing = await ALIGN.runAlign(objects, {
+    kind: "top",
+    targets: ["rectangle:a"],
+  });
   assert.equal(nothing.undoSteps, 0);
   assert.equal(batches.length, 1, "nothing to move = no write");
-  assert.equal(M.checkArgs(ALIGN.ALIGN_ARGS, { kind: "left", targets: ["rectangle:a"] }), null);
-  assert.match(M.checkArgs(ALIGN.ALIGN_ARGS, { kind: "sideways", targets: [] }), /must be one of/);
+  assert.equal(
+    M.checkArgs(ALIGN.ALIGN_ARGS, { kind: "left", targets: ["rectangle:a"] }),
+    null,
+  );
+  assert.match(
+    M.checkArgs(ALIGN.ALIGN_ARGS, { kind: "sideways", targets: [] }),
+    /must be one of/,
+  );
 });
 
 // ADR 323 §4 — plugin property rows: "Bind to data…" on a plugin object
@@ -656,23 +1097,50 @@ test("scopedBindTarget: a declared selector, narrowed with :nth; else the host's
   };
   const objects = { query: async (s) => table[s] ?? [] };
   // The declared selector selects exactly the object.
-  assert.equal(await M.scopedBindTarget(objects, `${L}/f1/2`, { selector: `${L}[name="Badge"]` }, null), `${L}[name="Badge"]`);
+  assert.equal(
+    await M.scopedBindTarget(
+      objects,
+      `${L}/f1/2`,
+      { selector: `${L}[name="Badge"]` },
+      null,
+    ),
+    `${L}[name="Badge"]`,
+  );
   // It selects several: narrowed with :nth.
-  assert.equal(await M.scopedBindTarget(objects, `${L}/f1/2`, { selector: L }, null), `${L}:nth(2)`);
+  assert.equal(
+    await M.scopedBindTarget(objects, `${L}/f1/2`, { selector: L }, null),
+    `${L}:nth(2)`,
+  );
   // Through the selected host (the core resolver supplies its durable selector).
   let asked = null;
-  const host = async (h) => ((asked = h.address), { selector: 'frame[name="Hero"]', wrote: false });
+  const host = async (h) => (
+    (asked = h.address),
+    { selector: 'frame[name="Hero"]', wrote: false }
+  );
   assert.equal(
-    await M.scopedBindTarget(objects, `${L}/f1/1`, { host: { address: "rectangle:f1", element: null }, kind: L }, host),
+    await M.scopedBindTarget(
+      objects,
+      `${L}/f1/1`,
+      { host: { address: "rectangle:f1", element: null }, kind: L },
+      host,
+    ),
     `frame[name="Hero"] > ${L}:nth(1)`,
   );
   assert.equal(asked, "rectangle:f1");
   // A dry run that cannot resolve yet keeps the shape it will store.
   const none = { query: async () => [] };
   assert.equal(
-    await M.scopedBindTarget(none, `${L}/f1/1`, { host: { address: "rectangle:f1", element: null }, kind: L }, host),
+    await M.scopedBindTarget(
+      none,
+      `${L}/f1/1`,
+      { host: { address: "rectangle:f1", element: null }, kind: L },
+      host,
+    ),
     `frame[name="Hero"] > ${L}`,
   );
   // Nothing to go on: the caller falls back.
-  assert.equal(await M.scopedBindTarget(none, `${L}/f1/1`, { selector: L }, host), null);
+  assert.equal(
+    await M.scopedBindTarget(none, `${L}/f1/1`, { selector: L }, host),
+    null,
+  );
 });

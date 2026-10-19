@@ -30,15 +30,25 @@ import manifestJson from "@paged-media/image-manifest/manifest.json";
 import { EMPTY_LAYER_STACK } from "../src/engine";
 import { LayersSection } from "../src/panels/image-panel";
 import { createImageSession } from "../src/session";
-import { makeFakeEditor, mapBacking, psdBytes, shellStub, silentConsole } from "./helpers";
+import {
+  makeFakeEditor,
+  mapBacking,
+  psdBytes,
+  shellStub,
+  silentConsole,
+} from "./helpers";
 
 async function ingest() {
   const fake = makeFakeEditor();
-  const handle = createBundleHost(() => fake.editor, manifestJson as PluginManifest, {
-    console: silentConsole,
-    storage: mapBacking(),
-    shell: shellStub(),
-  });
+  const handle = createBundleHost(
+    () => fake.editor,
+    manifestJson as PluginManifest,
+    {
+      console: silentConsole,
+      storage: mapBacking(),
+      shell: shellStub(),
+    },
+  );
   const session = createImageSession(handle.host);
   expect(await session.importBytes("t.psd", psdBytes())).toBe(true);
   return { handle, session };
@@ -79,7 +89,9 @@ describe("layer masks as an edit target", () => {
     const { handle, session } = await ingest();
     await session.addLayer("Paint");
     expect(await session.addLayerMask(1, false)).toBe(true);
-    expect(session.state().history?.undoLabel).toBe("Add layer mask (hide all)");
+    expect(session.state().history?.undoLabel).toBe(
+      "Add layer mask (hide all)",
+    );
     expect(session.state().status).toMatch(/hide-all/);
     session.dispose();
     handle.dispose();
@@ -99,7 +111,9 @@ describe("layer masks as an edit target", () => {
     expect(session.setActiveLayer(0)).toBe(true);
     expect(session.state().layers.editTarget).toBe("pixels");
     // Choosing a target is not an undo step.
-    expect(session.state().history?.undoLabel).toBe("Add layer mask (reveal all)");
+    expect(session.state().history?.undoLabel).toBe(
+      "Add layer mask (reveal all)",
+    );
     session.dispose();
     handle.dispose();
   });
@@ -170,7 +184,8 @@ describe("the panel's Pixels/Mask toggle", () => {
   /** Every element's props in a React tree, without a DOM (pure
    *  components only; hooks are not run). */
   function propsOf(node: unknown, out: Record<string, unknown>[] = []) {
-    if (node === null || node === undefined || typeof node !== "object") return out;
+    if (node === null || node === undefined || typeof node !== "object")
+      return out;
     if (Array.isArray(node)) {
       for (const n of node) propsOf(n, out);
       return out;
@@ -201,7 +216,9 @@ describe("the panel's Pixels/Mask toggle", () => {
     );
     const toggle = all.find((p) => p["data-image-layer-edit-target"] === 1);
     expect(toggle?.["data-target"]).toBe("mask");
-    expect(all.some((p) => p["data-image-layer-edit-target"] === 0)).toBe(false);
+    expect(all.some((p) => p["data-image-layer-edit-target"] === 0)).toBe(
+      false,
+    );
     const add = all.find((p) => p["data-image-layer-mask-new"] === 0);
     expect(add).toBeDefined();
     expect(all.some((p) => p["data-image-layer-mask-new"] === 1)).toBe(false);

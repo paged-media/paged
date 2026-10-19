@@ -278,7 +278,12 @@ function StoryInspector({
       </div>
 
       {/* REAL — the four honest StorySummary fields. */}
-      <Field label="Story id" value={story.selfId} mono testId="story-self-id" />
+      <Field
+        label="Story id"
+        value={story.selfId}
+        mono
+        testId="story-self-id"
+      />
       <Field
         label="Characters"
         value={String(story.characterCount)}
@@ -487,9 +492,7 @@ function StoryReflow({ storyId }: { storyId: string }) {
           testId="story-reflow-grow"
           checked={rule?.grow ?? false}
           mixed={rule === null}
-          onToggle={(grow) =>
-            write({ grow, maxPages: rule?.maxPages ?? null })
-          }
+          onToggle={(grow) => write({ grow, maxPages: rule?.maxPages ?? null })}
         />
       </div>
       <div
@@ -516,7 +519,11 @@ function StoryReflow({ storyId }: { storyId: string }) {
       <div
         className="pg-ui-xs"
         data-story-reflow-note
-        style={{ marginTop: 4, fontStyle: "italic", color: "var(--pg-muted-fg)" }}
+        style={{
+          marginTop: 4,
+          fontStyle: "italic",
+          color: "var(--pg-muted-fg)",
+        }}
       >
         Shows the value last set in this session; the editor cannot read it
         back, so it is unknown after undo or redo.

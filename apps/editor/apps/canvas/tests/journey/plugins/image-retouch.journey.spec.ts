@@ -114,7 +114,9 @@ test.describe("journey · paged.image retouching", () => {
     // What it does and its real limit are stated where a retoucher will
     // read them: the one-line note, then the collapsed About behind it.
     const note = page.locator("[data-image-caf-note]");
-    await expect(note).toContainText("texture copied from elsewhere in the image");
+    await expect(note).toContainText(
+      "texture copied from elsewhere in the image",
+    );
     await note.locator("summary", { hasText: "About" }).click();
     await expect(note.getByText("half resolution")).toBeVisible();
     await expect(note).toContainText("limited to a window");

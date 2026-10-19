@@ -188,7 +188,10 @@ describe("ovalToPath — the curve of an oval frame, from its box [plugin-draw.s
     const t = ovalToPath([0, 0, 100, 100]);
     const moved = mapTable(t, [1, 0, 0, 1, 50, 20]);
     expect(moved.anchors[0].anchor).toEqual([150, 70]);
-    expect(moved.anchors[0].left).toEqual([t.anchors[0].left[0] + 50, t.anchors[0].left[1] + 20]);
+    expect(moved.anchors[0].left).toEqual([
+      t.anchors[0].left[0] + 50,
+      t.anchors[0].left[1] + 20,
+    ]);
     const turned = mapTable(t, [0, 1, -1, 0, 0, 0]); // 90°
     expect(turned.anchors[0].anchor[0]).toBeCloseTo(-50, 9);
     expect(turned.anchors[0].anchor[1]).toBeCloseTo(100, 9);

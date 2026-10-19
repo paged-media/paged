@@ -61,7 +61,13 @@ export function cellCharacterStyleId(props: readonly StyleProp[]): string {
 function styleName(style: LoweredStyle): string {
   const parts = [
     style.fontName ?? null,
-    style.bold && style.italic ? "Bold Italic" : style.bold ? "Bold" : style.italic ? "Italic" : null,
+    style.bold && style.italic
+      ? "Bold Italic"
+      : style.bold
+        ? "Bold"
+        : style.italic
+          ? "Italic"
+          : null,
     style.fontSizePt != null ? `${style.fontSizePt} pt` : null,
     style.textRgb ?? null,
   ].filter((p): p is string => p !== null);
@@ -73,12 +79,19 @@ function styleName(style: LoweredStyle): string {
 export function cellCharacterStyles(
   content: LoweredContent,
 ): Map<number, { id: string; name: string; props: StyleProp[] }> {
-  const out = new Map<number, { id: string; name: string; props: StyleProp[] }>();
+  const out = new Map<
+    number,
+    { id: string; name: string; props: StyleProp[] }
+  >();
   for (const style of content.styles ?? []) {
     if (style.key === 0) continue;
     const props = styleProps(style);
     if (props.length === 0) continue;
-    out.set(style.key, { id: cellCharacterStyleId(props), name: styleName(style), props });
+    out.set(style.key, {
+      id: cellCharacterStyleId(props),
+      name: styleName(style),
+      props,
+    });
   }
   return out;
 }
@@ -101,13 +114,22 @@ export function cellCharacterStyleMints(
   const ops: Mutation[] = [];
   const minted = new Set<string>();
   for (const [key, st] of cellCharacterStyles(content)) {
-    if (!used.has(key) || knownStyleIds.has(st.id) || minted.has(st.id)) continue;
+    if (!used.has(key) || knownStyleIds.has(st.id) || minted.has(st.id))
+      continue;
     minted.add(st.id);
-    ops.push({ op: "createCharacterStyle", args: { selfId: st.id, name: st.name } });
+    ops.push({
+      op: "createCharacterStyle",
+      args: { selfId: st.id, name: st.name },
+    });
     for (const p of st.props) {
       ops.push({
         op: "setStyleProperty",
-        args: { collection: "character", styleId: st.id, path: p.path, value: p.value },
+        args: {
+          collection: "character",
+          styleId: st.id,
+          path: p.path,
+          value: p.value,
+        },
       });
     }
   }
@@ -116,7 +138,9 @@ export function cellCharacterStyleMints(
 
 /** The character style a cell's text should carry (`NO_CHARACTER_STYLE`
  *  for an unformatted cell). Keyed `row:col` at TABLE positions. */
-export function cellCharacterStyleMap(content: LoweredContent): Map<string, { style: string; text: string }> {
+export function cellCharacterStyleMap(
+  content: LoweredContent,
+): Map<string, { style: string; text: string }> {
   const styles = cellCharacterStyles(content);
   const colPos = new Map<number, number>();
   columnOrder(content).forEach((m, i) => colPos.set(m, i));
@@ -126,7 +150,10 @@ export function cellCharacterStyleMap(content: LoweredContent): Map<string, { st
       const c = colPos.get(cell.col);
       if (c === undefined || cell.text.length === 0) continue;
       const st = cell.styleKey ? styles.get(cell.styleKey) : undefined;
-      out.set(`${r}:${c}`, { style: st?.id ?? NO_CHARACTER_STYLE, text: cell.text });
+      out.set(`${r}:${c}`, {
+        style: st?.id ?? NO_CHARACTER_STYLE,
+        text: cell.text,
+      });
     }
   });
   return out;
@@ -166,7 +193,10 @@ export function cellCharacterStyleApplies(
  *  text was re-poured into a cell where either the old or the new text is
  *  formatted (re-poured text may inherit the old run's format). A table
  *  with no cell formatting on either side needs none. */
-export function cellsNeedingRestyle(prev: LoweredContent, next: LoweredContent): Set<string> {
+export function cellsNeedingRestyle(
+  prev: LoweredContent,
+  next: LoweredContent,
+): Set<string> {
   const a = cellCharacterStyleMap(prev);
   const b = cellCharacterStyleMap(next);
   const out = new Set<string>();

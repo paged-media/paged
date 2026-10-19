@@ -116,9 +116,7 @@ test.describe("W2.12 — Stories panel", () => {
     await expect(
       page.locator('[data-row-badge="overset"]').first(),
     ).toBeVisible();
-    await expect(
-      page.locator("[data-stories-overset-summary]"),
-    ).toBeVisible();
+    await expect(page.locator("[data-stories-overset-summary]")).toBeVisible();
   });
 });
 
@@ -128,9 +126,14 @@ test.describe("W2.12 — Stories panel", () => {
 // richer kit fields are honest seams.
 
 /** Read the live `StorySummary` collection straight off the wire. */
-async function wireStories(
-  page: import("@playwright/test").Page,
-): Promise<Array<{ selfId: string; characterCount: number; paragraphCount: number; overset?: boolean }>> {
+async function wireStories(page: import("@playwright/test").Page): Promise<
+  Array<{
+    selfId: string;
+    characterCount: number;
+    paragraphCount: number;
+    overset?: boolean;
+  }>
+> {
   return page.evaluate(async () => {
     const c = (
       globalThis as unknown as {
@@ -285,7 +288,9 @@ test.describe("U6 — story row selects + reveals its first frame", () => {
           globalThis as unknown as {
             __canvas: {
               client: {
-                camera: { read: () => { scale: number; tx: number; ty: number } };
+                camera: {
+                  read: () => { scale: number; tx: number; ty: number };
+                };
               };
             };
           }
@@ -349,7 +354,8 @@ test.describe("U6 — story row selects + reveals its first frame", () => {
                 Array<{
                   pageId?: string | null;
                   bounds: [number, number, number, number];
-                  itemTransform?: [number, number, number, number, number, number] | null;
+                  itemTransform?:
+                    [number, number, number, number, number, number] | null;
                 }>
               >;
             };

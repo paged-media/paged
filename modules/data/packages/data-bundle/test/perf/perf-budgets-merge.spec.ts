@@ -29,7 +29,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, afterEach, describe, expect, it, setDefaultTimeout } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  describe,
+  expect,
+  it,
+  setDefaultTimeout,
+} from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
@@ -55,7 +62,9 @@ import {
 
 setDefaultTimeout(BUDGET_TIMEOUT_MS);
 
-const LANE = fileURLToPath(new URL("../../../../conformance/indesign-merge/", import.meta.url));
+const LANE = fileURLToPath(
+  new URL("../../../../conformance/indesign-merge/", import.meta.url),
+);
 const ID = "long-record-set";
 const normalise = (s: string) => s.replace(/\r/g, "\n").replace(/\uFEFF/g, "");
 
@@ -100,104 +109,152 @@ const normalise = (s: string) => s.replace(/\r/g, "\n").replace(/\uFEFF/g, "");
 // the page's spread origin is gone. host calls 17 → 16, reads 11 → 10. (The
 // engine also reports `frameDropShadowKnockedOut` on every frame, a fresh one
 // included; it is a fresh-frame default and not copied: mutation ops stay 403.)
-const W8: Measured = onLabelled({
-  // 148 → 147, 13 → 12: the same −1 read net as below (template frame read
-  // +1, shared pages + tree −2); the reads do not depend on the engine.
-  hostCalls: 147,
-  hostReads: 12,
-  mutates: 2,
-  mutationOps: 402,
-  undoSteps: 2,
-  placeholdersRead: 0,
-  wasmCalls: 4,
-  cellsIn: 0,
-  resolves: 0,
-  stabilizeCalls: 0,
-  keyAllocs: 0,
-  fingerprints: 0,
-  duckQueries: 0,
-}, { hostCalls: 16, hostReads: 10, mutates: 1, mutationOps: 403, undoSteps: 1, wasmCalls: 6 });
+const W8: Measured = onLabelled(
+  {
+    // 148 → 147, 13 → 12: the same −1 read net as below (template frame read
+    // +1, shared pages + tree −2); the reads do not depend on the engine.
+    hostCalls: 147,
+    hostReads: 12,
+    mutates: 2,
+    mutationOps: 402,
+    undoSteps: 2,
+    placeholdersRead: 0,
+    wasmCalls: 4,
+    cellsIn: 0,
+    resolves: 0,
+    stabilizeCalls: 0,
+    keyAllocs: 0,
+    fingerprints: 0,
+    duckQueries: 0,
+  },
+  {
+    hostCalls: 16,
+    hostReads: 10,
+    mutates: 1,
+    mutationOps: 403,
+    undoSteps: 1,
+    wasmCalls: 6,
+  },
+);
 
-describe.skipIf(!RUN_BUDGETS)("perf budgets — Data Merge [data.perf.gates]", () => {
-  let h: HeadlessHost | null = null;
-  let duck: CountedDuck | null = null;
-  afterEach(() => {
-    h?.dispose();
-    h = null;
-  });
-  afterAll(async () => {
-    printTable();
-    await duck?.handle.close();
-  });
+describe.skipIf(!RUN_BUDGETS)(
+  "perf budgets — Data Merge [data.perf.gates]",
+  () => {
+    let h: HeadlessHost | null = null;
+    let duck: CountedDuck | null = null;
+    afterEach(() => {
+      h?.dispose();
+      h = null;
+    });
+    afterAll(async () => {
+      printTable();
+      await duck?.handle.close();
+    });
 
-  it("W8 merges 57 records, two columns, columns first, over 3 pages [data.perf.gates] [data.lower.merge-writer]", async () => {
-    h = await openDataHost();
-    await h.load(readFileSync(join(LANE, "templates", `${ID}.idml`)));
-    const { host, work } = countingHost(h.host);
-    const engine = await bootCountedEngine();
-    duck ??= await bootCountedDuck();
-    const s = await sessionOver(host, engine, duck);
-    await s.registerCsvSource("lrs", readFileSync(join(LANE, "csv", `${ID}.csv`), "utf8"));
-    s.addQuery("q", "SELECT * FROM lrs", "recordStream");
-    await s.refreshData();
-    // The undo mark: a paragraph style, not a page item — a consumed template
-    // page is duplicated, and a frame on it would be copied onto every page.
-    const markReply = (await h.host.editor.client.mutate({
-      op: "createParagraphStyle",
-      args: { name: "undo mark" },
-    } as never)) as { payload?: { appliedSeq?: number } };
-    const mark = markReply.payload!.appliedSeq!;
-
-    const options = {
-      query: "q",
-      recordsPerPage: { mode: "multiple", arrange: "columns", rowSpacingPt: 6, columnSpacingPt: 12 } as const,
-      template: "consume" as const,
-    };
-    work.reset();
-    engine.reset();
-    duck.reset();
-    const t0 = performance.now();
-    const r = await s.mergeRecords(options);
-    const ms = performance.now() - t0;
-    const snap = work.snapshot();
-    const pre = measure(snap, engine, duck, null);
-
-    // ── behaviour: InDesign's pages and texts ──────────────────────────────
-    expect(r.ok, r.diagnostics.join("; ")).toBe(true);
-    expect(r.mutateCalls).toBe(LABELLED ? 1 : 2);
-    const rec = JSON.parse(readFileSync(join(LANE, "recorded", `${ID}.json`), "utf8"));
-    const pages = await h.host.document.collection<{ selfId: string }>("pages");
-    expect(pages.length).toBe(rec.merged.page_count);
-    const tree = await h.host.document.tree();
-    for (let p = 0; p < pages.length; p++) {
-      const frames = pageElements(tree, p).filter((e) => e.kind === "textFrame");
-      const geoms = await h.host.document.elementGeometry(frames);
-      const texts: string[] = [];
-      for (const g of geoms) {
-        const c = await h.host.document.storyContent((g as { storyId: string }).storyId);
-        const t = c!.paragraphs.map((x) => x.runs.map((y) => y.text).join("")).join("\n");
-        texts.push(t);
-      }
-      expect(texts.sort(), `page ${p + 1}`).toEqual(
-        rec.merged.pages[p].text_frames.map((t: { text: string }) => normalise(t.text)).sort(),
+    it("W8 merges 57 records, two columns, columns first, over 3 pages [data.perf.gates] [data.lower.merge-writer]", async () => {
+      h = await openDataHost();
+      await h.load(readFileSync(join(LANE, "templates", `${ID}.idml`)));
+      const { host, work } = countingHost(h.host);
+      const engine = await bootCountedEngine();
+      duck ??= await bootCountedDuck();
+      const s = await sessionOver(host, engine, duck);
+      await s.registerCsvSource(
+        "lrs",
+        readFileSync(join(LANE, "csv", `${ID}.csv`), "utf8"),
       );
-    }
+      s.addQuery("q", "SELECT * FROM lrs", "recordStream");
+      await s.refreshData();
+      // The undo mark: a paragraph style, not a page item — a consumed template
+      // page is duplicated, and a frame on it would be copied onto every page.
+      const markReply = (await h.host.editor.client.mutate({
+        op: "createParagraphStyle",
+        args: { name: "undo mark" },
+      } as never)) as { payload?: { appliedSeq?: number } };
+      const mark = markReply.payload!.appliedSeq!;
 
-    // ── a second merge replaces the first (no duplicates) ──────────────────
-    const r2 = await s.mergeRecords(options);
-    expect(r2.ok, r2.diagnostics.join("; ")).toBe(true);
-    expect((await h.host.document.collection("pages")).length).toBe(rec.merged.page_count);
-    const all = await h.host.document.tree();
-    const count = Array.from({ length: rec.merged.page_count }, (_, p) =>
-      pageElements(all, p).filter((e) => e.kind === "textFrame").length,
-    ).reduce((a, b) => a + b, 0);
-    expect(count).toBe(57);
+      const options = {
+        query: "q",
+        recordsPerPage: {
+          mode: "multiple",
+          arrange: "columns",
+          rowSpacingPt: 6,
+          columnSpacingPt: 12,
+        } as const,
+        template: "consume" as const,
+      };
+      work.reset();
+      engine.reset();
+      duck.reset();
+      const t0 = performance.now();
+      const r = await s.mergeRecords(options);
+      const ms = performance.now() - t0;
+      const snap = work.snapshot();
+      const pre = measure(snap, engine, duck, null);
 
-    // Two undo steps per merge: undo the re-merge, then the merge.
-    const back = await undoStepsSince(h, mark);
-    expect(back.reached).toBe(true);
-    const m: Measured = { ...pre, undoSteps: back.steps / 2 };
-    report("W8.merge-57", m, { ms, bytesIn: engine.log.bytesIn, bytesOut: engine.log.bytesOut, detail: {} }, snap, engine);
-    expectBudget("W8", m, W8);
-  });
-});
+      // ── behaviour: InDesign's pages and texts ──────────────────────────────
+      expect(r.ok, r.diagnostics.join("; ")).toBe(true);
+      expect(r.mutateCalls).toBe(LABELLED ? 1 : 2);
+      const rec = JSON.parse(
+        readFileSync(join(LANE, "recorded", `${ID}.json`), "utf8"),
+      );
+      const pages = await h.host.document.collection<{ selfId: string }>(
+        "pages",
+      );
+      expect(pages.length).toBe(rec.merged.page_count);
+      const tree = await h.host.document.tree();
+      for (let p = 0; p < pages.length; p++) {
+        const frames = pageElements(tree, p).filter(
+          (e) => e.kind === "textFrame",
+        );
+        const geoms = await h.host.document.elementGeometry(frames);
+        const texts: string[] = [];
+        for (const g of geoms) {
+          const c = await h.host.document.storyContent(
+            (g as { storyId: string }).storyId,
+          );
+          const t = c!.paragraphs
+            .map((x) => x.runs.map((y) => y.text).join(""))
+            .join("\n");
+          texts.push(t);
+        }
+        expect(texts.sort(), `page ${p + 1}`).toEqual(
+          rec.merged.pages[p].text_frames
+            .map((t: { text: string }) => normalise(t.text))
+            .sort(),
+        );
+      }
+
+      // ── a second merge replaces the first (no duplicates) ──────────────────
+      const r2 = await s.mergeRecords(options);
+      expect(r2.ok, r2.diagnostics.join("; ")).toBe(true);
+      expect((await h.host.document.collection("pages")).length).toBe(
+        rec.merged.page_count,
+      );
+      const all = await h.host.document.tree();
+      const count = Array.from(
+        { length: rec.merged.page_count },
+        (_, p) =>
+          pageElements(all, p).filter((e) => e.kind === "textFrame").length,
+      ).reduce((a, b) => a + b, 0);
+      expect(count).toBe(57);
+
+      // Two undo steps per merge: undo the re-merge, then the merge.
+      const back = await undoStepsSince(h, mark);
+      expect(back.reached).toBe(true);
+      const m: Measured = { ...pre, undoSteps: back.steps / 2 };
+      report(
+        "W8.merge-57",
+        m,
+        {
+          ms,
+          bytesIn: engine.log.bytesIn,
+          bytesOut: engine.log.bytesOut,
+          detail: {},
+        },
+        snap,
+        engine,
+      );
+      expectBudget("W8", m, W8);
+    });
+  },
+);

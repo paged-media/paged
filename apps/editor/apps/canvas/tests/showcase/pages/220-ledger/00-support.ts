@@ -216,7 +216,8 @@ export async function importWorkbook(
       .catch(() => null);
     notes.push(
       "the paged.sheet engine wasm did NOT boot — the panel reported: " +
-        (bootError ?? "(no boot-error message; the range control never rendered)"),
+        (bootError ??
+          "(no boot-error message; the range control never rendered)"),
     );
     return false;
   }
@@ -245,7 +246,9 @@ const columnLabel = (col: number): string => {
 
 /** Parse the formula bar's cell badge ("C3") into zero-based (row, col);
  *  null for the unbound "—". */
-const parseCellRef = (text: string | null): { row: number; col: number } | null => {
+const parseCellRef = (
+  text: string | null,
+): { row: number; col: number } | null => {
   const m = /^([A-Z]+)(\d+)$/.exec((text ?? "").trim());
   if (!m) return null;
   let col = 0;
@@ -527,7 +530,6 @@ export async function insetCells(
   }
   await doc.mutate("batch", { ops });
 }
-
 
 const offsetCache = new Map<string, [number, number]>();
 

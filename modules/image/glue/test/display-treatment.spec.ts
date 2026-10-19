@@ -22,7 +22,11 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { displayTreatmentLabel, displayTreatmentOf, isCmykConversion } from "../src/engine";
+import {
+  displayTreatmentLabel,
+  displayTreatmentOf,
+  isCmykConversion,
+} from "../src/engine";
 
 describe("display treatment", () => {
   it("maps every wire code, and an unknown one to the honest default", () => {
@@ -39,8 +43,12 @@ describe("display treatment", () => {
     expect(isCmykConversion("cmyk-converted")).toBe(true);
     expect(isCmykConversion("cmyk-uncalibrated")).toBe(true);
     expect(isCmykConversion("managed")).toBe(false);
-    expect(displayTreatmentLabel("cmyk-converted")).toMatch(/^CMYK, converted to sRGB$/);
-    expect(displayTreatmentLabel("cmyk-uncalibrated")).toMatch(/without a profile/);
+    expect(displayTreatmentLabel("cmyk-converted")).toMatch(
+      /^CMYK, converted to sRGB$/,
+    );
+    expect(displayTreatmentLabel("cmyk-uncalibrated")).toMatch(
+      /without a profile/,
+    );
     expect(displayTreatmentLabel("managed")).toBe("ICC managed");
   });
 });

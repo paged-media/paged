@@ -26,7 +26,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const HERE = dirname(fileURLToPath(import.meta.url));
-export const FONT_PATH = resolve(HERE, "../../web-render/assets/fonts/Inter.ttf");
+export const FONT_PATH = resolve(
+  HERE,
+  "../../web-render/assets/fonts/Inter.ttf",
+);
 
 /** sha256 of a file's bytes, hex — the recording's freshness key. */
 export function sha256(bytes) {

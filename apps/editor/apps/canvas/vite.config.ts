@@ -21,7 +21,14 @@ import { defineConfig } from "vite";
 import { buildModuleManifest, MODULE_HOST } from "./scripts/module-index.mjs";
 import react from "@vitejs/plugin-react";
 import { resolve, sep } from "node:path";
-import { createReadStream, readFileSync, readdirSync, statSync, writeFileSync, existsSync } from "node:fs";
+import {
+  createReadStream,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+  existsSync,
+} from "node:fs";
 import {
   DATA_ORIGINS_ENV,
   connectSrc,
@@ -69,7 +76,13 @@ const CORPUS_ENVATO = resolveCorpusSubdir("idml");
 //                DuckDB). vendor/ is staged locally by the module's
 //                scripts/vendor-duckdb.sh; where it is absent the package is
 //                the only source.
-const DATA_BIN = resolve(__dirname, "node_modules", "@paged-media", "data", "bin");
+const DATA_BIN = resolve(
+  __dirname,
+  "node_modules",
+  "@paged-media",
+  "data",
+  "bin",
+);
 const DUCKDB_DIST = (() => {
   const candidates = [resolve(MONOREPO_ROOT, "modules", "data")];
   for (const dir of candidates) {
@@ -124,7 +137,10 @@ const crossOriginIsolation = {
 // loopback); without it the editor has no server and stays browser-only.
 const PAGED_SERVER = parseDataOrigins(process.env.PAGED_SERVER_URL)[0] ?? "";
 const DATA_ORIGINS = [
-  ...new Set([...parseDataOrigins(process.env[DATA_ORIGINS_ENV]), ...(PAGED_SERVER ? [PAGED_SERVER] : [])]),
+  ...new Set([
+    ...parseDataOrigins(process.env[DATA_ORIGINS_ENV]),
+    ...(PAGED_SERVER ? [PAGED_SERVER] : []),
+  ]),
 ];
 const CONNECT_SRC = connectSrc(DATA_ORIGINS);
 // Dev adds the Vite HMR WebSocket (client live-reload) — without it `pnpm dev`
@@ -157,7 +173,10 @@ const networkConnectSrcPolicy = {
     if (DATA_ORIGINS.length === 0 || !options.dir) return;
     const file = resolve(options.dir, "_headers");
     if (!existsSync(file)) return;
-    writeFileSync(file, rewriteHeadersCsp(readFileSync(file, "utf8"), CONNECT_SRC));
+    writeFileSync(
+      file,
+      rewriteHeadersCsp(readFileSync(file, "utf8"), CONNECT_SRC),
+    );
   },
 };
 
@@ -178,27 +197,46 @@ function aiProxyDev(): import("vite").Plugin {
         if (!apiKey) {
           res.statusCode = 503;
           res.setHeader("content-type", "application/json");
-          return res.end(JSON.stringify({ type: "error", error: { type: "ai_unavailable", message: "Start the dev server with ANTHROPIC_API_KEY set to use Claude." } }));
+          return res.end(
+            JSON.stringify({
+              type: "error",
+              error: {
+                type: "ai_unavailable",
+                message:
+                  "Start the dev server with ANTHROPIC_API_KEY set to use Claude.",
+              },
+            }),
+          );
         }
         try {
           const chunks: Buffer[] = [];
           for await (const chunk of req) chunks.push(chunk as Buffer);
           const headers = new Headers();
-          for (const [k, v] of Object.entries(req.headers)) if (typeof v === "string") headers.set(k, v);
+          for (const [k, v] of Object.entries(req.headers))
+            if (typeof v === "string") headers.set(k, v);
           const origin = `http://${req.headers.host}`;
           const request = new Request(new URL(req.url, origin), {
             method: req.method,
             headers,
             ...(req.method === "POST" ? { body: Buffer.concat(chunks) } : {}),
           });
-          const { handleAiProxy } = (await server.ssrLoadModule("@paged-media/ai/proxy")) as typeof import("@paged-media/ai/proxy");
-          const { default: catalog } = (await server.ssrLoadModule("@paged-media/ai/catalog")) as typeof import("@paged-media/ai/catalog");
+          const { handleAiProxy } = (await server.ssrLoadModule(
+            "@paged-media/ai/proxy",
+          )) as typeof import("@paged-media/ai/proxy");
+          const { default: catalog } = (await server.ssrLoadModule(
+            "@paged-media/ai/catalog",
+          )) as typeof import("@paged-media/ai/catalog");
           const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID;
-          const response = await handleAiProxy(request, { apiKey, catalog, ...(workspaceId ? { workspaceId } : {}) });
+          const response = await handleAiProxy(request, {
+            apiKey,
+            catalog,
+            ...(workspaceId ? { workspaceId } : {}),
+          });
           res.statusCode = response.status;
           response.headers.forEach((value, key) => res.setHeader(key, value));
           if (!response.body) return res.end();
-          for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) res.write(chunk);
+          for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>)
+            res.write(chunk);
           res.end();
         } catch (err) {
           next(err);
@@ -565,17 +603,29 @@ function dataBundleBin(): import("vite").Plugin {
           .map((n) => n.split(sep).join("/"))
           .filter((n) => !n.endsWith(".d.ts"));
       } catch {
-        this.warn(`@paged-media/data has no bin/ at ${DATA_BIN} — paged.data will not boot in this build`);
+        this.warn(
+          `@paged-media/data has no bin/ at ${DATA_BIN} — paged.data will not boot in this build`,
+        );
         return;
       }
       for (const name of names) {
         const abs = resolve(DATA_BIN, name);
         if (!statSync(abs).isFile()) continue;
-        this.emitFile({ type: "asset", fileName: `bin/${name}`, source: readFileSync(abs) });
+        this.emitFile({
+          type: "asset",
+          fileName: `bin/${name}`,
+          source: readFileSync(abs),
+        });
       }
       const missing = DUCKDB_FILES.filter((f) => !names.includes(f));
       for (const ext of ["json", "parquet"])
-        if (!names.some((n) => n.startsWith("duckdb-ext/") && n.endsWith(`/${ext}.duckdb_extension.wasm`)))
+        if (
+          !names.some(
+            (n) =>
+              n.startsWith("duckdb-ext/") &&
+              n.endsWith(`/${ext}.duckdb_extension.wasm`),
+          )
+        )
           missing.push(`duckdb-ext/…/${ext}.duckdb_extension.wasm`);
       if (missing.length)
         this.warn(
@@ -609,7 +659,10 @@ function pagedModules(): import("vite").Plugin {
     load(id) {
       if (id !== `\0${ID}`) return null;
       const hosted = !dev && process.env.PAGED_MODULES_HOSTED === "1";
-      const manifest = buildModuleManifest({ host: hosted ? MODULE_HOST : null, dev });
+      const manifest = buildModuleManifest({
+        host: hosted ? MODULE_HOST : null,
+        dev,
+      });
       return `export default ${JSON.stringify(manifest)};`;
     },
   };

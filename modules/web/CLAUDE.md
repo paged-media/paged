@@ -82,8 +82,8 @@ fragmentation → the bundle's engine wasm).
 - **Engine wasm freshness:** after any Rust change run
   `bash scripts/build-wasm.sh --engine` (wasm-bindgen-cli must equal the
   version in `packages/web-render/Cargo.lock`); `wasm-fresh.spec.ts` fails on
-  a stale artifact. A source change needs a version bump to publish
-  (`scripts/package-hash.mjs --check`).
+  a stale artifact. The bundle is a private workspace package, never
+  published on its own (PM-0008).
 
 ## Commands
 

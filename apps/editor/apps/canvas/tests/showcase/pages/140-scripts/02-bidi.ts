@@ -32,11 +32,9 @@ import type { PageContext, PageReport } from "../../types";
 import { caption, pourOne, prose } from "../135-story/00-support";
 
 // "Arabic writing runs from right to left."
-const ARABIC =
-  "الكتابة العربية تجري من اليمين إلى اليسار.";
+const ARABIC = "الكتابة العربية تجري من اليمين إلى اليسار.";
 // "Hebrew writing runs from right to left."
-const HEBREW =
-  "כתיבה עברית רצה מימין לשמאל.";
+const HEBREW = "כתיבה עברית רצה מימין לשמאל.";
 // "This line mixes Arabic with the word paged 2.0 and the digits 123
 // in two directions."
 const MIXED =
@@ -55,20 +53,28 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(42);
   const elements: string[] = [];
 
-  const head = await prose(ctx, page, [60, 104, 492, 130], [
-    { text: "Right to left", style: STYLE.head1 },
-  ]);
-  const intro = await prose(ctx, page, [60, 134, 492, 192], [
-    {
-      text:
-        "A bidirectional line is stored in logical order — the order it " +
-        "is spoken — and painted in visual order. The renderer reorders " +
-        "the runs at layout: Arabic and Hebrew read right to left, while " +
-        "digits and Latin words nested inside them keep their own " +
-        "left-to-right direction.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await prose(
+    ctx,
+    page,
+    [60, 104, 492, 130],
+    [{ text: "Right to left", style: STYLE.head1 }],
+  );
+  const intro = await prose(
+    ctx,
+    page,
+    [60, 134, 492, 192],
+    [
+      {
+        text:
+          "A bidirectional line is stored in logical order — the order it " +
+          "is spoken — and painted in visual order. The renderer reorders " +
+          "the runs at layout: Arabic and Hebrew read right to left, while " +
+          "digits and Latin words nested inside them keep their own " +
+          "left-to-right direction.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   const rightAlign = async (storyId: string, chars: number) => {
@@ -79,7 +85,11 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       { type: "text", value: "RightAlign" },
     );
   };
-  const applyFamily = async (storyId: string, chars: number, family: string) => {
+  const applyFamily = async (
+    storyId: string,
+    chars: number,
+    family: string,
+  ) => {
     await doc.setProperty(
       "storyRange",
       doc.storyRangeId(storyId, 0, chars),
@@ -89,7 +99,13 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   };
 
   // ── Arabic: the primary exhibit ───────────────────────────────────
-  const arabic = await pourOne(ctx, page, [60, 210, 492, 258], ARABIC, STYLE.body);
+  const arabic = await pourOne(
+    ctx,
+    page,
+    [60, 210, 492, 258],
+    ARABIC,
+    STYLE.body,
+  );
   await applyFamily(arabic.storyId, ARABIC.length, "Noto Sans Arabic");
   await rightAlign(arabic.storyId, ARABIC.length);
   expect(await doc.storyChars(arabic.storyId)).toBe(ARABIC.length);
@@ -105,14 +121,22 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
 
   // ── Hebrew: the honest substitution ───────────────────────────────
-  const hebrew = await pourOne(ctx, page, [60, 300, 492, 348], HEBREW, STYLE.body);
+  const hebrew = await pourOne(
+    ctx,
+    page,
+    [60, 300, 492, 348],
+    HEBREW,
+    STYLE.body,
+  );
   await applyFamily(hebrew.storyId, HEBREW.length, HEBREW_FAMILY);
   await rightAlign(hebrew.storyId, HEBREW.length);
   elements.push(hebrew.frameId);
   // Compose, then ask the fonts collection what happened: the family
   // the Hebrew asks for is not registered, and the engine says so.
   await doc.renderPage(page);
-  const fonts = (await doc.designer.collection("fonts")) as unknown as FontRead[];
+  const fonts = (await doc.designer.collection(
+    "fonts",
+  )) as unknown as FontRead[];
   const hebrewFont = fonts.find((f) => f.family === HEBREW_FAMILY);
   expect(
     hebrewFont,
@@ -135,7 +159,13 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
 
   // ── the mixed line: Latin + digits inside RTL ─────────────────────
-  const mixed = await pourOne(ctx, page, [60, 398, 492, 446], MIXED, STYLE.body);
+  const mixed = await pourOne(
+    ctx,
+    page,
+    [60, 398, 492, 446],
+    MIXED,
+    STYLE.body,
+  );
   await applyFamily(mixed.storyId, MIXED.length, "Noto Sans Arabic");
   await rightAlign(mixed.storyId, MIXED.length);
   elements.push(mixed.frameId);

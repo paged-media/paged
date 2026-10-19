@@ -69,9 +69,15 @@ export function setObjectModelEditor(editor: PagedEditor | null): void {
   // one the panels and every bundle host use), and reports the writes it
   // committed answering them so they fold into the script's undo step.
   const client = editor?.client as unknown as
-    | { setHostObjects?: (answer: ((calls: never[]) => Promise<unknown>) | null) => void }
+    | {
+        setHostObjects?: (
+          answer: ((calls: never[]) => Promise<unknown>) | null,
+        ) => void;
+      }
     | undefined;
-  client?.setHostObjects?.((calls) => answerHostObjectsRound(objectRegistry, calls));
+  client?.setHostObjects?.((calls) =>
+    answerHostObjectsRound(objectRegistry, calls),
+  );
 }
 
 /** The live editor the registry reads (null before the shell mounts) —
@@ -86,9 +92,15 @@ const getEditor = (): PagedEditor => {
   return currentEditor;
 };
 
-type CoreRow = { scope?: string; wire?: string; inferred?: true; readOnly?: true };
+type CoreRow = {
+  scope?: string;
+  wire?: string;
+  inferred?: true;
+  readOnly?: true;
+};
 const coreRow = (path: string): CoreRow | null =>
-  ((CORE_PATHS as Record<string, CoreRow | { op: true }>)[path] as CoreRow | undefined) ?? null;
+  ((CORE_PATHS as Record<string, CoreRow | { op: true }>)[path] as
+    CoreRow | undefined) ?? null;
 
 // ------------------------------------------------------------------
 // Table seam — an EDITOR-SIDE extension of the SDK's core seam, until it
@@ -126,12 +138,17 @@ function tableElementId(a: Parsed): ElementId | null {
   if (a.kind === "cell") {
     const story = tableStories.get(a.table);
     return story
-      ? { kind: "tableCell", id: { story_id: story, table_id: a.table, row: a.row, col: a.col } }
+      ? {
+          kind: "tableCell",
+          id: { story_id: story, table_id: a.table, row: a.row, col: a.col },
+        }
       : null;
   }
   if (a.kind === "table") {
     const story = tableStories.get(a.id);
-    return story ? { kind: "table", id: { story_id: story, table_id: a.id } } : null;
+    return story
+      ? { kind: "table", id: { story_id: story, table_id: a.id } }
+      : null;
   }
   return null;
 }
@@ -153,34 +170,54 @@ function notCarried(a: Parsed, path: string, refusal: Read): Read {
 
 function withTableSeam(core: CoreObjects): CoreObjects {
   const isTable = (a: Parsed) => a.kind === "cell" || a.kind === "table";
-  const refuse = (code: "unknownAddress" | "unknownPath" | "readOnly", reason: string) =>
-    ({ kind: "refused", code, reason }) as const;
+  const refuse = (
+    code: "unknownAddress" | "unknownPath" | "readOnly",
+    reason: string,
+  ) => ({ kind: "refused", code, reason }) as const;
   return {
     ...core,
     async get(a, path) {
       if (!isTable(a)) {
         const read = await core.get(a, path);
-        return read.kind === "refused" && read.code === "unknownPath" ? notCarried(a, path, read) : read;
+        return read.kind === "refused" && read.code === "unknownPath"
+          ? notCarried(a, path, read)
+          : read;
       }
       // Protocol 71: the SDK seam reaches cells and tables through core's
       // `Get` — use it, and fall back only while it answers `unmapped`.
       const viaCore = await core.get(a, path);
-      if (viaCore.kind !== "refused" || viaCore.code !== "unmapped") return viaCore;
+      if (viaCore.kind !== "refused" || viaCore.code !== "unmapped")
+        return viaCore;
       const scope = a.kind;
       const row = coreRow(path);
-      if (!row || row.scope !== scope) return refuse("unknownPath", `${scope} has no path "${path}"`);
+      if (!row || row.scope !== scope)
+        return refuse("unknownPath", `${scope} has no path "${path}"`);
       const id = tableElementId(a);
-      if (!id) return refuse("unknownAddress", `no ${scope} ${JSON.stringify(a)} (its story is unknown)`);
+      if (!id)
+        return refuse(
+          "unknownAddress",
+          `no ${scope} ${JSON.stringify(a)} (its story is unknown)`,
+        );
       const reply = (await getEditor()
-        .client.send({ kind: "requestElementProperties", payload: { id } } as never)
-        .catch(() => null)) as
-        | { kind: string; payload?: { result?: { entries: { path: string; value: unknown }[] } | null } }
-        | null;
-      const props = reply?.kind === "elementProperties" ? reply.payload?.result : null;
-      if (!props) return refuse("unknownAddress", `no ${scope} ${JSON.stringify(a)}`);
+        .client.send({
+          kind: "requestElementProperties",
+          payload: { id },
+        } as never)
+        .catch(() => null)) as {
+        kind: string;
+        payload?: {
+          result?: { entries: { path: string; value: unknown }[] } | null;
+        };
+      } | null;
+      const props =
+        reply?.kind === "elementProperties" ? reply.payload?.result : null;
+      if (!props)
+        return refuse("unknownAddress", `no ${scope} ${JSON.stringify(a)}`);
       const e = props.entries.find((x) => x.path === path);
       if (!e) return { kind: "absent" };
-      return e.value == null ? { kind: "mixed" } : { kind: "value", value: (e.value as { value: unknown }).value };
+      return e.value == null
+        ? { kind: "mixed" }
+        : { kind: "value", value: (e.value as { value: unknown }).value };
     },
     async planSet(a, path, value, ...rest) {
       // A null on a nullable row clears it: the final protocol-71 `Set`
@@ -190,16 +227,31 @@ function withTableSeam(core: CoreObjects): CoreObjects {
       if (viaCore.ok || viaCore.code !== "unmapped") return viaCore;
       const scope = a.kind;
       const row = coreRow(path);
-      if (!row || row.scope !== scope) return { ok: false, code: "unknownPath", reason: `${scope} has no path "${path}"` };
-      if (row.readOnly) return { ok: false, code: "readOnly", reason: `${path} is read-only` };
+      if (!row || row.scope !== scope)
+        return {
+          ok: false,
+          code: "unknownPath",
+          reason: `${scope} has no path "${path}"`,
+        };
+      if (row.readOnly)
+        return { ok: false, code: "readOnly", reason: `${path} is read-only` };
       const id = tableElementId(a);
-      if (!id) return { ok: false, code: "unknownAddress", reason: `no ${scope} ${JSON.stringify(a)} (its story is unknown)` };
+      if (!id)
+        return {
+          ok: false,
+          code: "unknownAddress",
+          reason: `no ${scope} ${JSON.stringify(a)} (its story is unknown)`,
+        };
       return {
         ok: true,
         mutations: [
           {
             op: "setElementProperty",
-            args: { elementId: id, path, value: { type: wireOfPath(path) ?? "text", value } },
+            args: {
+              elementId: id,
+              path,
+              value: { type: wireOfPath(path) ?? "text", value },
+            },
           } as never,
         ],
       };
@@ -229,9 +281,15 @@ function withTableSeam(core: CoreObjects): CoreObjects {
 
 type SchemaRow = ReturnType<CoreObjects["schema"]>[number];
 
-const PERCENT: SchemaRow["type"] = { kind: "number", unit: "percent" } as SchemaRow["type"];
+const PERCENT: SchemaRow["type"] = {
+  kind: "number",
+  unit: "percent",
+} as SchemaRow["type"];
 
-const ENGINE_ROWS: Record<string, ReadonlyArray<{ row: SchemaRow; wire: string }>> = {
+const ENGINE_ROWS: Record<
+  string,
+  ReadonlyArray<{ row: SchemaRow; wire: string }>
+> = {
   "style:cell": [
     {
       row: {
@@ -259,7 +317,9 @@ const ENGINE_STORES: Record<string, ReadonlySet<string>> = {
 };
 
 function kindOfParsed(a: Parsed): string {
-  return a.kind === "style" ? `style:${(a as { family: string }).family}` : a.kind;
+  return a.kind === "style"
+    ? `style:${(a as { family: string }).family}`
+    : a.kind;
 }
 
 function withEngineRows(core: CoreObjects): CoreObjects {
@@ -271,23 +331,40 @@ function withEngineRows(core: CoreObjects): CoreObjects {
       const fixed = stored
         ? rows.map((r) =>
             stored.has(r.path) && r.access === "readOnly"
-              ? ({ ...r, access: "readWrite", bindable: true, summary: undefined } as SchemaRow)
+              ? ({
+                  ...r,
+                  access: "readWrite",
+                  bindable: true,
+                  summary: undefined,
+                } as SchemaRow)
               : r,
           )
         : rows;
       const have = new Set(rows.map((r) => r.path));
-      const ahead = (ENGINE_ROWS[kind] ?? []).filter((e) => !have.has(e.row.path)).map((e) => e.row);
+      const ahead = (ENGINE_ROWS[kind] ?? [])
+        .filter((e) => !have.has(e.row.path))
+        .map((e) => e.row);
       return ahead.length > 0 ? [...fixed, ...ahead] : fixed;
     },
     async planSet(a, path, value, ...rest) {
       const plan = await core.planSet(a, path, value, ...rest);
-      if (plan.ok || plan.code !== "unknownPath" || a.kind === "handle") return plan;
-      const ahead = ENGINE_ROWS[kindOfParsed(a)]?.find((e) => e.row.path === path);
+      if (plan.ok || plan.code !== "unknownPath" || a.kind === "handle")
+        return plan;
+      const ahead = ENGINE_ROWS[kindOfParsed(a)]?.find(
+        (e) => e.row.path === path,
+      );
       if (!ahead) return plan;
       return {
         ok: true,
         mutations: [
-          { op: "set", args: { address: formatAddress(a), path, value: { type: ahead.wire, value } } } as never,
+          {
+            op: "set",
+            args: {
+              address: formatAddress(a),
+              path,
+              value: { type: ahead.wire, value },
+            },
+          } as never,
         ],
       };
     },
@@ -301,7 +378,10 @@ export const objectRegistry: ObjectRegistry = createObjectRegistry({
 // ADR 221 — scripts may ask Claude through the host bridge:
 // `JSON.parse(await paged.invoke("paged.ai.complete", { prompt }))`,
 // answered by the same-origin proxy. Registered as the editor's own.
-objectRegistry.register({ plugin: "paged.ai", model: aiObjectModel((prompt) => complete(editorAiTransport(), prompt)) });
+objectRegistry.register({
+  plugin: "paged.ai",
+  model: aiObjectModel((prompt) => complete(editorAiTransport(), prompt)),
+});
 
 /** `layer:<id>` with the id escaped as the grammar requires (a self id
  *  like `Layer/u0` carries a slash). */
@@ -325,7 +405,8 @@ export const editorObjectModel: ShellObjectModelHost = {
   objects,
   addressOf: (id) => addressOfElement(id),
   isInferred: (row: ShellPropertySchema) =>
-    !(row.addressKind ?? "").startsWith("plugin:") && coreRow(row.path)?.inferred === true,
+    !(row.addressKind ?? "").startsWith("plugin:") &&
+    coreRow(row.path)?.inferred === true,
   wireOf: (path) => wireOfPath(path),
   // §12.8 — a list / struct edit lowered by the SDK (read, apply,
   // validate, `set`) and committed as ONE batch = one undo step.

@@ -445,7 +445,11 @@ describe("quick selection reaching the engine selection", () => {
     const { engine, machine } = await quickRig(32, 16, qSplit);
 
     engine.selectionSelectAll();
-    machine.begin("quick", [6, 8], modeFromModifiers({ shift: false, alt: true }));
+    machine.begin(
+      "quick",
+      [6, 8],
+      modeFromModifiers({ shift: false, alt: true }),
+    );
     expect(machine.end()).toBe(true);
     let s = engine.selectionStats()!;
     expect(
@@ -458,7 +462,11 @@ describe("quick selection reaching the engine selection", () => {
     // each piece in turn and leave nothing.
     engine.selectionClear();
     engine.selectionSetRect(0, 0, 32, 8, "replace"); // the top half
-    machine.begin("quick", [6, 8], modeFromModifiers({ shift: true, alt: true }));
+    machine.begin(
+      "quick",
+      [6, 8],
+      modeFromModifiers({ shift: true, alt: true }),
+    );
     machine.update([8, 10]);
     expect(machine.end()).toBe(true);
     s = engine.selectionStats()!;

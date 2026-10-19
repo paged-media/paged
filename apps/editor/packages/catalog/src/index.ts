@@ -45,7 +45,4 @@ export {
   type WriteSpec,
 } from "./types";
 
-export {
-  createCatalogRegistry,
-  type CatalogRegistry,
-} from "./registry";
+export { createCatalogRegistry, type CatalogRegistry } from "./registry";

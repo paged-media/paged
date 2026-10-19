@@ -46,19 +46,28 @@ import { validateValue } from "./object-schema.js";
 
 type Ok<T> = { ok: true } & T;
 type No = { ok: false; code: ObjectErrorCode; reason: string };
-const no = (code: ObjectErrorCode, reason: string): No => ({ ok: false, code, reason });
+const no = (code: ObjectErrorCode, reason: string): No => ({
+  ok: false,
+  code,
+  reason,
+});
 
 /** The value a new item / an unset field starts from: a struct's field
  *  defaults (required fields without one get their type's default,
  *  optional ones stay absent), an enum's first member, 0, "", false, [],
  *  `Color/Black` for a colour, the zero point / identity transform. */
-export function defaultValueOf(type: ValueType, row?: Pick<PropertySchema, "default" | "range">): unknown {
+export function defaultValueOf(
+  type: ValueType,
+  row?: Pick<PropertySchema, "default" | "range">,
+): unknown {
   if (row?.default !== undefined) return structuredClone(row.default);
   switch (type.kind) {
     case "bool":
       return false;
     case "number":
-      return row?.range?.min !== undefined && row.range.min > 0 ? row.range.min : 0;
+      return row?.range?.min !== undefined && row.range.min > 0
+        ? row.range.min
+        : 0;
     case "length":
       return 0;
     case "color":
@@ -92,17 +101,32 @@ export function defaultValueOf(type: ValueType, row?: Pick<PropertySchema, "defa
   }
 }
 
-const isIndex = (n: unknown, len: number): n is number => Number.isInteger(n) && (n as number) >= 0 && (n as number) < len;
+const isIndex = (n: unknown, len: number): n is number =>
+  Number.isInteger(n) && (n as number) >= 0 && (n as number) < len;
 
-function setField(item: unknown, type: ValueType, field: string, value: unknown, at: string): Ok<{ value: unknown }> | No {
-  if (type.kind !== "struct") return no("invalidValue", `${at}: a ${type.kind} has no fields`);
+function setField(
+  item: unknown,
+  type: ValueType,
+  field: string,
+  value: unknown,
+  at: string,
+): Ok<{ value: unknown }> | No {
+  if (type.kind !== "struct")
+    return no("invalidValue", `${at}: a ${type.kind} has no fields`);
   const f = type.fields[field];
-  if (!f && !type.open) return no("invalidValue", `${at}: no field "${field}" (${Object.keys(type.fields).join(", ")})`);
+  if (!f && !type.open)
+    return no(
+      "invalidValue",
+      `${at}: no field "${field}" (${Object.keys(type.fields).join(", ")})`,
+    );
   if (f) {
     const why = validateValue(f, value, undefined, `${at}.${field}`);
     if (why) return no("invalidValue", why);
   }
-  const base = item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : {};
+  const base =
+    item && typeof item === "object" && !Array.isArray(item)
+      ? (item as Record<string, unknown>)
+      : {};
   return { ok: true, value: { ...base, [field]: value } };
 }
 
@@ -110,22 +134,51 @@ function setField(item: unknown, type: ValueType, field: string, value: unknown,
  * Apply one edit to a value of `type` (a list, or a struct for
  * `fieldSet`). Pure; the result is validated against `type`.
  */
-export function applyValueEdit(current: unknown, edit: ValueEdit, type: ValueType): Ok<{ value: unknown }> | No {
+export function applyValueEdit(
+  current: unknown,
+  edit: ValueEdit,
+  type: ValueType,
+): Ok<{ value: unknown }> | No {
   if (edit.edit === "fieldSet") {
-    if (type.kind !== "struct") return no("invalidValue", `fieldSet needs a struct value, not ${type.kind}`);
-    return setField(current ?? defaultValueOf(type), type, edit.field, edit.value, "value");
+    if (type.kind !== "struct")
+      return no(
+        "invalidValue",
+        `fieldSet needs a struct value, not ${type.kind}`,
+      );
+    return setField(
+      current ?? defaultValueOf(type),
+      type,
+      edit.field,
+      edit.value,
+      "value",
+    );
   }
-  if (type.kind !== "list") return no("invalidValue", `${edit.edit} needs a list value, not ${type.kind}`);
-  const list = Array.isArray(current) ? [...current] : current == null ? [] : null;
+  if (type.kind !== "list")
+    return no(
+      "invalidValue",
+      `${edit.edit} needs a list value, not ${type.kind}`,
+    );
+  const list = Array.isArray(current)
+    ? [...current]
+    : current == null
+      ? []
+      : null;
   if (!list) return no("invalidValue", "the current value is not a list");
   const it = type.of;
   switch (edit.edit) {
     case "add": {
       if (type.maxItems !== undefined && list.length >= type.maxItems) {
-        return no("invalidValue", `the list is full (maxItems ${type.maxItems})`);
+        return no(
+          "invalidValue",
+          `the list is full (maxItems ${type.maxItems})`,
+        );
       }
       const at = edit.index ?? list.length;
-      if (!Number.isInteger(at) || at < 0 || at > list.length) return no("invalidValue", `add: index ${at} is outside 0..${list.length}`);
+      if (!Number.isInteger(at) || at < 0 || at > list.length)
+        return no(
+          "invalidValue",
+          `add: index ${at} is outside 0..${list.length}`,
+        );
       const item = edit.item !== undefined ? edit.item : defaultValueOf(it);
       const why = validateValue(it, item, undefined, `item ${at}`);
       if (why) return no("invalidValue", why);
@@ -133,24 +186,42 @@ export function applyValueEdit(current: unknown, edit: ValueEdit, type: ValueTyp
       return { ok: true, value: list };
     }
     case "remove":
-      if (!isIndex(edit.index, list.length)) return no("invalidValue", `remove: no item ${edit.index}`);
+      if (!isIndex(edit.index, list.length))
+        return no("invalidValue", `remove: no item ${edit.index}`);
       list.splice(edit.index, 1);
       return { ok: true, value: list };
     case "move": {
-      if (!isIndex(edit.from, list.length)) return no("invalidValue", `move: no item ${edit.from}`);
-      if (!isIndex(edit.to, list.length)) return no("invalidValue", `move: index ${edit.to} is outside 0..${list.length - 1}`);
+      if (!isIndex(edit.from, list.length))
+        return no("invalidValue", `move: no item ${edit.from}`);
+      if (!isIndex(edit.to, list.length))
+        return no(
+          "invalidValue",
+          `move: index ${edit.to} is outside 0..${list.length - 1}`,
+        );
       const [item] = list.splice(edit.from, 1);
       list.splice(edit.to, 0, item);
       return { ok: true, value: list };
     }
     case "itemSet": {
-      if (!isIndex(edit.index, list.length)) return no("invalidValue", `itemSet: no item ${edit.index}`);
+      if (!isIndex(edit.index, list.length))
+        return no("invalidValue", `itemSet: no item ${edit.index}`);
       if (edit.field !== undefined) {
-        const r = setField(list[edit.index], it, edit.field, edit.value, `item ${edit.index}`);
+        const r = setField(
+          list[edit.index],
+          it,
+          edit.field,
+          edit.value,
+          `item ${edit.index}`,
+        );
         if (!r.ok) return r;
         list[edit.index] = r.value;
       } else {
-        const why = validateValue(it, edit.value, undefined, `item ${edit.index}`);
+        const why = validateValue(
+          it,
+          edit.value,
+          undefined,
+          `item ${edit.index}`,
+        );
         if (why) return no("invalidValue", why);
         list[edit.index] = edit.value;
       }
@@ -180,7 +251,12 @@ export async function planValueEdit(
     const row = rows.find((r) => r.path === path);
     if (!row) {
       // Items typed only by their fields: `path[].field` rows.
-      const itemRow = rows.find((r) => edit.edit === "itemSet" && edit.field !== undefined && r.path === `${path}[].${edit.field}`);
+      const itemRow = rows.find(
+        (r) =>
+          edit.edit === "itemSet" &&
+          edit.field !== undefined &&
+          r.path === `${path}[].${edit.field}`,
+      );
       if (!itemRow || edit.edit !== "itemSet") {
         const typedItems = rows.some((r) => r.path.startsWith(`${path}[].`));
         return no(
@@ -190,19 +266,38 @@ export async function planValueEdit(
             : `${address} has no path "${path}"`,
         );
       }
-      if ((itemRow.access ?? "readWrite") !== "readWrite") return no("readOnly", `${path}[].${edit.field} is ${itemRow.access}`);
-      const why = validateValue(itemRow.type, edit.value, itemRow, `${path}[${edit.index}].${edit.field}`);
+      if ((itemRow.access ?? "readWrite") !== "readWrite")
+        return no("readOnly", `${path}[].${edit.field} is ${itemRow.access}`);
+      const why = validateValue(
+        itemRow.type,
+        edit.value,
+        itemRow,
+        `${path}[${edit.index}].${edit.field}`,
+      );
       if (why) return no("invalidValue", why);
-      ops.push({ op: "set", address, path: `${path}[${edit.index}].${edit.field}`, value: edit.value });
+      ops.push({
+        op: "set",
+        address,
+        path: `${path}[${edit.index}].${edit.field}`,
+        value: edit.value,
+      });
       continue;
     }
-    if ((row.access ?? "readWrite") !== "readWrite") return no("readOnly", `${path} is ${row.access}`);
+    if ((row.access ?? "readWrite") !== "readWrite")
+      return no("readOnly", `${path} is ${row.access}`);
     const read = await objects.get(address, path);
     if (read.kind === "refused") return no(read.code, read.reason);
-    if (read.kind === "mixed") return no("invalidValue", `${address} ${path}: mixed`);
-    const current = read.kind === "value" ? read.value : row.default !== undefined ? row.default : null;
+    if (read.kind === "mixed")
+      return no("invalidValue", `${address} ${path}: mixed`);
+    const current =
+      read.kind === "value"
+        ? read.value
+        : row.default !== undefined
+          ? row.default
+          : null;
     const next = applyValueEdit(current, edit, row.type);
-    if (!next.ok) return { ...next, reason: `${address} ${path}: ${next.reason}` };
+    if (!next.ok)
+      return { ...next, reason: `${address} ${path}: ${next.reason}` };
     ops.push({ op: "set", address, path, value: next.value });
   }
   return { ok: true, ops };
@@ -217,6 +312,12 @@ export async function editValue(
   opts?: { label?: string },
 ): Promise<ObjectWriteResult> {
   const plan = await planValueEdit(objects, addresses, path, edit);
-  if (!plan.ok) return { applied: false, code: plan.code, reason: plan.reason, undoSteps: 0 };
+  if (!plan.ok)
+    return {
+      applied: false,
+      code: plan.code,
+      reason: plan.reason,
+      undoSteps: 0,
+    };
   return objects.batch(plan.ops, opts);
 }

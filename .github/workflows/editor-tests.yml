@@ -253,6 +253,13 @@ jobs:
       - name: local library (packages/repository)
         run: bun run test:repository
 
+      # The built-in tools' gesture handlers, driven through the gesture
+      # DSL against the test kit's recording fake editor (no engine, no
+      # browser): previews, modifier semantics, the exact mutation, the
+      # one-gesture-one-commit and cancel invariants.
+      - name: tool gesture handlers (packages/tools)
+        run: bun run test:tools
+
       # Every gated fidelity pack must carry a threshold entry, or the
       # fidelity gate silently skips it.
       - name: fidelity thresholds schema
@@ -607,24 +614,16 @@ jobs:
             --shard=${{ matrix.shard }}/${{ env.SHARDS }} \
             --reporter=blob
 
-      # Advisory GPU lane — re-run the journey tier through the WebGPU /
-      # Vello present path (headed via xvfb; software Vulkan when present,
-      # CPU fallback otherwise). Opt-in (workflow_dispatch only) on one
-      # shard, `continue-on-error` so it NEVER gates: the journeys' visual
-      # regression is the deterministic CPU readback above — this only
-      # smoke-checks that the GPU live-render path runs without crashing.
-      - name: journeys (GPU, advisory)
-        if: ${{ github.event_name == 'workflow_dispatch' && matrix.shard == 1 }}
-        continue-on-error: true
-        working-directory: apps/editor/apps/canvas
-        env:
-          CI: "1"
-          PAGED_CI_LEAN: "1"
-          BACKEND: gpu
-        run: |
-          xvfb-run -a npx playwright test \
-            --project=journeys \
-            --reporter=list
+      # No step here tests the editor on a GPU. A "journeys (GPU, advisory)"
+      # step used to re-run the journey tier with BACKEND=gpu under xvfb, but
+      # this runner has no Vulkan driver and the bundled Chromium no WebGPU
+      # adapter, the `journeys` project ignores the specs that assert the GPU
+      # is active, and nothing checked for an adapter: it could only exercise
+      # the CPU fallback the step above already runs, while its name claimed
+      # GPU coverage (docs/development/gpu-audit-2026-10.md, L-4). The WebGPU
+      # path runs end to end in the local `journeys-gpu` project and the macOS
+      # showcase nightly; a CI lane for it must require an adapter and fail
+      # without one (docs/development/testing.md).
 
       # Seed/refresh the committed LINUX visual baselines. Opt-in
       # (workflow_dispatch only) on one shard: runs the journey tier with

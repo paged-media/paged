@@ -93,7 +93,12 @@ import {
  *  catalog ceiling); this is the 1:1 bridge. */
 function toCatalogBinding(b: WidgetValueBinding): Binding {
   if (b.kind === "literal") return { kind: "literal", value: b.value };
-  return { kind: "selectionProperty", scope: b.scope, path: b.path, coerce: b.coerce };
+  return {
+    kind: "selectionProperty",
+    scope: b.scope,
+    path: b.path,
+    coerce: b.coerce,
+  };
 }
 
 /** A schema row → a catalog `CompositionNode`. The widget id is the
@@ -324,9 +329,7 @@ function SchemaListRow({
   const seenKeys = new Set<string>();
   const actions: ListLeafAction[] = (spec.actions ?? []).map((a, i) => {
     const base =
-      a.action.kind === "command"
-        ? a.action.command
-        : `apply:${a.action.path}`;
+      a.action.kind === "command" ? a.action.command : `apply:${a.action.path}`;
     const key = seenKeys.has(base) ? `${base}-${i}` : base;
     seenKeys.add(key);
     const gateOpen = gate(a.enabled, bindings);
@@ -364,7 +367,9 @@ function SchemaListRow({
   // The leaf reports a DROP ("row A landed on row B"); the op choice
   // and every refusal live here.
   const reorderSpec = spec.reorder;
-  const reorderDisabled = reorderSpec ? !gate(reorderSpec.enabled, bindings) : true;
+  const reorderDisabled = reorderSpec
+    ? !gate(reorderSpec.enabled, bindings)
+    : true;
   const runReorder = (draggedId: string, targetId: string) => {
     if (!reorderSpec) return;
     const from = byId.get(draggedId);
@@ -386,7 +391,10 @@ function SchemaListRow({
       id: rawById.get(draggedId) ?? draggedId,
       fromIndex: from.siblingIndex,
       toIndex: to.siblingIndex,
-      parentId: from.parentId == null ? null : (rawById.get(from.parentId) ?? from.parentId),
+      parentId:
+        from.parentId == null
+          ? null
+          : (rawById.get(from.parentId) ?? from.parentId),
     };
     const act = reorderSpec.action;
     if (act.kind === "command") {
@@ -521,7 +529,9 @@ function SchemaRow({
   // ADR 323 — an object-model property row: the shared PropertyField
   // over host.objects (it owns its disabled chrome).
   if (isPropertyRow(row)) {
-    return <SchemaPropertyRow row={row} bindings={bindings} disabled={!enabled} />;
+    return (
+      <SchemaPropertyRow row={row} bindings={bindings} disabled={!enabled} />
+    );
   }
   const rendered = row.list ? (
     <SchemaListRow row={row} bindings={bindings} />
@@ -576,7 +586,9 @@ function SchemaSection({
       <div className="pg-label mb-2">{section.title}</div>
       {/* `data-schema-rows` + :empty (globals.css) says "nothing to edit"
           when every row resolved to no target. */}
-      <div className="flex flex-col gap-[9px]" data-schema-rows="">{rows}</div>
+      <div className="flex flex-col gap-[9px]" data-schema-rows="">
+        {rows}
+      </div>
     </div>
   );
 }
@@ -597,10 +609,7 @@ export function SchemaPanelRenderer({
 }) {
   useBindingsTick(bindings);
   return (
-    <div
-      className="flex flex-col gap-[9px] p-3"
-      data-schema-panel={schema.id}
-    >
+    <div className="flex flex-col gap-[9px] p-3" data-schema-panel={schema.id}>
       {schema.sections.map((section, i) => (
         <SchemaSection
           key={`section-${i}`}

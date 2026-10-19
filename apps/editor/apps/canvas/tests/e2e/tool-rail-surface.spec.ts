@@ -64,9 +64,27 @@ import { fixturePath } from "./harness/fixtures";
 /** Tools under test: rail slot id (the tool's `group`) + shortcut. */
 const TOOLS = [
   { id: "paged.tool.page", slot: "page", key: "P", shift: true, title: "Page" },
-  { id: "paged.tool.pencil", slot: "pencil", key: "n", shift: false, title: "Pencil" },
-  { id: "paged.tool.scissors", slot: "scissors", key: "c", shift: false, title: "Scissors" },
-  { id: "paged.tool.shear", slot: "transform", key: "o", shift: false, title: "Shear" },
+  {
+    id: "paged.tool.pencil",
+    slot: "pencil",
+    key: "n",
+    shift: false,
+    title: "Pencil",
+  },
+  {
+    id: "paged.tool.scissors",
+    slot: "scissors",
+    key: "c",
+    shift: false,
+    title: "Scissors",
+  },
+  {
+    id: "paged.tool.shear",
+    slot: "transform",
+    key: "o",
+    shift: false,
+    title: "Shear",
+  },
   {
     id: "paged.tool.gradientSwatch",
     slot: "gradientSwatch",
@@ -106,7 +124,9 @@ async function countKind(page: Page, kind: string): Promise<number> {
       globalThis as unknown as {
         __canvas: {
           client: {
-            executeScript: (s: string) => Promise<{ output: string[]; error: string | null }>;
+            executeScript: (
+              s: string,
+            ) => Promise<{ output: string[]; error: string | null }>;
           };
         };
       }
@@ -117,7 +137,10 @@ async function countKind(page: Page, kind: string): Promise<number> {
       children?: unknown[];
     }>;
     let n = 0;
-    const visit = (node: { id?: { kind: string } | null; children?: unknown[] }) => {
+    const visit = (node: {
+      id?: { kind: string } | null;
+      children?: unknown[];
+    }) => {
       if (node.id && node.id.kind === k) n += 1;
       for (const ch of (node.children ?? []) as typeof tree) visit(ch);
     };
@@ -126,7 +149,9 @@ async function countKind(page: Page, kind: string): Promise<number> {
   }, kind);
 }
 
-async function pageZeroScreenCenter(page: Page): Promise<{ x: number; y: number; scale: number }> {
+async function pageZeroScreenCenter(
+  page: Page,
+): Promise<{ x: number; y: number; scale: number }> {
   return page.evaluate(() => {
     let best: HTMLCanvasElement | null = null;
     let bestArea = 0;
@@ -142,7 +167,9 @@ async function pageZeroScreenCenter(page: Page): Promise<{ x: number; y: number;
       globalThis as unknown as {
         __canvas: {
           handle: { pageSizesPt: [number, number][] };
-          client: { camera: { read: () => { scale: number; tx: number; ty: number } } };
+          client: {
+            camera: { read: () => { scale: number; tx: number; ty: number } };
+          };
         };
       }
     ).__canvas;
@@ -164,7 +191,9 @@ test.describe("tool rail — the six live tools no spec had named", () => {
       .poll(
         () =>
           page.evaluate(
-            () => (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas.ready,
+            () =>
+              (globalThis as unknown as { __canvas: { ready: boolean } })
+                .__canvas.ready,
           ),
         { timeout: 30_000 },
       )
@@ -192,7 +221,9 @@ test.describe("tool rail — the six live tools no spec had named", () => {
       // `contentSelectionInactive`, so this asserts the un-guarded path:
       // no caret, no text selection.
       await page.keyboard.press(tool.shift ? `Shift+${tool.key}` : tool.key);
-      await expect.poll(() => activeSlot(page), { timeout: 5_000 }).toBe(tool.slot);
+      await expect
+        .poll(() => activeSlot(page), { timeout: 5_000 })
+        .toBe(tool.slot);
     });
   }
 
@@ -202,7 +233,9 @@ test.describe("tool rail — the six live tools no spec had named", () => {
     const before = await countKind(page, "polygon");
 
     await page.locator('[data-tool-slot="pencil"]').click();
-    await expect.poll(() => activeSlot(page), { timeout: 5_000 }).toBe("pencil");
+    await expect
+      .poll(() => activeSlot(page), { timeout: 5_000 })
+      .toBe("pencil");
 
     // A freehand stroke: several moves, because a single down/up is a
     // click and the handler needs points to fit a path to.
@@ -240,7 +273,11 @@ test.describe("tool rail — the six live tools no spec had named", () => {
     await page.evaluate(async () => {
       const cmd = (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (id: string) => Promise<unknown> } } };
+          __canvas: {
+            registries: {
+              commands: { invoke: (id: string) => Promise<unknown> };
+            };
+          };
         }
       ).__canvas.registries.commands;
       await cmd.invoke("paged.file.new");
@@ -273,7 +310,9 @@ test.describe("tool rail — the six live tools no spec had named", () => {
     // what this tier asserts: the tool takes the tool slot and does not
     // fall back to select.
     await page.keyboard.press("o");
-    await expect.poll(() => activeSlot(page), { timeout: 5_000 }).toBe("transform");
+    await expect
+      .poll(() => activeSlot(page), { timeout: 5_000 })
+      .toBe("transform");
 
     // Selecting an element must not knock the tool off — the spring-loaded
     // override and the ADR-024 leave-by-tool rule both act on this path,

@@ -1,7 +1,12 @@
 {
   "kind": "struct",
   "fields": {
-    "bytes": { "kind": "bytes", "mime": ["application/vnd.openxmlformats-officedocument.presentationml.presentation"] },
+    "bytes": {
+      "kind": "bytes",
+      "mime": [
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      ]
+    },
     "name": { "kind": "text" }
   }
 }

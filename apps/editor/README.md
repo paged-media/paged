@@ -41,19 +41,19 @@ TypeScript + React 18 + Vite, Tailwind for styling.
 
 ### Apps
 
-| App | Package name | Role |
-|---|---|---|
-| `apps/canvas` | `paged-canvas` | The editor application. React shell driving a Web Worker that runs the engine wasm (Vello/WebGPU, tiny-skia CPU fallback) on an `OffscreenCanvas`. Owns the panel catalog wiring, REPL, script editor, and the Playwright fidelity suite. |
-| `apps/devtools` | `paged-devtools` | A Chrome-DevTools-style scene-graph inspector (Tree / Properties / Render panes) over `paged-introspect-wasm`. Standalone dev tool, separate wasm bundle. |
+| App             | Package name     | Role                                                                                                                                                                                                                                      |
+| --------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/canvas`   | `paged-canvas`   | The editor application. React shell driving a Web Worker that runs the engine wasm (Vello/WebGPU, tiny-skia CPU fallback) on an `OffscreenCanvas`. Owns the panel catalog wiring, REPL, script editor, and the Playwright fidelity suite. |
+| `apps/devtools` | `paged-devtools` | A Chrome-DevTools-style scene-graph inspector (Tree / Properties / Render panes) over `paged-introspect-wasm`. Standalone dev tool, separate wasm bundle.                                                                                 |
 
 ### Packages (`@paged-media/*`)
 
-| Package | Role | Depends on |
-|---|---|---|
-| `packages/client` (`@paged-media/client`) | Framework-agnostic SDK client. Owns the wasm protocol boundary: `CanvasClient` (main-thread worker handle), the tsify-generated wire types (`protocol.ts`), and the `SharedArrayBuffer` primitives (`sab/camera`, `sab/gesture`). **No React, no DOM beyond Worker + SAB.** | — (vendors engine wasm) |
-| `packages/catalog` (`@paged-media/catalog`) | Declarative command/panel catalog: the curated registry of bindings + composition nodes that panels are described against. | `@paged-media/client` |
-| `packages/shell` (`@paged-media/shell`) | The editor shell: React state contexts, registries (command/menu/panel/tool/overlay/keybinding), the dockview docking substrate, overlays (selection chrome, handles, snap lines, path edit), command palette, and the `PagedShell` root. | `@paged-media/client`, `@paged-media/catalog`, `@paged-media/ui` |
-| `packages/ui` (`@paged-media/ui`) | UI kit — input primitives (`BoundsInput`, `ColorPicker`, `LengthInput`, `NumberInput`, `ScrubField`, units). | `@paged-media/shell` |
+| Package                                     | Role                                                                                                                                                                                                                                                                        | Depends on                                                       |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `packages/client` (`@paged-media/client`)   | Framework-agnostic SDK client. Owns the wasm protocol boundary: `CanvasClient` (main-thread worker handle), the tsify-generated wire types (`protocol.ts`), and the `SharedArrayBuffer` primitives (`sab/camera`, `sab/gesture`). **No React, no DOM beyond Worker + SAB.** | — (vendors engine wasm)                                          |
+| `packages/catalog` (`@paged-media/catalog`) | Declarative command/panel catalog: the curated registry of bindings + composition nodes that panels are described against.                                                                                                                                                  | `@paged-media/client`                                            |
+| `packages/shell` (`@paged-media/shell`)     | The editor shell: React state contexts, registries (command/menu/panel/tool/overlay/keybinding), the dockview docking substrate, overlays (selection chrome, handles, snap lines, path edit), command palette, and the `PagedShell` root.                                   | `@paged-media/client`, `@paged-media/catalog`, `@paged-media/ui` |
+| `packages/ui` (`@paged-media/ui`)           | UI kit — input primitives (`BoundsInput`, `ColorPicker`, `LengthInput`, `NumberInput`, `ScrubField`, units).                                                                                                                                                                | `@paged-media/shell`                                             |
 
 Dependency picture (consumer → producer):
 
@@ -98,31 +98,19 @@ bun install             # at the repository root; workspace deps resolve via sym
 
 ### wasm prerequisite (read this before `bun run dev`)
 
-A fresh clone has the tracked `.d.ts` but **not** the gitignored
-`.wasm`/`.js` — so the editor **cannot build or run until the engine
-wasm is present** in `packages/client/src/wasm/`. Two paths:
-
-**Today (local dev, before npm publish):** build the wasm from a
-`paged-media/core` checkout. From this repo's root (with `core`'s
-Rust workspace reachable):
+The editor consumes the engine through the workspace: `@paged-media/canvas-wasm`
+(`engine/core/packages/canvas-wasm`, with its `./repo` and `./introspect` entries) is a
+`workspace:*` dependency, and its generated files (the glue, the `.d.ts`, the wasm) are
+gitignored. A fresh clone **cannot build or run until the engine wasm is built**:
 
 ```bash
 rustup target add wasm32-unknown-unknown
-cargo install wasm-bindgen-cli --version <pinned>   # matches core's Cargo.lock; build script prints it
-# optional: brew install binaryen   (wasm-opt size pass)
-
-bun run --filter paged-canvas wasm     # runs apps/canvas/build-wasm.sh → packages/client/src/wasm/
+bash tooling/bootstrap.sh              # wasm-bindgen-cli at the Cargo.lock version, binaryen
+moon run core:wasm-pkg                 # or: bash engine/core/scripts/build-wasm-packages.sh --workspace
 ```
 
-This produces `paged_canvas_wasm.{js,d.ts}` + `paged_canvas_wasm_bg.wasm`.
-(`apps/devtools` has its own `build-wasm.sh` for `paged-introspect-wasm`.)
-
-**After core publishes (target end state, decision B):** once
-`paged-media/core` publishes `@paged-media/canvas-wasm` (and
-`@paged-media/introspect-wasm`) to npm, `packages/client` is pointed
-at the published package and the build-from-core step disappears —
-`bun install` alone is sufficient. **This is not yet wired**; until
-then, local dev requires the core-checkout wasm build above.
+This writes `paged_canvas_wasm.{js,d.ts}` + `paged_canvas_wasm_bg.wasm` and the `introspect/`
+and `repo/` entries into `engine/core/packages/canvas-wasm/` (engine/core ADR 185, PM-0008).
 
 ### Run
 

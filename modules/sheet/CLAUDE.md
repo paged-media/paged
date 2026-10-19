@@ -43,17 +43,18 @@ and exported as `lowerPaginatedToChain` / `subscribeChainReflow`, but NO
 command or panel calls it — a user cannot reach it.
 The **in-frame grid renders + edits via K-1** (`sheet.grid.inframe`):
 `host.contribute.sceneLayer` paints the windowed grid (C-1 vector v0.39.0
-+ text v0.40.0), and the modal edit session is wired end-to-end
-(double-click entry → content-coord cell select → keystroke editor →
-Enter/Esc, session-scoped Cmd-Z per ADR-012) — driven by the editor
-journey `apps/canvas/tests/journey/plugins/sheet.journey.spec.ts` and the
-e2e `sheet-modal-session.spec.ts`. Workbook **persistence** rides
-`host.blob` (OPFS, S-08) + the `.paged` container part: written on
-import AND re-saved after every committed edit (debounced
-`PERSIST_DEBOUNCE_MS`, flushed on dispose / `flushPersist()`; before
-2026-10-04 edits were lost on reload); the
-**data-provider CONSUMER** (S-15, `sheetFromDataset`) sources a sheet from
-a governed dataset.
+
+- text v0.40.0), and the modal edit session is wired end-to-end
+  (double-click entry → content-coord cell select → keystroke editor →
+  Enter/Esc, session-scoped Cmd-Z per ADR-012) — driven by the editor
+  journey `apps/canvas/tests/journey/plugins/sheet.journey.spec.ts` and the
+  e2e `sheet-modal-session.spec.ts`. Workbook **persistence** rides
+  `host.blob` (OPFS, S-08) + the `.paged` container part: written on
+  import AND re-saved after every committed edit (debounced
+  `PERSIST_DEBOUNCE_MS`, flushed on dispose / `flushPersist()`; before
+  2026-10-04 edits were lost on reload); the
+  **data-provider CONSUMER** (S-15, `sheetFromDataset`) sources a sheet from
+  a governed dataset.
 
 ## Project State & Feature Matrix (cockpit)
 
@@ -71,7 +72,7 @@ Rules for every code change in this repo:
    ending in `__feat__<id_with_underscores>` or containing `[<id>]`. Otherwise an entry in
    `cockpit/test-map.yaml`.
 3. STATUS CHANGE → `claims:` in the feature file, never prose. "X is now shipped/partial" is a
-   claim edit; whether it *works* is computed from evidence and cannot be written.
+   claim edit; whether it _works_ is computed from evidence and cannot be written.
 4. BEFORE claiming a feature done: `cockpit feature <id> --json` (or its page in
    `cockpit serve`) — done means the linked tests are green and were produced after the
    latest implementation commit.
@@ -137,7 +138,7 @@ Rules for every code change in this repo:
   `Operation::Batch` (`apply_batch` rolls back every sibling). The damage
   is never confined to the redundant mint: measured against the real
   engine, lowering a chart twice — or lowering ANY second chart, since
-  every chart shares the axis grey — landed *nothing*, not merely a lost
+  every chart shares the axis grey — landed _nothing_, not merely a lost
   colour. So every lane that mints inside a batch **reads the document
   first (`readKnownSwatchIds`) and emits only the absent ids
   (`swatchMintOps`); a FAILED read mints NOTHING** — the batch still

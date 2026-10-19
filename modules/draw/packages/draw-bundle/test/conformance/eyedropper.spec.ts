@@ -106,7 +106,12 @@ describe("draw conformance — eyedropper (wave 2)", () => {
         { id: RECT, supports: full },
         { id: LINE, supports: strokesOnly },
       ],
-      { fillColor: "Color/Black", strokeWeight: 2, fillTint: null, opacity: null },
+      {
+        fillColor: "Color/Black",
+        strokeWeight: 2,
+        fillTint: null,
+        opacity: null,
+      },
     ) as Extract<Mutation, { op: "batch" }>;
     expect(m).toEqual({
       op: "batch",
@@ -144,7 +149,9 @@ describe("draw conformance — eyedropper (wave 2)", () => {
       },
     });
     // Nothing readable / no targets → nothing to write.
-    expect(applyStyleMutationFor([{ id: RECT, supports: full }], {})).toBeNull();
+    expect(
+      applyStyleMutationFor([{ id: RECT, supports: full }], {}),
+    ).toBeNull();
     expect(applyStyleMutationFor([], { fillColor: "Color/Black" })).toBeNull();
   });
 
@@ -160,7 +167,12 @@ describe("draw conformance — eyedropper (wave 2)", () => {
       const sw = await h.host.document.mutate({
         op: "createSwatch",
         args: {
-          spec: { selfId: RED, name: "#ff0000", space: "RGB", value: [255, 0, 0] },
+          spec: {
+            selfId: RED,
+            name: "#ff0000",
+            space: "RGB",
+            value: [255, 0, 0],
+          },
         },
       });
       if (!sw.applied) throw new Error("createSwatch failed");

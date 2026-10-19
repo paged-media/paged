@@ -151,8 +151,9 @@ export async function openCanvas(
   // Absent affordance (a production build) = nothing to wait for.
   await page.waitForFunction(
     () => {
-      const b = (globalThis as unknown as { __pluginBundles?: { settled: boolean } })
-        .__pluginBundles;
+      const b = (
+        globalThis as unknown as { __pluginBundles?: { settled: boolean } }
+      ).__pluginBundles;
       return !b || b.settled;
     },
     null,

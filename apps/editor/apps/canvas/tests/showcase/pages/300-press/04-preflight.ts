@@ -41,9 +41,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(123);
   const [left, top, right] = contentBox(page);
 
-  const head = await proseFrame(ctx, page, [left, top, right, top + 32], [
-    { text: "The preflight", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [left, top, right, top + 32],
+    [{ text: "The preflight", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   // ── the real export, run first so the page prints facts ──────────
@@ -60,35 +63,44 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     "the export session produced a PDF (bytes counted, then discarded)",
   ).toBeGreaterThan(1000);
 
-  const intro = await proseFrame(ctx, page, [left, top + 40, right, top + 148], [
-    {
-      text:
-        "A preflight is the press asking its questions early. While this page was built, the document you are holding went through the real export door — client.exportPdf, standard PDF 1.7, the same begin-page-finish session the File menu drives — and answered for every page it had. The serialized proof came back " +
-        `${formatBytes(result.pdfBytes)} long and was discarded on the spot; what this page keeps is the export's judgment: ` +
-        `${result.diagnostics.length} diagnostic line(s) and ${result.findings.length} structured finding(s), printed verbatim below.`,
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [left, top + 40, right, top + 148],
+    [
+      {
+        text:
+          "A preflight is the press asking its questions early. While this page was built, the document you are holding went through the real export door — client.exportPdf, standard PDF 1.7, the same begin-page-finish session the File menu drives — and answered for every page it had. The serialized proof came back " +
+          `${formatBytes(result.pdfBytes)} long and was discarded on the spot; what this page keeps is the export's judgment: ` +
+          `${result.diagnostics.length} diagnostic line(s) and ${result.findings.length} structured finding(s), printed verbatim below.`,
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(intro.frameId);
 
   // ── the codes, explained (fixed layout — the table below is the
   //    dynamic half and takes the remaining space) ───────────────────
-  const explain = await proseFrame(ctx, page, [left, top + 156, right, top + 336], [
-    {
-      text:
-        "Two codes carry most preflights. font_not_embeddable names a face whose fsType licence forbids embedding: the exporter follows its policy — outline the glyphs, or fail the export — rather than ship a file the licence disallows. image_missing_bytes names a placed link whose pixels never arrived; the page paints its proxy, and a proof would too, so the finding says it before the press does. Each finding arrives with a severity and the page it was raised on, which is what turns a warning list into a work list.",
-      style: STYLE.body,
-    },
-    {
-      text:
-        `Beneath the findings runs the flat diagnostics channel — ${result.diagnostics.length} line(s) on this run` +
-        (result.diagnostics.length > 0
-          ? `, the first of them: “${truncate(result.diagnostics[0], 130)}”`
-          : ", i.e. nothing to report") +
-        ". The findings are the structured half of the same story (protocol 62 carries both), and this document elects to print the structured one.",
-      style: STYLE.body,
-    },
-  ]);
+  const explain = await proseFrame(
+    ctx,
+    page,
+    [left, top + 156, right, top + 336],
+    [
+      {
+        text: "Two codes carry most preflights. font_not_embeddable names a face whose fsType licence forbids embedding: the exporter follows its policy — outline the glyphs, or fail the export — rather than ship a file the licence disallows. image_missing_bytes names a placed link whose pixels never arrived; the page paints its proxy, and a proof would too, so the finding says it before the press does. Each finding arrives with a severity and the page it was raised on, which is what turns a warning list into a work list.",
+        style: STYLE.body,
+      },
+      {
+        text:
+          `Beneath the findings runs the flat diagnostics channel — ${result.diagnostics.length} line(s) on this run` +
+          (result.diagnostics.length > 0
+            ? `, the first of them: “${truncate(result.diagnostics[0], 130)}”`
+            : ", i.e. nothing to report") +
+          ". The findings are the structured half of the same story (protocol 62 carries both), and this document elects to print the structured one.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(explain.frameId);
 
   // ── the findings, as a native table ──────────────────────────────
@@ -128,7 +140,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const table = await dataTable(
     ctx,
     page,
-    [left, tableTop, right, Math.min(634, tableTop + 66 + rows.length * rowHeight)],
+    [
+      left,
+      tableTop,
+      right,
+      Math.min(634, tableTop + 66 + rows.length * rowHeight),
+    ],
     {
       caption:
         "Table 20·1 — preflight findings, exactly as the pdfExported reply carried them.",

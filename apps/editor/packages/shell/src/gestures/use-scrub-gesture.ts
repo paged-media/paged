@@ -75,7 +75,11 @@ const DEFAULT_PRECISION = 2;
 const DEFAULT_SHIFT_SCALAR = 0.1;
 const DEFAULT_ALT_SCALAR = 10;
 
-function clamp(value: number, min: number | undefined, max: number | undefined): number {
+function clamp(
+  value: number,
+  min: number | undefined,
+  max: number | undefined,
+): number {
   let v = value;
   if (min !== undefined && v < min) v = min;
   if (max !== undefined && v > max) v = max;

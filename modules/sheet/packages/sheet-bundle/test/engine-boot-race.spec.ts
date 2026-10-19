@@ -43,7 +43,13 @@ import { stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WASM = join(HERE, "..", "bin", "sheet_js_bg.wasm");
-const FREEZE_XLSX = join(HERE, "..", "..", "..", "corpus/xlsx-corpus/11-freeze.xlsx");
+const FREEZE_XLSX = join(
+  HERE,
+  "..",
+  "..",
+  "..",
+  "corpus/xlsx-corpus/11-freeze.xlsx",
+);
 const built = existsSync(WASM);
 const required = process.env.REQUIRE_REAL_ENGINE === "1";
 
@@ -55,7 +61,12 @@ function delayedWasmFetch(): Promise<Response> {
   const delay = 10 * ++fetches;
   return new Promise((r) =>
     setTimeout(
-      () => r(new Response(readFileSync(WASM), { headers: { "Content-Type": "application/wasm" } })),
+      () =>
+        r(
+          new Response(readFileSync(WASM), {
+            headers: { "Content-Type": "application/wasm" },
+          }),
+        ),
       delay,
     ),
   );
@@ -65,7 +76,10 @@ describe.skipIf(!built && !required)(
   "concurrent engine boots share one wasm instance [sheet.plugin.persistence]",
   () => {
     beforeAll(() => {
-      expect(existsSync(WASM), `${WASM} missing — run scripts/build-wasm.sh`).toBe(true);
+      expect(
+        existsSync(WASM),
+        `${WASM} missing — run scripts/build-wasm.sh`,
+      ).toBe(true);
       (globalThis as { window?: unknown }).window = globalThis; // the browser branch
       stubGlobal("fetch", delayedWasmFetch);
     });
@@ -81,7 +95,10 @@ describe.skipIf(!built && !required)(
       // boots alongside it.
       const first = bootEngine().then((e) => {
         e.loadXlsx(xlsx);
-        expect(e.listFreezePanes(), "the fixture has one frozen sheet").toHaveLength(1);
+        expect(
+          e.listFreezePanes(),
+          "the fixture has one frozen sheet",
+        ).toHaveLength(1);
         return e;
       });
       const second = bootEngine();

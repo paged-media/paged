@@ -27,10 +27,19 @@ import { readFileSync } from "node:fs";
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { applyDefaults, createHeadlessHost, validateValue, type HeadlessHost } from "@paged-media/plugin-sdk";
+import {
+  applyDefaults,
+  createHeadlessHost,
+  validateValue,
+  type HeadlessHost,
+} from "@paged-media/plugin-sdk";
 
 import { pdfBundle } from "../src/activate";
-import { IMPORT_PDF_ARGS_TYPE, IMPORT_PDF_COMMAND, IMPORT_PDF_RESULT_TYPE } from "../src/commands";
+import {
+  IMPORT_PDF_ARGS_TYPE,
+  IMPORT_PDF_COMMAND,
+  IMPORT_PDF_RESULT_TYPE,
+} from "../src/commands";
 import { _resetPdfMapperCache } from "../src/engine-loader";
 import { PDF_IMPORT_DEFAULTS } from "../src/io/pdf";
 import { fileURLToPath } from "node:url";
@@ -41,7 +50,10 @@ import { fileURLToPath } from "node:url";
 // store hoists, not the one this package pins.
 const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
 
-const IDML = new URL("../../../../../engine/core/crates/idml-export/tests/fixtures/indesign-20.0.1-navigation.idml", import.meta.url);
+const IDML = new URL(
+  "../../../../../engine/core/crates/idml-export/tests/fixtures/indesign-20.0.1-navigation.idml",
+  import.meta.url,
+);
 
 let h: HeadlessHost;
 let pdf: Uint8Array;
@@ -50,12 +62,21 @@ let sourcePages: number;
 /** The engine's PDF of the loaded document (begin → pages → finish). */
 async function enginePdf(): Promise<Uint8Array> {
   const send = h.host.editor.client.send.bind(h.host.editor.client);
-  const begun = await send({ kind: "exportPdfBegin", payload: { options: {} } });
+  const begun = await send({
+    kind: "exportPdfBegin",
+    payload: { options: {} },
+  });
   if (begun.kind !== "exportPdfBegun") throw new Error(begun.kind);
   for (let i = 0; i < begun.payload.pageCount; i++) {
-    await send({ kind: "exportPdfPage", payload: { session: begun.payload.session } });
+    await send({
+      kind: "exportPdfPage",
+      payload: { session: begun.payload.session },
+    });
   }
-  const done = await send({ kind: "exportPdfFinish", payload: { session: begun.payload.session } });
+  const done = await send({
+    kind: "exportPdfFinish",
+    payload: { session: begun.payload.session },
+  });
   if (done.kind !== "pdfExported") throw new Error(done.kind);
   return Uint8Array.from(done.payload.pdfBytes);
 }
@@ -70,18 +91,29 @@ beforeEach(async () => {
 
 afterEach(() => h.dispose());
 
-const args = (over: Record<string, unknown> = {}) => ({ bytes: pdf, name: "navigation.pdf", mode: "auto", dpi: 150, ...over });
+const args = (over: Record<string, unknown> = {}) => ({
+  bytes: pdf,
+  name: "navigation.pdf",
+  mode: "auto",
+  dpi: 150,
+  ...over,
+});
 
 describe("[plugin-pdf.typed-commands] importPdf as a typed command", () => {
   it("is listed with the schema files' args and result", async () => {
-    const [c] = (await h.objects.commands()).filter((x) => x.owner === "media.paged.pdf");
+    const [c] = (await h.objects.commands()).filter(
+      (x) => x.owner === "media.paged.pdf",
+    );
     expect(c?.id).toBe(IMPORT_PDF_COMMAND);
     expect(c?.args).toEqual(IMPORT_PDF_ARGS_TYPE);
     expect(c?.result).toEqual(IMPORT_PDF_RESULT_TYPE);
   });
 
   it("opens a PDF as an editable document under Node, a page per PDF page", async () => {
-    const out = await h.objects.invoke(IMPORT_PDF_COMMAND, args({ mode: "editable" }));
+    const out = await h.objects.invoke(
+      IMPORT_PDF_COMMAND,
+      args({ mode: "editable" }),
+    );
     expect(validateValue(IMPORT_PDF_RESULT_TYPE, out)).toBeNull();
     expect(out).toEqual({ mode: "editable", pageCount: sourcePages });
     expect(await h.objects.query("page")).toHaveLength(sourcePages);
@@ -90,31 +122,48 @@ describe("[plugin-pdf.typed-commands] importPdf as a typed command", () => {
   }, 60_000);
 
   it("honours the page cap", async () => {
-    const out = (await h.objects.invoke(IMPORT_PDF_COMMAND, args({ maxPages: 1 }))) as { pageCount: number };
+    const out = (await h.objects.invoke(
+      IMPORT_PDF_COMMAND,
+      args({ maxPages: 1 }),
+    )) as { pageCount: number };
     expect(out.pageCount).toBe(1);
     expect(await h.objects.query("page")).toHaveLength(1);
   }, 60_000);
 
   it("refuses args outside the schema or its ranges, and opens nothing", async () => {
     const before = await h.objects.query("page");
-    await expect(h.objects.invoke(IMPORT_PDF_COMMAND, args({ mode: "vector" }))).rejects.toThrow(/invalidValue/);
-    await expect(h.objects.invoke(IMPORT_PDF_COMMAND, args({ dpi: 10 }))).rejects.toThrow(/invalidValue/);
-    await expect(h.objects.invoke(IMPORT_PDF_COMMAND, args({ maxPages: -1 }))).rejects.toThrow(/invalidValue/);
-    await expect(h.objects.invoke(IMPORT_PDF_COMMAND, args({ maxPages: 0 }))).rejects.toThrow(/invalidValue/);
-    await expect(h.objects.invoke(IMPORT_PDF_COMMAND, { name: "x" })).rejects.toThrow(/invalidValue/);
+    await expect(
+      h.objects.invoke(IMPORT_PDF_COMMAND, args({ mode: "vector" })),
+    ).rejects.toThrow(/invalidValue/);
+    await expect(
+      h.objects.invoke(IMPORT_PDF_COMMAND, args({ dpi: 10 })),
+    ).rejects.toThrow(/invalidValue/);
+    await expect(
+      h.objects.invoke(IMPORT_PDF_COMMAND, args({ maxPages: -1 })),
+    ).rejects.toThrow(/invalidValue/);
+    await expect(
+      h.objects.invoke(IMPORT_PDF_COMMAND, args({ maxPages: 0 })),
+    ).rejects.toThrow(/invalidValue/);
+    await expect(
+      h.objects.invoke(IMPORT_PDF_COMMAND, { name: "x" }),
+    ).rejects.toThrow(/invalidValue/);
     expect(await h.objects.query("page")).toEqual(before);
   });
 
   it("the image path needs a canvas: under Node it fails honestly and keeps the document", async () => {
     const before = await h.objects.query("page");
-    await expect(h.objects.invoke(IMPORT_PDF_COMMAND, args({ mode: "image" }))).rejects.toThrow();
+    await expect(
+      h.objects.invoke(IMPORT_PDF_COMMAND, args({ mode: "image" })),
+    ).rejects.toThrow();
     expect(await h.objects.query("page")).toEqual(before);
   }, 60_000);
 });
 
 describe("[plugin-pdf.typed-commands] partial args: struct defaults and optional fields (SDK 0.2.43)", () => {
   it("PDF_IMPORT_DEFAULTS is the schema's defaults; maxPages is optional", () => {
-    const filled = applyDefaults(IMPORT_PDF_ARGS_TYPE, { bytes: new Uint8Array(1) }) as Record<string, unknown>;
+    const filled = applyDefaults(IMPORT_PDF_ARGS_TYPE, {
+      bytes: new Uint8Array(1),
+    }) as Record<string, unknown>;
     const { bytes: _b, name, ...opts } = filled;
     expect(opts).toEqual(PDF_IMPORT_DEFAULTS);
     expect(name).toBe("document.pdf");
@@ -127,7 +176,10 @@ describe("[plugin-pdf.typed-commands] partial args: struct defaults and optional
   }, 60_000);
 
   it("opens a PDF from { bytes, maxPages }", async () => {
-    const out = (await h.objects.invoke(IMPORT_PDF_COMMAND, { bytes: pdf, maxPages: 1 })) as { pageCount: number };
+    const out = (await h.objects.invoke(IMPORT_PDF_COMMAND, {
+      bytes: pdf,
+      maxPages: 1,
+    })) as { pageCount: number };
     expect(out.pageCount).toBe(1);
   }, 60_000);
 });

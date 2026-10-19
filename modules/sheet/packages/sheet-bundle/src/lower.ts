@@ -124,7 +124,11 @@ export const DEFAULT_CELL_POINT_SIZE = 12;
  *  measured under. Both fallbacks are the rule {@link measureColumnWidths}
  *  states: `""` for the family (the engine's default-face resolution) and
  *  {@link DEFAULT_CELL_POINT_SIZE} for the size. */
-function faceOf(style: LoweredStyle | null): { family: string; style: string | null; sizePt: number } {
+function faceOf(style: LoweredStyle | null): {
+  family: string;
+  style: string | null;
+  sizePt: number;
+} {
   return {
     family: style?.fontName ?? "",
     style: style?.bold || style?.italic ? "Bold" : null,
@@ -132,8 +136,11 @@ function faceOf(style: LoweredStyle | null): { family: string; style: string | n
   };
 }
 
-const faceKey = (f: { family: string; style: string | null; sizePt: number }): string =>
-  `${f.family}|${f.style ?? ""}|${f.sizePt}`;
+const faceKey = (f: {
+  family: string;
+  style: string | null;
+  sizePt: number;
+}): string => `${f.family}|${f.style ?? ""}|${f.sizePt}`;
 
 /** What one column measurement pass learns: the widths, and the vertical
  *  metrics the engine's layout of the table will use ({@link TableFit}). */
@@ -164,7 +171,9 @@ export async function measureColumns(
   content: LoweredContent,
 ): Promise<MeasuredColumns> {
   const styleOf = (key: number | undefined) =>
-    key == null ? null : (content.styles ?? []).find((s) => s.key === key) ?? null;
+    key == null
+      ? null
+      : ((content.styles ?? []).find((s) => s.key === key) ?? null);
   const CELL_INSET_PT = 4; // left+right padding inside a cell
   /** Ascender (pt) per measured face key. */
   const ascenders = new Map<string, number>();
@@ -183,7 +192,12 @@ export async function measureColumns(
       }
       if (widest.length === 0) return col.widthPt;
       const face = faceOf(style);
-      const metrics = await host.text.measureString(face.family, face.style, widest, face.sizePt);
+      const metrics = await host.text.measureString(
+        face.family,
+        face.style,
+        widest,
+        face.sizePt,
+      );
       if (Number.isFinite(metrics.ascender) && metrics.ascender > 0) {
         ascenders.set(faceKey(face), metrics.ascender);
       }
@@ -202,10 +216,17 @@ export async function measureColumns(
     if (size > 0) perPt = Math.max(perPt, asc / size);
   }
   if (perPt === 0) perPt = 0.8;
-  const ascenderOf = (face: { family: string; style: string | null; sizePt: number }) =>
-    ascenders.get(faceKey(face)) ?? perPt * face.sizePt;
+  const ascenderOf = (face: {
+    family: string;
+    style: string | null;
+    sizePt: number;
+  }) => ascenders.get(faceKey(face)) ?? perPt * face.sizePt;
   const fit: TableFit = {
-    defaultAscenderPt: ascenderOf({ family: "", style: null, sizePt: ENGINE_DEFAULT_SIZE_PT }),
+    defaultAscenderPt: ascenderOf({
+      family: "",
+      style: null,
+      sizePt: ENGINE_DEFAULT_SIZE_PT,
+    }),
     cellAscenderPt: (r, c) => {
       const cell = content.rows[r]?.cells.find((x) => x.col === c);
       return ascenderOf(faceOf(cell ? styleOf(cell.styleKey) : null));
@@ -259,7 +280,10 @@ export async function selectionAnchor(
     return null;
   }
   const first = selected.find(
-    (id) => id.kind !== "storyRange" && id.kind !== "table" && id.kind !== "tableCell",
+    (id) =>
+      id.kind !== "storyRange" &&
+      id.kind !== "table" &&
+      id.kind !== "tableCell",
   );
   if (!first) return null;
   let geom: Awaited<ReturnType<BundleHost["document"]["elementGeometry"]>>;
@@ -272,16 +296,24 @@ export async function selectionAnchor(
   if (!g || !g.pageId) return null;
   const [top, left] = g.bounds;
   const [a, b, c, d, tx, ty] = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
-  return { pageId: g.pageId, left: a * left + c * top + tx, top: b * left + d * top + ty };
+  return {
+    pageId: g.pageId,
+    left: a * left + c * top + tx,
+    top: b * left + d * top + ty,
+  };
 }
 
 /** The page-space box of the FIRST selected element (its content box
  *  carried through its item transform — all four corners, so a rotated
  *  element's box is its true extent). Null with nothing selected, or when
  *  the element is on the pasteboard (no page). */
-export async function selectionBox(
-  host: BundleHost,
-): Promise<{ pageId: PageId; top: number; left: number; bottom: number; right: number } | null> {
+export async function selectionBox(host: BundleHost): Promise<{
+  pageId: PageId;
+  top: number;
+  left: number;
+  bottom: number;
+  right: number;
+} | null> {
   let selected: ElementId[];
   try {
     selected = host.selection.get();
@@ -289,7 +321,10 @@ export async function selectionBox(
     return null;
   }
   const first = selected.find(
-    (id) => id.kind !== "storyRange" && id.kind !== "table" && id.kind !== "tableCell",
+    (id) =>
+      id.kind !== "storyRange" &&
+      id.kind !== "table" &&
+      id.kind !== "tableCell",
   );
   if (!first) return null;
   let geom: Awaited<ReturnType<BundleHost["document"]["elementGeometry"]>>;
@@ -336,7 +371,8 @@ export function selectionIsInView(
   activePage: PageId | null,
 ): boolean {
   if (!activePage || activePage === selectionPage) return true;
-  const spreadOf = (id: PageId) => pages.find((p) => p.selfId === id)?.spreadId ?? null;
+  const spreadOf = (id: PageId) =>
+    pages.find((p) => p.selfId === id)?.spreadId ?? null;
   const active = spreadOf(activePage);
   const selected = spreadOf(selectionPage);
   if (active === null || selected === null) return true;
@@ -372,12 +408,17 @@ export async function placementForContent(
     const sized = defaultPlacement(at.pageId, content).bounds;
     const h = sized[2] - sized[0];
     const w = sized[3] - sized[1];
-    return { pageId: at.pageId, bounds: [at.top, at.left, at.top + h, at.left + w] };
+    return {
+      pageId: at.pageId,
+      bounds: [at.top, at.left, at.top + h, at.left + w],
+    };
   }
   // `meta` is read once: with no active page the first page, as
   // `activePageId` falls back.
   const pageId =
-    active ?? (await host.document.collection<{ selfId: string }>("pages"))[0]?.selfId ?? null;
+    active ??
+    (await host.document.collection<{ selfId: string }>("pages"))[0]?.selfId ??
+    null;
   return pageId ? defaultPlacement(pageId, content) : null;
 }
 
@@ -443,7 +484,9 @@ async function tableContentOps(
   const wantsText = cellCharacterStyles(content).size > 0;
   const wantsAlign = needsAlignStyles(content);
   const [swatches, styles, paragraphs] = await Promise.all([
-    wantsFills || wantsText ? readKnownSwatchIds(host) : Promise.resolve(undefined),
+    wantsFills || wantsText
+      ? readKnownSwatchIds(host)
+      : Promise.resolve(undefined),
     wantsText ? readKnownCharacterStyleIds(host) : Promise.resolve(null),
     wantsAlign ? readKnownParagraphStyleIds(host) : Promise.resolve(null),
   ]);
@@ -485,15 +528,26 @@ async function barOps(
   at: BarPlacement | undefined,
 ): Promise<Mutation[]> {
   if (!at || (content.databars ?? []).length === 0) return [];
-  return tableDataBarOps(content, at.widths, at.pageId, at.origin, await readKnownSwatchIds(host));
+  return tableDataBarOps(
+    content,
+    at.widths,
+    at.pageId,
+    at.origin,
+    await readKnownSwatchIds(host),
+  );
 }
 
 const isPolygon = (id: ElementId) => id.kind === "polygon";
 
 /** The elements an applied batch minted (`MutationOutcome.minted`, in mint
  *  order), filtered by `keep`. Empty when the batch was refused. */
-function mintedElements(outcome: MutationOutcome, keep: (id: ElementId) => boolean): ElementId[] {
-  return outcome.applied ? (outcome.minted ?? []).map((m) => m.element).filter(keep) : [];
+function mintedElements(
+  outcome: MutationOutcome,
+  keep: (id: ElementId) => boolean,
+): ElementId[] {
+  return outcome.applied
+    ? (outcome.minted ?? []).map((m) => m.element).filter(keep)
+    : [];
 }
 
 /** Pour a native table's content (see {@link tableContentOps}) as ONE
@@ -510,7 +564,12 @@ async function pourCellContent(
   tail: readonly Mutation[] = [],
   bars?: BarPlacement,
 ): Promise<{ calls: number; barIds: ElementId[] }> {
-  const { ops, styleOps } = await tableContentOps(host, content, storyId, tableId);
+  const { ops, styleOps } = await tableContentOps(
+    host,
+    content,
+    storyId,
+    tableId,
+  );
   const drawn = await barOps(host, content, bars);
   const lane1 = [...ops, ...drawn, ...tail];
   const all = [...lane1, ...styleOps];
@@ -529,7 +588,10 @@ async function pourCellContent(
   ] as const) {
     if (lane.length === 0) continue;
     calls += 1;
-    const t = await host.document.mutate({ op: "batch", args: { ops: [...lane] } });
+    const t = await host.document.mutate({
+      op: "batch",
+      args: { ops: [...lane] },
+    });
     if (!t.applied) host.log.warn(`lower: ${what} rejected`, t);
     else if (lane === lane1 && drawn.length > 0) {
       barIds = mintedElements(t, isPolygon);
@@ -575,7 +637,9 @@ async function readKnownParagraphStyleIds(
   host: BundleHost,
 ): Promise<Set<string> | null> {
   try {
-    const rows = await host.document.collection<{ selfId: string }>("paragraphStyles");
+    const rows = await host.document.collection<{ selfId: string }>(
+      "paragraphStyles",
+    );
     return new Set(rows.map((r) => r.selfId));
   } catch (err) {
     host.log.warn("cell alignment: paragraph-style read failed", err);
@@ -588,7 +652,9 @@ async function readKnownCharacterStyleIds(
   host: BundleHost,
 ): Promise<Set<string> | null> {
   try {
-    const rows = await host.document.collection<{ selfId: string }>("characterStyles");
+    const rows = await host.document.collection<{ selfId: string }>(
+      "characterStyles",
+    );
     return new Set(rows.map((r) => r.selfId));
   } catch (err) {
     host.log.warn("cell text styles: character-style read failed", err);
@@ -703,9 +769,7 @@ async function newStoryId(
   before: ReadonlySet<string>,
 ): Promise<string | null> {
   const after = await host.document.collection<{ selfId: string }>("stories");
-  const fresh = after
-    .map((s) => s.selfId)
-    .filter((id) => !before.has(id));
+  const fresh = after.map((s) => s.selfId).filter((id) => !before.has(id));
   return fresh.length === 1 ? fresh[0] : null;
 }
 
@@ -749,13 +813,20 @@ export async function lowerSelectionToFrame(
     placement = fittedPlacement(placement, content, fit);
   }
 
-  const one = await placeInOneCall(host, content, pageId, placement, columnWidths, {
-    ...opts,
-    sheet,
-    range,
-    contentVersion,
-    sheetName,
-  });
+  const one = await placeInOneCall(
+    host,
+    content,
+    pageId,
+    placement,
+    columnWidths,
+    {
+      ...opts,
+      sheet,
+      range,
+      contentVersion,
+      sheetName,
+    },
+  );
   if (one !== REFUSED) return one;
 
   // Refused in one call (nothing landed): the two-batch placement, whose
@@ -787,19 +858,33 @@ export async function lowerSelectionToFrame(
     // A host without in-batch handles (or one that refuses insertTable):
     // nothing landed (a refused batch rolls back whole) — the phased
     // placement, with its tab-text degradation.
-    host.log.debug("lower: one-batch placement refused — phased placement", placed);
-    return lowerPhased(host, content, pageId, placement, binding, columnWidths, {
-      ...opts,
-      sheet,
-      range,
-      contentVersion,
-      sheetName,
-    });
+    host.log.debug(
+      "lower: one-batch placement refused — phased placement",
+      placed,
+    );
+    return lowerPhased(
+      host,
+      content,
+      pageId,
+      placement,
+      binding,
+      columnWidths,
+      {
+        ...opts,
+        sheet,
+        range,
+        contentVersion,
+        sheetName,
+      },
+    );
   }
   if (placed.createdId?.kind !== "table") {
     // Applied, but the reply names no table: the frame stands and there is
     // no table id to pour into. Never place a second frame over it.
-    host.log.warn("lower: placement applied without reporting its table", placed);
+    host.log.warn(
+      "lower: placement applied without reporting its table",
+      placed,
+    );
     return placed.createdId ? frameIdOf(placed.createdId) : null;
   }
   const storyId = placed.createdId.id.story_id;
@@ -811,7 +896,9 @@ export async function lowerSelectionToFrame(
   const mintedFrame =
     minted.find((m) => m.handle === FRAME_HANDLE) ??
     minted.find((m) => m.element.kind === "textFrame");
-  const frameId: string | null = mintedFrame ? frameIdOf(mintedFrame.element) : null;
+  const frameId: string | null = mintedFrame
+    ? frameIdOf(mintedFrame.element)
+    : null;
 
   // The table's content — text, decor and text styles — as ONE more batch,
   // with the binding re-stamped to carry the table record. (Core 0eff96b
@@ -823,10 +910,25 @@ export async function lowerSelectionToFrame(
     storyId,
     tableId,
     frameId
-      ? [tableBindingStamp(frameId, sheetName, range, contentVersion, storyId, tableId, content, columnWidths)]
+      ? [
+          tableBindingStamp(
+            frameId,
+            sheetName,
+            range,
+            contentVersion,
+            storyId,
+            tableId,
+            content,
+            columnWidths,
+          ),
+        ]
       : [],
     // Data bars (Wave 9), under the frame at its page position.
-    { pageId, origin: [placement.bounds[0], placement.bounds[1]], widths: columnWidths },
+    {
+      pageId,
+      origin: [placement.bounds[0], placement.bounds[1]],
+      widths: columnWidths,
+    },
   );
 
   if (!frameId) {
@@ -845,7 +947,8 @@ export async function lowerSelectionToFrame(
     contentVersion,
     barIds,
   });
-  if (opts?.select !== false) await host.selection.set([{ kind: "textFrame", id: frameId }]);
+  if (opts?.select !== false)
+    await host.selection.set([{ kind: "textFrame", id: frameId }]);
   return frameId;
 }
 
@@ -892,7 +995,11 @@ async function placeInOneCall(
   const table = `$h:${TABLE_HANDLE}`;
   const { ops, styleOps } = await tableContentOps(host, content, table, table);
   const origin: [number, number] = [placement.bounds[0], placement.bounds[1]];
-  const drawn = await barOps(host, content, { pageId, origin, widths: columnWidths });
+  const drawn = await barOps(host, content, {
+    pageId,
+    origin,
+    widths: columnWidths,
+  });
   const binding = makeBinding(sheetName, range, contentVersion, {
     hash: contentHash(content),
     widths: [...columnWidths],
@@ -920,7 +1027,10 @@ async function placeInOneCall(
     },
   });
   if (!r.applied) {
-    host.log.debug("lower: one-call placement refused — two-batch placement", r);
+    host.log.debug(
+      "lower: one-call placement refused — two-batch placement",
+      r,
+    );
     return REFUSED;
   }
   // By handle, else by kind: the batch mints exactly one text frame and one
@@ -938,12 +1048,16 @@ async function placeInOneCall(
   if (!frameId || created?.kind !== "table") {
     // Applied — the table stands — but the reply does not name it. Never
     // place a second one over it.
-    host.log.warn("lower: one-call placement applied without naming its frame and table", r);
+    host.log.warn(
+      "lower: one-call placement applied without naming its frame and table",
+      r,
+    );
     return frameId;
   }
   const storyId = created.id.story_id;
   const tableId = created.id.table_id;
-  const barIds = drawn.length > 0 ? minted.map((m) => m.element).filter(isPolygon) : [];
+  const barIds =
+    drawn.length > 0 ? minted.map((m) => m.element).filter(isPolygon) : [];
   opts.onLowered?.({
     frameId,
     storyId,
@@ -956,7 +1070,8 @@ async function placeInOneCall(
     contentVersion,
     barIds,
   });
-  if (opts.select !== false) await host.selection.set([{ kind: "textFrame", id: frameId }]);
+  if (opts.select !== false)
+    await host.selection.set([{ kind: "textFrame", id: frameId }]);
   return frameId;
 }
 
@@ -970,9 +1085,13 @@ export async function tableUnderFrame(
   frameId: string,
   widths: readonly number[],
 ): Promise<{ storyId: string; tableId: string } | null> {
-  let g: Awaited<ReturnType<BundleHost["document"]["elementGeometry"]>>[number] | undefined;
+  let g:
+    | Awaited<ReturnType<BundleHost["document"]["elementGeometry"]>>[number]
+    | undefined;
   try {
-    [g] = await host.document.elementGeometry([{ kind: "textFrame", id: frameId }]);
+    [g] = await host.document.elementGeometry([
+      { kind: "textFrame", id: frameId },
+    ]);
   } catch (err) {
     host.log.debug("tableUnderFrame: geometry read failed", err);
     return null;
@@ -984,7 +1103,11 @@ export async function tableUnderFrame(
   for (let y = top + 2, n = 0; y < bottom && n < TABLE_PROBES; y += 4, n += 1) {
     let hit: Awaited<ReturnType<BundleHost["document"]["hitTest"]>>;
     try {
-      hit = await host.document.hitTest(g.pageId, [a * x + c * y + tx, b * x + d * y + ty], "text");
+      hit = await host.document.hitTest(
+        g.pageId,
+        [a * x + c * y + tx, b * x + d * y + ty],
+        "text",
+      );
     } catch {
       return null;
     }
@@ -1101,8 +1224,23 @@ async function lowerPhased(
     content,
     storyId,
     tableId,
-    [tableBindingStamp(frameId, sheetName, range, contentVersion, storyId, tableId, content, columnWidths)],
-    { pageId, origin: [placement.bounds[0], placement.bounds[1]], widths: columnWidths },
+    [
+      tableBindingStamp(
+        frameId,
+        sheetName,
+        range,
+        contentVersion,
+        storyId,
+        tableId,
+        content,
+        columnWidths,
+      ),
+    ],
+    {
+      pageId,
+      origin: [placement.bounds[0], placement.bounds[1]],
+      widths: columnWidths,
+    },
   );
 
   // S-04 — report the resolved native table so the session can address its
@@ -1257,7 +1395,9 @@ export async function storyOfFrame(
   frameId: string,
 ): Promise<string | null> {
   try {
-    const [item] = await host.document.elementGeometry([{ kind: "textFrame", id: frameId }]);
+    const [item] = await host.document.elementGeometry([
+      { kind: "textFrame", id: frameId },
+    ]);
     return item?.storyId || null;
   } catch (err) {
     host.log.debug("storyOfFrame: geometry read failed", err);
@@ -1288,18 +1428,30 @@ async function tableRefreshLanes(
   ) {
     return null;
   }
-  const ops = tableRefreshOps(prev, next, storyId, tableId, prevWidths, nextWidths);
+  const ops = tableRefreshOps(
+    prev,
+    next,
+    storyId,
+    tableId,
+    prevWidths,
+    nextWidths,
+  );
   const restyle = cellsNeedingRestyle(prev, next);
   const realign = cellsNeedingRealign(prev, next);
   const wantsFills = cellFillSwatchOps(next).length > 0;
   const wantsText = restyle.size > 0 && cellCharacterStyles(next).size > 0;
   const wantsAlign = realign.size > 0 && needsAlignStyles(next);
   const [swatches, styles, paragraphs] = await Promise.all([
-    wantsFills || wantsText ? readKnownSwatchIds(host) : Promise.resolve(undefined),
+    wantsFills || wantsText
+      ? readKnownSwatchIds(host)
+      : Promise.resolve(undefined),
     wantsText ? readKnownCharacterStyleIds(host) : Promise.resolve(null),
     wantsAlign ? readKnownParagraphStyleIds(host) : Promise.resolve(null),
   ]);
-  const decor = [...(wantsFills ? cellFillSwatchOps(next, swatches) : []), ...ops.decor];
+  const decor = [
+    ...(wantsFills ? cellFillSwatchOps(next, swatches) : []),
+    ...ops.decor,
+  ];
   const style =
     restyle.size === 0
       ? []
@@ -1323,7 +1475,8 @@ async function tableRefreshLanes(
           ...cellAlignApplies(next, storyId, tableId, {
             cells: realign,
             includeDefault: true,
-            available: wantsAlign && paragraphs === null ? new Set() : undefined,
+            available:
+              wantsAlign && paragraphs === null ? new Set() : undefined,
           }),
         ];
   // Below a host header band: the workbook's row 0 is the table's row
@@ -1374,7 +1527,8 @@ async function applyTableRefresh(
     calls += 1;
     const l = await host.document.mutate({ op: "batch", args: { ops: lane } });
     if (!l.applied) host.log.warn("refresh: lane rejected", l);
-    if (lane.length === tail.length && lane.every((op, i) => op === tail[i])) tailOutcome = l;
+    if (lane.length === tail.length && lane.every((op, i) => op === tail[i]))
+      tailOutcome = l;
   }
   return { calls, tailOutcome };
 }
@@ -1386,11 +1540,16 @@ async function frameOrigin(
   frameId: string,
 ): Promise<{ pageId: PageId; origin: [number, number] } | null> {
   try {
-    const [g] = await host.document.elementGeometry([{ kind: "textFrame", id: frameId }]);
+    const [g] = await host.document.elementGeometry([
+      { kind: "textFrame", id: frameId },
+    ]);
     if (!g?.pageId) return null;
     const [top, left] = g.bounds;
     const [a, b, c, d, tx, ty] = g.itemTransform ?? [1, 0, 0, 1, 0, 0];
-    return { pageId: g.pageId, origin: [b * left + d * top + ty, a * left + c * top + tx] };
+    return {
+      pageId: g.pageId,
+      origin: [b * left + d * top + ty, a * left + c * top + tx],
+    };
   } catch (err) {
     host.log.warn("refresh: frame geometry read failed", err);
     return null;
@@ -1456,7 +1615,13 @@ export async function refreshLoweredTable(
     : drawn.length > 0
       ? mintedElements(tailOutcome, isPolygon)
       : [];
-  return { ...info, content: next, columnWidths: nextWidths, contentVersion, barIds };
+  return {
+    ...info,
+    content: next,
+    columnWidths: nextWidths,
+    contentVersion,
+    barIds,
+  };
 }
 
 // ── what a placed table shows, kept with the document ─────────────────────
@@ -1477,7 +1642,10 @@ function placementPart(hash: string): string {
 /** Keep `content` as what a placed table shows (see above). Best effort: a
  *  host without container parts keeps nothing, and a later session then
  *  replaces a stale table instead of refreshing it. */
-export async function rememberShownContent(host: BundleHost, content: LoweredContent): Promise<void> {
+export async function rememberShownContent(
+  host: BundleHost,
+  content: LoweredContent,
+): Promise<void> {
   if (!host.supports("storage.parts@1")) return;
   try {
     await host.parts.write(
@@ -1500,7 +1668,9 @@ export async function recallShownContent(
   try {
     const bytes = await host.parts.read(placementPart(hash));
     if (!bytes) return null;
-    const content = JSON.parse(new TextDecoder().decode(bytes)) as LoweredContent;
+    const content = JSON.parse(
+      new TextDecoder().decode(bytes),
+    ) as LoweredContent;
     return contentHash(content) === hash ? content : null;
   } catch (err) {
     host.log.warn("placement record read failed", err);
@@ -1509,7 +1679,10 @@ export async function recallShownContent(
 }
 
 /** Drop the kept content `hash` (no placed table shows it any more). */
-export async function forgetShownContent(host: BundleHost, hash: string): Promise<void> {
+export async function forgetShownContent(
+  host: BundleHost,
+  hash: string,
+): Promise<void> {
   if (!host.supports("storage.parts@1")) return;
   try {
     await host.parts.delete(placementPart(hash));
@@ -1528,7 +1701,12 @@ export async function tableShape(
   host: BundleHost,
   storyId: string,
   tableId: string,
-): Promise<{ rows: number; cols: number; header?: number; footer?: number } | null> {
+): Promise<{
+  rows: number;
+  cols: number;
+  header?: number;
+  footer?: number;
+} | null> {
   let props: Awaited<ReturnType<BundleHost["document"]["elementProperties"]>>;
   try {
     props = await host.document.elementProperties({
@@ -1548,7 +1726,9 @@ export async function tableShape(
   if (rows === null || cols === null) return null;
   const header = count("tableHeaderRowCount");
   const footer = count("tableFooterRowCount");
-  return header === null || footer === null ? { rows, cols } : { rows, cols, header, footer };
+  return header === null || footer === null
+    ? { rows, cols }
+    : { rows, cols, header, footer };
 }
 
 /** Where the workbook's rows sit in a placed table: below the host's
@@ -1584,7 +1764,8 @@ export async function refreshBands(
   const cols = shape.cols === shown.cols.length;
   if (shape.header !== undefined && shape.footer !== undefined) {
     const body = shape.rows - shape.header - shape.footer;
-    if (cols && body === shown.rows.length) return { header: shape.header, footer: shape.footer };
+    if (cols && body === shown.rows.length)
+      return { header: shape.header, footer: shape.footer };
     host.log.warn(
       `refresh: the table in frame ${info.frameId} has ${body}×${shape.cols} body cells where ` +
         `${shown.rows.length}×${shown.cols.length} were placed — rows or columns the host ` +
@@ -1632,7 +1813,10 @@ export async function replaceLoweredTable(
       args: {
         ops: [
           ...oldBars,
-          { op: "deleteTable", args: { storyId: info.storyId, tableId: info.tableId } },
+          {
+            op: "deleteTable",
+            args: { storyId: info.storyId, tableId: info.tableId },
+          },
           tableInsertOp(next, info.storyId, widths),
         ],
       },
@@ -1645,7 +1829,18 @@ export async function replaceLoweredTable(
         next,
         info.storyId,
         tableId,
-        [tableBindingStamp(info.frameId, sheetName, info.range, contentVersion, info.storyId, tableId, next, widths)],
+        [
+          tableBindingStamp(
+            info.frameId,
+            sheetName,
+            info.range,
+            contentVersion,
+            info.storyId,
+            tableId,
+            next,
+            widths,
+          ),
+        ],
         at ? { ...at, widths } : undefined,
       );
       // A fresh table: no band of the host's above its rows.
@@ -1664,7 +1859,9 @@ export async function replaceLoweredTable(
   // Refused: re-place the frame where it stands (its page-space box).
   let geom: Awaited<ReturnType<BundleHost["document"]["elementGeometry"]>>;
   try {
-    geom = await host.document.elementGeometry([{ kind: "textFrame", id: info.frameId }]);
+    geom = await host.document.elementGeometry([
+      { kind: "textFrame", id: info.frameId },
+    ]);
   } catch (err) {
     host.log.warn("replace: frame geometry read failed", err);
     return null;
@@ -1676,7 +1873,9 @@ export async function replaceLoweredTable(
   const at = { left: a * left + c * top + tx, top: b * left + d * top + ty };
   const del = await host.document.mutate({
     op: "batch",
-    args: { ops: [...oldBars, { op: "deleteFrame", args: { frameId: info.frameId } }] },
+    args: {
+      ops: [...oldBars, { op: "deleteFrame", args: { frameId: info.frameId } }],
+    },
   });
   if (!del.applied) {
     host.log.warn("replace: removing the stale frame was rejected", del);
@@ -1688,7 +1887,12 @@ export async function replaceLoweredTable(
     contentVersion,
     placement: {
       pageId: g.pageId,
-      bounds: [at.top, at.left, at.top + (bottom - top), at.left + (right - left)],
+      bounds: [
+        at.top,
+        at.left,
+        at.top + (bottom - top),
+        at.left + (right - left),
+      ],
     },
     select: false,
     onLowered: (p) => {
@@ -1753,7 +1957,12 @@ async function deleteTables(
 ): Promise<boolean> {
   const r = await host.document.mutate({
     op: "batch",
-    args: { ops: tables.map((t) => ({ op: "deleteTable", args: { storyId, tableId: t.tableId } })) },
+    args: {
+      ops: tables.map((t) => ({
+        op: "deleteTable",
+        args: { storyId, tableId: t.tableId },
+      })),
+    },
   });
   if (r.applied) return true;
   host.log.warn("chain-lower: deleteTable rejected", r);
@@ -1804,7 +2013,12 @@ async function paginatePass(
         page.content,
         widths,
       );
-      tables.push({ tableId: prev.tableId, content: page.content, widths, blank: false });
+      tables.push({
+        tableId: prev.tableId,
+        content: page.content,
+        widths,
+        blank: false,
+      });
       tableIds.push(prev.tableId);
       continue;
     }
@@ -1838,7 +2052,15 @@ async function paginatePass(
       continue;
     }
     const blank = blankContent(t.content);
-    await applyTableRefresh(host, storyId, t.tableId, t.content, t.widths, blank, t.widths);
+    await applyTableRefresh(
+      host,
+      storyId,
+      t.tableId,
+      t.content,
+      t.widths,
+      blank,
+      t.widths,
+    );
     tables.push({ ...t, content: blank, blank: true });
   }
   return { storyId, chain, pages, tableIds, tables };
@@ -1870,7 +2092,16 @@ export async function lowerPaginatedToChain(
     host.log.warn(`chain-lower: story ${chainStoryId} threads no frames`);
     return null;
   }
-  return paginatePass(host, engine, sheet, range, chainStoryId, chain, [], opts);
+  return paginatePass(
+    host,
+    engine,
+    sheet,
+    range,
+    chainStoryId,
+    chain,
+    [],
+    opts,
+  );
 }
 
 /** How long a burst of reflow events settles before ONE re-pagination. */
@@ -1914,7 +2145,8 @@ export function subscribeChainReflow(
   let chainFrameIds = new Set<string>(last?.chain.map((c) => c.frameId) ?? []);
   if (chainFrameIds.size === 0) {
     void resolveChain(host, chainStoryId).then((chain) => {
-      if (chainFrameIds.size === 0) chainFrameIds = new Set(chain.map((c) => c.frameId));
+      if (chainFrameIds.size === 0)
+        chainFrameIds = new Set(chain.map((c) => c.frameId));
     });
   }
   let timer: ReturnType<typeof setTimeout> | null = null;

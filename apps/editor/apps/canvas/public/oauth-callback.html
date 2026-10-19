@@ -13,12 +13,18 @@
     <meta charset="utf-8" />
     <title>Signing in</title>
   </head>
-  <body style="font: 14px system-ui; background: #111; color: #ddd; padding: 24px">
+  <body
+    style="font: 14px system-ui; background: #111; color: #ddd; padding: 24px"
+  >
     <p id="msg">Signing in…</p>
     <script>
       const q = new URLSearchParams(location.search);
       const channel = new BroadcastChannel("paged-oauth");
-      channel.postMessage({ state: q.get("state"), code: q.get("code"), error: q.get("error") });
+      channel.postMessage({
+        state: q.get("state"),
+        code: q.get("code"),
+        error: q.get("error"),
+      });
       channel.close();
       document.getElementById("msg").textContent = q.get("code")
         ? "Signed in. You can close this window."

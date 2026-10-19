@@ -33,8 +33,10 @@ describe("draw menu entries", () => {
     const missing = MENU_ENTRIES.map(
       ([, suffix]) => `${MENU_COMMAND_PREFIX}.${suffix}`,
     ).filter((id) => !declaredSet.has(id));
-    expect(missing, `menu entries naming unknown commands: ${missing.join(", ")}`)
-      .toEqual([]);
+    expect(
+      missing,
+      `menu entries naming unknown commands: ${missing.join(", ")}`,
+    ).toEqual([]);
   });
 
   it("no command appears in two menu places", () => {
@@ -62,7 +64,9 @@ describe("draw menu entries", () => {
       const top = p.split("/")[0];
       return top !== "Draw" && !HOST_MENUS.includes(top);
     });
-    expect(stray, `unexpected top-level menus: ${stray.join(", ")}`).toEqual([]);
+    expect(stray, `unexpected top-level menus: ${stray.join(", ")}`).toEqual(
+      [],
+    );
   });
 
   it("covers a real share of the bundle's commands", () => {

@@ -63,7 +63,9 @@ async function newBlankDocument(page: Page): Promise<void> {
     await (
       globalThis as unknown as {
         __canvas: {
-          registries: { commands: { invoke: (id: string) => Promise<unknown> } };
+          registries: {
+            commands: { invoke: (id: string) => Promise<unknown> };
+          };
         };
       }
     ).__canvas.registries.commands.invoke("paged.file.new");
@@ -111,7 +113,10 @@ async function select(page: Page, refs: ElementRef[]): Promise<void> {
       globalThis as unknown as {
         __canvas: {
           client: {
-            setElementSelection: (ids: unknown[], mode: string) => Promise<unknown[]>;
+            setElementSelection: (
+              ids: unknown[],
+              mode: string,
+            ) => Promise<unknown[]>;
             elementGeometry: (ids: unknown[]) => Promise<unknown[]>;
           };
           setElementSelection?: (ids: unknown[]) => void;
@@ -127,8 +132,11 @@ async function select(page: Page, refs: ElementRef[]): Promise<void> {
     .poll(() =>
       page.evaluate(
         () =>
-          (globalThis as unknown as { __canvas: { elementSelection: unknown[] } })
-            .__canvas.elementSelection.length,
+          (
+            globalThis as unknown as {
+              __canvas: { elementSelection: unknown[] };
+            }
+          ).__canvas.elementSelection.length,
       ),
     )
     .toBe(refs.length);
@@ -139,7 +147,9 @@ async function invoke(page: Page, id: string): Promise<void> {
     await (
       globalThis as unknown as {
         __canvas: {
-          registries: { commands: { invoke: (id: string) => Promise<unknown> } };
+          registries: {
+            commands: { invoke: (id: string) => Promise<unknown> };
+          };
         };
       }
     ).__canvas.registries.commands.invoke(commandId);
@@ -149,7 +159,9 @@ async function invoke(page: Page, id: string): Promise<void> {
 async function undo(page: Page): Promise<void> {
   await page.evaluate(async () => {
     await (
-      globalThis as unknown as { __canvas: { client: { undo: () => Promise<unknown> } } }
+      globalThis as unknown as {
+        __canvas: { client: { undo: () => Promise<unknown> } };
+      }
     ).__canvas.client.undo();
   });
 }
@@ -160,7 +172,9 @@ async function geometry(page: Page, ref: ElementRef): Promise<Geometry> {
       globalThis as unknown as {
         __canvas: {
           client: {
-            elementGeometry: (ids: unknown[]) => Promise<
+            elementGeometry: (
+              ids: unknown[],
+            ) => Promise<
               Array<{ bounds: number[]; itemTransform?: number[] | null }>
             >;
           };
@@ -175,7 +189,12 @@ async function geometry(page: Page, ref: ElementRef): Promise<Geometry> {
  *  item transform, boxed. Computed HERE, independently of the editor's
  *  own `composedBox`, so the test is not checking the code against
  *  itself. */
-function footprint(g: Geometry): { left: number; top: number; right: number; bottom: number } {
+function footprint(g: Geometry): {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+} {
   const [top, left, bottom, right] = g.bounds;
   const [a, b, c, d, tx, ty] = g.transform ?? [1, 0, 0, 1, 0, 0];
   const pts = [
@@ -205,7 +224,11 @@ async function shown(page: Page, selector: string): Promise<number | null> {
  *  ("110 pt") for the raw number on focus, and that re-render lands
  *  after a bare `fill()` has selected the text — so `fill()` alone
  *  APPENDS ("110150"). Once focused, `fill()` replaces cleanly. */
-async function type(page: Page, selector: string, value: number): Promise<void> {
+async function type(
+  page: Page,
+  selector: string,
+  value: number,
+): Promise<void> {
   const field = page.locator(selector);
   await field.focus();
   await expect(field).not.toHaveValue(/pt/);
@@ -267,7 +290,9 @@ test.describe("E2E Transform X / Y and Bounds — where the object is", () => {
     await expect.poll(() => shown(page, X)).toBe(110);
 
     await type(page, X, 150);
-    await expect.poll(async () => footprint(await geometry(page, rect)).left).toBe(150);
+    await expect
+      .poll(async () => footprint(await geometry(page, rect)).left)
+      .toBe(150);
     const moved = await geometry(page, rect);
     // A MOVE: same inner box, same linear part, only the translation.
     expect(moved.bounds).toEqual([100, 100, 200, 300]);
@@ -276,15 +301,21 @@ test.describe("E2E Transform X / Y and Bounds — where the object is", () => {
     await expect.poll(() => shown(page, X)).toBe(150);
 
     await type(page, Y, 40);
-    await expect.poll(async () => footprint(await geometry(page, rect)).top).toBe(40);
+    await expect
+      .poll(async () => footprint(await geometry(page, rect)).top)
+      .toBe(40);
     await expect.poll(() => shown(page, Y)).toBe(40);
 
     // Each typed value is one undo step.
     await undo(page);
-    await expect.poll(async () => footprint(await geometry(page, rect)).top).toBe(100);
+    await expect
+      .poll(async () => footprint(await geometry(page, rect)).top)
+      .toBe(100);
     expect(footprint(await geometry(page, rect)).left).toBe(150);
     await undo(page);
-    await expect.poll(async () => footprint(await geometry(page, rect)).left).toBe(110);
+    await expect
+      .poll(async () => footprint(await geometry(page, rect)).left)
+      .toBe(110);
   });
 
   test("AC-XY-3 — a ROTATED frame: X / Y read its footprint, and a typed X lands its footprint there with the rotation kept @feat:editor-shell.panels.object-transform @feat:editor-tools.rotate @feat:editor-tools.move.translate @level:edge", async ({
@@ -317,7 +348,9 @@ test.describe("E2E Transform X / Y and Bounds — where the object is", () => {
     const target = Math.round(box.left) + 25;
     await type(page, X, target);
     await expect
-      .poll(async () => footprint(await geometry(page, rect)).left, { timeout: 10_000 })
+      .poll(async () => footprint(await geometry(page, rect)).left, {
+        timeout: 10_000,
+      })
       .toBeCloseTo(target, 1);
     const after = await geometry(page, rect);
     // Rigid: the rotation, the inner box and Y are all where they were.
@@ -328,8 +361,13 @@ test.describe("E2E Transform X / Y and Bounds — where the object is", () => {
     // Bounds cannot write the edges of a rotated frame (a frameBounds
     // write moves it along its own axes), so it is a read-only readout.
     await openPanel(page, "paged.properties");
-    await expect(page.locator(BOUNDS)).toHaveAttribute("data-page-bounds", "readout");
-    await expect(page.locator(`${BOUNDS} input[aria-label="left"]`)).toBeDisabled();
+    await expect(page.locator(BOUNDS)).toHaveAttribute(
+      "data-page-bounds",
+      "readout",
+    );
+    await expect(
+      page.locator(`${BOUNDS} input[aria-label="left"]`),
+    ).toBeDisabled();
     await expect
       .poll(() => shown(page, `${BOUNDS} input[aria-label="left"]`))
       .toBeCloseTo(target, 1);
@@ -339,14 +377,22 @@ test.describe("E2E Transform X / Y and Bounds — where the object is", () => {
     page,
   }) => {
     const pid = await pageId(page);
-    const at = (x: number, y: number) => ({ anchor: [x, y], left: [x, y], right: [x, y] });
+    const at = (x: number, y: number) => ({
+      anchor: [x, y],
+      left: [x, y],
+      right: [x, y],
+    });
     const line = await made(page, {
       op: "insertLine",
       args: { pageId: pid, start: [60, 80], end: [180, 130] },
     });
     const path = await made(page, {
       op: "insertPath",
-      args: { pageId: pid, open: false, anchors: [at(300, 300), at(360, 300), at(330, 360)] },
+      args: {
+        pageId: pid,
+        open: false,
+        anchors: [at(300, 300), at(360, 300), at(330, 360)],
+      },
     });
     await openPanel(page, "paged.object-transform");
 
@@ -383,13 +429,21 @@ test.describe("E2E Transform X / Y and Bounds — where the object is", () => {
     // A group: frameBounds is refused on a group id, and the group's own
     // transform write moves nothing (§13) — the typed X must ride
     // setGroupTransform, which moves every member.
-    const a = await made(page, { op: "insertFrame", args: { pageId: pid, bounds: [400, 100, 450, 150] } });
-    const b = await made(page, { op: "insertFrame", args: { pageId: pid, bounds: [420, 200, 480, 260] } });
+    const a = await made(page, {
+      op: "insertFrame",
+      args: { pageId: pid, bounds: [400, 100, 450, 150] },
+    });
+    const b = await made(page, {
+      op: "insertFrame",
+      args: { pageId: pid, bounds: [420, 200, 480, 260] },
+    });
     await select(page, [a, b]);
     await invoke(page, GROUP);
     await expect.poll(() => shown(page, X)).toBe(100);
     await type(page, X, 130);
-    await expect.poll(async () => footprint(await geometry(page, a)).left).toBe(130);
+    await expect
+      .poll(async () => footprint(await geometry(page, a)).left)
+      .toBe(130);
     expect(footprint(await geometry(page, b)).left).toBe(230);
     await expect.poll(() => shown(page, X)).toBe(130);
   });
@@ -409,7 +463,9 @@ test.describe("E2E Transform X / Y and Bounds — where the object is", () => {
 
     await type(page, right, 350);
     // The RIGHT edge lands at 350 on the page; the left edge stays at 110.
-    await expect.poll(async () => footprint(await geometry(page, rect)).right).toBe(350);
+    await expect
+      .poll(async () => footprint(await geometry(page, rect)).right)
+      .toBe(350);
     expect(footprint(await geometry(page, rect)).left).toBe(110);
     await expect.poll(() => shown(page, right)).toBe(350);
   });

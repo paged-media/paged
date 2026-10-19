@@ -63,7 +63,9 @@ interface CanvasGlobal {
       d: [number, number],
       mods: { shift: boolean; alt: boolean },
     ) => Promise<string[]>;
-    commitGesture: (h: number) => Promise<{ appliedSeq: number; pageIds: string[] }>;
+    commitGesture: (
+      h: number,
+    ) => Promise<{ appliedSeq: number; pageIds: string[] }>;
     cancelGesture: (h: number) => Promise<string[]>;
     undo: () => Promise<unknown>;
   };
@@ -111,7 +113,8 @@ async function hitUnrotatedFrame(
         const tr = reply.payload.itemTransform;
         if (!el || !fb) continue;
         if (tr) {
-          if (Math.abs(tr[0] - 1) > 1e-3 || Math.abs(tr[3] - 1) > 1e-3) continue;
+          if (Math.abs(tr[0] - 1) > 1e-3 || Math.abs(tr[3] - 1) > 1e-3)
+            continue;
           if (Math.abs(tr[1]) > 1e-3 || Math.abs(tr[2]) > 1e-3) continue;
         }
         return {
@@ -191,7 +194,8 @@ test.describe("Phase D — rotate + scale gestures", () => {
 
     await page.evaluate(
       async ({ target, pageId, anchorPt, delta }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture(
           [target],
           { kind: "rotate" },
@@ -212,7 +216,9 @@ test.describe("Phase D — rotate + scale gestures", () => {
     expect(t![3]).toBeCloseTo(0, 2);
   });
 
-  test("AC-E-15 — Shift snaps rotation to 15° increments @feat:editor-tools.rotate @feat:editor-tools.scale @level:happy", async ({ page }) => {
+  test("AC-E-15 — Shift snaps rotation to 15° increments @feat:editor-tools.rotate @feat:editor-tools.scale @level:happy", async ({
+    page,
+  }) => {
     const cx = (pageBounds[1] + pageBounds[3]) / 2;
     const cy = (pageBounds[0] + pageBounds[2]) / 2;
     // Anchor to the right; nudge slightly up: raw angle ~ -16.7°,
@@ -222,7 +228,8 @@ test.describe("Phase D — rotate + scale gestures", () => {
 
     await page.evaluate(
       async ({ target, pageId, anchorPt, delta }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture(
           [target],
           { kind: "rotate" },
@@ -242,19 +249,25 @@ test.describe("Phase D — rotate + scale gestures", () => {
     expect(t![1]).toBeCloseTo(expectedB, 3);
   });
 
-  test("rotate cancel restores original transform @feat:editor-tools.rotate @feat:editor-tools.scale @level:edge", async ({ page }) => {
+  test("rotate cancel restores original transform @feat:editor-tools.rotate @feat:editor-tools.scale @level:edge", async ({
+    page,
+  }) => {
     const before = await getTransform(page, target);
     const cx = (pageBounds[1] + pageBounds[3]) / 2;
     const cy = (pageBounds[0] + pageBounds[2]) / 2;
     await page.evaluate(
       async ({ target, pageId, anchorPt }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture(
           [target],
           { kind: "rotate" },
           { pageId, pointInPage: anchorPt },
         );
-        await c.client.updateGesture(h, [-50, 50], { shift: false, alt: false });
+        await c.client.updateGesture(h, [-50, 50], {
+          shift: false,
+          alt: false,
+        });
         await c.client.cancelGesture(h);
       },
       { target, pageId, anchorPt: [cx + 100, cy] },
@@ -263,19 +276,25 @@ test.describe("Phase D — rotate + scale gestures", () => {
     expect(after).toEqual(before);
   });
 
-  test("rotate undo round-trips @feat:editor-tools.rotate @feat:editor-tools.scale @level:happy", async ({ page }) => {
+  test("rotate undo round-trips @feat:editor-tools.rotate @feat:editor-tools.scale @level:happy", async ({
+    page,
+  }) => {
     const before = await getTransform(page, target);
     const cx = (pageBounds[1] + pageBounds[3]) / 2;
     const cy = (pageBounds[0] + pageBounds[2]) / 2;
     await page.evaluate(
       async ({ target, pageId, anchorPt }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture(
           [target],
           { kind: "rotate" },
           { pageId, pointInPage: anchorPt },
         );
-        await c.client.updateGesture(h, [-100, 100], { shift: false, alt: false });
+        await c.client.updateGesture(h, [-100, 100], {
+          shift: false,
+          alt: false,
+        });
         await c.client.commitGesture(h);
         await c.client.undo();
       },
@@ -297,7 +316,8 @@ test.describe("Phase D — rotate + scale gestures", () => {
 
     await page.evaluate(
       async ({ target, pageId, anchorPt, delta }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture(
           [target],
           { kind: "scale" },
@@ -315,7 +335,9 @@ test.describe("Phase D — rotate + scale gestures", () => {
     expect(t![3]).toBeCloseTo(1.0, 2);
   });
 
-  test("scale with Shift locks aspect ratio @feat:editor-tools.rotate @feat:editor-tools.scale @level:happy", async ({ page }) => {
+  test("scale with Shift locks aspect ratio @feat:editor-tools.rotate @feat:editor-tools.scale @level:happy", async ({
+    page,
+  }) => {
     const cx = (pageBounds[1] + pageBounds[3]) / 2;
     const cy = (pageBounds[0] + pageBounds[2]) / 2;
     // Diagonal anchor → both sx and sy populated; Shift forces them
@@ -325,7 +347,8 @@ test.describe("Phase D — rotate + scale gestures", () => {
 
     await page.evaluate(
       async ({ target, pageId, anchorPt, delta }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture(
           [target],
           { kind: "scale" },

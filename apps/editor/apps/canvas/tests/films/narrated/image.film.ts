@@ -62,7 +62,10 @@ const TRAILS = [
 
 /** A stroke along a trail, zig-zagging two pixels either side so the small
  *  healing dab covers the whole width of the line. */
-async function trailPath(k: Kit, t: (typeof TRAILS)[number]): Promise<Array<{ x: number; y: number }>> {
+async function trailPath(
+  k: Kit,
+  t: (typeof TRAILS)[number],
+): Promise<Array<{ x: number; y: number }>> {
   const [x0, y0] = t.from;
   const [x1, y1] = t.to;
   const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 10);
@@ -72,13 +75,24 @@ async function trailPath(k: Kit, t: (typeof TRAILS)[number]): Promise<Array<{ x:
   const out: Array<{ x: number; y: number }> = [];
   for (let i = 0; i <= n; i++) {
     const side = i % 2 === 0 ? -2 : 2;
-    out.push(await img(k, x0 + ((x1 - x0) * i) / n + nx * side, y0 + ((y1 - y0) * i) / n + ny * side));
+    out.push(
+      await img(
+        k,
+        x0 + ((x1 - x0) * i) / n + nx * side,
+        y0 + ((y1 - y0) * i) / n + ny * side,
+      ),
+    );
   }
   return out;
 }
 
 /** Alt-click: the healing brush's source. */
-async function sample(k: Kit, x: number, y: number, chip: boolean): Promise<void> {
+async function sample(
+  k: Kit,
+  x: number,
+  y: number,
+  chip: boolean,
+): Promise<void> {
   await k.pointer.moveTo(await img(k, x, y), { targetWidth: 10 });
   await k.hold(350);
   if (chip) k.chip("click to sample", "key", "Alt");
@@ -95,9 +109,16 @@ async function sample(k: Kit, x: number, y: number, chip: boolean): Promise<void
  *  because an item's accessible name includes its shortcut ("Place… ⌘D"). */
 async function menuWalk(k: Kit, path: string[]): Promise<void> {
   const item = (label: string) =>
-    k.page.getByRole("menuitem", { name: new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`) }).first();
+    k.page
+      .getByRole("menuitem", {
+        name: new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
+      })
+      .first();
   const [top, ...rest] = path;
-  await press(k, k.page.locator("header").getByText(top, { exact: true }).first());
+  await press(
+    k,
+    k.page.locator("header").getByText(top, { exact: true }).first(),
+  );
   await k.hold(250);
   for (const [i, label] of rest.entries()) {
     if (i === rest.length - 1) {
@@ -113,26 +134,43 @@ async function menuWalk(k: Kit, path: string[]): Promise<void> {
 }
 
 async function status(page: Page): Promise<string> {
-  return ((await page.locator("[data-image-status]").allTextContents().catch(() => [])) as string[]).join(" | ");
+  return (
+    (await page
+      .locator("[data-image-status]")
+      .allTextContents()
+      .catch(() => [])) as string[]
+  ).join(" | ");
 }
 
 async function editContext(page: Page): Promise<string | null> {
   return page.evaluate(() => {
-    const c = (globalThis as unknown as { __canvas: { debugContext(): { editContext: { type: string } | null } } }).__canvas;
+    const c = (
+      globalThis as unknown as {
+        __canvas: { debugContext(): { editContext: { type: string } | null } };
+      }
+    ).__canvas;
     return c.debugContext().editContext?.type ?? null;
   });
 }
 
 async function rectangles(page: Page): Promise<number> {
   return page.evaluate(async () => {
-    const c = (globalThis as unknown as { __canvas: { client: { executeScript(s: string): Promise<{ output: string[] }> } } }).__canvas;
+    const c = (
+      globalThis as unknown as {
+        __canvas: {
+          client: { executeScript(s: string): Promise<{ output: string[] }> };
+        };
+      }
+    ).__canvas;
     const r = await c.client.executeScript("JSON.stringify(paged.tree())");
     return (JSON.parse(r.output[0]).match(/"kind":"rectangle"/g) ?? []).length;
   });
 }
 
 /** Layer name, blend key and opacity (0–255) of each layer record in a PSD. */
-function psdLayers(b: Buffer): Array<{ name: string; blend: string; opacity: number }> {
+function psdLayers(
+  b: Buffer,
+): Array<{ name: string; blend: string; opacity: number }> {
   let p = 26;
   p += 4 + b.readUInt32BE(p); // colour mode data
   p += 4 + b.readUInt32BE(p); // image resources
@@ -160,7 +198,9 @@ function psdLayers(b: Buffer): Array<{ name: string; blend: string; opacity: num
 
 film("image", async (k) => {
   const { page, designer, pointer } = k;
-  const apply = page.getByRole("button", { name: "Apply", exact: true }).first();
+  const apply = page
+    .getByRole("button", { name: "Apply", exact: true })
+    .first();
 
   await k.setup(async () => {
     await designer.open();
@@ -175,10 +215,17 @@ film("image", async (k) => {
   // handed to the kit in roll-time points.
   const o = await screenPoint(page, 0, 0);
   const s100 = ((await screenPoint(page, 100, 0)).x - o.x) / 100;
-  const aim = async (r: [number, number, number, number]): Promise<[number, number, number, number]> => {
+  const aim = async (
+    r: [number, number, number, number],
+  ): Promise<[number, number, number, number]> => {
     const a = await pt(k, r[0], r[1]);
     const b = await pt(k, r[2], r[3]);
-    return [(a.x - o.x) / s100, (a.y - o.y) / s100, (b.x - o.x) / s100, (b.y - o.y) / s100];
+    return [
+      (a.x - o.x) / s100,
+      (a.y - o.y) / s100,
+      (b.x - o.x) / s100,
+      (b.y - o.y) / s100,
+    ];
   };
 
   // ── Place a photograph, like any picture. ──
@@ -190,14 +237,18 @@ film("image", async (k) => {
     await (await chooser).setFiles(join(ASSETS, PHOTO));
     await k.hold(600);
     await pointer.click(await pt(k, 60, 60), { targetWidth: 40 });
-    await expect.poll(() => rectangles(page), { timeout: 10_000 }).toBe(before + 1);
+    await expect
+      .poll(() => rectangles(page), { timeout: 10_000 })
+      .toBe(before + 1);
     await k.hold(1200);
   });
 
   // ── Open it for editing where it sits: the raster context. ──
   await k.scene("open", async () => {
     await menuWalk(k, ["Plugins", "Image", "Adjust…"]);
-    await expect.poll(() => status(page), { timeout: 20_000 }).toContain("2200×1469 decoded");
+    await expect
+      .poll(() => status(page), { timeout: 20_000 })
+      .toContain("2200×1469 decoded");
     await expect.poll(() => editContext(page)).toBe("rasterImage");
     await k.hold(800);
   });
@@ -207,7 +258,9 @@ film("image", async (k) => {
     await press(k, page.locator("[data-image-auto-enhance]"));
     await k.hold(2500);
     await press(k, apply);
-    await expect.poll(() => status(page), { timeout: 20_000 }).toContain("Composited 2200×1469");
+    await expect
+      .poll(() => status(page), { timeout: 20_000 })
+      .toContain("Composited 2200×1469");
     k.focus(await aim(PHOTO_AREA));
     await k.hold(2200);
   });
@@ -224,12 +277,23 @@ film("image", async (k) => {
     await page.mouse.down();
     await k.hold(450);
     await page.mouse.up();
-    await press(k, page.locator('[data-tool-flyout] [data-tool="media.paged.image.tool.heal"]'));
-    await expect(page.locator('[data-tool-slot="media.paged.image.tool.heal"][data-active="true"]')).toHaveCount(1);
+    await press(
+      k,
+      page.locator(
+        '[data-tool-flyout] [data-tool="media.paged.image.tool.heal"]',
+      ),
+    );
+    await expect(
+      page.locator(
+        '[data-tool-slot="media.paged.image.tool.heal"][data-active="true"]',
+      ),
+    ).toHaveCount(1);
     k.focus(await aim(SKY));
     await k.hold(900);
     await sample(k, TRAILS[0].source[0], TRAILS[0].source[1], true);
-    await expect.poll(() => status(page), { timeout: 10_000 }).toContain("source set");
+    await expect
+      .poll(() => status(page), { timeout: 10_000 })
+      .toContain("source set");
   });
 
   // ── Paint the trails away. ──
@@ -242,7 +306,13 @@ film("image", async (k) => {
       await pointer.paint(path, 70);
       // A new status line: this stroke's dabs, not the previous one's.
       await expect
-        .poll(async () => { const now = await status(page); return now !== before && /Painted \d+ dabs/.test(now); }, { timeout: 20_000 })
+        .poll(
+          async () => {
+            const now = await status(page);
+            return now !== before && /Painted \d+ dabs/.test(now);
+          },
+          { timeout: 20_000 },
+        )
         .toBe(true);
     }
     await k.hold(1800);
@@ -252,14 +322,21 @@ film("image", async (k) => {
   await k.scene("luma", async () => {
     k.unfocus();
     await menuWalk(k, ["Image", "Selection", "From luminosity channel"]);
-    await expect.poll(() => status(page), { timeout: 10_000 }).toContain("luma channel");
+    await expect
+      .poll(() => status(page), { timeout: 10_000 })
+      .toContain("luma channel");
     const exposure = page.locator("input[type=range]").first();
     await hover(k, exposure);
     const box = (await exposure.boundingBox())!;
-    await pointer.click({ x: box.x + box.width * 0.43, y: box.y + box.height / 2 }, { targetWidth: 8 });
+    await pointer.click(
+      { x: box.x + box.width * 0.43, y: box.y + box.height / 2 },
+      { targetWidth: 8 },
+    );
     await k.hold(1200);
     await press(k, apply);
-    await expect.poll(() => status(page), { timeout: 20_000 }).toContain("masked to the selection");
+    await expect
+      .poll(() => status(page), { timeout: 20_000 })
+      .toContain("masked to the selection");
     k.focus(await aim(PHOTO_AREA));
     await k.hold(2600);
   });
@@ -268,7 +345,9 @@ film("image", async (k) => {
   await k.scene("commit", async () => {
     k.unfocus();
     await menuWalk(k, ["Image", "Commit edits to the document"]);
-    await expect.poll(() => status(page), { timeout: 20_000 }).toContain("Committed revision");
+    await expect
+      .poll(() => status(page), { timeout: 20_000 })
+      .toContain("Committed revision");
     await k.hold(600);
   });
 
@@ -277,16 +356,27 @@ film("image", async (k) => {
     await k.key("Escape");
     await expect.poll(() => editContext(page)).toBe(null);
     await k.key("f", "Rectangle frame tool");
-    await pointer.drag(await pt(k, PSD_FRAME.x0, PSD_FRAME.y0), await pt(k, PSD_FRAME.x1, PSD_FRAME.y1), { speed: 1.3 });
+    await pointer.drag(
+      await pt(k, PSD_FRAME.x0, PSD_FRAME.y0),
+      await pt(k, PSD_FRAME.x1, PSD_FRAME.y1),
+      { speed: 1.3 },
+    );
     const chooser = page.waitForEvent("filechooser");
     await menuWalk(k, ["File", "Open…"]);
     k.chip(PSD, "file");
     await (await chooser).setFiles(join(ASSETS, PSD));
-    await expect.poll(() => status(page), { timeout: 20_000 }).toContain("400×300 decoded");
+    await expect
+      .poll(() => status(page), { timeout: 20_000 })
+      .toContain("400×300 decoded");
     // Clear the photo's adjustment values, which the new image inherits.
-    await press(k, page.getByRole("button", { name: "Reset", exact: true }).first());
+    await press(
+      k,
+      page.getByRole("button", { name: "Reset", exact: true }).first(),
+    );
     await press(k, apply);
-    await expect.poll(() => status(page), { timeout: 20_000 }).toContain("Composited 400×300");
+    await expect
+      .poll(() => status(page), { timeout: 20_000 })
+      .toContain("Composited 400×300");
   });
 
   // ── Change one, save it back as a PSD. ──
@@ -296,17 +386,25 @@ film("image", async (k) => {
     await rows.first().scrollIntoViewIfNeeded();
     await hover(k, rows.nth(1));
     await k.hold(700);
-    const signal = page.locator('[data-image-psd-layer="2"] [data-image-psd-opacity]');
+    const signal = page.locator(
+      '[data-image-psd-layer="2"] [data-image-psd-opacity]',
+    );
     await press(k, signal);
     await page.keyboard.press("Meta+a");
     await page.keyboard.type("25", { delay: 90 });
     await page.keyboard.press("Enter");
     await expect(signal).toHaveValue("25");
     await k.hold(500);
-    await press(k, page.getByRole("button", { name: "Export", exact: true }).last());
+    await press(
+      k,
+      page.getByRole("button", { name: "Export", exact: true }).last(),
+    );
     await k.hold(700);
     const download = page.waitForEvent("download");
-    await press(k, page.locator('[data-plugin-export="media.paged.image.exporter.psd"]'));
+    await press(
+      k,
+      page.locator('[data-plugin-export="media.paged.image.exporter.psd"]'),
+    );
     const file = await download;
     k.chip(`${file.suggestedFilename()} saved`, "save");
     const saved = join(k.dir, "exported.psd");

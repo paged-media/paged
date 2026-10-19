@@ -124,7 +124,10 @@ export function ToolProvider({ children }: PropsWithChildren) {
 
   const pushOverride = useCallback((id: ToolId) => {
     setInternal((prev) => ({
-      active: { base: prev.active.base, overrides: [...prev.active.overrides, id] },
+      active: {
+        base: prev.active.base,
+        overrides: [...prev.active.overrides, id],
+      },
       reason: "suspend",
     }));
   }, []);
@@ -166,7 +169,14 @@ export function ToolProvider({ children }: PropsWithChildren) {
       clearOverrides,
       toolStateRef,
     }),
-    [internal, effectiveTool, setBaseTool, pushOverride, popOverride, clearOverrides],
+    [
+      internal,
+      effectiveTool,
+      setBaseTool,
+      pushOverride,
+      popOverride,
+      clearOverrides,
+    ],
   );
 
   return <Context.Provider value={value}>{children}</Context.Provider>;

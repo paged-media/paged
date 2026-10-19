@@ -45,7 +45,10 @@ import type {
   PagedEditor,
 } from "@paged-media/shell";
 
-import { simplifyRdp, strokeWidthFromPressure } from "@paged-media/draw/geometry";
+import {
+  simplifyRdp,
+  strokeWidthFromPressure,
+} from "@paged-media/draw/geometry";
 
 import {
   beginPageDrag,

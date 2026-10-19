@@ -14,8 +14,17 @@ import { beforeAll, describe, expect, it, mock } from "bun:test";
 import { importActual } from "@paged-media/test-kit";
 
 import type { DataSourceSession } from "../src/session";
-import { bootRealDuckDB, bootRealEngine, DATA_JS_WASM, REQUIRE_REAL_DUCKDB } from "./real-duckdb";
-import { NODE_EXTENSION_REPO, refusedExtensionUrls, servedExtensionUrls } from "./duckdb-node-ext";
+import {
+  bootRealDuckDB,
+  bootRealEngine,
+  DATA_JS_WASM,
+  REQUIRE_REAL_DUCKDB,
+} from "./real-duckdb";
+import {
+  NODE_EXTENSION_REPO,
+  refusedExtensionUrls,
+  servedExtensionUrls,
+} from "./duckdb-node-ext";
 
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
 // real exports are taken once, before anything is mocked, and mock.module
@@ -51,10 +60,24 @@ const silent = { debug() {}, info() {}, warn() {}, error() {} };
 const stubHost = {
   log: silent,
   supports: () => false,
-  parts: { write: async () => {}, read: async () => null, list: async () => [] },
-  network: { consentedOrigins: () => [], requestConsent: async () => ({ granted: [], denied: [], remembered: false }) },
+  parts: {
+    write: async () => {},
+    read: async () => null,
+    list: async () => [],
+  },
+  network: {
+    consentedOrigins: () => [],
+    requestConsent: async () => ({
+      granted: [],
+      denied: [],
+      remembered: false,
+    }),
+  },
   // The document doors every host has; nothing here fires them.
-  document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }) },
+  document: {
+    onWillSave: () => ({ dispose() {} }),
+    onDidChange: () => ({ dispose() {} }),
+  },
 } as never;
 
 describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
@@ -63,7 +86,10 @@ describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
     let mod: Awaited<ReturnType<typeof loadSessionModule>>;
     let s: DataSourceSession;
     beforeAll(async () => {
-      expect(ready, `real DuckDB and the data-js wasm must be available: ${probe.error ?? ""}`).toBe(true);
+      expect(
+        ready,
+        `real DuckDB and the data-js wasm must be available: ${probe.error ?? ""}`,
+      ).toBe(true);
       mod = await loadSessionModule();
     });
     const fresh = () => (s = mod.createSession(stubHost, 0));
@@ -76,16 +102,26 @@ describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
           { sku: "B-2", price: 19.5, tags: [] },
         ]),
       );
-      expect(await s.importFile("catalog.json", arr)).toEqual({ source: "catalog", format: "json" });
-      const nd = new TextEncoder().encode('{"id":1,"name":"a"}\n{"id":2,"name":"b"}\n');
-      expect(await s.importFile("events.ndjson", nd)).toMatchObject({ source: "events", format: "json" });
+      expect(await s.importFile("catalog.json", arr)).toEqual({
+        source: "catalog",
+        format: "json",
+      });
+      const nd = new TextEncoder().encode(
+        '{"id":1,"name":"a"}\n{"id":2,"name":"b"}\n',
+      );
+      expect(await s.importFile("events.ndjson", nd)).toMatchObject({
+        source: "events",
+        format: "json",
+      });
 
       expect(await s.describeSource("catalog")).toEqual([
         { name: "sku", type: "VARCHAR" },
         { name: "price", type: "DOUBLE" },
         { name: "tags", type: "VARCHAR[]" },
       ]);
-      const p = await s.previewQuery("SELECT sku, price FROM catalog ORDER BY sku");
+      const p = await s.previewQuery(
+        "SELECT sku, price FROM catalog ORDER BY sku",
+      );
       expect(p.diagnostic).toBeNull();
       expect(p.rows).toEqual([
         ["A-1", "9.99"],
@@ -94,7 +130,9 @@ describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
       const e = await s.previewQuery("SELECT count(*) AS n FROM events");
       expect(e.rows).toEqual([["2"]]);
       expect(s.getState().sources).toEqual(["catalog", "events"]);
-      expect(s.getState().files.map((f) => [f.source, f.format, f.fileName])).toEqual([
+      expect(
+        s.getState().files.map((f) => [f.source, f.format, f.fileName]),
+      ).toEqual([
         ["catalog", "json", "catalog.json"],
         ["events", "json", "events.ndjson"],
       ]);
@@ -130,7 +168,9 @@ describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
         sheet: "Products",
         sheets: ["Products", "Prices"],
       });
-      expect((await s.describeSource("products")).map((c) => `${c.name}:${c.type}`)).toEqual([
+      expect(
+        (await s.describeSource("products")).map((c) => `${c.name}:${c.type}`),
+      ).toEqual([
         "sku:VARCHAR",
         "price:DOUBLE",
         "qty:BIGINT",
@@ -155,12 +195,19 @@ describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
         "1 error cell(s) in products.xlsx were read as empty",
       );
 
-      expect(await s.selectSheet("products", "Prices")).toMatchObject({ sheet: "Prices" });
-      expect((await s.previewQuery("SELECT * FROM products ORDER BY region")).rows).toEqual([
+      expect(await s.selectSheet("products", "Prices")).toMatchObject({
+        sheet: "Prices",
+      });
+      expect(
+        (await s.previewQuery("SELECT * FROM products ORDER BY region")).rows,
+      ).toEqual([
         ["de", "1.19"],
         ["en", "1.0"],
       ]);
-      expect(s.getState().files[0]).toMatchObject({ source: "products", sheet: "Prices" });
+      expect(s.getState().files[0]).toMatchObject({
+        source: "products",
+        sheet: "Prices",
+      });
     });
 
     it("JSON, Parquet and XLSX load DuckDB's json/parquet extensions from the shipped bin/duckdb-ext, never the network [data.source.adapters]", () => {
@@ -168,9 +215,14 @@ describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
       // needed an extension the eh build lacks. They came from the bundle's
       // own files (bin/duckdb-ext), the same ones the browser loads.
       expect(refusedExtensionUrls).toEqual([]);
-      const names = servedExtensionUrls.map((u) => u.slice(NODE_EXTENSION_REPO.length));
+      const names = servedExtensionUrls.map((u) =>
+        u.slice(NODE_EXTENSION_REPO.length),
+      );
       expect(new Set(names)).toEqual(
-        new Set(["/v1.1.1/wasm_eh/json.duckdb_extension.wasm", "/v1.1.1/wasm_eh/parquet.duckdb_extension.wasm"]),
+        new Set([
+          "/v1.1.1/wasm_eh/json.duckdb_extension.wasm",
+          "/v1.1.1/wasm_eh/parquet.duckdb_extension.wasm",
+        ]),
       );
     });
 
@@ -178,94 +230,139 @@ describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
       fresh();
       const odd = await s.importFile("notes.txt", new Uint8Array([1]));
       expect(odd.error).toMatch(/not a file the data plugin imports/);
-      const bad = await s.importFile("broken.xlsx", new TextEncoder().encode("not a zip"));
+      const bad = await s.importFile(
+        "broken.xlsx",
+        new TextEncoder().encode("not a zip"),
+      );
       expect(bad.error).toMatch(/not a readable \.xlsx workbook/);
-      const errors = s.getState().diagnostics.filter((d) => d.source === "import" && d.level === "error");
+      const errors = s
+        .getState()
+        .diagnostics.filter(
+          (d) => d.source === "import" && d.level === "error",
+        );
       expect(errors).toHaveLength(2);
       expect(s.getState().sources).toEqual([]);
     });
   },
 );
 
-describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)("the query lane over real DuckDB [data.query.seam]", () => {
-  let s: DataSourceSession;
-  beforeAll(async () => {
-    expect(ready).toBe(true);
-    const mod = await loadSessionModule();
-    s = mod.createSession(stubHost, 0);
-    await s.importFile("products.parquet", PARQUET);
-  });
-
-  it("the guard refuses file and URL reads, other statements and several statements [data.security.gates]", async () => {
-    const cases: [string, RegExp][] = [
-      ["SELECT * FROM read_csv('https://example.com/x.csv')", /read_csv\(\) reads files or URLs/],
-      ["SELECT * FROM 'https://example.com/x.parquet'", /not an imported source table/],
-      ["SELECT (SELECT count(*) FROM read_text('/etc/hosts'))", /read_text\(\) reads files/],
-      ["DROP TABLE products", /only a SELECT query/],
-      ["SELECT 1; SELECT 2", /exactly one SELECT/],
-      ["ATTACH 'x.db' AS x", /only a SELECT query/],
-    ];
-    for (const [sql, why] of cases) {
-      const p = await s.previewQuery(sql);
-      expect(p.diagnostic?.kind, sql).toBe("Guard");
-      expect(p.diagnostic?.message, sql).toMatch(why);
-      expect(await s.saveQuery("bad", sql), sql).toMatchObject({ kind: "Guard" });
-    }
-    expect(s.listQueries()).toEqual([]);
-    // range() reads nothing and is allowed.
-    expect((await s.previewQuery("SELECT * FROM range(3)")).rows).toEqual([["0"], ["1"], ["2"]]);
-  });
-
-  it("DuckDB errors come back with their class and position in the query as written [data.query.seam]", async () => {
-    const parse = await s.previewQuery("SELECT sku\nFORM products");
-    expect(parse.diagnostic).toMatchObject({ kind: "Parser", line: 2 });
-    const bind = await s.previewQuery("SELECT sku,\n  nope FROM products");
-    expect(bind.diagnostic).toMatchObject({ kind: "Binder", line: 2, column: 3 });
-    expect(bind.diagnostic!.message).toMatch(/"nope" not found/);
-    const cat = await s.previewQuery("SELECT * FROM missing");
-    expect(cat.diagnostic).toMatchObject({ kind: "Catalog", line: 1, column: 15 });
-  });
-
-  it("a saved query is defined on the engine and a refresh ingests it [data.query.seam]", async () => {
-    expect(await s.saveQuery("cheap", "SELECT sku, price FROM products WHERE price < 10;")).toBeNull();
-    expect(s.listQueries()).toEqual([
-      { id: "cheap", sql: "SELECT sku, price FROM products WHERE price < 10" },
-    ]);
-    await s.refreshData();
-    expect(await s.recordCount("cheap")).toBe(2);
-    // A query that stops working is reported per query, not swallowed.
-    s.addQuery("broken", "SELECT nope FROM products", "recordStream");
-    await s.refreshData();
-    const q = s.getState().diagnostics.filter((d) => d.source === "query");
-    expect(q.at(-1)?.message).toMatch(/query "broken" failed — Binder:/);
-    expect(await s.recordCount("cheap")).toBe(2);
-  });
-
-  it("builder SQL runs as built [data.query.seam]", async () => {
-    const { buildSql } = await import("../src/query/builder");
-    const filtered = buildSql({
-      source: "products",
-      columns: ["sku", "price"],
-      filters: [
-        { column: "price", op: ">=", value: "9.99" },
-        { column: "sku", op: "contains", value: "b" },
-      ],
-      sort: [{ column: "price", dir: "desc" }],
+describe.skipIf(!ready && !REQUIRE_REAL_DUCKDB)(
+  "the query lane over real DuckDB [data.query.seam]",
+  () => {
+    let s: DataSourceSession;
+    beforeAll(async () => {
+      expect(ready).toBe(true);
+      const mod = await loadSessionModule();
+      s = mod.createSession(stubHost, 0);
+      await s.importFile("products.parquet", PARQUET);
     });
-    expect((await s.previewQuery(filtered)).rows).toEqual([["B-2", "19.50"]]);
-    const grouped = buildSql({
-      source: "products",
-      groupBy: ["launched"],
-      aggregates: [{ fn: "count" }, { fn: "sum", column: "qty" }],
-      filters: [{ column: "launched", op: "is not empty" }],
-      sort: [{ column: "launched", dir: "asc" }],
+
+    it("the guard refuses file and URL reads, other statements and several statements [data.security.gates]", async () => {
+      const cases: [string, RegExp][] = [
+        [
+          "SELECT * FROM read_csv('https://example.com/x.csv')",
+          /read_csv\(\) reads files or URLs/,
+        ],
+        [
+          "SELECT * FROM 'https://example.com/x.parquet'",
+          /not an imported source table/,
+        ],
+        [
+          "SELECT (SELECT count(*) FROM read_text('/etc/hosts'))",
+          /read_text\(\) reads files/,
+        ],
+        ["DROP TABLE products", /only a SELECT query/],
+        ["SELECT 1; SELECT 2", /exactly one SELECT/],
+        ["ATTACH 'x.db' AS x", /only a SELECT query/],
+      ];
+      for (const [sql, why] of cases) {
+        const p = await s.previewQuery(sql);
+        expect(p.diagnostic?.kind, sql).toBe("Guard");
+        expect(p.diagnostic?.message, sql).toMatch(why);
+        expect(await s.saveQuery("bad", sql), sql).toMatchObject({
+          kind: "Guard",
+        });
+      }
+      expect(s.listQueries()).toEqual([]);
+      // range() reads nothing and is allowed.
+      expect((await s.previewQuery("SELECT * FROM range(3)")).rows).toEqual([
+        ["0"],
+        ["1"],
+        ["2"],
+      ]);
     });
-    const g = await s.previewQuery(grouped);
-    expect(g.diagnostic).toBeNull();
-    expect(g.columns.map((c) => c.name)).toEqual(["launched", "count", "sum_qty"]);
-    expect(g.rows).toEqual([
-      ["2026-01-15", "1", "3"],
-      ["2026-02-01", "1", "10"],
-    ]);
-  });
-});
+
+    it("DuckDB errors come back with their class and position in the query as written [data.query.seam]", async () => {
+      const parse = await s.previewQuery("SELECT sku\nFORM products");
+      expect(parse.diagnostic).toMatchObject({ kind: "Parser", line: 2 });
+      const bind = await s.previewQuery("SELECT sku,\n  nope FROM products");
+      expect(bind.diagnostic).toMatchObject({
+        kind: "Binder",
+        line: 2,
+        column: 3,
+      });
+      expect(bind.diagnostic!.message).toMatch(/"nope" not found/);
+      const cat = await s.previewQuery("SELECT * FROM missing");
+      expect(cat.diagnostic).toMatchObject({
+        kind: "Catalog",
+        line: 1,
+        column: 15,
+      });
+    });
+
+    it("a saved query is defined on the engine and a refresh ingests it [data.query.seam]", async () => {
+      expect(
+        await s.saveQuery(
+          "cheap",
+          "SELECT sku, price FROM products WHERE price < 10;",
+        ),
+      ).toBeNull();
+      expect(s.listQueries()).toEqual([
+        {
+          id: "cheap",
+          sql: "SELECT sku, price FROM products WHERE price < 10",
+        },
+      ]);
+      await s.refreshData();
+      expect(await s.recordCount("cheap")).toBe(2);
+      // A query that stops working is reported per query, not swallowed.
+      s.addQuery("broken", "SELECT nope FROM products", "recordStream");
+      await s.refreshData();
+      const q = s.getState().diagnostics.filter((d) => d.source === "query");
+      expect(q.at(-1)?.message).toMatch(/query "broken" failed — Binder:/);
+      expect(await s.recordCount("cheap")).toBe(2);
+    });
+
+    it("builder SQL runs as built [data.query.seam]", async () => {
+      const { buildSql } = await import("../src/query/builder");
+      const filtered = buildSql({
+        source: "products",
+        columns: ["sku", "price"],
+        filters: [
+          { column: "price", op: ">=", value: "9.99" },
+          { column: "sku", op: "contains", value: "b" },
+        ],
+        sort: [{ column: "price", dir: "desc" }],
+      });
+      expect((await s.previewQuery(filtered)).rows).toEqual([["B-2", "19.50"]]);
+      const grouped = buildSql({
+        source: "products",
+        groupBy: ["launched"],
+        aggregates: [{ fn: "count" }, { fn: "sum", column: "qty" }],
+        filters: [{ column: "launched", op: "is not empty" }],
+        sort: [{ column: "launched", dir: "asc" }],
+      });
+      const g = await s.previewQuery(grouped);
+      expect(g.diagnostic).toBeNull();
+      expect(g.columns.map((c) => c.name)).toEqual([
+        "launched",
+        "count",
+        "sum_qty",
+      ]);
+      expect(g.rows).toEqual([
+        ["2026-01-15", "1", "3"],
+        ["2026-02-01", "1", "10"],
+      ]);
+    });
+  },
+);

@@ -178,7 +178,9 @@ describe("svg-arc — arcToCubics against the centre form (properties)", () => {
     fc.assert(
       fc.property(centreArc, (arc) => {
         const { cubics } = lower(arc);
-        expect(cubics).toHaveLength(Math.ceil(Math.abs(arc.dTheta) / (Math.PI / 2)));
+        expect(cubics).toHaveLength(
+          Math.ceil(Math.abs(arc.dTheta) / (Math.PI / 2)),
+        );
         assertTrue(cubics.length <= 4, "more than four slices");
       }),
     );
@@ -215,7 +217,12 @@ describe("svg-arc — arcToCubics against the centre form (properties)", () => {
         const n = cubics.length;
         let from = start;
         cubics.forEach((slice, i) => {
-          const c: [[number, number], [number, number], [number, number], [number, number]] = [
+          const c: [
+            [number, number],
+            [number, number],
+            [number, number],
+            [number, number],
+          ] = [
             [from[0], from[1]],
             [slice.c1[0], slice.c1[1]],
             [slice.c2[0], slice.c2[1]],
@@ -265,7 +272,15 @@ describe("svg-arc — arcToCubics against the centre form (properties)", () => {
       fc.property(centreArc, (arc) => {
         const { start, end, cubics } = lower(arc);
         const large = Math.abs(arc.dTheta) > Math.PI;
-        const back = arcToCubics(end, arc.rx, arc.ry, arc.phiDeg, large, !(arc.dTheta > 0), start);
+        const back = arcToCubics(
+          end,
+          arc.rx,
+          arc.ry,
+          arc.phiDeg,
+          large,
+          !(arc.dTheta > 0),
+          start,
+        );
         expect(back).toHaveLength(cubics.length);
         const forward = [start, ...cubics.map((c) => c.end)];
         const backward = [end, ...back.map((c) => c.end)].reverse();
@@ -282,9 +297,25 @@ describe("svg-arc — arcToCubics against the centre form (properties)", () => {
         const { start, end, cubics } = lower(arc);
         const large = Math.abs(arc.dTheta) > Math.PI;
         const sweep = arc.dTheta > 0;
-        const negated = arcToCubics(start, -arc.rx, -arc.ry, arc.phiDeg, large, sweep, end);
+        const negated = arcToCubics(
+          start,
+          -arc.rx,
+          -arc.ry,
+          arc.phiDeg,
+          large,
+          sweep,
+          end,
+        );
         expect(negated).toEqual(cubics);
-        const turned = arcToCubics(start, arc.rx, arc.ry, arc.phiDeg + 360, large, sweep, end);
+        const turned = arcToCubics(
+          start,
+          arc.rx,
+          arc.ry,
+          arc.phiDeg + 360,
+          large,
+          sweep,
+          end,
+        );
         expect(turned).toHaveLength(cubics.length);
         turned.forEach((slice, i) => {
           assertVecClose(slice.end, cubics[i].end, 1e-7 * scaleOf(arc));
@@ -298,14 +329,17 @@ describe("svg-arc — arcToCubics against the centre form (properties)", () => {
 
 describe("svg-arc — arcToCubics from raw endpoint arguments (properties)", () => {
   const flag = fc.boolean();
-  const rawRadius = fc.oneof(
-    fc.constantFrom(1, 5, 10, 25),
-    real(0.01, 500),
-  );
+  const rawRadius = fc.oneof(fc.constantFrom(1, 5, 10, 25), real(0.01, 500));
 
   /** The larger radius AFTER the spec's out-of-range correction (§F.6.6:
    *  radii too small for the chord are scaled by √λ). */
-  const effectiveRadius = (start: Vec2, end: Vec2, rx: number, ry: number, phiDeg: number): number => {
+  const effectiveRadius = (
+    start: Vec2,
+    end: Vec2,
+    rx: number,
+    ry: number,
+    phiDeg: number,
+  ): number => {
     const phi = (phiDeg * Math.PI) / 180;
     const dx = (start[0] - end[0]) / 2;
     const dy = (start[1] - end[1]) / 2;
@@ -324,71 +358,112 @@ describe("svg-arc — arcToCubics from raw endpoint arguments (properties)", () 
     // near 0 and π, and a scaled-up arc is ALWAYS a half turn). See the
     // defect block below.
     fc.assert(
-      fc.property(vec2, vec2, rawRadius, rawRadius, angleDeg, flag, flag, (start, end, rx, ry, phi, large, sweep) => {
-        const chord = Math.hypot(end[0] - start[0], end[1] - start[1]);
-        fc.pre(chord > 1e-6);
-        const cubics = arcToCubics(start, rx, ry, phi, large, sweep, end);
-        assertTrue(cubics.length >= 1 && cubics.length <= 4, `${cubics.length} slices`);
-        for (const slice of cubics) {
-          for (const p of [slice.c1, slice.c2, slice.end]) {
-            assertTrue(Number.isFinite(p[0]) && Number.isFinite(p[1]), "non-finite output");
+      fc.property(
+        vec2,
+        vec2,
+        rawRadius,
+        rawRadius,
+        angleDeg,
+        flag,
+        flag,
+        (start, end, rx, ry, phi, large, sweep) => {
+          const chord = Math.hypot(end[0] - start[0], end[1] - start[1]);
+          fc.pre(chord > 1e-6);
+          const cubics = arcToCubics(start, rx, ry, phi, large, sweep, end);
+          assertTrue(
+            cubics.length >= 1 && cubics.length <= 4,
+            `${cubics.length} slices`,
+          );
+          for (const slice of cubics) {
+            for (const p of [slice.c1, slice.c2, slice.end]) {
+              assertTrue(
+                Number.isFinite(p[0]) && Number.isFinite(p[1]),
+                "non-finite output",
+              );
+            }
           }
-        }
-        assertVecClose(cubics[cubics.length - 1].end, end, 0, "last slice end");
-        // And the handle that arrives there is a real handle of a real
-        // arc: within the (corrected) radius of the end point, times the
-        // quarter-turn handle factor 4/3·tan(π/8) ≈ 0.552, plus slack.
-        const last = cubics[cubics.length - 1];
-        const reach = Math.hypot(last.c2[0] - end[0], last.c2[1] - end[1]);
-        assertTrue(
-          reach <= 0.5523 * effectiveRadius(start, end, rx, ry, phi) * (1 + 1e-6),
-          `the last handle is ${reach} from the end point`,
-        );
-      }),
+          assertVecClose(
+            cubics[cubics.length - 1].end,
+            end,
+            0,
+            "last slice end",
+          );
+          // And the handle that arrives there is a real handle of a real
+          // arc: within the (corrected) radius of the end point, times the
+          // quarter-turn handle factor 4/3·tan(π/8) ≈ 0.552, plus slack.
+          const last = cubics[cubics.length - 1];
+          const reach = Math.hypot(last.c2[0] - end[0], last.c2[1] - end[1]);
+          assertTrue(
+            reach <=
+              0.5523 * effectiveRadius(start, end, rx, ry, phi) * (1 + 1e-6),
+            `the last handle is ${reach} from the end point`,
+          );
+        },
+      ),
     );
   });
 
   it("radii too small for the chord are scaled up to a HALF circle on the chord", () => {
     fc.assert(
-      fc.property(smallVec2, smallVec2, real(0.05, 0.4), flag, flag, (start, end, shrink, large, sweep) => {
-        const chord = Math.hypot(end[0] - start[0], end[1] - start[1]);
-        fc.pre(chord > 0);
-        // A circle whose DIAMETER is `shrink` of the chord cannot reach.
-        const r = (shrink * chord) / 2;
-        const cubics = arcToCubics(start, r, r, 0, large, sweep, end);
-        // Two quarter slices — or three, when the half turn comes back
-        // from `acos` a hair over π.
-        assertTrue(cubics.length === 2 || cubics.length === 3, `${cubics.length} slices`);
-        // Scaled to radius chord/2 about the chord's midpoint: every
-        // slice boundary is on that circle.
-        const mid: Vec2 = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
-        for (const slice of cubics) {
-          assertClose(
-            Math.hypot(slice.end[0] - mid[0], slice.end[1] - mid[1]),
-            chord / 2,
-            1e-6 * chord,
-            "radius after scaling",
+      fc.property(
+        smallVec2,
+        smallVec2,
+        real(0.05, 0.4),
+        flag,
+        flag,
+        (start, end, shrink, large, sweep) => {
+          const chord = Math.hypot(end[0] - start[0], end[1] - start[1]);
+          fc.pre(chord > 0);
+          // A circle whose DIAMETER is `shrink` of the chord cannot reach.
+          const r = (shrink * chord) / 2;
+          const cubics = arcToCubics(start, r, r, 0, large, sweep, end);
+          // Two quarter slices — or three, when the half turn comes back
+          // from `acos` a hair over π.
+          assertTrue(
+            cubics.length === 2 || cubics.length === 3,
+            `${cubics.length} slices`,
           );
-        }
-      }),
+          // Scaled to radius chord/2 about the chord's midpoint: every
+          // slice boundary is on that circle.
+          const mid: Vec2 = [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2];
+          for (const slice of cubics) {
+            assertClose(
+              Math.hypot(slice.end[0] - mid[0], slice.end[1] - mid[1]),
+              chord / 2,
+              1e-6 * chord,
+              "radius after scaling",
+            );
+          }
+        },
+      ),
     );
   });
 
   it("a zero radius is one straight cubic; coincident end points are no arc at all", () => {
     fc.assert(
-      fc.property(vec2, vec2, rawRadius, angleDeg, flag, flag, (start, end, r, phi, large, sweep) => {
-        fc.pre(start[0] !== end[0] || start[1] !== end[1]);
-        for (const [rx, ry] of [
-          [0, r],
-          [r, 0],
-          [0, 0],
-        ]) {
-          expect(arcToCubics(start, rx, ry, phi, large, sweep, end)).toEqual([
-            { c1: start, c2: end, end },
-          ]);
-        }
-        expect(arcToCubics(start, r, r, phi, large, sweep, start)).toEqual([]);
-      }),
+      fc.property(
+        vec2,
+        vec2,
+        rawRadius,
+        angleDeg,
+        flag,
+        flag,
+        (start, end, r, phi, large, sweep) => {
+          fc.pre(start[0] !== end[0] || start[1] !== end[1]);
+          for (const [rx, ry] of [
+            [0, r],
+            [r, 0],
+            [0, 0],
+          ]) {
+            expect(arcToCubics(start, rx, ry, phi, large, sweep, end)).toEqual([
+              { c1: start, c2: end, end },
+            ]);
+          }
+          expect(arcToCubics(start, r, r, phi, large, sweep, start)).toEqual(
+            [],
+          );
+        },
+      ),
     );
   });
 
@@ -453,11 +528,23 @@ describe("svg-arc — arcToCubics from raw endpoint arguments (properties)", () 
 
   it("FIXED DEFECT: property — the last slice ends EXACTLY on the end point", () => {
     fc.assert(
-      fc.property(smallVec2, smallVec2, fc.constantFrom(1, 5, 10, 25), flag, flag, (start, end, r, large, sweep) => {
-        fc.pre(start[0] !== end[0] || start[1] !== end[1]);
-        const cubics = arcToCubics(start, r, r, 0, large, sweep, end);
-        assertVecClose(cubics[cubics.length - 1].end, end, 0, "last slice end");
-      }),
+      fc.property(
+        smallVec2,
+        smallVec2,
+        fc.constantFrom(1, 5, 10, 25),
+        flag,
+        flag,
+        (start, end, r, large, sweep) => {
+          fc.pre(start[0] !== end[0] || start[1] !== end[1]);
+          const cubics = arcToCubics(start, r, r, 0, large, sweep, end);
+          assertVecClose(
+            cubics[cubics.length - 1].end,
+            end,
+            0,
+            "last slice end",
+          );
+        },
+      ),
     );
   });
 });

@@ -1373,9 +1373,7 @@ export async function blendGenerationOf(
   return {
     // The tree the links were just read from — the same revision, so the
     // same tree, and not a second read of it.
-    group: anchor
-      ? groupHolding(await linkIndex(host).tree(), anchor)
-      : null,
+    group: anchor ? groupHolding(await linkIndex(host).tree(), anchor) : null,
     steps: links.steps.map((s) => s.id),
   };
 }

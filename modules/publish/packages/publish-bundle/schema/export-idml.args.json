@@ -1,1 +1,4 @@
-{ "kind": "struct", "fields": { "linkBase": { "kind": "text", "optional": true } } }
+{
+  "kind": "struct",
+  "fields": { "linkBase": { "kind": "text", "optional": true } }
+}

@@ -11,7 +11,10 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
-import { barcodeToMutations, type LoweredBarcode } from "../../data-host-model/src";
+import {
+  barcodeToMutations,
+  type LoweredBarcode,
+} from "../../data-host-model/src";
 import { ENGINE_ANCHOR, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
 
 const run = ENGINE_ANCHOR !== null || REQUIRE_REAL_CORE;
@@ -30,33 +33,46 @@ const code128: LoweredBarcode = {
   text: "",
 } as LoweredBarcode;
 
-describe.skipIf(!run)("barcode modules against real core [data.barcode.symbology]", () => {
-  let h: HeadlessHost | null = null;
-  afterEach(() => {
-    h?.dispose();
-    h = null;
-  });
+describe.skipIf(!run)(
+  "barcode modules against real core [data.barcode.symbology]",
+  () => {
+    let h: HeadlessHost | null = null;
+    afterEach(() => {
+      h?.dispose();
+      h = null;
+    });
 
-  it("every module is a black-filled, unstroked polygon [data.barcode.symbology]", async () => {
-    h = await openRealHost();
-    const host = h.host;
-    const ops = barcodeToMutations(code128, { pageId: "usp" as never, topPt: 50, leftPt: 50 });
-    const out = await host.document.mutate({ op: "batch", args: { ops } });
-    expect(out.applied).toBe(true);
+    it("every module is a black-filled, unstroked polygon [data.barcode.symbology]", async () => {
+      h = await openRealHost();
+      const host = h.host;
+      const ops = barcodeToMutations(code128, {
+        pageId: "usp" as never,
+        topPt: 50,
+        leftPt: 50,
+      });
+      const out = await host.document.mutate({ op: "batch", args: { ops } });
+      expect(out.applied).toBe(true);
 
-    const tree = JSON.stringify(await host.document.tree());
-    const ids = [...tree.matchAll(/"kind":"polygon","id":"([^"]+)"/g)].map((m) => m[1]);
-    expect(ids).toHaveLength(2);
-    for (const id of ids) {
-      const props = await host.document.elementProperties({ kind: "polygon", id } as never);
-      const entry = (path: string) =>
-        (props?.entries as { path: string; value: { value: unknown } }[]).find((e) => e.path === path)?.value
-          .value;
-      expect([id, entry("frameFillColor"), entry("frameStrokeColor")]).toEqual([
-        id,
-        "Color/Black",
-        "Swatch/None",
-      ]);
-    }
-  });
-});
+      const tree = JSON.stringify(await host.document.tree());
+      const ids = [...tree.matchAll(/"kind":"polygon","id":"([^"]+)"/g)].map(
+        (m) => m[1],
+      );
+      expect(ids).toHaveLength(2);
+      for (const id of ids) {
+        const props = await host.document.elementProperties({
+          kind: "polygon",
+          id,
+        } as never);
+        const entry = (path: string) =>
+          (
+            props?.entries as { path: string; value: { value: unknown } }[]
+          ).find((e) => e.path === path)?.value.value;
+        expect([
+          id,
+          entry("frameFillColor"),
+          entry("frameStrokeColor"),
+        ]).toEqual([id, "Color/Black", "Swatch/None"]);
+      }
+    });
+  },
+);

@@ -45,7 +45,9 @@ import { minimalIdml } from "./fixtures/minimal-idml";
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const FACE = new Uint8Array(readFileSync(join(HERE, "fixtures", "fonts", "SpaceGrotesk-VF.ttf")));
+const FACE = new Uint8Array(
+  readFileSync(join(HERE, "fixtures", "fonts", "SpaceGrotesk-VF.ttf")),
+);
 
 const manifest = (
   capabilities: PluginManifest["capabilities"] = {
@@ -84,15 +86,35 @@ function host(
     const { family, style } = payload as Face;
     // The engine's lookup: the exact style, else the family's regular face.
     const hit =
-      held.find((f) => f.family === family && (style === null || f.style === style)) ??
+      held.find(
+        (f) => f.family === family && (style === null || f.style === style),
+      ) ??
       (style === null
         ? undefined
-        : held.find((f) => f.family === family && (f.style === null || f.style === "Regular")));
+        : held.find(
+            (f) =>
+              f.family === family &&
+              (f.style === null || f.style === "Regular"),
+          ));
     return {
       kind: "fontFaceBytes",
       payload: hit
-        ? { found: true, family: hit.family, style: hit.style, postscriptName: null, format: "truetype", bytes: [0, 1, 0, 0] }
-        : { found: false, family, style, postscriptName: null, format: "", bytes: [] },
+        ? {
+            found: true,
+            family: hit.family,
+            style: hit.style,
+            postscriptName: null,
+            format: "truetype",
+            bytes: [0, 1, 0, 0],
+          }
+        : {
+            found: false,
+            family,
+            style,
+            postscriptName: null,
+            format: "",
+            bytes: [],
+          },
     };
   });
   fake.onSend(
@@ -100,14 +122,22 @@ function host(
     opts.registerReply ??
       (async (payload) => {
         const p = payload as Face & { bytes: number[]; scope: string };
-        if (p.scope === "document") held.push({ family: p.family, style: p.style });
-        return { kind: "fontRegistered", payload: { family: p.family, pageIds: ["p1"] } };
+        if (p.scope === "document")
+          held.push({ family: p.family, style: p.style });
+        return {
+          kind: "fontRegistered",
+          payload: { family: p.family, pageIds: ["p1"] },
+        };
       }),
   );
-  const { host } = createBundleHost(() => fake.editor, manifest(opts.capabilities), {
-    console: silent,
-    capabilityMode: opts.mode ?? "enforce",
-  });
+  const { host } = createBundleHost(
+    () => fake.editor,
+    manifest(opts.capabilities),
+    {
+      console: silent,
+      capabilityMode: opts.mode ?? "enforce",
+    },
+  );
   const registrations = () =>
     fake.sent
       .filter((m) => m.kind === "registerFont")
@@ -121,21 +151,35 @@ describe("host.assets.registerDocumentFont (ADR 328)", () => {
     const out = await h.assets.registerDocumentFont(ttf(), "Brand", "Bold");
     expect(out).toEqual({ status: "registered", pageIds: ["p1"] });
     const [sent] = registrations();
-    expect(sent).toMatchObject({ family: "Brand", style: "Bold", scope: "document" });
+    expect(sent).toMatchObject({
+      family: "Brand",
+      style: "Bold",
+      scope: "document",
+    });
     expect(sent.bytes).toHaveLength(64);
   });
 
   it("leaves a face the document holds alone (a style-less ask: any face of the family)", async () => {
-    const { host: h, registrations } = host({ held: [{ family: "Brand", style: "Bold" }] });
-    expect(await h.assets.registerDocumentFont(ttf(), "Brand", "Bold")).toEqual({ status: "held" });
-    expect(await h.assets.registerDocumentFont(ttf(), "Brand")).toEqual({ status: "held" });
+    const { host: h, registrations } = host({
+      held: [{ family: "Brand", style: "Bold" }],
+    });
+    expect(await h.assets.registerDocumentFont(ttf(), "Brand", "Bold")).toEqual(
+      { status: "held" },
+    );
+    expect(await h.assets.registerDocumentFont(ttf(), "Brand")).toEqual({
+      status: "held",
+    });
     expect(registrations()).toEqual([]);
   });
 
   it("fills a missing style even when the family's regular face is held", async () => {
     // The engine answers a Bold ask with the Regular face; that is not a Bold.
-    const { host: h, registrations } = host({ held: [{ family: "Brand", style: "Regular" }] });
-    expect((await h.assets.registerDocumentFont(ttf(), "Brand", "Bold")).status).toBe("registered");
+    const { host: h, registrations } = host({
+      held: [{ family: "Brand", style: "Regular" }],
+    });
+    expect(
+      (await h.assets.registerDocumentFont(ttf(), "Brand", "Bold")).status,
+    ).toBe("registered");
     expect(registrations().map((r) => r.style)).toEqual(["Bold"]);
   });
 
@@ -150,38 +194,72 @@ describe("host.assets.registerDocumentFont (ADR 328)", () => {
   });
 
   it("is gated: assets ∋ fonts throws in enforce, document.write refuses", async () => {
-    const noFonts = host({ capabilities: { document: { read: "broad", write: "broad" } } });
-    await expect(noFonts.host.assets.registerDocumentFont(ttf(), "Brand")).rejects.toThrow(PluginCapabilityError);
-    const noWrite = host({ capabilities: { assets: ["fonts"], document: { read: "broad" } } });
+    const noFonts = host({
+      capabilities: { document: { read: "broad", write: "broad" } },
+    });
+    await expect(
+      noFonts.host.assets.registerDocumentFont(ttf(), "Brand"),
+    ).rejects.toThrow(PluginCapabilityError);
+    const noWrite = host({
+      capabilities: { assets: ["fonts"], document: { read: "broad" } },
+    });
     const out = await noWrite.host.assets.registerDocumentFont(ttf(), "Brand");
     expect(out.status).toBe("refused");
-    expect(out.status === "refused" && out.reason).toMatch(/capabilities\.document\.write/);
+    expect(out.status === "refused" && out.reason).toMatch(
+      /capabilities\.document\.write/,
+    );
     expect(noWrite.registrations()).toEqual([]);
     // 'warn' logs and proceeds.
     const warn = host({ capabilities: {}, mode: "warn" });
-    expect((await warn.host.assets.registerDocumentFont(ttf(), "Brand")).status).toBe("registered");
+    expect(
+      (await warn.host.assets.registerDocumentFont(ttf(), "Brand")).status,
+    ).toBe("registered");
   });
 
   it("refuses what the canvas cannot draw: over budget, WOFF/WOFF2, not a face, no family", async () => {
     const { host: h, registrations } = host();
     const over = ttf(ASSET_BUDGETS.maxFontFaceBytes + 1);
-    expect((await h.assets.registerDocumentFont(over, "Brand")).status).toBe("refused");
+    expect((await h.assets.registerDocumentFont(over, "Brand")).status).toBe(
+      "refused",
+    );
     const woff = new Uint8Array([0x77, 0x4f, 0x46, 0x46, 0, 0, 0, 0]); // "wOFF"
     const woff2 = new Uint8Array([0x77, 0x4f, 0x46, 0x32, 0, 0, 0, 0]); // "wOF2"
-    expect((await h.assets.registerDocumentFont(woff, "Brand")).status).toBe("refused");
-    expect((await h.assets.registerDocumentFont(woff2, "Brand")).status).toBe("refused");
-    expect((await h.assets.registerDocumentFont(new Uint8Array([1, 2, 3, 4, 5]), "Brand")).status).toBe("refused");
-    expect((await h.assets.registerDocumentFont(ttf(), "  ")).status).toBe("refused");
+    expect((await h.assets.registerDocumentFont(woff, "Brand")).status).toBe(
+      "refused",
+    );
+    expect((await h.assets.registerDocumentFont(woff2, "Brand")).status).toBe(
+      "refused",
+    );
+    expect(
+      (
+        await h.assets.registerDocumentFont(
+          new Uint8Array([1, 2, 3, 4, 5]),
+          "Brand",
+        )
+      ).status,
+    ).toBe("refused");
+    expect((await h.assets.registerDocumentFont(ttf(), "  ")).status).toBe(
+      "refused",
+    );
     // OpenType (CFF) and a collection are faces the canvas reads.
     const otto = new Uint8Array([0x4f, 0x54, 0x54, 0x4f, 0, 0, 0, 0]);
     const ttcf = new Uint8Array([0x74, 0x74, 0x63, 0x66, 0, 0, 0, 0]);
-    expect((await h.assets.registerDocumentFont(otto, "Otto")).status).toBe("registered");
-    expect((await h.assets.registerDocumentFont(ttcf, "Coll")).status).toBe("registered");
+    expect((await h.assets.registerDocumentFont(otto, "Otto")).status).toBe(
+      "registered",
+    );
+    expect((await h.assets.registerDocumentFont(ttcf, "Coll")).status).toBe(
+      "registered",
+    );
     expect(registrations().map((r) => r.family)).toEqual(["Otto", "Coll"]);
   });
 
   it("answers an engine refusal or a dead channel as a refusal, never a throw", async () => {
-    const refused = host({ registerReply: () => ({ kind: "mutationFailed", payload: { error: "nope" } }) });
+    const refused = host({
+      registerReply: () => ({
+        kind: "mutationFailed",
+        payload: { error: "nope" },
+      }),
+    });
     const a = await refused.host.assets.registerDocumentFont(ttf(), "Brand");
     expect(a.status).toBe("refused");
     const dead = host({
@@ -215,13 +293,22 @@ describe("host.assets.registerDocumentFont on the real engine (headless harness)
       op: "batch",
       args: {
         ops: [
-          { op: "insertTextFrame", args: { pageId, bounds: [72, 72, 200, 400] } },
+          {
+            op: "insertTextFrame",
+            args: { pageId, bounds: [72, 72, 200, 400] },
+          },
           { op: "bindCreated", args: { handle: "t" } },
-          { op: "insertText", args: { storyId: "$h:t", offset: 0, text: "Grotesk" } },
+          {
+            op: "insertText",
+            args: { storyId: "$h:t", offset: 0, text: "Grotesk" },
+          },
           {
             op: "setElementProperty",
             args: {
-              elementId: { kind: "storyRange", id: { story_id: "$h:t", start: 0, end: 7 } } as unknown as ElementId,
+              elementId: {
+                kind: "storyRange",
+                id: { story_id: "$h:t", start: 0, end: 7 },
+              } as unknown as ElementId,
               path: "characterFontFamily",
               value: { type: "text", value: "Space Grotesk" },
             },
@@ -231,14 +318,21 @@ describe("host.assets.registerDocumentFont on the real engine (headless harness)
     } as never);
     expect(out.applied).toBe(true);
     const row = async () =>
-      (await h!.host.document.collection<FontRow>("fonts")).find((f) => f.family === "Space Grotesk");
+      (await h!.host.document.collection<FontRow>("fonts")).find(
+        (f) => f.family === "Space Grotesk",
+      );
     expect((await row())?.isMissing).toBe(true);
 
-    const first = await h.host.assets.registerDocumentFont(FACE, "Space Grotesk");
+    const first = await h.host.assets.registerDocumentFont(
+      FACE,
+      "Space Grotesk",
+    );
     expect(first.status).toBe("registered");
     // The story set in it was laid out again.
     expect(first.status === "registered" && first.pageIds).toContain(pageId);
     expect((await row())?.isMissing).toBe(false);
-    expect(await h.host.assets.registerDocumentFont(FACE, "Space Grotesk")).toEqual({ status: "held" });
+    expect(
+      await h.host.assets.registerDocumentFont(FACE, "Space Grotesk"),
+    ).toEqual({ status: "held" });
   });
 });

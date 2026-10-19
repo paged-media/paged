@@ -34,7 +34,11 @@
 // snap that would pull the point off it. View ▸ Snap to points turns it
 // off.
 
-import { getViewToggle, type CanvasPointerEvent, type PagedEditor } from "@paged-media/shell";
+import {
+  getViewToggle,
+  type CanvasPointerEvent,
+  type PagedEditor,
+} from "@paged-media/shell";
 import {
   anchorTargets,
   pageTargets,
@@ -76,9 +80,13 @@ export async function engineSnapPoint(
   query: EngineSnapQuery,
 ): Promise<EngineSnapResult | null> {
   try {
-    const reply = await send({ kind: "requestSnapPoint", payload: { query } } as never);
+    const reply = await send({
+      kind: "requestSnapPoint",
+      payload: { query },
+    } as never);
     if (reply.kind !== "snapPoint") return null;
-    const r = (reply.payload as { result?: EngineSnapResult } | undefined)?.result;
+    const r = (reply.payload as { result?: EngineSnapResult } | undefined)
+      ?.result;
     return r && r.tolerancePt > 0 ? r : null;
   } catch {
     return null;
@@ -86,7 +94,10 @@ export async function engineSnapPoint(
 }
 
 /** Is snapping on for a sample with these modifiers? */
-export function snappingOn(modifiers: { cmd?: boolean; shift?: boolean }): boolean {
+export function snappingOn(modifiers: {
+  cmd?: boolean;
+  shift?: boolean;
+}): boolean {
   return getViewToggle("snapToPoints") && !modifiers.cmd && !modifiers.shift;
 }
 
@@ -94,7 +105,12 @@ export interface HostSnapper {
   /** Read `pageId`'s targets (once per page). */
   prepare(pageId: string): Promise<void>;
   /** Snap `point` (page-local pt). `extra` are the tool's own points. */
-  snap(point: Vec2, e: CanvasPointerEvent, ptPerPx: number, extra?: readonly Vec2[]): Vec2;
+  snap(
+    point: Vec2,
+    e: CanvasPointerEvent,
+    ptPerPx: number,
+    extra?: readonly Vec2[],
+  ): Vec2;
   /** Snap through the engine (v67), else as `snap` does. */
   snapAsync(
     pageId: string,
@@ -108,16 +124,24 @@ export interface HostSnapper {
   reset(): void;
 }
 
-export function createHostSnapper(paged: () => PagedEditor | null): HostSnapper {
+export function createHostSnapper(
+  paged: () => PagedEditor | null,
+): HostSnapper {
   let page: string | null = null;
   let pageT: SnapTarget[] = [];
   let lastResult: SnapResult | null = null;
-  const snap = (point: Vec2, e: CanvasPointerEvent, ptPerPx: number, extra: readonly Vec2[] = []): Vec2 => {
+  const snap = (
+    point: Vec2,
+    e: CanvasPointerEvent,
+    ptPerPx: number,
+    extra: readonly Vec2[] = [],
+  ): Vec2 => {
     if (!snappingOn(e.modifiers)) {
       lastResult = null;
       return point;
     }
-    const targets = extra.length > 0 ? [...pageT, ...anchorTargets(extra, "own")] : pageT;
+    const targets =
+      extra.length > 0 ? [...pageT, ...anchorTargets(extra, "own")] : pageT;
     lastResult = snapPoint(point, targets, SNAP_TOLERANCE_PX * ptPerPx);
     return lastResult.point;
   };
@@ -129,7 +153,10 @@ export function createHostSnapper(paged: () => PagedEditor | null): HostSnapper 
       const p = paged();
       if (!p) return;
       try {
-        const pages = await p.client.collection<{ selfId: string; sizePt?: [number, number] }>("pages");
+        const pages = await p.client.collection<{
+          selfId: string;
+          sizePt?: [number, number];
+        }>("pages");
         const size = pages.find((x) => x.selfId === pageId)?.sizePt;
         if (size && page === pageId) pageT = pageTargets(size[0], size[1]);
       } catch {
@@ -144,12 +171,15 @@ export function createHostSnapper(paged: () => PagedEditor | null): HostSnapper 
       }
       const p = paged();
       if (p) {
-        const r = await engineSnapPoint(p.client.send.bind(p.client) as unknown as Send, {
-          pageId,
-          point: [point[0], point[1]],
-          cameraScale: 1 / ptPerPx,
-          extraPoints: extra.map((q) => [q[0], q[1]] as [number, number]),
-        });
+        const r = await engineSnapPoint(
+          p.client.send.bind(p.client) as unknown as Send,
+          {
+            pageId,
+            point: [point[0], point[1]],
+            cameraScale: 1 / ptPerPx,
+            extraPoints: extra.map((q) => [q[0], q[1]] as [number, number]),
+          },
+        );
         if (r) {
           lastResult = null;
           return [r.point[0], r.point[1]];

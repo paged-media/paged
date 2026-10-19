@@ -80,15 +80,17 @@ describe("calligraphicWidth", () => {
 
   it("a razor nib stroked along itself still floors at the hairline", () => {
     const razor: NibProfile = { angle: 0, roundness: 0, size: 10 };
-    expect(calligraphicWidth(0, razor)).toBeCloseTo(
-      MIN_BRUSH_WIDTH_RATIO * 10,
-    );
+    expect(calligraphicWidth(0, razor)).toBeCloseTo(MIN_BRUSH_WIDTH_RATIO * 10);
   });
 
   it("defensive inputs: non-positive/non-finite size → 0; roundness clamps", () => {
     expect(calligraphicWidth(1, { angle: 0, roundness: 0.3, size: 0 })).toBe(0);
-    expect(calligraphicWidth(1, { angle: 0, roundness: 0.3, size: -4 })).toBe(0);
-    expect(calligraphicWidth(1, { angle: 0, roundness: 0.3, size: NaN })).toBe(0);
+    expect(calligraphicWidth(1, { angle: 0, roundness: 0.3, size: -4 })).toBe(
+      0,
+    );
+    expect(calligraphicWidth(1, { angle: 0, roundness: 0.3, size: NaN })).toBe(
+      0,
+    );
     // roundness above 1 clamps to a round nib.
     expect(
       calligraphicWidth(0, { angle: 0, roundness: 7, size: 6 }),

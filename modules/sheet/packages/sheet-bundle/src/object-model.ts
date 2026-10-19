@@ -98,7 +98,15 @@ import type {
 import type { CellRegion, ObjectBridge, WorkbookSession } from "./session";
 
 export const PLUGIN_ID = manifest.id;
-export const SHEET_KINDS = ["workbook", "sheet", "cell", "range", "namedRange", "table", "chart"] as const;
+export const SHEET_KINDS = [
+  "workbook",
+  "sheet",
+  "cell",
+  "range",
+  "namedRange",
+  "table",
+  "chart",
+] as const;
 export type SheetKind = (typeof SHEET_KINDS)[number];
 
 /** The plugin's ONE label per host (core's rule: exactly `x-paged:<id>`,
@@ -124,7 +132,16 @@ export const CHART_KINDS = [
   "donut",
   "radar",
 ] as const;
-const H_ALIGNS = ["general", "left", "center", "right", "fill", "justify", "centerContinuous", "distributed"];
+const H_ALIGNS = [
+  "general",
+  "left",
+  "center",
+  "right",
+  "fill",
+  "justify",
+  "centerContinuous",
+  "distributed",
+];
 const V_ALIGNS = ["top", "center", "bottom", "justify", "distributed"];
 
 // ------------------------------------------------------------- schemas
@@ -135,21 +152,36 @@ const int: ValueType = { kind: "number", integer: true };
 const grid: ValueType = { kind: "list", of: { kind: "list", of: text } };
 const series: ValueType = {
   kind: "list",
-  of: { kind: "struct", fields: { values: text, categories: text, name: text, color: text } },
+  of: {
+    kind: "struct",
+    fields: { values: text, categories: text, name: text, color: text },
+  },
 };
 
-const rw = (path: string, type: ValueType, extra: Partial<PropertySchema> = {}): PropertySchema => ({
+const rw = (
+  path: string,
+  type: ValueType,
+  extra: Partial<PropertySchema> = {},
+): PropertySchema => ({
   path,
   type,
   ...extra,
 });
-const ro = (path: string, type: ValueType, extra: Partial<PropertySchema> = {}): PropertySchema => ({
+const ro = (
+  path: string,
+  type: ValueType,
+  extra: Partial<PropertySchema> = {},
+): PropertySchema => ({
   path,
   type,
   access: "readOnly",
   ...extra,
 });
-const derived = (path: string, type: ValueType, extra: Partial<PropertySchema> = {}): PropertySchema => ({
+const derived = (
+  path: string,
+  type: ValueType,
+  extra: Partial<PropertySchema> = {},
+): PropertySchema => ({
   path,
   type,
   access: "derived",
@@ -158,16 +190,34 @@ const derived = (path: string, type: ValueType, extra: Partial<PropertySchema> =
 
 /** The format rows a cell and a range share (the engine's style patch). */
 const STYLE_ROWS: PropertySchema[] = [
-  rw("numberFormat", text, { title: "Number format", summary: "An Excel number-format code (`0.00`, `#,##0`, `yyyy-mm-dd`)." }),
+  rw("numberFormat", text, {
+    title: "Number format",
+    summary: "An Excel number-format code (`0.00`, `#,##0`, `yyyy-mm-dd`).",
+  }),
   rw("fontName", text, { title: "Font" }),
-  rw("fontSize", { kind: "number", unit: "pt" }, { title: "Font size", range: { min: 1, max: 409 } }),
+  rw(
+    "fontSize",
+    { kind: "number", unit: "pt" },
+    { title: "Font size", range: { min: 1, max: 409 } },
+  ),
   rw("bold", bool, { title: "Bold" }),
   rw("italic", bool, { title: "Italic" }),
   rw("underline", bool, { title: "Underline" }),
-  rw("fontColor", text, { title: "Font colour", summary: "`#RRGGBB`; empty = automatic." }),
+  rw("fontColor", text, {
+    title: "Font colour",
+    summary: "`#RRGGBB`; empty = automatic.",
+  }),
   rw("fill", text, { title: "Fill", summary: "`#RRGGBB`; empty = none." }),
-  rw("hAlign", { kind: "enum", members: H_ALIGNS }, { title: "Horizontal alignment", default: "general" }),
-  rw("vAlign", { kind: "enum", members: V_ALIGNS }, { title: "Vertical alignment", default: "bottom" }),
+  rw(
+    "hAlign",
+    { kind: "enum", members: H_ALIGNS },
+    { title: "Horizontal alignment", default: "general" },
+  ),
+  rw(
+    "vAlign",
+    { kind: "enum", members: V_ALIGNS },
+    { title: "Vertical alignment", default: "bottom" },
+  ),
   rw("wrap", bool, { title: "Wrap text" }),
 ];
 const STYLE_PATHS = new Set(STYLE_ROWS.map((r) => r.path));
@@ -179,7 +229,11 @@ export const SHEET_SCHEMAS: Record<SheetKind, PropertySchema[]> = {
     rw("name", text, { title: "Name" }),
     derived("sheets", { kind: "list", of: text }, { title: "Sheets" }),
     rw("iterative", bool, { title: "Iterative calculation" }),
-    derived("version", text, { title: "Version", nullable: true, summary: "The content hash the document's label names." }),
+    derived("version", text, {
+      title: "Version",
+      nullable: true,
+      summary: "The content hash the document's label names.",
+    }),
     derived("dataSource", text, { title: "Dataset", nullable: true }),
   ],
   sheet: [
@@ -192,21 +246,38 @@ export const SHEET_SCHEMAS: Record<SheetKind, PropertySchema[]> = {
   cell: [
     rw("value", text, {
       title: "Value",
-      summary: "The computed value, unformatted (numbers as `5`, booleans `TRUE`). A write enters a constant; a text starting with `=` is refused (write `formula`).",
+      summary:
+        "The computed value, unformatted (numbers as `5`, booleans `TRUE`). A write enters a constant; a text starting with `=` is refused (write `formula`).",
     }),
-    rw("formula", text, { title: "Formula", nullable: true, summary: "`=…`, or null when the cell holds a constant." }),
-    rw("input", text, { title: "Input", summary: "What the formula bar shows: a constant or `=…`." }),
-    derived("display", text, { title: "Display", summary: "The formatted text." }),
+    rw("formula", text, {
+      title: "Formula",
+      nullable: true,
+      summary: "`=…`, or null when the cell holds a constant.",
+    }),
+    rw("input", text, {
+      title: "Input",
+      summary: "What the formula bar shows: a constant or `=…`.",
+    }),
+    derived("display", text, {
+      title: "Display",
+      summary: "The formatted text.",
+    }),
     ...STYLE_ROWS,
   ],
   range: [
     rw("values", grid, {
       title: "Values",
-      summary: "Rows of computed values; a write enters constants (its shape must match the range).",
+      summary:
+        "Rows of computed values; a write enters constants (its shape must match the range).",
       heavy: true,
     }),
     rw("inputs", grid, { title: "Inputs", heavy: true }),
-    rw("formula", text, { title: "Formula fill", summary: "Write: the formula entered in the top-left cell and filled across (relative references follow). Read: the top-left cell's formula.", nullable: true }),
+    rw("formula", text, {
+      title: "Formula fill",
+      summary:
+        "Write: the formula entered in the top-left cell and filled across (relative references follow). Read: the top-left cell's formula.",
+      nullable: true,
+    }),
     derived("display", grid, { title: "Display", heavy: true }),
     derived("rows", int, { title: "Rows" }),
     derived("cols", int, { title: "Columns" }),
@@ -215,7 +286,10 @@ export const SHEET_SCHEMAS: Record<SheetKind, PropertySchema[]> = {
   namedRange: [
     rw("name", text, { title: "Name" }),
     rw("refersTo", text, { title: "Refers to" }),
-    rw("scope", text, { title: "Scope", summary: "Empty = the workbook; else the sheet it is visible on." }),
+    rw("scope", text, {
+      title: "Scope",
+      summary: "Empty = the workbook; else the sheet it is visible on.",
+    }),
   ],
   table: [
     ro("name", text, { title: "Name" }),
@@ -225,18 +299,39 @@ export const SHEET_SCHEMAS: Record<SheetKind, PropertySchema[]> = {
     ro("headerRow", bool, { title: "Header row" }),
     ro("totalsRow", bool, { title: "Totals row" }),
     ro("style", text, { title: "Table style", nullable: true }),
-    derived("totals", { kind: "list", of: text }, { title: "Totals", summary: "The totals row's displayed values; empty without one." }),
+    derived(
+      "totals",
+      { kind: "list", of: text },
+      {
+        title: "Totals",
+        summary: "The totals row's displayed values; empty without one.",
+      },
+    ),
     derived("rowCount", int, { title: "Body rows" }),
   ],
   chart: [
     rw("kind", { kind: "enum", members: CHART_KINDS }, { title: "Chart type" }),
     rw("title", text, { title: "Title", nullable: true }),
     rw("legend", bool, { title: "Legend" }),
-    rw("series", series, { title: "Series", summary: "Ranges as `Sheet!A1:B2`; empty strings mean none." }),
-    rw("categoryAxisTitle", text, { title: "Category axis title", nullable: true }),
+    rw("series", series, {
+      title: "Series",
+      summary: "Ranges as `Sheet!A1:B2`; empty strings mean none.",
+    }),
+    rw("categoryAxisTitle", text, {
+      title: "Category axis title",
+      nullable: true,
+    }),
     rw("valueAxisTitle", text, { title: "Value axis title", nullable: true }),
-    rw("valueAxisMin", { kind: "number" }, { title: "Value axis minimum", nullable: true }),
-    rw("valueAxisMax", { kind: "number" }, { title: "Value axis maximum", nullable: true }),
+    rw(
+      "valueAxisMin",
+      { kind: "number" },
+      { title: "Value axis minimum", nullable: true },
+    ),
+    rw(
+      "valueAxisMax",
+      { kind: "number" },
+      { title: "Value axis maximum", nullable: true },
+    ),
     derived("sheet", text, { title: "Sheet" }),
   ],
 };
@@ -253,10 +348,13 @@ const KIND_TITLES: Record<SheetKind, string> = {
 
 // ----------------------------------------------------------- addresses
 
-export const addressOf = (kind: SheetKind, id: string): Address => `plugin:${PLUGIN_ID}/${kind}/${id}`;
+export const addressOf = (kind: SheetKind, id: string): Address =>
+  `plugin:${PLUGIN_ID}/${kind}/${id}`;
 
-const escapeId = (t: string): string => t.replace(/%/g, "%25").replace(/ /g, "%20");
-const unescapeId = (t: string): string => t.replace(/%20/g, " ").replace(/%25/g, "%");
+const escapeId = (t: string): string =>
+  t.replace(/%/g, "%25").replace(/ /g, "%20");
+const unescapeId = (t: string): string =>
+  t.replace(/%20/g, " ").replace(/%25/g, "%");
 
 function idOf(address: Address, kind: SheetKind): string | null {
   const p = `plugin:${PLUGIN_ID}/${kind}/`;
@@ -268,7 +366,8 @@ function splitSheet(id: string): { sheet: string; rest: string } | null {
   const bang = id.lastIndexOf("!");
   if (bang <= 0) return null;
   let sheet = id.slice(0, bang);
-  if (sheet.startsWith("'") && sheet.endsWith("'")) sheet = sheet.slice(1, -1).replace(/''/g, "'");
+  if (sheet.startsWith("'") && sheet.endsWith("'"))
+    sheet = sheet.slice(1, -1).replace(/''/g, "'");
   return { sheet, rest: id.slice(bang + 1) };
 }
 
@@ -281,17 +380,32 @@ function columnLabel(col: number): string {
   } while (n >= 0);
   return label;
 }
-const a1 = (row: number, col: number): string => `${columnLabel(col)}${row + 1}`;
+const a1 = (row: number, col: number): string =>
+  `${columnLabel(col)}${row + 1}`;
 
 /** The address of one cell (`plugin:media.paged.sheet/cell/<sheet>!<A1>`),
  *  as the kinds format it — for a panel that publishes the active cell. */
-export const cellAddressOf = (sheet: string, row: number, col: number): Address =>
-  addressOf("cell", escapeId(`${sheet}!${a1(row, col)}`));
+export const cellAddressOf = (
+  sheet: string,
+  row: number,
+  col: number,
+): Address => addressOf("cell", escapeId(`${sheet}!${a1(row, col)}`));
 
 /** The address of a rectangular range (`plugin:media.paged.sheet/range/<sheet>!<A1>:<B2>`),
  *  as the kinds format it — for a panel that publishes the grid selection. */
-export const rangeAddressOf = (sheet: string, top: number, left: number, rows: number, cols: number): Address =>
-  addressOf("range", escapeId(`${sheet}!${a1(top, left)}:${a1(top + rows - 1, left + cols - 1)}`));
+export const rangeAddressOf = (
+  sheet: string,
+  top: number,
+  left: number,
+  rows: number,
+  cols: number,
+): Address =>
+  addressOf(
+    "range",
+    escapeId(
+      `${sheet}!${a1(top, left)}:${a1(top + rows - 1, left + cols - 1)}`,
+    ),
+  );
 
 /** The address of the workbook (there is one per document). */
 export const WORKBOOK_ADDRESS: Address = `plugin:${PLUGIN_ID}/workbook/main`;
@@ -309,7 +423,10 @@ function rawText(v: RawValue): string {
 }
 
 const value = (v: unknown): ObjectValue => ({ kind: "value", value: v });
-const refusedValue = (code: "unknownAddress" | "unknownPath" | "failed", reason: string): ObjectValue => ({
+const refusedValue = (
+  code: "unknownAddress" | "unknownPath" | "failed",
+  reason: string,
+): ObjectValue => ({
   kind: "refused",
   code,
   reason,
@@ -335,8 +452,13 @@ interface VersionMeta {
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const d = await globalThis.crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>);
-  return Array.from(new Uint8Array(d), (b) => b.toString(16).padStart(2, "0")).join("");
+  const d = await globalThis.crypto.subtle.digest(
+    "SHA-256",
+    bytes as Uint8Array<ArrayBuffer>,
+  );
+  return Array.from(new Uint8Array(d), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 // ------------------------------------------------------------ the model
@@ -348,7 +470,10 @@ export interface SheetObjectModel {
   dispose(): void;
 }
 
-export function contributeObjectModel(host: BundleHost, session: WorkbookSession): SheetObjectModel {
+export function contributeObjectModel(
+  host: BundleHost,
+  session: WorkbookSession,
+): SheetObjectModel {
   const bridge: ObjectBridge = session.objectBridge();
   const enc = new TextEncoder();
   const dec = new TextDecoder();
@@ -392,51 +517,82 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
   }
 
   /** `Sheet!A1[:B2]` resolved by the ENGINE. */
-  function resolveRef(engine: SheetEngine, id: string, single: boolean): ResolvedRange {
+  function resolveRef(
+    engine: SheetEngine,
+    id: string,
+    single: boolean,
+  ): ResolvedRange {
     const parts = splitSheet(id);
     if (!parts) throw new Refuse(`"${id}" must name its sheet (Sheet1!B4)`);
     const sheet = sheetIdByName(engine, parts.sheet);
-    if (!engine.resolveRange) throw new Refuse("engine wasm predates resolve_range");
+    if (!engine.resolveRange)
+      throw new Refuse("engine wasm predates resolve_range");
     let r: ResolvedRange;
     try {
       r = engine.resolveRange(sheet, parts.rest);
     } catch (err) {
-      throw new Refuse(`"${id}": ${err instanceof Error ? err.message : String(err)}`);
+      throw new Refuse(
+        `"${id}": ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
-    if (single && (r.top !== r.bottom || r.left !== r.right)) throw new Refuse(`"${id}" is not one cell`);
+    if (single && (r.top !== r.bottom || r.left !== r.right))
+      throw new Refuse(`"${id}" is not one cell`);
     return r;
   }
 
-  function cellAddress(engine: SheetEngine, sheet: number, row: number, col: number): Address {
-    return addressOf("cell", escapeId(`${sheetName(engine, sheet)}!${a1(row, col)}`));
+  function cellAddress(
+    engine: SheetEngine,
+    sheet: number,
+    row: number,
+    col: number,
+  ): Address {
+    return addressOf(
+      "cell",
+      escapeId(`${sheetName(engine, sheet)}!${a1(row, col)}`),
+    );
   }
 
   // ── reads ────────────────────────────────────────────────────────────
 
-  function styleOf(engine: SheetEngine, r: ResolvedRange, path: string): ObjectValue {
-    if (!engine.getStyle) return refusedValue("failed", "engine wasm predates get_style");
-    const key: keyof CellStylePatch = path === "numberFormat" ? "numFmt" : (path as keyof CellStylePatch);
+  function styleOf(
+    engine: SheetEngine,
+    r: ResolvedRange,
+    path: string,
+  ): ObjectValue {
+    if (!engine.getStyle)
+      return refusedValue("failed", "engine wasm predates get_style");
+    const key: keyof CellStylePatch =
+      path === "numberFormat" ? "numFmt" : (path as keyof CellStylePatch);
     const area = (r.bottom - r.top + 1) * (r.right - r.left + 1);
     const first = engine.getStyle(r.sheet, r.top, r.left)[key] ?? null;
     if (area <= 256) {
       for (let row = r.top; row <= r.bottom; row++) {
         for (let col = r.left; col <= r.right; col++) {
           const v = engine.getStyle(r.sheet, row, col)[key] ?? null;
-          if (JSON.stringify(v) !== JSON.stringify(first)) return { kind: "mixed" };
+          if (JSON.stringify(v) !== JSON.stringify(first))
+            return { kind: "mixed" };
         }
       }
     }
     return value(first);
   }
 
-  function readCellOrRange(engine: SheetEngine, kind: "cell" | "range", id: string, path: string): ObjectValue {
+  function readCellOrRange(
+    engine: SheetEngine,
+    kind: "cell" | "range",
+    id: string,
+    path: string,
+  ): ObjectValue {
     const r = resolveRef(engine, id, kind === "cell");
     if (STYLE_PATHS.has(path)) return styleOf(engine, r, path);
-    if (!engine.getRangeRaw || !engine.getRangeInputs) return refusedValue("failed", "engine wasm predates the value doors");
+    if (!engine.getRangeRaw || !engine.getRangeInputs)
+      return refusedValue("failed", "engine wasm predates the value doors");
     if (kind === "cell") {
       switch (path) {
         case "value":
-          return value(rawText(engine.getRangeRaw(r.sheet, r.range)[0]?.[0] ?? null));
+          return value(
+            rawText(engine.getRangeRaw(r.sheet, r.range)[0]?.[0] ?? null),
+          );
         case "input":
           return value(engine.getRangeInputs(r.sheet, r.range)[0]?.[0] ?? "");
         case "formula": {
@@ -450,13 +606,16 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
     }
     switch (path) {
       case "values":
-        return value(engine.getRangeRaw(r.sheet, r.range).map((row) => row.map(rawText)));
+        return value(
+          engine.getRangeRaw(r.sheet, r.range).map((row) => row.map(rawText)),
+        );
       case "inputs":
         return value(engine.getRangeInputs(r.sheet, r.range));
       case "display":
         return value(engine.getRangeValues(r.sheet, r.range));
       case "formula": {
-        const input = engine.getRangeInputs(r.sheet, a1(r.top, r.left))[0]?.[0] ?? "";
+        const input =
+          engine.getRangeInputs(r.sheet, a1(r.top, r.left))[0]?.[0] ?? "";
         return value(input.startsWith("=") ? input : null);
       }
       case "rows":
@@ -481,7 +640,9 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
 
   function chartOf(engine: SheetEngine, id: string): ChartSpec {
     const index = Number(id);
-    const c = Number.isInteger(index) ? engine.chartSpecs?.().find((x) => x.index === index) : undefined;
+    const c = Number.isInteger(index)
+      ? engine.chartSpecs?.().find((x) => x.index === index)
+      : undefined;
     if (!c) throw new Refuse(`no chart ${id}`);
     return c;
   }
@@ -497,7 +658,8 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
 
   function read(kind: SheetKind, address: Address, path: string): ObjectValue {
     const id = idOf(address, kind);
-    if (id === null) return refusedValue("unknownAddress", `${address} is not a ${kind}`);
+    if (id === null)
+      return refusedValue("unknownAddress", `${address} is not a ${kind}`);
     const engine = bridge.engine();
     if (!engine) return refusedValue("unknownAddress", "no workbook is open");
     try {
@@ -528,7 +690,11 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
             case "index":
               return value(engine.listSheets().findIndex((x) => x.id === sid));
             case "usedRange":
-              return value(info.rows > 0 && info.cols > 0 ? `A1:${a1(info.rows - 1, info.cols - 1)}` : null);
+              return value(
+                info.rows > 0 && info.cols > 0
+                  ? `A1:${a1(info.rows - 1, info.cols - 1)}`
+                  : null,
+              );
             case "freezeRows":
               return value(engine.getLayout?.(sid).freezeRows ?? 0);
             case "freezeCols":
@@ -547,13 +713,19 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
             case "refersTo":
               return value(n.refersTo);
             case "scope":
-              return value(n.scope === null || n.scope === undefined ? "" : sheetName(engine, n.scope));
+              return value(
+                n.scope === null || n.scope === undefined
+                  ? ""
+                  : sheetName(engine, n.scope),
+              );
           }
           break;
         }
         case "table": {
           const lower = id.toLowerCase();
-          const t = (engine.listTables?.() ?? []).find((x) => x.name.toLowerCase() === lower);
+          const t = (engine.listTables?.() ?? []).find(
+            (x) => x.name.toLowerCase() === lower,
+          );
           if (!t) throw new Refuse(`no table "${id}"`);
           switch (path) {
             case "name":
@@ -573,7 +745,12 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
             case "totals":
             case "rowCount": {
               const r = engine.resolveRange!(t.sheet, t.range);
-              const rows = r.bottom - r.top + 1 - (t.headerRow ? 1 : 0) - (t.totalsRow ? 1 : 0);
+              const rows =
+                r.bottom -
+                r.top +
+                1 -
+                (t.headerRow ? 1 : 0) -
+                (t.totalsRow ? 1 : 0);
               if (path === "rowCount") return value(Math.max(rows, 0));
               if (!t.totalsRow) return value([]);
               const last = `${a1(r.bottom, r.left)}:${a1(r.bottom, r.right)}`;
@@ -609,8 +786,12 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
       }
       return refusedValue("unknownPath", `${kind} has no path "${path}"`);
     } catch (err) {
-      if (err instanceof Refuse) return refusedValue("unknownAddress", err.message);
-      return refusedValue("failed", err instanceof Error ? err.message : String(err));
+      if (err instanceof Refuse)
+        return refusedValue("unknownAddress", err.message);
+      return refusedValue(
+        "failed",
+        err instanceof Error ? err.message : String(err),
+      );
     }
   }
 
@@ -619,7 +800,9 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
     if (!engine) return [];
     const out: Address[] = [];
     const scopeSheet = within ? idOf(within, "sheet") : null;
-    const sheets = engine.listSheets().filter((x) => scopeSheet === null || x.name === scopeSheet);
+    const sheets = engine
+      .listSheets()
+      .filter((x) => scopeSheet === null || x.name === scopeSheet);
     const cap = limit ?? Number.POSITIVE_INFINITY;
     switch (kind) {
       case "workbook":
@@ -629,12 +812,20 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
       case "range":
         return sheets
           .filter((x) => x.rows > 0 && x.cols > 0)
-          .map((x) => addressOf("range", escapeId(`${x.name}!A1:${a1(x.rows - 1, x.cols - 1)}`)));
+          .map((x) =>
+            addressOf(
+              "range",
+              escapeId(`${x.name}!A1:${a1(x.rows - 1, x.cols - 1)}`),
+            ),
+          );
       case "cell": {
         // The cells that hold something, sheet by sheet.
         for (const x of sheets) {
           if (x.rows === 0 || x.cols === 0 || !engine.getRangeInputs) continue;
-          const inputs = engine.getRangeInputs(x.id, `A1:${a1(x.rows - 1, x.cols - 1)}`);
+          const inputs = engine.getRangeInputs(
+            x.id,
+            `A1:${a1(x.rows - 1, x.cols - 1)}`,
+          );
           for (let r = 0; r < inputs.length; r++) {
             for (let c = 0; c < inputs[r]!.length; c++) {
               if (inputs[r]![c] === "") continue;
@@ -649,16 +840,27 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
         return (engine.listNames?.() ?? []).map((n) =>
           addressOf(
             "namedRange",
-            escapeId(n.scope === null || n.scope === undefined ? n.name : `${sheetName(engine, n.scope)}!${n.name}`),
+            escapeId(
+              n.scope === null || n.scope === undefined
+                ? n.name
+                : `${sheetName(engine, n.scope)}!${n.name}`,
+            ),
           ),
         );
       case "table":
         return (engine.listTables?.() ?? [])
-          .filter((t) => scopeSheet === null || sheetName(engine, t.sheet) === scopeSheet)
+          .filter(
+            (t) =>
+              scopeSheet === null || sheetName(engine, t.sheet) === scopeSheet,
+          )
           .map((t) => addressOf("table", escapeId(t.name)));
       case "chart":
         return (engine.chartSpecs?.() ?? [])
-          .filter((c) => scopeSheet === null || sheetName(engine, c.hostSheet) === scopeSheet)
+          .filter(
+            (c) =>
+              scopeSheet === null ||
+              sheetName(engine, c.hostSheet) === scopeSheet,
+          )
           .map((c) => addressOf("chart", String(c.index)));
     }
   }
@@ -689,7 +891,10 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
 
   const notFormula = (v: unknown, what: string): string => {
     const t = String(v);
-    if (t.startsWith("=")) throw new Refuse(`${what}: "${t}" starts with "=" — write the formula path`);
+    if (t.startsWith("="))
+      throw new Refuse(
+        `${what}: "${t}" starts with "=" — write the formula path`,
+      );
     return t;
   };
 
@@ -708,7 +913,13 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
     };
   }
 
-  function planSet(engine: SheetEngine, kind: SheetKind, address: Address, path: string, v: unknown): Step {
+  function planSet(
+    engine: SheetEngine,
+    kind: SheetKind,
+    address: Address,
+    path: string,
+    v: unknown,
+  ): Step {
     const id = idOf(address, kind);
     if (id === null) throw new Refuse(`${address} is not a ${kind}`);
     switch (kind) {
@@ -717,8 +928,13 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
         if (path === "iterative") {
           return (e) => {
             const cs = e.calcSettings?.();
-            if (!e.setIterative) throw new Refuse("engine wasm predates set_iterative");
-            e.setIterative(Boolean(v), cs?.maxIter ?? 100, cs?.maxChange ?? 0.001);
+            if (!e.setIterative)
+              throw new Refuse("engine wasm predates set_iterative");
+            e.setIterative(
+              Boolean(v),
+              cs?.maxIter ?? 100,
+              cs?.maxChange ?? 0.001,
+            );
           };
         }
         break;
@@ -726,16 +942,20 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
         const sid = sheetIdByName(engine, id);
         if (path === "name") {
           return (e) => {
-            if (!e.renameSheet) throw new Refuse("engine wasm predates rename_sheet");
+            if (!e.renameSheet)
+              throw new Refuse("engine wasm predates rename_sheet");
             e.renameSheet(sid, String(v));
           };
         }
         if (path === "freezeRows" || path === "freezeCols") {
           return (e) => {
-            if (!e.setFreeze) throw new Refuse("engine wasm predates set_freeze");
+            if (!e.setFreeze)
+              throw new Refuse("engine wasm predates set_freeze");
             const l = e.getLayout?.(sid);
-            const rows = path === "freezeRows" ? Number(v) : (l?.freezeRows ?? 0);
-            const cols = path === "freezeCols" ? Number(v) : (l?.freezeCols ?? 0);
+            const rows =
+              path === "freezeRows" ? Number(v) : (l?.freezeRows ?? 0);
+            const cols =
+              path === "freezeCols" ? Number(v) : (l?.freezeCols ?? 0);
             e.setFreeze(sid, rows, cols);
           };
         }
@@ -749,7 +969,8 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
         else if (path === "input") input = String(v);
         else if (path === "formula") {
           if (v === null) input = "";
-          else if (!String(v).startsWith("=")) throw new Refuse(`formula "${String(v)}" must start with "="`);
+          else if (!String(v).startsWith("="))
+            throw new Refuse(`formula "${String(v)}" must start with "="`);
           else input = String(v);
         } else break;
         return (_e, p) => {
@@ -767,11 +988,20 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
           if (g.length !== rows || g.some((row) => row.length !== cols)) {
             throw new Refuse(`${path} must be ${rows}×${cols} for ${id}`);
           }
-          const inputs = g.map((row) => row.map((x) => (path === "values" ? notFormula(x, "values") : String(x))));
+          const inputs = g.map((row) =>
+            row.map((x) =>
+              path === "values" ? notFormula(x, "values") : String(x),
+            ),
+          );
           return (_e, p) => {
             for (let i = 0; i < rows; i++) {
               for (let j = 0; j < cols; j++) {
-                p.cells.push({ sheet: r.sheet, row: r.top + i, col: r.left + j, input: inputs[i]![j]! });
+                p.cells.push({
+                  sheet: r.sheet,
+                  row: r.top + i,
+                  col: r.left + j,
+                  input: inputs[i]![j]!,
+                });
               }
             }
             p.regions.push(regionOf(r));
@@ -779,18 +1009,32 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
         }
         if (path === "formula") {
           const f = v === null ? "" : String(v);
-          if (f !== "" && !f.startsWith("=")) throw new Refuse(`formula "${f}" must start with "="`);
+          if (f !== "" && !f.startsWith("="))
+            throw new Refuse(`formula "${f}" must start with "="`);
           return (e, p) => {
             if (f === "") {
               for (let i = 0; i < rows; i++) {
-                for (let j = 0; j < cols; j++) p.cells.push({ sheet: r.sheet, row: r.top + i, col: r.left + j, input: "" });
+                for (let j = 0; j < cols; j++)
+                  p.cells.push({
+                    sheet: r.sheet,
+                    row: r.top + i,
+                    col: r.left + j,
+                    input: "",
+                  });
               }
             } else {
-              p.cells.push({ sheet: r.sheet, row: r.top, col: r.left, input: f });
+              p.cells.push({
+                sheet: r.sheet,
+                row: r.top,
+                col: r.left,
+                input: f,
+              });
               flushCells(e, p);
-              if (!e.fillRange) throw new Refuse("engine wasm predates fill_range");
+              if (!e.fillRange)
+                throw new Refuse("engine wasm predates fill_range");
               const topRow = `${a1(r.top, r.left)}:${a1(r.top, r.right)}`;
-              if (cols > 1) e.fillRange(r.sheet, a1(r.top, r.left), topRow, false);
+              if (cols > 1)
+                e.fillRange(r.sheet, a1(r.top, r.left), topRow, false);
               if (rows > 1) e.fillRange(r.sheet, topRow, r.range, false);
             }
             p.regions.push(regionOf(r));
@@ -812,7 +1056,8 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
           };
         }
         if (path === "scope") {
-          const next = String(v) === "" ? null : sheetIdByName(engine, String(v));
+          const next =
+            String(v) === "" ? null : sheetIdByName(engine, String(v));
           return (e) => {
             e.defineName!(next ?? 0, n.name, n.refersTo, next);
             e.deleteName!(ctx, n.name, scope);
@@ -821,7 +1066,9 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
         break;
       }
       case "table":
-        throw new Refuse("tables are read-only: the xlsx table part re-emits verbatim (spec §10.2)");
+        throw new Refuse(
+          "tables are read-only: the xlsx table part re-emits verbatim (spec §10.2)",
+        );
       case "chart": {
         const c = chartOf(engine, id);
         const patch: ChartPatch = {};
@@ -842,7 +1089,8 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
             throw new Refuse(`chart has no writable path "${path}"`);
         }
         return (e) => {
-          if (!e.updateChart) throw new Refuse("engine wasm predates update_chart");
+          if (!e.updateChart)
+            throw new Refuse("engine wasm predates update_chart");
           e.updateChart(c.index, patch);
           chartOps.push({ op: "update", index: c.index, patch });
         };
@@ -851,7 +1099,11 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
     throw new Refuse(`${kind} has no writable path "${path}"`);
   }
 
-  function planCreate(engine: SheetEngine, kind: SheetKind, props: Record<string, unknown>): Step {
+  function planCreate(
+    engine: SheetEngine,
+    kind: SheetKind,
+    props: Record<string, unknown>,
+  ): Step {
     switch (kind) {
       case "sheet":
         return (e) => {
@@ -861,18 +1113,28 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
       case "namedRange": {
         const name = String(props.name ?? "");
         const refersTo = String(props.refersTo ?? "");
-        if (!name || !refersTo) throw new Refuse("a named range needs name and refersTo");
-        const scope = props.scope ? sheetIdByName(engine, String(props.scope)) : null;
+        if (!name || !refersTo)
+          throw new Refuse("a named range needs name and refersTo");
+        const scope = props.scope
+          ? sheetIdByName(engine, String(props.scope))
+          : null;
         return (e) => e.defineName!(scope ?? 0, name, refersTo, scope);
       }
       case "chart": {
-        const list = (props.series ?? []) as { values: string; categories: string }[];
-        if (list.length === 0) throw new Refuse("a chart needs at least one series");
+        const list = (props.series ?? []) as {
+          values: string;
+          categories: string;
+        }[];
+        if (list.length === 0)
+          throw new Refuse("a chart needs at least one series");
         const kindTag = String(props.kind ?? "column");
         const first = list[0]!;
         const parts = splitSheet(first.values);
         const sheet = parts ? sheetIdByName(engine, parts.sheet) : 0;
-        const title = props.title === null || props.title === undefined ? "" : String(props.title);
+        const title =
+          props.title === null || props.title === undefined
+            ? ""
+            : String(props.title);
         // `addChart` takes plain A1 on its host sheet; the full series
         // (any sheet) lands through `updateChart` below.
         const plain = (t: string) => (t ? (splitSheet(t)?.rest ?? t) : "");
@@ -880,10 +1142,18 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
           const values = plain(first.values);
           const categories = plain(first.categories ?? "");
           const index = e.addChart(sheet, values, categories, kindTag, title);
-          chartOps.push({ op: "add", sheet, values, categories, kind: kindTag, title });
+          chartOps.push({
+            op: "add",
+            sheet,
+            values,
+            categories,
+            kind: kindTag,
+            title,
+          });
           const patch: ChartPatch = {};
           for (const [k, x] of Object.entries(props)) {
-            if (k !== "kind" && k !== "title") (patch as Record<string, unknown>)[k] = x;
+            if (k !== "kind" && k !== "title")
+              (patch as Record<string, unknown>)[k] = x;
           }
           if (Object.keys(patch).length > 0 && e.updateChart) {
             e.updateChart(index, patch);
@@ -892,17 +1162,24 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
         };
       }
     }
-    throw new Refuse(`${kind} objects are not created through the object model`);
+    throw new Refuse(
+      `${kind} objects are not created through the object model`,
+    );
   }
 
-  function planDelete(engine: SheetEngine, kind: SheetKind, address: Address): Step {
+  function planDelete(
+    engine: SheetEngine,
+    kind: SheetKind,
+    address: Address,
+  ): Step {
     const id = idOf(address, kind);
     if (id === null) throw new Refuse(`${address} is not a ${kind}`);
     switch (kind) {
       case "sheet": {
         const sid = sheetIdByName(engine, id);
         return (e) => {
-          if (!e.deleteSheet) throw new Refuse("engine wasm predates delete_sheet");
+          if (!e.deleteSheet)
+            throw new Refuse("engine wasm predates delete_sheet");
           e.deleteSheet(sid);
         };
       }
@@ -915,19 +1192,28 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
         const r = resolveRef(engine, id, kind === "cell");
         return (_e, p) => {
           for (let i = r.top; i <= r.bottom; i++) {
-            for (let j = r.left; j <= r.right; j++) p.cells.push({ sheet: r.sheet, row: i, col: j, input: "" });
+            for (let j = r.left; j <= r.right; j++)
+              p.cells.push({ sheet: r.sheet, row: i, col: j, input: "" });
           }
           p.regions.push(regionOf(r));
         };
       }
     }
-    throw new Refuse(`${kind} objects are not deleted through the object model`);
+    throw new Refuse(
+      `${kind} objects are not deleted through the object model`,
+    );
   }
 
   /** Save the workbook as a content-addressed version. */
-  async function snapshot(engine: SheetEngine): Promise<{ hash: string; parts: PartChange[] }> {
+  async function snapshot(
+    engine: SheetEngine,
+  ): Promise<{ hash: string; parts: PartChange[] }> {
     const bytes = engine.saveXlsx();
-    const meta: VersionMeta = { v: 1, name: session.state().fileName ?? "workbook.xlsx", chartOps };
+    const meta: VersionMeta = {
+      v: 1,
+      name: session.state().fileName ?? "workbook.xlsx",
+      chartOps,
+    };
     const metaBytes = enc.encode(JSON.stringify(meta));
     const all = new Uint8Array(bytes.length + 1 + metaBytes.length);
     all.set(bytes, 0);
@@ -949,7 +1235,10 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
    */
   async function write(
     plan: (engine: SheetEngine) => Step[],
-  ): Promise<{ ok: true; hash: string; parts: PartChange[] } | { ok: false; reason: string }> {
+  ): Promise<
+    | { ok: true; hash: string; parts: PartChange[] }
+    | { ok: false; reason: string }
+  > {
     await session.ensureRestored();
     syncEpoch();
     const engine = bridge.engine();
@@ -958,7 +1247,10 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
     try {
       steps = plan(engine);
     } catch (err) {
-      return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+      return {
+        ok: false,
+        reason: err instanceof Error ? err.message : String(err),
+      };
     }
     const parts: PartChange[] = [];
     if (loadedHash === null) {
@@ -976,7 +1268,10 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
     } catch (err) {
       chartOps = chartOps.slice(0, before.ops);
       await loadVersion(before.hash);
-      return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+      return {
+        ok: false,
+        reason: err instanceof Error ? err.message : String(err),
+      };
     }
     const next = await snapshot(engine);
     parts.push(...next.parts);
@@ -992,14 +1287,19 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
     let data: Record<string, unknown> = {};
     try {
       const env = await host.document?.getDocumentMetadata?.();
-      if (env && typeof env.data === "object" && env.data !== null) data = { ...(env.data as Record<string, unknown>) };
+      if (env && typeof env.data === "object" && env.data !== null)
+        data = { ...(env.data as Record<string, unknown>) };
     } catch {
       /* no readable label: start a fresh envelope */
     }
     data.wb = hash;
     return {
       op: "setDocumentMetadata",
-      args: { key: VERSION_LABEL_KEY, value: JSON.stringify({ v: 1, data }), caller: PLUGIN_ID },
+      args: {
+        key: VERSION_LABEL_KEY,
+        value: JSON.stringify({ v: 1, data }),
+        caller: PLUGIN_ID,
+      },
     } as const;
   }
 
@@ -1023,7 +1323,8 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
           : op.address.startsWith(prefix)
             ? op.address.slice(prefix.length).split("/")[0]!
             : "";
-    if (!(SHEET_KINDS as readonly string[]).includes(raw)) throw new Refuse(`${JSON.stringify(op)} is not a paged.sheet op`);
+    if (!(SHEET_KINDS as readonly string[]).includes(raw))
+      throw new Refuse(`${JSON.stringify(op)} is not a paged.sheet op`);
     return raw as SheetKind;
   }
 
@@ -1034,7 +1335,8 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
     const r = await write((engine) =>
       ops.map((op) => {
         const kind = kindOf(op);
-        if (op.op === "set") return planSet(engine, kind, op.address, op.path, op.value);
+        if (op.op === "set")
+          return planSet(engine, kind, op.address, op.path, op.value);
         if (op.op === "create") return planCreate(engine, kind, op.props ?? {});
         if (op.op === "delete") return planDelete(engine, kind, op.address);
         throw new Refuse(`"${op.op}" is not a write`);
@@ -1054,19 +1356,28 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
 
   /** A typed command's write: the same versioning, committed through the
    *  bundle's own doors (the parts, then the label as ONE mutation). */
-  async function commandWrite(apply: (engine: SheetEngine, p: Pending) => void): Promise<void> {
+  async function commandWrite(
+    apply: (engine: SheetEngine, p: Pending) => void,
+  ): Promise<void> {
     const r = await write(() => [apply]);
     if (!r.ok) throw new Error(r.reason);
     await writeParts(r.parts);
-    const outcome = await host.document.mutate((await labelMutation(r.hash)) as never);
+    const outcome = await host.document.mutate(
+      (await labelMutation(r.hash)) as never,
+    );
     if (!(outcome as { applied?: boolean }).applied) {
-      host.log.warn("object model: the version label was refused — the change is not an undo step", outcome);
+      host.log.warn(
+        "object model: the version label was refused — the change is not an undo step",
+        outcome,
+      );
     }
   }
 
   // ── versions: undo / redo / open ─────────────────────────────────────
 
-  async function readVersion(hash: string): Promise<{ bytes: Uint8Array; meta: VersionMeta } | null> {
+  async function readVersion(
+    hash: string,
+  ): Promise<{ bytes: Uint8Array; meta: VersionMeta } | null> {
     const bytes = await host.parts.read(`${VERSIONS}${hash}.xlsx`);
     const metaBytes = await host.parts.read(`${VERSIONS}${hash}.json`);
     if (!bytes || !metaBytes) return null;
@@ -1084,7 +1395,14 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
     const engine = bridge.engine()!;
     for (const op of v.meta.chartOps) {
       try {
-        if (op.op === "add") engine.addChart(op.sheet!, op.values!, op.categories ?? "", op.kind!, op.title ?? "");
+        if (op.op === "add")
+          engine.addChart(
+            op.sheet!,
+            op.values!,
+            op.categories ?? "",
+            op.kind!,
+            op.title ?? "",
+          );
         else if (op.op === "update") engine.updateChart?.(op.index!, op.patch!);
       } catch (err) {
         host.log.warn("object model: a chart op did not replay", err);
@@ -1121,7 +1439,9 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
           if (h === null) loadedHash = baselineHash;
         }
       })
-      .catch((err) => host.log.warn("object model: version follow failed", err));
+      .catch((err) =>
+        host.log.warn("object model: version follow failed", err),
+      );
     return reconciling;
   }
 
@@ -1131,13 +1451,23 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
 
   // ── datasets: publish a range ────────────────────────────────────────
 
-  const published = new Map<string, { range: string; header: boolean; handle: DataProviderHandle; revision: string }>();
-  const revisionNow = (): string => `${bridge.epoch()}.${session.contentVersion()}`;
+  const published = new Map<
+    string,
+    {
+      range: string;
+      header: boolean;
+      handle: DataProviderHandle;
+      revision: string;
+    }
+  >();
+  const revisionNow = (): string =>
+    `${bridge.epoch()}.${session.contentVersion()}`;
 
   function snapshotRange(range: string, header: boolean): ProviderRecordSet {
     const engine = engineOrThrow();
     const r = resolveRef(engine, range, false);
-    if (!engine.getRangeRaw) throw new Error("engine wasm predates get_range_raw");
+    if (!engine.getRangeRaw)
+      throw new Error("engine wasm predates get_range_raw");
     const raw = engine.getRangeRaw(r.sheet, r.range);
     const cols = r.right - r.left + 1;
     const names = header
@@ -1156,13 +1486,16 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
             ? "bool"
             : "text";
       fields.push({ name: names[c]!, ty, nullable: true });
-      columns.push(ty === "text" ? col.map((v) => (v === null ? null : rawText(v))) : col);
+      columns.push(
+        ty === "text" ? col.map((v) => (v === null ? null : rawText(v))) : col,
+      );
     }
     return { schema: { fields }, columns, rowCount: body.length };
   }
 
   function publish(name: string, range: string, header: boolean): string {
-    if (!host.dataProviders) throw new Error("no data-provider registry is wired");
+    if (!host.dataProviders)
+      throw new Error("no data-provider registry is wired");
     const id = `${PLUGIN_ID}.dataset.${name}`;
     published.get(id)?.handle.dispose();
     const first = snapshotRange(range, header);
@@ -1215,35 +1548,62 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
   // ── typed commands ───────────────────────────────────────────────────
 
   const C = (s: string) => `${PLUGIN_ID}.command.${s}`;
-  const struct = (fields: Record<string, StructField>): ValueType => ({ kind: "struct", fields });
+  const struct = (fields: Record<string, StructField>): ValueType => ({
+    kind: "struct",
+    fields,
+  });
   /** A field the caller may omit; `invoke` fills the default in. */
-  const dflt = (type: ValueType, d: unknown): StructField => ({ ...type, default: d });
-  const findOpts = { matchCase: dflt(bool, false), entireCell: dflt(bool, false), inFormulas: dflt(bool, false) };
+  const dflt = (type: ValueType, d: unknown): StructField => ({
+    ...type,
+    default: d,
+  });
+  const findOpts = {
+    matchCase: dflt(bool, false),
+    entireCell: dflt(bool, false),
+    inFormulas: dflt(bool, false),
+  };
 
-  const cellRange = (range: string) => resolveRef(engineOrThrow(), range, false);
+  const cellRange = (range: string) =>
+    resolveRef(engineOrThrow(), range, false);
 
-  const structural = (id: string, title: string, kind: StructuralEditKind): TypedCommandContribution => ({
+  const structural = (
+    id: string,
+    title: string,
+    kind: StructuralEditKind,
+  ): TypedCommandContribution => ({
     id: C(id),
     title,
     args: struct({ sheet: text, at: int, count: dflt(int, 1) }),
     async handler(_ctx, a) {
-      const { sheet, at, count } = a as { sheet: string; at: number; count: number };
+      const { sheet, at, count } = a as {
+        sheet: string;
+        at: number;
+        count: number;
+      };
       await commandWrite((engine) => {
-        if (!engine.structuralEdit) throw new Error("engine wasm predates structural_edit");
+        if (!engine.structuralEdit)
+          throw new Error("engine wasm predates structural_edit");
         engine.structuralEdit(sheetIdByName(engine, sheet), kind, at, count);
       });
     },
   });
 
-  const fill = (id: string, title: string, down: boolean): TypedCommandContribution => ({
+  const fill = (
+    id: string,
+    title: string,
+    down: boolean,
+  ): TypedCommandContribution => ({
     id: C(id),
     title,
     args: struct({ range: text }),
     async handler(_ctx, a) {
       const r = cellRange((a as { range: string }).range);
       await commandWrite((engine, p) => {
-        if (!engine.fillRange) throw new Error("engine wasm predates fill_range");
-        const src = down ? `${a1(r.top, r.left)}:${a1(r.top, r.right)}` : `${a1(r.top, r.left)}:${a1(r.bottom, r.left)}`;
+        if (!engine.fillRange)
+          throw new Error("engine wasm predates fill_range");
+        const src = down
+          ? `${a1(r.top, r.left)}:${a1(r.top, r.right)}`
+          : `${a1(r.top, r.left)}:${a1(r.bottom, r.left)}`;
         engine.fillRange(r.sheet, src, r.range, false);
         p.regions.push(regionOf(r));
       });
@@ -1264,7 +1624,15 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
     {
       id: C("importXlsx"),
       title: "Import workbook (.xlsx)",
-      args: struct({ bytes: { kind: "bytes", mime: ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"] }, name: dflt(text, "workbook.xlsx") }),
+      args: struct({
+        bytes: {
+          kind: "bytes",
+          mime: [
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          ],
+        },
+        name: dflt(text, "workbook.xlsx"),
+      }),
       result: text,
       async handler(_ctx, a) {
         const { bytes, name } = a as { bytes: Uint8Array; name: string };
@@ -1284,7 +1652,8 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
         session.setActiveSheet(r.sheet);
         session.setRange(r.range);
         const frame = await session.lowerSelection();
-        if (!frame) throw new Error(`could not place ${(a as { range: string }).range}`);
+        if (!frame)
+          throw new Error(`could not place ${(a as { range: string }).range}`);
         return { frame: `textFrame:${frame}` };
       },
     },
@@ -1305,7 +1674,8 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
       async handler(_ctx, a) {
         const { providerId, live } = a as { providerId: string; live: boolean };
         await session.sourceFromDataset(providerId, { live });
-        if (session.state().dataSource?.providerId !== providerId) throw new Error(`could not source ${providerId}`);
+        if (session.state().dataSource?.providerId !== providerId)
+          throw new Error(`could not source ${providerId}`);
         return addressOf("workbook", WORKBOOK_ID);
       },
     },
@@ -1316,8 +1686,15 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
       result: text,
       async handler(_ctx, a) {
         await session.ensureRestored();
-        const { name, range, header } = a as { name: string; range: string; header: boolean };
-        if (!/^[A-Za-z0-9_-]+$/.test(name)) throw new Error(`invalidValue: dataset name "${name}" (letters, digits, _ and - only)`);
+        const { name, range, header } = a as {
+          name: string;
+          range: string;
+          header: boolean;
+        };
+        if (!/^[A-Za-z0-9_-]+$/.test(name))
+          throw new Error(
+            `invalidValue: dataset name "${name}" (letters, digits, _ and - only)`,
+          );
         return publish(name, range, header);
       },
     },
@@ -1343,8 +1720,12 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
       async handler(_ctx, a) {
         let made = "";
         await commandWrite((engine) => {
-          if (!engine.addSheet) throw new Error("engine wasm predates add_sheet");
-          made = sheetName(engine, engine.addSheet((a as { name?: string }).name ?? ""));
+          if (!engine.addSheet)
+            throw new Error("engine wasm predates add_sheet");
+          made = sheetName(
+            engine,
+            engine.addSheet((a as { name?: string }).name ?? ""),
+          );
         });
         return addressOf("sheet", escapeId(made));
       },
@@ -1363,7 +1744,8 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
         const r = cellRange((a as { range: string }).range);
         await commandWrite((_e, p) => {
           for (let i = r.top; i <= r.bottom; i++) {
-            for (let j = r.left; j <= r.right; j++) p.cells.push({ sheet: r.sheet, row: i, col: j, input: "" });
+            for (let j = r.left; j <= r.right; j++)
+              p.cells.push({ sheet: r.sheet, row: i, col: j, input: "" });
           }
           p.regions.push(regionOf(r));
         });
@@ -1372,7 +1754,12 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
     {
       id: C("sortRange"),
       title: "Sort range",
-      args: struct({ range: text, keyColumn: dflt(int, 0), ascending: dflt(bool, true), hasHeader: dflt(bool, false) }),
+      args: struct({
+        range: text,
+        keyColumn: dflt(int, 0),
+        ascending: dflt(bool, true),
+        hasHeader: dflt(bool, false),
+      }),
       async handler(_ctx, a) {
         const { range, keyColumn, ascending, hasHeader } = a as {
           range: string;
@@ -1394,9 +1781,16 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
       result: { kind: "list", of: text },
       async handler(_ctx, a) {
         await session.ensureRestored();
-        const { needle, ...opts } = a as { needle: string; matchCase: boolean; entireCell: boolean; inFormulas: boolean };
+        const { needle, ...opts } = a as {
+          needle: string;
+          matchCase: boolean;
+          entireCell: boolean;
+          inFormulas: boolean;
+        };
         const engine = engineOrThrow();
-        return engine.findAll(undefined, needle, opts).map((m) => cellAddress(engine, m.sheet, m.row, m.col));
+        return engine
+          .findAll(undefined, needle, opts)
+          .map((m) => cellAddress(engine, m.sheet, m.row, m.col));
       },
     },
     {
@@ -1414,14 +1808,23 @@ export function contributeObjectModel(host: BundleHost, session: WorkbookSession
         };
         let occurrences = 0;
         await commandWrite((engine) => {
-          occurrences = engine.replaceAll(undefined, needle, replacement, opts).occurrences;
+          occurrences = engine.replaceAll(
+            undefined,
+            needle,
+            replacement,
+            opts,
+          ).occurrences;
         });
         return occurrences;
       },
     },
   ];
 
-  const handle: ObjectModelHandle = host.contribute.objectModel({ kinds, commands, batch: batchWrite });
+  const handle: ObjectModelHandle = host.contribute.objectModel({
+    kinds,
+    commands,
+    batch: batchWrite,
+  });
 
   return {
     reconcile,

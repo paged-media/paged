@@ -66,7 +66,9 @@ const THEME_VARYING = [
 ];
 
 test.describe("Styleguide — theme", () => {
-  test("dark is the persisted default at boot @feat:editor-shell.theme @feat:scripting.script-editor @level:smoke", async ({ page }) => {
+  test("dark is the persisted default at boot @feat:editor-shell.theme @feat:scripting.script-editor @level:smoke", async ({
+    page,
+  }) => {
     await openCanvas(page);
     expect(await isDark(page)).toBe(true);
     const persisted = await page.evaluate(() =>
@@ -111,7 +113,9 @@ test.describe("Styleguide — theme", () => {
     expect(back).toEqual(dark);
   });
 
-  test("the persisted choice survives a reload @feat:editor-shell.theme @feat:scripting.script-editor @level:happy", async ({ page }) => {
+  test("the persisted choice survives a reload @feat:editor-shell.theme @feat:scripting.script-editor @level:happy", async ({
+    page,
+  }) => {
     await openCanvas(page);
     await page.evaluate(() => window.__canvas.setTheme("light"));
     await expect.poll(() => isDark(page)).toBe(false);

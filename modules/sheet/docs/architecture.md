@@ -23,19 +23,19 @@ crates; the TypeScript side calls them and translates their results
 The engine is written in this repo and depends on no third-party spreadsheet engine
 ([ADR 500](adr/500-own-calculation-engine.md)).
 
-| Crate | What it owns | Workspace crates it depends on |
-|---|---|---|
-| `sheet-core` | The stored types: `CellValue`, `CellRef`/`RangeRef`, `SheetModel`, the formula AST, interners. Its `build.rs` generates the function name table from `registry/functions/`. | none |
-| `sheet-format` | Number-format codes (compile and render), `General` display, 1900/1904 date serials, locale tables for en-US, de-DE, fr-FR, es-ES, it-IT. | core |
-| `sheet-parser` | Lexer and Pratt parser for the Excel formula dialect, the printer, reference extraction, and the rewrite of references for row and column insert/delete. | core |
-| `sheet-fn` | The function kernels, each a pure `fn(&[Arg], &EvalCtx) -> CellValue`, coercion rules, and the dispatch `match` its `build.rs` generates from the registry. | core, format |
-| `sheet-calc` | `Engine`: owns the model, the dependency graph, the dirty set, the recalculation scheduler, the evaluator, spill bookkeeping. | core, parser, fn |
-| `sheet-lower` | `(sheet, range, options)` to the `LoweredContent` IR: formatted cell text, column widths, row heights, merges, grid rules, a style table. Also pagination across a list of frame boxes, and conditional-format evaluation. | core, format |
-| `sheet-grid` | A windowed view of one sheet as the `GridScene` IR: only the cells visible from a scroll origin inside a width and height. | core, format, lower |
-| `sheet-chart` | The chart model (ten kinds) and the generator that turns a chart plus resolved data into `ChartGeometry`, a list of five primitive kinds. Layout is done by `plotters` with its default features off. | core, format |
-| `sheet-xlsx` | The OPC zip container, the SpreadsheetML parts, the writer. | core, lower, chart, format |
-| `sheet-js` | `SheetSession`, a plain-Rust session over the engine and the XLSX document, and the wasm class `SheetEngine` that forwards to it. | all nine above |
-| `sheet-conformance` | Tests only: the corpus loader, 47 integration test files, the `coverage-gate` binary. | all ten above |
+| Crate               | What it owns                                                                                                                                                                                                               | Workspace crates it depends on |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `sheet-core`        | The stored types: `CellValue`, `CellRef`/`RangeRef`, `SheetModel`, the formula AST, interners. Its `build.rs` generates the function name table from `registry/functions/`.                                                | none                           |
+| `sheet-format`      | Number-format codes (compile and render), `General` display, 1900/1904 date serials, locale tables for en-US, de-DE, fr-FR, es-ES, it-IT.                                                                                  | core                           |
+| `sheet-parser`      | Lexer and Pratt parser for the Excel formula dialect, the printer, reference extraction, and the rewrite of references for row and column insert/delete.                                                                   | core                           |
+| `sheet-fn`          | The function kernels, each a pure `fn(&[Arg], &EvalCtx) -> CellValue`, coercion rules, and the dispatch `match` its `build.rs` generates from the registry.                                                                | core, format                   |
+| `sheet-calc`        | `Engine`: owns the model, the dependency graph, the dirty set, the recalculation scheduler, the evaluator, spill bookkeeping.                                                                                              | core, parser, fn               |
+| `sheet-lower`       | `(sheet, range, options)` to the `LoweredContent` IR: formatted cell text, column widths, row heights, merges, grid rules, a style table. Also pagination across a list of frame boxes, and conditional-format evaluation. | core, format                   |
+| `sheet-grid`        | A windowed view of one sheet as the `GridScene` IR: only the cells visible from a scroll origin inside a width and height.                                                                                                 | core, format, lower            |
+| `sheet-chart`       | The chart model (ten kinds) and the generator that turns a chart plus resolved data into `ChartGeometry`, a list of five primitive kinds. Layout is done by `plotters` with its default features off.                      | core, format                   |
+| `sheet-xlsx`        | The OPC zip container, the SpreadsheetML parts, the writer.                                                                                                                                                                | core, lower, chart, format     |
+| `sheet-js`          | `SheetSession`, a plain-Rust session over the engine and the XLSX document, and the wasm class `SheetEngine` that forwards to it.                                                                                          | all nine above                 |
+| `sheet-conformance` | Tests only: the corpus loader, 47 integration test files, the `coverage-gate` binary.                                                                                                                                      | all ten above                  |
 
 The function table is generated: `sheet-core/build.rs` and `sheet-fn/build.rs` both read
 `registry/functions/*.yaml` and sort by id, so a function without a registry row has no id
@@ -182,22 +182,22 @@ preserved but never interpreted, [ADR 504](adr/504-publishing-first-scope.md).
 
 ## Host doors
 
-| Door | What the plugin uses it for |
-|---|---|
-| `contributePanel`, `host.contribute.command`, `host.contribute.menu` | three panels (Workbook, Grid, Datasets), twelve commands, twelve menu entries |
-| `host.contribute.objectType`, `host.contribute.editContext` | the `sheetFrame` type and the `sheet` context, which declares no canvas tools and one panel |
-| `host.contribute.importer`, `host.contribute.exporter` | `.xlsx` in and out of the session |
-| `host.contribute.sceneLayer()` | the in-frame grid |
-| `host.contribute.bindingProvider` | the host's Swatches, Character and Paragraph panels read workbook values while the `sheet` context is active |
-| `host.document.mutate` | every write: frames, tables, cell text, paths, swatches, cell styles, metadata |
-| `host.document.collection`, `meta`, `elementGeometry`, `elementProperties` | stories, swatches and pages; the active page; frame size; a table cell's properties |
-| `host.text.measureString` | column widths of a lowered table |
-| `host.selection.set` | select the frame after lowering |
-| `host.parts`, `host.blob`, `host.storage` | the stored workbook and its name |
-| `host.dataProviders` | discover datasets, pull a snapshot, watch its revision |
-| `host.clipboard` | copy and paste cell ranges; copy a function name |
-| `host.shell.pickFile`, `host.shell.openPanel`, `host.log`, `host.supports` | file picker, opening panels, logging, probing optional doors |
-| `host.document.frameChain`, `hitTest`, `onDidChange` | only the paginated chain lowering in `src/lower.ts`, which the bundle exports but does not call (see [`status.md`](status.md)) |
+| Door                                                                       | What the plugin uses it for                                                                                                    |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `contributePanel`, `host.contribute.command`, `host.contribute.menu`       | three panels (Workbook, Grid, Datasets), twelve commands, twelve menu entries                                                  |
+| `host.contribute.objectType`, `host.contribute.editContext`                | the `sheetFrame` type and the `sheet` context, which declares no canvas tools and one panel                                    |
+| `host.contribute.importer`, `host.contribute.exporter`                     | `.xlsx` in and out of the session                                                                                              |
+| `host.contribute.sceneLayer()`                                             | the in-frame grid                                                                                                              |
+| `host.contribute.bindingProvider`                                          | the host's Swatches, Character and Paragraph panels read workbook values while the `sheet` context is active                   |
+| `host.document.mutate`                                                     | every write: frames, tables, cell text, paths, swatches, cell styles, metadata                                                 |
+| `host.document.collection`, `meta`, `elementGeometry`, `elementProperties` | stories, swatches and pages; the active page; frame size; a table cell's properties                                            |
+| `host.text.measureString`                                                  | column widths of a lowered table                                                                                               |
+| `host.selection.set`                                                       | select the frame after lowering                                                                                                |
+| `host.parts`, `host.blob`, `host.storage`                                  | the stored workbook and its name                                                                                               |
+| `host.dataProviders`                                                       | discover datasets, pull a snapshot, watch its revision                                                                         |
+| `host.clipboard`                                                           | copy and paste cell ranges; copy a function name                                                                               |
+| `host.shell.pickFile`, `host.shell.openPanel`, `host.log`, `host.supports` | file picker, opening panels, logging, probing optional doors                                                                   |
+| `host.document.frameChain`, `hitTest`, `onDidChange`                       | only the paginated chain lowering in `src/lower.ts`, which the bundle exports but does not call (see [`status.md`](status.md)) |
 
 The manifest declares `document` (read `broad`, write `scoped`), `rendering` (`hitTest`,
 `sceneLayer`), `network: false`, `dataProviders` (consume `dataset`), `clipboard` (`full`),
@@ -209,8 +209,8 @@ The manifest declares `document` (read `broad`, write `scoped`), `rendering` (`h
   mode, checks that the installed `wasm-bindgen` CLI has the version in `Cargo.lock`, runs
   `wasm-bindgen --target web` into `packages/sheet-bundle/bin/` (gitignored) and, if
   installed, `wasm-opt -Oz`. It fails above 100 MB; the manifest declares 8 MiB for the same
-  file. The bundle has no build step of its own; `.github/workflows/sheet-publish.yml`
-  stays, dispatch-only, until the npm deprecation.
+  file. The bundle has no build step of its own; the dispatch-only `sheet-publish.yml` was
+  deleted with the npm deprecation (PM-0008).
 - Rust lane (`.github/workflows/rust.yml`, on pull requests and on `main`): `cargo fmt`,
   `clippy` with warnings denied, the dependency guards, `cargo deny`, `cargo nextest`, then
   `coverage-gate`, which fails when a registry row marked `implemented` names no test or

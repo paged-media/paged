@@ -34,7 +34,14 @@
 //       its two undo steps;
 //   (8) the live tool: a freehand drag and an Alt straight drag both cut.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "bun:test";
 
 import type {
   BundleHost,
@@ -95,11 +102,21 @@ function areaOf(t: PathAnchorsResult): number {
 /** `[minX, minY, maxX, maxY]` of a table's anchors, in PAGE space. */
 function pageBox(t: PathAnchorsResult): [number, number, number, number] {
   const m = t.itemTransform ?? [1, 0, 0, 1, 0, 0];
-  let box: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+  let box: [number, number, number, number] = [
+    Infinity,
+    Infinity,
+    -Infinity,
+    -Infinity,
+  ];
   for (const a of t.anchors) {
     const x = m[0] * a.anchor[0] + m[2] * a.anchor[1] + m[4];
     const y = m[1] * a.anchor[0] + m[3] * a.anchor[1] + m[5];
-    box = [Math.min(box[0], x), Math.min(box[1], y), Math.max(box[2], x), Math.max(box[3], y)];
+    box = [
+      Math.min(box[0], x),
+      Math.min(box[1], y),
+      Math.max(box[2], x),
+      Math.max(box[3], y),
+    ];
   }
   return box;
 }
@@ -119,19 +136,32 @@ async function propsOf(h: HeadlessHost, id: ElementId) {
   return out;
 }
 
-async function stroke(h: HeadlessHost, id: ElementId, weight: number): Promise<void> {
+async function stroke(
+  h: HeadlessHost,
+  id: ElementId,
+  weight: number,
+): Promise<void> {
   for (const m of [
     {
       op: "setElementProperty",
-      args: { elementId: id, path: "frameStrokeColor", value: { type: "colorRef", value: "Color/Black" } },
+      args: {
+        elementId: id,
+        path: "frameStrokeColor",
+        value: { type: "colorRef", value: "Color/Black" },
+      },
     },
     {
       op: "setElementProperty",
-      args: { elementId: id, path: "frameStrokeWeight", value: { type: "length", value: weight } },
+      args: {
+        elementId: id,
+        path: "frameStrokeWeight",
+        value: { type: "length", value: weight },
+      },
     },
   ] as const) {
     const out = await h.host.document.mutate(m);
-    if (!out.applied) throw new Error(`stroke setup refused: ${JSON.stringify(out.error)}`);
+    if (!out.applied)
+      throw new Error(`stroke setup refused: ${JSON.stringify(out.error)}`);
   }
 }
 
@@ -228,8 +258,17 @@ describe("draw conformance — the Knife", () => {
 
   it("the probe batch: one strip per target, inserted, NAMED and pinned to the target's raw frame", () => {
     const batch = knifeStripBatchFor([
-      { pageId: PAGE_ID, cutInner: [[0, 0], [10, 0]] },
-    ]) as { op: string; args: { ops: { op: string; args: Record<string, unknown> }[] } };
+      {
+        pageId: PAGE_ID,
+        cutInner: [
+          [0, 0],
+          [10, 0],
+        ],
+      },
+    ]) as {
+      op: string;
+      args: { ops: { op: string; args: Record<string, unknown> }[] };
+    };
     expect(batch.args.ops.map((o) => o.op)).toEqual([
       "insertPath",
       "bindCreated",
@@ -238,9 +277,14 @@ describe("draw conformance — the Knife", () => {
     expect(batch.args.ops[1].args).toEqual({ handle: knifeStripHandle(0) });
     expect(batch.args.ops[2].args.path).toBe("framePath");
     // A strip KNIFE_STRIP_WIDTH_PT wide around the cut.
-    const strip = batch.args.ops[0].args.anchors as { anchor: [number, number] }[];
+    const strip = batch.args.ops[0].args.anchors as {
+      anchor: [number, number];
+    }[];
     const ys = strip.map((a) => a.anchor[1]);
-    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(KNIFE_STRIP_WIDTH_PT, 12);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(
+      KNIFE_STRIP_WIDTH_PT,
+      12,
+    );
   });
 
   it("a wavy cut crossing the square TWICE leaves THREE pieces, one undo removes them all", async () => {
@@ -253,7 +297,8 @@ describe("draw conformance — the Knife", () => {
     ]);
     expect(result.pieces).toHaveLength(3);
     let total = 0;
-    for (const p of result.pieces) total += areaOf((await h.host.document.pathAnchors(p))!);
+    for (const p of result.pieces)
+      total += areaOf((await h.host.document.pathAnchors(p))!);
     expect(total).toBeCloseTo(10000, 0);
     await h.host.document.undo();
     expect(await leafIds(h)).toEqual(before);
@@ -282,7 +327,10 @@ describe("draw conformance — the Knife", () => {
     }
     // The lower piece (140 pt tall, around the hole) has two contours.
     expect(contours.sort()).toEqual([1, 2]);
-    expect(areas.reduce((a, b) => a + b, 0)).toBeCloseTo(200 * 200 - 40 * 40, 0);
+    expect(areas.reduce((a, b) => a + b, 0)).toBeCloseTo(
+      200 * 200 - 40 * 40,
+      0,
+    );
   });
 
   it("a NICK (the cut enters and stops) changes nothing and leaves no undo step", async () => {
@@ -296,7 +344,9 @@ describe("draw conformance — the Knife", () => {
     expect(result.cut).toEqual([]);
     expect(result.undoSteps).toBe(0);
     expect(await leafIds(h)).toEqual(before);
-    expect((await h.host.document.pathAnchors(SQ))!.anchors).toEqual(original.anchors);
+    expect((await h.host.document.pathAnchors(SQ))!.anchors).toEqual(
+      original.anchors,
+    );
     // The last step is still the stroke setup, not a strip.
     await h.host.document.undo();
     expect((await propsOf(h, SQ)).frameStrokeWeight).not.toBe(3);
@@ -317,7 +367,11 @@ describe("draw conformance — the Knife", () => {
     ];
     const rot = await h.host.document.mutate({
       op: "setElementProperty",
-      args: { elementId: SQ, path: "frameTransform", value: { type: "transform", value: m } },
+      args: {
+        elementId: SQ,
+        path: "frameTransform",
+        value: { type: "transform", value: m },
+      },
     });
     expect(rot.applied).toBe(true);
     const result = await applyKnife(h.host, PAGE_ID, [
@@ -388,7 +442,9 @@ describe("draw conformance — the Knife", () => {
     const document = new Proxy(h.host.document, {
       get(target, prop, receiver) {
         if (prop === "planarRegions") {
-          return async (...args: Parameters<BundleHost["document"]["planarRegions"]>) => {
+          return async (
+            ...args: Parameters<BundleHost["document"]["planarRegions"]>
+          ) => {
             if (!fired) {
               fired = true;
               await h.host.document.mutate({
@@ -408,7 +464,9 @@ describe("draw conformance — the Knife", () => {
     });
     const host = new Proxy(h.host, {
       get(target, prop, receiver) {
-        return prop === "document" ? document : (Reflect.get(target, prop, receiver) as unknown);
+        return prop === "document"
+          ? document
+          : (Reflect.get(target, prop, receiver) as unknown);
       },
     }) as BundleHost;
     await h.host.selection.set([SQ]);
@@ -428,16 +486,34 @@ describe("draw conformance — the Knife", () => {
   it("the cut batch: inserts and their paint FIRST, the target rewrite after, deletes LAST", () => {
     const table = {
       anchors: [
-        { anchor: [0, 0] as [number, number], left: [0, 0] as [number, number], right: [0, 0] as [number, number] },
-        { anchor: [1, 0] as [number, number], left: [1, 0] as [number, number], right: [1, 0] as [number, number] },
-        { anchor: [1, 1] as [number, number], left: [1, 1] as [number, number], right: [1, 1] as [number, number] },
+        {
+          anchor: [0, 0] as [number, number],
+          left: [0, 0] as [number, number],
+          right: [0, 0] as [number, number],
+        },
+        {
+          anchor: [1, 0] as [number, number],
+          left: [1, 0] as [number, number],
+          right: [1, 0] as [number, number],
+        },
+        {
+          anchor: [1, 1] as [number, number],
+          left: [1, 1] as [number, number],
+          right: [1, 1] as [number, number],
+        },
       ],
       subpathStarts: [0],
     };
     const batch = knifeBatchFor(
       [
         {
-          target: { id: SQ, pageId: PAGE_ID, inner: table, transform: null, cutInner: [] },
+          target: {
+            id: SQ,
+            pageId: PAGE_ID,
+            inner: table,
+            transform: null,
+            cutInner: [],
+          },
           pieces: [table, table],
           paint: { fill: "Color/Black", stroke: null, weight: 2 },
         },
@@ -463,7 +539,9 @@ describe("draw conformance — the Knife", () => {
       handler.onActivate(undefined as never);
       handler.onPointerDown(pointerAt(PAGE_ID, [60, 140]));
       for (let x = 70; x <= 260; x += 10) {
-        handler.onPointerMove(pointerAt(PAGE_ID, [x, 140 + (x % 20 === 0 ? 1 : 0)]));
+        handler.onPointerMove(
+          pointerAt(PAGE_ID, [x, 140 + (x % 20 === 0 ? 1 : 0)]),
+        );
       }
       expect(h.lastToolPreview()).not.toBeNull();
       handler.onPointerUp(pointerAt(PAGE_ID, [260, 140]));
@@ -483,7 +561,8 @@ describe("draw conformance — the Knife", () => {
       await settle();
       expect(done!.pieces).toHaveLength(2);
       const areas = [];
-      for (const p of done!.pieces) areas.push(areaOf((await h.host.document.pathAnchors(p))!));
+      for (const p of done!.pieces)
+        areas.push(areaOf((await h.host.document.pathAnchors(p))!));
       expect(areas[0]).toBeCloseTo(5000, 0);
       expect(areas[1]).toBeCloseTo(5000, 0);
     });

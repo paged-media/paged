@@ -40,7 +40,10 @@ import { importWorkbook, placedTables } from "./sheet-kit";
 
 const ROWS = 30;
 const HEADER = ["item", "qty"];
-const BODY = Array.from({ length: ROWS }, (_, i) => [`Item ${i + 1}`, String((i + 1) * 3)]);
+const BODY = Array.from({ length: ROWS }, (_, i) => [
+  `Item ${i + 1}`,
+  String((i + 1) * 3),
+]);
 const CSV = [HEADER, ...BODY].map((r) => r.join(",")).join("\n") + "\n";
 
 async function link(page: Page, from: string, to: string): Promise<void> {
@@ -68,8 +71,18 @@ test.describe("journey · paged.sheet pagination", () => {
     // Three 200 pt frames: 31 rows of ~15 pt need more than one, fewer
     // than four.
     const a = await designer.addTextFrame({ x0: 36, y0: 36, x1: 276, y1: 236 });
-    const b = await designer.addTextFrame({ x0: 300, y0: 36, x1: 540, y1: 236 });
-    const c = await designer.addTextFrame({ x0: 36, y0: 300, x1: 276, y1: 500 });
+    const b = await designer.addTextFrame({
+      x0: 300,
+      y0: 36,
+      x1: 540,
+      y1: 236,
+    });
+    const c = await designer.addTextFrame({
+      x0: 36,
+      y0: 300,
+      x1: 276,
+      y1: 500,
+    });
     await link(page, a.frameId, b.frameId);
     await link(page, b.frameId, c.frameId);
 
@@ -83,16 +96,24 @@ test.describe("journey · paged.sheet pagination", () => {
     await designer.runCommand("media.paged.sheet.command.paginateToChain");
 
     await expect
-      .poll(async () => (await placedTables(page)).tables.length, { timeout: 15_000 })
+      .poll(async () => (await placedTables(page)).tables.length, {
+        timeout: 15_000,
+      })
       .toBeGreaterThan(1);
     const doc = await placedTables(page);
     const stories = new Set(doc.tables.map((t) => t.storyFile));
     expect(stories.size, "every slice is in the chain's one story").toBe(1);
-    expect(doc.tables.length, "three frames hold the range").toBeLessThanOrEqual(3);
+    expect(
+      doc.tables.length,
+      "three frames hold the range",
+    ).toBeLessThanOrEqual(3);
     for (const t of doc.tables) {
       expect(t.rows.length, "no empty slice").toBeGreaterThan(0);
     }
     const flowed = doc.tables.flatMap((t) => t.rows);
-    expect(flowed, "every source row once, in order").toEqual([HEADER, ...BODY]);
+    expect(flowed, "every source row once, in order").toEqual([
+      HEADER,
+      ...BODY,
+    ]);
   });
 });

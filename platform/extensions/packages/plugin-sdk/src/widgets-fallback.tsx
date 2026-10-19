@@ -43,9 +43,7 @@ import type {
 
 import { type CreateElement, requireCreateElement } from "./react-optional.js";
 
-function TextareaCodeEditor(
-  props: CodeEditorProps,
-): ReturnType<CreateElement> {
+function TextareaCodeEditor(props: CodeEditorProps): ReturnType<CreateElement> {
   const createElement = requireCreateElement(
     "plugin-sdk: host.widgets.CodeEditor fell back to the built-in textarea, " +
       "but React is not installed. Install react, or inject a widget catalog " +
@@ -57,7 +55,8 @@ function TextareaCodeEditor(
     spellCheck: false,
     "aria-label": props.ariaLabel,
     "data-code-editor-fallback": props.language ?? "text",
-    onChange: (e: { target: { value: string } }) => props.onChange(e.target.value),
+    onChange: (e: { target: { value: string } }) =>
+      props.onChange(e.target.value),
     style: {
       width: "100%",
       minHeight: props.minHeight ?? 96,
@@ -78,9 +77,7 @@ function TextareaCodeEditor(
  *  every pick (it listens to the DOM `input` event), so it feeds
  *  `onChange`; the value the picker settles on is reported on blur as
  *  `onCommit`. */
-function NativeColorPicker(
-  props: ColorPickerProps,
-): ReturnType<CreateElement> {
+function NativeColorPicker(props: ColorPickerProps): ReturnType<CreateElement> {
   const createElement = requireCreateElement(
     "plugin-sdk: host.widgets.ColorPicker fell back to <input type=color>, " +
       "but React is not installed. Install react, or inject a widget catalog " +

@@ -34,7 +34,11 @@ import { loadIdml, openCanvas, openPanel } from "./fidelity/canvas-driver";
 import { generatedFixture } from "./e2e/harness/fixtures";
 import { loadViaReactPath, screenPoint } from "./e2e/harness/viewport";
 import { fieldOf, undoOnce } from "./e2e/harness/objects";
-import { engineGet, expectRenderChange, pageRender } from "./e2e/harness/engine";
+import {
+  engineGet,
+  expectRenderChange,
+  pageRender,
+} from "./e2e/harness/engine";
 
 interface CellAddr {
   storyId: string;
@@ -44,22 +48,43 @@ interface CellAddr {
 }
 
 /** Sweep page 0 for the first table cell (a hit test with a table context). */
-async function findCell(page: Page, pageId: string, widthPt: number, heightPt: number) {
+async function findCell(
+  page: Page,
+  pageId: string,
+  widthPt: number,
+  heightPt: number,
+) {
   return page.evaluate(
     async ({ pageId, widthPt, heightPt }) => {
-      const c = (globalThis as unknown as {
-        __canvas: {
-          client: {
-            send(m: unknown): Promise<{
-              kind: string;
-              payload?: { storyId?: string | null; tableContext?: { tableId: string; row: number; col: number } | null };
-            }>;
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              send(m: unknown): Promise<{
+                kind: string;
+                payload?: {
+                  storyId?: string | null;
+                  tableContext?: {
+                    tableId: string;
+                    row: number;
+                    col: number;
+                  } | null;
+                };
+              }>;
+            };
           };
-        };
-      }).__canvas;
+        }
+      ).__canvas;
       for (let gy = 0.04; gy < 0.97; gy += 0.03) {
         for (let gx = 0.04; gx < 0.97; gx += 0.03) {
-          const r = await c.client.send({ kind: "hitTest", payload: { pageId, docPoint: [widthPt * gx, heightPt * gy], filter: "any" } });
+          const r = await c.client.send({
+            kind: "hitTest",
+            payload: {
+              pageId,
+              docPoint: [widthPt * gx, heightPt * gy],
+              filter: "any",
+            },
+          });
           const p = r.payload;
           if (r.kind === "hitResult" && p?.tableContext && p.storyId) {
             const { tableId, row, col } = p.tableContext;
@@ -77,12 +102,25 @@ async function findCell(page: Page, pageId: string, widthPt: number, heightPt: n
 function cellRead(page: Page, a: CellAddr, path: string): Promise<unknown> {
   return page.evaluate(
     async ({ a, path }) => {
-      const c = (globalThis as unknown as {
-        __canvas: { client: { elementProperties(id: unknown): Promise<{ entries: { path: string; value: { value: unknown } | null }[] } | null> } };
-      }).__canvas;
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              elementProperties(id: unknown): Promise<{
+                entries: { path: string; value: { value: unknown } | null }[];
+              } | null>;
+            };
+          };
+        }
+      ).__canvas;
       const props = await c.client.elementProperties({
         kind: "tableCell",
-        id: { story_id: a.storyId, table_id: a.tableId, row: a.row, col: a.col },
+        id: {
+          story_id: a.storyId,
+          table_id: a.tableId,
+          row: a.row,
+          col: a.col,
+        },
       });
       const e = props?.entries.find((x) => x.path === path);
       return e ? (e.value?.value ?? null) : "absent";
@@ -120,7 +158,9 @@ test.describe("Cell fill tint (engine 0.71.11)", () => {
 
     // A solid fill to tint.
     await panel.locator("[data-cell-fill-select]").selectOption("Color/Black");
-    await expect.poll(() => cellRead(page, addr, "cellFillColor")).toBe("Color/Black");
+    await expect
+      .poll(() => cellRead(page, addr, "cellFillColor"))
+      .toBe("Color/Black");
 
     const field = fieldOf(panel, "cellFillTint");
     await expect(field).toHaveAttribute("data-value-type", "number");
@@ -132,7 +172,9 @@ test.describe("Cell fill tint (engine 0.71.11)", () => {
     await expect.poll(() => cellRead(page, addr, "cellFillTint")).toBe(30);
     await expectRenderChange(page, p0, render);
     await undoOnce(page);
-    await expect.poll(() => cellRead(page, addr, "cellFillTint")).toEqual(before);
+    await expect
+      .poll(() => cellRead(page, addr, "cellFillTint"))
+      .toEqual(before);
     // The fill colour (the step before) is still applied.
     expect(await cellRead(page, addr, "cellFillColor")).toBe("Color/Black");
   });
@@ -142,7 +184,9 @@ test.describe("Cell fill tint (engine 0.71.11)", () => {
   }) => {
     await loadIdml(page, generatedFixture("styles-cascade"));
     await openPanel(page, "paged.cell-styles");
-    await page.locator('[data-style-options-open="CellStyle/CellBase"]').click();
+    await page
+      .locator('[data-style-options-open="CellStyle/CellBase"]')
+      .click();
     const panel = page.locator('[data-style-options-panel="ready"]');
     const address = "style:cell/CellStyle/CellBase";
     await expect(panel).toHaveAttribute("data-style-target", address);
@@ -151,8 +195,12 @@ test.describe("Cell fill tint (engine 0.71.11)", () => {
     const before = await engineGet(page, address, "cellFillTint");
     const next = before === 35 ? 45 : 35;
     await commitNumber(field, next);
-    await expect.poll(() => engineGet(page, address, "cellFillTint")).toBe(next);
+    await expect
+      .poll(() => engineGet(page, address, "cellFillTint"))
+      .toBe(next);
     await undoOnce(page);
-    await expect.poll(() => engineGet(page, address, "cellFillTint")).toEqual(before);
+    await expect
+      .poll(() => engineGet(page, address, "cellFillTint"))
+      .toEqual(before);
   });
 });

@@ -1,56 +1,61 @@
-$schema: '../../.moon/cache/schemas/project.json'
+$schema: "../../.moon/cache/schemas/project.json"
 
 # paged.draw: a Cargo workspace (image trace) and JS packages
 # (draw-geometry, draw-tools, draw-bundle).
-language: 'rust'
-layer: 'library'
-stack: 'systems'
-tags: ['rust', 'node', 'module', 'wasm']
+language: "rust"
+layer: "library"
+stack: "systems"
+tags: ["rust", "node", "module", "wasm"]
 
 project:
-  title: 'modules/draw'
-  description: 'Vector drawing module: geometry, tools, image trace.'
+  title: "modules/draw"
+  description: "Vector drawing module: geometry, tools, image trace."
 
-# draw-rust validates the bundle manifest with the in-tree plugin-cli.
+# draw-rust validates the bundle manifest with the in-tree paged-plugin bin (plugin-sdk).
 dependsOn:
-  - id: 'extensions'
-    scope: 'development'
-  - id: 'test-kit'
-    scope: 'development'
+  - id: "extensions"
+    scope: "development"
+  - id: "test-kit"
+    scope: "development"
 
 tasks:
   rust-lint:
-    description: 'clippy as draw-rust runs it: native, then wasm32.'
+    description: "clippy as draw-rust runs it: native, then wasm32."
     script: >-
       cargo clippy --workspace --all-targets -- -D warnings
       && cargo clippy --workspace --all-targets --target wasm32-unknown-unknown -- -D warnings
 
   js-test:
     # The image-trace specs boot the wasm; draw-vitest.yml builds it first.
-    deps: ['~:wasm']
+    deps: ["~:wasm"]
 
   manifest:
-    description: 'plugin-cli validate of the bundle manifest (measures the built wasm).'
-    toolchains: ['system']
-    deps: ['~:wasm']
-    command: 'bun ../../platform/extensions/packages/plugin-cli/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json'
+    description: "paged-plugin validate of the bundle manifest (measures the built wasm)."
+    toolchains: ["system"]
+    deps: ["~:wasm"]
+    command: "bun ../../platform/extensions/packages/plugin-sdk/bin/paged-plugin.mjs validate packages/draw-bundle/manifest.json"
     inputs:
-      - 'packages/draw-bundle/manifest.json'
-      - 'packages/draw-bundle/wasm/*'
-      - project: 'extensions'
-        filter: ['packages/plugin-cli/**/*', 'packages/plugin-api/src/manifest.schema.json']
+      - "packages/draw-bundle/manifest.json"
+      - "packages/draw-bundle/wasm/*"
+      - project: "extensions"
+        filter:
+          [
+            "packages/plugin-sdk/bin/**/*",
+            "packages/plugin-sdk/untyped-commands.baseline.json",
+            "packages/plugin-api/src/manifest.schema.json",
+          ]
 
   wasm:
-    description: 'trace-js wasm into packages/draw-bundle/wasm/ (scripts/build-wasm.sh).'
-    toolchains: ['rust']
-    command: 'bash scripts/build-wasm.sh'
+    description: "trace-js wasm into packages/draw-bundle/wasm/ (scripts/build-wasm.sh)."
+    toolchains: ["rust"]
+    command: "bash scripts/build-wasm.sh"
     inputs:
-      - '@group(rust-sources)'
-      - 'scripts/build-wasm.sh'
-      - 'packages/draw-bundle/manifest.json'
+      - "@group(rust-sources)"
+      - "scripts/build-wasm.sh"
+      - "packages/draw-bundle/manifest.json"
     outputs:
-      - 'packages/draw-bundle/wasm/trace_js*'
+      - "packages/draw-bundle/wasm/trace_js*"
     options:
       # Needs wasm-bindgen-cli at the Cargo.lock version; draw-rust and
       # draw-vitest build it in CI (.github/actions/module-wasm).
-      runInCI: 'skip'
+      runInCI: "skip"

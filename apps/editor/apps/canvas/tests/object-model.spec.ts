@@ -44,14 +44,18 @@ const REPO_ROOT = pathResolve(__dirname, "..", "..", "..");
 const FIXTURE = `${REPO_ROOT}/corpus/idml/generated/geometry-groups.idml`;
 const FRAME = { kind: "textFrame", id: "ua365e1" };
 const ADDRESS = `textFrame:${FRAME.id}`;
-const FIELD = '[data-stroke-panel="ready"] [data-property-field="frameStrokeWeight"]';
+const FIELD =
+  '[data-stroke-panel="ready"] [data-property-field="frameStrokeWeight"]';
 
 type ObjectValue = { kind: string; value?: unknown };
 interface Canvas {
   client: {
     setElementSelection(ids: unknown[], mode: string): Promise<unknown[]>;
     elementProperties(id: unknown): Promise<{
-      entries: { path: string; value?: { type: string; value?: unknown } | null }[];
+      entries: {
+        path: string;
+        value?: { type: string; value?: unknown } | null;
+      }[];
     } | null>;
     mutate(m: unknown): Promise<unknown>;
     undo(): Promise<unknown>;
@@ -60,11 +64,17 @@ interface Canvas {
   objects: {
     get(address: string, path: string): Promise<ObjectValue>;
     query(selector: string): Promise<string[]>;
-    schema(addressOrKind: string): Promise<{ path: string; type: { kind: string } }[]>;
+    schema(
+      addressOrKind: string,
+    ): Promise<{ path: string; type: { kind: string } }[]>;
   } | null;
   registries: {
     commands: {
-      register(c: { id: string; title: string; handler: (p: unknown, a: unknown) => unknown }): { dispose(): void };
+      register(c: {
+        id: string;
+        title: string;
+        handler: (p: unknown, a: unknown) => unknown;
+      }): { dispose(): void };
     };
   };
 }
@@ -89,11 +99,12 @@ const oidLabel = (page: Page) =>
     const c = (globalThis as unknown as { __canvas: Canvas }).__canvas;
     const props = await c.client.elementProperties(target);
     const e = props?.entries.find(
-      (x) => x.value?.type === "pluginMetadata" && (x.value.value as { key?: string }).key === "x-paged:oid",
+      (x) =>
+        x.value?.type === "pluginMetadata" &&
+        (x.value.value as { key?: string }).key === "x-paged:oid",
     );
     return e ? ((e.value!.value as { value?: string }).value ?? null) : null;
   }, FRAME);
-
 
 test.describe("ADR 323 — object model in the editor", () => {
   test.beforeEach(async ({ page }) => {
@@ -101,7 +112,10 @@ test.describe("ADR 323 — object model in the editor", () => {
     await loadIdml(page, FIXTURE);
     await selectFrame(page);
     await openPanel(page, "paged.stroke");
-    await expect(page.locator(FIELD)).toHaveAttribute("data-value-type", "length");
+    await expect(page.locator(FIELD)).toHaveAttribute(
+      "data-value-type",
+      "length",
+    );
   });
 
   test("OM-1 — a PropertyField write lands through host.objects and is ONE undo step @feat:editor-shell.panels.stroke @feat:scripting.property-readwrite @feat:round-tripping.undo-redo @level:happy", async ({
@@ -116,7 +130,10 @@ test.describe("ADR 323 — object model in the editor", () => {
     await input.fill(String(next));
     await input.blur();
     await expect.poll(() => readWeight(page)).toBe(next);
-    await expect(page.locator(FIELD)).toHaveAttribute("data-binding-state", "value");
+    await expect(page.locator(FIELD)).toHaveAttribute(
+      "data-binding-state",
+      "value",
+    );
 
     // One undo restores the previous value: the field wrote ONE step.
     await page.evaluate(() =>
@@ -128,7 +145,11 @@ test.describe("ADR 323 — object model in the editor", () => {
   test("OM-2 — Bind to data… routes (selector, path, schema) to paged.data's media.paged.data.bindProperty: its Bindings panel opens with the draft; nothing is bound yet @feat:editor-shell.panels.stroke @feat:data.bind.authoring @level:happy", async ({
     page,
   }) => {
-    const { selector } = await bindToData(page, page.locator(FIELD), "frameStrokeWeight");
+    const { selector } = await bindToData(
+      page,
+      page.locator(FIELD),
+      "frameStrokeWeight",
+    );
     expect(selector.length).toBeGreaterThan(0);
     // No fallback dialog on the routed path: paged.data owns the binding UI.
     await expect(page.locator("[data-bind-to-data]")).toHaveCount(0);
@@ -141,24 +162,40 @@ test.describe("ADR 323 — object model in the editor", () => {
   test("OM-3 — the durable target resolves back to the frame; a binding defined through the REAL data bundle lights the badge (asked via media.paged.data.propertyBindings, never by parsing labels) @feat:editor-shell.panels.stroke @feat:data.bind.authoring @level:happy", async ({
     page,
   }) => {
-    const { selector } = await bindToData(page, page.locator(FIELD), "frameStrokeWeight");
+    const { selector } = await bindToData(
+      page,
+      page.locator(FIELD),
+      "frameStrokeWeight",
+    );
     // Durable: a name or an x-paged:oid selector, never the session id.
     expect(selector).not.toContain(FRAME.id);
     const hits = await page.evaluate(
-      (sel) => (globalThis as unknown as { __canvas: Canvas }).__canvas.objects!.query(sel),
+      (sel) =>
+        (globalThis as unknown as { __canvas: Canvas }).__canvas.objects!.query(
+          sel,
+        ),
       selector,
     );
     expect(hits).toEqual([ADDRESS]);
     // The oid label paged.data will reuse was minted by the editor.
     const label = await oidLabel(page);
     expect(label).not.toBeNull();
-    expect(JSON.parse(label!)).toMatchObject({ v: 1, data: { oid: expect.any(String) } });
+    expect(JSON.parse(label!)).toMatchObject({
+      v: 1,
+      data: { oid: expect.any(String) },
+    });
 
     await openPanel(page, "paged.stroke");
     await expect(page.locator(FIELD)).not.toHaveAttribute("data-bound", "");
     const defined = await page.evaluate(
       async ({ sel }) => {
-        const o = (globalThis as unknown as { __canvas: { objects: { invoke(c: string, a: unknown): Promise<unknown> } } }).__canvas.objects;
+        const o = (
+          globalThis as unknown as {
+            __canvas: {
+              objects: { invoke(c: string, a: unknown): Promise<unknown> };
+            };
+          }
+        ).__canvas.objects;
         return o.invoke("media.paged.data.defineProperty", {
           id: "om-weight",
           selector: sel,
@@ -180,7 +217,13 @@ test.describe("ADR 323 — object model in the editor", () => {
     const run = (source: string) =>
       page.evaluate(
         (src) =>
-          (globalThis as unknown as { __demo: { run(s: string): Promise<{ ok: boolean; error?: string }> } }).__demo.run(src),
+          (
+            globalThis as unknown as {
+              __demo: {
+                run(s: string): Promise<{ ok: boolean; error?: string }>;
+              };
+            }
+          ).__demo.run(src),
         source,
       );
     const r = await run(`

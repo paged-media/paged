@@ -45,23 +45,35 @@ test.describe("journey · protocol 66 binary doors", () => {
     const designer = new Designer(page);
     await designer.open();
     await designer.newDocument();
-    const frame = await designer.drawRectangle({ x0: 90, y0: 120, x1: 290, y1: 320 });
+    const frame = await designer.drawRectangle({
+      x0: 90,
+      y0: 120,
+      x1: 290,
+      y1: 320,
+    });
     expect(frame, "drew a target frame").not.toBe("");
 
     const before = await designer.renderBytes();
     const transferred = await page.evaluate(async (elementId) => {
-      const paged = (globalThis as unknown as {
-        __paged: {
-          sceneLayers: {
-            submitImage(
-              id: string,
-              image: { rgba: Uint8Array; width: number; height: number; dest: number[] },
-              caller?: string,
-              transfer?: boolean,
-            ): Promise<void>;
+      const paged = (
+        globalThis as unknown as {
+          __paged: {
+            sceneLayers: {
+              submitImage(
+                id: string,
+                image: {
+                  rgba: Uint8Array;
+                  width: number;
+                  height: number;
+                  dest: number[];
+                },
+                caller?: string,
+                transfer?: boolean,
+              ): Promise<void>;
+            };
           };
-        };
-      }).__paged;
+        }
+      ).__paged;
       const w = 64;
       const h = 64;
       const rgba = new Uint8Array(w * h * 4);
@@ -77,22 +89,33 @@ test.describe("journey · protocol 66 binary doors", () => {
     }, frame);
     expect(transferred, "the pixels were transferred, not copied").toBe(0);
     const drawn = await designer.expectRenderChangesFrom(before);
-    expect(drawn, "the binary scene image renders in the frame").toBeGreaterThan(64);
+    expect(
+      drawn,
+      "the binary scene image renders in the frame",
+    ).toBeGreaterThan(64);
 
     const afterImage = await designer.renderBytes();
     await page.evaluate(async (elementId) => {
-      const paged = (globalThis as unknown as {
-        __paged: {
-          sceneLayers: {
-            submitImageTiles(
-              id: string,
-              tiles: Array<{ x: number; y: number; width: number; height: number; rgba: Uint8Array }>,
-              caller?: string,
-              transfer?: boolean,
-            ): Promise<void>;
+      const paged = (
+        globalThis as unknown as {
+          __paged: {
+            sceneLayers: {
+              submitImageTiles(
+                id: string,
+                tiles: Array<{
+                  x: number;
+                  y: number;
+                  width: number;
+                  height: number;
+                  rgba: Uint8Array;
+                }>,
+                caller?: string,
+                transfer?: boolean,
+              ): Promise<void>;
+            };
           };
-        };
-      }).__paged;
+        }
+      ).__paged;
       const rgba = new Uint8Array(32 * 32 * 4);
       for (let i = 0; i < 32 * 32; i++) rgba.set([20, 20, 220, 255], i * 4);
       await paged.sceneLayers.submitImageTiles(
@@ -107,13 +130,25 @@ test.describe("journey · protocol 66 binary doors", () => {
 
     // A malformed tile is refused, loudly.
     const refused = await page.evaluate(async (elementId) => {
-      const paged = (globalThis as unknown as {
-        __paged: { sceneLayers: { submitImageTiles(...a: unknown[]): Promise<void> } };
-      }).__paged;
+      const paged = (
+        globalThis as unknown as {
+          __paged: {
+            sceneLayers: { submitImageTiles(...a: unknown[]): Promise<void> };
+          };
+        }
+      ).__paged;
       try {
         await paged.sceneLayers.submitImageTiles(
           elementId,
-          [{ x: 60, y: 60, width: 8, height: 8, rgba: new Uint8Array(8 * 8 * 4) }],
+          [
+            {
+              x: 60,
+              y: 60,
+              width: 8,
+              height: 8,
+              rgba: new Uint8Array(8 * 8 * 4),
+            },
+          ],
           "journey.binary",
         );
         return "accepted";
@@ -125,15 +160,21 @@ test.describe("journey · protocol 66 binary doors", () => {
 
     // Parts as bytes.
     const parts = await page.evaluate(async () => {
-      const paged = (globalThis as unknown as {
-        __paged: {
-          parts: {
-            write(path: string, bytes: Uint8Array, caller?: string): Promise<void>;
-            read(path: string): Promise<Uint8Array | null>;
-            delete(path: string, caller?: string): Promise<boolean>;
+      const paged = (
+        globalThis as unknown as {
+          __paged: {
+            parts: {
+              write(
+                path: string,
+                bytes: Uint8Array,
+                caller?: string,
+              ): Promise<void>;
+              read(path: string): Promise<Uint8Array | null>;
+              delete(path: string, caller?: string): Promise<boolean>;
+            };
           };
-        };
-      }).__paged;
+        }
+      ).__paged;
       const body = new Uint8Array(256);
       for (let i = 0; i < 256; i++) body[i] = i;
       const path = "paged/journey.binary/px/a.bin";
@@ -143,43 +184,65 @@ test.describe("journey · protocol 66 binary doors", () => {
       const again = await paged.parts.delete(path, "journey.binary");
       const gone = await paged.parts.read(path);
       return {
-        same: back !== null && back.length === 256 && back.every((v, i) => v === i),
+        same:
+          back !== null && back.length === 256 && back.every((v, i) => v === i),
         deleted,
         again,
         gone,
       };
     });
-    expect(parts).toEqual({ same: true, deleted: true, again: false, gone: null });
+    expect(parts).toEqual({
+      same: true,
+      deleted: true,
+      again: false,
+      gone: null,
+    });
 
     // Image bytes committed through a mutation, as bytes: the first
     // `replaceImageBytes` with `bytes: []` in a batch takes the buffer.
-    const target = await designer.drawRectangle({ x0: 320, y0: 120, x1: 420, y1: 220 });
+    const target = await designer.drawRectangle({
+      x0: 320,
+      y0: 120,
+      x1: 420,
+      y1: 220,
+    });
     expect(target, "drew a second frame").not.toBe("");
     const committed = await page.evaluate(async (elementId) => {
-      const paged = (globalThis as unknown as {
-        __paged: {
-          mutateWithBytes(
-            mutation: unknown,
-            bytes: Uint8Array,
-            transfer?: boolean,
-          ): Promise<{ kind: string }>;
-          client: {
-            placedAssetBytesBinary(id: string): Promise<{ encoded: Uint8Array } | null>;
+      const paged = (
+        globalThis as unknown as {
+          __paged: {
+            mutateWithBytes(
+              mutation: unknown,
+              bytes: Uint8Array,
+              transfer?: boolean,
+            ): Promise<{ kind: string }>;
+            client: {
+              placedAssetBytesBinary(
+                id: string,
+              ): Promise<{ encoded: Uint8Array } | null>;
+            };
           };
-        };
-      }).__paged;
+        }
+      ).__paged;
       // A 1x1 PNG.
       const png = () =>
         new Uint8Array([
-          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48,
-          0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00,
-          0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78,
-          0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0xf0, 0x1f, 0x00, 0x05, 0x00, 0x01, 0xff, 0x89, 0x99,
-          0x3d, 0x1d, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+          0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00,
+          0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+          0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89,
+          0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63,
+          0xf8, 0xcf, 0xc0, 0xf0, 0x1f, 0x00, 0x05, 0x00, 0x01, 0xff, 0x89,
+          0x99, 0x3d, 0x1d, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44,
+          0xae, 0x42, 0x60, 0x82,
         ]);
       const bytes = png();
       const reply = await paged.mutateWithBytes(
-        { op: "batch", args: { ops: [{ op: "replaceImageBytes", args: { elementId, bytes: [] } }] } },
+        {
+          op: "batch",
+          args: {
+            ops: [{ op: "replaceImageBytes", args: { elementId, bytes: [] } }],
+          },
+        },
         bytes,
         true,
       );
@@ -208,12 +271,20 @@ test.describe("journey · protocol 66 binary doors", () => {
 
     // Save waits for a will-save listener.
     const waited = await page.evaluate(async () => {
-      const reg = (globalThis as unknown as {
-        __willSave: {
-          register(id: string, l: (e: { format: string }) => Promise<void>): { dispose(): void };
-          run(e: { format: "paged" }, timeoutMs?: number): Promise<{ failed: string[]; timedOut: string[] }>;
-        };
-      }).__willSave;
+      const reg = (
+        globalThis as unknown as {
+          __willSave: {
+            register(
+              id: string,
+              l: (e: { format: string }) => Promise<void>,
+            ): { dispose(): void };
+            run(
+              e: { format: "paged" },
+              timeoutMs?: number,
+            ): Promise<{ failed: string[]; timedOut: string[] }>;
+          };
+        }
+      ).__willSave;
       let ran = false;
       const d = reg.register("journey.binary", async () => {
         await new Promise((r) => setTimeout(r, 50));

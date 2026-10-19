@@ -30,12 +30,15 @@ export function readZip(zip: Uint8Array): ZipEntry[] {
     const extraLen = view.getUint16(p + 30, true);
     const commentLen = view.getUint16(p + 32, true);
     const local = view.getUint32(p + 42, true);
-    const name = new TextDecoder().decode(zip.subarray(p + 46, p + 46 + nameLen));
+    const name = new TextDecoder().decode(
+      zip.subarray(p + 46, p + 46 + nameLen),
+    );
     const lNameLen = view.getUint16(local + 26, true);
     const lExtraLen = view.getUint16(local + 28, true);
     const start = local + 30 + lNameLen + lExtraLen;
     const raw = zip.subarray(start, start + csize);
-    const bytes = method === 0 ? raw.slice() : new Uint8Array(inflateRawSync(raw));
+    const bytes =
+      method === 0 ? raw.slice() : new Uint8Array(inflateRawSync(raw));
     out.push({ name, bytes });
     p += 46 + nameLen + extraLen + commentLen;
   }
@@ -99,9 +102,14 @@ export function stripContainerParts(zip: Uint8Array): Uint8Array {
         !e.name.startsWith("paged/") &&
         e.name !== "manifest.json" &&
         !e.name.startsWith("data/") &&
-        !(e.name.startsWith("META-INF/") && e.name !== "META-INF/container.xml" && e.name !== "META-INF/metadata.xml"),
+        !(
+          e.name.startsWith("META-INF/") &&
+          e.name !== "META-INF/container.xml" &&
+          e.name !== "META-INF/metadata.xml"
+        ),
     ),
   );
 }
 
-export const text = (e: ZipEntry | undefined): string => (e ? new TextDecoder().decode(e.bytes) : "");
+export const text = (e: ZipEntry | undefined): string =>
+  e ? new TextDecoder().decode(e.bytes) : "";

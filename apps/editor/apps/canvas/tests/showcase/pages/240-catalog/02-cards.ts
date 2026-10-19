@@ -72,22 +72,30 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const elements: string[] = [];
   const covers: string[] = [];
 
-  const head = await proseFrame(ctx, pg, [60, 54, 492, 84], [
-    { text: "The record card", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, pg, [60, 90, 492, 200], [
-    {
-      text:
-        "The order book from the opener, published. The CSV registers " +
-        "through the plugin's DuckDB query engine; the field-mapping wizard " +
-        "asks the Rust engine for each column's binding expression; and " +
-        "three of those bindings resolve into the card below as tagged " +
-        "placeholder fields, each placed at the text caret. Nothing in the " +
-        "card is typed: every value was resolved from record 1001 by the " +
-        "engine, and a data refresh re-resolves it in place.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    pg,
+    [60, 54, 492, 84],
+    [{ text: "The record card", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    pg,
+    [60, 90, 492, 200],
+    [
+      {
+        text:
+          "The order book from the opener, published. The CSV registers " +
+          "through the plugin's DuckDB query engine; the field-mapping wizard " +
+          "asks the Rust engine for each column's binding expression; and " +
+          "three of those bindings resolve into the card below as tagged " +
+          "placeholder fields, each placed at the text caret. Nothing in the " +
+          "card is typed: every value was resolved from record 1001 by the " +
+          "engine, and a data refresh re-resolves it in place.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── the card furniture (the page decides where its frames sit) ────
@@ -108,9 +116,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
   elements.push(cardPlate, cardRule);
 
-  const cardHead = await proseFrame(ctx, pg, [cardX0 + 12, 234, cardX1 - 12, 254], [
-    { text: "Order record — three live fields", style: STYLE.tableHead },
-  ]);
+  const cardHead = await proseFrame(
+    ctx,
+    pg,
+    [cardX0 + 12, 234, cardX1 - 12, 254],
+    [{ text: "Order record — three live fields", style: STYLE.tableHead }],
+  );
   elements.push(cardHead.frameId);
 
   const lines: Array<{ frameId: string; storyId: string }> = [];
@@ -126,18 +137,23 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     elements.push(made.frameId);
   }
 
-  const commentary = await proseFrame(ctx, pg, [319, 220, 492, 448], [
-    {
-      text:
-        "The caret lane. Each field went in at a real insertion point: the " +
-        "page placed the caret after a label, and the plugin's lowering " +
-        "asked the host's caret door (C-9) where “here” was. A field is " +
-        "placed once — the session keys it by its binding id — so later " +
-        "lowering passes on these pages re-resolve these three in place " +
-        "rather than duplicating them.",
-      style: STYLE.caption,
-    },
-  ]);
+  const commentary = await proseFrame(
+    ctx,
+    pg,
+    [319, 220, 492, 448],
+    [
+      {
+        text:
+          "The caret lane. Each field went in at a real insertion point: the " +
+          "page placed the caret after a label, and the plugin's lowering " +
+          "asked the host's caret door (C-9) where “here” was. A field is " +
+          "placed once — the session keys it by its binding id — so later " +
+          "lowering passes on these pages re-resolve these three in place " +
+          "rather than duplicating them.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(commentary.frameId);
 
   // ── the plugin drive ──────────────────────────────────────────────
@@ -227,9 +243,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     }
   }
 
-  const status = await proseFrame(ctx, pg, [60, 470, 492, 560], [
-    { text: statusText, style: STYLE.bodySmall },
-  ]);
+  const status = await proseFrame(
+    ctx,
+    pg,
+    [60, 470, 492, 560],
+    [{ text: statusText, style: STYLE.bodySmall }],
+  );
   elements.push(status.frameId);
 
   elements.push(

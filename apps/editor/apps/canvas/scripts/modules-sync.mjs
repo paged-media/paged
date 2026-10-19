@@ -40,12 +40,27 @@
 // without a version has no immutable home.
 
 import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { brotliCompressSync, constants } from "node:zlib";
 
-import { APP, MODULE_HOST, buildModuleManifest, packageIndex, sha, toPosix as posix, walkWasm as walk } from "./module-index.mjs";
+import {
+  APP,
+  MODULE_HOST,
+  buildModuleManifest,
+  packageIndex,
+  sha,
+  toPosix as posix,
+  walkWasm as walk,
+} from "./module-index.mjs";
 
 export { MODULE_HOST };
 const BUCKET = process.env.PAGED_MODULE_BUCKET ?? "paged-modules";
@@ -62,7 +77,10 @@ async function present(url) {
 function upload(key, file) {
   const raw = readFileSync(file);
   const br = brotliCompressSync(raw, {
-    params: { [constants.BROTLI_PARAM_QUALITY]: 10, [constants.BROTLI_PARAM_SIZE_HINT]: raw.length },
+    params: {
+      [constants.BROTLI_PARAM_QUALITY]: 10,
+      [constants.BROTLI_PARAM_SIZE_HINT]: raw.length,
+    },
   });
   // In a temp dir: the file may be inside the package store (a declared
   // module this build did not emit).
@@ -72,11 +90,20 @@ function upload(key, file) {
   execFileSync(
     "npx",
     [
-      "-y", "wrangler@3", "r2", "object", "put", `${BUCKET}/${key}`,
-      "--file", tmp,
-      "--content-type", "application/wasm",
-      "--content-encoding", "br",
-      "--cache-control", "public, max-age=31536000, immutable",
+      "-y",
+      "wrangler@3",
+      "r2",
+      "object",
+      "put",
+      `${BUCKET}/${key}`,
+      "--file",
+      tmp,
+      "--content-type",
+      "application/wasm",
+      "--content-encoding",
+      "br",
+      "--cache-control",
+      "public, max-age=31536000, immutable",
     ],
     { stdio: ["ignore", "inherit", "inherit"] },
   );
@@ -86,7 +113,10 @@ function upload(key, file) {
 
 /** The installed root of package `name` (realpath), or null. */
 function rootOf(name) {
-  for (const base of [join(APP, "node_modules"), join(APP, "..", "..", "node_modules")]) {
+  for (const base of [
+    join(APP, "node_modules"),
+    join(APP, "..", "..", "node_modules"),
+  ]) {
     const p = join(base, ...name.split("/"));
     if (existsSync(join(p, "package.json"))) return p;
   }
@@ -104,7 +134,9 @@ for (const file of walk(dist, [], false)) {
   const hit = index.get(sha("sha256", raw));
   const served = "/" + posix(relative(dist, file));
   if (!hit) {
-    console.error(`::error::${served} matches no installed @paged-media package — a module needs a version to be hosted`);
+    console.error(
+      `::error::${served} matches no installed @paged-media package — a module needs a version to be hosted`,
+    );
     failed = true;
     continue;
   }
@@ -113,10 +145,21 @@ for (const file of walk(dist, [], false)) {
   let note = "already hosted";
   if (!(await present(url))) {
     if (dry) note = "would upload";
-    else note = `uploaded (${(upload(key, file) / 1048576).toFixed(1)} MiB brotli)`;
+    else
+      note = `uploaded (${(upload(key, file) / 1048576).toFixed(1)} MiB brotli)`;
   }
-  modules.push({ served, url, package: hit.name, version: hit.version, path: hit.path, bytes: raw.length, sha384: `sha384-${sha("sha384", raw)}` });
-  console.log(`${served} → ${url} · ${(raw.length / 1048576).toFixed(1)} MiB · ${note}`);
+  modules.push({
+    served,
+    url,
+    package: hit.name,
+    version: hit.version,
+    path: hit.path,
+    bytes: raw.length,
+    sha384: `sha384-${sha("sha384", raw)}`,
+  });
+  console.log(
+    `${served} → ${url} · ${(raw.length / 1048576).toFixed(1)} MiB · ${note}`,
+  );
 }
 // The module door (ADR 223) answers every DECLARED plugin artifact in the
 // build's module manifest with its module-host URL, whether or not this build
@@ -134,10 +177,13 @@ for (const [pkgName, pkg] of Object.entries(declared.packages)) {
     if (!(await present(url))) {
       if (dry) note = "would upload";
       else if (!root) {
-        console.error(`::error::${url} is declared but ${pkgName} is not installed`);
+        console.error(
+          `::error::${url} is declared but ${pkgName} is not installed`,
+        );
         failed = true;
         continue;
-      } else note = `uploaded (${(upload(key, join(root, ...path.split("/"))) / 1048576).toFixed(1)} MiB brotli)`;
+      } else
+        note = `uploaded (${(upload(key, join(root, ...path.split("/"))) / 1048576).toFixed(1)} MiB brotli)`;
     }
     console.log(`(declared) ${url} · ${note}`);
   }
@@ -147,7 +193,15 @@ if (dry) process.exit(0);
 
 // The output keeps a 302 where each module was, and a record of what it hosts.
 const redirects = modules.map((m) => `${m.served} ${m.url} 302`).join("\n");
-appendFileSync(join(dist, "_redirects"), `\n# Wasm modules are hosted at ${MODULE_HOST} (ADR 220).\n${redirects}\n`);
+appendFileSync(
+  join(dist, "_redirects"),
+  `\n# Wasm modules are hosted at ${MODULE_HOST} (ADR 220).\n${redirects}\n`,
+);
 for (const m of modules) rmSync(join(dist, m.served));
-writeFileSync(join(dist, "modules.json"), JSON.stringify({ host: MODULE_HOST, modules }, null, 1));
-console.log(`modules: ${modules.length} hosted, removed from the deploy, redirected`);
+writeFileSync(
+  join(dist, "modules.json"),
+  JSON.stringify({ host: MODULE_HOST, modules }, null, 1),
+);
+console.log(
+  `modules: ${modules.length} hosted, removed from the deploy, redirected`,
+);

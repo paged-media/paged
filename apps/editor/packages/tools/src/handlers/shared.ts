@@ -24,10 +24,7 @@
 // post-mutate selection of the created element, and the quiet
 // mutationFailed warning.
 
-import type {
-  CanvasPointerEvent,
-  PagedEditor,
-} from "@paged-media/shell";
+import type { CanvasPointerEvent, PagedEditor } from "@paged-media/shell";
 import type { ElementId, Mutation } from "@paged-media/client";
 
 export const CLICK_DRAG_THRESHOLD_PX = 4;
@@ -58,7 +55,10 @@ export function endLocalFor(
   drag: PageDrag,
   e: CanvasPointerEvent,
 ): [number, number] {
-  return [e.docPoint[0] - drag.pageOrigin[0], e.docPoint[1] - drag.pageOrigin[1]];
+  return [
+    e.docPoint[0] - drag.pageOrigin[0],
+    e.docPoint[1] - drag.pageOrigin[1],
+  ];
 }
 
 /** `[top, left, bottom, right]` page-local bounds. */
@@ -184,7 +184,8 @@ export interface GraphicPaint {
 }
 
 /** The style InDesign applies to a shape drawn with a tool. */
-export const NORMAL_GRAPHICS_FRAME_STYLE = "ObjectStyle/$ID/[Normal Graphics Frame]";
+export const NORMAL_GRAPHICS_FRAME_STYLE =
+  "ObjectStyle/$ID/[Normal Graphics Frame]";
 
 /** `[Normal Graphics Frame]` as InDesign ships it — what a document
  *  without that style (one made with File ▸ New) gets. */
@@ -197,7 +198,9 @@ export const INDESIGN_GRAPHIC_PAINT: GraphicPaint = {
 type Client = PagedEditor["client"];
 
 /** The document's own `[Normal Graphics Frame]`, when it has one. */
-async function normalGraphicsFramePaint(client: Client): Promise<GraphicPaint | null> {
+async function normalGraphicsFramePaint(
+  client: Client,
+): Promise<GraphicPaint | null> {
   const reply = await client.send({
     kind: "requestStyleProperties",
     payload: { collection: "object", styleId: NORMAL_GRAPHICS_FRAME_STYLE },
@@ -220,7 +223,9 @@ async function normalGraphicsFramePaint(client: Client): Promise<GraphicPaint | 
  * document has defaults of its own (the engine paints the shape with
  * them; adding ours would override the user's choice).
  */
-export async function graphicPaintFor(client: Client): Promise<GraphicPaint | null> {
+export async function graphicPaintFor(
+  client: Client,
+): Promise<GraphicPaint | null> {
   const [meta, style] = await Promise.all([
     client.documentMeta().catch(() => null),
     normalGraphicsFramePaint(client).catch(() => null),
@@ -241,7 +246,10 @@ type InsertOp = Extract<
   { op: "insertFrame" | "insertOval" | "insertLine" | "insertPath" }
 >;
 
-const KIND_OF: Record<InsertOp["op"], "rectangle" | "oval" | "graphicLine" | "polygon"> = {
+const KIND_OF: Record<
+  InsertOp["op"],
+  "rectangle" | "oval" | "graphicLine" | "polygon"
+> = {
   insertFrame: "rectangle",
   insertOval: "oval",
   insertLine: "graphicLine",
@@ -261,13 +269,21 @@ function paintOps(kind: InsertOp["op"], paint: GraphicPaint): Mutation[] {
   if (paint.fill !== null && kind !== "insertLine") {
     ops.push({
       op: "setElementProperty",
-      args: { elementId, path: "frameFillColor", value: { type: "colorRef", value: paint.fill } },
+      args: {
+        elementId,
+        path: "frameFillColor",
+        value: { type: "colorRef", value: paint.fill },
+      },
     });
   }
   if (paint.stroke !== null) {
     ops.push({
       op: "setElementProperty",
-      args: { elementId, path: "frameStrokeColor", value: { type: "colorRef", value: paint.stroke } },
+      args: {
+        elementId,
+        path: "frameStrokeColor",
+        value: { type: "colorRef", value: paint.stroke },
+      },
     });
     if (paint.strokeWeight !== null) {
       ops.push({
@@ -290,7 +306,10 @@ function paintOps(kind: InsertOp["op"], paint: GraphicPaint): Mutation[] {
  * gridified rectangle paints every cell. Anything else in a batch (the
  * pencil's variable-width outline) keeps its place after the paint.
  */
-export function withGraphicPaint(mutation: Mutation, paint: GraphicPaint | null): Mutation {
+export function withGraphicPaint(
+  mutation: Mutation,
+  paint: GraphicPaint | null,
+): Mutation {
   if (!paint) return mutation;
   const children = mutation.op === "batch" ? mutation.args.ops : [mutation];
   const ops: Mutation[] = [];
@@ -326,14 +345,17 @@ export async function mutateGraphicAndSelect(
   onRefused?: (reply: MutateReply) => void,
 ): Promise<MutateReply | null> {
   const paint = await graphicPaintFor(paged.client).catch(() => null);
-  return mutateAndSelect(paged, withGraphicPaint(mutation, paint), label, onRefused);
+  return mutateAndSelect(
+    paged,
+    withGraphicPaint(mutation, paint),
+    label,
+    onRefused,
+  );
 }
 
 /** The worker reply `mutate` resolves with (refusals RESOLVE as
  *  `mutationFailed` — they never reject). */
-export type MutateReply = Awaited<
-  ReturnType<PagedEditor["client"]["mutate"]>
->;
+export type MutateReply = Awaited<ReturnType<PagedEditor["client"]["mutate"]>>;
 
 /**
  * Fire a mutation, warn on `mutationFailed`, and select the element

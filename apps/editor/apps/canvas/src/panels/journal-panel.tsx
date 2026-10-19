@@ -17,7 +17,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The Journal panel (ADR 025) — the local flight recorder's surface.
 //
 // Two halves, and the SECOND one is the point:
@@ -86,7 +85,9 @@ export function JournalPanel() {
   // change (an eviction, a counted SAB write) leaves the entry array identical
   // and would otherwise never reach the screen.
   const version = useSyncExternalStore(subscribe, getVersion, getVersion);
-  const [minSeverity, setMinSeverity] = useState<JournalSeverity | "all">("all");
+  const [minSeverity, setMinSeverity] = useState<JournalSeverity | "all">(
+    "all",
+  );
   const [exporting, setExporting] = useState(false);
 
   const { entries, ledger, counts } = useMemo(() => {
@@ -102,7 +103,10 @@ export function JournalPanel() {
     const rank = { debug: 0, info: 1, warn: 2, error: 3 } as const;
     const floor = minSeverity === "all" ? -1 : rank[minSeverity];
     // Newest first: when something just went wrong, it is at the top.
-    return entries.filter((e) => rank[e.severity] >= floor).slice().reverse();
+    return entries
+      .filter((e) => rank[e.severity] >= floor)
+      .slice()
+      .reverse();
   }, [entries, minSeverity]);
 
   return (
@@ -127,7 +131,15 @@ export function JournalPanel() {
         }}
       >
         <div style={kicker}>Journal</div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center", flex: "0 1 auto", minWidth: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            alignItems: "center",
+            flex: "0 1 auto",
+            minWidth: 0,
+          }}
+        >
           <select
             data-journal-filter
             aria-label="Minimum severity"
@@ -172,14 +184,21 @@ export function JournalPanel() {
         </div>
       </div>
 
-      <p data-journal-summary style={{ ...mono, margin: "0 0 8px", color: "var(--pg-muted-fg)" }}>
-        {entries.length} entr{entries.length === 1 ? "y" : "ies"} · {counts.error}{" "}
-        error{counts.error === 1 ? "" : "s"} · {counts.warn} warning
+      <p
+        data-journal-summary
+        style={{ ...mono, margin: "0 0 8px", color: "var(--pg-muted-fg)" }}
+      >
+        {entries.length} entr{entries.length === 1 ? "y" : "ies"} ·{" "}
+        {counts.error} error{counts.error === 1 ? "" : "s"} · {counts.warn}{" "}
+        warning
         {counts.warn === 1 ? "" : "s"}
       </p>
 
       {shown.length === 0 ? (
-        <p data-journal-empty style={{ margin: 0, color: "var(--pg-muted-fg)" }}>
+        <p
+          data-journal-empty
+          style={{ margin: 0, color: "var(--pg-muted-fg)" }}
+        >
           Nothing recorded at this severity yet.
         </p>
       ) : (
@@ -192,9 +211,7 @@ export function JournalPanel() {
 
       <UncapturedSection ledger={ledger} />
 
-      {exporting && (
-        <ExportDialog onClose={() => setExporting(false)} />
-      )}
+      {exporting && <ExportDialog onClose={() => setExporting(false)} />}
     </div>
   );
 }
@@ -262,13 +279,41 @@ function UncapturedSection({
   const clean = ledgerIsClean(ledger);
   const rows: [string, number, string][] = [
     ["evicted", ledger.evicted, "recorded, then overwritten by the ring"],
-    ["collapsed", ledger.collapsed, "folded into another entry by a rate policy (the count survives on it)"],
-    ["rejected data", ledger.rejectedData, "values dropped for failing the identifier rule — THIS IS A BUG IN THE EMITTING CODE"],
-    ["gesture SAB writes", ledger.sabGestureUpdates, "deliberately not journaled individually"],
-    ["camera SAB writes", ledger.sabCameraWrites, "deliberately not journaled individually"],
-    ["worker entries dropped", ledger.workerDropped, "lost to the worker ring before a drain reached them"],
-    ["drain failures", ledger.drainFailures, "an UNKNOWN number of worker entries are missing"],
-    ["plugin log lines", ledger.pluginLogCensus, "censused (severity + site hash); the text is withheld by design"],
+    [
+      "collapsed",
+      ledger.collapsed,
+      "folded into another entry by a rate policy (the count survives on it)",
+    ],
+    [
+      "rejected data",
+      ledger.rejectedData,
+      "values dropped for failing the identifier rule — THIS IS A BUG IN THE EMITTING CODE",
+    ],
+    [
+      "gesture SAB writes",
+      ledger.sabGestureUpdates,
+      "deliberately not journaled individually",
+    ],
+    [
+      "camera SAB writes",
+      ledger.sabCameraWrites,
+      "deliberately not journaled individually",
+    ],
+    [
+      "worker entries dropped",
+      ledger.workerDropped,
+      "lost to the worker ring before a drain reached them",
+    ],
+    [
+      "drain failures",
+      ledger.drainFailures,
+      "an UNKNOWN number of worker entries are missing",
+    ],
+    [
+      "plugin log lines",
+      ledger.pluginLogCensus,
+      "censused (severity + site hash); the text is withheld by design",
+    ],
   ];
   const tracing = ledger.engineTracing;
   const tracingTotal =
@@ -297,14 +342,20 @@ function UncapturedSection({
               <li
                 key={label}
                 data-journal-uncaptured-row={label}
-                style={{ ...mono, color: "var(--pg-muted-fg)", padding: "1px 0" }}
+                style={{
+                  ...mono,
+                  color: "var(--pg-muted-fg)",
+                  padding: "1px 0",
+                }}
               >
                 <strong style={{ color: "var(--pg-fg)" }}>{n}</strong> {label}
                 <span style={{ marginLeft: 6 }}>— {why}</span>
               </li>
             ))}
           {tracingTotal > 0 && (
-            <li style={{ ...mono, color: "var(--pg-muted-fg)", padding: "1px 0" }}>
+            <li
+              style={{ ...mono, color: "var(--pg-muted-fg)", padding: "1px 0" }}
+            >
               <strong style={{ color: "var(--pg-fg)" }}>{tracingTotal}</strong>{" "}
               engine tracing events — fired and dropped; no shipped subscriber
               carries their text
@@ -314,12 +365,27 @@ function UncapturedSection({
       )}
 
       <details data-journal-blindspots>
-        <summary style={{ ...mono, cursor: "pointer", color: "var(--pg-muted-fg)" }}>
-          {KNOWN_BLIND_SPOTS.length} structural blind spots (always present, by design)
+        <summary
+          style={{ ...mono, cursor: "pointer", color: "var(--pg-muted-fg)" }}
+        >
+          {KNOWN_BLIND_SPOTS.length} structural blind spots (always present, by
+          design)
         </summary>
-        <ul style={{ listStyle: "none", margin: "6px 0 0", padding: 0, display: "grid", gap: 8 }}>
+        <ul
+          style={{
+            listStyle: "none",
+            margin: "6px 0 0",
+            padding: 0,
+            display: "grid",
+            gap: 8,
+          }}
+        >
           {KNOWN_BLIND_SPOTS.map((spot) => (
-            <li key={spot.id} data-journal-blindspot={spot.id} style={{ ...mono }}>
+            <li
+              key={spot.id}
+              data-journal-blindspot={spot.id}
+              style={{ ...mono }}
+            >
               <div style={{ color: "var(--pg-fg)" }}>{spot.what}</div>
               <div style={{ color: "var(--pg-muted-fg)" }}>{spot.why}</div>
               <div style={{ color: "var(--pg-muted-fg)", fontStyle: "italic" }}>
@@ -348,9 +414,7 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
     () => ({
       // Both sections are OPT-IN and default OFF. Stack traces embed the
       // user's disk paths; document shape carries font families.
-      crash: includeCrash
-        ? { stacks: readCrashStacks() }
-        : undefined,
+      crash: includeCrash ? { stacks: readCrashStacks() } : undefined,
       documentShape: includeShape ? getDocumentShape() : undefined,
     }),
     [includeCrash, includeShape],
@@ -393,7 +457,10 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
           boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
         }}
       >
-        <h2 id="journal-export-title" style={{ margin: "0 0 4px", fontSize: 15 }}>
+        <h2
+          id="journal-export-title"
+          style={{ margin: "0 0 4px", fontSize: 15 }}
+        >
           Export journal bundle
         </h2>
         <p style={{ margin: "0 0 12px", color: "var(--muted-fg, #9a9a9a)" }}>
@@ -413,7 +480,8 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
             <span>
               Include crash stack traces
               <span style={{ color: "var(--muted-fg, #9a9a9a)" }}>
-                {" "}— stack traces usually contain file paths from your disk.
+                {" "}
+                — stack traces usually contain file paths from your disk.
               </span>
             </span>
           </label>
@@ -427,7 +495,8 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
             <span>
               Include document shape
               <span style={{ color: "var(--muted-fg, #9a9a9a)" }}>
-                {" "}— page/story counts and font names. No document text.
+                {" "}
+                — page/story counts and font names. No document text.
               </span>
             </span>
           </label>

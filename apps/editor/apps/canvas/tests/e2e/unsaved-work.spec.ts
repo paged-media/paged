@@ -66,15 +66,23 @@ async function instrumentBeforeUnload(page: Page): Promise<void> {
 
 const guardCount = (page: Page) =>
   page.evaluate(
-    () => (globalThis as unknown as { __beforeUnloadCount: number }).__beforeUnloadCount,
+    () =>
+      (globalThis as unknown as { __beforeUnloadCount: number })
+        .__beforeUnloadCount,
   );
 
-async function keybindings(page: Page): Promise<{ key: string; command: string }[]> {
+async function keybindings(
+  page: Page,
+): Promise<{ key: string; command: string }[]> {
   return page.evaluate(
     () =>
       (
         globalThis as unknown as {
-          __canvas: { debugContext: () => { keybindings: { key: string; command: string }[] } };
+          __canvas: {
+            debugContext: () => {
+              keybindings: { key: string; command: string }[];
+            };
+          };
         }
       ).__canvas.debugContext().keybindings,
   );
@@ -91,7 +99,9 @@ test.describe("Phase A — unsaved work", () => {
       .poll(
         () =>
           page.evaluate(
-            () => (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas.ready,
+            () =>
+              (globalThis as unknown as { __canvas: { ready: boolean } })
+                .__canvas.ready,
           ),
         { timeout: 30_000 },
       )
@@ -122,7 +132,9 @@ test.describe("Phase A — unsaved work", () => {
     // through the dialog that is supposed to stop them.
     await page.evaluate(async () => {
       await (
-        globalThis as unknown as { __canvas: { client: { undo: () => Promise<unknown> } } }
+        globalThis as unknown as {
+          __canvas: { client: { undo: () => Promise<unknown> } };
+        }
       ).__canvas.client.undo();
     });
     await expect.poll(() => guardCount(page), { timeout: 8_000 }).toBe(clean);
@@ -165,7 +177,9 @@ test.describe("Phase A — unsaved work", () => {
               () =>
                 (
                   globalThis as unknown as {
-                    __canvas: { debugContext: () => { panels: { open: string[] } } };
+                    __canvas: {
+                      debugContext: () => { panels: { open: string[] } };
+                    };
                   }
                 ).__canvas.debugContext().panels.open,
             )
@@ -186,7 +200,9 @@ test.describe("B3 — the Pages panels stop being two halves", () => {
       .poll(
         () =>
           page.evaluate(
-            () => (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas.ready,
+            () =>
+              (globalThis as unknown as { __canvas: { ready: boolean } })
+                .__canvas.ready,
           ),
         { timeout: 30_000 },
       )
@@ -195,8 +211,11 @@ test.describe("B3 — the Pages panels stop being two halves", () => {
     const pageCount = () =>
       page.evaluate(
         () =>
-          (globalThis as unknown as { __canvas: { handle: { pageCount: number } } })
-            .__canvas.handle.pageCount,
+          (
+            globalThis as unknown as {
+              __canvas: { handle: { pageCount: number } };
+            }
+          ).__canvas.handle.pageCount,
       );
     const before = await pageCount();
     expect(before).toBeGreaterThan(1);
@@ -205,20 +224,27 @@ test.describe("B3 — the Pages panels stop being two halves", () => {
     // was reachable only from `paged.pages-list`, which is in no mode's
     // slots. A designer on the default layout could add pages forever
     // and never remove one.
-    const menuCommands = await page.evaluate(
-      () =>
-        (
-          globalThis as unknown as {
-            __canvas: { registries: { menus: { list: () => { path: string; command: string }[] } } };
-          }
-        ).__canvas.registries.menus.list(),
+    const menuCommands = await page.evaluate(() =>
+      (
+        globalThis as unknown as {
+          __canvas: {
+            registries: {
+              menus: { list: () => { path: string; command: string }[] };
+            };
+          };
+        }
+      ).__canvas.registries.menus.list(),
     );
     expect(menuCommands.map((m) => m.path)).toContain("Layout/Delete page");
 
     await page.evaluate(async () => {
       const cmd = (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (id: string) => Promise<unknown> } } };
+          __canvas: {
+            registries: {
+              commands: { invoke: (id: string) => Promise<unknown> };
+            };
+          };
         }
       ).__canvas.registries.commands;
       await cmd.invoke("paged.insert.deletePage");
@@ -245,7 +271,9 @@ test.describe("A5 — Save writes back to the file it opened", () => {
       .poll(
         () =>
           page.evaluate(
-            () => (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas.ready,
+            () =>
+              (globalThis as unknown as { __canvas: { ready: boolean } })
+                .__canvas.ready,
           ),
         { timeout: 30_000 },
       )
@@ -268,7 +296,11 @@ test.describe("A5 — Save writes back to the file it opened", () => {
     const failures = await page.evaluate(async () => {
       const c = (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (id: string) => Promise<unknown> } } };
+          __canvas: {
+            registries: {
+              commands: { invoke: (id: string) => Promise<unknown> };
+            };
+          };
         }
       ).__canvas;
       try {
@@ -278,7 +310,10 @@ test.describe("A5 — Save writes back to the file it opened", () => {
         return String(e);
       }
     });
-    expect(failures, "Save threw instead of falling back to a download").toBeNull();
+    expect(
+      failures,
+      "Save threw instead of falling back to a download",
+    ).toBeNull();
   });
 });
 
@@ -297,7 +332,9 @@ test.describe("ED-4 — saving clears the edited flag", () => {
       .poll(
         () =>
           page.evaluate(
-            () => (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas.ready,
+            () =>
+              (globalThis as unknown as { __canvas: { ready: boolean } })
+                .__canvas.ready,
           ),
         { timeout: 30_000 },
       )
@@ -309,7 +346,9 @@ test.describe("ED-4 — saving clears the edited flag", () => {
           (
             await (
               globalThis as unknown as {
-                __canvas: { client: { documentMeta: () => Promise<{ dirty: boolean }> } };
+                __canvas: {
+                  client: { documentMeta: () => Promise<{ dirty: boolean }> };
+                };
               }
             ).__canvas.client.documentMeta()
           ).dirty,
@@ -325,7 +364,9 @@ test.describe("ED-4 — saving clears the edited flag", () => {
 
     await edit();
     await expect.poll(dirty).toBe(true);
-    await expect.poll(() => guardCount(page), { timeout: 8_000 }).toBe(clean + 1);
+    await expect
+      .poll(() => guardCount(page), { timeout: 8_000 })
+      .toBe(clean + 1);
 
     // Save through the command Cmd+S runs. Headless there is no file handle,
     // so this is the download fallback — still a save the user asked for.
@@ -333,7 +374,11 @@ test.describe("ED-4 — saving clears the edited flag", () => {
     await page.evaluate(async () => {
       await (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (id: string) => Promise<unknown> } } };
+          __canvas: {
+            registries: {
+              commands: { invoke: (id: string) => Promise<unknown> };
+            };
+          };
         }
       ).__canvas.registries.commands.invoke("paged.file.savePaged");
     });
@@ -349,33 +394,53 @@ test.describe("ED-4 — saving clears the edited flag", () => {
     // The next edit makes it dirty again.
     await edit();
     await expect.poll(dirty).toBe(true);
-    await expect.poll(() => guardCount(page), { timeout: 8_000 }).toBe(clean + 1);
+    await expect
+      .poll(() => guardCount(page), { timeout: 8_000 })
+      .toBe(clean + 1);
 
     // Saved once more, File ▸ New replaces the document without asking:
     // the film's "Open… warns of unsaved edits" after a save.
     await page.evaluate(async () => {
       await (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (id: string) => Promise<unknown> } } };
+          __canvas: {
+            registries: {
+              commands: { invoke: (id: string) => Promise<unknown> };
+            };
+          };
         }
       ).__canvas.registries.commands.invoke("paged.file.savePaged");
     });
     await expect.poll(dirty).toBe(false);
     const pagesBefore = await page.evaluate(
-      () => (globalThis as unknown as { __canvas: { handle: { pageCount: number } } }).__canvas.handle.pageCount,
+      () =>
+        (
+          globalThis as unknown as {
+            __canvas: { handle: { pageCount: number } };
+          }
+        ).__canvas.handle.pageCount,
     );
     expect(pagesBefore).toBeGreaterThan(1);
     await page.evaluate(async () => {
       await (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (id: string) => Promise<unknown> } } };
+          __canvas: {
+            registries: {
+              commands: { invoke: (id: string) => Promise<unknown> };
+            };
+          };
         }
       ).__canvas.registries.commands.invoke("paged.file.new");
     });
     await expect
       .poll(() =>
         page.evaluate(
-          () => (globalThis as unknown as { __canvas: { handle: { pageCount: number } | null } }).__canvas.handle?.pageCount,
+          () =>
+            (
+              globalThis as unknown as {
+                __canvas: { handle: { pageCount: number } | null };
+              }
+            ).__canvas.handle?.pageCount,
         ),
       )
       .toBe(1);

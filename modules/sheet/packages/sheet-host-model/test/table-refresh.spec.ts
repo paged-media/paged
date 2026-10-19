@@ -41,40 +41,87 @@ function content(
         col: c,
         text,
         align: "left" as const,
-        styleKey: opts.fillAt && opts.fillAt[0] === r && opts.fillAt[1] === c ? 1 : 0,
+        styleKey:
+          opts.fillAt && opts.fillAt[0] === r && opts.fillAt[1] === c ? 1 : 0,
       })),
     })),
     rules: { h: [], v: [] },
     merges: [],
     styles: [
-      { key: 0, bold: false, italic: false, borderTop: false, borderRight: false, borderBottom: false, borderLeft: false },
-      { key: 1, bold: false, italic: false, fillRgb: "#FFFF00", borderTop: false, borderRight: false, borderBottom: false, borderLeft: false },
+      {
+        key: 0,
+        bold: false,
+        italic: false,
+        borderTop: false,
+        borderRight: false,
+        borderBottom: false,
+        borderLeft: false,
+      },
+      {
+        key: 1,
+        bold: false,
+        italic: false,
+        fillRgb: "#FFFF00",
+        borderTop: false,
+        borderRight: false,
+        borderBottom: false,
+        borderLeft: false,
+      },
     ],
   };
 }
 
 describe("placed-table refresh replaces in place [sheet.lower.page]", () => {
   it("re-pours ONLY the changed cell (no second table)", () => {
-    const prev = content([["Item", "Qty"], ["Pens", "3"]]);
-    const next = content([["Item", "Qty"], ["Pens", "4"]]);
+    const prev = content([
+      ["Item", "Qty"],
+      ["Pens", "3"],
+    ]);
+    const next = content([
+      ["Item", "Qty"],
+      ["Pens", "4"],
+    ]);
     const ops = tableRefreshOps(prev, next, "S", "T", [50, 50], [50, 50]);
     expect(ops.structure).toEqual([]);
     expect(ops.text).toEqual([
-      { op: "deleteRange", args: { storyId: "S", start: 0, end: 1, cell: { tableId: "T", row: 1, col: 1 } } },
-      { op: "insertText", args: { storyId: "S", offset: 0, text: "4", cell: { tableId: "T", row: 1, col: 1 } } },
+      {
+        op: "deleteRange",
+        args: {
+          storyId: "S",
+          start: 0,
+          end: 1,
+          cell: { tableId: "T", row: 1, col: 1 },
+        },
+      },
+      {
+        op: "insertText",
+        args: {
+          storyId: "S",
+          offset: 0,
+          text: "4",
+          cell: { tableId: "T", row: 1, col: 1 },
+        },
+      },
     ]);
-    expect(JSON.stringify(ops)).not.toContain("insertTable\"");
+    expect(JSON.stringify(ops)).not.toContain('insertTable"');
   });
 
   it("reshapes rows at the tail and pours the new rows", () => {
     const prev = content([["a"], ["b"], ["c"]]);
     const fewer = tableRefreshOps(prev, content([["a"]]), "S", "T", [50], [50]);
-    expect(fewer.structure.map((m) => m.op)).toEqual(["deleteTableRow", "deleteTableRow"]);
-    expect(fewer.structure.map((m) => (m.args as { at: number }).at)).toEqual([2, 1]);
+    expect(fewer.structure.map((m) => m.op)).toEqual([
+      "deleteTableRow",
+      "deleteTableRow",
+    ]);
+    expect(fewer.structure.map((m) => (m.args as { at: number }).at)).toEqual([
+      2, 1,
+    ]);
     expect(fewer.text).toEqual([]);
 
     const more = tableRefreshOps(content([["a"]]), prev, "S", "T", [50], [50]);
-    expect(more.structure.filter((m) => m.op === "insertTableRow")).toHaveLength(2);
+    expect(
+      more.structure.filter((m) => m.op === "insertTableRow"),
+    ).toHaveLength(2);
     expect(more.text.map((m) => m.op)).toEqual(["insertText", "insertText"]);
   });
 
@@ -85,12 +132,18 @@ describe("placed-table refresh replaces in place [sheet.lower.page]", () => {
     expect(ops.decor).toContainEqual({
       op: "setElementProperty",
       args: {
-        elementId: { kind: "tableCell", id: { story_id: "S", table_id: "T", row: 0, col: 0 } },
+        elementId: {
+          kind: "tableCell",
+          id: { story_id: "S", table_id: "T", row: 0, col: 0 },
+        },
         path: "cellFillColor",
         value: { type: "colorRef", value: NO_FILL_SWATCH },
       },
     });
-    expect(ops.structure.map((m) => m.op).sort()).toEqual(["setColumnWidth", "setRowHeight"]);
+    expect(ops.structure.map((m) => m.op).sort()).toEqual([
+      "setColumnWidth",
+      "setRowHeight",
+    ]);
   });
 
   it("a page split that moved rows is a row insert + delete, not a re-pour of every shifted cell [sheet.lower.paginate]", () => {
@@ -102,10 +155,21 @@ describe("placed-table refresh replaces in place [sheet.lower.page]", () => {
     expect(ops.structure).toEqual([
       { op: "deleteTableRow", args: { storyId: "S", tableId: "T", at: 3 } },
       { op: "insertTableRow", args: { storyId: "S", tableId: "T", at: 1 } },
-      { op: "setRowHeight", args: { storyId: "S", tableId: "T", row: 1, height: 18 } },
+      {
+        op: "setRowHeight",
+        args: { storyId: "S", tableId: "T", row: 1, height: 18 },
+      },
     ]);
     expect(ops.text).toEqual([
-      { op: "insertText", args: { storyId: "S", offset: 0, text: "z", cell: { tableId: "T", row: 1, col: 0 } } },
+      {
+        op: "insertText",
+        args: {
+          storyId: "S",
+          offset: 0,
+          text: "z",
+          cell: { tableId: "T", row: 1, col: 0 },
+        },
+      },
     ]);
   });
 
@@ -115,8 +179,21 @@ describe("placed-table refresh replaces in place [sheet.lower.page]", () => {
 
   it("a host header band moves every row-addressed op below it, and nothing else [sheet.lower.page]", () => {
     // The workbook's row 0 is the table's row 2 under a two-row band.
-    const prev = content([["Item", "Qty"], ["Pens", "3"]], { fillAt: [1, 1] });
-    const next = content([["Item", "Qty"], ["Pens", "4"], ["Ink", "9"]], { fillAt: [0, 0], height: 20 });
+    const prev = content(
+      [
+        ["Item", "Qty"],
+        ["Pens", "3"],
+      ],
+      { fillAt: [1, 1] },
+    );
+    const next = content(
+      [
+        ["Item", "Qty"],
+        ["Pens", "4"],
+        ["Ink", "9"],
+      ],
+      { fillAt: [0, 0], height: 20 },
+    );
     const lanes = tableRefreshOps(prev, next, "S", "T", [50, 50], [50, 60]);
     const styles = [
       ...cellCharacterStyleApplies(next, "S", "T", { includeDefault: true }),
@@ -127,11 +204,14 @@ describe("placed-table refresh replaces in place [sheet.lower.page]", () => {
     expect(moved).toHaveLength(ops.length);
     const rowOf = (m: (typeof ops)[number]): number | null => {
       const a = m.args as Record<string, unknown>;
-      if (m.op === "insertTableRow" || m.op === "deleteTableRow") return a.at as number;
-      if (m.op === "setRowHeight" || m.op === "setCellSpan") return a.row as number;
+      if (m.op === "insertTableRow" || m.op === "deleteTableRow")
+        return a.at as number;
+      if (m.op === "setRowHeight" || m.op === "setCellSpan")
+        return a.row as number;
       const cell = a.cell as { row: number } | undefined;
       if (cell) return cell.row;
-      const el = a.elementId as { kind: string; id: { row: number } } | undefined;
+      const el = a.elementId as
+        { kind: string; id: { row: number } } | undefined;
       return el?.kind === "tableCell" ? el.id.row : null;
     };
     let rowOps = 0;
@@ -142,14 +222,28 @@ describe("placed-table refresh replaces in place [sheet.lower.page]", () => {
       } else {
         rowOps += 1;
         expect(rowOf(moved[i])).toBe(r + 2);
-        expect({ ...moved[i], args: { ...moved[i].args, at: 0, row: 0, cell: 0, elementId: 0 } })
-          .toEqual({ ...op, args: { ...op.args, at: 0, row: 0, cell: 0, elementId: 0 } });
+        expect({
+          ...moved[i],
+          args: { ...moved[i].args, at: 0, row: 0, cell: 0, elementId: 0 },
+        }).toEqual({
+          ...op,
+          args: { ...op.args, at: 0, row: 0, cell: 0, elementId: 0 },
+        });
       }
     });
     // Every lane that names a row is in the fixture: inserts, heights, text,
     // fills, styles; and the column widths (no row) are left alone.
-    expect(new Set(ops.filter((op) => rowOf(op) !== null).map((op) => op.op))).toEqual(
-      new Set(["insertTableRow", "setRowHeight", "deleteRange", "insertText", "setElementProperty", "applyStyle"]),
+    expect(
+      new Set(ops.filter((op) => rowOf(op) !== null).map((op) => op.op)),
+    ).toEqual(
+      new Set([
+        "insertTableRow",
+        "setRowHeight",
+        "deleteRange",
+        "insertText",
+        "setElementProperty",
+        "applyStyle",
+      ]),
     );
     expect(rowOps).toBeGreaterThan(0);
     expect(moved.filter((op) => op.op === "setColumnWidth")).toEqual(

@@ -72,7 +72,9 @@ export function EditContextBreadcrumb() {
               onClick={() => popTo(i)}
               style={{
                 ...crumbStyle,
-                color: isActive ? "var(--overlay-selection, #d4127a)" : "var(--pg-muted-fg)",
+                color: isActive
+                  ? "var(--overlay-selection, #d4127a)"
+                  : "var(--pg-muted-fg)",
                 fontWeight: isActive ? 600 : 400,
               }}
             >

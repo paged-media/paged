@@ -1,0 +1,49 @@
+# Commits that only reformat, which `git blame` skips. GitHub reads this file
+# by itself; for a local `git blame`, run once per clone:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# tooling/js/mass-format.sh --record appends its commits here.
+
+# fmt: engine/core (bun fmt, no other change)
+d124b0627b6af2cd5396fb120eea81b3e7054b6d
+
+# fmt: apps/editor (bun fmt, no other change)
+b989f38e2d05ddc4fa23c039bbbc59f5d0104252
+
+# fmt: apps/server (bun fmt, no other change)
+1a7d3e3f7bb479b9d2a3d2e9a06962e52925976b
+
+# fmt: platform/extensions (bun fmt, no other change)
+3e0cb87ab5c2960b673d1e21fe2b57f2c01258ac
+
+# fmt: platform/shared (bun fmt, no other change)
+c0efb8fd38a02be69fa03bcad17f45af9ecc1381
+
+# fmt: modules/data (bun fmt, no other change)
+965831c1b5b382ded174f3bbfd657cb271236aaa
+
+# fmt: modules/doc (bun fmt, no other change)
+a7e38bed8e13c78acdc61019c307efaaffa949f0
+
+# fmt: modules/draw (bun fmt, no other change)
+73b4e542c24a22e87ba41df8dcf1bb066d15fab4
+
+# fmt: modules/image (bun fmt, no other change)
+d3ea5131391f4f33dad629a5b2dff464dccd05fd
+
+# fmt: modules/publish (bun fmt, no other change)
+da367c79d162dfaee204567d39b799183effd256
+
+# fmt: modules/sheet (bun fmt, no other change)
+efb8c6751f55deb19e60b8cc1a556f6760ed60e4
+
+# fmt: modules/slide (bun fmt, no other change)
+4f3f7647541074e953ef29b5454a14225566a894
+
+# fmt: modules/web (bun fmt, no other change)
+580f7b9bc881f6619720f16e891b1ff8ebec005c
+
+# fmt: tooling (bun fmt, no other change)
+2414b9607fc650dc983656096a9de2e038e287ce
+
+# fmt: root (bun fmt, no other change)
+3562d75a5a5ca7e3ab772db64a6584494861439d

@@ -15,18 +15,18 @@ and tests per kernel, PSD block, codec, colour lane and brush-file block;
 `registry/kernels.yaml` is also build input. `references/` is gitignored (third-party
 source trees, see [ADR 461](adr/461-clean-room-protocol.md)).
 
-| Crate | Owns | Workspace dependencies |
-|---|---|---|
-| `image-core` | `PixelFormat`, `Region`, `Tile` and `TileMap` (256-pixel tiles), generation and content hashes; crop geometry and the curve-to-table builder | nothing |
-| `image-kernels` | `KernelDef`, the shader binding interface (`src/abi.rs`), the `kernel_family!` macro, the kernel definitions (`src/families/`) | core |
-| `image-gpu` | the wgpu device, shader assembly, dispatch and readback; selection coverage, brush dab planning, the stroke compositor, histogram and statistics, a distance transform; a texture pool and a tile residency manager | core, kernels |
-| `image-pipeline` | "Engine A": a lazy graph of sources and kernel applications, evaluated when a sink pulls a region | core, kernels, gpu, codecs |
-| `image-graph` | "Engine B": a persistent tiled buffer graph with per-tile invalidation, and the tile undo journal | core, kernels, gpu, pipeline |
-| `image-codecs` | `ImageSource` and `ImageTarget` over a `ByteSource`; PNG, JPEG and raw adapters; an EXIF reader | core |
-| `image-cms` | the `CmsEngine` trait and its two backends | core |
-| `image-psd` | the PSD/PSB parser, model, edit operations and writer; a reader for `.abr` brush files | core |
-| `image-js` | the wasm surface and the editor-facing logic behind it: ingest, the layer stack, selection, strokes, fills, healing, raster type, save-back | the eight crates above |
-| `image-conformance` | tests only: the scalar reference harness, fixture builders, property tests, one benchmark | core, kernels with feature `reference`, gpu, pipeline, graph, codecs, psd |
+| Crate               | Owns                                                                                                                                                                                                                | Workspace dependencies                                                    |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `image-core`        | `PixelFormat`, `Region`, `Tile` and `TileMap` (256-pixel tiles), generation and content hashes; crop geometry and the curve-to-table builder                                                                        | nothing                                                                   |
+| `image-kernels`     | `KernelDef`, the shader binding interface (`src/abi.rs`), the `kernel_family!` macro, the kernel definitions (`src/families/`)                                                                                      | core                                                                      |
+| `image-gpu`         | the wgpu device, shader assembly, dispatch and readback; selection coverage, brush dab planning, the stroke compositor, histogram and statistics, a distance transform; a texture pool and a tile residency manager | core, kernels                                                             |
+| `image-pipeline`    | "Engine A": a lazy graph of sources and kernel applications, evaluated when a sink pulls a region                                                                                                                   | core, kernels, gpu, codecs                                                |
+| `image-graph`       | "Engine B": a persistent tiled buffer graph with per-tile invalidation, and the tile undo journal                                                                                                                   | core, kernels, gpu, pipeline                                              |
+| `image-codecs`      | `ImageSource` and `ImageTarget` over a `ByteSource`; PNG, JPEG and raw adapters; an EXIF reader                                                                                                                     | core                                                                      |
+| `image-cms`         | the `CmsEngine` trait and its two backends                                                                                                                                                                          | core                                                                      |
+| `image-psd`         | the PSD/PSB parser, model, edit operations and writer; a reader for `.abr` brush files                                                                                                                              | core                                                                      |
+| `image-js`          | the wasm surface and the editor-facing logic behind it: ingest, the layer stack, selection, strokes, fills, healing, raster type, save-back                                                                         | the eight crates above                                                    |
+| `image-conformance` | tests only: the scalar reference harness, fixture builders, property tests, one benchmark                                                                                                                           | core, kernels with feature `reference`, gpu, pipeline, graph, codecs, psd |
 
 `image-gpu` is the only crate that depends on `wgpu`; `image-js` is the only `cdylib` and
 the only crate that depends on `wasm-bindgen`. `deny.toml` denies unknown registries and
@@ -203,21 +203,21 @@ matches. "Selection to path" inserts paths. The undo history is not stored.
 
 ## Host doors
 
-| Door | What the plugin uses it for |
-|---|---|
-| `contributePanel`, `host.contribute.command`, `contributeTool`, `host.contribute.menu` | one panel ("Image"), 37 commands, 15 tools, 34 menu entries |
-| `host.contribute.importer`, `host.contribute.exporter` | one importer for `.psd .psb .png .jpg .jpeg`; exporters for PSD, PNG and JPEG |
-| `host.contribute.editContext`, `host.contribute.bindingProvider` | the `rasterImage` context, entered by double-click; two providers that make the host's Layers and Character panels show the raster stack and the raster type settings |
-| `host.assets.getPlacedImage`, `host.assets.getFontFace` | original bytes of a placed image; font bytes for raster type |
-| `host.contribute.sceneLayer()` | submit and clear the image item inside a frame |
-| `host.images.claimImageResource` | serve 256-pixel tiles of level 0 to the renderer, on the "claim tiles" command |
-| `host.overlay.setToolPreview` | the crop frame, the selection outline, the brush tip ring |
-| `host.document.elementGeometry`, `host.selection.get` / `onDidChange` | the frame's box; the target frame; clearing the layer on deselect |
-| `host.document.getMetadata` / `setMetadata` | the ownership marker |
-| `host.document.mutate` (`insertPath`), `host.document.pathAnchors` | selection to path and path to selection |
-| `host.shell.saveFile`, `host.shell.pickFile`, `host.shell.openPanel` | deliver save-back bytes; open an `.abr` file; raise the panel |
-| `host.workers.concurrency` / `spawn` | the decode worker pool |
-| `host.supports`, `host.log` | probing optional doors; logging |
+| Door                                                                                   | What the plugin uses it for                                                                                                                                           |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contributePanel`, `host.contribute.command`, `contributeTool`, `host.contribute.menu` | one panel ("Image"), 37 commands, 15 tools, 34 menu entries                                                                                                           |
+| `host.contribute.importer`, `host.contribute.exporter`                                 | one importer for `.psd .psb .png .jpg .jpeg`; exporters for PSD, PNG and JPEG                                                                                         |
+| `host.contribute.editContext`, `host.contribute.bindingProvider`                       | the `rasterImage` context, entered by double-click; two providers that make the host's Layers and Character panels show the raster stack and the raster type settings |
+| `host.assets.getPlacedImage`, `host.assets.getFontFace`                                | original bytes of a placed image; font bytes for raster type                                                                                                          |
+| `host.contribute.sceneLayer()`                                                         | submit and clear the image item inside a frame                                                                                                                        |
+| `host.images.claimImageResource`                                                       | serve 256-pixel tiles of level 0 to the renderer, on the "claim tiles" command                                                                                        |
+| `host.overlay.setToolPreview`                                                          | the crop frame, the selection outline, the brush tip ring                                                                                                             |
+| `host.document.elementGeometry`, `host.selection.get` / `onDidChange`                  | the frame's box; the target frame; clearing the layer on deselect                                                                                                     |
+| `host.document.getMetadata` / `setMetadata`                                            | the ownership marker                                                                                                                                                  |
+| `host.document.mutate` (`insertPath`), `host.document.pathAnchors`                     | selection to path and path to selection                                                                                                                               |
+| `host.shell.saveFile`, `host.shell.pickFile`, `host.shell.openPanel`                   | deliver save-back bytes; open an `.abr` file; raise the panel                                                                                                         |
+| `host.workers.concurrency` / `spawn`                                                   | the decode worker pool                                                                                                                                                |
+| `host.supports`, `host.log`                                                            | probing optional doors; logging                                                                                                                                       |
 
 The manifest declares `document` (read `broad`, write `scoped`), `rendering`
 (`sceneLayer`, `hitTest`, `resourceProvider`, `overlay`), `assets` (`images`, `fonts`),

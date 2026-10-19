@@ -63,7 +63,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     { path: "paragraphSpaceBefore", value: { type: "length", value: 6.5 } },
     { path: "paragraphSpaceAfter", value: { type: "length", value: 6.5 } },
     { path: "paragraphFirstLineIndent", value: { type: "length", value: 0 } },
-    { path: "paragraphJustification", value: { type: "text", value: "LeftAlign" } },
+    {
+      path: "paragraphJustification",
+      value: { type: "text", value: "LeftAlign" },
+    },
     { path: "paragraphStyleNextStyle", value: { type: "text", value: bodyId } },
   ];
   for (const prop of paraProps) {
@@ -134,9 +137,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   }
 
   // ── the narration, wearing the style it narrates ─────────────────
-  const head = await proseFrame(ctx, page, [48, 58, 480, 92], [
-    { text: "Live style surgery", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [48, 58, 480, 92],
+    [{ text: "Live style surgery", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   const paras = [
@@ -173,7 +179,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     paras.map((text) => ({
       text,
       style: "Field Note",
-      charRanges: [{ start: 0, end: openerLen(text), style: "Field Note Caps" }],
+      charRanges: [
+        { start: 0, end: openerLen(text), style: "Field Note Caps" },
+      ],
     })),
   );
   elements.push(prose.frameId);
@@ -189,17 +197,22 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     },
   );
 
-  const caption = await proseFrame(ctx, page, [48, 436, 480, 478], [
-    {
-      text:
-        "Field Note, created and dressed on this page · " +
-        "setStyleProperty: characterFontSize, characterTracking, " +
-        "characterFillColor, paragraphSpaceBefore, paragraphSpaceAfter, " +
-        "paragraphFirstLineIndent, paragraphJustification, " +
-        "paragraphStyleNextStyle",
-      style: STYLE.caption,
-    },
-  ]);
+  const caption = await proseFrame(
+    ctx,
+    page,
+    [48, 436, 480, 478],
+    [
+      {
+        text:
+          "Field Note, created and dressed on this page · " +
+          "setStyleProperty: characterFontSize, characterTracking, " +
+          "characterFillColor, paragraphSpaceBefore, paragraphSpaceAfter, " +
+          "paragraphFirstLineIndent, paragraphJustification, " +
+          "paragraphStyleNextStyle",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(caption.frameId);
 
   await marginNote(

@@ -34,8 +34,18 @@ const session = () =>
 describe("tool options", () => {
   it("maps brush percentages onto the brush's 0..1 parameters", () => {
     const s = session();
-    applyToolSettings(s, "brush", { size: 40, hardness: 50, opacity: 80, flow: 25 });
-    expect(s.setBrushParams).toHaveBeenCalledWith({ size: 40, hardness: 0.5, opacity: 0.8, flow: 0.25 });
+    applyToolSettings(s, "brush", {
+      size: 40,
+      hardness: 50,
+      opacity: 80,
+      flow: 25,
+    });
+    expect(s.setBrushParams).toHaveBeenCalledWith({
+      size: 40,
+      hardness: 0.5,
+      opacity: 0.8,
+      flow: 0.25,
+    });
   });
 
   it("passes wand tolerance and contiguity, and ignores mistyped values", () => {
@@ -53,7 +63,14 @@ describe("tool options", () => {
   });
 
   it("declares fields for the six tools", () => {
-    const f = toolOptionFields({ brush: "b", pencil: "p", eraser: "e", wand: "w", bucket: "k", gradient: "g" });
+    const f = toolOptionFields({
+      brush: "b",
+      pencil: "p",
+      eraser: "e",
+      wand: "w",
+      bucket: "k",
+      gradient: "g",
+    });
     expect(Object.keys(f).sort()).toEqual(["b", "e", "g", "k", "p", "w"]);
     expect(f.w.map((x) => x.key)).toEqual(["tolerance", "contiguous"]);
   });

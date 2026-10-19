@@ -43,10 +43,25 @@ import type { WebDiagnostic } from "./diagnose";
 /** Generic CSS font families — never "missing from the document":
  *  they map to the browser's own families, not document faces. */
 const GENERIC = new Set([
-  "serif", "sans-serif", "monospace", "cursive", "fantasy",
-  "system-ui", "ui-serif", "ui-sans-serif", "ui-monospace",
-  "ui-rounded", "math", "emoji", "fangsong", "inherit", "initial",
-  "unset", "revert", "revert-layer", "default",
+  "serif",
+  "sans-serif",
+  "monospace",
+  "cursive",
+  "fantasy",
+  "system-ui",
+  "ui-serif",
+  "ui-sans-serif",
+  "ui-monospace",
+  "ui-rounded",
+  "math",
+  "emoji",
+  "fangsong",
+  "inherit",
+  "initial",
+  "unset",
+  "revert",
+  "revert-layer",
+  "default",
 ]);
 
 /** CSS-wide / keyword tokens a `font:` shorthand may carry that are
@@ -57,17 +72,40 @@ const GENERIC = new Set([
  *  document?", never a crash). */
 const SHORTHAND_NON_FAMILY = new Set([
   // <font-style>
-  "normal", "italic", "oblique",
+  "normal",
+  "italic",
+  "oblique",
   // <font-variant> (the common ones)
   "small-caps",
   // <font-weight>
-  "bold", "bolder", "lighter",
-  "100", "200", "300", "400", "500", "600", "700", "800", "900",
+  "bold",
+  "bolder",
+  "lighter",
+  "100",
+  "200",
+  "300",
+  "400",
+  "500",
+  "600",
+  "700",
+  "800",
+  "900",
   // <font-stretch>
-  "ultra-condensed", "extra-condensed", "condensed", "semi-condensed",
-  "semi-expanded", "expanded", "extra-expanded", "ultra-expanded",
+  "ultra-condensed",
+  "extra-condensed",
+  "condensed",
+  "semi-condensed",
+  "semi-expanded",
+  "expanded",
+  "extra-expanded",
+  "ultra-expanded",
   // system font keywords
-  "caption", "icon", "menu", "message-box", "small-caption", "status-bar",
+  "caption",
+  "icon",
+  "menu",
+  "message-box",
+  "small-caption",
+  "status-bar",
 ]);
 
 /** Strip CSS comments so a `font-family` inside `/* … *\/` doesn't
@@ -152,8 +190,7 @@ function familiesFromShorthand(value: string): string[] {
 // the `font:` shorthand (a `font:` NOT followed by `-family`) needs
 // the shorthand recovery. A leading boundary keeps `font:` from
 // matching inside `font-family:` etc.
-const FONT_DECL =
-  /(?:^|[;{}\s])font(-family)?\s*:\s*([^;{}]*)/gi;
+const FONT_DECL = /(?:^|[;{}\s])font(-family)?\s*:\s*([^;{}]*)/gi;
 
 /**
  * The ordered set of font families the source CSS requests — from
@@ -250,8 +287,7 @@ export interface ResolvedFontFace {
 // and no node built-ins, and the input may be a SharedArrayBuffer-
 // backed view (the worker's served bytes): plain indexed reads work on
 // those where `Blob`/`btoa` paths reject or require copies.
-const B64 =
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 function toBase64(bytes: Uint8Array): string {
   let out = "";
@@ -301,9 +337,7 @@ export function fontFaceDataUrl(
 }
 
 /** Map an asset `format` to the CSS `format()` keyword. */
-function cssFormat(
-  format: ResolvedFontFace["format"],
-): string | null {
+function cssFormat(format: ResolvedFontFace["format"]): string | null {
   switch (format) {
     case "truetype":
       return "truetype";

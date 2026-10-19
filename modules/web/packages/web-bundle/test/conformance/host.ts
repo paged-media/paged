@@ -47,4 +47,8 @@ export const mapBacking = () => {
 };
 
 export const openHost = (): Promise<HeadlessHost> =>
-  createHeadlessHost({ resolveFrom: ENGINE_ANCHOR, console: silent, storage: mapBacking() });
+  createHeadlessHost({
+    resolveFrom: ENGINE_ANCHOR,
+    console: silent,
+    storage: mapBacking(),
+  });

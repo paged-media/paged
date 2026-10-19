@@ -56,7 +56,10 @@ export interface RecordedElement {
 }
 
 /** Every page item of the document in page order, with our label decoded. */
-export function documentElements(tree: readonly TreeNode[], key: string = BINDING_KEY): RecordedElement[] {
+export function documentElements(
+  tree: readonly TreeNode[],
+  key: string = BINDING_KEY,
+): RecordedElement[] {
   const out: RecordedElement[] = [];
   let page = -1;
   const items = (nodes: readonly TreeNode[]) => {
@@ -64,7 +67,10 @@ export function documentElements(tree: readonly TreeNode[], key: string = BINDIN
       if (n.id) {
         const entry = n.pluginMetadata?.find((m) => m.key === key);
         const env = entry ? parseEnvelope(entry.value) : null;
-        const data = env && env.data && typeof env.data === "object" ? (env.data as Record<string, unknown>) : null;
+        const data =
+          env && env.data && typeof env.data === "object"
+            ? (env.data as Record<string, unknown>)
+            : null;
         out.push({ element: n.id, page, data });
       }
       if (n.children) items(n.children);
@@ -118,15 +124,24 @@ function sameElement(a: ElementId, b: ElementId): boolean {
   return a.kind === b.kind && JSON.stringify(a.id) === JSON.stringify(b.id);
 }
 
-function matches(data: Record<string, unknown> | null, t: RelowerTarget): boolean {
+function matches(
+  data: Record<string, unknown> | null,
+  t: RelowerTarget,
+): boolean {
   if (!data || data.kind !== t.kind) return false;
-  if (t.kind === "merge") return t.merge !== undefined && data.merge === t.merge;
+  if (t.kind === "merge")
+    return t.merge !== undefined && data.merge === t.merge;
   return t.binding !== undefined && data.binding === t.binding;
 }
 
 /** Only frame-like page items can be deleted with `deleteFrame`. */
 function deletable(e: ElementId): boolean {
-  return typeof e.id === "string" && e.kind !== "storyRange" && e.kind !== "table" && e.kind !== "tableCell";
+  return (
+    typeof e.id === "string" &&
+    e.kind !== "storyRange" &&
+    e.kind !== "table" &&
+    e.kind !== "tableCell"
+  );
 }
 
 /**
@@ -154,24 +169,30 @@ export function planRelower(
     if (!old.some((o) => sameElement(o, m))) old.push(m);
   }
   const removed = old.filter(deletable);
-  const remove: Mutation[] = removed.map((e) => ({ op: "deleteFrame", args: { frameId: e.id as string } }));
+  const remove: Mutation[] = removed.map((e) => ({
+    op: "deleteFrame",
+    args: { frameId: e.id as string },
+  }));
 
   // Pages the previous lowering added — remembered, or read off the labels
   // (`createdPage: true` on what it put on a page it added) — that hold
   // nothing else once it is gone.
   const created = new Set<PageId>(memory.createdPages ?? []);
   for (const e of labelled) {
-    if (e.data?.createdPage === true && memory.pages[e.page]) created.add(memory.pages[e.page]);
+    if (e.data?.createdPage === true && memory.pages[e.page])
+      created.add(memory.pages[e.page]);
   }
   const removedPages: PageId[] = [];
   for (const pageId of created) {
     const index = memory.pages.indexOf(pageId);
     if (index < 0) continue;
     const left = elements.filter(
-      (e) => e.page === index && !removed.some((r) => sameElement(r, e.element)),
+      (e) =>
+        e.page === index && !removed.some((r) => sameElement(r, e.element)),
     );
     if (left.length === 0) removedPages.push(pageId);
   }
-  for (const pageId of removedPages) remove.push({ op: "deletePage", args: { pageId } });
+  for (const pageId of removedPages)
+    remove.push({ op: "deletePage", args: { pageId } });
   return { remove, reuse, removed, removedPages };
 }

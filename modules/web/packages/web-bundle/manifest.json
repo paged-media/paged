@@ -9,17 +9,9 @@
       "read": "broad",
       "write": "scoped"
     },
-    "rendering": [
-      "sceneLayer",
-      "overlay"
-    ],
-    "editContext": [
-      "webFrame"
-    ],
-    "assets": [
-      "fonts",
-      "images"
-    ],
+    "rendering": ["sceneLayer", "overlay"],
+    "editContext": ["webFrame"],
+    "assets": ["fonts", "images"],
     "wasm": [
       {
         "name": "blitz",
@@ -31,9 +23,7 @@
     "network": false,
     "clipboard": "full",
     "dataProviders": {
-      "consume": [
-        "dataset"
-      ]
+      "consume": ["dataset"]
     }
   },
   "contributes": {
@@ -70,9 +60,7 @@
         "linkable": false
       }
     ],
-    "importers": [
-      "media.paged.web.importer.html"
-    ],
+    "importers": ["media.paged.web.importer.html"],
     "objectModel": {
       "kinds": [
         {
@@ -101,10 +89,7 @@
               "path": "media",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "print",
-                  "screen"
-                ]
+                "members": ["print", "screen"]
               },
               "default": "print",
               "title": "Media",
@@ -114,12 +99,7 @@
               "path": "overflow",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "clip",
-                  "shrink",
-                  "grow",
-                  "thread"
-                ]
+                "members": ["clip", "shrink", "grow", "thread"]
               },
               "default": "clip",
               "title": "Overflow",
@@ -183,10 +163,7 @@
               "path": "storage",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "inline",
-                  "part"
-                ]
+                "members": ["inline", "part"]
               },
               "access": "derived",
               "title": "Storage",
@@ -235,10 +212,7 @@
               "path": "scope",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "doc",
-                  "data"
-                ]
+                "members": ["doc", "data"]
               },
               "access": "readOnly",
               "title": "Scope",

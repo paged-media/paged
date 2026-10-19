@@ -59,7 +59,10 @@ export function arcPath(
   const delta = clamped / segments;
   const k = (4 / 3) * Math.tan(delta / 4);
 
-  const point = (th: number): Vec2 => [cx + rx * Math.cos(th), cy + ry * Math.sin(th)];
+  const point = (th: number): Vec2 => [
+    cx + rx * Math.cos(th),
+    cy + ry * Math.sin(th),
+  ];
   const tangent = (th: number): Vec2 => [-rx * Math.sin(th), ry * Math.cos(th)];
 
   const anchors: AnchorTriple[] = [];

@@ -17,7 +17,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The Journal panel (ADR 025) — the local flight recorder's surface.
 //
 // Two things are worth a spec here, and the second is the one that matters:
@@ -57,7 +56,9 @@ test.describe("journal panel @feat:editor-shell.panels.journal", () => {
       /\d+ entr(y|ies)/,
     );
     await expect(
-      panel.locator('[data-journal-entry][data-journal-code="plugin.activate"]').first(),
+      panel
+        .locator('[data-journal-entry][data-journal-code="plugin.activate"]')
+        .first(),
     ).toBeVisible();
   });
 

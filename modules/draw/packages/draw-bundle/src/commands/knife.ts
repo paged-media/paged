@@ -117,7 +117,12 @@ import {
   type CompoundPaint,
 } from "./compound-path";
 import { bindMinted, mutateMinting } from "./minted";
-import { pageOriginOf, SPREAD_ORIGIN, spreadTableOf, type PageOrigin } from "../page-origin";
+import {
+  pageOriginOf,
+  SPREAD_ORIGIN,
+  spreadTableOf,
+  type PageOrigin,
+} from "../page-origin";
 import {
   batchMutationFor,
   bindCreatedMutationFor,
@@ -134,13 +139,15 @@ export const KNIFE_SNAP_TOLERANCE_PT = KNIFE_STRIP_WIDTH_PT / 2 + 1 / 64;
 
 /** A face smaller than this (pt²) is not a piece: it is what a cut that
  *  doubles back on itself leaves where its strip overlaps itself. */
-export const KNIFE_MIN_PIECE_AREA_PT2 = 4 * KNIFE_STRIP_WIDTH_PT * KNIFE_STRIP_WIDTH_PT;
+export const KNIFE_MIN_PIECE_AREA_PT2 =
+  4 * KNIFE_STRIP_WIDTH_PT * KNIFE_STRIP_WIDTH_PT;
 
 /** The batch-local handle of target `i`'s strip in the PROBE batch. */
 export const knifeStripHandle = (i: number): string => `knife_s${i}`;
 
 /** The batch-local handle of target `i`'s inserted piece `k` (k ≥ 1). */
-export const knifePieceHandle = (i: number, k: number): string => `knife_p${i}_${k}`;
+export const knifePieceHandle = (i: number, k: number): string =>
+  `knife_p${i}_${k}`;
 
 /** One target, resolved: its table in its OWN (inner) space, its
  *  transform, and the cut mapped into that same space. */
@@ -185,16 +192,27 @@ export interface KnifeResult {
 
 const isIdentity = (m: Affine | null): boolean =>
   !m ||
-  (m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1 && m[4] === 0 && m[5] === 0);
+  (m[0] === 1 &&
+    m[1] === 0 &&
+    m[2] === 0 &&
+    m[3] === 1 &&
+    m[4] === 0 &&
+    m[5] === 0);
 
-const triple = (a: { anchor: readonly number[]; left: readonly number[]; right: readonly number[] }): AnchorTriple => ({
+const triple = (a: {
+  anchor: readonly number[];
+  left: readonly number[];
+  right: readonly number[];
+}): AnchorTriple => ({
   anchor: [a.anchor[0]!, a.anchor[1]!],
   left: [a.left[0]!, a.left[1]!],
   right: [a.right[0]!, a.right[1]!],
 });
 
 /** A planar face as a closed `AnchorTable`. */
-export function faceTable(face: Pick<PlanarFace, "anchors" | "subpathStarts">): AnchorTable {
+export function faceTable(
+  face: Pick<PlanarFace, "anchors" | "subpathStarts">,
+): AnchorTable {
   const starts = face.subpathStarts.length > 0 ? [...face.subpathStarts] : [0];
   return {
     anchors: face.anchors.map(triple),
@@ -211,7 +229,10 @@ export function faceTable(face: Pick<PlanarFace, "anchors" | "subpathStarts">): 
  * largest piece comes first — it is the one the target keeps. Pure.
  */
 export function knifePiecesFrom(
-  faces: readonly Pick<PlanarFace, "signature" | "area" | "anchors" | "subpathStarts">[],
+  faces: readonly Pick<
+    PlanarFace,
+    "signature" | "area" | "anchors" | "subpathStarts"
+  >[],
   cutInner: readonly Vec2[],
 ): AnchorTable[] {
   return faces
@@ -224,8 +245,13 @@ export function knifePiecesFrom(
     )
     .sort((a, b) => b.area - a.area)
     .map((f) => {
-      const snapped = snapOntoPolyline(faceTable(f), cutInner, KNIFE_SNAP_TOLERANCE_PT);
-      return contourRanges(snapped.anchors.length, snapped.subpathStarts).length > 1
+      const snapped = snapOntoPolyline(
+        faceTable(f),
+        cutInner,
+        KNIFE_SNAP_TOLERANCE_PT,
+      );
+      return contourRanges(snapped.anchors.length, snapped.subpathStarts)
+        .length > 1
         ? orientForNonZeroHoles(snapped)
         : snapped;
     });
@@ -242,7 +268,11 @@ export function knifeStripBatchFor(
   for (let i = 0; i < targets.length; i++) {
     const strip = sliverAround(targets[i]!.cutInner, KNIFE_STRIP_WIDTH_PT);
     if (!strip) return null;
-    const table: AnchorTable = { anchors: strip, subpathStarts: [0], subpathOpen: [false] };
+    const table: AnchorTable = {
+      anchors: strip,
+      subpathStarts: [0],
+      subpathOpen: [false],
+    };
     ops.push(
       {
         op: "insertPath",
@@ -282,7 +312,11 @@ function paintOpsFor(id: ElementId, paint: CompoundPaint): MutationInput[] {
   const ops: MutationInput[] = [
     {
       op: "setElementProperty",
-      args: { elementId: id, path: "frameFillColor", value: { type: "colorRef", value: paint.fill } },
+      args: {
+        elementId: id,
+        path: "frameFillColor",
+        value: { type: "colorRef", value: paint.fill },
+      },
     },
     {
       op: "setElementProperty",
@@ -358,7 +392,11 @@ export function knifeBatchFor(
     if (box) {
       ops.push({
         op: "setElementProperty",
-        args: { elementId: plan.target.id, path: "frameBounds", value: { type: "bounds", value: box } },
+        args: {
+          elementId: plan.target.id,
+          path: "frameBounds",
+          value: { type: "bounds", value: box },
+        },
       });
     }
   });
@@ -444,11 +482,14 @@ export async function knifeTargetOf(
   let pageOrigin: PageOrigin;
   if (read && read.anchors.length >= 2) {
     if ((read.subpathOpen ?? []).some((open) => open)) {
-      return { skip: "an open path is cut with Scissors, not the Knife — not cut" };
+      return {
+        skip: "an open path is cut with Scissors, not the Knife — not cut",
+      };
     }
     inner = {
       anchors: read.anchors.map(triple),
-      subpathStarts: read.subpathStarts.length > 0 ? [...read.subpathStarts] : [0],
+      subpathStarts:
+        read.subpathStarts.length > 0 ? [...read.subpathStarts] : [0],
       subpathOpen: [],
     };
     transform = (read.itemTransform ?? null) as Affine | null;
@@ -466,7 +507,9 @@ export async function knifeTargetOf(
         [right, top],
         [right, bottom],
         [left, bottom],
-      ].map(([x, y]) => triple({ anchor: [x!, y!], left: [x!, y!], right: [x!, y!] })),
+      ].map(([x, y]) =>
+        triple({ anchor: [x!, y!], left: [x!, y!], right: [x!, y!] }),
+      ),
       subpathStarts: [0],
       subpathOpen: [false],
     };
@@ -478,7 +521,8 @@ export async function knifeTargetOf(
   const cutInner: Vec2[] = [];
   for (const p of cutPage) {
     const q = inverseApplyAffine(transform, p[0], p[1]);
-    if (!q) return { skip: "the path's transform cannot be inverted — not cut" };
+    if (!q)
+      return { skip: "the path's transform cannot be inverted — not cut" };
     cutInner.push([q[0], q[1]]);
   }
   const own = tableBounds(inner);
@@ -502,7 +546,12 @@ export async function applyKnife(
   pageId: string,
   cutPage: readonly Vec2[],
 ): Promise<KnifeResult> {
-  const result: KnifeResult = { cut: [], pieces: [], skipped: [], undoSteps: 0 };
+  const result: KnifeResult = {
+    cut: [],
+    pieces: [],
+    skipped: [],
+    undoSteps: 0,
+  };
   if (cutPage.length < 2) return result;
   const targets: KnifeTarget[] = [];
   for (const id of await knifeCandidates(host, pageId, cutPage)) {
@@ -523,11 +572,15 @@ export async function applyKnife(
   if (!probe) return result;
   const probed = await mutateMinting(host, probe);
   if (!probed.outcome.applied) {
-    host.log.warn(`knife: the cut strips were refused: ${JSON.stringify(probed.outcome.error)}`);
+    host.log.warn(
+      `knife: the cut strips were refused: ${JSON.stringify(probed.outcome.error)}`,
+    );
     return result;
   }
   const strips = bindMinted(probed, probe);
-  const stripIds = targets.map((_, i) => strips?.byHandle.get(knifeStripHandle(i)) ?? null);
+  const stripIds = targets.map(
+    (_, i) => strips?.byHandle.get(knifeStripHandle(i)) ?? null,
+  );
 
   // 2. THE ARRANGEMENT — one query per target, against its own strip.
   const plans: KnifePlan[] = [];
@@ -535,7 +588,9 @@ export async function applyKnife(
     const t = targets[i]!;
     const strip = stripIds[i];
     if (!strip) continue;
-    const regions = await host.document.planarRegions([t.id, strip]).catch(() => null);
+    const regions = await host.document
+      .planarRegions([t.id, strip])
+      .catch(() => null);
     if (!regions || !regions.found) {
       const reason = regions?.reason ?? "the planar arrangement did not answer";
       result.skipped.push({ id: t.id, reason });
@@ -565,7 +620,14 @@ export async function applyKnife(
   }
   if (plans.length === 0) {
     if (deletes.length > 0) {
-      await host.document.mutate(batchMutationFor(deletes.map((d) => ({ op: "deleteFrame", args: { frameId: String(d.id) } }))));
+      await host.document.mutate(
+        batchMutationFor(
+          deletes.map((d) => ({
+            op: "deleteFrame",
+            args: { frameId: String(d.id) },
+          })),
+        ),
+      );
     }
     return result;
   }
@@ -574,7 +636,9 @@ export async function applyKnife(
   const batch = knifeBatchFor(plans, deletes);
   const written = await mutateMinting(host, batch);
   if (!written.outcome.applied) {
-    host.log.warn(`knife: the cut was refused: ${JSON.stringify(written.outcome.error)}`);
+    host.log.warn(
+      `knife: the cut was refused: ${JSON.stringify(written.outcome.error)}`,
+    );
     return result;
   }
   const named = bindMinted(written, batch);

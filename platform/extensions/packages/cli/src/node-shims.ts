@@ -46,9 +46,14 @@ let installed = false;
 /** Where `@duckdb/duckdb-wasm` resolves from: the cwd first (a user's own
  *  install), then this package. Null when it is not installed. */
 export function resolveDuckDBNode(cwd = process.cwd()): string | null {
-  for (const anchor of [join(cwd, "package.json"), fileURLToPath(import.meta.url)]) {
+  for (const anchor of [
+    join(cwd, "package.json"),
+    fileURLToPath(import.meta.url),
+  ]) {
     try {
-      return createRequire(anchor).resolve("@duckdb/duckdb-wasm/dist/duckdb-node-blocking.cjs");
+      return createRequire(anchor).resolve(
+        "@duckdb/duckdb-wasm/dist/duckdb-node-blocking.cjs",
+      );
     } catch {
       /* next anchor */
     }
@@ -76,8 +81,12 @@ class InProcessDuckDBWorker {
   }
 
   private async boot(binDir: string): Promise<void> {
-    const api = (await import(pathToFileURL(join(binDir, "duckdb-browser.mjs")).href)) as {
-      AsyncDuckDBDispatcher: new () => { onMessage(req: unknown): Promise<void> };
+    const api = (await import(
+      pathToFileURL(join(binDir, "duckdb-browser.mjs")).href
+    )) as {
+      AsyncDuckDBDispatcher: new () => {
+        onMessage(req: unknown): Promise<void>;
+      };
     };
     const lib = resolveDuckDBNode();
     const self = this;
@@ -85,15 +94,24 @@ class InProcessDuckDBWorker {
       protected async instantiate(mainModule: string): Promise<unknown> {
         if (!lib) throw new Error(DUCKDB_MISSING);
         const duckdb = createRequire(import.meta.url)(lib) as {
-          createDuckDB(bundles: unknown, logger: unknown, runtime: unknown): Promise<{ instantiate(): Promise<unknown> }>;
+          createDuckDB(
+            bundles: unknown,
+            logger: unknown,
+            runtime: unknown,
+          ): Promise<{ instantiate(): Promise<unknown> }>;
           VoidLogger: new () => unknown;
           NODE_RUNTIME: unknown;
         };
         installExtensionXhr(join(binDir, "duckdb-ext"));
-        const wasm = mainModule.startsWith("file:") ? fileURLToPath(mainModule) : resolve(mainModule);
+        const wasm = mainModule.startsWith("file:")
+          ? fileURLToPath(mainModule)
+          : resolve(mainModule);
         const db = await duckdb.createDuckDB(
           {
-            mvp: { mainModule: join(binDir, "duckdb-mvp.NOT-SHIPPED.wasm"), mainWorker: "" },
+            mvp: {
+              mainModule: join(binDir, "duckdb-mvp.NOT-SHIPPED.wasm"),
+              mainWorker: "",
+            },
             eh: { mainModule: wasm, mainWorker: "" },
           },
           new duckdb.VoidLogger(),
@@ -106,7 +124,9 @@ class InProcessDuckDBWorker {
         queueMicrotask(() => self.emit("message", { data: response }));
       }
     }
-    this.dispatcher = new NodeDispatcher() as unknown as { onMessage(req: unknown): Promise<void> };
+    this.dispatcher = new NodeDispatcher() as unknown as {
+      onMessage(req: unknown): Promise<void>;
+    };
     for (const req of this.queue.splice(0)) void this.dispatcher.onMessage(req);
   }
 
@@ -146,7 +166,10 @@ function installExtensionXhr(extDir: string): void {
     responseType = "";
     private url = "";
     open(_method: string, url: string, async?: boolean): void {
-      if (async !== false) throw new Error(`paged CLI: only synchronous extension loads are served (asked for ${url})`);
+      if (async !== false)
+        throw new Error(
+          `paged CLI: only synchronous extension loads are served (asked for ${url})`,
+        );
       this.url = url;
     }
     setRequestHeader(): void {}
@@ -155,7 +178,10 @@ function installExtensionXhr(extDir: string): void {
         const file = fileURLToPath(this.url);
         if (existsSync(file)) {
           const b = readFileSync(file);
-          this.response = b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
+          this.response = b.buffer.slice(
+            b.byteOffset,
+            b.byteOffset + b.byteLength,
+          ) as ArrayBuffer;
           this.status = 200;
           return;
         }
@@ -175,11 +201,21 @@ export function installNodeShims(): void {
   };
   const realFetch = g.fetch.bind(globalThis);
   g.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const href = input instanceof URL ? input.href : typeof input === "string" ? input : (input as Request).url;
+    const href =
+      input instanceof URL
+        ? input.href
+        : typeof input === "string"
+          ? input
+          : (input as Request).url;
     if (href.startsWith("file:")) {
       const file = fileURLToPath(href);
-      if (!file.endsWith(".wasm")) throw new TypeError(`paged CLI: fetch(${href}) — only bundle .wasm files are served from disk`);
-      return new Response(readFileSync(file), { headers: { "content-type": "application/wasm" } });
+      if (!file.endsWith(".wasm"))
+        throw new TypeError(
+          `paged CLI: fetch(${href}) — only bundle .wasm files are served from disk`,
+        );
+      return new Response(readFileSync(file), {
+        headers: { "content-type": "application/wasm" },
+      });
     }
     return realFetch(input as RequestInfo, init);
   }) as typeof fetch;
@@ -187,15 +223,19 @@ export function installNodeShims(): void {
   // Worker; Bun has one, but DuckDB's browser worker script does not run in
   // it, so the DuckDB URL is routed here first and any other URL goes to the
   // runtime's own Worker when there is one.
-  const RuntimeWorker = g.Worker as (new (url: string | URL, options?: unknown) => object) | undefined;
+  const RuntimeWorker = g.Worker as
+    (new (url: string | URL, options?: unknown) => object) | undefined;
   g.Worker = class HeadlessWorker {
     constructor(url: string | URL, options?: unknown) {
       const href = String(url);
       if (/duckdb-browser-eh\.worker\.js$/.test(href)) {
         return new InProcessDuckDBWorker(href) as unknown as HeadlessWorker;
       }
-      if (RuntimeWorker) return new RuntimeWorker(url, options) as HeadlessWorker;
-      throw new Error(`paged CLI: Web Workers are not available headlessly (${href})`);
+      if (RuntimeWorker)
+        return new RuntimeWorker(url, options) as HeadlessWorker;
+      throw new Error(
+        `paged CLI: Web Workers are not available headlessly (${href})`,
+      );
     }
   };
 }

@@ -39,7 +39,13 @@ const corner = (x: number, y: number) => ({
 
 describe("knife — the strip around a cut", () => {
   it("a straight cut becomes a closed rectangle exactly `width` wide, corners on their anchors", () => {
-    const s = sliverAround([[0, 10], [100, 10]], 2)!;
+    const s = sliverAround(
+      [
+        [0, 10],
+        [100, 10],
+      ],
+      2,
+    )!;
     expect(s.map((a) => a.anchor)).toEqual([
       [0, 11],
       [100, 11],
@@ -92,9 +98,33 @@ describe("knife — the strip around a cut", () => {
 
   it("refuses what is not a cut: one point, duplicates only, a non-positive width", () => {
     expect(sliverAround([[1, 1]], 1)).toBeNull();
-    expect(sliverAround([[1, 1], [1, 1]], 1)).toBeNull();
-    expect(sliverAround([[0, 0], [1, 0]], 0)).toBeNull();
-    expect(sliverAround([[0, 0], [1, 0]], Number.NaN)).toBeNull();
+    expect(
+      sliverAround(
+        [
+          [1, 1],
+          [1, 1],
+        ],
+        1,
+      ),
+    ).toBeNull();
+    expect(
+      sliverAround(
+        [
+          [0, 0],
+          [1, 0],
+        ],
+        0,
+      ),
+    ).toBeNull();
+    expect(
+      sliverAround(
+        [
+          [0, 0],
+          [1, 0],
+        ],
+        Number.NaN,
+      ),
+    ).toBeNull();
   });
 });
 
@@ -110,7 +140,14 @@ describe("knife — closing the strip's gap", () => {
       subpathStarts: [0],
       subpathOpen: [false],
     };
-    const out = snapOntoPolyline(table, [[-10, 50], [110, 50]], 0.05);
+    const out = snapOntoPolyline(
+      table,
+      [
+        [-10, 50],
+        [110, 50],
+      ],
+      0.05,
+    );
     expect(out.anchors[0]).toEqual(table.anchors[0]);
     expect(out.anchors[1]).toEqual(table.anchors[1]);
     expect(out.anchors[2].anchor[1]).toBeCloseTo(50, 12);
@@ -152,22 +189,37 @@ describe("knife — closing the strip's gap", () => {
 
   it("an anchor whose neighbours both lie along the cut (a bend of the cut) is projected onto it", () => {
     const table: AnchorTable = {
-      anchors: [corner(0, 0.04), corner(10, 0.04), corner(10, 50), corner(0, 50)],
+      anchors: [
+        corner(0, 0.04),
+        corner(10, 0.04),
+        corner(10, 50),
+        corner(0, 50),
+      ],
       subpathStarts: [0],
     };
     // Both 0 and 1 are near the cut, so neither may slide; each drops
     // straight onto y = 0.
-    const out = snapOntoPolyline(table, [[-5, 0], [15, 0]], 0.05);
+    const out = snapOntoPolyline(
+      table,
+      [
+        [-5, 0],
+        [15, 0],
+      ],
+      0.05,
+    );
     expect(out.anchors[0].anchor).toEqual([0, 0]);
     expect(out.anchors[1].anchor).toEqual([10, 0]);
   });
 
   it("the nearest point is found on the right SEGMENT of a bent cut", () => {
-    const near = nearestOnPolyline([12, 4], [
-      [0, 0],
-      [10, 0],
-      [10, 10],
-    ])!;
+    const near = nearestOnPolyline(
+      [12, 4],
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ],
+    )!;
     expect(near.point).toEqual([10, 4]);
     expect(near.distance).toBeCloseTo(2, 12);
   });

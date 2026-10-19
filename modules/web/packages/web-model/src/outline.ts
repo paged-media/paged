@@ -33,7 +33,8 @@
 
 /** Same tag grammar as the linter's TAG, so the outline and the
  *  diagnostics agree on what counts as a tag. */
-const TAG = /<\s*(\/)?\s*([a-zA-Z][a-zA-Z0-9-]*)((?:"[^"]*"|'[^']*'|[^"'>])*?)(\/)?\s*>/g;
+const TAG =
+  /<\s*(\/)?\s*([a-zA-Z][a-zA-Z0-9-]*)((?:"[^"]*"|'[^']*'|[^"'>])*?)(\/)?\s*>/g;
 
 export interface TagOutlineEntry {
   /** Lowercased element tag name (`div`, `h1`, `img`). */

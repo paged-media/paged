@@ -53,27 +53,38 @@ const STAMP = join(WASM_DIR, "SOURCE_HASH");
 const present = existsSync(WASM);
 const required = process.env.REQUIRE_REAL_WASM === "1";
 
-const REBUILD = "rebuild it with `bash scripts/build-wasm.sh` (or `moon run image:wasm`)";
+const REBUILD =
+  "rebuild it with `bash scripts/build-wasm.sh` (or `moon run image:wasm`)";
 
-describe.skipIf(!present && !required)("the engine wasm in glue/wasm/ matches the Rust sources", () => {
-  it("the wasm and its SOURCE_HASH are present", () => {
-    expect(existsSync(WASM), `${WASM} missing — ${REBUILD}`).toBe(true);
-    expect(existsSync(STAMP), `${STAMP} missing — ${REBUILD}`).toBe(true);
-  });
+describe.skipIf(!present && !required)(
+  "the engine wasm in glue/wasm/ matches the Rust sources",
+  () => {
+    it("the wasm and its SOURCE_HASH are present", () => {
+      expect(existsSync(WASM), `${WASM} missing — ${REBUILD}`).toBe(true);
+      expect(existsSync(STAMP), `${STAMP} missing — ${REBUILD}`).toBe(true);
+    });
 
-  it("SOURCE_HASH equals the hash of the checkout's sources", () => {
-    const stamped = existsSync(STAMP) ? readFileSync(STAMP, "utf8").trim() : "(none)";
-    expect(
-      stamped,
-      `the wasm was built from different sources than this checkout — ${REBUILD}`,
-    ).toBe(sourceHash());
-  });
+    it("SOURCE_HASH equals the hash of the checkout's sources", () => {
+      const stamped = existsSync(STAMP)
+        ? readFileSync(STAMP, "utf8").trim()
+        : "(none)";
+      expect(
+        stamped,
+        `the wasm was built from different sources than this checkout — ${REBUILD}`,
+      ).toBe(sourceHash());
+    });
 
-  it("the wasm itself carries the same hash (the stamp file was not edited by hand)", async () => {
-    const glue = (await import(
-      /* @vite-ignore */ join(WASM_DIR, "image_js.js")
-    )) as { initSync(o: { module: Buffer }): unknown; engine_source_hash(): string };
-    glue.initSync({ module: readFileSync(WASM) });
-    expect(glue.engine_source_hash()).toBe(readFileSync(STAMP, "utf8").trim());
-  });
-});
+    it("the wasm itself carries the same hash (the stamp file was not edited by hand)", async () => {
+      const glue = (await import(
+        /* @vite-ignore */ join(WASM_DIR, "image_js.js")
+      )) as {
+        initSync(o: { module: Buffer }): unknown;
+        engine_source_hash(): string;
+      };
+      glue.initSync({ module: readFileSync(WASM) });
+      expect(glue.engine_source_hash()).toBe(
+        readFileSync(STAMP, "utf8").trim(),
+      );
+    });
+  },
+);

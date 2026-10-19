@@ -46,7 +46,14 @@
 //       (RFI C-23) — warned at place, and reset falls back to the
 //       recorded origin rather than failing mutely.
 
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "bun:test";
+import {
+  describe,
+  expect,
+  it,
+  beforeAll,
+  afterAll,
+  beforeEach,
+} from "bun:test";
 
 import type {
   BundleHost,
@@ -163,11 +170,7 @@ const anchorAt = (p: [number, number]) => ({
 });
 
 /** An axis-aligned square, corner-collapsed handles — the pure fixture. */
-const square = (
-  cx: number,
-  cy: number,
-  half: number,
-): AnchorTable => ({
+const square = (cx: number, cy: number, half: number): AnchorTable => ({
   anchors: [
     anchorAt([cx - half, cy - half]),
     anchorAt([cx + half, cy - half]),
@@ -329,7 +332,9 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
       });
       // A non-numeric anchor is not coerced — the whole table refuses.
       expect(
-        parseAnchorTable({ anchors: [{ anchor: ["a", 2] }, { anchor: [3, 4] }] }),
+        parseAnchorTable({
+          anchors: [{ anchor: ["a", 2] }, { anchor: [3, 4] }],
+        }),
       ).toBeNull();
     });
 
@@ -350,7 +355,11 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
 
     it("upsert / rename / remove are pure and no-op on an unknown id", () => {
       const one = { v: 1, symbols: [SQUARE_SYMBOL] };
-      const two = upsertSymbol(one, { ...SQUARE_SYMBOL, id: "sym-2", name: "B" });
+      const two = upsertSymbol(one, {
+        ...SQUARE_SYMBOL,
+        id: "sym-2",
+        name: "B",
+      });
       expect(two.symbols.map((s) => s.id)).toEqual(["sym-1", "sym-2"]);
       expect(one.symbols).toHaveLength(1); // the input is untouched
       // Upsert REPLACES in place (a redefine keeps the row's position).
@@ -440,14 +449,22 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
       expect(symbolInstanceOf(null)).toBeNull();
       expect(symbolInstanceOf({ v: 1, data: {} })).toBeNull();
       expect(
-        symbolInstanceOf({ v: 1, data: { symbolInstance: { symbol: "sym-1" } } }),
+        symbolInstanceOf({
+          v: 1,
+          data: { symbolInstance: { symbol: "sym-1" } },
+        }),
       ).toBeNull();
       expect(
         symbolInstanceOf({
           v: 1,
           data: { symbolInstance: { symbol: "sym-1", instance: "si-1" } },
         }),
-      ).toEqual({ symbol: "sym-1", instance: "si-1", piece: 0, origin: [0, 0] });
+      ).toEqual({
+        symbol: "sym-1",
+        instance: "si-1",
+        piece: 0,
+        origin: [0, 0],
+      });
 
       const stack = { fills: [{ color: "Color/Black" }], strokes: [] };
       const withStack = { v: 1, data: { appearance: stack } };
@@ -570,26 +587,42 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
         symbolBatchFor([
           {
             plan: two,
-            replace: { group: { kind: "group", id: "g1" } as ElementId, stale: [poly("a1"), poly("b1")] },
+            replace: {
+              group: { kind: "group", id: "g1" } as ElementId,
+              stale: [poly("a1"), poly("b1")],
+            },
           },
           {
             plan: two,
-            replace: { group: { kind: "group", id: "g2" } as ElementId, stale: [poly("a2"), poly("b2")] },
+            replace: {
+              group: { kind: "group", id: "g2" } as ElementId,
+              stale: [poly("a2"), poly("b2")],
+            },
           },
         ]) as Extract<Mutation, { op: "batch" }>
       ).args.ops as { op: string; args: Record<string, unknown> }[];
       const phases = ops.map((o) => o.op);
       // 2 instances × 2 pieces: insert + bind each.
       expect(phases.slice(0, 8)).toEqual([
-        "insertPath", "bindCreated", "insertPath", "bindCreated",
-        "insertPath", "bindCreated", "insertPath", "bindCreated",
+        "insertPath",
+        "bindCreated",
+        "insertPath",
+        "bindCreated",
+        "insertPath",
+        "bindCreated",
+        "insertPath",
+        "bindCreated",
       ]);
       expect(ops[1]!.args).toEqual({ handle: symbolHandle(0, 0, 0) });
       expect(ops[7]!.args).toEqual({ handle: symbolHandle(1, 1, 0) });
       // BOTH old groups dissolved before ANY delete …
       expect(phases.slice(8, 14)).toEqual([
-        "dissolveGroup", "dissolveGroup",
-        "deleteFrame", "deleteFrame", "deleteFrame", "deleteFrame",
+        "dissolveGroup",
+        "dissolveGroup",
+        "deleteFrame",
+        "deleteFrame",
+        "deleteFrame",
+        "deleteFrame",
       ]);
       // … and BOTH new groups last, addressing the new leaves by handle.
       expect(phases.slice(-2)).toEqual(["createGroup", "createGroup"]);
@@ -633,9 +666,7 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
       if (stamp.op !== "setPluginMetadata") throw new Error("unreachable");
       expect(stamp.args.key).toBe("x-paged:media.paged.draw");
       expect(stamp.args.caller).toBe("media.paged.draw");
-      expect(
-        symbolInstanceOf(JSON.parse(stamp.args.value as string)),
-      ).toEqual({
+      expect(symbolInstanceOf(JSON.parse(stamp.args.value as string))).toEqual({
         symbol: "sym-1",
         instance: "si-1",
         piece: 0,
@@ -681,7 +712,9 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
           { op: "batch" }
         >
       ).args.ops;
-      expect((ops[0] as { args: { path: string } }).args.path).toBe("framePath");
+      expect((ops[0] as { args: { path: string } }).args.path).toBe(
+        "framePath",
+      );
       expect(
         (ops[0] as { args: { value: { value: { subpathStarts: number[] } } } })
           .args.value.value.subpathStarts,
@@ -706,7 +739,9 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
       expect(batch.args.ops).toHaveLength(2);
       const first = batch.args.ops[0]!;
       if (first.op !== "setPluginMetadata") throw new Error("unreachable");
-      expect(JSON.parse(first.args.value as string).data).toEqual({ keepMe: 1 });
+      expect(JSON.parse(first.args.value as string).data).toEqual({
+        keepMe: 1,
+      });
       const second = batch.args.ops[1]!;
       if (second.op !== "setPluginMetadata") throw new Error("unreachable");
       // Nothing left to keep ⇒ the envelope is CLEARED, not left as `{}`.
@@ -790,7 +825,9 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
       expect(commandFor(h, DELETE_SYMBOL_COMMAND_ID).title).toContain(
         "the placed artwork stays",
       );
-      const panel = h.panelsContributed().find((p) => p.id === SYMBOLS_PANEL_ID);
+      const panel = h
+        .panelsContributed()
+        .find((p) => p.id === SYMBOLS_PANEL_ID);
       expect(panel).toBeDefined();
       expect(panel!.title).toBe("Symbols");
       expect(panel!.defaultDock).toBe("right");
@@ -857,7 +894,9 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
         [450, 550],
       ]);
       // …carrying the definition's paint and the link.
-      const ref = symbolInstanceOf(await h.host.document.getMetadata(created[0]!));
+      const ref = symbolInstanceOf(
+        await h.host.document.getMetadata(created[0]!),
+      );
       expect(ref).toEqual({
         symbol: "sym-1",
         instance: "si-1",
@@ -989,9 +1028,10 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
       expect(after[0]!.leaves[0]!.id).not.toBe(placed!.id);
       expect(await sizeOf(h, after[0]!.leaves[0]!)).toEqual([100, 100]);
       expect(
-        (await compoundSourceOf(h.host, after[0]!.leaves[0]!))!.table.anchors.map(
-          (a) => a.anchor,
-        ),
+        (await compoundSourceOf(
+          h.host,
+          after[0]!.leaves[0]!,
+        ))!.table.anchors.map((a) => a.anchor),
       ).toEqual([
         [400, 400],
         [500, 400],
@@ -1284,7 +1324,10 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
       expect(await applyDefineSymbol(h.host, { name: "S" })).not.toBeNull();
       const firsts: ElementId[] = [];
       for (const [x, y] of at) {
-        const leaves = await applyPlaceSymbolInstance(h.host, "sym-1", { x, y });
+        const leaves = await applyPlaceSymbolInstance(h.host, "sym-1", {
+          x,
+          y,
+        });
         expect(leaves.length).toBeGreaterThan(0);
         firsts.push(leaves[0]!);
       }
@@ -1306,7 +1349,8 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
           await definePlace([INNER], []);
           return [];
         },
-        run: (host) => applyPlaceSymbolInstance(host, "sym-1", { x: 450, y: 550 }),
+        run: (host) =>
+          applyPlaceSymbolInstance(host, "sym-1", { x: 450, y: 550 }),
         stepwise: 2,
         trees: 1,
       },
@@ -1319,7 +1363,8 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
           await definePlace([OUTER, extra!], []);
           return [];
         },
-        run: (host) => applyPlaceSymbolInstance(host, "sym-1", { x: 260, y: 560 }),
+        run: (host) =>
+          applyPlaceSymbolInstance(host, "sym-1", { x: 260, y: 560 }),
         stepwise: 2,
         trees: 1,
       },
@@ -1329,7 +1374,12 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
           const [placed] = await definePlace([INNER], [[450, 550]]);
           const moved = await h.host.document.mutate({
             op: "pathPointSet",
-            args: { elementId: placed!, index: 0, role: "anchor", position: [300, 400] },
+            args: {
+              elementId: placed!,
+              index: 0,
+              role: "anchor",
+              position: [300, 400],
+            },
           });
           expect(moved.applied).toBe(true);
           return [placed!];
@@ -1341,11 +1391,14 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
       {
         name: "redefine, three one-piece instances",
         setup: async () => {
-          await definePlace([INNER], [
-            [150, 600],
-            [300, 600],
-            [450, 600],
-          ]);
+          await definePlace(
+            [INNER],
+            [
+              [150, 600],
+              [300, 600],
+              [450, 600],
+            ],
+          );
           return [OUTER];
         },
         run: (host) => applyRedefineSymbol(host, "sym-1"),
@@ -1392,11 +1445,14 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
     it("redefine, three TWO-piece instances: all three rebuild — the old loop rebuilt only the last", async () => {
       const setup = async (): Promise<void> => {
         const [extra] = await placeSquare(h, 400, 120);
-        await definePlace([INNER, extra!], [
-          [150, 560],
-          [300, 560],
-          [450, 560],
-        ]);
+        await definePlace(
+          [INNER, extra!],
+          [
+            [150, 560],
+            [300, 560],
+            [450, 560],
+          ],
+        );
         await h.host.selection.set([INNER, extra!]);
       };
       const warned: string[] = [];
@@ -1415,9 +1471,9 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
       expect(shipped.undoSteps).toBe(1);
       expect(shipped.restored).toBe(true);
       // Three instances, two leaves each, each in its own group.
-      const groups = (JSON.parse(shipped.picture) as { tree: string }).tree.match(
-        /#\d+\[#\d+ #\d+\]/g,
-      );
+      const groups = (
+        JSON.parse(shipped.picture) as { tree: string }
+      ).tree.match(/#\d+\[#\d+ #\d+\]/g);
       expect(groups).toHaveLength(3);
 
       // The stepwise lane too, since 0.65.0. On 0.64.0 two of its three
@@ -1452,9 +1508,13 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
     it("the inline note NAMES the semantics and every honest limit", () => {
       // The feature's substance, in plain words (the panel's About text;
       // the full account of what is and is not built lives in the docs).
-      expect(SYMBOLS_NOTE).toContain("adds an instance linked to its definition");
+      expect(SYMBOLS_NOTE).toContain(
+        "adds an instance linked to its definition",
+      );
       expect(SYMBOLS_NOTE).toContain("Redefine rebuilds every instance");
-      expect(SYMBOLS_NOTE).toContain("Reset transform rebuilds the selected instance");
+      expect(SYMBOLS_NOTE).toContain(
+        "Reset transform rebuilds the selected instance",
+      );
       expect(SYMBOLS_NOTE).toContain("Break link keeps the artwork");
       // The static-instance decision: a redefine loses local changes.
       expect(SYMBOLS_NOTE).toContain("changes made to an instance are lost");
@@ -1463,7 +1523,9 @@ describe("draw conformance — SYMBOLS (Illustrator Phase 2, §16.1)", () => {
       expect(SYMBOLS_NOTE).toContain("cannot be undone");
       // The limits that are real and must not quietly disappear.
       expect(SYMBOLS_NOTE).toContain("Text cannot go into a symbol");
-      expect(SYMBOLS_NOTE).toContain("placed images, gradients and appearance stacks are not kept");
+      expect(SYMBOLS_NOTE).toContain(
+        "placed images, gradients and appearance stacks are not kept",
+      );
     });
   });
 });

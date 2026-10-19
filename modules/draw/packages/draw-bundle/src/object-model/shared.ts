@@ -37,7 +37,11 @@ import type {
   SceneTreeNode,
   ValueType,
 } from "@paged-media/plugin-api";
-import { formatAddress, parseAddress, toElementId } from "@paged-media/plugin-sdk";
+import {
+  formatAddress,
+  parseAddress,
+  toElementId,
+} from "@paged-media/plugin-sdk";
 
 import manifest from "../../manifest.json";
 
@@ -80,7 +84,12 @@ export function treeItems(roots: readonly SceneTreeNode[]): ElementId[] {
   const out: ElementId[] = [];
   const walk = (nodes: readonly SceneTreeNode[]) => {
     for (const n of nodes) {
-      if (n.id && n.id.kind !== "storyRange" && n.id.kind !== "table" && n.id.kind !== "tableCell") {
+      if (
+        n.id &&
+        n.id.kind !== "storyRange" &&
+        n.id.kind !== "table" &&
+        n.id.kind !== "tableCell"
+      ) {
         out.push(n.id);
       }
       if (n.children) walk(n.children);
@@ -162,8 +171,14 @@ export const row = (
   extra: Omit<PropertySchema, "path" | "type"> = {},
 ): PropertySchema => ({ path, type, ...extra });
 
-export const ro = (path: string, type: ValueType, summary: string): PropertySchema =>
-  row(path, type, { access: "readOnly", summary });
+export const ro = (
+  path: string,
+  type: ValueType,
+  summary: string,
+): PropertySchema => row(path, type, { access: "readOnly", summary });
 
-export const derived = (path: string, type: ValueType, summary: string): PropertySchema =>
-  row(path, type, { access: "derived", summary });
+export const derived = (
+  path: string,
+  type: ValueType,
+  summary: string,
+): PropertySchema => row(path, type, { access: "derived", summary });

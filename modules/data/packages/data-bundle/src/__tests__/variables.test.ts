@@ -54,9 +54,13 @@ function fakeHost(opts?: FakeOpts) {
     manifest: { id: "media.paged.data", version: "0.0.1" },
     log: silent,
     // Every door this fake carries; it has no object registry (`objects@1`).
-    supports: (f: string) => (opts?.supports ? opts.supports(f) : f !== "objects@1"),
+    supports: (f: string) =>
+      opts?.supports ? opts.supports(f) : f !== "objects@1",
     selection: { get: () => opts?.selection?.() ?? [], set: async () => [] },
-    network: { consentedOrigins: () => [], requestConsent: async () => ({ granted: [], denied: [] }) },
+    network: {
+      consentedOrigins: () => [],
+      requestConsent: async () => ({ granted: [], denied: [] }),
+    },
     text,
     document: {
       onWillSave: () => ({ dispose() {} }),
@@ -64,11 +68,25 @@ function fakeHost(opts?: FakeOpts) {
         mutateCalls += 1;
         mutations.push(m);
         if (m.op === "insertTextFrame") {
-          return { applied: true, createdId: { kind: "textFrame", id: "frame-new" }, pageIds: [] };
+          return {
+            applied: true,
+            createdId: { kind: "textFrame", id: "frame-new" },
+            pageIds: [],
+          };
         }
-        if (m.op === "batch" && (m.args as { ops: Mutation[] }).ops.some((o) => o.op === "bindCreated")) {
+        if (
+          m.op === "batch" &&
+          (m.args as { ops: Mutation[] }).ops.some(
+            (o) => o.op === "bindCreated",
+          )
+        ) {
           const element = { kind: "textFrame", id: "frame-new" };
-          return { applied: true, createdId: element, pageIds: [], minted: [{ handle: "frame", element, storyId: "story-new" }] };
+          return {
+            applied: true,
+            createdId: element,
+            pageIds: [],
+            minted: [{ handle: "frame", element, storyId: "story-new" }],
+          };
         }
         return { applied: true, createdId: null, pageIds: [] };
       },
@@ -76,7 +94,11 @@ function fakeHost(opts?: FakeOpts) {
       frameChain: async () => [],
       tree: async () => opts?.tree?.() ?? [],
       elementGeometry: async (ids: { id: string }[]) =>
-        ids.map((i) => ({ id: { kind: "textFrame", id: i.id }, pageId: "p1", bounds: [0, 0, 100, 200] })),
+        ids.map((i) => ({
+          id: { kind: "textFrame", id: i.id },
+          pageId: "p1",
+          bounds: [0, 0, 100, 200],
+        })),
       hitTest: async () => ({ storyId: "story-new" }),
       meta: async () => ({ activePage: "p1" }),
       collection: async () => [{ selfId: "p1" }],
@@ -100,8 +122,18 @@ function fakeEngine(over?: Partial<DataEngineLike>): DataEngineLike {
     governed_catalog: () => ({}),
     plan_batch: () => ({}),
     run_record_flow_batch: () => [],
-    evaluate_rule: () => ({ scope: "x", fires: [], apply: { action: "tableStyle", name: "s" }, total: 0 }),
-    lower_record_flow: () => ({ frames: [], overflow: false, placed: 0, total: 0 }),
+    evaluate_rule: () => ({
+      scope: "x",
+      fires: [],
+      apply: { action: "tableStyle", name: "s" },
+      total: 0,
+    }),
+    lower_record_flow: () => ({
+      frames: [],
+      overflow: false,
+      placed: 0,
+      total: 0,
+    }),
     lower_barcode: () => null,
     sync_state: () => ({}),
     pin() {},
@@ -140,10 +172,16 @@ describe("data_lower_visibility session lane (§9.8)", () => {
   it("writes elementVisible on the bound element", async () => {
     const fake = fakeHost();
     const engine = fakeEngine({
-      resolve_lowered: () => ({ kind: "visibility", target: "u77", visible: false }),
+      resolve_lowered: () => ({
+        kind: "visibility",
+        target: "u77",
+        visible: false,
+      }),
     });
     const s = await sessionWith(fake.host, engine);
-    s.addVisibilityBinding("Badge", "u77", "q1", "in_stock", { kind: "rectangle" });
+    s.addVisibilityBinding("Badge", "u77", "q1", "in_stock", {
+      kind: "rectangle",
+    });
     await s.lowerBinding("Badge");
 
     expect(fake.mutations).toEqual([
@@ -165,14 +203,22 @@ describe("data_lower_visibility session lane (§9.8)", () => {
           kind: "page",
           label: "1",
           children: [
-            { id: { kind: "textFrame", id: "u10" }, kind: "textFrame", label: "t" },
+            {
+              id: { kind: "textFrame", id: "u10" },
+              kind: "textFrame",
+              label: "t",
+            },
             { id: { kind: "oval", id: "u77" }, kind: "oval", label: "o" },
           ],
         },
       ],
     });
     const engine = fakeEngine({
-      resolve_lowered: () => ({ kind: "visibility", target: "u77", visible: true }),
+      resolve_lowered: () => ({
+        kind: "visibility",
+        target: "u77",
+        visible: true,
+      }),
     });
     const s = await sessionWith(fake.host, engine);
     s.addVisibilityBinding("Badge", "u77", "q1", "in_stock"); // no kind given
@@ -193,21 +239,32 @@ describe("data_lower_visibility session lane (§9.8)", () => {
             label: "1",
             children: [
               { id: { kind: "oval", id: "u77" }, kind: "oval", label: "o" },
-              { id: { kind: "polygon", id: "u78" }, kind: "polygon", label: "p", children: [] },
+              {
+                id: { kind: "polygon", id: "u78" },
+                kind: "polygon",
+                label: "p",
+                children: [],
+              },
             ],
           },
         ];
       },
     });
     const engine = fakeEngine({
-      resolve_lowered: (id: string) => ({ kind: "visibility", target: id === "A" ? "u77" : "u78", visible: false }),
+      resolve_lowered: (id: string) => ({
+        kind: "visibility",
+        target: id === "A" ? "u77" : "u78",
+        visible: false,
+      }),
     });
     const s = await sessionWith(fake.host, engine);
     s.addVisibilityBinding("A", "u77", "q1", "in_stock");
     s.addVisibilityBinding("B", "u78", "q1", "in_stock");
     await s.lowerAll();
     expect(treeReads).toBe(1);
-    expect(fake.mutations.map((m) => (m.args as { elementId: unknown }).elementId)).toEqual([
+    expect(
+      fake.mutations.map((m) => (m.args as { elementId: unknown }).elementId),
+    ).toEqual([
       { kind: "oval", id: "u77" },
       { kind: "polygon", id: "u78" },
     ]);
@@ -219,10 +276,16 @@ describe("data_lower_visibility session lane (§9.8)", () => {
     const s1 = await sessionWith(
       leave.host,
       fakeEngine({
-        resolve_lowered: () => ({ kind: "visibility", target: "u77", visible: null }),
+        resolve_lowered: () => ({
+          kind: "visibility",
+          target: "u77",
+          visible: null,
+        }),
       }),
     );
-    s1.addVisibilityBinding("Badge", "u77", "q1", "in_stock", { missing: "leave" });
+    s1.addVisibilityBinding("Badge", "u77", "q1", "in_stock", {
+      missing: "leave",
+    });
     await s1.lowerBinding("Badge");
     expect(leave.calls()).toBe(0);
 
@@ -232,7 +295,11 @@ describe("data_lower_visibility session lane (§9.8)", () => {
     const s2 = await sessionWith(
       gone.host,
       fakeEngine({
-        resolve_lowered: () => ({ kind: "visibility", target: "u404", visible: true }),
+        resolve_lowered: () => ({
+          kind: "visibility",
+          target: "u404",
+          visible: true,
+        }),
       }),
     );
     s2.addVisibilityBinding("Badge", "u404", "q1", "in_stock");
@@ -246,7 +313,11 @@ describe("data_lower_visibility session lane (§9.8)", () => {
 describe("data_lower_variable_caret placement (C-9 / the D-01 residual)", () => {
   const engine = () =>
     fakeEngine({
-      resolve_lowered: () => ({ kind: "variable", text: "Alpha", hidden: false }),
+      resolve_lowered: () => ({
+        kind: "variable",
+        text: "Alpha",
+        hidden: false,
+      }),
     });
 
   it("inserts AT THE CARET when the host carries the C-9 door", async () => {
@@ -266,7 +337,10 @@ describe("data_lower_variable_caret placement (C-9 / the D-01 residual)", () => 
   it("falls back to story start when the host reports the door but injects none", async () => {
     // The exact shape of an out-of-date host: supports() says yes (or the
     // capability list is stale) but host.text has no caret member.
-    const fake = fakeHost({ noCaretMember: true, selection: () => [{ kind: "textFrame", id: "f1" }] });
+    const fake = fakeHost({
+      noCaretMember: true,
+      selection: () => [{ kind: "textFrame", id: "f1" }],
+    });
     const s = await sessionWith(fake.host, engine());
     s.addVariableBinding("Name", "anchor", "q1", "name");
     await s.lowerBinding("Name");
@@ -295,7 +369,9 @@ describe("data_lower_variable_caret placement (C-9 / the D-01 residual)", () => 
   it("ignores a caret that is in a DIFFERENT story than the pinned one", async () => {
     // A cell-qualified caret answers null by contract; a caret in another story
     // answers a real offset that would be nonsense here. Both must not leak.
-    const fake = fakeHost({ caret: () => ({ storyId: "elsewhere", offset: 99 }) });
+    const fake = fakeHost({
+      caret: () => ({ storyId: "elsewhere", offset: 99 }),
+    });
     const s = await sessionWith(fake.host, engine());
     const { commitLoweredVariable } = await import("../lower");
     const placed = await commitLoweredVariable(
@@ -318,10 +394,19 @@ describe("data_lower_variable_caret placement (C-9 / the D-01 residual)", () => 
     s.addVariableBinding("Name", "anchor", "q1", "name");
     await s.lowerBinding("Name");
     expect(fake.calls()).toBe(1);
-    const batch = fake.mutations[0] as { op: string; args: { ops: Mutation[] } };
+    const batch = fake.mutations[0] as {
+      op: string;
+      args: { ops: Mutation[] };
+    };
     expect(batch.op).toBe("batch");
-    expect(batch.args.ops.map((m) => m.op)).toEqual(["insertTextFrame", "bindCreated", "insertField"]);
-    expect((batch.args.ops[2] as { args: { storyId: string } }).args.storyId).toBe("$h:frame");
+    expect(batch.args.ops.map((m) => m.op)).toEqual([
+      "insertTextFrame",
+      "bindCreated",
+      "insertField",
+    ]);
+    expect(
+      (batch.args.ops[2] as { args: { storyId: string } }).args.storyId,
+    ).toBe("$h:frame");
   });
 });
 
@@ -330,7 +415,12 @@ describe("data_lower_variable_caret placement (C-9 / the D-01 residual)", () => 
 describe("data_dataset_apply session lane (§9.9)", () => {
   const applies = [
     { variable: "Name", kind: "text", text: "Beta", applicable: true },
-    { variable: "Photo", kind: "image", href: "images/beta.png", applicable: true },
+    {
+      variable: "Photo",
+      kind: "image",
+      href: "images/beta.png",
+      applicable: true,
+    },
     { variable: "Badge", kind: "visibility", visible: false, applicable: true },
   ];
 
@@ -365,13 +455,21 @@ describe("data_dataset_apply session lane (§9.9)", () => {
   async function wired() {
     const fake = fakeHost({
       placeholders: () => [
-        { storyId: "s1", offset: 12, plugin: "media.paged.data", key: "Name", value: "Alpha" },
+        {
+          storyId: "s1",
+          offset: 12,
+          plugin: "media.paged.data",
+          key: "Name",
+          value: "Alpha",
+        },
       ],
     });
     const s = await sessionWith(fake.host, engineWithSets());
     s.addVariableBinding("Name", "anchor", "q1", "name");
     s.addImageBinding("Photo", "u55", "q1", "photo");
-    s.addVisibilityBinding("Badge", "u77", "q1", "in_stock", { kind: "rectangle" });
+    s.addVisibilityBinding("Badge", "u77", "q1", "in_stock", {
+      kind: "rectangle",
+    });
     return { fake, s };
   }
 
@@ -407,7 +505,9 @@ describe("data_dataset_apply session lane (§9.9)", () => {
     const fake = fakeHost({ placeholders: () => [] }); // the field was never placed
     const s = await sessionWith(fake.host, engineWithSets());
     s.addImageBinding("Photo", "u55", "q1", "photo");
-    s.addVisibilityBinding("Badge", "u77", "q1", "in_stock", { kind: "rectangle" });
+    s.addVisibilityBinding("Badge", "u77", "q1", "in_stock", {
+      kind: "rectangle",
+    });
     const result = await s.applyDataSet("Beta");
     expect(result.applied).toBe(2);
     expect(Object.keys(result.skipped)).toEqual(["Name"]);
@@ -452,7 +552,9 @@ describe("data_dataset_apply session lane (§9.9)", () => {
   it("warns before a bulk capture crosses the D-08 payload cap", async () => {
     const fake = fakeHost();
     const engine = engineWithSets();
-    (engine as { data_set_payload_bytes?: () => number }).data_set_payload_bytes = () => 60_000;
+    (
+      engine as { data_set_payload_bytes?: () => number }
+    ).data_set_payload_bytes = () => 60_000;
     const s = await sessionWith(fake.host, engine);
     await s.captureEveryRecord("q1", { nameColumn: "name" });
     expect(s.getState().message).toContain("a document can store");

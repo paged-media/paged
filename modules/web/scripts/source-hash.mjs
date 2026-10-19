@@ -55,7 +55,9 @@ export function sourceHash() {
     h.update(rel);
     h.update("\0");
     const bytes = readFileSync(join(root, rel));
-    h.update(TEXT.test(rel) ? bytes.toString("utf8").replace(/\r\n/g, "\n") : bytes);
+    h.update(
+      TEXT.test(rel) ? bytes.toString("utf8").replace(/\r\n/g, "\n") : bytes,
+    );
     h.update("\0");
   }
   return h.digest("hex");

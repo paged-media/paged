@@ -23,12 +23,21 @@
 // can't be undone. Also the datasets panel's display names.
 
 import { createElement } from "react";
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+} from "react-test-renderer";
 import { describe, expect, it, vi } from "bun:test";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
-import { createWorkbookSession, makeWorkbookPanel, type SheetEngine } from "../src";
+import {
+  createWorkbookSession,
+  makeWorkbookPanel,
+  type SheetEngine,
+} from "../src";
 import { datasetLabel, makeDatasetsPanel } from "../src/panels/datasets-panel";
 
 function fakeEngine(sheetCount = 2): SheetEngine {
@@ -41,14 +50,29 @@ function fakeEngine(sheetCount = 2): SheetEngine {
     sortRange: () => ({ changed: [], edits: [] }),
     findAll: () => [],
     replaceAll: () => ({ occurrences: 0, changed: [], edits: [], skipped: [] }),
-    getRangeLowered: () => ({ cols: [], rows: [], rules: { h: [], v: [] }, merges: [] }),
-    getRangeStyled: () => ({ cols: [], rows: [], rules: { h: [], v: [] }, merges: [] }),
+    getRangeLowered: () => ({
+      cols: [],
+      rows: [],
+      rules: { h: [], v: [] },
+      merges: [],
+    }),
+    getRangeStyled: () => ({
+      cols: [],
+      rows: [],
+      rules: { h: [], v: [] },
+      merges: [],
+    }),
     getRangeValues: () => [],
     paginate: () => [],
     getGridScene: () => null as never,
     setGridSelection() {},
     listSheets: () =>
-      Array.from({ length: sheetCount }, (_, id) => ({ id, name: `Sheet${id + 1}`, rows: 2, cols: 2 })),
+      Array.from({ length: sheetCount }, (_, id) => ({
+        id,
+        name: `Sheet${id + 1}`,
+        rows: 2,
+        cols: 2,
+      })),
     listCharts: () => [{ index: 0, kind: "column", title: "", seriesCount: 2 }],
     chartKinds: () => ["column", "line"],
     addChart: () => 0,
@@ -61,19 +85,29 @@ function fakeEngine(sheetCount = 2): SheetEngine {
   } as unknown as SheetEngine;
 }
 
-function fakeHost(features: string[] = []): { host: BundleHost; opened: string[] } {
+function fakeHost(features: string[] = []): {
+  host: BundleHost;
+  opened: string[];
+} {
   const opened: string[] = [];
   const host = {
     log: { debug() {}, info() {}, warn() {}, error() {} },
     // The document doors every host has; nothing here fires them.
-    document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+    document: {
+      onDidChange: () => ({ dispose() {} }),
+      onDidOpen: () => ({ dispose() {} }),
+    },
     supports: (f: string) => features.includes(f),
     shell: { openPanel: (id: string) => void opened.push(id) },
   } as unknown as BundleHost;
   return { host, opened };
 }
 
-const byData = (tree: ReactTestRenderer, key: string, value?: string): ReactTestInstance[] =>
+const byData = (
+  tree: ReactTestRenderer,
+  key: string,
+  value?: string,
+): ReactTestInstance[] =>
   tree.root.findAll(
     (n) =>
       typeof n.type === "string" &&
@@ -112,15 +146,21 @@ describe("workbook panel layout", () => {
       "charts",
       "functions",
     ]);
-    expect(sections.filter((s) => s.props.open).map((s) => s.props["data-sheet-section"])).toEqual([
-      "place",
-    ]);
+    expect(
+      sections
+        .filter((s) => s.props.open)
+        .map((s) => s.props["data-sheet-section"]),
+    ).toEqual(["place"]);
   });
 
   it("says Place on page, for a range and for a chart", () => {
     const { tree } = mount();
-    expect(text(byData(tree, "data-sheet-lower")[0])).toContain("Place on page");
-    expect(text(byData(tree, "data-sheet-chart-lower")[0])).toContain("Place on page");
+    expect(text(byData(tree, "data-sheet-lower")[0])).toContain(
+      "Place on page",
+    );
+    expect(text(byData(tree, "data-sheet-chart-lower")[0])).toContain(
+      "Place on page",
+    );
     expect(JSON.stringify(tree.toJSON())).not.toMatch(/Lower to frame/);
   });
 
@@ -136,7 +176,10 @@ describe("workbook panel layout", () => {
     expect(byData(tree, "data-sheet-find-needle")).toHaveLength(0);
     act(() => byData(tree, "data-sheet-open-properties")[0].props.onClick());
     act(() => byData(tree, "data-sheet-open-grid")[0].props.onClick());
-    expect(opened).toEqual(["media.paged.sheet.panel.properties", "media.paged.sheet.panel.grid"]);
+    expect(opened).toEqual([
+      "media.paged.sheet.panel.properties",
+      "media.paged.sheet.panel.grid",
+    ]);
   });
 
   it("keeps the format rows and iterative calculation where the host has no Sheet properties", () => {
@@ -150,7 +193,9 @@ describe("workbook panel layout", () => {
     vi.useFakeTimers();
     try {
       const { tree, session } = mount();
-      const del = vi.spyOn(session, "deleteSheet").mockReturnValue({ ok: true });
+      const del = vi
+        .spyOn(session, "deleteSheet")
+        .mockReturnValue({ ok: true });
       const button = () => byData(tree, "data-sheet-delete")[0];
       act(() => button().props.onClick());
       expect(del).not.toHaveBeenCalled();
@@ -170,7 +215,9 @@ describe("workbook panel layout", () => {
     const fresh = vi.spyOn(session, "newWorkbook").mockResolvedValue();
     act(() => byData(tree, "data-sheet-new")[0].props.onClick());
     expect(fresh).not.toHaveBeenCalled();
-    expect(text(byData(tree, "data-sheet-new")[0])).toContain("Confirm replace");
+    expect(text(byData(tree, "data-sheet-new")[0])).toContain(
+      "Confirm replace",
+    );
     act(() => byData(tree, "data-sheet-new")[0].props.onClick());
     expect(fresh).toHaveBeenCalledTimes(1);
   });
@@ -188,7 +235,10 @@ describe("datasets panel names", () => {
     const host = {
       log: { debug() {}, info() {}, warn() {}, error() {} },
       // The document doors every host has; nothing here fires them.
-      document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+      document: {
+        onDidChange: () => ({ dispose() {} }),
+        onDidOpen: () => ({ dispose() {} }),
+      },
       supports: (f: string) => f === "dataProviders@1",
       dataProviders: {
         discover: () => [
@@ -196,7 +246,12 @@ describe("datasets panel names", () => {
             id: "pricing-dataset",
             category: "dataset",
             revision: "1",
-            schema: { fields: [{ name: "sku", ty: "text" }, { name: "price", ty: "float" }] },
+            schema: {
+              fields: [
+                { name: "sku", ty: "text" },
+                { name: "price", ty: "float" },
+              ],
+            },
           },
         ],
         get: async () => null,
@@ -212,8 +267,8 @@ describe("datasets panel names", () => {
     const name = byData(tree, "data-dataset-name")[0];
     expect(text(name)).toContain("Pricing");
     expect(name.props.title).toBe("pricing-dataset");
-    expect(JSON.stringify(byData(tree, "data-dataset-fields")[0].props.children)).toContain(
-      "2 fields: sku, price",
-    );
+    expect(
+      JSON.stringify(byData(tree, "data-dataset-fields")[0].props.children),
+    ).toContain("2 fields: sku, price");
   });
 });

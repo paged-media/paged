@@ -20,9 +20,36 @@ const content: LoweredContent = {
   rules: { h: [], v: [] },
   merges: [],
   databars: [
-    { row: 0, col: 1, x: 51, y: 1, w: 38, h: 13, fillFraction: 1, fill: "#638EC6" },
-    { row: 2, col: 1, x: 51, y: 16, w: 19, h: 18, fillFraction: 0.5, fill: "#638EC6" },
-    { row: 1, col: 1, x: 51, y: 99, w: 10, h: 5, fillFraction: 0.2, fill: "#638EC6" }, // hidden row
+    {
+      row: 0,
+      col: 1,
+      x: 51,
+      y: 1,
+      w: 38,
+      h: 13,
+      fillFraction: 1,
+      fill: "#638EC6",
+    },
+    {
+      row: 2,
+      col: 1,
+      x: 51,
+      y: 16,
+      w: 19,
+      h: 18,
+      fillFraction: 0.5,
+      fill: "#638EC6",
+    },
+    {
+      row: 1,
+      col: 1,
+      x: 51,
+      y: 99,
+      w: 10,
+      h: 5,
+      fillFraction: 0.2,
+      fill: "#638EC6",
+    }, // hidden row
   ],
 };
 
@@ -38,7 +65,9 @@ describe("data bars on the native table [sheet.xlsx.condfmt]", () => {
   });
 
   it("draws, fills and sends each bar under the frame; mints its colour once", () => {
-    const ops = loose(tableDataBarOps(content, [60, 80], "Page/u1", [100, 20], new Set()));
+    const ops = loose(
+      tableDataBarOps(content, [60, 80], "Page/u1", [100, 20], new Set()),
+    );
     expect(ops.map((o) => o.op)).toEqual([
       "createSwatch",
       "insertPath",
@@ -52,10 +81,24 @@ describe("data bars on the native table [sheet.xlsx.condfmt]", () => {
     ]);
     const first = ops[1].args.anchors as { anchor: [number, number] }[];
     expect(first[0].anchor).toEqual([20 + 62, 100 + 1]);
-    expect(ops[4].args).toEqual({ elementId: { kind: "polygon", id: "$h:bar0" }, to: "backward" });
+    expect(ops[4].args).toEqual({
+      elementId: { kind: "polygon", id: "$h:bar0" },
+      to: "backward",
+    });
     // A known colour is referenced, not re-minted; no bars, no ops.
-    const known = new Set([String((ops[0].args.spec as { selfId: string }).selfId)]);
-    expect(loose(tableDataBarOps(content, [60, 80], "Page/u1", [0, 0], known))[0].op).toBe("insertPath");
-    expect(tableDataBarOps({ ...content, databars: [] }, [60, 80], "Page/u1", [0, 0])).toEqual([]);
+    const known = new Set([
+      String((ops[0].args.spec as { selfId: string }).selfId),
+    ]);
+    expect(
+      loose(tableDataBarOps(content, [60, 80], "Page/u1", [0, 0], known))[0].op,
+    ).toBe("insertPath");
+    expect(
+      tableDataBarOps(
+        { ...content, databars: [] },
+        [60, 80],
+        "Page/u1",
+        [0, 0],
+      ),
+    ).toEqual([]);
   });
 });

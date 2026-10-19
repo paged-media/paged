@@ -61,10 +61,7 @@
 // in-memory today (app state, per session); when it learns to persist,
 // these options persist with it and nothing here changes.
 
-import type {
-  ToolOptionField,
-  ToolOptionsSpec,
-} from "@paged-media/plugin-api";
+import type { ToolOptionField, ToolOptionsSpec } from "@paged-media/plugin-api";
 
 type OptionValue = number | boolean | string;
 
@@ -184,7 +181,9 @@ export interface ToolOptionsReader {
   select(key: string): string;
 }
 
-export function createToolOptionsReader(def: ToolOptionsDef): ToolOptionsReader {
+export function createToolOptionsReader(
+  def: ToolOptionsDef,
+): ToolOptionsReader {
   let door: ToolSettingsDoor | null = null;
 
   const field = (key: string, kind: OptionDef["kind"]): OptionDef => {

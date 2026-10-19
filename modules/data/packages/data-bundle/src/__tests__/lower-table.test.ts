@@ -27,7 +27,9 @@ const table = {
   bounds: { widthPt: 130, heightPt: 24 },
 };
 
-function fakeHost(reply: (ops: Mutation[]) => { applied: boolean; error?: unknown }) {
+function fakeHost(
+  reply: (ops: Mutation[]) => { applied: boolean; error?: unknown },
+) {
   const sent: Mutation[][] = [];
   const selected: unknown[] = [];
   const frame = { kind: "textFrame", id: "u1" };
@@ -35,14 +37,24 @@ function fakeHost(reply: (ops: Mutation[]) => { applied: boolean; error?: unknow
     manifest: { id: "media.paged.data", version: "0.0.1" },
     log: silent,
     supports: () => true,
-    selection: { get: () => [], set: async (ids: unknown[]) => void selected.push(...ids) },
+    selection: {
+      get: () => [],
+      set: async (ids: unknown[]) => void selected.push(...ids),
+    },
     document: {
       mutate: async (m: Mutation) => {
         const ops = (m.args as { ops: Mutation[] }).ops;
         sent.push(ops);
         const r = reply(ops);
         return r.applied
-          ? { applied: true, createdId: frame, pageIds: [], minted: [{ handle: "frame", element: frame, storyId: "Story/u2" }] }
+          ? {
+              applied: true,
+              createdId: frame,
+              pageIds: [],
+              minted: [
+                { handle: "frame", element: frame, storyId: "Story/u2" },
+              ],
+            }
           : r;
       },
       meta: async () => ({ activePage: "p1" }),
@@ -58,7 +70,11 @@ function fakeHost(reply: (ops: Mutation[]) => { applied: boolean; error?: unknow
 describe("commitLoweredTable is one batch [data.lower.content]", () => {
   it("frame, table, cells and label in ONE mutate, addressed by handle [data.lower.content]", async () => {
     const fake = fakeHost(() => ({ applied: true }));
-    const frameId = await commitLoweredTable(fake.host, table, { binding: "t1", def: "d", session: "s" });
+    const frameId = await commitLoweredTable(fake.host, table, {
+      binding: "t1",
+      def: "d",
+      session: "s",
+    });
     expect(frameId).toBe("u1");
     expect(fake.sent.length).toBe(1);
     const ops = fake.sent[0]!;
@@ -73,15 +89,25 @@ describe("commitLoweredTable is one batch [data.lower.content]", () => {
       "setPluginMetadata",
     ]);
     expect((ops[2]!.args as { storyId: string }).storyId).toBe("$h:frame");
-    expect((ops[4]!.args as { storyId: string; cell: { tableId: string } }).cell.tableId).toBe("$h:table");
-    expect((ops[7]!.args as { elementId: { id: string } }).elementId.id).toBe("$h:frame");
+    expect(
+      (ops[4]!.args as { storyId: string; cell: { tableId: string } }).cell
+        .tableId,
+    ).toBe("$h:table");
+    expect((ops[7]!.args as { elementId: { id: string } }).elementId.id).toBe(
+      "$h:frame",
+    );
     expect(fake.selected).toEqual([{ kind: "textFrame", id: "u1" }]);
   });
 
   it("degrades to tab text + rules in one batch when core refuses insertTable [data.lower.content]", async () => {
     const fake = fakeHost((ops) =>
       ops.some((o) => o.op === "insertTable")
-        ? { applied: false, error: { what: "Mutation::Batch child 2 (InsertTable): unsupported — batch rolled back" } }
+        ? {
+            applied: false,
+            error: {
+              what: "Mutation::Batch child 2 (InsertTable): unsupported — batch rolled back",
+            },
+          }
         : { applied: true },
     );
     expect(await commitLoweredTable(fake.host, table)).toBe("u1");
@@ -98,7 +124,9 @@ describe("commitLoweredTable is one batch [data.lower.content]", () => {
   it("any other rejection places nothing and does not degrade [data.lower.content]", async () => {
     const fake = fakeHost(() => ({
       applied: false,
-      error: { what: "Mutation::Batch child 7 (SetPluginMetadata): foreign key — batch rolled back" },
+      error: {
+        what: "Mutation::Batch child 7 (SetPluginMetadata): foreign key — batch rolled back",
+      },
     }));
     expect(await commitLoweredTable(fake.host, table)).toBeNull();
     expect(fake.sent.length).toBe(1);

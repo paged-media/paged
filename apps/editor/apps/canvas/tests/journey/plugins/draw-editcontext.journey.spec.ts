@@ -63,8 +63,7 @@ async function elementScreenCenter(
               Array<{
                 bounds: [number, number, number, number];
                 itemTransform?:
-                  | [number, number, number, number, number, number]
-                  | null;
+                  [number, number, number, number, number, number] | null;
               }>
             >;
           };
@@ -104,7 +103,12 @@ test.describe("journey · paged.draw vectorGraphic edit context", () => {
     //    context claims; it has no web metadata, so the webFrame object
     //    type does NOT claim it first). Filled so the double-click target
     //    is over ink. ──
-    const id = await designer.drawRectangle({ x0: 170, y0: 170, x1: 440, y1: 360 });
+    const id = await designer.drawRectangle({
+      x0: 170,
+      y0: 170,
+      x1: 440,
+      y1: 360,
+    });
     expect(id, "drew a rectangle").not.toBe("");
     const ref: ElementRef = { kind: "rectangle", id };
     await designer.applyFill("rectangle", id, "Color/Black");
@@ -119,9 +123,11 @@ test.describe("journey · paged.draw vectorGraphic edit context", () => {
 
     // The breadcrumb appears with the "Vector graphic" crumb — the
     // user-visible proof the context is active.
-    await expect(breadcrumb, "the edit-context breadcrumb appears").toBeVisible({
-      timeout: 6_000,
-    });
+    await expect(breadcrumb, "the edit-context breadcrumb appears").toBeVisible(
+      {
+        timeout: 6_000,
+      },
+    );
     await expect(
       breadcrumb.locator('[data-edit-context-crumb="vectorGraphic"]'),
     ).toHaveText(/Vector graphic/);

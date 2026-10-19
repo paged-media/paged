@@ -5,55 +5,54 @@
 #
 # Names carry a `js-` prefix because a module can hold a Cargo workspace and
 # JS packages in one project; the shared vocabulary is in all.yml.
-$schema: '../cache/schemas/tasks.json'
+$schema: "../cache/schemas/tasks.json"
 
 inheritedBy:
-  tags: ['node']
+  tags: ["node"]
 
 fileGroups:
   js-sources:
-    - '**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}'
-    - '**/*.{json,css,html,svg}'
-    - '/package.json'
-    - '/bunfig.toml'
-    - '/bun.lock'
-    - '!docs/**'
+    - "**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}"
+    - "**/*.{json,css,html,svg}"
+    - "/package.json"
+    - "/bunfig.toml"
+    - "/bun.lock"
+    - "!docs/**"
   # Tests may read anything in the workspace (fixtures, manifests, the
   # built wasm, corpora): everything but docs.
   js-tests:
-    - '**/*'
-    - '!docs/**'
-    - '!**/*.md'
+    - "**/*"
+    - "!docs/**"
+    - "!**/*.md"
 
 taskOptions:
   # A project that redefines one of these tasks replaces its command line
   # instead of appending to it.
-  mergeArgs: 'replace'
+  mergeArgs: "replace"
 
 tasks:
   js-check:
-    description: 'The workspace `typecheck` script.'
-    command: 'bun run typecheck'
+    description: "The workspace `typecheck` script."
+    command: "bun run typecheck"
     inputs:
-      - '@group(js-sources)'
+      - "@group(js-sources)"
 
   js-lint:
     description: >-
       bun lint over the project with the root config (/bunfig.toml [lint]),
       through the pinned canary (tooling/js/bun-canary.sh).
-    toolchains: ['system']
-    command: 'bash $workspaceRoot/tooling/js/bun-canary.sh lint --no-script .'
+    toolchains: ["system"]
+    command: "bash $workspaceRoot/tooling/js/bun-canary.sh lint --no-script ."
     inputs:
-      - '@group(js-sources)'
-      - '/eslint-suppressions.json'
-      - '/tooling/js/bun-canary.sh'
-      - '/tooling/js/bun-canary-version'
+      - "@group(js-sources)"
+      - "/eslint-suppressions.json"
+      - "/tooling/js/bun-canary.sh"
+      - "/tooling/js/bun-canary-version"
 
   js-test:
-    description: 'The workspace `test` script.'
-    command: 'bun run test'
+    description: "The workspace `test` script."
+    command: "bun run test"
     inputs:
-      - '@group(js-tests)'
+      - "@group(js-tests)"
     options:
       cache: false
-

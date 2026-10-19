@@ -41,7 +41,11 @@ const invoke = (page: Page, id: string) =>
     (cmd) =>
       (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (c: string) => Promise<unknown> } } };
+          __canvas: {
+            registries: {
+              commands: { invoke: (c: string) => Promise<unknown> };
+            };
+          };
         }
       ).__canvas.registries.commands.invoke(cmd),
     id,
@@ -50,14 +54,20 @@ const openPanels = (page: Page) =>
   page.evaluate(() => {
     const p = (
       globalThis as unknown as {
-        __canvas: { debugContext: () => { panels: { open: string[]; active: string | null } } };
+        __canvas: {
+          debugContext: () => {
+            panels: { open: string[]; active: string | null };
+          };
+        };
       }
     ).__canvas.debugContext().panels;
     return [p.active, ...p.open].filter(Boolean) as string[];
   });
 const activeTool = (page: Page) =>
   page.evaluate(
-    () => (globalThis as unknown as { __canvas: { activeTool?: string | null } }).__canvas.activeTool ?? null,
+    () =>
+      (globalThis as unknown as { __canvas: { activeTool?: string | null } })
+        .__canvas.activeTool ?? null,
   );
 
 test.describe("journey · paged.image plugin", () => {
@@ -75,7 +85,12 @@ test.describe("journey · paged.image plugin", () => {
     await designer.newDocument();
 
     // Place an image + serve its pixels (the proven core path).
-    const id = await designer.drawRectangle({ x0: 90, y0: 120, x1: 350, y1: 320 });
+    const id = await designer.drawRectangle({
+      x0: 90,
+      y0: 120,
+      x1: 350,
+      y1: 320,
+    });
     expect(await designer.placeImageLink(id)).toBe(true);
     await designer.serveTiledImage(id);
     await designer.selectElement("rectangle", id);
@@ -114,17 +129,24 @@ test.describe("journey · paged.image plugin", () => {
     await invoke(page, `paged.tool.activate.${CROP_TOOL}`).catch(() => {});
     await page.waitForTimeout(100);
     // eslint-disable-next-line no-console
-    console.log(`[journey] paged.image crop tool armed=${(await activeTool(page)) === CROP_TOOL}`);
+    console.log(
+      `[journey] paged.image crop tool armed=${(await activeTool(page)) === CROP_TOOL}`,
+    );
 
     // GPU note — on the real-Chrome WebGPU lane the adjustment kernels run;
     // on the CPU fallback they're inert (place/crop/claim still work). Just
     // record the backend so the GPU lane proves the engine path is reachable.
     const gpuActive = await page.evaluate(
-      () => (globalThis as unknown as { __canvas: { gpuActive?: boolean | null } }).__canvas.gpuActive ?? null,
+      () =>
+        (globalThis as unknown as { __canvas: { gpuActive?: boolean | null } })
+          .__canvas.gpuActive ?? null,
     );
     // eslint-disable-next-line no-console
     console.log(`[journey] paged.image gpuActive=${gpuActive}`);
 
-    expect(fail, `paged.image host steps that did not drive: ${fail.join(" | ")}`).toEqual([]);
+    expect(
+      fail,
+      `paged.image host steps that did not drive: ${fail.join(" | ")}`,
+    ).toEqual([]);
   });
 });

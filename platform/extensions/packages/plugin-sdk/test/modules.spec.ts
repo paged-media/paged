@@ -48,7 +48,11 @@ const manifest = (wasm: WasmArtifact[]): PluginManifest => ({
   capabilities: { wasm },
 });
 
-const ENGINE: WasmArtifact = { name: "engine", path: "bin/engine.wasm", purpose: "compute" };
+const ENGINE: WasmArtifact = {
+  name: "engine",
+  path: "bin/engine.wasm",
+  purpose: "compute",
+};
 
 function hostWith(
   wasm: WasmArtifact[],
@@ -64,7 +68,10 @@ function hostWith(
 }
 
 function recordingBackend(
-  answer: (pluginId: string, a: WasmArtifact) => { url: string; integrity?: string | null } | null,
+  answer: (
+    pluginId: string,
+    a: WasmArtifact,
+  ) => { url: string; integrity?: string | null } | null,
 ) {
   const calls: Array<[string, WasmArtifact]> = [];
   const backend: ModulesBackend = {
@@ -110,8 +117,12 @@ describe("host.modules", () => {
   it("refuses an undeclared name before the backend is asked", async () => {
     const { backend, calls } = recordingBackend(hosted);
     const host = hostWith([ENGINE], backend);
-    await expect(host.modules.resolve("other")).rejects.toThrow(/capabilities\.wasm/);
-    await expect(host.modules.fetch("other")).rejects.toThrow(/capabilities\.wasm/);
+    await expect(host.modules.resolve("other")).rejects.toThrow(
+      /capabilities\.wasm/,
+    );
+    await expect(host.modules.fetch("other")).rejects.toThrow(
+      /capabilities\.wasm/,
+    );
     expect(calls).toHaveLength(0);
     // 'warn' proceeds — but there is no declared path to hand the backend.
     const lax = hostWith([ENGINE], backend, "warn");
@@ -128,30 +139,45 @@ describe("host.modules", () => {
   });
 
   it("answers null when the backend does not serve it, throws, or answers garbage", async () => {
-    expect(await hostWith([ENGINE], { url: () => null }).modules.resolve("engine")).toBeNull();
+    expect(
+      await hostWith([ENGINE], { url: () => null }).modules.resolve("engine"),
+    ).toBeNull();
     const throwing: ModulesBackend = {
       url() {
         throw new Error("boom");
       },
     };
-    expect(await hostWith([ENGINE], throwing).modules.resolve("engine")).toBeNull();
-    const relative: ModulesBackend = { url: () => ({ url: "bin/engine.wasm" }) };
-    expect(await hostWith([ENGINE], relative).modules.resolve("engine")).toBeNull();
+    expect(
+      await hostWith([ENGINE], throwing).modules.resolve("engine"),
+    ).toBeNull();
+    const relative: ModulesBackend = {
+      url: () => ({ url: "bin/engine.wasm" }),
+    };
+    expect(
+      await hostWith([ENGINE], relative).modules.resolve("engine"),
+    ).toBeNull();
   });
 
   it("passes the manifest's integrity stamp, which wins over the host's", async () => {
     const stamped = { ...ENGINE, integrity: SRI_A };
-    const noHostSri = hostWith([stamped], { url: () => ({ url: "https://m.example/x.wasm" }) });
+    const noHostSri = hostWith([stamped], {
+      url: () => ({ url: "https://m.example/x.wasm" }),
+    });
     expect((await noHostSri.modules.resolve("engine"))?.integrity).toBe(SRI_A);
     const otherAlg = hostWith([stamped], {
-      url: () => ({ url: "https://m.example/x.wasm", integrity: "sha256-" + "C".repeat(43) + "=" }),
+      url: () => ({
+        url: "https://m.example/x.wasm",
+        integrity: "sha256-" + "C".repeat(43) + "=",
+      }),
     });
     expect((await otherAlg.modules.resolve("engine"))?.integrity).toBe(SRI_A);
   });
 
   it("refuses a host answer whose digest contradicts the manifest", async () => {
     const stamped = { ...ENGINE, integrity: SRI_A };
-    const host = hostWith([stamped], { url: () => ({ url: "https://m.example/x.wasm", integrity: SRI_B }) });
+    const host = hostWith([stamped], {
+      url: () => ({ url: "https://m.example/x.wasm", integrity: SRI_B }),
+    });
     expect(await host.modules.resolve("engine")).toBeNull();
   });
 
@@ -165,7 +191,9 @@ describe("host.modules", () => {
       "https://modules.paged.media/@paged-media/test/1.0.0/bin/engine.wasm",
       { integrity: SRI_A },
     );
-    const plain = hostWith([ENGINE], { url: () => ({ url: "https://m.example/x.wasm" }) });
+    const plain = hostWith([ENGINE], {
+      url: () => ({ url: "https://m.example/x.wasm" }),
+    });
     await plain.modules.fetch("engine");
     expect(fetchMock).toHaveBeenLastCalledWith("https://m.example/x.wasm");
   });
@@ -199,7 +227,13 @@ describe("resolveWasm / fetchWasm (bundle side)", () => {
     };
     expect(await resolveWasmUrl(old, "engine", FALLBACK)).toBe(FALLBACK);
     // A host that claims the flag but lacks the member still falls back.
-    expect(await resolveWasmUrl({ ...old, supports: () => true }, "engine", FALLBACK)).toBe(FALLBACK);
+    expect(
+      await resolveWasmUrl(
+        { ...old, supports: () => true },
+        "engine",
+        FALLBACK,
+      ),
+    ).toBe(FALLBACK);
   });
 
   it("falls back when the host refuses or does not serve the name", async () => {
@@ -212,7 +246,11 @@ describe("resolveWasm / fetchWasm (bundle side)", () => {
   it("fetchWasm fetches the resolved URL with its integrity", async () => {
     const fetchMock = vi.fn(async () => new Response("wasm"));
     stubFetch(fetchMock);
-    await fetchWasm(hostWith([{ ...ENGINE, integrity: SRI_B }]), "engine", FALLBACK);
+    await fetchWasm(
+      hostWith([{ ...ENGINE, integrity: SRI_B }]),
+      "engine",
+      FALLBACK,
+    );
     expect(fetchMock).toHaveBeenLastCalledWith(FALLBACK, { integrity: SRI_B });
     await fetchWasm(hostWith([ENGINE]), "engine", FALLBACK);
     expect(fetchMock).toHaveBeenLastCalledWith(FALLBACK);

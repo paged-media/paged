@@ -39,10 +39,21 @@ function doc(withSplit: boolean, sections: number): LoweredDoc {
         basedOn: null,
         props: withSplit
           ? [
-              { path: "paragraphSpanColumnType", value: { type: "text", value: "SplitColumns" } },
-              { path: "paragraphSpanSplitColumnCount", value: { type: "text", value: "2" } },
+              {
+                path: "paragraphSpanColumnType",
+                value: { type: "text", value: "SplitColumns" },
+              },
+              {
+                path: "paragraphSpanSplitColumnCount",
+                value: { type: "text", value: "2" },
+              },
             ]
-          : [{ path: "characterLeading", value: { type: "length", value: 12 } }],
+          : [
+              {
+                path: "characterLeading",
+                value: { type: "length", value: 12 },
+              },
+            ],
       },
     ],
     story: { blocks: [] },
@@ -82,7 +93,8 @@ function fakeEngine() {
     },
     lowered: () => doc(mid, mid ? 1 : 2),
     skeletonStories: () => (mid ? ["docx_s0"] : ["docx_s0", "docx_s1"]),
-    skeletonIdml: (name: string) => new TextEncoder().encode(`${name}:${mid ? "split" : "pages"}`),
+    skeletonIdml: (name: string) =>
+      new TextEncoder().encode(`${name}:${mid ? "split" : "pages"}`),
   };
   return { engine, calls };
 }
@@ -91,7 +103,10 @@ function fakeEngine() {
 function fakeHost(knowsColumns: boolean) {
   const opened: string[] = [];
   const applied: Op[] = [];
-  const diagnostics = new Map<string, { severity: string; message: string }[]>();
+  const diagnostics = new Map<
+    string,
+    { severity: string; message: string }[]
+  >();
   const refuses = (o: Op) =>
     !knowsColumns &&
     o.op === "setStyleProperty" &&
@@ -106,7 +121,8 @@ function fakeHost(knowsColumns: boolean) {
     document: {
       async mutate(m: Op) {
         const ops = m.op === "batch" ? (m.args.ops as Op[]) : [m];
-        if (ops.some(refuses)) return { applied: false, error: { kind: "notImplemented" } };
+        if (ops.some(refuses))
+          return { applied: false, error: { kind: "notImplemented" } };
         applied.push(...ops);
         return { applied: true, createdId: null, pageIds: [] };
       },
@@ -114,7 +130,8 @@ function fakeHost(knowsColumns: boolean) {
     },
     parts: { async write() {} },
     diagnostics: {
-      set: (k: string, v: { severity: string; message: string }[]) => diagnostics.set(k, v),
+      set: (k: string, v: { severity: string; message: string }[]) =>
+        diagnostics.set(k, v),
     },
     log: { debug() {}, info() {}, warn() {}, error() {} },
   };
@@ -125,19 +142,33 @@ describe("openStandalone and span/split columns", () => {
   it("keeps the span/split lowering on an engine that takes it", async () => {
     const { engine, calls } = fakeEngine();
     const { host, opened, applied, diagnostics } = fakeHost(true);
-    const out = await openStandalone(host as never, engine as never, doc(true, 1), new Uint8Array(), "c.docx");
+    const out = await openStandalone(
+      host as never,
+      engine as never,
+      doc(true, 1),
+      new Uint8Array(),
+      "c.docx",
+    );
     expect(opened).toEqual(["c.docx:split"]);
     expect(calls).toEqual([]);
     expect(out?.midPageColumns).toBe(true);
     expect(out?.storyIds).toEqual(["docx_s0"]);
-    expect(applied.some((o) => o.args.path === "paragraphSpanColumnType")).toBe(true);
+    expect(applied.some((o) => o.args.path === "paragraphSpanColumnType")).toBe(
+      true,
+    );
     expect(diagnostics.get(COLUMNS_DIAGNOSTICS_KEY)).toEqual([]);
   });
 
   it("reopens with page breaks when the engine refuses them", async () => {
     const { engine, calls } = fakeEngine();
     const { host, opened, applied, diagnostics } = fakeHost(false);
-    const out = await openStandalone(host as never, engine as never, doc(true, 1), new Uint8Array(), "c.docx");
+    const out = await openStandalone(
+      host as never,
+      engine as never,
+      doc(true, 1),
+      new Uint8Array(),
+      "c.docx",
+    );
     expect(opened).toEqual(["c.docx:split", "c.docx:pages"]);
     expect(calls).toEqual(["setMidPageColumns(false)"]);
     expect(out?.midPageColumns).toBe(false);
@@ -145,12 +176,15 @@ describe("openStandalone and span/split columns", () => {
     expect(out?.ir.sections).toHaveLength(2);
     // The second lowering's styles went in (no span/split path anywhere).
     expect(applied.some((o) => o.args.path === "characterLeading")).toBe(true);
-    expect(applied.some((o) => String(o.args.path).startsWith("paragraphSpan"))).toBe(false);
+    expect(
+      applied.some((o) => String(o.args.path).startsWith("paragraphSpan")),
+    ).toBe(false);
     // Both stories got their grow rule.
-    expect(applied.filter((o) => o.op === "setFlowGrowRule").map((o) => o.args.storyId)).toEqual([
-      "docx_s0",
-      "docx_s1",
-    ]);
+    expect(
+      applied
+        .filter((o) => o.op === "setFlowGrowRule")
+        .map((o) => o.args.storyId),
+    ).toEqual(["docx_s0", "docx_s1"]);
     const d = diagnostics.get(COLUMNS_DIAGNOSTICS_KEY) ?? [];
     expect(d).toHaveLength(1);
     expect(d[0].severity).toBe("warning");
@@ -163,7 +197,13 @@ describe("openStandalone and span/split columns", () => {
     calls.length = 0;
     const plain = { ...engine, usesMidPageColumns: () => false };
     const { host, opened } = fakeHost(false);
-    const out = await openStandalone(host as never, plain as never, doc(false, 1), new Uint8Array(), "c.docx");
+    const out = await openStandalone(
+      host as never,
+      plain as never,
+      doc(false, 1),
+      new Uint8Array(),
+      "c.docx",
+    );
     expect(opened).toEqual(["c.docx:split"]);
     expect(out?.midPageColumns).toBe(false);
     expect(calls).toEqual([]);

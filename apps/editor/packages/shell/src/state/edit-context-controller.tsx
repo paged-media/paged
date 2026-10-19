@@ -257,7 +257,7 @@ export function EditContextController() {
     // already in hand — otherwise a context declaring `toolIds: []`
     // would exit itself the instant it opened, since every tool is
     // outside an empty set including the one the user already held.
-    toolAtEntryRef.current = (primary ?? activeToolRef.current) ?? null;
+    toolAtEntryRef.current = primary ?? activeToolRef.current ?? null;
   }, [active, enteredKey, tool]);
 
   // ADR 024 — LEAVING BY TOOL, derived rather than wired per entry point.

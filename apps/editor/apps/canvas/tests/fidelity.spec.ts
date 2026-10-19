@@ -64,9 +64,7 @@ import {
 } from "./fidelity/dashboard";
 
 const FIDELITY_MODE = (process.env.FIDELITY_MODE ?? "gate") as
-  | "gate"
-  | "capture"
-  | "advisory";
+  "gate" | "capture" | "advisory";
 
 function thresholdFor(name: string): PackThreshold | null {
   return loadThresholds().fixtures.find((f) => f.name === name) ?? null;
@@ -142,7 +140,9 @@ for (const pack of packs) {
         candPaths.push(dst);
       }
 
-      const refRaster = pack.hasReferencePdf ? rasterizeReferencePdf(pack) : null;
+      const refRaster = pack.hasReferencePdf
+        ? rasterizeReferencePdf(pack)
+        : null;
 
       const pageRecords: PageRecord[] = [];
       let worstMean: number | null = null;
@@ -177,9 +177,14 @@ for (const pack of packs) {
           continue;
         }
         pagesDiffed += 1;
-        worstMean = worstMean === null ? metrics.meanDe : Math.max(worstMean, metrics.meanDe);
-        worstP99 = worstP99 === null ? metrics.p99De : Math.max(worstP99, metrics.p99De);
-        worstSsim = worstSsim === null ? metrics.ssim : Math.min(worstSsim, metrics.ssim);
+        worstMean =
+          worstMean === null
+            ? metrics.meanDe
+            : Math.max(worstMean, metrics.meanDe);
+        worstP99 =
+          worstP99 === null ? metrics.p99De : Math.max(worstP99, metrics.p99De);
+        worstSsim =
+          worstSsim === null ? metrics.ssim : Math.min(worstSsim, metrics.ssim);
         pageRecords.push({
           page: pageNum,
           diff: metrics,
@@ -312,17 +317,20 @@ test.afterAll(async () => {
   const path = resolve(FIDELITY_OUT_ROOT, "results.json");
   writeFileSync(
     path,
-    JSON.stringify({ runs: aggregate, dpi: FIDELITY_DPI, mode: FIDELITY_MODE }, null, 2),
+    JSON.stringify(
+      { runs: aggregate, dpi: FIDELITY_DPI, mode: FIDELITY_MODE },
+      null,
+      2,
+    ),
   );
   refreshDashboard();
-  process.stdout.write(
-    `\n[fidelity] dashboard: file://${dashboardPath()}\n`,
-  );
+  process.stdout.write(`\n[fidelity] dashboard: file://${dashboardPath()}\n`);
   if (FIDELITY_MODE === "capture") {
     const baselines: CapturedBaseline[] = [];
     for (const r of aggregate) {
       if (r.pagesDiffed === 0) continue;
-      if (r.worstMeanDe == null || r.worstP99De == null || r.worstSsim == null) continue;
+      if (r.worstMeanDe == null || r.worstP99De == null || r.worstSsim == null)
+        continue;
       baselines.push({
         name: r.name,
         pagesWithPdf: r.pagesDiffed,

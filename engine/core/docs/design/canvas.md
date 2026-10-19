@@ -2,7 +2,7 @@
 
 May 2026. Concept paper. Sections describe intent; where the implementation differs, `../status.md` and the ADRs in `../adr/` are authoritative.
 
-*Status note (2026-10-02): the worker side of this concept is `crates/paged-canvas` with its binding layer `crates/paged-canvas-wasm`; the main-thread side (UI shell, input pipeline, overlay) is in the editor repository. The sections on incremental computation with salsa (§3.6, §7) and on incremental line breaking (§4.2) were not adopted as written; [ADR 107](../adr/107-whole-document-build.md) and [ADR 027](../adr/027-incremental-flow-invalidation.md) record what was built.*
+_Status note (2026-10-02): the worker side of this concept is `crates/paged-canvas` with its binding layer `crates/paged-canvas-wasm`; the main-thread side (UI shell, input pipeline, overlay) is in the editor repository. The sections on incremental computation with salsa (§3.6, §7) and on incremental line breaking (§4.2) were not adopted as written; [ADR 107](../adr/107-whole-document-build.md) and [ADR 027](../adr/027-incremental-flow-invalidation.md) record what was built._
 
 ---
 
@@ -32,7 +32,7 @@ The canvas must serve as the foundation for the inspector. Hit-testing must retu
 
 ### 2.2 Non-goals
 
-*Status note (2026-10-02): `paged-parse` no longer exists in this repository; the IDML reader moved to the plugin-publish repository ([ADR 022](https://github.com/paged-media/plugin-publish/blob/main/docs/adr/022-idml-relocates-to-plugin-publish.md)).*
+_Status note (2026-10-02): `paged-parse` no longer exists in this repository; the IDML reader moved to the plugin-publish repository ([ADR 022](https://github.com/paged-media/plugin-publish/blob/main/docs/adr/022-idml-relocates-to-plugin-publish.md))._
 
 This concept does not define the backend renderer itself. The renderer is the existing Rust pipeline through `paged-parse`, `paged-scene`, `paged-text`, `paged-compose`, and `paged-gpu`, with Vello as the GPU rasterizer. The concept defines the contract between that renderer and everything above it.
 
@@ -44,16 +44,16 @@ This concept does not define collaboration, undo/redo persistence formats, or as
 
 ### 2.3 Explicit performance targets
 
-| Operation | Target | Hard ceiling |
-|---|---|---|
-| Pan, zoom: input-to-pixel | 8 ms | 16 ms |
-| Page jump animation | 200 ms total | 300 ms |
-| First paint of new document, 100 pages | 800 ms | 1500 ms |
-| First paint of new document, 500 pages | 2000 ms | 4000 ms |
-| Single-character keystroke to visible glyph | 16 ms | 32 ms |
-| Full TOC update after heading edit | 200 ms | 500 ms |
-| Frame resize: visible reflow | 33 ms | 66 ms |
-| Memory ceiling, 500-page document at idle | 400 MB | 700 MB |
+| Operation                                   | Target       | Hard ceiling |
+| ------------------------------------------- | ------------ | ------------ |
+| Pan, zoom: input-to-pixel                   | 8 ms         | 16 ms        |
+| Page jump animation                         | 200 ms total | 300 ms       |
+| First paint of new document, 100 pages      | 800 ms       | 1500 ms      |
+| First paint of new document, 500 pages      | 2000 ms      | 4000 ms      |
+| Single-character keystroke to visible glyph | 16 ms        | 32 ms        |
+| Full TOC update after heading edit          | 200 ms       | 500 ms       |
+| Frame resize: visible reflow                | 33 ms        | 66 ms        |
+| Memory ceiling, 500-page document at idle   | 400 MB       | 700 MB       |
 
 All targets are measured on a 2022-class developer laptop at 1× device pixel ratio. Mobile and high-DPR targets relax these by 50%.
 
@@ -75,7 +75,7 @@ The boundary between main thread and worker is a typed message channel for conte
 
 ### 3.2 Four-tier incremental pipeline
 
-*Status note (2026-10-02): this section predates the implementation; the tiers are not separately cached with dependency-tracked recomputation. Layout is one build over the whole document, made cheaper by caches the caller passes in: see [ADR 107](../adr/107-whole-document-build.md) and [ADR 027](../adr/027-incremental-flow-invalidation.md).*
+_Status note (2026-10-02): this section predates the implementation; the tiers are not separately cached with dependency-tracked recomputation. Layout is one build over the whole document, made cheaper by caches the caller passes in: see [ADR 107](../adr/107-whole-document-build.md) and [ADR 027](../adr/027-incremental-flow-invalidation.md)._
 
 The document is processed through four tiers, each consuming inputs and producing outputs that downstream tiers depend on.
 
@@ -91,7 +91,7 @@ Each tier is independently testable. Each tier has explicit cache invalidation s
 
 ### 3.3 Content-space addressing
 
-Every user-visible operation is expressed in content space, never pixel space. A text selection is `{story_id, start_offset, end_offset}`. A frame manipulation is a transformation on geometry in document points (1/72 inch). A drag-and-drop is a new position in document units. The cursor's screen position is *derived* from the current layout for display purposes; the cursor's *identity* is a content offset.
+Every user-visible operation is expressed in content space, never pixel space. A text selection is `{story_id, start_offset, end_offset}`. A frame manipulation is a transformation on geometry in document points (1/72 inch). A drag-and-drop is a new position in document units. The cursor's screen position is _derived_ from the current layout for display purposes; the cursor's _identity_ is a content offset.
 
 This principle has two consequences. First, the editor surface is correct at any zoom — including extreme zoom-out where individual glyphs are sub-pixel — because operations don't depend on pixel-precise input. Second, operations are stable across re-layouts: if the user has selected paragraph 3 of story X and an upstream edit changes pagination, the selection still points to paragraph 3 of story X; it doesn't drift because its position on screen changed.
 
@@ -109,7 +109,7 @@ The same principle applies to layout: when the user types, the active paragraph 
 
 ### 3.6 Deterministic invalidation
 
-*Status note (2026-10-02): this section predates the implementation; salsa was not adopted and no manifest in this repository names it as a dependency. See [ADR 107](../adr/107-whole-document-build.md).*
+_Status note (2026-10-02): this section predates the implementation; salsa was not adopted and no manifest in this repository names it as a dependency. See [ADR 107](../adr/107-whole-document-build.md)._
 
 Cache entries are keyed by inputs, not by clock time or sequence number. If two mutation sequences produce the same intermediate state, they hit the same cache entries. This makes the system testable: snapshot the input state, replay a mutation, assert the derived state matches.
 
@@ -131,7 +131,7 @@ The `frame-for-story index` in the current `paged-scene` is the inverse mapping:
 
 **Anchors** are named positions within stories that other content can reference. Every paragraph with a paragraph style marked as a "heading style" automatically produces an anchor. Every footnote marker produces an anchor (the body-side anchor of the footnote). Cross-reference targets, index entries, and bookmarks produce anchors. The anchor table maps anchor ID to `{story_id, paragraph_index, run_index, character_offset_within_run}`. Anchor positions are content-stable: they move with the content they're attached to, not with the layout.
 
-**Computed stories** are stories whose content is a function of anchors and document state. The most important examples are tables of contents, indexes, and lists of figures. A computed story has a *definition* (e.g., "collect every heading at paragraph styles 'Heading 1' and 'Heading 2'") and a *materialization function* that produces text runs from the current anchor table and numbering map. The materialization is deterministic: given the same inputs, it produces the same output. Computed stories flow through frame chains exactly like regular stories.
+**Computed stories** are stories whose content is a function of anchors and document state. The most important examples are tables of contents, indexes, and lists of figures. A computed story has a _definition_ (e.g., "collect every heading at paragraph styles 'Heading 1' and 'Heading 2'") and a _materialization function_ that produces text runs from the current anchor table and numbering map. The materialization is deterministic: given the same inputs, it produces the same output. Computed stories flow through frame chains exactly like regular stories.
 
 **Fields** are placeholders within text runs that get resolved during the resolution pass. The field types the canvas must support:
 
@@ -149,7 +149,7 @@ Fields have a stable identity (an ID) and a target (typically an anchor ID or a 
 
 ### 4.2 Tier 2 — Per-story layout
 
-*Status note (2026-10-02): this section predates the implementation; the composer is not incremental (a paragraph is laid out whole). What was built is a per-paragraph layout cache (`crates/paged-text/src/cache.rs`) and, per story, a resume and an early stop at paragraph boundaries (`crates/paged-renderer/src/pipeline/resume.rs`): see [ADR 027](../adr/027-incremental-flow-invalidation.md).*
+_Status note (2026-10-02): this section predates the implementation; the composer is not incremental (a paragraph is laid out whole). What was built is a per-paragraph layout cache (`crates/paged-text/src/cache.rs`) and, per story, a resume and an early stop at paragraph boundaries (`crates/paged-renderer/src/pipeline/resume.rs`): see [ADR 027](../adr/027-incremental-flow-invalidation.md)._
 
 The layout tier consumes a story and its frame chain and produces a laid-out story: a sequence of paragraphs, each with a sequence of lines, each with a list of positioned glyph clusters and the frame they belong to. Layout also produces frame-level facts: which frames are full, which are partially filled, where the story ends.
 
@@ -189,7 +189,7 @@ This schema is the contract with tier 3 and tier 4.
 
 ### 4.3 Tier 3 — Resolution
 
-*Status note (2026-10-02): this section predates the implementation; `crates/paged-canvas/src/resolve.rs` holds a resolution pass with a numbering map and a field diff that assigns page numbers. Running headers and text-anchor destinations are resolved by one second run of the document build (`build_document_fixed` in `crates/paged-renderer/src/pipeline/mod.rs`): see [ADR 107](../adr/107-whole-document-build.md).*
+_Status note (2026-10-02): this section predates the implementation; `crates/paged-canvas/src/resolve.rs` holds a resolution pass with a numbering map and a field diff that assigns page numbers. Running headers and text-anchor destinations are resolved by one second run of the document build (`build_document_fixed` in `crates/paged-renderer/src/pipeline/mod.rs`): see [ADR 107](../adr/107-whole-document-build.md)._
 
 The resolution tier consumes the laid-out document and produces resolved field values.
 
@@ -234,13 +234,13 @@ The display list is keyed by `(page_id, layout_generation, numbering_generation)
 
 **LOD cache.** Three resolution tiers, each with explicit memory budget and eviction policy.
 
-*Snapshot tier* (target: 256–512 px page width). A thumbnail of every page in the document, packed into a texture atlas. Used by the page navigator, minimap, and the canvas at overview zoom. Generated lazily on first request, cached indefinitely (never evicted). Memory: ~64 KB per page, ~32 MB for a 500-page document. Regenerated for a page only when that page's layout or numbering generation changes.
+_Snapshot tier_ (target: 256–512 px page width). A thumbnail of every page in the document, packed into a texture atlas. Used by the page navigator, minimap, and the canvas at overview zoom. Generated lazily on first request, cached indefinitely (never evicted). Memory: ~64 KB per page, ~32 MB for a 500-page document. Regenerated for a page only when that page's layout or numbering generation changes.
 
-*Mid-resolution tier* (target: 1024–2048 px page width). A bitmap per page, sufficient for page-fit and near-page-fit zoom. LRU eviction with a budget of ~200 pages cached at any time. Memory: ~4 MB per page, capped at ~800 MB; in practice the working set is ~50 pages at ~200 MB. Regenerated on layout or numbering generation change.
+_Mid-resolution tier_ (target: 1024–2048 px page width). A bitmap per page, sufficient for page-fit and near-page-fit zoom. LRU eviction with a budget of ~200 pages cached at any time. Memory: ~4 MB per page, capped at ~800 MB; in practice the working set is ~50 pages at ~200 MB. Regenerated on layout or numbering generation change.
 
-*Live tiles tier* (variable resolution, per zoom). At close zoom, the renderer produces tiles directly from the display list using Vello. Tiles are keyed by `(page_id, zoom_band, tile_x, tile_y, layout_generation, numbering_generation)`. Only tiles intersecting the viewport plus a one-tile margin are produced. LRU eviction with a memory ceiling enforced per zoom band.
+_Live tiles tier_ (variable resolution, per zoom). At close zoom, the renderer produces tiles directly from the display list using Vello. Tiles are keyed by `(page_id, zoom_band, tile_x, tile_y, layout_generation, numbering_generation)`. Only tiles intersecting the viewport plus a one-tile margin are produced. LRU eviction with a memory ceiling enforced per zoom band.
 
-**Tier transitions.** The renderer always has *something* to draw because the snapshot tier is never evicted. When the user requests a zoom level for which higher-tier data is not yet ready, the canvas draws the snapshot upsampled (or the mid-res if available) and refines as higher tiers arrive. Transitions are sample-blended over 1–2 frames so the user perceives sharpening, not popping.
+**Tier transitions.** The renderer always has _something_ to draw because the snapshot tier is never evicted. When the user requests a zoom level for which higher-tier data is not yet ready, the canvas draws the snapshot upsampled (or the mid-res if available) and refines as higher tiers arrive. Transitions are sample-blended over 1–2 frames so the user perceives sharpening, not popping.
 
 **Cache invalidation.** When tier 2 reports that a story's layout changed, the canvas computes the set of affected pages from the frame chain. All three LOD tiers mark those pages stale. The mid-res and snapshot tiers regenerate in the background at low priority; the live tile tier regenerates on demand for tiles in the viewport. Pages outside the viewport are not re-rendered until they enter it.
 
@@ -250,7 +250,7 @@ The display list is keyed by `(page_id, layout_generation, numbering_generation)
 
 ## 5. Worker–main thread contract
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 115](../adr/115-worker-boundary-transports.md) for the worker boundary as built. The message kinds are `MainToWorkerKind` and `WorkerToMainKind` in `crates/paged-canvas/src/channel.rs`.*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 115](../adr/115-worker-boundary-transports.md) for the worker boundary as built. The message kinds are `MainToWorkerKind` and `WorkerToMainKind` in `crates/paged-canvas/src/channel.rs`._
 
 ### 5.1 Camera state via SharedArrayBuffer
 
@@ -292,7 +292,7 @@ The main thread can issue many `HitTest` and `Geometry` queries quickly (e.g., d
 
 ### 5.4 Determinism and replay
 
-*Status note (2026-10-02): this section predates the implementation; undo and redo are built on pre-captured inverse operations, not on replay from a snapshot: see [ADR 110](../adr/110-one-undo-timeline.md).*
+_Status note (2026-10-02): this section predates the implementation; undo and redo are built on pre-captured inverse operations, not on replay from a snapshot: see [ADR 110](../adr/110-one-undo-timeline.md)._
 
 Every mutation has a sequence number. The worker's state is a deterministic function of `(initial document, ordered mutation sequence, font and asset resolution results)`. This enables several capabilities:
 
@@ -305,7 +305,7 @@ Every mutation has a sequence number. The worker's state is a deterministic func
 
 ## 6. Editor mutations and the propagation cascade
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 116](../adr/116-mutations-lowered-onto-operations.md) (wire mutations and the operations they are lowered onto), [ADR 117](../adr/117-story-local-text-offsets.md) (text addresses) and [ADR 107](../adr/107-whole-document-build.md) (a mutation is followed by a whole-document build). No crate in this repository implements the synchronous main-thread composer of §6.2 and §6.3.*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 116](../adr/116-mutations-lowered-onto-operations.md) (wire mutations and the operations they are lowered onto), [ADR 117](../adr/117-story-local-text-offsets.md) (text addresses) and [ADR 107](../adr/107-whole-document-build.md) (a mutation is followed by a whole-document build). No crate in this repository implements the synchronous main-thread composer of §6.2 and §6.3._
 
 ### 6.1 Mutation API
 
@@ -330,31 +330,31 @@ Each mutation has a unique ID and a sequence number. The worker acknowledges wit
 
 **Example A: User types one character into a body paragraph in chapter 5.**
 
-1. *Main thread (synchronous, this frame).* The character is captured by the keystroke handler. The main thread already knows the active paragraph's style attributes and metrics (from a cached layout query for the current selection). It runs a synchronous Knuth-Plass pass over the active paragraph only, using a lightweight composer running in the main thread (a stripped subset of `paged-text`). It patches the active page's display list locally and submits a redraw of the active tile. The user sees the character within 16 ms.
+1. _Main thread (synchronous, this frame)._ The character is captured by the keystroke handler. The main thread already knows the active paragraph's style attributes and metrics (from a cached layout query for the current selection). It runs a synchronous Knuth-Plass pass over the active paragraph only, using a lightweight composer running in the main thread (a stripped subset of `paged-text`). It patches the active page's display list locally and submits a redraw of the active tile. The user sees the character within 16 ms.
 
-2. *Main → worker.* Mutation message dispatched: `InsertText(body_story_id, offset, "X")`.
+2. _Main → worker._ Mutation message dispatched: `InsertText(body_story_id, offset, "X")`.
 
-3. *Worker (asynchronous).* Tier 2 resumes composition from the checkpoint before the edit. K-P short-circuits within 1–2 paragraphs because line breaks converge. No frame-level changes; the chapter 5 frame chain is unaffected downstream. Tier 3 sees no changes to anchor text or page positions, so the numbering map is unchanged; field diff is empty (or contains only fields whose `TextRef` target is the edited paragraph). Tier 4 marks the active page dirty and re-generates its display list and the mid-res cache entry.
+3. _Worker (asynchronous)._ Tier 2 resumes composition from the checkpoint before the edit. K-P short-circuits within 1–2 paragraphs because line breaks converge. No frame-level changes; the chapter 5 frame chain is unaffected downstream. Tier 3 sees no changes to anchor text or page positions, so the numbering map is unchanged; field diff is empty (or contains only fields whose `TextRef` target is the edited paragraph). Tier 4 marks the active page dirty and re-generates its display list and the mid-res cache entry.
 
-4. *Worker → main.* `PagesDirty([active_page_id])` — but the main thread already redrew this page in step 1, so it's already correct. The mid-res tier swap happens silently when the worker finishes.
+4. _Worker → main._ `PagesDirty([active_page_id])` — but the main thread already redrew this page in step 1, so it's already correct. The mid-res tier swap happens silently when the worker finishes.
 
 Total visible latency: one frame. Background work: a few milliseconds.
 
 **Example B: User inserts a half-page figure mid-chapter 2 of a 200-page document.**
 
-1. *Main thread.* The user drags a figure from a library into the canvas. On drop, the main thread issues `InsertFrame(page_id, geometry, image)` plus `InsertField(...)` for the figure's auto-numbered caption.
+1. _Main thread._ The user drags a figure from a library into the canvas. On drop, the main thread issues `InsertFrame(page_id, geometry, image)` plus `InsertField(...)` for the figure's auto-numbered caption.
 
-2. *Worker.* Tier 2 sees that chapter 2's body story now has a new anchored frame in the middle. The composer resumes from the checkpoint before the insertion, accommodates the figure's anchor (which displaces text below it), and runs forward. Line breaks shift; line counts per page change. Composition continues forward until either (a) it finds a checkpoint where the laid-out tail matches the cache, or (b) it reaches the end of the story. For a half-page figure in a 200-page chapter, composition typically settles within the next several pages but every subsequent chapter's *pagination* is shifted — chapter 3 now starts one or two pages later, chapter 4 likewise, and so on.
+2. _Worker._ Tier 2 sees that chapter 2's body story now has a new anchored frame in the middle. The composer resumes from the checkpoint before the insertion, accommodates the figure's anchor (which displaces text below it), and runs forward. Line breaks shift; line counts per page change. Composition continues forward until either (a) it finds a checkpoint where the laid-out tail matches the cache, or (b) it reaches the end of the story. For a half-page figure in a 200-page chapter, composition typically settles within the next several pages but every subsequent chapter's _pagination_ is shifted — chapter 3 now starts one or two pages later, chapter 4 likewise, and so on.
 
-3. *Worker (tier 3).* The numbering pass walks pages. Page numbers for everything from chapter 3 onward shift by 1–2. The figure's auto-number resolves (it's "Figure 2.7" or whatever the counter produces). The numbering map has ~150 entries changed.
+3. _Worker (tier 3)._ The numbering pass walks pages. Page numbers for everything from chapter 3 onward shift by 1–2. The figure's auto-number resolves (it's "Figure 2.7" or whatever the counter produces). The numbering map has ~150 entries changed.
 
-4. *Worker (tier 3, field resolution).* Every field whose target shifted gets a new value. The TOC contains entries for every heading from chapter 3 onward; their page numbers all changed. Every cross-reference whose target moved gets updated. Running headers on every page from chapter 3 onward refer to potentially-changed chapter titles (unchanged in this case, since chapter content wasn't edited, only paginated differently). Field diff has ~50–100 entries.
+4. _Worker (tier 3, field resolution)._ Every field whose target shifted gets a new value. The TOC contains entries for every heading from chapter 3 onward; their page numbers all changed. Every cross-reference whose target moved gets updated. Running headers on every page from chapter 3 onward refer to potentially-changed chapter titles (unchanged in this case, since chapter content wasn't edited, only paginated differently). Field diff has ~50–100 entries.
 
-5. *Worker (back to tier 2).* The TOC story is content-dirty: many fields within it have new resolved text. The TOC re-flows. Its length is typically stable (number text width is similar), but if it's near a page boundary it might cross. Re-flow takes a few milliseconds.
+5. _Worker (back to tier 2)._ The TOC story is content-dirty: many fields within it have new resolved text. The TOC re-flows. Its length is typically stable (number text width is similar), but if it's near a page boundary it might cross. Re-flow takes a few milliseconds.
 
-6. *Worker (tier 3 again).* Numbering pass runs again; field diff is now small (only fields on the TOC's pages if they changed). Usually converges here.
+6. _Worker (tier 3 again)._ Numbering pass runs again; field diff is now small (only fields on the TOC's pages if they changed). Usually converges here.
 
-7. *Worker (tier 4).* All affected pages have their display lists invalidated. The visible pages re-render at high priority; the rest queue at low priority. Background mid-res cache regeneration spreads over the next 1–2 seconds.
+7. _Worker (tier 4)._ All affected pages have their display lists invalidated. The visible pages re-render at high priority; the rest queue at low priority. Background mid-res cache regeneration spreads over the next 1–2 seconds.
 
 Total visible latency for the inserted figure to appear in place: target 100 ms. Total time for the entire downstream cascade (TOC updated, page numbers settled in cache, all background tiers refreshed): target 1–2 seconds, none of it blocking the user.
 
@@ -374,7 +374,7 @@ The user sees the immediate frame the resize affects update within one frame (sy
 
 For typing-class operations, the budget is one frame for visible feedback. The synchronous main-thread composer is the mechanism. Its scope is intentionally narrow: it composes one paragraph at a time, with no field resolution, no cross-story dependencies, no master page logic. Its output is a single dirty rectangle on the active page, blitted directly to the canvas.
 
-For mutation-class operations (anything that changes frame geometry, anything that shifts pagination), the budget is one frame for the *local* visible effect (the dragged frame snaps to its new position) and "soon" for downstream settling. The user can continue editing while downstream work proceeds; they only block if they try to interact with content whose layout hasn't settled, which is rare.
+For mutation-class operations (anything that changes frame geometry, anything that shifts pagination), the budget is one frame for the _local_ visible effect (the dragged frame snaps to its new position) and "soon" for downstream settling. The user can continue editing while downstream work proceeds; they only block if they try to interact with content whose layout hasn't settled, which is rare.
 
 For navigation-class operations (page jump, zoom transition), the budget is the animation duration (200 ms). The LOD cache absorbs almost all of the work: the navigator displays snapshots instantly, mid-res tiles arrive within the animation, live tiles arrive after settling.
 
@@ -382,7 +382,7 @@ For navigation-class operations (page jump, zoom transition), the budget is the 
 
 ## 7. The dependency graph and salsa
 
-*Status note (2026-10-02): this section predates the implementation; salsa was not adopted. See [ADR 107](../adr/107-whole-document-build.md) (layout is a whole-document build) and [ADR 027](../adr/027-incremental-flow-invalidation.md) (the incremental invalidation built on top of it).*
+_Status note (2026-10-02): this section predates the implementation; salsa was not adopted. See [ADR 107](../adr/107-whole-document-build.md) (layout is a whole-document build) and [ADR 027](../adr/027-incremental-flow-invalidation.md) (the incremental invalidation built on top of it)._
 
 ### 7.1 Why a query system
 
@@ -412,6 +412,7 @@ The canvas's worker-side data model is modeled as a salsa database. Inputs are: 
 Specifically:
 
 **Input queries** (set by mutation handlers, never computed):
+
 - `story_content(story_id) -> StoryContent`
 - `frame_geometry(frame_id) -> Geometry`
 - `frame_chain(chain_id) -> FrameChain`
@@ -421,6 +422,7 @@ Specifically:
 - `font_bytes(font_id) -> FontBytes`
 
 **Derived queries** (computed lazily, memoized):
+
 - `laid_out_story(story_id) -> LaidOutStory` — depends on story content, frame chain, font, styles
 - `frame_placements(chain_id) -> Vec<FramePlacement>` — depends on laid_out_story
 - `page_content(page_id) -> Vec<FrameOnPage>` — depends on all frame placements with frames on this page, plus master content
@@ -498,7 +500,7 @@ For documents where the navigator's vertical extent isn't enough to be useful (a
 
 ### 9.1 Purpose
 
-The overlay layer is HTML/SVG positioned above the canvas. It draws everything that is *not* document content:
+The overlay layer is HTML/SVG positioned above the canvas. It draws everything that is _not_ document content:
 
 - Selection chrome: transform handles on selected frames, marching ants around selected text ranges
 - Text caret (blinking)
@@ -515,7 +517,7 @@ The overlay layer is HTML/SVG positioned above the canvas. It draws everything t
 
 A single full-viewport `<div>` overlays the canvas with `pointer-events: auto` or `none` per child element. The overlay div has `transform: matrix(...)` applied with the camera, so its content is positioned in document space.
 
-Individual chrome elements are rendered as SVG or HTML elements. Sizing is in CSS pixels, *not* document units — handles stay 12 px wide whether the document is at 5% or 800% zoom. To achieve this with a single CSS transform, each chrome element applies an inverse-scale at its own level: the overlay's transform is the camera, individual handles use `transform: scale(1/camera_scale)`. This keeps positioning in document space while making sizes constant in screen space.
+Individual chrome elements are rendered as SVG or HTML elements. Sizing is in CSS pixels, _not_ document units — handles stay 12 px wide whether the document is at 5% or 800% zoom. To achieve this with a single CSS transform, each chrome element applies an inverse-scale at its own level: the overlay's transform is the camera, individual handles use `transform: scale(1/camera_scale)`. This keeps positioning in document space while making sizes constant in screen space.
 
 Why HTML/SVG instead of a canvas-rendered overlay? Three reasons. First, accessibility — overlay elements are real DOM nodes that screen readers can find. Second, ease of styling and theming — overlay chrome inherits the editor's design tokens directly. Third, ease of interaction — overlay elements have native event handling, focus, drag-and-drop.
 
@@ -523,7 +525,7 @@ The cost is that overlay rendering is on the main thread. This is acceptable bec
 
 ### 9.3 Hit-testing integration
 
-*Status note (2026-10-02): this section predates the implementation; the hit tester iterates candidate elements in the renderer's paint order and no R-tree is used: see [ADR 114](../adr/114-interaction-lives-in-the-engine.md), which also records selection geometry, gestures and snapping as built.*
+_Status note (2026-10-02): this section predates the implementation; the hit tester iterates candidate elements in the renderer's paint order and no R-tree is used: see [ADR 114](../adr/114-interaction-lives-in-the-engine.md), which also records selection geometry, gestures and snapping as built._
 
 Pointer events fire on overlay elements when they hit chrome (handle, caret, marquee). Pointer events fall through to the canvas div when they hit document content. The canvas div then issues a `HitTest` to the worker, which returns the content-level hit (story ID + offset, or frame ID, or page background).
 
@@ -541,7 +543,7 @@ For very long selections (the user selects the entire document), the geometry co
 
 ## 10. IDML feature coverage roadmap
 
-*Status note (2026-10-02): this roadmap predates the implementation; see `../status.md` for what ships.*
+_Status note (2026-10-02): this roadmap predates the implementation; see `../status.md` for what ships._
 
 The canvas accommodates IDML features as the renderer adds them. This section is the explicit list of what the canvas must support and the order it must support it. Detailed renderer-side scoping is in the original design spec.
 
@@ -653,43 +655,43 @@ This section is the gating list. Each criterion has a definition-of-done that ca
 
 The biggest technical risk is incremental composition. Knuth-Plass is naturally a whole-paragraph (and sometimes multi-paragraph, with `keep-with-next`) global optimization; making it incremental with correct checkpointing requires careful analysis of where stable boundaries exist. Implementation may discover that certain document patterns (heavy widow-orphan constraints, dense `keep-with-next` chains) defeat checkpointing and force whole-story recomposition.
 
-*Mitigation.* Build a benchmark suite of real-world documents early. Profile incremental composition against the full re-compose baseline. If certain patterns can't be checkpointed, fall back to whole-story re-compose for those stories — single-character latency degrades but only for stories with the pathological pattern, which are typically structural pages (cover, TOC) not body content.
+_Mitigation._ Build a benchmark suite of real-world documents early. Profile incremental composition against the full re-compose baseline. If certain patterns can't be checkpointed, fall back to whole-story re-compose for those stories — single-character latency degrades but only for stories with the pathological pattern, which are typically structural pages (cover, TOC) not body content.
 
 ### 12.2 Resolution convergence
 
 The feedback loop between content and resolution could in principle fail to converge. A TOC that grows enough to push pages onto more pages whose numbers then grow the TOC further is a real (if rare) scenario. The system caps at 4 iterations to prevent infinite loops, but the cap fires as a warning the user must address.
 
-*Mitigation.* The convergence cap surfaces to the inspector with diagnostic information ("the TOC's length is unstable; consider fixing its page count manually"). For automated environments, the cap is a hard error. In practice, documents that exhibit this pattern are also problematic in InDesign and require manual TOC updates.
+_Mitigation._ The convergence cap surfaces to the inspector with diagnostic information ("the TOC's length is unstable; consider fixing its page count manually"). For automated environments, the cap is a hard error. In practice, documents that exhibit this pattern are also problematic in InDesign and require manual TOC updates.
 
 ### 12.3 Worker termination and recovery
 
 A WASM panic, a GPU device loss, or an OOM crash in the worker terminates rendering. The main thread must recover gracefully.
 
-*Mitigation.* All worker state is deterministic from the mutation log. Spawning a new worker and replaying produces the same state. The main thread maintains the mutation log; the worker is stateless except for caches. Recovery is automatic for transient errors and surfaces to the user only for persistent errors (e.g., document is too large for available memory).
+_Mitigation._ All worker state is deterministic from the mutation log. Spawning a new worker and replaying produces the same state. The main thread maintains the mutation log; the worker is stateless except for caches. Recovery is automatic for transient errors and surfaces to the user only for persistent errors (e.g., document is too large for available memory).
 
 ### 12.4 Browser API maturity
 
 WebGPU is mature but recent. `OffscreenCanvas` support is widespread but has edge cases on Firefox and Safari. `SharedArrayBuffer` requires cross-origin isolation headers.
 
-*Mitigation.* The architecture is browser-agnostic in principle. Concrete browser compatibility is gated by the deployment environment. For environments where `SharedArrayBuffer` is not available, the camera uses `postMessage` with structured cloning; latency degrades but functionality is preserved. For browsers without `OffscreenCanvas`, the worker can be eliminated and rendering moves to the main thread; performance degrades but functionality is preserved.
+_Mitigation._ The architecture is browser-agnostic in principle. Concrete browser compatibility is gated by the deployment environment. For environments where `SharedArrayBuffer` is not available, the camera uses `postMessage` with structured cloning; latency degrades but functionality is preserved. For browsers without `OffscreenCanvas`, the worker can be eliminated and rendering moves to the main thread; performance degrades but functionality is preserved.
 
 ### 12.5 Memory growth from caches
 
 Three LOD tiers with explicit budgets are the design defense, but real-world usage may produce pathological cache patterns (e.g., a long scroll through a 1000-page document loading the mid-res tier for every page).
 
-*Mitigation.* Budgets are configurable. Eviction is observable in the developer HUD. Long-running session tests catch memory growth in CI. Worst case: aggressive eviction degrades visual quality (snapshots used where mid-res would be ideal) but never crashes.
+_Mitigation._ Budgets are configurable. Eviction is observable in the developer HUD. Long-running session tests catch memory growth in CI. Worst case: aggressive eviction degrades visual quality (snapshots used where mid-res would be ideal) but never crashes.
 
 ### 12.6 Complexity creep
 
 The architecture has many moving parts. As IDML features land in later phases (effects, tables, internationalization), the temptation will be to add new tiers or new fast paths. Each addition risks the integrity of the four-tier model.
 
-*Mitigation.* The four-tier model is the architecture contract. New IDML features add new node types in tier 1, new composition rules in tier 2, new field kinds in tier 3, or new display commands in tier 4 — but never new tiers and never cross-tier fast paths. Every PR is reviewed against this contract.
+_Mitigation._ The four-tier model is the architecture contract. New IDML features add new node types in tier 1, new composition rules in tier 2, new field kinds in tier 3, or new display commands in tier 4 — but never new tiers and never cross-tier fast paths. Every PR is reviewed against this contract.
 
 ---
 
 ## 13. Open questions
 
-*Status note (2026-10-02): this section predates the implementation; OQ-1 and OQ-3 presuppose salsa, which was not adopted ([ADR 107](../adr/107-whole-document-build.md)). OQ-6 was decided: the host registers fonts and colour profiles, see [ADR 109](../adr/109-engine-does-no-io.md).*
+_Status note (2026-10-02): this section predates the implementation; OQ-1 and OQ-3 presuppose salsa, which was not adopted ([ADR 107](../adr/107-whole-document-build.md)). OQ-6 was decided: the host registers fonts and colour profiles, see [ADR 109](../adr/109-engine-does-no-io.md)._
 
 These are decisions deferred to implementation but flagged here for explicit resolution before the relevant phase begins.
 
@@ -751,4 +753,4 @@ These are decisions deferred to implementation but flagged here for explicit res
 
 ---
 
-*End of document.*
+_End of document._

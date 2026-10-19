@@ -96,7 +96,9 @@ test.describe("registry invariants (built-ins + bundles)", () => {
       .toBe(true);
   });
 
-  test("INV-REG-1 — tool shortcuts are unique @feat:editor-shell.tool-rail @level:happy", async ({ page }) => {
+  test("INV-REG-1 — tool shortcuts are unique @feat:editor-shell.tool-rail @level:happy", async ({
+    page,
+  }) => {
     const { tools } = await snapshot(page);
     const byShortcut = new Map<string, string[]>();
     for (const t of tools) {
@@ -122,14 +124,32 @@ test.describe("registry invariants (built-ins + bundles)", () => {
     page,
   }) => {
     const problems = await page.evaluate(() => {
-      type Kb = { key: string; command: string; when?: (s: unknown) => boolean };
-      type Ev = { key: string; metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean };
+      type Kb = {
+        key: string;
+        command: string;
+        when?: (s: unknown) => boolean;
+      };
+      type Ev = {
+        key: string;
+        metaKey: boolean;
+        ctrlKey: boolean;
+        altKey: boolean;
+        shiftKey: boolean;
+      };
       const r = (
         globalThis as unknown as {
           __canvas: {
             registries: {
-              tools: { list: () => Array<{ id: string; shortcut?: string; status?: string }> };
-              editContexts: { list: () => Array<{ type: string; toolIds?: string[] }> };
+              tools: {
+                list: () => Array<{
+                  id: string;
+                  shortcut?: string;
+                  status?: string;
+                }>;
+              };
+              editContexts: {
+                list: () => Array<{ type: string; toolIds?: string[] }>;
+              };
               keybindings: {
                 list: () => Kb[];
                 resolve: (e: Ev, state?: unknown) => Kb | null;
@@ -178,7 +198,9 @@ test.describe("registry invariants (built-ins + bundles)", () => {
             editContext: { type: c.type, toolIds: c.toolIds },
           });
           if (won?.command !== own) {
-            out.push(`inside ${c.type}, "${key}" fires ${won?.command ?? "nothing"}, not ${tool.id}`);
+            out.push(
+              `inside ${c.type}, "${key}" fires ${won?.command ?? "nothing"}, not ${tool.id}`,
+            );
           }
         }
         const outside = { ...base, editContext: null };
@@ -191,7 +213,9 @@ test.describe("registry invariants (built-ins + bundles)", () => {
         });
         const won = r.keybindings.resolve(ev, outside);
         if (live.length > 0 && won?.command === own) {
-          out.push(`outside its frame, "${key}" arms ${tool.id} over ${live.map((o) => o.command).join(", ")}`);
+          out.push(
+            `outside its frame, "${key}" arms ${tool.id} over ${live.map((o) => o.command).join(", ")}`,
+          );
         }
       }
       return out;
@@ -199,7 +223,9 @@ test.describe("registry invariants (built-ins + bundles)", () => {
     expect(problems, problems.join("; ")).toEqual([]);
   });
 
-  test("INV-REG-2 — one group default per flyout slot @feat:editor-shell.tool-rail @level:happy", async ({ page }) => {
+  test("INV-REG-2 — one group default per flyout slot @feat:editor-shell.tool-rail @level:happy", async ({
+    page,
+  }) => {
     const { tools } = await snapshot(page);
     const defaults = new Map<string, string[]>();
     for (const t of tools) {

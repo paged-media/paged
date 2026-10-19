@@ -190,10 +190,16 @@ describe("persistDraft (the explicit save — the panel's only document write)",
           return { applied: true };
         },
       },
-      parts: { write: async () => {}, read: async () => null, list: async () => [] },
+      parts: {
+        write: async () => {},
+        read: async () => null,
+        list: async () => [],
+      },
       supports: () => false, // no container writer → the part write no-ops
     } as unknown as Pick<BundleHost, "document" | "parts" | "supports">;
-    await expect(persistDraft(host, id, draft)).resolves.toEqual({ applied: true });
+    await expect(persistDraft(host, id, draft)).resolves.toEqual({
+      applied: true,
+    });
     expect(writes).toHaveLength(1);
     expect(writes[0].id).toBe(id);
     // The envelope path is web-model's single (de)serialization point —
@@ -204,9 +210,16 @@ describe("persistDraft (the explicit save — the panel's only document write)",
   it("reports an engine rejection with its reason (caller keeps the dirty state)", async () => {
     const host = {
       document: {
-        setMetadata: async () => ({ applied: false, error: "refused for a reason" }),
+        setMetadata: async () => ({
+          applied: false,
+          error: "refused for a reason",
+        }),
       },
-      parts: { write: async () => {}, read: async () => null, list: async () => [] },
+      parts: {
+        write: async () => {},
+        read: async () => null,
+        list: async () => [],
+      },
       supports: () => false,
     } as unknown as Pick<BundleHost, "document" | "parts" | "supports">;
     await expect(persistDraft(host, id, draft)).resolves.toEqual({
@@ -235,7 +248,9 @@ describe("persistDraft (the explicit save — the panel's only document write)",
     } as unknown as BundleHost;
     const large = { ...draft, html: "<p>x</p>".repeat(20000) };
 
-    await expect(persistDraft(host, id, large)).resolves.toEqual({ applied: true });
+    await expect(persistDraft(host, id, large)).resolves.toEqual({
+      applied: true,
+    });
     // One part, at a content-addressed path (the host prepends the plugin
     // namespace; this layer speaks relative paths)…
     expect([...store.keys()]).toHaveLength(1);

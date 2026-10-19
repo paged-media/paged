@@ -32,7 +32,6 @@ import { build as livepaint } from "../pages/200-drawing-office/05-livepaint";
 import { build as appearance } from "../pages/200-drawing-office/06-appearance";
 import { build as paint } from "../pages/200-drawing-office/07b-paint-banked";
 
-
 // Continuation of 200-drawing-office - split for the in-chain per-op cost;
 // the checkpoint chain absorbs splits with zero logic change.
 annualChapter({

@@ -24,7 +24,14 @@
 // handlers drive the live selection (first selected = kept,
 // re-selected on success).
 
-import { describe, expect, it, beforeAll, afterAll, beforeEach } from "bun:test";
+import {
+  describe,
+  expect,
+  it,
+  beforeAll,
+  afterAll,
+  beforeEach,
+} from "bun:test";
 
 import type {
   CommandContribution,
@@ -120,10 +127,9 @@ describe("draw conformance — pathfinder booleans (Phase 4c)", () => {
     it("the recorded Unite handler drives the selection (kept = first selected, re-selected)", async () => {
       const before = await leafCount(h);
       await h.host.selection.set([KEPT, OTHER]);
-      await commandFor(
-        h,
-        "media.paged.draw.command.pathfinderUnite",
-      ).handler(undefined);
+      await commandFor(h, "media.paged.draw.command.pathfinderUnite").handler(
+        undefined,
+      );
       expect(await leafCount(h)).toBe(before - 1);
       // The result (kept) element is the selection.
       const sel = h.host.selection.get();
@@ -137,10 +143,9 @@ describe("draw conformance — pathfinder booleans (Phase 4c)", () => {
       await h.host.selection.set([KEPT]);
       const before = await leafCount(h);
       await expect(
-        commandFor(
-          h,
-          "media.paged.draw.command.pathfinderSubtract",
-        ).handler(undefined),
+        commandFor(h, "media.paged.draw.command.pathfinderSubtract").handler(
+          undefined,
+        ),
       ).resolves.toBeUndefined();
       expect(await leafCount(h)).toBe(before);
     });

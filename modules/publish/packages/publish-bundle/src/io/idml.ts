@@ -58,7 +58,10 @@ export const IDML_MIME = "application/vnd.adobe.indesign-idml-package";
  * destructive, so a failure fails LOUD in the log (never a throw past the host
  * — the mutate-never-throws convention).
  */
-async function importIdml(host: BundleHost, file: ImportRequest): Promise<void> {
+async function importIdml(
+  host: BundleHost,
+  file: ImportRequest,
+): Promise<void> {
   if (!host.supports("document.openNative@1")) {
     host.log.warn(
       `${IDML_IMPORTER_ID}: host predates document.openNative@1 — ${file.name} not opened`,
@@ -67,7 +70,9 @@ async function importIdml(host: BundleHost, file: ImportRequest): Promise<void> 
   }
   try {
     await host.nativeDocument.open(file.bytes);
-    host.log.info(`${IDML_IMPORTER_ID}: opened ${file.name} as the active document`);
+    host.log.info(
+      `${IDML_IMPORTER_ID}: opened ${file.name} as the active document`,
+    );
   } catch (err) {
     host.log.error(
       `${IDML_IMPORTER_ID}: failed to open ${file.name} — ${String(err)}`,
@@ -91,7 +96,8 @@ async function exportIdml(host: BundleHost): Promise<ExportResult | null> {
     // The typed command's path: the engine's losses become diagnostics there
     // and the file is named after the document.
     const r = await exportIdmlResult(host);
-    for (const d of r.diagnostics) host.log.warn(`${IDML_EXPORTER_ID}: ${d.message}`);
+    for (const d of r.diagnostics)
+      host.log.warn(`${IDML_EXPORTER_ID}: ${d.message}`);
     return { bytes: r.bytes, fileName: r.fileName };
   } catch (err) {
     host.log.error(`${IDML_EXPORTER_ID}: export failed — ${String(err)}`);

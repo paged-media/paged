@@ -83,7 +83,9 @@ interface CanvasGlobal {
       delta: [number, number],
       modifiers: { shift: boolean; alt: boolean },
     ) => Promise<string[]>;
-    commitGesture: (handle: number) => Promise<{ appliedSeq: number; pageIds: string[] }>;
+    commitGesture: (
+      handle: number,
+    ) => Promise<{ appliedSeq: number; pageIds: string[] }>;
     cancelGesture: (handle: number) => Promise<string[]>;
     groupLeaves: (groupId: string) => Promise<ElementId[]>;
     elementGeometry: (
@@ -165,7 +167,8 @@ test.describe("Track L — Group transform acceptance", () => {
     groupId = hit.groupChain[0];
     leaves = await page.evaluate(
       async ({ groupId }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         return c.client.groupLeaves(groupId);
       },
       { groupId },
@@ -194,7 +197,8 @@ test.describe("Track L — Group transform acceptance", () => {
 
     await page.evaluate(
       async ({ groupId, delta }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture(
           [{ kind: "group", id: groupId }],
           { kind: "translate" },
@@ -262,7 +266,8 @@ test.describe("Track L — Group transform acceptance", () => {
 
     await page.evaluate(
       async ({ groupId, pageId, anchorPt, delta }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture(
           [{ kind: "group", id: groupId }],
           { kind: "rotate" },
@@ -320,8 +325,9 @@ test.describe("Track L — Group transform acceptance", () => {
 
     await page.evaluate(
       ({ groupId }) => {
-        (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas
-          .setActiveGroup(groupId);
+        (
+          globalThis as unknown as { __canvas: CanvasGlobal }
+        ).__canvas.setActiveGroup(groupId);
       },
       { groupId },
     );
@@ -354,7 +360,8 @@ test.describe("Track L — Group transform acceptance", () => {
 
     await page.evaluate(
       async ({ groupId, delta }) => {
-        const c = (globalThis as unknown as { __canvas: CanvasGlobal }).__canvas;
+        const c = (globalThis as unknown as { __canvas: CanvasGlobal })
+          .__canvas;
         const h = await c.client.beginGesture(
           [{ kind: "group", id: groupId }],
           { kind: "translate" },

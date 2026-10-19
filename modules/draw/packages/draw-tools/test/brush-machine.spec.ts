@@ -18,7 +18,10 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { MIN_BRUSH_WIDTH_RATIO, type NibProfile } from "@paged-media/draw-geometry";
+import {
+  MIN_BRUSH_WIDTH_RATIO,
+  type NibProfile,
+} from "@paged-media/draw-geometry";
 
 import { BrushMachine } from "../src";
 
@@ -29,7 +32,11 @@ const NIB: NibProfile = { angle: 0, roundness: 0.3, size: 6 };
 
 describe("BrushMachine — sampling (the pencil pipeline underneath)", () => {
   it("collects decimated samples while drawing (live polyline preview)", () => {
-    const m = new BrushMachine({ tolerance: 1, minSampleDistance: 2, nib: NIB });
+    const m = new BrushMachine({
+      tolerance: 1,
+      minSampleDistance: 2,
+      nib: NIB,
+    });
     m.handle({ type: "down", point: [0, 0] });
     m.handle({ type: "move", point: [0.5, 0] }); // below the floor — dropped
     m.handle({ type: "move", point: [5, 0] });
@@ -64,7 +71,11 @@ describe("BrushMachine — sampling (the pencil pipeline underneath)", () => {
 
 describe("BrushMachine — the calligraphic width lane", () => {
   it("commits per-anchor widths, 1:1 with the simplified anchors", () => {
-    const m = new BrushMachine({ tolerance: 1, minSampleDistance: 0, nib: NIB });
+    const m = new BrushMachine({
+      tolerance: 1,
+      minSampleDistance: 0,
+      nib: NIB,
+    });
     m.handle({ type: "down", point: [0, 0] });
     m.handle({ type: "move", point: [50, 40] });
     m.handle({ type: "move", point: [100, 0] });
@@ -87,8 +98,10 @@ describe("BrushMachine — the calligraphic width lane", () => {
       nib: NIB,
     });
     m.handle({ type: "down", point: [0, 0] });
-    for (let x = 10; x <= 100; x += 10) m.handle({ type: "move", point: [x, 0] });
-    for (let y = 10; y <= 100; y += 10) m.handle({ type: "move", point: [100, y] });
+    for (let x = 10; x <= 100; x += 10)
+      m.handle({ type: "move", point: [x, 0] });
+    for (let y = 10; y <= 100; y += 10)
+      m.handle({ type: "move", point: [100, y] });
     const snap = m.handle({ type: "up", point: [100, 100] });
     const c = snap.commit!;
     expect(c.anchors.map((a) => a.anchor)).toEqual([
@@ -118,7 +131,9 @@ describe("BrushMachine — the calligraphic width lane", () => {
     // Vertical stroke → model width 6; pressure 1 doubles it, pressure 0
     // floors at the hairline ratio.
     expect(c.widths[0]).toBeCloseTo(12);
-    expect(c.widths[c.widths.length - 1]).toBeCloseTo(MIN_BRUSH_WIDTH_RATIO * 6);
+    expect(c.widths[c.widths.length - 1]).toBeCloseTo(
+      MIN_BRUSH_WIDTH_RATIO * 6,
+    );
   });
 
   it("pressure:false is the uniform lane — a round nib commits constant nib.size", () => {

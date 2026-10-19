@@ -51,13 +51,18 @@ export const bundledWasm = binDir + "blitz_web_bg.wasm";
 export const bundledPresent =
   existsSync(binDir + "blitz_web.js") && existsSync(bundledWasm);
 const countingPresent =
-  existsSync(perfDir + "blitz_web.js") && existsSync(perfDir + "blitz_web_bg.wasm");
+  existsSync(perfDir + "blitz_web.js") &&
+  existsSync(perfDir + "blitz_web_bg.wasm");
 
 interface Glue {
   default: (init?: unknown) => Promise<unknown>;
   initSync: (m: { module: Uint8Array }) => unknown;
   render_web_frame: (html: string, w: number, h: number) => string;
-  render_web_flow: (html: string, framesJson: string, flowRoot: string) => string;
+  render_web_flow: (
+    html: string,
+    framesJson: string,
+    flowRoot: string,
+  ) => string;
   perf_counters?: () => string;
   perf_counters_reset?: () => void;
 }
@@ -103,7 +108,9 @@ const utf8 = (s: string): number => Buffer.byteLength(s, "utf8");
  */
 export async function bootEngine(host: BundleHost): Promise<EngineLane> {
   const dir = countingPresent ? perfDir : binDir;
-  const glue = (await import(new URL(dir + "blitz_web.js", "file://").href)) as Glue;
+  const glue = (await import(
+    new URL(dir + "blitz_web.js", "file://").href
+  )) as Glue;
   const stats: BoundaryStats = {
     boots: 0,
     loaderImports: 0,
@@ -129,7 +136,11 @@ export async function bootEngine(host: BundleHost): Promise<EngineLane> {
       stats.lastOutput = out;
       return out;
     },
-    render_web_flow: (html: string, framesJson: string, flowRoot: string): string => {
+    render_web_flow: (
+      html: string,
+      framesJson: string,
+      flowRoot: string,
+    ): string => {
       stats.flowCalls += 1;
       stats.bytesIn += utf8(html) + utf8(framesJson) + utf8(flowRoot);
       const out = glue.render_web_flow(html, framesJson, flowRoot);
@@ -146,7 +157,8 @@ export async function bootEngine(host: BundleHost): Promise<EngineLane> {
       return counted as never;
     },
   });
-  if (!engine) throw new Error("the real engine failed to load through the bundle loader");
+  if (!engine)
+    throw new Error("the real engine failed to load through the bundle loader");
 
   return {
     engine,
@@ -161,7 +173,9 @@ export async function bootEngine(host: BundleHost): Promise<EngineLane> {
       glue.perf_counters_reset?.();
     },
     engineCounters: () =>
-      glue.perf_counters ? (JSON.parse(glue.perf_counters()) as Record<string, number>) : null,
+      glue.perf_counters
+        ? (JSON.parse(glue.perf_counters()) as Record<string, number>)
+        : null,
   };
 }
 
@@ -186,16 +200,21 @@ export function article(paragraphs = 40): WebFrameSource {
   for (let i = 0; i < paragraphs; i++) {
     html += `<p>P${String(i).padStart(2, "0")}X ${FILLER}</p>`;
   }
-  return source(html, "body{margin:0;font-size:16px;line-height:24px}p{margin:0 0 8px 0}");
+  return source(
+    html,
+    "body{margin:0;font-size:16px;line-height:24px}p{margin:0 0 8px 0}",
+  );
 }
-export const articleMarker = (i: number): string => `P${String(i).padStart(2, "0")}X`;
+export const articleMarker = (i: number): string =>
+  `P${String(i).padStart(2, "0")}X`;
 export const ARTICLE_WORDS_PER_PARA = 1 + FILLER.split(/\s+/).length;
 
 /** `n` small blocks in a wrapping flex grid — each its own inline formatting
  *  context, so each paints (and bakes) as exactly one text run `Wnnn`. */
 export function runGrid(n = 200): WebFrameSource {
   let html = '<div class="g">';
-  for (let i = 0; i < n; i++) html += `<span>W${String(i).padStart(3, "0")}</span>`;
+  for (let i = 0; i < n; i++)
+    html += `<span>W${String(i).padStart(3, "0")}</span>`;
   html += "</div>";
   return source(
     html,
@@ -203,7 +222,8 @@ export function runGrid(n = 200): WebFrameSource {
       ".g{display:flex;flex-wrap:wrap}.g span{width:56px}",
   );
 }
-export const runMarker = (i: number): string => `W${String(i).padStart(3, "0")}`;
+export const runMarker = (i: number): string =>
+  `W${String(i).padStart(3, "0")}`;
 
 // ---------------------------------------------------------------------------
 // Frames

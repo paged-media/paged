@@ -1,50 +1,50 @@
-$schema: '../../.moon/cache/schemas/project.json'
+$schema: "../../.moon/cache/schemas/project.json"
 
 # paged.slide: a Cargo workspace (pptx-*, slide-* crates, vendored
 # paged-ooxml) and a JS package (slide-bundle). apps/editor builds
 # slide-bundle from source.
-language: 'rust'
-layer: 'library'
-stack: 'systems'
-tags: ['rust', 'node', 'module', 'wasm']
+language: "rust"
+layer: "library"
+stack: "systems"
+tags: ["rust", "node", "module", "wasm"]
 
 project:
-  title: 'modules/slide'
-  description: 'PowerPoint/PPTX module: import, export, charts.'
+  title: "modules/slide"
+  description: "PowerPoint/PPTX module: import, export, charts."
 
-# validate:manifest runs the in-tree plugin-cli. vendor/paged-ooxml is a
+# validate:manifest runs the in-tree paged-plugin bin (plugin-sdk). vendor/paged-ooxml is a
 # stamped copy of modules/doc's crate, checked against its own stamp
 # (scripts/sync-ooxml.sh --check), so it is not a build edge to doc.
 dependsOn:
-  - id: 'extensions'
-    scope: 'development'
-  - id: 'test-kit'
-    scope: 'development'
+  - id: "extensions"
+    scope: "development"
+  - id: "test-kit"
+    scope: "development"
 
 tasks:
   js-test:
     # slide-bundle's bun test boots the engine wasm; build it first.
-    deps: ['~:wasm']
+    deps: ["~:wasm"]
 
   vendor-check:
-    description: 'vendor/paged-ooxml still matches its stamp (scripts/sync-ooxml.sh --check).'
-    toolchains: ['system']
-    command: 'bash scripts/sync-ooxml.sh --check'
+    description: "vendor/paged-ooxml still matches its stamp (scripts/sync-ooxml.sh --check)."
+    toolchains: ["system"]
+    command: "bash scripts/sync-ooxml.sh --check"
     inputs:
-      - 'vendor/paged-ooxml/**/*'
-      - 'scripts/sync-ooxml.sh'
+      - "vendor/paged-ooxml/**/*"
+      - "scripts/sync-ooxml.sh"
 
   wasm:
-    description: 'slide-js wasm into packages/slide-bundle/bin/ (scripts/build-wasm.sh).'
-    toolchains: ['rust']
-    command: 'bash scripts/build-wasm.sh'
+    description: "slide-js wasm into packages/slide-bundle/bin/ (scripts/build-wasm.sh)."
+    toolchains: ["rust"]
+    command: "bash scripts/build-wasm.sh"
     inputs:
-      - '@group(rust-sources)'
-      - 'scripts/build-wasm.sh'
-      - 'packages/slide-bundle/manifest.json'
+      - "@group(rust-sources)"
+      - "scripts/build-wasm.sh"
+      - "packages/slide-bundle/manifest.json"
     outputs:
-      - 'packages/slide-bundle/bin/slide_js*'
+      - "packages/slide-bundle/bin/slide_js*"
     options:
       # Needs wasm-bindgen-cli at the Cargo.lock version; slide-bundle and
       # the editor's module-wasm action (.github/actions/module-wasm) build it in CI.
-      runInCI: 'skip'
+      runInCI: "skip"

@@ -115,7 +115,9 @@ test.describe("Styleguide — cockpit chrome", () => {
     await openCanvas(page);
   });
 
-  test("all five chrome surfaces are mounted @feat:editor-shell.cockpit-modes @feat:editor-shell.context-toolbars @feat:editor-shell.panel-rail @feat:editor-shell.theme @feat:editor-shell.tool-rail @level:happy", async ({ page }) => {
+  test("all five chrome surfaces are mounted @feat:editor-shell.cockpit-modes @feat:editor-shell.context-toolbars @feat:editor-shell.panel-rail @feat:editor-shell.theme @feat:editor-shell.tool-rail @level:happy", async ({
+    page,
+  }) => {
     for (const sel of CHROME_SURFACES) {
       await expect(page.locator(sel).first()).toBeVisible();
     }
@@ -135,7 +137,9 @@ test.describe("Styleguide — cockpit chrome", () => {
     expect(offenders, "\n" + offenders.join("\n")).toEqual([]);
   });
 
-  test("chrome text renders IBM Plex Sans @feat:editor-shell.cockpit-modes @feat:editor-shell.context-toolbars @feat:editor-shell.panel-rail @feat:editor-shell.theme @feat:editor-shell.tool-rail @level:happy", async ({ page }) => {
+  test("chrome text renders IBM Plex Sans @feat:editor-shell.cockpit-modes @feat:editor-shell.context-toolbars @feat:editor-shell.panel-rail @feat:editor-shell.theme @feat:editor-shell.tool-rail @level:happy", async ({
+    page,
+  }) => {
     const fonts = await page.evaluate((surfaces) => {
       const families = new Set<string>();
       for (const sel of surfaces) {

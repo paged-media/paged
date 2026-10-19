@@ -58,7 +58,9 @@ function setup() {
 }
 
 const html = (r: ReactTestRenderer) =>
-  r.root.find((n) => n.type === "textarea" && n.props["aria-label"] === "Web frame HTML");
+  r.root.find(
+    (n) => n.type === "textarea" && n.props["aria-label"] === "Web frame HTML",
+  );
 const type = async (r: ReactTestRenderer, value: string) =>
   act(async () => html(r).props.onChange({ target: { value } }));
 

@@ -33,7 +33,11 @@
 
 import type { LoweredDoc } from "@paged-media/doc-host-model";
 import { parseLoweredDoc } from "@paged-media/doc-host-model";
-import type { BundleHost, ElementId, PartChange } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  PartChange,
+} from "@paged-media/plugin-api";
 
 import { DocEngine } from "./engine.js";
 
@@ -71,7 +75,15 @@ export async function discoverDocs(host: BundleHost): Promise<DocState[]> {
   const items: ElementId[] = [];
   const labels = new Map<string, string>();
   let reported = false;
-  const walk = (nodes: ReadonlyArray<{ id?: ElementId | null; children?: unknown; pluginMetadata?: Array<{ key: string; value: string }> }> | undefined) => {
+  const walk = (
+    nodes:
+      | ReadonlyArray<{
+          id?: ElementId | null;
+          children?: unknown;
+          pluginMetadata?: Array<{ key: string; value: string }>;
+        }>
+      | undefined,
+  ) => {
     for (const n of nodes ?? []) {
       const id = n.id as { kind?: string; id?: unknown } | null | undefined;
       if (id && typeof id.id === "string") {
@@ -102,7 +114,10 @@ export async function discoverDocs(host: BundleHost): Promise<DocState[]> {
 
 function stateOf(frame: ElementId, labelText: string): DocState | null {
   try {
-    const env = JSON.parse(labelText) as { v?: number; data?: Partial<DocLabelData> };
+    const env = JSON.parse(labelText) as {
+      v?: number;
+      data?: Partial<DocLabelData>;
+    };
     if (!env || typeof env.data?.part !== "string") return null;
     return { frame, data: env.data as DocLabelData, labelText };
   } catch {
@@ -111,7 +126,10 @@ function stateOf(frame: ElementId, labelText: string): DocState | null {
 }
 
 /** The .docx bytes of a document, or null when its part is missing. */
-export async function readDocBytes(host: BundleHost, s: DocState): Promise<Uint8Array | null> {
+export async function readDocBytes(
+  host: BundleHost,
+  s: DocState,
+): Promise<Uint8Array | null> {
   if (!host.supports("storage.parts@1")) return null;
   try {
     return await host.parts.read(s.data.part);
@@ -125,7 +143,10 @@ const lowerings = new Map<string, LoweredDoc>();
 
 /** The lowering of a document's current state: the cache part, else the
  *  engine over the .docx part. Null when neither part can be read. */
-export async function readLowered(host: BundleHost, s: DocState): Promise<LoweredDoc | null> {
+export async function readLowered(
+  host: BundleHost,
+  s: DocState,
+): Promise<LoweredDoc | null> {
   const memo = lowerings.get(s.labelText);
   if (memo) return memo;
   let ir: LoweredDoc | null = null;
@@ -156,8 +177,13 @@ export async function readLowered(host: BundleHost, s: DocState): Promise<Lowere
 
 /** SHA-256 of `bytes`, lower-case hex. */
 export async function sha256(bytes: Uint8Array): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>);
-  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+  const digest = await globalThis.crypto.subtle.digest(
+    "SHA-256",
+    bytes as Uint8Array<ArrayBuffer>,
+  );
+  return Array.from(new Uint8Array(digest), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 /** A new persisted state for an edited .docx: the content-addressed .docx and
@@ -171,7 +197,12 @@ export async function plannedState(
   const hash = await sha256(bytes);
   const part = `sources/${hash}.docx`;
   const lowered = `lowered/${hash}.json`;
-  const data: DocLabelData = { ...s.data, part, lowered, blocks: ir.story.blocks.length };
+  const data: DocLabelData = {
+    ...s.data,
+    part,
+    lowered,
+    blocks: ir.story.blocks.length,
+  };
   const labelText = JSON.stringify({ v: 1, data });
   lowerings.set(labelText, ir);
   return {
