@@ -88,22 +88,23 @@ export function ExportCenterPanel() {
       return;
     }
     setBusy(id);
-    try {
-      if (t.action === "image") {
-        await runImageExport(client, {
-          pageIds: handle.pageIds,
-          pageSizesPt: handle.pageSizesPt,
-          settings: image,
-          baseName: meta?.documentName,
-        });
-      }
-      // IDML export is now the paged.publish plugin exporter (ADR-022 Phase 5),
-      // rendered via the plugin-exporters section, not a built-in target.
-    } catch {
-      /* surfaced in the inspector; the center row just clears busy */
-    } finally {
-      setBusy(null);
-    }
+    // IDML export is now the paged.publish plugin exporter (ADR-022 Phase 5),
+    // rendered via the plugin-exporters section, not a built-in target. A
+    // promise chain, not try/finally (the React Compiler, ADR 228).
+    const run =
+      t.action === "image"
+        ? runImageExport(client, {
+            pageIds: handle.pageIds,
+            pageSizesPt: handle.pageSizesPt,
+            settings: image,
+            baseName: meta?.documentName,
+          })
+        : Promise.resolve();
+    await run
+      .catch(() => {
+        /* surfaced in the inspector; the center row just clears busy */
+      })
+      .finally(() => setBusy(null));
   };
 
   return (

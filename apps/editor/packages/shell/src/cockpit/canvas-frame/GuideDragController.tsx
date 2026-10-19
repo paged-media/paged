@@ -51,7 +51,7 @@
 // same Operation channel as every other edit. The re-query is skipped
 // while a drag is live so it never clobbers an in-flight preview.
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 import type {
   GuideSummary,
@@ -107,6 +107,39 @@ function pageForDoc(
   return null;
 }
 
+/** The guides mirror rebuilt from each spread's live `guides` set
+ *  (`pageIndex` is spread-local: mapped to a document page id through each
+ *  spread's running page offset). Null when the read fails. Outside the
+ *  component: the React Compiler does not compile a conditional inside a
+ *  `try` (ADR 228). */
+async function guidesFromSpreads(
+  client: ReturnType<typeof useCanvasClient>,
+  handle: { pageIds: string[] } | null,
+): Promise<{ spreadIds: string[]; mirror: OptimisticGuide[] } | null> {
+  try {
+    const spreads = await client.collection<SpreadSummary>("spreads");
+    const pages = handle?.pageIds ?? [];
+    const mirror: OptimisticGuide[] = [];
+    let pageOffset = 0;
+    for (const sp of spreads) {
+      for (const g of (sp.guides ?? []) as GuideSummary[]) {
+        const pageId = pages[pageOffset + (g.pageIndex ?? 0)] ?? pages[0];
+        if (!pageId) continue;
+        mirror.push({
+          id: g.id,
+          spreadId: sp.selfId,
+          orientation: g.orientation,
+          pageId,
+          position: g.position,
+        });
+      }
+      pageOffset += sp.pageCount;
+    }
+    return { spreadIds: spreads.map((s) => s.selfId), mirror };
+  } catch {
+    return null;
+  }
+}
 export function GuideDragController() {
   const client = useCanvasClient();
   const { camera } = useCamera();
@@ -116,13 +149,21 @@ export function GuideDragController() {
   // Live refs so the once-per-drag window listeners read fresh values
   // without re-subscribing every preview tick.
   const cameraRef = useRef(camera);
-  cameraRef.current = camera;
+  useLayoutEffect(() => {
+    cameraRef.current = camera;
+  });
   const handleRef = useRef(handle);
-  handleRef.current = handle;
+  useLayoutEffect(() => {
+    handleRef.current = handle;
+  });
   const dragRef = useRef<GuideDragState | null>(drag);
-  dragRef.current = drag;
+  useLayoutEffect(() => {
+    dragRef.current = drag;
+  });
   const guidesRef = useRef(guides);
-  guidesRef.current = guides;
+  useLayoutEffect(() => {
+    guidesRef.current = guides;
+  });
 
   // Spread ids for the loaded document, document order. Guides are
   // spread-scoped; a created guide lands on the spread that owns the
@@ -155,33 +196,15 @@ export function GuideDragController() {
   // mid-drag Operation push never clobbers the preview.
   const resyncFromSpreads = useCallback(async () => {
     if (dragRef.current) return;
-    try {
-      const spreads = await client.collection<SpreadSummary>("spreads");
-      spreadIdsRef.current = spreads.map((s) => s.selfId);
-      const pages = handleRef.current?.pageIds ?? [];
-      const mirror: OptimisticGuide[] = [];
-      let pageOffset = 0;
-      for (const sp of spreads) {
-        for (const g of (sp.guides ?? []) as GuideSummary[]) {
-          const pageId = pages[pageOffset + (g.pageIndex ?? 0)] ?? pages[0];
-          if (!pageId) continue;
-          mirror.push({
-            id: g.id,
-            spreadId: sp.selfId,
-            orientation: g.orientation,
-            pageId,
-            position: g.position,
-          });
-        }
-        pageOffset += sp.pageCount;
-      }
-      setGuides(mirror);
-    } catch {
-      /* worker reload / disconnect — keep the current mirror */
-    }
+    const read = await guidesFromSpreads(client, handleRef.current);
+    if (!read) return; // worker reload / disconnect — keep the current mirror
+    spreadIdsRef.current = read.spreadIds;
+    setGuides(read.mirror);
   }, [client, setGuides]);
   const resyncRef = useRef(resyncFromSpreads);
-  resyncRef.current = resyncFromSpreads;
+  useLayoutEffect(() => {
+    resyncRef.current = resyncFromSpreads;
+  });
 
   // Seed on load + re-sync on every Operation push (mutationApplied /
   // undoApplied / redoApplied). Load is detected by a pageIds signature
@@ -281,7 +304,9 @@ export function GuideDragController() {
     [overRulerAt, clientToDoc],
   );
   const resolvePreviewRef = useRef(resolvePreview);
-  resolvePreviewRef.current = resolvePreview;
+  useLayoutEffect(() => {
+    resolvePreviewRef.current = resolvePreview;
+  });
 
   /** Fire one guide mutation; resolve true on `mutationApplied`. */
   const dispatch = useCallback(
@@ -357,7 +382,9 @@ export function GuideDragController() {
     [spreadForPageId, dispatch, setGuides],
   );
   const settleRef = useRef(settle);
-  settleRef.current = settle;
+  useLayoutEffect(() => {
+    settleRef.current = settle;
+  });
 
   // ── window listeners, mounted only while a drag is live ──────────
   const dragActive = drag != null;

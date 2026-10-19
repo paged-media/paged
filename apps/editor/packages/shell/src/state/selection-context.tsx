@@ -228,6 +228,7 @@ export function SelectionProvider({ children }: PropsWithChildren) {
       setElementGeometry,
       placedGeometry,
       activeTool,
+      setActiveTool,
       pathEditMode,
       selectedAnchors,
       setSelectedAnchors,

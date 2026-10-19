@@ -87,7 +87,14 @@
 // papered over with a `binding`-lane row set that would take the read
 // out of the platform seam and put it back in one panel.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   CatalogRegistryProvider,
@@ -263,7 +270,10 @@ export function LayersPanel(_: PanelProps) {
   // row the user clicked, not on core's idea of it.
   const { rows, provider } = useProvidedCollection<LayerRow>("layers");
   const rowsRef = useRef<readonly LayerRow[]>([]);
-  rowsRef.current = rows ?? [];
+  // Updated after each commit, before any input can reach a command.
+  useLayoutEffect(() => {
+    rowsRef.current = rows ?? [];
+  });
 
   // ------------------------------------------------------- capability
   //
@@ -288,7 +298,9 @@ export function LayersPanel(_: PanelProps) {
   // are built once and would otherwise close over the selection as it
   // was at registration time.
   const selectionRef = useRef<readonly ElementId[]>([]);
-  selectionRef.current = selectedElements;
+  useLayoutEffect(() => {
+    selectionRef.current = selectedElements;
+  });
 
   const rowById = useCallback(
     (id: string): LayerRow | undefined =>

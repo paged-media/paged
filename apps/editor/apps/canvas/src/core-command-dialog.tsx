@@ -233,6 +233,19 @@ export function fromText(
   }
 }
 
+/** Run `work`; resolve with the message of what it threw, or null. The
+ *  dialogs' submit handlers go through it because the React Compiler does
+ *  not compile a component with a `try … finally` in it (ADR 228). */
+async function attempt(work: () => Promise<void>): Promise<string | null> {
+  try {
+    await work();
+    return null;
+  } catch (e) {
+    const err = e as { code?: string; message?: string };
+    return `${err.code ? `${err.code}: ` : ""}${err.message ?? String(e)}`;
+  }
+}
+
 /** The address list a ref field picks from. */
 const queryKindOf = (to: string): string => (to === "item" ? "frame" : to);
 
@@ -352,16 +365,13 @@ function CommandForm({ pending: p }: { pending: Pending }) {
     }
     setBusy(true);
     setError(null);
-    try {
+    const failed = await attempt(async () => {
       const result = await invokeCoreCommand(op, args);
       p.onDone?.(result);
       close();
-    } catch (e) {
-      const err = e as { code?: string; message?: string };
-      setError(`${err.code ? `${err.code}: ` : ""}${err.message ?? String(e)}`);
-    } finally {
-      setBusy(false);
-    }
+    });
+    if (failed !== null) setError(failed);
+    setBusy(false);
   };
 
   return (
@@ -651,16 +661,13 @@ export function CoreCommandButton({
       return;
     }
     setBusy(true);
-    try {
+    const failed = await attempt(async () => {
       const r = await invokeCoreCommand(op, args);
       setError(null);
       onDone?.(r);
-    } catch (e) {
-      const err = e as { code?: string; message?: string };
-      setError(`${err.code ? `${err.code}: ` : ""}${err.message ?? String(e)}`);
-    } finally {
-      setBusy(false);
-    }
+    });
+    if (failed !== null) setError(failed);
+    setBusy(false);
   };
   return (
     <button

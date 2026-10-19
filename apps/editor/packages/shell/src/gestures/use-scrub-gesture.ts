@@ -33,7 +33,13 @@
 // follow the canvas convention: Shift = fine (default ×0.1),
 // Alt = coarse (default ×10).
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 export interface ScrubGestureOptions {
   /** Current value when the scrub begins. */
@@ -102,7 +108,9 @@ export function useScrubGesture(options: ScrubGestureOptions): ScrubGesture {
   // handlers (registered once per element) see fresh values without
   // re-binding on every render.
   const optionsRef = useRef(options);
-  optionsRef.current = options;
+  useLayoutEffect(() => {
+    optionsRef.current = options;
+  });
   const latestValueRef = useRef<number>(initial);
 
   // Re-sync `value` to `initial` when the controlled initial value

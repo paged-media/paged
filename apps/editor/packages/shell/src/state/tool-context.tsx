@@ -21,6 +21,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -109,7 +110,9 @@ export function ToolProvider({ children }: PropsWithChildren) {
 
   const toolStateRef = useRef<ActiveToolState>(internal.active);
   // Keep the synchronous mirror current on every render.
-  toolStateRef.current = internal.active;
+  useLayoutEffect(() => {
+    toolStateRef.current = internal.active;
+  });
 
   const setBaseTool = useCallback((id: ToolId) => {
     setInternal((prev) =>

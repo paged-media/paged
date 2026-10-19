@@ -240,6 +240,17 @@ function deriveSections(
   }));
 }
 
+/** The persisted "last used" faces (a module function: the React Compiler
+ *  does not compile a component with a conditional inside a `try`). */
+function readLastUsed(): Record<ToolGroupId, string> {
+  try {
+    return JSON.parse(
+      window.localStorage.getItem(LAST_USED_STORAGE_KEY) ?? "{}",
+    ) as Record<ToolGroupId, string>;
+  } catch {
+    return {};
+  }
+}
 export function ToolRail({
   foot,
   hostToolIds,
@@ -278,15 +289,8 @@ export function ToolRail({
   // updated whenever a member of the group becomes effective (click,
   // flyout pick, or shortcut). Persisted in localStorage so the rail
   // faces survive a reload, alongside the dock layout.
-  const [lastUsed, setLastUsed] = useState<Record<ToolGroupId, string>>(() => {
-    try {
-      return JSON.parse(
-        window.localStorage.getItem(LAST_USED_STORAGE_KEY) ?? "{}",
-      ) as Record<ToolGroupId, string>;
-    } catch {
-      return {};
-    }
-  });
+  const [lastUsed, setLastUsed] =
+    useState<Record<ToolGroupId, string>>(readLastUsed);
   useEffect(() => {
     try {
       window.localStorage.setItem(
@@ -656,7 +660,7 @@ function ToolSlot({
         openFlyout();
       }, LONG_PRESS_MS);
     },
-    [hasFlyout, openFlyout],
+    [hasFlyout, openFlyout, onUnhint],
   );
 
   const onClick = useCallback(

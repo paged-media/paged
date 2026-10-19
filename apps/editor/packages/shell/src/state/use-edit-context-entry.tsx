@@ -34,7 +34,11 @@
 
 import { useCallback } from "react";
 
-import type { ElementId, PageId } from "@paged-media/client";
+import type {
+  ElementGeometryItem,
+  ElementId,
+  PageId,
+} from "@paged-media/client";
 import { decodeEnvelope } from "@paged-media/helpers";
 
 import { useCanvasClient } from "./canvas-client-context";
@@ -95,6 +99,36 @@ function idKey(id: ElementId): string {
   return `${anyId.kind ?? ""}:${String(anyId.id)}`;
 }
 
+/** Select `element` (an edit context's write-scope root) and mirror its
+ *  geometry; the entering point gains its content point through the same
+ *  frame geometry the K-1 content pointers map through (W-19), so the
+ *  entering point and the first pointer after it share one content origin.
+ *  A failed selection still enters (the context is the point): `at` comes
+ *  back as it was. Outside the hook: the React Compiler does not compile a
+ *  conditional inside a `try` (ADR 228). */
+async function selectForEntry(
+  client: ReturnType<typeof useCanvasClient>,
+  element: ElementId,
+  at: EnterPoint | undefined,
+  setElementSelection: (ids: ElementId[]) => void,
+  setElementGeometry: (geom: ElementGeometryItem[]) => void,
+): Promise<EnterPoint | undefined> {
+  try {
+    const ids = await client.setElementSelection([element], "replace");
+    setElementSelection(ids);
+    const geom = await client.elementGeometry(ids);
+    setElementGeometry(geom);
+    if (!at) return at;
+    const key = idKey(element);
+    const item = geom.find(
+      (g) => g.pageId === at.pageId && idKey(g.id) === key,
+    );
+    const content = item ? pageToContentPoint(item, at.pagePoint) : null;
+    return content ? { ...at, contentPoint: content } : at;
+  } catch {
+    return at;
+  }
+}
 export function useEditContextEntry() {
   const client = useCanvasClient();
   const { setElementSelection, setElementGeometry } = useSelection();
@@ -178,29 +212,15 @@ export function useEditContextEntry() {
       if (!resolution) return false;
 
       // Select the element (the context's write-scope root) and enter.
-      let at: EnterPoint | undefined =
+      const at = await selectForEntry(
+        client,
+        element,
         hit.pageId && hit.pagePoint
           ? { pageId: hit.pageId, pagePoint: hit.pagePoint }
-          : undefined;
-      try {
-        const ids = await client.setElementSelection([element], "replace");
-        setElementSelection(ids);
-        const geom = await client.elementGeometry(ids);
-        setElementGeometry(geom);
-        // W-19 — the same frame geometry the K-1 content pointers map
-        // through, so the entering point and the first pointer after it
-        // share one content origin.
-        if (at) {
-          const key = idKey(element);
-          const item = geom.find(
-            (g) => g.pageId === at!.pageId && idKey(g.id) === key,
-          );
-          const content = item ? pageToContentPoint(item, at.pagePoint) : null;
-          if (content) at = { ...at, contentPoint: content };
-        }
-      } catch {
-        // Selection failed — still enter (the context is the point).
-      }
+          : undefined,
+        setElementSelection,
+        setElementGeometry,
+      );
       // resolution.context is the REPRESENTATIVE-candidate copy; enter the
       // REAL registered contribution by type so its hooks/metadataKey are
       // the live ones.

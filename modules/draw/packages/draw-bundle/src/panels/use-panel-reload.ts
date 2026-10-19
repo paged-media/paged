@@ -51,7 +51,11 @@ export function usePanelReload(
   reload: Reload,
 ): () => void {
   const latest = React.useRef(reload);
-  latest.current = reload;
+  // The newest closure, after each commit (written during render it keeps
+  // the hook uncompiled, editor ADR 228).
+  React.useLayoutEffect(() => {
+    latest.current = reload;
+  });
   const reloader = React.useRef<Reloader | null>(null);
 
   React.useEffect(() => {

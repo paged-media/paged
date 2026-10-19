@@ -47,6 +47,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -139,7 +140,9 @@ export function GuideDragProvider({ children }: PropsWithChildren) {
   // listeners (registered once per drag) read the freshest state
   // without re-subscribing on every preview tick.
   const dragRef = useRef<GuideDragState | null>(null);
-  dragRef.current = drag;
+  useLayoutEffect(() => {
+    dragRef.current = drag;
+  });
 
   const beginCreate = useCallback((orientation: GuideOrientation) => {
     const next: GuideDragState = {

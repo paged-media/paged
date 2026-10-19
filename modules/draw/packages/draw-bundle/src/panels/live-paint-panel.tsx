@@ -162,7 +162,10 @@ export function makeLivePaintPanel(host: BundleHost): {
         if (!live()) return;
         const tally: Record<string, string[]> = {};
         for (const f of links.fills) {
-          (tally[f.ref.group] ??= []).push(f.ref.face);
+          // Not `??=`: the React Compiler does not lower it (ADR 228).
+          const faces = tally[f.ref.group] ?? [];
+          tally[f.ref.group] = faces;
+          faces.push(f.ref.face);
         }
         setPortable(host.supports(LIVE_PAINT_FEATURE));
         setGroups(library.groups);

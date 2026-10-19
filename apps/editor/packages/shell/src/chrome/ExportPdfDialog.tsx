@@ -240,32 +240,37 @@ export function ExportPdfDialog() {
     const controller = new AbortController();
     abortRef.current = controller;
     setPhase({ kind: "exporting", done: 0, total: 1 });
-    try {
-      const { bytes, diagnostics } = await client.exportPdf(options, {
+    // A promise chain, not try/finally: the React Compiler does not compile
+    // a component with a `finally` in it (ADR 228).
+    await client
+      .exportPdf(options, {
         signal: controller.signal,
         onProgress: (done, total) =>
           setPhase({ kind: "exporting", done, total }),
+      })
+      .then(({ bytes, diagnostics }) => {
+        const blob = new Blob([bytes.slice()], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${docName}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setPhase({ kind: "done", pages: pageCount, diagnostics });
+      })
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          setPhase({ kind: "idle" });
+        } else {
+          setPhase({
+            kind: "error",
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+      })
+      .finally(() => {
+        abortRef.current = null;
       });
-      const blob = new Blob([bytes.slice()], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${docName}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setPhase({ kind: "done", pages: pageCount, diagnostics });
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        setPhase({ kind: "idle" });
-      } else {
-        setPhase({
-          kind: "error",
-          message: err instanceof Error ? err.message : String(err),
-        });
-      }
-    } finally {
-      abortRef.current = null;
-    }
   }, [client, form, docName, activeProfile, pageCount]);
 
   const onCancel = useCallback(() => {

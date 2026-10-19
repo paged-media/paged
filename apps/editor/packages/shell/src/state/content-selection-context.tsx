@@ -65,6 +65,9 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
   const [caret, setCaret] = useState<CaretGeometry | null>(null);
   const [selectionRects, setSelectionRects] = useState<SelectionRect[]>([]);
   const contentSelectionRef = useRef<ContentSelection | null>(null);
+  // Written during render on purpose: the caret reader handed to plugins
+  // (`getEditor().contentSelection.contentSelectionRef`) may be read by a
+  // panel while it renders. It keeps this provider uncompiled (ADR 228).
   contentSelectionRef.current = contentSelection;
 
   const setContentSelection = useCallback(

@@ -78,11 +78,6 @@
       "count": 2
     }
   },
-  "apps/editor/apps/canvas/src/panels/layers-panel.tsx": {
-    "react-hooks/refs": {
-      "count": 2
-    }
-  },
   "apps/editor/apps/canvas/src/panels/object-options-panels.tsx": {
     "react-hooks/purity": {
       "count": 1
@@ -94,11 +89,6 @@
   "apps/editor/apps/canvas/src/panels/page-position.ts": {
     "react-hooks/set-state-in-effect": {
       "count": 1
-    }
-  },
-  "apps/editor/apps/canvas/src/panels/properties-panel.tsx": {
-    "react-hooks/refs": {
-      "count": 3
     }
   },
   "apps/editor/apps/canvas/src/panels/schema-list-demo-panel.tsx": {
@@ -174,16 +164,6 @@
       "count": 1
     }
   },
-  "apps/editor/packages/shell/src/PagedShell.tsx": {
-    "react-hooks/refs": {
-      "count": 1
-    }
-  },
-  "apps/editor/packages/shell/src/actions/actions-context.tsx": {
-    "react-hooks/refs": {
-      "count": 1
-    }
-  },
   "apps/editor/packages/shell/src/catalog/binding-hook.ts": {
     "react-hooks/set-state-in-effect": {
       "count": 2
@@ -232,37 +212,14 @@
       "count": 2
     }
   },
-  "apps/editor/packages/shell/src/chrome/SoftProofToggle.tsx": {
-    "react-hooks/refs": {
-      "count": 12
-    }
-  },
   "apps/editor/packages/shell/src/chrome/ToolRail.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    },
     "react-hooks/set-state-in-effect": {
       "count": 1
-    }
-  },
-  "apps/editor/packages/shell/src/cockpit/canvas-frame/GuideDragController.tsx": {
-    "react-hooks/refs": {
-      "count": 7
-    }
-  },
-  "apps/editor/packages/shell/src/cockpit/canvas-frame/ThreadingController.tsx": {
-    "react-hooks/refs": {
-      "count": 6
     }
   },
   "apps/editor/packages/shell/src/cockpit/cockpit-state-context.tsx": {
     "react-hooks/refs": {
       "count": 7
-    }
-  },
-  "apps/editor/packages/shell/src/gestures/use-scrub-gesture.ts": {
-    "react-hooks/refs": {
-      "count": 1
     }
   },
   "apps/editor/packages/shell/src/overlays/thread-lines.tsx": {
@@ -275,24 +232,9 @@
       "count": 1
     }
   },
-  "apps/editor/packages/shell/src/state/edit-context-controller.tsx": {
-    "react-hooks/refs": {
-      "count": 6
-    }
-  },
   "apps/editor/packages/shell/src/state/edit-context-stack.tsx": {
     "react-hooks/refs": {
       "count": 2
-    }
-  },
-  "apps/editor/packages/shell/src/state/guide-drag-context.tsx": {
-    "react-hooks/refs": {
-      "count": 1
-    }
-  },
-  "apps/editor/packages/shell/src/state/page-thumbnails.ts": {
-    "react-hooks/refs": {
-      "count": 1
     }
   },
   "apps/editor/packages/shell/src/state/paged-editor.tsx": {
@@ -306,25 +248,7 @@
     }
   },
   "apps/editor/packages/shell/src/state/selection-context.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    },
     "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "apps/editor/packages/shell/src/state/threading-context.tsx": {
-    "react-hooks/refs": {
-      "count": 1
-    }
-  },
-  "apps/editor/packages/shell/src/state/tool-context.tsx": {
-    "react-hooks/refs": {
-      "count": 1
-    }
-  },
-  "apps/editor/packages/shell/src/state/tool-settings-context.tsx": {
-    "react-hooks/refs": {
       "count": 1
     }
   },
@@ -343,11 +267,6 @@
       "count": 1
     }
   },
-  "apps/editor/packages/ui/src/inputs/ScrubField.tsx": {
-    "react-hooks/refs": {
-      "count": 5
-    }
-  },
   "apps/editor/packages/ui/src/inputs/SmartDialMicro.tsx": {
     "react-hooks/refs": {
       "count": 4
@@ -355,11 +274,6 @@
   },
   "modules/data/packages/data-bundle/src/panels/dataset-panel.tsx": {
     "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "modules/draw/packages/draw-bundle/src/panels/use-panel-reload.ts": {
-    "react-hooks/refs": {
       "count": 1
     }
   },

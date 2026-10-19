@@ -389,6 +389,10 @@ function PagedEditorBinder({
       registries,
     ],
   );
+  // Written during render on purpose, before the children render: they
+  // (plugin panels through the bundle host's `getEditor()`) may read the
+  // handle while they render, and a write after the commit would hand them
+  // the previous one. It keeps this binder uncompiled (ADR 228).
   editorRef.current = editor;
 
   return (

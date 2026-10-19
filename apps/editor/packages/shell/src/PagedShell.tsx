@@ -33,6 +33,7 @@
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -88,6 +89,7 @@ import {
   useWorkflowMode,
   type WorkflowMode,
 } from "./state/workflow-mode-context";
+import type { MenuItemContribution } from "./registries/menu";
 import type { ModeContribution } from "./registries/mode";
 import { ToolSettingsProvider } from "./state/tool-settings-context";
 import { FormattingAffectsProvider } from "./state/formatting-affects-context";
@@ -514,7 +516,11 @@ function ShellChrome({
   // mutations) without re-subscribing per handle change.
   const handleRef = useRef(handle);
   const refreshingPagesRef = useRef(false);
-  handleRef.current = handle;
+  // Kept current after each commit (not during render, which keeps the
+  // React Compiler from compiling the component, ADR 228).
+  useLayoutEffect(() => {
+    handleRef.current = handle;
+  });
 
   // Thumbnails for pages added or edited after the load pass.
   usePageThumbnails();
@@ -597,9 +603,11 @@ function ShellChrome({
     setPanelsHidden((v) => !v);
   };
   const toggleAllRef = useRef(toggleAll);
-  toggleAllRef.current = toggleAll;
   const togglePanelsRef = useRef(togglePanels);
-  togglePanelsRef.current = togglePanels;
+  useLayoutEffect(() => {
+    toggleAllRef.current = toggleAll;
+    togglePanelsRef.current = togglePanels;
+  });
 
   // Cockpit — the Window menu lists every REGISTERED panel and opens
   // it as a right-dock tab (`paged.panel.show.*`). Registry-driven so
@@ -638,34 +646,34 @@ function ShellChrome({
         : label === "Workspace"
           ? `Window/${p.title}`
           : `Window/${label}/${p.title}`;
+      // Built before the `try` (the compiler does not lower a conditional
+      // inside one, ADR 228); only the registration can throw.
+      const item: MenuItemContribution = {
+        path,
+        command: `paged.panel.show.${p.id}`,
+        group: section,
+        // E4 — the heading the user sees above each section.
+        groupLabel: plugin ? "Panels" : section,
+        order,
+        // ADR 024 — a panel that belongs to a DIFFERENT content type
+        // is not offered here.
+        //
+        // The Window menu listed every registered panel in every
+        // context, so editing a Word document offered "Vector
+        // stroke" and the spreadsheet panel — surfaces for content
+        // that is not on screen and cannot be reached from where the
+        // user is standing.
+        //
+        // The rule is deliberately narrow: hide a panel only when
+        // ANOTHER context claims it and that context is not active.
+        // A panel no context claims stays listed, because host
+        // panels and the selection-driven plugin panels (paged.image
+        // adjustments on a selected frame) are legitimately usable
+        // without entering anything.
+        when: (state) => panelBelongsHere(state, p.id),
+      };
       try {
-        items.set(
-          p.id,
-          registries.menus.register({
-            path,
-            command: `paged.panel.show.${p.id}`,
-            group: section,
-            // E4 — the heading the user sees above each section.
-            groupLabel: plugin ? "Panels" : section,
-            order,
-            // ADR 024 — a panel that belongs to a DIFFERENT content type
-            // is not offered here.
-            //
-            // The Window menu listed every registered panel in every
-            // context, so editing a Word document offered "Vector
-            // stroke" and the spreadsheet panel — surfaces for content
-            // that is not on screen and cannot be reached from where the
-            // user is standing.
-            //
-            // The rule is deliberately narrow: hide a panel only when
-            // ANOTHER context claims it and that context is not active.
-            // A panel no context claims stays listed, because host
-            // panels and the selection-driven plugin panels (paged.image
-            // adjustments on a selected frame) are legitimately usable
-            // without entering anything.
-            when: (state) => panelBelongsHere(state, p.id),
-          }),
-        );
+        items.set(p.id, registries.menus.register(item));
       } catch {
         // Two panels sharing a title — the first one keeps the path.
       }
@@ -1008,7 +1016,7 @@ function ShellChrome({
   }, [registries]);
 
   // Dev hook. Playwright + ad-hoc browser scripts read
-  // `window.__canvas`. Re-published on every render so it always
+  // `window.__canvas`. Re-published after every commit so it always
   // reflects current state. Stripped from production builds via
   // Vite's `import.meta.env.PROD` constant — typed loosely here so
   // shell's tsconfig (which doesn't include Vite's ambient types)
@@ -1021,82 +1029,87 @@ function ShellChrome({
   // that DELIBERATELY retains the automation handle so a script can drive the
   // editor live. Everywhere else the handle stays dev-only.
   const isDemoBuild = viteEnv?.MODE === "demo";
-  if (!isProd || isDemoBuild) {
-    (globalThis as unknown as { __canvas?: unknown }).__canvas = {
-      client,
-      handle,
-      ready: handle != null,
-      snapshotsReady,
-      elementSelection,
-      // SDK Phase 3 — tests need to drive the SelectionContext
-      // explicitly so binding-hook-backed panels (Character, Stroke,
-      // Object/Transform, …) render resolved values. The worker-
-      // side `client.setElementSelection` updates the worker; this
-      // setter updates the main-thread React mirror panels read
-      // from. Production code uses `useSelection().setElementSelection`
-      // (or the click → selection chain); this is purely a test
-      // affordance.
-      setElementSelection,
-      elementGeometry,
-      // Tests that drive selection programmatically (no viewport click)
-      // must also populate the geometry mirror the canvas-panel click
-      // path fetches — overlays keyed on it (threading ports, selection
-      // chrome) read `useSelection().elementGeometry`, not the worker
-      // directly. Exposed so the harness can mirror a real selection.
-      setElementGeometry,
-      // SDK Phase 3 — text-side selection mirror, also needed by
-      // tests that drive content-scope binding hooks (Character
-      // panel etc.).
-      contentSelection,
-      setContentSelection,
-      activeTool,
-      setActiveTool,
-      // Track L — exposed for tests that drive the panel's double-
-      // click descent / Escape exit state machine. The selection
-      // context owns the source of truth; this just lets Playwright
-      // observe and drive it.
-      activeGroup,
-      setActiveGroup,
-      registries,
-      // Design system — Playwright drives/asserts the theme.
-      theme,
-      setTheme,
-      // Cockpit — Playwright drives/asserts the workflow mode.
-      mode: workflowMode,
-      setMode: setWorkflowMode,
-      // Renderer backend — tests assert the WebGPU path actually engaged
-      // (true), fell back to CPU (false), or hasn't attached yet (null).
-      // Set from the worker's `attachReady.gpuActive` (a real `initGpu`).
-      gpuActive,
-      // Cockpit — open any REGISTERED panel as a right-dock tab
-      // (the panel-rail / Window-menu path, exposed for tests).
-      openPanel: (id: string) => cockpitActions.openPanel?.(id),
-      // Journey-oracle introspection — the dimensions DOM/`__canvas`
-      // can't otherwise give: which panels are open/active and the
-      // edit-context stack. Populated by `<DebugContextProbe>` (mounted
-      // inside CockpitStateProvider); reads the ref so it stays valid
-      // across this object's per-render republish.
-      debugContext: () => debugContextRef.current,
-      // ADR 323 — the shared object registry: `editor.get/set/query/
-      // batch/schema` (demo automation) and specs read it here.
-      objects: objectModel?.objects ?? null,
-    };
-    // Demo/automation entry: run a demo script (paged.* + editor.* + demo.*)
-    // against the live handle. Trusted first-party scripts only (see runner).
-    // Exposed wherever the handle is — dev today; the `demo` playground build
-    // (Phase 2) un-gates the same block in a production bundle.
-    (globalThis as unknown as { __demo?: unknown }).__demo = {
-      run: (source: string) =>
-        runDemoScriptWithHandle(
-          source,
-          (
-            globalThis as unknown as {
-              __canvas: Parameters<typeof runDemoScriptWithHandle>[1];
-            }
-          ).__canvas,
-        ),
-    };
-  }
+  // Published after every commit (a layout effect, so before any input
+  // or script can read it): assigning it during render, as before, keeps
+  // the React Compiler from compiling this component (ADR 228).
+  useLayoutEffect(() => {
+    if (!isProd || isDemoBuild) {
+      (globalThis as unknown as { __canvas?: unknown }).__canvas = {
+        client,
+        handle,
+        ready: handle != null,
+        snapshotsReady,
+        elementSelection,
+        // SDK Phase 3 — tests need to drive the SelectionContext
+        // explicitly so binding-hook-backed panels (Character, Stroke,
+        // Object/Transform, …) render resolved values. The worker-
+        // side `client.setElementSelection` updates the worker; this
+        // setter updates the main-thread React mirror panels read
+        // from. Production code uses `useSelection().setElementSelection`
+        // (or the click → selection chain); this is purely a test
+        // affordance.
+        setElementSelection,
+        elementGeometry,
+        // Tests that drive selection programmatically (no viewport click)
+        // must also populate the geometry mirror the canvas-panel click
+        // path fetches — overlays keyed on it (threading ports, selection
+        // chrome) read `useSelection().elementGeometry`, not the worker
+        // directly. Exposed so the harness can mirror a real selection.
+        setElementGeometry,
+        // SDK Phase 3 — text-side selection mirror, also needed by
+        // tests that drive content-scope binding hooks (Character
+        // panel etc.).
+        contentSelection,
+        setContentSelection,
+        activeTool,
+        setActiveTool,
+        // Track L — exposed for tests that drive the panel's double-
+        // click descent / Escape exit state machine. The selection
+        // context owns the source of truth; this just lets Playwright
+        // observe and drive it.
+        activeGroup,
+        setActiveGroup,
+        registries,
+        // Design system — Playwright drives/asserts the theme.
+        theme,
+        setTheme,
+        // Cockpit — Playwright drives/asserts the workflow mode.
+        mode: workflowMode,
+        setMode: setWorkflowMode,
+        // Renderer backend — tests assert the WebGPU path actually engaged
+        // (true), fell back to CPU (false), or hasn't attached yet (null).
+        // Set from the worker's `attachReady.gpuActive` (a real `initGpu`).
+        gpuActive,
+        // Cockpit — open any REGISTERED panel as a right-dock tab
+        // (the panel-rail / Window-menu path, exposed for tests).
+        openPanel: (id: string) => cockpitActions.openPanel?.(id),
+        // Journey-oracle introspection — the dimensions DOM/`__canvas`
+        // can't otherwise give: which panels are open/active and the
+        // edit-context stack. Populated by `<DebugContextProbe>` (mounted
+        // inside CockpitStateProvider); reads the ref so it stays valid
+        // across this object's per-render republish.
+        debugContext: () => debugContextRef.current,
+        // ADR 323 — the shared object registry: `editor.get/set/query/
+        // batch/schema` (demo automation) and specs read it here.
+        objects: objectModel?.objects ?? null,
+      };
+      // Demo/automation entry: run a demo script (paged.* + editor.* + demo.*)
+      // against the live handle. Trusted first-party scripts only (see runner).
+      // Exposed wherever the handle is — dev today; the `demo` playground build
+      // (Phase 2) un-gates the same block in a production bundle.
+      (globalThis as unknown as { __demo?: unknown }).__demo = {
+        run: (source: string) =>
+          runDemoScriptWithHandle(
+            source,
+            (
+              globalThis as unknown as {
+                __canvas: Parameters<typeof runDemoScriptWithHandle>[1];
+              }
+            ).__canvas,
+          ),
+      };
+    }
+  });
 
   // Consolidated worker-message subscribe. Routes the discrete
   // events into the right contexts; bulk traffic (camera, gestures)
@@ -1256,29 +1269,29 @@ function ShellChrome({
       const importer = registries.importers.resolve(file.name, file.type);
       if (importer) {
         setStatus(`importing ${file.name} via ${importer.title}…`);
+        // A promise chain, not try/finally: the React Compiler does not
+        // compile a component with a `finally` in it (ADR 228).
         void (async () => {
-          try {
-            const bytes = new Uint8Array(await file.arrayBuffer());
-            // U14 — park the file name for the open orchestration: an
-            // importer that OPENS a document does so through
-            // `nativeDocument.open(bytes)`, which carries no name.
-            setPendingImportSource(file.name);
-            await importer.import({
-              name: file.name,
-              bytes,
-              mimeType: file.type,
-            });
-            setStatus(`imported ${file.name}`);
-          } catch (err) {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          // U14 — park the file name for the open orchestration: an
+          // importer that OPENS a document does so through
+          // `nativeDocument.open(bytes)`, which carries no name.
+          setPendingImportSource(file.name);
+          await importer.import({
+            name: file.name,
+            bytes,
+            mimeType: file.type,
+          });
+          setStatus(`imported ${file.name}`);
+        })()
+          .catch((err: unknown) => {
             setWarnings((prev) => [
               ...prev,
               `import of ${file.name} via ${importer.title} failed: ` +
                 (err instanceof Error ? err.message : String(err)),
             ]);
-          } finally {
-            setPendingImportSource(null);
-          }
-        })();
+          })
+          .finally(() => setPendingImportSource(null));
         return;
       }
       void loadDocumentFile(client, file, {
@@ -1474,8 +1487,8 @@ function UnsavedChangesGuard() {
 /** Dev-only renderless probe: reads the cockpit tab state + edit-context
  *  stack (both providers are in scope here, unlike at the `__canvas`
  *  publish site) and mirrors them into `targetRef` for the journey-test
- *  oracle. Writing a ref during render is safe — it's idempotent and
- *  triggers no state update. */
+ *  oracle, after each commit (a ref written during render keeps the
+ *  component uncompiled, ADR 228). */
 function DebugContextProbe({
   targetRef,
 }: {
@@ -1485,29 +1498,31 @@ function DebugContextProbe({
   const editStack = useOptionalEditContextStack();
   const registries = useRegistries();
   const tool = useOptionalTool();
-  targetRef.current = {
-    panels: {
-      open: cockpit?.rightTabs ?? [],
-      active: cockpit?.activeTab ?? null,
-    },
-    editContext: editStack?.active
-      ? {
-          type: editStack.active.type,
-          scopeRoot: editStack.active.scopeRoot,
-          label: editStack.active.label,
-        }
-      : null,
-    inspectorContext: cockpit?.inspectorContext ?? null,
-    tools: {
-      base: tool?.toolState.base ?? null,
-      effective: tool?.effectiveTool ?? null,
-      registered: registries.tools.list().map((t) => t.id),
-    },
-    commands: registries.commands.list().map((c) => c.id),
-    keybindings: registries.keybindings
-      .list()
-      .map((k) => ({ key: k.key, command: k.command })),
-  };
+  useLayoutEffect(() => {
+    targetRef.current = {
+      panels: {
+        open: cockpit?.rightTabs ?? [],
+        active: cockpit?.activeTab ?? null,
+      },
+      editContext: editStack?.active
+        ? {
+            type: editStack.active.type,
+            scopeRoot: editStack.active.scopeRoot,
+            label: editStack.active.label,
+          }
+        : null,
+      inspectorContext: cockpit?.inspectorContext ?? null,
+      tools: {
+        base: tool?.toolState.base ?? null,
+        effective: tool?.effectiveTool ?? null,
+        registered: registries.tools.list().map((t) => t.id),
+      },
+      commands: registries.commands.list().map((c) => c.id),
+      keybindings: registries.keybindings
+        .list()
+        .map((k) => ({ key: k.key, command: k.command })),
+    };
+  });
   return null;
 }
 
