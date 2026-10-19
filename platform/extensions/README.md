@@ -45,7 +45,7 @@ deliberately.
 
 ## React 19
 
-From 0.2.76 the contract is typed against React 19 ([PM-0008](../../docs/adr/PM-0008-npm-packages-and-release.md),
+From 0.2.79 the contract is typed against React 19 ([PM-0008](../../docs/adr/PM-0008-npm-packages-and-release.md),
 amendment 2): `plugin-api` depends on `@types/react` ^19.3, and `plugin-sdk`'s optional React
 peer, like every built-in bundle's, is `react >=19.3`. The editor provides React 19.3.1. For an
 extension with React panels:

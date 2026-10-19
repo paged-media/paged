@@ -18,6 +18,21 @@ What this folder holds.
   pagination of three real Word documents measured against Word's own PDF export: the
   numbers, every deviation, what was fixed and what is left.
 
+## Tests
+
+Each surface the bundle contributes has a test that asserts what it does, tagged with
+`covers()` for the surface-conformance gate (the overview is
+`platform/extensions/docs/testing-plugins.md`). All of them are in
+`packages/doc-bundle/test/`; the ones that boot the docx engine skip without
+`bin/docx_js_bg.wasm` (`bash scripts/build-wasm.sh`) and fail instead under
+`REQUIRE_REAL_DOCX=1`, which the `doc / bun test` workflow sets after building it.
+
+| Layer     | Files                                                       | What they assert                                                                                                                                                                                                                                                                                                                                                                                               |
+| --------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| unit      | `commands-unit.spec.ts`                                     | The bundle on a recording fake editor. "Insert Word document…": the picker it asks, the text frame a picked file starts as (inside the Word page's margins), the outline panel raised; a cancelled pick, a host without a picker and a file that is not a Word document place nothing. The typed `placeDoc`; `exportDocx` and `fillMergeFields` refusing an address that is not a placed Word document.        |
+| headless  | `headless/object-model.spec.ts`, `headless/docx-io.spec.ts` | On the real engine: the typed commands through `host.objects` (merge fields filled in one undo step, a placed second letter, an export carrying an edit), File ▸ Open of a `.docx` as its own document and File ▸ Export as `.docx`. Finding DOC-1 (placing a document is many undo steps) is an expected failure there.                                                                                       |
+| component | `panels/*.dom.test.tsx` (`bun run test:dom`, happy-dom)     | The outline panel (empty state, the insert button and its no-picker reason, the document's name and counts, Select frame, inserting a picked file) and the Word properties schema panel, rendered through the SDK's schema-panel component and a minimal renderer (`panels/schema-renderer.tsx`): the document's rows, the merge-field list, a value written through it poured into the text as one undo step. |
+
 ## Decisions in other repositories that bind this one
 
 These records live in other public paged-media repositories. The code here rests on each of

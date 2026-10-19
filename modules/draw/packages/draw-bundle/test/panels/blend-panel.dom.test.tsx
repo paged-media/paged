@@ -76,6 +76,7 @@ import {
   PLAIN_LEAVES,
   RECORDS,
 } from "./harness";
+import { covers } from "@paged-media/test-kit";
 
 /** `count` key pairs: `a<i>` and, 60 pt to its right, `b<i>`. */
 const keyPairs = (count: number): string =>
@@ -174,6 +175,7 @@ describe("Blend options panel — rendered against the engine", () => {
     });
 
     it("+ Blend builds, through the engine, what the form holds", async () => {
+      covers("panel:media.paged.draw.panel.blend");
       const panel = await mountPanel(h, makeBlendPanel);
       await drive(
         () => h.host.selection.set([poly("a0"), poly("b0")]),
@@ -218,6 +220,7 @@ describe("Blend options panel — rendered against the engine", () => {
     });
 
     it("Update rebuilds the record with the options above it", async () => {
+      covers("panel:media.paged.draw.panel.blend");
       const panel = await mountPanel(h, makeBlendPanel);
       panel.change('[data-draw-blend-field="steps"]', "4");
       await panel.click("[data-draw-blend-update]");
@@ -279,6 +282,7 @@ describe("Blend options panel — rendered against the engine", () => {
     });
 
     it("Release removes the intermediates and the record, and keeps the keys", async () => {
+      covers("panel:media.paged.draw.panel.blend");
       const panel = await mountPanel(h, makeBlendPanel);
       await panel.click("[data-draw-blend-release]");
 

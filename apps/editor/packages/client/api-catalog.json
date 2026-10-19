@@ -3,9 +3,9 @@
   "package": "@paged-media/client",
   "protocol": 74,
   "counts": {
-    "clientMembers": 76,
+    "clientMembers": 78,
     "wireKinds": 52,
-    "exports": 72
+    "exports": 73
   },
   "wireKinds": [
     "beginGesture",
@@ -501,6 +501,18 @@
           "summary": "ADR 025 — drain the render worker's journal ring into the caller."
         },
         {
+          "name": "CanvasClient.setSnapshotBackend",
+          "kind": "method",
+          "signature": "setSnapshotBackend(backend: \"auto\" | \"gpu\" | \"cpu\"): void",
+          "summary": "Choose the rasterizer that answers {@link requestSnapshot} — the eyedropper, PNG export, AI page images and document thumbnails all read pixels through it."
+        },
+        {
+          "name": "CanvasClient.snapshotBackendInfo",
+          "kind": "method",
+          "signature": "async snapshotBackendInfo(timeoutMs",
+          "summary": "The snapshot backend the worker was asked for, whether it has a WebGPU device, and which rasterizer drew the last snapshot (`null` before the first)."
+        },
+        {
           "name": "CanvasClient.redo",
           "kind": "method",
           "signature": "async redo(): Promise<WorkerToMain>",
@@ -570,6 +582,12 @@
           "name": "JournalDrain",
           "kind": "type",
           "signature": "JournalDrain",
+          "summary": null
+        },
+        {
+          "name": "SnapshotBackendInfo",
+          "kind": "type",
+          "signature": "SnapshotBackendInfo",
           "summary": null
         }
       ]
