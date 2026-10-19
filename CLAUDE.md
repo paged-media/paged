@@ -17,6 +17,8 @@ next to the code you change. This file holds only what crosses components.
   public SDK (`plugin-sdk`, which ships the contract as its `./api` entry).
   Built-in-only code must not leak into it: community extensions consume it.
 - `apps/editor`, `apps/server`, `apps/cli` (`paged-node`) — applications.
+- `packages/paged` — the published `@paged-media/paged`, assembled from the engine's
+  `canvas-wasm` and the bundled CLI (its `paged` bin); see npm packages below.
 - `platform/shared/*` — internal code of the built-ins and the editor (PM-0002):
   `ai`, `fmt`, `helpers`, `panel-kit`, `react-live`, `test-kit`, `test-resources`,
   `wasm-boot`, and the Rust crates `ooxml` (`paged-ooxml`, the OOXML foundation of
