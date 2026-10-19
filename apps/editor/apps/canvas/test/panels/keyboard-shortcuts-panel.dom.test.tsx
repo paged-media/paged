@@ -84,28 +84,26 @@ describe("Keyboard shortcuts panel", () => {
     ]);
   });
 
-  // The rows are memoised on the registry objects, which never change
-  // identity: a binding a bundle registers while the panel is open never
-  // appears (bundles load after the shell mounts, some on demand).
-  test.failing(
-    "PN-351: a binding registered while the panel is open appears in it",
-    async () => {
-      covers("panel:paged.keyboard-shortcuts");
-      const h = await mountPanel(KeyboardShortcutsPanel, {
-        id: "paged.keyboard-shortcuts",
+  // PN-351 (fixed): the rows are memoised on views of the registries,
+  // which change with them (ADR 229), so a binding a bundle registers while
+  // the panel is open (bundles load after the shell mounts, some on
+  // demand) appears at once.
+  test("PN-351: a binding registered while the panel is open appears in it", async () => {
+    covers("panel:paged.keyboard-shortcuts");
+    const h = await mountPanel(KeyboardShortcutsPanel, {
+      id: "paged.keyboard-shortcuts",
+    });
+    await h.act(() => {
+      h.registries.commands.register({
+        id: "test.late",
+        title: "Late command",
+        handler: noop,
       });
-      await h.act(() => {
-        h.registries.commands.register({
-          id: "test.late",
-          title: "Late command",
-          handler: noop,
-        });
-        h.registries.keybindings.register({
-          key: "cmd+j",
-          command: "test.late",
-        });
+      h.registries.keybindings.register({
+        key: "cmd+j",
+        command: "test.late",
       });
-      expect(rows(h).map((r) => r[0])).toContain("Late command");
-    },
-  );
+    });
+    expect(rows(h).map((r) => r[0])).toContain("Late command");
+  });
 });

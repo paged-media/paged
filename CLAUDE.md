@@ -55,6 +55,19 @@ shared packages (`ai`, `helpers`, `test-kit`, `test-resources`, `wasm-boot`).
   Never add to it; fix a finding and run `--prune-suppressions` in the same commit.
   A one-line exception says why: `// eslint-disable-next-line <rule> -- <reason>`.
 
+## React
+
+- Every first-party React source ships compiled by the React Compiler: the editor's
+  build compiles the editor and every module bundle from source, plugin-sdk compiles
+  ahead of time. One configuration, `tooling/js/react-compiler.mjs`
+  (apps/editor/docs/adr/229-react-compiler.md).
+- Read a registry, store, session or host surface during render through a view
+  (`@paged-media/react-live`'s `useLive`, the shell's `useRegistryView`) or a
+  `useSyncExternalStore` snapshot, never on the object itself.
+- Each package's `compiler-coverage.json` lists what the compiler leaves uncompiled; CI
+  fails on a new entry. Fixing a bailout means running the ratchet with `--write` in the
+  same commit (`bun tooling/js/react-compiler-coverage.mjs --write`).
+
 ## Agent tools (MCP)
 
 `.mcp.json` registers two servers; `.claude/settings.json` allows their read

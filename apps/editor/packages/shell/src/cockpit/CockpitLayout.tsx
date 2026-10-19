@@ -34,6 +34,7 @@ import type { ComponentType } from "react";
 import type { PanelProps } from "../registries/panel";
 import { usePaged } from "../state/paged-editor";
 import { useRegistries } from "../state/registries-context";
+import { useRegistryView } from "../state/live";
 import { useWorkflowMode } from "../state/workflow-mode-context";
 import { PanelHost } from "./PanelHost";
 import { RightDock } from "./RightDock";
@@ -60,9 +61,9 @@ export function CockpitLayout({
   onFile,
 }: CockpitLayoutProps) {
   const paged = usePaged();
-  const registries = useRegistries();
+  const modes = useRegistryView(useRegistries().modes);
   const { mode } = useWorkflowMode();
-  const slots = registries.modes.get(mode)?.slots;
+  const slots = modes.get(mode)?.slots;
 
   const leftId = slots?.left;
   const canvasOverride = slots?.canvas?.startsWith("panel:")

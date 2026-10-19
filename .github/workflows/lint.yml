@@ -14,9 +14,10 @@ concurrency:
 #
 # bun lint is in Bun's canary builds only, so tooling/js/bun-canary.sh runs one
 # exact npm canary (tooling/js/bun-canary-version) through bunx. Bun itself,
-# for bunx, is the version in /.prototools. There is no install step: the
-# config and its rules are native to bun lint, and a checkout without
-# node_modules lints exactly as an installed one does.
+# for bunx, is the version in /.prototools. The lint job has no install step:
+# the config and its rules are native to bun lint, and a checkout without
+# node_modules lints exactly as an installed one does. The React Compiler job
+# beside it installs the workspace, for Babel and the compiler.
 on:
   push:
     branches: [main]
@@ -34,6 +35,8 @@ on:
       - "tooling/js/bun-canary.*"
       - "tooling/js/lint-selftest/**"
       - "platform/shared/*/package.json"
+      - "**/compiler-coverage.json"
+      - "bun.lock"
       - ".github/workflows/lint.yml"
   pull_request:
     paths:
@@ -50,6 +53,8 @@ on:
       - "tooling/js/bun-canary.*"
       - "tooling/js/lint-selftest/**"
       - "platform/shared/*/package.json"
+      - "**/compiler-coverage.json"
+      - "bun.lock"
       - ".github/workflows/lint.yml"
   workflow_dispatch:
 
@@ -98,3 +103,38 @@ jobs:
           path: lint-junit.xml
           if-no-files-found: warn
           retention-days: 14
+
+  # The React Compiler's coverage ratchet (apps/editor ADR 229): the
+  # compiler, with the builds' own options (tooling/js/react-compiler.mjs),
+  # over every first-party React source. Each package's
+  # compiler-coverage.json lists the components and hooks it leaves
+  # uncompiled; a new one fails, one that is fixed must be removed (--write),
+  # and every "use no memo" needs an issue link and an unexpired date.
+  react-compiler:
+    name: React Compiler coverage (bailouts ratchet)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: moonrepo/setup-toolchain@v0.6.4
+        with:
+          auto-install: true
+          proto-version: "0.63.1"
+      - name: cache Bun's package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+      - name: bun install (root workspace)
+        run: bun install --frozen-lockfile
+      - name: compiler coverage
+        run: bun tooling/js/react-compiler-coverage.mjs --json "$RUNNER_TEMP/react-compiler-coverage.json"
+      - name: upload the coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: react-compiler-coverage
+          path: ${{ runner.temp }}/react-compiler-coverage.json
+          if-no-files-found: warn
+          retention-days: 30

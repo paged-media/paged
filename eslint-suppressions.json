@@ -220,9 +220,6 @@
     }
   },
   "apps/editor/packages/shell/src/chrome/CommandPalette.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    },
     "react-hooks/set-state-in-effect": {
       "count": 1
     }
@@ -235,11 +232,6 @@
       "count": 2
     }
   },
-  "apps/editor/packages/shell/src/chrome/MenuBar.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
   "apps/editor/packages/shell/src/chrome/SoftProofToggle.tsx": {
     "react-hooks/refs": {
       "count": 12
@@ -247,7 +239,7 @@
   },
   "apps/editor/packages/shell/src/chrome/ToolRail.tsx": {
     "react-hooks/exhaustive-deps": {
-      "count": 4
+      "count": 1
     },
     "react-hooks/set-state-in-effect": {
       "count": 1
