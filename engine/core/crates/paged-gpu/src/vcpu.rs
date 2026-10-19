@@ -187,8 +187,8 @@ struct Surface {
 impl Surface {
     fn new(w: u32, h: u32, offset: (i32, i32), scale: f32, id: u64) -> Self {
         let (w, h) = (w.clamp(1, MAX_SIDE), h.clamp(1, MAX_SIDE));
-        let xform = Affine::translate((-offset.0 as f64, -offset.1 as f64))
-            * Affine::scale(scale as f64);
+        let xform =
+            Affine::translate((-offset.0 as f64, -offset.1 as f64)) * Affine::scale(scale as f64);
         let mut s = Self {
             w,
             h,
@@ -218,8 +218,11 @@ impl Surface {
             }
         }
         if let Some(m) = self.masks.last() {
-            self.ctx
-                .set_mask(Mask::from_parts(m.as_ref().clone(), self.w as u16, self.h as u16));
+            self.ctx.set_mask(Mask::from_parts(
+                m.as_ref().clone(),
+                self.w as u16,
+                self.h as u16,
+            ));
         }
     }
 
@@ -283,7 +286,13 @@ impl Surface {
         set_brush(self.ctx(), brush);
     }
 
-    fn fill(&mut self, res: &mut Resources, path: &BezPath, brush: PaintBrush, blend: PenikoBlendMode) {
+    fn fill(
+        &mut self,
+        res: &mut Resources,
+        path: &BezPath,
+        brush: PaintBrush,
+        blend: PenikoBlendMode,
+    ) {
         let blends = blend != PenikoBlendMode::default();
         if blends {
             self.before_blend(res);
@@ -474,9 +483,11 @@ impl Scratch {
                 ctx.reset_and_resize(w as u16, h as u16);
                 ctx
             }
-            None => self
-                .ctx
-                .insert(RenderContext::new_with(w as u16, h as u16, render_settings())),
+            None => self.ctx.insert(RenderContext::new_with(
+                w as u16,
+                h as u16,
+                render_settings(),
+            )),
         };
         ctx.set_fill_rule(Fill::NonZero);
         draw(ctx);
@@ -554,14 +565,17 @@ fn group_infos(list: &DisplayList) -> std::collections::HashMap<usize, GroupInfo
     for (i, cmd) in list.commands.iter().enumerate() {
         let reads = match cmd {
             DisplayCommand::FillPathBlend { blend_mode, .. } => *blend_mode != BlendMode::Normal,
-            DisplayCommand::FillPathOverprint { .. } | DisplayCommand::StrokePathOverprint { .. } => true,
+            DisplayCommand::FillPathOverprint { .. }
+            | DisplayCommand::StrokePathOverprint { .. } => true,
             DisplayCommand::InnerShadow { .. }
             | DisplayCommand::OuterGlow { .. }
             | DisplayCommand::InnerGlow { .. }
             | DisplayCommand::BevelEmboss { .. }
             | DisplayCommand::Satin { .. } => true,
             DisplayCommand::BeginBlendGroup {
-                blend_mode, knockout, ..
+                blend_mode,
+                knockout,
+                ..
             } => *blend_mode != BlendMode::Normal || *knockout,
             DisplayCommand::PushLayer { blend_mode, .. } => *blend_mode != BlendMode::Normal,
             _ => false,
@@ -668,7 +682,8 @@ impl Raster<'_> {
         pad_pt: f64,
         draw: impl FnOnce(&mut RenderContext),
     ) -> Option<(Pixmap, i32, i32)> {
-        let surface = self.frames
+        let surface = self
+            .frames
             .iter()
             .rev()
             .find_map(|f| f.surface.as_ref())
@@ -713,7 +728,13 @@ impl Raster<'_> {
     }
 
     /// Splat a page-level CMYK draw into the plane state.
-    fn splat(&mut self, paint: &Paint, bbox_pt: KRect, pad_pt: f64, draw: impl FnOnce(&mut RenderContext)) {
+    fn splat(
+        &mut self,
+        paint: &Paint,
+        bbox_pt: KRect,
+        pad_pt: f64,
+        draw: impl FnOnce(&mut RenderContext),
+    ) {
         if !self.want_planes || !self.on_page() || !matches!(paint, Paint::Cmyk { .. }) {
             return;
         }
@@ -734,7 +755,13 @@ impl Raster<'_> {
 
     /// An overprint draw: per-ink composite for a CMYK paint, a
     /// `Darken` stamp (the per-channel max of RGB) for any other.
-    fn overprint(&mut self, paint: &Paint, transform: &CTransform, path: &BezPath, stroke: Option<vello_cpu::kurbo::Stroke>) {
+    fn overprint(
+        &mut self,
+        paint: &Paint,
+        transform: &CTransform,
+        path: &BezPath,
+        stroke: Option<vello_cpu::kurbo::Stroke>,
+    ) {
         let Some(brush) = vello_map::resolve_paint(paint, self.list, transform) else {
             return;
         };
@@ -916,7 +943,12 @@ impl Raster<'_> {
                         continue;
                     };
                     let path = vello_map::path_to_bez(data, transform);
-                    self.overprint(paint, transform, &path, Some(vello_map::kurbo_stroke(stroke)));
+                    self.overprint(
+                        paint,
+                        transform,
+                        &path,
+                        Some(vello_map::kurbo_stroke(stroke)),
+                    );
                 }
                 DisplayCommand::DropShadow {
                     path_id,
@@ -963,9 +995,8 @@ impl Raster<'_> {
                         continue;
                     };
                     let [a, b, c, d, tx, ty] = transform.0;
-                    let unit_to_page = Affine::new([
-                        a as f64, b as f64, c as f64, d as f64, tx as f64, ty as f64,
-                    ]);
+                    let unit_to_page =
+                        Affine::new([a as f64, b as f64, c as f64, d as f64, tx as f64, ty as f64]);
                     let pixel_to_unit =
                         Affine::scale_non_uniform(1.0 / img.width as f64, 1.0 / img.height as f64);
                     let (surface, res, _) = self.split();
@@ -1014,8 +1045,13 @@ impl Raster<'_> {
                     });
                 }
                 DisplayCommand::BeginMaskedContent(_) => {
-                    if !matches!(self.frames.last(), Some(Frame { kind: FrameKind::SoftMask { .. }, .. }))
-                    {
+                    if !matches!(
+                        self.frames.last(),
+                        Some(Frame {
+                            kind: FrameKind::SoftMask { .. },
+                            ..
+                        })
+                    ) {
                         continue; // stray marker — tolerated
                     }
                     let Some(Frame {
@@ -1068,7 +1104,15 @@ impl Raster<'_> {
                     ..
                 } => {
                     let info = infos.get(&idx).copied().unwrap_or_default();
-                    self.begin_group(*bounds, *blend_mode, *opacity, *isolated, *knockout, None, info);
+                    self.begin_group(
+                        *bounds,
+                        *blend_mode,
+                        *opacity,
+                        *isolated,
+                        *knockout,
+                        None,
+                        info,
+                    );
                 }
                 DisplayCommand::PushLayer {
                     bounds,
@@ -1078,7 +1122,15 @@ impl Raster<'_> {
                     ..
                 } => {
                     let info = infos.get(&idx).copied().unwrap_or_default();
-                    self.begin_group(*bounds, *blend_mode, *opacity, true, false, Some(*effect), info);
+                    self.begin_group(
+                        *bounds,
+                        *blend_mode,
+                        *opacity,
+                        true,
+                        false,
+                        Some(*effect),
+                        info,
+                    );
                 }
                 DisplayCommand::InnerShadow {
                     path_id,
@@ -1193,7 +1245,13 @@ impl Raster<'_> {
         // A malformed list can leave frames open; close them so their
         // content still lands.
         while !self.frames.is_empty() {
-            if matches!(self.frames.last(), Some(Frame { kind: FrameKind::SoftMask { .. }, .. })) {
+            if matches!(
+                self.frames.last(),
+                Some(Frame {
+                    kind: FrameKind::SoftMask { .. },
+                    ..
+                })
+            ) {
                 // Artwork that never reached its content: drop it rather
                 // than paint the mask geometry onto the page.
                 self.frames.pop();
@@ -1296,7 +1354,11 @@ impl Raster<'_> {
                 opacity,
                 backdrop_copied,
                 knockout_base,
-                blur_sigma_px: if effect.is_some() { sigma_pt * scale } else { 0.0 },
+                blur_sigma_px: if effect.is_some() {
+                    sigma_pt * scale
+                } else {
+                    0.0
+                },
                 layer: effect.is_some(),
             },
         });
@@ -1363,7 +1425,10 @@ impl Raster<'_> {
             self.frames.last(),
             Some(Frame {
                 surface: Some(_),
-                kind: FrameKind::Group { knockout_base: Some(_), .. },
+                kind: FrameKind::Group {
+                    knockout_base: Some(_),
+                    ..
+                },
             })
         );
         if !layer && parent_has_knockout {
@@ -1405,12 +1470,22 @@ impl Raster<'_> {
         );
     }
 
-    fn knockout_member(&mut self, member: Pixmap, goff: (i32, i32), blend: BlendMode, opacity: f32) {
+    fn knockout_member(
+        &mut self,
+        member: Pixmap,
+        goff: (i32, i32),
+        blend: BlendMode,
+        opacity: f32,
+    ) {
         let (gw, gh) = (member.width() as u32, member.height() as u32);
         let (base, parent_off, pw, ph) = {
             let Some(Frame {
                 surface: Some(parent),
-                kind: FrameKind::Group { knockout_base: Some(base), .. },
+                kind:
+                    FrameKind::Group {
+                        knockout_base: Some(base),
+                        ..
+                    },
             }) = self.frames.last()
             else {
                 return;
@@ -1460,14 +1535,26 @@ impl Raster<'_> {
     /// A drop shadow: the shape, offset, filled in the shadow colour,
     /// blurred by a separable Gaussian of `sigma_pt`, choked by `spread`
     /// and grained by `noise`, composited source-over.
-    fn drop_shadow(&mut self, path: &BezPath, color: ComposeColor, sigma_pt: f32, spread: f32, noise: f32) {
+    fn drop_shadow(
+        &mut self,
+        path: &BezPath,
+        color: ComposeColor,
+        sigma_pt: f32,
+        spread: f32,
+        noise: f32,
+    ) {
         let scale = self.scale;
         let brush = vello_map::linear_to_peniko(color);
         let sigma_px = sigma_pt * scale;
         if sigma_px <= 0.5 {
             // Sub-pixel blur: the hard-edged fill is indistinguishable.
             let (s, res, _) = self.split();
-            s.fill(res, path, PaintBrush::Solid(brush), PenikoBlendMode::default());
+            s.fill(
+                res,
+                path,
+                PaintBrush::Solid(brush),
+                PenikoBlendMode::default(),
+            );
             return;
         }
         let surface_xform = self.active().xform;
@@ -1512,7 +1599,12 @@ impl Raster<'_> {
             if w == 0 || h == 0 || w > MAX_SIDE || h > MAX_SIDE {
                 continue;
             }
-            let c = premul_rgba8(ComposeColor::rgba(stamp.color.r, stamp.color.g, stamp.color.b, 1.0));
+            let c = premul_rgba8(ComposeColor::rgba(
+                stamp.color.r,
+                stamp.color.g,
+                stamp.color.b,
+                1.0,
+            ));
             let ca = stamp.color.a.clamp(0.0, 1.0);
             let mut rgba = vec![0u8; (w as usize) * (h as usize) * 4];
             for (i, &m) in stamp.mask.data.iter().enumerate() {
@@ -1586,7 +1678,8 @@ impl Raster<'_> {
             let s = self.active();
             (s.xform, s.id)
         };
-        let Some((ox, oy, w, h)) = effect_scratch_bounds(xform, path.bounding_box(), pad_pt as f64) else {
+        let Some((ox, oy, w, h)) = effect_scratch_bounds(xform, path.bounding_box(), pad_pt as f64)
+        else {
             return;
         };
         let to_scratch = Affine::translate((-ox as f64, -oy as f64)) * xform;
@@ -1604,10 +1697,12 @@ impl Raster<'_> {
                 .into_iter()
                 .map(|m| m as f32 / 255.0)
                 .collect(),
-            FeatherKind::Directional(p) => directional_feather_mask(interior, w, h, (ox, oy), bbox, p, scale)
-                .into_iter()
-                .map(|m| m as f32 / 255.0)
-                .collect(),
+            FeatherKind::Directional(p) => {
+                directional_feather_mask(interior, w, h, (ox, oy), bbox, p, scale)
+                    .into_iter()
+                    .map(|m| m as f32 / 255.0)
+                    .collect()
+            }
             FeatherKind::Gradient(p) => {
                 if p.stops.is_empty() {
                     return;
@@ -1651,14 +1746,19 @@ impl Raster<'_> {
                             return None;
                         }
                         let q = ((by as u32 * b.w + bx as u32) * 4) as usize;
-                        Some([b.pixels[q], b.pixels[q + 1], b.pixels[q + 2], b.pixels[q + 3]])
+                        Some([
+                            b.pixels[q],
+                            b.pixels[q + 1],
+                            b.pixels[q + 2],
+                            b.pixels[q + 3],
+                        ])
                     })
                     .unwrap_or(paper_fallback);
                 let q = ((ty * sw + tx) * 4) as usize;
                 let f = factor.clamp(0.0, 1.0);
                 for ch in 0..4 {
-                    target[q + ch] =
-                        (target[q + ch] as f32 * f + under[ch] as f32 * (1.0 - f)).clamp(0.0, 255.0) as u8;
+                    target[q + ch] = (target[q + ch] as f32 * f + under[ch] as f32 * (1.0 - f))
+                        .clamp(0.0, 255.0) as u8;
                 }
             }
         }
@@ -1743,7 +1843,11 @@ fn scratch_bbox(xform: Affine, bbox_pt: KRect, pad_pt: f64) -> Option<(i32, i32,
 }
 
 /// [`scratch_bbox`] with the effect lane's 8192 px cap.
-fn effect_scratch_bounds(xform: Affine, bbox_pt: KRect, pad_pt: f64) -> Option<(i32, i32, u32, u32)> {
+fn effect_scratch_bounds(
+    xform: Affine,
+    bbox_pt: KRect,
+    pad_pt: f64,
+) -> Option<(i32, i32, u32, u32)> {
     let (x, y, w, h) = scratch_bbox(xform, bbox_pt, pad_pt)?;
     (w <= 8192 && h <= 8192).then_some((x, y, w, h))
 }
@@ -2031,7 +2135,13 @@ fn directional_feather_mask(
     let hw = ((bbox.x1 - bbox.x0) * 0.5) as f32;
     let hh = ((bbox.y1 - bbox.y0) * 0.5) as f32;
     let (sin_a, cos_a) = (-params.angle_deg.to_radians()).sin_cos();
-    let ramp = |d: f32, width: f32| if width > 0.0 { (d / width).clamp(0.0, 1.0) } else { 1.0 };
+    let ramp = |d: f32, width: f32| {
+        if width > 0.0 {
+            (d / width).clamp(0.0, 1.0)
+        } else {
+            1.0
+        }
+    };
     if lw + rw + tw + bw > 0.0 {
         for j in 0..h {
             for i in 0..w {

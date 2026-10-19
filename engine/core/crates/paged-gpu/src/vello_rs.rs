@@ -100,9 +100,11 @@
 use std::cell::RefCell;
 use std::sync::Arc;
 
-use paged_compose::{BlendMode as ComposeBlendMode, DisplayCommand, DisplayList, LayerEffect, Paint};
 #[cfg(test)]
 use paged_compose::Color as ComposeColor;
+use paged_compose::{
+    BlendMode as ComposeBlendMode, DisplayCommand, DisplayList, LayerEffect, Paint,
+};
 use vello::kurbo;
 use vello::peniko::{
     BlendMode as PenikoBlendMode, Blob, BrushRef, Color as PenikoColor, Compose, Fill,
