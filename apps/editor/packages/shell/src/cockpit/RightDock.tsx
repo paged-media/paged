@@ -23,8 +23,15 @@
 // only one tab is open — the kit's "single fixed inspector" look in
 // the non-design modes. The ONLY tabbed surface in the app; panels
 // never float or re-dock elsewhere.
+//
+// Every open tab's panel stays mounted (ADR 233): the inactive ones sit
+// in a hidden <Activity>, which keeps their state and DOM (a scrolled
+// list, a half-typed field, an expanded section) and unmounts their
+// effects, so a hidden panel holds no subscription and fetches nothing.
+// Switching tabs reveals a panel instead of mounting it again. Each panel
+// scrolls in its own container, so each keeps its scroll position.
 
-import { useEffect, useRef } from "react";
+import { Activity, useEffect, useRef } from "react";
 
 import { Icon, hasIcon } from "../icons";
 import { PluginGlyph } from "../icons/plugin-glyph";
@@ -152,14 +159,26 @@ export function RightDock() {
           <div style={{ flex: 1 }} />
         </div>
       )}
-      <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-        {active ? (
-          <PanelHost id={active} />
-        ) : (
+      <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+        {!active && (
           <div className="pg-ui-xs" style={{ padding: 16, opacity: 0.6 }}>
             No panel open.
           </div>
         )}
+        {tabs.map((t) => (
+          <Activity
+            key={t.id}
+            mode={t.id === active ? "visible" : "hidden"}
+            name={t.id}
+          >
+            <div
+              data-dock-panel={t.id}
+              style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: "auto" }}
+            >
+              <PanelHost id={t.id} />
+            </div>
+          </Activity>
+        ))}
       </div>
     </div>
   );
