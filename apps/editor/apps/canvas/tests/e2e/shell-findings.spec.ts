@@ -470,7 +470,7 @@ test.describe("SH-201 (UX F-28) — Cut, Copy, Paste, Duplicate", () => {
       "Duplicate",
     ]) {
       await expect(
-        page.getByRole("menuitem", { name: new RegExp(`^${name}`) }),
+        page.getByRole("menuitem", { name: new RegExp(`^${name}( [^a-z]|$)`) }),
       ).toBeVisible({ timeout: 2_000 });
     }
   });
