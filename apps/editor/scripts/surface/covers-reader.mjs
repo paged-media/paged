@@ -225,13 +225,24 @@ function readRust(file, text, out) {
  * malformed call; the test files read; and their concatenated text for
  * the secondary "mentioned" signal.
  */
-export function readCovers(root, files) {
+export function readCovers(root, files, options = {}) {
+  const { candidates = null, keepTexts = true } = options;
   const out = { calls: [], errors: [], testFiles: [], texts: new Map() };
   for (const file of files) {
     if (SKIP.test(file)) continue;
     const isRust = file.endsWith(".rs");
     const isJs = /\.(ts|tsx|mts|cts|js|mjs|cjs|jsx)$/.test(file);
     if (!isRust && !isJs) continue;
+    // Reading is the cost on a slow disk. With a candidate list (the files
+    // `git grep` found a covers form in), a file outside it is read only
+    // when its text is wanted for the "mentioned" signal.
+    if (candidates && !candidates.has(file)) {
+      if (!keepTexts) {
+        if (isTestFile(file)) out.testFiles.push(file);
+        continue;
+      }
+      if (!isTestFile(file) && !(isRust && /(^|\/)src\//.test(file))) continue;
+    }
     let text;
     try {
       text = readFileSync(join(root, file), "utf8");
@@ -265,7 +276,7 @@ export function readCovers(root, files) {
       continue;
     }
     out.testFiles.push(file);
-    out.texts.set(file, text);
+    if (keepTexts) out.texts.set(file, text);
     const before = out.calls.length;
     if (isRust) readRust(file, text, out);
     else readTs(file, text, out);
