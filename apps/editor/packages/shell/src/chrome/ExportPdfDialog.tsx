@@ -27,7 +27,7 @@
 // command (`paged.file.exportPdf`) only opens it via the module
 // emitter below (the CommandPalette `notifyPalette` pattern).
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExportPdfWireOptions } from "@paged-media/client";
 import {
   Dialog,
@@ -167,20 +167,17 @@ export function ExportPdfDialog() {
     };
   }, [open, handle, client]);
 
-  const set = useCallback(
-    <K extends keyof FormState>(key: K, value: FormState[K]) => {
-      setForm((f) => {
-        const next = { ...f, [key]: value };
-        try {
-          localStorage.setItem(OPTIONS_KEY, JSON.stringify(next));
-        } catch {
-          /* quota — last-used options are a convenience only */
-        }
-        return next;
-      });
-    },
-    [],
-  );
+  const set = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setForm((f) => {
+      const next = { ...f, [key]: value };
+      try {
+        localStorage.setItem(OPTIONS_KEY, JSON.stringify(next));
+      } catch {
+        /* quota — last-used options are a convenience only */
+      }
+      return next;
+    });
+  };
 
   // X-4 needs an output intent with REAL bytes behind it: an
   // explicitly selected registered profile, or a working space the
@@ -191,6 +188,7 @@ export function ExportPdfDialog() {
     form.outputIntentProfile === "" &&
     !profileActive;
 
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const rangeInvalid = useMemo(() => {
     if (form.allPages) return false;
     const from = Number(form.pageFrom);
@@ -208,7 +206,7 @@ export function ExportPdfDialog() {
   const canExport =
     handle != null && !exporting && !x4ProfileMissing && !rangeInvalid;
 
-  const onExport = useCallback(async () => {
+  const onExport = async () => {
     const options: ExportPdfWireOptions = {
       standard: form.standard,
       outputIntentProfile:
@@ -271,15 +269,15 @@ export function ExportPdfDialog() {
       .finally(() => {
         abortRef.current = null;
       });
-  }, [client, form, docName, activeProfile, pageCount]);
+  };
 
-  const onCancel = useCallback(() => {
+  const onCancel = () => {
     if (abortRef.current) {
       abortRef.current.abort();
     } else {
       setOpen(false);
     }
-  }, []);
+  };
 
   const statusAttr =
     phase.kind === "exporting"

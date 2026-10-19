@@ -279,6 +279,7 @@ function CommandForm({ pending: p }: { pending: Pending }) {
     };
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const info = useMemo(
     () =>
       op
@@ -287,12 +288,8 @@ function CommandForm({ pending: p }: { pending: Pending }) {
         : null,
     [commands, op],
   );
-  const fields = useMemo(
-    () =>
-      Object.entries(info?.args.fields ?? {}).filter(
-        ([name]) => name !== "handle",
-      ),
-    [info],
+  const fields = Object.entries(info?.args.fields ?? {}).filter(
+    ([name]) => name !== "handle",
   );
 
   // Seed the form: the selection / caret, then the entry's own prefill.

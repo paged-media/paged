@@ -158,6 +158,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
   const replayingRef = useRef(false);
   const replayMutations = useRef(0);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const commit = useCallback((next: ActionLibrary) => {
     setLibrary(next);
     setPersisted(saveLibrary(next));
@@ -167,6 +168,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
   // updaters during the render phase, so writing localStorage and
   // another component's state from inside one is a side effect in
   // render. Every caller already has the current library in scope.
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const patch = useCallback(
     (actionId: string, fn: (action: PagedAction) => PagedAction) => {
       commit({
@@ -257,6 +259,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
     return () => off();
   }, [client]);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const startRecording = useCallback(() => {
     setLastReport(null);
     recordingRef.current = true;
@@ -267,11 +270,13 @@ export function ActionsProvider({ children }: PropsWithChildren) {
     });
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const cancelRecording = useCallback(() => {
     recordingRef.current = false;
     setRecording(null);
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const stopRecording = useCallback(
     (name: string): PagedAction | null => {
       recordingRef.current = false;
@@ -295,6 +300,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
     [recording, library, commit],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const play = useCallback(
     async (actionId: string): Promise<ReplayReport | null> => {
       const action = library.actions.find((a) => a.id === actionId);
@@ -328,6 +334,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
     [library, playingId, registries],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const api = useMemo<ActionsApi>(
     () => ({
       actions: library.actions,

@@ -297,6 +297,7 @@ export function ThreadingController() {
    *  point through the live camera + the viewport wrapper rect — the
    *  same inversion the GuideDragController uses (`data-paged-viewport`
    *  tags the wrapper). */
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const clientToDoc = useCallback(
     (clientX: number, clientY: number): [number, number] | null => {
       const wrap = document.querySelector("[data-paged-viewport]");
@@ -318,6 +319,7 @@ export function ThreadingController() {
    *  engine's own precondition (linkFrames rejects a non-empty target),
    *  so the channel stays the authority and a rejection surfaces as a
    *  no-op. */
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const hitFrame = useCallback(
     (pageId: PageId, docX: number, docY: number, rect: ShellPageRect) =>
       hitFrameAt(client, pageId, docX, docY, rect),
@@ -326,6 +328,7 @@ export function ThreadingController() {
 
   /** Fire one mutation; resolve the created id (if any) on success,
    *  `false` on failure. */
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const dispatch = useCallback(
     (mutation: Mutation) => dispatchVia(client, mutation),
     [client],
@@ -338,6 +341,7 @@ export function ThreadingController() {
    *
    *  `end` is where a DRAG was released (ED-5): the new frame is then the
    *  dragged box, like any frame tool draws, wherever the drag began. */
+  // eslint-disable-next-line no-restricted-syntax -- handed to a hook that compares it (ADR 229)
   const settleDrop = useCallback(
     async (
       src: LoadedCursor,
@@ -572,6 +576,7 @@ export function ThreadingController() {
     geomRef.current = elementGeometry;
   });
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const refreshOverset = useCallback(async () => {
     setOversetFrames(
       await oversetFrameIds(
@@ -590,6 +595,7 @@ export function ThreadingController() {
   // whole document. Re-runs on selection change + every Operation push,
   // so load-time chains AND undo/redo are reflected directly from the
   // engine — no session mirror.
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const refreshChain = useCallback(async () => {
     setChainState(await chainStateOf(client, geomRef.current));
   }, [client, setChainState]);

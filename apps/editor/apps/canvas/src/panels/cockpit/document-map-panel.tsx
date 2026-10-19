@@ -122,6 +122,7 @@ function useMissingLinksByPage(
 
   // Identity of the missing-link host set — re-resolve only when the
   // set of missing hosts (or the page order) actually changes.
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const missingKey = useMemo(() => {
     if (!links) return null;
     return links
@@ -215,14 +216,12 @@ export function DocumentMapPanel(_props: PanelProps) {
   const [selected, setSelected] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const entries = useMemo(
     () => (handle ? groupSpreads(handle.pageIds, spreads) : []),
     [handle, spreads],
   );
-  const rects = useMemo(
-    () => (handle ? layoutPages(handle.pageSizesPt) : []),
-    [handle],
-  );
+  const rects = handle ? layoutPages(handle.pageSizesPt) : [];
 
   // REAL per-page missing-link counts (gap 2) — host frame resolved to
   // its page via elementGeometry.
@@ -240,6 +239,7 @@ export function DocumentMapPanel(_props: PanelProps) {
   const missingFonts = fonts ? fonts.filter((f) => f.isMissing).length : 0;
 
   // Margin/column readout per page index, keyed for the spread rows.
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const pageByIndex = useMemo(() => {
     const m = new Map<number, PageSummary>();
     for (const p of pages ?? []) m.set(p.index - 1, p);
@@ -264,6 +264,7 @@ export function DocumentMapPanel(_props: PanelProps) {
       .finally(() => setAdding(false));
   };
 
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return entries;

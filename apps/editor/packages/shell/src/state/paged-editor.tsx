@@ -318,6 +318,7 @@ function PagedEditorBinder({
   const editContextStack = useOptionalEditContextStack();
   const editContext = editContextStack?.active ?? null;
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const editor = useMemo<PagedEditor>(
     () => ({
       client,

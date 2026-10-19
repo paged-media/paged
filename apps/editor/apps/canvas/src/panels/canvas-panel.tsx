@@ -112,6 +112,7 @@ export function CanvasPanel(_props: PanelProps) {
   // page-local frame AABB; try to refine the outline to the precise
   // per-cell rect via elementGeometry(cellElementId), falling back to
   // the frame AABB. A non-table hit clears any prior cell selection.
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const resolveTableCell = useCallback(
     (s: SelectionState | null) => {
       if (!tableSelection) return;
@@ -251,6 +252,7 @@ export function CanvasPanel(_props: PanelProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [activeGroup, setActiveGroup]);
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const onHit = useCallback(
     (
       s: SelectionState | null,
@@ -364,6 +366,7 @@ export function CanvasPanel(_props: PanelProps) {
     ],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const onMarquee = useCallback(
     (
       pageId: import("@paged-media/client").PageId,
@@ -388,6 +391,7 @@ export function CanvasPanel(_props: PanelProps) {
     [client, setElementGeometry, setElementSelection],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const onGestureCommitted = useCallback(() => {
     if (elementSelection.length === 0) return;
     void client
@@ -450,6 +454,7 @@ export function CanvasPanel(_props: PanelProps) {
       .catch(() => {});
   }, [activeScopeRoot, client, setElementGeometry]);
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const onDoubleClickGroup = useCallback(
     (
       groupId: string,

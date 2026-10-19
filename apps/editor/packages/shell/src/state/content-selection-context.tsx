@@ -70,6 +70,7 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
   // panel while it renders. It keeps this provider uncompiled (ADR 229).
   contentSelectionRef.current = contentSelection;
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const setContentSelection = useCallback(
     (sel: ContentSelection | null) => {
       setContentSelectionRaw(sel);
@@ -95,6 +96,7 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
     [client],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const value = useMemo<ContentSelectionContextValue>(
     () => ({
       contentSelection,

@@ -83,6 +83,7 @@ export function usePanelReload(
     };
   }, [host, name]);
 
+  // eslint-disable-next-line no-restricted-syntax -- not a plain binding (ADR 229)
   return React.useCallback(() => reloader.current?.request(), []);
 }
 
@@ -106,6 +107,7 @@ export function useFollowedDraft<P>(
 ] {
   const [draft, setDraft] = React.useState<P>(initial);
   const followed = React.useRef<string | null>(null);
+  // eslint-disable-next-line no-restricted-syntax -- a hook's result: callers may compare it (ADR 229)
   const follow = React.useCallback((id: string, params: P) => {
     const key = `${id}\u0000${JSON.stringify(params)}`;
     if (followed.current === key) return;

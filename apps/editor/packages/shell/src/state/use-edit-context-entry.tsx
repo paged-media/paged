@@ -140,6 +140,7 @@ export function useEditContextEntry() {
    * to `true` when a context was entered (caller skips group descent),
    * `false` otherwise.
    */
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const tryEnterEditContext = useCallback(
     async (hit: DoubleClickHit, objectTypesOnly = false): Promise<boolean> => {
       const element = hit.element;
@@ -244,6 +245,7 @@ export function useEditContextEntry() {
    *  this before starting raw text editing on a frame, so manual edits
    *  on plugin-owned content (a lowered sheet table) route into the
    *  plugin's modal session instead of corrupting what it compiles. */
+  // eslint-disable-next-line no-restricted-syntax -- a hook's result: callers may compare it (ADR 229)
   const tryEnterOwnedContent = useCallback(
     (hit: DoubleClickHit): Promise<boolean> => tryEnterEditContext(hit, true),
     [tryEnterEditContext],
@@ -255,6 +257,7 @@ export function useEditContextEntry() {
    *  first, as the double-click entry does — the controller exits any
    *  context whose scope root leaves the selection. Resolves `false` when
    *  no such context is registered. */
+  // eslint-disable-next-line no-restricted-syntax -- a hook's result: callers may compare it (ADR 229)
   const enterContextByType = useCallback(
     async (type: string, element: ElementId): Promise<boolean> => {
       const real = editContexts.get(type);

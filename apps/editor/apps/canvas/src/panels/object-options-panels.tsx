@@ -38,7 +38,7 @@
 // field writes through `host.objects`, offers "Bind to data…" and shows
 // the binding badge.
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import {
   CockpitBtn,
@@ -219,7 +219,7 @@ const COMPONENTS: Record<string, number> = { CMYK: 4, RGB: 3, LAB: 3, Gray: 1 };
 /** The whole colour (`swatch.color`) as ONE write: space + components
  *  (+ the model it carries) go together. */
 function SwatchColorEditor({ address }: { address: string }) {
-  const targets = useMemo(() => [address], [address]);
+  const targets = [address];
   const field = useObjectField({ path: "color", targets, schemaKind: address });
   const current =
     field.state.state === "value" &&
@@ -309,7 +309,7 @@ export function SwatchOptionsPanel() {
   );
   const address = selfId ? swatchAddress(selfId) : null;
   // One array per swatch, for the fields' effects below.
-  const targets = useMemo(() => (address ? [address] : []), [address]);
+  const targets = address ? [address] : [];
   return (
     <div
       data-swatch-options-panel={swatches ? "ready" : "loading"}
@@ -388,7 +388,7 @@ function AddressListPanel({
   const names = useObjectNames(list);
   const [pick, setPick] = useState("");
   const address = pick && list?.includes(pick) ? pick : (list?.[0] ?? null);
-  const targets = useMemo(() => (address ? [address] : []), [address]);
+  const targets = address ? [address] : [];
   return (
     <div
       data-object-options-panel={list ? testId : "loading"}
@@ -558,7 +558,7 @@ export function SectionOptionsPanel() {
   const address = selfId
     ? formatAddress({ kind: "section", id: selfId } as never)
     : null;
-  const targets = useMemo(() => (address ? [address] : []), [address]);
+  const targets = address ? [address] : [];
   return (
     <div
       data-section-options-panel={sections ? "ready" : "loading"}

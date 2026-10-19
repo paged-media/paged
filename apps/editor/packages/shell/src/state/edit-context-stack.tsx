@@ -160,6 +160,7 @@ export function EditContextStackProvider({ children }: PropsWithChildren) {
   // unrelated renders.
   const hooksRef = useRef(new Map<string, EditContextContribution>());
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const enter = useCallback(
     (
       contribution: EditContextContribution,
@@ -217,6 +218,7 @@ export function EditContextStackProvider({ children }: PropsWithChildren) {
   // Pop the top frame, running the modal hook for `mode` (commit/cancel,
   // K-1) BEFORE `onExit`. `exit` runs `onExit` only (the plain pop). A
   // throwing hook never wedges the unwind.
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const popWith = useCallback(
     (mode: "exit" | "commit" | "cancel"): EditContextFrame | null => {
       let popped: EditContextFrame | null = null;
@@ -246,10 +248,14 @@ export function EditContextStackProvider({ children }: PropsWithChildren) {
     [],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const pop = useCallback(() => popWith("exit"), [popWith]);
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const commit = useCallback(() => popWith("commit"), [popWith]);
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const cancel = useCallback(() => popWith("cancel"), [popWith]);
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const exitAll = useCallback(() => {
     setStack((prev) => {
       // Run onExit for every frame, top→root, on the way out.
@@ -275,6 +281,7 @@ export function EditContextStackProvider({ children }: PropsWithChildren) {
     ? (hooksRef.current.get(active.type) ?? null)
     : null;
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const isActiveDirty = useCallback((): boolean => {
     if (!active) return false;
     const contribution = hooksRef.current.get(active.type);
@@ -285,6 +292,7 @@ export function EditContextStackProvider({ children }: PropsWithChildren) {
     }
   }, [active]);
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const isInScope = useCallback(
     (id: ElementId | null | undefined): boolean => {
       if (!active) return true; // no context → no restriction
@@ -300,6 +308,7 @@ export function EditContextStackProvider({ children }: PropsWithChildren) {
     [active],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const value = useMemo<EditContextStackValue>(
     () => ({
       stack,

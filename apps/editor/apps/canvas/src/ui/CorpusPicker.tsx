@@ -29,7 +29,7 @@
 // identically to opening a file from disk (default font, snapshots,
 // document handle).
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   loadDocumentFile,
   useCanvasClient,
@@ -72,39 +72,36 @@ export function CorpusPicker() {
     };
   }, []);
 
-  const load = useCallback(
-    async (id: string) => {
-      if (!id) return;
-      setBusy(true);
-      // An async block and `.finally`, not try/finally: the React Compiler
-      // does not compile a component with a `finally` in it (ADR 229).
-      await (async () => {
-        // id is "<group>/<name>"; don't encode the slash separator.
-        const path = id.split("/").map(encodeURIComponent).join("/");
-        const resp = await fetch(`/corpus/idml/file/${path}`);
-        if (!resp.ok) {
-          console.warn(`[corpus] ${id}: HTTP ${resp.status}`);
-          return;
-        }
-        const buf = await resp.arrayBuffer();
-        const file = new File([buf], `${id.replace("/", "-")}.idml`, {
-          type: "application/octet-stream",
-        });
-        await loadDocumentFile(client, file, {
-          setHandle: doc.setHandle,
-          setSourceName: doc.setSourceName,
-          setLoading: doc.setLoading,
-          setStatus: (s) => console.info("[corpus]", s),
-          setSnapshotsReady: doc.setSnapshotsReady,
-          addSnapshot: (pageId, url) =>
-            doc.setSnapshots((prev) => new Map(prev).set(pageId, url)),
-          resetForNewDocument: doc.resetForNewDocument,
-          pushWarning: (w) => console.warn("[corpus]", w),
-        });
-      })().finally(() => setBusy(false));
-    },
-    [client, doc],
-  );
+  const load = async (id: string) => {
+    if (!id) return;
+    setBusy(true);
+    // An async block and `.finally`, not try/finally: the React Compiler
+    // does not compile a component with a `finally` in it (ADR 229).
+    await (async () => {
+      // id is "<group>/<name>"; don't encode the slash separator.
+      const path = id.split("/").map(encodeURIComponent).join("/");
+      const resp = await fetch(`/corpus/idml/file/${path}`);
+      if (!resp.ok) {
+        console.warn(`[corpus] ${id}: HTTP ${resp.status}`);
+        return;
+      }
+      const buf = await resp.arrayBuffer();
+      const file = new File([buf], `${id.replace("/", "-")}.idml`, {
+        type: "application/octet-stream",
+      });
+      await loadDocumentFile(client, file, {
+        setHandle: doc.setHandle,
+        setSourceName: doc.setSourceName,
+        setLoading: doc.setLoading,
+        setStatus: (s) => console.info("[corpus]", s),
+        setSnapshotsReady: doc.setSnapshotsReady,
+        addSnapshot: (pageId, url) =>
+          doc.setSnapshots((prev) => new Map(prev).set(pageId, url)),
+        resetForNewDocument: doc.resetForNewDocument,
+        pushWarning: (w) => console.warn("[corpus]", w),
+      });
+    })().finally(() => setBusy(false));
+  };
 
   if (entries.length === 0) return null;
 

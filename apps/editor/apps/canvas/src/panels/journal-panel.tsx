@@ -117,6 +117,7 @@ export function JournalPanel() {
   );
   const [exporting, setExporting] = useState(false);
 
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const shown = useMemo(() => {
     const rank = { debug: 0, info: 1, warn: 2, error: 3 } as const;
     const floor = minSeverity === "all" ? -1 : rank[minSeverity];
@@ -428,18 +429,15 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
   const [includeCrash, setIncludeCrash] = useState(false);
   const [includeShape, setIncludeShape] = useState(false);
 
-  const options = useMemo(
-    () => ({
-      // Both sections are OPT-IN and default OFF. Stack traces embed the
-      // user's disk paths; document shape carries font families.
-      crash: includeCrash ? { stacks: readCrashStacks() } : undefined,
-      documentShape: includeShape ? getDocumentShape() : undefined,
-    }),
-    [includeCrash, includeShape],
-  );
+  const options = {
+    // Both sections are OPT-IN and default OFF. Stack traces embed the
+    // user's disk paths; document shape carries font families.
+    crash: includeCrash ? { stacks: readCrashStacks() } : undefined,
+    documentShape: includeShape ? getDocumentShape() : undefined,
+  };
 
-  const text = useMemo(() => previewBundle(options), [options]);
-  const bundle = useMemo(() => buildBundleNow(options), [options]);
+  const text = previewBundle(options);
+  const bundle = buildBundleNow(options);
 
   return (
     <div

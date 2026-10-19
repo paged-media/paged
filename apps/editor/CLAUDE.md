@@ -109,6 +109,13 @@ so:
   a value beside a version counter that only triggers the render.
 - **Name a component** with a declaration or a `const`: the compiler
   cannot see `return function Panel()`.
+- **No new `useMemo` / `useCallback`.** The compiler memoizes compiled
+  components with the dependencies it can prove. Keep one only where
+  identity is the point (an effect dependency it stabilises, a value a
+  caller or a context consumer compares, a component the compiler does
+  not compile yet) and say so on the line above:
+  `// eslint-disable-next-line no-restricted-syntax -- <reason>`
+  (`bun lint` fails on one without it).
 - `bun run test:dom:compiled` (canvas, shell) runs the DOM lane on
   compiled code; CI does too. Fixing a bailout, or adding a component,
   updates `compiler-coverage.json`:

@@ -82,6 +82,7 @@ export function FillStrokeCluster() {
 
   // Fill path follows the J toggle (container frame vs. the text
   // inside it); stroke stays frame-level (text stroke isn't a path).
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const fillBinding = useMemo(
     () =>
       affects === "text"
@@ -101,6 +102,7 @@ export function FillStrokeCluster() {
           },
     [affects],
   );
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const strokeBinding = useMemo(
     () => ({
       value: {

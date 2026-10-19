@@ -59,6 +59,7 @@ export function InstrumentationProvider({ children }: PropsWithChildren) {
   const [layoutCacheStats, setLayoutCacheStats] =
     useState<LayoutCacheStats | null>(null);
 
+  // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<InstrumentationContextValue>(
     () => ({
       fps,
