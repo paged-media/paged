@@ -27,6 +27,7 @@ on:
       - "tooling/bootstrap.sh"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/wasm-tools/**"
+      - ".github/actions/module-wasm/**"
       - ".github/workflows/doc-vitest.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -57,6 +58,13 @@ jobs:
       # which the real-engine specs boot.
       - name: engine wasm packages
         uses: ./.github/actions/engine-wasm
+      # The docx engine wasm (packages/doc-bundle/bin/, build output), which
+      # the importer, the commands, the object model and the panel specs
+      # boot. Without it they skip; REQUIRE_REAL_DOCX=1 below makes that a
+      # failure here.
+      - name: module wasm (doc)
+        uses: ./.github/actions/module-wasm
+        with: { module: doc }
       # One install for the whole root workspace (bun.lock).
       - name: bun install (root workspace)
         working-directory: .
@@ -69,15 +77,22 @@ jobs:
       # Red results must still upload (the state matrix wants the ✗), so the
       # run does not abort here — the gate at the end fails the job once the
       # artifact is safely uploaded.
+      # The main task per package, then doc-bundle's DOM task (happy-dom
+      # preloaded) for the *.dom.test.tsx panel specs.
       - name: bun test (junit per package; red results still upload)
+        env:
+          REQUIRE_REAL_DOCX: "1"
         run: |
           set -uo pipefail
           bun run --filter './packages/*' test \
             --reporter=junit --reporter-outfile=junit.bun.xml \
             || echo "TS_FAILED=1" >> "$GITHUB_ENV"
+          ( cd packages/doc-bundle && bun run test:dom \
+            --reporter=junit --reporter-outfile=junit-dom.bun.xml ) \
+            || echo "TS_FAILED=1" >> "$GITHUB_ENV"
           # bun's reports, rewritten into the vitest shape the evidence has always
           # had (tooling/js/bun-junit.mjs): the artifact keeps its name and test ids.
-          bun ../../tooling/js/bun-junit.mjs --out junit-all.xml packages/*/junit.bun.xml \
+          bun ../../tooling/js/bun-junit.mjs --out junit-all.xml packages/*/junit.bun.xml packages/doc-bundle/junit-dom.bun.xml \
             || echo "TS_FAILED=1" >> "$GITHUB_ENV"
           [ -s junit-all.xml ]
       # plugin-doc is a PUBLIC repo and the publish-results action lives in the
