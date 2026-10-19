@@ -29,7 +29,7 @@
 //! The renderer queries [`ImageResourceProvider::tile`] at the mip level
 //! matching the current scale ([`mip_level_for_scale`]) and places each
 //! returned tile as an ordinary [`DisplayCommand::Image`] — the SAME lane
-//! placed assets use, so the tiles rasterise through tiny-skia (CPU) and
+//! placed assets use, so the tiles rasterise through `vello_cpu` (CPU) and
 //! Vello (GPU) with no new path and no Vello fork. When the provider lacks
 //! tiles at the chosen level the renderer records a
 //! [`ResourceTilesNeeded`] signal and assembles whatever coarser level IS

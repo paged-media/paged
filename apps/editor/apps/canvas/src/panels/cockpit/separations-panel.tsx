@@ -95,20 +95,15 @@ export function SeparationsPanel() {
 
   // Swatches whose own total area coverage exceeds the limit. Exact,
   // and independent of whether a colour profile is active.
-  const overLimitSwatches = useMemo(
-    () =>
-      (swatches ?? [])
-        .filter(
-          (s) =>
-            typeof s.totalAreaCoveragePct === "number" &&
-            s.totalAreaCoveragePct > limit,
-        )
-        .sort(
-          (a, b) =>
-            (b.totalAreaCoveragePct ?? 0) - (a.totalAreaCoveragePct ?? 0),
-        ),
-    [swatches, limit],
-  );
+  const overLimitSwatches = (swatches ?? [])
+    .filter(
+      (s) =>
+        typeof s.totalAreaCoveragePct === "number" &&
+        s.totalAreaCoveragePct > limit,
+    )
+    .sort(
+      (a, b) => (b.totalAreaCoveragePct ?? 0) - (a.totalAreaCoveragePct ?? 0),
+    );
 
   // Swatches with no ink decomposition at all — they separate at the
   // RIP against the output intent, so the ink limit cannot be checked
@@ -121,6 +116,7 @@ export function SeparationsPanel() {
   const separationAvailable = pages.length > 0 && pages[0].separationAvailable;
 
   // The union of plates any page needs — the job's plate list.
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const jobPlates = useMemo(() => {
     const seen = new Map<string, { name: string; isSpot: boolean }>();
     for (const page of pages) {

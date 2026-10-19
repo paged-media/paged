@@ -286,6 +286,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   }>({ t: 0, x: 0, y: 0, count: 0 });
 
   // Document-space layout — only used to compute initial fit-to-document.
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const rects = useMemo(
     () => layoutPages(props.pageSizesPt),
     [props.pageSizesPt],
@@ -382,6 +383,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
 
   // Resolve a DOM pointer event to the document-coordinate
   // CanvasPointerEvent a GestureHandler expects.
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const buildToolPointer = useCallback(
     (
       e: React.PointerEvent<HTMLDivElement>,
@@ -447,6 +449,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // pt on the page the PATH sits on — not the page under the pointer,
   // which a drag is free to leave — plus the zoom its pixel tolerances
   // are measured at. Null when the session has no path on a page yet.
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const buildPathEditPointer = useCallback(
     (e: React.PointerEvent<HTMLDivElement>): PathEditPointer | null => {
       const view = props.pathEdit?.getView();
@@ -481,6 +484,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // The active context's frame-content point under a client position, or
   // null when there is no active context or the point is outside its
   // content box. Shared by the pointer and wheel lanes.
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const activeContentPointAt = useCallback(
     (
       target: HTMLDivElement,
@@ -528,6 +532,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     ],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const dispatchContentPointer = useCallback(
     (
       e: React.PointerEvent<HTMLDivElement>,
@@ -560,6 +565,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // asynchronously; pointer moves that arrive before it does are
   // accumulated into `pendingDelta` and flushed on resolve. A pointer
   // that went up in the meantime (a fast drag) is committed then.
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const beginWorkerGesture = useCallback(
     (gs: GestureState, anchor: GestureAnchor | null) => {
       void props.client
@@ -606,6 +612,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     [props.client, props.onGestureCommitted, setSnapLines],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (e.button !== 0 && e.button !== 1) return;
@@ -901,6 +908,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     ],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       // K-1 — while a content gesture owns the pointer, route moves to the
@@ -1034,6 +1042,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     [props, rects, buildPathEditPointer, beginWorkerGesture],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const onPointerUp = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       // K-1 — end a content gesture: deliver the up to the active context
@@ -1249,6 +1258,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // spine — cancelled via its Escape-equivalent), the legacy worker
   // gesture (cancel the handle), and a marquee (drop the rect). A pan
   // has nothing to roll back.
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const abortActiveDrag = useCallback(() => {
     // Tool-spine draw drag (Rectangle/Pen/…): cancel, don't commit.
     if (toolDragRef.current && props.toolGesture) {
@@ -1324,6 +1334,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
   // here; we just roll the gesture back. Previously this aliased
   // `onPointerUp`, which COMMITTED the interrupted gesture — a phantom
   // mutation. Now it aborts (the plan's pointercancel → abort).
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const onPointerCancel = useCallback(() => {
     // K-1 — a cancelled content gesture just ends (the context keeps its
     // state; no tool drag to abort).
@@ -1453,6 +1464,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     return null;
   }
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const onWheel = useCallback(
     (e: React.WheelEvent<HTMLDivElement>) => {
       const rect = e.currentTarget.getBoundingClientRect();
@@ -1501,6 +1513,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
     [props, editContextStack, activeContentPointAt],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const onDoubleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       // Phase H — double-click on a frame nested inside a group →

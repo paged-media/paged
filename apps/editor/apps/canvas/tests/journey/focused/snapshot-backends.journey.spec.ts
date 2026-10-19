@@ -75,11 +75,12 @@ type Handle = {
  * GPU ↔ CPU snapshot budget per page at 72 dpi, over every channel of
  * every pixel: the mean absolute difference (0–255) and the share of
  * pixels with any channel more than 8 levels apart. Measured on Metal
- * against the tiny-skia CPU lane (see ADR 188): worst mean 0.104 (a
- * gradients page), worst share 0.574 % (a text page, glyph edges); sized
- * at the worst page × 1.25.
+ * against the vello_cpu CPU lane (ADR 189): worst mean 0.051 (a gradients
+ * page), worst share 0.003 % (a text page, a few pixels); most pages differ
+ * by at most 4 levels anywhere. Sized at the worst page × 1.25. (Against
+ * tiny-skia the same pages measured 0.104 and 0.574 %.)
  */
-const PARITY = { meanAbs: 0.13, overEight: 0.0072 };
+const PARITY = { meanAbs: 0.064, overEight: 0.00004 };
 
 /** The pages the parity check walks: every kind of content the model has. */
 const PARITY_FIXTURES: FixtureName[] = [

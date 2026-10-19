@@ -2580,8 +2580,8 @@ impl CanvasModel {
     }
 
     /// Tier 4 seam: the per-page display list the worker hands to
-    /// the GPU rasterizer (Vello in `apps/canvas/`, tiny-skia in
-    /// headless tests).
+    /// the rasterizer (Vello on WebGPU in `apps/canvas/`, `vello_cpu`
+    /// in headless tests and CPU snapshots).
     pub fn display_list_for_page(&self, id: &PageId) -> Option<&DisplayList> {
         self.page(id).map(|p| &p.list)
     }

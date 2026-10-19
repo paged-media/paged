@@ -217,10 +217,12 @@ export function OverlaySignalsProvider({ children }: PropsWithChildren) {
   // exact signature they always had (every built-in tool handler is
   // untouched); the list writer normalizes an empty list to null so
   // "clear" is one state everywhere.
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const setToolPreview = useCallback(
     (value: ToolPreviewShape | null) => setToolPreviewSlot(value),
     [],
   );
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const setToolPreviews = useCallback(
     (value: readonly ToolPreviewShape[] | null) =>
       setToolPreviewSlot(value && value.length > 0 ? value : null),
@@ -230,6 +232,7 @@ export function OverlaySignalsProvider({ children }: PropsWithChildren) {
   const [overlayLayers, setOverlayLayers] = useState<
     readonly OverlayLayerEntry[]
   >([]);
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const setOverlayLayer = useCallback(
     (key: string, shapes: readonly ToolPreviewShape[]) =>
       setOverlayLayers((prev) => {
@@ -241,6 +244,7 @@ export function OverlaySignalsProvider({ children }: PropsWithChildren) {
       }),
     [],
   );
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const removeOverlayLayer = useCallback(
     (key: string) =>
       setOverlayLayers((prev) =>
@@ -251,6 +255,7 @@ export function OverlaySignalsProvider({ children }: PropsWithChildren) {
     [],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<OverlaySignalsValue>(
     () => ({
       hitSelection,

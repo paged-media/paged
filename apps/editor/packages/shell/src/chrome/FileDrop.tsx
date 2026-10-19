@@ -21,8 +21,6 @@
 // Playwright suite drives via `page.setInputFiles`. Extracted from
 // PagedShell so the Header can mount the compact variant.
 
-import { useCallback } from "react";
-
 export interface FileDropProps {
   onFile: (file: File) => void;
   compact?: boolean;
@@ -34,14 +32,11 @@ export interface FileDropProps {
 }
 
 export function FileDrop(props: FileDropProps) {
-  const onDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      const file = e.dataTransfer.files[0];
-      if (file) props.onFile(file);
-    },
-    [props],
-  );
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) props.onFile(file);
+  };
   const input = (
     // No `accept` filter: like canvas drag-drop, this routes through the
     // importer registry, which claims every registered format (.idml, .svg,

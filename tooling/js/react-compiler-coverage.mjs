@@ -140,6 +140,15 @@ function notConsidered(ast, seenLines) {
     "FunctionDeclaration|FunctionExpression|ArrowFunctionExpression"(path) {
       const line = path.node.loc?.start.line;
       if (seenLines.has(line)) return;
+      // Inside a function the compiler handled (compiled or a bailout):
+      // part of that one, not a component of its own.
+      for (
+        let up = path.parentPath?.getFunctionParent();
+        up;
+        up = up.parentPath?.getFunctionParent()
+      ) {
+        if (seenLines.has(up.node.loc?.start.line)) return;
+      }
       const name = looksLikeAComponent(path);
       if (name) out.push({ function: name, line });
     },

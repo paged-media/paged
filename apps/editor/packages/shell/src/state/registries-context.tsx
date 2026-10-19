@@ -150,6 +150,7 @@ export function RegistriesProvider({
   }, []);
 
   // Wrap in useMemo so consumers see a stable object reference.
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const value = useMemo(() => ref.current!, []);
 
   return <Context.Provider value={value}>{children}</Context.Provider>;

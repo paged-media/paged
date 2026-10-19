@@ -18,13 +18,13 @@ default = []
 # Pulls in paged-gpu's Vello + WebGPU backend so `ViewerSession` can
 # present to a canvas and read back off-surface. The only meaningful
 # build for wasm32 — `viewer/build-wasm.sh` always enables it. The
-# forward SDK is WebGPU-only; tiny-skia is NOT linked (see the
-# `default-features = false` on paged-renderer below).
+# forward SDK is WebGPU-only; the CPU rasterizer (vello_cpu) is NOT
+# linked (see the `default-features = false` on paged-renderer below).
 gpu = ["paged-gpu/vello-backend", "dep:paged-gpu", "dep:wasm-bindgen-futures"]
 
 [dependencies]
 idml-import = { path = "../idml-import" }
-# default-features = false drops `cpu` (= paged-gpu/cpu = tiny-skia).
+# default-features = false drops `cpu` (= paged-gpu/cpu = vello_cpu).
 # `build_document` is not cpu-gated, so parse + layout still work; only
 # the legacy CPU rasterizer is excluded.
 paged-renderer = { path = "../paged-renderer", default-features = false }

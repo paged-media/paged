@@ -659,7 +659,7 @@ pub fn color_id_to_paint_with_list_dir(
         // The renderer's gradient lives in the path's local 0..1
         // unit-rect; the rasterizer derives the actual circle radius
         // by averaging `width * R_unit` and `height * R_unit` (see
-        // `paged_gpu::cpu::build_radial_gradient_shader`), so to
+        // `paged_gpu`'s `vello_map::resolve_paint`), so to
         // produce a circle of pt-radius √(w² + h²) we set
         // `R_unit = 2·√(w² + h²) / (w + h)`. When the caller can't
         // supply the bbox (text-frame strokes etc.) we fall back to
@@ -679,7 +679,7 @@ pub fn color_id_to_paint_with_list_dir(
                     // Rasterizer averages (a·R, b·R)·hypot and (c·R,
                     // d·R)·hypot to reduce a unit-rect circle to a
                     // single page-space radius (see
-                    // `paged_gpu::cpu::build_radial_gradient_shader`).
+                    // `paged_gpu`'s `vello_map::resolve_paint`).
                     // Compensate so the page-space circle has the
                     // pt-radius we computed above.
                     let r_unit = 2.0 * r_actual / (w + h);
