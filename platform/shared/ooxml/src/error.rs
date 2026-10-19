@@ -16,7 +16,17 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! Error type for the OOXML foundation.
+//! Error types for the OOXML foundation.
+//!
+//! Two of them, because the callers need two shapes:
+//!
+//! - [`OoxmlError`]: reading or writing a package (the container, a
+//!   required part, the typed DOM).
+//! - [`XmlError`]: the scanning helpers ([`crate::xml`], [`crate::splice`],
+//!   [`crate::ContentTypes`], [`crate::Relationships::try_parse`]). It keeps
+//!   quick-xml's own error types, so a module that wraps them (paged.sheet's
+//!   `XlsxError`) reports exactly what it reported before the helpers moved
+//!   here.
 
 use thiserror::Error;
 
@@ -71,6 +81,14 @@ pub enum OoxmlError {
         limit: usize,
     },
 
+    /// The package inflates past the reader's memory budget
+    /// ([`crate::MAX_UNCOMPRESSED_BYTES`], or the budget given to
+    /// [`crate::read_zip`]): a decompression bomb, or a package too large
+    /// to hold. The text says which part, or that the entries' declared
+    /// sizes already exceed it.
+    #[error("package exceeds the reader's memory budget: {0}")]
+    Budget(String),
+
     /// I/O failure while reading or writing part bytes.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
@@ -84,8 +102,8 @@ pub enum OoxmlError {
     Xml { part: String, detail: String },
 
     /// The vendored `ooxmlsdk` typed-DOM (de)serializer rejected a part
-    /// (see [`crate::dom`]). Carried as a string so this crate's public error
-    /// does not leak `ooxmlsdk` types.
+    /// (see `crate::dom`, feature `dom`). Carried as a string so this
+    /// crate's public error does not leak `ooxmlsdk` types.
     #[error("ooxml typed-dom error: {0}")]
     Sdk(String),
 
@@ -105,6 +123,7 @@ impl OoxmlError {
     }
 }
 
+#[cfg(feature = "dom")]
 impl From<ooxmlsdk::common::SdkError> for OoxmlError {
     fn from(e: ooxmlsdk::common::SdkError) -> Self {
         OoxmlError::Sdk(e.to_string())
@@ -113,3 +132,73 @@ impl From<ooxmlsdk::common::SdkError> for OoxmlError {
 
 /// Convenience result alias.
 pub type Result<T> = std::result::Result<T, OoxmlError>;
+
+/// Why [`crate::read_zip`] refused a package: only the failures a zip read
+/// can have, so a module that maps them into its own error carries nothing
+/// else.
+#[derive(Debug, Error)]
+pub enum ZipReadError {
+    /// The container is not a readable ZIP.
+    #[error("not a valid OPC (zip) package: {0}")]
+    Zip(#[from] zip::result::ZipError),
+
+    /// Reading an entry failed (a corrupt deflate stream, an entry larger
+    /// than it declares).
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+
+    /// See [`OoxmlError::Budget`].
+    #[error("package exceeds the reader's memory budget: {0}")]
+    Budget(String),
+}
+
+impl From<ZipReadError> for OoxmlError {
+    fn from(e: ZipReadError) -> Self {
+        match e {
+            ZipReadError::Zip(e) => OoxmlError::Zip(e),
+            ZipReadError::Io(e) => OoxmlError::Io(e),
+            ZipReadError::Budget(detail) => OoxmlError::Budget(detail),
+        }
+    }
+}
+
+/// A failure of the XML scanning helpers, in quick-xml's own types.
+#[derive(Debug, Error)]
+pub enum XmlError {
+    /// Not well-formed XML (an attribute error included).
+    #[error(transparent)]
+    Syntax(#[from] quick_xml::Error),
+
+    /// Text or an attribute could not be decoded.
+    #[error(transparent)]
+    Encoding(#[from] quick_xml::encoding::EncodingError),
+
+    /// A character or entity reference could not be resolved.
+    #[error(transparent)]
+    Escape(#[from] quick_xml::escape::EscapeError),
+}
+
+impl From<quick_xml::events::attributes::AttrError> for XmlError {
+    fn from(e: quick_xml::events::attributes::AttrError) -> Self {
+        XmlError::Syntax(quick_xml::Error::InvalidAttr(e))
+    }
+}
+
+/// An error type the XML helpers can report in directly: anything that wraps
+/// quick-xml's syntax, attribute, encoding and escape errors. [`XmlError`] is
+/// one; so is paged.sheet's `XlsxError`.
+pub trait FromXmlError:
+    From<quick_xml::Error>
+    + From<quick_xml::events::attributes::AttrError>
+    + From<quick_xml::encoding::EncodingError>
+    + From<quick_xml::escape::EscapeError>
+{
+}
+
+impl<E> FromXmlError for E where
+    E: From<quick_xml::Error>
+        + From<quick_xml::events::attributes::AttrError>
+        + From<quick_xml::encoding::EncodingError>
+        + From<quick_xml::escape::EscapeError>
+{
+}

@@ -27,7 +27,8 @@
 //!
 //! - [`opc`]  — the zip container: ordered [`opc::PartEntry`] list +
 //!   `[Content_Types].xml`. Understood parts are `Modeled`; everything else
-//!   is `Opaque` (preserved byte-identical).
+//!   is `Opaque` (preserved byte-identical). The read, with its memory
+//!   budget, is the shared `paged-ooxml` crate's.
 //! - [`rels`] — `.rels` relationship resolution (root → workbook → parts).
 //! - [`parts`] — the four understood parts: `workbook`, `worksheet`,
 //!   `shared_strings`, `styles`.
@@ -60,9 +61,10 @@ pub mod write;
 pub use error::XlsxError;
 
 /// The total number of uncompressed bytes [`XlsxDocument::open`] will read
-/// from one package (1 GiB). Past it the open fails with
-/// [`XlsxError::Budget`]; a wasm32 host could not hold more anyway.
-pub const MAX_UNCOMPRESSED_BYTES: u64 = 1 << 30;
+/// from one package (1 GiB, `paged-ooxml`'s budget for every OOXML module).
+/// Past it the open fails with [`XlsxError::Budget`]; a wasm32 host could not
+/// hold more anyway.
+pub const MAX_UNCOMPRESSED_BYTES: u64 = paged_ooxml::MAX_UNCOMPRESSED_BYTES;
 pub use parts::chart::{ParsedChart as XlsxChart, SheetResolver as ChartSheetResolver};
 pub use parts::comments::{CellComment, SheetComments};
 pub use parts::conditional_format::{
@@ -77,8 +79,8 @@ pub use style_edit::{EdgePatch, StylePatch};
 use opc::{ModeledKind, OpcContainer, PartEntry};
 use parts::chart::{ParsedChart, SheetResolver};
 use rels::{
-    part_dir, rels_part_for, resolve_target, Relationships, REL_CHART, REL_COMMENTS, REL_DRAWING,
-    REL_EXTERNAL_LINK, REL_OFFICE_DOCUMENT, REL_SHARED_STRINGS, REL_STYLES, REL_TABLE,
+    parse_rels, part_dir, rels_part_name, resolve_target, Relationships, REL_CHART, REL_COMMENTS,
+    REL_DRAWING, REL_EXTERNAL_LINK, REL_OFFICE_DOCUMENT, REL_SHARED_STRINGS, REL_STYLES, REL_TABLE,
 };
 use sheet_core::cell::{Cell, StyleId};
 use sheet_core::{SheetId, SheetModel};
@@ -236,9 +238,9 @@ impl XlsxDocument {
             .ok_or_else(|| XlsxError::Structure("missing _rels/.rels".into()))?
             .bytes()
             .to_vec();
-        let root_rels = Relationships::parse(&root_rels_bytes)?;
+        let root_rels = parse_rels(&root_rels_bytes)?;
         let wb_target = root_rels
-            .by_type(REL_OFFICE_DOCUMENT)
+            .by_type_suffix(REL_OFFICE_DOCUMENT)
             .ok_or_else(|| XlsxError::Structure("no officeDocument relationship".into()))?
             .target
             .clone();
@@ -253,25 +255,25 @@ impl XlsxDocument {
             .to_vec();
         let parsed_wb = parts::workbook::parse(&workbook_bytes)?;
 
-        let wb_rels_part = rels_part_for(&workbook_part);
+        let wb_rels_part = rels_part_name(&workbook_part);
         let wb_rels = match container.part(&wb_rels_part) {
-            Some(p) => Relationships::parse(p.bytes())?,
+            Some(p) => parse_rels(p.bytes())?,
             None => Relationships::default(),
         };
         let wb_base = part_dir(&workbook_part);
 
         // 3. sharedStrings + styles (resolved through the workbook rels).
         let shared_part = wb_rels
-            .by_type(REL_SHARED_STRINGS)
-            .map(|r| resolve_target(&wb_base, &r.target));
+            .by_type_suffix(REL_SHARED_STRINGS)
+            .map(|r| resolve_target(wb_base, &r.target));
         let styles_part = wb_rels
-            .by_type(REL_STYLES)
-            .map(|r| resolve_target(&wb_base, &r.target));
+            .by_type_suffix(REL_STYLES)
+            .map(|r| resolve_target(wb_base, &r.target));
         // The cell metadata: which `cm=` values mark a dynamic-array formula.
         // A part that does not parse marks none (it still round-trips).
         let metadata_part = wb_rels
-            .by_type(parts::metadata::REL_SHEET_METADATA)
-            .map(|r| resolve_target(&wb_base, &r.target))
+            .by_type_suffix(parts::metadata::REL_SHEET_METADATA)
+            .map(|r| resolve_target(wb_base, &r.target))
             .filter(|name| container.part(name).is_some());
         let dynamic_meta = metadata_part
             .as_ref()
@@ -314,8 +316,8 @@ impl XlsxDocument {
                     // The theme part's scheme resolves `theme="N"` colours
                     // for the page lowering (round 2; get_style already did).
                     let theme = wb_rels
-                        .by_type("/theme")
-                        .map(|r| resolve_target(&wb_base, &r.target))
+                        .by_type_suffix("/theme")
+                        .map(|r| resolve_target(wb_base, &r.target))
                         .and_then(|t| container.part(&t))
                         .and_then(|t| parts::theme::ThemePalette::parse(t.bytes()).ok());
                     let colors = parts::styles::ColorContext::new(p.bytes(), theme);
@@ -373,7 +375,7 @@ impl XlsxDocument {
                     sref.name, sref.rid
                 ))
             })?;
-            let ws_part = resolve_target(&wb_base, target);
+            let ws_part = resolve_target(wb_base, target);
             let ws_bytes = container
                 .part(&ws_part)
                 .ok_or_else(|| XlsxError::Structure(format!("missing worksheet {ws_part}")))?
@@ -442,13 +444,13 @@ impl XlsxDocument {
             // structured refs resolve; the table PARTS stay opaque (never
             // promoted), so they re-emit byte-identical (preservation invariant,
             // spec §10.2 — understood now, not rewritten).
-            let ws_rels_part = rels_part_for(&ws_part);
+            let ws_rels_part = rels_part_name(&ws_part);
             if let Some(ws_rels_bytes) = container.part(&ws_rels_part).map(|p| p.bytes().to_vec()) {
-                let ws_rels = Relationships::parse(&ws_rels_bytes)?;
+                let ws_rels = parse_rels(&ws_rels_bytes)?;
                 let ws_base = part_dir(&ws_part);
                 let mut tables = Vec::new();
                 for rel in ws_rels.all_of_type(REL_TABLE) {
-                    let table_part = resolve_target(&ws_base, &rel.target);
+                    let table_part = resolve_target(ws_base, &rel.target);
                     if let Some(table_bytes) =
                         container.part(&table_part).map(|p| p.bytes().to_vec())
                     {
@@ -472,8 +474,8 @@ impl XlsxDocument {
                 // commentsN.xml part (+ its companion VML) stay OPAQUE (never
                 // promoted), so they re-emit byte-identical. The FIRST comments
                 // rel wins (a worksheet has one comments part).
-                if let Some(rel) = ws_rels.by_type(REL_COMMENTS) {
-                    let comments_part = resolve_target(&ws_base, &rel.target);
+                if let Some(rel) = ws_rels.by_type_suffix(REL_COMMENTS) {
+                    let comments_part = resolve_target(ws_base, &rel.target);
                     if let Some(comments_bytes) =
                         container.part(&comments_part).map(|p| p.bytes().to_vec())
                     {
@@ -548,26 +550,26 @@ impl XlsxDocument {
                 .map(|b| (b.sheet_id, b.part_name.clone()))
                 .collect();
             for (host_sheet, ws_part) in ws_for_charts {
-                let ws_rels_part = rels_part_for(&ws_part);
+                let ws_rels_part = rels_part_name(&ws_part);
                 let Some(ws_rels_bytes) = container.part(&ws_rels_part).map(|p| p.bytes().to_vec())
                 else {
                     continue;
                 };
-                let ws_rels = Relationships::parse(&ws_rels_bytes)?;
+                let ws_rels = parse_rels(&ws_rels_bytes)?;
                 let ws_base = part_dir(&ws_part);
                 for drawing_rel in ws_rels.all_of_type(REL_DRAWING) {
-                    let drawing_part = resolve_target(&ws_base, &drawing_rel.target);
-                    let drawing_rels_part = rels_part_for(&drawing_part);
+                    let drawing_part = resolve_target(ws_base, &drawing_rel.target);
+                    let drawing_rels_part = rels_part_name(&drawing_part);
                     let Some(dr_bytes) = container
                         .part(&drawing_rels_part)
                         .map(|p| p.bytes().to_vec())
                     else {
                         continue;
                     };
-                    let dr_rels = Relationships::parse(&dr_bytes)?;
+                    let dr_rels = parse_rels(&dr_bytes)?;
                     let dr_base = part_dir(&drawing_part);
                     for chart_rel in dr_rels.all_of_type(REL_CHART) {
-                        let chart_part = resolve_target(&dr_base, &chart_rel.target);
+                        let chart_part = resolve_target(dr_base, &chart_rel.target);
                         if let Some(chart_bytes) =
                             container.part(&chart_part).map(|p| p.bytes().to_vec())
                         {
@@ -602,10 +604,10 @@ impl XlsxDocument {
             // is what a formula's `[n]` names, so we push a book per ref).
             let book = wb_rels
                 .target_of(rid)
-                .map(|t| resolve_target(&wb_base, t))
+                .map(|t| resolve_target(wb_base, t))
                 .filter(|_| {
                     wb_rels
-                        .rels
+                        .items
                         .iter()
                         .any(|r| r.id == *rid && r.is_type(REL_EXTERNAL_LINK))
                 })
@@ -756,7 +758,7 @@ impl XlsxDocument {
             } else {
                 format!("metadata{n}.xml")
             };
-            let part = resolve_target(&wb_dir, &target);
+            let part = resolve_target(wb_dir, &target);
             if self.container.part(&part).is_none() {
                 break (part, target);
             }

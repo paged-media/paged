@@ -39,6 +39,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use paged_ooxml::opc::OpcPackage;
 use paged_ooxml::rels::{part_dir, rels_part_name, resolve_target, Relationship, Relationships};
+use paged_ooxml::xml::{escape_attr as escape, unescape};
 use serde::Deserialize;
 
 const REL_SLIDE: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
@@ -169,21 +170,6 @@ fn attr(tag: &str, name: &str) -> Option<String> {
     let i = tag.find(&key)? + key.len();
     let j = tag[i..].find('"')? + i;
     Some(unescape(&tag[i..j]))
-}
-
-fn unescape(s: &str) -> String {
-    s.replace("&quot;", "\"")
-        .replace("&apos;", "'")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&amp;", "&")
-}
-
-fn escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
 }
 
 fn write_rels(r: &Relationships) -> Vec<u8> {

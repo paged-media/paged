@@ -16,7 +16,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-//! The typed-DOM bridge to the vendored `ooxmlsdk` crate.
+//! The typed-DOM bridge to the `ooxmlsdk` crate (feature `dom`).
 //!
 //! The OPC container ([`crate::opc`]) gives us the *raw bytes* of a part; this
 //! module turns those bytes into `ooxmlsdk`'s code-generated typed part tree

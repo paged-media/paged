@@ -18,12 +18,13 @@
 
 //! `[Content_Types].xml` — the OPC content-type table.
 //!
-//! Extension defaults + per-part overrides, in document order. We keep this as a
-//! *read* model this pass (it is needed to resolve a part's content type and to
-//! know which overrides exist); the writer re-emits the part verbatim, so no
-//! re-serialization is required until save-back grows new parts (M2+).
+//! Extension defaults + per-part overrides, in document order, so a writer
+//! can re-serialize the table identically when nothing changed and minimally
+//! when one override goes (paged.sheet drops `calcChain.xml`'s). Untouched,
+//! the part re-emits verbatim.
 
-use crate::error::{OoxmlError, Result};
+use crate::error::{FromXmlError, XmlError};
+use crate::xml::attr_as;
 
 /// The reserved OPC part name of the content-type table.
 pub const CONTENT_TYPES_PART: &str = "[Content_Types].xml";
@@ -39,30 +40,35 @@ pub struct ContentTypes {
 
 impl ContentTypes {
     /// Parse the content-type table. Only `Default`/`Override` elements matter;
-    /// anything else is ignored (tolerant scan, never panics).
-    pub fn parse(xml: &[u8]) -> Result<ContentTypes> {
+    /// anything else is ignored. Malformed XML is an error, never a panic.
+    pub fn parse(xml: &[u8]) -> Result<ContentTypes, XmlError> {
+        Self::parse_as(xml)
+    }
+
+    /// [`parse`](Self::parse) reporting in the caller's own error type (see
+    /// [`crate::xml::attr_as`]).
+    pub fn parse_as<E: FromXmlError>(xml: &[u8]) -> Result<ContentTypes, E> {
         use quick_xml::events::Event;
         let mut reader = quick_xml::Reader::from_reader(xml);
         reader.config_mut().trim_text(false);
         let mut ct = ContentTypes::default();
         let mut buf = Vec::new();
         loop {
-            let ev = reader
-                .read_event_into(&mut buf)
-                .map_err(|e| OoxmlError::xml(CONTENT_TYPES_PART, e))?;
-            match ev {
+            match reader.read_event_into(&mut buf)? {
                 Event::Empty(e) | Event::Start(e) => match e.local_name().as_ref() {
                     b"Default" => {
-                        if let (Some(ext), Some(ty)) =
-                            (attr(&e, b"Extension")?, attr(&e, b"ContentType")?)
-                        {
+                        if let (Some(ext), Some(ty)) = (
+                            attr_as::<E>(&e, b"Extension")?,
+                            attr_as::<E>(&e, b"ContentType")?,
+                        ) {
                             ct.defaults.push((ext, ty));
                         }
                     }
                     b"Override" => {
-                        if let (Some(pn), Some(ty)) =
-                            (attr(&e, b"PartName")?, attr(&e, b"ContentType")?)
-                        {
+                        if let (Some(pn), Some(ty)) = (
+                            attr_as::<E>(&e, b"PartName")?,
+                            attr_as::<E>(&e, b"ContentType")?,
+                        ) {
                             ct.overrides.push((pn, ty));
                         }
                     }
@@ -102,20 +108,6 @@ impl ContentTypes {
     }
 }
 
-/// Read an attribute's UTF-8 value by local name (namespace prefix ignored).
-pub(crate) fn attr(e: &quick_xml::events::BytesStart<'_>, key: &[u8]) -> Result<Option<String>> {
-    for a in e.attributes() {
-        let a = a.map_err(|e| OoxmlError::xml(CONTENT_TYPES_PART, e))?;
-        if a.key.local_name().as_ref() == key {
-            let v = a
-                .normalized_value(quick_xml::XmlVersion::Implicit1_0)
-                .map_err(|e| OoxmlError::xml(CONTENT_TYPES_PART, e))?;
-            return Ok(Some(v.into_owned()));
-        }
-    }
-    Ok(None)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,6 +132,23 @@ mod tests {
         assert!(ct
             .content_type_of("/word/_rels/document.xml.rels")
             .is_some());
+    }
+
+    #[test]
+    fn keeps_document_order_for_a_minimal_rewrite() {
+        let xml = br#"<?xml version="1.0"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/calcChain.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml"/>
+</Types>"#;
+        let ct = ContentTypes::parse(xml).unwrap();
+        assert_eq!(ct.defaults.len(), 2);
+        assert_eq!(ct.defaults[0].0, "rels");
+        assert_eq!(ct.overrides.len(), 2);
+        assert!(ct.has_override("/xl/calcChain.xml"));
+        assert!(!ct.has_override("/xl/sharedStrings.xml"));
     }
 
     #[test]

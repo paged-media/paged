@@ -17,7 +17,9 @@ next to the code you change. This file holds only what crosses components.
   Built-in-only code must not leak into it: community extensions consume it.
 - `apps/editor`, `apps/server`, `apps/cli` (`paged-node`) — applications.
 - `platform/shared/*` — internal code of the built-ins and the editor (PM-0002):
-  `ai`, `helpers`, `test-kit`, `test-resources`, `wasm-boot`.
+  `ai`, `helpers`, `test-kit`, `test-resources`, `wasm-boot`, and the Rust crate
+  `ooxml` (`paged-ooxml`, the OOXML foundation of doc, slide and sheet; its own
+  Cargo workspace, a path dependency of theirs).
 - `tooling/import` — how this repository was assembled; do not edit history-related files by hand.
 
 ## Tasks (Moon)
@@ -26,7 +28,7 @@ Moon (`.moon/`, version pinned in `.prototools`) runs every component's tasks
 from anywhere in the repository. One project per Cargo workspace and JS component root:
 `core`, `core-idml-viewer`, `publish`, `image`, `draw`, `sheet`, `data`, `doc`,
 `slide`, `web`, `web-render`, `extensions`, `editor`, `server`, `cli`, and the
-shared packages (`ai`, `helpers`, `test-kit`, `test-resources`, `wasm-boot`).
+shared packages (`ai`, `helpers`, `ooxml`, `test-kit`, `test-resources`, `wasm-boot`).
 
 - `moon run <project>:test` — also `:fmt`, `:check`, `:lint`, `:build`, and
   `:wasm` where the component ships a wasm artifact. `moon run :lint` runs it

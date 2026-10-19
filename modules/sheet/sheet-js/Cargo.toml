@@ -28,9 +28,6 @@ sheet-grid = { path = "../sheet-grid" }
 # it). Pure leaf crate (deps = core+format), no SDK, no inter-plugin contact.
 sheet-chart = { path = "../sheet-chart" }
 serde.workspace = true
-# `zip` is already in the tree (sheet-xlsx); used here only to author the
-# embedded empty workbook for the `SheetEngine::new()` start-without-a-file path.
-zip.workspace = true
 
 # wasm-only boundary deps (referenced solely inside #[cfg(target_arch =
 # "wasm32")] mod wasm). On the native build (the conformance test target) they
@@ -48,6 +45,8 @@ console_error_panic_hook.workspace = true
 perf-counters = ["sheet-calc/perf-counters"]
 
 [dev-dependencies]
+# tests/it/wave4_features.rs and wave9_colors.rs build and read packages.
+zip.workspace = true
 # tests/it/wave6_format.rs reads the TS option spelling through serde.
 serde_json.workspace = true
 # tests/perf_budgets.rs reads sheet_calc::perf; a dev-dependency feature

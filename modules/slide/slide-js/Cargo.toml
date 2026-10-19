@@ -23,3 +23,7 @@ slide-idml.workspace = true
 pptx-export.workspace = true
 slide-resolve.workspace = true
 wasm-bindgen.workspace = true
+
+[dev-dependencies]
+# The zip-bomb builders and the peak-allocation counter (tests/zip_budget.rs).
+paged-ooxml = { workspace = true, features = ["testing"] }

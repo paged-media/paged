@@ -18,6 +18,7 @@ on 2026-10-02 from the code as it stood, for decisions made earlier; their statu
 | [603](603-two-entry-points.md) | Two entry points: Open opens the file as the document, Insert places it in a frame | Accepted, recorded retroactively 2026-10-02 |
 | [604](604-word-is-the-oracle.md) | Microsoft Word is the test oracle | Accepted, recorded retroactively 2026-10-02 |
 | [605](605-object-model-and-merge-fields.md) | A placed Word document is an object model; merge fields bind through it | Accepted 2026-10-06 |
+| [607](607-the-ooxml-foundation-is-shared.md) | The OOXML foundation is one shared crate, and every package read has a memory budget | Accepted 2026-10-19 |
 
 Decisions made in other repositories that this plugin's code rests on are listed in
 [`../README.md`](../README.md).

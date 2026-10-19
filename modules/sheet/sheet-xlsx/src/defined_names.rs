@@ -27,6 +27,7 @@ use crate::splice::{
     attr_local, attrs_of, children_of, prefix_of, render_tag, root_children, set_attr, splice, Span,
 };
 use crate::XlsxDocument;
+use paged_ooxml::xml::escape_text;
 
 /// The `<workbook>` children that FOLLOW `<definedNames>` (ECMA-376
 /// §18.2.27 child order) — a new section goes before the first of these.
@@ -42,12 +43,6 @@ const AFTER_DEFINED_NAMES: &[&str] = &[
     "webPublishObjects",
     "extLst",
 ];
-
-fn escape_text(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
 
 /// Does `<definedName>` span `item` name `name` in scope `local`?
 fn is_match(xml: &[u8], item: &Span, name: &str, local: Option<u32>) -> Result<bool, XlsxError> {

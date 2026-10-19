@@ -49,7 +49,7 @@ use crate::error::XlsxError;
 use crate::opc::{ModeledKind, PartEntry};
 use crate::parts::styles::{builtin_num_fmt, ColorAttrs, ColorContext};
 use crate::parts::theme::ThemePalette;
-use crate::rels::{part_dir, resolve_target, Relationships};
+use crate::rels::{parse_rels, part_dir, resolve_target};
 use crate::splice::{
     attr_local, attrs_of, children_of, escape_attr, prefix_of, render_tag, root_children, set_attr,
     splice, Span,
@@ -742,9 +742,8 @@ impl XlsxDocument {
         match existing {
             Some(part) => self.set_part_bytes(&part, xml),
             None => {
-                let dir = part_dir(&self.workbook_part);
-                let part = format!("{dir}styles.xml");
                 let target = "styles.xml";
+                let part = resolve_target(part_dir(&self.workbook_part), target);
                 self.container.parts.push(PartEntry::Modeled {
                     name: part.clone(),
                     kind: ModeledKind::Styles,
@@ -766,10 +765,10 @@ impl XlsxDocument {
     /// `None` when there is none or it is unreadable.
     pub(crate) fn theme_palette(&self) -> Option<ThemePalette> {
         self.part_bytes(&self.wb_rels_part)
-            .and_then(|raw| Relationships::parse(&raw).ok())
+            .and_then(|raw| parse_rels(&raw).ok())
             .and_then(|rels| {
-                rels.by_type("/theme")
-                    .map(|r| resolve_target(&part_dir(&self.workbook_part), &r.target))
+                rels.by_type_suffix("/theme")
+                    .map(|r| resolve_target(part_dir(&self.workbook_part), &r.target))
             })
             .and_then(|part| self.part_bytes(&part))
             .and_then(|xml| ThemePalette::parse(&xml).ok())

@@ -29,6 +29,9 @@ use quick_xml::events::Event;
 use quick_xml::name::QName;
 use quick_xml::Reader;
 
+// The attribute is read as written (no unescaping), as before the helpers moved.
+use paged_ooxml::xml::{attr_raw as attr, local_name};
+
 use crate::rpr::{render_text, RunSpecials, SpecialSource};
 use docx_core::{LINE_BREAK, SOFT_HYPHEN};
 
@@ -129,13 +132,6 @@ pub struct ResolvedParaTarget {
 /// content, and vice versa.)
 fn in_cell(stack: &[Vec<u8>]) -> bool {
     stack.iter().any(|n| n.as_slice() == b"tc")
-}
-
-fn local_name(qname: &[u8]) -> &[u8] {
-    match qname.iter().position(|&b| b == b':') {
-        Some(i) => &qname[i + 1..],
-        None => qname,
-    }
 }
 
 /// Run-edits-only convenience over [`patch_document_xml_full`] (tests).
@@ -578,13 +574,6 @@ enum Special {
     /// Not text at all (a page or column `w:br` is a pagination
     /// instruction; an `rPr`, a drawing, …).
     No,
-}
-
-fn attr(e: &quick_xml::events::BytesStart<'_>, name: &[u8]) -> Option<String> {
-    e.attributes()
-        .flatten()
-        .find(|a| local_name(a.key.as_ref()) == name)
-        .map(|a| String::from_utf8_lossy(&a.value).into_owned())
 }
 
 fn special(e: &quick_xml::events::BytesStart<'_>) -> Special {
