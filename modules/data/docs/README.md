@@ -9,6 +9,28 @@ What this folder holds.
 - [`status.md`](status.md): what ships today, the limits of what ships, and what is not built.
 - [`adr/`](adr/README.md): the decision records of this repository, 014, 015 and 550–557.
 
+## Tests
+
+The surface the bundle gives the editor (every command, panel and the file importer it
+registers) is asserted for behaviour, and each test names the surface id it vouches for with
+`covers()` (the surface-conformance gate,
+[`platform/extensions/docs/testing-plugins.md`](../../../platform/extensions/docs/testing-plugins.md)).
+All of them run the REAL bundle (`dataBundle.activate`) over the real data-js engine and a
+real DuckDB, booted from disk (`packages/data-bundle/test/conformance/env.ts`). Without the
+data-js wasm (`scripts/build-wasm.sh`) or DuckDB-WASM (`scripts/vendor-duckdb.sh`) they are
+skipped and name what is missing; the CI lane (`REQUIRE_REAL_DUCKDB`, `REQUIRE_REAL_ENGINE`,
+`REQUIRE_REAL_CORE`) makes that a failure.
+
+| Layer     | File                                                                            | What it asserts                                                                                                                                                                                                                                                                                                                                     |
+| --------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| unit      | `packages/data-bundle/test/commands.spec.ts`                                    | Each of the 19 command ids (palette commands and the object model's typed commands) on the SDK's in-process host over the recording fake editor: the panel a command opens, what it refuses and says without data, the session's sources, queries, records and data sets afterwards, and every write it makes (`document.mutate`, `objects.batch`). |
+| headless  | `packages/data-bundle/test/headless/commands.headless.test.ts`                  | The same scenarios over the real canvas engine: the bound rectangle's stroke weight and visibility per record, Data Merge onto pages, the exported Data Merge template, and `document.undo()` taking each back. The findings DAT-1 and DAT-2 are expected failures here.                                                                            |
+| unit      | `packages/data-bundle/test/io.spec.ts`                                          | The JSON / NDJSON / Parquet importer on fixtures built in code: the source it defines, the rows a query reads, the panel it opens, the contested spreadsheet types it leaves to paged.sheet.                                                                                                                                                        |
+| component | `packages/data-bundle/test/panels.dom.test.tsx` (`bun run test:dom`, happy-dom) | The Data sources, Bindings, Dataset preview, Data query and Data overview panels as the bundle registers them, rendered and driven: importing a picked file, the empty states that lead to Data sources, Merge records, previewing and saving a query, and the overview's lists and property rows.                                                  |
+
+The scenarios live in `packages/data-bundle/test/conformance/scenarios.ts`. The menu entries
+belong to the editor's Playwright layer (`apps/editor/apps/canvas/tests/`).
+
 ## Decisions in other repositories that bind this one
 
 These records live in other public paged-media repositories. The code here rests on each of

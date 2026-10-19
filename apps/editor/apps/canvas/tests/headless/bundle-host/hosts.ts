@@ -151,6 +151,56 @@ export function probeBundle(manifest: PluginManifest): {
 
 export type AdapterName = "editor" | "headless" | "bare";
 
+/** Contribution ids per registry. */
+export interface Registered {
+  tools: string[];
+  panels: string[];
+  commands: string[];
+  keybindings: string[];
+  importers: string[];
+  exporters: string[];
+  editContexts: string[];
+  objectTypes: string[];
+  menus: string[];
+}
+
+/** The harness's recorded contributions, as a {@link Registered}. */
+function recorded(hh: HeadlessHost): Registered {
+  const of = (kind: string) =>
+    hh.contributions.filter((c) => c.kind === kind).map((c) => c.id);
+  return {
+    tools: of("tool"),
+    // A schema panel registers a synthesized React panel too.
+    panels: [...new Set([...of("panel"), ...of("schemaPanel")])],
+    commands: of("command"),
+    keybindings: hh.contributions
+      .filter((c) => c.kind === "keybinding")
+      .map((c) => {
+        const k = c.value as { key: string; command: string };
+        return `${k.key}→${k.command}`;
+      }),
+    importers: of("importer"),
+    exporters: of("exporter"),
+    editContexts: of("editContext"),
+    objectTypes: of("objectType"),
+    menus: [],
+  };
+}
+
+async function invokeRecorded(
+  hh: HeadlessHost,
+  editor: PagedEditor,
+  id: string,
+  payload?: unknown,
+): Promise<unknown> {
+  const c = hh.contributions.find((x) => x.kind === "command" && x.id === id);
+  if (!c) throw new Error(`no command ${id} registered`);
+  return (c.value as { handler(p: unknown, a?: unknown): unknown }).handler(
+    editor,
+    payload,
+  );
+}
+
 /** What a case gets: the probe's host and the means to play the user. */
 export interface HostUnderTest {
   readonly name: AdapterName;
@@ -169,6 +219,12 @@ export interface HostUnderTest {
   newBlank(): Promise<string[]>;
   /** The engine-backed editor every adapter's host reads. */
   readonly editor: PagedEditor;
+  /** What the host's registries hold now, by contribution kind (the
+   *  editor's shell registries; the harness's recording log). */
+  registered(): Registered;
+  /** Run a registered command as the host runs it (the editor: through its
+   *  command registry, `when`-gated; the harness: the recorded handler). */
+  invokeCommand(id: string, payload?: unknown): Promise<unknown>;
   /** The editor-only controllers (null on the SDK adapters). */
   readonly editorApp: EditorApp | null;
   dispose(): void | Promise<void>;
@@ -254,6 +310,21 @@ export async function editorAdapter(): Promise<HostUnderTest> {
     name: "editor",
     host,
     editor: ed.editor as unknown as PagedEditor,
+    registered: () => {
+      const r = ed.registries;
+      return {
+        tools: r.tools.list().map((x) => x.id),
+        panels: r.panels.list().map((x) => x.id),
+        commands: r.commands.list().map((x) => x.id),
+        keybindings: r.keybindings.list().map((x) => `${x.key}→${x.command}`),
+        importers: (r.importers?.list() ?? []).map((x) => x.id),
+        exporters: (r.exporters?.list() ?? []).map((x) => x.id),
+        editContexts: (r.editContexts?.list() ?? []).map((x) => x.type),
+        objectTypes: (r.objectTypes?.list() ?? []).map((x) => x.type),
+        menus: (r.menus?.list() ?? []).map((x) => `${x.path}→${x.command}`),
+      };
+    },
+    invokeCommand: (id, payload) => ed.invoke(id, payload),
     sibling: (m) => make(m ?? probeManifest(OTHER_ID)),
     withManifest: (m) => make(m),
     // A reload: the bundle's host is built again, over the same backends.
@@ -288,10 +359,16 @@ export async function editorAdapter(): Promise<HostUnderTest> {
 export async function headlessAdapter(): Promise<HostUnderTest> {
   const hh = await engine();
   let lastProbe: { dispose(): void } | null = null;
-  const load = (manifest: PluginManifest): BundleHost => {
+  // The harness loads a bundle id once; a second ask for the same id (a
+  // sibling several cases use) is the host it already has.
+  const loadedById = new Map<string, BundleHost>();
+  const load = (manifest: PluginManifest, again = false): BundleHost => {
+    const known = loadedById.get(manifest.id);
+    if (known && !again) return known;
     const probe = probeBundle(manifest);
     const loaded = hh.loadBundle(probe.bundle);
     if (manifest.id === PROBE_ID) lastProbe = loaded;
+    loadedById.set(manifest.id, probe.host());
     return probe.host();
   };
   const host = load(probeManifest());
@@ -299,11 +376,14 @@ export async function headlessAdapter(): Promise<HostUnderTest> {
     name: "headless",
     host,
     editor: hh.host.editor,
+    registered: () => recorded(hh),
+    invokeCommand: (id, payload) =>
+      invokeRecorded(hh, hh.host.editor, id, payload),
     sibling: (m) => load(m ?? probeManifest(OTHER_ID)),
     withManifest: (m) => load(m),
     reactivate() {
       lastProbe?.dispose();
-      return load(probeManifest());
+      return load(probeManifest(), true);
     },
     load: (idml) => hh.load(idml),
     newBlank: () => hh.newBlank(612, 792),
@@ -326,6 +406,8 @@ export async function bareAdapter(): Promise<HostUnderTest> {
     name: "bare",
     host: make(probeManifest()),
     editor,
+    registered: () => recorded(hh),
+    invokeCommand: (id, payload) => invokeRecorded(hh, editor, id, payload),
     sibling: (m) => make(m ?? probeManifest(OTHER_ID)),
     withManifest: (m) => make(m),
     reactivate: () => make(probeManifest()),
