@@ -17,33 +17,11 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The engine protocol the editor under test runs (the installed
-// @paged-media/canvas-wasm's version minor, `0.<protocol>.<patch>`, as
-// packages/client/src/protocol.ts reads it). A data journey whose undo shape
-// changed with an engine release asserts the shape of the engine it runs on.
-
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
+// The data journeys' reads of the engine under test. The editor runs the
+// workspace engine (protocol 69 on): a merge that adds pages is ONE undo step,
+// and a refresh or lower carries the session label in that same step.
 
 import { expect, type Page } from "@playwright/test";
-
-const require = createRequire(import.meta.url);
-
-export const ENGINE_PROTOCOL: number = (() => {
-  try {
-    const pkg = require.resolve("@paged-media/canvas-wasm/package.json");
-    const v = (JSON.parse(readFileSync(pkg, "utf8")) as { version: string })
-      .version;
-    return Number(v.split(".")[1]) || 0;
-  } catch {
-    return 0;
-  }
-})();
-
-/** Protocol 69: the data plugin names pages minted in a batch, so a merge
- *  that adds pages is ONE undo step (two before), and a refresh or lower
- *  carries the session label in that same step. */
-export const ONE_STEP_MERGE = ENGINE_PROTOCOL >= 69;
 
 /** The session version the document's own label names (protocol 69,
  *  `DocumentMeta.pluginMetadata`, key `x-paged:media.paged.data`), or null. */

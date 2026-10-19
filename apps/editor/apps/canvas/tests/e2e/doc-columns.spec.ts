@@ -43,11 +43,7 @@
 //
 // Each line is "label x row": the left edge of its first glyph in pt from
 // the page's left, and its row on the 12 pt grid below the top margin.
-// Engines before protocol 64 refuse the properties; the document then
-// reopens with a page per column change, so the spec skips there.
 import { test, expect } from "@playwright/test";
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -59,19 +55,6 @@ const HARNESS = (name: string) =>
   pathResolve(dirname(fileURLToPath(import.meta.url)), "harness", name);
 const OPEN_COMMAND = "paged.file.openIdml";
 const IMPORTER_ID = "media.paged.doc.importer.docx";
-
-/** The engine's wire protocol (canvas-wasm is versioned `0.<protocol>.<patch>`;
- *  a sync-wasm.sh build is `0.<protocol>.0-local`). */
-function engineProtocol(): number {
-  const require = createRequire(import.meta.url);
-  const pkg = JSON.parse(
-    readFileSync(
-      require.resolve("@paged-media/canvas-wasm/package.json"),
-      "utf8",
-    ),
-  ) as { version: string };
-  return Number(pkg.version.split(/[.-]/)[1]);
-}
 
 /** continuous_docx(): Word's 10 pages. Page 3 is section B: B1, B2 in two
  *  columns balanced 5 / 4, B3 below the deeper one, B4 in two columns
@@ -287,10 +270,6 @@ test.describe("plugin-doc — Word's mid-page column changes (ADR 029)", () => {
   test("AC-DOCCOL-1 — a continuous section that changes the columns stays on Word's page, balanced like Word's @feat:plugin-doc.file-entry @level:gesture", async ({
     page,
   }) => {
-    test.skip(
-      engineProtocol() < 64,
-      "span/split columns need wire protocol 64",
-    );
     const want = parse(CONTINUOUS);
     // Word page 3: B1, B2 and B3 share the page; B2 is two columns of five
     // and four lines; B4's six lines all in column 1.
@@ -307,10 +286,6 @@ test.describe("plugin-doc — Word's mid-page column changes (ADR 029)", () => {
   test("AC-DOCCOL-2 — column counts into each other, other gaps, and sections running past the page @feat:plugin-doc.file-entry @level:gesture", async ({
     page,
   }) => {
-    test.skip(
-      engineProtocol() < 64,
-      "span/split columns need wire protocol 64",
-    );
     const want = parse(COLUMNS);
     // Word's page count (columns.word.json): no column change opens a page.
     expect(want).toHaveLength(13);

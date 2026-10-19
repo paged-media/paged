@@ -31,12 +31,8 @@
 // plugin-doc lowers each to the engine's break-before rule
 // (paragraphStartParagraph, wire protocol 64) on the paragraph that starts
 // over; a break inside a paragraph splits it into native paragraphs, and
-// save-back folds them into the one Word paragraph again. Engines before
-// protocol 64 refuse the rule (the document still opens, without breaks),
-// so the spec skips there.
+// save-back folds them into the one Word paragraph again.
 import { test, expect } from "@playwright/test";
-import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { inflateRawSync } from "node:zlib";
 import { dirname, resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,20 +49,6 @@ const FIXTURE = pathResolve(
 const OPEN_COMMAND = "paged.file.openIdml";
 const IMPORTER_ID = "media.paged.doc.importer.docx";
 const EXPORTER_ID = "media.paged.doc.exporter.docx";
-
-/** The engine's wire protocol, read like `engineGrows()` in
- *  doc-standalone-open.spec.ts: canvas-wasm is versioned `0.<protocol>.<patch>`
- *  (a sync-wasm.sh build is `0.<protocol>.0-local`). */
-function engineProtocol(): number {
-  const require = createRequire(import.meta.url);
-  const pkg = JSON.parse(
-    readFileSync(
-      require.resolve("@paged-media/canvas-wasm/package.json"),
-      "utf8",
-    ),
-  ) as { version: string };
-  return Number(pkg.version.split(/[.-]/)[1]);
-}
 
 /** Word's page map (breaks.word.json): per page, per column, the label
  *  (first word) of each line; `[]` is a blank page. Every page is 360 × 192 pt. */
@@ -241,10 +223,6 @@ test.describe("plugin-doc — Word's breaks (ADR 028 / 029)", () => {
   test("AC-DOCBR-1 — page, column and section breaks put Word's lines on Word's pages, and save back as Word wrote them @feat:plugin-doc.file-entry @level:gesture", async ({
     page,
   }) => {
-    test.skip(
-      engineProtocol() < 64,
-      "the break-before rule (paragraphStartParagraph) needs wire protocol 64",
-    );
     await openCanvas(page);
     await invoke(page, "paged.file.new");
     await page.waitForFunction(
