@@ -35,11 +35,11 @@
 
 import { type CSSProperties, type ReactElement } from "react";
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
+import { useConfirm } from "@paged-media/panel-kit";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
 import type { WorkbookSession } from "../session";
-import { useConfirm } from "./confirm";
 
 // ---------------------------------------------------------------- styles
 

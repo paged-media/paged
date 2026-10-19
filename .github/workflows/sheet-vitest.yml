@@ -25,6 +25,7 @@ on:
       # The internal shared code the bundle uses (workspace:*).
       - "platform/shared/wasm-boot/**"
       - "platform/shared/helpers/**"
+      - "platform/shared/panel-kit/**"
       # The shared OOXML foundation the engine wasm builds from.
       - "platform/shared/ooxml/**"
       # The engine wasm packages this workflow builds against (workspace:*),
@@ -63,6 +64,7 @@ on:
       # The internal shared code the bundle uses (workspace:*).
       - "platform/shared/wasm-boot/**"
       - "platform/shared/helpers/**"
+      - "platform/shared/panel-kit/**"
       # The shared OOXML foundation the engine wasm builds from.
       - "platform/shared/ooxml/**"
       # The engine wasm packages this workflow builds against (workspace:*),
