@@ -51,6 +51,7 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use paged_test_resources::covers;
 use serde_json::Value;
 
 /// Set to `1` to write the golden files instead of comparing them.
@@ -774,7 +775,7 @@ fn golden_files(dir: &Path) -> Vec<(String, String)> {
 
 #[test]
 fn every_command_path_has_its_goldens() {
-    paged_test_resources::covers!("cli:paged");
+    covers!("cli:paged");
     let paths = command_paths();
     assert!(
         paths.len() >= 45,
@@ -786,8 +787,11 @@ fn every_command_path_has_its_goldens() {
     let never_exits: BTreeSet<&str> = NO_EXIT_ZERO.iter().map(|(p, _)| *p).collect();
     let mut problems = Vec::new();
     for (path, leaf) in &paths {
-        if !src.contains(&format!("covers!(\"cli:{path}\")")) {
-            problems.push(format!("{path}: no test says covers!(\"cli:{path}\")"));
+        // The needle is assembled, so this line is not itself read as a
+        // marker by the surface gate.
+        let marker = format!("{}!(\"cli:{path}\")", "covers");
+        if !src.contains(&marker) {
+            problems.push(format!("{path}: no test calls {marker}"));
         }
         let dir = golden_dir(path);
         let files = golden_files(&dir);

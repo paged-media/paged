@@ -650,8 +650,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -709,8 +711,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -768,8 +772,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -827,8 +833,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -886,8 +894,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -945,8 +955,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -1004,8 +1016,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -1063,8 +1077,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -1122,8 +1138,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -1181,8 +1199,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -1282,8 +1302,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -1341,8 +1363,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -1400,8 +1424,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -1459,8 +1485,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -1518,8 +1546,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -1661,8 +1691,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -1720,8 +1752,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -1779,8 +1813,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -1838,8 +1874,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -1897,8 +1935,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -1956,8 +1996,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -2015,8 +2057,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -2074,8 +2118,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -2133,8 +2179,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -2192,8 +2240,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -2293,8 +2343,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -2352,8 +2404,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -2411,8 +2465,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -2470,8 +2526,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -2496,9 +2554,10 @@
       ],
       "cells": {
         "automation": {
-          "door": "typed",
+          "door": "named",
           "measured": {
             "automation.batch": "parity",
+            "automation.command": "parity",
             "automation.mutate": "parity"
           },
           "status": "parity"
@@ -2521,16 +2580,19 @@
           "status": "parity"
         },
         "editor-ui": {
-          "door": "typed",
+          "door": "named",
           "measured": {
+            "ui.command": "parity",
             "ui.dialog": "parity"
           },
           "status": "parity"
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -2551,13 +2613,15 @@
     },
     {
       "cases": [
+        "deletePage/current",
         "deletePage"
       ],
       "cells": {
         "automation": {
-          "door": "typed",
+          "door": "named",
           "measured": {
             "automation.batch": "parity",
+            "automation.command": "parity",
             "automation.mutate": "parity"
           },
           "status": "parity"
@@ -2580,16 +2644,19 @@
           "status": "parity"
         },
         "editor-ui": {
-          "door": "typed",
+          "door": "named",
           "measured": {
+            "ui.command": "parity",
             "ui.dialog": "parity"
           },
           "status": "parity"
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -2647,8 +2714,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -2669,16 +2738,21 @@
     },
     {
       "cases": [
-        "insertFrame"
+        "insertFrame",
+        "insertFrame/command"
       ],
       "cells": {
         "automation": {
-          "door": "typed",
+          "door": "named",
+          "findings": [
+            "PAR-6"
+          ],
           "measured": {
             "automation.batch": "parity",
+            "automation.command": "differs",
             "automation.mutate": "parity"
           },
-          "status": "parity"
+          "status": "differs"
         },
         "boa": {
           "door": "named",
@@ -2698,16 +2772,22 @@
           "status": "parity"
         },
         "editor-ui": {
-          "door": "typed",
+          "door": "named",
+          "findings": [
+            "PAR-6"
+          ],
           "measured": {
+            "ui.command": "differs",
             "ui.dialog": "parity"
           },
-          "status": "parity"
+          "status": "differs"
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -2728,13 +2808,15 @@
     },
     {
       "cases": [
-        "insertTextFrame"
+        "insertTextFrame",
+        "insertTextFrame/command"
       ],
       "cells": {
         "automation": {
-          "door": "typed",
+          "door": "named",
           "measured": {
             "automation.batch": "parity",
+            "automation.command": "parity",
             "automation.mutate": "parity"
           },
           "status": "parity"
@@ -2757,16 +2839,19 @@
           "status": "parity"
         },
         "editor-ui": {
-          "door": "typed",
+          "door": "named",
           "measured": {
+            "ui.command": "parity",
             "ui.dialog": "parity"
           },
           "status": "parity"
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -2825,9 +2910,11 @@
           "status": "parity"
         },
         "mcp": {
-          "door": "generic",
-          "measured": {},
-          "status": "not-run"
+          "door": "named",
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -2885,8 +2972,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -2944,8 +3033,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -3003,8 +3094,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -3062,8 +3155,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -3121,8 +3216,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -3222,8 +3319,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -3281,8 +3380,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -3340,8 +3441,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -3399,8 +3502,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -3458,8 +3563,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -3517,8 +3624,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -3576,8 +3685,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -3635,8 +3746,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -3694,8 +3807,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -3753,8 +3868,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -3812,8 +3929,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -3871,8 +3990,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -3933,8 +4054,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -3992,8 +4115,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -4051,8 +4176,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -4110,8 +4237,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -4169,8 +4298,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -4230,8 +4361,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -4291,8 +4424,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -4350,8 +4485,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -4462,8 +4599,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "generic",
@@ -4516,8 +4655,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "generic",
@@ -4570,8 +4711,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "generic",
@@ -4628,8 +4771,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -4687,8 +4832,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -4746,8 +4893,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -4805,8 +4954,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -4860,8 +5011,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "generic",
@@ -4903,9 +5056,9 @@
           "status": "gap"
         },
         "mcp": {
-          "door": "generic",
+          "door": "none",
           "measured": {},
-          "status": "not-run"
+          "status": "gap"
         },
         "plugin-api": {
           "door": "none",
@@ -4960,8 +5113,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -5019,8 +5174,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -5078,8 +5235,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -5137,8 +5296,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -5196,8 +5357,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -5255,8 +5418,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -5314,8 +5479,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -5421,8 +5588,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "generic",
@@ -5479,8 +5648,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -5538,8 +5709,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -5597,8 +5770,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -5656,8 +5831,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -5715,8 +5892,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -5774,8 +5953,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -5833,8 +6014,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -5934,8 +6117,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -5993,8 +6178,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -6052,8 +6239,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -6111,8 +6300,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -6170,8 +6361,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -6229,8 +6422,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -6288,8 +6483,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -6347,8 +6544,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -6406,8 +6605,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -6465,8 +6666,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -6524,8 +6727,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -6583,8 +6788,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -6642,8 +6849,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -6701,8 +6910,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -6760,8 +6971,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -6819,8 +7032,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -6878,8 +7093,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -6937,8 +7154,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -6996,8 +7215,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -7055,8 +7276,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -7114,8 +7337,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -7173,8 +7398,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -7232,8 +7459,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -7291,8 +7520,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -7350,8 +7581,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -7409,8 +7642,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -7468,8 +7703,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -7527,8 +7764,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -7549,16 +7788,21 @@
     },
     {
       "cases": [
-        "insertOval"
+        "insertOval",
+        "insertOval/command"
       ],
       "cells": {
         "automation": {
-          "door": "typed",
+          "door": "named",
+          "findings": [
+            "PAR-6"
+          ],
           "measured": {
             "automation.batch": "parity",
+            "automation.command": "differs",
             "automation.mutate": "parity"
           },
-          "status": "parity"
+          "status": "differs"
         },
         "boa": {
           "door": "named",
@@ -7578,16 +7822,22 @@
           "status": "parity"
         },
         "editor-ui": {
-          "door": "typed",
+          "door": "named",
+          "findings": [
+            "PAR-6"
+          ],
           "measured": {
+            "ui.command": "differs",
             "ui.dialog": "parity"
           },
-          "status": "parity"
+          "status": "differs"
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -7645,8 +7895,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -7704,8 +7956,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -7763,8 +8017,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -7864,8 +8120,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -7965,8 +8223,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -8024,8 +8284,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -8083,8 +8345,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -8138,8 +8402,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "generic",
@@ -8196,8 +8462,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -8255,8 +8523,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -8314,8 +8584,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -8373,8 +8645,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -8432,8 +8706,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -8491,8 +8767,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -8550,8 +8828,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -8609,8 +8889,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -8668,8 +8950,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -8727,8 +9011,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -8786,8 +9072,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -8845,8 +9133,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -8904,8 +9194,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -8963,8 +9255,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -9022,8 +9316,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -9081,8 +9377,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -9140,8 +9438,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -9199,8 +9499,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -9258,8 +9560,10 @@
         },
         "mcp": {
           "door": "named",
-          "measured": {},
-          "status": "not-run"
+          "measured": {
+            "mcp.run_script": "parity"
+          },
+          "status": "parity"
         },
         "plugin-api": {
           "door": "typed",
@@ -9281,14 +9585,14 @@
   ],
   "summary": {
     "automation": {
-      "differs": 0,
+      "differs": 2,
       "gap": 1,
       "generic": 7,
-      "named": 4,
+      "named": 9,
       "none": 1,
       "not-run": 8,
-      "parity": 141,
-      "typed": 138
+      "parity": 139,
+      "typed": 133
     },
     "boa": {
       "differs": 0,
@@ -9311,23 +9615,23 @@
       "typed": 2
     },
     "editor-ui": {
-      "differs": 0,
+      "differs": 2,
       "gap": 8,
       "generic": 0,
-      "named": 4,
+      "named": 9,
       "none": 8,
       "not-run": 8,
-      "parity": 134,
-      "typed": 138
+      "parity": 132,
+      "typed": 133
     },
     "mcp": {
       "differs": 0,
-      "gap": 0,
-      "generic": 4,
-      "named": 146,
-      "none": 0,
-      "not-run": 150,
-      "parity": 0,
+      "gap": 1,
+      "generic": 2,
+      "named": 147,
+      "none": 1,
+      "not-run": 10,
+      "parity": 139,
       "typed": 0
     },
     "plugin-api": {
