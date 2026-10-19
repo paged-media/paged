@@ -215,6 +215,11 @@ import {
   type ObjectCommandDeps,
 } from "./object-commands";
 import {
+  CANVAS_CONTEXT_MENU_COMMAND,
+  CANVAS_CONTEXT_MENU_KEYBINDINGS,
+  CanvasContextMenuHost,
+} from "./canvas-context-menu";
+import {
   browserClipboard,
   buildClipboardCommands,
   CLIPBOARD_DIAGNOSTIC_SOURCE,
@@ -1350,6 +1355,7 @@ function CanvasAppIntegration() {
       ...commands,
       ...aiCommands,
       ...clipboardCommands,
+      CANVAS_CONTEXT_MENU_COMMAND,
       ...objectCommands,
       ...insertCommands,
       ...alignCommands,
@@ -1379,6 +1385,7 @@ function CanvasAppIntegration() {
       ...APP_KEYBINDINGS,
       ...SELECT_ALL_KEYBINDINGS,
       ...CLIPBOARD_KEYBINDINGS,
+      ...CANVAS_CONTEXT_MENU_KEYBINDINGS,
       ...OBJECT_KEYBINDINGS,
       ...INSERT_KEYBINDINGS,
     ].map((k) => registries.keybindings.register(k));
@@ -1509,6 +1516,7 @@ function CanvasAppRoot() {
       objectModel={editorObjectModel}
     >
       <CanvasAppIntegration />
+      <CanvasContextMenuHost />
       <PluginBundles />
       <ConsentDialog controller={editorConsent.controller} />
       <SecretPromptDialog controller={editorSecrets.controller} />

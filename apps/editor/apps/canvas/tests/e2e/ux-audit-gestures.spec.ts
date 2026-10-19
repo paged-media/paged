@@ -27,6 +27,7 @@
 // model and the editor's own state, never by a screenshot. GM-2 is a
 // finding of the gesture matrix, recorded the same way.
 
+import { covers } from "@paged-media/test-kit";
 import { expect, test, type Page } from "@playwright/test";
 
 import {
@@ -310,14 +311,41 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
   test("[F-27] a right-click on a frame opens a context menu @level:gesture", async ({
     page,
   }) => {
-    test.fail(EXPECTED, "F-27: the canvas has no context menu");
+    covers("command:paged.edit.contextMenu");
     const { g } = await gestureEditor(page);
     await g.tool("paged.tool.select").settle();
     await selectElements(page, [T.frame.id]);
     await g.click(T.frame.at, { button: 2 }).settle();
-    await expect(page.locator('[role="menu"]')).toHaveCount(1, {
-      timeout: 2_000,
-    });
+    const menu = page.getByTestId("canvas-context-menu");
+    await expect(menu).toHaveAttribute("role", "menu", { timeout: 2_000 });
+    // The selected frame's verbs are live; Escape closes the menu.
+    await expect(
+      menu.locator('[data-command="paged.edit.copy"]'),
+    ).not.toHaveAttribute("data-disabled");
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+  });
+
+  test("[F-27] a right-click on an unselected frame selects it first, as InDesign does @level:gesture", async ({
+    page,
+  }) => {
+    covers("command:paged.edit.contextMenu");
+    const { g } = await gestureEditor(page);
+    await g.tool("paged.tool.select").settle();
+    await selectElements(page, []);
+    await g.click(T.frame.at, { button: 2 }).settle();
+    await expect(page.getByTestId("canvas-context-menu")).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          (
+            globalThis as unknown as {
+              __canvas: { elementSelection: Array<{ id: string }> };
+            }
+          ).__canvas.elementSelection.map((e) => e.id),
+        ),
+      )
+      .toEqual([T.frame.id.id]);
   });
 
   test("[GM-2] a transform tool acts on the selection made AFTER it was picked (the Layers panel, Select All) @level:gesture", async ({

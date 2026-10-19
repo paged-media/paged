@@ -208,6 +208,27 @@ describe("the combo vocabulary", () => {
   });
 });
 
+describe("an Alt chord on a Mac, where Option changes the key", () => {
+  test("Option+Shift+Cmd+V matches by the physical key (InDesign's Paste in Place)", () => {
+    covers("keybinding:cmd+alt+shift+v→paged.edit.pasteInPlace");
+    const b: KeybindingContribution[] = [
+      { key: "cmd+alt+shift+v", command: "paged.edit.pasteInPlace" },
+    ];
+    // macOS reports key "◊" for Option+Shift+V, code "KeyV".
+    expect(
+      resolveBinding(b, press("cmd+alt+shift+◊", { code: "KeyV" }))?.command,
+    ).toBe("paged.edit.pasteInPlace");
+    // Without Alt in the binding, the code is not consulted: a layout
+    // that puts another letter on that key keeps its own.
+    expect(
+      resolveBinding(
+        [{ key: "cmd+v", command: "paste" }],
+        press("cmd+z", { code: "KeyV" }),
+      ),
+    ).toBeNull();
+  });
+});
+
 describe("the dispatch rule among bindings on one key", () => {
   const guarded = (on: () => boolean, command: string) => ({
     key: "cmd+d",
