@@ -1,0 +1,22 @@
+{
+  "name": "@paged-media/helpers",
+  "private": true,
+  "version": "0.0.0",
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
+  "description": "Internal small helpers of the built-ins and the editor, one implementation each: sha256Hex, base64 and data: URLs, length units, naive colour conversions, and the x-paged label key and envelope codec. Never published (docs/adr/PM-0002).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "bun check -p tsconfig.json",
+    "test": "bun test --timeout 30000 --parallel --preload ../../../tooling/js/bun-test-setup.ts"
+  },
+  "devDependencies": {
+    "@paged-media/plugin-sdk": "workspace:*",
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

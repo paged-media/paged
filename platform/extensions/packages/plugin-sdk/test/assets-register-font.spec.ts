@@ -36,8 +36,7 @@ import {
 } from "../src";
 import { makeFakeEditor } from "./fake-editor";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
+import { silentConsole as silent } from "../src/testing";
 const manifest = (
   id = "media.paged.test",
   capabilities: PluginManifest["capabilities"] = { assets: ["fonts"] },

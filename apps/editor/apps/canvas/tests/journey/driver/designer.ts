@@ -583,6 +583,14 @@ export class Designer {
    *
    * Polling cannot mask a real regression: a render that genuinely never
    * changes still fails, just at the timeout instead of immediately.
+   *
+   * It waits on the engine, not on the clock (ADR 228): a new snapshot is
+   * taken when {@link renderGeneration} moved (the engine reported a change
+   * that can repaint the page) and at least once a second regardless, for
+   * a change that arrives by a path the counter does not see. A snapshot
+   * is a full-page CPU render plus two PNG round-trips through the
+   * protocol, so not re-rendering an unchanged page every tick is also
+   * what keeps the poll itself from loading a busy machine.
    */
   async expectRenderChangesFrom(
     before: Uint8Array,
@@ -590,22 +598,78 @@ export class Designer {
   ): Promise<number> {
     const minPixels = opts.minPixels ?? 64;
     let changed = 0;
+    let seen = Number.NaN;
+    let shotAt = 0;
     await expect
       .poll(
         async () => {
-          changed = await this.renderDiffPixels(
-            before,
-            await this.renderBytes(),
-          );
+          const generation = await this.renderGeneration();
+          if (generation !== seen || Date.now() - shotAt >= 1_000) {
+            seen = generation;
+            shotAt = Date.now();
+            changed = await this.renderDiffPixels(
+              before,
+              await this.renderBytes(),
+            );
+          }
           return changed;
         },
         {
-          timeout: opts.timeout ?? 15_000,
+          timeout: opts.timeout ?? 30_000,
+          intervals: [50, 100, 250],
           message: `rendered page should change by >${minPixels}px`,
         },
       )
       .toBeGreaterThan(minPixels);
     return changed;
+  }
+
+  /**
+   * The engine's change counter, read in the page: how many worker
+   * messages since this page booted said the page may now render
+   * differently (a mutation, undo or redo, a committed or updated gesture,
+   * a scene layer, a font, a loaded document, dirty pages or a story, a
+   * script run). There is no rendered-frame notification on the protocol;
+   * these are the messages the engine sends when it has applied a change,
+   * and a snapshot requested after one of them composes it. The counter is
+   * installed on first use and follows a replaced client.
+   */
+  async renderGeneration(): Promise<number> {
+    return this.page.evaluate(() => {
+      type Msg = { kind: string };
+      type Client = { subscribe?: (l: (m: Msg) => void) => () => void };
+      const g = globalThis as unknown as {
+        __canvas?: { client?: Client };
+        __renderGeneration?: { n: number; client: Client | null };
+      };
+      const gen = (g.__renderGeneration ??= { n: 0, client: null });
+      const client = g.__canvas?.client ?? null;
+      if (client && client !== gen.client && client.subscribe) {
+        gen.client = client;
+        const kinds = new Set([
+          "documentLoaded",
+          "mutationApplied",
+          "undoApplied",
+          "redoApplied",
+          "gestureUpdated",
+          "gestureCommitted",
+          "gestureCancelled",
+          "pagesDirty",
+          "storyDirty",
+          "sceneLayerApplied",
+          "resourceClaimApplied",
+          "fontRegistered",
+          "fontRegistryCleared",
+          "colorProfileRegistered",
+          "frameReflow",
+          "scriptResult",
+        ]);
+        client.subscribe((m) => {
+          if (kinds.has(m.kind)) gen.n++;
+        });
+      }
+      return gen.n;
+    });
   }
 
   /** Inverse of {@link expectRenderChanged}: assert the render did NOT

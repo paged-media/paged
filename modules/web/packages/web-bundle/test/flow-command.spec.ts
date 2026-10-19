@@ -39,11 +39,10 @@ import {
   unthreadSelectedFromFlow,
 } from "../src/render-flow-command";
 
+import { silentConsole as silent } from "@paged-media/plugin-sdk";
 const S = { kind: "rectangle", id: "uS" } as ElementId;
 const B = { kind: "rectangle", id: "uB" } as ElementId;
 const C = { kind: "textFrame", id: "uC" } as ElementId;
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
 /** A host whose `getMetadata` returns `metadata` for any id, records every
  *  `setMetadata` write, and has no container parts (so the source rides the
  *  label inline — the sources here are small). */

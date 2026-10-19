@@ -49,8 +49,7 @@ import {
 import { createObjectRegistry } from "../src/object-registry";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
+import { silentConsole as silent } from "../src/testing";
 let live: HeadlessHost | null = null;
 afterEach(() => {
   live?.dispose();

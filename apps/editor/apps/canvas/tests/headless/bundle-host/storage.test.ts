@@ -79,21 +79,15 @@ describe.each([
   // "Namespaced key-value PERSISTENCE": what a bundle stored is there when
   // the same bundle is activated again on the same host (a reload, a
   // re-activation after an error). The editor's backing is localStorage;
-  // the headless harness gives every host a fresh in-memory map when no
-  // `storage` is injected, while it shares its blob store across hosts "so
-  // a reloaded bundle sees its own persisted bytes".
-  const persists = name === "headless" ? test.failing : test;
+  // the headless harness keeps one in-memory map for all its hosts when no
+  // `storage` is injected, as it shares its blob store. (Finding HOST-1,
+  // a fresh map per host, fixed in wave C.)
   if (name !== "bare")
-    persists(
-      name === "headless"
-        ? "HOST-1 — a re-activated bundle reads what it stored (headless: a fresh map per host)"
-        : "a re-activated bundle reads what it stored",
-      () => {
-        t.host.storage.set("persisted", { v: 7 });
-        const again = t.reactivate();
-        expect(again.storage.get("persisted")).toEqual({ v: 7 });
-      },
-    );
+    test("a re-activated bundle reads what it stored", () => {
+      t.host.storage.set("persisted", { v: 7 });
+      const again = t.reactivate();
+      expect(again.storage.get("persisted")).toEqual({ v: 7 });
+    });
 });
 
 // ── host.blob ────────────────────────────────────────────────────────

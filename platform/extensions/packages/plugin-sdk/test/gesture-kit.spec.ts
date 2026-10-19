@@ -56,8 +56,7 @@ import {
 } from "../src/index";
 import { minimalIdml } from "./fixtures/minimal-idml";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
+import { silentConsole as silent } from "../src/testing";
 /** A handler that records what it is told, as plain data. */
 function spyHandler() {
   const calls: Array<{

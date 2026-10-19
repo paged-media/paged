@@ -209,6 +209,10 @@ export interface FakeEditor {
   currentPreview(): ToolPreviewShape | readonly ToolPreviewShape[] | null;
   /** The live contributions of a registry (disposed ones are gone). */
   registered<T = unknown>(registry: FakeRegistryName): T[];
+  /** The ids of a registry's live contributions, in registration order: a
+   *  contribution's `id`, an edit context's or object type's `type`, a
+   *  keybinding's `key`. */
+  ids(registry: FakeRegistryName): string[];
   /** The live tools, for a gesture driver to mount. */
   tools(): ToolContribution[];
   /** Run a registered command's handler against this editor (recorded). */
@@ -796,6 +800,9 @@ export function createFakeEditor(options: FakeEditorOptions = {}): FakeEditor {
     currentPreview: () => preview,
     registered<T>(name: FakeRegistryName): T[] {
       return [...(live.get(name)?.keys() ?? [])] as T[];
+    },
+    ids(name: FakeRegistryName): string[] {
+      return [...(live.get(name)?.values() ?? [])];
     },
     tools() {
       return [...(live.get("tools")?.keys() ?? [])] as ToolContribution[];

@@ -197,13 +197,12 @@ test.describe("journey · paged.data binding engine + expression DSL", () => {
     //    The blank page now carries the data-driven content. ──
     const beforeLower = await designer.renderBytes();
     await page.getByRole("button", { name: /lower to document/i }).click();
-    // The lower lane runs a DuckDB query + commits Mutations; let the worker +
-    // the render pipeline settle.
-    await page.waitForTimeout(1500);
-    const afterLower = await designer.renderBytes();
 
     // ── 5. RENDER ASSERTION (HARD) — the resolved/computed value visibly
-    //    reached the page (the §9 lowering lanes lowered real content). ──
-    await designer.expectRenderChanged(beforeLower, afterLower);
+    //    reached the page (the §9 lowering lanes lowered real content). The
+    //    lower lane runs a DuckDB query and then commits Mutations, so the
+    //    render is polled until the commit lands (ADR 228), not sampled once
+    //    after a sleep tuned on a fast machine. ──
+    await designer.expectRenderChangesFrom(beforeLower);
   });
 });

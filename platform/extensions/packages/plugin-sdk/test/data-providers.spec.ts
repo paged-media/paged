@@ -46,8 +46,7 @@ import {
 } from "../src";
 import { makeFakeEditor } from "./fake-editor";
 
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-
+import { silentConsole as silent } from "../src/testing";
 const PROVIDER: PluginManifest = {
   id: "media.paged.data",
   name: "data",

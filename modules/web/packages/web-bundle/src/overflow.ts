@@ -36,6 +36,8 @@
 // it answers only "fits or not". The engine has no content-height export, so
 // shrink searches (about ten layouts) and grow and thread measure once.
 
+import { PT_PER_PX } from "@paged-media/helpers";
+
 import {
   scaleSceneLayer,
   type OverflowPolicy,
@@ -65,7 +67,6 @@ const SHRINK_ROUNDS = 9;
 
 /** The viewport height (CSS px) content is measured in. */
 const MEASURE_PX = MAX_GROW_PX;
-const PT_PER_PX = 72 / 96;
 
 type Bounds = { top: number; bottom: number } | null;
 

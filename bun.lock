@@ -5,6 +5,34 @@
     "": {
       "name": "paged",
     },
+    "apps/cli": {
+      "name": "@paged-media/cli",
+      "version": "0.1.0-canary.0",
+      "bin": {
+        "paged-node": "./dist/bin.js",
+      },
+      "dependencies": {
+        "@anthropic-ai/sdk": "0.135.0",
+        "@paged-media/canvas-wasm": "workspace:*",
+      },
+      "devDependencies": {
+        "@duckdb/duckdb-wasm": "1.29.0",
+        "@paged-media/ai": "workspace:*",
+        "@paged-media/data": "workspace:*",
+        "@paged-media/plugin-api": "workspace:*",
+        "@paged-media/plugin-sdk": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "react": "catalog:",
+        "typescript": "catalog:",
+      },
+      "peerDependencies": {
+        "@duckdb/duckdb-wasm": "1.29.0",
+      },
+      "optionalPeers": [
+        "@duckdb/duckdb-wasm",
+      ],
+    },
     "apps/editor": {
       "name": "paged-monorepo",
       "version": "0.0.0",
@@ -23,6 +51,7 @@
         "@paged-media/data": "workspace:*",
         "@paged-media/doc": "workspace:*",
         "@paged-media/draw": "workspace:*",
+        "@paged-media/helpers": "workspace:*",
         "@paged-media/image": "workspace:*",
         "@paged-media/pdf": "workspace:*",
         "@paged-media/plugin-api": "workspace:*",
@@ -109,6 +138,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@paged-media/canvas-wasm": "workspace:*",
+        "@paged-media/helpers": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "catalog:",
@@ -125,6 +155,7 @@
         "@paged-media/ai": "workspace:*",
         "@paged-media/catalog": "workspace:*",
         "@paged-media/client": "workspace:*",
+        "@paged-media/helpers": "workspace:*",
         "@paged-media/plugin-api": "workspace:*",
         "@paged-media/repository": "workspace:*",
         "@paged-media/ui": "workspace:*",
@@ -189,6 +220,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@paged-media/client": "workspace:*",
+        "@paged-media/helpers": "workspace:*",
         "@paged-media/shell": "workspace:*",
         "clsx": "^2.1.1",
         "tailwind-merge": "^3.7.0",
@@ -227,6 +259,10 @@
     "modules/data/packages/data-bundle": {
       "name": "@paged-media/data",
       "version": "0.1.0-canary.17",
+      "dependencies": {
+        "@paged-media/helpers": "workspace:*",
+        "@paged-media/wasm-boot": "workspace:*",
+      },
       "devDependencies": {
         "@happy-dom/global-registrator": "catalog:",
         "@paged-media/canvas-wasm": "workspace:*",
@@ -257,6 +293,7 @@
       "name": "@paged-media/data-host-model",
       "version": "0.1.0-canary.0",
       "dependencies": {
+        "@paged-media/helpers": "workspace:*",
         "@paged-media/plugin-api": "workspace:*",
       },
       "devDependencies": {
@@ -274,6 +311,10 @@
     "modules/doc/packages/doc-bundle": {
       "name": "@paged-media/doc",
       "version": "0.1.0-canary.4",
+      "dependencies": {
+        "@paged-media/helpers": "workspace:*",
+        "@paged-media/wasm-boot": "workspace:*",
+      },
       "devDependencies": {
         "@happy-dom/global-registrator": "catalog:",
         "@paged-media/canvas-wasm": "workspace:*",
@@ -319,6 +360,10 @@
     "modules/draw/packages/draw-bundle": {
       "name": "@paged-media/draw",
       "version": "0.1.0-canary.20",
+      "dependencies": {
+        "@paged-media/helpers": "workspace:*",
+        "@paged-media/wasm-boot": "workspace:*",
+      },
       "devDependencies": {
         "@happy-dom/global-registrator": "catalog:",
         "@paged-media/canvas-wasm": "workspace:*",
@@ -348,6 +393,9 @@
     "modules/draw/packages/draw-geometry": {
       "name": "@paged-media/draw-geometry",
       "version": "0.1.0-canary.0",
+      "dependencies": {
+        "@paged-media/helpers": "workspace:*",
+      },
       "devDependencies": {
         "@types/bun": "catalog:",
         "fast-check": "^4.10.2",
@@ -379,6 +427,10 @@
     "modules/image/glue": {
       "name": "@paged-media/image",
       "version": "0.1.0-canary.21",
+      "dependencies": {
+        "@paged-media/helpers": "workspace:*",
+        "@paged-media/wasm-boot": "workspace:*",
+      },
       "devDependencies": {
         "@happy-dom/global-registrator": "catalog:",
         "@paged-media/canvas-wasm": "workspace:*",
@@ -411,6 +463,8 @@
       "name": "@paged-media/pdf",
       "version": "0.2.6-canary.0",
       "dependencies": {
+        "@paged-media/helpers": "workspace:*",
+        "@paged-media/wasm-boot": "workspace:*",
         "jszip": "^3.10.2",
       },
       "devDependencies": {
@@ -454,6 +508,10 @@
     "modules/sheet/packages/sheet-bundle": {
       "name": "@paged-media/sheet",
       "version": "0.1.0-canary.24",
+      "dependencies": {
+        "@paged-media/helpers": "workspace:*",
+        "@paged-media/wasm-boot": "workspace:*",
+      },
       "devDependencies": {
         "@happy-dom/global-registrator": "catalog:",
         "@paged-media/canvas-wasm": "workspace:*",
@@ -501,6 +559,10 @@
     "modules/slide/packages/slide-bundle": {
       "name": "@paged-media/slide",
       "version": "0.1.0-canary.1",
+      "dependencies": {
+        "@paged-media/helpers": "workspace:*",
+        "@paged-media/wasm-boot": "workspace:*",
+      },
       "devDependencies": {
         "@happy-dom/global-registrator": "catalog:",
         "@paged-media/canvas-wasm": "workspace:*",
@@ -534,6 +596,10 @@
     "modules/web/packages/web-bundle": {
       "name": "@paged-media/web",
       "version": "0.1.0-canary.18",
+      "dependencies": {
+        "@paged-media/helpers": "workspace:*",
+        "@paged-media/wasm-boot": "workspace:*",
+      },
       "devDependencies": {
         "@happy-dom/global-registrator": "catalog:",
         "@paged-media/canvas-wasm": "workspace:*",
@@ -574,6 +640,9 @@
     "modules/web/packages/web-model": {
       "name": "@paged-media/web-model",
       "version": "0.1.0-canary.0",
+      "dependencies": {
+        "@paged-media/helpers": "workspace:*",
+      },
       "devDependencies": {
         "@types/bun": "catalog:",
         "fast-check": "4.10.2",
@@ -587,56 +656,9 @@
         "typescript": "catalog:",
       },
     },
-    "platform/extensions/packages/ai": {
-      "name": "@paged-media/ai",
-      "version": "0.1.0-canary.4",
-      "dependencies": {
-        "@anthropic-ai/sdk": "0.135.0",
-      },
-      "devDependencies": {
-        "@paged-media/plugin-api": "workspace:*",
-        "@types/bun": "catalog:",
-        "@types/node": "catalog:",
-        "typescript": "catalog:",
-      },
-      "peerDependencies": {
-        "@paged-media/plugin-api": "workspace:*",
-      },
-      "optionalPeers": [
-        "@paged-media/plugin-api",
-      ],
-    },
-    "platform/extensions/packages/cli": {
-      "name": "@paged-media/cli",
-      "version": "0.1.0-canary.0",
-      "bin": {
-        "paged-node": "./dist/bin.js",
-      },
-      "dependencies": {
-        "@anthropic-ai/sdk": "0.135.0",
-        "@paged-media/canvas-wasm": "workspace:*",
-      },
-      "devDependencies": {
-        "@duckdb/duckdb-wasm": "1.29.0",
-        "@paged-media/ai": "workspace:*",
-        "@paged-media/data": "workspace:*",
-        "@paged-media/plugin-api": "workspace:*",
-        "@paged-media/plugin-sdk": "workspace:*",
-        "@types/bun": "catalog:",
-        "@types/node": "catalog:",
-        "react": "catalog:",
-        "typescript": "catalog:",
-      },
-      "peerDependencies": {
-        "@duckdb/duckdb-wasm": "1.29.0",
-      },
-      "optionalPeers": [
-        "@duckdb/duckdb-wasm",
-      ],
-    },
     "platform/extensions/packages/plugin-api": {
       "name": "@paged-media/plugin-api",
-      "version": "0.2.78-canary.0",
+      "version": "0.2.80-canary.0",
       "dependencies": {
         "@types/react": "catalog:",
       },
@@ -646,7 +668,7 @@
     },
     "platform/extensions/packages/plugin-sdk": {
       "name": "@paged-media/plugin-sdk",
-      "version": "0.2.78-canary.0",
+      "version": "0.2.80-canary.0",
       "bin": {
         "paged-plugin": "./bin/paged-plugin.mjs",
       },
@@ -669,6 +691,35 @@
         "react",
       ],
     },
+    "platform/shared/ai": {
+      "name": "@paged-media/ai",
+      "version": "0.1.0-canary.4",
+      "dependencies": {
+        "@anthropic-ai/sdk": "0.135.0",
+        "@paged-media/helpers": "workspace:*",
+      },
+      "devDependencies": {
+        "@paged-media/plugin-api": "workspace:*",
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "typescript": "catalog:",
+      },
+      "peerDependencies": {
+        "@paged-media/plugin-api": "workspace:*",
+      },
+      "optionalPeers": [
+        "@paged-media/plugin-api",
+      ],
+    },
+    "platform/shared/helpers": {
+      "name": "@paged-media/helpers",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@paged-media/plugin-sdk": "workspace:*",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "platform/shared/test-kit": {
       "name": "@paged-media/test-kit",
       "version": "0.0.0",
@@ -679,6 +730,14 @@
       "devDependencies": {
         "@types/bun": "catalog:",
         "fast-check": "^4.10.2",
+        "typescript": "catalog:",
+      },
+    },
+    "platform/shared/wasm-boot": {
+      "name": "@paged-media/wasm-boot",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@types/bun": "catalog:",
         "typescript": "catalog:",
       },
     },
@@ -808,13 +867,13 @@
 
     "@oxc-project/types": ["@oxc-project/types@0.154.0", "", {}, "sha512-KYOUGQFlLWR+s4QMV2Q9ko38TZm7EdO87Qm7rvZLqk/webse/cDjtyxKhg/47l0byCbs/k46LT8qc4PKjAikzA=="],
 
-    "@paged-media/ai": ["@paged-media/ai@workspace:platform/extensions/packages/ai"],
+    "@paged-media/ai": ["@paged-media/ai@workspace:platform/shared/ai"],
 
     "@paged-media/canvas-wasm": ["@paged-media/canvas-wasm@workspace:engine/core/packages/canvas-wasm"],
 
     "@paged-media/catalog": ["@paged-media/catalog@workspace:apps/editor/packages/catalog"],
 
-    "@paged-media/cli": ["@paged-media/cli@workspace:platform/extensions/packages/cli"],
+    "@paged-media/cli": ["@paged-media/cli@workspace:apps/cli"],
 
     "@paged-media/client": ["@paged-media/client@workspace:apps/editor/packages/client"],
 
@@ -831,6 +890,8 @@
     "@paged-media/draw-geometry": ["@paged-media/draw-geometry@workspace:modules/draw/packages/draw-geometry"],
 
     "@paged-media/draw-tools": ["@paged-media/draw-tools@workspace:modules/draw/packages/draw-tools"],
+
+    "@paged-media/helpers": ["@paged-media/helpers@workspace:platform/shared/helpers"],
 
     "@paged-media/idml-viewer": ["@paged-media/idml-viewer@workspace:engine/core/web/idml-viewer"],
 
@@ -861,6 +922,8 @@
     "@paged-media/tools": ["@paged-media/tools@workspace:apps/editor/packages/tools"],
 
     "@paged-media/ui": ["@paged-media/ui@workspace:apps/editor/packages/ui"],
+
+    "@paged-media/wasm-boot": ["@paged-media/wasm-boot@workspace:platform/shared/wasm-boot"],
 
     "@paged-media/web": ["@paged-media/web@workspace:modules/web/packages/web-bundle"],
 

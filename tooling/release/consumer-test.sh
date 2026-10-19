@@ -94,6 +94,13 @@ check(Object.keys(api).length === 0, "plugin-api: type-only (no runtime exports)
 check(schema?.required?.includes("apiVersion"), "plugin-api/manifest.schema.json");
 check(typeof sdk.loadBundle === "function" && typeof sdk.defineBundle === "function", "plugin-sdk: loadBundle, defineBundle");
 check(sdk.satisfiesApiVersion(`^${sdk.API_VERSION.slice(0, 3)}`), "plugin-sdk: API_VERSION negotiates");
+const fake = sdk.createFakeEditor();
+const loaded = sdk.loadBundle(() => fake.editor, sdk.defineBundle({
+  manifest: { id: "com.example.hello", name: "Hello", version: "0.1.0", apiVersion: "^0.2", contributes: { commands: ["com.example.hello.command.report"] } },
+  activate: (host) => host.contribute.command({ id: "com.example.hello.command.report", title: "Report", handler: () => {} }),
+}), { console: sdk.silentConsole, storage: sdk.mapBacking() });
+check(fake.ids("commands").join() === "com.example.hello.command.report", "plugin-sdk: an activation test over createFakeEditor, mapBacking, silentConsole");
+loaded.dispose();
 const minor = (v) => v.split(".")[1];
 check(minor(viewerPkg.version) === minor(canvasPkg.version), `one version: idml-viewer ${viewerPkg.version}, canvas-wasm ${canvasPkg.version}`);
 
@@ -105,7 +112,15 @@ JS
   cat >"$dir/consumer.ts" <<'TS'
 // A tiny extension and an embedder, typed against the four packages.
 import type { BundleHost, PagedBundle, PluginManifest } from "@paged-media/plugin-api";
-import { API_VERSION, defineBundle, satisfiesApiVersion } from "@paged-media/plugin-sdk";
+import {
+  API_VERSION,
+  createFakeEditor,
+  defineBundle,
+  loadBundle,
+  mapBacking,
+  satisfiesApiVersion,
+  silentConsole,
+} from "@paged-media/plugin-sdk";
 import { createViewer, type Viewer } from "@paged-media/idml-viewer";
 import initSession, { ViewerSession } from "@paged-media/idml-viewer/session";
 import { Inspector, describeCatalog } from "@paged-media/canvas-wasm/introspect";
@@ -128,6 +143,13 @@ export const bundle: PagedBundle = defineBundle({
 });
 
 export const negotiates: boolean = satisfiesApiVersion(manifest.apiVersion);
+
+/** The activation test a bundle's own suite writes, over the SDK's doubles. */
+export function activationTest(): string[] {
+  const fake = createFakeEditor();
+  loadBundle(() => fake.editor, bundle, { console: silentConsole, storage: mapBacking() }).dispose();
+  return fake.ids("commands");
+}
 
 export async function embed(canvas: HTMLCanvasElement): Promise<Viewer> {
   await initSession();

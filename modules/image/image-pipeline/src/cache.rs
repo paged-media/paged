@@ -33,8 +33,9 @@ use std::collections::HashMap;
 use image_core::{ContentHash, ParamsHash, TileMap};
 
 /// Cache identity for one materialized node (§7.1). `input` is the
-/// content hash of the upstream node's result (a leaf source has no
-/// upstream, so its `input` is the hash of its own decoded identity).
+/// content hash of the upstream node's result folded with the region
+/// the node was asked for (a leaf source has no upstream, so its `input`
+/// is the hash of its own decoded identity and that region).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct OpKey {
     pub op_id: u64,

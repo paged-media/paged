@@ -13,6 +13,8 @@ on:
     branches: [main]
     paths:
       - "modules/publish/**"
+      # The TypeScript base every package's tsconfig extends.
+      - "tsconfig.base.json"
       # pdf-import path-depends on the engine's model crates and idml-import
       # (and through them on more engine crates and on engine/core's
       # workspace settings), so an engine change can break it.
@@ -31,6 +33,9 @@ on:
       - ".github/actions/module-wasm/**"
       - "platform/extensions/packages/plugin-api/**"
       - "platform/extensions/packages/plugin-sdk/**"
+      # The internal shared code the bundle uses (workspace:*).
+      - "platform/shared/wasm-boot/**"
+      - "platform/shared/helpers/**"
       - ".github/workflows/publish-ci.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -43,6 +48,8 @@ on:
   pull_request:
     paths:
       - "modules/publish/**"
+      # The TypeScript base every package's tsconfig extends.
+      - "tsconfig.base.json"
       # pdf-import path-depends on the engine's model crates and idml-import
       # (and through them on more engine crates and on engine/core's
       # workspace settings), so an engine change can break it.
@@ -61,6 +68,9 @@ on:
       - ".github/actions/module-wasm/**"
       - "platform/extensions/packages/plugin-api/**"
       - "platform/extensions/packages/plugin-sdk/**"
+      # The internal shared code the bundle uses (workspace:*).
+      - "platform/shared/wasm-boot/**"
+      - "platform/shared/helpers/**"
       - ".github/workflows/publish-ci.yml"
       - "bun.lock"
       - "bunfig.toml"

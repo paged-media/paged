@@ -54,9 +54,9 @@ js-sys = "0.3"
 web-sys = "0.3"
 serde-wasm-bindgen = "0.6"
 console_error_panic_hook = "0.1"
-getrandom = { version = "0.3", features = ["wasm_js"] }
+getrandom = { version = "0.4", features = ["wasm_js"] }
 proptest = "1"
-criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
 qcms = { version = "0.3", default-features = false, features = ["cmyk", "iccv4-enabled"] }
 # PNG codec (D-4). zune-png is the chosen adapter crate (decode+encode,
 # pure-Rust, no_std-capable); image/png is the bench comparison only and

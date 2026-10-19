@@ -2,6 +2,8 @@
 
 - **Status:** Accepted, 2026-10-11. Amended 2026-10-16: the CLI command is `paged-node ai`
   (see the amendment below).
+- **Moved (wave C, 2026-10-19):** the package is `platform/shared/ai` now (internal code of the
+  editor and paged-node); the paths below are as recorded.
 - **Scope:** `packages/ai` (`@paged-media/ai`, entries `.`, `./proxy`, `./catalog`); the `ai` verb
   and the `paged.ai.complete` registration in `packages/cli`; `HeadlessHost.newBlank` in
   `packages/plugin-sdk/src/harness.ts`.

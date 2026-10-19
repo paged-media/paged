@@ -51,7 +51,8 @@ tasks:
     inputs:
       - "@group(web-render-sources)"
       - "scripts/build-wasm.sh"
-      - "scripts/source-hash.mjs"
+      - "/tooling/rust/build-wasm.sh"
+      - "/tooling/js/source-hash.mjs"
       - "packages/web-bundle/manifest.json"
     outputs:
       - "packages/web-bundle/bin/blitz_web*"
@@ -68,6 +69,7 @@ tasks:
     inputs:
       - "@group(web-render-sources)"
       - "scripts/build-wasm-perf.sh"
+      - "/tooling/rust/build-wasm.sh"
     options:
       cache: false
       runInCI: false

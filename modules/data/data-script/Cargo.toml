@@ -11,7 +11,9 @@ description = "paged.data constrained scripting surface (spec §10): a sandboxed
 workspace = true
 
 [dependencies]
-boa_engine = "0.21.1"
+# boa 0.22 turned `temporal` on by default; the sandbox keeps the feature
+# set 0.21's defaults gave it.
+boa_engine = { version = "0.22", default-features = false, features = ["float16", "xsum"] }
 data-core = { path = "../data-core" }
 data-automation = { path = "../data-automation" }
 data-js = { path = "../data-js" }

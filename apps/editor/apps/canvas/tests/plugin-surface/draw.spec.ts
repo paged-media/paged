@@ -65,7 +65,6 @@ const TOOLS = [
   "media.paged.draw.tool.deleteAnchor",
   "media.paged.draw.tool.convertAnchor",
   "media.paged.draw.tool.curvature",
-  "media.paged.draw.tool.pencil",
   "media.paged.draw.tool.gradientAnnotator",
   "media.paged.draw.tool.measure",
   "media.paged.draw.tool.shapeBuilder",
@@ -250,7 +249,6 @@ const TOOL_SLOT: Record<string, string> = {
   "media.paged.draw.tool.deleteAnchor": "pen",
   "media.paged.draw.tool.convertAnchor": "pen",
   "media.paged.draw.tool.curvature": "pen",
-  "media.paged.draw.tool.pencil": "pen",
   "media.paged.draw.tool.paintbrush": "pen",
   "media.paged.draw.tool.blobBrush": "pen",
   "media.paged.draw.tool.eraserBrush": "pen",
@@ -590,7 +588,8 @@ test.describe("plugin surface · paged.draw", () => {
     ).toEqual([]);
 
     // And the totals the campaign quotes, so a silent shrink is loud.
-    expect(TOOLS).toHaveLength(21);
+    // 20 since the Pencil became the host's alone (draw ADR 359).
+    expect(TOOLS).toHaveLength(20);
     expect(PANELS).toHaveLength(10);
     expect(COMMANDS).toHaveLength(107);
   });
@@ -930,9 +929,7 @@ test.describe("plugin surface · paged.draw", () => {
     await designer.selectElement("rectangle", target);
     const beforeApply = await designer.renderBytes();
     await styles.locator("[data-draw-graphic-style-apply]").first().click();
-    await page.waitForTimeout(600);
-    const afterApply = await designer.renderBytes();
-    await designer.expectRenderChanged(beforeApply, afterApply);
+    await designer.expectRenderChangesFrom(beforeApply);
 
     // Redefine / break-link / rename / delete all run off the same rows.
     await styles.locator("[data-draw-graphic-style-redefine]").first().click();
@@ -1220,9 +1217,7 @@ test.describe("plugin surface · paged.draw", () => {
     await designer.selectElement("polygon", open);
     const beforeClose = await designer.renderBytes();
     await designer.runCommand("media.paged.draw.command.closePath");
-    await page.waitForTimeout(500);
-    const afterClose = await designer.renderBytes();
-    await designer.expectRenderChanged(beforeClose, afterClose);
+    await designer.expectRenderChangesFrom(beforeClose);
 
     // ── RADIAL GRADIENT — the sibling the journeys never ran (only the
     //    linear one). The fill becomes a Gradient/ reference. ──
@@ -1290,9 +1285,7 @@ test.describe("plugin surface · paged.draw", () => {
     ]);
     const beforeMask = await designer.renderBytes();
     await designer.runCommand("media.paged.draw.command.makeOpacityMask");
-    await page.waitForTimeout(600);
-    const afterMask = await designer.renderBytes();
-    await designer.expectRenderChanged(beforeMask, afterMask);
+    await designer.expectRenderChangesFrom(beforeMask);
     await designer.runCommand("media.paged.draw.command.releaseOpacityMask");
     await page.waitForTimeout(600);
 

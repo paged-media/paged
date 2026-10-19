@@ -45,6 +45,8 @@ import type {
 import {
   createBundleHost,
   createRecordableAssetSource,
+  mapBacking,
+  silentConsole as silent,
 } from "@paged-media/plugin-sdk";
 import {
   composeFontFaces,
@@ -60,17 +62,6 @@ import { resolvePreviewFontFaces } from "../src/panels/font-resolution";
 import { previewFontBadge } from "../src/panels/web-source-panel";
 
 const manifest = webBundle.manifest;
-const silent = { debug() {}, info() {}, warn() {}, error() {} };
-const mapBacking = () => {
-  const m = new Map<string, string>();
-  return {
-    getItem: (k: string) => m.get(k) ?? null,
-    setItem: (k: string, v: string) => void m.set(k, v),
-    removeItem: (k: string) => void m.delete(k),
-    keys: () => Array.from(m.keys()),
-  };
-};
-
 // An editor whose `fonts` collection returns FontSummary-shaped rows —
 // the only collection this test exercises.
 function fakeEditorWithFonts(

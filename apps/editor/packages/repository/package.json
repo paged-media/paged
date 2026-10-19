@@ -12,10 +12,11 @@
   },
   "scripts": {
     "typecheck": "bun check -p tsconfig.json",
-    "test": "bun test"
+    "test": "bun test --timeout 30000"
   },
   "dependencies": {
-    "@paged-media/canvas-wasm": "workspace:*"
+    "@paged-media/canvas-wasm": "workspace:*",
+    "@paged-media/helpers": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",

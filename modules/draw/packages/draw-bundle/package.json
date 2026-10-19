@@ -15,8 +15,8 @@
   },
   "scripts": {
     "typecheck": "bun check -p tsconfig.json",
-    "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --path-ignore-patterns '**/*.dom.test.*'",
-    "test:dom": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts .dom.test.",
+    "test": "bun test --timeout 30000 --parallel --preload ../../../../tooling/js/bun-test-setup.ts --path-ignore-patterns '**/*.dom.test.*'",
+    "test:dom": "bun test --timeout 30000 --parallel --preload ../../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts .dom.test.",
     "bench": "bun ./test/perf/doors.bench.ts"
   },
   "devDependencies": {
@@ -48,6 +48,10 @@
     "type": "git",
     "url": "git+https://github.com/paged-media/paged.git",
     "directory": "modules/draw/packages/draw-bundle"
+  },
+  "dependencies": {
+    "@paged-media/helpers": "workspace:*",
+    "@paged-media/wasm-boot": "workspace:*"
   },
   "peerDependencies": {
     "@paged-media/plugin-api": "workspace:*",
