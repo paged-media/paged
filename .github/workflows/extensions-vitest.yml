@@ -49,6 +49,8 @@ on:
       # The engine wasm packages the harness boots (workspace:*), and what
       # builds them (.github/actions/engine-wasm).
       - "engine/core/crates/**"
+      # The shared formatting crate (platform/shared/fmt), compiled into the engine.
+      - "platform/shared/fmt/**"
       - "engine/core/Cargo.*"
       - "engine/core/rust-toolchain.toml"
       - "engine/core/scripts/build-wasm-packages.sh"
@@ -80,6 +82,8 @@ on:
       # The engine wasm packages the harness boots (workspace:*), and what
       # builds them (.github/actions/engine-wasm).
       - "engine/core/crates/**"
+      # The shared formatting crate (platform/shared/fmt), compiled into the engine.
+      - "platform/shared/fmt/**"
       - "engine/core/Cargo.*"
       - "engine/core/rust-toolchain.toml"
       - "engine/core/scripts/build-wasm-packages.sh"

@@ -1,0 +1,13 @@
+$schema: "../../../.moon/cache/schemas/project.json"
+
+# paged-fmt: the formatting facts the built-ins share (docs/adr/PM-0002) —
+# the calendar, the locale table and digit grouping. Compiled into the
+# sheet, data and slide wasm and the engine's.
+language: "rust"
+layer: "library"
+stack: "systems"
+tags: ["rust", "shared"]
+
+project:
+  title: "platform/shared/fmt"
+  description: "Shared formatting facts: proleptic-Gregorian calendar, locale table, digit grouping."

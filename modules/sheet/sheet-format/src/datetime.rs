@@ -26,6 +26,7 @@
 use crate::locale::LocaleData;
 use crate::sections::{ElapsedUnit, Section, Token};
 use crate::serial;
+use paged_fmt::calendar;
 use sheet_core::DateSystem;
 use std::fmt::Write as _;
 
@@ -178,14 +179,12 @@ pub fn render_datetime(
 
 /// Day-of-week index (0 = Sunday) for a date serial. Excel serial 1
 /// (1900-01-01) is a Sunday; we anchor on the civil date to stay correct
-/// across the phantom-leap boundary.
+/// across the phantom-leap boundary. The two Excel-only dates count on from
+/// their neighbours: 1900-01-00 is a Sunday (1899-12-31) and the phantom
+/// 1900-02-29 a Thursday (1900-03-01), as the civil arithmetic has them.
 fn weekday_of(date_serial: f64, sys: DateSystem) -> usize {
     if let Some((y, m, d)) = serial::serial_to_ymd(date_serial, sys) {
-        // Sakamoto's algorithm (0 = Sunday).
-        const T: [i32; 12] = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
-        let yy = if m < 3 { y - 1 } else { y };
-        let w = (yy + yy / 4 - yy / 100 + yy / 400 + T[(m - 1) as usize] + d as i32) % 7;
-        (((w % 7) + 7) % 7) as usize
+        calendar::weekday(calendar::days_from_civil(y as i64, m, d)) as usize
     } else {
         0
     }

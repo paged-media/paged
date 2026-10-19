@@ -44,6 +44,8 @@ on:
       - "modules/**"
       - "platform/extensions/packages/**"
       - "engine/core/crates/**"
+      # The shared formatting crate (platform/shared/fmt), compiled into the engine.
+      - "platform/shared/fmt/**"
       - "engine/core/Cargo.*"
       - "engine/core/rust-toolchain.toml"
       - "engine/core/scripts/build-wasm-packages.sh"

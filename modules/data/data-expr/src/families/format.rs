@@ -95,7 +95,9 @@ fn opt_usize(v: Option<&Value>, default: usize) -> usize {
 }
 
 /// Fixed-decimal formatting with locale-aware grouping + decimal separators.
-/// Deterministic given the locale (re-resolution stays idempotent).
+/// Deterministic given the locale (re-resolution stays idempotent). Nothing is
+/// grouped while the integer part has fewer than `3 + min_grouping` digits
+/// (CLDR `minimumGroupingDigits`; paged-fmt's grouping).
 fn fmt_fixed(n: f64, decimals: usize, locale: Locale) -> String {
     if !n.is_finite() {
         return ValueError::Value.code().to_string();
@@ -110,32 +112,15 @@ fn fmt_fixed(n: f64, decimals: usize, locale: Locale) -> String {
     if neg {
         out.push('-');
     }
-    out.push_str(&group_thousands(
+    paged_fmt::digits::push_grouped(
+        &mut out,
         int_part,
         locale.group_sep(),
         locale.min_grouping(),
-    ));
+    );
     if let Some(f) = frac {
-        out.push(locale.decimal_sep());
+        out.push_str(locale.decimal_sep());
         out.push_str(f);
-    }
-    out
-}
-
-/// Insert `sep` every three digits from the right. `int_part` is digits only.
-/// Nothing is grouped while the integer part has fewer than `3 + min_grouping`
-/// digits (CLDR `minimumGroupingDigits`).
-fn group_thousands(int_part: &str, sep: char, min_grouping: usize) -> String {
-    let len = int_part.len();
-    if len < 3 + min_grouping.max(1) {
-        return int_part.to_string();
-    }
-    let mut out = String::with_capacity(len + len / 3 * sep.len_utf8());
-    for (i, ch) in int_part.chars().enumerate() {
-        if i > 0 && (len - i).is_multiple_of(3) {
-            out.push(sep);
-        }
-        out.push(ch);
     }
     out
 }

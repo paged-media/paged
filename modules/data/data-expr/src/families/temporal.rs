@@ -56,7 +56,7 @@ fn field(v: &Value, pick: impl Fn((i32, u32, u32)) -> f64) -> Value {
 /// (Excel's default). 1970-01-01 (day 0) was a Thursday.
 pub fn weekday(args: &[Value], _ctx: &EvalCtx) -> Value {
     match super::to_days(&args[0]) {
-        Ok(days) => Value::Number(((days as i64 + 4).rem_euclid(7) + 1) as f64),
+        Ok(days) => Value::Number((paged_fmt::calendar::weekday(days as i64) + 1) as f64),
         Err(e) => Value::Error(e),
     }
 }
