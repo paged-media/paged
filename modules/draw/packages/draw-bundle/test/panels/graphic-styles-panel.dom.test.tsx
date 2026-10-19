@@ -48,7 +48,7 @@ import {
   GRAPHIC_STYLES_NOTE,
   GRAPHIC_STYLES_PANEL_ID,
 } from "../../src";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import {
   documentBurst,
   drive,

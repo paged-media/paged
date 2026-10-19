@@ -45,7 +45,7 @@ import {
   REPEAT_PANEL_ID,
   REPEAT_PANEL_NOTE,
 } from "../../src";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import {
   documentBurst,
   drive,
