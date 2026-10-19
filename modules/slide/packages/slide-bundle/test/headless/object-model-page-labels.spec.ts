@@ -28,13 +28,14 @@
 import { readFileSync } from "node:fs";
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { covers } from "@paged-media/test-kit";
 
 import { createHeadlessHost, type HeadlessHost } from "@paged-media/plugin-sdk";
 import type { MutationInput, ObjectValue } from "@paged-media/plugin-api";
 
-import slideBundle from "../src/index";
-import { parseState } from "../src/slides-model";
-import { slideEngine, type ImportReport } from "../src/engine";
+import slideBundle from "../../src/index";
+import { parseState } from "../../src/slides-model";
+import { slideEngine, type ImportReport } from "../../src/engine";
 import {
   DECK_ADDRESS,
   IMPORT_PPTX_COMMAND,
@@ -42,18 +43,18 @@ import {
   NEW_SLIDE_COMMAND,
   PLUGIN_ID,
   transitionRecord,
-} from "../src/object-model";
+} from "../../src/object-model";
 import { fileURLToPath } from "node:url";
 
 // The engine is this package's own @paged-media/canvas-wasm devDependency.
 // Without an anchor the headless harness resolves it from plugin-sdk's
 // install location, which in the root Bun workspace is whichever version the
 // store hoists, not the one this package pins.
-const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
+const ENGINE_ANCHOR = fileURLToPath(new URL("..", import.meta.url));
 
 const P = "plugin:media.paged.slide";
 const FIXTURE = new URL(
-  "../../../slide-conformance/fixtures/placeholders.pptx",
+  "../../../../slide-conformance/fixtures/placeholders.pptx",
   import.meta.url,
 );
 
@@ -166,7 +167,7 @@ describe("[plugin-slide.object-model] slide data on page labels (protocol 70)", 
       const bytes = new Uint8Array(
         readFileSync(
           new URL(
-            "../../../slide-conformance/fixtures/motion.pptx",
+            "../../../../slide-conformance/fixtures/motion.pptx",
             import.meta.url,
           ),
         ),
@@ -229,6 +230,7 @@ describe("[plugin-slide.object-model] slide data on page labels (protocol 70)", 
   });
 
   it("newSlide takes partial args: {} appends after the last slide", async () => {
+    covers("command:media.paged.slide.newSlide");
     const n = slides.length;
     const out = (await h.objects.invoke(NEW_SLIDE_COMMAND, {})) as {
       slide: string;

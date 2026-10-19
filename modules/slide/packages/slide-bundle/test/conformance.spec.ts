@@ -25,6 +25,7 @@
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "bun:test";
+import { covers } from "@paged-media/test-kit";
 
 import { createHeadlessHost } from "@paged-media/plugin-sdk";
 import type { ElementId } from "@paged-media/plugin-api";
@@ -270,6 +271,7 @@ describe("a deck's embedded fonts", () => {
 
 describe("File \u25b8 Open of a deck with embedded fonts", () => {
   it("opens the document with the deck's faces", async () => {
+    covers("importer:media.paged.slide.importer.pptx");
     const bytes = new Uint8Array(
       readFileSync(
         new URL(
