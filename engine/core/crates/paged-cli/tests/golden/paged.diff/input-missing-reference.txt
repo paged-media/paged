@@ -1,0 +1,10 @@
+$ paged diff missing.png doc.png
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: compare missing.png with doc.png
+
+Caused by:
+    0: open missing.png
+    1: No such file or directory (os error <N>)

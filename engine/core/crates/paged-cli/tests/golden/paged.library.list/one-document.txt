@@ -1,0 +1,6 @@
+$ paged library list --library lib
+--- exit: 0
+--- stdout
+brochure	<HASH>
+--- stderr
+(empty)

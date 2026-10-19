@@ -1,0 +1,6 @@
+$ paged invoke doc.paged insertOval '{"pageId":"usp"}'
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: insertOval: the arguments do not fit: missing field `bounds`

@@ -1,0 +1,6 @@
+$ paged parts read w.paged paged/none.json
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: no part at "paged/none.json"

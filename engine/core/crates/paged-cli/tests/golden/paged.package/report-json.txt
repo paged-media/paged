@@ -1,0 +1,19 @@
+$ paged package doc.paged -o pkg2 --json --instructions 'Print on matte.'
+--- exit: 0
+--- stdout
+{
+  "document": "<TMP>/pkg2/doc.idml",
+  "fonts": [],
+  "inks": [],
+  "links": [
+    {
+      "fileName": "u5.png",
+      "from": null,
+      "sourceUri": "",
+      "status": "written"
+    }
+  ],
+  "lost": []
+}
+--- stderr
+(empty)

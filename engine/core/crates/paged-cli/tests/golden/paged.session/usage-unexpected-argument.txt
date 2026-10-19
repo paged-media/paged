@@ -1,0 +1,10 @@
+$ paged session extra
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: unexpected argument 'extra' found
+
+Usage: paged session
+
+For more information, try '--help'.

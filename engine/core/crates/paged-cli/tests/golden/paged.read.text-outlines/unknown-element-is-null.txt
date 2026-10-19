@@ -1,0 +1,11 @@
+$ paged read text-outlines doc.paged oval:nope
+--- exit: 0
+--- stdout
+{
+  "kind": "textOutlines",
+  "payload": {
+    "result": null
+  }
+}
+--- stderr
+(empty)

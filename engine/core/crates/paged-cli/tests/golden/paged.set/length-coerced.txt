@@ -1,0 +1,9 @@
+$ paged set doc.paged rectangle:u5 frameStrokeWeight 3mm
+--- exit: 0
+--- stdout
+{
+  "type": "length",
+  "value": 8.504
+}
+--- stderr
+frameStrokeWeight set in the loaded document. Nothing saved — pass -o to write the result.

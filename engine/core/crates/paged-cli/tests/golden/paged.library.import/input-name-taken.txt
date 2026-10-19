@@ -1,0 +1,6 @@
+$ paged library import brochure.paged --library lib
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: a document named `brochure` exists

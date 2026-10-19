@@ -1,0 +1,11 @@
+$ paged read element-properties doc.paged oval:nope
+--- exit: 0
+--- stdout
+{
+  "kind": "elementProperties",
+  "payload": {
+    "result": null
+  }
+}
+--- stderr
+(empty)

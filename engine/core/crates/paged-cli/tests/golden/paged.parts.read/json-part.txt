@@ -1,0 +1,8 @@
+$ paged parts read w.paged paged/tool/data.json
+--- exit: 0
+--- stdout
+{
+  "a": 1
+}
+--- stderr
+(empty)

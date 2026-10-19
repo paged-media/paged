@@ -1,0 +1,17 @@
+$ paged read frame-chain doc.paged Story/u0
+--- exit: 0
+--- stdout
+{
+  "kind": "frameChainResult",
+  "payload": {
+    "links": [
+      {
+        "frameId": "u1",
+        "next": null,
+        "overflow": false
+      }
+    ]
+  }
+}
+--- stderr
+(empty)

@@ -1,0 +1,10 @@
+$ paged frobnicate
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: unrecognized subcommand 'frobnicate'
+
+Usage: paged <COMMAND>
+
+For more information, try '--help'.

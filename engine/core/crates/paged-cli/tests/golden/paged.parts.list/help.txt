@@ -1,0 +1,42 @@
+$ paged parts list --help
+--- exit: 0
+--- stdout
+List the parts under a path prefix
+
+Usage: paged parts list [OPTIONS] <DOC> [PREFIX]
+
+Arguments:
+  <DOC>
+          `.paged` container (an IDML package carries no parts)
+
+  [PREFIX]
+          Prefix to list; empty lists everything
+          
+          [default: ""]
+
+Options:
+      --fonts <DIR|FILE>
+          Font file or directory to make available, repeatable.
+          
+          A directory is read one level deep and each face is asked for its own family name, so a corpus directory needs no mapping.
+
+      --font-family <NAME[/STYLE]=PATH>
+          Bind one family (and optionally a style) to a file, repeatable: `--font-family "Fraunces/Italic=/path/Fraunces-Italic.ttf"`.
+          
+          Wins over `--fonts` for the same family and style — a scan is a convenience, this is the instrument.
+
+      --font <FILE>
+          Fallback face for text no registered family answers for. Absent, the face the CLI bundles (Inter) stands in
+
+      --no-default-font
+          No fallback face: text no registered family answers for is not set, and the run says so (to see what a document is missing)
+
+      --cmyk-profile <NAME|FILE>
+          CMYK profile: a file path, or a name to resolve against the host's installed profiles (e.g. "Coated FOGRA39").
+          
+          Absent, the document's own declared profile name is resolved and made the working space. Absent that too, colour is naive math and the run says so.
+
+  -h, --help
+          Print help (see a summary with '-h')
+--- stderr
+(empty)

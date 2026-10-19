@@ -1,0 +1,6 @@
+$ paged read path-anchors doc.paged nope
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: "nope" is not an element address. Expected `kind:id` — textFrame, rectangle, oval, polygon, graphicLine, group — or `storyRange:<storyId>@<start>..<end>`.

@@ -1,0 +1,91 @@
+$ paged script --help
+--- exit: 0
+--- stdout
+Author a document by running a `.js` file against it
+
+Usage: paged script [OPTIONS] <DOC> <SCRIPT>
+
+Arguments:
+  <DOC>
+          IDML or `.paged` document to author into
+
+  <SCRIPT>
+          The script
+
+Options:
+      --timeout <TIMEOUT>
+          Wall-clock ceiling in milliseconds, or "none" to disable the deadline (the loop, recursion and stack guards still apply)
+          
+          [default: 60000]
+
+      --max-loop-iterations <MAX_LOOP_ITERATIONS>
+          Loop-iteration ceiling
+          
+          [default: 10000000]
+
+  -o, --out <OUT>
+          Write the authored document here. The format follows the extension: .paged, .idml or .pdf. Without it the script's changes are not saved (the run warns when there were any)
+          
+          [alias: --export]
+
+      --render <FILE.png>
+          Also rasterise a page of the result here
+
+      --page <PAGE>
+          Which page `--render` takes (1-based, or a page id)
+          
+          [default: 1]
+
+      --dpi <DPI>
+          Render resolution
+          
+          [default: 144]
+
+      --standard <STANDARD>
+          "pdf17" (default) or "pdfx4". X-4 needs a resolvable output intent — give one here or let the document's profile serve
+          
+          [default: pdf17]
+
+      --output-intent <OUTPUT_INTENT>
+          Output-intent profile NAME, resolved against what this run registered. Defaults to the working space
+
+      --output-condition <OUTPUT_CONDITION>
+          Human-readable output condition for the OutputIntent dict
+
+      --marks
+          Crop marks, registration marks, colour bars, page info
+
+      --pages <FROM-TO>
+          0-based inclusive page range, e.g. `0-9`
+
+      --bookmarks
+          Write the document's bookmarks as the PDF outline
+
+      --tagged
+          Create Tagged PDF: a structure tree of stories and paragraphs, as InDesign's "Create Tagged PDF" writes it
+
+      --fonts <DIR|FILE>
+          Font file or directory to make available, repeatable.
+          
+          A directory is read one level deep and each face is asked for its own family name, so a corpus directory needs no mapping.
+
+      --font-family <NAME[/STYLE]=PATH>
+          Bind one family (and optionally a style) to a file, repeatable: `--font-family "Fraunces/Italic=/path/Fraunces-Italic.ttf"`.
+          
+          Wins over `--fonts` for the same family and style — a scan is a convenience, this is the instrument.
+
+      --font <FILE>
+          Fallback face for text no registered family answers for. Absent, the face the CLI bundles (Inter) stands in
+
+      --no-default-font
+          No fallback face: text no registered family answers for is not set, and the run says so (to see what a document is missing)
+
+      --cmyk-profile <NAME|FILE>
+          CMYK profile: a file path, or a name to resolve against the host's installed profiles (e.g. "Coated FOGRA39").
+          
+          Absent, the document's own declared profile name is resolved and made the working space. Absent that too, colour is naive math and the run says so.
+
+  -h, --help
+          Print help (see a summary with '-h')
+--- stderr
+(empty)

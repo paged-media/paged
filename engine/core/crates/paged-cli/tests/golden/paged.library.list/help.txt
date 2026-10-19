@@ -1,0 +1,12 @@
+$ paged library list --help
+--- exit: 0
+--- stdout
+The library's documents and their heads
+
+Usage: paged library list [OPTIONS]
+
+Options:
+      --library <LIBRARY>  The library directory. Default: `$PAGED_LIBRARY`, else `~/.paged/library`
+  -h, --help               Print help
+--- stderr
+(empty)

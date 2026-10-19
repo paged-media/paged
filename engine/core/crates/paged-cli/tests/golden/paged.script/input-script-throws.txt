@@ -1,0 +1,6 @@
+$ paged script doc.paged throws.js
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: throws.js: Error: boom

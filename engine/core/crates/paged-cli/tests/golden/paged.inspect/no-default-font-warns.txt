@@ -1,0 +1,11 @@
+$ paged inspect doc.paged --no-default-font
+--- exit: 0
+--- stdout
+file        doc.paged
+protocol    <PROTOCOL>
+pages       1
+cmyk        (none — naive conversion)
+content     5 frame(s), 1 story(ies), 1 paragraph(s), 1 run(s), 0 glyph(s), 0 line(s)
+  page   1  usp  612 × 792 pt     <DIGEST>
+--- stderr
+warning: 1 text run(s) shaped 0 glyphs — no registered font answered for them, so the text will not appear. Pass --fonts <dir> to register families, or --font <file> as a fallback face (without --no-default-font the bundled one stands in).
