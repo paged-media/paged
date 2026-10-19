@@ -48,6 +48,7 @@ import {
 import {
   EXPORT_TARGETS,
   exportTargetById,
+  exportReadiness,
   runImageExport,
   runPluginExporter,
   setImageSettings,
@@ -66,23 +67,13 @@ export {
   type ExportTarget,
 } from "./export-targets";
 
-/** Per-target readiness pill tone + label. PDF gates on the working
- *  space (X-4 output intent); the other LIVE targets are ready the
- *  moment a document is open; HONEST targets read "Coming soon". */
+/** Per-target readiness pill tone + label (`exportReadiness`). */
 function readiness(
   target: ExportTarget,
   loaded: boolean,
   profileReady: boolean,
 ): { tone: "ready" | "warn" | "draft"; label: string } {
-  if (!target.live) return { tone: "draft", label: "Coming soon" };
-  if (!loaded) return { tone: "draft", label: "No document" };
-  if (target.id === "pdf-x4" && !profileReady) {
-    return { tone: "warn", label: "PDF 1.7 — no output intent" };
-  }
-  return {
-    tone: "ready",
-    label: target.id === "pdf-x4" ? "Ready · X-4" : "Ready",
-  };
+  return exportReadiness(target, loaded, profileReady);
 }
 
 /** Export mode — LEFT panel: outputs navigation (kit ExportNavPanel).

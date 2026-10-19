@@ -73,7 +73,7 @@ test.describe("Export Center panel", () => {
     // — one of the two live verdicts, never a placeholder.
     await expect(
       page.locator('[data-status-pill="readiness-pdf-x4"]'),
-    ).toHaveText(/^(Ready · X-4|PDF 1\.7 — no output intent)$/);
+    ).toHaveText(/^Ready · (X-4|PDF 1\.7)$/);
 
     // With a document loaded, the loaded-state readout is live too.
     await expect(page.locator("[data-export-center]")).toContainText(

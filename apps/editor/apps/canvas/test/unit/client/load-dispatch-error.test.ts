@@ -20,9 +20,9 @@
 // The client half of a binary load whose dispatch throws in the worker.
 // A scripted worker answers each message the way the real one does when
 // its dispatch throws: a `dispatchError` warning naming the request's seq.
-// For a `send` the client rejects that caller; for a `loadDocument` it does
-// not (WRK-2), so the load stays pending even once the worker names it
-// (the worker does not name it yet: WRK-1, tests/worker-boot.spec.ts).
+// The client rejects that caller, a `send` and a `loadDocument` alike
+// (findings WRK-2 here and WRK-1 in tests/worker-boot.spec.ts, both fixed:
+// a load whose dispatch threw used to stay pending for good).
 
 import { describe, expect, test } from "bun:test";
 
@@ -84,11 +84,9 @@ describe("a dispatch that throws, answered with the request's seq", () => {
     );
   });
 
-  // Finding WRK-2: `settleFromWarning` settles a `dispatchError` only for
-  // `pending` and `bytesPending`, never for `loadDocPending`, so a load
-  // whose dispatch threw stays pending for good (and every later
-  // `registerDocumentFont` waits behind it).
-  test.failing("WRK-2: a load is rejected", async () => {
+  // Finding WRK-2 (fixed): a load whose dispatch threw is rejected, so no
+  // later `registerDocumentFont` waits behind it.
+  test("WRK-2: a load is rejected", async () => {
     const client = new CanvasClient({ workerFactory: throwingWorker });
     expect(await outcome(client.loadDocument(new Uint8Array([1, 2, 3])))).toBe(
       "rejected",

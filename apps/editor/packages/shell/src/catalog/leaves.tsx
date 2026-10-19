@@ -971,6 +971,9 @@ export interface ListLeafAction {
   onInvoke: (rowId: string) => void;
   /** B2 — the row field whose truthiness picks the label. */
   state?: { field: string; labelWhenOff: string };
+  /** An icon drawn instead of the label (which names the button). */
+  icon?: string;
+  iconWhenOff?: string;
 }
 
 /** Resolved TREE structure for the rows the leaf was handed. The
@@ -1363,15 +1366,22 @@ export function ListLeaf({ props }: LeafProps) {
                   : null;
                 const actionLabel =
                   on === false && a.state ? a.state.labelWhenOff : a.label;
+                const icon =
+                  on === false && a.iconWhenOff ? a.iconWhenOff : a.icon;
                 return (
                   <button
                     key={a.key}
                     type="button"
                     disabled={a.disabled}
                     aria-label={`${actionLabel}: ${label}`}
+                    title={icon ? actionLabel : undefined}
                     data-list-action={a.key}
                     data-row-state={on === null ? undefined : on ? "on" : "off"}
-                    className="shrink-0 cursor-pointer rounded-[6px] border px-[7px] text-[11px] leading-[22px] disabled:cursor-default"
+                    className={
+                      icon
+                        ? "flex h-[24px] w-[24px] shrink-0 cursor-pointer items-center justify-center rounded-[6px] border disabled:cursor-default"
+                        : "shrink-0 cursor-pointer rounded-[6px] border px-[7px] text-[11px] leading-[22px] disabled:cursor-default"
+                    }
                     style={{
                       fontFamily: "var(--font-sans)",
                       borderColor: "var(--pg-border)",
@@ -1381,7 +1391,7 @@ export function ListLeaf({ props }: LeafProps) {
                     }}
                     onClick={() => a.onInvoke(id)}
                   >
-                    {actionLabel}
+                    {icon ? <Icon name={icon} size={14} /> : actionLabel}
                   </button>
                 );
               })}

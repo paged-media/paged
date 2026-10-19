@@ -54,9 +54,46 @@ interface ContentSelectionContextValue {
    * post-mutation refresh) can read the latest value without
    * closing over a stale state snapshot. */
   contentSelectionRef: React.MutableRefObject<ContentSelection | null>;
+
+  /** The character style chosen at a collapsed caret, kept for the text
+   *  typed there (finding PN-152, InDesign's insertion-point style; editor
+   *  ADR 236). The engine stores no style on an empty range, so the caret
+   *  holds it: the next insert at the caret carries it, and any new
+   *  selection drops it. `null` when none was chosen. */
+  typingStyle: TypingStyle | null;
+  setTypingStyle: (style: TypingStyle | null) => void;
+}
+
+/** A character style held for a caret (see `typingStyle`). */
+export interface TypingStyle {
+  /** The caret it was chosen at. */
+  storyId: string;
+  offset: number;
+  /** The character style's `Self` id. */
+  characterStyle: string;
 }
 
 const Context = createContext<ContentSelectionContextValue | null>(null);
+
+// The held style, mirrored for the text input path, which inserts from a
+// key handler outside React's render (`heldTypingStyle`). One editor, one
+// caret: written only by the provider's setter.
+let held: TypingStyle | null = null;
+
+/** The character style held for the caret `sel` (finding PN-152), or
+ *  `null`: what an insert at that caret applies to the text it adds. */
+export function heldTypingStyle(sel: {
+  storyId: string;
+  start: number;
+  end: number;
+}): string | null {
+  return held &&
+    sel.start === sel.end &&
+    held.storyId === sel.storyId &&
+    held.offset === sel.start
+    ? held.characterStyle
+    : null;
+}
 
 export function ContentSelectionProvider({ children }: PropsWithChildren) {
   const client = useCanvasClient();
@@ -65,6 +102,12 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
   const [caret, setCaret] = useState<CaretGeometry | null>(null);
   const [selectionRects, setSelectionRects] = useState<SelectionRect[]>([]);
   const contentSelectionRef = useRef<ContentSelection | null>(null);
+  const [typingStyle, setTypingStyleRaw] = useState<TypingStyle | null>(null);
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  const setTypingStyle = useCallback((style: TypingStyle | null) => {
+    held = style;
+    setTypingStyleRaw(style);
+  }, []);
   // Written during render on purpose: the caret reader handed to plugins
   // (`getEditor().contentSelection.contentSelectionRef`) may be read by a
   // panel while it renders. It keeps this provider uncompiled (ADR 229).
@@ -74,6 +117,9 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
   const setContentSelection = useCallback(
     (sel: ContentSelection | null) => {
       setContentSelectionRaw(sel);
+      // A new selection is a new insertion point: the style held for the
+      // old caret goes (an insert applies it before it moves the caret).
+      setTypingStyle(null);
       void client.setSelection(sel);
       if (sel) {
         void client
@@ -93,7 +139,7 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
         setSelectionRects([]);
       }
     },
-    [client],
+    [client, setTypingStyle],
   );
 
   // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
@@ -106,8 +152,17 @@ export function ContentSelectionProvider({ children }: PropsWithChildren) {
       selectionRects,
       setSelectionRects,
       contentSelectionRef,
+      typingStyle,
+      setTypingStyle,
     }),
-    [contentSelection, setContentSelection, caret, selectionRects],
+    [
+      contentSelection,
+      setContentSelection,
+      caret,
+      selectionRects,
+      typingStyle,
+      setTypingStyle,
+    ],
   );
 
   return <Context.Provider value={value}>{children}</Context.Provider>;

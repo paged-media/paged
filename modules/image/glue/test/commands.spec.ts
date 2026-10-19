@@ -388,7 +388,7 @@ describe("canvas verbs (pixel edits, one undo step each)", () => {
     expect(k.session.state().uncommitted).toBe(true);
     expect(k.docOps()).toEqual([]);
     // Undo takes the step (redo comes back to the rotated image); what
-    // the undone image LOOKS like is IMG-1, below.
+    // the undone image looks like is IMG-1, below.
     await k.run(`${C}.undo`);
     expect(k.session.state().history?.redoSteps).toEqual([
       "Rotate 90° clockwise",
@@ -400,22 +400,19 @@ describe("canvas verbs (pixel edits, one undo step each)", () => {
     k.dispose();
   });
 
-  // FINDING IMG-1: undoing a 90° canvas rotation restores the pixel
-  // BYTES but not the canvas SIZE. The 4×2 image's rows are read back as
-  // a 2×4 image (RR/BB/RR/BB instead of RRBB/RRBB), and Commit then
-  // writes that scrambled image into the document.
-  it.failing(
-    "IMG-1 — undoing rotateCw restores the 4×2 canvas and its pixels",
-    async () => {
-      const k = await ingested();
-      await k.run(`${C}.rotateCw`);
-      await k.run(`${C}.undo`);
-      const undone = await sourcePixels(k.session);
-      expect([undone.w, undone.h]).toEqual([4, 2]);
-      expect(at(undone, 3, 0)).toEqual([...BLUE]);
-      k.dispose();
-    },
-  );
+  // Finding IMG-1 (fixed): undoing a 90° canvas rotation restores the
+  // canvas SIZE with the pixels. The 4×2 image's rows were read back as a
+  // 2×4 image (RR/BB/RR/BB instead of RRBB/RRBB), and Commit then wrote
+  // that scrambled image into the document.
+  it("IMG-1 — undoing rotateCw restores the 4×2 canvas and its pixels", async () => {
+    const k = await ingested();
+    await k.run(`${C}.rotateCw`);
+    await k.run(`${C}.undo`);
+    const undone = await sourcePixels(k.session);
+    expect([undone.w, undone.h]).toEqual([4, 2]);
+    expect(at(undone, 3, 0)).toEqual([...BLUE]);
+    k.dispose();
+  });
 
   it("rotateCcw turns the canvas 90° counter-clockwise, as one undo step", async () => {
     covers("command:media.paged.image.command.rotateCcw");
@@ -434,19 +431,16 @@ describe("canvas verbs (pixel edits, one undo step each)", () => {
     k.dispose();
   });
 
-  // FINDING IMG-1, the counter-clockwise twin.
-  it.failing(
-    "IMG-1 — undoing rotateCcw restores the 4×2 canvas and its pixels",
-    async () => {
-      const k = await ingested();
-      await k.run(`${C}.rotateCcw`);
-      await k.run(`${C}.undo`);
-      const undone = await sourcePixels(k.session);
-      expect([undone.w, undone.h]).toEqual([4, 2]);
-      expect(at(undone, 3, 0)).toEqual([...BLUE]);
-      k.dispose();
-    },
-  );
+  // Finding IMG-1 (fixed), the counter-clockwise twin.
+  it("IMG-1 — undoing rotateCcw restores the 4×2 canvas and its pixels", async () => {
+    const k = await ingested();
+    await k.run(`${C}.rotateCcw`);
+    await k.run(`${C}.undo`);
+    const undone = await sourcePixels(k.session);
+    expect([undone.w, undone.h]).toEqual([4, 2]);
+    expect(at(undone, 3, 0)).toEqual([...BLUE]);
+    k.dispose();
+  });
 
   it("rotate180 keeps the size and swaps the halves; undo restores it", async () => {
     covers("command:media.paged.image.command.rotate180");

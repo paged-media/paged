@@ -124,31 +124,24 @@ describe("Glyphs: inserting", () => {
     ]);
   });
 
-  // The insert never moves the caret: each click inserts at the same
-  // offset, so "— ©" lands as "©—".
-  test.failing(
-    "PN-210: two glyphs clicked in a row land in the order clicked",
-    async () => {
-      covers("panel:paged.glyphs");
-      const h = await mount();
-      await h.caret(h.scene.storyId, 2);
-      await h.click(glyph(h, "—"));
-      await h.click(glyph(h, "©"));
-      expect(await storyText(h)).toBe(`He—©${TEXT.slice(2)}`);
-    },
-  );
+  // Finding PN-210 (fixed): a glyph moves the caret past itself, as a typed
+  // character does, so two clicks land in the order clicked.
+  test("PN-210: two glyphs clicked in a row land in the order clicked", async () => {
+    covers("panel:paged.glyphs");
+    const h = await mount();
+    await h.caret(h.scene.storyId, 2);
+    await h.click(glyph(h, "—"));
+    await h.click(glyph(h, "©"));
+    expect(await storyText(h)).toBe(`He—©${TEXT.slice(2)}`);
+  });
 
-  // With a range selected the glyph is inserted after it; in a text
-  // editor (InDesign included) a typed or inserted character replaces
-  // the selection.
-  test.failing(
-    "PN-211: a glyph inserted over a selected range replaces it",
-    async () => {
-      covers("panel:paged.glyphs");
-      const h = await mount();
-      await h.selectText(h.scene.storyId, 0, 5);
-      await h.click(glyph(h, "©"));
-      expect(await storyText(h)).toBe(`©${TEXT.slice(5)}`);
-    },
-  );
+  // Finding PN-211 (fixed with PN-210): with a range selected the glyph
+  // replaces it, as a typed character does (InDesign too).
+  test("PN-211: a glyph inserted over a selected range replaces it", async () => {
+    covers("panel:paged.glyphs");
+    const h = await mount();
+    await h.selectText(h.scene.storyId, 0, 5);
+    await h.click(glyph(h, "©"));
+    expect(await storyText(h)).toBe(`©${TEXT.slice(5)}`);
+  });
 });

@@ -28,7 +28,13 @@
 // stays per-frame (`frameGradientFillAngle` via the Gradient tool /
 // selection property), not part of the gradient resource.
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import {
   GradientRamp,
@@ -53,6 +59,14 @@ export function GradientEditor() {
   const [stops, setStops] = useState<RampStop[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
   const [kind, setKind] = useState<string>("linear");
+  // Finding PN-160 (R15): the ramp follows the gradient when it changes
+  // elsewhere (Gradient Options, a script, an undo). Each applied change
+  // reloads the active gradient's stops, so the next commit starts from
+  // the document's ramp, never a stale copy.
+  const activeRef = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    activeRef.current = activeId;
+  });
 
   // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const refreshLists = useCallback(() => {
@@ -90,7 +104,8 @@ export function GradientEditor() {
             })) ?? [],
           );
           setKind(d?.kind ?? "linear");
-          setSelected(null);
+          const count = d?.stops.length ?? 0;
+          setSelected((cur) => (cur !== null && cur < count ? cur : null));
         })
         .catch(() => setDetail(null));
     },
@@ -102,6 +117,7 @@ export function GradientEditor() {
     const off = client.subscribe((msg) => {
       if (msg.kind === "documentLoaded") {
         setActiveId(null);
+        setSelected(null);
         refreshLists();
       }
       if (
@@ -110,10 +126,11 @@ export function GradientEditor() {
         msg.kind === "redoApplied"
       ) {
         refreshLists();
+        if (activeRef.current) loadDetail(activeRef.current);
       }
     });
     return off;
-  }, [client, refreshLists]);
+  }, [client, refreshLists, loadDetail]);
 
   useEffect(() => loadDetail(activeId), [activeId, loadDetail]);
 
@@ -221,7 +238,10 @@ export function GradientEditor() {
         aria-label="Gradient"
         data-gradient-select
         value={activeId ?? ""}
-        onChange={(e) => setActiveId(e.target.value || null)}
+        onChange={(e) => {
+          setSelected(null);
+          setActiveId(e.target.value || null);
+        }}
       >
         {gradients.map((g) => (
           <option key={g.selfId} value={g.selfId}>

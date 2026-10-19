@@ -101,6 +101,7 @@ import {
   canvasKeyYields,
   canvasSurfaceOf,
   focusCanvasViewport,
+  heldTypingStyle,
   insideKeyOwningContainer,
   isCanvasSurface,
   isFormField,
@@ -589,7 +590,7 @@ export function useTextEditing(ctx: TextEditingContext) {
 
 /** Insert `text` at the caret, or replace the range with it, and move
  *  the caret past it. A replace is one `batch`, so it undoes as one. */
-function insertAt(
+export function insertAt(
   client: CanvasClient,
   sel: ContentSelection,
   text: string,
@@ -600,7 +601,28 @@ function insertAt(
     op: "insertText",
     args: { storyId: sel.storyId, offset: sel.start, text, cell },
   };
-  if (sel.start === sel.end) {
+  // Finding PN-152 (ADR 236): a character style chosen at this caret
+  // goes on the text typed there, in the insert's one undo step.
+  const style = sel.cell ? null : heldTypingStyle(sel);
+  if (style) {
+    const end = sel.start + byteLength(text);
+    void client.mutate({
+      op: "batch",
+      args: {
+        ops: [
+          insert,
+          {
+            op: "set",
+            args: {
+              address: `storyRange:${sel.storyId}@${sel.start}..${end}`,
+              path: "appliedCharacterStyle",
+              value: { type: "text", value: style },
+            },
+          },
+        ],
+      },
+    } as Mutation);
+  } else if (sel.start === sel.end) {
     void client.mutate(insert);
   } else {
     void client.mutate({

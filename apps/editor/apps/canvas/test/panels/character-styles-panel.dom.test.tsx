@@ -24,7 +24,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
 
+import type { CanvasClient } from "@paged-media/client";
+
 import { CharacterStylesPanel } from "../../src/panels/character-styles-panel";
+import { insertAt } from "../../src/ui/useTextEditing";
 import { richScene } from "./fixtures";
 import { mountPanel, unmountAll } from "./harness";
 import { styleApplySuite } from "./support/style-apply-suite";
@@ -78,19 +81,41 @@ describe("paged.character-styles: the model's runs", () => {
 });
 
 describe("paged.character-styles: findings", () => {
-  // InDesign keeps a style chosen at an insertion point for the text
-  // typed there. Here the panel sends the write, the engine stores
-  // nothing for an empty range, and the list shows nothing applied.
-  test.failing(
-    "PN-152: a style chosen at a caret is kept for the caret (the list marks it applied)",
-    async () => {
-      covers("panel:paged.character-styles");
-      const h = await mount();
-      await h.caret(h.scene.storyId, 8);
-      await h.click(applyItem(h, h.scene.characterStyle));
-      expect(appliedItem(h)).toBe(h.scene.characterStyle);
-    },
-  );
+  // Finding PN-152 (fixed, ADR 236): InDesign keeps a style chosen at an
+  // insertion point for the text typed there. The engine stores no style
+  // on an empty range, so the caret holds it, and the list marks it.
+  test("PN-152: a style chosen at a caret is kept for the caret (the list marks it applied)", async () => {
+    covers("panel:paged.character-styles");
+    const h = await mount();
+    await h.caret(h.scene.storyId, 8);
+    await h.click(applyItem(h, h.scene.characterStyle));
+    expect(appliedItem(h)).toBe(h.scene.characterStyle);
+  });
+
+  test("PN-152: text typed at that caret carries the held style, in one undo step", async () => {
+    covers("panel:paged.character-styles");
+    const h = await mount();
+    await h.caret(h.scene.storyId, 8);
+    await h.click(applyItem(h, h.scene.characterStyle));
+    const sel = { storyId: h.scene.storyId, start: 8, end: 8, affinity: false };
+    const from = h.mark();
+    await h.act(() =>
+      insertAt(
+        h.client as unknown as CanvasClient,
+        sel as never,
+        "Z",
+        () => {},
+      ),
+    );
+    await h.settle();
+    expect(h.mutations(from)).toHaveLength(1);
+    expect(
+      await h.get(
+        `storyRange:${h.scene.storyId}@8..9`,
+        "appliedCharacterStyle",
+      ),
+    ).toEqual({ type: "text", value: h.scene.characterStyle });
+  });
 
   // A mixed range shows the "[None]" option, which says no style is
   // applied, when two different ones are.

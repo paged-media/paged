@@ -76,6 +76,10 @@ export interface StyleApplyPanelProps {
   deleteOp: DeleteStyleOp;
   /** Default name for a freshly created style. */
   newName: string;
+  /** A collapsed caret's held style (PN-152, ADR 236): when `caret` is
+   *  given, choosing a style hands it to `caret.hold` instead of writing
+   *  an empty range, and `caret.held` is the style the list marks. */
+  caret?: { held: string | null; hold: (selfId: string) => void } | null;
 }
 
 function unwrapAppliedId(v: Value | null): string {
@@ -93,9 +97,10 @@ export function StyleApplyPanel({
   createOp,
   deleteOp,
   newName,
+  caret,
 }: StyleApplyPanelProps) {
   const client = useCanvasClient();
-  const appliedId = unwrapAppliedId(applied.value);
+  const appliedId = caret?.held ?? unwrapAppliedId(applied.value);
   const onCommit = applied.onCommit;
 
   const [items, setItems] = useState<StyleRow[]>([]);
@@ -122,11 +127,13 @@ export function StyleApplyPanel({
     return off;
   }, [client, refresh]);
 
-  const apply = onCommit
-    ? (selfId: string) => {
-        onCommit({ type: "text", value: selfId } as Value);
-      }
-    : undefined;
+  const apply = caret
+    ? caret.hold
+    : onCommit
+      ? (selfId: string) => {
+          onCommit({ type: "text", value: selfId } as Value);
+        }
+      : undefined;
 
   const onNew = () => {
     void client

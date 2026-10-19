@@ -60,11 +60,13 @@ const rows = (h: AnyH) =>
   );
 const row = (h: AnyH, id: string) =>
   h.root.querySelector<HTMLElement>(`[data-list-row="${CSS.escape(id)}"]`)!;
-/** A row's action, found by its current label ("Hide" / "Show", …). */
+/** A row's action, found by its current label ("Hide" / "Show", …): its
+ *  accessible name reads "<label>: <layer name>" (an icon button's label
+ *  is its name and tooltip, not its text). */
 const labelled = (h: AnyH, id: string, label: string) =>
   [
     ...row(h, id).querySelectorAll<HTMLButtonElement>("[data-list-action]"),
-  ].find((b) => b.textContent === label);
+  ].find((b) => b.getAttribute("aria-label")?.startsWith(`${label}: `));
 
 const LAYER_COMMANDS = [
   "paged.layers.reorder",

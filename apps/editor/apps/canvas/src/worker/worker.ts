@@ -723,13 +723,15 @@ async function pump() {
         // Surface the failure but keep draining — a hung pump strands
         // every subsequent message (e.g. a failing attachCanvas would
         // block every requestSnapshot behind it).
-        // Carry the failed request's seq (channel messages have one), so
-        // the client rejects THAT caller instead of leaving it pending.
+        // Carry the failed request's seq (channel, direct and binary-load
+        // messages have one), so the client rejects THAT caller instead of
+        // leaving it pending (finding WRK-1: a throwing load was reported
+        // with no seq and never settled).
         postBack({
           seq:
             data.kind === "channel"
               ? data.msg.seq
-              : data.kind === "direct"
+              : data.kind === "direct" || data.kind === "loadDocumentBinary"
                 ? data.seq
                 : null,
           protocol: PROTOCOL_VERSION,

@@ -25,7 +25,7 @@
 // createCharacterStyle / deleteCharacterStyle. Redefine, groups
 // and override markers are honest seams (style-infra roadmap).
 
-import { useObjectField } from "@paged-media/shell";
+import { useContentSelection, useObjectField } from "@paged-media/shell";
 
 import { StyleApplyPanel } from "./style-apply";
 
@@ -35,6 +35,31 @@ export function CharacterStylesPanel() {
     path: "appliedCharacterStyle",
     scope: "content",
   });
+  // Finding PN-152 (ADR 236): at a collapsed caret the chosen style is
+  // held for the text typed there (InDesign's insertion-point style); the
+  // engine keeps no style on an empty range.
+  const {
+    contentSelection: sel,
+    typingStyle,
+    setTypingStyle,
+  } = useContentSelection();
+  const atCaret = sel !== null && sel.start === sel.end;
+  const caret = atCaret
+    ? {
+        held:
+          typingStyle &&
+          typingStyle.storyId === sel.storyId &&
+          typingStyle.offset === sel.start
+            ? typingStyle.characterStyle
+            : null,
+        hold: (selfId: string) =>
+          setTypingStyle({
+            storyId: sel.storyId,
+            offset: sel.start,
+            characterStyle: selfId,
+          }),
+      }
+    : null;
   return (
     <div className="p-0" data-character-styles-panel="ready">
       <StyleApplyPanel
@@ -46,6 +71,7 @@ export function CharacterStylesPanel() {
         createOp="createCharacterStyle"
         deleteOp="deleteCharacterStyle"
         newName="New character style"
+        caret={caret}
       />
     </div>
   );

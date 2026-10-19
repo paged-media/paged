@@ -2808,6 +2808,41 @@ mod wasm {
 
     /// Replace an engine-held image's pixels in place (same handle, same
     /// extent) and drop its mip pyramid, which the new pixels invalidate.
+    /// [`set_image_pixels`] for a composite whose extent may differ from
+    /// the bound image's (an undo or redo across a canvas operation): the
+    /// image takes `w`x`h`, and when that changed, the selection is
+    /// re-bound to it as a canvas operation does.
+    fn set_image_extent(handle: u32, w: u32, h: u32, rgba: Arc<[u8]>) -> Result<(), JsValue> {
+        let resized = IMAGES.with(|m| {
+            let mut map = m.borrow_mut();
+            let img = map
+                .get_mut(&handle)
+                .ok_or_else(|| JsValue::from_str(&format!("unknown image handle {handle}")))?;
+            let resized = (img.width, img.height) != (w, h);
+            img.width = w;
+            img.height = h;
+            img.rgba = crate::pixels::Pixels::from_rgba8(rgba);
+            Ok::<bool, JsValue>(resized)
+        })?;
+        PYRAMIDS.with(|p| p.borrow_mut().remove(&handle));
+        if resized {
+            SELECTION.with(|s| s.borrow_mut().bind(handle, w, h));
+        }
+        Ok(())
+    }
+
+    /// The open stack's canvas extent, `[width, height]` (`[0, 0]` with
+    /// no stack open): what an undo or redo across a canvas operation
+    /// leaves (finding IMG-1).
+    #[wasm_bindgen]
+    pub fn layers_extent() -> Vec<u32> {
+        LAYERS.with(|l| {
+            l.borrow()
+                .as_ref()
+                .map_or(vec![0, 0], |d| vec![d.stack.width(), d.stack.height()])
+        })
+    }
+
     fn set_image_pixels(handle: u32, rgba: Arc<[u8]>) -> Result<(), JsValue> {
         IMAGES.with(|m| {
             let mut map = m.borrow_mut();
@@ -3792,8 +3827,13 @@ mod wasm {
             let Some(label) = label else {
                 return (doc, Ok(String::new()));
             };
+            // Finding IMG-1: a step across a canvas operation (rotate,
+            // canvas size) changes the stack's EXTENT, so the bound image
+            // takes the extent with the pixels — the 4x2 image came back
+            // from an undone 90 degree turn as its bytes read as 2x4.
+            let (w, h) = (doc.stack.width(), doc.stack.height());
             let result = match doc.stack.composite(ctx.as_deref(), None).await {
-                Ok(rgba) => set_image_pixels(doc.handle, rgba).map(|()| label),
+                Ok(rgba) => set_image_extent(doc.handle, w, h, rgba).map(|()| label),
                 Err(e) => Err(ingest_err(e)),
             };
             (doc, result)

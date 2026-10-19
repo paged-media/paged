@@ -112,52 +112,49 @@ test.describe("W0.17 — worker boot + cross-origin isolation", () => {
     ).toEqual([]);
   });
 
-  // Finding WRK-1: when a binary load's dispatch throws (an engine trap,
-  // or wasm-bindgen refusing its arguments), the worker's pump reports a
-  // `dispatchError` with `seq: null`: it carries a seq only for `channel`
-  // and `direct` messages, not for `loadDocumentBinary`. The client cannot
-  // tell which load failed, so the load never settles and the editor
-  // waits on it for good (WRK-2 is the client half). The headless test
-  // worker answers `loadFailed` here on purpose, so only the real worker
-  // shows it. The test makes the dispatch throw with a load whose bytes
-  // are null, which wasm-bindgen refuses before the engine runs.
-  test.fail(
-    "WRK-1: a load whose dispatch throws is reported with that load's seq",
-    async ({ page }) => {
-      await openCanvas(page);
-      const seq = await page.evaluate(
-        () =>
-          new Promise<number | null | "none">((resolve) => {
-            const worker = (
-              globalThis as unknown as {
-                __canvas: { client: { worker: Worker } };
-              }
-            ).__canvas.client.worker;
-            const onMessage = (event: MessageEvent) => {
-              const m = event.data as {
-                kind?: string;
-                seq?: number | null;
-                payload?: { kind?: string };
-              };
-              if (m.kind === "warning" && m.payload?.kind === "dispatchError") {
-                worker.removeEventListener("message", onMessage);
-                resolve(m.seq ?? null);
-              }
+  // Finding WRK-1 (fixed): when a binary load's dispatch throws (an engine
+  // trap, or wasm-bindgen refusing its arguments), the worker's pump
+  // reports the `dispatchError` with that load's seq, so the client
+  // rejects the load (WRK-2 is the client half). The headless test worker
+  // answers `loadFailed` here on purpose, so only the real worker shows
+  // it. The test makes the dispatch throw with a load whose bytes are
+  // null, which wasm-bindgen refuses before the engine runs.
+  test("WRK-1: a load whose dispatch throws is reported with that load's seq", async ({
+    page,
+  }) => {
+    await openCanvas(page);
+    const seq = await page.evaluate(
+      () =>
+        new Promise<number | null | "none">((resolve) => {
+          const worker = (
+            globalThis as unknown as {
+              __canvas: { client: { worker: Worker } };
+            }
+          ).__canvas.client.worker;
+          const onMessage = (event: MessageEvent) => {
+            const m = event.data as {
+              kind?: string;
+              seq?: number | null;
+              payload?: { kind?: string };
             };
-            worker.addEventListener("message", onMessage);
-            worker.postMessage({
-              kind: "loadDocumentBinary",
-              seq: 424242,
-              bytes: null,
-              font: null,
-              cmykIccProfile: null,
-            });
-            setTimeout(() => resolve("none"), 5_000);
-          }),
-      );
-      expect(seq).toBe(424242);
-    },
-  );
+            if (m.kind === "warning" && m.payload?.kind === "dispatchError") {
+              worker.removeEventListener("message", onMessage);
+              resolve(m.seq ?? null);
+            }
+          };
+          worker.addEventListener("message", onMessage);
+          worker.postMessage({
+            kind: "loadDocumentBinary",
+            seq: 424242,
+            bytes: null,
+            font: null,
+            cmykIccProfile: null,
+          });
+          setTimeout(() => resolve("none"), 5_000);
+        }),
+    );
+    expect(seq).toBe(424242);
+  });
 
   test("the worker chunk + wasm asset resolve with correct content-types @feat:plugin-platform.worker-pool @feat:the-renderer.offscreen-worker @level:happy", async ({
     page,
