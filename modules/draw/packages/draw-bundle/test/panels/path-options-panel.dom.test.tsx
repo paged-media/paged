@@ -65,7 +65,7 @@ import {
 } from "../../src";
 import { MENU_COMMAND_PREFIX, MENU_ENTRIES } from "../../src/menu";
 import { pathItem } from "../fixtures/build-idml";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import {
   drive,
   leafIds,
