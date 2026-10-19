@@ -86,7 +86,7 @@ function readBuildModule(): string | undefined {
 function bundleCommand(outdir: string): string[] {
   const build = readPkg().scripts?.build ?? "";
   // The JavaScript is built by scripts/build.mjs: the React Compiler ahead
-  // of time, then `bun build` (editor ADR 228).
+  // of time, then `bun build` (editor ADR 229).
   if (/\bscripts\/build\.mjs\b/.test(build))
     return ["bun", "scripts/build.mjs", "--outdir", outdir];
   const step = build

@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The render counter of the React Compiler measurements (ADR 228,
+// The render counter of the React Compiler measurements (ADR 229,
 // docs/migration/react-compiler.md). It stands in for React DevTools: it
 // installs `__REACT_DEVTOOLS_GLOBAL_HOOK__` before React loads, and React
 // DOM (development AND production builds) reports every commit to it. For

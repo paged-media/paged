@@ -100,7 +100,7 @@ export function FormatSection(props: {
     setMsg(r.ok ? done : r.message);
 
   // Read the session during render through a view that changes with it
-  // (react-live, editor ADR 228): the session object itself never does.
+  // (react-live, editor ADR 229): the session object itself never does.
   const live = useLive(session, onDidChangeOf);
   const target = live.formatTarget();
   const cur = live.styleAtTarget();

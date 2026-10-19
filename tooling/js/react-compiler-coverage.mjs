@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// The React Compiler coverage ratchet (apps/editor/docs/adr/228-react-compiler.md).
+// The React Compiler coverage ratchet (apps/editor/docs/adr/229-react-compiler.md).
 //
 //   bun tooling/js/react-compiler-coverage.mjs            check (CI)
 //   bun tooling/js/react-compiler-coverage.mjs --write    record the bailouts
@@ -53,7 +53,7 @@ const COMPILER = `babel-plugin-react-compiler@${
   require("babel-plugin-react-compiler/package.json").version
 }`;
 const RECORD = "compiler-coverage.json";
-const ADR = "apps/editor/docs/adr/228-react-compiler.md";
+const ADR = "apps/editor/docs/adr/229-react-compiler.md";
 
 const args = process.argv.slice(2);
 const WRITE = args.includes("--write");

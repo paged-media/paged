@@ -1,4 +1,4 @@
-// The React Compiler's one configuration (apps/editor/docs/adr/228-react-compiler.md).
+// The React Compiler's one configuration (apps/editor/docs/adr/229-react-compiler.md).
 //
 // Everything that runs the compiler reads it, so the build and the ratchet
 // cannot disagree about what is compiled or how:

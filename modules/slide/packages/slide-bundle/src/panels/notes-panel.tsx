@@ -32,7 +32,7 @@ export function makeNotesPanel(
   store: SlidesStore,
 ): React.ComponentType<PanelProps> {
   const Component: React.FC<PanelProps> = () => {
-    // The store as a render value (react-live, editor ADR 228): a new view
+    // The store as a render value (react-live, editor ADR 229): a new view
     // after every change, so what is read from it is read again.
     const slides = useLive(store, subscribeOf);
     const slide = slides.activeSlide();

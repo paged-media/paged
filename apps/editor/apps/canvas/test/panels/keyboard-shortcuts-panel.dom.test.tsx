@@ -85,7 +85,7 @@ describe("Keyboard shortcuts panel", () => {
   });
 
   // PN-351 (fixed): the rows are memoised on views of the registries,
-  // which change with them (ADR 228), so a binding a bundle registers while
+  // which change with them (ADR 229), so a binding a bundle registers while
   // the panel is open (bundles load after the shell mounts, some on
   // demand) appears at once.
   test("PN-351: a binding registered while the panel is open appears in it", async () => {

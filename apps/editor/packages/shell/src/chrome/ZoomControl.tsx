@@ -45,7 +45,7 @@ export function ZoomControl({
   side = "bottom",
 }: { side?: "top" | "bottom" } = {}) {
   const { camera } = useCamera();
-  // Read through a view of the registry (state/live.ts, ADR 228). A
+  // Read through a view of the registry (state/live.ts, ADR 229). A
   // camera re-render alone would not do: compiled, `commands.get(id)` is
   // kept for as long as the registry object is the same, and it always is.
   const commands = useRegistryView(useRegistries().commands);

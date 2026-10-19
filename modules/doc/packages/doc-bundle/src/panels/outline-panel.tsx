@@ -229,7 +229,7 @@ export function makeOutlinePanel(
   actions: OutlinePanelActions,
 ): PanelDescriptor {
   const Component: React.FC<PanelProps> = () => {
-    // The store as a render value (react-live, editor ADR 228): a new view
+    // The store as a render value (react-live, editor ADR 229): a new view
     // after every change, so the document and the notice are read again.
     const live = useLive(store, subscribeOf);
     const doc = live.get();

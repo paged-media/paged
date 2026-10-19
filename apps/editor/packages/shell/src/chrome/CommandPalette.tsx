@@ -169,7 +169,7 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const registries = useRegistries();
-  // Read during render through views (state/live.ts, ADR 228): the
+  // Read during render through views (state/live.ts, ADR 229): the
   // registries keep their identity while bundles register into them, so a
   // value computed from the registry itself would be kept for good.
   const commands = useRegistryView(registries.commands);

@@ -83,7 +83,7 @@ const INSERT_VERB = /^Insert (.+)$/;
 export function MenuBar() {
   const registries = useRegistries();
   // Every registry this bar reads during render, as a view that changes
-  // with its contents (state/live.ts, ADR 228): bundles register menus,
+  // with its contents (state/live.ts, ADR 229): bundles register menus,
   // panels, tools and bindings after the bar first renders.
   const menus = useRegistryView(registries.menus);
   const keybindings = useRegistryView(registries.keybindings);

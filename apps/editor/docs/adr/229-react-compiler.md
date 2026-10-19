@@ -1,4 +1,4 @@
-# ADR 228 — The React Compiler compiles every first-party React source
+# ADR 229 — The React Compiler compiles every first-party React source
 
 - **Status:** Accepted 2026-10-19.
 - **Scope:** `tooling/js/react-compiler.mjs` (the one configuration), `tooling/js/react-compiler-coverage.mjs`

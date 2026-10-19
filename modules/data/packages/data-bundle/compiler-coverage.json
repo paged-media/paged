@@ -1,5 +1,5 @@
 {
-  "$comment": "The components and hooks of this package the React Compiler leaves uncompiled: its bailouts (it could not prove the Rules of React; the reason is its own) and the functions it cannot see as components (notCompiled). Written by tooling/js/react-compiler-coverage.mjs --write; CI fails on a new one, and the lists only get shorter (apps/editor/docs/adr/228-react-compiler.md).",
+  "$comment": "The components and hooks of this package the React Compiler leaves uncompiled: its bailouts (it could not prove the Rules of React; the reason is its own) and the functions it cannot see as components (notCompiled). Written by tooling/js/react-compiler-coverage.mjs --write; CI fails on a new one, and the lists only get shorter (apps/editor/docs/adr/229-react-compiler.md).",
   "compiler": "babel-plugin-react-compiler@1.0.0",
   "skipped": 4,
   "bailouts": [],

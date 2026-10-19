@@ -71,7 +71,7 @@ export interface KeybindingRegistry extends Api.KeybindingRegistry {
   /** The binding a key press would fire — with the live state, or with
    *  `state` when given (diagnostics, the registry invariants). */
   resolve(event: KeyEventLike, state?: unknown): KeybindingContribution | null;
-  /** Called after a binding is registered or removed (ADR 228: render-time
+  /** Called after a binding is registered or removed (ADR 229: render-time
    *  readers go through `useRegistryView`). */
   onChange(handler: () => void): Disposable;
 }
