@@ -122,7 +122,7 @@ const Context = createContext<ActionsApi | null>(null);
 /** Run a replay's steps in order through the command registry; a step
  *  that throws is recorded with its message and the replay goes on.
  *  Outside the provider: the React Compiler does not compile a component
- *  with a `try` it cannot lower (ADR 228). */
+ *  with a `try` it cannot lower (ADR 229). */
 async function replaySteps(
   commands: { invoke(id: string, payload?: unknown): Promise<unknown> },
   steps: ReturnType<typeof planReplay>["run"],
@@ -399,7 +399,7 @@ export function ActionsProvider({ children }: PropsWithChildren) {
   // record the act of replaying.
   const apiRef = useRef<ActionsApi | null>(null);
   // Kept current after each commit (a ref written during render keeps the
-  // provider uncompiled, ADR 228).
+  // provider uncompiled, ADR 229).
   useLayoutEffect(() => {
     apiRef.current = api;
   });

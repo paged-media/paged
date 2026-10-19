@@ -105,7 +105,7 @@ function idKey(id: ElementId): string {
  *  entering point and the first pointer after it share one content origin.
  *  A failed selection still enters (the context is the point): `at` comes
  *  back as it was. Outside the hook: the React Compiler does not compile a
- *  conditional inside a `try` (ADR 228). */
+ *  conditional inside a `try` (ADR 229). */
 async function selectForEntry(
   client: ReturnType<typeof useCanvasClient>,
   element: ElementId,

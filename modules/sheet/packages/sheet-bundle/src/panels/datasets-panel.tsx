@@ -33,13 +33,8 @@
 // (the contract carries no label), never the raw id. Token-layer styling (--pg-*, --space-*, --font-mono,
 // --radius-*) mirrors the workbook panel so it reads native in both themes.
 
-import {
-  useCallback,
-  useEffect,
-  useState,
-  type CSSProperties,
-  type ReactElement,
-} from "react";
+import { useCallback, type CSSProperties, type ReactElement } from "react";
+import { onDidChangeOf, useLive } from "@paged-media/react-live";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
@@ -128,19 +123,19 @@ export function makeDatasetsPanel(
   host: BundleHost,
   session: WorkbookSession,
 ): () => ReactElement {
-  return function DatasetsPanel(): ReactElement {
+  // A declaration, so the React Compiler sees the component (it cannot
+  // see `return function DatasetsPanel()`, editor ADR 229).
+  function DatasetsPanel(): ReactElement {
     // Re-render on session changes (a sourced sheet, a stale signal) AND
     // when the panel mounts (discover is a synchronous registry read).
-    const [, force] = useState(0);
-    useEffect(() => {
-      const sub = session.onDidChange(() => force((n) => n + 1));
-      return () => sub.dispose();
-    }, []);
+    // The session as a render value (react-live, editor ADR 229): a new
+    // view after every change, so what is read from it is read again.
+    const live = useLive(session, onDidChangeOf);
 
     // The governed datasets in the "dataset" category — schema + revision,
     // NO rows. [] when no registry is wired (paged.data absent / headless).
     const datasets = session.discoverDatasets();
-    const st = session.state();
+    const st = live.state();
 
     const onSource = useCallback((id: string) => {
       host.log.info(`sourcing sheet from dataset "${id}"`);
@@ -149,7 +144,7 @@ export function makeDatasetsPanel(
     // Using a dataset starts a fresh workbook: with another workbook open
     // that replaces it, so the button asks for a second click first.
     const { armed, confirm } = useConfirm();
-    const workbookOpen = session.sheets().length > 0;
+    const workbookOpen = live.sheets().length > 0;
 
     return (
       <div
@@ -239,5 +234,6 @@ export function makeDatasetsPanel(
         </p>
       </div>
     );
-  };
+  }
+  return DatasetsPanel;
 }

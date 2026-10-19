@@ -162,7 +162,7 @@ export function makeLivePaintPanel(host: BundleHost): {
         if (!live()) return;
         const tally: Record<string, string[]> = {};
         for (const f of links.fills) {
-          // Not `??=`: the React Compiler does not lower it (ADR 228).
+          // Not `??=`: the React Compiler does not lower it (ADR 229).
           const faces = tally[f.ref.group] ?? [];
           tally[f.ref.group] = faces;
           faces.push(f.ref.face);

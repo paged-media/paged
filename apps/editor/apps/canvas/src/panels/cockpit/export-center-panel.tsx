@@ -90,7 +90,7 @@ export function ExportCenterPanel() {
     setBusy(id);
     // IDML export is now the paged.publish plugin exporter (ADR-022 Phase 5),
     // rendered via the plugin-exporters section, not a built-in target. A
-    // promise chain, not try/finally (the React Compiler, ADR 228).
+    // promise chain, not try/finally (the React Compiler, ADR 229).
     const run =
       t.action === "image"
         ? runImageExport(client, {

@@ -46,7 +46,7 @@ export function ScrubField(props: ScrubFieldProps) {
   const { children, className, onUpdate, onCommit, onCancel, ...gestureOpts } =
     props;
   // Destructured: the compiler would take the whole result for a ref, as
-  // its `bind` is one, and refuse to read `value` during render (ADR 228).
+  // its `bind` is one, and refuse to read `value` during render (ADR 229).
   const { bind, value, isScrubbing } = useScrubGesture({
     ...gestureOpts,
     onUpdate,

@@ -91,7 +91,7 @@ export function ScriptEditorPanel(_: PanelProps) {
       };
       append({ source: "", output: [], error: null, note: `You: ${prompt}` });
       // A promise chain rather than try/finally: the React Compiler does
-      // not compile a component with a `finally` in it (ADR 228).
+      // not compile a component with a `finally` in it (ADR 229).
       await runEditorAgent(client, {
         mode: "script",
         prompt,

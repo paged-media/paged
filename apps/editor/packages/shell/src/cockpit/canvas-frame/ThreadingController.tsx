@@ -113,7 +113,7 @@ function pageForDoc(
 
 // The channel round trips the controller makes, outside the component:
 // the React Compiler does not compile a conditional inside a `try`
-// (ADR 228).
+// (ADR 229).
 
 /** Hit-test one page point; the frame under it, or null. */
 async function hitFrameAt(
@@ -492,7 +492,7 @@ export function ThreadingController() {
           finish();
           return;
         }
-        // Not `||=`: the React Compiler does not lower it (ADR 228).
+        // Not `||=`: the React Compiler does not lower it (ADR 229).
         if (!dragged)
           dragged =
             Math.hypot(m.clientX - start.clientX, m.clientY - start.clientY) >

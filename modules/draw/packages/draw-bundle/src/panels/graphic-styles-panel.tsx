@@ -165,7 +165,7 @@ const NO_LINK: SelectionLink = {
  *  its group or as one of its derived layers — both resolve to the carrier
  *  that owns the appearance (and therefore the style link). Outside the
  *  panel: the React Compiler does not compile a conditional inside a `try`
- *  (editor ADR 228). */
+ *  (editor ADR 229). */
 async function selectionLinkOf(
   host: BundleHost,
   first: NonNullable<Parameters<typeof resolveAppearanceCarrier>[1]>,

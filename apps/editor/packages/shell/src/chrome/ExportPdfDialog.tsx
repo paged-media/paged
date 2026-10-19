@@ -241,7 +241,7 @@ export function ExportPdfDialog() {
     abortRef.current = controller;
     setPhase({ kind: "exporting", done: 0, total: 1 });
     // A promise chain, not try/finally: the React Compiler does not compile
-    // a component with a `finally` in it (ADR 228).
+    // a component with a `finally` in it (ADR 229).
     await client
       .exportPdf(options, {
         signal: controller.signal,

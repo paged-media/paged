@@ -31,7 +31,7 @@ import { KitSelect } from "@paged-media/ui";
 
 /** `{ "data-<testId>": "ready" }`, the attribute specs wait for. Built
  *  outside the component: the React Compiler does not lower a computed
- *  template-literal key (ADR 228). */
+ *  template-literal key (ADR 229). */
 function readyProbe(testId: string): Record<string, string> {
   return { [`data-${testId}`]: "ready" };
 }

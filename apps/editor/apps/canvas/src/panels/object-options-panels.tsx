@@ -131,7 +131,7 @@ function useObjectNames(list: readonly string[] | null): Map<string, string> {
 
 /** An address and its own name, or null (no name, or a refused read).
  *  Outside the hook: the compiler does not compile a conditional inside a
- *  `try` (ADR 228). */
+ *  `try` (ADR 229). */
 async function objectName(
   model: NonNullable<ReturnType<typeof useObjectModel>>,
   address: string,
@@ -301,7 +301,7 @@ export function SwatchOptionsPanel() {
     (s) => s.kind !== "none" && s.kind !== "registration",
   );
   // A string, said so: the compiler cannot tell an element read off the
-  // collection is not mutated later, and would not memoize on it (ADR 228).
+  // collection is not mutated later, and would not memoize on it (ADR 229).
   const selfId = String(
     pick && editable.some((s) => s.selfId === pick)
       ? pick

@@ -96,7 +96,7 @@ function report(message: string): void {
  *  whose edges can be written. EMPTY when any id has no geometry (it is not
  *  a free page item, or it is gone: a box that silently left it out would
  *  be a wrong number) or a read fails. Outside the hook: the compiler does
- *  not compile a conditional inside a `try` (ADR 228). */
+ *  not compile a conditional inside a `try` (ADR 229). */
 async function readFootprint(
   client: ReturnType<typeof useCanvasClient>,
   ids: ElementId[],

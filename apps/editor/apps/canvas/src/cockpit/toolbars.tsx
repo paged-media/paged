@@ -350,7 +350,7 @@ export function PrepressToolbar(_props: ModeToolbarProps) {
   // Validate runs the REAL PDF pipeline; its typed return seeds the
   // shared findings store the Preflight panel + the Issues badge read.
   // A promise chain, not try/finally: the React Compiler does not compile
-  // a component with a `finally` in it (ADR 228).
+  // a component with a `finally` in it (ADR 229).
   const validate = () => {
     if (!loaded || running) return;
     setRunning(true);

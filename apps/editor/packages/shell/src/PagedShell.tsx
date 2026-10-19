@@ -517,7 +517,7 @@ function ShellChrome({
   const handleRef = useRef(handle);
   const refreshingPagesRef = useRef(false);
   // Kept current after each commit (not during render, which keeps the
-  // React Compiler from compiling the component, ADR 228).
+  // React Compiler from compiling the component, ADR 229).
   useLayoutEffect(() => {
     handleRef.current = handle;
   });
@@ -647,7 +647,7 @@ function ShellChrome({
           ? `Window/${p.title}`
           : `Window/${label}/${p.title}`;
       // Built before the `try` (the compiler does not lower a conditional
-      // inside one, ADR 228); only the registration can throw.
+      // inside one, ADR 229); only the registration can throw.
       const item: MenuItemContribution = {
         path,
         command: `paged.panel.show.${p.id}`,
@@ -1031,7 +1031,7 @@ function ShellChrome({
   const isDemoBuild = viteEnv?.MODE === "demo";
   // Published after every commit (a layout effect, so before any input
   // or script can read it): assigning it during render, as before, keeps
-  // the React Compiler from compiling this component (ADR 228).
+  // the React Compiler from compiling this component (ADR 229).
   useLayoutEffect(() => {
     if (!isProd || isDemoBuild) {
       (globalThis as unknown as { __canvas?: unknown }).__canvas = {
@@ -1270,7 +1270,7 @@ function ShellChrome({
       if (importer) {
         setStatus(`importing ${file.name} via ${importer.title}…`);
         // A promise chain, not try/finally: the React Compiler does not
-        // compile a component with a `finally` in it (ADR 228).
+        // compile a component with a `finally` in it (ADR 229).
         void (async () => {
           const bytes = new Uint8Array(await file.arrayBuffer());
           // U14 — park the file name for the open orchestration: an
@@ -1488,7 +1488,7 @@ function UnsavedChangesGuard() {
  *  stack (both providers are in scope here, unlike at the `__canvas`
  *  publish site) and mirrors them into `targetRef` for the journey-test
  *  oracle, after each commit (a ref written during render keeps the
- *  component uncompiled, ADR 228). */
+ *  component uncompiled, ADR 229). */
 function DebugContextProbe({
   targetRef,
 }: {

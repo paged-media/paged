@@ -282,11 +282,6 @@
       "count": 3
     }
   },
-  "modules/sheet/packages/sheet-bundle/src/panels/workbook-panel.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
   "modules/slide/packages/slide-bundle/src/panels/slides-panel.tsx": {
     "react-hooks/exhaustive-deps": {
       "count": 1

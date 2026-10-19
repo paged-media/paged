@@ -81,7 +81,7 @@ interface RevealDeps {
 }
 
 /** U6's reveal, outside the component: the React Compiler does not compile
- *  a component with a conditional inside a `try` (ADR 228). */
+ *  a component with a conditional inside a `try` (ADR 229). */
 async function revealStoryFrame(
   {
     client,

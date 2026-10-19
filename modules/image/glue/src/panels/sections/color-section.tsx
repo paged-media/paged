@@ -19,7 +19,7 @@ const swatch = (c: Rgba01) => ({
 });
 
 /** `data-image-<which>` (built outside the component: the React Compiler
- *  does not lower a computed template-literal key, editor ADR 228). */
+ *  does not lower a computed template-literal key, editor ADR 229). */
 function colorAttr(which: string): Record<string, boolean> {
   return { [`data-image-${which}`]: true };
 }
