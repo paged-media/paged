@@ -315,9 +315,11 @@ console.log('captioned figure', figure, '+', caption);"#,
         .collect();
     assert!(kinds.iter().any(|k| k == "Rectangle"), "figure: {kinds:?}");
     assert!(kinds.iter().any(|k| k == "TextFrame"), "caption: {kinds:?}");
-    // The caption's first 48 chars are 8pt. (placeImage returns false
-    // headlessly — the remote asset can't be fetched — so the image LINK
-    // itself is not observable here; we assert the two frames + 8pt caption.)
+    // The caption's first 48 chars are 8pt. (placeImage returns false here
+    // because it refuses the `rectangle:<id>` address insertFrame answered —
+    // finding SCR-4, host_functions/frames.rs::place_image — not because a
+    // remote asset cannot be fetched; so the image LINK itself is not
+    // observable here, and we assert the two frames + 8pt caption.)
     let sid = first_story_id(&mut m);
     let props = read(&mut m, &format!("paged.inspect('storyRange:{sid}@0..48')"));
     assert_eq!(

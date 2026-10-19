@@ -19,6 +19,7 @@ mod object_model_query;
 mod object_model_surface;
 mod script_authoring_surface;
 mod script_basics;
+mod script_frame_proxy;
 mod script_surface;
 mod scripting_feature_evidence;
 mod story_range_text_paths;

@@ -91,11 +91,14 @@ function upload(key, file) {
     "npx",
     [
       "-y",
-      "wrangler@3",
+      "wrangler@4",
       "r2",
       "object",
       "put",
       `${BUCKET}/${key}`,
+      // Wrangler 4 runs `r2 object` commands against the local simulator
+      // unless told otherwise.
+      "--remote",
       "--file",
       tmp,
       "--content-type",
