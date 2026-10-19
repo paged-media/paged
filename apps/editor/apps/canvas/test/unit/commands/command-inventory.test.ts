@@ -49,6 +49,7 @@ import { buildCoreCommandEntries } from "../../../src/core-command-entries";
 import { buildInsertCommands } from "../../../src/insert-commands";
 import { buildObjectCommands } from "../../../src/object-commands";
 import { buildClipboardCommands } from "../../../src/clipboard-commands";
+import { CANVAS_CONTEXT_MENU_COMMAND } from "../../../src/canvas-context-menu";
 import { GLOBAL_LIGHT_COMMANDS } from "../../../src/panels/global-light-dialog";
 import { SELECT_ALL_COMMAND } from "../../../src/select-all";
 import { AI_ASK_COMMAND } from "@paged-media/shell";
@@ -151,6 +152,7 @@ function tableIds(): string[] {
   return [
     ...buildAppCommands(noop),
     ...buildClipboardCommands(noop),
+    CANVAS_CONTEXT_MENU_COMMAND,
     ...buildObjectCommands(noop),
     ...buildInsertCommands(noop),
     ...buildCoreCommandEntries(),
@@ -225,6 +227,7 @@ describe("the host command inventory", () => {
       "commands",
       "aiCommands",
       "clipboardCommands",
+      "CANVAS_CONTEXT_MENU_COMMAND",
       "objectCommands",
       "insertCommands",
       "alignCommands",
