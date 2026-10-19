@@ -301,7 +301,7 @@ let epoch = 0;
  * `load()` calls the worker directly and broadcasts nothing (the SDK's
  * own `parentOf` index has the same blind spot), so the conformance
  * harness calls this from its `load`
- * (`test/conformance/host.ts`). There is no door to ASK whether the
+ * (`test/headless/host.ts`). There is no door to ASK whether the
  * document is still the same one — no revision on `document.meta()`, and
  * a reloaded fixture has the same ids — so it has to be told.
  */

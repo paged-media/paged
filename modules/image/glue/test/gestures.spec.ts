@@ -27,7 +27,7 @@ import { describe, expect, it } from "bun:test";
 
 import type { ElementId, PluginManifest } from "@paged-media/plugin-api";
 import { createBundleHost } from "@paged-media/plugin-sdk";
-import { createFakeEditor, gestures } from "@paged-media/test-kit";
+import { covers, createFakeEditor, gestures } from "@paged-media/test-kit";
 import manifestJson from "@paged-media/image-manifest/manifest.json";
 
 import { makeBucketGesture } from "../src/bucket-tool";
@@ -87,6 +87,7 @@ function imageHarness(
 
 describe("paged.image tools through the gesture DSL", () => {
   it("Move: the drag's page delta becomes an image-px delta (÷ the fit scale); the outline previews; the release sends it @level:gesture", async () => {
+    covers("tool:media.paged.image.tool.move");
     const { fake, g, host, session, calls } = imageHarness();
     await g
       .tool(() => makeMoveGesture(host, session))
@@ -124,6 +125,7 @@ describe("paged.image tools through the gesture DSL", () => {
   });
 
   it("Gradient: the drag is the gradient line in image px; Shift snaps it to 45°; under 1 px nothing @level:gesture", async () => {
+    covers("tool:media.paged.image.tool.gradient");
     const { g, host, session, calls } = imageHarness();
     await g
       .tool(() => makeGradientGesture(host, session))
@@ -141,6 +143,7 @@ describe("paged.image tools through the gesture DSL", () => {
   });
 
   it("Bucket: a click fills at the image pixel under it; Alt+click samples instead @level:gesture", async () => {
+    covers("tool:media.paged.image.tool.bucket");
     const { g, host, session, calls } = imageHarness();
     await g
       .tool(() => makeBucketGesture(host, session))
@@ -152,6 +155,7 @@ describe("paged.image tools through the gesture DSL", () => {
   });
 
   it("Red eye: a drag is its box in image px; a click is a 24 px box around the point @level:gesture", async () => {
+    covers("tool:media.paged.image.tool.redEye");
     const { g, host, session, calls } = imageHarness();
     await g
       .tool(() => makeRedEyeGesture(host, session))

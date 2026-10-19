@@ -43,7 +43,7 @@ import {
   APPEARANCE_PANEL_ID,
   type AppearanceStack,
 } from "../../src";
-import { openHost } from "../conformance/host";
+import { openHost } from "../headless/host";
 import {
   documentBurst,
   drive,
