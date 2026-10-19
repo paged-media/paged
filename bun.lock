@@ -377,6 +377,7 @@
       "version": "0.1.0-canary.20",
       "dependencies": {
         "@paged-media/helpers": "workspace:*",
+        "@paged-media/panel-kit": "workspace:*",
         "@paged-media/wasm-boot": "workspace:*",
       },
       "devDependencies": {
@@ -740,6 +741,24 @@
         "typescript": "catalog:",
       },
     },
+    "platform/shared/panel-kit": {
+      "name": "@paged-media/panel-kit",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@happy-dom/global-registrator": "catalog:",
+        "@paged-media/plugin-api": "workspace:*",
+        "@testing-library/react": "catalog:",
+        "@types/bun": "catalog:",
+        "@types/react": "catalog:",
+        "react": "catalog:",
+        "react-dom": "catalog:",
+        "typescript": "catalog:",
+      },
+      "peerDependencies": {
+        "@paged-media/plugin-api": "workspace:*",
+        "react": ">=19.3",
+      },
+    },
     "platform/shared/react-live": {
       "name": "@paged-media/react-live",
       "version": "0.0.0",
@@ -981,6 +1000,8 @@
     "@paged-media/image": ["@paged-media/image@workspace:modules/image/glue"],
 
     "@paged-media/image-manifest": ["@paged-media/image-manifest@workspace:modules/image/manifest"],
+
+    "@paged-media/panel-kit": ["@paged-media/panel-kit@workspace:platform/shared/panel-kit"],
 
     "@paged-media/pdf": ["@paged-media/pdf@workspace:modules/publish/packages/pdf-bundle"],
 

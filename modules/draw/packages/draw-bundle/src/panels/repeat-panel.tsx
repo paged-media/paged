@@ -53,12 +53,12 @@ import {
 } from "../commands/repeat";
 import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
 import {
+  About,
   humanize,
-  PanelAbout,
-  PanelIntro,
   Refusal,
   useActionFeedback,
-} from "./panel-kit";
+} from "@paged-media/panel-kit";
+import { PanelIntro } from "./panel-parts";
 
 export const REPEAT_PANEL_ID = "media.paged.draw.panel.repeat";
 
@@ -167,7 +167,7 @@ export function makeRepeatPanel(host: BundleHost): {
       },
     );
 
-    const { refusal, run } = useActionFeedback(host, reload);
+    const { refusal, run } = useActionFeedback(host, reload, "draw panel");
 
     const numberRow = (
       label: string,
@@ -466,7 +466,7 @@ export function makeRepeatPanel(host: BundleHost): {
           ))
         )}
 
-        <PanelAbout text={REPEAT_PANEL_NOTE} attr="data-draw-repeat-note" />
+        <About attr="data-draw-repeat-note">{REPEAT_PANEL_NOTE}</About>
       </div>
     );
   };
