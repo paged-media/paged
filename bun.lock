@@ -256,7 +256,7 @@
       "version": "0.74.0-dev",
     },
     "engine/core/web/idml-viewer": {
-      "name": "@paged-media/idml-viewer",
+      "name": "@paged-media/viewer",
       "version": "0.74.0-dev",
       "devDependencies": {
         "@types/bun": "catalog:",
@@ -1004,8 +1004,6 @@
 
     "@paged-media/helpers": ["@paged-media/helpers@workspace:platform/shared/helpers"],
 
-    "@paged-media/idml-viewer": ["@paged-media/idml-viewer@workspace:engine/core/web/idml-viewer"],
-
     "@paged-media/image": ["@paged-media/image@workspace:modules/image/glue"],
 
     "@paged-media/image-manifest": ["@paged-media/image-manifest@workspace:modules/image/manifest"],
@@ -1037,6 +1035,8 @@
     "@paged-media/tools": ["@paged-media/tools@workspace:apps/editor/packages/tools"],
 
     "@paged-media/ui": ["@paged-media/ui@workspace:apps/editor/packages/ui"],
+
+    "@paged-media/viewer": ["@paged-media/viewer@workspace:engine/core/web/idml-viewer"],
 
     "@paged-media/wasm-boot": ["@paged-media/wasm-boot@workspace:platform/shared/wasm-boot"],
 

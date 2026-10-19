@@ -1,15 +1,15 @@
-# @paged-media/idml-viewer
+# @paged-media/viewer
 
 Standalone IDML viewer for the browser — camera, pages, input lanes and
 events over the engine's WebGPU `ViewerSession`, which ships in this package
-as `@paged-media/idml-viewer/session`. Rendering is WebGPU-only (the session
+as `@paged-media/viewer/session`. Rendering is WebGPU-only (the session
 rejects without `navigator.gpu`).
 
 ```ts
 import {
   createViewer,
   createSessionFromBundledWasm,
-} from "@paged-media/idml-viewer";
+} from "@paged-media/viewer";
 
 const viewer = await createViewer({
   canvas: document.querySelector("canvas")!,
@@ -53,12 +53,12 @@ this with a fake.
 
 The session itself is the `./session` entry: the wasm-bindgen module of
 the engine's `paged-sdk` crate, with its wasm at
-`@paged-media/idml-viewer/session/paged_sdk_bg.wasm`. It replaces the
+`@paged-media/viewer/session/paged_sdk_bg.wasm`. It replaces the
 `@paged-media/sdk` package (same API):
 
 ```ts
-import init, { ViewerSession } from "@paged-media/idml-viewer/session";
-import wasmUrl from "@paged-media/idml-viewer/session/paged_sdk_bg.wasm?url";
+import init, { ViewerSession } from "@paged-media/viewer/session";
+import wasmUrl from "@paged-media/viewer/session/paged_sdk_bg.wasm?url";
 
 await init({ module_or_path: wasmUrl });
 const session = await ViewerSession.new();

@@ -20,7 +20,7 @@
 // The package.json files and bun.lock are restored afterwards (unless --keep),
 // so a local dry run leaves the tree as it was. Release versions are never
 // committed. The built files the packages ship (the engine wasm, plugin-api's
-// and plugin-sdk's dist/, the idml-viewer's dist/) must exist before this runs.
+// and plugin-sdk's dist/, the viewer's dist/) must exist before this runs.
 //
 // Prints one line per tarball: `<name>\t<path>`.
 
@@ -34,7 +34,7 @@ const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 /** The public packages, in publish order (a dependency before its dependents). */
 export const PUBLIC_PACKAGES = [
   { name: "@paged-media/canvas-wasm", dir: "engine/core/packages/canvas-wasm" },
-  { name: "@paged-media/idml-viewer", dir: "engine/core/web/idml-viewer" },
+  { name: "@paged-media/viewer", dir: "engine/core/web/idml-viewer" },
   {
     name: "@paged-media/plugin-api",
     dir: "platform/extensions/packages/plugin-api",

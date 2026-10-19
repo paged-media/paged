@@ -1,6 +1,6 @@
 $schema: "../../../../.moon/cache/schemas/project.json"
 
-# @paged-media/idml-viewer: the TypeScript wrapper around the engine's
+# @paged-media/viewer: the TypeScript wrapper around the engine's
 # paged-sdk wasm, a package of the root Bun workspace (Moon installs that
 # once, at the root, before the first JS task).
 language: "typescript"
@@ -10,7 +10,7 @@ tags: ["node", "engine"]
 
 project:
   title: "engine/core/web/idml-viewer"
-  description: "TypeScript viewer wrapper published as @paged-media/idml-viewer."
+  description: "TypeScript viewer wrapper published as @paged-media/viewer."
 
 # It ships core's paged-sdk wasm as its ./session entry: core:wasm-pkg
 # builds it into wasm/ (PM-0008). Its tests use a fake session and need no wasm.
