@@ -1,6 +1,3 @@
 {
-  "command:paged.ai.ask": "Registered inline in main.tsx's CanvasAppIntegration (opens the assistant panel with the payload as its draft, auto-run); main.tsx boots the app on import, so no unit test can import the registration; asserted in the browser tier.",
-  "command:paged.chrome.toggleAll": "Registered inline in PagedShell over its own toggleAll closure (dock and tool-rail visibility state); there is no unit seam short of mounting PagedShell, so its behaviour is asserted in the browser tier (Tab, View menu).",
-  "command:paged.chrome.togglePanels": "Registered inline in PagedShell over its own togglePanels closure (dock visibility, the tool rail kept); there is no unit seam short of mounting PagedShell, so its behaviour is asserted in the browser tier (Shift+Tab).",
-  "command:paged.sample.hello": "the catalog's own demo command, registered to prove the worker-bundle contribution path works; it is not product surface and has no user-facing behaviour to assert."
+  "command:paged.ai.ask": "Registered inline in CanvasAppIntegration in apps/canvas/src/main.tsx, the app's entry module, which boots the editor when imported (createRoot at module scope, Vite ?worker imports), so no unit or component test can reach the registration; its effect (the AI Assistant opens with the payload as its draft and runs it) is asserted in the browser, tests/e2e/shell-commands.spec.ts. A unit test needs the AI command table moved into an importable build*Commands(deps) module, as the object and insert commands are."
 }
