@@ -104,15 +104,118 @@ pub enum SurfaceError {
     Readback(String),
     #[error("PNG encode failed: {0}")]
     PngEncode(String),
+    #[error("GPU device lost: {0}")]
+    DeviceLost(String),
+}
+
+/// Set by the device's lost callback: why the browser took the device
+/// away (a GPU-process crash, a driver reset, `destroy`). Shared with the
+/// callback, which may run on any thread the backend chooses.
+#[derive(Clone, Default)]
+struct LostFlag(std::sync::Arc<std::sync::Mutex<Option<String>>>);
+
+impl LostFlag {
+    fn watch(device: &wgpu::Device) -> Self {
+        let flag = Self::default();
+        let set = flag.clone();
+        device.set_device_lost_callback(move |reason, message| {
+            if let Ok(mut slot) = set.0.lock() {
+                *slot = Some(format!("{reason:?}: {message}"));
+            }
+        });
+        flag
+    }
+
+    fn reason(&self) -> Option<String> {
+        self.0.lock().ok().and_then(|slot| slot.clone())
+    }
+}
+
+/// The device half of a presenter: what a lost device takes with it and
+/// [`SurfacePresenter::recover`] builds again on the same canvas.
+struct Gpu {
+    adapter: wgpu::Adapter,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    renderer: Renderer,
+    lost: LostFlag,
+}
+
+impl Gpu {
+    /// Adapter, device and Vello renderer, without touching any canvas.
+    ///
+    /// Asking for all three BEFORE the surface exists is what keeps a
+    /// failure here from costing the CPU fallback its canvas: creating
+    /// the surface takes the canvas's WebGPU context, and a canvas with a
+    /// WebGPU context never hands out a 2D one. A browser adapter can
+    /// present to any canvas, so none is needed to choose it.
+    async fn request(instance: &wgpu::Instance) -> Result<Self, SurfaceError> {
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                compatible_surface: None,
+                force_fallback_adapter: false,
+                // The adapter's own limits, as before wgpu 30 added bucketing.
+                apply_limit_buckets: false,
+            })
+            .await
+            .map_err(|_| SurfaceError::NoAdapter)?;
+
+        // Chrome's canvas typically only exposes `Bgra8Unorm` /
+        // `Bgra8UnormSrgb`. Vello renders into a STORAGE_BINDING
+        // texture; writing to a Bgra8Unorm storage texture requires
+        // the `BGRA8UNORM_STORAGE` device feature. Request it when
+        // the adapter advertises it; gracefully fall back if not.
+        let mut required_features = wgpu::Features::empty();
+        if adapter
+            .features()
+            .contains(wgpu::Features::BGRA8UNORM_STORAGE)
+        {
+            required_features |= wgpu::Features::BGRA8UNORM_STORAGE;
+        }
+        let (device, queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("paged-gpu surface device"),
+                required_features,
+                required_limits: wgpu::Limits::downlevel_webgl2_defaults()
+                    .using_resolution(adapter.limits()),
+                memory_hints: wgpu::MemoryHints::default(),
+                trace: wgpu::Trace::Off,
+                experimental_features: wgpu::ExperimentalFeatures::default(),
+            })
+            .await
+            .map_err(|e| SurfaceError::RequestDevice(format!("{e:?}")))?;
+        let lost = LostFlag::watch(&device);
+
+        let renderer = Renderer::new(
+            &device,
+            RendererOptions {
+                use_cpu: false,
+                antialiasing_support: AaSupport::area_only(),
+                num_init_threads: std::num::NonZeroUsize::new(1),
+                pipeline_cache: None,
+            },
+        )
+        .map_err(|e| SurfaceError::RendererInit(format!("{e:?}")))?;
+        Ok(Self {
+            adapter,
+            device,
+            queue,
+            renderer,
+            lost,
+        })
+    }
 }
 
 /// Long-lived presenter bound to one canvas. Constructed once at
 /// editor mount; reused for every frame.
 pub struct SurfacePresenter {
+    instance: wgpu::Instance,
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     renderer: Renderer,
+    lost: LostFlag,
     surface_format: wgpu::TextureFormat,
     /// Intermediate Rgba8Unorm storage texture Vello renders into.
     /// Vello's compute pipeline cannot bind the surface texture
@@ -157,46 +260,30 @@ impl SurfacePresenter {
         height: u32,
     ) -> Result<Self, SurfaceError> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        // The device first, the canvas last (see `Gpu::request`).
+        let gpu = Gpu::request(&instance).await?;
         let surface = instance
             .create_surface(target)
             .map_err(|e| SurfaceError::CreateSurface(format!("{e:?}")))?;
+        Ok(Self::assemble(instance, surface, gpu, width, height))
+    }
 
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-                // The adapter's own limits, as before wgpu 30 added bucketing.
-                apply_limit_buckets: false,
-            })
-            .await
-            .map_err(|_| SurfaceError::NoAdapter)?;
-
-        // Chrome's canvas typically only exposes `Bgra8Unorm` /
-        // `Bgra8UnormSrgb`. Vello renders into a STORAGE_BINDING
-        // texture; writing to a Bgra8Unorm storage texture requires
-        // the `BGRA8UNORM_STORAGE` device feature. Request it when
-        // the adapter advertises it; gracefully fall back if not.
-        let mut required_features = wgpu::Features::empty();
-        if adapter
-            .features()
-            .contains(wgpu::Features::BGRA8UNORM_STORAGE)
-        {
-            required_features |= wgpu::Features::BGRA8UNORM_STORAGE;
-        }
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: Some("paged-gpu surface device"),
-                required_features,
-                required_limits: wgpu::Limits::downlevel_webgl2_defaults()
-                    .using_resolution(adapter.limits()),
-                memory_hints: wgpu::MemoryHints::default(),
-                trace: wgpu::Trace::Off,
-                experimental_features: wgpu::ExperimentalFeatures::default(),
-            })
-            .await
-            .map_err(|e| SurfaceError::RequestDevice(format!("{e:?}")))?;
-
+    /// Bind a device to the surface: pick the canvas format, allocate
+    /// Vello's target and the blitter, configure.
+    fn assemble(
+        instance: wgpu::Instance,
+        surface: wgpu::Surface<'static>,
+        gpu: Gpu,
+        width: u32,
+        height: u32,
+    ) -> Self {
+        let Gpu {
+            adapter,
+            device,
+            queue,
+            renderer,
+            lost,
+        } = gpu;
         // Vello renders into an intermediate Rgba8Unorm storage
         // texture; `TextureBlitter` then copies it onto the surface
         // (which keeps RENDER_ATTACHMENT-only usage). This matches
@@ -214,27 +301,18 @@ impl SurfacePresenter {
             })
             .or_else(|| caps.formats.iter().copied().find(|f| !f.is_srgb()))
             .or_else(|| caps.formats.first().copied())
-            .unwrap_or(wgpu::TextureFormat::Rgba8Unorm);
-
-        let renderer = Renderer::new(
-            &device,
-            RendererOptions {
-                use_cpu: false,
-                antialiasing_support: AaSupport::area_only(),
-                num_init_threads: std::num::NonZeroUsize::new(1),
-                pipeline_cache: None,
-            },
-        )
-        .map_err(|e| SurfaceError::RendererInit(format!("{e:?}")))?;
+            .unwrap_or(wgpu::TextureFormat::Bgra8Unorm);
 
         let (target_texture, target_view) = create_target(width, height, &device);
         let blitter = wgpu::util::TextureBlitter::new(&device, surface_format);
 
         let presenter = Self {
+            instance,
             surface,
             device,
             queue,
             renderer,
+            lost,
             surface_format,
             target_texture,
             target_view,
@@ -243,7 +321,39 @@ impl SurfacePresenter {
             height,
         };
         presenter.configure_surface();
-        Ok(presenter)
+        presenter
+    }
+
+    /// Why the device was lost, once it has been: a GPU-process crash, a
+    /// driver reset, the tab's device destroyed. `None` while it serves.
+    /// Every present fails after a loss, so a caller checks this to tell a
+    /// dead device from a skipped frame.
+    pub fn lost_reason(&self) -> Option<String> {
+        self.lost.reason()
+    }
+
+    /// Destroy the device — what a GPU-process crash does to it. The lost
+    /// callback fires; for tests of the loss path.
+    pub fn destroy_device(&self) {
+        self.device.destroy();
+    }
+
+    /// A new device on the same canvas, after [`Self::lost_reason`] says
+    /// the old one is gone: adapter, device and renderer requested again,
+    /// the surface reconfigured with them. Every cached scene stays valid
+    /// (scenes are encodings, not GPU resources). On failure the canvas
+    /// keeps its WebGPU context and cannot fall back to 2D drawing; the
+    /// caller reports the loss and draws snapshots on the CPU.
+    pub async fn recover(self) -> Result<Self, SurfaceError> {
+        let Self {
+            instance,
+            surface,
+            width,
+            height,
+            ..
+        } = self;
+        let gpu = Gpu::request(&instance).await?;
+        Ok(Self::assemble(instance, surface, gpu, width, height))
     }
 
     /// Surface dimensions in device pixels. Read at any time by the
@@ -264,6 +374,28 @@ impl SurfacePresenter {
         self.target_texture = t;
         self.target_view = v;
         self.configure_surface();
+    }
+
+    /// The next surface texture. A lost device is an error the caller can
+    /// tell apart ([`SurfaceError::DeviceLost`]); an outdated or lost
+    /// SURFACE is reconfigured and asked once more.
+    fn acquire(&self) -> Result<wgpu::SurfaceTexture, SurfaceError> {
+        if let Some(reason) = self.lost.reason() {
+            return Err(SurfaceError::DeviceLost(reason));
+        }
+        for attempt in 0..2 {
+            match self.surface.get_current_texture() {
+                wgpu::CurrentSurfaceTexture::Success(t)
+                | wgpu::CurrentSurfaceTexture::Suboptimal(t) => return Ok(t),
+                wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost
+                    if attempt == 0 =>
+                {
+                    self.configure_surface();
+                }
+                other => return Err(SurfaceError::GetTexture(format!("{other:?}"))),
+            }
+        }
+        Err(SurfaceError::GetTexture("surface lost twice".into()))
     }
 
     fn configure_surface(&self) {
@@ -324,6 +456,38 @@ impl SurfacePresenter {
         scene
     }
 
+    /// A page as a snapshot draws it on the GPU, scaled to `dpi`: the
+    /// white page body and the page's content, built exactly as
+    /// [`Self::build_page_scene`] builds them for the screen and placed
+    /// the way [`Self::present_scenes`] places a page (`Scene::append`
+    /// under the page → pixel transform), without the editor's 1 pt
+    /// page-edge border. Returns the scene and its size in pixels, which
+    /// is `RasterOptions::pixel_size` — the CPU snapshot's size.
+    pub fn build_snapshot_scene(
+        list: &DisplayList,
+        width_pt: f32,
+        height_pt: f32,
+        dpi: f32,
+    ) -> (Scene, u32, u32) {
+        use vello::peniko;
+        let mut page = Scene::new();
+        page.fill(
+            peniko::Fill::NonZero,
+            kurbo::Affine::IDENTITY,
+            peniko::Color::from_rgba8(255, 255, 255, 255),
+            None,
+            &kurbo::Rect::new(0.0, 0.0, width_pt as f64, height_pt as f64),
+        );
+        let content = build_scene_with_transform(list, kurbo::Affine::IDENTITY);
+        page.append(&content, None);
+        let mut scene = Scene::new();
+        scene.append(&page, Some(kurbo::Affine::scale((dpi / 72.0) as f64)));
+        let mut opts = crate::RasterOptions::new(width_pt, height_pt);
+        opts.dpi = dpi;
+        let (w, h) = opts.pixel_size();
+        (scene, w, h)
+    }
+
     /// Compose previously-built per-page scenes onto the surface,
     /// each at its own affine transform. The transform parallels
     /// `present_multi`'s `[a, b, c, d, e, f]` convention.
@@ -336,13 +500,7 @@ impl SurfacePresenter {
         pages: &[(&Scene, [f32; 6])],
         background: Color,
     ) -> Result<(), SurfaceError> {
-        let frame = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(t)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
-            other => {
-                return Err(SurfaceError::GetTexture(format!("{other:?}")));
-            }
-        };
+        let frame = self.acquire()?;
 
         let mut combined = Scene::new();
         for (scene, t) in pages {
@@ -397,13 +555,7 @@ impl SurfacePresenter {
         pages: &[(&DisplayList, [f32; 6])],
         background: Color,
     ) -> Result<(), SurfaceError> {
-        let frame = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(t)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
-            other => {
-                return Err(SurfaceError::GetTexture(format!("{other:?}")));
-            }
-        };
+        let frame = self.acquire()?;
 
         // Compose one scene from many per-page scenes. `Scene::append`
         // copies the appended scene's draws into the target with the
@@ -470,13 +622,7 @@ impl SurfacePresenter {
         viewport: Viewport,
         background: Color,
     ) -> Result<(), SurfaceError> {
-        let frame = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(t)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
-            other => {
-                return Err(SurfaceError::GetTexture(format!("{other:?}")));
-            }
-        };
+        let frame = self.acquire()?;
 
         let scene = build_scene_for_surface(list, viewport);
 
@@ -566,6 +712,9 @@ impl SurfacePresenter {
         width_px: u32,
         height_px: u32,
     ) -> Result<PendingReadback, SurfaceError> {
+        if let Some(reason) = self.lost.reason() {
+            return Err(SurfaceError::DeviceLost(reason));
+        }
         let width_px = width_px.max(1);
         let height_px = height_px.max(1);
 

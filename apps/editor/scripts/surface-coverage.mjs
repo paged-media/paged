@@ -73,6 +73,7 @@ import {
   writeFileSync,
   appendFileSync,
 } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -141,8 +142,9 @@ export const LAYERS = [
  *  enumeration does not know yet is reported, not blocking. */
 const ORPHANS_FAIL = false;
 
-/** The editor's settings inventory is required once it exists on main. */
-const SETTINGS_INVENTORY_REQUIRED = false;
+/** The editor's settings inventory (owned by the shell's storage-key
+ *  scan, apps/canvas/test/unit/settings/storage-inventory.test.ts). */
+const SETTINGS_INVENTORY_REQUIRED = true;
 
 const MIN_REASON = 40;
 
@@ -218,6 +220,35 @@ function writeAcknowledged(entries, dir = ACK_DIR) {
 
 // ── the computation ──────────────────────────────────────────────────
 
+/** The files that hold a covers form, found by `git grep` (fast; the gate
+ *  then parses only those for calls), or null without git. */
+function coversCandidates(root) {
+  try {
+    const out = execFileSync(
+      "git",
+      [
+        "grep",
+        "--untracked",
+        "-l",
+        "-I",
+        "-z",
+        "-E",
+        "covers!?[[:space:]]*\\(|//[[:space:]]*covers:",
+        "--",
+        ...["ts", "tsx", "mts", "cts", "js", "mjs", "cjs", "jsx", "rs"].map(
+          (e) => `*.${e}`,
+        ),
+      ],
+      { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+    );
+    return new Set(out.split("\0").filter(Boolean));
+  } catch (e) {
+    // Exit status 1 is "no match": an empty set, not a failure.
+    if (e?.status === 1) return new Set();
+    return null;
+  }
+}
+
 const globToRegex = (glob) =>
   new RegExp(
     `^${glob
@@ -230,10 +261,14 @@ const globToRegex = (glob) =>
  * Enumerate, read every covers() call, resolve each id, and grade every
  * (id, clause). Pure apart from reading files.
  */
-export function computeGate(root = ROOT, ackDir = ACK_DIR) {
+export function computeGate(root = ROOT, ackDir = ACK_DIR, options = {}) {
+  const { mentioned: wantMentioned = true } = options;
   const surface = enumerateSurface(root);
   const files = listFiles(root, ["."]);
-  const covers = readCovers(root, files);
+  const covers = readCovers(root, files, {
+    candidates: coversCandidates(root),
+    keepTexts: wantMentioned,
+  });
 
   const byKey = new Map(surface.items.map((i) => [`${i.kind}:${i.id}`, i]));
   const familyMatchers = surface.items
@@ -288,7 +323,7 @@ export function computeGate(root = ROOT, ackDir = ACK_DIR) {
   }
 
   // Mentioned (the secondary signal): the id's text in any test file.
-  const blob = [...covers.texts.values()].join("\n");
+  const blob = wantMentioned ? [...covers.texts.values()].join("\n") : "";
   //   keybinding: its command (the binding itself is a chord, rarely spelt
   //   the way it is registered); setting: its key with its tool; family:
   //   any member.
@@ -405,9 +440,9 @@ export function computeGate(root = ROOT, ackDir = ACK_DIR) {
   for (const n of surface.notes) bundleProblems.push(n);
 
   // Plumbing contributions (no covers() kind): the old "mentioned" ratchet.
-  const plumbingUnmentioned = surface.plumbing.filter(
-    (p) => !blob.includes(p.id),
-  );
+  const plumbingUnmentioned = wantMentioned
+    ? surface.plumbing.filter((p) => !blob.includes(p.id))
+    : [];
 
   const settingsPending = surface.settingsInventory === null;
 
@@ -583,7 +618,8 @@ function main(argv) {
     const i = argv.indexOf(name);
     return i >= 0 ? argv[i + 1] : undefined;
   };
-  const r = computeGate();
+  const fast = argv.includes("--prune") || argv.includes("--list");
+  const r = computeGate(ROOT, ACK_DIR, { mentioned: !fast });
   const report = buildReport(r);
   const md = markdownReport(report);
 

@@ -116,6 +116,7 @@ is not written yet.
 | [185](185-the-wasm-packages-are-workspace-packages.md) | The engine's wasm packages are workspace packages | Accepted 2026-10-18 |
 | [186](186-a-mutation-names-the-pages-it-created.md) | A mutation names the pages it created | Accepted 2026-10-18 |
 | [187](187-the-wire-describes-itself-as-json-schema.md) | The wire describes itself as JSON Schema | Accepted 2026-10-18 |
+| [188](188-snapshots-draw-on-the-worker-gpu.md) | Snapshots draw on the worker's GPU, and a lost device is replaced | Accepted 2026-10-19 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).
