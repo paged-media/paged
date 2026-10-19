@@ -22,6 +22,7 @@
 // the honesty smoke test.
 
 import { describe, expect, it, vi } from "bun:test";
+import { covers } from "@paged-media/test-kit";
 
 import type { PagedEditor } from "@paged-media/plugin-api";
 import { loadBundle } from "@paged-media/plugin-sdk";
@@ -152,6 +153,7 @@ describe("webBundle.activate", () => {
   });
 
   it("insert command: ONE sentinel batch (frame + metadata), selected, panel opened", async () => {
+    covers("command:media.paged.web.command.insertWebFrame");
     const fake = makeFakeEditor();
     const openPanel = vi.fn();
     loadBundle(() => fake.editor, webBundle, {
