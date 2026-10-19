@@ -106,29 +106,3 @@ export {
   type MatrixTool,
   type MatrixZoom,
 } from "./gestures/matrix.ts";
-
-// The headless editor's engine half (apps/editor/apps/canvas/tests/headless
-// builds the editor on it): the canvas-wasm booted once per process, an
-// in-process render worker the real CanvasClient drives, and the canonical
-// model dump the headless and parity suites compare.
-export {
-  headlessEngineModule,
-  type EngineCanvasWorker,
-  type HeadlessEngineModule,
-} from "./headless/engine.ts";
-export {
-  createEngineWorker,
-  type EngineWorker,
-  type EngineWorkerOptions,
-  type GestureRecord,
-  type PostedMessage,
-} from "./headless/engine-worker.ts";
-export {
-  canonicalJson,
-  dumpDiff,
-  elementKey,
-  modelDump,
-  MODEL_DUMP_COLLECTIONS,
-  type ModelDump,
-  type ModelDumpOptions,
-} from "./headless/model-dump.ts";
