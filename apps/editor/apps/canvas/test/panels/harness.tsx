@@ -135,6 +135,10 @@ export interface MountOptions<S> {
   /** The panel id it is registered under. Defaults to the contribution's
    *  id when a contribution is passed. */
   id?: string;
+  /** Registrations the panel should find when it FIRST renders (commands,
+   *  keybindings, other panels), the way the app's registries are full
+   *  before a user opens a panel. Runs before the panel mounts. */
+  registries?: (registries: ShellRegistries) => void;
 }
 
 interface Bridge {
@@ -268,14 +272,19 @@ function BridgeCapture({ onBridge }: { onBridge: (b: Bridge) => void }) {
  *  (PanelHost reads the registry at render and does not subscribe). */
 function Registered({
   contribution,
+  before,
   children,
-}: PropsWithChildren<{ contribution: PanelContribution }>) {
+}: PropsWithChildren<{
+  contribution: PanelContribution;
+  before?: (registries: ShellRegistries) => void;
+}>) {
   const registries = useRegistries();
   useLayoutEffect(() => {
     if (registries.panels.get(contribution.id)) return;
+    before?.(registries);
     const registration = registries.panels.register(contribution);
     return () => registration.dispose();
-  }, [registries, contribution]);
+  }, [registries, contribution, before]);
   const present = useSyncExternalStore(
     (onChange) => {
       const sub = registries.panels.onChange(onChange);
@@ -499,7 +508,7 @@ export async function mountPanel<S = undefined>(
         <BridgeCapture onBridge={(next) => (bridge.current = next)} />
         <SeedDocument handle={handle} resolution={engine.lastResolution} />
         <FollowPages />
-        <Registered contribution={contribution}>
+        <Registered contribution={contribution} before={options.registries}>
           <PanelHost id={id} />
         </Registered>
       </ShellProviders>,

@@ -46,40 +46,7 @@ afterEach(unmountAll);
 
 /** The panels the lane has no test file for yet. It only shrinks; a new
  *  panel never joins it (it lands with its test). */
-const NOT_YET_TESTED: readonly string[] = [
-  "paged.export-center",
-  "paged.preflight",
-  "paged.separations",
-  "paged.publication-health",
-  "paged.comments",
-  "paged.component-library",
-  "paged.outputs",
-  "paged.data-source",
-  "paged.data-grid",
-  "paged.story-inspector",
-  "paged.output-readiness",
-  "paged.review-inspector",
-  "paged.export-inspector",
-  "paged.align",
-  "paged.pathfinder",
-  "paged.schema-list-demo",
-  "paged.schema-tree-demo",
-  "paged.object-transform",
-  "paged.text-frame-options",
-  "paged.text-wrap",
-  "paged.frame-fitting",
-  "paged.effects",
-  "paged.layers",
-  "paged.attributes",
-  "paged.ai-assistant",
-  "paged.repl",
-  "paged.script-editor",
-  "paged.actions",
-  "paged.keyboard-shortcuts",
-  "paged.problems",
-  "paged.journal",
-  "paged.library",
-];
+const NOT_YET_TESTED: readonly string[] = [];
 
 /** `panel:<id>` literals the lane's files assert, by file. */
 function coveredPanels(): Map<string, string[]> {
