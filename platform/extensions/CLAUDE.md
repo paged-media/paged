@@ -47,7 +47,7 @@ cites its proposal number, "ADR 323".
   are a dev-time luxury.
 - **Naming:** the plugin runtime is `@paged-media/plugin-sdk`. The
   engine's WebGPU `ViewerSession` was `@paged-media/sdk` (deprecated) and
-  is now `@paged-media/idml-viewer/session` (PM-0008); neither is claimed
+  is now `@paged-media/viewer/session` (PM-0008); neither is claimed
   here.
 - **CLI stays dependency-free.** `paged-plugin.mjs` hand-mirrors
   `manifest.schema.json`; change them together.

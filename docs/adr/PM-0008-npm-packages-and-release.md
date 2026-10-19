@@ -1,8 +1,8 @@
 # PM-0008 — Four public npm packages, one release workflow
 
 - **Status:** Accepted 2026-10-18. Amended 2026-10-18 (amendment 1: one version for the four
-  packages, and how a release is cut) and 2026-10-19 (amendment 2: the contract moves to
-  React 19).
+  packages, and how a release is cut), 2026-10-19 (amendment 2: the contract moves to
+  React 19) and 2026-10-19 (amendment 3: three public packages, before the first release).
 - **Supersedes:** apps/editor ADR 201 (first-party plugins compiled in as pinned published
   packages).
 - **Amends:** apps/editor ADR 205 (the client packaged as the write SDK): the client is a
@@ -102,3 +102,58 @@ places, and both move with it:
 
 What an extension author changes is in
 [platform/extensions/README.md](../../platform/extensions/README.md#react-19).
+
+## Amendment 3 (2026-10-19): three public packages, before the first release
+
+Nothing was published from the layout of the decision above. Before the first release the four
+packages become three, and the engine package carries the command line.
+
+| Package | Directory | Entries | Built from |
+|---|---|---|---|
+| `@paged-media/viewer` | `engine/core/web/idml-viewer` | `.`, `./session`, `./session/paged_sdk_bg.wasm` | the viewer and the `paged-sdk` session wasm |
+| `@paged-media/paged` | `packages/paged` | `.`, `./introspect`, `./introspect/catalog.json`, `./repo`, each wasm by its own subpath; bin `paged` | the engine wasm of the private `@paged-media/canvas-wasm`, and the CLI of the private `@paged-media/cli` (`apps/cli`), bundled |
+| `@paged-media/plugin-sdk` | `platform/extensions/packages/plugin-sdk` | `.`, `./gesture-kit`, `./api` (type-only), `./api/manifest.schema.json`; bin `paged-plugin` | the runtime, and the declarations of the private `@paged-media/plugin-api`, inlined |
+
+- **`@paged-media/viewer` replaces `@paged-media/idml-viewer`**, unchanged otherwise: the
+  `./session` entry and the subset audit (its wasm links no mutation, canvas, scripting or
+  introspection crate) stay. The directory and the Moon project (`core-idml-viewer`) keep their
+  names; the format stays `idml`, the package is the viewer.
+- **`@paged-media/paged` replaces `@paged-media/canvas-wasm` on npm.** `canvas-wasm` stays the
+  engine's workspace package (about a hundred files import it) and becomes private;
+  `packages/paged` assembles the published package from its built files, so a consumer's
+  imports change only in the package name (`@paged-media/paged/introspect`, `…/repo`). The
+  package also ships the `paged` bin: the Node CLI of `apps/cli`, bundled into the package's
+  `dist/` with every first-party module inlined, so it runs from the tarball under Node 24 and
+  Bun with nothing native. In the repository the bin keeps the name `paged-node`
+  ([ADR 324](../../platform/extensions/docs/adr/324-node-cli-over-the-headless-host.md), its
+  amendment), so it does not shadow the engine's Rust `paged` in a checkout; the Rust CLI is not
+  on npm. `paged mcp` serves the tools of the Rust `paged mcp` (`engine/core/crates/paged-mcp`)
+  over stdio, with the same names and schemas, over the wasm engine.
+- **`@paged-media/plugin-sdk` absorbs `@paged-media/plugin-api` as its type-only `./api`
+  entry.** `plugin-api` stays the contract's source package in the workspace (about seven
+  hundred files import it) and becomes private. plugin-sdk's build copies its declarations
+  into `dist/api/` and points its own declarations there, so the published package depends on
+  no private package
+  ([ADR 331](../../platform/extensions/docs/adr/331-the-host-adapter-stays-public.md)). An
+  extension takes its types from `@paged-media/plugin-sdk/api` and its runtime from
+  `@paged-media/plugin-sdk`, and has one peer dependency: `@paged-media/plugin-sdk`. The
+  `paged-plugin` bin gains `init`, which writes a minimal extension.
+- **The contract has one public version: plugin-sdk's.** A change under `plugin-api/src` or
+  `plugin-sdk/src` moves plugin-sdk's in-tree counter, and plugin-api's private counter moves
+  with it to the same value (the contract guard checks both). A release publishes plugin-sdk at
+  the tag's version, as amendment 1 says.
+- **Why three and not two.** The viewer could be an entry of `@paged-media/paged`, but a
+  script-tag or CDN user who wants to show a document would then install the full engine, with
+  its editing canvas, introspection and CLI: the viewer stays a package of its own, a small one.
+- **Built-in modules change nothing.** They are private workspace packages; their
+  `workspace:` dependencies and peers on `plugin-api` and `plugin-sdk` stay as they are.
+- **Deprecated on npm**, besides the list above, once the replacements are published:
+  `idml-viewer` (use `@paged-media/viewer`), `canvas-wasm` (use `@paged-media/paged`) and
+  `plugin-api` (use `@paged-media/plugin-sdk/api`). `sdk`, `introspect-wasm` and `plugin-cli`
+  now point at `@paged-media/viewer/session`, `@paged-media/paged/introspect` and the
+  `paged-plugin` bin of plugin-sdk. The commands, and the unpublishing of the retired packages
+  where npm allows it, are in [the runbook](../migration/npm-release-runbook.md).
+
+The release workflow stages, verifies, installs in a clean room and publishes the three, at the
+tag's version; the minor still carries the protocol, read from `canvas-wasm`'s committed
+`0.<protocol>.0-dev`.

@@ -58,7 +58,9 @@ import {
 import { usePanelReload } from "./use-panel-reload";
 import {
   About,
+  color,
   ConfirmButton,
+  font,
   humanize,
   Refusal,
   useActionFeedback,
@@ -87,34 +89,34 @@ const rowStyle: React.CSSProperties = {
   alignItems: "center",
   gap: 6,
   padding: "3px 0",
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 const iconBtn: React.CSSProperties = {
   border: "none",
   background: "none",
   cursor: "pointer",
   padding: "0 3px",
-  font: "12px var(--font-sans, sans-serif)",
-  color: "var(--pg-fg, currentColor)",
+  font: `12px ${font.sans}`,
+  color: color.fg,
 };
 const sectionStyle: React.CSSProperties = {
-  font: "11px var(--font-sans, sans-serif)",
+  font: `11px ${font.sans}`,
   textTransform: "uppercase",
   letterSpacing: "0.04em",
   opacity: 0.65,
   paddingTop: 8,
 };
 const tagStyle: React.CSSProperties = {
-  font: "10px var(--font-sans, sans-serif)",
+  font: `10px ${font.sans}`,
   textTransform: "uppercase",
   letterSpacing: "0.04em",
-  border: "1px solid var(--pg-border, rgba(127,127,127,0.5))",
+  border: `1px solid ${color.border}`,
   borderRadius: 2,
   padding: "0 3px",
 };
 const mutedStyle: React.CSSProperties = {
   opacity: 0.6,
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 
 /** The one-line summary a symbol row shows: how much artwork the

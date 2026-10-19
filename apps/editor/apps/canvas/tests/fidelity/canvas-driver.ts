@@ -97,31 +97,62 @@ export interface OpenCanvasOptions {
   /** Query string to boot with, e.g. `"?solo=paged.draw"`. Defaults to
    *  none, so every existing caller is unaffected. */
   search?: string;
+  /** Answer the replace question (ADR 230) with Don't save whenever it
+   *  appears (default true). A spec that asserts the question itself
+   *  passes false and answers it. */
+  answerReplacePrompts?: boolean;
 }
 
 export async function openCanvas(
   page: Page,
   options: OpenCanvasOptions = {},
 ): Promise<void> {
-  // A3 — `File ▸ New` and `File ▸ Open` now ask before discarding an
-  // EDITED document, and Playwright auto-DISMISSES dialogs when nothing
-  // is listening. Without a handler the confirm is declined, the command
-  // returns early, and the document is silently never replaced — which
-  // took publish.journey down, where the failure then read as a renderer
-  // fault (0 changed pixels) rather than a New that never happened.
+  // A3 — `File ▸ New`, `File ▸ Open`, a drop and every plugin open ask
+  // before discarding an EDITED document (ADR 230). Specs that replace an
+  // edited document as a step, not as the subject, need the question
+  // answered, or the open never happens — which took publish.journey
+  // down, where the failure then read as a renderer fault (0 changed
+  // pixels) rather than a New that never happened.
   //
-  // Accepts ONLY the discard prompt, by message. A blanket accept-all
-  // would swallow a dialog some future test did not expect, and this
-  // helper is used by nearly every spec in the suite. The guard's own
-  // behaviour is asserted in unsaved-work.spec.ts, which does not use
-  // this path.
+  // The question is the shell's prompt; it falls back to the platform
+  // `confirm` only when no prompt is mounted. Both get Don't save, and
+  // ONLY the replace question does: a blanket accept-all would swallow a
+  // dialog some future test did not expect, and this helper is used by
+  // nearly every spec in the suite. Every answer is recorded on
+  // `window.__answeredReplacePrompts`, so a spec can assert none was
+  // asked. The guard's own behaviour is asserted with
+  // `answerReplacePrompts: false` (shell-findings, documents-door).
   page.on("dialog", (d) => {
-    if (d.type() === "confirm" && d.message().includes("unsaved edits")) {
+    if (
+      options.answerReplacePrompts !== false &&
+      d.type() === "confirm" &&
+      d.message().includes("unsaved edits")
+    ) {
       void d.accept();
     } else {
       void d.dismiss();
     }
   });
+  if (options.answerReplacePrompts !== false) {
+    await page.addInitScript(() => {
+      const w = globalThis as unknown as {
+        __answeredReplacePrompts?: string[];
+      };
+      w.__answeredReplacePrompts = [];
+      setInterval(() => {
+        const dialog = document.querySelector(
+          '[data-testid="replace-document-dialog"]',
+        );
+        const discard = dialog?.querySelector<HTMLButtonElement>(
+          '[data-testid="replace-document-discard"]',
+        );
+        if (!dialog || !discard || discard.dataset.answered) return;
+        discard.dataset.answered = "1";
+        w.__answeredReplacePrompts?.push(dialog.textContent ?? "");
+        discard.click();
+      }, 50);
+    });
+  }
   await page.goto(`/${options.search ?? ""}`);
   // Pull console output into the Playwright test log so render
   // panics surface in the test report instead of vanishing.

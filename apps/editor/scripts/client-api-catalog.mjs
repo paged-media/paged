@@ -7,7 +7,7 @@
  *   The capability-parity survey asked which surfaces can reach the
  *   engine's 117 mutations and 62 wire kinds. One answer was awkward:
  *   "the SDK" reaches almost none of them — but the SDK it measured was
- *   `@paged-media/idml-viewer`, which is READ-ONLY by ratified design
+ *   `@paged-media/viewer`, which is READ-ONLY by ratified design
  *   ("sibling, not a shrunk app": no paged-mutate, no paged-script, no
  *   paged-canvas). Growing it into a write surface would undo that
  *   decision, and it does not need undoing, because the full-capability

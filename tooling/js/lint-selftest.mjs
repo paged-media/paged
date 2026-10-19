@@ -271,7 +271,7 @@ for (const path of EXTENSIONS) {
     "@paged-media/plugin-api",
     "@paged-media/plugin-sdk/harness",
     "@paged-media/canvas-wasm",
-    "@paged-media/idml-viewer",
+    "@paged-media/viewer",
     "react",
     "node:fs",
     "./sibling",

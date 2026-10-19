@@ -24,9 +24,12 @@ import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "bun:test";
 
 import {
+  chrome,
   color,
   createDebouncer,
   font,
+  radius,
+  space,
   humanize,
   refusalText,
   status,
@@ -214,8 +217,11 @@ describe("tokens", () => {
   it("every token names a variable and exactly one fallback", () => {
     for (const value of [
       ...Object.values(color),
+      ...Object.values(chrome),
       ...Object.values(status),
       ...Object.values(font),
+      ...Object.values(space),
+      ...Object.values(radius),
     ]) {
       expect(value).toMatch(/^var\(--[a-z0-9-]+, [^,]+\)$/);
     }

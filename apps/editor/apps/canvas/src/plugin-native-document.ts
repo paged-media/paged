@@ -32,10 +32,20 @@
 //     subtree, which is exactly why it is separately gated).
 //   • open   — replace the active document via `client.loadDocument` (the
 //     binary side-channel); an importer produces native bytes and hands
-//     them here.
+//     them here. It asks the replace question first (ADR 230): every
+//     importer that opens a document — File ▸ Open PDF…, a dropped .docx,
+//     a plugin's own open — replaces an edited document only after the
+//     user said so. Keeping it rejects with an `AbortError`.
 
 import type { CanvasClient } from "@paged-media/client";
 import type { CreateBundleHostOptions } from "@paged-media/plugin-sdk";
+import {
+  allowImportReplace,
+  confirmReplace,
+  currentImportName,
+  importReplaceAllowed,
+  replaceDeclinedError,
+} from "@paged-media/shell";
 
 /** The injected backend the SDK's `host.nativeDocument` door forwards to. */
 type NativeDocumentBackend = NonNullable<
@@ -105,6 +115,18 @@ export function createEditorNativeDocumentBackend(
       const client = getClient();
       if (!client)
         throw new Error("no engine client to load the document into");
+      // One import is one replacement: asked about once, even when the
+      // importer opens twice on the way (its own half-built document is
+      // nothing the user could lose). The name is the file the user chose,
+      // when the shell runs the import (File ▸ Open…, a drop, Open PDF…).
+      if (!importReplaceAllowed()) {
+        const name = currentImportName();
+        const proceed = await confirmReplace(client, {
+          action: name ? `Opening ${name}` : "Opening the imported document",
+        });
+        if (!proceed) throw replaceDeclinedError();
+        allowImportReplace();
+      }
       // Prefer the full shell orchestration so the opened document activates
       // in the view (setHandle + snapshot + default font). Fall back to the
       // bare worker load when no orchestration is injected — that call

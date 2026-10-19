@@ -35,6 +35,14 @@ import {
   type SessionState,
   type Statement,
 } from "@paged-media/shell";
+import {
+  chrome,
+  color,
+  font,
+  IconButton,
+  radius,
+  status,
+} from "@paged-media/panel-kit";
 
 interface ScriptMeta {
   id: string;
@@ -229,7 +237,7 @@ export function PlaygroundController(): React.ReactElement | null {
           <div
             style={{
               padding: "12px 14px 8px",
-              borderBottom: "1px solid var(--pg-border,#333)",
+              borderBottom: `1px solid ${color.border}`,
             }}
           >
             <div style={{ fontSize: 13, fontWeight: 640 }}>
@@ -239,7 +247,7 @@ export function PlaygroundController(): React.ReactElement | null {
               <div
                 style={{
                   fontSize: 12,
-                  color: "var(--pg-muted-fg,#aaa)",
+                  color: color.mutedFg,
                   marginTop: 2,
                 }}
               >
@@ -256,7 +264,7 @@ export function PlaygroundController(): React.ReactElement | null {
                 gap: 4,
                 flexWrap: "wrap",
                 padding: "8px 12px",
-                borderBottom: "1px solid var(--pg-border,#333)",
+                borderBottom: `1px solid ${color.border}`,
               }}
             >
               {chapters.map((c, i) => (
@@ -271,7 +279,7 @@ export function PlaygroundController(): React.ReactElement | null {
                     fontSize: 10.5,
                     cursor: "pointer",
                     borderRadius: 999,
-                    border: "1px solid var(--pg-border,#333)",
+                    border: `1px solid ${color.border}`,
                     padding: "2px 8px",
                     maxWidth: 120,
                     overflow: "hidden",
@@ -279,11 +287,11 @@ export function PlaygroundController(): React.ReactElement | null {
                     whiteSpace: "nowrap",
                     color:
                       i === state.currentChapter
-                        ? "var(--pg-primary-fg,#fff)"
-                        : "var(--pg-muted-fg,#aaa)",
+                        ? color.primaryFg
+                        : color.mutedFg,
                     background:
                       i === state.currentChapter
-                        ? "var(--pg-primary,#6b5cff)"
+                        ? color.primary
                         : "transparent",
                   }}
                 >
@@ -308,8 +316,8 @@ export function PlaygroundController(): React.ReactElement | null {
                 border: "none",
                 outline: "none",
                 background: "transparent",
-                color: "var(--pg-fg,#ddd)",
-                fontFamily: "var(--font-mono,monospace)",
+                color: color.fg,
+                fontFamily: font.mono,
                 fontSize: 12,
                 lineHeight: "18px",
               }}
@@ -321,7 +329,7 @@ export function PlaygroundController(): React.ReactElement | null {
                 flex: 1,
                 overflow: "auto",
                 padding: "8px 0",
-                fontFamily: "var(--font-mono,monospace)",
+                fontFamily: font.mono,
                 fontSize: 12,
                 lineHeight: "18px",
               }}
@@ -340,10 +348,10 @@ export function PlaygroundController(): React.ReactElement | null {
                         display: "flex",
                         padding: "0 14px",
                         background: active
-                          ? "color-mix(in srgb, var(--pg-primary,#6b5cff) 22%, transparent)"
+                          ? `color-mix(in srgb, ${color.primary} 22%, transparent)`
                           : "transparent",
                         borderLeft: active
-                          ? "2px solid var(--pg-primary,#6b5cff)"
+                          ? `2px solid ${color.primary}`
                           : "2px solid transparent",
                       }}
                     >
@@ -352,7 +360,7 @@ export function PlaygroundController(): React.ReactElement | null {
                           width: 24,
                           textAlign: "right",
                           marginRight: 12,
-                          color: "var(--pg-muted-fg,#666)",
+                          color: color.mutedFg,
                           userSelect: "none",
                         }}
                       >
@@ -361,7 +369,7 @@ export function PlaygroundController(): React.ReactElement | null {
                       <span
                         style={{
                           whiteSpace: "pre-wrap",
-                          color: "var(--pg-fg,#cdd)",
+                          color: color.fg,
                         }}
                       >
                         {line || " "}
@@ -379,19 +387,25 @@ export function PlaygroundController(): React.ReactElement | null {
               alignItems: "center",
               gap: 8,
               padding: "8px 12px",
-              borderTop: "1px solid var(--pg-border,#333)",
+              borderTop: `1px solid ${color.border}`,
               flexWrap: "wrap",
             }}
           >
-            <button
-              type="button"
+            <IconButton
+              label={
+                playing
+                  ? "Pause"
+                  : state.status === "done"
+                    ? "Play again"
+                    : "Play"
+              }
               data-playground-play
               onClick={toggle}
               style={btnPrimary}
               title="Play / Pause (Space)"
             >
               {playing ? "❚❚" : state.status === "done" ? "↻" : "▶"}
-            </button>
+            </IconButton>
             <button
               type="button"
               data-playground-step
@@ -401,19 +415,19 @@ export function PlaygroundController(): React.ReactElement | null {
             >
               ⤼ step
             </button>
-            <button
-              type="button"
+            <IconButton
+              label="Restart"
               data-playground-restart
               onClick={restart}
               style={btnGhost}
               title="Restart (r)"
             >
               ⟲
-            </button>
+            </IconButton>
             <span
               style={{
                 display: "inline-flex",
-                border: "1px solid var(--pg-border,#333)",
+                border: `1px solid ${color.border}`,
                 borderRadius: 4,
                 overflow: "hidden",
               }}
@@ -427,10 +441,7 @@ export function PlaygroundController(): React.ReactElement | null {
                     ...btnGhost,
                     borderRadius: 0,
                     padding: "3px 7px",
-                    color:
-                      speedMs === s.ms
-                        ? "var(--pg-primary,#6b5cff)"
-                        : "var(--pg-muted-fg,#aaa)",
+                    color: speedMs === s.ms ? color.primary : color.mutedFg,
                   }}
                 >
                   {s.label}
@@ -473,10 +484,7 @@ export function PlaygroundController(): React.ReactElement | null {
               style={{
                 width: "100%",
                 fontSize: 11,
-                color:
-                  state.status === "error"
-                    ? "var(--warn,#e5484d)"
-                    : "var(--pg-muted-fg,#888)",
+                color: state.status === "error" ? status.error : color.mutedFg,
               }}
             >
               {state.status}
@@ -498,13 +506,13 @@ const chipStyle: React.CSSProperties = {
   top: 72,
   zIndex: 8800,
   font: "inherit",
-  fontFamily: "var(--font-mono,monospace)",
+  fontFamily: font.mono,
   fontSize: 11,
   cursor: "pointer",
-  color: "var(--pg-fg,#fff)",
-  background: "var(--chrome-panel-bg,#1e1e22)",
-  border: "1px solid var(--pg-border,#333)",
-  borderRadius: "var(--radius-sm,4px)",
+  color: color.fg,
+  background: chrome.panelBg,
+  border: `1px solid ${color.border}`,
+  borderRadius: radius.sm,
   padding: "4px 9px",
 };
 const panelStyle: React.CSSProperties = {
@@ -516,10 +524,10 @@ const panelStyle: React.CSSProperties = {
   width: 400,
   display: "flex",
   flexDirection: "column",
-  background: "var(--chrome-panel-bg,#1e1e22)",
-  color: "var(--pg-fg,#fff)",
-  border: "1px solid var(--pg-border,#333)",
-  borderRadius: "var(--radius-md,8px)",
+  background: chrome.panelBg,
+  color: color.fg,
+  border: `1px solid ${color.border}`,
+  borderRadius: radius.md,
   boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
   overflow: "hidden",
   fontFamily: "var(--font-sans)",
@@ -528,10 +536,10 @@ const btnGhost: React.CSSProperties = {
   font: "inherit",
   fontSize: 12,
   cursor: "pointer",
-  color: "var(--pg-muted-fg,#ccc)",
+  color: color.mutedFg,
   background: "transparent",
-  border: "1px solid var(--pg-border,#333)",
-  borderRadius: "var(--radius-sm,4px)",
+  border: `1px solid ${color.border}`,
+  borderRadius: radius.sm,
   padding: "3px 9px",
 };
 const btnPrimary: React.CSSProperties = {
@@ -539,9 +547,9 @@ const btnPrimary: React.CSSProperties = {
   fontSize: 12.5,
   fontWeight: 600,
   cursor: "pointer",
-  color: "var(--pg-primary-fg,#fff)",
-  background: "var(--pg-primary,#6b5cff)",
+  color: color.primaryFg,
+  background: color.primary,
   border: "none",
-  borderRadius: "var(--radius-sm,4px)",
+  borderRadius: radius.sm,
   padding: "4px 11px",
 };

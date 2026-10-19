@@ -256,7 +256,7 @@
       "version": "0.74.0-dev",
     },
     "engine/core/web/idml-viewer": {
-      "name": "@paged-media/idml-viewer",
+      "name": "@paged-media/viewer",
       "version": "0.74.0-dev",
       "devDependencies": {
         "@types/bun": "catalog:",
@@ -277,6 +277,7 @@
       "version": "0.1.0-canary.17",
       "dependencies": {
         "@paged-media/helpers": "workspace:*",
+        "@paged-media/panel-kit": "workspace:*",
         "@paged-media/react-live": "workspace:*",
         "@paged-media/wasm-boot": "workspace:*",
       },
@@ -330,6 +331,7 @@
       "version": "0.1.0-canary.4",
       "dependencies": {
         "@paged-media/helpers": "workspace:*",
+        "@paged-media/panel-kit": "workspace:*",
         "@paged-media/react-live": "workspace:*",
         "@paged-media/wasm-boot": "workspace:*",
       },
@@ -584,6 +586,7 @@
       "version": "0.1.0-canary.1",
       "dependencies": {
         "@paged-media/helpers": "workspace:*",
+        "@paged-media/panel-kit": "workspace:*",
         "@paged-media/react-live": "workspace:*",
         "@paged-media/wasm-boot": "workspace:*",
       },
@@ -683,7 +686,7 @@
     },
     "platform/extensions/packages/plugin-api": {
       "name": "@paged-media/plugin-api",
-      "version": "0.2.80-canary.0",
+      "version": "0.2.81-canary.0",
       "dependencies": {
         "@types/react": "catalog:",
       },
@@ -693,7 +696,7 @@
     },
     "platform/extensions/packages/plugin-sdk": {
       "name": "@paged-media/plugin-sdk",
-      "version": "0.2.80-canary.0",
+      "version": "0.2.81-canary.0",
       "bin": {
         "paged-plugin": "./bin/paged-plugin.mjs",
       },
@@ -1001,8 +1004,6 @@
 
     "@paged-media/helpers": ["@paged-media/helpers@workspace:platform/shared/helpers"],
 
-    "@paged-media/idml-viewer": ["@paged-media/idml-viewer@workspace:engine/core/web/idml-viewer"],
-
     "@paged-media/image": ["@paged-media/image@workspace:modules/image/glue"],
 
     "@paged-media/image-manifest": ["@paged-media/image-manifest@workspace:modules/image/manifest"],
@@ -1034,6 +1035,8 @@
     "@paged-media/tools": ["@paged-media/tools@workspace:apps/editor/packages/tools"],
 
     "@paged-media/ui": ["@paged-media/ui@workspace:apps/editor/packages/ui"],
+
+    "@paged-media/viewer": ["@paged-media/viewer@workspace:engine/core/web/idml-viewer"],
 
     "@paged-media/wasm-boot": ["@paged-media/wasm-boot@workspace:platform/shared/wasm-boot"],
 

@@ -30,6 +30,7 @@ import { PluginGlyph } from "../icons/plugin-glyph";
 import { useRegistries } from "../state/registries-context";
 import { useRegistryView } from "../state/live";
 import { useOptionalCockpitState } from "../cockpit/cockpit-state-context";
+import { Segment } from "@paged-media/panel-kit";
 
 export interface PanelRailItem {
   /** A registered panel id (`paged.swatches`, …). */
@@ -81,15 +82,14 @@ export function PanelRail({ items }: { items: PanelRailItem[] }) {
   const renderItem = (item: PanelRailItem, plugin: boolean) => {
     const active = isActive(item);
     return (
-      <button
+      <Segment
         key={`${item.panelId}:${item.inspectorContext ?? ""}`}
-        type="button"
+        pressed={active}
         data-panel-rail-item={
           item.inspectorContext
             ? `${item.panelId}:${item.inspectorContext}`
             : item.panelId
         }
-        data-active={active ? "true" : "false"}
         title={item.title}
         onClick={() => toggle(item)}
         style={{
@@ -112,7 +112,7 @@ export function PanelRail({ items }: { items: PanelRailItem[] }) {
           <Icon name={item.icon} size={17} />
         )}
         <span style={{ fontSize: 9.5, lineHeight: 1 }}>{item.title}</span>
-      </button>
+      </Segment>
     );
   };
 

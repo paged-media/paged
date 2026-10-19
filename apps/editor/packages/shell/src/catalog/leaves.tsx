@@ -45,6 +45,7 @@ import type { CollectionName, Value } from "@paged-media/client";
 import {
   LabelledBy,
   Segment,
+  useDisclosure,
   useFieldName,
   useRowLabelId,
 } from "@paged-media/panel-kit";
@@ -288,7 +289,7 @@ export function LayoutSectionLeaf({ props }: LeafProps) {
   const title = typeof props.title === "string" ? props.title : undefined;
   const heading = props.heading !== false;
   const collapsible = props.collapsible === true;
-  const [open, setOpen] = useState(props.defaultOpen !== false);
+  const { open, toggle, region } = useDisclosure(props.defaultOpen !== false);
   if (!heading) {
     return (
       <div className="flex flex-col gap-[9px]" data-section={title}>
@@ -303,8 +304,7 @@ export function LayoutSectionLeaf({ props }: LeafProps) {
           type="button"
           className="flex w-full cursor-pointer items-center justify-between border-0 bg-transparent py-[9px] text-left"
           data-section-toggle
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
+          {...toggle}
         >
           <span
             className="whitespace-nowrap text-[12.5px] font-semibold"
@@ -319,7 +319,7 @@ export function LayoutSectionLeaf({ props }: LeafProps) {
           />
         </button>
         {open && (
-          <div className="flex flex-col gap-[9px] pb-3">
+          <div {...region} className="flex flex-col gap-[9px] pb-3">
             {(props.children as React.ReactNode) ?? null}
           </div>
         )}

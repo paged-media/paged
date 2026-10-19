@@ -34,6 +34,7 @@ import type {
   Disposable,
   ElementId,
 } from "@paged-media/plugin-api";
+import { refusalText } from "@paged-media/panel-kit";
 import { sha256Hex } from "@paged-media/helpers";
 
 import { latestWins } from "./coalesce";
@@ -3319,7 +3320,12 @@ export function createImageSession(host: BundleHost): ImageSession {
           if (outcome.applied) {
             inserted += 1;
           } else {
-            lastError = String(outcome.error ?? "the host refused the insert");
+            // In words (the panel kit's refusalText): an engine error is an
+            // object, and String() made it "[object Object]".
+            lastError =
+              outcome.error == null
+                ? "the host refused the insert"
+                : refusalText(outcome.error);
             host.log.debug("path insert refused", outcome.error);
           }
         } catch (err) {

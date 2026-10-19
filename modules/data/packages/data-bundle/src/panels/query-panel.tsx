@@ -29,38 +29,39 @@ import type {
 } from "../session";
 import { DiagnosticsList } from "./diagnostics";
 import { useSessionSnapshot } from "./use-session";
+import { color, font, space, status } from "@paged-media/panel-kit";
 
 const wrap: CSSProperties = {
   display: "flex",
   flexDirection: "column",
-  gap: "var(--space-3, 12px)",
-  padding: "var(--space-3, 12px)",
+  gap: space[3],
+  padding: space[3],
   fontSize: "12px",
-  color: "var(--pg-fg, #ddd)",
+  color: color.fg,
 };
 const row: CSSProperties = {
   display: "flex",
-  gap: "var(--space-2, 8px)",
+  gap: space[2],
   alignItems: "center",
   flexWrap: "wrap",
 };
 const note: CSSProperties = {
-  color: "var(--pg-muted-fg, #999)",
+  color: color.mutedFg,
   fontSize: "11px",
   lineHeight: 1.5,
 };
 const mono: CSSProperties = {
-  fontFamily: "var(--font-mono, ui-monospace, monospace)",
+  fontFamily: font.mono,
 };
 const errorStyle: CSSProperties = {
   ...mono,
-  color: "var(--status-error-fg, #f88)",
+  color: status.error,
   whiteSpace: "pre-wrap",
 };
 const cell: CSSProperties = {
   ...mono,
   padding: "2px 6px",
-  borderBottom: "1px solid var(--pg-border, #333)",
+  borderBottom: `1px solid ${color.border}`,
   textAlign: "left",
   whiteSpace: "nowrap",
 };

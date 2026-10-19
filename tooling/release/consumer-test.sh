@@ -9,7 +9,7 @@
 #   npm  — `npm install` of the tarballs under Node;
 #   bun  — `bun add` of the tarballs under Bun.
 # In each:
-#   1. import every entry and subpath (idml-viewer, ./session; canvas-wasm,
+#   1. import every entry and subpath (viewer, ./session; canvas-wasm,
 #      ./introspect, ./repo; plugin-api, ./manifest.schema.json; plugin-sdk),
 #      instantiate the session, introspection and repository wasm, read
 #      ./introspect/catalog.json, and run the paged-plugin bin's `validate`;
@@ -37,7 +37,7 @@ tgz() {
   echo "$f"
 }
 CANVAS=$(tgz canvas-wasm)
-VIEWER=$(tgz idml-viewer)
+VIEWER=$(tgz viewer)
 API=$(tgz plugin-api)
 SDK=$(tgz plugin-sdk)
 
@@ -55,15 +55,15 @@ JSON
 // Every entry and subpath of the four packages, from a consumer's side.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import * as viewer from "@paged-media/idml-viewer";
-import * as session from "@paged-media/idml-viewer/session";
+import * as viewer from "@paged-media/viewer";
+import * as session from "@paged-media/viewer/session";
 import * as canvas from "@paged-media/canvas-wasm";
 import * as introspect from "@paged-media/canvas-wasm/introspect";
 import * as repo from "@paged-media/canvas-wasm/repo";
 import * as api from "@paged-media/plugin-api";
 import * as sdk from "@paged-media/plugin-sdk";
 import schema from "@paged-media/plugin-api/manifest.schema.json" with { type: "json" };
-import viewerPkg from "@paged-media/idml-viewer/package.json" with { type: "json" };
+import viewerPkg from "@paged-media/viewer/package.json" with { type: "json" };
 import canvasPkg from "@paged-media/canvas-wasm/package.json" with { type: "json" };
 
 const failures = [];
@@ -73,11 +73,11 @@ const check = (ok, what) => {
 };
 const bytes = (spec) => readFileSync(fileURLToPath(import.meta.resolve(spec)));
 
-check(typeof viewer.createViewer === "function", "idml-viewer: createViewer");
-check(typeof viewer.createSessionFromBundledWasm === "function", "idml-viewer: createSessionFromBundledWasm");
-check(typeof session.ViewerSession === "function", "idml-viewer/session: ViewerSession");
-session.initSync({ module: bytes("@paged-media/idml-viewer/session/paged_sdk_bg.wasm") });
-check(true, "idml-viewer/session: the session wasm instantiates");
+check(typeof viewer.createViewer === "function", "viewer: createViewer");
+check(typeof viewer.createSessionFromBundledWasm === "function", "viewer: createSessionFromBundledWasm");
+check(typeof session.ViewerSession === "function", "viewer/session: ViewerSession");
+session.initSync({ module: bytes("@paged-media/viewer/session/paged_sdk_bg.wasm") });
+check(true, "viewer/session: the session wasm instantiates");
 check(typeof canvas.CanvasWorker === "function", "canvas-wasm: CanvasWorker");
 check(bytes("@paged-media/canvas-wasm/paged_canvas_wasm_bg.wasm").length > 1e6, "canvas-wasm: the canvas wasm resolves");
 check(typeof introspect.Inspector === "function", "canvas-wasm/introspect: Inspector");
@@ -102,7 +102,7 @@ const loaded = sdk.loadBundle(() => fake.editor, sdk.defineBundle({
 check(fake.ids("commands").join() === "com.example.hello.command.report", "plugin-sdk: an activation test over createFakeEditor, mapBacking, silentConsole");
 loaded.dispose();
 const minor = (v) => v.split(".")[1];
-check(minor(viewerPkg.version) === minor(canvasPkg.version), `one version: idml-viewer ${viewerPkg.version}, canvas-wasm ${canvasPkg.version}`);
+check(minor(viewerPkg.version) === minor(canvasPkg.version), `one version: viewer ${viewerPkg.version}, canvas-wasm ${canvasPkg.version}`);
 
 if (failures.length) {
   console.error(`${failures.length} import check(s) failed`);
@@ -121,8 +121,8 @@ import {
   satisfiesApiVersion,
   silentConsole,
 } from "@paged-media/plugin-sdk";
-import { createViewer, type Viewer } from "@paged-media/idml-viewer";
-import initSession, { ViewerSession } from "@paged-media/idml-viewer/session";
+import { createViewer, type Viewer } from "@paged-media/viewer";
+import initSession, { ViewerSession } from "@paged-media/viewer/session";
 import { Inspector, describeCatalog } from "@paged-media/canvas-wasm/introspect";
 import { Repository } from "@paged-media/canvas-wasm/repo";
 import { CanvasWorker } from "@paged-media/canvas-wasm";
@@ -228,7 +228,7 @@ cat >"$BUN_DIR/package.json" <<JSON
   "type": "module",
   "dependencies": {
     "@paged-media/canvas-wasm": "$CANVAS",
-    "@paged-media/idml-viewer": "$VIEWER",
+    "@paged-media/viewer": "$VIEWER",
     "@paged-media/plugin-api": "$API",
     "@paged-media/plugin-sdk": "$SDK",
     "typescript": "$TS7",

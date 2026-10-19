@@ -45,6 +45,7 @@ import {
   type ToolSectionId,
 } from "../registries/tool";
 import type { EditContextContribution } from "../registries/edit-context";
+import { font, IconButton } from "@paged-media/panel-kit";
 
 // Concept 1 (T4) — the left tool rail. Shell CHROME, rendered as a
 // sibling of the dockview container, NOT a dock panel: fixed, not
@@ -550,15 +551,15 @@ function FloatingToolPalette({
         >
           ⠿
         </span>
-        <button
-          type="button"
+        <IconButton
+          label="Close palette"
           onClick={onClose}
           style={paletteCloseStyle}
           title="Close palette"
           data-tool-palette-close
         >
           ×
-        </button>
+        </IconButton>
       </div>
       <div style={{ display: "flex", gap: 2, padding: 4 }}>
         {slot.members.map((m) => (
@@ -1242,7 +1243,7 @@ const tooltipTitleStyle: CSSProperties = {
 };
 
 const tooltipKeyStyle: CSSProperties = {
-  fontFamily: "var(--font-mono, ui-monospace, monospace)",
+  fontFamily: font.mono,
   fontSize: 11,
   padding: "0 4px",
   borderRadius: 3,

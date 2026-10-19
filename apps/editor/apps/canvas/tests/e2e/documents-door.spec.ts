@@ -72,7 +72,8 @@ type DocWindow = {
 };
 
 async function loadText(page: Page): Promise<void> {
-  await openCanvas(page);
+  // The spec answers the replace question itself (ADR 230).
+  await openCanvas(page, { answerReplacePrompts: false });
   await page.setInputFiles('input[type="file"]', fixturePath("text"));
   await expect
     .poll(
@@ -160,8 +161,8 @@ test.describe("D-26 — host.documents, the editor backend", () => {
     await edit(page, first.pageIds[0]);
     expect(await dirty(page)).toBe(true);
 
-    // Keep: the prompt names the plugin and the document; the answer is
-    // `declined` and the edit survives.
+    // Cancel: the prompt names the plugin and the document; the answer
+    // is `declined` and the edit survives.
     await startOpen(page, "Catalog (merged)");
     const dialog = page.getByTestId("replace-document-dialog");
     await expect(dialog).toBeVisible();
@@ -179,7 +180,7 @@ test.describe("D-26 — host.documents, the editor backend", () => {
     await expect(dialog).toHaveCount(0);
     expect(await dirty(page)).toBe(true);
 
-    // Esc is a keep too.
+    // Esc is a Cancel too.
     await startOpen(page, "Catalog (merged)");
     await expect(dialog).toBeVisible();
     await page.keyboard.press("Escape");
@@ -189,7 +190,7 @@ test.describe("D-26 — host.documents, the editor backend", () => {
     });
     expect(await dirty(page)).toBe(true);
 
-    // Discard: the copy opens clean.
+    // Don't save: the copy opens clean.
     await startOpen(page, "Catalog (merged)");
     await page.getByTestId("replace-document-discard").click();
     const r = await openResult(page);
