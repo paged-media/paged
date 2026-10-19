@@ -43,13 +43,13 @@ import {
   type ReactNode,
 } from "react";
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
+import { Disclosure, useConfirm } from "@paged-media/panel-kit";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 
 import type { FunctionEntry } from "../../../sheet-host-model/src";
 import { DELIMITED_MIMES, importBytes, XLSX_MIME } from "../import-xlsx";
 import { columnLabel, type WorkbookSession } from "../session";
-import { useConfirm } from "./confirm";
 import { FormatSection, labelOf, NamesSection } from "./format-section";
 import { PROPERTIES_PANEL_ID } from "./properties-panel";
 
@@ -145,12 +145,13 @@ function Section(props: {
   children: ReactNode;
 }): ReactElement {
   return (
-    <details
+    <Disclosure
+      summary={props.title}
+      defaultOpen={props.open}
       data-sheet-section={props.id}
-      open={props.open}
       style={sectionStyle}
+      summaryStyle={summaryStyle}
     >
-      <summary style={summaryStyle}>{props.title}</summary>
       <div
         style={{
           display: "flex",
@@ -160,7 +161,7 @@ function Section(props: {
       >
         {props.children}
       </div>
-    </details>
+    </Disclosure>
   );
 }
 

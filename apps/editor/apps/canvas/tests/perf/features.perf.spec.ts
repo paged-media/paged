@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The React 19 features' probe (apps/editor ADR 230,
+// The React 19 features' probe (apps/editor ADR 233,
 // docs/migration/react-19-features.md): the shell interactions the features
 // change, each driven the same number of times and measured like the panel
 // probe (./probe.ts: next frame, settled, commits, renders, listeners):

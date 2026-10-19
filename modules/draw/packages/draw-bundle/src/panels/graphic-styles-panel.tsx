@@ -66,12 +66,12 @@ import {
 import { resolveAppearanceCarrier } from "../commands/appearance-bake";
 import { usePanelReload } from "./use-panel-reload";
 import {
+  About,
   ConfirmButton,
-  PanelAbout,
-  PanelIntro,
   Refusal,
   useActionFeedback,
-} from "./panel-kit";
+} from "@paged-media/panel-kit";
+import { PanelIntro } from "./panel-parts";
 
 export const GRAPHIC_STYLES_PANEL_ID = "media.paged.draw.panel.graphicStyles";
 
@@ -223,7 +223,7 @@ export function makeGraphicStylesPanel(host: BundleHost): {
       },
     );
 
-    const { refusal, run } = useActionFeedback(host, reload);
+    const { refusal, run } = useActionFeedback(host, reload, "draw panel");
 
     const linkedName =
       link.ref === null
@@ -399,10 +399,9 @@ export function makeGraphicStylesPanel(host: BundleHost): {
           })
         )}
 
-        <PanelAbout
-          text={GRAPHIC_STYLES_NOTE}
-          attr="data-draw-graphic-styles-note"
-        />
+        <About attr="data-draw-graphic-styles-note">
+          {GRAPHIC_STYLES_NOTE}
+        </About>
       </div>
     );
   };

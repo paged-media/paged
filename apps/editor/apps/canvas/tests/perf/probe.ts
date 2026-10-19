@@ -21,7 +21,7 @@
 // input probe, the sample a probe takes after an interaction, a summary of
 // samples, and the seeded document. Two probes use them: panels.perf.spec.ts
 // (the React Compiler, ADR 229) and features.perf.spec.ts (the React 19
-// features, ADR 230). Numbers, not assertions.
+// features, ADR 233). Numbers, not assertions.
 
 import type { Page } from "@playwright/test";
 

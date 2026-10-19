@@ -26,6 +26,10 @@ on:
       - "tooling/rust/**"
       # The test-resources dev-dependency (the skip convention).
       - "platform/shared/test-resources/**"
+      # The shared OOXML foundation, a path dependency of the Cargo workspace.
+      - "platform/shared/ooxml/**"
+      # The shared DrawingML chart reader, a path dependency (slide ADR 709).
+      - "platform/shared/dml-chart/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/sheet/docs/**/*.md"
   # Pre-merge gate (audit finding: this lane was push-main-only, so a PR
@@ -46,6 +50,10 @@ on:
       - "tooling/rust/**"
       # The test-resources dev-dependency (the skip convention).
       - "platform/shared/test-resources/**"
+      # The shared OOXML foundation, a path dependency of the Cargo workspace.
+      - "platform/shared/ooxml/**"
+      # The shared DrawingML chart reader, a path dependency (slide ADR 709).
+      - "platform/shared/dml-chart/**"
       # Prose under docs/ builds and tests nothing (test inputs are not .md there).
       - "!modules/sheet/docs/**/*.md"
   workflow_dispatch:

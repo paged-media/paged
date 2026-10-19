@@ -18,222 +18,133 @@
 
 // ADR 029 — the section skeleton of docx_conformance::pagination_docx(), the
 // document Word paginated (docx-conformance/fixtures/pagination.word.json),
-// asserted on the IDML package this crate writes, read back with quick-xml.
+// asserted on the native document this crate builds (ADR 606), read back
+// from its `.paged` package the way the engine reads it.
 
-use std::collections::HashMap;
 use std::io::Read;
 
-use docx_skeleton::{section_frame_id, section_story_id, skeleton, IDML_MIMETYPE};
-use quick_xml::events::Event;
+use docx_skeleton::{section_frame_id, section_story_id, skeleton, Skeleton};
+use paged_model::{FirstBaselineOffset, MarginPreference, TextFrame};
+use paged_scene::Document;
 
 fn pagination() -> docx_core::DocxDocument {
     docx_import::import_docx(&docx_conformance::pagination_docx()).expect("import")
 }
 
-/// One XML element: name, attributes, and the text directly inside it.
-#[derive(Debug, Clone)]
-struct El {
-    name: String,
-    attrs: HashMap<String, String>,
-    text: String,
-}
-
-fn elements(xml: &str) -> Vec<El> {
-    let mut reader = quick_xml::Reader::from_str(xml);
-    let mut out: Vec<El> = Vec::new();
-    let mut open: Vec<usize> = Vec::new();
-    loop {
-        match reader.read_event().expect("well-formed XML") {
-            Event::Start(e) => {
-                out.push(el(&e));
-                open.push(out.len() - 1);
-            }
-            Event::Empty(e) => out.push(el(&e)),
-            Event::End(_) => {
-                open.pop();
-            }
-            Event::Text(t) => {
-                if let Some(&i) = open.last() {
-                    out[i].text.push_str(&t.decode().unwrap());
-                }
-            }
-            Event::Eof => break,
-            _ => {}
-        }
-    }
-    out
-}
-
-fn el(e: &quick_xml::events::BytesStart) -> El {
-    El {
-        name: String::from_utf8(e.name().as_ref().to_vec()).unwrap(),
-        attrs: e
-            .attributes()
-            .map(|a| {
-                let a = a.unwrap();
-                (
-                    String::from_utf8(a.key.as_ref().to_vec()).unwrap(),
-                    a.normalized_value(quick_xml::XmlVersion::Implicit1_0)
-                        .unwrap()
-                        .into_owned(),
-                )
-            })
-            .collect(),
-        text: String::new(),
-    }
-}
-
-/// The package: entries in order, and their contents.
-struct Package {
-    names: Vec<String>,
-    first_stored: bool,
-    parts: HashMap<String, String>,
-}
-
-fn open(bytes: &[u8]) -> Package {
+/// The package's entry names, in order, and whether the first is stored.
+fn entries(bytes: &[u8]) -> (Vec<String>, bool) {
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).expect("zip");
     let first_stored = zip.by_index(0).unwrap().compression() == zip::CompressionMethod::Stored;
-    let mut names = Vec::new();
-    let mut parts = HashMap::new();
-    for i in 0..zip.len() {
-        let mut f = zip.by_index(i).unwrap();
-        let mut s = String::new();
-        f.read_to_string(&mut s).unwrap();
-        let name = f.name().unwrap().into_owned();
-        names.push(name.clone());
-        parts.insert(name, s);
-    }
-    Package {
-        names,
-        first_stored,
-        parts,
-    }
-}
-
-impl Package {
-    fn els(&self, path: &str) -> Vec<El> {
-        elements(self.parts.get(path).unwrap_or_else(|| panic!("{path}")))
-    }
-}
-
-fn find<'a>(els: &'a [El], name: &str) -> &'a El {
-    els.iter()
-        .find(|e| e.name == name)
-        .unwrap_or_else(|| panic!("<{name}>"))
-}
-
-fn nums(s: &str) -> Vec<f32> {
-    s.split_whitespace().map(|v| v.parse().unwrap()).collect()
-}
-
-/// What story `k`'s spread says: page bounds, margins, frame.
-struct SpreadView {
-    page: Vec<f32>,
-    margin: HashMap<String, String>,
-    frame: HashMap<String, String>,
-    /// Frame `[top, left, bottom, right]` from its path anchors.
-    frame_box: [f32; 4],
-    frame_pref: HashMap<String, String>,
-    inset: String,
-}
-
-fn spread(pkg: &Package, k: usize) -> SpreadView {
-    let els = pkg.els(&format!("Spreads/Spread_docx_sp{k}.xml"));
-    let page = find(&els, "Page");
-    assert_eq!(page.attrs["Self"], format!("docx_p{k}"));
-    assert_eq!(page.attrs["ItemTransform"], "1 0 0 1 0 0");
-    let frame = find(&els, "TextFrame");
-    assert_eq!(frame.attrs["ItemTransform"], "1 0 0 1 0 0");
-    let pts: Vec<Vec<f32>> = els
-        .iter()
-        .filter(|e| e.name == "PathPointType")
-        .map(|e| nums(&e.attrs["Anchor"]))
+    let names = (0..zip.len())
+        .map(|i| zip.by_index(i).unwrap().name().unwrap().into_owned())
         .collect();
-    assert_eq!(pts.len(), 4, "a rectangle");
-    let xs = pts.iter().map(|p| p[0]);
-    let ys = pts.iter().map(|p| p[1]);
-    let frame_box = [
-        ys.clone().fold(f32::MAX, f32::min),
-        xs.clone().fold(f32::MAX, f32::min),
-        ys.fold(f32::MIN, f32::max),
-        xs.fold(f32::MIN, f32::max),
-    ];
-    SpreadView {
-        page: nums(&page.attrs["GeometricBounds"]),
-        margin: find(&els, "MarginPreference").attrs.clone(),
-        frame: frame.attrs.clone(),
-        frame_box,
-        frame_pref: find(&els, "TextFramePreference").attrs.clone(),
-        inset: find(&els, "InsetSpacing").text.clone(),
+    (names, first_stored)
+}
+
+/// The document the engine opens from the package: its model part.
+fn model(sk: &Skeleton) -> Document {
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&sk.paged)).expect("zip");
+    let mut pgm = Vec::new();
+    zip.by_name(paged_store::DOCUMENT_PGM_PATH)
+        .expect("the model part")
+        .read_to_end(&mut pgm)
+        .unwrap();
+    paged_store::from_bytes(&pgm).expect("the model part decodes")
+}
+
+/// What story `k`'s spread holds: page bounds `[top, left, bottom,
+/// right]`, margins, and the one frame.
+struct SpreadView<'a> {
+    page: [f32; 4],
+    margin: &'a MarginPreference,
+    frame: &'a TextFrame,
+}
+
+fn spread(doc: &Document, k: usize) -> SpreadView<'_> {
+    let s = &doc.spreads[k];
+    assert_eq!(s.src, format!("Spreads/Spread_docx_sp{k}.xml"));
+    let s = &s.spread;
+    assert_eq!(s.self_id.as_deref(), Some(format!("docx_sp{k}").as_str()));
+    assert_eq!(s.pages.len(), 1, "a page per story");
+    let page = &s.pages[0];
+    let page_id = format!("docx_p{k}");
+    assert_eq!(page.self_id.as_deref(), Some(page_id.as_str()));
+    assert_eq!(page.item_transform, Some([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]));
+    assert_eq!(s.text_frames.len(), 1, "one frame per story");
+    let frame = &s.text_frames[0];
+    assert_eq!(frame.item_transform, Some([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]));
+    // The frame's path is its margin box.
+    assert_eq!(frame.anchors.len(), 4, "a rectangle");
+    let b = &frame.bounds;
+    for a in &frame.anchors {
+        assert!([b.left, b.right].contains(&a.anchor.0));
+        assert!([b.top, b.bottom].contains(&a.anchor.1));
     }
+    let p = &page.bounds;
+    SpreadView {
+        page: [p.top, p.left, p.bottom, p.right],
+        margin: &s.page_margins[&page_id],
+        frame,
+    }
+}
+
+fn frame_box(f: &TextFrame) -> [f32; 4] {
+    [f.bounds.top, f.bounds.left, f.bounds.bottom, f.bounds.right]
 }
 
 #[test]
-fn the_package_is_an_idml_package() {
+fn the_package_is_a_native_document() {
     let sk = skeleton(&pagination(), "pagination.docx").expect("skeleton");
-    let pkg = open(&sk.idml);
-    assert_eq!(pkg.names[0], "mimetype", "OCF: mimetype first");
-    assert!(pkg.first_stored, "OCF: mimetype stored");
-    assert_eq!(pkg.parts["mimetype"], IDML_MIMETYPE);
-    let container = pkg.els("META-INF/container.xml");
-    assert_eq!(
-        find(&container, "rootfile").attrs["full-path"],
-        "designmap.xml"
-    );
+    let (names, first_stored) = entries(&sk.paged);
+    assert_eq!(names[0], "mimetype", "OCF: mimetype first");
+    assert!(first_stored, "OCF: mimetype stored");
+    assert!(names.iter().any(|n| n == paged_store::DOCUMENT_PGM_PATH));
 
-    // The designmap names every part this package holds, spreads and
-    // stories in story order.
-    let dm = pkg.els("designmap.xml");
-    let doc = find(&dm, "Document");
-    assert_eq!(doc.attrs["StoryList"], "docx_s0 docx_s1");
-    assert_eq!(doc.attrs["Name"], "pagination.docx");
-    let srcs: Vec<&str> = dm
-        .iter()
-        .filter(|e| e.name.starts_with("idPkg:"))
-        .map(|e| e.attrs["src"].as_str())
-        .collect();
-    for src in &srcs {
-        assert!(pkg.parts.contains_key(*src), "designmap names {src}");
-    }
-    let spreads: Vec<&&str> = srcs.iter().filter(|s| s.starts_with("Spreads/")).collect();
+    // The manifest names every spread and story, in story order.
+    let doc = model(&sk);
+    let dm = &doc.designmap;
+    assert_eq!(dm.document_name.as_deref(), Some("pagination.docx"));
+    let srcs = |v: Vec<&str>| v.into_iter().map(str::to_string).collect::<Vec<_>>();
     assert_eq!(
-        spreads,
-        [
-            &"Spreads/Spread_docx_sp0.xml",
-            &"Spreads/Spread_docx_sp1.xml"
-        ]
+        dm.spreads.iter().map(|s| s.src.clone()).collect::<Vec<_>>(),
+        srcs(vec![
+            "Spreads/Spread_docx_sp0.xml",
+            "Spreads/Spread_docx_sp1.xml"
+        ])
     );
-    let stories: Vec<&&str> = srcs.iter().filter(|s| s.starts_with("Stories/")).collect();
     assert_eq!(
-        stories,
-        [&"Stories/Story_docx_s0.xml", &"Stories/Story_docx_s1.xml"]
+        dm.stories.iter().map(|s| s.src.clone()).collect::<Vec<_>>(),
+        srcs(vec![
+            "Stories/Story_docx_s0.xml",
+            "Stories/Story_docx_s1.xml"
+        ])
+    );
+    assert_eq!(
+        doc.stories
+            .iter()
+            .map(|s| s.self_id.clone())
+            .collect::<Vec<_>>(),
+        vec![section_story_id(0), section_story_id(1)]
     );
 
     // Single-sided, sized like section 1.
-    let prefs = pkg.els("Resources/Preferences.xml");
-    let dp = find(&prefs, "DocumentPreference");
-    assert_eq!(dp.attrs["FacingPages"], "false");
-    assert_eq!(
-        dp.attrs["PagesPerDocument"], "1",
-        "InDesign adds PagesPerDocument - 1 stray default pages"
-    );
-    assert_eq!(
-        (
-            dp.attrs["PageWidth"].as_str(),
-            dp.attrs["PageHeight"].as_str()
-        ),
-        ("612", "792")
-    );
-    // Every style and swatch the parts reference is defined.
-    let styles = &pkg.parts["Resources/Styles.xml"];
-    for s in [
-        "ParagraphStyle/$ID/[No paragraph style]",
-        "CharacterStyle/$ID/[No character style]",
-        "ObjectStyle/$ID/[None]",
-    ] {
-        assert!(styles.contains(&format!("Self=\"{s}\"")), "{s}");
-    }
-    assert!(pkg.parts["Resources/Graphic.xml"].contains("Self=\"Swatch/None\""));
+    let dp = &dm.document_preference;
+    assert_eq!(dp.facing_pages, Some(false));
+    assert_eq!((dp.page_width, dp.page_height), (Some(612.0), Some(792.0)));
+    // Every style and swatch the items reference is defined.
+    assert!(doc
+        .styles
+        .paragraph_styles
+        .contains_key("ParagraphStyle/$ID/[No paragraph style]"));
+    assert!(doc
+        .styles
+        .character_styles
+        .contains_key("CharacterStyle/$ID/[No character style]"));
+    assert!(doc
+        .styles
+        .object_styles
+        .contains_key("ObjectStyle/$ID/[None]"));
+    assert!(doc.palette.swatches.contains_key("Swatch/None"));
 }
 
 #[test]
@@ -243,47 +154,50 @@ fn one_page_frame_and_empty_story_per_section() {
         sk.section_stories,
         vec![section_story_id(0), section_story_id(1)]
     );
-    let pkg = open(&sk.idml);
+    let doc = model(&sk);
+    assert_eq!(doc.spreads.len(), 2);
 
     // Section 1: Letter, 1 in margins; section 2: A5 landscape, 0.5 in.
-    let s1 = spread(&pkg, 0);
+    let s1 = spread(&doc, 0);
     assert_eq!(s1.page, [0.0, 0.0, 792.0, 612.0]);
-    assert_eq!(s1.frame_box, [72.0, 72.0, 720.0, 540.0]);
-    for side in ["Top", "Bottom", "Left", "Right"] {
-        assert_eq!(s1.margin[side], "72");
-    }
-    assert_eq!(s1.margin["ColumnCount"], "1");
-    let s2 = spread(&pkg, 1);
+    assert_eq!(frame_box(s1.frame), [72.0, 72.0, 720.0, 540.0]);
+    let m = s1.margin;
+    assert_eq!([m.top, m.bottom, m.left, m.right], [72.0; 4]);
+    assert_eq!(m.column_count, 1);
+    let s2 = spread(&doc, 1);
     assert!((s2.page[2] - 419.55).abs() < 0.01 && (s2.page[3] - 595.3).abs() < 0.01);
-    assert_eq!((s2.frame_box[0], s2.frame_box[1]), (36.0, 36.0));
-    assert!((s2.frame_box[3] - (595.3 - 36.0)).abs() < 0.01);
+    let f2 = frame_box(s2.frame);
+    assert_eq!((f2[0], f2[1]), (36.0, 36.0));
+    assert!((f2[3] - (595.3 - 36.0)).abs() < 0.01);
 
     for (k, s) in [s1, s2].iter().enumerate() {
         // Each section frame threads its own story, alone.
-        assert_eq!(s.frame["Self"], section_frame_id(k));
-        assert_eq!(s.frame["ParentStory"], section_story_id(k));
-        assert_eq!(s.frame["PreviousTextFrame"], "n");
-        assert_eq!(s.frame["NextTextFrame"], "n");
+        let f = s.frame;
+        assert_eq!(f.self_id.as_deref(), Some(section_frame_id(k).as_str()));
+        assert_eq!(
+            f.parent_story.as_deref(),
+            Some(section_story_id(k).as_str())
+        );
+        assert_eq!(f.next_text_frame.as_deref(), Some("n"));
         // Word's line-box fit.
-        assert_eq!(s.frame_pref["FirstBaselineOffset"], "LeadingOffset");
-        assert_eq!(s.inset, "0");
-        assert!(!s.frame_pref.contains_key("TextColumnCount"));
+        assert_eq!(
+            f.first_baseline_offset,
+            Some(FirstBaselineOffset::LeadingOffset)
+        );
+        assert_eq!(f.inset_spacing, Some([0.0; 4]));
+        assert_eq!(f.column_count, None);
 
-        let story = pkg.els(&format!("Stories/Story_{}.xml", section_story_id(k)));
-        assert_eq!(find(&story, "Story").attrs["Self"], section_story_id(k));
-        let paras = story
-            .iter()
-            .filter(|e| e.name == "ParagraphStyleRange")
-            .count();
-        assert_eq!(paras, 1, "one empty paragraph");
-        assert!(!story.iter().any(|e| e.name == "Content"), "no text");
+        let story = &doc.stories[k];
+        assert_eq!(story.self_id, section_story_id(k));
+        assert_eq!(story.story.paragraphs.len(), 1, "one empty paragraph");
+        assert!(story.story.paragraphs[0].runs.is_empty(), "no text");
     }
 }
 
 #[test]
 fn the_package_is_deterministic() {
-    let a = skeleton(&pagination(), "pagination.docx").unwrap().idml;
-    let b = skeleton(&pagination(), "pagination.docx").unwrap().idml;
+    let a = skeleton(&pagination(), "pagination.docx").unwrap().paged;
+    let b = skeleton(&pagination(), "pagination.docx").unwrap().paged;
     assert_eq!(a, b);
 }
 
@@ -296,18 +210,15 @@ fn continuous_sections_share_the_story_of_the_page_they_continue() {
     let docx = docx_import::import_docx(&docx_conformance::continuous_docx()).expect("import");
     assert_eq!(docx.sections.len(), 17);
     let sk = skeleton(&docx, "continuous.docx").expect("skeleton");
-    let pkg = open(&sk.idml);
-    let count =
-        |pkg: &Package, prefix: &str| pkg.names.iter().filter(|n| n.starts_with(prefix)).count();
-    assert_eq!(
-        count(&pkg, "Spreads/"),
-        8,
-        "a page per story, not per section"
-    );
-    assert_eq!(count(&pkg, "Stories/"), 8);
+    let doc = model(&sk);
+    assert_eq!(doc.spreads.len(), 8, "a page per story, not per section");
+    assert_eq!(doc.stories.len(), 8);
     for k in 0..8 {
-        let s = spread(&pkg, k);
-        assert_eq!(s.frame["ParentStory"], section_story_id(k));
+        let s = spread(&doc, k);
+        assert_eq!(
+            s.frame.parent_story.as_deref(),
+            Some(section_story_id(k).as_str())
+        );
     }
 
     // Each story's page and frame are its FIRST section's: story 0 is A1's
@@ -315,23 +226,23 @@ fn continuous_sections_share_the_story_of_the_page_they_continue() {
     // lowering chose for B (B1 and B3 span them, ADR 029); story 3 is C1's
     // 0.5 in margins (C2's other margins become indents); story 6 is F2's
     // 6 in page.
-    let s0 = spread(&pkg, 0);
+    let s0 = spread(&doc, 0);
     assert_eq!((s0.page[3], s0.page[2]), (360.0, 312.0));
-    assert_eq!(s0.frame_box, [36.0, 36.0, 276.0, 324.0]);
-    assert!(!s0.frame_pref.contains_key("TextColumnCount"));
-    let s1 = spread(&pkg, 1);
-    assert_eq!(s1.frame_pref["TextColumnCount"], "2");
-    assert_eq!(s1.frame_pref["TextColumnGutter"], "36");
-    assert_eq!(s1.margin["ColumnCount"], "2");
+    assert_eq!(frame_box(s0.frame), [36.0, 36.0, 276.0, 324.0]);
+    assert_eq!(s0.frame.column_count, None);
+    let s1 = spread(&doc, 1);
+    assert_eq!(s1.frame.column_count, Some(2));
+    assert_eq!(s1.frame.column_gutter, Some(36.0));
+    assert_eq!(s1.margin.column_count, 2);
     assert_eq!(
-        spread(&pkg, 2).frame_pref["TextColumnCount"],
-        "2",
+        spread(&doc, 2).frame.column_count,
+        Some(2),
         "D1 + nextColumn D2"
     );
-    let s3 = spread(&pkg, 3);
-    assert_eq!((s3.frame_box[1], s3.frame_box[3]), (36.0, 324.0));
-    assert_eq!(spread(&pkg, 6).page[3], 432.0);
-    assert_eq!(spread(&pkg, 7).page[3], 360.0);
+    let f3 = frame_box(spread(&doc, 3).frame);
+    assert_eq!((f3[1], f3[3]), (36.0, 324.0));
+    assert_eq!(spread(&doc, 6).page[3], 432.0);
+    assert_eq!(spread(&doc, 7).page[3], 360.0);
 
     // The pour's view agrees: one block group per skeleton story.
     let ir = docx_lower::lower(&docx);
@@ -349,10 +260,10 @@ fn continuous_sections_share_the_story_of_the_page_they_continue() {
         mid_page_columns: false,
     };
     let sk = docx_skeleton::skeleton_with(&docx, "continuous.docx", old).expect("skeleton");
-    let pkg = open(&sk.idml);
-    assert_eq!(count(&pkg, "Spreads/"), 11);
-    assert!(!spread(&pkg, 1).frame_pref.contains_key("TextColumnCount"));
-    assert_eq!(spread(&pkg, 2).frame_pref["TextColumnCount"], "2");
+    let doc = model(&sk);
+    assert_eq!(doc.spreads.len(), 11);
+    assert_eq!(spread(&doc, 1).frame.column_count, None);
+    assert_eq!(spread(&doc, 2).frame.column_count, Some(2));
     assert_eq!(
         sk.section_stories,
         docx_skeleton::story_ids_with(&docx, old)

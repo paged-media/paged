@@ -41,6 +41,7 @@ import {
   type ReactElement,
 } from "react";
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
+import { About, color, Disclosure, font } from "@paged-media/panel-kit";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import {
@@ -825,13 +826,12 @@ export function makeGridPanel(
             </span>
           )}
         </div>
-        <details
+        <Disclosure
+          summary="Replace and options"
           data-sheet-replace-section
-          style={{ font: "12px var(--font-sans, sans-serif)" }}
+          style={{ font: `12px ${font.sans}` }}
+          summaryStyle={{ color: color.mutedFg }}
         >
-          <summary style={{ cursor: "pointer", color: "var(--pg-muted-fg)" }}>
-            Replace and options
-          </summary>
           <div
             style={{
               display: "flex",
@@ -908,7 +908,7 @@ export function makeGridPanel(
               </label>
             ))}
           </div>
-        </details>
+        </Disclosure>
         {findMsg && (
           <p
             data-sheet-find-msg
@@ -1143,12 +1143,11 @@ export function makeGridPanel(
           Click a cell to select it and type to edit; the same grid edits inside
           a placed sheet frame.
         </p>
-        <details style={{ ...note, marginTop: 0 }}>
-          <summary style={{ cursor: "pointer" }}>About</summary>
+        <About style={{ marginTop: 0 }}>
           Drag or Shift+click to select a range. F2 edits the cell, Enter or Tab
           commits and moves, Delete clears. Drag the corner handle to fill.
           Double-click a placed sheet frame on the page to edit it there.
-        </details>
+        </About>
       </div>
     );
   }

@@ -1,0 +1,73 @@
+name: shared / rust
+concurrency:
+  # A newer push to a pull request cancels the older run. Main pushes share
+  # one group per event type: a running main run always finishes, and a newer
+  # push replaces the one still waiting, so direct pushes queue at most one.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.event_name) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# The shared Rust crates of the built-in modules, each a Cargo workspace of
+# its own (platform/shared/<crate>, PM-0005): fmt, clippy for the host and
+# wasm32, tests and cargo-deny over every feature. The modules that take them
+# as path dependencies (doc, slide, sheet) test them again in their own lanes,
+# with their own features and lockfiles.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "platform/shared/ooxml/**"
+      - "platform/shared/dml-chart/**"
+      - ".github/workflows/shared-rust.yml"
+      # The root Cargo config and its linker/wrapper scripts apply to every build.
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      - "!platform/shared/*/docs/**/*.md"
+  pull_request:
+    paths:
+      - "platform/shared/ooxml/**"
+      - "platform/shared/dml-chart/**"
+      - ".github/workflows/shared-rust.yml"
+      - ".cargo/config.toml"
+      - "tooling/rust/**"
+      - "!platform/shared/*/docs/**/*.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  crate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: [ooxml, dml-chart]
+    defaults:
+      run:
+        working-directory: platform/shared/${{ matrix.crate }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.99.1
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - name: mold (the Rust linker on Linux, .cargo/config.toml)
+        if: runner.os == 'Linux'
+        uses: rui314/setup-mold@v1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: platform/shared/${{ matrix.crate }} -> target
+          prefix-key: v0-rust-shared-${{ matrix.crate }}
+          # Only main writes the cache; pull requests restore main's (A10).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@nextest
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: clippy (wasm32, the target the modules ship)
+        run: cargo clippy --all-features --target wasm32-unknown-unknown -- -D warnings
+      - run: cargo nextest run --all-features --no-tests=fail
+      - run: cargo test --doc --all-features
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: platform/shared/${{ matrix.crate }}/Cargo.toml

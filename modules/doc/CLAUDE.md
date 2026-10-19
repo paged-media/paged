@@ -2,7 +2,7 @@
 
 Orientation for Claude sessions in **paged-media/plugin-doc** — the paged.doc
 Word/DOCX subsystem, delivered as a Paged plugin (dual-licensed AGPL-3.0-only OR
-PMEL, And The Next GmbH; the shared `paged-ooxml` crate included).
+PMEL, And The Next GmbH, as is the shared `paged-ooxml` crate).
 
 ## What this is
 
@@ -20,8 +20,9 @@ this repo — it is self-documenting). Architecture: [`docs/architecture.md`](do
 Status/milestones: [`docs/status.md`](docs/status.md).
 
 **STATUS: M0 foundation + M1 Tier-0 read path shipped** (green). Rust crates
-(Cargo workspace, top level): `paged-ooxml` (OPC + carry-through + ooxmlsdk typed
-DOM), `docx-core` (frozen semantic WML view), `docx-import` (WML → docx-core),
+(Cargo workspace, top level; the OOXML foundation `paged-ooxml` — OPC with its memory
+budget + carry-through + ooxmlsdk typed DOM — is `platform/shared/ooxml`, shared with
+slide and sheet, ADR 607): `docx-core` (frozen semantic WML view), `docx-import` (WML → docx-core),
 `docx-lower` (docx-core → Lowered IR), `docx-js` (wasm-bindgen surface),
 `docx-conformance` (TEST-ONLY). TS packages (`packages/*`): `doc-host-model` (pure
 IR → Mutation[]) + `doc-bundle` (`@paged-media/doc`: manifest + `activate`).
@@ -60,13 +61,17 @@ Rules for every code change in this repo:
   Lowered IR into host mutations. **Never implement a DOCX operation in
   TypeScript** — if the bundle seems to need one, the missing piece is a `docx-js`
   API.
-- **ISOLATION CONTRACT, superset.** Zero core contact AND zero inter-plugin
-  contact: the only `@paged-media/*` dependencies are `plugin-api`, `plugin-sdk`,
-  and published contracts — never core, never another plugin, not at build time,
-  runtime, or via side channels. `docx-lower` is pure model→IR with **no core
-  dependency**; the native model is reached only through `host.document.mutate`.
-  Rust guard: `deny.toml` `[sources]`. TS guard: the contract-import lint rule (`/bunfig.toml`, PM-0003).
-  SDK gaps become RFI entries — NEVER core modifications from this repo.
+- **ISOLATION CONTRACT, built-in form (PM-0002).** Zero inter-plugin contact:
+  the TS packages depend only on `plugin-api`, `plugin-sdk`, `platform/shared/*`
+  and published contracts — never another plugin, not at build time, runtime, or
+  via side channels. In Rust ONE crate reaches the engine: `docx-skeleton` builds
+  the standalone-open skeleton with the engine's model crates (`paged-model`,
+  `paged-scene`, `paged-store`, path dependencies at the same commit, ADR 606).
+  Everything else stays engine-free: `docx-lower` is pure model→IR with **no
+  core dependency**, and the open document is reached only through the host
+  (`host.document.mutate`, `host.nativeDocument.open`). Rust guard: `deny.toml`
+  `[sources]`. TS guard: the contract-import lint rule (`/bunfig.toml`, PM-0003).
+  SDK gaps become RFI entries, not engine changes made from here.
 - **PURE LOWERING.** `docx-lower` is pure `docx-core → LoweredDoc`;
   `doc-host-model` is pure `LoweredDoc → Mutation[]`. Every behavior change lands
   with a test.
@@ -79,8 +84,9 @@ Rules for every code change in this repo:
 - **LICENSE.** Every crate, `paged-ooxml` included, is AGPL-3.0-only OR PMEL
   (the workspace default; ADR PM-0001) and every `.rs` and TS file carries the
   AGPL/PMEL header block. `paged-ooxml` was MPL-2.0 OR PMEL before the relicense.
-- **ooxmlsdk is vendored + pinned** (the DuckDB-WASM / Blitz posture): treat
-  upstream as a starting point; be ready to carry patches. OPC/carry-through is
+- **ooxmlsdk is pinned** (0.12, in `platform/shared/ooxml/Cargo.toml`, behind that
+  crate's `dom` feature; the DuckDB-WASM / Blitz posture): treat upstream as a
+  starting point; be ready to carry patches. OPC/carry-through is
   ALWAYS our own `zip`+`quick-xml` — never trust `ooxmlsdk` for byte-exact fidelity.
 
 ## Commands
