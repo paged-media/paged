@@ -91,6 +91,7 @@ export function WorkflowModeProvider({
   const [mode, setModeState] = useState<WorkflowMode>(
     () => initialMode ?? loadInitialMode(),
   );
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const setMode = useCallback((m: WorkflowMode) => {
     setModeState(m);
     try {
@@ -99,6 +100,7 @@ export function WorkflowModeProvider({
       /* persistence is a convenience only */
     }
   }, []);
+  // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<WorkflowModeValue>(
     () => ({ mode, setMode }),
     [mode, setMode],

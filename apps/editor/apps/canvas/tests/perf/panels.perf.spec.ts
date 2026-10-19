@@ -295,22 +295,24 @@ test("image adjustments", async ({ page }) => {
   await d.openPanel("media.paged.image.panel.adjustments");
   const bar = page.locator("[data-image-action-bar]").first();
   await expect(bar).toBeVisible();
-  // The sections open and close without a GPU (the adjustments' pixels
-  // need one): the panel re-renders on its own state.
-  const toggles = page.locator("details > summary", { hasNotText: "About" });
-  const count = Math.max(1, Math.min(6, await toggles.count()));
+  // A slider the panel holds in its own state (the adjustments' pixels need
+  // a GPU; the panel's controls do not): every step sets a new value.
+  const slider = page.locator('input[type="range"]:visible:enabled').first();
+  await expect(slider).toBeVisible();
+  const min = Number((await slider.getAttribute("min")) ?? 0);
+  const max = Number((await slider.getAttribute("max")) ?? 1);
   const out: Sample[] = [];
   for (let i = 0; i < ROUNDS; i++) {
     await resetProbe(page);
-    await toggles.nth(i % count).click();
+    await slider.fill(String(min + ((max - min) * ((i % 4) + 1)) / 5));
     out.push(await sample(page));
   }
   results["image adjustments"] = out;
 });
 
-// The "Memo ✨" spot check, counted: with the five panels open, how many
-// mounted function components carry a React Compiler cache (what DevTools
-// marks with the badge), overall and for the components that render most.
+// The "Memo ✨" spot check, counted: with the four editor panels open, how
+// many mounted function components carry a React Compiler cache (what
+// DevTools marks with the badge).
 test("memo census", async ({ page }) => {
   const { d, frames } = await seed(page);
   for (const id of [

@@ -349,17 +349,18 @@ export function PrepressToolbar(_props: ModeToolbarProps) {
 
   // Validate runs the REAL PDF pipeline; its typed return seeds the
   // shared findings store the Preflight panel + the Issues badge read.
-  const validate = async () => {
+  // A promise chain, not try/finally: the React Compiler does not compile
+  // a component with a `finally` in it (ADR 229).
+  const validate = () => {
     if (!loaded || running) return;
     setRunning(true);
-    try {
-      const result = await client.exportPdf({ standard: "pdf17" });
-      recordFindings(result);
-    } catch {
-      /* surfaced in the Preflight panel; the badge stays as-is */
-    } finally {
-      setRunning(false);
-    }
+    void client
+      .exportPdf({ standard: "pdf17" })
+      .then(recordFindings)
+      .catch(() => {
+        /* surfaced in the Preflight panel; the badge stays as-is */
+      })
+      .finally(() => setRunning(false));
   };
 
   return (

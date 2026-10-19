@@ -53,6 +53,7 @@ export function GradientEditor() {
   const [selected, setSelected] = useState<number | null>(null);
   const [kind, setKind] = useState<string>("linear");
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const refreshLists = useCallback(() => {
     void client
       .collection<GradientSummary>("gradients")
@@ -67,6 +68,7 @@ export function GradientEditor() {
       .catch(() => setSwatches([]));
   }, [client]);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const loadDetail = useCallback(
     (id: string | null) => {
       if (!id) {
@@ -115,32 +117,29 @@ export function GradientEditor() {
   useEffect(() => loadDetail(activeId), [activeId, loadDetail]);
 
   // Commit the locally edited stop table as ONE editGradient.
-  const commit = useCallback(
-    (nextStops: RampStop[], nextKind: string) => {
-      if (!detail) return;
-      void client
-        .mutate({
-          op: "editGradient",
-          args: {
-            gradientId: detail.selfId,
-            spec: {
-              selfId: detail.selfId,
-              name: detail.name,
-              kind: nextKind === "radial" ? "Radial" : "Linear",
-              stops: [...nextStops]
-                .sort((a, b) => a.locationPct - b.locationPct)
-                .map((s) => ({
-                  stopColor: s.stopColorRef,
-                  locationPct: s.locationPct,
-                  midpointPct: s.midpointPct,
-                })),
-            },
+  const commit = (nextStops: RampStop[], nextKind: string) => {
+    if (!detail) return;
+    void client
+      .mutate({
+        op: "editGradient",
+        args: {
+          gradientId: detail.selfId,
+          spec: {
+            selfId: detail.selfId,
+            name: detail.name,
+            kind: nextKind === "radial" ? "Radial" : "Linear",
+            stops: [...nextStops]
+              .sort((a, b) => a.locationPct - b.locationPct)
+              .map((s) => ({
+                stopColor: s.stopColorRef,
+                locationPct: s.locationPct,
+                midpointPct: s.midpointPct,
+              })),
           },
-        })
-        .catch(() => {});
-    },
-    [client, detail],
-  );
+        },
+      })
+      .catch(() => {});
+  };
 
   const moveStop = (i: number, pct: number) =>
     setStops((prev) =>

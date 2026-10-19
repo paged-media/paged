@@ -83,6 +83,7 @@ export function DocumentProvider({ children }: PropsWithChildren) {
   const [snapshotsReady, setSnapshotsReady] = useState(false);
   const [resolution, setResolution] = useState<ResolutionResult | null>(null);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const resetForNewDocument = useCallback(() => {
     setSnapshots((prev) => {
       for (const url of prev.values()) URL.revokeObjectURL(url);
@@ -95,6 +96,7 @@ export function DocumentProvider({ children }: PropsWithChildren) {
     setSourceName(null);
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<DocumentContextValue>(
     () => ({
       handle,

@@ -148,6 +148,7 @@ export function PlaygroundController(): React.ReactElement | null {
   }, [speedMs]);
 
   const playing = state.status === "playing";
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const toggle = useCallback(() => {
     const s = sessionRef.current;
     if (!s) return;
@@ -157,20 +158,25 @@ export function PlaygroundController(): React.ReactElement | null {
       s.play();
     } else s.play();
   }, [playing, state.status]);
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const stepOnce = useCallback(() => sessionRef.current?.step(), []);
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const restart = useCallback(() => {
     sessionRef.current?.restart();
   }, []);
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const seekChapter = useCallback(
     (i: number) => sessionRef.current?.seekToChapter(i),
     [],
   );
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const runEdited = useCallback(() => {
     setEditing(false);
     setCurrent(draft); // recreates the session (effect) → autoplay handled separately
     // play after the new session mounts
     setTimeout(() => sessionRef.current?.play(), 0);
   }, [draft]);
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const copyAll = useCallback(
     () => void navigator.clipboard?.writeText(current ?? ""),
     [current],
@@ -207,6 +213,7 @@ export function PlaygroundController(): React.ReactElement | null {
     return () => window.removeEventListener("keydown", onKey);
   }, [scriptId, toggle, stepOnce, restart, seekChapter, state.currentChapter]);
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const activeSpan = useMemo(() => {
     const st = statements[state.currentIndex];
     return st ? { from: st.lineStart, to: st.lineEnd } : null;

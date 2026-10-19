@@ -26,8 +26,9 @@
 // crop geometry are the engine's deterministic Rust (image_core / the
 // reduce histogram); this leaf only renders + forwards.
 
-import { Fragment, useEffect, useReducer, useState } from "react";
+import { Fragment, useState } from "react";
 import type { ReactNode } from "react";
+import { onDidChangeOf, useLive } from "@paged-media/react-live";
 
 import manifest from "../../manifest.json";
 
@@ -1694,8 +1695,12 @@ export function LayersSection({
 }
 
 export function makeImagePanel(session: ImageSession) {
-  return function ImagePanel() {
-    const [, bump] = useReducer((n: number) => n + 1, 0);
+  // A declaration, so the React Compiler sees the component (it cannot see
+  // `return function ImagePanel()`, editor ADR 229).
+  function ImagePanel() {
+    // The session as a render value (react-live): a new view after every
+    // change, so what is read from it during render is read again.
+    const live = useLive(session, onDidChangeOf);
     // Control points per curve: the composite and each channel's.
     const [curveChannel, setCurveChannel] = useState<CurveChannel>("rgb");
     const [curvePointsBy, setCurvePointsBy] = useState<
@@ -1729,19 +1734,19 @@ export function makeImagePanel(session: ImageSession) {
     const [stop1, setStop1] = useState(1);
     const [noiseAmount, setNoiseAmount] = useState(0.5);
 
-    useEffect(() => {
-      const sub = session.onDidChange(bump);
-      return () => sub.dispose();
-    }, []);
-
-    const s = session.state();
+    const s = live.state();
     const p = s.params;
     const [resizeW, setResizeW] = useState(s.source?.width ?? 0);
     const [resizeH, setResizeH] = useState(s.source?.height ?? 0);
     const [resizeFilter, setResizeFilter] =
       useState<ResampleFilter>("lanczos3");
-    // Track the natural size when the source changes (a new import).
-    useEffect(() => {
+    // Track the natural size when the source changes (a new import, a
+    // crop, a resize). Adjusted while rendering, React's pattern for state
+    // that follows a value (an effect would paint the old size first).
+    const sourceSize = `${s.source?.handle ?? ""}:${s.source?.width ?? 0}x${s.source?.height ?? 0}`;
+    const [sizedFor, setSizedFor] = useState(sourceSize);
+    if (sizedFor !== sourceSize) {
+      setSizedFor(sourceSize);
       setResizeW(s.source?.width ?? 0);
       setResizeH(s.source?.height ?? 0);
       setCanvasSize((c) => ({
@@ -1749,13 +1754,15 @@ export function makeImagePanel(session: ImageSession) {
         width: s.source?.width ?? 0,
         height: s.source?.height ?? 0,
       }));
-    }, [s.source?.handle, s.source?.width, s.source?.height]);
+    }
     // A NEW image starts from identity in the session (its params are
     // reset on ingest), so the pickers this panel keeps for itself follow:
     // a curve left drawn here would be re-sent, shape and all, by the
     // next drag on it. Keyed on the source OBJECT, which a crop or a
     // resize updates in place and only a new ingest replaces.
-    useEffect(() => {
+    const [pickersFor, setPickersFor] = useState(s.source);
+    if (pickersFor !== s.source) {
+      setPickersFor(s.source);
       setCurvePointsBy({
         rgb: IDENTITY_CURVE,
         r: IDENTITY_CURVE,
@@ -1764,7 +1771,7 @@ export function makeImagePanel(session: ImageSession) {
       });
       setAspect("free");
       setAngle(0);
-    }, [s.source]);
+    }
     const disabled = s.busy || !s.source;
     const engineLine =
       s.engine === "ready"
@@ -1815,7 +1822,7 @@ export function makeImagePanel(session: ImageSession) {
       session.setCurvePoints(next, curveChannel);
     };
 
-    const machine = session.cropMachine();
+    const machine = live.cropMachine();
 
     return (
       <div style={{ padding: "var(--space-2, 8px)", fontSize: "12px" }}>
@@ -3331,7 +3338,6 @@ export function makeImagePanel(session: ImageSession) {
               const a = e.target.value as AspectPreset;
               setAspect(a);
               machine?.setPreset(a);
-              bump();
             }}
           >
             {ASPECTS.map((a) => (
@@ -3351,7 +3357,6 @@ export function makeImagePanel(session: ImageSession) {
           onChange={(v) => {
             setAngle(v);
             machine?.setAngle(v);
-            bump();
           }}
         />
         <div
@@ -3375,7 +3380,6 @@ export function makeImagePanel(session: ImageSession) {
               if (s.source) machine?.reset(s.source.width, s.source.height);
               setAspect("free");
               setAngle(0);
-              bump();
             }}
           >
             Reset crop
@@ -3470,5 +3474,6 @@ export function makeImagePanel(session: ImageSession) {
         </details>
       </div>
     );
-  };
+  }
+  return ImagePanel;
 }

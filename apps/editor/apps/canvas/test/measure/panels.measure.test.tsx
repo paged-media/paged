@@ -24,7 +24,8 @@
 // and compares. Each scenario mounts the panel on the panel lane's harness,
 // drives the same interactions, and records for every one how many commits
 // React made and how many components it rendered. The fifth heavy panel,
-// image adjustments, is measured in modules/image/glue's DOM lane.
+// image adjustments, needs the image module's wasm and a placed image: it is
+// measured by the latency probe (tests/perf) on the production build.
 //
 // Not part of `test:dom` (the file name has no `.dom.test.`): it asserts
 // nothing about behaviour, it writes numbers. The output is one JSON line
