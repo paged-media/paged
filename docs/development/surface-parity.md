@@ -101,8 +101,20 @@ precondition, and asserts identical model dumps.
   and run as `test.failing`: it fails for the finding's reason today, and
   when the product is fixed the test passes, `test.failing` fails, and the
   entry is deleted with the fix. A disagreement not on record fails the
-  suite. The parity findings sit with every other layer's in
+  suite. The findings so far:
+
+  | Id    | What happens                                                                                      | Test                                   |
+  | ----- | ------------------------------------------------------------------------------------------------- | -------------------------------------- |
+  | PAR-1 | each load with a fallback font keeps about 0.9 MB of wasm memory (a copy of the font)             | `tests/headless/engine-memory.test.ts` |
+  | PAR-2 | every document opened grows memory by about 4 MB: the client registers the default faces again    | `tests/headless/engine-memory.test.ts` |
+  | PAR-3 | `paged.schema` answers the catalog's row shape, `host.objects.schema` and `editor.schema` another | `parity/findings.ts`                   |
+  | PAR-4 | the object query lists a master item that `get` then answers notFound for                         | `parity/parity.test.ts`                |
+  | PAR-5 | an oval's `frameBounds` cannot be read (noSuchPath); the same root as the Align panel's PN-261    | `parity/parity.test.ts`                |
+  | PAR-6 | Insert ▸ Rectangle and Insert ▸ Ellipse stroke the frame; every other surface's insert does not   | `parity/findings.ts`                   |
+
+  They sit with every other layer's in
   [conformance-findings-2026-10.md](conformance-findings-2026-10.md).
+
 - **Engine traps.** A case that makes the engine panic poisons its wasm
   instance; the suite records the trap and continues on a fresh editor.
 - **Gaps** (a surface with no door to an operation) and operations with no
