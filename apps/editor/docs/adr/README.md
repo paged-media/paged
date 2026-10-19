@@ -46,6 +46,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [228](228-flaky-tests-are-quarantined.md) | A flaky test is quarantined with an owner and an expiry, not retried until green | Accepted 2026-10-19 |
 | [229](229-react-compiler.md) | The React Compiler compiles every first-party React source | Accepted 2026-10-19 |
 | [230](230-one-replace-question.md) | One question before any document replaces the open one | Accepted 2026-10-19 |
+| [233](233-panel-controls-share-one-kit.md) | Panel controls share one kit: named by their row, refusals in words | Accepted 2026-10-19 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

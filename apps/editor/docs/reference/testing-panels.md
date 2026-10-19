@@ -77,9 +77,12 @@ journal buffer, the assistant session, the preflight findings, schema panels' lo
   shrinks, and a panel that gains a file must leave it.
 
 The reach findings are kept by the primitive that renders the control (`A11Y_KNOWN`), so one
-fix in a primitive clears every panel that uses it. Each panel with findings has a ratchet test
-(nothing beyond its listed findings, and every listed finding still there) and an expected
-failure that flips when the panel is clean.
+fix in a primitive clears every panel that uses it. Each panel has a ratchet test (nothing
+beyond its listed findings, and every listed finding still there); a panel with findings also
+has an expected failure that flips when the panel is clean. The table is empty since the panel
+kit's field naming (ADR 233): a row's label names its controls, a field with no visible label is
+named after its row's title, and every built-in panel passes. A new unnamed control is fixed
+with the kit (`LabelledBy`, `NamedAs`, `useFieldName`, `IconButton`), not listed.
 
 ## The states matrix
 
@@ -144,9 +147,10 @@ A new panel added to `BUILT_IN_PANELS` fails `registry.dom.test.tsx` until it ha
 
 ## Counts
 
-All 89 built-in panels have their own file: 76 files in `test/panels`, 1,069 tests, of which
-130 are expected failures (88 written per finding, 42 from the reach table), naming 99 findings
-between `PN-1` and `PN-357`; the Playwright flows add PN-358. Panels that register commands while mounted (Layers, the
+All 89 built-in panels have their own file: 76 files in `test/panels`, 1,052 tests (on
+2026-10-19), of which 79 are expected failures, each written per finding (the 42 the reach
+table generated went when PN-5 to PN-16 were fixed, and PN-2, PN-4, PN-155, PN-162, PN-213 and
+PN-262 are ordinary tests now), out of 99 findings named between `PN-1` and `PN-357`; the Playwright flows add PN-358. Panels that register commands while mounted (Layers, the
 schema demos) and panels that run typed core commands (style lists, options panels) assert
 those commands too, under `command:` ids. The commands a panel registers while mounted also
 need the gate's `integration` clause, which only a browser can give them (the headless editor
