@@ -240,7 +240,9 @@ test.describe("UX audit 2026-10 — canvas gestures (expected failures until fix
     await g.wheel({ at: T.empty.at, shift: true, deltaY: 200 }).settle();
     const c1 = await camera(page);
     expect(c1.ty).toBe(c0.ty);
-    expect(c1.tx).toBe(c0.tx - 200);
+    // The camera crosses to the worker as float32: the pan is exact to
+    // the 1/1000 px, not to the last bit of a float64.
+    expect(c1.tx).toBeCloseTo(c0.tx - 200, 3);
   });
 
   // F-35 does NOT reproduce: the Pen stays the base and effective tool
