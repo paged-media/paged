@@ -1,0 +1,4 @@
+{
+  "$comment": "Quarantined Playwright tests (apps/editor/docs/adr/228). Each entry needs the matching { tag: \"@quarantine\" } on the test; apps/editor/scripts/quarantine-guard.mjs checks both, and fails an entry past its expiry. id = '<file> › <describe> › <title>' as Playwright prints it; expires at most 30 days after added.",
+  "entries": []
+}
