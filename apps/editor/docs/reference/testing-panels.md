@@ -107,6 +107,22 @@ Three things, each against the real engine:
 
 And its disabled state where it has one (a disabled control sends nothing).
 
+## Browser-only behaviour (Playwright)
+
+What happy-dom cannot show has one Playwright flow per panel in
+`apps/canvas/tests/e2e/panels-browser.spec.ts`: a pointer drag on the Color Wheel (and Add to
+Swatches as one undo step), a stop dragged along the Gradients ramp, a real HTML5 drag between
+Layers rows, and Properties following a click on the canvas and writing the clicked frame. Real
+layout is checked where a panel breaks at the dock's default width (1280 × 720 window): PN-358,
+Layers rows whose buttons squeeze the layer name to 18 px.
+They load the test kit's code-built gesture fixture, so they need no corpus. The component lane
+already covers everything that does not need layout, pointer capture or the canvas.
+
+```sh
+cd apps/editor/apps/canvas
+bunx playwright test tests/e2e/panels-browser.spec.ts --project=chromium
+```
+
 ## Findings
 
 A test that exposes a bug is an expected failure, `test.failing("PN-<n>: <what should
@@ -130,6 +146,6 @@ A new panel added to `BUILT_IN_PANELS` fails `registry.dom.test.tsx` until it ha
 
 All 89 built-in panels have their own file: 76 files in `test/panels`, 1,069 tests, of which
 130 are expected failures (88 written per finding, 42 from the reach table), naming 99 findings
-between `PN-1` and `PN-357`. Panels that register commands while mounted (Layers, the
+between `PN-1` and `PN-357`; the Playwright flows add PN-358. Panels that register commands while mounted (Layers, the
 schema demos) and panels that run typed core commands (style lists, options panels) assert
 those commands too, under `command:` ids.

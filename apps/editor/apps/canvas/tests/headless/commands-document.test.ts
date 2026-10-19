@@ -36,10 +36,7 @@ import {
   stubGlobal,
   unstubAllGlobals,
 } from "@paged-media/test-kit";
-import {
-  dumpDiff,
-  elementKey,
-} from "@paged-media/test-kit/headless";
+import { dumpDiff, elementKey } from "@paged-media/test-kit/headless";
 
 import { addressOfElement } from "../../src/object-model";
 import { createHeadlessEditor, type HeadlessEditor } from "./harness";
