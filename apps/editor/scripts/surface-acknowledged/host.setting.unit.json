@@ -1,0 +1,5 @@
+{
+  "setting:paged.tool.polygon.sides": "Seeded 2026-10-19, when covers() became the measure: no unit test changes setting paged.tool.polygon.sides and asserts its effect under covers(); no test file names it at all; declared in apps/editor/packages/tools/src/built-in-tools.ts.",
+  "setting:paged.tool.polygon.starInset": "Seeded 2026-10-19, when covers() became the measure: no unit test changes setting paged.tool.polygon.starInset and asserts its effect under covers(); no test file names it at all; declared in apps/editor/packages/tools/src/built-in-tools.ts.",
+  "setting:paged.tool.smooth.tolerance": "Seeded 2026-10-19, when covers() became the measure: no unit test changes setting paged.tool.smooth.tolerance and asserts its effect under covers(); no test file names it at all; declared in apps/editor/packages/tools/src/built-in-tools.ts."
+}
