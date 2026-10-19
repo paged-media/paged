@@ -14,6 +14,21 @@ What this folder holds.
   of a native layout engine for web content, the background to
   [ADR 020](adr/020-paged-web-native-engine-defer-frame-threading.md).
 
+## Tests
+
+Each surface the bundle contributes has a test that asserts what it does, tagged with
+`covers()` for the surface-conformance gate (the overview is
+`platform/extensions/docs/testing-plugins.md`). All of them are in
+`packages/web-bundle/test/`; the render and bake ones need the Blitz engine wasm
+(`bash scripts/build-wasm.sh --engine`) and skip without it, or fail under
+`REQUIRE_REAL_ENGINE=1`, which the `web / bun test` workflow sets after building it.
+
+| Layer     | Files                                                                               | What they assert                                                                                                                                                                                                                                                                                                                                                                  |
+| --------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| unit      | `activate.spec.ts`, `bake.spec.ts`, `flow-command.spec.ts`, `commands-unit.spec.ts` | The insert command's one batch (frame and source together); render-to-frame's diagnostic and its no-op without a selection; thread, unthread and thread-into-the-named-flow on a recording host (what is persisted, and the no-ops); render-flow and bake doing nothing, and saying why, without a selection, without a flow, or on a frame that is not a web frame.              |
+| headless  | `headless/commands.spec.ts`, `conformance/`                                         | All seven commands on the real engine, each with its undo: insert, thread, unthread, the named flow, render to frame and across a flow (the scene layers submitted), bake to native content (one undo step); the `.html` importer (sanitised on ingest). `conformance/` holds the deeper engine specs (bake fidelity, overflow, persistence, fonts).                              |
+| component | `panels/*.dom.test.tsx` (`bun run test:dom`, happy-dom)                             | The Web source panel (insert, a draft saved only on "Save to document" as one undo step, making a plain frame a web frame) and the Web frame properties schema panel, rendered through the SDK's schema-panel component and a minimal renderer (`panels/schema-renderer.tsx`): render options written back, a CSS variable picked from its list and rewritten in the frame's CSS. |
+
 ## Decisions in other repositories that bind this one
 
 These records live in other public paged-media repositories. The code here rests on each of

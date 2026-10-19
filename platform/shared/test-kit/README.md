@@ -22,7 +22,7 @@ inside the test body, next to the assertions it vouches for:
 import { covers } from "@paged-media/test-kit";
 
 it("undo restores the frame", async () => {
-  covers("command:paged.undo");
+  covers("command:paged.editor.undo");
   // ... the assertions
 });
 ```
@@ -39,7 +39,7 @@ and their ids; plugin contributions use the same kinds with their own ids:
 | `keybinding` | `<key>→<command>`, the key as registered (lowercase combo): `keybinding:cmd+z→paged.editor.undo`; `->` is read as `→`                                                                                                                           |
 | `setting`    | the configuration key; a tool option is `<toolId>.<key>`: `setting:paged.tool.polygon.sides`                                                                                                                                                    |
 | `cli`        | the binary and the command path, one space apart: `cli:paged export-pdf`                                                                                                                                                                        |
-| `script`     | the function's full name: `script:paged.document.pages`, `script:editor.select`                                                                                                                                                                 |
+| `script`     | the function's full name: `script:paged.pages`, `script:editor.select`                                                                                                                                                                          |
 | `importer`   | a bundle's importer id (`contributes.importers`)                                                                                                                                                                                                |
 | `exporter`   | a bundle's exporter id (`contributes.exporters`)                                                                                                                                                                                                |
 
