@@ -28,7 +28,14 @@
 //     re-seeded first when `&seed=<name>` names a seed prelude.
 
 import { act, cleanup, render, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "bun:test";
 
 import { covers, stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
 
@@ -38,12 +45,17 @@ import { seedPrelude } from "../../../src/playground/seeds";
 
 const DOCS = "https://docs.paged.media";
 
+const happyDOM = (
+  window as unknown as { happyDOM: { setURL(url: string): void } }
+).happyDOM;
+/** Where the DOM lane's window starts; put back when this file is done,
+ *  because a worker's later test files share the window. */
+const STARTING_URL = window.location.href;
+
 /** Navigate the test window to the editor's origin at `search` (the
  *  realm starts at about:blank, where history cannot set a query). */
 function at(search: string) {
-  (
-    window as unknown as { happyDOM: { setURL(url: string): void } }
-  ).happyDOM.setURL(`http://localhost:5180/${search}`);
+  happyDOM.setURL(`http://localhost:5180/${search}`);
 }
 
 type CanvasStub = {
@@ -90,6 +102,7 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 beforeEach(() => {
   delete (window as unknown as { __canvas?: unknown }).__canvas;
 });
+afterAll(() => happyDOM.setURL(STARTING_URL));
 afterEach(() => {
   cleanup();
   unstubAllGlobals();
