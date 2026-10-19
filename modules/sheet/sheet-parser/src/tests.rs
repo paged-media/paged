@@ -976,6 +976,35 @@ fn a_range_of_literals_is_a_parse_error__feat__sheet_parser_dialect() {
     assert_eq!(roundtrip("SUM(A1:INDEX(B:B,3))"), "SUM(A1:INDEX(B:B,3))");
 }
 
+/// `x:x` is the column band X:X, in Excel as here, even where `x` is a LET
+/// local; the range of a local with a local is spelled with a space,
+/// `x :x`. The printer dropped that space, so `LET(x,1,LE,2,x\t:x)` printed
+/// as `LET(x,1,LE,2,x:x)`, which reads back as the band (found by the
+/// parse_formula fuzz target; the input is
+/// `fuzz/regressions/parse_formula-local-range-prints-as-band.txt`).
+#[test]
+fn a_range_after_a_bare_word_keeps_its_space__feat__sheet_parser_dialect() {
+    let fuzz = "LET(x,1,LE,2,x\t:x)\n";
+    let f = p(fuzz);
+    assert_eq!(p(&pr(&f)).root, f.root);
+    assert_eq!(pr(&f), "LET(x,1,LE,2,x :x)");
+    for (input, canonical) in [
+        ("LET(x,A1,x :x)", "LET(x,A1,x :x)"),
+        ("LET(x,A1,y,B2,x : y)", "LET(x,A1,y,B2,x :y)"),
+        ("LET(x,A1,y,B2,x :y :x)", "LET(x,A1,y,B2,x :y :x)"),
+        ("LET(x,A1,x :A:C)", "LET(x,A1,x :A:C)"),
+        ("LET(x,A1,A1:x)", "LET(x,A1,A1:x)"),
+        ("LET(x,A1,x#:B2)", "LET(x,A1,x#:B2)"),
+        ("LET(abcd,A1,abcd:abcd)", "LET(abcd,A1,abcd:abcd)"),
+        // No space inside a band, and none where nothing could fuse.
+        ("LET(x,A1,x:x)", "LET(x,A1,X:X)"),
+        ("SUM(A1:B2)", "SUM(A1:B2)"),
+    ] {
+        assert_eq!(roundtrip(input), canonical, "{input}");
+        assert_eq!(p(canonical).root, p(input).root, "{input}");
+    }
+}
+
 #[test]
 fn whole_bands_rewrite_on_structural_edits__feat__sheet_parser_dialect() {
     let ins_rows = Edit::InsertRows {

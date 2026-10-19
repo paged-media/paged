@@ -25,7 +25,7 @@
 // last-used (else first-registered) profile is the toggle's target;
 // with no registered profile the toggle stays disabled.
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 
 import { useCanvasClient } from "../state/canvas-client-context";
 
@@ -33,7 +33,8 @@ export function SoftProofToggle() {
   const client = useCanvasClient();
   const [proofOn, setProofOn] = useState(false);
   const [profiles, setProfiles] = useState<string[]>([]);
-  const lastProfile = useRef<string | null>(null);
+  // The profile last proofed with, as state (read while rendering).
+  const [lastProfile, setLastProfile] = useState<string | null>(null);
 
   useEffect(() => {
     const refresh = () =>
@@ -41,7 +42,7 @@ export function SoftProofToggle() {
         .documentMeta()
         .then((m) => {
           setProofOn(m.proofProfileName != null);
-          if (m.proofProfileName) lastProfile.current = m.proofProfileName;
+          if (m.proofProfileName) setLastProfile(m.proofProfileName);
         })
         .catch(() => {});
     refresh();
@@ -57,7 +58,7 @@ export function SoftProofToggle() {
     return off;
   }, [client]);
 
-  const target = lastProfile.current ?? profiles[0] ?? null;
+  const target = lastProfile ?? profiles[0] ?? null;
   const disabled = !proofOn && target === null;
 
   const toggle = () => {

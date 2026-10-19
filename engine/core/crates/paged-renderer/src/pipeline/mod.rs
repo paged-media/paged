@@ -449,7 +449,7 @@ pub struct PipelineOptions<'a> {
     /// into the frame's content box (transformed by the frame's
     /// `ItemTransform`, clipped to the content box) right after the frame's
     /// own content, so a plugin renders inside a frame through the same
-    /// display-list → Vello/tiny-skia path. `None` (the default) is the
+    /// display-list → Vello / `vello_cpu` path. `None` (the default) is the
     /// no-plugin path and costs nothing.
     pub scene_layers: Option<&'a std::collections::HashMap<String, paged_compose::SceneLayer>>,
     /// v70 — faces registered for scene-layer text ONLY (a plugin's own

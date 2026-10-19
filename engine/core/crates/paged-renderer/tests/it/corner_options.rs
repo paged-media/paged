@@ -95,10 +95,10 @@ fn all_five_corner_options_emit_geometry() {
         any_fill(3, &|s| count_cubics(s) == 0 && count_lines(s) == 12),
         "inset page should emit a sharp fold-in (line-only) corner fill path"
     );
-    // Fancy: the three-arc ornamental scallop — 12 cubics (3 per
-    // corner; the W1.8 calibration, previously 8).
+    // Fancy: InDesign's straight knot, as its PDF export draws it —
+    // no cubics, six LineTos per corner plus the four edges.
     assert!(
-        any_fill(4, &|s| count_cubics(s) == 12),
-        "fancy page should emit a 12-cubic ornamental corner fill path"
+        any_fill(4, &|s| count_cubics(s) == 0 && count_lines(s) == 28),
+        "fancy page should emit InDesign's line-only knotted corner fill path"
     );
 }

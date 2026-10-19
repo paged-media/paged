@@ -52,6 +52,7 @@ export function ColorSettingsPanel() {
   const [proofProfile, setProofProfile] = useState<string>("");
   const [paperWhite, setPaperWhite] = useState(false);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const refresh = useCallback(() => {
     void client
       .documentMeta()

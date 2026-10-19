@@ -21,6 +21,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -109,8 +110,11 @@ export function ToolProvider({ children }: PropsWithChildren) {
 
   const toolStateRef = useRef<ActiveToolState>(internal.active);
   // Keep the synchronous mirror current on every render.
-  toolStateRef.current = internal.active;
+  useLayoutEffect(() => {
+    toolStateRef.current = internal.active;
+  });
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const setBaseTool = useCallback((id: ToolId) => {
     setInternal((prev) =>
       prev.active.base === id && prev.reason === "switch"
@@ -122,6 +126,7 @@ export function ToolProvider({ children }: PropsWithChildren) {
     );
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const pushOverride = useCallback((id: ToolId) => {
     setInternal((prev) => ({
       active: {
@@ -132,6 +137,7 @@ export function ToolProvider({ children }: PropsWithChildren) {
     }));
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const popOverride = useCallback((id: ToolId) => {
     setInternal((prev) => {
       const idx = prev.active.overrides.lastIndexOf(id);
@@ -145,6 +151,7 @@ export function ToolProvider({ children }: PropsWithChildren) {
     });
   }, []);
 
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const clearOverrides = useCallback(() => {
     setInternal((prev) =>
       prev.active.overrides.length === 0
@@ -158,6 +165,7 @@ export function ToolProvider({ children }: PropsWithChildren) {
 
   const effectiveTool = deriveEffective(internal.active);
 
+  // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<ToolContextValue>(
     () => ({
       toolState: internal.active,

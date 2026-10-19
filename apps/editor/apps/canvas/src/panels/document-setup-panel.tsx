@@ -155,6 +155,7 @@ export function MarginsColumnsPanel() {
   const pages = useCollection<PageSummary>("pages");
   const [pick, setPick] = useState<string>("");
   const chosen = pick || pages?.[0]?.selfId || "";
+  // eslint-disable-next-line no-restricted-syntax -- a computed block, not a single expression (ADR 229)
   const targets = useMemo(() => {
     if (!pages || pages.length === 0) return [];
     if (chosen === ALL) return pages.map((p) => pageAddress(p.selfId));

@@ -25,7 +25,7 @@
 // version being replaced stays in the list; a release is a name given once
 // to a version and never moved.
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import {
   confirmDiscard,
@@ -99,15 +99,47 @@ function when(ts: number): string {
   });
 }
 
+// The library and the open document, as one snapshot per library version:
+// the store hands the render the values, not only the version beside them
+// (a value read from a getter next to a version that only triggers the
+// render is a value the React Compiler keeps; ADR 229).
+type LibrarySnapshot = {
+  version: number;
+  library: ReturnType<typeof getLibrary>;
+  current: ReturnType<typeof currentLibraryDocument>;
+};
+let librarySnap: LibrarySnapshot | null = null;
+function librarySnapshot(): LibrarySnapshot {
+  const version = libraryVersion();
+  if (librarySnap?.version !== version) {
+    librarySnap = {
+      version,
+      library: getLibrary(),
+      current: currentLibraryDocument(),
+    };
+  }
+  return librarySnap;
+}
+
+/** What the panel lists, read outside the component (the compiler does not
+ *  compile a component with a conditional inside a `try`). */
+async function readLibrary(
+  library: NonNullable<LibrarySnapshot["library"]>,
+  current: LibrarySnapshot["current"],
+) {
+  const list = await library.list();
+  const history = current ? await library.log(current.id) : [];
+  const refs = current ? await library.refs(current.id) : {};
+  return { list, history, refs };
+}
+
 export function LibraryPanel() {
   const editor = usePaged();
-  const version = useSyncExternalStore(
+  const { version, library, current } = useSyncExternalStore(
     subscribeLibrary,
-    libraryVersion,
-    libraryVersion,
+    librarySnapshot,
+    librarySnapshot,
   );
-  const library = getLibrary();
-  const current = currentLibraryDocument();
   const [docs, setDocs] = useState<DocumentEntry[]>([]);
   const [log, setLog] = useState<CommitInfo[]>([]);
   const [releases, setReleases] = useState<Record<string, string>>({});
@@ -129,11 +161,8 @@ export function LibraryPanel() {
   useEffect(() => {
     if (!library) return;
     let live = true;
-    void (async () => {
-      try {
-        const list = await library.list();
-        const history = current ? await library.log(current.id) : [];
-        const refs = current ? await library.refs(current.id) : {};
+    void readLibrary(library, current).then(
+      ({ list, history, refs }) => {
         if (!live) return;
         setDocs(list);
         setLog(history);
@@ -147,40 +176,38 @@ export function LibraryPanel() {
         setReleases(named);
         setBranches(Object.keys(refs).filter((r) => r.startsWith("agent/")));
         setError(null);
-      } catch (err) {
+      },
+      (err: unknown) => {
         if (live) setError(err instanceof Error ? err.message : String(err));
-      }
-    })();
+      },
+    );
     return () => {
       live = false;
     };
   }, [library, current, version, tick, liveVersion]);
 
-  const open = useCallback(
-    async (entry: DocumentEntry, target = "main") => {
-      if (!library) return;
-      if (!(await confirmDiscard(editor, `Opening ${entry.name}`))) return;
-      const bytes = await library.exportPaged(entry.id, target);
-      const doc = editor.document;
-      await loadDocumentFile(
-        editor.client,
-        new File([bytes.slice()], `${entry.name}.paged`),
-        {
-          setHandle: doc.setHandle,
-          setSourceName: doc.setSourceName,
-          setLoading: doc.setLoading,
-          setStatus: (s) => console.info("[library]", s),
-          setSnapshotsReady: doc.setSnapshotsReady,
-          addSnapshot: (pageId, url) =>
-            doc.setSnapshots((prev) => new Map(prev).set(pageId, url)),
-          resetForNewDocument: doc.resetForNewDocument,
-          pushWarning: (w) => console.warn("[library]", w),
-          libraryDocument: entry,
-        },
-      );
-    },
-    [editor, library],
-  );
+  const open = async (entry: DocumentEntry, target = "main") => {
+    if (!library) return;
+    if (!(await confirmDiscard(editor, `Opening ${entry.name}`))) return;
+    const bytes = await library.exportPaged(entry.id, target);
+    const doc = editor.document;
+    await loadDocumentFile(
+      editor.client,
+      new File([bytes.slice()], `${entry.name}.paged`),
+      {
+        setHandle: doc.setHandle,
+        setSourceName: doc.setSourceName,
+        setLoading: doc.setLoading,
+        setStatus: (s) => console.info("[library]", s),
+        setSnapshotsReady: doc.setSnapshotsReady,
+        addSnapshot: (pageId, url) =>
+          doc.setSnapshots((prev) => new Map(prev).set(pageId, url)),
+        resetForNewDocument: doc.resetForNewDocument,
+        pushWarning: (w) => console.warn("[library]", w),
+        libraryDocument: entry,
+      },
+    );
+  };
 
   const act = (f: () => Promise<unknown>) => () => {
     f()

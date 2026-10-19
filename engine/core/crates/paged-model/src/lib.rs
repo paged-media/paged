@@ -1485,8 +1485,8 @@ pub struct TextFrame {
     /// swatch resolved through an active CMYK working profile) the CPU
     /// rasterizer composites the real per-channel maximum against
     /// page-level ink planes, with named inks kept on their own plate
-    /// (`paged_gpu::cpu`, `compose_cmyk_overprint_via_planes` /
-    /// `compose_spot_overprint_via_plane`); the Vello backend mirrors
+    /// (`paged_gpu`'s `ink_planes::compose_overprint`); the Vello
+    /// backend mirrors
     /// the same arithmetic in a compute pass
     /// (`paged_gpu::cmyk_compute`).
     ///
@@ -1792,7 +1792,7 @@ pub struct Rectangle {
     /// approximate Inside/Outside without clipping.
     pub stroke_alignment: Option<String>,
     /// `EndCap` — `ButtEndCap` (default), `RoundEndCap`, or
-    /// `ProjectingEndCap`. Maps to tiny-skia's `LineCap`. Only
+    /// `ProjectingEndCap`. Maps to kurbo's `Cap`. Only
     /// visible on open paths or dashed/dotted strokes.
     pub end_cap: Option<String>,
     /// `EndJoin` — `MiterEndJoin` (default), `RoundEndJoin`, or

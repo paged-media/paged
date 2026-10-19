@@ -382,8 +382,11 @@ export function makeBindingsPanel(
   host: BundleHost,
   session: DataSourceSession,
 ): () => ReactElement {
-  return function BindingsPanel(): ReactElement {
-    const [snapshot, refresh] = useSessionSnapshot(session);
+  // A declaration, so the React Compiler sees the component (it cannot
+  // see `return function BindingsPanel()`, editor ADR 229).
+  function BindingsPanel(): ReactElement {
+    // `live`: the session read during render, renewed with the snapshot.
+    const [snapshot, refresh, live] = useSessionSnapshot(session);
     const [fit, setFit] = useState<IdmlFit>("Proportionally");
     const [symbology, setSymbology] = useState<BarcodeSymbology>("ean13");
     // Binding AUTHORING: kind + query + field drive a real addBinding flow.
@@ -1519,7 +1522,7 @@ export function makeBindingsPanel(
             <span style={note}>none</span>
           ) : (
             <ul style={{ margin: 0, paddingLeft: "var(--space-3, 12px)" }}>
-              {(session.listBindings() ?? []).map((b) => {
+              {(live.listBindings() ?? []).map((b) => {
                 const sync = syncRows?.find((r) => r.id === b.id) ?? null;
                 const status = sync?.status ?? null;
                 return (
@@ -1665,7 +1668,7 @@ export function makeBindingsPanel(
                           }}
                         >
                           <option value="">
-                            session locale ({session.getLocale()})
+                            session locale ({live.getLocale()})
                           </option>
                           {locales.map((l) => (
                             <option key={l.tag} value={l.tag}>
@@ -1771,5 +1774,6 @@ export function makeBindingsPanel(
         <p style={note}>Bindings re-resolve when you refresh data.</p>
       </div>
     );
-  };
+  }
+  return BindingsPanel;
 }

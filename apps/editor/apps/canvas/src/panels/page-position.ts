@@ -92,6 +92,48 @@ function report(message: string): void {
   ]);
 }
 
+/** The selection's footprint: the union of its boxes, and the one leaf
+ *  whose edges can be written. EMPTY when any id has no geometry (it is not
+ *  a free page item, or it is gone: a box that silently left it out would
+ *  be a wrong number) or a read fails. Outside the hook: the compiler does
+ *  not compile a conditional inside a `try` (ADR 229). */
+async function readFootprint(
+  client: ReturnType<typeof useCanvasClient>,
+  ids: ElementId[],
+): Promise<{ box: PageBox | null; edgeLeaf: PlacedLeaf | null }> {
+  try {
+    const leaves = ids.filter((id) => id.kind !== "group");
+    const groups = ids.filter((id) => id.kind === "group");
+    const geometry =
+      leaves.length > 0 ? await client.elementGeometry(leaves) : [];
+    if (geometry.length !== leaves.length) return EMPTY;
+    const boxes = geometry.map((g) => composedBox(g.bounds, g.itemTransform));
+    for (const group of groups) {
+      // A group's box is the union of its members' boxes, read through its
+      // leaves.
+      const members = await client.groupLeaves(group.id as string);
+      const placed = await client.elementGeometry(members);
+      if (placed.length === 0) return EMPTY;
+      boxes.push(...placed.map((g) => composedBox(g.bounds, g.itemTransform)));
+    }
+    const only = ids.length === 1 && geometry.length === 1 ? geometry[0] : null;
+    const leaf: PlacedLeaf | null =
+      only && isPageItem(only.id)
+        ? {
+            id: only.id,
+            bounds: only.bounds,
+            transform: only.itemTransform ?? null,
+          }
+        : null;
+    return {
+      box: unionBox(boxes),
+      edgeLeaf: edgesWritable(leaf) ? leaf : null,
+    };
+  } catch {
+    return EMPTY;
+  }
+}
+
 /**
  * The live footprint of the element selection, re-read whenever the
  * engine applies, undoes or redoes anything (or a gesture commits), and
@@ -108,59 +150,17 @@ export function usePagePosition(): PagePosition {
   const selectionKey = JSON.stringify(elementSelection);
 
   useEffect(() => {
-    const ids = elementSelection.filter(isPageItem);
+    // The selection by value (the key), so an equal selection in a new
+    // array does not refetch.
+    const ids = (JSON.parse(selectionKey) as ElementId[]).filter(isPageItem);
     if (ids.length === 0) {
       setState(EMPTY);
       return;
     }
     let cancelled = false;
     const refetch = async () => {
-      try {
-        const leaves = ids.filter((id) => id.kind !== "group");
-        const groups = ids.filter((id) => id.kind === "group");
-        const geometry =
-          leaves.length > 0 ? await client.elementGeometry(leaves) : [];
-        // An id with no geometry is not a free page item (or is gone):
-        // a box that silently left it out would be a wrong number.
-        if (geometry.length !== leaves.length) {
-          if (!cancelled) setState(EMPTY);
-          return;
-        }
-        const boxes = geometry.map((g) =>
-          composedBox(g.bounds, g.itemTransform),
-        );
-        for (const group of groups) {
-          // A group's box is the union of its members' boxes, read
-          // through its leaves.
-          const members = await client.groupLeaves(group.id as string);
-          const placed = await client.elementGeometry(members);
-          if (placed.length === 0) {
-            if (!cancelled) setState(EMPTY);
-            return;
-          }
-          boxes.push(
-            ...placed.map((g) => composedBox(g.bounds, g.itemTransform)),
-          );
-        }
-        const only =
-          ids.length === 1 && geometry.length === 1 ? geometry[0] : null;
-        const leaf: PlacedLeaf | null =
-          only && isPageItem(only.id)
-            ? {
-                id: only.id,
-                bounds: only.bounds,
-                transform: only.itemTransform ?? null,
-              }
-            : null;
-        if (!cancelled) {
-          setState({
-            box: unionBox(boxes),
-            edgeLeaf: edgesWritable(leaf) ? leaf : null,
-          });
-        }
-      } catch {
-        if (!cancelled) setState(EMPTY);
-      }
+      const next = await readFootprint(client, ids);
+      if (!cancelled) setState(next);
     };
     void refetch();
     const off = client.subscribe((msg) => {
@@ -177,10 +177,11 @@ export function usePagePosition(): PagePosition {
       cancelled = true;
       off();
     };
-  }, [client, selectionKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [client, selectionKey]);
 
   /** Send one batch; report a refusal; re-read the selection chrome
    *  (it caches geometry and refreshes only on clicks and gestures). */
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const send = useCallback(
     async (verb: string, ops: Mutation[]) => {
       if (ops.length === 0) return;
@@ -201,6 +202,7 @@ export function usePagePosition(): PagePosition {
     [client, elementGeometry, elementSelection, setElementGeometry],
   );
 
+  // eslint-disable-next-line no-restricted-syntax -- a hook's result: callers may compare it (ADR 229)
   const moveBy = useCallback(
     async (dx: number, dy: number) => {
       problemsSink.clear(OBJECT_DIAGNOSTIC_SOURCE);
@@ -216,6 +218,7 @@ export function usePagePosition(): PagePosition {
   );
 
   const edgeLeaf = state.edgeLeaf;
+  // eslint-disable-next-line no-restricted-syntax -- a hook's result: callers may compare it (ADR 229)
   const setEdges = useCallback(
     async (box: PageBox) => {
       problemsSink.clear(OBJECT_DIAGNOSTIC_SOURCE);
