@@ -110,12 +110,13 @@ fn is_svg_magic(bytes: &[u8]) -> bool {
     s.starts_with("<?xml") || s.starts_with("<svg") || s.starts_with("<!DOCTYPE svg")
 }
 
-/// Decode an SVG via resvg → tiny-skia → RGBA8. The image is scaled
-/// so its longest edge lands at most `max_px` (matching the DCT-scale
-/// cap for raster images), preserving aspect.
+/// Decode an SVG: usvg parses it and `paged_gpu::svg` draws it with
+/// vello_cpu into RGBA8. The image is scaled so its longest edge lands
+/// at most `max_px` (matching the DCT-scale cap for raster images),
+/// preserving aspect.
 fn decode_svg_bytes(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedImage> {
-    let opt = resvg::usvg::Options::default();
-    let tree = resvg::usvg::Tree::from_data(bytes, &opt).ok()?;
+    let opt = usvg::Options::default();
+    let tree = usvg::Tree::from_data(bytes, &opt).ok()?;
     let svg_w: f32 = tree.size().width().ceil().max(1.0);
     let svg_h: f32 = tree.size().height().ceil().max(1.0);
     let longest = svg_w.max(svg_h);
@@ -126,14 +127,12 @@ fn decode_svg_bytes(bytes: &[u8], max_px: u32) -> Option<paged_compose::DecodedI
     };
     let w = ((svg_w * scale).ceil() as u32).max(1);
     let h = ((svg_h * scale).ceil() as u32).max(1);
-    let mut pixmap = resvg::tiny_skia::Pixmap::new(w, h)?;
-    let transform = resvg::tiny_skia::Transform::from_scale(scale, scale);
-    resvg::render(&tree, transform, &mut pixmap.as_mut());
+    let rgba = paged_gpu::svg::rasterize_svg(&tree, w, h, scale)?;
     Some(paged_compose::DecodedImage {
         width: w,
         height: h,
         encoded: bytes::Bytes::copy_from_slice(bytes),
-        rgba: bytes::Bytes::from(pixmap.take()),
+        rgba: bytes::Bytes::from(rgba),
         icc: None,
     })
 }

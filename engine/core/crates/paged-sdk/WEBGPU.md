@@ -26,11 +26,9 @@ and the editor's snapshot fallback without WebGPU. This note is the design spec.
   `SurfacePresenter::render_scene_to_rgba` (no `image` dep on this crate;
   for headless calls without a canvas it spins up a throwaway 1×1
   `OffscreenCanvas` purely for its device).
-- **Known follow-up:** tiny-skia is still pulled transitively by `resvg`
-  (build-time SVG asset decode in `paged-renderer`), independent of the
-  forward Vello renderer. Removing it (to actually shrink the wasm) means
-  making `resvg` optional in `paged-renderer` — deferred; size is currently
-  not a constraint.
+- Placed SVGs are decoded at build time by `usvg` and drawn by `vello_cpu`
+  (`paged-gpu`'s `svg` feature, ADR 189), so the viewer links `vello_cpu`
+  for that alone; tiny-skia and `resvg` are no longer in it.
 
 ## What this crate is
 
