@@ -101,10 +101,14 @@ export const CHART_SIZE_PT: [number, number] = [CHART_W_PT, CHART_H_PT];
 
 /** The size placement bounds give a chart: their extent, or
  *  {@link CHART_SIZE_PT} for a bare top-left. */
-export function chartSizeOf(bounds?: [number, number, number, number]): [number, number] {
+export function chartSizeOf(
+  bounds?: [number, number, number, number],
+): [number, number] {
   if (!bounds) return CHART_SIZE_PT;
   const [top, left, bottom, right] = bounds;
-  return right - left > 0 && bottom - top > 0 ? [right - left, bottom - top] : CHART_SIZE_PT;
+  return right - left > 0 && bottom - top > 0
+    ? [right - left, bottom - top]
+    : CHART_SIZE_PT;
 }
 
 /** Options for [`lowerChartToFrame`]. */
@@ -126,7 +130,10 @@ export interface ChartLowerOptions {
  *  behind — measured), then every element deleted (`deleteFrame` resolves
  *  paths and text frames alike). `withGroup: false` skips the dissolve, for a
  *  chart whose group the user has already taken apart. */
-export function chartRemovalOps(placed: PlacedChart, withGroup = true): Mutation[] {
+export function chartRemovalOps(
+  placed: PlacedChart,
+  withGroup = true,
+): Mutation[] {
   return [
     ...(withGroup && placed.groupId
       ? [{ op: "dissolveGroup" as const, args: { groupId: placed.groupId } }]
@@ -146,14 +153,18 @@ export async function removePlacedChart(
   placed: PlacedChart,
 ): Promise<boolean> {
   if (placed.elementIds.length === 0) return false;
-  let r = await host.document.mutate({ op: "batch", args: { ops: chartRemovalOps(placed) } });
+  let r = await host.document.mutate({
+    op: "batch",
+    args: { ops: chartRemovalOps(placed) },
+  });
   if (!r.applied && placed.groupId) {
     r = await host.document.mutate({
       op: "batch",
       args: { ops: chartRemovalOps(placed, false) },
     });
   }
-  if (!r.applied) host.log.warn("chart refresh: removing the old chart was rejected", r);
+  if (!r.applied)
+    host.log.warn("chart refresh: removing the old chart was rejected", r);
   return r.applied;
 }
 
@@ -183,25 +194,42 @@ export interface ChartPage {
  */
 export function chartBoxOnPage(
   page: ChartPage,
-  selection: { top: number; left: number; bottom: number; right: number } | null,
+  selection: {
+    top: number;
+    left: number;
+    bottom: number;
+    right: number;
+  } | null,
   size: [number, number] = CHART_SIZE_PT,
   gap: number = CHART_GAP_PT,
 ): { top: number; left: number; width: number; height: number } {
   const [mt, ml, mb, mr] = page.margins;
   // A margin box with no room left is no box: the page's own edges then.
-  let area = { top: mt, left: ml, bottom: page.height - mb, right: page.width - mr };
+  let area = {
+    top: mt,
+    left: ml,
+    bottom: page.height - mb,
+    right: page.width - mr,
+  };
   if (area.bottom - area.top < 1 || area.right - area.left < 1) {
     area = { top: 0, left: 0, bottom: page.height, right: page.width };
   }
-  const scale = Math.min(1, (area.right - area.left) / size[0], (area.bottom - area.top) / size[1]);
+  const scale = Math.min(
+    1,
+    (area.right - area.left) / size[0],
+    (area.bottom - area.top) / size[1],
+  );
   const width = size[0] * scale;
   const height = size[1] * scale;
   const x = (v: number) => Math.min(Math.max(v, area.left), area.right - width);
-  const y = (v: number) => Math.min(Math.max(v, area.top), area.bottom - height);
+  const y = (v: number) =>
+    Math.min(Math.max(v, area.top), area.bottom - height);
   if (!selection) return { top: area.top, left: area.left, width, height };
   const EPS = 0.01;
-  const fitsY = (top: number) => top >= area.top - EPS && top + height <= area.bottom + EPS;
-  const fitsX = (left: number) => left >= area.left - EPS && left + width <= area.right + EPS;
+  const fitsY = (top: number) =>
+    top >= area.top - EPS && top + height <= area.bottom + EPS;
+  const fitsX = (left: number) =>
+    left >= area.left - EPS && left + width <= area.right + EPS;
   const below = selection.bottom + gap;
   const above = selection.top - gap - height;
   const right = selection.right + gap;
@@ -223,9 +251,10 @@ export function chartBoxOnPage(
  *  else in the active page's margin box. The bounds carry the chart's size
  *  (shrunk when the page cannot hold {@link CHART_SIZE_PT}). Null with no
  *  page to place on. */
-export async function chartPlacement(
-  host: BundleHost,
-): Promise<{ pageId: PageId; bounds: [number, number, number, number] } | null> {
+export async function chartPlacement(host: BundleHost): Promise<{
+  pageId: PageId;
+  bounds: [number, number, number, number];
+} | null> {
   const selected = await selectionBox(host);
   // ONE pages read serves the spread check, the page to place on and its
   // margins.
@@ -236,7 +265,10 @@ export async function chartPlacement(
     /* no page read: placed as before, without a page to fit */
   }
   const active = (await host.document.meta()).activePage ?? null;
-  const box = selected && selectionIsInView(pages, selected.pageId, active) ? selected : null;
+  const box =
+    selected && selectionIsInView(pages, selected.pageId, active)
+      ? selected
+      : null;
   const pageId = box?.pageId ?? active ?? pages[0]?.selfId ?? null;
   if (!pageId) return null;
   let page: ChartPage | null = null;
@@ -246,7 +278,12 @@ export async function chartPlacement(
       page = {
         width: p.sizePt[0],
         height: p.sizePt[1],
-        margins: [p.marginTopPt ?? 0, p.marginLeftPt ?? 0, p.marginBottomPt ?? 0, p.marginRightPt ?? 0],
+        margins: [
+          p.marginTopPt ?? 0,
+          p.marginLeftPt ?? 0,
+          p.marginBottomPt ?? 0,
+          p.marginRightPt ?? 0,
+        ],
       };
     }
   }
@@ -254,10 +291,16 @@ export async function chartPlacement(
     const at = box
       ? { top: box.bottom + CHART_GAP_PT, left: box.left }
       : { top: CHART_INSET_PT, left: CHART_INSET_PT };
-    return { pageId, bounds: [at.top, at.left, at.top + CHART_H_PT, at.left + CHART_W_PT] };
+    return {
+      pageId,
+      bounds: [at.top, at.left, at.top + CHART_H_PT, at.left + CHART_W_PT],
+    };
   }
   const at = chartBoxOnPage(page, box);
-  return { pageId, bounds: [at.top, at.left, at.top + at.height, at.left + at.width] };
+  return {
+    pageId,
+    bounds: [at.top, at.left, at.top + at.height, at.left + at.width],
+  };
 }
 
 /** Every label of `geom`, measured at its own size with the host's shaper —
@@ -272,7 +315,9 @@ async function measureLabels(
   const labels = geom.prims.filter((p): p is TextPrim => p.kind === "text");
   const out: (LabelMetrics | null)[] = labels.map(() => null);
   const bySize = new Map<number, number[]>();
-  labels.forEach((l, i) => bySize.set(l.sizePt, [...(bySize.get(l.sizePt) ?? []), i]));
+  labels.forEach((l, i) =>
+    bySize.set(l.sizePt, [...(bySize.get(l.sizePt) ?? []), i]),
+  );
   for (const [size, at] of bySize) {
     try {
       const measured = await host.text.measureStrings(
@@ -284,11 +329,18 @@ async function measureLabels(
       at.forEach((i, k) => {
         const m = measured[k];
         if (m && Number.isFinite(m.advance) && m.advance > 0) {
-          out[i] = { advance: m.advance, ascender: m.ascender, descender: m.descender };
+          out[i] = {
+            advance: m.advance,
+            ascender: m.ascender,
+            descender: m.descender,
+          };
         }
       });
     } catch (err) {
-      host.log.debug("lowerChart: label measurement failed — estimated sizes", err);
+      host.log.debug(
+        "lowerChart: label measurement failed — estimated sizes",
+        err,
+      );
     }
   }
   return out;
@@ -390,7 +442,10 @@ export async function lowerChartToFrame(
     members.push({ kind: "textFrame", id: `$h:${handle}` });
     if (!text || text.text.length === 0) continue;
     pours.push(
-      { op: "insertText", args: { storyId: `$h:${handle}`, offset: 0, text: text.text } },
+      {
+        op: "insertText",
+        args: { storyId: `$h:${handle}`, offset: 0, text: text.text },
+      },
       ...labelStyleOps(`$h:${handle}`, text),
     );
   }
@@ -428,7 +483,9 @@ export async function lowerChartToFrame(
     await pourLabels(host, storiesBefore, texts);
   }
   if (opts?.onLowered) {
-    const made: ElementId[] = outcome.applied ? (outcome.minted ?? []).map((m) => m.element) : [];
+    const made: ElementId[] = outcome.applied
+      ? (outcome.minted ?? []).map((m) => m.element)
+      : [];
     const groupId = made.find((id) => id.kind === "group")?.id ?? null;
     opts.onLowered({
       chartIndex,
@@ -441,7 +498,8 @@ export async function lowerChartToFrame(
     });
   }
 
-  if (outcome.applied && outcome.createdId) await host.selection.set([outcome.createdId]);
+  if (outcome.applied && outcome.createdId)
+    await host.selection.set([outcome.createdId]);
   return true;
 }
 
@@ -477,7 +535,10 @@ async function pourLabels(
       op: "batch",
       args: {
         ops: [
-          { op: "insertText", args: { storyId: fresh[i], offset: 0, text: label.text } },
+          {
+            op: "insertText",
+            args: { storyId: fresh[i], offset: 0, text: label.text },
+          },
           ...labelStyleOps(fresh[i], label),
         ],
       },

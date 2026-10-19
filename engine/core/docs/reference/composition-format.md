@@ -8,12 +8,12 @@ other is the publishing format). It formalizes the composition model sketched in
 internal design note into an actual on-disk format. It **descends from today's
 `paged-scene` arrangement concepts** (spreads/pages/frames/masters/styles), cleaned per an
 internal notebook of misshapen concepts and decoupled from IDML content. Load-bearing
-*shape* only — the exact fields evolve behind it ([ADR 021](../adr/021-paged-native-document-model-idml-as-format.md) "get the architecture right; evolve the
+_shape_ only — the exact fields evolve behind it ([ADR 021](../adr/021-paged-native-document-model-idml-as-format.md) "get the architecture right; evolve the
 details").
 
-*Status note (2026-10-02): this document is partly implemented. `crates/paged-composition/src/lib.rs` implements the arrangement kernel (surfaces, flows, pages, the region/group/layer tree, the position kinds, JSON serialization) and `crates/paged-flow/src/lib.rs` implements the flow protocol of §5. Templates, instances and slots (§7) and shared-resource handles (§8) are not built. The composition is a projection derived from the document model (`Document::to_composition` in `crates/paged-scene/src/lib.rs`), not the model the renderer builds from. Its container path is `paged/core/composition/document.pgd`; `CanvasModel::refresh_composition_part` (`crates/paged-canvas/src/model.rs`) writes the part, and no wire operation calls that method. The sections below carry a note where the code differs.*
+_Status note (2026-10-02): this document is partly implemented. `crates/paged-composition/src/lib.rs` implements the arrangement kernel (surfaces, flows, pages, the region/group/layer tree, the position kinds, JSON serialization) and `crates/paged-flow/src/lib.rs` implements the flow protocol of §5. Templates, instances and slots (§7) and shared-resource handles (§8) are not built. The composition is a projection derived from the document model (`Document::to_composition` in `crates/paged-scene/src/lib.rs`), not the model the renderer builds from. Its container path is `paged/core/composition/document.pgd`; `CanvasModel::refresh_composition_part` (`crates/paged-canvas/src/model.rs`) writes the part, and no wire operation calls that method. The sections below carry a note where the code differs._
 
-## 0. What the composition is — and is *not*
+## 0. What the composition is — and is _not_
 
 The composition is **the arrangement**: how content is placed, ordered, flowed, constrained, and
 projected onto surfaces. It is the one thing no content part can own.
@@ -30,7 +30,7 @@ C1 test ("hand-build a composition with a native part, no IDML, render it") pass
 
 ## 1. Serialization — JSON, diffable, inspectable
 
-*Status note (2026-10-02): this section predates the implementation; see `Composition` in `crates/paged-composition/src/lib.rs`, which carries `format`, `version`, `capabilities`, `surfaces`, `flows`, `pages` and `nodes`. `resources`, `templates` and a page's `master` are not implemented, and a flow names its part and its selector in two fields.*
+_Status note (2026-10-02): this section predates the implementation; see `Composition` in `crates/paged-composition/src/lib.rs`, which carries `format`, `version`, `capabilities`, `surfaces`, `flows`, `pages` and `nodes`. `resources`, `templates` and a page's `master` are not implemented, and a flow names its part and its selector in two fields._
 
 `document.pgd` is a **JSON** document (aligning with [`paged-file-format.md`](paged-file-format.md) §2's open/inspectable/diffable
 principle and the `spec`-role convention). No bespoke binary. A composition is a small tree of typed
@@ -53,23 +53,23 @@ binary fast-load cache is possible later, never the source of truth — [`paged-
 
 ## 2. The node model — one generic typed tree
 
-*Status note (2026-10-02): this section predates the implementation; the `Node` enum in `crates/paged-composition/src/lib.rs` has `Region`, `Group` and `Layer`. `Guide` and `Grid` are not implemented, and a `Group` carries an id and children only.*
+_Status note (2026-10-02): this section predates the implementation; the `Node` enum in `crates/paged-composition/src/lib.rs` has `Region`, `Group` and `Layer`. `Guide` and `Grid` are not implemented, and a `Group` carries an id and children only._
 
 Nodes form a tree (`{ id, kind, props, children }`), stable-id'd. `kind` is an open enum; the
-composition's kinds are all *arrangement* kinds (never content kinds):
+composition's kinds are all _arrangement_ kinds (never content kinds):
 
 - **`Region`** — the placement unit (§3). Binds a content part into a geometry.
 - **`Group`** — grouping + a shared transform/clip.
 - **`Layer`** — a stacking + visibility/lock/print band (replaces IDML's `<Layer>`).
 - **`Guide` / `Grid`** — layout scaffolding for constraints.
 
-Geometric primitives that are *pure composition decoration with no content part* (a plain ruled line,
+Geometric primitives that are _pure composition decoration with no content part_ (a plain ruled line,
 a background swatch rectangle) are also `Region`s — with a content binding of `none` and a fill/stroke
 from the resource graph. Anything with real content (text, a table, a drawing) binds a part.
 
 ## 3. `Region` — the placement unit
 
-*Status note (2026-10-02): this section predates the implementation; `Region` in `crates/paged-composition/src/lib.rs` carries `id`, `bind`, `position`, `geometry`, `layer`, `flow` and `visibleOn`. Its geometry is a rectangular content box (`RegionGeometry` in `crates/paged-flow/src/lib.rs`: width, height, columns, column gap). `transform`, `clip`, `blend`, `opacity`, `overrides` and non-rectangular outlines are not implemented, and the container manifest records no dependency between parts.*
+_Status note (2026-10-02): this section predates the implementation; `Region` in `crates/paged-composition/src/lib.rs` carries `id`, `bind`, `position`, `geometry`, `layer`, `flow` and `visibleOn`. Its geometry is a rectangular content box (`RegionGeometry` in `crates/paged-flow/src/lib.rs`: width, height, columns, column gap). `transform`, `clip`, `blend`, `opacity`, `overrides` and non-rectangular outlines are not implemented, and the container manifest records no dependency between parts._
 
 A region places (a selector into) a content part into a geometry on a surface. Its props:
 
@@ -85,30 +85,30 @@ A region places (a selector into) a content part into a geometry on a surface. I
   draws the region's `SceneLayer` (the compositor proper).
 - **`flow`** — optional `FlowId`: this region is a link in a region-chain (§5).
 - **`visibleOn`** — a set of surfaces/conditions (§6); default: all surfaces.
-- **`overrides`** — view-local presentation overrides applied to the bound content in *this* region
+- **`overrides`** — view-local presentation overrides applied to the bound content in _this_ region
   (the "frame-local override", kept minimal).
 
-A region never contains content; it *windows* a part. Two regions may bind the *same* part with
+A region never contains content; it _windows_ a part. Two regions may bind the _same_ part with
 different selectors/geometry (the same dataset placed twice with two chart views — [`paged-file-format.md`](paged-file-format.md)
 §5's definition-vs-placement, generalized).
 
-**Binding-location rule:** a `bind` is *placement* (arrangement — belongs here). A
-*content↔content* dependency — a sheet table whose rows derive from a data part — is *content
-semantics* and lives in the **content part** (the sheet part records `{ source:"data/ds1", … }`), NOT
+**Binding-location rule:** a `bind` is _placement_ (arrangement — belongs here). A
+_content↔content_ dependency — a sheet table whose rows derive from a data part — is _content
+semantics_ and lives in the **content part** (the sheet part records `{ source:"data/ds1", … }`), NOT
 in the composition. The composition only places the region; the **container manifest records the
 inter-part dependency** (`deriveFrom` across parts) for staleness + open-order. Rule
-of thumb: a *position* (`Anchor`) is composition; a *derivation* is part-internal.
+of thumb: a _position_ (`Anchor`) is composition; a _derivation_ is part-internal.
 
 ## 4. Positioning — one constraint system
 
-*Status note (2026-10-02): this section predates the implementation; the six kinds exist as the `Position` enum in `crates/paged-composition/src/lib.rs`. Only `PageRelative` is resolved to geometry, in `crates/paged-composition-render/src/lib.rs`; the layout pass that resolves the other kinds is not built.*
+_Status note (2026-10-02): this section predates the implementation; the six kinds exist as the `Position` enum in `crates/paged-composition/src/lib.rs`. Only `PageRelative` is resolved to geometry, in `crates/paged-composition-render/src/lib.rs`; the layout pass that resolves the other kinds is not built._
 
 `position` is one of a single constraint family — never a separate model per case:
 
 - `PageRelative { page, at }` · `SpreadRelative { spread, at }` · `FrameRelative { region, edge, offset }`
 - `GridCell { grid, row, col, span }`
 - `Anchor { part, at: <selector-position> }` — anchored-to-content (a figure anchored mid-story):
-  the region's origin is a *position inside another part's content*. This is the unification —
+  the region's origin is a _position inside another part's content_. This is the unification —
   the anchored object is one constraint kind, resolved by the same layout engine, not a special model.
 - `ViewportRelative { edge, offset }` — for screen surfaces.
 
@@ -116,11 +116,11 @@ One layout pass resolves all constraint kinds into concrete geometry per surface
 
 ## 5. Flow — region-chains (the FlowId protocol, content-agnostic)
 
-*Status note (2026-10-02): implemented in `crates/paged-flow/src/lib.rs` (`FlowId`, `RegionChain`, `FlowContent`, `run_flow`, `Overset`). `crates/paged-renderer/src/flow.rs` implements the protocol for shaped text; the renderer's story emitter does not run through `run_flow` and shares the `region_overflows` rule with it. Growing a chain when content is overset is recorded in [ADR 026](../adr/026-auto-growing-region-chains.md).*
+_Status note (2026-10-02): implemented in `crates/paged-flow/src/lib.rs` (`FlowId`, `RegionChain`, `FlowContent`, `run_flow`, `Overset`). `crates/paged-renderer/src/flow.rs` implements the protocol for shaped text; the renderer's story emitter does not run through `run_flow` and shares the `region_overflows` rule with it. Growing a chain when content is overset is recorded in [ADR 026](../adr/026-auto-growing-region-chains.md)._
 
 A **flow** (`{ id, part }`) names a content sequence in a part that fragments across an **ordered set
-of regions** (each region tagged with that `flow` id). The composition owns the *chain + order +
-overset*; the content engine owns *the content and how it fragments* (composition owns the
+of regions** (each region tagged with that `flow` id). The composition owns the _chain + order +
+overset_; the content engine owns _the content and how it fragments_ (composition owns the
 views/region-chain; the part owns the story/content).
 
 - **Content-agnostic:** the same protocol threads an IDML/publishing story, an HTML flow, or a long
@@ -133,88 +133,88 @@ views/region-chain; the part owns the story/content).
 
 ## 6. Surfaces & conditions
 
-*Status note (2026-10-02): this section predates the implementation; `Surface`, `SurfaceKind` (`Print`, `Screen`) and a region's `visibleOn` exist as data in `crates/paged-composition/src/lib.rs`. No code reads `visibleOn`, and props do not vary by surface.*
+_Status note (2026-10-02): this section predates the implementation; `Surface`, `SurfaceKind` (`Print`, `Screen`) and a region's `visibleOn` exist as data in `crates/paged-composition/src/lib.rs`. No code reads `visibleOn`, and props do not vary by surface._
 
 - **`surfaces`** — a `SurfaceSet` (`print`, `screen`, …). Exactly one is the **print projection** —
   the deterministic, CMYK-exact surface the fidelity gate + PDF/IDML export target. Multi-surface never
   perturbs it.
 - A region's **`visibleOn`** restricts it to surfaces/conditions; a `screen`-only interactive web
   region is simply absent from the print projection. Props may also vary by surface.
-- **`printFallback` is not a new field:** a screen-only region plus a *print-only* region
+- **`printFallback` is not a new field:** a screen-only region plus a _print-only_ region
   (`visibleOn:["print"]`, e.g. a static image) over the same geometry gives a print fallback with the
   existing `visibleOn` mechanism — no new primitive.
 
 ## 7. Templates, instances & slots
 
-*Status note (2026-10-02): not implemented; `crates/paged-composition/src/lib.rs` has no template, instance or slot types.*
+_Status note (2026-10-02): not implemented; `crates/paged-composition/src/lib.rs` has no template, instance or slot types._
 
 - A **template** (`{ id, slots?, root }`) is a composition subtree (a page template, a repeating
   component, the master-page chrome) that may declare named **slots** (content parameters).
 - A template `Region` may `bind` a **slot** (`{ slot: "hero" }`) instead of a concrete part-selector —
-  a named placeholder for *content*.
+  a named placeholder for _content_.
 - An **instance** references a template + **fills its slots** (`slots: { hero: {part,selector}, … }`)
-  + an optional **override `DiffLayer`** (tracked property/child overrides for arrangement). Slots
-  supply per-instance *content*; overrides supply per-instance *arrangement* divergence.
+  - an optional **override `DiffLayer`** (tracked property/child overrides for arrangement). Slots
+    supply per-instance _content_; overrides supply per-instance _arrangement_ divergence.
 - Master pages, repeating product pages (a 40-page catalog — same layout, different product per
-  page via slot-fills), and component instances are the *same* primitive. Editing a template repaints
+  page via slot-fills), and component instances are the _same_ primitive. Editing a template repaints
   all instances except overridden nodes; "detach" materializes the diff. Replaces IDML's
   special-purpose master-spread + `OverriddenPageItemProps`. (Nested templates — a component instance
   inside a page template — are the same primitive recursively; unproven past one level.)
 
 ## 8. Shared resources — typed graph handles
 
-*Status note (2026-10-02): not implemented; `Composition` in `crates/paged-composition/src/lib.rs` has no `resources` field, and no code reads or writes `paged/core/resources/`.*
+_Status note (2026-10-02): not implemented; `Composition` in `crates/paged-composition/src/lib.rs` has no `resources` field, and no code reads or writes `paged/core/resources/`._
 
 `resources` are handles into `paged/core/resources/` — the **ColorGraph** and **StyleGraph** (typed
-references + relationships/inheritance) shared across *all* parts, so a swatch or paragraph style is
+references + relationships/inheritance) shared across _all_ parts, so a swatch or paragraph style is
 one entity, not a per-format duplicate. A region's fill is a `Reference<Color>` into the graph; a
 flow's base style is a `Reference<ParagraphStyle>`. This is where "one document, consistent styling"
 across an IDML story and a web frame is won.
 
 ## 9. IDML ↔ composition (the adapter boundary)
 
-*Status note (2026-10-02): this section predates the implementation; the import direction exists in part: `Document::to_composition` in `crates/paged-scene/src/lib.rs` maps pages and each story's frame chain (a flow plus text-frame regions with their content-box geometry); rectangles, groups, layers, master spreads, anchored objects and resource references are not mapped. The export direction is not built: the IDML package is written from the document model by `plugin-publish: crates/idml-export` ([ADR 022](https://github.com/paged-media/plugin-publish/blob/main/docs/adr/022-idml-relocates-to-plugin-publish.md)).*
+_Status note (2026-10-02): this section predates the implementation; the import direction exists in part: `Document::to_composition` in `crates/paged-scene/src/lib.rs` maps pages and each story's frame chain (a flow plus text-frame regions with their content-box geometry); rectangles, groups, layers, master spreads, anchored objects and resource references are not mapped. The export direction is not built: the IDML package is written from the document model by `plugin-publish: crates/idml-export` ([ADR 022](https://github.com/paged-media/plugin-publish/blob/main/docs/adr/022-idml-relocates-to-plugin-publish.md))._
 
-The composition is where the IDML *arrangement* maps in and out; IDML *content* maps to the publishing
+The composition is where the IDML _arrangement_ maps in and out; IDML _content_ maps to the publishing
 part (separate spec).
 
 **Import (`IDML → composition` + `IDML → publishing`):**
 
-| IDML arrangement | Composition |
-|---|---|
-| `<Spread>` / `<Page>` | `pages` (+ `spread`) with size + master instance |
-| `<TextFrame>` (+ `NextTextFrame` chain) | `Region`s over a `flow` bound to the publishing story |
-| `<Rectangle>/<Oval>/<Polygon>/<GraphicLine>` | `Region`s (decoration or bound to a graphic part) |
-| `<Group>` | `Group` node |
-| anchored object | a `Region` with an `Anchor` constraint (§4) |
-| `<MasterSpread>` + overrides | a `template` + instance `DiffLayer` (§7) |
-| `<Layer>` | `Layer` node (§2) |
-| swatch/style refs | `Reference<Color>`/`Reference<Style>` into the resource graph (§8) |
-| geometry, transforms, columns | region `geometry`/`transform`/columns |
+| IDML arrangement                             | Composition                                                        |
+| -------------------------------------------- | ------------------------------------------------------------------ |
+| `<Spread>` / `<Page>`                        | `pages` (+ `spread`) with size + master instance                   |
+| `<TextFrame>` (+ `NextTextFrame` chain)      | `Region`s over a `flow` bound to the publishing story              |
+| `<Rectangle>/<Oval>/<Polygon>/<GraphicLine>` | `Region`s (decoration or bound to a graphic part)                  |
+| `<Group>`                                    | `Group` node                                                       |
+| anchored object                              | a `Region` with an `Anchor` constraint (§4)                        |
+| `<MasterSpread>` + overrides                 | a `template` + instance `DiffLayer` (§7)                           |
+| `<Layer>`                                    | `Layer` node (§2)                                                  |
+| swatch/style refs                            | `Reference<Color>`/`Reference<Style>` into the resource graph (§8) |
+| geometry, transforms, columns                | region `geometry`/`transform`/columns                              |
 
 (The story/table/character content itself goes to the publishing part; provenance carry-through keeps
 what neither model owns.)
 
 **Export (derived IDML projection, `composition + parts → IDML`):** to keep `.paged` a valid IDML
-package, the composition + publishing part *regenerate* the canonical IDML parts:
+package, the composition + publishing part _regenerate_ the canonical IDML parts:
 regions over a flow → threaded `<TextFrame>`s + a `<Story>`; templates → master spreads; non-print
 parts → baked `<Image>`/PDF page-items (the derived flatten). Lossless for IDML-origin arrangement;
 best-effort + diagnostic for composition features IDML can't hold (a `screen` surface, a live binding).
 
 ## 10. Relationship to the render pipeline (unchanged below)
 
-*Status note (2026-10-02): this section predates the implementation; `crates/paged-composition-render/src/lib.rs` renders one page of a composition through a `RegionRenderer` (single page, `PageRelative` positions). The production pipeline does not go through it; it builds display lists from the document model ([ADR 107](../adr/107-whole-document-build.md)).*
+_Status note (2026-10-02): this section predates the implementation; `crates/paged-composition-render/src/lib.rs` renders one page of a composition through a `RegionRenderer` (single page, `PageRelative` positions). The production pipeline does not go through it; it builds display lists from the document model ([ADR 107](../adr/107-whole-document-build.md))._
 
 The composition **drives the compositor**: for a target surface, resolve constraints → geometry; ask
 each region's engine to render its `part:selector` into that geometry → a `SceneLayer` (per region, per
 flow-fragment); the compositor arranges them by layer/z/clip/transform/blend (§3). PDF/print export =
 the compositor over the print-projection SceneLayers. This is exactly today's `paged-compose` +
-`SceneLayer` path ([ADR 013](../adr/013-in-frame-scenelayer.md)) — the composition format just makes the *arrangement* it composites
+`SceneLayer` path ([ADR 013](../adr/013-in-frame-scenelayer.md)) — the composition format just makes the _arrangement_ it composites
 explicit and Paged-owned, instead of implicit in the IDML scene.
 
 ## 11. Versioning & capabilities
 
-*Status note (2026-10-02): this section predates the implementation; `version` and `capabilities` are fields of `Composition` in `crates/paged-composition/src/lib.rs`. No code checks them when the part is read, and `minEngine` and the render-cache fallback are not implemented.*
+_Status note (2026-10-02): this section predates the implementation; `version` and `capabilities` are fields of `Composition` in `crates/paged-composition/src/lib.rs`. No code checks them when the part is read, and `minEngine` and the render-cache fallback are not implemented._
 
 `document.pgd` carries `version` (its `producer.version`) and declares the `capabilities` it uses
 (`flow.regionChain@N`, `surface.screen@N`, `positioning.grid@N`, …) + contributes to the document's
@@ -223,7 +223,7 @@ explicit and Paged-owned, instead of implicit in the IDML scene.
 
 ## 12. Open questions
 
-- **Selector grammar** — the composition holds selectors opaquely, but a *shared minimal* selector
+- **Selector grammar** — the composition holds selectors opaquely, but a _shared minimal_ selector
   convention (`story/<id>`, `flow:<name>`, `<A1:range>`) helps tooling; how much is standardized vs
   per-engine.
 - **Geometry for non-rect regions** — inline path vs `Reference<vector-part>`; how a clip/frame shape
@@ -233,14 +233,14 @@ explicit and Paged-owned, instead of implicit in the IDML scene.
   paged.web fragmentation already does.)
 - **Undo/collaboration identity** on composition nodes (out of scope for v1; stable ids are the enabler).
 - **How much of the print-projection regeneration is deterministic** enough for the fidelity gate to
-  run on the *derived* IDML (vs on the composition directly).
+  run on the _derived_ IDML (vs on the composition directly).
 
 ---
 
 **Bottom line.** `document.pgd` is a small JSON tree of **arrangement** nodes — surfaces, pages,
 **regions** that bind (a selector into) a content part into a positioned, layered, clipped geometry,
 **region-chains** that flow a part's content across regions (the content-agnostic `FlowId`), a single
-positioning-constraint system, template/instances, and typed shared-resource references. It holds *no
-content* — content lives in parts, referenced by handle. It descends from `paged-scene`'s arrangement
+positioning-constraint system, template/instances, and typed shared-resource references. It holds _no
+content_ — content lives in parts, referenced by handle. It descends from `paged-scene`'s arrangement
 concepts, cleaned, and drives the existing compositor unchanged. It is the
 core-owned "native model," and the first code seam over it is the region-chain/flow protocol.

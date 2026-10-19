@@ -21,9 +21,20 @@
 // an exit code. In-process callable (the tests drive it), and what the
 // `paged-node` bin runs.
 
-import { parseArgs, flagBool, flagStr, type OptionSpec, type ParsedArgs } from "./args";
+import {
+  parseArgs,
+  flagBool,
+  flagStr,
+  type OptionSpec,
+  type ParsedArgs,
+} from "./args";
 import { BIN, CliError, EXIT } from "./errors";
-import { cliVersion, engineVersionOnDisk, openSession, type CliSession } from "./session";
+import {
+  cliVersion,
+  engineVersionOnDisk,
+  openSession,
+  type CliSession,
+} from "./session";
 import { GLOBAL_OPTIONS, sessionOptions, VERBS, type Verb } from "./verbs";
 
 export interface MainIO {
@@ -42,14 +53,18 @@ const optionLine = (o: OptionSpec): string =>
 
 /** `paged-node --help`, generated from the verb table. */
 export function helpText(): string {
-  const width = Math.max(...VERBS.map((v) => v.name.length + v.usage.length + 1));
+  const width = Math.max(
+    ...VERBS.map((v) => v.name.length + v.usage.length + 1),
+  );
   return [
     `${BIN} ${cliVersion()} — the paged Node CLI over core and every installed plugin (ADR 324)`,
     "",
     `usage: ${BIN} <verb> [args] [options]`,
     "",
     "verbs:",
-    ...VERBS.map((v) => `  ${`${v.name} ${v.usage}`.padEnd(width + 2)} ${v.summary}`),
+    ...VERBS.map(
+      (v) => `  ${`${v.name} ${v.usage}`.padEnd(width + 2)} ${v.summary}`,
+    ),
     "",
     "options (every verb):",
     ...GLOBAL_OPTIONS.map(optionLine),
@@ -76,7 +91,9 @@ export function verbHelp(v: Verb): string {
 
 function textMode(args: ParsedArgs, verb: Verb): boolean {
   if (flagBool(args, "text")) return true;
-  const fmtIsOutput = verb.options.some((o) => o.name === "format" && o.value === "json|text");
+  const fmtIsOutput = verb.options.some(
+    (o) => o.name === "format" && o.value === "json|text",
+  );
   const f = flagStr(args, "format");
   if (fmtIsOutput && f !== undefined && f !== "json" && f !== "text") {
     throw new CliError(EXIT.usage, `--format: "${f}" is not json | text`);
@@ -85,30 +102,50 @@ function textMode(args: ParsedArgs, verb: Verb): boolean {
 }
 
 /** Run the CLI; resolves to the exit code. Never calls process.exit. */
-export async function main(argv: readonly string[], io: MainIO = processIO): Promise<number> {
+export async function main(
+  argv: readonly string[],
+  io: MainIO = processIO,
+): Promise<number> {
   const cwd = io.cwd ?? process.cwd();
   const [first, ...rest] = argv;
-  if (first === undefined || first === "--help" || first === "-h" || first === "help") {
+  if (
+    first === undefined ||
+    first === "--help" ||
+    first === "-h" ||
+    first === "help"
+  ) {
     io.stdout(helpText());
     return first === undefined ? EXIT.usage : EXIT.ok;
   }
   if (first === "--version" || first === "-v") {
-    io.stdout(JSON.stringify({ cli: cliVersion(), engine: engineVersionOnDisk() }));
+    io.stdout(
+      JSON.stringify({ cli: cliVersion(), engine: engineVersionOnDisk() }),
+    );
     return EXIT.ok;
   }
   const verb = VERBS.find((v) => v.name === first);
   let text = false;
   let session: CliSession | null = null;
   try {
-    if (!verb) throw new CliError(EXIT.usage, `unknown verb "${first}" — one of: ${VERBS.map((v) => v.name).join(", ")}`);
+    if (!verb)
+      throw new CliError(
+        EXIT.usage,
+        `unknown verb "${first}" — one of: ${VERBS.map((v) => v.name).join(", ")}`,
+      );
     const args = parseArgs(rest, [...verb.options, ...GLOBAL_OPTIONS]);
     if (flagBool(args, "help")) {
       io.stdout(verbHelp(verb));
       return EXIT.ok;
     }
     text = textMode(args, verb);
-    if (args.positionals.length < verb.min || args.positionals.length > verb.max) {
-      throw new CliError(EXIT.usage, `usage: ${BIN} ${verb.name} ${verb.usage}`);
+    if (
+      args.positionals.length < verb.min ||
+      args.positionals.length > verb.max
+    ) {
+      throw new CliError(
+        EXIT.usage,
+        `usage: ${BIN} ${verb.name} ${verb.usage}`,
+      );
     }
     const options = sessionOptions(args, cwd);
     const result = await verb.run({
@@ -120,12 +157,29 @@ export async function main(argv: readonly string[], io: MainIO = processIO): Pro
         return session;
       },
     });
-    io.stdout(text && result.text !== undefined ? result.text : JSON.stringify(result.json, null, 2));
+    io.stdout(
+      text && result.text !== undefined
+        ? result.text
+        : JSON.stringify(result.json, null, 2),
+    );
     return result.exit ?? EXIT.ok;
   } catch (err) {
-    const e = err instanceof CliError ? err : new CliError(EXIT.failed, err instanceof Error ? (err.stack ?? err.message) : String(err));
+    const e =
+      err instanceof CliError
+        ? err
+        : new CliError(
+            EXIT.failed,
+            err instanceof Error ? (err.stack ?? err.message) : String(err),
+          );
     if (text) io.stderr(`${BIN}: ${e.message}`);
-    else io.stdout(JSON.stringify({ error: { message: e.message, exit: e.exit, ...(e.detail ?? {}) } }, null, 2));
+    else
+      io.stdout(
+        JSON.stringify(
+          { error: { message: e.message, exit: e.exit, ...(e.detail ?? {}) } },
+          null,
+          2,
+        ),
+      );
     return e.exit;
   } finally {
     (session as CliSession | null)?.dispose();

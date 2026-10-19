@@ -112,7 +112,10 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
           A plugin asked to store a credential under{" "}
           <code
             data-testid="secret-ref"
-            style={{ font: "12px var(--font-mono, monospace)", color: "var(--fg, #e7e7e7)" }}
+            style={{
+              font: "12px var(--font-mono, monospace)",
+              color: "var(--fg, #e7e7e7)",
+            }}
           >
             {pending.ref}
           </code>
@@ -153,7 +156,11 @@ function SecretPrompt({ pending }: { pending: PendingSecret }) {
 
         <p
           data-testid="secret-tier-note"
-          style={{ margin: "8px 0 16px", fontSize: 12, color: "var(--muted-fg, #9a9a9a)" }}
+          style={{
+            margin: "8px 0 16px",
+            fontSize: 12,
+            color: "var(--muted-fg, #9a9a9a)",
+          }}
         >
           {tierNote}
         </p>

@@ -49,7 +49,11 @@ export interface PtRect {
 interface CanvasGlobal {
   __canvas: {
     ready: boolean;
-    handle: { pageCount: number; pageIds: string[]; pageSizesPt: [number, number][] } | null;
+    handle: {
+      pageCount: number;
+      pageIds: string[];
+      pageSizesPt: [number, number][];
+    } | null;
     openPanel?: (id: string) => void;
     setElementSelection?: (
       ids: Array<{ kind: string; id: string }>,
@@ -90,7 +94,12 @@ interface CanvasGlobal {
       ) => Promise<void>;
       collection: (name: string) => Promise<Array<{ selfId: string }>>;
       layers: () => Promise<
-        Array<{ selfId: string; name?: string; visible?: boolean; locked?: boolean }>
+        Array<{
+          selfId: string;
+          name?: string;
+          visible?: boolean;
+          locked?: boolean;
+        }>
       >;
     };
     gpuActive?: boolean | null;
@@ -163,7 +172,8 @@ export class Designer {
 
   async openPanel(id: string): Promise<void> {
     await this.page.evaluate(
-      (pid) => (globalThis as unknown as CanvasGlobal).__canvas.openPanel?.(pid),
+      (pid) =>
+        (globalThis as unknown as CanvasGlobal).__canvas.openPanel?.(pid),
       id,
     );
   }
@@ -239,7 +249,10 @@ export class Designer {
     const before = await treeIds(this.page, "textFrame");
     const reply = (await mutate(this.page, {
       op: "insertTextFrame",
-      args: { pageId: pageIds[0], bounds: [rect.y0, rect.x0, rect.y1, rect.x1] },
+      args: {
+        pageId: pageIds[0],
+        bounds: [rect.y0, rect.x0, rect.y1, rect.x1],
+      },
     })) as { payload?: { createdId?: { id?: string } } };
     await expect
       .poll(() => treeCount(this.page, "textFrame"))
@@ -383,13 +396,14 @@ export class Designer {
 
   /** Channel-create a graphic frame; returns its created ElementId ref
    *  ({kind,id}). The fast-path counterpart to {@link drawRectangle}. */
-  async addFrame(
-    rect: PtRect,
-  ): Promise<{ kind: string; id: string } | null> {
+  async addFrame(rect: PtRect): Promise<{ kind: string; id: string } | null> {
     const { pageIds } = await this.handle();
     const reply = (await mutate(this.page, {
       op: "insertFrame",
-      args: { pageId: pageIds[0], bounds: [rect.y0, rect.x0, rect.y1, rect.x1] },
+      args: {
+        pageId: pageIds[0],
+        bounds: [rect.y0, rect.x0, rect.y1, rect.x1],
+      },
     })) as { payload?: { createdId?: { kind: string; id: string } } };
     return reply.payload?.createdId ?? null;
   }
@@ -434,7 +448,9 @@ export class Designer {
     // set JOURNEY_VISUAL=1 (with Linux baselines present) to enable it.
     if (process.env.CI && process.env.JOURNEY_VISUAL !== "1") {
       // eslint-disable-next-line no-console
-      console.log(`[journey] content checkpoint "${name}" skipped in CI (no platform baseline)`);
+      console.log(
+        `[journey] content checkpoint "${name}" skipped in CI (no platform baseline)`,
+      );
       return;
     }
     const { pageIds, pageSizesPt } = await this.handle();
@@ -577,7 +593,10 @@ export class Designer {
     await expect
       .poll(
         async () => {
-          changed = await this.renderDiffPixels(before, await this.renderBytes());
+          changed = await this.renderDiffPixels(
+            before,
+            await this.renderBytes(),
+          );
           return changed;
         },
         {
@@ -610,8 +629,7 @@ export class Designer {
    *  plugin pixels (paged.image's kernels) on this. */
   async gpuActive(): Promise<boolean> {
     return this.page.evaluate(
-      () =>
-        (globalThis as unknown as CanvasGlobal).__canvas.gpuActive === true,
+      () => (globalThis as unknown as CanvasGlobal).__canvas.gpuActive === true,
     );
   }
 
@@ -784,11 +802,7 @@ export class Designer {
    *  produces) — needed before changing a character property via a
    *  panel. Unlike {@link placeCaret} it does NOT blur, so the panel
    *  control can take focus. */
-  async selectText(
-    storyId: string,
-    start: number,
-    end: number,
-  ): Promise<void> {
+  async selectText(storyId: string, start: number, end: number): Promise<void> {
     await setCaret(this.page, storyId, start, end);
   }
 
@@ -799,10 +813,7 @@ export class Designer {
    * `fillPanelControl("characterFontSize", 36)` types 36 into the
    * Character panel's size field.
    */
-  async fillPanelControl(
-    path: string,
-    value: number | string,
-  ): Promise<void> {
+  async fillPanelControl(path: string, value: number | string): Promise<void> {
     const input = this.page.locator(`[data-control="${path}"] input`).first();
     await expect(input).toBeVisible();
     await input.fill(String(value));
@@ -820,7 +831,10 @@ export class Designer {
     await mutate(this.page, {
       op: "setElementProperty",
       args: {
-        elementId: { kind: "storyRange", id: { story_id: storyId, start, end } },
+        elementId: {
+          kind: "storyRange",
+          id: { story_id: storyId, start, end },
+        },
         path: "characterFontSize",
         value: { type: "length", value: pt },
       },
@@ -855,14 +869,20 @@ export class Designer {
   /** Read a document collection (swatches, colorGroups, …). */
   async collection(name: string): Promise<Array<{ selfId: string }>> {
     return this.page.evaluate(
-      (n) => (globalThis as unknown as CanvasGlobal).__canvas.client.collection(n),
+      (n) =>
+        (globalThis as unknown as CanvasGlobal).__canvas.client.collection(n),
       name,
     );
   }
 
   /** Read the layer list. */
   async layers(): Promise<
-    Array<{ selfId: string; name?: string; visible?: boolean; locked?: boolean }>
+    Array<{
+      selfId: string;
+      name?: string;
+      visible?: boolean;
+      locked?: boolean;
+    }>
   > {
     return this.page.evaluate(() =>
       (globalThis as unknown as CanvasGlobal).__canvas.client.layers(),
@@ -896,7 +916,10 @@ export class Designer {
       .poll(async () => (await this.collection("swatches")).length)
       .toBeGreaterThan(before.length);
     const after = await this.collection("swatches");
-    return after.find((s) => !before.some((b) => b.selfId === s.selfId))?.selfId ?? "";
+    return (
+      after.find((s) => !before.some((b) => b.selfId === s.selfId))?.selfId ??
+      ""
+    );
   }
 
   /** Create an (empty) color group. */
@@ -925,7 +948,10 @@ export class Designer {
       .poll(async () => (await this.collection("gradients")).length)
       .toBeGreaterThan(before.length);
     const after = await this.collection("gradients");
-    return after.find((g) => !before.some((b) => b.selfId === g.selfId))?.selfId ?? "";
+    return (
+      after.find((g) => !before.some((b) => b.selfId === g.selfId))?.selfId ??
+      ""
+    );
   }
 
   /** Invoke a registered command the way the menu, the palette and the
@@ -980,7 +1006,10 @@ export class Designer {
       .poll(async () => (await this.layers()).length)
       .toBeGreaterThan(before.length);
     const after = await this.layers();
-    return after.find((l) => !before.some((b) => b.selfId === l.selfId))?.selfId ?? "";
+    return (
+      after.find((l) => !before.some((b) => b.selfId === l.selfId))?.selfId ??
+      ""
+    );
   }
 
   /** Toggle a layer's visibility. */

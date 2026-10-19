@@ -37,11 +37,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { openCanvas } from "../fidelity/canvas-driver";
 import { elementPageRectPt, type ElementRef } from "./harness/fixtures";
-import {
-  bounds,
-  itemTransform,
-  runGesture,
-} from "./harness/gesture";
+import { bounds, itemTransform, runGesture } from "./harness/gesture";
 import { selectElements, clearSelection } from "./harness/ui";
 import {
   activateTool,
@@ -90,7 +86,9 @@ async function drawRect(
 }
 
 test.describe("E2E-01 — create → Shift-move → Alt-resize → Shift-rotate → undo×4 → redo×4", () => {
-  test("AC-E2E-GEST-FAM-1 @feat:editor-tools.draw.rectangle @feat:editor-tools.move.translate @feat:editor-tools.select.click-marquee @level:happy", async ({ page }) => {
+  test("AC-E2E-GEST-FAM-1 @feat:editor-tools.draw.rectangle @feat:editor-tools.move.translate @feat:editor-tools.select.click-marquee @level:happy", async ({
+    page,
+  }) => {
     test.setTimeout(180_000);
     await openCanvas(page);
     const fx = await loadViaReactPath(page, "geometry");
@@ -125,7 +123,8 @@ test.describe("E2E-01 — create → Shift-move → Alt-resize → Shift-rotate 
     // Worker commit lands asynchronously after pointer-up.
     await expect
       .poll(
-        async () => (await elementPageRectPt(page, ref))!.left - afterCreate.left,
+        async () =>
+          (await elementPageRectPt(page, ref))!.left - afterCreate.left,
         { timeout: 5_000 },
       )
       .toBeGreaterThan(dxPx / start.scale - 6);
@@ -230,7 +229,9 @@ test.describe("E2E-01 — create → Shift-move → Alt-resize → Shift-rotate 
 });
 
 test.describe("E2E-04 — marquee subset → rigid group drag → one undo", () => {
-  test("AC-E2E-GEST-FAM-2 @feat:editor-tools.draw.rectangle @feat:editor-tools.move.translate @feat:editor-tools.select.click-marquee @level:happy", async ({ page }) => {
+  test("AC-E2E-GEST-FAM-2 @feat:editor-tools.draw.rectangle @feat:editor-tools.move.translate @feat:editor-tools.select.click-marquee @level:happy", async ({
+    page,
+  }) => {
     test.setTimeout(180_000);
     await openCanvas(page);
     const fx = await loadViaReactPath(page, "geometry");
@@ -318,10 +319,9 @@ test.describe("E2E-04 — marquee subset → rigid group drag → one undo", () 
       { settleMs: 200 },
     );
     await expect
-      .poll(
-        async () => (await elementPageRectPt(page, a))!.left - rectA.left,
-        { timeout: 5_000 },
-      )
+      .poll(async () => (await elementPageRectPt(page, a))!.left - rectA.left, {
+        timeout: 5_000,
+      })
       .toBeGreaterThan(dxPx / g0.scale - 6);
     const movedA = (await elementPageRectPt(page, a))!;
     const movedB = (await elementPageRectPt(page, b))!;

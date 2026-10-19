@@ -64,10 +64,15 @@ function commandFor(h: HeadlessHost, id: string): CommandContribution {
 async function leafIds(h: HeadlessHost): Promise<string[]> {
   const roots = await h.host.document.tree();
   const out: string[] = [];
-  const walk = (nodes: { id?: { id?: unknown } | null; children?: unknown[] }[]) => {
+  const walk = (
+    nodes: { id?: { id?: unknown } | null; children?: unknown[] }[],
+  ) => {
     for (const node of nodes) {
       const raw = node.id?.id;
-      if (typeof raw === "string" && (!node.children || node.children.length === 0)) {
+      if (
+        typeof raw === "string" &&
+        (!node.children || node.children.length === 0)
+      ) {
         out.push(raw);
       }
       if (node.children) walk(node.children as never);
@@ -136,7 +141,9 @@ describe("draw conformance — insert-shape commands (wave 2)", () => {
         expect(a[k][1]).toBeCloseTo(v0.anchors[i][k][1], 9);
       }
     });
-    expect(spiralTablesFor({ ...SPIRAL_PARAM_DEFAULTS })).toEqual([spiralDefaultTable()]);
+    expect(spiralTablesFor({ ...SPIRAL_PARAM_DEFAULTS })).toEqual([
+      spiralDefaultTable(),
+    ]);
     expect(rectGridTablesFor({ ...RECT_GRID_PARAM_DEFAULTS })).toEqual(
       rectGridDefaultTables(),
     );

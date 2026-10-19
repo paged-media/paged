@@ -28,7 +28,9 @@ import { expect, test } from "@playwright/test";
 import { Designer } from "../driver/designer";
 
 test.describe("journey · layers", () => {
-  test("add a layer and toggle its visibility @feat:editor-shell.context-toolbars @feat:editor-shell.panels.properties @feat:layers.ops @feat:layers.model @feat:editor-shell.panels.layers @level:happy", async ({ page }) => {
+  test("add a layer and toggle its visibility @feat:editor-shell.context-toolbars @feat:editor-shell.panels.properties @feat:layers.ops @feat:layers.model @feat:editor-shell.panels.layers @level:happy", async ({
+    page,
+  }) => {
     const designer = new Designer(page);
     await designer.open();
     await designer.newDocument();
@@ -41,16 +43,18 @@ test.describe("journey · layers", () => {
     // Hide it…
     await designer.setLayerVisible(layerId, false);
     await expect
-      .poll(async () =>
-        (await designer.layers()).find((l) => l.selfId === layerId)?.visible,
+      .poll(
+        async () =>
+          (await designer.layers()).find((l) => l.selfId === layerId)?.visible,
       )
       .toBe(false);
 
     // …and show it again.
     await designer.setLayerVisible(layerId, true);
     await expect
-      .poll(async () =>
-        (await designer.layers()).find((l) => l.selfId === layerId)?.visible,
+      .poll(
+        async () =>
+          (await designer.layers()).find((l) => l.selfId === layerId)?.visible,
       )
       .toBe(true);
   });

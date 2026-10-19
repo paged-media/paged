@@ -52,7 +52,9 @@ const pair: fc.Arbitrary<[AnchorTriple[], AnchorTriple[]]> = fc
   );
 
 const sizeOf = (...runs: AnchorTriple[][]): number =>
-  magnitude(...runs.flatMap((run) => run.flatMap((a) => [a.anchor, a.left, a.right])));
+  magnitude(
+    ...runs.flatMap((run) => run.flatMap((a) => [a.anchor, a.left, a.right])),
+  );
 
 const channel = fc.integer({ min: 0, max: 255 });
 const rgb: fc.Arbitrary<Rgb> = fc.tuple(channel, channel, channel);
@@ -117,8 +119,14 @@ describe("blend — interpolateAnchors (properties)", () => {
       fc.property(pair, real(-1, 2), ([a, b], t) => {
         interpolateAnchors(a, b, t).forEach((anchor, i) => {
           const bothCorners =
-            KEYS.every((k) => a[i][k][0] === a[i].anchor[0] && a[i][k][1] === a[i].anchor[1]) &&
-            KEYS.every((k) => b[i][k][0] === b[i].anchor[0] && b[i][k][1] === b[i].anchor[1]);
+            KEYS.every(
+              (k) =>
+                a[i][k][0] === a[i].anchor[0] && a[i][k][1] === a[i].anchor[1],
+            ) &&
+            KEYS.every(
+              (k) =>
+                b[i][k][0] === b[i].anchor[0] && b[i][k][1] === b[i].anchor[1],
+            );
           if (!bothCorners) return;
           // Exactly collapsed, not merely within the classifier's 1e-3.
           assertVecClose(anchor.left, anchor.anchor, 0, `[${i}].left`);
@@ -143,7 +151,8 @@ describe("blend — interpolateAnchors (properties)", () => {
   it("answers [] for mismatched lengths or a non-finite t, never a throw", () => {
     fc.assert(
       fc.property(anchorRun(0, 5), anchorRun(0, 5), unit, (a, b, t) => {
-        if (a.length !== b.length) expect(interpolateAnchors(a, b, t)).toEqual([]);
+        if (a.length !== b.length)
+          expect(interpolateAnchors(a, b, t)).toEqual([]);
         for (const bad of [Number.NaN, Infinity, -Infinity]) {
           expect(interpolateAnchors(a, a, bad)).toEqual([]);
         }
@@ -210,7 +219,10 @@ describe("blend — mixRgb (properties)", () => {
       fc.property(rgb, rgb, unit, (a, b, t) => {
         mixRgb(a, b, t).forEach((v, i) => {
           const exact = a[i] + (b[i] - a[i]) * t;
-          assertTrue(Math.abs(v - exact) <= 0.5 + 1e-9, `channel ${i}: ${v} vs ${exact}`);
+          assertTrue(
+            Math.abs(v - exact) <= 0.5 + 1e-9,
+            `channel ${i}: ${v} vs ${exact}`,
+          );
         });
       }),
     );
@@ -229,11 +241,19 @@ describe("blend — mixRgb (properties)", () => {
   it("clamps out-of-gamut input into 0..255", () => {
     const loose = real(-500, 800);
     fc.assert(
-      fc.property(fc.tuple(loose, loose, loose), fc.tuple(loose, loose, loose), unit, (a, b, t) => {
-        for (const v of mixRgb(a, b, t)) {
-          assertTrue(Number.isInteger(v) && v >= 0 && v <= 255, `channel = ${v}`);
-        }
-      }),
+      fc.property(
+        fc.tuple(loose, loose, loose),
+        fc.tuple(loose, loose, loose),
+        unit,
+        (a, b, t) => {
+          for (const v of mixRgb(a, b, t)) {
+            assertTrue(
+              Number.isInteger(v) && v >= 0 && v <= 255,
+              `channel = ${v}`,
+            );
+          }
+        },
+      ),
     );
   });
 });

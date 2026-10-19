@@ -143,23 +143,31 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   expect(cellStyles.map((s) => s.name)).not.toContain("Scratch Cell");
 
   // ── the page ─────────────────────────────────────────────────────
-  const head = await proseFrame(ctx, p(70), [60, 58, 492, 88], [
-    { text: "Dressing the grid", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, p(70), [60, 92, 492, 172], [
-    {
-      text:
-        "Two styles were minted for this page: a table style born Ledger " +
-        "and renamed Financial, and a cell style born TD Money, renamed " +
-        "TD Currency, based on the fixture's Annual TD Number. A scratch " +
-        "pair ran the whole create-and-delete round transiently. What a " +
-        "live-created style cannot yet do is carry arms — the definition " +
-        "door refuses the cell and table collections, so Financial is a " +
-        "name with a cascade position and nothing in its pockets. The " +
-        "switch below makes that visible instead of hiding it.",
-      style: STYLE.body,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    p(70),
+    [60, 58, 492, 88],
+    [{ text: "Dressing the grid", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    p(70),
+    [60, 92, 492, 172],
+    [
+      {
+        text:
+          "Two styles were minted for this page: a table style born Ledger " +
+          "and renamed Financial, and a cell style born TD Money, renamed " +
+          "TD Currency, based on the fixture's Annual TD Number. A scratch " +
+          "pair ran the whole create-and-delete round transiently. What a " +
+          "live-created style cannot yet do is carry arms — the definition " +
+          "door refuses the cell and table collections, so Financial is a " +
+          "name with a cascade position and nothing in its pockets. The " +
+          "switch below makes that visible instead of hiding it.",
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── the switch exhibit: cascade made visible ─────────────────────
@@ -199,8 +207,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     await pourStyledCell(doc, storyId, tid, 2, 0, "cascade", tableBody);
     await pourStyledCell(doc, storyId, tid, 2, 1, "resolved live", tableBody);
     await insetCells(doc, storyId, tid, [
-      [0, 0, "both"], [0, 1, "both"], [1, 0, "both"], [1, 1, "both"],
-      [2, 0, "both"], [2, 1, "both"],
+      [0, 0, "both"],
+      [0, 1, "both"],
+      [1, 0, "both"],
+      [1, 1, "both"],
+      [2, 0, "both"],
+      [2, 1, "both"],
     ]);
     await doc.setProperty(
       "table",
@@ -211,16 +223,21 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   };
   await mkSwitch([60, 186, 274, 276], annualTableId, "Annual Table");
   await mkSwitch([278, 186, 492, 276], FINANCIAL_ID, "Financial");
-  const switchCaption = await proseFrame(ctx, p(70), [60, 282, 492, 322], [
-    {
-      text:
-        "The same table twice. Left, appliedTableStyle names the fixture's " +
-        "Annual Table: header band, alternating fills, hairlines — all " +
-        "region defaults. Right, it names the live-created Financial: the " +
-        "dressing vanishes, because the style is real but empty.",
-      style: STYLE.caption,
-    },
-  ]);
+  const switchCaption = await proseFrame(
+    ctx,
+    p(70),
+    [60, 282, 492, 322],
+    [
+      {
+        text:
+          "The same table twice. Left, appliedTableStyle names the fixture's " +
+          "Annual Table: header band, alternating fills, hairlines — all " +
+          "region defaults. Right, it names the live-created Financial: the " +
+          "dressing vanishes, because the style is real but empty.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(switchCaption.frameId);
 
   // ── the closing exhibit ──────────────────────────────────────────
@@ -254,18 +271,63 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
   const headers = ["QTR", "MILESTONE", "RUNS", "COST (EUR)"];
   for (const [col, label] of headers.entries()) {
-    await pourStyledCell(doc, exhibitStory, exhibitId, 0, col, label, tableHead);
+    await pourStyledCell(
+      doc,
+      exhibitStory,
+      exhibitId,
+      0,
+      col,
+      label,
+      tableHead,
+    );
   }
   for (const [i, row] of LEDGER.entries()) {
-    await pourStyledCell(doc, exhibitStory, exhibitId, 1 + i, 0, row[0], tableBody);
-    await pourStyledCell(doc, exhibitStory, exhibitId, 1 + i, 1, row[1], tableBody);
-    await pourStyledCell(doc, exhibitStory, exhibitId, 1 + i, 2, row[2], tableNumber);
-    await pourStyledCell(doc, exhibitStory, exhibitId, 1 + i, 3, row[3], tableNumber);
+    await pourStyledCell(
+      doc,
+      exhibitStory,
+      exhibitId,
+      1 + i,
+      0,
+      row[0],
+      tableBody,
+    );
+    await pourStyledCell(
+      doc,
+      exhibitStory,
+      exhibitId,
+      1 + i,
+      1,
+      row[1],
+      tableBody,
+    );
+    await pourStyledCell(
+      doc,
+      exhibitStory,
+      exhibitId,
+      1 + i,
+      2,
+      row[2],
+      tableNumber,
+    );
+    await pourStyledCell(
+      doc,
+      exhibitStory,
+      exhibitId,
+      1 + i,
+      3,
+      row[3],
+      tableNumber,
+    );
   }
   {
     const pad: Array<[number, number, "left" | "right" | "both"]> = [];
     for (let r = 0; r <= LEDGER.length; r += 1) {
-      pad.push([r, 0, "both"], [r, 1, "left"], [r, 2, "right"], [r, 3, "right"]);
+      pad.push(
+        [r, 0, "both"],
+        [r, 1, "left"],
+        [r, 2, "right"],
+        [r, 3, "right"],
+      );
     }
     await insetCells(doc, exhibitStory, exhibitId, pad);
   }
@@ -300,16 +362,21 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   }
   await doc.batch(decor);
 
-  const exhibitCaption = await proseFrame(ctx, p(70), [60, 508, 492, 560], [
-    {
-      text:
-        "The figures column is set in Table Number — right-aligned " +
-        "tabular lining, the fixture's own style — with appliedCellStyle " +
-        "naming Annual TD Number per cell. Decimal figures align on " +
-        "their tabular widths and the right edge.",
-      style: STYLE.caption,
-    },
-  ]);
+  const exhibitCaption = await proseFrame(
+    ctx,
+    p(70),
+    [60, 508, 492, 560],
+    [
+      {
+        text:
+          "The figures column is set in Table Number — right-aligned " +
+          "tabular lining, the fixture's own style — with appliedCellStyle " +
+          "naming Annual TD Number per cell. Decimal figures align on " +
+          "their tabular widths and the right edge.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(exhibitCaption.frameId);
 
   await marginNote(

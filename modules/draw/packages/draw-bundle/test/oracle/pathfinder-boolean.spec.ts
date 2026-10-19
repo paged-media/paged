@@ -172,7 +172,8 @@ const BOUNDS: Record<string, [number, number, number, number]> = {
 
 const FIXTURE = loadOracle<BooleanParameters>("pathfinder-boolean");
 const RECORDED = new Map(FIXTURE.cases.map((c) => [c.id, c]));
-const theirs = (id: string): ShapeSummary => summarize(RECORDED.get(id)!.measured.paths);
+const theirs = (id: string): ShapeSummary =>
+  summarize(RECORDED.get(id)!.measured.paths);
 
 describe("oracle — pathfinder booleans", () => {
   let h: HeadlessHost;
@@ -228,10 +229,14 @@ describe("oracle — pathfinder booleans", () => {
       for (const c of FIXTURE.cases) {
         for (const p of c.measured.paths) {
           const signed = signedArea(p);
-          expect(relDiff(Math.abs(signed), p.area), `${c.id} area`).toBeLessThan(AREA_REL_TOL);
-          expect(boundsDiff(pathBounds(p), p.bounds), `${c.id} bounds`).toBeLessThan(
-            BOUNDS_ABS_TOL,
-          );
+          expect(
+            relDiff(Math.abs(signed), p.area),
+            `${c.id} area`,
+          ).toBeLessThan(AREA_REL_TOL);
+          expect(
+            boundsDiff(pathBounds(p), p.bounds),
+            `${c.id} bounds`,
+          ).toBeLessThan(BOUNDS_ABS_TOL);
           expect(windingOf(signed), `${c.id} winding`).toBe(p.winding);
         }
       }
@@ -242,10 +247,14 @@ describe("oracle — pathfinder booleans", () => {
     it("every case paints the set operation that was ASKED for, within its bounds", () => {
       for (const c of PATHFINDER_BOOLEAN_CASES) {
         const got = theirs(c.id);
-        expect(relDiff(got.fillArea, byDefinition(c)), `${c.id} area`).toBeLessThan(AREA_REL_TOL);
-        expect(boundsDiff(got.bounds, BOUNDS[c.id]), `${c.id} bounds`).toBeLessThan(
-          BOUNDS_ABS_TOL,
-        );
+        expect(
+          relDiff(got.fillArea, byDefinition(c)),
+          `${c.id} area`,
+        ).toBeLessThan(AREA_REL_TOL);
+        expect(
+          boundsDiff(got.bounds, BOUNDS[c.id]),
+          `${c.id} bounds`,
+        ).toBeLessThan(BOUNDS_ABS_TOL);
       }
       // The rectangles are exact; subtract is back − front (8000 − 2000),
       // not front − back (8800 − 2000).
@@ -260,7 +269,8 @@ describe("oracle — pathfinder booleans", () => {
         const got = theirs(c.id);
         // Plain, simple, closed paths — never a compound path…
         expect(got.allClosed, c.id).toBe(true);
-        for (const p of c.measured.paths) expect(p.compound, c.id).toBeUndefined();
+        for (const p of c.measured.paths)
+          expect(p.compound, c.id).toBeUndefined();
         expect(Math.abs(got.area - got.fillArea), c.id).toBeLessThan(0.2);
         // …one of them, except EXCLUDE, which is the two disjoint pieces
         // (front-only first, back-only second)…
@@ -271,9 +281,9 @@ describe("oracle — pathfinder booleans", () => {
           expect(p.polarity, c.id).toBe("negative");
         }
       }
-      expect(RECORDED.get("rects-exclude")!.measured.paths.map((p) => p.area)).toEqual([
-        6800, 6000,
-      ]);
+      expect(
+        RECORDED.get("rects-exclude")!.measured.paths.map((p) => p.area),
+      ).toEqual([6800, 6000]);
       // Curves are cut at the crossings and stay cubics.
       expect(theirs("circle-rect-union").anchors).toBe(7);
       expect(theirs("circle-rect-union").curvedSegments).toBe(4);
@@ -287,8 +297,12 @@ describe("oracle — pathfinder booleans", () => {
       it(`${c.id}: painted area and bounds`, async () => {
         const ours = (await engine(c)).shape;
         expect(ours.allClosed).toBe(true);
-        expect(relDiff(ours.fillArea, byDefinition(c))).toBeLessThan(AREA_REL_TOL);
-        expect(boundsDiff(ours.bounds, BOUNDS[c.id])).toBeLessThan(BOUNDS_ABS_TOL);
+        expect(relDiff(ours.fillArea, byDefinition(c))).toBeLessThan(
+          AREA_REL_TOL,
+        );
+        expect(boundsDiff(ours.bounds, BOUNDS[c.id])).toBeLessThan(
+          BOUNDS_ABS_TOL,
+        );
       });
     }
   });
@@ -299,8 +313,12 @@ describe("oracle — pathfinder booleans", () => {
         const ours = (await engine(c)).shape;
         const want = theirs(c.id);
         expect(ours.allClosed).toBe(want.allClosed);
-        expect(relDiff(ours.fillArea, want.fillArea)).toBeLessThan(AREA_REL_TOL);
-        expect(boundsDiff(ours.bounds, want.bounds)).toBeLessThan(BOUNDS_ABS_TOL);
+        expect(relDiff(ours.fillArea, want.fillArea)).toBeLessThan(
+          AREA_REL_TOL,
+        );
+        expect(boundsDiff(ours.bounds, want.bounds)).toBeLessThan(
+          BOUNDS_ABS_TOL,
+        );
         expect(ours.paths).toBe(want.paths);
         expect(ours.anchors).toBe(want.anchors);
         expect(ours.curvedSegments).toBe(want.curvedSegments);
@@ -324,15 +342,26 @@ describe("oracle — pathfinder booleans", () => {
         expect(new Set(want.windings).size, id).toBe(1);
         expect(relDiff(want.area, exclude), id).toBeLessThan(AREA_REL_TOL);
         // Either way the same pixels, under either fill rule.
-        expect(relDiff(paintedArea(paths, "evenodd"), exclude), id).toBeLessThan(AREA_REL_TOL);
-        expect(relDiff(paintedArea(paths, "nonzero"), exclude), id).toBeLessThan(AREA_REL_TOL);
+        expect(
+          relDiff(paintedArea(paths, "evenodd"), exclude),
+          id,
+        ).toBeLessThan(AREA_REL_TOL);
+        expect(
+          relDiff(paintedArea(paths, "nonzero"), exclude),
+          id,
+        ).toBeLessThan(AREA_REL_TOL);
       }
     });
 
     it("direction — FIXED in 0.65.0: every path counter-clockwise, as Illustrator's", async () => {
       for (const c of PATHFINDER_BOOLEAN_CASES) {
-        expect(new Set((await engine(c)).shape.windings), `${c.id}: engine`).toEqual(new Set(["ccw"]));
-        expect(new Set(theirs(c.id).windings), `${c.id}: Illustrator`).toEqual(new Set(["ccw"]));
+        expect(
+          new Set((await engine(c)).shape.windings),
+          `${c.id}: engine`,
+        ).toEqual(new Set(["ccw"]));
+        expect(new Set(theirs(c.id).windings), `${c.id}: Illustrator`).toEqual(
+          new Set(["ccw"]),
+        );
       }
     });
   });

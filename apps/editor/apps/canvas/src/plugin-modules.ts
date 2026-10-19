@@ -52,7 +52,10 @@ export interface ModuleFile {
 export interface ModuleManifest {
   /** The module host this build is deployed against, or null (not hosted). */
   host: string | null;
-  packages: Record<string, { version: string; files: Record<string, ModuleFile> }>;
+  packages: Record<
+    string,
+    { version: string; files: Record<string, ModuleFile> }
+  >;
   plugins: Record<string, { package: string; base: string }>;
 }
 
@@ -62,7 +65,10 @@ export type ModuleArtifact = Pick<WasmArtifact, "name" | "path">;
 /** plugin-sdk's `ModulesBackend`, answering synchronously with the
  *  bytes' integrity always known (it is measured at build time). */
 export interface EditorModulesBackend extends ModulesBackend {
-  url(pluginId: string, artifact: ModuleArtifact): { url: string; integrity: string } | null;
+  url(
+    pluginId: string,
+    artifact: ModuleArtifact,
+  ): { url: string; integrity: string } | null;
 }
 
 /** `base` + a bundle-relative path, normalised; null when it escapes. */
@@ -96,10 +102,19 @@ export function createEditorModulesBackend(
       if (!file || path === null) return null;
       if (manifest.host) {
         const host = manifest.host.replace(/\/+$/, "");
-        return { url: `${host}/${plugin.package}/${file.version}/${path}`, integrity: file.integrity };
+        return {
+          url: `${host}/${plugin.package}/${file.version}/${path}`,
+          integrity: file.integrity,
+        };
       }
       if (file.fs) {
-        return { url: new URL(`/@fs${file.fs.startsWith("/") ? "" : "/"}${file.fs}`, origin).href, integrity: file.integrity };
+        return {
+          url: new URL(
+            `/@fs${file.fs.startsWith("/") ? "" : "/"}${file.fs}`,
+            origin,
+          ).href,
+          integrity: file.integrity,
+        };
       }
       return null;
     },

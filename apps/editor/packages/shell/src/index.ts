@@ -185,6 +185,7 @@ export {
 } from "./state/paged-editor";
 
 export {
+  createShellRegistries,
   RegistriesProvider,
   useRegistries,
   type ShellRegistries,
@@ -555,7 +556,10 @@ export {
   type StatusTone,
   type PanelStatus,
 } from "./components/cockpit/kit";
-export { AIAssistant, type AssistantKind } from "./components/cockpit/ai-assistant";
+export {
+  AIAssistant,
+  type AssistantKind,
+} from "./components/cockpit/ai-assistant";
 export {
   dismissAssistantRun,
   getAssistantState,
@@ -567,7 +571,10 @@ export {
   type AssistantState,
   type AssistantView,
 } from "./ai/assistant-session";
-export { PoweredByClaude, type PoweredByClaudeProps } from "./ai/powered-by-claude";
+export {
+  PoweredByClaude,
+  type PoweredByClaudeProps,
+} from "./ai/powered-by-claude";
 export {
   AI_ASK_COMMAND,
   AI_PROXY_PATH,
@@ -622,7 +629,11 @@ export {
   type ObjectProperty,
   type ObjectPropertyRequest,
 } from "./catalog/object-model";
-export { PropertyField, PropertyFieldLeaf, type PropertyFieldProps } from "./catalog/property-field";
+export {
+  PropertyField,
+  PropertyFieldLeaf,
+  type PropertyFieldProps,
+} from "./catalog/property-field";
 export {
   ObjectFieldFrame,
   scopedBindTarget,

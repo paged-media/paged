@@ -105,7 +105,13 @@ interface CompoundCase {
 
 // --- the cases: a MIRROR of scripts/illustrator/probes/compound-path.jsx ----
 
-const rect = (l: number, t: number, r: number, b: number, clockwise: boolean): OraclePath =>
+const rect = (
+  l: number,
+  t: number,
+  r: number,
+  b: number,
+  clockwise: boolean,
+): OraclePath =>
   polygon(
     clockwise
       ? [
@@ -144,9 +150,18 @@ const COMPOUND_PATH_CASES: CompoundCase[] = [
   of("nested-hole-behind-cw-cw", [hole(CW), outer(CW)]),
   of("three-deep-cw-cw-cw", [outer(CW), hole(CW), island(CW)]),
   of("four-deep-cw-cw-cw-cw", [outer(CW), hole(CW), island(CW), core(CW)]),
-  of("disjoint-cw-ccw", [rect(100, 100, 180, 180, CW), rect(220, 100, 300, 180, CCW)]),
-  of("overlap-cw-cw", [rect(100, 100, 200, 180, CW), rect(150, 140, 260, 220, CW)]),
-  of("overlap-cw-ccw", [rect(100, 100, 200, 180, CW), rect(150, 140, 260, 220, CCW)]),
+  of("disjoint-cw-ccw", [
+    rect(100, 100, 180, 180, CW),
+    rect(220, 100, 300, 180, CCW),
+  ]),
+  of("overlap-cw-cw", [
+    rect(100, 100, 200, 180, CW),
+    rect(150, 140, 260, 220, CW),
+  ]),
+  of("overlap-cw-ccw", [
+    rect(100, 100, 200, 180, CW),
+    rect(150, 140, 260, 220, CCW),
+  ]),
 ];
 
 /** What Illustrator's compound path PAINTS (its own rule: non-zero). */
@@ -214,7 +229,8 @@ const CONTOUR_DIRECTIONS: Record<string, [Winding[], Winding[]]> = {
 const largestFirst = (paths: readonly OraclePath[]): OraclePath[] =>
   [...paths].sort(
     (a, b) =>
-      Math.abs(signedArea(b)) - Math.abs(signedArea(a)) || pathBounds(a)[0] - pathBounds(b)[0],
+      Math.abs(signedArea(b)) - Math.abs(signedArea(a)) ||
+      pathBounds(a)[0] - pathBounds(b)[0],
   );
 const directions = (paths: readonly OraclePath[]): Winding[] =>
   largestFirst(paths).map((p) => windingOf(signedArea(p)));
@@ -224,7 +240,10 @@ const RECORDED = new Map(FIXTURE.cases.map((c) => [c.id, c]));
 
 describe("oracle — compound path winding", () => {
   let h: HeadlessHost;
-  const bundleResults = new Map<string, { leavesGone: number; paths: OraclePath[] }>();
+  const bundleResults = new Map<
+    string,
+    { leavesGone: number; paths: OraclePath[] }
+  >();
 
   beforeAll(async () => {
     h = await openOracleHost();
@@ -248,7 +267,8 @@ describe("oracle — compound path winding", () => {
     )!.value as CommandContribution;
     const result = await onEngine(h, c.input.paths, async (run) => {
       const before = (await leafIds(h)).length;
-      const selected = order === "back-to-front" ? run.ids : [...run.ids].reverse();
+      const selected =
+        order === "back-to-front" ? run.ids : [...run.ids].reverse();
       await h.host.selection.set(selected);
       await make.handler({} as never, undefined as never);
       run.took(1); // Make is ONE batch — one undo step
@@ -266,7 +286,9 @@ describe("oracle — compound path winding", () => {
     it("says who made it", () => {
       expect(FIXTURE.produced_by.app).toBe("Adobe Illustrator");
       expect(FIXTURE.produced_by.version).toMatch(/^\d+\.\d+/);
-      expect(FIXTURE.produced_by.script).toBe("scripts/illustrator/probes/compound-path.jsx");
+      expect(FIXTURE.produced_by.script).toBe(
+        "scripts/illustrator/probes/compound-path.jsx",
+      );
     });
 
     it("has exactly this spec's cases (probe and spec have not drifted)", () => {
@@ -286,10 +308,14 @@ describe("oracle — compound path winding", () => {
       for (const c of FIXTURE.cases) {
         for (const p of c.measured.paths) {
           const signed = signedArea(p);
-          expect(relDiff(Math.abs(signed), p.area), `${c.id} area`).toBeLessThan(AREA_REL_TOL);
-          expect(boundsDiff(pathBounds(p), p.bounds), `${c.id} bounds`).toBeLessThan(
-            BOUNDS_ABS_TOL,
-          );
+          expect(
+            relDiff(Math.abs(signed), p.area),
+            `${c.id} area`,
+          ).toBeLessThan(AREA_REL_TOL);
+          expect(
+            boundsDiff(pathBounds(p), p.bounds),
+            `${c.id} bounds`,
+          ).toBeLessThan(BOUNDS_ABS_TOL);
           expect(windingOf(signed), `${c.id} winding`).toBe(p.winding);
         }
       }
@@ -305,7 +331,10 @@ describe("oracle — compound path winding", () => {
         // Subpaths come back FRONT to back; the geometry is the inputs'.
         const inputs = [...c.input.paths].reverse();
         got.forEach((p, i) => {
-          expect(boundsDiff(p.bounds, pathBounds(inputs[i])), `${c.id} subpath ${i}`).toBe(0);
+          expect(
+            boundsDiff(p.bounds, pathBounds(inputs[i])),
+            `${c.id} subpath ${i}`,
+          ).toBe(0);
           expect(p.anchors, `${c.id} subpath ${i}`).toHaveLength(4);
         });
       }
@@ -373,7 +402,9 @@ describe("oracle — compound path winding", () => {
           relDiff(paintedArea(ours.paths, "nonzero"), ILLUSTRATOR_PAINTS[c.id]),
           c.id,
         ).toBeLessThan(AREA_REL_TOL);
-        expect(directions(ours.paths), c.id).toEqual(CONTOUR_DIRECTIONS[c.id][0]);
+        expect(directions(ours.paths), c.id).toEqual(
+          CONTOUR_DIRECTIONS[c.id][0],
+        );
       }
     });
 
@@ -386,9 +417,10 @@ describe("oracle — compound path winding", () => {
         largestFirst(ours.paths).forEach((p, i) => {
           expect(p.closed, c.id).toBe(true);
           expect(p.anchors, c.id).toHaveLength(4);
-          expect(boundsDiff(pathBounds(p), pathBounds(want[i])), c.id).toBeLessThan(
-            BOUNDS_ABS_TOL,
-          );
+          expect(
+            boundsDiff(pathBounds(p), pathBounds(want[i])),
+            c.id,
+          ).toBeLessThan(BOUNDS_ABS_TOL);
         });
       }
     });
@@ -410,7 +442,10 @@ describe("oracle — compound path winding", () => {
       }
       const four = COMPOUND_PATH_CASES.find((c) => EVEN_ODD_DIFFERS.has(c.id))!;
       expect(paintedArea(four.input.paths, "evenodd")).toBeCloseTo(31200, 6); // was the bundle's
-      expect(paintedArea((await bundle(four)).paths, "nonzero")).toBeCloseTo(31600, 6);
+      expect(paintedArea((await bundle(four)).paths, "nonzero")).toBeCloseTo(
+        31600,
+        6,
+      );
       expect(ILLUSTRATOR_PAINTS["four-deep-cw-cw-cw-cw"]).toBe(31600);
     });
 
@@ -418,10 +453,13 @@ describe("oracle — compound path winding", () => {
       let differing = 0;
       for (const c of COMPOUND_PATH_CASES) {
         const [oursWant, theirsWant] = CONTOUR_DIRECTIONS[c.id];
-        expect(directions((await bundle(c)).paths), `${c.id}: bundle`).toEqual(oursWant);
-        expect(directions(RECORDED.get(c.id)!.measured.paths), `${c.id}: Illustrator`).toEqual(
-          theirsWant,
+        expect(directions((await bundle(c)).paths), `${c.id}: bundle`).toEqual(
+          oursWant,
         );
+        expect(
+          directions(RECORDED.get(c.id)!.measured.paths),
+          `${c.id}: Illustrator`,
+        ).toEqual(theirsWant);
         if (String(oursWant) !== String(theirsWant)) differing++;
       }
       // nested-ccw-ccw: the backmost (outer) path was drawn
@@ -430,10 +468,15 @@ describe("oracle — compound path winding", () => {
     });
 
     it("CONVENTION — contour order: the survivor first and back to front here, front to back there", async () => {
-      const c = COMPOUND_PATH_CASES.find((x) => x.id === "three-deep-cw-cw-cw")!;
-      const sizes = (paths: readonly OraclePath[]) => paths.map((p) => Math.abs(signedArea(p)));
+      const c = COMPOUND_PATH_CASES.find(
+        (x) => x.id === "three-deep-cw-cw-cw",
+      )!;
+      const sizes = (paths: readonly OraclePath[]) =>
+        paths.map((p) => Math.abs(signedArea(p)));
       expect(sizes((await bundle(c)).paths)).toEqual([40000, 10000, 1600]);
-      expect(sizes(RECORDED.get(c.id)!.measured.paths)).toEqual([1600, 10000, 40000]);
+      expect(sizes(RECORDED.get(c.id)!.measured.paths)).toEqual([
+        1600, 10000, 40000,
+      ]);
     });
   });
 });

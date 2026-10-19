@@ -47,11 +47,16 @@ import {
   type PathPointOp,
 } from "@paged-media/draw-tools";
 
-import { F1_MULTI_SHAPE, F2_CLOSED_QUAD, F3_CURVED_OPEN } from "../fixtures/corpus";
+import {
+  F1_MULTI_SHAPE,
+  F2_CLOSED_QUAD,
+  F3_CURVED_OPEN,
+} from "../fixtures/corpus";
 import { SCALED_SQUARE, SMOOTH_ARCH } from "../fixtures/path-edit";
 import { openHost } from "./host";
 
-const polygon = (id: string): ElementId => ({ kind: "polygon", id }) as ElementId;
+const polygon = (id: string): ElementId =>
+  ({ kind: "polygon", id }) as ElementId;
 
 /** f32 storage: the engine's table agrees with an f64 model to here. */
 const F32 = 1e-3;
@@ -100,8 +105,14 @@ describe("draw conformance — DirectSelectMachine.apply against the real engine
       for (const role of ["anchor", "left", "right"] as const) {
         const want = toPointer(a[role]);
         const got = preview.anchors[i][role];
-        expect(Math.abs(got[0] - want[0]), `anchor ${i} ${role} x`).toBeLessThan(F32);
-        expect(Math.abs(got[1] - want[1]), `anchor ${i} ${role} y`).toBeLessThan(F32);
+        expect(
+          Math.abs(got[0] - want[0]),
+          `anchor ${i} ${role} x`,
+        ).toBeLessThan(F32);
+        expect(
+          Math.abs(got[1] - want[1]),
+          `anchor ${i} ${role} y`,
+        ).toBeLessThan(F32);
       }
     });
     expect(preview.subpathOpen ?? []).toEqual(after.subpathOpen ?? []);
@@ -109,8 +120,10 @@ describe("draw conformance — DirectSelectMachine.apply against the real engine
   }
 
   it("INSERT on a closed quad's closing segment (the subpath bookkeeping case)", async () => {
-    const { after } = await agree(F2_CLOSED_QUAD.bytes(), polygon("uquad"), (t) =>
-      anchorEditOps(planAnchorAddAt(t, 3, 0.5)!),
+    const { after } = await agree(
+      F2_CLOSED_QUAD.bytes(),
+      polygon("uquad"),
+      (t) => anchorEditOps(planAnchorAddAt(t, 3, 0.5)!),
     );
     expect(after.anchors).toHaveLength(5);
   });
@@ -122,8 +135,10 @@ describe("draw conformance — DirectSelectMachine.apply against the real engine
   });
 
   it("CONVERT a corner to smooth — the neighbour-tangent rule", async () => {
-    const { after } = await agree(F1_MULTI_SHAPE.bytes(), polygon("upoly"), (t) =>
-      anchorEditOps(planAnchorConvertAt(t, 1)!),
+    const { after } = await agree(
+      F1_MULTI_SHAPE.bytes(),
+      polygon("upoly"),
+      (t) => anchorEditOps(planAnchorConvertAt(t, 1)!),
     );
     // It really is smooth now, not a no-op.
     expect(after.anchors[1].left).not.toEqual(after.anchors[1].anchor);
@@ -136,9 +151,11 @@ describe("draw conformance — DirectSelectMachine.apply against the real engine
   });
 
   it("CONVERT a closed contour's FIRST anchor to smooth — the neighbours wrap, so the engine (and the model) smooth it", async () => {
-    const { after } = await agree(F2_CLOSED_QUAD.bytes(), polygon("uquad"), () => [
-      { op: "pathPointCurveType", index: 0, smooth: true },
-    ]);
+    const { after } = await agree(
+      F2_CLOSED_QUAD.bytes(),
+      polygon("uquad"),
+      () => [{ op: "pathPointCurveType", index: 0, smooth: true }],
+    );
     expect(after.anchors[0].left).not.toEqual(after.anchors[0].anchor);
   });
 

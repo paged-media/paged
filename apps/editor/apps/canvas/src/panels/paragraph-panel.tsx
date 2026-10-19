@@ -96,7 +96,9 @@ function RuleRow({
 }) {
   const field = useObjectField({ path, scope: "content" });
   const spec =
-    field.state.state === "value" && field.state.value && typeof field.state.value === "object"
+    field.state.state === "value" &&
+    field.state.value &&
+    typeof field.state.value === "object"
       ? (field.state.value as ParagraphRuleSpec)
       : null;
   const disabled = field.commit == null;
@@ -114,62 +116,63 @@ function RuleRow({
       data-seam={absent ? "true" : undefined}
     >
       <div style={{ opacity: absent ? 0.55 : 1 }}>
-      <div className="flex items-center gap-[9px] py-[5px]">
-        <TogglePill
-          checked={on}
-          disabled={disabled}
-          testId={testId}
-          onToggle={(next) => {
-            // On → write the spec; off → clear the whole rule (null).
-            write(next ? (spec ? { ...spec, on: true } : DEFAULT_RULE) : null);
-          }}
-        />
-        <span
-          className="flex-1 text-xs"
-          style={{ color: on ? "var(--pg-fg)" : "var(--pg-muted-fg)" }}
-        >
-          {name}
-        </span>
-        {on && (
-          <Icon
-            name="ui-chevron-down"
-            size={13}
-            style={{ color: "var(--pg-muted-fg)" }}
-          />
-        )}
-      </div>
-      {on && (
-        <div
-          className="mb-[6px] ml-1 grid grid-cols-2 gap-2 py-2 pl-3"
-          data-rule-fields={testId}
-          style={{ borderLeft: "2px solid var(--pg-primary-soft)" }}
-        >
-          <NumberInput
-            suffix="pt"
-            value={spec?.weight ?? 1}
-            min={0}
+        <div className="flex items-center gap-[9px] py-[5px]">
+          <TogglePill
+            checked={on}
             disabled={disabled}
-            onChange={() => {}}
-            onCommit={(next) => patch({ weight: next })}
-            aria-label={`${testId} weight`}
+            testId={testId}
+            onToggle={(next) => {
+              // On → write the spec; off → clear the whole rule (null).
+              write(
+                next ? (spec ? { ...spec, on: true } : DEFAULT_RULE) : null,
+              );
+            }}
           />
-          <NumberInput
-            suffix="pt"
-            value={spec?.offset ?? 0}
-            disabled={disabled}
-            onChange={() => {}}
-            onCommit={(next) => patch({ offset: next })}
-            aria-label={`${testId} offset`}
-          />
+          <span
+            className="flex-1 text-xs"
+            style={{ color: on ? "var(--pg-fg)" : "var(--pg-muted-fg)" }}
+          >
+            {name}
+          </span>
+          {on && (
+            <Icon
+              name="ui-chevron-down"
+              size={13}
+              style={{ color: "var(--pg-muted-fg)" }}
+            />
+          )}
         </div>
-      )}
+        {on && (
+          <div
+            className="mb-[6px] ml-1 grid grid-cols-2 gap-2 py-2 pl-3"
+            data-rule-fields={testId}
+            style={{ borderLeft: "2px solid var(--pg-primary-soft)" }}
+          >
+            <NumberInput
+              suffix="pt"
+              value={spec?.weight ?? 1}
+              min={0}
+              disabled={disabled}
+              onChange={() => {}}
+              onCommit={(next) => patch({ weight: next })}
+              aria-label={`${testId} weight`}
+            />
+            <NumberInput
+              suffix="pt"
+              value={spec?.offset ?? 0}
+              disabled={disabled}
+              onChange={() => {}}
+              onCommit={(next) => patch({ offset: next })}
+              aria-label={`${testId} offset`}
+            />
+          </div>
+        )}
       </div>
     </ObjectFieldFrame>
   );
 }
 
 export function ParagraphPanel() {
-
   return (
     <CatalogRegistryProvider registry={appCatalogRegistry()}>
       <div className="p-3 flex flex-col gap-[9px]" data-paragraph-panel="ready">
@@ -179,8 +182,16 @@ export function ParagraphPanel() {
           data-section="Paragraph rules"
         >
           <div className="pg-label mb-1">Paragraph rules</div>
-          <RuleRow name="Rule above" testId="rule-above" path="paragraphRuleAbove" />
-          <RuleRow name="Rule below" testId="rule-below" path="paragraphRuleBelow" />
+          <RuleRow
+            name="Rule above"
+            testId="rule-above"
+            path="paragraphRuleAbove"
+          />
+          <RuleRow
+            name="Rule below"
+            testId="rule-below"
+            path="paragraphRuleBelow"
+          />
         </div>
       </div>
     </CatalogRegistryProvider>

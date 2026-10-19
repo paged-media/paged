@@ -66,14 +66,23 @@ describe("snapPoint", () => {
   });
 
   it("property: a snapped point is never farther than the tolerance per axis, and snapping is idempotent", () => {
-    const coord = fc.double({ min: -500, max: 500, noNaN: true, noDefaultInfinity: true });
+    const coord = fc.double({
+      min: -500,
+      max: 500,
+      noNaN: true,
+      noDefaultInfinity: true,
+    });
     const target: fc.Arbitrary<SnapTarget> = fc.oneof(
-      fc.tuple(coord, coord).map(([x, y]): SnapTarget => ({ kind: "point", at: [x, y] })),
+      fc
+        .tuple(coord, coord)
+        .map(([x, y]): SnapTarget => ({ kind: "point", at: [x, y] })),
       coord.map((x): SnapTarget => ({ kind: "x", x })),
       coord.map((y): SnapTarget => ({ kind: "y", y })),
-      fc
-        .tuple(coord, coord, coord, coord)
-        .map(([a, b, c, d]): SnapTarget => ({ kind: "segment", a: [a, b], b: [c, d] })),
+      fc.tuple(coord, coord, coord, coord).map(([a, b, c, d]): SnapTarget => ({
+        kind: "segment",
+        a: [a, b],
+        b: [c, d],
+      })),
     );
     fc.assert(
       fc.property(

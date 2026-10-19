@@ -1,0 +1,446 @@
+name: release
+
+# The repository's one release workflow (docs/adr/PM-0008). Two jobs, chosen
+# by what triggered the run:
+#
+#   npm     A tag v0.<protocol>.<patch>[-prerelease] (pushed, or a dispatch
+#           on the tag's ref): the four public npm packages at the tag's
+#           version — @paged-media/canvas-wasm, @paged-media/idml-viewer,
+#           @paged-media/plugin-api and @paged-media/plugin-sdk. It builds the
+#           engine wasm fresh, runs the checks, packs the packages with the
+#           workspace resolved, installs the tarballs in a clean room, and
+#           publishes them with provenance through npm trusted publishing.
+#   deploy  A push to main that changes what the editor consumes, a dispatch
+#           on main, or the engine-updated repository_dispatch: the editor
+#           playground (apps/canvas `demo` build) to Cloudflare Pages
+#           (play.paged.media), its wasm hosted on modules.paged.media.
+#
+# TRUSTED PUBLISHING is keyed on this file's NAME: npm matches the OIDC claims
+# (repository paged-media/paged, workflow release.yml, no environment) against
+# each package's Trusted Publisher entry. Renaming this file, or publishing the
+# packages from another workflow, breaks it. Until all four entries exist, the
+# NPM_TOKEN secret authorizes the publish (the auth gate below needs one of the
+# two); once the first OIDC publish has gone through, the owner deletes the
+# secret (docs/migration/npm-release-runbook.md).
+#
+# Versions: the tag is the version of all four packages. Its minor must be the
+# engine's protocol (canvas-wasm's committed 0.<protocol>.0-dev); the release
+# version exists only in this run's checkout, never in a commit. A `-suffix`
+# publishes under the `next` dist-tag, anything else under `latest`. Check the
+# remote's tags and npm before naming a version: two releases have raced.
+#
+# Replaces core-publish-wasm.yml, extensions-publish.yml, editor-playground.yml
+# and the per-module *-publish.yml workflows.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    # Branch pushes only: GitHub does not evaluate path filters for tags.
+    # Everything the editor consumes through the workspace (see
+    # editor-tests.yml): the module bundles, the extension contract and ai,
+    # and the engine's wasm packages with what builds them.
+    paths:
+      - "apps/editor/**"
+      - "modules/**"
+      - "platform/extensions/packages/**"
+      - "engine/core/crates/**"
+      - "engine/core/Cargo.*"
+      - "engine/core/rust-toolchain.toml"
+      - "engine/core/scripts/build-wasm-packages.sh"
+      - "engine/core/packages/**"
+      - ".cargo/config.toml"
+      - "tooling/bootstrap.sh"
+      - ".github/actions/engine-wasm/**"
+      - ".github/actions/module-wasm/**"
+      - ".github/actions/wasm-tools/**"
+      - ".github/workflows/release.yml"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "package.json"
+      # Prose under docs/ builds and tests nothing (test inputs are not .md there).
+      - "!apps/editor/docs/**/*.md"
+      # Module prose (B3a made every module an editor input).
+      - "!modules/*/docs/**/*.md"
+  workflow_dispatch:
+  repository_dispatch:
+    types: [engine-updated]
+
+# Declaring this block sets every unlisted scope to none; each job widens
+# only what it needs.
+permissions:
+  contents: read
+
+jobs:
+  npm:
+    name: npm (the four public packages)
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # the OIDC token trusted publishing exchanges, and provenance
+    # One release at a time, never cancelled: a second tag waits.
+    concurrency:
+      group: release-npm
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      # The version is the tag. A dispatch accepts any ref; from a branch it
+      # would version a release "main", so only a tag ref passes.
+      - name: the version is the tag
+        id: ver
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            echo "::error::ref ${GITHUB_REF_NAME} is a ${GITHUB_REF_TYPE}, not a tag — nothing to version a release from."
+            exit 1
+          fi
+          if ! printf '%s' "${GITHUB_REF_NAME}" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::tag ${GITHUB_REF_NAME} is not vMAJOR.MINOR.PATCH[-prerelease]."
+            exit 1
+          fi
+          V="${GITHUB_REF_NAME#v}"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          # The dist-tag rider (engine/core/docs/reference/protocol-governance.md,
+          # Release coupling): a prerelease never becomes `latest`.
+          if [[ "$V" == *-* ]]; then TAG=next; else TAG=latest; fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "release $V under the npm dist-tag $TAG"
+
+      # Node and Bun at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
+        with:
+          auto-install: true
+          proto-version: "0.63.1"
+
+      # The tag's minor against canvas-wasm's committed 0.<protocol>.0-dev
+      # (tooling/release/stage.mjs checks it again when it stages), and the
+      # committed versions against PROTOCOL_VERSION.
+      - name: the tag carries the engine's protocol
+        run: |
+          set -euo pipefail
+          node engine/core/scripts/check-wasm-package-versions.mjs
+          node --input-type=module -e '
+            const { versionProblem } = await import("./tooling/release/stage.mjs");
+            const p = versionProblem(process.argv[1]);
+            if (p) { console.error("::error::" + p); process.exit(1); }
+            console.log("protocol OK for " + process.argv[1]);
+          ' "${{ steps.ver.outputs.version }}"
+
+      # A re-run of a tag publishes what the first run did not (a partial
+      # release is fixed by re-running, never by re-tagging); a tag that is
+      # already on npm in full has nothing left to do.
+      - name: what npm already has
+        id: have
+        run: |
+          set -euo pipefail
+          V="${{ steps.ver.outputs.version }}"
+          MISSING=0
+          for PKG in canvas-wasm idml-viewer plugin-api plugin-sdk; do
+            if npm view "@paged-media/$PKG@$V" version >/dev/null 2>&1; then
+              echo "already on npm: @paged-media/$PKG@$V"
+            else
+              echo "to publish:     @paged-media/$PKG@$V"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+          echo "missing=$MISSING" >> "$GITHUB_OUTPUT"
+          if [ "$MISSING" = 0 ]; then
+            echo "::notice::all four packages are on npm at $V — nothing to publish."
+          fi
+
+      # OIDC trusted publishing needs npm >= 11.5.1. The Node of /.prototools
+      # bundles an npm 11; a pinned upgrade only if it is older.
+      - name: npm new enough for trusted publishing
+        if: steps.have.outputs.missing != '0'
+        run: |
+          set -euo pipefail
+          NPM=$(npm --version)
+          if node -e 'const [a,b,c]=process.argv[1].split(".").map(Number); process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$NPM"; then
+            echo "npm $NPM"
+          else
+            echo "npm $NPM is older than 11.5.1; installing npm 11.6.2"
+            npm install -g npm@11.6.2
+            npm --version
+          fi
+
+      # Is trusted publishing ready for each package? It asks npm's token
+      # exchange directly, because npm's own OIDC helper is SILENT on every
+      # failure path (it logs at verbose/silly and falls back to a configured
+      # token), which once made "trusted publishing never happened" read as
+      # npm's E404-on-PUT, "package missing". The claims it prints are the
+      # values the npmjs.com form must match. Claims only, never the token.
+      - name: trusted publishing — readiness of the four packages
+        id: oidc
+        if: steps.have.outputs.missing != '0'
+        run: |
+          set -euo pipefail
+          AUD="npm:registry.npmjs.org"
+          ID_TOKEN="$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${AUD}" | jq -r '.value // empty')"
+          if [ -z "$ID_TOKEN" ]; then
+            echo "::warning::No OIDC id-token for ${AUD}: trusted publishing is not available in this run."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          PAYLOAD="$(printf '%s' "$ID_TOKEN" | cut -d. -f2 | tr '_-' '/+')"
+          case $(( ${#PAYLOAD} % 4 )) in 2) PAYLOAD="${PAYLOAD}==";; 3) PAYLOAD="${PAYLOAD}=";; esac
+          printf '%s' "$PAYLOAD" | base64 -d 2>/dev/null \
+            | jq '{repository, repository_owner, workflow_ref, job_workflow_ref, event_name, ref, environment, sub, aud}' \
+            || echo "  (could not decode claims)"
+          READY=true
+          for PKG in canvas-wasm idml-viewer plugin-api plugin-sdk; do
+            CODE="$(curl -sS -o /tmp/exch.json -w '%{http_code}' -X POST \
+              -H "Authorization: Bearer ${ID_TOKEN}" \
+              "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/@paged-media%2f${PKG}")"
+            if [ "$CODE" = "200" ] && [ -n "$(jq -r '.token // empty' /tmp/exch.json)" ]; then
+              echo "  OK         @paged-media/${PKG}"
+            else
+              MSG="$(jq -r '.message // .error // empty' /tmp/exch.json 2>/dev/null || true)"
+              echo "  NOT READY  @paged-media/${PKG}: HTTP ${CODE} — ${MSG:-no message}"
+              READY=false
+            fi
+            rm -f /tmp/exch.json
+          done
+          echo "ready=$READY" >> "$GITHUB_OUTPUT"
+          if [ "$READY" = true ]; then
+            echo "::notice::All four packages authenticate via OIDC. Once this release is on npm, the NPM_TOKEN secret can be deleted."
+          else
+            echo "::notice::Each package needs its own Trusted Publisher entry: organization paged-media, repository paged, workflow release.yml, no environment."
+          fi
+
+      # THE AUTH GATE, before anything expensive: trusted publishing ready for
+      # all four, or a token that authenticates. A bad token costs two seconds
+      # and names itself (E401) instead of arriving as E404-on-PUT after the
+      # build (four releases went missing that way). A throwaway userconfig
+      # keeps the runner's ~/.npmrc untouched.
+      - name: auth gate — trusted publishing or a working token
+        if: steps.have.outputs.missing != '0'
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.oidc.outputs.ready }}" = "true" ]; then
+            echo "trusted publishing is ready for all four packages."
+            if [ -n "${NPM_TOKEN}" ]; then
+              echo "::notice::NPM_TOKEN is still set; npm uses OIDC first. Delete the secret after this release."
+            fi
+            exit 0
+          fi
+          if [ -z "${NPM_TOKEN}" ]; then
+            echo "::error::Trusted publishing is not ready for every package and NPM_TOKEN is not set: nothing could authorize the publish."
+            exit 1
+          fi
+          RC="$(mktemp)"
+          printf '//registry.npmjs.org/:_authToken=%s\n' "${NPM_TOKEN}" > "$RC"
+          if ! WHO=$(NPM_CONFIG_USERCONFIG="$RC" npm whoami --registry https://registry.npmjs.org/ 2>&1); then
+            rm -f "$RC"
+            echo "::error::NPM_TOKEN does not authenticate against the npm registry: ${WHO}"
+            echo "::error::Mint a granular token with read+write on the @paged-media scope and re-set the secret, or register the Trusted Publishers."
+            exit 1
+          fi
+          rm -f "$RC"
+          echo "npm authenticated by token as: ${WHO}"
+
+      - name: bun install (root workspace)
+        if: steps.have.outputs.missing != '0'
+        run: bun install --frozen-lockfile
+
+      # A release never takes wasm from a cache: the four parts are built
+      # from this tag (the `wasm-release` profile, wasm-bindgen --target web,
+      # wasm-opt -Oz) into canvas-wasm and the idml-viewer's wasm/.
+      - name: engine wasm (built fresh)
+        if: steps.have.outputs.missing != '0'
+        uses: ./.github/actions/engine-wasm
+        with:
+          cache: "false"
+          artifact: "false"
+
+      # "Sibling, not a shrunk app": paged-sdk's crate graph links no editor
+      # crate. verify-tarballs repeats the file half on the packed viewer.
+      - name: viewer subset audit (crate graph and the built session)
+        if: steps.have.outputs.missing != '0'
+        working-directory: engine/core
+        run: node scripts/viewer-subset-audit.mjs web/idml-viewer
+
+      - name: idml-viewer — typecheck, test, build
+        if: steps.have.outputs.missing != '0'
+        working-directory: engine/core/web/idml-viewer
+        run: |
+          set -euo pipefail
+          bun run typecheck
+          bun run test
+          bun run build
+
+      # Build BEFORE the suite: react-free-import.spec.ts asserts on the
+      # SHIPPED artifact and skips itself when dist/ is absent. The vendored
+      # wire and capability catalog must match the engine this tag builds.
+      - name: plugin-api and plugin-sdk — typecheck, build, test, wire and catalog lockstep
+        if: steps.have.outputs.missing != '0'
+        working-directory: platform/extensions
+        run: |
+          set -euo pipefail
+          bun run --filter './packages/plugin-*' typecheck
+          bun run --filter './packages/plugin-*' build
+          bun run --filter './packages/plugin-*' test
+          bun scripts/sync-wire.mjs --check
+          bun scripts/sync-catalog.mjs --check
+
+      # The four tarballs at the release version, with workspace: and catalog:
+      # resolved; stage.mjs runs verify-tarballs.mjs (names, versions, licence,
+      # repository, every entry point present, one version for the four, and
+      # the viewer subset audit of the packed files).
+      - name: pack the four packages at the release version
+        if: steps.have.outputs.missing != '0'
+        run: bun tooling/release/stage.mjs "${{ steps.ver.outputs.version }}" "$RUNNER_TEMP/npm" --keep
+
+      # Install the tarballs into empty projects under Node (npm) and Bun,
+      # import every entry and subpath, run the paged-plugin bin, typecheck a
+      # consumer with nodenext and bundler resolution.
+      - name: clean-room consumer test
+        if: steps.have.outputs.missing != '0'
+        run: bash tooling/release/consumer-test.sh "$RUNNER_TEMP/npm" "$RUNNER_TEMP/consumer"
+
+      - name: keep the tarballs
+        if: steps.have.outputs.missing != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-tarballs-${{ steps.ver.outputs.version }}
+          path: ${{ runner.temp }}/npm/*.tgz
+          if-no-files-found: error
+          retention-days: 30
+
+      # In dependency order, each skipped when npm has it already. npm tries
+      # OIDC first and, when that is not configured, falls back to the token
+      # (written to the userconfig only when the secret is set). --loglevel
+      # verbose because npm reports every OIDC failure at verbose and falls
+      # back silently. A package configured wrongly on npmjs.com stops the run
+      # with the earlier ones published: configure it and re-run the tag.
+      - name: publish (provenance, trusted publishing)
+        if: steps.have.outputs.missing != '0'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          V="${{ steps.ver.outputs.version }}"
+          TAG="${{ steps.ver.outputs.tag }}"
+          export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/.npmrc-publish"
+          printf '%s\n' "registry=https://registry.npmjs.org/" > "$NPM_CONFIG_USERCONFIG"
+          if [ -n "${NODE_AUTH_TOKEN}" ]; then
+            printf '%s\n' "//registry.npmjs.org/:_authToken=\${NODE_AUTH_TOKEN}" >> "$NPM_CONFIG_USERCONFIG"
+          fi
+          for PKG in canvas-wasm idml-viewer plugin-api plugin-sdk; do
+            if npm view "@paged-media/$PKG@$V" version >/dev/null 2>&1; then
+              echo "skip @paged-media/$PKG@$V (already on npm)"
+              continue
+            fi
+            TGZ="$RUNNER_TEMP/npm/paged-media-$PKG-$V.tgz"
+            test -f "$TGZ" || { echo "::error::$TGZ was not staged"; exit 1; }
+            echo "publish @paged-media/$PKG@$V under $TAG"
+            npm publish --provenance --access public --tag "$TAG" --loglevel verbose "$TGZ"
+          done
+
+      - name: dist-tags of the four packages
+        run: node tooling/release/assert-dist-tags.mjs "${{ steps.ver.outputs.version }}" "${{ steps.ver.outputs.tag }}"
+
+  deploy:
+    name: deploy (editor playground)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    # Deploys run one at a time and are never cancelled; a newer deploy that
+    # arrives while one runs waits, and replaces any older one still waiting.
+    concurrency:
+      group: release-deploy
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: apps/editor
+    steps:
+      - uses: actions/checkout@v4
+
+      # Bun and Node at the versions in /.prototools, installed by proto.
+      - uses: moonrepo/setup-toolchain@v0.6.4
+        with:
+          auto-install: true
+          proto-version: "0.63.1"
+      - name: cache Bun's package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: install (root workspace)
+        working-directory: .
+        run: bun install --frozen-lockfile
+
+      # The engine's wasm packages and the bundles' engine wasm (build
+      # outputs; the editor consumes the workspace packages). Vite resolves
+      # the bundles' relative wasm glue (sheet, web, doc, draw, image, pdf)
+      # at build time.
+      - name: engine wasm packages
+        uses: ./.github/actions/engine-wasm
+        with: { artifact: "false" }
+      - name: module wasm (doc)
+        uses: ./.github/actions/module-wasm
+        with: { module: doc }
+      - name: module wasm (slide)
+        uses: ./.github/actions/module-wasm
+        with: { module: slide }
+      - name: module wasm (sheet)
+        uses: ./.github/actions/module-wasm
+        with: { module: sheet }
+      - name: module wasm (data)
+        uses: ./.github/actions/module-wasm
+        with: { module: data }
+      - name: module wasm (web)
+        uses: ./.github/actions/module-wasm
+        with: { module: web }
+      - name: module wasm (draw)
+        uses: ./.github/actions/module-wasm
+        with: { module: draw }
+      - name: module wasm (image)
+        uses: ./.github/actions/module-wasm
+        with: { module: image }
+      - name: module wasm (publish)
+        uses: ./.github/actions/module-wasm
+        with: { module: publish }
+
+      # PAGED_MODULES_HOSTED: the module door (ADR 223) answers the module
+      # host, because the next step hosts every module the build lists.
+      - name: build the demo
+        env:
+          PAGED_MODULES_HOSTED: "1"
+        run: bun run --filter paged-canvas build:demo
+
+      # The module upload. Wasm modules are hosted, not deployed (ADR 220):
+      # every .wasm in the build is uploaded to modules.paged.media (R2,
+      # brotli, immutable per package version) if it is not there yet,
+      # removed from the deploy, and replaced by a same-origin 302. That also
+      # keeps every file under Cloudflare Pages' 25 MiB limit — the engine
+      # (~27 MiB) and DuckDB (~34 MiB) are not.
+      - name: host the wasm modules (modules.paged.media)
+        working-directory: apps/editor/apps/canvas
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bun scripts/modules-sync.mjs dist-demo
+
+      - name: every file fits the Pages size limit
+        working-directory: apps/editor/apps/canvas/dist-demo
+        run: |
+          big=$(find . -type f -size +25M)
+          if [ -n "$big" ]; then echo "::error::over Cloudflare Pages' 25 MiB limit: $big"; exit 1; fi
+
+      - name: deploy to Cloudflare Pages (play.paged.media)
+        # npx (not wrangler-action, which adds wrangler to the workspace).
+        # Deployed from apps/canvas so wrangler picks up apps/canvas/functions:
+        # the same-origin Claude proxy at /api/ai (ADR 221). Its secret and
+        # KV binding live on the Pages project, not here.
+        working-directory: apps/editor/apps/canvas
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx -y wrangler@3 pages deploy dist-demo --project-name=paged-playground --branch=main

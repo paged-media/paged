@@ -158,9 +158,7 @@ export function EditContextStackProvider({ children }: PropsWithChildren) {
   // Hooks fire OUTSIDE React state (the plugin's onEnter/onExit) — keep
   // them in a ref so the callbacks stay stable and don't re-fire on
   // unrelated renders.
-  const hooksRef = useRef(
-    new Map<string, EditContextContribution>(),
-  );
+  const hooksRef = useRef(new Map<string, EditContextContribution>());
 
   const enter = useCallback(
     (
@@ -274,7 +272,7 @@ export function EditContextStackProvider({ children }: PropsWithChildren) {
   // recomputes whenever `active` changes). K-1 content-pointer delivery
   // reads it.
   const activeContribution = active
-    ? hooksRef.current.get(active.type) ?? null
+    ? (hooksRef.current.get(active.type) ?? null)
     : null;
 
   const isActiveDirty = useCallback((): boolean => {

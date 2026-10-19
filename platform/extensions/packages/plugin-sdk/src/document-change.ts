@@ -44,11 +44,15 @@
 import type { DocumentChangeEvent, PagedEditor } from "@paged-media/plugin-api";
 
 /** A message on the editor client's broadcast. */
-export type ClientMessage = Parameters<Parameters<PagedEditor["client"]["subscribe"]>[0]>[0];
+export type ClientMessage = Parameters<
+  Parameters<PagedEditor["client"]["subscribe"]>[0]
+>[0];
 
 /** The bundle-facing event for a reply that committed a change to the
  *  document, or `null` for every other message. */
-export function documentChangeOf(msg: ClientMessage): DocumentChangeEvent | null {
+export function documentChangeOf(
+  msg: ClientMessage,
+): DocumentChangeEvent | null {
   switch (msg.kind) {
     case "mutationApplied":
     case "gestureCommitted":
@@ -84,7 +88,12 @@ export function documentChangeOf(msg: ClientMessage): DocumentChangeEvent | null
 }
 
 function reflowOf(
-  reflow: { frameId: string; contentBox: [number, number, number, number] } | null | undefined,
+  reflow:
+    | { frameId: string; contentBox: [number, number, number, number] }
+    | null
+    | undefined,
 ): Pick<DocumentChangeEvent, "reflow"> {
-  return reflow ? { reflow: { frameId: reflow.frameId, contentBox: reflow.contentBox } } : {};
+  return reflow
+    ? { reflow: { frameId: reflow.frameId, contentBox: reflow.contentBox } }
+    : {};
 }

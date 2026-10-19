@@ -181,7 +181,7 @@ export interface WebFrameSource {
 }
 
 export const DEFAULT_SOURCE: WebFrameSource = {
-  html: '<h1>Web frame</h1>\n<p>Authored as HTML/CSS, placed on the page.</p>',
+  html: "<h1>Web frame</h1>\n<p>Authored as HTML/CSS, placed on the page.</p>",
   css:
     'h1 { font: 600 18px/1.2 "IBM Plex Sans", sans-serif; margin: 0 0 6px; }\n' +
     'p  { font: 13px/1.45 "IBM Plex Sans", sans-serif; margin: 0; }',
@@ -296,8 +296,12 @@ export function contentHash(text: string): string {
     h1 = Math.imul(h1 ^ c, 2654435761);
     h2 = Math.imul(h2 ^ c, 1597334677);
   }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  h1 =
+    Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^
+    Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 =
+    Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^
+    Math.imul(h1 ^ (h1 >>> 13), 3266489909);
   const hex = (n: number) => (n >>> 0).toString(16).padStart(8, "0");
   return hex(h2) + hex(h1);
 }
@@ -313,7 +317,12 @@ export function sourcePartPath(ref: WebSourceRef): string {
 /** How a source is stored: inline in the label, or as a part + pointer. */
 export type StoredSource =
   | { kind: "inline"; label: WebSourceEnvelope }
-  | { kind: "part"; label: WebSourceEnvelope; ref: WebSourceRef; partText: string };
+  | {
+      kind: "part";
+      label: WebSourceEnvelope;
+      ref: WebSourceRef;
+      partText: string;
+    };
 
 /** Decide where a source goes. Small sources stay inline in the label
  *  (undoable, IDML-portable, readable without the plugin's parts); a
@@ -323,7 +332,8 @@ export function storeSource(source: WebFrameSource): StoredSource {
   const envelope = envelopeFor(source);
   const text = JSON.stringify(envelope);
   const bytes = utf8Length(text);
-  if (bytes <= LABEL_INLINE_MAX_BYTES) return { kind: "inline", label: envelope };
+  if (bytes <= LABEL_INLINE_MAX_BYTES)
+    return { kind: "inline", label: envelope };
   const ref: WebSourceRef = { hash: contentHash(text), bytes };
   return {
     kind: "part",
@@ -338,20 +348,26 @@ export function storeSource(source: WebFrameSource): StoredSource {
 }
 
 /** The part pointer a label carries, or `null` for an inline/legacy label. */
-export function sourceRefOf(envelope: WebSourceEnvelope | null): WebSourceRef | null {
+export function sourceRefOf(
+  envelope: WebSourceEnvelope | null,
+): WebSourceRef | null {
   if (!envelope || envelope.v !== SOURCE_METADATA_VERSION) return null;
   const ref = (envelope.data as { ref?: unknown }).ref;
   if (typeof ref !== "object" || ref === null) return null;
   const { hash, bytes } = ref as { hash?: unknown; bytes?: unknown };
   if (typeof hash !== "string" || !/^[0-9a-f]{16}$/.test(hash)) return null;
-  if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) return null;
+  if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0)
+    return null;
   return { hash, bytes };
 }
 
 /** Decode a part's text, verifying it is the content the pointer names.
  *  `null` when it is not (a mismatched or corrupt part is never read as
  *  the live source). */
-export function sourceFromPartText(text: string, ref: WebSourceRef): WebFrameSource | null {
+export function sourceFromPartText(
+  text: string,
+  ref: WebSourceRef,
+): WebFrameSource | null {
   if (contentHash(text) !== ref.hash) return null;
   try {
     return sourceFromEnvelope(JSON.parse(text) as WebSourceEnvelope);
@@ -361,8 +377,12 @@ export function sourceFromPartText(text: string, ref: WebSourceRef): WebFrameSou
 }
 
 /** Whether a label marks a web frame: an inline source or a part pointer. */
-export function isWebFrameEnvelope(envelope: WebSourceEnvelope | null): boolean {
-  return sourceFromEnvelope(envelope) !== null || sourceRefOf(envelope) !== null;
+export function isWebFrameEnvelope(
+  envelope: WebSourceEnvelope | null,
+): boolean {
+  return (
+    sourceFromEnvelope(envelope) !== null || sourceRefOf(envelope) !== null
+  );
 }
 
 /** Unwrap + validate a `getMetadata` envelope. Unknown versions and
@@ -484,7 +504,7 @@ export function composeSrcdoc(
   fontFaceCss = "",
 ): string {
   return (
-    "<!doctype html><html><head><meta charset=\"utf-8\">" +
+    '<!doctype html><html><head><meta charset="utf-8">' +
     `<style>${fontFaceCss}${source.css}</style>` +
     `</head><body class="media-${source.options.media}">` +
     source.html +

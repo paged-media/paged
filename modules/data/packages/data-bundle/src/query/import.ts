@@ -119,7 +119,9 @@ export async function loadIntoDuckDB(
     case "xlsx": {
       const x = readXlsx(bytes, sheet);
       if (x.rows === 0) {
-        const cols = x.columns.map((c) => `${quoteIdent(c.name)} ${c.type}`).join(", ");
+        const cols = x.columns
+          .map((c) => `${quoteIdent(c.name)} ${c.type}`)
+          .join(", ");
         await duck.exec(`CREATE OR REPLACE TABLE ${table} (${cols})`);
       } else {
         const file = virtualFileName(source, format);

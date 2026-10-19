@@ -26,7 +26,14 @@
 // Geometry is page-space (x0, y0, x1, y1) per the driver helpers.
 
 import { plate, proseFrame, specLabel } from "../../annual-support";
-import { LAYER, STYLE, SWATCH, TRIM_H_PT, TRIM_W_PT, p } from "../../names-annual";
+import {
+  LAYER,
+  STYLE,
+  SWATCH,
+  TRIM_H_PT,
+  TRIM_W_PT,
+  p,
+} from "../../names-annual";
 import type { PageContext, PageReport } from "../../types";
 
 export async function build(ctx: PageContext): Promise<PageReport> {
@@ -51,18 +58,26 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
   elements.push(rule);
 
-  const title = await proseFrame(ctx, p(11), [60, 300, 480, 430], [
-    { text: "Part I — The Document", style: STYLE.partTitle },
-  ]);
+  const title = await proseFrame(
+    ctx,
+    p(11),
+    [60, 300, 480, 430],
+    [{ text: "Part I — The Document", style: STYLE.partTitle }],
+  );
   elements.push(title.frameId);
 
   // Verso p12 — the epigraph, in the annual's own voice.
-  const epigraph = await proseFrame(ctx, p(12), [60, 280, 480, 430], [
-    {
-      text: "A book that sets itself owes its reader an account of how. The next eight pages are that account: the grid this page hangs on, the masters that stamp its furniture, the layers it stacks, and the conditions under which any of it is visible.",
-      style: STYLE.deck,
-    },
-  ]);
+  const epigraph = await proseFrame(
+    ctx,
+    p(12),
+    [60, 280, 480, 430],
+    [
+      {
+        text: "A book that sets itself owes its reader an account of how. The next eight pages are that account: the grid this page hangs on, the masters that stamp its furniture, the layers it stacks, and the conditions under which any of it is visible.",
+        style: STYLE.deck,
+      },
+    ],
+  );
   elements.push(epigraph.frameId);
 
   elements.push(

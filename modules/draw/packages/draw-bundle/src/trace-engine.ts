@@ -306,7 +306,12 @@ async function loadModule(): Promise<TraceWasmModule> {
 /** Wrap a loaded module in the typed facade. Exported for the
  *  conformance spec, which asserts the JSON boundary shape directly. */
 export function wrapTraceEngine(mod: TraceWasmModule): TraceEngine {
-  const traceJson: TraceEngine["traceJson"] = (pixels, width, height, options) => {
+  const traceJson: TraceEngine["traceJson"] = (
+    pixels,
+    width,
+    height,
+    options,
+  ) => {
     // `maxTracePixels` is a DECODER knob; the kernel has never heard of
     // it, so it is stripped here rather than smuggled across as an
     // ignored field.
@@ -322,7 +327,9 @@ export function wrapTraceEngine(mod: TraceWasmModule): TraceEngine {
       return JSON.parse(mod.traceLimits()) as TraceLimits;
     },
     trace(pixels, width, height, options) {
-      return JSON.parse(traceJson(pixels, width, height, options)) as TraceResult;
+      return JSON.parse(
+        traceJson(pixels, width, height, options),
+      ) as TraceResult;
     },
     traceJson,
   };
@@ -442,7 +449,12 @@ export function answerTraceRequest(
 ): TraceWorkerReply {
   try {
     if (request.kind === "limits") {
-      return { id: request.id, ok: true, kind: "limits", limits: engine.limits() };
+      return {
+        id: request.id,
+        ok: true,
+        kind: "limits",
+        limits: engine.limits(),
+      };
     }
     const pixels = new Uint8Array(
       request.pixels,
@@ -453,7 +465,12 @@ export function answerTraceRequest(
       id: request.id,
       ok: true,
       kind: "trace",
-      json: engine.traceJson(pixels, request.width, request.height, request.options),
+      json: engine.traceJson(
+        pixels,
+        request.width,
+        request.height,
+        request.options,
+      ),
     };
   } catch (err) {
     return { id: request.id, ok: false, error: messageOf(err) };
@@ -501,7 +518,9 @@ function callingThreadSession(engine: TraceEngine): TraceSession {
       } catch (err) {
         // The wasm throws its refusal as a bare STRING. Both lanes reject
         // with an Error carrying the kernel's message.
-        throw err instanceof Error ? err : new Error(messageOf(err), { cause: err });
+        throw err instanceof Error
+          ? err
+          : new Error(messageOf(err), { cause: err });
       }
     },
     close() {},
@@ -521,7 +540,9 @@ async function workerSession(
     return null;
   };
   if (!host.supports("workers@1")) {
-    return why(`the host has no worker backend (supports("workers@1") is false)`);
+    return why(
+      `the host has no worker backend (supports("workers@1") is false)`,
+    );
   }
   let worker: BundleWorker;
   try {
@@ -618,7 +639,8 @@ async function workerSession(
         transfer,
       );
       if (!reply.ok) throw new Error(reply.error);
-      if (reply.kind !== "trace") throw new Error("unexpected answer from the trace worker");
+      if (reply.kind !== "trace")
+        throw new Error("unexpected answer from the trace worker");
       return JSON.parse(reply.json) as TraceResult;
     },
     close,

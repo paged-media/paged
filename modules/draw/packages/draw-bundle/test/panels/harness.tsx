@@ -97,7 +97,9 @@ export interface EventLog {
 function override<T extends object>(target: T, key: string, value: unknown): T {
   return new Proxy(target, {
     get(obj, prop, receiver) {
-      return prop === key ? value : (Reflect.get(obj, prop, receiver) as unknown);
+      return prop === key
+        ? value
+        : (Reflect.get(obj, prop, receiver) as unknown);
     },
   });
 }
@@ -128,7 +130,11 @@ export function tapEvents(host: BundleHost): {
       }),
   );
   return {
-    host: override(override(host, "selection", selection), "document", document),
+    host: override(
+      override(host, "selection", selection),
+      "document",
+      document,
+    ),
     events,
   };
 }
@@ -353,7 +359,9 @@ export function unmountAll(): void {
  * a panel that is about to go away, and the next test starts from
  * "nothing selected" whatever this one left behind.
  */
-export async function teardownPanels(h: HeadlessHost | undefined): Promise<void> {
+export async function teardownPanels(
+  h: HeadlessHost | undefined,
+): Promise<void> {
   cleanup();
   await h?.host.selection.set([]);
 }

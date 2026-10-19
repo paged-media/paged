@@ -29,7 +29,12 @@
 // is given after the deck's document opens; the source deck the importer
 // keeps as a container part brings the faces back each time it is reopened.
 
-import type { AssetSurface, BundleHost, Diagnostic, DocumentFontOutcome } from "@paged-media/plugin-api";
+import type {
+  AssetSurface,
+  BundleHost,
+  Diagnostic,
+  DocumentFontOutcome,
+} from "@paged-media/plugin-api";
 
 import type { EmbeddedFaceReport } from "./engine.js";
 
@@ -37,12 +42,16 @@ export type { DocumentFontOutcome };
 
 /** The host's document-font door, or null where the host has no backend for
  *  it (`supports("assets.documentFont@1")` false). */
-export function documentFontDoor(host: BundleHost): Pick<AssetSurface, "registerDocumentFont"> | null {
+export function documentFontDoor(
+  host: BundleHost,
+): Pick<AssetSurface, "registerDocumentFont"> | null {
   return host.supports("assets.documentFont@1") ? host.assets : null;
 }
 
 /** The faces the document may use, in the report's order. */
-export function usableFaces(faces: readonly EmbeddedFaceReport[]): EmbeddedFaceReport[] {
+export function usableFaces(
+  faces: readonly EmbeddedFaceReport[],
+): EmbeddedFaceReport[] {
   return faces.filter((f) => f.use === "editable" && f.length > 0);
 }
 
@@ -73,9 +82,16 @@ export async function giveDocumentEmbeddedFonts(
   for (const f of usable) {
     let outcome: DocumentFontOutcome;
     try {
-      outcome = await door.registerDocumentFont(data.slice(f.offset, f.offset + f.length), f.family, f.style);
+      outcome = await door.registerDocumentFont(
+        data.slice(f.offset, f.offset + f.length),
+        f.family,
+        f.style,
+      );
     } catch (err) {
-      outcome = { status: "refused", reason: err instanceof Error ? err.message : String(err) };
+      outcome = {
+        status: "refused",
+        reason: err instanceof Error ? err.message : String(err),
+      };
     }
     if (outcome.status === "refused") {
       out.push({

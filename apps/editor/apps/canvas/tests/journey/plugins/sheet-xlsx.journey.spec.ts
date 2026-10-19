@@ -97,8 +97,7 @@ async function elementScreenCenter(
               Array<{
                 bounds: [number, number, number, number];
                 itemTransform?:
-                  | [number, number, number, number, number, number]
-                  | null;
+                  [number, number, number, number, number, number] | null;
               }>
             >;
           };
@@ -231,9 +230,14 @@ test.describe("journey · paged.sheet xlsx round-trip", () => {
       }`,
     ).toBe(true);
     if ("byteLength" in exported) {
-      expect(exported.byteLength, "the exported .xlsx is non-empty").toBeGreaterThan(64);
+      expect(
+        exported.byteLength,
+        "the exported .xlsx is non-empty",
+      ).toBeGreaterThan(64);
       // ZIP local-file-header magic: "PK\x03\x04".
-      expect(exported.magic, "the export is a valid .xlsx ZIP").toBe("PK\x03\x04");
+      expect(exported.magic, "the export is a valid .xlsx ZIP").toBe(
+        "PK\x03\x04",
+      );
     }
   });
 });

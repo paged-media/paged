@@ -435,7 +435,10 @@ export function parseSymbolLibrary(bytes: Uint8Array | null): SymbolLibrary {
     for (const p of Array.isArray(s.pieces) ? s.pieces : []) {
       const table = parseAnchorTable((p as Partial<SymbolPiece>)?.table);
       if (!table) continue;
-      pieces.push({ table, paint: parseSymbolPaint((p as SymbolPiece)?.paint) });
+      pieces.push({
+        table,
+        paint: parseSymbolPaint((p as SymbolPiece)?.paint),
+      });
     }
     symbols.push({
       id: s.id,
@@ -806,7 +809,10 @@ export function symbolFinishBatchFor(args: {
       // table as given, where `insertPath` added the page's origin: so the
       // page-space table gets that origin too.
       ops.push(
-        framePathMutationFor(binding.keep, spreadTableOf(piece.table, args.plan.pageOrigin ?? SPREAD_ORIGIN)),
+        framePathMutationFor(
+          binding.keep,
+          spreadTableOf(piece.table, args.plan.pageOrigin ?? SPREAD_ORIGIN),
+        ),
       );
       for (const id of binding.absorb) {
         ops.push({ op: "deleteFrame", args: { frameId: id.id as string } });
@@ -857,8 +863,11 @@ export interface SymbolBuild {
 /** The batch-local handle of build `build`'s piece `piece`, contour
  *  `contour`. Deterministic, so the conformance spec asserts the exact
  *  wire. Pure. */
-export const symbolHandle = (build: number, piece: number, contour: number): string =>
-  `sy${build}_${piece}_${contour}`;
+export const symbolHandle = (
+  build: number,
+  piece: number,
+  contour: number,
+): string => `sy${build}_${piece}_${contour}`;
 
 /** What the one batch resolves each piece of build `build` to: its first
  *  contour's handle survives, the rest are absorbed into it. Pure. */
@@ -1136,7 +1145,11 @@ async function liveInstanceSources(
   host: BundleHost,
   instance: SymbolInstance,
   registration: SymbolRegistration,
-): Promise<{ origin: [number, number] | null; pageId: string | null; pageOrigin: PageOrigin | null }> {
+): Promise<{
+  origin: [number, number] | null;
+  pageId: string | null;
+  pageOrigin: PageOrigin | null;
+}> {
   const tables: AnchorTable[] = [];
   let pageId: string | null = null;
   let pageOrigin: PageOrigin | null = null;
@@ -1280,8 +1293,8 @@ export async function emitSymbolInstances(
   const bound = bindMinted(built, batch);
   if (bound) {
     builds.forEach(({ at, build }, b) => {
-      out[at] = build.plan.pieces.map(
-        (_, p) => bound.byHandle.get(symbolHandle(b, p, 0))!,
+      out[at] = build.plan.pieces.map((_, p) =>
+        bound.byHandle.get(symbolHandle(b, p, 0))!,
       );
     });
   } else {
@@ -1371,7 +1384,9 @@ async function emitSymbolInstanceStepwise(
     return bindings.map((b) => b.keep);
   }
   const keeps = bindings.map((b) => b.keep);
-  const measured = await host.document.elementGeometry([...keeps]).catch(() => []);
+  const measured = await host.document
+    .elementGeometry([...keeps])
+    .catch(() => []);
   if (measured.length === 0) warnUnmeasurable(host, label, plan.origin);
   return keeps;
 }
@@ -1489,7 +1504,9 @@ async function rebuildPlanFor(
     symbol,
     pageId,
     // The origin pairs with the page the live read found, not a fallback.
-    ...(live.pageId !== null && live.pageOrigin ? { pageOrigin: live.pageOrigin } : {}),
+    ...(live.pageId !== null && live.pageOrigin
+      ? { pageOrigin: live.pageOrigin }
+      : {}),
     instanceId: instance.instance,
     origin: live.origin ?? instance.origin,
     replace: { group, stale: instance.leaves },
@@ -1745,7 +1762,9 @@ export function contributeSymbolCommands(host: BundleHost): Disposable {
       category: SYMBOLS_COMMAND_CATEGORY,
       handler: (_paged, payload) => {
         const p = payloadOf(payload);
-        return applyRenameSymbol(host, p.symbolId, p.name).then(() => undefined);
+        return applyRenameSymbol(host, p.symbolId, p.name).then(
+          () => undefined,
+        );
       },
     }),
     registerCommand(host, {

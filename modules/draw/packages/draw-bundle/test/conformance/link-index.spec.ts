@@ -26,9 +26,21 @@
 // the document goes through the RAW host, the way another command — or
 // another plugin, or the user — would.
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "bun:test";
 
-import type { BundleHost, DocumentOpenedEvent, ElementId, Mutation } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  DocumentOpenedEvent,
+  ElementId,
+  Mutation,
+} from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
 import { drawBundle, pasteIntoMutationFor } from "../../src";
@@ -61,7 +73,9 @@ const turn = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 function override<T extends object>(target: T, key: string, value: unknown): T {
   return new Proxy(target, {
     get(obj, prop, receiver) {
-      return prop === key ? value : (Reflect.get(obj, prop, receiver) as unknown);
+      return prop === key
+        ? value
+        : (Reflect.get(obj, prop, receiver) as unknown);
     },
   });
 }
@@ -82,7 +96,9 @@ describe("draw conformance — the link index", () => {
     h = await openHost();
     await h.load(
       panelDocument(
-        rectItem("r0", 40, 40, 200) + rectItem("r1", 300, 40) + seedRow("s", 2, { x: 60, y: 60 }),
+        rectItem("r0", 40, 40, 200) +
+          rectItem("r1", 300, 40) +
+          seedRow("s", 2, { x: 60, y: 60 }),
       ),
     );
     h.loadBundle(drawBundle);
@@ -183,7 +199,10 @@ describe("draw conformance — the link index", () => {
     const index = linkIndex(host);
     await index.snapshot();
     // The command shape: stamp, then discover — on the same host.
-    const written = host.document.setMetadata(plainId(2), { v: 1, data: { tag: "p2" } });
+    const written = host.document.setMetadata(plainId(2), {
+      v: 1,
+      data: { tag: "p2" },
+    });
     const tags = written.then(async () =>
       (await index.snapshot()).linked.map((l) => l.envelope?.data.tag),
     );
@@ -219,7 +238,9 @@ describe("draw conformance — the link index", () => {
     let attempts = 0;
     const flaky = () => {
       attempts += 1;
-      return attempts === 1 ? Promise.reject(new Error("no")) : Promise.resolve("ok");
+      return attempts === 1
+        ? Promise.reject(new Error("no"))
+        : Promise.resolve("ok");
     };
     await expect(index.cached("flaky", flaky)).rejects.toThrow("no");
     expect(await index.cached("flaky", flaky)).toBe("ok");
@@ -294,7 +315,9 @@ describe("draw conformance — the link index", () => {
       host,
       "document",
       override(host.document, "tree", () =>
-        failing ? Promise.reject(new Error("worker gone")) : host.document.tree(),
+        failing
+          ? Promise.reject(new Error("worker gone"))
+          : host.document.tree(),
       ),
     );
     const index = linkIndex(flaky);
@@ -309,7 +332,11 @@ describe("draw conformance — the link index", () => {
     // tree's rows are stripped of it, so every leaf is read by id.
     const strip = (nodes: unknown[]): unknown[] =>
       nodes.map((n) => {
-        const { pluginMetadata: _drop, children, ...rest } = n as {
+        const {
+          pluginMetadata: _drop,
+          children,
+          ...rest
+        } = n as {
           pluginMetadata?: unknown;
           children?: unknown[];
         };
@@ -397,10 +424,14 @@ describe("draw conformance — the link index", () => {
     const wired = override(
       host,
       "document",
-      override(host.document, "onDidOpen", (listener: (e: DocumentOpenedEvent) => void) => {
-        opened = listener;
-        return { dispose() {} };
-      }),
+      override(
+        host.document,
+        "onDidOpen",
+        (listener: (e: DocumentOpenedEvent) => void) => {
+          opened = listener;
+          return { dispose() {} };
+        },
+      ),
     );
     const index = linkIndex(wired);
     let told = 0;
@@ -463,7 +494,11 @@ describe("draw conformance — the link index follows a drag and a script", () =
   type Reply = { kind: string; payload?: { handle?: number } };
   /** The host's own client: how the editor drives a canvas gesture. */
   const send = (message: { kind: string; payload?: unknown }): Promise<Reply> =>
-    (h.host.editor.client as unknown as { send: (m: unknown) => Promise<Reply> }).send(message);
+    (
+      h.host.editor.client as unknown as {
+        send: (m: unknown) => Promise<Reply>;
+      }
+    ).send(message);
 
   beforeAll(async () => {
     h = await openHost();
@@ -472,9 +507,16 @@ describe("draw conformance — the link index follows a drag and a script", () =
   afterAll(() => h?.dispose());
   beforeEach(async () => {
     [pageId] = (await h.load(
-      panelDocument(rectItem("r0", 40, 40, 200) + rectItem("r1", 300, 40) + seedRow("s", 2, { x: 60, y: 60 })),
+      panelDocument(
+        rectItem("r0", 40, 40, 200) +
+          rectItem("r1", 300, 40) +
+          seedRow("s", 2, { x: 60, y: 60 }),
+      ),
     )) as [string];
-    const out = await h.host.document.setMetadata(plainId(0), { v: 1, data: { tag: "p0" } });
+    const out = await h.host.document.setMetadata(plainId(0), {
+      v: 1,
+      data: { tag: "p0" },
+    });
     expect(out.applied).toBe(true);
     perLeaf = await metadataReadsPerLeaf(h.host);
     ({ host, work } = countingHost(h.host));
@@ -496,7 +538,11 @@ describe("draw conformance — the link index follows a drag and a script", () =
     const handle = begun.payload!.handle!;
     await send({
       kind: "updateGesture",
-      payload: { handle, delta: [20, 0], modifiers: { shift: false, alt: false, disableSnap: true } },
+      payload: {
+        handle,
+        delta: [20, 0],
+        modifiers: { shift: false, alt: false, disableSnap: true },
+      },
     });
     expect(await index.snapshot()).toBe(first); // in flight: nothing committed
     const done = await send({ kind: "commitGesture", payload: { handle } });
@@ -521,7 +567,9 @@ describe("draw conformance — the link index follows a drag and a script", () =
     const first = await index.snapshot();
     expect(first.leaves).toHaveLength(LEAVES);
 
-    const run = await h.runScript(`paged.insertTextFrame(${JSON.stringify(pageId)}, [500, 500, 560, 560]);`);
+    const run = await h.runScript(
+      `paged.insertTextFrame(${JSON.stringify(pageId)}, [500, 500, 560, 560]);`,
+    );
     expect(run.error).toBeNull();
     expect(told).toBe(1);
 

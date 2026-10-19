@@ -97,10 +97,14 @@ describe("draw conformance — measure tool (Phase 4c)", () => {
   it("the snap's hatch read is GUARDED: a host without the hatch answers null, never a throw", async () => {
     const bare = new Proxy(h.host, {
       get(target, prop, receiver) {
-        return prop === "editor" ? {} : (Reflect.get(target, prop, receiver) as unknown);
+        return prop === "editor"
+          ? {}
+          : (Reflect.get(target, prop, receiver) as unknown);
       },
     }) as BundleHost;
-    await expect(nearestPathPointOnPage(bare, POLY, [175, 500], 6)).resolves.toBeNull();
+    await expect(
+      nearestPathPointOnPage(bare, POLY, [175, 500], 6),
+    ).resolves.toBeNull();
     // …and through the counting host the one hatch call is the named request.
     const { host, work } = countingHost(h.host);
     await nearestPathPointOnPage(host, POLY, [175, 500], 6);
@@ -275,14 +279,18 @@ describe("draw conformance — measure tool (Phase 4c)", () => {
         [10, 10],
         [110, 10],
       ]);
-      expect((live[1] as unknown as ToolPreviewTextMirror).text).toBe("100.00 pt · 0.0°");
+      expect((live[1] as unknown as ToolPreviewTextMirror).text).toBe(
+        "100.00 pt · 0.0°",
+      );
       handler.onPointerUp(pointer([110, 10]));
       const frozen = h.lastToolPreviews()!;
       expect((frozen[0] as ToolPreviewPolyline).points).toEqual([
         [10, 10],
         [110, 10],
       ]);
-      expect((frozen[1] as unknown as ToolPreviewTextMirror).text).toBe("100.00 pt · 0.0°");
+      expect((frozen[1] as unknown as ToolPreviewTextMirror).text).toBe(
+        "100.00 pt · 0.0°",
+      );
       // Every publish was the multi-shape door; none was the single slot.
       expect(work.count("overlay.setToolPreview")).toBe(0);
       expect(work.count("overlay.setToolPreviews")).toBeGreaterThanOrEqual(3);

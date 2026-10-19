@@ -24,7 +24,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
+const ROOT = path.resolve(
+  path.dirname(new URL(import.meta.url).pathname),
+  "../..",
+);
 const OUT = path.join(ROOT, "image-conformance/fixtures/vips");
 const YAML = path.join(ROOT, "registry/vips-oracle.yaml");
 const N = 64;
@@ -50,7 +53,8 @@ function stimulus(kind, seed) {
     for (let x = 0; x < N; x++)
       for (let c = 0; c < 4; c++) {
         const h = hash(seed, x, y, c);
-        const v = kind === "opaque" ? (c === 3 ? 1 : KINDS.unit(h)) : KINDS[kind](h);
+        const v =
+          kind === "opaque" ? (c === 3 ? 1 : KINDS.unit(h)) : KINDS[kind](h);
         buf.writeFloatLE(v, o);
         o += 4;
       }
@@ -63,14 +67,28 @@ const hueMatrix = (deg) => {
   const c = Math.cos(t);
   const s = Math.sin(t);
   return [
-    [0.213 + c * 0.787 - s * 0.213, 0.715 - c * 0.715 - s * 0.715, 0.072 - c * 0.072 + s * 0.928],
-    [0.213 - c * 0.213 + s * 0.143, 0.715 + c * 0.285 + s * 0.14, 0.072 - c * 0.072 - s * 0.283],
-    [0.213 - c * 0.213 - s * 0.787, 0.715 - c * 0.715 + s * 0.715, 0.072 + c * 0.928 + s * 0.072],
+    [
+      0.213 + c * 0.787 - s * 0.213,
+      0.715 - c * 0.715 - s * 0.715,
+      0.072 - c * 0.072 + s * 0.928,
+    ],
+    [
+      0.213 - c * 0.213 + s * 0.143,
+      0.715 + c * 0.285 + s * 0.14,
+      0.072 - c * 0.072 - s * 0.283,
+    ],
+    [
+      0.213 - c * 0.213 - s * 0.787,
+      0.715 - c * 0.715 + s * 0.715,
+      0.072 + c * 0.928 + s * 0.072,
+    ],
   ];
 };
 const satMatrix = (sat) => {
   const L = [0.3, 0.59, 0.11];
-  return [0, 1, 2].map((r) => [0, 1, 2].map((c) => (1 - sat) * L[c] + (r === c ? sat : 0)));
+  return [0, 1, 2].map((r) =>
+    [0, 1, 2].map((c) => (1 - sat) * L[c] + (r === c ? sat : 0)),
+  );
 };
 /** A 4x4 recomb matrix file: the 3x3 colour block, alpha passed through. */
 const mat4 = (m3) =>
@@ -89,14 +107,52 @@ const unaryLinear = (id, a, b, kind = "unit") => ({
   steps: [["linear", "A", "O", a, b]],
 });
 export const ROWS = [
-  { id: "math.linear", in: ["unit"], params: { gain: 1.5, bias: -0.125 }, steps: [["linear", "A", "O", "1.5", "-0.125"]] },
-  { ...unaryLinear("math.invert", "-1", "1"), note: "1 - x via linear (vips invert is format-relative)" },
-  { id: "math.add", in: ["unit", "unit"], params: {}, steps: [["add", "A", "B", "O"]] },
-  { id: "math.sub", in: ["unit", "unit"], params: {}, steps: [["subtract", "A", "B", "O"]] },
-  { id: "math.mul", in: ["unit", "unit"], params: {}, steps: [["multiply", "A", "B", "O"]] },
-  { id: "math.div", in: ["unit", "pos"], params: {}, steps: [["divide", "A", "B", "O"]] },
-  { id: "math.add_const", in: ["unit"], params: { v: 0.375 }, steps: [["linear", "A", "O", "1", "0.375"]] },
-  { id: "math.mul_const", in: ["unit"], params: { v: 1.75 }, steps: [["linear", "A", "O", "1.75", "0"]] },
+  {
+    id: "math.linear",
+    in: ["unit"],
+    params: { gain: 1.5, bias: -0.125 },
+    steps: [["linear", "A", "O", "1.5", "-0.125"]],
+  },
+  {
+    ...unaryLinear("math.invert", "-1", "1"),
+    note: "1 - x via linear (vips invert is format-relative)",
+  },
+  {
+    id: "math.add",
+    in: ["unit", "unit"],
+    params: {},
+    steps: [["add", "A", "B", "O"]],
+  },
+  {
+    id: "math.sub",
+    in: ["unit", "unit"],
+    params: {},
+    steps: [["subtract", "A", "B", "O"]],
+  },
+  {
+    id: "math.mul",
+    in: ["unit", "unit"],
+    params: {},
+    steps: [["multiply", "A", "B", "O"]],
+  },
+  {
+    id: "math.div",
+    in: ["unit", "pos"],
+    params: {},
+    steps: [["divide", "A", "B", "O"]],
+  },
+  {
+    id: "math.add_const",
+    in: ["unit"],
+    params: { v: 0.375 },
+    steps: [["linear", "A", "O", "1", "0.375"]],
+  },
+  {
+    id: "math.mul_const",
+    in: ["unit"],
+    params: { v: 1.75 },
+    steps: [["linear", "A", "O", "1.75", "0"]],
+  },
   { id: "math.abs", in: ["signed"], params: {}, steps: [["abs", "A", "O"]] },
   { id: "math.sign", in: ["signed"], params: {}, steps: [["sign", "A", "O"]] },
   { ...unaryLinear("math.neg", "-1", "0", "signed") },
@@ -153,11 +209,36 @@ export const ROWS = [
       ["bandjoin_const", "T1", "O", "0.5"],
     ],
   },
-  { id: "math.min", in: ["unit", "unit"], params: {}, steps: [["minpair", "A", "B", "O"]] },
-  { id: "math.max", in: ["unit", "unit"], params: {}, steps: [["maxpair", "A", "B", "O"]] },
-  { id: "math.clamp", in: ["unit"], params: { lo: 0.25, hi: 0.75 }, steps: [["clamp", "A", "O", "--min", "0.25", "--max", "0.75"]] },
-  { id: "math.min_const", in: ["unit"], params: { v: 0.5 }, steps: [["clamp", "A", "O", "--min", "-1000", "--max", "0.5"]] },
-  { id: "math.max_const", in: ["unit"], params: { v: 0.5 }, steps: [["clamp", "A", "O", "--min", "0.5", "--max", "1000"]] },
+  {
+    id: "math.min",
+    in: ["unit", "unit"],
+    params: {},
+    steps: [["minpair", "A", "B", "O"]],
+  },
+  {
+    id: "math.max",
+    in: ["unit", "unit"],
+    params: {},
+    steps: [["maxpair", "A", "B", "O"]],
+  },
+  {
+    id: "math.clamp",
+    in: ["unit"],
+    params: { lo: 0.25, hi: 0.75 },
+    steps: [["clamp", "A", "O", "--min", "0.25", "--max", "0.75"]],
+  },
+  {
+    id: "math.min_const",
+    in: ["unit"],
+    params: { v: 0.5 },
+    steps: [["clamp", "A", "O", "--min", "-1000", "--max", "0.5"]],
+  },
+  {
+    id: "math.max_const",
+    in: ["unit"],
+    params: { v: 0.5 },
+    steps: [["clamp", "A", "O", "--min", "0.5", "--max", "1000"]],
+  },
   // ── windowed / module kernels (GPU only in the replay) ──
   {
     id: "conv.box",
@@ -227,10 +308,30 @@ export const ROWS = [
     out: [32, 32],
     steps: [["reduce", "A", "O", "2", "2", "--kernel", "lanczos3"]],
   },
-  { id: "geom.flip_h", in: ["unit"], params: {}, steps: [["flip", "A", "O", "horizontal"]] },
-  { id: "geom.flip_v", in: ["unit"], params: {}, steps: [["flip", "A", "O", "vertical"]] },
-  { id: "geom.rotate90_cw", in: ["unit"], params: {}, steps: [["rot", "A", "O", "d90"]] },
-  { id: "geom.rotate90_ccw", in: ["unit"], params: {}, steps: [["rot", "A", "O", "d270"]] },
+  {
+    id: "geom.flip_h",
+    in: ["unit"],
+    params: {},
+    steps: [["flip", "A", "O", "horizontal"]],
+  },
+  {
+    id: "geom.flip_v",
+    in: ["unit"],
+    params: {},
+    steps: [["flip", "A", "O", "vertical"]],
+  },
+  {
+    id: "geom.rotate90_cw",
+    in: ["unit"],
+    params: {},
+    steps: [["rot", "A", "O", "d90"]],
+  },
+  {
+    id: "geom.rotate90_ccw",
+    in: ["unit"],
+    params: {},
+    steps: [["rot", "A", "O", "d270"]],
+  },
   {
     id: "geom.crop",
     in: ["unit"],
@@ -248,7 +349,12 @@ export const ROWS = [
         "affine",
         "A",
         "O",
-        v(Math.cos(Math.PI / 6), -Math.sin(Math.PI / 6), Math.sin(Math.PI / 6), Math.cos(Math.PI / 6)),
+        v(
+          Math.cos(Math.PI / 6),
+          -Math.sin(Math.PI / 6),
+          Math.sin(Math.PI / 6),
+          Math.cos(Math.PI / 6),
+        ),
         "--interpolate",
         "bilinear",
         "--oarea",
@@ -290,12 +396,26 @@ export const ROWS = [
     id: "adjust.brightness_contrast",
     in: ["opaque"],
     params: { brightness: 0.1, contrast: 1.3 },
-    steps: [["linear", "A", "O", "1.3 1.3 1.3 1", v(...Array(3).fill(0.5 - 0.65 + 0.1), 0)]],
+    steps: [
+      [
+        "linear",
+        "A",
+        "O",
+        "1.3 1.3 1.3 1",
+        v(...Array(3).fill(0.5 - 0.65 + 0.1), 0),
+      ],
+    ],
   },
   {
     id: "adjust.levels",
     in: ["opaque"],
-    params: { in_black: 0.1, in_white: 0.9, gamma: 1.3, out_black: 0.05, out_white: 0.95 },
+    params: {
+      in_black: 0.1,
+      in_white: 0.9,
+      gamma: 1.3,
+      out_black: 0.05,
+      out_white: 0.95,
+    },
     steps: [
       ["linear", "A", "T1", "1.25 1.25 1.25 1", "-0.125 -0.125 -0.125 0"],
       ["clamp", "T1", "T2", "--min", "0", "--max", "1"],
@@ -308,7 +428,13 @@ export const ROWS = [
     in: ["opaque"],
     params: { r: [0.05, 0.95, 1.2], g: [0.1, 0.9, 0.8], b: [0, 1, 1.5] },
     steps: [
-      ["linear", "A", "T1", v(1 / 0.9, 1 / 0.8, 1, 1), v(-0.05 / 0.9, -0.1 / 0.8, 0, 0)],
+      [
+        "linear",
+        "A",
+        "T1",
+        v(1 / 0.9, 1 / 0.8, 1, 1),
+        v(-0.05 / 0.9, -0.1 / 0.8, 0, 0),
+      ],
       ["clamp", "T1", "T2", "--min", "0", "--max", "1"],
       ["math2_const", "T2", "O", "pow", v(1 / 1.2, 1 / 0.8, 1 / 1.5, 1)],
     ],
@@ -346,7 +472,11 @@ export const ROWS = [
 /** vips options that take no value. */
 const FLAGS = new Set(["--separable"]);
 function vips(args, cwd) {
-  return execFileSync("vips", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  return execFileSync("vips", args, {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
 }
 
 function record(row, version) {
@@ -355,10 +485,25 @@ function record(row, version) {
   row.in.forEach((kind, i) => {
     const raw = path.join(dir, `${names[i]}.raw`);
     fs.writeFileSync(raw, stimulus(kind, i + 1));
-    vips(["rawload", "--", raw, `${names[i]}8.v`, String(N), String(N), "16"], dir);
-    vips(["copy", `${names[i]}8.v`, `${names[i]}.v`, "--format", "float", "--bands", "4"], dir);
+    vips(
+      ["rawload", "--", raw, `${names[i]}8.v`, String(N), String(N), "16"],
+      dir,
+    );
+    vips(
+      [
+        "copy",
+        `${names[i]}8.v`,
+        `${names[i]}.v`,
+        "--format",
+        "float",
+        "--bands",
+        "4",
+      ],
+      dir,
+    );
   });
-  for (const [f, text] of Object.entries(row.files || {})) fs.writeFileSync(path.join(dir, f), text);
+  for (const [f, text] of Object.entries(row.files || {}))
+    fs.writeFileSync(path.join(dir, f), text);
   const sub = (a) =>
     a
       .split(" ")
@@ -380,7 +525,9 @@ function record(row, version) {
       } else pos.push(sub(t));
     }
     const argv = [op, ...opts, "--", ...pos];
-    commands.push(`vips ${argv.map((a) => (a.includes(" ") ? `"${a}"` : a)).join(" ")}`);
+    commands.push(
+      `vips ${argv.map((a) => (a.includes(" ") ? `"${a}"` : a)).join(" ")}`,
+    );
     vips(argv, dir);
   }
   // The last step's output, whatever it was called, cast to float and
@@ -388,7 +535,9 @@ function record(row, version) {
   const tail = row.steps[row.steps.length - 1];
   const last = sub(tail[lastOutIndex(tail)]);
   vips(["cast", last, "F.v", "float"], dir);
-  const final = row.scale ? (vips(["linear", "F.v", "S.v", String(row.scale), "0"], dir), "S.v") : "F.v";
+  const final = row.scale
+    ? (vips(["linear", "F.v", "S.v", String(row.scale), "0"], dir), "S.v")
+    : "F.v";
   if (row.scale) commands.push(`vips linear <out> <out> ${row.scale} 0`);
   fs.mkdirSync(OUT, { recursive: true });
   fs.copyFileSync(path.join(dir, final), path.join(OUT, `${row.id}.v`));
@@ -401,7 +550,8 @@ function record(row, version) {
     stimulus: {
       size: [N, N],
       bands: 4,
-      formula: "h = (7x + 13y + 29c + 31*seed + 17*((x*y) mod 11)) mod 257; inputs use seed 1, 2",
+      formula:
+        "h = (7x + 13y + 29c + 31*seed + 17*((x*y) mod 11)) mod 257; inputs use seed 1, 2",
       kinds: row.in,
     },
     params: row.params,
@@ -410,13 +560,18 @@ function record(row, version) {
     commands,
     note: row.note || null,
   };
-  fs.writeFileSync(path.join(OUT, `${row.id}.vips.json`), JSON.stringify(prov, null, 2) + "\n");
+  fs.writeFileSync(
+    path.join(OUT, `${row.id}.vips.json`),
+    JSON.stringify(prov, null, 2) + "\n",
+  );
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
 /** Index of the output operand in a step: the token after the inputs. */
 function lastOutIndex(step) {
-  const outs = step.map((t, i) => [t, i]).filter(([t, i]) => i > 0 && /^(O|T\d)$/.test(t));
+  const outs = step
+    .map((t, i) => [t, i])
+    .filter(([t, i]) => i > 0 && /^(O|T\d)$/.test(t));
   return outs[outs.length - 1][1];
 }
 
@@ -429,14 +584,15 @@ function measured() {
   for (const line of fs.readFileSync(YAML, "utf8").split("\n")) {
     const m = line.match(/^- id: (\S+)/);
     if (m) id = m[1];
-    const t = line.match(/^ {2}(oracle_tolerance|gpu_tolerance_measured): (.+)$/);
+    const t = line.match(
+      /^ {2}(oracle_tolerance|gpu_tolerance_measured): (.+)$/,
+    );
     if (id && t) (keep[id] ||= {})[t[1]] = t[2];
   }
   return keep;
 }
 
-export const DIVERGES = {
-};
+export const DIVERGES = {};
 
 function writeYaml() {
   const keep = measured();
@@ -468,7 +624,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const want = process.argv.slice(2).filter((a) => !a.startsWith("--"));
   const yamlOnly = process.argv.includes("--yaml-only");
   if (!yamlOnly) {
-    const version = execFileSync("vips", ["--version"], { encoding: "utf8" }).trim();
+    const version = execFileSync("vips", ["--version"], {
+      encoding: "utf8",
+    }).trim();
     for (const row of ROWS) {
       if (want.length && !want.includes(row.id)) continue;
       if (DIVERGES[row.id]) continue;

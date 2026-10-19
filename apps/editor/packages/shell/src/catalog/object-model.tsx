@@ -78,12 +78,17 @@ const Context = createContext<ShellObjectModelHost | null>(null);
 /** The schema row of a path. An INDEXED path (`rows[2].height`,
  *  `labels[x-paged:acme]`) matches its family row (`rows[i].height` /
  *  `rows[].height`, `labels[key]`). */
-export function findSchemaRow<R extends { path: string }>(rows: readonly R[], path: string): R | null {
+export function findSchemaRow<R extends { path: string }>(
+  rows: readonly R[],
+  path: string,
+): R | null {
   const exact = rows.find((r) => r.path === path);
   if (exact || !path.includes("[")) return exact ?? null;
   const family = (p: string) => p.replace(/\[[^\]]*\]/g, "[]");
   const want = family(path);
-  return rows.find((r) => r.path.includes("[") && family(r.path) === want) ?? null;
+  return (
+    rows.find((r) => r.path.includes("[") && family(r.path) === want) ?? null
+  );
 }
 
 export function ObjectModelProvider({
@@ -138,7 +143,11 @@ const NONE: FieldState = { state: "none" };
 const NO_COLLECTIONS: readonly never[] = [];
 const NO_PATHS: readonly PropertyPath[] = [];
 
-function storyRangeId(c: { storyId: string; start: number; end: number }): ElementId {
+function storyRangeId(c: {
+  storyId: string;
+  start: number;
+  end: number;
+}): ElementId {
   return {
     kind: "storyRange",
     id: { story_id: c.storyId, start: c.start, end: c.end },
@@ -155,7 +164,8 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
   // ------------------------------------------------------- targets
   const targetIds = useMemo((): ElementId[] => {
     if (req.targets) return [];
-    if (scope === "content") return contentSelection ? [storyRangeId(contentSelection)] : [];
+    if (scope === "content")
+      return contentSelection ? [storyRangeId(contentSelection)] : [];
     return elementSelection;
   }, [req.targets, scope, contentSelection, elementSelection]);
   const addresses = useMemo((): string[] => {
@@ -178,7 +188,10 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
   // ADR 023 — report the selection-bound PATH exactly like `useBindings`
   // does, so entering an edit context still knows which panels it would
   // displace. Explicit targets are not selection-bound.
-  useReportBindingSurface(NO_COLLECTIONS, req.targets ? NO_PATHS : [req.path as PropertyPath]);
+  useReportBindingSurface(
+    NO_COLLECTIONS,
+    req.targets ? NO_PATHS : [req.path as PropertyPath],
+  );
 
   // ---------------------------------------------- change ticks
   const [tick, setTick] = useState(0);
@@ -231,7 +244,8 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
         if (!cancelled) setState(reduceValues(values));
       },
       (err: unknown) => {
-        if (!cancelled) setState({ state: "refused", code: "failed", reason: String(err) });
+        if (!cancelled)
+          setState({ state: "refused", code: "failed", reason: String(err) });
       },
     );
     return () => {
@@ -248,13 +262,24 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
       return;
     }
     let cancelled = false;
-    void resolveSelectionProperty(providerHost, req.path as never, scope).then((r) => {
-      if (!cancelled) setClaim(r);
-    });
+    void resolveSelectionProperty(providerHost, req.path as never, scope).then(
+      (r) => {
+        if (!cancelled) setClaim(r);
+      },
+    );
     return () => {
       cancelled = true;
     };
-  }, [providerHost, wire, req.targets, req.path, scope, providerTick, tick, addressesKey]);
+  }, [
+    providerHost,
+    wire,
+    req.targets,
+    req.path,
+    scope,
+    providerTick,
+    tick,
+    addressesKey,
+  ]);
 
   // ---------------------------------------------------------- bound
   const [bound, setBound] = useState(false);
@@ -292,7 +317,12 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
         );
         return handled
           ? { applied: true, undoSteps: 1 }
-          : { applied: false, undoSteps: 0, code: "failed", reason: "the edit context did not take the write" };
+          : {
+              applied: false,
+              undoSteps: 0,
+              code: "failed",
+              reason: "the edit context did not take the write",
+            };
       };
     }
     if (!model || addresses.length === 0 || readOnly) return null;
@@ -300,34 +330,60 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
       const ops = setOps(addresses, req.path, value);
       const r =
         ops.length === 1
-          ? await model.objects.set(addresses[0], req.path, value, { label: req.path })
+          ? await model.objects.set(addresses[0], req.path, value, {
+              label: req.path,
+            })
           : await model.objects.batch(ops, { label: req.path });
-      setError(r.applied ? null : `${r.code ?? "failed"}: ${r.reason ?? "refused"}`);
+      setError(
+        r.applied ? null : `${r.code ?? "failed"}: ${r.reason ?? "refused"}`,
+      );
       return r;
     };
-  }, [claimed, providerHost, wire, model, addresses, readOnly, req.path, scope]);
+  }, [
+    claimed,
+    providerHost,
+    wire,
+    model,
+    addresses,
+    readOnly,
+    req.path,
+    scope,
+  ]);
 
   const edit = useMemo(() => {
     if (!commit || !row) return null;
     const type = row.type;
     return async (e: ShellValueEdit): Promise<ShellObjectWriteResult> => {
       if (!claimed && model?.editValue) {
-        const r = await model.editValue(addresses, req.path, e, { label: req.path });
-        setError(r.applied ? null : `${r.code ?? "failed"}: ${r.reason ?? "refused"}`);
+        const r = await model.editValue(addresses, req.path, e, {
+          label: req.path,
+        });
+        setError(
+          r.applied ? null : `${r.code ?? "failed"}: ${r.reason ?? "refused"}`,
+        );
         return r;
       }
       // No editValue door (or an edit-context provider answers the
       // path): apply to the one shown value and write it whole.
       if (state.state !== "value" && state.state !== "absent") {
-        const reason = state.state === "mixed" ? "the targets differ (mixed)" : "nothing to edit";
+        const reason =
+          state.state === "mixed"
+            ? "the targets differ (mixed)"
+            : "nothing to edit";
         setError(`invalidValue: ${reason}`);
         return { applied: false, undoSteps: 0, code: "invalidValue", reason };
       }
-      const current = state.state === "value" ? state.value : (row.default ?? null);
+      const current =
+        state.state === "value" ? state.value : (row.default ?? null);
       const next = applyValueEdit(current, e, type);
       if (!next.ok) {
         setError(`invalidValue: ${next.reason}`);
-        return { applied: false, undoSteps: 0, code: "invalidValue", reason: next.reason };
+        return {
+          applied: false,
+          undoSteps: 0,
+          code: "invalidValue",
+          reason: next.reason,
+        };
       }
       return commit(next.value);
     };
@@ -335,7 +391,10 @@ export function useObjectProperty(req: ObjectPropertyRequest): ObjectProperty {
 
   const shown: FieldState = claimed
     ? claimed.read.kind === "value"
-      ? { state: "value", value: (claimed.read.value as { value?: unknown }).value ?? null }
+      ? {
+          state: "value",
+          value: (claimed.read.value as { value?: unknown }).value ?? null,
+        }
       : claimed.read.kind === "mixed"
         ? { state: "mixed" }
         : { state: "absent" }
@@ -361,14 +420,16 @@ export function useElementLabels() {
   const client = useCanvasClient();
   return useCallback(
     async (id: ElementId | null) => {
-      if (!id) return { name: null as string | null, oid: null as string | null };
+      if (!id)
+        return { name: null as string | null, oid: null as string | null };
       const props = await client.elementProperties(id).catch(() => null);
       const meta = props?.entries.find(
         (e) =>
           e.value?.type === "pluginMetadata" &&
           (e.value.value as { key?: string }).key === "x-paged:oid",
       );
-      const raw = meta?.value as { value?: { value?: string | null } } | undefined;
+      const raw = meta?.value as
+        { value?: { value?: string | null } } | undefined;
       return {
         name: props?.name ?? null,
         oid: raw?.value?.value ?? null,

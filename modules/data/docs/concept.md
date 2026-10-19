@@ -5,8 +5,8 @@ June 2026. Concept paper. Sections describe intent; where the implementation dif
 Sections not relevant outside the original planning context have been removed; numbering is unchanged.
 
 **v0.4 changes:** `paged.data` can act as a **data provider for other
-consumers** (notably the sheets plugin) — *mediated entirely by a core SDK
-data-provider contract*, never by direct plugin-to-plugin coupling (§7.1).
+consumers** (notably the sheets plugin) — _mediated entirely by a core SDK
+data-provider contract_, never by direct plugin-to-plugin coupling (§7.1).
 Independence is preserved: `paged.data` publishes resolved datasets through
 a neutral core registry and never knows, names, or calls any consumer; a
 consumer reads providers through the SDK and never knows a specific plugin
@@ -20,7 +20,7 @@ adapters; no specific transformation tool is named or depended upon.
 **v0.2 changes:** Engine decision **settled — DuckDB-WASM (MIT)**.
 DataFusion (pure-Rust, Apache-2) was considered as an alternative and
 declined for v1: DuckDB's connector breadth (Excel, httpfs, SQLite/Postgres/
-MySQL attach) *is* most of the database-publishing product, and rebuilding
+MySQL attach) _is_ most of the database-publishing product, and rebuilding
 it on DataFusion is schedule-eating work for no v1 user benefit. **Apache
 Arrow is clarified as substrate, not a candidate** — it is the interchange
 type already woven through the stack (DuckDB results, `RecordSet`, D-2),
@@ -40,7 +40,7 @@ tables, image placeholders, scriptable queries, data-driven formatting,
 record flow across pages, and batch document generation.
 
 The thesis ties directly to the governed-data conviction running through
-the broader work: a publication should be a *projection of governed data*,
+the broader work: a publication should be a _projection of governed data_,
 not a hand-assembled artifact. `paged.data` makes the data the source of
 truth and the document a live, regenerable view of it.
 
@@ -88,7 +88,7 @@ model.
 
 ### 1.1 Non-goals
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 555](adr/555-batch-reuses-the-engine.md) (the headless path is a plain-Rust command-line binary, `data-cli`; no napi-rs binding is built) and [ADR 015](adr/015-duckdb-wasm-vendored.md) (how the prebuilt DuckDB-WASM artifact is acquired and booted).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 555](adr/555-batch-reuses-the-engine.md) (the headless path is a plain-Rust command-line binary, `data-cli`; no napi-rs binding is built) and [ADR 015](adr/015-duckdb-wasm-vendored.md) (how the prebuilt DuckDB-WASM artifact is acquired and booted)._
 
 - No server-side rendering or mandatory server component. Query and binding
   run client-side WASM; the same crates compile natively (napi-rs) for the
@@ -97,10 +97,10 @@ model.
   prebuilt module (consumed as a WASM artifact, not compiled in-tree).
 - **No embedding of any source-available/ELv2/SSPL/proprietary data
   engine** (§3). Such tools are integrated, if at all, only by consuming
-  their data *outputs* through the standard source adapters — never linked
+  their data _outputs_ through the standard source adapters — never linked
   or redistributed.
 - No becoming a general BI/analytics tool. DuckDB's analytical power serves
-  *publishing*; dashboards, notebooks, and ad-hoc exploration are not the
+  _publishing_; dashboards, notebooks, and ad-hoc exploration are not the
   product.
 - No bypassing the capability/consent model for "convenience" — network and
   filesystem reach is always explicit (§11).
@@ -132,7 +132,7 @@ with the inter-plugin rule that defines the suite.
 
 ### 2.1 Isolation contract (same superset as plugin-sheet)
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md) in plugin-sdk (the isolation contract). In this repository the import rule is checked by a lint rule (`/bunfig.toml`, PM-0003) and `deny.toml`; the glue is the TypeScript package `packages/data-bundle`; the one worker is the DuckDB worker the bundle spawns ([ADR 015](adr/015-duckdb-wasm-vendored.md)); and the Boa sandbox exists only in the native `data-script` crate ([ADR 555](adr/555-batch-reuses-the-engine.md)).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md) in plugin-sdk (the isolation contract). In this repository the import rule is checked by a lint rule (`/bunfig.toml`, PM-0003) and `deny.toml`; the glue is the TypeScript package `packages/data-bundle`; the one worker is the DuckDB worker the bundle spawns ([ADR 015](adr/015-duckdb-wasm-vendored.md)); and the Boa sandbox exists only in the native `data-script` crate ([ADR 555](adr/555-batch-reuses-the-engine.md))._
 
 1. **Zero core contact** beyond the published SDK; CI builds against SDK
    canaries only.
@@ -140,12 +140,12 @@ with the inter-plugin rule that defines the suite.
    discovery, messaging, or shared state with any other plugin. Overlaps
    are resolved through **core SDK surfaces**, never sibling plugins:
    - **Image placeholders** place images through the document's standard
-     **asset mechanism** (core SDK) — *not* `plugin-image`. (If advanced
+     **asset mechanism** (core SDK) — _not_ `plugin-image`. (If advanced
      processing of a placed image is ever wanted, that is the user
      separately invoking `plugin-image` on the resulting asset; `paged.data`
      neither knows nor calls it.)
    - **Dynamic tables** lower to the core **native table content model**
-     (SDK) via `paged.data`'s *own* lowering code — *not* `plugin-sheet`.
+     (SDK) via `paged.data`'s _own_ lowering code — _not_ `plugin-sheet`.
      Two plugins independently targeting the same core table contract is
      correct; sharing code would not be.
    - **Charts from data** (if ever in scope) lower through `paged.draw`
@@ -164,22 +164,22 @@ build.
 
 ### 2.2 Required SDK surface (gap analysis → RFCs, due before M0)
 
-*Status note (2026-10-02): this section predates the implementation; most rows of this table are now host doors the plugin uses. See [ADR 552](adr/552-binding-is-a-recipe.md) (placeholder fields and per-element plugin metadata), [ADR 551](adr/551-compiled-to-native-content.md) (table, image and style content written through host mutations), [ADR 554](adr/554-record-flow-pagination.md) (the frame-chain read), [ADR 556](adr/556-secrets-never-enter-the-plugin.md) (network consent), [ADR 014](adr/014-data-provider-arrow-seam.md) (the data-provider registry) and, in the editor, [ADR 024](https://github.com/paged-media/editor/blob/main/docs/adr/024-context-sensitivity-is-a-core-concept.md) (double-click entry into the edit context the plugin contributes). The designs behind the network, credential and data-provider rows are in `plugin-sdk: docs/design/`. The plugin uses no OPFS storage, registers no importer, and spawns its DuckDB worker itself ([ADR 015](adr/015-duckdb-wasm-vendored.md)).*
+_Status note (2026-10-02): this section predates the implementation; most rows of this table are now host doors the plugin uses. See [ADR 552](adr/552-binding-is-a-recipe.md) (placeholder fields and per-element plugin metadata), [ADR 551](adr/551-compiled-to-native-content.md) (table, image and style content written through host mutations), [ADR 554](adr/554-record-flow-pagination.md) (the frame-chain read), [ADR 556](adr/556-secrets-never-enter-the-plugin.md) (network consent), [ADR 014](adr/014-data-provider-arrow-seam.md) (the data-provider registry) and, in the editor, [ADR 024](https://github.com/paged-media/editor/blob/main/docs/adr/024-context-sensitivity-is-a-core-concept.md) (double-click entry into the edit context the plugin contributes). The designs behind the network, credential and data-provider rows are in `plugin-sdk: docs/design/`. The plugin uses no OPFS storage, registers no importer, and spawns its DuckDB worker itself ([ADR 015](adr/015-duckdb-wasm-vendored.md))._
 
-| Need | Likely status | If missing |
-|---|---|---|
-| Read document structure, styles, frames, and **placeholder/tag markup in text** | read covered; *inline placeholder markup model* to verify | **RFC: tagged-placeholder content model** (named insertion points in text runs that survive editing) — the most consequential row (§9.1) |
-| Commit Operations producing text, table, rule, and **placed-asset** content in owned regions | mutation surface covered; table + asset placement to verify | RFC: native table content model (shared with plugin-sheet); asset-placement op |
-| Owned-content / lock semantics + edit-interception for bound content | to verify | RFC: owned-content attribute + "edit the data binding" interception |
-| Frame-chain topology + overflow notification (record flow / pagination) | text threading exists; plugin visibility to verify | RFC: frame-chain read + overflow notification (shared with plugin-sheet) |
-| Reflow notification carrying **content-box geometry**, not display geometry (resize vs transform, §9.6) | to verify | RFC clause (shared with the plugin-sheet concept §8.5, `plugin-sheets: docs/concept.md`) |
-| Document style read **and write** (data-driven formatting via document styles) | read covered; write to verify | RFC: style-management capability (shared with plugin-sheet) |
-| **Network capability** (DuckDB httpfs / remote sources / API adapters) with user consent + allow-list | new | **RFC: network capability with per-origin consent and a visible data-source manifest** (§11) |
-| **Filesystem/import capability** (local CSV/Excel/Parquet/DB files via OPFS) | shared with image/sheet OPFS RFC | RFC: storage + file-import capability |
-| Register importer/exporter (open a data file → start a binding) | shared RFC | RFC: importer registration |
-| Worker spawn + SharedArrayBuffer (DuckDB worker + binding workers) | shared RFC | RFC: worker capability with COOP/COEP |
-| Document-scoped persistent plugin payload (binding definitions, source manifests) | to verify | RFC: plugin document-data capability with size budget |
-| **Register as a data provider** (publish schema + `RecordSet` + refresh, consumed by others through the SDK — §7.1) | new | **RFC: core data-provider contract/registry** (shared with the sheets plugin's consumer side); category/capability discovery, no consumer identity exposed to the provider |
+| Need                                                                                                                | Likely status                                               | If missing                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Read document structure, styles, frames, and **placeholder/tag markup in text**                                     | read covered; _inline placeholder markup model_ to verify   | **RFC: tagged-placeholder content model** (named insertion points in text runs that survive editing) — the most consequential row (§9.1)                                   |
+| Commit Operations producing text, table, rule, and **placed-asset** content in owned regions                        | mutation surface covered; table + asset placement to verify | RFC: native table content model (shared with plugin-sheet); asset-placement op                                                                                             |
+| Owned-content / lock semantics + edit-interception for bound content                                                | to verify                                                   | RFC: owned-content attribute + "edit the data binding" interception                                                                                                        |
+| Frame-chain topology + overflow notification (record flow / pagination)                                             | text threading exists; plugin visibility to verify          | RFC: frame-chain read + overflow notification (shared with plugin-sheet)                                                                                                   |
+| Reflow notification carrying **content-box geometry**, not display geometry (resize vs transform, §9.6)             | to verify                                                   | RFC clause (shared with the plugin-sheet concept §8.5, `plugin-sheets: docs/concept.md`)                                                                                   |
+| Document style read **and write** (data-driven formatting via document styles)                                      | read covered; write to verify                               | RFC: style-management capability (shared with plugin-sheet)                                                                                                                |
+| **Network capability** (DuckDB httpfs / remote sources / API adapters) with user consent + allow-list               | new                                                         | **RFC: network capability with per-origin consent and a visible data-source manifest** (§11)                                                                               |
+| **Filesystem/import capability** (local CSV/Excel/Parquet/DB files via OPFS)                                        | shared with image/sheet OPFS RFC                            | RFC: storage + file-import capability                                                                                                                                      |
+| Register importer/exporter (open a data file → start a binding)                                                     | shared RFC                                                  | RFC: importer registration                                                                                                                                                 |
+| Worker spawn + SharedArrayBuffer (DuckDB worker + binding workers)                                                  | shared RFC                                                  | RFC: worker capability with COOP/COEP                                                                                                                                      |
+| Document-scoped persistent plugin payload (binding definitions, source manifests)                                   | to verify                                                   | RFC: plugin document-data capability with size budget                                                                                                                      |
+| **Register as a data provider** (publish schema + `RecordSet` + refresh, consumed by others through the SDK — §7.1) | new                                                         | **RFC: core data-provider contract/registry** (shared with the sheets plugin's consumer side); category/capability discovery, no consumer identity exposed to the provider |
 
 Several rows are shared RFCs with the sibling plugins — convergence on the
 platform, independence between plugins.
@@ -192,13 +192,13 @@ or live external fetch — mirroring `EditorSession extends ViewerSession`.
 
 ## 3. Legal and methodological ground rules — **decisive**
 
-| Dependency | Finding | Ruling |
-|---|---|---|
-| **DuckDB / DuckDB-WASM** | MIT licensed. | **Bundle freely.** Vendored as a prebuilt WASM artifact + JS bindings; attribution preserved. |
-| **Source-available / ELv2 / SSPL / proprietary data engines** (any third-party transformation or query engine of this class) | Not OSI-open. | **Never embed, link, or redistribute such an engine.** Integrate, if at all, only by consuming its data *outputs* (tables + optional metadata sidecars) through the standard source adapters (§7) — touching *zero* engine code. |
-| **Arrow / ADBC** | Apache-2. | Permitted; the natural interchange type system for DuckDB results and any warehouse extracts. |
-| Source-level clean-room | Largely **not applicable**: SQL is a standard; binding semantics are our own design; EasyCatalog is a *conceptual* reference only. | If any reference engine is ever mounted under `references/`, the analyst/implementer protocol from the `plugin-image` concept §3.1 (`plugin-image: docs/concept.md`) applies verbatim. EasyCatalog is studied as a product (features/UX), never as code. |
-| **License** | See `LICENSE.md`. | — |
+| Dependency                                                                                                                   | Finding                                                                                                                            | Ruling                                                                                                                                                                                                                                                   |
+| ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DuckDB / DuckDB-WASM**                                                                                                     | MIT licensed.                                                                                                                      | **Bundle freely.** Vendored as a prebuilt WASM artifact + JS bindings; attribution preserved.                                                                                                                                                            |
+| **Source-available / ELv2 / SSPL / proprietary data engines** (any third-party transformation or query engine of this class) | Not OSI-open.                                                                                                                      | **Never embed, link, or redistribute such an engine.** Integrate, if at all, only by consuming its data _outputs_ (tables + optional metadata sidecars) through the standard source adapters (§7) — touching _zero_ engine code.                         |
+| **Arrow / ADBC**                                                                                                             | Apache-2.                                                                                                                          | Permitted; the natural interchange type system for DuckDB results and any warehouse extracts.                                                                                                                                                            |
+| Source-level clean-room                                                                                                      | Largely **not applicable**: SQL is a standard; binding semantics are our own design; EasyCatalog is a _conceptual_ reference only. | If any reference engine is ever mounted under `references/`, the analyst/implementer protocol from the `plugin-image` concept §3.1 (`plugin-image: docs/concept.md`) applies verbatim. EasyCatalog is studied as a product (features/UX), never as code. |
+| **License**                                                                                                                  | See `LICENSE.md`.                                                                                                                  | —                                                                                                                                                                                                                                                        |
 
 The strategic read: binding to governed datasets is valuable and on-thesis
 (governed data feeding governed publications), but the value is in the
@@ -210,7 +210,7 @@ licensing question entirely.
 
 ## 4. Crate architecture
 
-*Status note (2026-10-02): this section predates the implementation; see `architecture.md` (there is no `manifest/`, `glue/` or `references/` directory: the bundle and its manifest are `packages/data-bundle`, with the translation to host mutations in `packages/data-host-model`; the crates `data-barcode`, `data-dataset`, `data-script` and `data-cli` were added), [ADR 015](adr/015-duckdb-wasm-vendored.md) (the DuckDB-WASM integration is TypeScript in `packages/data-bundle/src/query/`; `data-query` shapes, orders and hashes results), [ADR 551](adr/551-compiled-to-native-content.md) (`data-lower` produces plain data and does not touch the SDK) and [ADR 555](adr/555-batch-reuses-the-engine.md) (`data-automation` plans batches; the headless binary is `data-cli`; there is no napi-rs binding).*
+_Status note (2026-10-02): this section predates the implementation; see `architecture.md` (there is no `manifest/`, `glue/` or `references/` directory: the bundle and its manifest are `packages/data-bundle`, with the translation to host mutations in `packages/data-host-model`; the crates `data-barcode`, `data-dataset`, `data-script` and `data-cli` were added), [ADR 015](adr/015-duckdb-wasm-vendored.md) (the DuckDB-WASM integration is TypeScript in `packages/data-bundle/src/query/`; `data-query` shapes, orders and hashes results), [ADR 551](adr/551-compiled-to-native-content.md) (`data-lower` produces plain data and does not touch the SDK) and [ADR 555](adr/555-batch-reuses-the-engine.md) (`data-automation` plans batches; the headless binary is `data-cli`; there is no napi-rs binding)._
 
 Repository `paged-media/plugin-data`:
 
@@ -248,7 +248,7 @@ plugin-data/
 
 ### 5.1 The object model
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 014](adr/014-data-provider-arrow-seam.md) (a `RecordSet` is a schema plus columns of tagged values, not an Arrow batch), [ADR 550](adr/550-own-binding-language.md) (a binding stores its expression as source text), [ADR 551](adr/551-compiled-to-native-content.md) and [ADR 557](adr/557-variables-and-data-sets.md) (the `Barcode` and `Visibility` binding kinds were added), [ADR 552](adr/552-binding-is-a-recipe.md) (what is stored in the document) and [ADR 555](adr/555-batch-reuses-the-engine.md) (the headless path named in the record below is the `data-cli` binary; no napi-rs binding is built).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 014](adr/014-data-provider-arrow-seam.md) (a `RecordSet` is a schema plus columns of tagged values, not an Arrow batch), [ADR 550](adr/550-own-binding-language.md) (a binding stores its expression as source text), [ADR 551](adr/551-compiled-to-native-content.md) and [ADR 557](adr/557-variables-and-data-sets.md) (the `Barcode` and `Visibility` binding kinds were added), [ADR 552](adr/552-binding-is-a-recipe.md) (what is stored in the document) and [ADR 555](adr/555-batch-reuses-the-engine.md) (the headless path named in the record below is the `data-cli` binary; no napi-rs binding is built)._
 
 ```rust
 pub struct DataSource {            // a connection + its scope
@@ -287,15 +287,15 @@ pub struct SyncState {             // per binding/target
 - `Value` mirrors the sheet `CellValue` shape (number/text/bool/null/error)
   plus typed temporal and binary (for image bytes/URIs) — a shared
   vocabulary, not shared code.
-- Binding *definitions* and source *manifests* are the plugin's
+- Binding _definitions_ and source _manifests_ are the plugin's
   document-scoped payload (SDK document-data capability, §2.2); resolved
-  *values* are committed content. The document carries the recipe and the
+  _values_ are committed content. The document carries the recipe and the
   result, exactly as `plugin-sheet` carries sheet model + lowered content.
 
 > **`RefreshPolicy` — shape vs. scheduler (record, 2026-06-13).** The
 > `RefreshPolicy { Manual | OnOpen | Interval{secs} | Never }` field exists on
 > every `DataSource` and **round-trips** with the recipe (serde; added fields
-> default, so pre-policy payloads still decode). It is a stored *policy shape*,
+> default, so pre-policy payloads still decode). It is a stored _policy shape_,
 > **not** a live scheduler. The honest interactive-vs-automation split is
 > encoded in `RefreshPolicy::honored_interactively()`: the interactive editor
 > acts on `Manual` (explicit user refresh), `OnOpen` (re-resolve **once** on
@@ -311,20 +311,20 @@ pub struct SyncState {             // per binding/target
 
 ### 5.2 Placeholders
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 552](adr/552-binding-is-a-recipe.md) (a text placeholder is a host placeholder field tagged with the plugin id and the binding id; a table frame the plugin creates carries plugin metadata).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 552](adr/552-binding-is-a-recipe.md) (a text placeholder is a host placeholder field tagged with the plugin id and the binding id; a table frame the plugin creates carries plugin metadata)._
 
 A **placeholder** is a named, edit-surviving insertion point in document
 content (a tagged text run, an empty frame marked image-target, a frame
 marked table/flow region). Placeholders are the binding's anchor; they
 depend on the SDK tagged-placeholder model (§2.2, top RFC). Resolution
-replaces/fills the placeholder's *content* while preserving the *anchor*,
+replaces/fills the placeholder's _content_ while preserving the _anchor_,
 so re-resolution is idempotent and round-trip-safe.
 
 ---
 
 ## 6. Query and ingest engine (`data-query`, `data-sources`)
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 015](adr/015-duckdb-wasm-vendored.md) as amended (DuckDB-WASM is booted by TypeScript in `packages/data-bundle/src/query/duckdb.ts`, in a worker the bundle spawns; `data-query` only shapes, orders and hashes results; nothing is persisted to OPFS), [ADR 014](adr/014-data-provider-arrow-seam.md) as amended (a result is converted to a `RecordSet` in TypeScript and crosses into the engine as a JSON-shaped value, not as Arrow IPC) and [ADR 556](adr/556-secrets-never-enter-the-plugin.md) (a remote source is fetched by the bundle after consent and handed to DuckDB as bytes; `httpfs` is not used).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 015](adr/015-duckdb-wasm-vendored.md) as amended (DuckDB-WASM is booted by TypeScript in `packages/data-bundle/src/query/duckdb.ts`, in a worker the bundle spawns; `data-query` only shapes, orders and hashes results; nothing is persisted to OPFS), [ADR 014](adr/014-data-provider-arrow-seam.md) as amended (a result is converted to a `RecordSet` in TypeScript and crosses into the engine as a JSON-shaped value, not as Arrow IPC) and [ADR 556](adr/556-secrets-never-enter-the-plugin.md) (a remote source is fetched by the bundle after consent and handed to DuckDB as bytes; `httpfs` is not used)._
 
 ### 6.1 DuckDB-WASM
 
@@ -352,13 +352,13 @@ an engine candidate.
 
 ### 6.2 Source adapters
 
-| Kind | Mechanism | Capability |
-|---|---|---|
-| File (CSV/TSV/JSON/Parquet/Excel) | DuckDB readers over OPFS-imported bytes | file-import |
-| Remote (HTTP(S) file, REST/JSON API) | DuckDB `httpfs` / fetch adapter → temp table | network (per-origin consent) |
-| DB attach (SQLite/Postgres/MySQL) | DuckDB scanners; client-side reachable DBs | network + credential handling |
-| **Governed extract** (§7) | read governed warehouse/database tables via the file/DB/remote adapter; optional column-metadata sidecar (names, descriptions, types) | file or network |
-| Inline seed | data embedded in the document (small lookup tables) | none (travels with the doc) |
+| Kind                                 | Mechanism                                                                                                                             | Capability                    |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| File (CSV/TSV/JSON/Parquet/Excel)    | DuckDB readers over OPFS-imported bytes                                                                                               | file-import                   |
+| Remote (HTTP(S) file, REST/JSON API) | DuckDB `httpfs` / fetch adapter → temp table                                                                                          | network (per-origin consent)  |
+| DB attach (SQLite/Postgres/MySQL)    | DuckDB scanners; client-side reachable DBs                                                                                            | network + credential handling |
+| **Governed extract** (§7)            | read governed warehouse/database tables via the file/DB/remote adapter; optional column-metadata sidecar (names, descriptions, types) | file or network               |
+| Inline seed                          | data embedded in the document (small lookup tables)                                                                                   | none (travels with the doc)   |
 
 Each adapter declares its capability; a source cannot be created without
 the granting capability present and consented.
@@ -389,7 +389,7 @@ particular data-transformation tool**:
 
 ### 7.1 Acting as a data provider for other consumers (SDK-mediated)
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 014](adr/014-data-provider-arrow-seam.md) (the data-provider contract exists as a host door, and the plugin registers its publications through it) and `plugin-sdk: docs/design/data-provider.md` (the design of that door).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 014](adr/014-data-provider-arrow-seam.md) (the data-provider contract exists as a host door, and the plugin registers its publications through it) and `plugin-sdk: docs/design/data-provider.md` (the design of that door)._
 
 `paged.data` can serve its resolved datasets to **other consumers in the
 Paged ecosystem** — most importantly the **sheets plugin**, so a sheet can
@@ -417,7 +417,7 @@ done **without any inter-plugin contact**, through a core-mediated
   capability/consent model (§11) still governs the underlying fetch — a
   consumer cannot induce network access `paged.data` is not authorized to
   perform.
-- **Security note:** the provider contract exposes *data*, not the ability
+- **Security note:** the provider contract exposes _data_, not the ability
   to define new queries or sources in `paged.data`. A consumer reads
   published results; it cannot drive `paged.data`'s network/file reach.
 
@@ -433,26 +433,27 @@ plugins strictly decoupled. The data-provider contract is a new SDK RFC
 > (name + an **Arrow-aligned** `FieldType`: bool/int/float/text/date/datetime/
 > bytes/null) + `columns[c][r]` tagged `Value`s + `row_count` — which serde-decodes
 > directly into `data-core::RecordSet` (a Rust struct: `Schema` + `Vec<Vec<Value>>`
-> + `row_count`). The `ProviderPublication` (`data-js::core`) already carries the
-> `Schema` **descriptor** half alongside the stabilized `RecordSet` and a content-
-> etag `revision`. So the transport is **columnar + typed + Arrow-shaped**, but it
-> is JSON-over-the-wasm-boundary, **not** an `arrow-rs` IPC byte buffer — and that
-> is the *correct* state per **ADR-014**: "Arrow-aligned rows reuse the renderer
-> seam; not a shared arrow-rs package", and `arrow-rs` is the implementation that
-> was explicitly **declined** (a heavy dep for a shape the system already speaks).
-> No additive descriptor is missing — the `Schema` already IS the Arrow-aligned
-> descriptor on both the `RecordSet` and the `ProviderPublication`. A genuine
-> `arrow-rs` IPC encode (zero-copy columnar bytes instead of JSON materialisation)
-> is a **deferred v3 perf item**: it is an architecture move
-> (pulling the dep ADR-014 declines, re-tiering the wasm boundary), to be taken
-> only if profiling shows the JSON materialisation is a real bottleneck on
-> 100k+-row publications. Until then the seam is shape-compatible and honest.
+>
+> - `row_count`). The `ProviderPublication` (`data-js::core`) already carries the
+>   `Schema` **descriptor** half alongside the stabilized `RecordSet` and a content-
+>   etag `revision`. So the transport is **columnar + typed + Arrow-shaped**, but it
+>   is JSON-over-the-wasm-boundary, **not** an `arrow-rs` IPC byte buffer — and that
+>   is the _correct_ state per **ADR-014**: "Arrow-aligned rows reuse the renderer
+>   seam; not a shared arrow-rs package", and `arrow-rs` is the implementation that
+>   was explicitly **declined** (a heavy dep for a shape the system already speaks).
+>   No additive descriptor is missing — the `Schema` already IS the Arrow-aligned
+>   descriptor on both the `RecordSet` and the `ProviderPublication`. A genuine
+>   `arrow-rs` IPC encode (zero-copy columnar bytes instead of JSON materialisation)
+>   is a **deferred v3 perf item**: it is an architecture move
+>   (pulling the dep ADR-014 declines, re-tiering the wasm boundary), to be taken
+>   only if profiling shows the JSON materialisation is a real bottleneck on
+>   100k+-row publications. Until then the seam is shape-compatible and honest.
 
 ---
 
 ## 8. Binding and synchronization engine (`data-bind`) — salsa-shaped
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 553](adr/553-non-destructive-refresh.md) (the five sync states, the content-hash stamps and the keyed row diff as built).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 553](adr/553-non-destructive-refresh.md) (the five sync states, the content-hash stamps and the keyed row diff as built)._
 
 The incremental core, same intellectual architecture as layout, Engine B
 (`plugin-image`), and recalc (`plugin-sheet`):
@@ -475,7 +476,7 @@ The incremental core, same intellectual architecture as layout, Engine B
     preserved, and reported in a sync panel (never silently clobbered).
   - `Stale` / `Error` — source changed but not re-resolved / resolution
     failed (with diagnostic).
-- **Conflict policy (D-6):** default is *non-destructive* — refresh never
+- **Conflict policy (D-6):** default is _non-destructive_ — refresh never
   overwrites `Overridden`/`Pinned` without explicit user action; a sync
   report lists divergences for review. This is the print-publishing
   expectation (you do not want a data refresh silently rewriting an
@@ -488,7 +489,7 @@ The incremental core, same intellectual architecture as layout, Engine B
 
 ## 9. Placeholder lowering (`data-lower`) — content-space, frame-ops-honored
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 551](adr/551-compiled-to-native-content.md) (how each binding kind is written as native content: `data-lower` produces plain data, `packages/data-host-model` turns it into host mutations, and the bundle sends them; a barcode kind was added) and [ADR 550](adr/550-own-binding-language.md) (the expression language).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 551](adr/551-compiled-to-native-content.md) (how each binding kind is written as native content: `data-lower` produces plain data, `packages/data-host-model` turns it into host mutations, and the bundle sends them; a barcode kind was added) and [ADR 550](adr/550-own-binding-language.md) (the expression language)._
 
 All output is **native Paged content** committed via Operations; the
 content-space principle and frame-operation handling are inherited from
@@ -541,7 +542,7 @@ core table contract, own lowering code.
 
 ### 9.4 Record flow and pagination — the catalog engine
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 554](adr/554-record-flow-pagination.md) (the plugin paginates in one bounded pass over a frame chain read from the host or supplied by the caller; a record is never split).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 554](adr/554-record-flow-pagination.md) (the plugin paginates in one bounded pass over a frame chain read from the host or supplied by the caller; a record is never split)._
 
 The defining print-automation feature: a **record flow** binds a query to a
 **frame chain + a template** (a designed layout for one record — the
@@ -556,7 +557,7 @@ record, paginating across pages exactly like threaded text/sheet frames:
   overflow notification → re-split → settle), conformance-tested for
   convergence including pathological records (a record taller than a page).
 - This is how "generate a 200-page product catalog from the database"
-  becomes a *live, regenerable* document rather than a batch artifact —
+  becomes a _live, regenerable_ document rather than a batch artifact —
   though batch is also supported (§10).
 
 ### 9.5 Data-driven formatting rules
@@ -580,7 +581,7 @@ not. Registry rows `data.frame.transform.*` assert this on the output.
 
 ## 10. Print automation / batch generation (`data-automation`)
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 555](adr/555-batch-reuses-the-engine.md) (a batch run reuses the interactive engine; the headless path is the plain-Rust binary `paged-data-batch` in `data-cli`, which takes query results already materialised by the caller; no napi-rs binding is built; the scripting surface is the native-only `data-script` crate, in which a script is handed no host functions and returns a build specification).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 555](adr/555-batch-reuses-the-engine.md) (a batch run reuses the interactive engine; the headless path is the plain-Rust binary `paged-data-batch` in `data-cli`, which takes query results already materialised by the caller; no napi-rs binding is built; the scripting surface is the native-only `data-script` crate, in which a script is handed no host functions and returns a build specification)._
 
 The EasyCatalog "build" capability, two execution modes from one crate:
 
@@ -605,7 +606,7 @@ The EasyCatalog "build" capability, two execution modes from one crate:
 
 ## 11. Security and threat model — the largest surface in the suite
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 556](adr/556-secrets-never-enter-the-plugin.md) (a source names its credential by reference, and credentials are redacted from the payload the engine emits; a remote source is fetched by the bundle only after per-origin consent) and [ADR 015](adr/015-duckdb-wasm-vendored.md) as amended (DuckDB's `httpfs` is not used). The designs of the consent and credential doors are `plugin-sdk: docs/design/network-consent.md` and `plugin-sdk: docs/design/credential-store.md`.*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 556](adr/556-secrets-never-enter-the-plugin.md) (a source names its credential by reference, and credentials are redacted from the payload the engine emits; a remote source is fetched by the bundle only after per-origin consent) and [ADR 015](adr/015-duckdb-wasm-vendored.md) as amended (DuckDB's `httpfs` is not used). The designs of the consent and credential doors are `plugin-sdk: docs/design/network-consent.md` and `plugin-sdk: docs/design/credential-store.md`._
 
 External data + scriptable queries make this plugin categorically
 higher-risk than its siblings. The model is explicit:
@@ -641,7 +642,7 @@ higher-risk than its siblings. The model is explicit:
 
 ### 12.1 Identical environment to Paged core
 
-*Status note (2026-10-02): this section predates the implementation; this repository's tests run under `cargo nextest` and vitest, and it has no Playwright suite; see `architecture.md`.*
+_Status note (2026-10-02): this section predates the implementation; this repository's tests run under `cargo nextest` and vitest, and it has no Playwright suite; see `architecture.md`._
 
 Adopted verbatim (as in the sibling specs): Playwright sole browser-side
 runner (Chrome-only); `@feat`/`#[feature_test]`; `paged-results.json`
@@ -654,7 +655,7 @@ Projects.
 
 ### 12.2 The 100% verification invariant
 
-*Status note (2026-10-02): this section predates the implementation; see [ADR 317](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/317-registry-driven-dispatch.md) in plugin-sdk (dispatch is generated from the registry for expression functions only; the other registry rows are checked by the coverage gate, which requires a test on disk for every row marked implemented).*
+_Status note (2026-10-02): this section predates the implementation; see [ADR 317](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/317-registry-driven-dispatch.md) in plugin-sdk (dispatch is generated from the registry for expression functions only; the other registry rows are checked by the coverage gate, which requires a test on disk for every row marked implemented)._
 
 1. **Registry-driven dispatch** for source adapters, expression functions,
    binding kinds, and lowering rules — no row, no dispatch entry,
@@ -666,7 +667,7 @@ Projects.
 
 ### 12.3 Registry integration
 
-*Status note (2026-10-02): this section predates the implementation; the registry is in this repository, under `registry/functions/` and `registry/features/`.*
+_Status note (2026-10-02): this section predates the implementation; the registry is in this repository, under `registry/functions/` and `registry/features/`._
 
 `registry/features/data.*.yaml` — namespaces: `data.source.*`,
 `data.query.*`, `data.expr.*`, `data.bind.*` (resolution/sync/identity),
@@ -696,7 +697,7 @@ tests:
 
 ### 12.4 Oracles and harnesses (`data-conformance`, test-only)
 
-*Status note (2026-10-02): this section predates the implementation; the native-DuckDB oracle is an unimplemented skeleton in `data-conformance/tests/it/oracle.rs`; see `status.md`.*
+_Status note (2026-10-02): this section predates the implementation; the native-DuckDB oracle is an unimplemented skeleton in `data-conformance/tests/it/oracle.rs`; see `status.md`._
 
 - **DuckDB itself** is the query oracle: expected result sets are computed
   by DuckDB native and diffed against DuckDB-WASM (parity across the two
@@ -715,52 +716,52 @@ tests:
 
 ### 12.5 Performance gates (CI-enforced)
 
-| Benchmark | Target |
-|---|---|
-| Query 1M-row CSV → grouped `RecordSet` (DuckDB-WASM, worker) | < 1.5 s cold |
-| Resolve + lower a 200-page record-flow catalog | < 5 s; incremental refresh < 300 ms for a 100-record delta |
-| Variable re-resolution, 5k placeholders, 1-source refresh | < 200 ms |
-| Sync diff, 50k-record set, 1% changed | minimal row deltas; < 250 ms |
-| Round-trip a bound document (defs + overrides) | lossless; credentials absent |
-| DuckDB-WASM + plugin bundle initial load | budgeted; extensions lazy-loaded (D-4) |
+| Benchmark                                                    | Target                                                     |
+| ------------------------------------------------------------ | ---------------------------------------------------------- |
+| Query 1M-row CSV → grouped `RecordSet` (DuckDB-WASM, worker) | < 1.5 s cold                                               |
+| Resolve + lower a 200-page record-flow catalog               | < 5 s; incremental refresh < 300 ms for a 100-record delta |
+| Variable re-resolution, 5k placeholders, 1-source refresh    | < 200 ms                                                   |
+| Sync diff, 50k-record set, 1% changed                        | minimal row deltas; < 250 ms                               |
+| Round-trip a bound document (defs + overrides)               | lossless; credentials absent                               |
+| DuckDB-WASM + plugin bundle initial load                     | budgeted; extensions lazy-loaded (D-4)                     |
 
 ---
 
 ## 13. Feature inventory and tiering
 
-*Status note (2026-10-02): this section predates the implementation; see `status.md` (what is shipped and what is not).*
+_Status note (2026-10-02): this section predates the implementation; see `status.md` (what is shipped and what is not)._
 
-| Tier | Content | Schedule |
-|---|---|---|
-| **T0 — spine** | object model; DuckDB-WASM query engine + file/inline sources; expression core (formatting/conditionals); binding/resolution engine + sync states; variable replacement + image placeholders; single-region dynamic table; round-trip of binding defs; capability/consent skeleton | M0 |
-| **T1 — the automation product** | record flow + template instancing + grouping + pagination across chains; full expression/format engine; data-driven formatting rules; remote + DB-attach sources (network capability + consent UI); override/pin/stale sync panel semantics; document-style integration | M1 |
-| **T2 — governed + batch** | **governed-extract source** (governed tables + optional metadata sidecar, §7); batch/headless generation (§10); scripted queries/builds (Boa); richer source adapters; credential mechanism (D-8) | M2 |
-| **T3 — depth** | incremental sync optimization, large-catalog performance, localization of formats, advanced grouping/cross-tab presentation (presentation only — not pivot semantics) | M3+ |
-| **T∞ — never** | embedding any third-party data engine; general BI/dashboards; server-mandatory operation; arbitrary host code execution via scripting | excluded by design/§3 |
+| Tier                            | Content                                                                                                                                                                                                                                                                           | Schedule              |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| **T0 — spine**                  | object model; DuckDB-WASM query engine + file/inline sources; expression core (formatting/conditionals); binding/resolution engine + sync states; variable replacement + image placeholders; single-region dynamic table; round-trip of binding defs; capability/consent skeleton | M0                    |
+| **T1 — the automation product** | record flow + template instancing + grouping + pagination across chains; full expression/format engine; data-driven formatting rules; remote + DB-attach sources (network capability + consent UI); override/pin/stale sync panel semantics; document-style integration           | M1                    |
+| **T2 — governed + batch**       | **governed-extract source** (governed tables + optional metadata sidecar, §7); batch/headless generation (§10); scripted queries/builds (Boa); richer source adapters; credential mechanism (D-8)                                                                                 | M2                    |
+| **T3 — depth**                  | incremental sync optimization, large-catalog performance, localization of formats, advanced grouping/cross-tab presentation (presentation only — not pivot semantics)                                                                                                             | M3+                   |
+| **T∞ — never**                  | embedding any third-party data engine; general BI/dashboards; server-mandatory operation; arbitrary host code execution via scripting                                                                                                                                             | excluded by design/§3 |
 
 ---
 
 ## 14. Open decisions
 
-*Status note (2026-10-02): this section predates the implementation; what was decided and built is recorded in [ADR 015](adr/015-duckdb-wasm-vendored.md) (D-2, D-3, D-4), [ADR 553](adr/553-non-destructive-refresh.md) (D-6), [ADR 555](adr/555-batch-reuses-the-engine.md) (D-7), [ADR 556](adr/556-secrets-never-enter-the-plugin.md) (D-8) and [ADR 550](adr/550-own-binding-language.md) (D-9).*
+_Status note (2026-10-02): this section predates the implementation; what was decided and built is recorded in [ADR 015](adr/015-duckdb-wasm-vendored.md) (D-2, D-3, D-4), [ADR 553](adr/553-non-destructive-refresh.md) (D-6), [ADR 555](adr/555-batch-reuses-the-engine.md) (D-7), [ADR 556](adr/556-secrets-never-enter-the-plugin.md) (D-8) and [ADR 550](adr/550-own-binding-language.md) (D-9)._
 
-| ID | Decision | Default leaning | Resolve by |
-|---|---|---|---|
-| D-1 | Governed-data integration depth | **outputs only (§3, §7)** — ruled; no third-party engine ever embedded | settled |
-| D-2 | DataFusion as an alternative/embedded engine substrate | not for v1; Arrow yes (interchange), DataFusion no | M1 |
-| D-3 | DuckDB extension allow-list (security-reviewed set) | httpfs (gated), excel, json, parquet, SQLite/Postgres scanners; nothing broadening host reach | M0 |
-| D-4 | DuckDB-WASM bundle-size strategy (eager vs lazy extension load; which build) | lazy-load extensions; minimal core build; measure | M0 |
-| D-5 | Governed-extract integration scope (read outputs vs orchestrate upstream) | read-only governed tables + optional metadata sidecar from a user-provided location; never orchestrate upstream transformation | M2 |
-| D-6 | Sync conflict policy (refresh vs overrides/pins) | non-destructive default; sync report for divergences | M1 |
-| D-7 | Batch generation scope | parameterized multi-doc/section from one template; no scheduling/webhooks | M2 |
-| D-8 | Credential storage for DB sources | SDK secret store if available else session-only; never in document payload | M2 (RFC at M0) |
-| D-9 | Binding expression language: own DSL vs reuse a sheet-style formula dialect | own minimal DSL (publishing-focused) sharing the `Value`/format vocabulary; not Excel-grammar | M0 |
+| ID  | Decision                                                                     | Default leaning                                                                                                                | Resolve by     |
+| --- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------- |
+| D-1 | Governed-data integration depth                                              | **outputs only (§3, §7)** — ruled; no third-party engine ever embedded                                                         | settled        |
+| D-2 | DataFusion as an alternative/embedded engine substrate                       | not for v1; Arrow yes (interchange), DataFusion no                                                                             | M1             |
+| D-3 | DuckDB extension allow-list (security-reviewed set)                          | httpfs (gated), excel, json, parquet, SQLite/Postgres scanners; nothing broadening host reach                                  | M0             |
+| D-4 | DuckDB-WASM bundle-size strategy (eager vs lazy extension load; which build) | lazy-load extensions; minimal core build; measure                                                                              | M0             |
+| D-5 | Governed-extract integration scope (read outputs vs orchestrate upstream)    | read-only governed tables + optional metadata sidecar from a user-provided location; never orchestrate upstream transformation | M2             |
+| D-6 | Sync conflict policy (refresh vs overrides/pins)                             | non-destructive default; sync report for divergences                                                                           | M1             |
+| D-7 | Batch generation scope                                                       | parameterized multi-doc/section from one template; no scheduling/webhooks                                                      | M2             |
+| D-8 | Credential storage for DB sources                                            | SDK secret store if available else session-only; never in document payload                                                     | M2 (RFC at M0) |
+| D-9 | Binding expression language: own DSL vs reuse a sheet-style formula dialect  | own minimal DSL (publishing-focused) sharing the `Value`/format vocabulary; not Excel-grammar                                  | M0             |
 
 ---
 
 ## 15. Milestones
 
-*Status note (2026-10-02): this section predates the implementation; see `status.md` (what is shipped and what is not). The DuckDB oracle harness named under M0 is an unimplemented skeleton (`data-conformance/tests/it/oracle.rs`), and the headless generation named under M2 is the `data-cli` binary ([ADR 555](adr/555-batch-reuses-the-engine.md)).*
+_Status note (2026-10-02): this section predates the implementation; see `status.md` (what is shipped and what is not). The DuckDB oracle harness named under M0 is an unimplemented skeleton (`data-conformance/tests/it/oracle.rs`), and the headless generation named under M2 is the `data-cli` binary ([ADR 555](adr/555-batch-reuses-the-engine.md))._
 
 **M0 — Spine + safe data + first bindings.**
 Phase 0 (serial): **A-0 audit** (SDK surface for tagged placeholders, table
@@ -770,7 +771,7 @@ binding kinds, source-adapter trait, capability/consent model. Then:
 DuckDB-WASM query engine + file/inline sources; expression core; binding/
 resolution/sync engine; variable + image placeholders; single-region
 dynamic table; capability skeleton + security gates; round-trip; DuckDB
-oracle harness + coverage gate. *Exit:* T0
+oracle harness + coverage gate. _Exit:_ T0
 green at claimed tiers; security tests green; plugin loads via SDK with
 zero core changes; coverage 100%.
 
@@ -778,13 +779,13 @@ zero core changes; coverage 100%.
 Record flow + templates + grouping + pagination; full expression/format
 engine; data-driven rules; remote + DB sources with network-capability
 consent UI; override/pin/stale sync panel; document-style integration.
-*Exit:* perf gates green; a real catalog demo — a multi-hundred-page
+_Exit:_ perf gates green; a real catalog demo — a multi-hundred-page
 product catalog generated live from a database, paginated, document-styled,
 images placed — produced end-to-end.
 
 **M2 — Governed + batch.**
 governed-extract source (§7); batch/headless generation (§10); scripted
-queries/builds; credential mechanism; richer adapters. *Exit:* governed-
+queries/builds; credential mechanism; richer adapters. _Exit:_ governed-
 model→catalog path demonstrated; batch generation of per-segment documents.
 
 **M3 — Depth.**

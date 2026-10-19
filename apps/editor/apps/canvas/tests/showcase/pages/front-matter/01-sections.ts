@@ -62,9 +62,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     selfId: string;
     startPageIndex?: number | null;
   }>;
-  const scratchId = sections.find(
-    (s) => s.startPageIndex === p(5),
-  )?.selfId;
+  const scratchId = sections.find((s) => s.startPageIndex === p(5))?.selfId;
   if (!scratchId) {
     throw new Error(
       "the scratch section did not appear in the sections collection",

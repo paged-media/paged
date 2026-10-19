@@ -115,7 +115,10 @@ function fieldSummary(fields: readonly { name: string }[]): string {
   const n = fields.length;
   const head = `${n} field${n === 1 ? "" : "s"}`;
   if (n === 0) return head;
-  const names = fields.slice(0, 3).map((f) => f.name).join(", ");
+  const names = fields
+    .slice(0, 3)
+    .map((f) => f.name)
+    .join(", ");
   return `${head}: ${names}${n > 3 ? ", …" : ""}`;
 }
 
@@ -163,8 +166,8 @@ export function makeDatasetsPanel(
           // Honest empty state — §2.1 graceful absence: paged.data not
           // installed / no shared registry wired ⇒ no governed sources.
           <p data-datasets-empty style={{ ...note, marginTop: 0 }}>
-            No datasets yet. Publish a query as a dataset in paged.data, and
-            it appears here.
+            No datasets yet. Publish a query as a dataset in paged.data, and it
+            appears here.
           </p>
         ) : (
           <div
@@ -178,12 +181,20 @@ export function makeDatasetsPanel(
               const sourced = st.dataSource?.providerId === d.id;
               const stale = sourced && st.dataSource?.stale === true;
               return (
-                <div data-dataset-row data-dataset-id={d.id} key={d.id} style={row}>
+                <div
+                  data-dataset-row
+                  data-dataset-id={d.id}
+                  key={d.id}
+                  style={row}
+                >
                   <div style={{ minWidth: 0 }}>
                     <div data-dataset-name style={nameStyle} title={d.id}>
                       {datasetLabel(d.id)}
                     </div>
-                    <div data-dataset-fields={d.schema.fields.length} style={metaStyle}>
+                    <div
+                      data-dataset-fields={d.schema.fields.length}
+                      style={metaStyle}
+                    >
                       {fieldSummary(d.schema.fields)}
                       {sourced && (stale ? " · update available" : " · in use")}
                     </div>
@@ -193,7 +204,8 @@ export function makeDatasetsPanel(
                     data-dataset-source
                     data-armed={armed === d.id ? "" : undefined}
                     onClick={() => {
-                      if (workbookOpen && !sourced) confirm(d.id, () => onSource(d.id));
+                      if (workbookOpen && !sourced)
+                        confirm(d.id, () => onSource(d.id));
                       else onSource(d.id);
                     }}
                     title={
@@ -205,7 +217,11 @@ export function makeDatasetsPanel(
                     }
                     style={sourceButton}
                   >
-                    {armed === d.id ? "Confirm replace" : stale ? "Update" : "Use"}
+                    {armed === d.id
+                      ? "Confirm replace"
+                      : stale
+                        ? "Update"
+                        : "Use"}
                   </button>
                 </div>
               );

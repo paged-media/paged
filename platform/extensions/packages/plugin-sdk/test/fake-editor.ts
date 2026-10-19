@@ -104,9 +104,25 @@ export function makeFakeImageChannel() {
     baseHeight: number;
     revision: number;
   };
-  type Tile = { x: number; y: number; width: number; height: number; rgba: number[] };
-  type Submit = { imageId: string; level: number; tiles: Tile[]; generation: number };
-  type Need = { imageId: string; level: number; tiles: [number, number][]; generation: number };
+  type Tile = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    rgba: number[];
+  };
+  type Submit = {
+    imageId: string;
+    level: number;
+    tiles: Tile[];
+    generation: number;
+  };
+  type Need = {
+    imageId: string;
+    level: number;
+    tiles: [number, number][];
+    generation: number;
+  };
 
   const claims: Claim[] = [];
   const releases: string[] = [];
@@ -248,14 +264,19 @@ export function makeFakeEditor(opts?: {
         return elementPropertiesReply;
       }
       if (msg.kind === "writePagedPart") {
-        const m = msg as unknown as { payload: { path: string; bytes: number[] } };
+        const m = msg as unknown as {
+          payload: { path: string; bytes: number[] };
+        };
         pagedParts.set(m.payload.path, m.payload.bytes);
         return { kind: "pagedPartWritten", payload: {} };
       }
       if (msg.kind === "readPagedPart") {
         const m = msg as unknown as { payload: { path: string } };
         const b = pagedParts.get(m.payload.path);
-        return { kind: "pagedPartRead", payload: { found: b !== undefined, bytes: b ?? [] } };
+        return {
+          kind: "pagedPartRead",
+          payload: { found: b !== undefined, bytes: b ?? [] },
+        };
       }
       if (msg.kind === "deletePagedPart") {
         const m = msg as unknown as { payload: { path: string } };
@@ -264,7 +285,9 @@ export function makeFakeEditor(opts?: {
       }
       if (msg.kind === "listPagedParts") {
         const m = msg as unknown as { payload: { prefix: string } };
-        const paths = [...pagedParts.keys()].filter((p) => p.startsWith(m.payload.prefix));
+        const paths = [...pagedParts.keys()].filter((p) =>
+          p.startsWith(m.payload.prefix),
+        );
         return { kind: "pagedPartList", payload: { paths } };
       }
       return { kind: "noop" };

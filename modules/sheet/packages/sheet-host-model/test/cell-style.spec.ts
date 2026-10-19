@@ -72,7 +72,12 @@ describe("sheet_plugin_cell_style_from_cell: mint + populate plan", () => {
     expect(plan.propertyOps).toEqual([
       {
         op: "setStyleProperty",
-        args: { collection: "cell", styleId: "style.1", path: "cellFillColor", value: FILL },
+        args: {
+          collection: "cell",
+          styleId: "style.1",
+          path: "cellFillColor",
+          value: FILL,
+        },
       },
       {
         op: "setStyleProperty",

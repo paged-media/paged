@@ -83,9 +83,9 @@ describe("host.assets.getPlacedImage (C-5, engine-served)", () => {
     live = await createHeadlessHost({ console: silent, storage: mapBacking() });
     await live.load(minimalIdml());
     live.loadBundle(bundle("media.paged.c5gate", false));
-    await expect(
-      live.host.assets.getPlacedImage("urect"),
-    ).rejects.toThrow(/assets/);
+    await expect(live.host.assets.getPlacedImage("urect")).rejects.toThrow(
+      /assets/,
+    );
   });
 });
 

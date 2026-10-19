@@ -83,7 +83,10 @@ async function openStyleOptions(
   await expect(panel).toHaveAttribute("data-style-family", family);
   await panel.locator("[data-style-options-select]").selectOption(selfId);
   if (typeof selfId === "string") {
-    await expect(panel).toHaveAttribute("data-style-target", `style:${family}/${selfId}`);
+    await expect(panel).toHaveAttribute(
+      "data-style-target",
+      `style:${family}/${selfId}`,
+    );
   }
   return panel;
 }
@@ -98,18 +101,36 @@ test.describe("ADR 323 — core options panels over host.objects", () => {
     page,
   }) => {
     await loadIdml(page, fixture("styles-cascade"));
-    const panel = await openStyleOptions(page, "paragraph", "ParagraphStyle/Body");
+    const panel = await openStyleOptions(
+      page,
+      "paragraph",
+      "ParagraphStyle/Body",
+    );
     const address = "style:paragraph/ParagraphStyle/Body";
     const before = await objGet(page, address, "paragraphSpaceBefore");
     const next = before === 7 ? 9 : 7;
-    const field = await roundTrip(page, panel, address, "paragraphSpaceBefore", next);
+    const field = await roundTrip(
+      page,
+      panel,
+      address,
+      "paragraphSpaceBefore",
+      next,
+    );
     // An enum row renders as a select of its members (the schema's, not
     // the panel's).
-    await expect(fieldOf(panel, "paragraphJustification")).toHaveAttribute("data-value-type", "enum");
+    await expect(fieldOf(panel, "paragraphJustification")).toHaveAttribute(
+      "data-value-type",
+      "enum",
+    );
     // "Next style" is a ref picked from the paragraph styles.
     const nextStyle = fieldOf(panel, "paragraphStyleNextStyle");
-    await nextStyle.locator("select").first().selectOption("ParagraphStyle/Subtitle");
-    await expect.poll(() => objGet(page, address, "paragraphStyleNextStyle")).toBe("ParagraphStyle/Subtitle");
+    await nextStyle
+      .locator("select")
+      .first()
+      .selectOption("ParagraphStyle/Subtitle");
+    await expect
+      .poll(() => objGet(page, address, "paragraphStyleNextStyle"))
+      .toBe("ParagraphStyle/Subtitle");
     await undoOnce(page);
     const r = await bindToData(page, field, "paragraphSpaceBefore");
     expect(r.selector).toBe(address);
@@ -120,11 +141,16 @@ test.describe("ADR 323 — core options panels over host.objects", () => {
   }) => {
     await loadIdml(page, fixture("styles-cascade"));
     await openPanel(page, "paged.paragraph-styles");
-    await page.locator('[data-cockpit-action="paragraph-styles-options"]').click();
+    await page
+      .locator('[data-cockpit-action="paragraph-styles-options"]')
+      .click();
     const panel = page.locator('[data-style-options-panel="ready"]');
     await expect(panel).toBeVisible();
     await expect(panel).toHaveAttribute("data-style-family", "paragraph");
-    await expect(panel).toHaveAttribute("data-style-target", /^style:paragraph\//);
+    await expect(panel).toHaveAttribute(
+      "data-style-target",
+      /^style:paragraph\//,
+    );
   });
 
   test("OM-OPT-3 — Character Style Options: size on a new character style → one undo @feat:styles.set-style-property @feat:editor-shell.panels.character-styles @feat:round-tripping.undo-redo @level:happy", async ({
@@ -132,14 +158,23 @@ test.describe("ADR 323 — core options panels over host.objects", () => {
   }) => {
     await loadIdml(page, fixture("styles-cascade"));
     await page.evaluate(() =>
-      (globalThis as unknown as { __canvas: { client: { mutate(m: unknown): Promise<unknown> } } }).__canvas.client.mutate({
+      (
+        globalThis as unknown as {
+          __canvas: { client: { mutate(m: unknown): Promise<unknown> } };
+        }
+      ).__canvas.client.mutate({
         op: "createCharacterStyle",
         args: { name: "Emphasis" },
       }),
     );
     // A created style's Self id is minted (`CharacterStyle/u1`): pick it by name.
-    const panel = await openStyleOptions(page, "character", { label: "Emphasis" });
-    await expect(panel).toHaveAttribute("data-style-target", /^style:character\/CharacterStyle\//);
+    const panel = await openStyleOptions(page, "character", {
+      label: "Emphasis",
+    });
+    await expect(panel).toHaveAttribute(
+      "data-style-target",
+      /^style:character\/CharacterStyle\//,
+    );
     const address = (await panel.getAttribute("data-style-target"))!;
     await roundTrip(page, panel, address, "characterFontSize", 15);
     // Character styles carry no paragraph rows.
@@ -153,7 +188,13 @@ test.describe("ADR 323 — core options panels over host.objects", () => {
     const panel = await openStyleOptions(page, "object", "ObjectStyle/Base");
     const address = "style:object/ObjectStyle/Base";
     const before = await objGet(page, address, "frameFillTint");
-    await roundTrip(page, panel, address, "frameFillTint", before === 40 ? 60 : 40);
+    await roundTrip(
+      page,
+      panel,
+      address,
+      "frameFillTint",
+      before === 40 ? 60 : 40,
+    );
   });
 
   test("OM-OPT-5 — Cell and Table Style Options: stroke weight, region cell style → one undo each @feat:styles.set-style-property @feat:styles.cell.crud @feat:styles.table.crud @feat:round-tripping.undo-redo @level:happy", async ({
@@ -162,24 +203,48 @@ test.describe("ADR 323 — core options panels over host.objects", () => {
     await loadIdml(page, fixture("styles-cascade"));
     // Opened from the Cell Styles list row.
     await openPanel(page, "paged.cell-styles");
-    await page.locator('[data-style-options-open="CellStyle/CellBase"]').click();
+    await page
+      .locator('[data-style-options-open="CellStyle/CellBase"]')
+      .click();
     const panel = page.locator('[data-style-options-panel="ready"]');
-    await expect(panel).toHaveAttribute("data-style-target", "style:cell/CellStyle/CellBase");
+    await expect(panel).toHaveAttribute(
+      "data-style-target",
+      "style:cell/CellStyle/CellBase",
+    );
     const cell = "style:cell/CellStyle/CellBase";
     const w = await objGet(page, cell, "cellTopEdgeStrokeWeight");
-    await roundTrip(page, panel, cell, "cellTopEdgeStrokeWeight", w === 3 ? 5 : 3);
+    await roundTrip(
+      page,
+      panel,
+      cell,
+      "cellTopEdgeStrokeWeight",
+      w === 3 ? 5 : 3,
+    );
 
     const table = await openStyleOptions(page, "table", "TableStyle/TableBase");
     const address = "style:table/TableStyle/TableBase";
     const tw = await objGet(page, address, "tableStyleTopBorderStrokeWeight");
-    await roundTrip(page, table, address, "tableStyleTopBorderStrokeWeight", tw === 2 ? 4 : 2);
+    await roundTrip(
+      page,
+      table,
+      address,
+      "tableStyleTopBorderStrokeWeight",
+      tw === 2 ? 4 : 2,
+    );
     const region = fieldOf(table, "tableStyleBodyRegionCellStyle");
     const before = await objGet(page, address, "tableStyleBodyRegionCellStyle");
-    const pick = before === "CellStyle/CellDerived" ? "CellStyle/CellBase" : "CellStyle/CellDerived";
+    const pick =
+      before === "CellStyle/CellDerived"
+        ? "CellStyle/CellBase"
+        : "CellStyle/CellDerived";
     await region.locator("select").first().selectOption(pick);
-    await expect.poll(() => objGet(page, address, "tableStyleBodyRegionCellStyle")).toBe(pick);
+    await expect
+      .poll(() => objGet(page, address, "tableStyleBodyRegionCellStyle"))
+      .toBe(pick);
     await undoOnce(page);
-    await expect.poll(() => objGet(page, address, "tableStyleBodyRegionCellStyle")).toEqual(before);
+    await expect
+      .poll(() => objGet(page, address, "tableStyleBodyRegionCellStyle"))
+      .toEqual(before);
   });
 
   test("OM-OPT-6 — Document Setup: bleed and an enum colour setting on doc → one undo each; Bind to data… targets doc @feat:editor-shell.panels.color-settings @feat:layout-model.spreads-pages @feat:round-tripping.undo-redo @level:happy", async ({
@@ -189,8 +254,17 @@ test.describe("ADR 323 — core options panels over host.objects", () => {
     await openPanel(page, "paged.document-setup");
     const panel = page.locator('[data-document-setup-panel="ready"]');
     const before = await objGet(page, "doc", "documentBleedTop");
-    const field = await roundTrip(page, panel, "doc", "documentBleedTop", before === 9 ? 12 : 9);
-    await expect(fieldOf(panel, "renderingIntent")).toHaveAttribute("data-value-type", "enum");
+    const field = await roundTrip(
+      page,
+      panel,
+      "doc",
+      "documentBleedTop",
+      before === 9 ? 12 : 9,
+    );
+    await expect(fieldOf(panel, "renderingIntent")).toHaveAttribute(
+      "data-value-type",
+      "enum",
+    );
     const r = await bindToData(page, field, "documentBleedTop");
     expect(r.selector).toBe("doc");
   });
@@ -210,7 +284,9 @@ test.describe("ADR 323 — core options panels over host.objects", () => {
     await intent.locator("select").first().selectOption(pick);
     await expect.poll(() => objGet(page, "doc", "renderingIntent")).toBe(pick);
     await undoOnce(page);
-    await expect.poll(() => objGet(page, "doc", "renderingIntent")).toEqual(was);
+    await expect
+      .poll(() => objGet(page, "doc", "renderingIntent"))
+      .toEqual(was);
   });
 
   test("OM-OPT-7 — Margins and Columns: All pages writes ONE batch over every page = one undo @feat:layout-model.spreads-pages @feat:layout-model.text-columns @feat:round-tripping.undo-redo @level:happy", async ({
@@ -220,16 +296,28 @@ test.describe("ADR 323 — core options panels over host.objects", () => {
     await openPanel(page, "paged.margins-columns");
     const panel = page.locator('[data-margins-columns-panel="ready"]');
     await panel.locator("[data-page-select]").selectOption("__all__");
-    const addresses = ((await panel.locator("[data-schema-sections]").getAttribute("data-target")) ?? "").split(" ");
+    const addresses = (
+      (await panel
+        .locator("[data-schema-sections]")
+        .getAttribute("data-target")) ?? ""
+    ).split(" ");
     expect(addresses.length).toBeGreaterThan(1);
-    const before = await Promise.all(addresses.map((a) => objGet(page, a, "pageMarginTop")));
+    const before = await Promise.all(
+      addresses.map((a) => objGet(page, a, "pageMarginTop")),
+    );
     await typeInto(fieldOf(panel, "pageMarginTop"), "33");
-    for (const a of addresses) await expect.poll(() => objGet(page, a, "pageMarginTop")).toBe(33);
+    for (const a of addresses)
+      await expect.poll(() => objGet(page, a, "pageMarginTop")).toBe(33);
     await undoOnce(page);
-    for (const [i, a] of addresses.entries()) await expect.poll(() => objGet(page, a, "pageMarginTop")).toEqual(before[i]);
+    for (const [i, a] of addresses.entries())
+      await expect
+        .poll(() => objGet(page, a, "pageMarginTop"))
+        .toEqual(before[i]);
     // Columns on one page.
     await panel.locator("[data-page-select]").selectOption({ index: 0 });
-    const one = (await panel.locator("[data-schema-sections]").getAttribute("data-target"))!;
+    const one = (await panel
+      .locator("[data-schema-sections]")
+      .getAttribute("data-target"))!;
     const cols = await objGet(page, one, "pageColumnCount");
     await roundTrip(page, panel, one, "pageColumnCount", cols === 3 ? 2 : 3);
   });
@@ -242,20 +330,29 @@ test.describe("ADR 323 — core options panels over host.objects", () => {
     const panel = page.locator('[data-swatch-options-panel="ready"]');
     await expect(panel).toHaveAttribute("data-options-target", /^swatch:/);
     const address = (await panel.getAttribute("data-options-target"))!;
-    const before = (await objGet(page, address, "color")) as { space: string; value: number[] };
+    const before = (await objGet(page, address, "color")) as {
+      space: string;
+      value: number[];
+    };
     expect(typeof before).toBe("object");
     await panel.locator("[data-swatch-color-space]").selectOption("RGB");
     await panel.locator("[data-swatch-color-value]").fill("10, 200, 30");
     await panel.locator('[data-cockpit-action="swatch-color-apply"]').click();
     await expect
       .poll(async () => {
-        const c = (await objGet(page, address, "color")) as { space: string; value: number[] };
+        const c = (await objGet(page, address, "color")) as {
+          space: string;
+          value: number[];
+        };
         return [c.space, c.value.map((n) => Math.round(n))];
       })
       .toEqual(["RGB", [10, 200, 30]]);
     await undoOnce(page);
     await expect
-      .poll(async () => ((await objGet(page, address, "color")) as { space: string }).space)
+      .poll(
+        async () =>
+          ((await objGet(page, address, "color")) as { space: string }).space,
+      )
       .toBe(before.space);
   });
 
@@ -273,7 +370,10 @@ test.describe("ADR 323 — core options panels over host.objects", () => {
     await expect(sec).toHaveAttribute("data-options-target", /^section:/);
     const s = (await sec.getAttribute("data-options-target"))!;
     await roundTrip(page, sec, s, "prefix", "A-");
-    await expect(fieldOf(sec, "numberingStyle")).toHaveAttribute("data-value-type", "enum");
+    await expect(fieldOf(sec, "numberingStyle")).toHaveAttribute(
+      "data-value-type",
+      "enum",
+    );
   });
 
   test("OM-OPT-10 — Guides: position on guide:… → one undo @feat:layout-model.guides @feat:round-tripping.undo-redo @level:happy", async ({
@@ -306,8 +406,22 @@ test.describe("ADR 323 — core options panels over host.objects", () => {
     await loadIdml(page, fixture("geometry-groups"));
     const frame = { kind: "textFrame", id: "ua365e1" };
     await page.evaluate(async (target) => {
-      const c = (globalThis as unknown as { __canvas: { client: { setElementSelection(ids: unknown[], m: string): Promise<unknown[]> }; setElementSelection(ids: unknown[]): void } }).__canvas;
-      c.setElementSelection(await c.client.setElementSelection([target], "replace"));
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            client: {
+              setElementSelection(
+                ids: unknown[],
+                m: string,
+              ): Promise<unknown[]>;
+            };
+            setElementSelection(ids: unknown[]): void;
+          };
+        }
+      ).__canvas;
+      c.setElementSelection(
+        await c.client.setElementSelection([target], "replace"),
+      );
     }, frame);
     await openPanel(page, "paged.object-options");
     const panel = page.locator('[data-object-options-panel="ready"]');
@@ -317,9 +431,13 @@ test.describe("ADR 323 — core options panels over host.objects", () => {
     const was = await objGet(page, address, "frameCornerOptionTopLeft");
     const pick = was === "RoundedCorner" ? "BeveledCorner" : "RoundedCorner";
     await corner.locator("select").first().selectOption(pick);
-    await expect.poll(() => objGet(page, address, "frameCornerOptionTopLeft")).toBe(pick);
+    await expect
+      .poll(() => objGet(page, address, "frameCornerOptionTopLeft"))
+      .toBe(pick);
     await undoOnce(page);
-    await expect.poll(() => objGet(page, address, "frameCornerOptionTopLeft")).toEqual(was);
+    await expect
+      .poll(() => objGet(page, address, "frameCornerOptionTopLeft"))
+      .toEqual(was);
     await roundTrip(page, panel, address, "itemName", "Headline box");
   });
 
@@ -330,13 +448,33 @@ test.describe("ADR 323 — core options panels over host.objects", () => {
     const p0 = fx.pages[0];
     const cell = await page.evaluate(
       async ({ pageId, w, h }) => {
-        const c = (globalThis as unknown as {
-          __canvas: { client: { send(m: unknown): Promise<{ kind: string; payload?: { storyId?: string | null; tableContext?: { tableId: string } | null } }> } };
-        }).__canvas;
+        const c = (
+          globalThis as unknown as {
+            __canvas: {
+              client: {
+                send(m: unknown): Promise<{
+                  kind: string;
+                  payload?: {
+                    storyId?: string | null;
+                    tableContext?: { tableId: string } | null;
+                  };
+                }>;
+              };
+            };
+          }
+        ).__canvas;
         for (let gy = 0.04; gy < 0.97; gy += 0.03) {
           for (let gx = 0.04; gx < 0.97; gx += 0.03) {
-            const r = await c.client.send({ kind: "hitTest", payload: { pageId, docPoint: [w * gx, h * gy], filter: "any" } });
-            if (r.kind === "hitResult" && r.payload?.tableContext && r.payload.storyId) return { gx, gy };
+            const r = await c.client.send({
+              kind: "hitTest",
+              payload: { pageId, docPoint: [w * gx, h * gy], filter: "any" },
+            });
+            if (
+              r.kind === "hitResult" &&
+              r.payload?.tableContext &&
+              r.payload.storyId
+            )
+              return { gx, gy };
           }
         }
         return null;
@@ -344,7 +482,11 @@ test.describe("ADR 323 — core options panels over host.objects", () => {
       { pageId: p0.pageId, w: p0.widthPt, h: p0.heightPt },
     );
     expect(cell).not.toBeNull();
-    const pt = await screenPoint(page, p0.widthPt * cell!.gx, p0.heightPt * cell!.gy);
+    const pt = await screenPoint(
+      page,
+      p0.widthPt * cell!.gx,
+      p0.heightPt * cell!.gy,
+    );
     await page.mouse.click(pt.x, pt.y);
     await openPanel(page, "paged.table");
     const panel = page.locator('[data-table-panel="ready"]');
@@ -358,18 +500,33 @@ test.describe("ADR 323 — core options panels over host.objects", () => {
     const before = await objGet(page, address, "cellFillTint");
     const written = await page.evaluate(
       (a) =>
-        (globalThis as unknown as {
-          __canvas: { objects: { set(a: string, p: string, v: unknown): Promise<{ applied: boolean; code?: string }> } };
-        }).__canvas.objects.set(a, "cellFillTint", 40),
+        (
+          globalThis as unknown as {
+            __canvas: {
+              objects: {
+                set(
+                  a: string,
+                  p: string,
+                  v: unknown,
+                ): Promise<{ applied: boolean; code?: string }>;
+              };
+            };
+          }
+        ).__canvas.objects.set(a, "cellFillTint", 40),
       address,
     );
     expect(written).toMatchObject({ applied: true });
     await expect.poll(() => objGet(page, address, "cellFillTint")).toBe(40);
     await undoOnce(page);
-    await expect.poll(() => objGet(page, address, "cellFillTint")).toEqual(before);
+    await expect
+      .poll(() => objGet(page, address, "cellFillTint"))
+      .toEqual(before);
     // The span is the cell's live schema field.
     const span = await objGet(page, address, "columnSpan");
     expect(typeof span).toBe("number");
-    await expect(fieldOf(fields, "columnSpan")).toHaveAttribute("data-value-type", /.+/);
+    await expect(fieldOf(fields, "columnSpan")).toHaveAttribute(
+      "data-value-type",
+      /.+/,
+    );
   });
 });

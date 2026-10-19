@@ -132,7 +132,14 @@ export interface PdfExportArgs {
 /** The fields the schema DEFAULTS (every other field is optional). */
 export type PdfExportDefaults = Pick<
   PdfExportArgs,
-  "standard" | "colorPolicy" | "cropMarks" | "registrationMarks" | "colorBars" | "pageInfo" | "effectDpi" | "restrictedFontPolicy"
+  | "standard"
+  | "colorPolicy"
+  | "cropMarks"
+  | "registrationMarks"
+  | "colorBars"
+  | "pageInfo"
+  | "effectDpi"
+  | "restrictedFontPolicy"
 >;
 
 /** The schema's struct-field defaults, read from `schema/export-pdf.args.json`
@@ -140,7 +147,10 @@ export type PdfExportDefaults = Pick<
  *  `host.objects.invoke` all see). */
 export const PDF_EXPORT_DEFAULTS: Readonly<PdfExportDefaults> = Object.freeze(
   Object.fromEntries(
-    Object.entries((exportPdfArgs as { fields: Record<string, { default?: unknown }> }).fields)
+    Object.entries(
+      (exportPdfArgs as { fields: Record<string, { default?: unknown }> })
+        .fields,
+    )
       .filter(([, f]) => "default" in f)
       .map(([k, f]) => [k, f.default]),
   ) as unknown as PdfExportDefaults,
@@ -148,8 +158,14 @@ export const PDF_EXPORT_DEFAULTS: Readonly<PdfExportDefaults> = Object.freeze(
 
 /** The defaults with `overrides` applied: a complete, valid args record
  *  (what `invoke` hands the handler for the same partial args). */
-export function pdfExportArgs(overrides: Partial<PdfExportArgs> = {}): PdfExportArgs {
-  return { ...PDF_EXPORT_DEFAULTS, ...overrides, ...(overrides.bleed ? { bleed: [...overrides.bleed] } : {}) };
+export function pdfExportArgs(
+  overrides: Partial<PdfExportArgs> = {},
+): PdfExportArgs {
+  return {
+    ...PDF_EXPORT_DEFAULTS,
+    ...overrides,
+    ...(overrides.bleed ? { bleed: [...overrides.bleed] } : {}),
+  };
 }
 
 /** A refusal the registry reports as `invalidValue: …` (the code prefix
@@ -159,14 +175,18 @@ function invalid(reason: string): Error {
 }
 
 /** Parse a 1-based page range into the engine's 0-based inclusive one. */
-export function parsePageRange(pages: string): { pageFrom: number | null; pageTo: number | null } {
+export function parsePageRange(pages: string): {
+  pageFrom: number | null;
+  pageTo: number | null;
+} {
   const t = pages.trim().toLowerCase();
   if (t === "" || t === "all") return { pageFrom: null, pageTo: null };
   const m = /^(\d+)(?:\s*-\s*(\d+))?$/.exec(t);
   if (!m) throw invalid(`pages "${pages}" is not "all", "n" or "a-b"`);
   const from = Number(m[1]);
   const to = m[2] === undefined ? from : Number(m[2]);
-  if (from < 1 || to < from) throw invalid(`pages "${pages}" is not an ascending 1-based range`);
+  if (from < 1 || to < from)
+    throw invalid(`pages "${pages}" is not an ascending 1-based range`);
   return { pageFrom: from - 1, pageTo: to - 1 };
 }
 
@@ -174,17 +194,27 @@ export function parsePageRange(pages: string): { pageFrom: number | null; pageTo
  *  cannot carry (ADR 132 puts `range` on rows) are checked here. */
 export function pdfWireOptions(args: PdfExportArgs): PdfWireOptions {
   const { bleed, marksOffset, downsamplePpi } = args;
-  if (bleed !== undefined && bleed.length !== 4) throw invalid("bleed is [top, inside, bottom, outside]");
-  if (bleed?.some((b) => b < 0 || b > 432)) throw invalid("bleed values are 0–432 pt");
-  if (marksOffset !== undefined && (marksOffset < 0 || marksOffset > 72)) throw invalid("marksOffset is 0–72 pt");
-  if (downsamplePpi !== undefined && (downsamplePpi < 1 || downsamplePpi > 2400)) {
+  if (bleed !== undefined && bleed.length !== 4)
+    throw invalid("bleed is [top, inside, bottom, outside]");
+  if (bleed?.some((b) => b < 0 || b > 432))
+    throw invalid("bleed values are 0–432 pt");
+  if (marksOffset !== undefined && (marksOffset < 0 || marksOffset > 72))
+    throw invalid("marksOffset is 0–72 pt");
+  if (
+    downsamplePpi !== undefined &&
+    (downsamplePpi < 1 || downsamplePpi > 2400)
+  ) {
     throw invalid("downsamplePpi is 1–2400 (absent = never resample)");
   }
-  if (args.effectDpi < 36 || args.effectDpi > 1200) throw invalid("effectDpi is 36–1200");
-  const text = (s: string | undefined): string | null => (s === undefined || s === "" ? null : s);
+  if (args.effectDpi < 36 || args.effectDpi > 1200)
+    throw invalid("effectDpi is 36–1200");
+  const text = (s: string | undefined): string | null =>
+    s === undefined || s === "" ? null : s;
   const outputIntentProfile = text(args.outputIntentProfile);
   if (args.standard === "pdfx4" && outputIntentProfile === null) {
-    throw invalid("pdfx4 needs an outputIntentProfile (a registered profile name)");
+    throw invalid(
+      "pdfx4 needs an outputIntentProfile (a registered profile name)",
+    );
   }
   return {
     standard: args.standard,
@@ -212,7 +242,10 @@ function severityOf(s: string): ExportDiagnostic["severity"] {
 /** The document's name for an output file, from the engine's meta. */
 async function baseName(host: BundleHost): Promise<string> {
   try {
-    const meta = (await host.document.meta()) as { documentName?: string | null; name?: string | null };
+    const meta = (await host.document.meta()) as {
+      documentName?: string | null;
+      name?: string | null;
+    };
     const n = (meta.documentName ?? meta.name ?? "").trim();
     return n === "" ? "document" : n.replace(/\.(idml|paged|pdf)$/i, "");
   } catch {
@@ -222,21 +255,38 @@ async function baseName(host: BundleHost): Promise<string> {
 
 /** Export the active document to PDF through the engine's session door
  *  (begin → one page per call → finish), cancelling on failure. */
-export async function exportPdf(host: BundleHost, args: PdfExportArgs): Promise<ExportResult> {
+export async function exportPdf(
+  host: BundleHost,
+  args: PdfExportArgs,
+): Promise<ExportResult> {
   const options = pdfWireOptions(args);
   const client = host.editor.client;
-  const begun = await client.send({ kind: "exportPdfBegin", payload: { options } });
-  if (begun.kind === "exportPdfFailed") throw new Error(`failed: ${begun.payload.error}`);
-  if (begun.kind !== "exportPdfBegun") throw new Error(`failed: unexpected reply ${begun.kind}`);
+  const begun = await client.send({
+    kind: "exportPdfBegin",
+    payload: { options },
+  });
+  if (begun.kind === "exportPdfFailed")
+    throw new Error(`failed: ${begun.payload.error}`);
+  if (begun.kind !== "exportPdfBegun")
+    throw new Error(`failed: unexpected reply ${begun.kind}`);
   const { session, pageCount } = begun.payload;
   try {
     for (let i = 0; i < pageCount; i++) {
-      const r = await client.send({ kind: "exportPdfPage", payload: { session } });
-      if (r.kind === "exportPdfFailed") throw new Error(`failed: ${r.payload.error}`);
+      const r = await client.send({
+        kind: "exportPdfPage",
+        payload: { session },
+      });
+      if (r.kind === "exportPdfFailed")
+        throw new Error(`failed: ${r.payload.error}`);
     }
-    const done = await client.send({ kind: "exportPdfFinish", payload: { session } });
-    if (done.kind === "exportPdfFailed") throw new Error(`failed: ${done.payload.error}`);
-    if (done.kind !== "pdfExported") throw new Error(`failed: unexpected reply ${done.kind}`);
+    const done = await client.send({
+      kind: "exportPdfFinish",
+      payload: { session },
+    });
+    if (done.kind === "exportPdfFailed")
+      throw new Error(`failed: ${done.payload.error}`);
+    if (done.kind !== "pdfExported")
+      throw new Error(`failed: unexpected reply ${done.kind}`);
     const findings = done.payload.findings ?? [];
     const diagnostics: ExportDiagnostic[] = [
       ...findings.map((f) => ({
@@ -248,7 +298,12 @@ export async function exportPdf(host: BundleHost, args: PdfExportArgs): Promise<
       // The flat list repeats findings as text; keep only what it adds.
       ...done.payload.diagnostics
         .filter((d) => !findings.some((f) => d.includes(f.message)))
-        .map((message) => ({ severity: "info" as const, code: "pdf", message, page: 0 })),
+        .map((message) => ({
+          severity: "info" as const,
+          code: "pdf",
+          message,
+          page: 0,
+        })),
     ];
     return {
       bytes: Uint8Array.from(done.payload.pdfBytes),
@@ -258,7 +313,9 @@ export async function exportPdf(host: BundleHost, args: PdfExportArgs): Promise<
       diagnostics,
     };
   } catch (err) {
-    await client.send({ kind: "exportPdfCancel", payload: { session } }).catch(() => undefined);
+    await client
+      .send({ kind: "exportPdfCancel", payload: { session } })
+      .catch(() => undefined);
     throw err;
   }
 }
@@ -266,20 +323,32 @@ export async function exportPdf(host: BundleHost, args: PdfExportArgs): Promise<
 /** Export the active document to IDML through the engine's writer. Every
  *  loss the engine reports becomes a warning (the exporter used to drop
  *  them). */
-export async function exportIdmlResult(host: BundleHost, linkBase?: string): Promise<ExportResult> {
+export async function exportIdmlResult(
+  host: BundleHost,
+  linkBase?: string,
+): Promise<ExportResult> {
   const reply = await host.editor.client.send({
     kind: "exportIdml",
-    payload: { linkBase: linkBase === undefined || linkBase === "" ? null : linkBase },
+    payload: {
+      linkBase: linkBase === undefined || linkBase === "" ? null : linkBase,
+    },
   });
-  if (reply.kind === "exportIdmlFailed") throw new Error(`failed: ${reply.payload.error}`);
-  if (reply.kind !== "idmlExported") throw new Error(`failed: unexpected reply ${reply.kind}`);
+  if (reply.kind === "exportIdmlFailed")
+    throw new Error(`failed: ${reply.payload.error}`);
+  if (reply.kind !== "idmlExported")
+    throw new Error(`failed: unexpected reply ${reply.kind}`);
   const pages = await host.document.collection("pages");
   return {
     bytes: Uint8Array.from(reply.payload.idmlBytes),
     fileName: `${await baseName(host)}.idml`,
     mimeType: "application/vnd.adobe.indesign-idml-package",
     pageCount: pages.length,
-    diagnostics: (reply.payload.lost ?? []).map((message) => ({ severity: "warning" as const, code: "idml.lost", message, page: 0 })),
+    diagnostics: (reply.payload.lost ?? []).map((message) => ({
+      severity: "warning" as const,
+      code: "idml.lost",
+      message,
+      page: 0,
+    })),
   };
 }
 
@@ -288,18 +357,33 @@ async function exportPagedResult(host: BundleHost): Promise<ExportResult> {
   const bytes = host.supports("documents.exportPaged@1")
     ? await host.documents.exportPaged()
     : await (async () => {
-        const reply = await host.editor.client.send({ kind: "exportPaged", payload: {} });
-        if (reply.kind === "pagedPartFailed") throw new Error(`failed: ${reply.payload.error}`);
-        if (reply.kind !== "pagedExported") throw new Error(`failed: unexpected reply ${reply.kind}`);
+        const reply = await host.editor.client.send({
+          kind: "exportPaged",
+          payload: {},
+        });
+        if (reply.kind === "pagedPartFailed")
+          throw new Error(`failed: ${reply.payload.error}`);
+        if (reply.kind !== "pagedExported")
+          throw new Error(`failed: unexpected reply ${reply.kind}`);
         return Uint8Array.from(reply.payload.bytes);
       })();
   const pages = await host.document.collection("pages");
-  return { bytes, fileName: `${await baseName(host)}.paged`, mimeType: "application/zip", pageCount: pages.length, diagnostics: [] };
+  return {
+    bytes,
+    fileName: `${await baseName(host)}.paged`,
+    mimeType: "application/zip",
+    pageCount: pages.length,
+    diagnostics: [],
+  };
 }
 
 /** Open IDML bytes as the active document: the native-document door (the
  *  editor), else the documents door (headless hosts, the Node CLI). */
-export async function openIdml(host: BundleHost, bytes: Uint8Array, name: string): Promise<string[]> {
+export async function openIdml(
+  host: BundleHost,
+  bytes: Uint8Array,
+  name: string,
+): Promise<string[]> {
   if (host.supports("document.openNative@1")) {
     await host.nativeDocument.open(bytes);
   } else if (host.supports("documents.open@1")) {
@@ -308,11 +392,15 @@ export async function openIdml(host: BundleHost, bytes: Uint8Array, name: string
   } else {
     throw new Error("failed: this host cannot open a document");
   }
-  return (await host.document.collection<{ selfId: string }>("pages")).map((p) => p.selfId);
+  return (await host.document.collection<{ selfId: string }>("pages")).map(
+    (p) => p.selfId,
+  );
 }
 
 /** Register the typed commands. `null` on a host without the door. */
-export function contributePublishCommands(host: BundleHost): ObjectModelHandle | null {
+export function contributePublishCommands(
+  host: BundleHost,
+): ObjectModelHandle | null {
   if (!host.supports("contribute.objectModel@1")) return null;
   const commands: TypedCommandContribution[] = [
     {
@@ -327,7 +415,8 @@ export function contributePublishCommands(host: BundleHost): ObjectModelHandle |
       title: "Export IDML",
       args: exportIdmlArgs as ValueType,
       result: EXPORT_RESULT_TYPE,
-      handler: (_ctx, args) => exportIdmlResult(host, (args as { linkBase?: string }).linkBase),
+      handler: (_ctx, args) =>
+        exportIdmlResult(host, (args as { linkBase?: string }).linkBase),
     },
     {
       id: EXPORT_PAGED_COMMAND,

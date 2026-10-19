@@ -30,7 +30,10 @@
 import { readFileSync } from "node:fs";
 
 import { bakeWebFrameToDocument } from "../../web-bundle/src/bake-to-document";
-import { parseSceneLayer, type WebEngine } from "../../web-bundle/src/engine-loader";
+import {
+  parseSceneLayer,
+  type WebEngine,
+} from "../../web-bundle/src/engine-loader";
 import { envelopeFor } from "../../web-model/src";
 
 // The host contract types, taken from the bake's own signature (this package
@@ -64,7 +67,9 @@ export function readFace(bytes: Uint8Array): Face {
   const tables: Record<string, number> = {};
   for (let i = 0; i < n; i++) {
     const o = 12 + 16 * i;
-    tables[String.fromCharCode(...bytes.subarray(o, o + 4))] = dv.getUint32(o + 8);
+    tables[String.fromCharCode(...bytes.subarray(o, o + 4))] = dv.getUint32(
+      o + 8,
+    );
   }
   const upm = dv.getUint16(tables.head + 18);
   const hhea = tables.hhea;
@@ -76,9 +81,11 @@ export function readFace(bytes: Uint8Array): Face {
   let sub = -1;
   for (let i = 0; i < dv.getUint16(cmap + 2); i++) {
     const r = cmap + 4 + 8 * i;
-    if (dv.getUint16(r) === 3 && dv.getUint16(r + 2) === 1) sub = cmap + dv.getUint32(r + 4);
+    if (dv.getUint16(r) === 3 && dv.getUint16(r + 2) === 1)
+      sub = cmap + dv.getUint32(r + 4);
   }
-  if (sub < 0 || dv.getUint16(sub) !== 4) throw new Error("readFace: no cmap 3/1 format 4");
+  if (sub < 0 || dv.getUint16(sub) !== 4)
+    throw new Error("readFace: no cmap 3/1 format 4");
   const segX2 = dv.getUint16(sub + 6);
   const ends = sub + 14;
   const starts = ends + segX2 + 2;
@@ -131,31 +138,56 @@ export async function recordBake(
     selection: { get: () => [WEB_ID] },
     diagnostics: { set: () => {} },
     text: {
-      measureString: async (_family: string, _style: string | null, text: string, sizePt: number) => {
+      measureString: async (
+        _family: string,
+        _style: string | null,
+        text: string,
+        sizePt: number,
+      ) => {
         let units = 0;
         for (const ch of text) units += face.advance(ch.codePointAt(0)!);
         const k = sizePt / face.upm;
-        return { advance: units * k, ascender: face.ascender * k, descender: face.descender * k };
+        return {
+          advance: units * k,
+          ascender: face.ascender * k,
+          descender: face.descender * k,
+        };
       },
     },
     document: {
       getMetadata: async () =>
-        envelopeFor({ html, css, options: { media: "print", overflow: "clip" } }),
+        envelopeFor({
+          html,
+          css,
+          options: { media: "print", overflow: "clip" },
+        }),
       elementGeometry: async () => [
         {
           id: WEB_ID,
           pageId: "PAGE",
-          bounds: [FRAME_ORIGIN.top, FRAME_ORIGIN.left, FRAME_ORIGIN.top + heightPt, FRAME_ORIGIN.left + widthPt],
+          bounds: [
+            FRAME_ORIGIN.top,
+            FRAME_ORIGIN.left,
+            FRAME_ORIGIN.top + heightPt,
+            FRAME_ORIGIN.left + widthPt,
+          ],
         },
       ],
-      collection: async (name: string) => (name === "stories" ? stories.slice() : []),
+      collection: async (name: string) =>
+        name === "stories" ? stories.slice() : [],
       mutate: async (m: WireOp) => {
         ops.push(JSON.parse(JSON.stringify(m)));
         if (m.op === "insertTextFrame") {
           stories.push({ selfId: `STORY${stories.length}` });
-          return { applied: true, createdId: { kind: "textFrame", id: `tf${stories.length}` } };
+          return {
+            applied: true,
+            createdId: { kind: "textFrame", id: `tf${stories.length}` },
+          };
         }
-        return { applied: true, createdId: { kind: "rectangle", id: `r${ops.length}` } };
+        return {
+          applied: true,
+          createdId: { kind: "rectangle", id: `r${ops.length}` },
+        };
       },
     },
   } as unknown as BundleHost;
@@ -165,7 +197,8 @@ export async function recordBake(
     renderFlow: () => null,
   };
   const out = await bakeWebFrameToDocument(host, WEB_ID, engine);
-  if (!out.baked) throw new Error(`bake failed: ${JSON.stringify(out.diagnostics)}`);
+  if (!out.baked)
+    throw new Error(`bake failed: ${JSON.stringify(out.diagnostics)}`);
   return ops;
 }
 
@@ -185,8 +218,11 @@ export function toPagedScript(ops: WireOp[], header: string): string {
   let n = 0;
   let lastStory: string | null = null;
   const elementVar = new Map<string, string>();
-  const set = (target: string, path: string, value: { type: string; value: unknown }) =>
-    `paged.set(${target}, ${lit(path)}, ${lit(value.value)});`;
+  const set = (
+    target: string,
+    path: string,
+    value: { type: string; value: unknown },
+  ) => `paged.set(${target}, ${lit(path)}, ${lit(value.value)});`;
   const one = (o: WireOp, created: string | null): void => {
     const a = o.args as Record<string, any>;
     switch (o.op) {
@@ -198,7 +234,10 @@ export function toPagedScript(ops: WireOp[], header: string): string {
         return;
       case "replaceImageBytes": {
         const el = elementVar.get(a.elementId);
-        if (!el) throw new Error(`replaceImageBytes on an unknown element ${a.elementId}`);
+        if (!el)
+          throw new Error(
+            `replaceImageBytes on an unknown element ${a.elementId}`,
+          );
         lines.push(`paged.replaceImageBytes(${el}, ${lit(a.bytes)});`);
         return;
       }
@@ -206,10 +245,14 @@ export function toPagedScript(ops: WireOp[], header: string): string {
         lines.push(`const e${++n} = paged.insertFrame(pid, ${lit(a.bounds)});`);
         return;
       case "insertPath":
-        lines.push(`const e${++n} = paged.insertPath(pid, ${lit(a.anchors)}, ${lit(Boolean(a.open))}, false);`);
+        lines.push(
+          `const e${++n} = paged.insertPath(pid, ${lit(a.anchors)}, ${lit(Boolean(a.open))}, false);`,
+        );
         return;
       case "insertTextFrame": {
-        lines.push(`const e${++n} = paged.insertTextFrame(pid, ${lit(a.bounds)});`);
+        lines.push(
+          `const e${++n} = paged.insertTextFrame(pid, ${lit(a.bounds)});`,
+        );
         const v = `s${n}`;
         lines.push(`const ${v} = JSON.parse(paged.stories()).at(-1).selfId;`);
         storyVar.set(`STORY${storyVar.size}`, v);
@@ -219,14 +262,16 @@ export function toPagedScript(ops: WireOp[], header: string): string {
       case "bindCreated": {
         // The one-batch bake names the item just inserted; later ops address
         // it (or a text frame's story) as `$h:<handle>`.
-        if (n === 0) throw new Error(`bindCreated ${a.handle} before any insert`);
+        if (n === 0)
+          throw new Error(`bindCreated ${a.handle} before any insert`);
         elementVar.set(`$h:${a.handle}`, `e${n}`);
         if (lastStory === `s${n}`) storyVar.set(`$h:${a.handle}`, lastStory);
         return;
       }
       case "insertText": {
         const v = storyVar.get(a.storyId);
-        if (!v) throw new Error(`insertText into an unknown story ${a.storyId}`);
+        if (!v)
+          throw new Error(`insertText into an unknown story ${a.storyId}`);
         lines.push(`paged.insertText(${v}, ${a.offset}, ${lit(a.text)});`);
         return;
       }
@@ -234,8 +279,15 @@ export function toPagedScript(ops: WireOp[], header: string): string {
         const el = a.elementId as { kind: string; id: any };
         if (el.kind === "storyRange") {
           const v = storyVar.get(el.id.story_id);
-          if (!v) throw new Error(`property on an unknown story ${el.id.story_id}`);
-          lines.push(set(`\`storyRange:\${${v}}@${el.id.start}..${el.id.end}\``, a.path, a.value));
+          if (!v)
+            throw new Error(`property on an unknown story ${el.id.story_id}`);
+          lines.push(
+            set(
+              `\`storyRange:\${${v}}@${el.id.start}..${el.id.end}\``,
+              a.path,
+              a.value,
+            ),
+          );
         } else if (el.id === "$created" && created) {
           lines.push(set(created, a.path, a.value));
         } else if (typeof el.id === "string" && elementVar.has(el.id)) {
@@ -301,16 +353,29 @@ export interface Expected {
 export function expectedFrom(ops: WireOp[]): Expected {
   const items: ExpectedItem[] = [];
   const swatches: Expected["swatches"] = [];
-  const flat = ops.flatMap((o) => (o.op === "batch" ? (o.args as { ops: WireOp[] }).ops : [o]));
+  const flat = ops.flatMap((o) =>
+    o.op === "batch" ? (o.args as { ops: WireOp[] }).ops : [o],
+  );
   for (const o of flat) {
     const a = o.args as Record<string, any>;
-    if (o.op === "createSwatch") swatches.push({ name: a.spec.name, rgb: a.spec.value });
-    else if (o.op === "insertFrame") items.push({ kind: "rectangle", bounds: a.bounds });
-    else if (o.op === "insertTextFrame") items.push({ kind: "textFrame", bounds: a.bounds });
+    if (o.op === "createSwatch")
+      swatches.push({ name: a.spec.name, rgb: a.spec.value });
+    else if (o.op === "insertFrame")
+      items.push({ kind: "rectangle", bounds: a.bounds });
+    else if (o.op === "insertTextFrame")
+      items.push({ kind: "textFrame", bounds: a.bounds });
     else if (o.op === "insertPath") {
       const xs = a.anchors.map((p: { anchor: number[] }) => p.anchor[0]);
       const ys = a.anchors.map((p: { anchor: number[] }) => p.anchor[1]);
-      items.push({ kind: "polygon", bounds: [Math.min(...ys), Math.min(...xs), Math.max(...ys), Math.max(...xs)] });
+      items.push({
+        kind: "polygon",
+        bounds: [
+          Math.min(...ys),
+          Math.min(...xs),
+          Math.max(...ys),
+          Math.max(...xs),
+        ],
+      });
     } else if (o.op === "insertText") items[items.length - 1].text = a.text;
     else if (o.op === "replaceImageBytes") items[items.length - 1].image = true;
     else if (o.op === "setElementProperty") {
@@ -324,15 +389,27 @@ export function expectedFrom(ops: WireOp[]): Expected {
       if (a.path === "frameStrokeWeight") last.strokeWeight = a.value.value;
       if (a.path === "frameOpacity") last.opacity = a.value.value;
       if (a.path === "frameDropShadowMode") last.shadow = true;
-      if (a.path === "frameDropShadowXOffset") last.shadowOffset = [a.value.value, last.shadowOffset?.[1] ?? 0];
-      if (a.path === "frameDropShadowYOffset") last.shadowOffset = [last.shadowOffset?.[0] ?? 0, a.value.value];
+      if (a.path === "frameDropShadowXOffset")
+        last.shadowOffset = [a.value.value, last.shadowOffset?.[1] ?? 0];
+      if (a.path === "frameDropShadowYOffset")
+        last.shadowOffset = [last.shadowOffset?.[0] ?? 0, a.value.value];
       if (a.path === "frameDropShadowSize") last.shadowSize = a.value.value;
-      if (a.path === "frameCornerRadiusTopLeft") last.cornerRadius = a.value.value;
+      if (a.path === "frameCornerRadiusTopLeft")
+        last.cornerRadius = a.value.value;
       if (a.path === "framePath") {
         last.subpaths = a.value.value.subpathStarts.length;
-        const xs = a.value.value.anchors.map((p: { anchor: number[] }) => p.anchor[0]);
-        const ys = a.value.value.anchors.map((p: { anchor: number[] }) => p.anchor[1]);
-        last.bounds = [Math.min(...ys), Math.min(...xs), Math.max(...ys), Math.max(...xs)];
+        const xs = a.value.value.anchors.map(
+          (p: { anchor: number[] }) => p.anchor[0],
+        );
+        const ys = a.value.value.anchors.map(
+          (p: { anchor: number[] }) => p.anchor[1],
+        );
+        last.bounds = [
+          Math.min(...ys),
+          Math.min(...xs),
+          Math.max(...ys),
+          Math.max(...xs),
+        ];
       }
     }
   }

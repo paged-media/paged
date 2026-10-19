@@ -32,11 +32,27 @@
 //       0.64 the op did not exist and COPY was refused by name; the
 //       refusal path is pinned against a host whose vocabulary lacks it.)
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "bun:test";
 
-import type { CommandContribution, ElementId, PathAnchorsResult } from "@paged-media/plugin-api";
+import type {
+  CommandContribution,
+  ElementId,
+  PathAnchorsResult,
+} from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { affineReflect, affineRotate, composeAffine, type Affine } from "@paged-media/draw-geometry";
+import {
+  affineReflect,
+  affineRotate,
+  composeAffine,
+  type Affine,
+} from "@paged-media/draw-geometry";
 
 import {
   applyReflect,
@@ -70,7 +86,10 @@ const DOC = () =>
   );
 
 /** Every anchor of `id` in PAGE space. */
-async function pageAnchors(h: HeadlessHost, id: ElementId): Promise<[number, number][]> {
+async function pageAnchors(
+  h: HeadlessHost,
+  id: ElementId,
+): Promise<[number, number][]> {
   const t = (await h.host.document.pathAnchors(id)) as PathAnchorsResult;
   const m = t.itemTransform ?? [1, 0, 0, 1, 0, 0];
   return t.anchors.map((a) => [
@@ -108,7 +127,11 @@ describe("draw conformance — Reflect and Transform again", () => {
   });
 
   it("is on the menu: Reflect ×2, Reflect…, Transform again", () => {
-    expect(MENU_ENTRIES.filter(([path]) => path.startsWith("Draw/Transform/")).map(([p]) => p)).toEqual([
+    expect(
+      MENU_ENTRIES.filter(([path]) => path.startsWith("Draw/Transform/")).map(
+        ([p]) => p,
+      ),
+    ).toEqual([
       "Draw/Transform/Reflect horizontally",
       "Draw/Transform/Reflect vertically",
       "Draw/Transform/Reflect…",
@@ -149,7 +172,9 @@ describe("draw conformance — Reflect and Transform again", () => {
 
   it("a TYPED angle (payload): 45° swaps the axes about the centre", async () => {
     await h.host.selection.set([TRI]);
-    await commandFor(h, REFLECT_HORIZONTAL_COMMAND_ID).handler(undefined, { angleDeg: 45 });
+    await commandFor(h, REFLECT_HORIZONTAL_COMMAND_ID).handler(undefined, {
+      angleDeg: 45,
+    });
     // Across the 45° line through (150, 130): (x, y) → (y + 20, x − 20).
     near(await pageAnchors(h, TRI), [
       [120, 80],
@@ -180,7 +205,11 @@ describe("draw conformance — Reflect and Transform again", () => {
     const rot = affineRotate(30, [150, 130]);
     const set = await h.host.document.mutate({
       op: "setElementProperty",
-      args: { elementId: TRI, path: "frameTransform", value: { type: "transform", value: [...rot] } },
+      args: {
+        elementId: TRI,
+        path: "frameTransform",
+        value: { type: "transform", value: [...rot] },
+      },
     });
     expect(set.applied).toBe(true);
     const before = await pageAnchors(h, TRI);
@@ -207,7 +236,10 @@ describe("draw conformance — Reflect and Transform again", () => {
   });
 
   it("a GROUP moves through setGroupTransform and its members follow", async () => {
-    const made = await h.host.document.mutate({ op: "createGroup", args: { memberIds: [TRI, SQ] } });
+    const made = await h.host.document.mutate({
+      op: "createGroup",
+      args: { memberIds: [TRI, SQ] },
+    });
     expect(made.applied).toBe(true);
     const group = (made as { createdId: ElementId }).createdId;
     await h.host.selection.set([group]);
@@ -240,17 +272,29 @@ describe("draw conformance — Reflect and Transform again", () => {
     const geometry = await h.host.document.elementGeometry([group]);
     expect(geometry.length).toBeLessThanOrEqual(1);
     for (const g of geometry) expect(g.id).toEqual(group);
-    const stored = (await h.host.document.elementProperties(group))?.entries.find(
-      (e) => e.path === "frameTransform",
-    )?.value;
-    const G = (stored?.type === "transform" ? (stored.value ?? null) : null) as Affine | null;
+    const stored = (
+      await h.host.document.elementProperties(group)
+    )?.entries.find((e) => e.path === "frameTransform")?.value;
+    const G = (
+      stored?.type === "transform" ? (stored.value ?? null) : null
+    ) as Affine | null;
     const done = await applyReflect(spy, 90);
     expect(done.applied).toBe(true);
-    const ops = (sent[0] as { args: { ops: { op: string; args: { groupId?: string; transform?: number[] } }[] } })
-      .args.ops;
+    const ops = (
+      sent[0] as {
+        args: {
+          ops: {
+            op: string;
+            args: { groupId?: string; transform?: number[] };
+          }[];
+        };
+      }
+    ).args.ops;
     expect(ops.map((o) => o.op)).toEqual(["setGroupTransform"]);
     expect(ops[0]!.args.groupId).toBe(String(group.id));
-    expect(ops[0]!.args.transform).toEqual([...composeAffine(affineReflect(90, [220, 130]), G ?? [1, 0, 0, 1, 0, 0])]);
+    expect(ops[0]!.args.transform).toEqual([
+      ...composeAffine(affineReflect(90, [220, 130]), G ?? [1, 0, 0, 1, 0, 0]),
+    ]);
     // Group spans x 100..340: centre 220, x → 440 − x.
     near((await pageAnchors(h, SQ)).slice(0, 1), [[140, 100]]);
     near((await pageAnchors(h, TRI)).slice(0, 1), [[340, 100]]);
@@ -261,7 +305,11 @@ describe("draw conformance — Reflect and Transform again", () => {
   it("TRANSFORM AGAIN repeats the last reflection about the NEW selection's centre", async () => {
     await h.host.selection.set([TRI]);
     await applyReflect(h.host, 90);
-    expect(lastSelectionTransform()).toEqual({ kind: "reflect", angleDeg: 90, copy: false });
+    expect(lastSelectionTransform()).toEqual({
+      kind: "reflect",
+      angleDeg: 90,
+      copy: false,
+    });
     await h.host.selection.set([SQ]);
     const beforeTri = await pageAnchors(h, TRI);
     await commandFor(h, TRANSFORM_AGAIN_COMMAND_ID).handler(undefined);
@@ -287,7 +335,9 @@ describe("draw conformance — Reflect and Transform again", () => {
   it("COPY (0.65): the original stays, its mirror image appears, in ONE batch and ONE undo step", async () => {
     const leafKeys = async () => {
       const out: string[] = [];
-      const walk = (nodes: { id?: ElementId | null; children?: unknown[] }[]) => {
+      const walk = (
+        nodes: { id?: ElementId | null; children?: unknown[] }[],
+      ) => {
         for (const n of nodes) {
           if (n.children?.length) walk(n.children as never);
           else if (n.id) out.push(`${n.id.kind}:${String(n.id.id)}`);
@@ -302,20 +352,34 @@ describe("draw conformance — Reflect and Transform again", () => {
     const { host, work } = countingHost(h.host);
     const done = await applyReflect(host, 90, true);
     expect(done.applied).toBe(true);
-    expect(work.mutations.map((m) => m.op)).toEqual(["mediaPagedDrawOpProbe", "batch"]);
+    expect(work.mutations.map((m) => m.op)).toEqual([
+      "mediaPagedDrawOpProbe",
+      "batch",
+    ]);
     const keysAfter = await leafKeys();
     const added = keysAfter.filter((k) => !keysBefore.includes(k));
     expect(added).toHaveLength(1);
     // One of the two is where the triangle was, the other is mirrored
     // about the vertical axis through the selection's centre (x = 150).
-    const copy = { kind: "polygon", id: added[0]!.slice("polygon:".length) } as ElementId;
+    const copy = {
+      kind: "polygon",
+      id: added[0]!.slice("polygon:".length),
+    } as ElementId;
     const shapes = [await pageAnchors(h, TRI), await pageAnchors(h, copy)];
     const mirrored = before.map(([x, y]) => [300 - x, y] as [number, number]);
     const isAt = (got: [number, number][], want: [number, number][]) =>
-      got.every((p, i) => Math.abs(p[0] - want[i]![0]) < 1e-3 && Math.abs(p[1] - want[i]![1]) < 1e-3);
+      got.every(
+        (p, i) =>
+          Math.abs(p[0] - want[i]![0]) < 1e-3 &&
+          Math.abs(p[1] - want[i]![1]) < 1e-3,
+      );
     expect(shapes.filter((s) => isAt(s, before))).toHaveLength(1);
     expect(shapes.filter((s) => isAt(s, mirrored))).toHaveLength(1);
-    expect(lastSelectionTransform()).toEqual({ kind: "reflect", angleDeg: 90, copy: true });
+    expect(lastSelectionTransform()).toEqual({
+      kind: "reflect",
+      angleDeg: 90,
+      copy: true,
+    });
     await h.host.document.undo();
     expect(await leafKeys()).toEqual(keysBefore);
     near(await pageAnchors(h, TRI), before);
@@ -326,14 +390,20 @@ describe("draw conformance — Reflect and Transform again", () => {
     // engine's ops, and this one leaves `duplicateElements` out.
     const old = new Proxy(h.host, {
       get(obj, prop, receiver) {
-        if (prop !== "document") return Reflect.get(obj, prop, receiver) as unknown;
+        if (prop !== "document")
+          return Reflect.get(obj, prop, receiver) as unknown;
         return new Proxy(obj.document, {
           get(doc, key, r) {
             if (key !== "mutate") return Reflect.get(doc, key, r) as unknown;
             return async (m: { op: string }) => {
               const out = await doc.mutate(m as never);
               if (m.op !== "mediaPagedDrawOpProbe") return out;
-              return JSON.parse(JSON.stringify(out).replace(/`duplicateElements`, ?|duplicateElements, ?/g, ""));
+              return JSON.parse(
+                JSON.stringify(out).replace(
+                  /`duplicateElements`, ?|duplicateElements, ?/g,
+                  "",
+                ),
+              );
             };
           },
         });
@@ -343,7 +413,11 @@ describe("draw conformance — Reflect and Transform again", () => {
     const before = await pageAnchors(h, TRI);
     const { host, work } = countingHost(old);
     const done = await applyReflect(host, 90, true);
-    expect(done).toEqual({ applied: false, targets: [], refusal: COPY_UNAVAILABLE_NOTE });
+    expect(done).toEqual({
+      applied: false,
+      targets: [],
+      refusal: COPY_UNAVAILABLE_NOTE,
+    });
     expect(work.mutations.map((m) => m.op)).toEqual(["mediaPagedDrawOpProbe"]);
     near(await pageAnchors(h, TRI), before);
     expect(lastSelectionTransform()).toBeNull();
@@ -353,7 +427,12 @@ describe("draw conformance — Reflect and Transform again", () => {
     const batch = transformBatchFor(
       [
         { id: TRI, matrix: null, box: [100, 100, 160, 200], group: false },
-        { id: { kind: "group", id: "g1" } as ElementId, matrix: null, box: [0, 0, 1, 1], group: true },
+        {
+          id: { kind: "group", id: "g1" } as ElementId,
+          matrix: null,
+          box: [0, 0, 1, 1],
+          group: true,
+        },
       ],
       [-1, 0, 0, 1, 300, 0],
       true,

@@ -564,7 +564,8 @@ async function carrierPaint(
     for (const e of props?.entries ?? []) {
       const v = e.value;
       if (!v) continue;
-      if (e.path === "frameFillColor" && v.type === "colorRef") out.fill = v.value;
+      if (e.path === "frameFillColor" && v.type === "colorRef")
+        out.fill = v.value;
       else if (e.path === "frameStrokeColor" && v.type === "colorRef") {
         out.stroke = v.value;
       } else if (e.path === "frameStrokeWeight" && v.type === "length") {
@@ -636,7 +637,9 @@ export async function bakeAppearance(
   const stack = appearanceOf(prev);
   const layers = appearanceBakeLayers(stack);
   if (layers.length === 0) {
-    host.log.debug(`${label}: nothing to bake (empty appearance stack) — no-op`);
+    host.log.debug(
+      `${label}: nothing to bake (empty appearance stack) — no-op`,
+    );
     return [];
   }
   if (appearanceBakeOf(prev)) {
@@ -673,7 +676,9 @@ export async function bakeAppearance(
   // What the batch minted, in mint order — which is insertion order,
   // which is paint order. Off the engine's reply, not a tree diff
   // (`commands/minted.ts`).
-  const created = mintedLeaves(inserted).filter((e) => typeof e.id === "string");
+  const created = mintedLeaves(inserted).filter(
+    (e) => typeof e.id === "string",
+  );
   if (created.length !== layers.length) {
     host.log.warn(
       `${label}: expected ${layers.length} derived layers, found ` +

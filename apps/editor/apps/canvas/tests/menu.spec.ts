@@ -128,9 +128,7 @@ test.describe("Phase 4 — menu via commands", () => {
       .locator('nav[aria-label="Main menu"]')
       .getByRole("button", { name: "File" })
       .click();
-    await expect(
-      page.getByRole("menuitem", { name: "Open…" }),
-    ).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Open…" })).toBeVisible();
   });
 
   test("AC-MENU-U11 — the Window menu is grouped into category sections @feat:editor-shell.menus @level:happy", async ({
@@ -147,15 +145,25 @@ test.describe("Phase 4 — menu via commands", () => {
     const menu = page.getByRole("menu").first();
     await expect(menu).toBeVisible();
     // Sections are headed, and separated.
-    await expect(menu.locator('[data-menu-group-label="Workspace"]')).toBeVisible();
-    await expect(menu.locator('[data-menu-group-label="Panels"]')).toBeVisible();
-    await expect.poll(() => menu.locator('[role="separator"]').count()).toBeGreaterThanOrEqual(1);
+    await expect(
+      menu.locator('[data-menu-group-label="Workspace"]'),
+    ).toBeVisible();
+    await expect(
+      menu.locator('[data-menu-group-label="Panels"]'),
+    ).toBeVisible();
+    await expect
+      .poll(() => menu.locator('[role="separator"]').count())
+      .toBeGreaterThanOrEqual(1);
     // Each category is a submenu holding its panels.
     await page.locator('[data-menu-submenu="Structure"]').hover();
-    await expect(page.getByRole("menuitem", { name: "Links", exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("menuitem", { name: "Links", exact: true }),
+    ).toBeVisible();
     // Moving to the next category swaps the open submenu.
     await page.locator('[data-menu-submenu="Styles"]').click();
-    await expect(page.getByRole("menuitem", { name: "Swatches", exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("menuitem", { name: "Swatches", exact: true }),
+    ).toBeVisible();
   });
 });
 
@@ -184,13 +192,17 @@ test.describe("ED-13 — plugin submenus", () => {
     await page.locator('[data-menu-trigger="Plugins"]').click();
     const plugins = await page
       .locator('[role="menu"] [data-menu-submenu]')
-      .evaluateAll((els) => els.map((e) => e.getAttribute("data-menu-submenu")!));
+      .evaluateAll((els) =>
+        els.map((e) => e.getAttribute("data-menu-submenu")!),
+      );
     expect(plugins.length, "plugins have submenus").toBeGreaterThan(2);
 
     const clashes: string[] = [];
     for (const name of plugins) {
       await page.keyboard.press("ArrowDown");
-      const trigger = page.locator(`[role="menu"] [data-menu-submenu="${name}"]`).first();
+      const trigger = page
+        .locator(`[role="menu"] [data-menu-submenu="${name}"]`)
+        .first();
       await expect(trigger).toBeFocused();
       await page.keyboard.press("ArrowRight");
       await expect(trigger).toHaveAttribute("data-state", "open");
@@ -227,10 +239,14 @@ test.describe("ED-13 — plugin submenus", () => {
 // left. Several items of one kind keep that kind's menu; mixed kinds
 // show none.
 test.describe("ED-19 — context menus follow a multi-selection", () => {
-  async function contextMenus(page: import("@playwright/test").Page): Promise<string[]> {
+  async function contextMenus(
+    page: import("@playwright/test").Page,
+  ): Promise<string[]> {
     return page
       .locator('[data-menu-trigger][data-menu-context="true"]')
-      .evaluateAll((els) => els.map((e) => e.getAttribute("data-menu-trigger")!));
+      .evaluateAll((els) =>
+        els.map((e) => e.getAttribute("data-menu-trigger")!),
+      );
   }
 
   test("AC-MENU-ED19-1 — two paths keep Draw on the bar; a path and an oval do not @feat:editor-shell.menus @level:edge", async ({
@@ -239,8 +255,18 @@ test.describe("ED-19 — context menus follow a multi-selection", () => {
     const designer = new Designer(page);
     await designer.open();
     await designer.newDocument();
-    const a = await designer.drawRectangle({ x0: 60, y0: 60, x1: 160, y1: 160 });
-    const b = await designer.drawRectangle({ x0: 200, y0: 60, x1: 300, y1: 160 });
+    const a = await designer.drawRectangle({
+      x0: 60,
+      y0: 60,
+      x1: 160,
+      y1: 160,
+    });
+    const b = await designer.drawRectangle({
+      x0: 200,
+      y0: 60,
+      x1: 300,
+      y1: 160,
+    });
     await designer.selectElement("rectangle", a);
     await expect.poll(() => contextMenus(page)).toContain("Draw");
 
@@ -267,12 +293,17 @@ test.describe("ED-19 — context menus follow a multi-selection", () => {
     await designer.newDocument();
     await designer.runCommand("media.paged.web.command.insertWebFrame");
     await designer.runCommand("media.paged.web.command.insertWebFrame");
-    const frames = [...(await treeIds(page, "textFrame")), ...(await treeIds(page, "rectangle"))];
+    const frames = [
+      ...(await treeIds(page, "textFrame")),
+      ...(await treeIds(page, "rectangle")),
+    ];
     expect(frames.length, "two web frames").toBe(2);
     await selectElements(page, frames);
     await expect.poll(() => contextMenus(page)).toContain("Web");
     await page.locator('[data-menu-trigger="Web"]').click();
-    const thread = page.getByRole("menuitem", { name: /^Thread flow into frames/ });
+    const thread = page.getByRole("menuitem", {
+      name: /^Thread flow into frames/,
+    });
     await expect(thread).toBeVisible();
     await expect(thread).not.toHaveAttribute("data-disabled", /.*/);
   });

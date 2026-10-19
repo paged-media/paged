@@ -22,13 +22,28 @@ export function RankLookupSection({
     <>
       <div style={sectionTitle}>Median / Maximum / Minimum</div>
       <div style={row}>
-        <button type="button" data-image-median disabled={off} onClick={() => void session.applyMedian()}>
+        <button
+          type="button"
+          data-image-median
+          disabled={off}
+          onClick={() => void session.applyMedian()}
+        >
           Median
         </button>
-        <button type="button" data-image-maximum disabled={off} onClick={() => void session.applyMorph("max")}>
+        <button
+          type="button"
+          data-image-maximum
+          disabled={off}
+          onClick={() => void session.applyMorph("max")}
+        >
           Maximum
         </button>
-        <button type="button" data-image-minimum disabled={off} onClick={() => void session.applyMorph("min")}>
+        <button
+          type="button"
+          data-image-minimum
+          disabled={off}
+          onClick={() => void session.applyMorph("min")}
+        >
           Minimum
         </button>
       </div>
@@ -49,7 +64,8 @@ export function RankLookupSection({
       </div>
       <div style={note}>
         Median, Maximum and Minimum work on a 3×3 neighbourhood. A lookup table
-        is applied at 9×9×9 lattice points (larger tables are resampled to that).
+        is applied at 9×9×9 lattice points (larger tables are resampled to
+        that).
       </div>
     </>
   );

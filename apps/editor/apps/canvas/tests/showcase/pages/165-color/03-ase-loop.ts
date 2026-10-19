@@ -150,7 +150,9 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   for (const [i, ink] of INKS.entries()) {
     expect(returned[i].selfId).not.toBe(ink.selfId);
   }
-  const loopGroup = (await groupList(doc)).find((g) => g.name === "Annual Loop");
+  const loopGroup = (await groupList(doc)).find(
+    (g) => g.name === "Annual Loop",
+  );
   expect(loopGroup?.members ?? []).toHaveLength(INKS.length);
   // Measured, not remembered: did the SPOT flag survive the trip? The
   // importer maps an ASE spot entry to Model=Spot; the collection's
@@ -158,37 +160,45 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const seaSpot = /spot/i.test(returned[2].kind);
 
   // ── the page ─────────────────────────────────────────────────────
-  const head = await proseFrame(ctx, pg, [48, 58, 480, 90], [
-    { text: "There and back — the .ase loop", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    pg,
+    [48, 58, 480, 90],
+    [{ text: "There and back — the .ase loop", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
-  const intro = await proseFrame(ctx, pg, [48, 96, 480, 252], [
-    {
-      text:
-        "Three inks were minted for this page and gathered into a group " +
-        "called Annual Loop. The group then left the document: the export " +
-        `door serialised it to ${ase.length} bytes of Adobe Swatch ` +
-        `Exchange, magic ASEF, version ${aseVersion} — the same file a ` +
-        "designer would hand to a colleague on another tool. Then all " +
-        "three swatches and the group were deleted; for a moment the " +
-        "palette genuinely did not hold them.",
-      style: STYLE.body,
-    },
-    {
-      text:
-        "importSwatchLibrary read those bytes back. The chips below are " +
-        "painted from the REIMPORTED swatches, resolved by name — which " +
-        "is only possible because the originals are gone. Identity does " +
-        "not ride in an .ase: each ink returned under a fresh Color/u " +
-        "id. The names, the colour spaces, the channel values and the " +
-        "group all did" +
-        (seaSpot
-          ? ", and Ledger Sea came back still a spot."
-          : "; the spot flag did not survive this exporter, and the margin records it."),
-      style: STYLE.body,
-    },
-  ]);
+  const intro = await proseFrame(
+    ctx,
+    pg,
+    [48, 96, 480, 252],
+    [
+      {
+        text:
+          "Three inks were minted for this page and gathered into a group " +
+          "called Annual Loop. The group then left the document: the export " +
+          `door serialised it to ${ase.length} bytes of Adobe Swatch ` +
+          `Exchange, magic ASEF, version ${aseVersion} — the same file a ` +
+          "designer would hand to a colleague on another tool. Then all " +
+          "three swatches and the group were deleted; for a moment the " +
+          "palette genuinely did not hold them.",
+        style: STYLE.body,
+      },
+      {
+        text:
+          "importSwatchLibrary read those bytes back. The chips below are " +
+          "painted from the REIMPORTED swatches, resolved by name — which " +
+          "is only possible because the originals are gone. Identity does " +
+          "not ride in an .ase: each ink returned under a fresh Color/u " +
+          "id. The names, the colour spaces, the channel values and the " +
+          "group all did" +
+          (seaSpot
+            ? ", and Ledger Sea came back still a spot."
+            : "; the spot flag did not survive this exporter, and the margin records it."),
+        style: STYLE.body,
+      },
+    ],
+  );
   elements.push(intro.frameId);
 
   let y = 268;
@@ -206,15 +216,20 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     y += 36;
   }
 
-  const outro = await proseFrame(ctx, pg, [48, y + 8, 480, y + 74], [
-    {
-      text:
-        "The loop is the point: a palette is not locked in this file " +
-        "format. What leaves as an interchange library comes back as " +
-        "first-class document swatches, grouped as they left.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const outro = await proseFrame(
+    ctx,
+    pg,
+    [48, y + 8, 480, y + 74],
+    [
+      {
+        text:
+          "The loop is the point: a palette is not locked in this file " +
+          "format. What leaves as an interchange library comes back as " +
+          "first-class document swatches, grouped as they left.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(outro.frameId);
 
   await marginNote(

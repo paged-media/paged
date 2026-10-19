@@ -33,7 +33,7 @@ import type { PageContext, PageReport } from "../../types";
 /** 1-based physical page → the folio label the sections produce. */
 function folioOf(physical: number): string {
   if (physical <= 10) {
-    const roman = ["i","ii","iii","iv","v","vi","vii","viii","ix","x"];
+    const roman = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"];
     return roman[physical - 1];
   }
   if (physical <= 126) return String(physical - 10);
@@ -52,9 +52,17 @@ export async function build(ctx: PageContext): Promise<PageReport> {
 
   for (const col of columns) {
     const box = contentBox(col.page);
-    const heading = await proseFrame(ctx, col.page, [box[0], box[1], box[2], box[1] + 52], [
-      { text: col.page === p(5) ? "Contents" : "Contents, continued", style: STYLE.head1 },
-    ]);
+    const heading = await proseFrame(
+      ctx,
+      col.page,
+      [box[0], box[1], box[2], box[1] + 52],
+      [
+        {
+          text: col.page === p(5) ? "Contents" : "Contents, continued",
+          style: STYLE.head1,
+        },
+      ],
+    );
     elements.push(heading.frameId);
 
     const paras = col.entries.map((ch) => ({

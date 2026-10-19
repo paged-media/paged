@@ -108,21 +108,29 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const elements: string[] = [];
   const covers: string[] = [];
 
-  const head = await proseFrame(ctx, pg, [60, 54, 492, 84], [
-    { text: "Four symbologies, one order book", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, pg, [60, 90, 492, 186], [
-    {
-      text:
-        "Retail wants EAN-13 and UPC-A, logistics wants Code-128, screens " +
-        "want QR — the order book carries a column for each, with real " +
-        "check digits. The engine encodes all four clean-room in Rust and " +
-        "lowers each symbol as native path geometry scaled to its bound " +
-        "frame: filled rectangles on the page, not an image in a frame. " +
-        "Print them at any size; they were never pixels.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    pg,
+    [60, 54, 492, 84],
+    [{ text: "Four symbologies, one order book", style: STYLE.head1 }],
+  );
+  const intro = await proseFrame(
+    ctx,
+    pg,
+    [60, 90, 492, 186],
+    [
+      {
+        text:
+          "Retail wants EAN-13 and UPC-A, logistics wants Code-128, screens " +
+          "want QR — the order book carries a column for each, with real " +
+          "check digits. The engine encodes all four clean-room in Rust and " +
+          "lowers each symbol as native path geometry scaled to its bound " +
+          "frame: filled rectangles on the page, not an image in a frame. " +
+          "Print them at any size; they were never pixels.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   // ── furniture: bound frames + titles + payload captions ───────────
@@ -326,9 +334,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     elements.push(payload.frameId);
   }
 
-  const verdictFrame = await proseFrame(ctx, pg, [60, 470, 492, 540], [
-    { text: verdict, style: STYLE.bodySmall },
-  ]);
+  const verdictFrame = await proseFrame(
+    ctx,
+    pg,
+    [60, 470, 492, 540],
+    [{ text: verdict, style: STYLE.bodySmall }],
+  );
   elements.push(verdictFrame.frameId);
 
   elements.push(

@@ -201,19 +201,19 @@ wasm glue fetches `wasm/trace_js_bg.wasm` by URL.
 
 ## Host doors
 
-| Door | What the plugin uses it for |
-|---|---|
-| `contributeTool`, `contributeSchemaPanel`, `contributeEditContext` (plugin-sdk) | tools with their activation commands and shortcuts; the Draw settings panel; the `vectorGraphic` context |
-| `host.contribute.command`, `.panel`, `.menu`, `.importer`, `.exporter`, `.bindingProvider` | commands, React panels, menu entries, SVG in and out, the Layers provider |
-| `host.document.mutate` | every document change |
+| Door                                                                                                                       | What the plugin uses it for                                                                                                                            |
+| -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `contributeTool`, `contributeSchemaPanel`, `contributeEditContext` (plugin-sdk)                                            | tools with their activation commands and shortcuts; the Draw settings panel; the `vectorGraphic` context                                               |
+| `host.contribute.command`, `.panel`, `.menu`, `.importer`, `.exporter`, `.bindingProvider`                                 | commands, React panels, menu entries, SVG in and out, the Layers provider                                                                              |
+| `host.document.mutate`                                                                                                     | every document change                                                                                                                                  |
 | `host.document.pathAnchors`, `elementGeometry`, `elementProperties`, `tree`, `hitTest`, `collection`, `meta`, `frameChain` | reads: anchors, bounds and transforms, typed properties, the scene tree, hit tests, pages, swatches and stories, the active page and creation defaults |
-| `host.document.planarRegions` | the faces of overlapping paths, for Shape Builder and Live Paint |
-| `host.document.getMetadata` / `setMetadata`, `host.parts.read` / `write` | the metadata envelope and the container parts |
-| `host.document.onDidChange`, `host.selection.get` / `set` / `onDidChange` | panels and bindings follow the selection and the document |
-| `host.overlay.setToolPreview`, `host.viewport.pxToPt` | tool previews (one shape at a time); screen-constant pick tolerances |
-| `host.bindings.publish` | panel gates, the measure readout, status and refusal messages |
-| `host.assets.getPlacedImage` | the bytes of a placed image, for the trace |
-| `host.supports`, `host.log` | probing optional doors; logging |
+| `host.document.planarRegions`                                                                                              | the faces of overlapping paths, for Shape Builder and Live Paint                                                                                       |
+| `host.document.getMetadata` / `setMetadata`, `host.parts.read` / `write`                                                   | the metadata envelope and the container parts                                                                                                          |
+| `host.document.onDidChange`, `host.selection.get` / `set` / `onDidChange`                                                  | panels and bindings follow the selection and the document                                                                                              |
+| `host.overlay.setToolPreview`, `host.viewport.pxToPt`                                                                      | tool previews (one shape at a time); screen-constant pick tolerances                                                                                   |
+| `host.bindings.publish`                                                                                                    | panel gates, the measure readout, status and refusal messages                                                                                          |
+| `host.assets.getPlacedImage`                                                                                               | the bytes of a placed image, for the trace                                                                                                             |
+| `host.supports`, `host.log`                                                                                                | probing optional doors; logging                                                                                                                        |
 
 One call bypasses these doors: the Measure tool's snap to the nearest path point sends the
 raw request `requestNearestPathPoint` through `host.editor.client.send` (`handlers/measure.ts`).
@@ -232,7 +232,7 @@ for the C-15 handles and the B-18 nesting pair).
 
 - The root `build` script is the typecheck. No package builds on its own: all are private
   workspace packages (PM-0008), and the editor builds them from source.
-  `.github/workflows/draw-publish.yml` stays, dispatch-only, until the npm deprecation.
+  The dispatch-only `draw-publish.yml` was deleted with the npm deprecation (PM-0008).
 - `scripts/build-wasm.sh` builds `trace-js` in release mode, checks that the installed
   `wasm-bindgen` CLI matches `Cargo.lock`, runs `wasm-bindgen --target web` and, if
   present, `wasm-opt -Oz`, and writes `packages/draw-bundle/wasm/`. It is needed only when

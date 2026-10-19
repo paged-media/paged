@@ -269,8 +269,8 @@ test.describe("E2E numbering-list (W2.10) ops", () => {
           ).__canvas;
           const p = await c.client.elementProperties(id);
           return (
-            (p?.entries.find((e) => e.path === "paragraphListType")
-              ?.value as { value: string } | undefined) ?? null
+            (p?.entries.find((e) => e.path === "paragraphListType")?.value as
+              { value: string } | undefined) ?? null
           );
         }, range);
         expect(lt == null || lt.value === "").toBe(true);

@@ -2,7 +2,11 @@
 // save-back merges them back into one body.
 import { describe, expect, it } from "bun:test";
 
-import { mergeSectionContents, pouredParagraphCount, sectionBlocks } from "../src/index.js";
+import {
+  mergeSectionContents,
+  pouredParagraphCount,
+  sectionBlocks,
+} from "../src/index.js";
 import type { LoweredBlock, LoweredDoc, LoweredSection } from "../src/index.js";
 
 const section = (firstBlock: number, story?: number): LoweredSection => ({
@@ -18,7 +22,11 @@ const section = (firstBlock: number, story?: number): LoweredSection => ({
 });
 
 const para = (text: string): LoweredBlock =>
-  ({ kind: "paragraph", style: "p", runs: [{ text }] }) as unknown as LoweredBlock;
+  ({
+    kind: "paragraph",
+    style: "p",
+    runs: [{ text }],
+  }) as unknown as LoweredBlock;
 
 function doc(blocks: LoweredBlock[], sections?: LoweredSection[]): LoweredDoc {
   return {
@@ -43,7 +51,13 @@ describe("sectionBlocks", () => {
     // section 2 opens story 1, sections 3+4 share story 2.
     const blocks = ["a", "b", "c", "d", "e", "f", "g", "h"].map(para);
     const groups = sectionBlocks(
-      doc(blocks, [section(0, 0), section(2, 0), section(3, 1), section(5, 2), section(6, 2)]),
+      doc(blocks, [
+        section(0, 0),
+        section(2, 0),
+        section(3, 1),
+        section(5, 2),
+        section(6, 2),
+      ]),
     );
     expect(groups.map((g) => g.length)).toEqual([3, 2, 3]);
     expect(groups.flat()).toEqual(blocks);
@@ -51,7 +65,9 @@ describe("sectionBlocks", () => {
 
   it("keeps every section its own story when the lowering has no story index", () => {
     const blocks = ["a", "b", "c"].map(para);
-    expect(sectionBlocks(doc(blocks, [section(0), section(1), section(2)])).length).toBe(3);
+    expect(
+      sectionBlocks(doc(blocks, [section(0), section(1), section(2)])).length,
+    ).toBe(3);
   });
 
   it("treats a lowering without sections as one section", () => {
@@ -71,11 +87,9 @@ describe("mergeSectionContents", () => {
       ],
       [2, 1],
     );
-    expect(merged.paragraphs.map((x) => x.runs.map((r) => r.text).join(""))).toEqual([
-      "one",
-      "two",
-      "three",
-    ]);
+    expect(
+      merged.paragraphs.map((x) => x.runs.map((r) => r.text).join("")),
+    ).toEqual(["one", "two", "three"]);
     expect(merged.selfId).toBe("s0");
   });
 
@@ -96,17 +110,16 @@ describe("mergeSectionContents", () => {
       ],
       counts,
     );
-    expect(merged.paragraphs.map((x) => x.runs.map((r) => r.text).join(""))).toEqual([
-      "a",
-      "b",
-      "c",
-      "d",
-      "e",
-    ]);
+    expect(
+      merged.paragraphs.map((x) => x.runs.map((r) => r.text).join("")),
+    ).toEqual(["a", "b", "c", "d", "e"]);
   });
 
   it("keeps text a user added at a section's end", () => {
-    const merged = mergeSectionContents([{ paragraphs: [p("x"), p("added")] }], [1]);
+    const merged = mergeSectionContents(
+      [{ paragraphs: [p("x"), p("added")] }],
+      [1],
+    );
     expect(merged.paragraphs.length).toBe(2);
   });
 });

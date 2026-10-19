@@ -431,7 +431,9 @@ export function ExportInspectorPanel(_props: PanelProps) {
                     placeholder="1-3, 5"
                     value={image.range}
                     disabled={!loaded}
-                    onChange={(e) => setImageSettings({ range: e.target.value })}
+                    onChange={(e) =>
+                      setImageSettings({ range: e.target.value })
+                    }
                   />
                 </SettingRow>
               ) : null}

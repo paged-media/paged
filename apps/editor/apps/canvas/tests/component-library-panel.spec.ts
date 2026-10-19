@@ -49,8 +49,8 @@ test.describe("Component library panel (honest stub)", () => {
     await expect(stub).toContainText("reusable components");
 
     // No fake library grid and no dead interactive chrome.
-    await expect(
-      panel.locator("button, input, select, textarea"),
-    ).toHaveCount(0);
+    await expect(panel.locator("button, input, select, textarea")).toHaveCount(
+      0,
+    );
   });
 });

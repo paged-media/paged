@@ -191,7 +191,11 @@ export function styleProps(style: LoweredStyle): StyleProp[] {
         : style.italic
           ? "Italic"
           : null;
-  if (face) props.push({ path: "characterFontStyle", value: { type: "text", value: face } });
+  if (face)
+    props.push({
+      path: "characterFontStyle",
+      value: { type: "text", value: face },
+    });
 
   if (style.fontName != null)
     props.push({
@@ -206,7 +210,10 @@ export function styleProps(style: LoweredStyle): StyleProp[] {
     });
 
   if (style.underline)
-    props.push({ path: "characterUnderline", value: { type: "bool", value: true } });
+    props.push({
+      path: "characterUnderline",
+      value: { type: "bool", value: true },
+    });
 
   // Cell TEXT colour → character fill (the glyph colour). Fill BACKGROUND is
   // a cell facet, handled separately (and blocked in this fallback lane).
@@ -257,7 +264,12 @@ export function cellTextSwatchOps(
 function blockedFacets(style: LoweredStyle): BlockedFacet[] {
   const out: BlockedFacet[] = [];
   if (style.fillRgb != null) out.push("fillBackground");
-  if (style.borderTop || style.borderRight || style.borderBottom || style.borderLeft)
+  if (
+    style.borderTop ||
+    style.borderRight ||
+    style.borderBottom ||
+    style.borderLeft
+  )
     out.push("border");
   return out;
 }

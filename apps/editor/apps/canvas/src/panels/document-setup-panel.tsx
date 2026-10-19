@@ -36,7 +36,11 @@
 
 import { useMemo, useState } from "react";
 
-import { CockpitPanelHeader, CockpitRow, useCollection } from "@paged-media/shell";
+import {
+  CockpitPanelHeader,
+  CockpitRow,
+  useCollection,
+} from "@paged-media/shell";
 import { formatAddress } from "@paged-media/plugin-sdk";
 import type { PageSummary } from "@paged-media/client";
 
@@ -89,7 +93,13 @@ const DOCUMENT_SECTIONS: readonly SectionSpec[] = [
   },
   {
     title: "Conditions",
-    fields: [{ path: "activeConditionSet", label: "Active set", collection: "conditionSets" }],
+    fields: [
+      {
+        path: "activeConditionSet",
+        label: "Active set",
+        collection: "conditionSets",
+      },
+    ],
   },
 ];
 
@@ -125,7 +135,11 @@ export function DocumentSetupPanel() {
   return (
     <div data-document-setup-panel="ready">
       <CockpitPanelHeader title="Document Setup" />
-      <SchemaSections targets={DOC_TARGETS} sections={DOCUMENT_SECTIONS} testId="doc" />
+      <SchemaSections
+        targets={DOC_TARGETS}
+        sections={DOCUMENT_SECTIONS}
+        testId="doc"
+      />
     </div>
   );
 }
@@ -147,7 +161,10 @@ export function MarginsColumnsPanel() {
     return [pageAddress(chosen)];
   }, [pages, chosen]);
   return (
-    <div data-margins-columns-panel={pages ? "ready" : "loading"} data-page-targets={targets.length}>
+    <div
+      data-margins-columns-panel={pages ? "ready" : "loading"}
+      data-page-targets={targets.length}
+    >
       <CockpitPanelHeader title="Margins and Columns" />
       <div className="px-3.5 pb-2">
         <CockpitRow label="Pages">
@@ -167,7 +184,12 @@ export function MarginsColumnsPanel() {
         </CockpitRow>
       </div>
       {targets.length > 0 && (
-        <SchemaSections key={targets.join(" ")} targets={targets} sections={PAGE_SECTIONS} testId="page" />
+        <SchemaSections
+          key={targets.join(" ")}
+          targets={targets}
+          sections={PAGE_SECTIONS}
+          testId="page"
+        />
       )}
     </div>
   );

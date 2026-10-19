@@ -244,7 +244,10 @@ export function ThreadingController() {
         const x1 = Math.max(doc[0], endDoc[0]) - landingRect.x;
         const y0 = Math.min(doc[1], endDoc[1]) - landingRect.y;
         const y1 = Math.max(doc[1], endDoc[1]) - landingRect.y;
-        if (x1 - x0 >= MIN_DRAGGED_FRAME_PT && y1 - y0 >= MIN_DRAGGED_FRAME_PT) {
+        if (
+          x1 - x0 >= MIN_DRAGGED_FRAME_PT &&
+          y1 - y0 >= MIN_DRAGGED_FRAME_PT
+        ) {
           await drawAndLink([y0, x0, y1, x1]);
           return;
         }
@@ -276,8 +279,12 @@ export function ThreadingController() {
       // the click and hang off the edge); on the pasteboard it stays
       // where it was put.
       if (!landingPage || !landingRect) return;
-      const w = hit ? Math.min(DEFAULT_FRAME_W, landingRect.w) : DEFAULT_FRAME_W;
-      const h = hit ? Math.min(DEFAULT_FRAME_H, landingRect.h) : DEFAULT_FRAME_H;
+      const w = hit
+        ? Math.min(DEFAULT_FRAME_W, landingRect.w)
+        : DEFAULT_FRAME_W;
+      const h = hit
+        ? Math.min(DEFAULT_FRAME_H, landingRect.h)
+        : DEFAULT_FRAME_H;
       let left = doc[0] - landingRect.x;
       let top = doc[1] - landingRect.y;
       if (hit) {
@@ -314,7 +321,8 @@ export function ThreadingController() {
     const previousPriority = root.style.getPropertyPriority("cursor");
     root.style.setProperty("cursor", "copy", "important");
     return () => {
-      if (previous) root.style.setProperty("cursor", previous, previousPriority);
+      if (previous)
+        root.style.setProperty("cursor", previous, previousPriority);
       else root.style.removeProperty("cursor");
     };
   }, [cursorLoaded]);
@@ -361,7 +369,10 @@ export function ThreadingController() {
         const page =
           pageForDoc(rects, pageIds, a[0], a[1]) ??
           (src.sourcePageId
-            ? { pageId: src.sourcePageId, rect: rects[pageIds.indexOf(src.sourcePageId)] }
+            ? {
+                pageId: src.sourcePageId,
+                rect: rects[pageIds.indexOf(src.sourcePageId)],
+              }
             : null);
         if (!page?.rect) return;
         setToolPreviewRef.current?.({
@@ -499,10 +510,18 @@ export function ThreadingController() {
         if (!props) continue;
         const next = props.entries.find((e) => e.path === "nextTextFrame");
         const prev = props.entries.find((e) => e.path === "previousTextFrame");
-        if (next?.value && next.value.type === "text" && isLinked(next.value.value)) {
+        if (
+          next?.value &&
+          next.value.type === "text" &&
+          isLinked(next.value.value)
+        ) {
           withNext.add(frameId);
         }
-        if (prev?.value && prev.value.type === "text" && isLinked(prev.value.value)) {
+        if (
+          prev?.value &&
+          prev.value.type === "text" &&
+          isLinked(prev.value.value)
+        ) {
           withPrev.add(frameId);
         }
       }

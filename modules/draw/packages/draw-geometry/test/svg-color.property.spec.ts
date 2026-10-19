@@ -26,11 +26,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { cmykToRgb, parseCssColor, rgbToHex, type Rgb } from "../src";
-import {
-  assertTrue,
-  fc,
-  real,
-} from "./property-kit";
+import { assertTrue, fc, real } from "./property-kit";
 
 const channel = fc.integer({ min: 0, max: 255 });
 const rgb: fc.Arbitrary<Rgb> = fc.tuple(channel, channel, channel);
@@ -51,7 +47,9 @@ const dressed = (s: fc.Arbitrary<string>): fc.Arbitrary<string> =>
     .map(
       ([text, upper, lead, trail]) =>
         lead +
-        [...text].map((ch, i) => (upper[i % upper.length] ? ch.toUpperCase() : ch)).join("") +
+        [...text]
+          .map((ch, i) => (upper[i % upper.length] ? ch.toUpperCase() : ch))
+          .join("") +
         trail,
     );
 
@@ -78,7 +76,8 @@ const KEYWORDS: Record<string, Rgb> = {
   orange: [255, 165, 0],
 };
 
-const clamp255 = (n: number): number => Math.max(0, Math.min(255, Math.round(n)));
+const clamp255 = (n: number): number =>
+  Math.max(0, Math.min(255, Math.round(n)));
 
 /** A well-formed answer: `null`, or three integers in 0..255. */
 function isWellFormed(value: unknown): boolean {
@@ -102,7 +101,9 @@ describe("svg-color — round trips (properties)", () => {
   it("parseCssColor → rgbToHex is the identity on canonical #rrggbb", () => {
     fc.assert(
       fc.property(
-        fc.array(hexDigit, { minLength: 6, maxLength: 6 }).map((d) => `#${d.join("")}`),
+        fc
+          .array(hexDigit, { minLength: 6, maxLength: 6 })
+          .map((d) => `#${d.join("")}`),
         (hex) => {
           const parsed = parseCssColor(hex);
           assertTrue(parsed !== null, `${hex} did not parse`);
@@ -118,7 +119,11 @@ describe("svg-color — round trips (properties)", () => {
       fc.property(loose, loose, loose, (r, g, b) => {
         const hex = rgbToHex([r, g, b]);
         assertTrue(/^#[0-9a-f]{6}$/.test(hex), `not a #rrggbb string: ${hex}`);
-        expect(parseCssColor(hex)).toEqual([clamp255(r), clamp255(g), clamp255(b)]);
+        expect(parseCssColor(hex)).toEqual([
+          clamp255(r),
+          clamp255(g),
+          clamp255(b),
+        ]);
       }),
     );
   });
@@ -193,7 +198,9 @@ describe("svg-color — round trips (properties)", () => {
     );
     fc.assert(
       fc.property(
-        sample.chain((plain) => fc.tuple(fc.constant(plain), dressed(fc.constant(plain)))),
+        sample.chain((plain) =>
+          fc.tuple(fc.constant(plain), dressed(fc.constant(plain))),
+        ),
         ([plain, noisy]) => {
           expect(parseCssColor(noisy)).toEqual(parseCssColor(plain));
         },
@@ -203,9 +210,12 @@ describe("svg-color — round trips (properties)", () => {
 
   it("`none`, `transparent` and blank are no paint", () => {
     fc.assert(
-      fc.property(dressed(fc.constantFrom("none", "transparent", "")), (text) => {
-        expect(parseCssColor(text)).toBeNull();
-      }),
+      fc.property(
+        dressed(fc.constantFrom("none", "transparent", "")),
+        (text) => {
+          expect(parseCssColor(text)).toBeNull();
+        },
+      ),
     );
   });
 });
@@ -224,19 +234,27 @@ describe("svg-color — cmykToRgb (properties)", () => {
 
   it("more ink is never lighter: every channel is monotone non-increasing", () => {
     fc.assert(
-      fc.property(ink, ink, ink, ink, ink, fc.integer({ min: 0, max: 3 }), (c, m, y, k, more, which) => {
-        const a: [number, number, number, number] = [c, m, y, k];
-        const b: [number, number, number, number] = [c, m, y, k];
-        b[which] = Math.max(a[which], more);
-        const lighter = cmykToRgb(...a);
-        const darker = cmykToRgb(...b);
-        for (let i = 0; i < 3; i++) {
-          assertTrue(
-            darker[i] <= lighter[i],
-            `channel ${i} got lighter (${lighter[i]} → ${darker[i]}) with more ink`,
-          );
-        }
-      }),
+      fc.property(
+        ink,
+        ink,
+        ink,
+        ink,
+        ink,
+        fc.integer({ min: 0, max: 3 }),
+        (c, m, y, k, more, which) => {
+          const a: [number, number, number, number] = [c, m, y, k];
+          const b: [number, number, number, number] = [c, m, y, k];
+          b[which] = Math.max(a[which], more);
+          const lighter = cmykToRgb(...a);
+          const darker = cmykToRgb(...b);
+          for (let i = 0; i < 3; i++) {
+            assertTrue(
+              darker[i] <= lighter[i],
+              `channel ${i} got lighter (${lighter[i]} → ${darker[i]}) with more ink`,
+            );
+          }
+        },
+      ),
     );
   });
 
@@ -366,13 +384,21 @@ describe("svg-color — DEFECTS in parseCssColor", () => {
   it("FIXED DEFECT (3): what it returns always formats as a #rrggbb string", () => {
     const parsed = parseCssColor("rgb(none 0 0)");
     // Either null (the contract) or a colour that formats.
-    expect(parsed === null || /^#[0-9a-f]{6}$/.test(rgbToHex(parsed))).toBe(true);
+    expect(parsed === null || /^#[0-9a-f]{6}$/.test(rgbToHex(parsed))).toBe(
+      true,
+    );
     expect(parsed).toBeNull();
   });
 
   it("FIXED DEFECT (4): an Object.prototype member name is not a colour keyword", () => {
     expect(parseCssColor("constructor")).toBeNull();
-    for (const name of ["valueOf", "toString", "hasOwnProperty", "isPrototypeOf", "toLocaleString"]) {
+    for (const name of [
+      "valueOf",
+      "toString",
+      "hasOwnProperty",
+      "isPrototypeOf",
+      "toLocaleString",
+    ]) {
       expect(parseCssColor(name)).toBeNull();
     }
   });
@@ -396,14 +422,18 @@ describe("svg-color — DEFECTS in parseCssColor", () => {
   it("FIXED DEFECT: property — for ANY string the answer is null or three integers in 0..255", () => {
     const hostile = fc.oneof(
       fc.string(),
-      fc.array(fc.constantFrom(...HEX_DIGITS, "g", "-", "+", " "), {
-        minLength: 6,
-        maxLength: 6,
-      }).map((c) => `#${c.join("")}`),
-      fc.array(fc.constantFrom("1", "2", "a", "none", "%", "-", "e"), {
-        minLength: 3,
-        maxLength: 4,
-      }).map((parts) => `rgb(${parts.join(", ")})`),
+      fc
+        .array(fc.constantFrom(...HEX_DIGITS, "g", "-", "+", " "), {
+          minLength: 6,
+          maxLength: 6,
+        })
+        .map((c) => `#${c.join("")}`),
+      fc
+        .array(fc.constantFrom("1", "2", "a", "none", "%", "-", "e"), {
+          minLength: 3,
+          maxLength: 4,
+        })
+        .map((parts) => `rgb(${parts.join(", ")})`),
       fc.constantFrom("constructor", "__proto__", "valueOf", "toString"),
     );
     fc.assert(

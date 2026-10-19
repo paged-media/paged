@@ -16,7 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The REPEAT OPTIONS panel, RENDERED (happy-dom) against the real engine:
 // behaviour first (empty state, records, buttons asserted on the
 // DOCUMENT), then its reload budgets as counts at the host doors — the
@@ -69,7 +68,6 @@ import {
 
 const PANEL = "[data-draw-repeat-panel]";
 
-
 /** Per-leaf `getMetadata` one link walk costs on this engine (RFI C-65:
  *  1 before tree rows carried metadata, 0 after), and what a walk over
  *  this file's 50 leaves therefore reads besides the tree. */
@@ -99,11 +97,9 @@ describe("Repeat options panel — rendered against the engine", () => {
       expect(panel.count("[data-draw-repeat-row]")).toBe(0);
       // Three make verbs, all waiting for a selection.
       const makes = panel.all("[data-draw-repeat-make]") as HTMLButtonElement[];
-      expect(makes.map((b) => b.getAttribute("data-draw-repeat-make"))).toEqual([
-        "radial",
-        "grid",
-        "mirror",
-      ]);
+      expect(makes.map((b) => b.getAttribute("data-draw-repeat-make"))).toEqual(
+        ["radial", "grid", "mirror"],
+      );
       expect(makes.every((b) => b.disabled)).toBe(true);
       expect(panel.get("[data-draw-repeat-note]").textContent).toBe(
         REPEAT_PANEL_NOTE,
@@ -175,12 +171,13 @@ describe("Repeat options panel — rendered against the engine", () => {
           r.instances.length,
         ]),
       ).toEqual([["rep-1", "grid", 2, 1, 1]]);
-      expect(repeatSourceOf(await h.host.document.getMetadata(poly("s0")))?.repeat).toBe(
-        "rep-1",
-      );
+      expect(
+        repeatSourceOf(await h.host.document.getMetadata(poly("s0")))?.repeat,
+      ).toBe("rep-1");
       const instance = library.repeats[0]!.instances[0]!;
       expect(
-        repeatInstanceOf(await h.host.document.getMetadata(poly(instance.id)))?.repeat,
+        repeatInstanceOf(await h.host.document.getMetadata(poly(instance.id)))
+          ?.repeat,
       ).toBe("rep-1");
       // ONE batch (the note's "ONE undo step"), and no refusal.
       expect(panel.work.mutations.map((m) => m.op)).toEqual(["batch"]);
@@ -214,20 +211,17 @@ describe("Repeat options panel — rendered against the engine", () => {
     // value). The form now follows the record (`useFollowedDraft`) and
     // takes its options only when the record, or what is saved for it,
     // changes.
-    it(
-      "typed options survive the selection change that a Make needs (one record in the library)",
-      async () => {
-        expect((await readRepeatLibrary(h.host)).repeats).toHaveLength(1);
-        const panel = await mountPanel(h, makeRepeatPanel);
-        const columns = () =>
-          panel.get<HTMLInputElement>('[data-draw-repeat-field="columns"]').value;
-        await drive(() => h.host.selection.set([]), panel.work);
-        panel.change('[data-draw-repeat-field="columns"]', "7");
-        expect(columns()).toBe("7");
-        await drive(() => h.host.selection.set([poly("s1")]), panel.work);
-        expect(columns()).toBe("7");
-      },
-    );
+    it("typed options survive the selection change that a Make needs (one record in the library)", async () => {
+      expect((await readRepeatLibrary(h.host)).repeats).toHaveLength(1);
+      const panel = await mountPanel(h, makeRepeatPanel);
+      const columns = () =>
+        panel.get<HTMLInputElement>('[data-draw-repeat-field="columns"]').value;
+      await drive(() => h.host.selection.set([]), panel.work);
+      panel.change('[data-draw-repeat-field="columns"]', "7");
+      expect(columns()).toBe("7");
+      await drive(() => h.host.selection.set([poly("s1")]), panel.work);
+      expect(columns()).toBe("7");
+    });
 
     it("Release removes the instances and the record, and keeps the source", async () => {
       const panel = await mountPanel(h, makeRepeatPanel);
@@ -235,7 +229,9 @@ describe("Repeat options panel — rendered against the engine", () => {
 
       expect((await readRepeatLibrary(h.host)).repeats).toEqual([]);
       expect(await leafIds(h)).toHaveLength(PRISTINE);
-      expect(repeatSourceOf(await h.host.document.getMetadata(poly("s0")))).toBeNull();
+      expect(
+        repeatSourceOf(await h.host.document.getMetadata(poly("s0"))),
+      ).toBeNull();
       expect(panel.count("[data-draw-repeat-row]")).toBe(0);
     });
 
@@ -247,21 +243,21 @@ describe("Repeat options panel — rendered against the engine", () => {
     // or the REPEAT TOOL left an open panel showing no repeat (0 rows).
     // `writeRepeatLibrary` now announces the write, and the panel reloads
     // on that.
-    it(
-      "an OPEN panel shows a repeat built by the COMMAND, not only by its own button",
-      async () => {
-        await h.host.selection.set([poly("s2")]);
-        const panel = await mountPanel(h, makeRepeatPanel);
-        await drive(async () => {
-          const made = await applyMakeRepeat(h.host, "grid", { columns: 2, rows: 1 });
-          if (made.length !== 1) throw new Error("the repeat was not built");
-        }, panel.work);
-        // The document has it…
-        expect((await readRepeatLibrary(h.host)).repeats).toHaveLength(1);
-        // …and so does the panel.
-        expect(panel.count("[data-draw-repeat-row]")).toBe(1);
-      },
-    );
+    it("an OPEN panel shows a repeat built by the COMMAND, not only by its own button", async () => {
+      await h.host.selection.set([poly("s2")]);
+      const panel = await mountPanel(h, makeRepeatPanel);
+      await drive(async () => {
+        const made = await applyMakeRepeat(h.host, "grid", {
+          columns: 2,
+          rows: 1,
+        });
+        if (made.length !== 1) throw new Error("the repeat was not built");
+      }, panel.work);
+      // The document has it…
+      expect((await readRepeatLibrary(h.host)).repeats).toHaveLength(1);
+      // …and so does the panel.
+      expect(panel.count("[data-draw-repeat-row]")).toBe(1);
+    });
 
     // The same, in the order the EDITOR has (see blend-panel.dom.test.tsx):
     // the recipe write lands a task after the reload the batch started.
@@ -301,12 +297,17 @@ describe("Repeat options panel — rendered against the engine", () => {
         if (k > 0) {
           await drive(async () => {
             await h.host.selection.set([poly(`s${k - 1}`)]);
-            const made = await applyMakeRepeat(h.host, "grid", { columns: 2, rows: 1 });
+            const made = await applyMakeRepeat(h.host, "grid", {
+              columns: 2,
+              rows: 1,
+            });
             if (made.length !== 1) throw new Error(`repeat ${k} was not built`);
             await h.host.selection.set([]);
           }, panel.work);
         }
-        walksByRecords.push((await panel.costOf(() => plainChange(h, k))).walks);
+        walksByRecords.push(
+          (await panel.costOf(() => plainChange(h, k))).walks,
+        );
       }
       unmountAll();
     });
@@ -391,15 +392,12 @@ describe("Repeat options panel — rendered against the engine", () => {
     // not the last to start; see blend-panel.dom.test.tsx for the mechanism.
     // Here the older reload's `setActive(null)` landed after the newer
     // one resolved the selected source to rep-1, and the panel showed "".
-    it(
-      "the panel ends on the LATEST selection when a slower, older reload is still in flight",
-      async () => {
-        const panel = await mountPanel(h, makeRepeatPanel);
-        expect(panel.attr(PANEL, "data-draw-repeat-active")).toBe("");
-        await selectDuringWalk(h, panel, [poly("s0")]);
-        expect(panel.attr(PANEL, "data-draw-repeat-active")).toBe("rep-1");
-        expect(panel.cost()).toMatchObject({ reloads: 2, walks: 1 });
-      },
-    );
+    it("the panel ends on the LATEST selection when a slower, older reload is still in flight", async () => {
+      const panel = await mountPanel(h, makeRepeatPanel);
+      expect(panel.attr(PANEL, "data-draw-repeat-active")).toBe("");
+      await selectDuringWalk(h, panel, [poly("s0")]);
+      expect(panel.attr(PANEL, "data-draw-repeat-active")).toBe("rep-1");
+      expect(panel.cost()).toMatchObject({ reloads: 2, walks: 1 });
+    });
   });
 });

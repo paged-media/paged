@@ -148,7 +148,6 @@ interface TableReadback {
   columnCount: number | null;
 }
 
-
 // ADR 323 — every cell / table property is an object-model field on a
 // `cell:<table>/<r>,<c>` or `table:<id>` address: reads and writes go
 // through `host.objects` (the app's table seam maps them onto the same
@@ -186,7 +185,11 @@ const CELL_SCHEMA_FIELDS: ReadonlyArray<{ path: string; label: string }> = [
   { path: "rowSpan", label: "Row span" },
   { path: "columnSpan", label: "Column span" },
 ];
-const TABLE_PATHS = ["appliedTableStyle", "tableRowCount", "tableColumnCount"] as const;
+const TABLE_PATHS = [
+  "appliedTableStyle",
+  "tableRowCount",
+  "tableColumnCount",
+] as const;
 const NO_TARGETS: readonly string[] = [];
 
 /** One object field per path over ONE address (a fixed path list, so
@@ -273,7 +276,10 @@ export function TablePanel() {
 
   const setTableStyle = useCallback(
     (styleId: string) => {
-      tableFields.appliedTableStyle?.onCommit?.({ type: "text", value: styleId } as Value);
+      tableFields.appliedTableStyle?.onCommit?.({
+        type: "text",
+        value: styleId,
+      } as Value);
     },
     [tableFields],
   );
@@ -439,7 +445,10 @@ export function TablePanel() {
         {/* ADR 323 §4 — the selected row's height and column's width as
             INDEXED table rows (`rows[i].height`, `columns[i].width` on
             the table address): read back, one undo step, Bind to data…. */}
-        <div className="flex flex-col gap-1.5 pb-1" data-table-indexed-fields={tableAddress ?? ""}>
+        <div
+          className="flex flex-col gap-1.5 pb-1"
+          data-table-indexed-fields={tableAddress ?? ""}
+        >
           <PropertyField
             key={`row-${cell.row}`}
             path={`rows[${cell.row}].height`}
@@ -490,7 +499,10 @@ export function TablePanel() {
             op="deleteTable"
             label="Delete table"
             testId="delete-table"
-            args={{ storyId: `story:${cell.storyId}`, tableId: tableAddress ?? cell.tableId }}
+            args={{
+              storyId: `story:${cell.storyId}`,
+              tableId: tableAddress ?? cell.tableId,
+            }}
           />
         </div>
       </CockpitSection>
@@ -567,7 +579,9 @@ export function TablePanel() {
           <CockpitBtn
             sm
             testId="merge-cells"
-            onClick={() => applySpan(Math.max(2, rowSpan), Math.max(2, columnSpan))}
+            onClick={() =>
+              applySpan(Math.max(2, rowSpan), Math.max(2, columnSpan))
+            }
           >
             Merge 2×2
           </CockpitBtn>
@@ -605,35 +619,38 @@ export function TablePanel() {
 
       <CockpitSection title="Cell">
         <CockpitRow label="Fill">
-<ObjectFieldFrame field={cellFields.cellFillColor} className="relative inline-flex w-full">
-          <span className="relative inline-flex w-full">
-            <select
-              data-cell-fill-select
-              value={cellRead?.fillColor ?? ""}
-              onChange={(e) =>
-                setCellProp("cellFillColor", {
-                  type: "colorRef",
-                  value: e.target.value === "" ? null : e.target.value,
-                })
-              }
-              className="h-[28px] w-full appearance-none rounded-[6px] border border-input bg-background pl-2.5 pr-7 text-[12px]"
-              style={{ color: "var(--pg-fg)" }}
-            >
-              <option value="">[None]</option>
-              {(swatches ?? []).map((s) => (
-                <option key={s.selfId} value={s.selfId}>
-                  {displayName(s.name)}
-                </option>
-              ))}
-            </select>
-            <Icon
-              name="ui-chevron-down"
-              size={13}
-              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2"
-              style={{ color: "var(--pg-muted-fg)" }}
-            />
-          </span>
-</ObjectFieldFrame>
+          <ObjectFieldFrame
+            field={cellFields.cellFillColor}
+            className="relative inline-flex w-full"
+          >
+            <span className="relative inline-flex w-full">
+              <select
+                data-cell-fill-select
+                value={cellRead?.fillColor ?? ""}
+                onChange={(e) =>
+                  setCellProp("cellFillColor", {
+                    type: "colorRef",
+                    value: e.target.value === "" ? null : e.target.value,
+                  })
+                }
+                className="h-[28px] w-full appearance-none rounded-[6px] border border-input bg-background pl-2.5 pr-7 text-[12px]"
+                style={{ color: "var(--pg-fg)" }}
+              >
+                <option value="">[None]</option>
+                {(swatches ?? []).map((s) => (
+                  <option key={s.selfId} value={s.selfId}>
+                    {displayName(s.name)}
+                  </option>
+                ))}
+              </select>
+              <Icon
+                name="ui-chevron-down"
+                size={13}
+                className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2"
+                style={{ color: "var(--pg-muted-fg)" }}
+              />
+            </span>
+          </ObjectFieldFrame>
         </CockpitRow>
         <CockpitRow label="Tint">
           <PropertyField
@@ -645,78 +662,96 @@ export function TablePanel() {
         </CockpitRow>
         <CockpitRow label="Insets (T L B R)">
           <div className="grid grid-cols-4 gap-1">
-<ObjectFieldFrame field={cellFields.cellInsetTop} className="relative min-w-0">
-            <NumberCommit
-              testId="inset-top"
-              value={cellRead?.insetTop}
-              onCommit={(v) =>
-                setCellProp("cellInsetTop", { type: "length", value: v })
-              }
-            />
-</ObjectFieldFrame>
-<ObjectFieldFrame field={cellFields.cellInsetLeft} className="relative min-w-0">
-            <NumberCommit
-              testId="inset-left"
-              value={cellRead?.insetLeft}
-              onCommit={(v) =>
-                setCellProp("cellInsetLeft", { type: "length", value: v })
-              }
-            />
-</ObjectFieldFrame>
-<ObjectFieldFrame field={cellFields.cellInsetBottom} className="relative min-w-0">
-            <NumberCommit
-              testId="inset-bottom"
-              value={cellRead?.insetBottom}
-              onCommit={(v) =>
-                setCellProp("cellInsetBottom", { type: "length", value: v })
-              }
-            />
-</ObjectFieldFrame>
-<ObjectFieldFrame field={cellFields.cellInsetRight} className="relative min-w-0">
-            <NumberCommit
-              testId="inset-right"
-              value={cellRead?.insetRight}
-              onCommit={(v) =>
-                setCellProp("cellInsetRight", { type: "length", value: v })
-              }
-            />
-</ObjectFieldFrame>
+            <ObjectFieldFrame
+              field={cellFields.cellInsetTop}
+              className="relative min-w-0"
+            >
+              <NumberCommit
+                testId="inset-top"
+                value={cellRead?.insetTop}
+                onCommit={(v) =>
+                  setCellProp("cellInsetTop", { type: "length", value: v })
+                }
+              />
+            </ObjectFieldFrame>
+            <ObjectFieldFrame
+              field={cellFields.cellInsetLeft}
+              className="relative min-w-0"
+            >
+              <NumberCommit
+                testId="inset-left"
+                value={cellRead?.insetLeft}
+                onCommit={(v) =>
+                  setCellProp("cellInsetLeft", { type: "length", value: v })
+                }
+              />
+            </ObjectFieldFrame>
+            <ObjectFieldFrame
+              field={cellFields.cellInsetBottom}
+              className="relative min-w-0"
+            >
+              <NumberCommit
+                testId="inset-bottom"
+                value={cellRead?.insetBottom}
+                onCommit={(v) =>
+                  setCellProp("cellInsetBottom", { type: "length", value: v })
+                }
+              />
+            </ObjectFieldFrame>
+            <ObjectFieldFrame
+              field={cellFields.cellInsetRight}
+              className="relative min-w-0"
+            >
+              <NumberCommit
+                testId="inset-right"
+                value={cellRead?.insetRight}
+                onCommit={(v) =>
+                  setCellProp("cellInsetRight", { type: "length", value: v })
+                }
+              />
+            </ObjectFieldFrame>
           </div>
         </CockpitRow>
         <CockpitRow label="Vert. justify">
-<ObjectFieldFrame field={cellFields.cellVerticalJustification} className="relative inline-flex w-full">
-          <span className="relative inline-flex w-full">
-            <select
-              data-cell-vjustify-select
-              value={cellRead?.verticalJustification ?? ""}
-              onChange={(e) =>
-                setCellProp("cellVerticalJustification", {
-                  type: "text",
-                  value: e.target.value,
-                })
-              }
-              className="h-[28px] w-full appearance-none rounded-[6px] border border-input bg-background pl-2.5 pr-7 text-[12px]"
-              style={{ color: "var(--pg-fg)" }}
-            >
-              {VJUSTIFY.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <Icon
-              name="ui-chevron-down"
-              size={13}
-              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2"
-              style={{ color: "var(--pg-muted-fg)" }}
-            />
-          </span>
-</ObjectFieldFrame>
+          <ObjectFieldFrame
+            field={cellFields.cellVerticalJustification}
+            className="relative inline-flex w-full"
+          >
+            <span className="relative inline-flex w-full">
+              <select
+                data-cell-vjustify-select
+                value={cellRead?.verticalJustification ?? ""}
+                onChange={(e) =>
+                  setCellProp("cellVerticalJustification", {
+                    type: "text",
+                    value: e.target.value,
+                  })
+                }
+                className="h-[28px] w-full appearance-none rounded-[6px] border border-input bg-background pl-2.5 pr-7 text-[12px]"
+                style={{ color: "var(--pg-fg)" }}
+              >
+                {VJUSTIFY.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <Icon
+                name="ui-chevron-down"
+                size={13}
+                className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2"
+                style={{ color: "var(--pg-muted-fg)" }}
+              />
+            </span>
+          </ObjectFieldFrame>
         </CockpitRow>
       </CockpitSection>
 
       <CockpitSection title="Cell options">
-        <div className="flex flex-col gap-1.5 pb-2" data-cell-schema-fields={cellAddress ?? ""}>
+        <div
+          className="flex flex-col gap-1.5 pb-2"
+          data-cell-schema-fields={cellAddress ?? ""}
+        >
           {CELL_SCHEMA_FIELDS.map((f) => (
             <PropertyField
               key={f.path}
@@ -742,46 +777,55 @@ export function TablePanel() {
         ).map(([side, edge]) => (
           <CockpitRow key={side} label={side}>
             <div className="grid grid-cols-[1fr_56px_56px] gap-1">
-<ObjectFieldFrame field={cellFields[`cell${side}EdgeStrokeColor`]} className="relative inline-flex w-full">
-              <span className="relative inline-flex w-full">
-                <select
-                  data-edge-color-select={side.toLowerCase()}
-                  value={edge.color ?? ""}
-                  onChange={(e) => setEdgeColor(side, e.target.value)}
-                  className="h-[28px] w-full appearance-none rounded-[6px] border border-input bg-background pl-2.5 pr-7 text-[12px]"
-                  style={{ color: "var(--pg-fg)" }}
-                >
-                  <option value="">[None]</option>
-                  {(swatches ?? []).map((s) => (
-                    <option key={s.selfId} value={s.selfId}>
-                      {displayName(s.name)}
-                    </option>
-                  ))}
-                </select>
-                <Icon
-                  name="ui-chevron-down"
-                  size={13}
-                  className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2"
-                  style={{ color: "var(--pg-muted-fg)" }}
+              <ObjectFieldFrame
+                field={cellFields[`cell${side}EdgeStrokeColor`]}
+                className="relative inline-flex w-full"
+              >
+                <span className="relative inline-flex w-full">
+                  <select
+                    data-edge-color-select={side.toLowerCase()}
+                    value={edge.color ?? ""}
+                    onChange={(e) => setEdgeColor(side, e.target.value)}
+                    className="h-[28px] w-full appearance-none rounded-[6px] border border-input bg-background pl-2.5 pr-7 text-[12px]"
+                    style={{ color: "var(--pg-fg)" }}
+                  >
+                    <option value="">[None]</option>
+                    {(swatches ?? []).map((s) => (
+                      <option key={s.selfId} value={s.selfId}>
+                        {displayName(s.name)}
+                      </option>
+                    ))}
+                  </select>
+                  <Icon
+                    name="ui-chevron-down"
+                    size={13}
+                    className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2"
+                    style={{ color: "var(--pg-muted-fg)" }}
+                  />
+                </span>
+              </ObjectFieldFrame>
+              <ObjectFieldFrame
+                field={cellFields[`cell${side}EdgeStrokeWeight`]}
+                className="relative min-w-0"
+              >
+                <NumberCommit
+                  testId={`edge-weight-${side.toLowerCase()}`}
+                  placeholder="Wt"
+                  value={edge.weight ?? undefined}
+                  onCommit={(v) => setEdgeWeight(side, v)}
                 />
-              </span>
-</ObjectFieldFrame>
-<ObjectFieldFrame field={cellFields[`cell${side}EdgeStrokeWeight`]} className="relative min-w-0">
-              <NumberCommit
-                testId={`edge-weight-${side.toLowerCase()}`}
-                placeholder="Wt"
-                value={edge.weight ?? undefined}
-                onCommit={(v) => setEdgeWeight(side, v)}
-              />
-</ObjectFieldFrame>
-<ObjectFieldFrame field={cellFields[`cell${side}EdgeStrokeTint`]} className="relative min-w-0">
-              <NumberCommit
-                testId={`edge-tint-${side.toLowerCase()}`}
-                placeholder="Tint"
-                value={edge.tint ?? undefined}
-                onCommit={(v) => setEdgeTint(side, v)}
-              />
-</ObjectFieldFrame>
+              </ObjectFieldFrame>
+              <ObjectFieldFrame
+                field={cellFields[`cell${side}EdgeStrokeTint`]}
+                className="relative min-w-0"
+              >
+                <NumberCommit
+                  testId={`edge-tint-${side.toLowerCase()}`}
+                  placeholder="Tint"
+                  value={edge.tint ?? undefined}
+                  onCommit={(v) => setEdgeTint(side, v)}
+                />
+              </ObjectFieldFrame>
             </div>
           </CockpitRow>
         ))}
@@ -789,39 +833,49 @@ export function TablePanel() {
 
       <CockpitSection title="Applied styles">
         <CockpitRow label="Cell style">
-<ObjectFieldFrame field={cellFields.appliedCellStyle} className="relative inline-flex w-full">
-          <StyleSelect
-            testId="apply-cell-style"
-            collection="cellStyles"
-            items={cellStyles ?? []}
-            value={cellRead?.appliedCellStyle ?? ""}
-            onApply={(id) =>
-              setCellProp("appliedCellStyle", { type: "text", value: id })
-            }
-          />
-</ObjectFieldFrame>
+          <ObjectFieldFrame
+            field={cellFields.appliedCellStyle}
+            className="relative inline-flex w-full"
+          >
+            <StyleSelect
+              testId="apply-cell-style"
+              collection="cellStyles"
+              items={cellStyles ?? []}
+              value={cellRead?.appliedCellStyle ?? ""}
+              onApply={(id) =>
+                setCellProp("appliedCellStyle", { type: "text", value: id })
+              }
+            />
+          </ObjectFieldFrame>
         </CockpitRow>
         <CockpitRow label="Table style">
-<ObjectFieldFrame field={tableFields.appliedTableStyle} className="relative inline-flex w-full">
-          <StyleSelect
-            testId="apply-table-style"
-            collection="tableStyles"
-            items={tableStyles ?? []}
-            value={tableRead?.appliedTableStyle ?? ""}
-            onApply={setTableStyle}
-          />
-</ObjectFieldFrame>
+          <ObjectFieldFrame
+            field={tableFields.appliedTableStyle}
+            className="relative inline-flex w-full"
+          >
+            <StyleSelect
+              testId="apply-table-style"
+              collection="tableStyles"
+              items={tableStyles ?? []}
+              value={tableRead?.appliedTableStyle ?? ""}
+              onApply={setTableStyle}
+            />
+          </ObjectFieldFrame>
         </CockpitRow>
       </CockpitSection>
 
       <div
         className="pg-ui-xs"
         data-table-text-note
-        style={{ padding: "4px 14px 14px", lineHeight: 1.45, color: "var(--pg-muted-fg)" }}
+        style={{
+          padding: "4px 14px 14px",
+          lineHeight: 1.45,
+          color: "var(--pg-muted-fg)",
+        }}
       >
-        Cell text: pick the Type tool and click into a cell to edit its
-        text in place. This panel edits cell structure, fills, strokes,
-        insets, spans, and styles.
+        Cell text: pick the Type tool and click into a cell to edit its text in
+        place. This panel edits cell structure, fills, strokes, insets, spans,
+        and styles.
       </div>
     </div>
   );

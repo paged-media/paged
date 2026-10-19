@@ -37,23 +37,42 @@ import { openCanvas, openPanel } from "../fidelity/canvas-driver";
 import { startFakeIdp } from "./harness/fake-idp";
 
 const SERVER = process.env.PAGED_SERVER_URL;
-const REPO_ROOT = pathResolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
+const REPO_ROOT = pathResolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "..",
+  "..",
+);
 const FIXTURE = `${REPO_ROOT}/corpus/idml/generated/text.idml`;
 
 async function edit(page: Page, text: string): Promise<void> {
   await page.evaluate(async (t) => {
-    const c = (globalThis as unknown as { __canvas: { client: { send: (m: unknown) => Promise<unknown> } } }).__canvas;
+    const c = (
+      globalThis as unknown as {
+        __canvas: { client: { send: (m: unknown) => Promise<unknown> } };
+      }
+    ).__canvas;
     const bytes = Array.from(new TextEncoder().encode(t));
-    await c.client.send({ kind: "writePagedPart", payload: { path: "paged/media.paged.test/probe.json", bytes } });
+    await c.client.send({
+      kind: "writePagedPart",
+      payload: { path: "paged/media.paged.test/probe.json", bytes },
+    });
   }, text);
 }
 
 async function save(page: Page): Promise<void> {
   const download = page.waitForEvent("download");
   await page.evaluate(() =>
-    (globalThis as unknown as { __canvas: { registries: { commands: { invoke: (id: string) => Promise<unknown> } } } }).__canvas.registries.commands.invoke(
-      "paged.file.savePaged",
-    ),
+    (
+      globalThis as unknown as {
+        __canvas: {
+          registries: {
+            commands: { invoke: (id: string) => Promise<unknown> };
+          };
+        };
+      }
+    ).__canvas.registries.commands.invoke("paged.file.savePaged"),
   );
   await download;
 }
@@ -68,18 +87,29 @@ test.describe("library panel with a server @feat:editor-shell.panels.library", (
     await new Promise((r) => idp.close(r));
   });
 
-  test("sign in, push, edit, push the difference, pull @level:happy", async ({ page, context }) => {
+  test("sign in, push, edit, push the difference, pull @level:happy", async ({
+    page,
+    context,
+  }) => {
     await openCanvas(page);
     await page.evaluate(async () => {
       localStorage.clear();
       const root = await navigator.storage.getDirectory();
-      await root.removeEntry("paged-library", { recursive: true }).catch(() => undefined);
+      await root
+        .removeEntry("paged-library", { recursive: true })
+        .catch(() => undefined);
     });
     await page.reload();
     await openCanvas(page);
     await page.setInputFiles('input[type="file"]', FIXTURE);
     await expect
-      .poll(() => page.evaluate(() => (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas.ready))
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (globalThis as unknown as { __canvas: { ready: boolean } }).__canvas
+              .ready,
+        ),
+      )
       .toBe(true);
     await openPanel(page, "paged.library");
     const panel = page.locator("[data-library-panel]");
@@ -89,10 +119,14 @@ test.describe("library panel with a server @feat:editor-shell.panels.library", (
     const popup = context.waitForEvent("page");
     await panel.locator("[data-library-signin]").click();
     await (await popup).waitForEvent("close");
-    await expect(panel.locator("[data-library-who]")).toContainText("user:alice@127.0.0.1");
+    await expect(panel.locator("[data-library-who]")).toContainText(
+      "user:alice@127.0.0.1",
+    );
 
     await panel.locator("[data-library-push]").click();
-    await expect(panel.locator("[data-library-sync-note]")).toContainText("Pushed");
+    await expect(panel.locator("[data-library-sync-note]")).toContainText(
+      "Pushed",
+    );
 
     // The first save is the first .paged projection (the opened version was the
     // .idml), so it adds the model part and the manifest.
@@ -100,17 +134,23 @@ test.describe("library panel with a server @feat:editor-shell.panels.library", (
     await save(page);
     await expect(panel.locator("[data-library-version]")).toHaveCount(2);
     await panel.locator("[data-library-push]").click();
-    await expect(panel.locator("[data-library-sync-note]")).toContainText("Pushed");
+    await expect(panel.locator("[data-library-sync-note]")).toContainText(
+      "Pushed",
+    );
 
     // A later edit to one part: that part, the manifest, the tree and the commit travel.
     await edit(page, '{"v":2}');
     await save(page);
     await expect(panel.locator("[data-library-version]")).toHaveCount(3);
     await panel.locator("[data-library-push]").click();
-    await expect(panel.locator("[data-library-sync-note]")).toContainText(/Pushed [1-4] objects? \([0-9,]+ bytes\)/);
+    await expect(panel.locator("[data-library-sync-note]")).toContainText(
+      /Pushed [1-4] objects? \([0-9,]+ bytes\)/,
+    );
 
     await panel.locator("[data-library-pull]").click();
-    await expect(panel.locator("[data-library-sync-note]")).toHaveText("Up to date");
+    await expect(panel.locator("[data-library-sync-note]")).toHaveText(
+      "Up to date",
+    );
     await expect(panel.locator("[data-library-error]")).toHaveCount(0);
   });
 });

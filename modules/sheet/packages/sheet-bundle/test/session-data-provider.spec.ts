@@ -48,11 +48,7 @@ import type {
 } from "@paged-media/plugin-api";
 
 import type { SheetEngine } from "../src";
-import {
-  cellToString,
-  createWorkbookSession,
-  makeDatasetsPanel,
-} from "../src";
+import { cellToString, createWorkbookSession, makeDatasetsPanel } from "../src";
 
 // ---- the mocked engine module ------------------------------------------
 //
@@ -77,12 +73,29 @@ function makeFakeEngine(): SheetEngine {
     sortRange: () => ({ changed: [], edits: [] }),
     findAll: () => [],
     replaceAll: () => ({ occurrences: 0, changed: [], edits: [], skipped: [] }),
-    getRangeLowered: () => ({ cols: [], rows: [], rules: { h: [], v: [] }, merges: [] }),
-    getRangeStyled: () => ({ cols: [], rows: [], rules: { h: [], v: [] }, merges: [] }),
+    getRangeLowered: () => ({
+      cols: [],
+      rows: [],
+      rules: { h: [], v: [] },
+      merges: [],
+    }),
+    getRangeStyled: () => ({
+      cols: [],
+      rows: [],
+      rules: { h: [], v: [] },
+      merges: [],
+    }),
     getRangeValues: () => [],
     paginate: () => [],
     getGridScene: () => ({
-      viewport: { firstRow: 0, firstCol: 0, rows: 0, cols: 0, xOffsets: [0], yOffsets: [0] },
+      viewport: {
+        firstRow: 0,
+        firstCol: 0,
+        rows: 0,
+        cols: 0,
+        xOffsets: [0],
+        yOffsets: [0],
+      },
       cells: [],
       styles: [],
       gridlines: { h: [], v: [] },
@@ -187,12 +200,18 @@ function fakeHost(opts?: { wired?: boolean }) {
   const host = {
     log: { debug() {}, info() {}, warn() {}, error() {} },
     // The document doors every host has; nothing here fires them.
-    document: { onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+    document: {
+      onDidChange: () => ({ dispose() {} }),
+      onDidOpen: () => ({ dispose() {} }),
+    },
     supports: (f: string) => (wired ? f === "dataProviders@1" : false),
     // When NOT wired the surface itself is absent (the consumer guards on
     // both supports() AND the surface existing).
     dataProviders: wired ? dataProviders : undefined,
-    shell: { openPanel: (id: string) => openedPanels.push(id), closePanel() {} },
+    shell: {
+      openPanel: (id: string) => openedPanels.push(id),
+      closePanel() {},
+    },
   } as unknown as BundleHost;
   return { host, dataProviders, changeListeners, getCalls, openedPanels };
 }

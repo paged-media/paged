@@ -94,7 +94,8 @@ export function axisPercentAt(axis: GradientAxis, point: Vec2): number {
   if (!(axis.lengthPt > 0)) return 0;
   const r = (axis.angleDeg * Math.PI) / 180;
   const along =
-    (point[0] - axis.origin[0]) * Math.cos(r) + (point[1] - axis.origin[1]) * Math.sin(r);
+    (point[0] - axis.origin[0]) * Math.cos(r) +
+    (point[1] - axis.origin[1]) * Math.sin(r);
   return (along / axis.lengthPt) * 100;
 }
 
@@ -169,7 +170,11 @@ export class GradientStopMachine {
 
   private follow(index: number, point: Vec2): void {
     const next = [...this.live];
-    next[index] = clampStopLocation(this.base, index, axisPercentAt(this.options.axis, point));
+    next[index] = clampStopLocation(
+      this.base,
+      index,
+      axisPercentAt(this.options.axis, point),
+    );
     this.live = next;
   }
 

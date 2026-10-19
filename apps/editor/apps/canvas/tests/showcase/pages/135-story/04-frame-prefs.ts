@@ -53,34 +53,64 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(37);
   const elements: string[] = [];
 
-  const head = await prose(ctx, page, [48, 104, 480, 130], [
-    { text: "Columns, balance, depth, and the first baseline", style: STYLE.head1 },
-  ]);
-  const intro = await prose(ctx, page, [48, 134, 480, 186], [
-    {
-      text:
-        "Three frames, three text-frame preferences: a two-column split " +
-        "with a ten-point gutter, the same split balanced so the columns " +
-        "end even, and a vertically justified box whose inset holds the " +
-        "text off its own stroke. Below them, the six first-baseline " +
-        "policies in identical boxes.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await prose(
+    ctx,
+    page,
+    [48, 104, 480, 130],
+    [
+      {
+        text: "Columns, balance, depth, and the first baseline",
+        style: STYLE.head1,
+      },
+    ],
+  );
+  const intro = await prose(
+    ctx,
+    page,
+    [48, 134, 480, 186],
+    [
+      {
+        text:
+          "Three frames, three text-frame preferences: a two-column split " +
+          "with a ten-point gutter, the same split balanced so the columns " +
+          "end even, and a vertically justified box whose inset holds the " +
+          "text off its own stroke. Below them, the six first-baseline " +
+          "policies in identical boxes.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   const slate = await doc.swatch(SWATCH.slate);
 
   // ── frame 1: two columns + gutter ─────────────────────────────────
-  const f1 = await pourOne(ctx, page, [48, 200, 182, 344], COLUMNS_TEXT, STYLE.bodySmall);
+  const f1 = await pourOne(
+    ctx,
+    page,
+    [48, 200, 182, 344],
+    COLUMNS_TEXT,
+    STYLE.bodySmall,
+  );
   // ── frame 2: balanced columns ─────────────────────────────────────
-  const f2 = await pourOne(ctx, page, [196, 200, 330, 344], BALANCE_TEXT, STYLE.bodySmall);
+  const f2 = await pourOne(
+    ctx,
+    page,
+    [196, 200, 330, 344],
+    BALANCE_TEXT,
+    STYLE.bodySmall,
+  );
   // ── frame 3: vertical justify + inset, stroked so both read ───────
-  const f3 = await prose(ctx, page, [344, 200, 480, 344], [
-    { text: "The top of the box.", style: STYLE.bodySmall },
-    { text: "The middle holds its ground.", style: STYLE.bodySmall },
-    { text: "The bottom of the box.", style: STYLE.bodySmall },
-  ]);
+  const f3 = await prose(
+    ctx,
+    page,
+    [344, 200, 480, 344],
+    [
+      { text: "The top of the box.", style: STYLE.bodySmall },
+      { text: "The middle holds its ground.", style: STYLE.bodySmall },
+      { text: "The bottom of the box.", style: STYLE.bodySmall },
+    ],
+  );
   elements.push(f1.frameId, f2.frameId, f3.frameId);
 
   const set = (id: string, path: string, value: unknown) => ({
@@ -97,7 +127,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       type: "text",
       value: "JustifyAlign",
     }),
-    set(f3.frameId, "frameInsetSpacing", { type: "bounds", value: [10, 10, 10, 10] }),
+    set(f3.frameId, "frameInsetSpacing", {
+      type: "bounds",
+      value: [10, 10, 10, 10],
+    }),
     set(f3.frameId, "frameStrokeColor", { type: "colorRef", value: slate }),
     set(f3.frameId, "frameStrokeWeight", { type: "length", value: 0.5 }),
   ]);
@@ -134,7 +167,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     const cell = await pourOne(ctx, page, box, "First line", STYLE.bodySmall);
     elements.push(cell.frameId);
     stripOps.push(
-      set(cell.frameId, "textFrameFirstBaseline", { type: "text", value: mode }),
+      set(cell.frameId, "textFrameFirstBaseline", {
+        type: "text",
+        value: mode,
+      }),
       set(cell.frameId, "frameStrokeColor", { type: "colorRef", value: slate }),
       set(cell.frameId, "frameStrokeWeight", { type: "length", value: 0.5 }),
     );

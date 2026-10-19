@@ -87,7 +87,9 @@ async function importSvg(
  *  serialized text, or a reason. */
 async function exportSvg(
   page: import("@playwright/test").Page,
-): Promise<{ id: string; byteLength: number; text: string } | { reason: string }> {
+): Promise<
+  { id: string; byteLength: number; text: string } | { reason: string }
+> {
   return page.evaluate(async (exporterId) => {
     const reg = (
       globalThis as unknown as {
@@ -96,7 +98,8 @@ async function exportSvg(
             exporters?: {
               list: () => Array<{
                 id: string;
-                export: () => Promise<{ bytes: Uint8Array; fileName: string } | null>
+                export: () =>
+                  | Promise<{ bytes: Uint8Array; fileName: string } | null>
                   | { bytes: Uint8Array; fileName: string }
                   | null;
               }>;
@@ -172,23 +175,35 @@ test.describe("journey · paged.draw SVG interchange", () => {
         children?: unknown[];
       }>;
       const out: Array<{ kind: string; id: string }> = [];
-      const visit = (node: { id?: { kind: string; id: string } | null; children?: unknown[] }) => {
+      const visit = (node: {
+        id?: { kind: string; id: string } | null;
+        children?: unknown[];
+      }) => {
         if (node.id && node.id.kind === "polygon") out.push(node.id);
         for (const ch of (node.children ?? []) as typeof tree) visit(ch);
       };
       for (const root of tree) visit(root);
       return out;
     });
-    expect(polys.length, "have at least one imported path to export").toBeGreaterThan(0);
+    expect(
+      polys.length,
+      "have at least one imported path to export",
+    ).toBeGreaterThan(0);
     await designer.selectElement("polygon", polys[0].id);
 
     const exported = await exportSvg(page);
-    expect(exported, `SVG export: ${JSON.stringify(exported)}`).not.toHaveProperty(
-      "reason",
-    );
+    expect(
+      exported,
+      `SVG export: ${JSON.stringify(exported)}`,
+    ).not.toHaveProperty("reason");
     if ("byteLength" in exported) {
-      expect(exported.byteLength, "the exporter produced bytes").toBeGreaterThan(0);
-      expect(exported.text, "the export is an <svg> document").toContain("<svg");
+      expect(
+        exported.byteLength,
+        "the exporter produced bytes",
+      ).toBeGreaterThan(0);
+      expect(exported.text, "the export is an <svg> document").toContain(
+        "<svg",
+      );
     }
   });
 });

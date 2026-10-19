@@ -30,19 +30,38 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "bun:test";
 
 import type { ElementId } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
-import { affineReflect, ovalToPath, type Affine } from "@paged-media/draw-geometry";
+import {
+  affineReflect,
+  ovalToPath,
+  type Affine,
+} from "@paged-media/draw-geometry";
 
 import { drawBundle } from "../../src";
-import { applyReflect, forgetLastTransform } from "../../src/commands/transform";
+import {
+  applyReflect,
+  forgetLastTransform,
+} from "../../src/commands/transform";
 import {
   applyMakeObjectsOnPath,
   applyReleaseObjectsOnPath,
 } from "../../src/commands/objects-on-path";
-import { REPEAT_DEFAULTS, repeatBatchFor, repeatHandle, repeatPlanFor } from "../../src/commands/repeat";
+import {
+  REPEAT_DEFAULTS,
+  repeatBatchFor,
+  repeatHandle,
+  repeatPlanFor,
+} from "../../src/commands/repeat";
 import { bindMinted, mutateMinting } from "../../src/commands/minted";
 import { ovalStandIns } from "../../src/handlers/oval-stand-ins";
 import { applyCreateOutlines } from "../../src/commands/create-outlines";
@@ -63,12 +82,24 @@ const oval = (id: string): ElementId => ({ kind: "oval", id }) as ElementId;
  *  rotated by `deg` — stored in spread space, as InDesign writes it. */
 const placed = (x: number, y: number, deg = 0): Affine => {
   const r = (deg * Math.PI) / 180;
-  return [Math.cos(r), Math.sin(r), -Math.sin(r), Math.cos(r), ORIGIN[0] + x, ORIGIN[1] + y];
+  return [
+    Math.cos(r),
+    Math.sin(r),
+    -Math.sin(r),
+    Math.cos(r),
+    ORIGIN[0] + x,
+    ORIGIN[1] + y,
+  ];
 };
 const itemTransform = (m: Affine) => m.map((v) => +v.toFixed(12)).join(" ");
 
 /** A polygon of one or more closed (or one open) contours in inner space. */
-function polygon(self: string, contours: Vec[][], m: Affine, open = false): string {
+function polygon(
+  self: string,
+  contours: Vec[][],
+  m: Affine,
+  open = false,
+): string {
   const xs = contours.flat().map((p) => p[0]);
   const ys = contours.flat().map((p) => p[1]);
   const bounds = `${Math.min(...ys)} ${Math.min(...xs)} ${Math.max(...ys)} ${Math.max(...xs)}`;
@@ -76,7 +107,12 @@ function polygon(self: string, contours: Vec[][], m: Affine, open = false): stri
     .map(
       (c) =>
         `<GeometryPathType PathOpen="${open}"><PathPointArray>` +
-        c.map(([x, y]) => `<PathPointType Anchor="${x} ${y}" LeftDirection="${x} ${y}" RightDirection="${x} ${y}"/>`).join("") +
+        c
+          .map(
+            ([x, y]) =>
+              `<PathPointType Anchor="${x} ${y}" LeftDirection="${x} ${y}" RightDirection="${x} ${y}"/>`,
+          )
+          .join("") +
         `</PathPointArray></GeometryPathType>`,
     )
     .join("");
@@ -144,7 +180,9 @@ const PAGE_ORIGIN = await (async () => {
   try {
     await p.load(DOC());
     const [g] = await p.host.document.elementGeometry([poly("tri")]);
-    return (g as { pageOrigin?: unknown } | undefined)?.pageOrigin !== undefined;
+    return (
+      (g as { pageOrigin?: unknown } | undefined)?.pageOrigin !== undefined
+    );
   } finally {
     p.dispose();
   }
@@ -158,16 +196,24 @@ describe("draw conformance — page space on a page that does not start at its s
   async function spreadOutline(id: ElementId): Promise<Vec[][]> {
     const t = await h.host.document.pathAnchors(id);
     if (!t) throw new Error(`no anchors for ${String(id.id)}`);
-    const m = storedTransformOf((t.itemTransform ?? null) as Affine | null, pageOriginOf(t)) ?? [1, 0, 0, 1, 0, 0];
+    const m = storedTransformOf(
+      (t.itemTransform ?? null) as Affine | null,
+      pageOriginOf(t),
+    ) ?? [1, 0, 0, 1, 0, 0];
     const starts = t.subpathStarts.length > 0 ? t.subpathStarts : [0];
-    return starts.map((s, i) => t.anchors.slice(s, starts[i + 1] ?? t.anchors.length).map((a) => apply(m, a.anchor)));
+    return starts.map((s, i) =>
+      t.anchors
+        .slice(s, starts[i + 1] ?? t.anchors.length)
+        .map((a) => apply(m, a.anchor)),
+    );
   }
   /** The document's own stored transform for `id`. */
   async function frameTransform(id: ElementId): Promise<Affine> {
     const props = await h.host.document.elementProperties(id);
     const e = props?.entries.find((x) => x.path === "frameTransform");
     const v = e?.value;
-    if (!v || v.type !== "transform" || !v.value) throw new Error(`no frameTransform for ${String(id.id)}`);
+    if (!v || v.type !== "transform" || !v.value)
+      throw new Error(`no frameTransform for ${String(id.id)}`);
     return v.value as unknown as Affine;
   }
   const near = (got: readonly Vec[][], want: readonly Vec[][]) => {
@@ -184,7 +230,10 @@ describe("draw conformance — page space on a page that does not start at its s
     const pts = contours.flat();
     const xs = pts.map((p) => p[0]);
     const ys = pts.map((p) => p[1]);
-    return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+    return [
+      (Math.min(...xs) + Math.max(...xs)) / 2,
+      (Math.min(...ys) + Math.max(...ys)) / 2,
+    ];
   };
   /** Does this engine read geometry in page space (and say so)? */
   let pageSpaceEngine = false;
@@ -199,7 +248,8 @@ describe("draw conformance — page space on a page that does not start at its s
     forgetLastTransform();
     await h.host.selection.set([]);
     const [g] = await h.host.document.elementGeometry([poly("tri")]);
-    pageSpaceEngine = (g as { pageOrigin?: unknown } | undefined)?.pageOrigin !== undefined;
+    pageSpaceEngine =
+      (g as { pageOrigin?: unknown } | undefined)?.pageOrigin !== undefined;
   });
 
   it("translate(pageOrigin ?? [0, 0]) ∘ itemTransform IS the stored frameTransform, from both geometry doors", async () => {
@@ -208,7 +258,10 @@ describe("draw conformance — page space on a page that does not start at its s
       const [g] = await h.host.document.elementGeometry([id]);
       const t = await h.host.document.pathAnchors(id);
       for (const read of [g, t]) {
-        const m = storedTransformOf((read!.itemTransform ?? null) as Affine | null, pageOriginOf(read));
+        const m = storedTransformOf(
+          (read!.itemTransform ?? null) as Affine | null,
+          pageOriginOf(read),
+        );
         m!.forEach((v, i) => expect(v).toBeCloseTo(stored[i]!, 6));
         if (pageSpaceEngine) expect(pageOriginOf(read)).toEqual(ORIGIN);
       }
@@ -233,13 +286,19 @@ describe("draw conformance — page space on a page that does not start at its s
     await h.host.selection.set([poly("rot")]);
     await applyReflect(h.host, 0);
     const r = affineReflect(0, centre(before));
-    near(await spreadOutline(poly("rot")), before.map((c) => c.map((p) => apply(r, p))));
+    near(
+      await spreadOutline(poly("rot")),
+      before.map((c) => c.map((p) => apply(r, p))),
+    );
   });
 
   it("Objects on a path: MAKE slots the objects on the path, RELEASE puts them back exactly", async () => {
     const home = await spreadOutline(poly("o1"));
     await h.host.selection.set([poly("o1"), poly("o2"), poly("spine")]);
-    const moved = await applyMakeObjectsOnPath(h.host, { alignToPath: false, fitToArtboard: false });
+    const moved = await applyMakeObjectsOnPath(h.host, {
+      alignToPath: false,
+      fitToArtboard: false,
+    });
     expect(moved).toHaveLength(2);
     // The path runs from page (100, 300) to (500, 300).
     const a = centre(await spreadOutline(poly("o1")));
@@ -252,16 +311,24 @@ describe("draw conformance — page space on a page that does not start at its s
     near(await spreadOutline(poly("o1")), home);
   });
 
-  it.skipIf(!PAGE_ORIGIN)("Objects on a path: the ARTBOARD fit holds the objects on THIS page (an engine that reports the origin)", async () => {
-    // The published engine reads spread space here and reports no origin,
-    // so its artboard fit compares against the wrong rect and refuses;
-    // that is the engine fix's to correct, and the bundle uses the origin
-    // as soon as it is reported.
-    await h.host.selection.set([poly("o1"), poly("o2"), poly("spine")]);
-    const moved = await applyMakeObjectsOnPath(h.host, { alignToPath: false });
-    expect(moved).toHaveLength(2);
-    expect(centre(await spreadOutline(poly("o2")))[0]).toBeCloseTo(ORIGIN[0] + 500, 3);
-  });
+  it.skipIf(!PAGE_ORIGIN)(
+    "Objects on a path: the ARTBOARD fit holds the objects on THIS page (an engine that reports the origin)",
+    async () => {
+      // The published engine reads spread space here and reports no origin,
+      // so its artboard fit compares against the wrong rect and refuses;
+      // that is the engine fix's to correct, and the bundle uses the origin
+      // as soon as it is reported.
+      await h.host.selection.set([poly("o1"), poly("o2"), poly("spine")]);
+      const moved = await applyMakeObjectsOnPath(h.host, {
+        alignToPath: false,
+      });
+      expect(moved).toHaveLength(2);
+      expect(centre(await spreadOutline(poly("o2")))[0]).toBeCloseTo(
+        ORIGIN[0] + 500,
+        3,
+      );
+    },
+  );
 
   it("Shape Builder: an oval's stand-in lies exactly on the oval's curve", async () => {
     const probe = await ovalStandIns(h.host, [oval("ov"), oval("ov2")], "spec");
@@ -271,20 +338,31 @@ describe("draw conformance — page space on a page that does not start at its s
         // The frame box is the oval's own (inner) space either way.
         const [g] = await h.host.document.elementGeometry([id]);
         const m = await frameTransform(id);
-        const curve = [ovalToPath(g!.bounds).anchors.map((a) => apply(m, a.anchor))];
+        const curve = [
+          ovalToPath(g!.bounds).anchors.map((a) => apply(m, a.anchor)),
+        ];
         near(await spreadOutline(probe!.ids[k]!), curve);
       }
     } finally {
       await probe!.release();
     }
     // Withdrawn: the stand-ins are gone, the ovals untouched.
-    expect(await h.host.document.pathAnchors(probe!.ids[0]!).catch(() => null)).toBeNull();
+    expect(
+      await h.host.document.pathAnchors(probe!.ids[0]!).catch(() => null),
+    ).toBeNull();
   });
 
   it("Repeat: a compound source's copy keeps its hole and lands where its plan puts it", async () => {
     const plan = await repeatPlanFor(h.host, {
       repeat: "rep-ps",
-      params: { ...REPEAT_DEFAULTS, kind: "grid", columns: 2, rows: 1, spacing: [10, 10], fitToArtboard: false },
+      params: {
+        ...REPEAT_DEFAULTS,
+        kind: "grid",
+        columns: 2,
+        rows: 1,
+        spacing: [10, 10],
+        fitToArtboard: false,
+      },
       ids: [poly("ring")],
       label: "spec",
     });
@@ -295,16 +373,25 @@ describe("draw conformance — page space on a page that does not start at its s
     expect(made.outcome.applied).toBe(true);
     const copy = bindMinted(made, batch)!.byHandle.get(repeatHandle(0, 0))!;
     const source = await spreadOutline(poly("ring"));
-    near(await spreadOutline(copy), source.map((c) => c.map(([x, y]) => [x + dx, y + dy] as Vec)));
+    near(
+      await spreadOutline(copy),
+      source.map((c) => c.map(([x, y]) => [x + dx, y + dy] as Vec)),
+    );
   });
 });
 
 /** "Ho" in Lora on the same page placement (`create-outlines.spec.ts`'s
  *  document, moved): the frame's box is page (40, 300)–(400, 380). */
-const LORA = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../fixtures/fonts/Lora.ttf"));
+const LORA = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "../fixtures/fonts/Lora.ttf"),
+);
 const TEXT_DOC = () =>
   buildIdml([
-    { name: "mimetype", data: "application/vnd.adobe.indesign-idml-package", store: true },
+    {
+      name: "mimetype",
+      data: "application/vnd.adobe.indesign-idml-package",
+      store: true,
+    },
     {
       name: "designmap.xml",
       data: `<?xml version="1.0" encoding="UTF-8"?>
@@ -355,36 +442,50 @@ describe("draw conformance — Create Outlines on a page that does not start at 
   });
   afterAll(() => h?.dispose());
 
-  it.skipIf(!PAGE_ORIGIN)("the outlines, holes and all, land inside the frame's box on its page (an engine that reports the origin)", async () => {
-    // The outlines door answers page space on every engine; only an engine
-    // that reports the page origin lets the re-merged runs get it back.
-    const frame = { kind: "textFrame", id: "tf" } as ElementId;
-    const before = new Set(((await h.host.document.tree()) as { id?: ElementId }[]).map((n) => String(n.id?.id)));
-    await h.host.selection.set([frame]);
-    expect(await applyCreateOutlines(h.host)).toEqual([frame]);
-    const leaves: ElementId[] = [];
-    const walk = (nodes: readonly { id?: ElementId | null; children?: readonly unknown[] | null }[]) => {
-      for (const n of nodes) {
-        if (n.children?.length) walk(n.children as never);
-        else if (n.id && !before.has(String(n.id.id))) leaves.push(n.id);
+  it.skipIf(!PAGE_ORIGIN)(
+    "the outlines, holes and all, land inside the frame's box on its page (an engine that reports the origin)",
+    async () => {
+      // The outlines door answers page space on every engine; only an engine
+      // that reports the page origin lets the re-merged runs get it back.
+      const frame = { kind: "textFrame", id: "tf" } as ElementId;
+      const before = new Set(
+        ((await h.host.document.tree()) as { id?: ElementId }[]).map((n) =>
+          String(n.id?.id),
+        ),
+      );
+      await h.host.selection.set([frame]);
+      expect(await applyCreateOutlines(h.host)).toEqual([frame]);
+      const leaves: ElementId[] = [];
+      const walk = (
+        nodes: readonly {
+          id?: ElementId | null;
+          children?: readonly unknown[] | null;
+        }[],
+      ) => {
+        for (const n of nodes) {
+          if (n.children?.length) walk(n.children as never);
+          else if (n.id && !before.has(String(n.id.id))) leaves.push(n.id);
+        }
+      };
+      walk((await h.host.document.tree()) as never);
+      expect(leaves.length).toBeGreaterThanOrEqual(1);
+      let holed = 0;
+      for (const id of leaves) {
+        const t = (await h.host.document.pathAnchors(id))!;
+        if (t.subpathStarts.length > 1) holed++;
+        const m = storedTransformOf(
+          (t.itemTransform ?? null) as Affine | null,
+          pageOriginOf(t),
+        ) ?? [1, 0, 0, 1, 0, 0];
+        for (const a of t.anchors) {
+          const [x, y] = apply(m, a.anchor);
+          expect(x - ORIGIN[0]).toBeGreaterThan(39);
+          expect(x - ORIGIN[0]).toBeLessThan(401);
+          expect(y - ORIGIN[1]).toBeGreaterThan(299);
+          expect(y - ORIGIN[1]).toBeLessThan(381);
+        }
       }
-    };
-    walk((await h.host.document.tree()) as never);
-    expect(leaves.length).toBeGreaterThanOrEqual(1);
-    let holed = 0;
-    for (const id of leaves) {
-      const t = (await h.host.document.pathAnchors(id))!;
-      if (t.subpathStarts.length > 1) holed++;
-      const m = storedTransformOf((t.itemTransform ?? null) as Affine | null, pageOriginOf(t)) ?? [1, 0, 0, 1, 0, 0];
-      for (const a of t.anchors) {
-        const [x, y] = apply(m, a.anchor);
-        expect(x - ORIGIN[0]).toBeGreaterThan(39);
-        expect(x - ORIGIN[0]).toBeLessThan(401);
-        expect(y - ORIGIN[1]).toBeGreaterThan(299);
-        expect(y - ORIGIN[1]).toBeLessThan(381);
-      }
-    }
-    expect(holed).toBeGreaterThanOrEqual(1);
-  });
+      expect(holed).toBeGreaterThanOrEqual(1);
+    },
+  );
 });
-

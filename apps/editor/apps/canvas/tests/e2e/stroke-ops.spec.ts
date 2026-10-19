@@ -174,9 +174,8 @@ test.describe("E2E stroke op round-trips", () => {
       },
       expectModel: async () => {
         expect(
-          (
-            (await readProp(page, rect, "frameStrokeType")) as { value: string }
-          ).value,
+          ((await readProp(page, rect, "frameStrokeType")) as { value: string })
+            .value,
         ).toBe("StrokeStyle/$ID/Dotted");
       },
     });
@@ -203,9 +202,8 @@ test.describe("E2E stroke op round-trips", () => {
       },
       expectModel: async () => {
         expect(
-          (
-            (await readProp(page, rect, "frameStrokeJoin")) as { value: string }
-          ).value,
+          ((await readProp(page, rect, "frameStrokeJoin")) as { value: string })
+            .value,
         ).toBe("RoundEndJoin");
       },
     });

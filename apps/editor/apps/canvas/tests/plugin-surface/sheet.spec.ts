@@ -169,7 +169,13 @@ interface CanvasRegistries {
     list(): Array<{ id: string; title: string; category?: string }>;
     get(id: string): { id: string; title: string } | undefined;
     invoke(id: string, payload?: unknown): Promise<unknown>;
-    observe(o: (e: { phase: string; invocation: { id: string }; error?: unknown }) => void): {
+    observe(
+      o: (e: {
+        phase: string;
+        invocation: { id: string };
+        error?: unknown;
+      }) => void,
+    ): {
       dispose(): void;
     };
   };
@@ -178,7 +184,12 @@ interface CanvasRegistries {
   menus: { list(): Array<{ path: string; command: string }> };
   keybindings: { list(): Array<{ key: string; command: string }> };
   importers: {
-    list(): Array<{ id: string; title: string; extensions: string[]; mimeTypes?: string[] }>;
+    list(): Array<{
+      id: string;
+      title: string;
+      extensions: string[];
+      mimeTypes?: string[];
+    }>;
     resolve(name: string, mime?: string): { id: string } | null;
     acceptExtensions(): string[];
   };
@@ -186,7 +197,12 @@ interface CanvasRegistries {
     list(): Array<{ id: string; title: string; extension: string }>;
   };
   editContexts: {
-    list(): Array<{ type: string; entry: string; toolIds?: string[] | null; panelIds?: string[] | null }>;
+    list(): Array<{
+      type: string;
+      entry: string;
+      toolIds?: string[] | null;
+      panelIds?: string[] | null;
+    }>;
   };
   objectTypes: { list(): Array<{ type: string; editContextType?: string }> };
 }
@@ -197,14 +213,15 @@ interface CanvasGlobal {
     openPanel: (id: string) => void;
     registries: CanvasRegistries;
     client: {
-      executeScript: (s: string) => Promise<{ output: string[]; error: string | null }>;
+      executeScript: (
+        s: string,
+      ) => Promise<{ output: string[]; error: string | null }>;
       camera: { read: () => { scale: number; tx: number; ty: number } };
-      elementGeometry: (
-        ids: unknown[],
-      ) => Promise<
+      elementGeometry: (ids: unknown[]) => Promise<
         Array<{
           bounds: [number, number, number, number];
-          itemTransform?: [number, number, number, number, number, number] | null;
+          itemTransform?:
+            [number, number, number, number, number, number] | null;
         }>
       >;
     };
@@ -219,7 +236,10 @@ async function bootWithDocument(page: Page): Promise<void> {
   await page.setInputFiles('input[type="file"]', fixturePath("geometry"));
   await expect
     .poll(
-      () => page.evaluate(() => (globalThis as unknown as CanvasGlobal).__canvas.ready),
+      () =>
+        page.evaluate(
+          () => (globalThis as unknown as CanvasGlobal).__canvas.ready,
+        ),
       { timeout: 30_000 },
     )
     .toBe(true);
@@ -228,7 +248,10 @@ async function bootWithDocument(page: Page): Promise<void> {
 
 async function invoke(page: Page, id: string): Promise<void> {
   await page.evaluate(
-    (cid) => (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke(cid),
+    (cid) =>
+      (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke(cid),
     id,
   );
 }
@@ -238,7 +261,9 @@ async function invoke(page: Page, id: string): Promise<void> {
  *  promise that only settles when the dialog is answered. */
 async function invokeDetached(page: Page, id: string): Promise<void> {
   await page.evaluate((cid) => {
-    void (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke(cid);
+    void (
+      globalThis as unknown as CanvasGlobal
+    ).__canvas.registries.commands.invoke(cid);
   }, id);
 }
 
@@ -260,7 +285,10 @@ async function countKind(page: Page, kind: string): Promise<number> {
       children?: unknown[];
     }>;
     let n = 0;
-    const visit = (node: { id?: { kind: string } | null; children?: unknown[] }) => {
+    const visit = (node: {
+      id?: { kind: string } | null;
+      children?: unknown[];
+    }) => {
       if (node.id && node.id.kind === k) n += 1;
       for (const ch of (node.children ?? []) as typeof tree) visit(ch);
     };
@@ -320,9 +348,13 @@ async function importWorkbook(page: Page): Promise<void> {
   await page.evaluate(
     async ({ bytes, mime }) => {
       const r = (globalThis as unknown as CanvasGlobal).__canvas.registries;
-      const imp = r.importers.resolve("sheet-02-formulas.xlsx", mime) as
-        | { import: (f: { name: string; bytes: Uint8Array; mimeType: string }) => Promise<void> }
-        | null;
+      const imp = r.importers.resolve("sheet-02-formulas.xlsx", mime) as {
+        import: (f: {
+          name: string;
+          bytes: Uint8Array;
+          mimeType: string;
+        }) => Promise<void>;
+      } | null;
       if (!imp) throw new Error("no importer resolved for .xlsx");
       await imp.import({
         name: "sheet-02-formulas.xlsx",
@@ -335,7 +367,9 @@ async function importWorkbook(page: Page): Promise<void> {
   // The engine boots in-browser and parses the workbook; the panel's
   // range control is the readable proof it landed.
   await openPanel(page, WORKBOOK_PANEL);
-  await expect(page.locator("[data-sheet-range]")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("[data-sheet-range]")).toBeVisible({
+    timeout: 30_000,
+  });
 }
 
 test.describe("plugin surface · paged.sheet", () => {
@@ -368,13 +402,18 @@ test.describe("plugin surface · paged.sheet", () => {
     expect([...c.commands].sort()).toEqual([...DECLARED.commands].sort());
     expect([...c.importers]).toEqual([...DECLARED.importers]);
     expect([...c.exporters]).toEqual([...DECLARED.exporters]);
-    expect(c.editContexts.map((e) => e.type)).toEqual([...DECLARED.editContexts]);
+    expect(c.editContexts.map((e) => e.type)).toEqual([
+      ...DECLARED.editContexts,
+    ]);
     expect(c.objectTypes.map((o) => o.type)).toEqual([...DECLARED.objectTypes]);
 
     for (const id of c.panels) expect(live.panels, `panel ${id}`).toContain(id);
-    for (const id of c.commands) expect(live.commands, `command ${id}`).toContain(id);
-    for (const id of c.importers) expect(live.importers, `importer ${id}`).toContain(id);
-    for (const id of c.exporters) expect(live.exporters, `exporter ${id}`).toContain(id);
+    for (const id of c.commands)
+      expect(live.commands, `command ${id}`).toContain(id);
+    for (const id of c.importers)
+      expect(live.importers, `importer ${id}`).toContain(id);
+    for (const id of c.exporters)
+      expect(live.exporters, `exporter ${id}`).toContain(id);
     for (const e of c.editContexts)
       expect(live.editContexts, `editContext ${e.type}`).toContain(e.type);
     for (const o of c.objectTypes)
@@ -432,9 +471,15 @@ test.describe("plugin surface · paged.sheet", () => {
       return r.commands
         .list()
         .filter((c) => c.id.startsWith("media.paged.sheet.command."))
-        .map((c) => ({ id: c.id, title: c.title, category: c.category ?? null }));
+        .map((c) => ({
+          id: c.id,
+          title: c.title,
+          category: c.category ?? null,
+        }));
     });
-    expect(registered.map((c) => c.id).sort()).toEqual([...DECLARED.commands].sort());
+    expect(registered.map((c) => c.id).sort()).toEqual(
+      [...DECLARED.commands].sort(),
+    );
     for (const c of registered) {
       expect(c.title, `${c.id} has a palette title`).toBeTruthy();
       expect(c.category, `${c.id} is grouped under a category`).toBe("Sheet");
@@ -513,7 +558,9 @@ test.describe("plugin surface · paged.sheet", () => {
 
     // The command opens the workbook panel on success and the engine
     // parses the file in-browser — the range control is the proof.
-    await expect(page.locator("[data-sheet-range]")).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator("[data-sheet-range]")).toBeVisible({
+      timeout: 30_000,
+    });
   });
 
   test("four of the twelve 'commands' only raise a panel — and two of those are named like dialogs they do not have", async ({
@@ -522,10 +569,14 @@ test.describe("plugin surface · paged.sheet", () => {
     // openGrid and sheetFromDataset do what their titles say: they raise
     // the panel they name.
     await invoke(page, "media.paged.sheet.command.openGrid");
-    await expect(page.locator('[data-sheet-panel="grid"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-sheet-panel="grid"]')).toBeVisible({
+      timeout: 15_000,
+    });
 
     await invoke(page, "media.paged.sheet.command.sheetFromDataset");
-    await expect(page.locator('[data-sheet-panel="datasets"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-sheet-panel="datasets"]')).toBeVisible({
+      timeout: 15_000,
+    });
 
     // "Sort range…" and "Find & replace…" carry the ellipsis that means
     // "this opens a dialog". Neither does — each raises the panel its
@@ -559,9 +610,9 @@ test.describe("plugin surface · paged.sheet", () => {
     }
     // The cold Grid panel at least names the first step instead of
     // sitting blank.
-    await expect(page.locator('[data-sheet-panel="grid"] [data-grid-empty]')).toContainText(
-      "Open or create a workbook",
-    );
+    await expect(
+      page.locator('[data-sheet-panel="grid"] [data-grid-empty]'),
+    ).toContainText("Open or create a workbook");
 
     // Once a workbook exists the controls are there — so the commands
     // are not broken, they are just useless at the moment a user reaches
@@ -570,7 +621,9 @@ test.describe("plugin surface · paged.sheet", () => {
     for (const [id, panel, control] of CONTROLS) {
       await openPanel(page, DATASETS_PANEL);
       await invoke(page, id);
-      await expect(page.locator(`[data-sheet-panel="${panel}"]`)).toBeVisible({ timeout: 15_000 });
+      await expect(page.locator(`[data-sheet-panel="${panel}"]`)).toBeVisible({
+        timeout: 15_000,
+      });
       await expect(
         page.locator(control),
         `${id}'s control appears once a workbook is open`,
@@ -618,7 +671,9 @@ test.describe("plugin surface · paged.sheet", () => {
     await page.locator("[data-sheet-range]").fill("A1:B3");
     await page.locator("[data-sheet-lower]").click();
     await expect
-      .poll(async () => (await selectedElement(page))?.kind ?? null, { timeout: 20_000 })
+      .poll(async () => (await selectedElement(page))?.kind ?? null, {
+        timeout: 20_000,
+      })
       .not.toBeNull();
 
     const mark = log.length;
@@ -644,7 +699,8 @@ test.describe("plugin surface · paged.sheet", () => {
       type: "surface-finding",
       description:
         "styleFromCell outcome with a lowered frame: " +
-        (log.slice(styleMark).find((l) => /styleFromCell:/.test(l)) ?? "(none)"),
+        (log.slice(styleMark).find((l) => /styleFromCell:/.test(l)) ??
+          "(none)"),
     });
   });
 
@@ -655,9 +711,17 @@ test.describe("plugin surface · paged.sheet", () => {
   }) => {
     const wiring = await page.evaluate((mime) => {
       const r = (globalThis as unknown as CanvasGlobal).__canvas.registries;
-      const entry = r.importers.list().find((i) => i.id === "media.paged.sheet.importer.xlsx");
+      const entry = r.importers
+        .list()
+        .find((i) => i.id === "media.paged.sheet.importer.xlsx");
       return {
-        entry: entry ? { title: entry.title, ext: entry.extensions, mime: entry.mimeTypes ?? [] } : null,
+        entry: entry
+          ? {
+              title: entry.title,
+              ext: entry.extensions,
+              mime: entry.mimeTypes ?? [],
+            }
+          : null,
         byName: r.importers.resolve("Budget.xlsx")?.id ?? null,
         byUpperName: r.importers.resolve("BUDGET.XLSX")?.id ?? null,
         byMime: r.importers.resolve("unknown", mime)?.id ?? null,
@@ -687,7 +751,9 @@ test.describe("plugin surface · paged.sheet", () => {
   }) => {
     const listed = await page.evaluate(() => {
       const r = (globalThis as unknown as CanvasGlobal).__canvas.registries;
-      const e = r.exporters.list().find((x) => x.id === "media.paged.sheet.exporter.xlsx");
+      const e = r.exporters
+        .list()
+        .find((x) => x.id === "media.paged.sheet.exporter.xlsx");
       return e ? { title: e.title, extension: e.extension } : null;
     });
     expect(listed).not.toBeNull();
@@ -696,8 +762,15 @@ test.describe("plugin surface · paged.sheet", () => {
     // No workbook → the exporter answers null rather than inventing one.
     const empty = await page.evaluate(async () => {
       const r = (globalThis as unknown as CanvasGlobal).__canvas.registries;
-      const e = r.exporters.list().find((x) => x.id === "media.paged.sheet.exporter.xlsx") as
-        | { export: () => Promise<{ bytes: Uint8Array } | null> | { bytes: Uint8Array } | null }
+      const e = r.exporters
+        .list()
+        .find((x) => x.id === "media.paged.sheet.exporter.xlsx") as
+        | {
+            export: () =>
+              | Promise<{ bytes: Uint8Array } | null>
+              | { bytes: Uint8Array }
+              | null;
+          }
         | undefined;
       return (await e!.export()) === null;
     });
@@ -706,7 +779,9 @@ test.describe("plugin surface · paged.sheet", () => {
     await importWorkbook(page);
     const out = await page.evaluate(async () => {
       const r = (globalThis as unknown as CanvasGlobal).__canvas.registries;
-      const e = r.exporters.list().find((x) => x.id === "media.paged.sheet.exporter.xlsx") as
+      const e = r.exporters
+        .list()
+        .find((x) => x.id === "media.paged.sheet.exporter.xlsx") as
         | {
             export: () =>
               | Promise<{ bytes: Uint8Array; fileName: string } | null>
@@ -746,9 +821,15 @@ test.describe("plugin surface · paged.sheet", () => {
       };
     });
     expect(declared.entry).toBe("doubleClick");
-    expect(declared.objectRoutesTo, "sheetFrame routes to the sheet context").toBe("sheet");
+    expect(
+      declared.objectRoutesTo,
+      "sheetFrame routes to the sheet context",
+    ).toBe("sheet");
     expect(declared.panelIds).toEqual([WORKBOOK_PANEL]);
-    expect(declared.toolIds, "the sheet context restricts the rail to nothing").toEqual([]);
+    expect(
+      declared.toolIds,
+      "the sheet context restricts the rail to nothing",
+    ).toEqual([]);
 
     // Import + lower so there is a bound frame on the page.
     await importWorkbook(page);
@@ -773,7 +854,9 @@ test.describe("plugin surface · paged.sheet", () => {
     await page.mouse.dblclick(at!.x, at!.y);
 
     await expect(breadcrumb).toBeVisible({ timeout: 15_000 });
-    await expect(breadcrumb.locator('[data-edit-context-crumb="sheet"]')).toHaveCount(1);
+    await expect(
+      breadcrumb.locator('[data-edit-context-crumb="sheet"]'),
+    ).toHaveCount(1);
     // The context toolbar states where you are…
     await expect(page.locator("[data-context-toolbar]")).toHaveAttribute(
       "data-edit-context",
@@ -820,15 +903,29 @@ test.describe("plugin surface · paged.sheet", () => {
       const r = (globalThis as unknown as CanvasGlobal).__canvas.registries;
       const mine = (s: string) => s.startsWith("media.paged.sheet.");
       return {
-        tools: r.tools.list().map((t) => t.id).filter(mine),
+        tools: r.tools
+          .list()
+          .map((t) => t.id)
+          .filter(mine),
         // Other bundles DO put tools in the rail — so this is a choice
         // paged.sheet made, not a door the contract lacks.
-        pluginToolsTotal: r.tools.list().filter((t) => t.id.startsWith("media.paged.")).length,
-        menuItems: r.menus.list().filter((m) => mine(m.command)).map((m) => m.path),
-        keybindings: r.keybindings.list().filter((k) => mine(k.command)).map((k) => k.key),
+        pluginToolsTotal: r.tools
+          .list()
+          .filter((t) => t.id.startsWith("media.paged.")).length,
+        menuItems: r.menus
+          .list()
+          .filter((m) => mine(m.command))
+          .map((m) => m.path),
+        keybindings: r.keybindings
+          .list()
+          .filter((k) => mine(k.command))
+          .map((k) => k.key),
         // The K-8 panel-rail door (`rail: true` on a panel contribution)
         // would give the panels a launcher glyph. Nobody opted in.
-        railPanels: r.panels.list().filter((p) => p.rail).map((p) => p.id),
+        railPanels: r.panels
+          .list()
+          .filter((p) => p.rail)
+          .map((p) => p.id),
       };
     });
 
@@ -879,15 +976,30 @@ test.describe("plugin surface · paged.sheet", () => {
       [...reach.keybindings].sort(),
       "paged.sheet binds its grid chords",
     ).toEqual(
-      ["cmd+c", "ctrl+c", "cmd+v", "ctrl+v", "cmd+d", "cmd+r", "ctrl+r", "cmd+f", "ctrl+f"].sort(),
+      [
+        "cmd+c",
+        "ctrl+c",
+        "cmd+v",
+        "ctrl+v",
+        "cmd+d",
+        "cmd+r",
+        "ctrl+r",
+        "cmd+f",
+        "ctrl+f",
+      ].sort(),
     );
-    expect(reach.railPanels, "no panel opted into the K-8 rail launcher").toEqual([]);
+    expect(
+      reach.railPanels,
+      "no panel opted into the K-8 rail launcher",
+    ).toEqual([]);
 
     // The rail slot machinery exists and is populated by other plugins —
     // there is simply nothing in it that makes a spreadsheet.
     await expect(page.locator('[data-tool-rail="ready"]')).toBeVisible();
     await expect(
-      page.locator('[data-tool-rail="ready"] [data-tool^="media.paged.sheet."]'),
+      page.locator(
+        '[data-tool-rail="ready"] [data-tool^="media.paged.sheet."]',
+      ),
     ).toHaveCount(0);
 
     test.info().annotations.push({
@@ -914,7 +1026,9 @@ test.describe("plugin surface · paged.sheet", () => {
         .getByRole("button", { name: "Plugins" })
         .click();
       await page.locator('[data-menu-submenu="Sheet"]').hover();
-      await expect(page.getByRole("menuitem", { name: "Grid", exact: true })).toHaveCount(1);
+      await expect(
+        page.getByRole("menuitem", { name: "Grid", exact: true }),
+      ).toHaveCount(1);
     };
 
     await openWindowMenu();
@@ -945,7 +1059,9 @@ test.describe("plugin surface · paged.sheet", () => {
     const paletteHasIt = await page.evaluate(() => {
       const r = (globalThis as unknown as CanvasGlobal).__canvas.registries;
       const id = "paged.panel.show.media.paged.sheet.panel.workbook";
-      return Boolean(r.commands.get(id)) && !("when" in (r.commands.get(id) ?? {}));
+      return (
+        Boolean(r.commands.get(id)) && !("when" in (r.commands.get(id) ?? {}))
+      );
     });
     expect(
       paletteHasIt,
@@ -996,10 +1112,9 @@ test.describe("plugin surface · paged.sheet", () => {
     // page is untouched. Nothing a designer can see has happened.
     await importWorkbook(page);
     const afterImport = await countKind(page, "textFrame");
-    expect(
-      afterImport,
-      "importing a workbook places NOTHING on the page",
-    ).toBe(before);
+    expect(afterImport, "importing a workbook places NOTHING on the page").toBe(
+      before,
+    );
 
     // STEP TWO — the second command. Only now does a frame appear.
     await invoke(page, "media.paged.sheet.command.lowerToFrame");

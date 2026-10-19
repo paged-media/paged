@@ -67,7 +67,11 @@ function qr(): LoweredBarcode {
   };
 }
 
-const placement: BarcodePlacement = { pageId: "page-1" as never, topPt: 36, leftPt: 36 };
+const placement: BarcodePlacement = {
+  pageId: "page-1" as never,
+  topPt: 36,
+  leftPt: 36,
+};
 
 describe("data-host-model · barcode (VECTOR lane, §9.7)", () => {
   it("emits one closed insertPath filled rect per dark module + the page origin", () => {
@@ -76,7 +80,11 @@ describe("data-host-model · barcode (VECTOR lane, §9.7)", () => {
     const paths = ops.filter((o) => o.op === "insertPath");
     expect(paths).toHaveLength(2);
     const first = paths[0] as {
-      args: { pageId: string; open: boolean; anchors: { anchor: [number, number] }[] };
+      args: {
+        pageId: string;
+        open: boolean;
+        anchors: { anchor: [number, number] }[];
+      };
     };
     // A filled rect is a CLOSED path of 4 anchors.
     expect(first.args.open).toBe(false);
@@ -91,22 +99,29 @@ describe("data-host-model · barcode (VECTOR lane, §9.7)", () => {
   });
 
   it("stamps the binding envelope onto a created path when supplied", () => {
-    const env = makeEnvelope({ kind: "barcode", target: "bc-frame", symbology: "code128" });
+    const env = makeEnvelope({
+      kind: "barcode",
+      target: "bc-frame",
+      symbology: "code128",
+    });
     const ops = barcodeToMutations(code128(), placement, env);
     // 2 painted paths + 1 metadata op.
     expect(ops.filter((o) => o.op === "insertPath")).toHaveLength(2);
     expect(ops.filter((o) => o.op === "setPluginMetadata")).toHaveLength(1);
     const meta = ops.find((o) => o.op === "setPluginMetadata") as
-      | { args: { key: string; elementId: { id: string } } }
-      | undefined;
+      { args: { key: string; elementId: { id: string } } } | undefined;
     expect(meta?.args.key).toBe(BINDING_KEY);
     expect(meta?.args.elementId.id).toBe("$created");
   });
 
   it("lowers QR modules as square cells offset by the page origin", () => {
-    const ops = barcodeToMutations(qr(), placement).filter((o) => o.op === "insertPath");
+    const ops = barcodeToMutations(qr(), placement).filter(
+      (o) => o.op === "insertPath",
+    );
     expect(ops).toHaveLength(3); // 3 dark modules, no envelope
-    const third = ops[2] as { args: { anchors: { anchor: [number, number] }[] } };
+    const third = ops[2] as {
+      args: { anchors: { anchor: [number, number] }[] };
+    };
     // The 3rd module is at content (0, 4); page origin (36, 36) → top-left (36, 40).
     const a = third.args.anchors.map((p) => p.anchor);
     expect(a[0]).toEqual([36, 40]);
@@ -114,16 +129,28 @@ describe("data-host-model · barcode (VECTOR lane, §9.7)", () => {
   });
 
   it("paints every module: black fill, no stroke, on the path just created [data.barcode.symbology]", () => {
-    const ops = barcodeToMutations(code128(), placement, makeEnvelope({ kind: "barcode" }));
+    const ops = barcodeToMutations(
+      code128(),
+      placement,
+      makeEnvelope({ kind: "barcode" }),
+    );
     const created = { kind: "polygon", id: "$created" };
     const paint = [
       {
         op: "setElementProperty",
-        args: { elementId: created, path: "frameFillColor", value: { type: "colorRef", value: "Color/Black" } },
+        args: {
+          elementId: created,
+          path: "frameFillColor",
+          value: { type: "colorRef", value: "Color/Black" },
+        },
       },
       {
         op: "setElementProperty",
-        args: { elementId: created, path: "frameStrokeColor", value: { type: "colorRef", value: "Swatch/None" } },
+        args: {
+          elementId: created,
+          path: "frameStrokeColor",
+          value: { type: "colorRef", value: "Swatch/None" },
+        },
       },
     ];
     // insertPath, fill, stroke — per module — then the envelope.
@@ -145,6 +172,8 @@ describe("data-host-model · barcode (VECTOR lane, §9.7)", () => {
     expect(barcodeToMutations(empty, placement)).toHaveLength(0);
     expect(barcodeModuleCount(empty)).toBe(0);
     // Even with an envelope, no modules → nothing drawn (no stray metadata).
-    expect(barcodeToMutations(empty, placement, makeEnvelope({}))).toHaveLength(0);
+    expect(barcodeToMutations(empty, placement, makeEnvelope({}))).toHaveLength(
+      0,
+    );
   });
 });

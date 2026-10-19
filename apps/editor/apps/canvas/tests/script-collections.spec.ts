@@ -146,7 +146,10 @@ test.describe("editor.script — collection reads", () => {
     );
     expect(after.length).toBe(before.length + 1);
     const created = after.find((g) => g.name === "Script Probe Group");
-    expect(created, "created color group not visible to paged.colorGroups()").toBeDefined();
+    expect(
+      created,
+      "created color group not visible to paged.colorGroups()",
+    ).toBeDefined();
     expect(created!.members).toContain("Color/CMYKCyan");
   });
 
@@ -157,9 +160,9 @@ test.describe("editor.script — collection reads", () => {
     await loadIdml(page, SAMPLE);
     const styles = await read<NamedSummary[]>(page, "paged.paragraphStyles()");
     expect(styles.length).toBeGreaterThan(0);
-    expect(
-      styles.some((s) => s.selfId.startsWith("ParagraphStyle/")),
-    ).toBe(true);
+    expect(styles.some((s) => s.selfId.startsWith("ParagraphStyle/"))).toBe(
+      true,
+    );
   });
 
   test("AC-SCRIPT-COLL-5 — paged.characterStyles() lists real character styles @feat:color-swatches.color-groups @feat:color-swatches.gradients @feat:color-swatches.swatch.crud @feat:conditional-text.applied-conditions @feat:images-graphics.placed-images @feat:layers.ops @feat:scripting.collections @feat:styles.character.crud @feat:styles.object.crud @feat:styles.paragraph.crud @feat:the-renderer.collections-read @level:happy", async ({
@@ -169,9 +172,9 @@ test.describe("editor.script — collection reads", () => {
     await loadIdml(page, SAMPLE);
     const styles = await read<NamedSummary[]>(page, "paged.characterStyles()");
     expect(styles.length).toBeGreaterThan(0);
-    expect(
-      styles.some((s) => s.selfId.startsWith("CharacterStyle/")),
-    ).toBe(true);
+    expect(styles.some((s) => s.selfId.startsWith("CharacterStyle/"))).toBe(
+      true,
+    );
   });
 
   test("AC-SCRIPT-COLL-6 — paged.objectStyles() lists real object styles @feat:color-swatches.color-groups @feat:color-swatches.gradients @feat:color-swatches.swatch.crud @feat:conditional-text.applied-conditions @feat:images-graphics.placed-images @feat:layers.ops @feat:scripting.collections @feat:styles.character.crud @feat:styles.object.crud @feat:styles.paragraph.crud @feat:the-renderer.collections-read @level:happy", async ({

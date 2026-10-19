@@ -54,7 +54,11 @@ async function pathAnchorsOf(
   return page.evaluate(async (r) => {
     const c = (
       globalThis as unknown as {
-        __canvas: { client: { pathAnchors: (id: unknown) => Promise<PathAnchorsResult | null> } };
+        __canvas: {
+          client: {
+            pathAnchors: (id: unknown) => Promise<PathAnchorsResult | null>;
+          };
+        };
       }
     ).__canvas;
     return c.client.pathAnchors(r).catch(() => null);
@@ -81,7 +85,9 @@ test.describe("journey · paged.draw create outlines", () => {
     expect(storyId, "the frame has a story").not.toBeNull();
     await designer.placeCaret(storyId!, 0);
     await designer.typeText("Hello");
-    await expect.poll(() => designer.storyChars(storyId!), { timeout: 6_000 }).toBe(5);
+    await expect
+      .poll(() => designer.storyChars(storyId!), { timeout: 6_000 })
+      .toBe(5);
     await designer.expectRenderChangesFrom(blankA);
 
     await designer.selectElement("textFrame", frameId);
@@ -94,7 +100,9 @@ test.describe("journey · paged.draw create outlines", () => {
       .poll(() => designer.count("textFrame"), { timeout: 10_000 })
       .toBe(framesBefore - 1);
     await expect
-      .poll(async () => (await treeIds(page, "polygon")).length, { timeout: 8_000 })
+      .poll(async () => (await treeIds(page, "polygon")).length, {
+        timeout: 8_000,
+      })
       .toBe(polysBefore.length + 1);
     const outline = (await treeIds(page, "polygon")).find(
       (p) => !polysBefore.some((b) => b.id === p.id),
@@ -105,12 +113,23 @@ test.describe("journey · paged.draw create outlines", () => {
     // "o" keeps its COUNTER: a contour whose box lies strictly inside
     // another's (how many contours "e" takes is the face's business).
     const boxes = model!.subpathStarts.map((start, i, starts) => {
-      const run = model!.anchors.slice(start, starts[i + 1] ?? model!.anchors.length);
+      const run = model!.anchors.slice(
+        start,
+        starts[i + 1] ?? model!.anchors.length,
+      );
       const xs = run.map((a) => a.anchor[0]);
       const ys = run.map((a) => a.anchor[1]);
-      return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] as const;
+      return [
+        Math.min(...xs),
+        Math.min(...ys),
+        Math.max(...xs),
+        Math.max(...ys),
+      ] as const;
     });
-    expect(boxes.length, "one contour per glyph at least").toBeGreaterThanOrEqual(5);
+    expect(
+      boxes.length,
+      "one contour per glyph at least",
+    ).toBeGreaterThanOrEqual(5);
     const hasCounter = boxes.some((inner, i) =>
       boxes.some(
         (outer, j) =>
@@ -121,7 +140,9 @@ test.describe("journey · paged.draw create outlines", () => {
           inner[3] < outer[3],
       ),
     );
-    expect(hasCounter, "a counter survives as a contour inside its glyph").toBe(true);
+    expect(hasCounter, "a counter survives as a contour inside its glyph").toBe(
+      true,
+    );
     // The glyphs lie where the text was set (page space, inside the frame).
     for (const a of model!.anchors) {
       expect(a.anchor[0]).toBeGreaterThanOrEqual(frame.x0 - 1);
@@ -138,8 +159,12 @@ test.describe("journey · paged.draw create outlines", () => {
       .poll(() => designer.count("textFrame"), { timeout: 8_000 })
       .toBe(framesBefore);
     await expect
-      .poll(async () => (await treeIds(page, "polygon")).length, { timeout: 8_000 })
+      .poll(async () => (await treeIds(page, "polygon")).length, {
+        timeout: 8_000,
+      })
       .toBe(polysBefore.length);
-    await expect.poll(() => designer.storyChars(storyId!), { timeout: 6_000 }).toBe(5);
+    await expect
+      .poll(() => designer.storyChars(storyId!), { timeout: 6_000 })
+      .toBe(5);
   });
 });

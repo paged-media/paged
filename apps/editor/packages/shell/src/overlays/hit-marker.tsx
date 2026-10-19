@@ -70,8 +70,22 @@ function HitMarkerRender(props: OverlayProps) {
         />
       )}
       <g transform={`translate(${markerX}, ${markerY}) scale(${inv})`}>
-        <line x1={-6} y1={0} x2={6} y2={0} stroke="var(--overlay-target)" strokeWidth={1.5} />
-        <line x1={0} y1={-6} x2={0} y2={6} stroke="var(--overlay-target)" strokeWidth={1.5} />
+        <line
+          x1={-6}
+          y1={0}
+          x2={6}
+          y2={0}
+          stroke="var(--overlay-target)"
+          strokeWidth={1.5}
+        />
+        <line
+          x1={0}
+          y1={-6}
+          x2={0}
+          y2={6}
+          stroke="var(--overlay-target)"
+          strokeWidth={1.5}
+        />
         <circle cx={0} cy={0} r={2} fill="var(--overlay-target)" />
       </g>
     </g>

@@ -16,7 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The PATH OPTIONS panel, RENDERED (happy-dom) against the real engine.
 //
 // What it has to prove is one sentence: A NUMBER TYPED INTO A FIELD
@@ -183,7 +182,9 @@ async function sentTo(
 function override<T extends object>(target: T, key: string, value: unknown): T {
   return new Proxy(target, {
     get(obj, prop, receiver) {
-      return prop === key ? value : (Reflect.get(obj, prop, receiver) as unknown);
+      return prop === key
+        ? value
+        : (Reflect.get(obj, prop, receiver) as unknown);
     },
   });
 }
@@ -231,7 +232,9 @@ describe("Path options panel — rendered against the engine", () => {
       }
       expect(panel.attr(PANEL, "data-draw-pathopts-panel")).toBe("offset");
       expect(valueOf(panel, "offset.delta")).toBe("6");
-      expect(panel.get<HTMLSelectElement>(select("offset.join")).value).toBe("miter");
+      expect(panel.get<HTMLSelectElement>(select("offset.join")).value).toBe(
+        "miter",
+      );
       expect(valueOf(panel, "offset.miterLimit")).toBe("4");
       // Nothing selected: an operation on the selection has no target.
       expect(panel.disabled(apply("offset"))).toBe(true);
@@ -373,9 +376,9 @@ describe("Path options panel — rendered against the engine", () => {
       ]);
       // The miter limit means nothing to a round join, and the form says so.
       panel.change(select("offset.join"), "round");
-      expect(panel.get<HTMLInputElement>(field("offset.miterLimit")).disabled).toBe(
-        true,
-      );
+      expect(
+        panel.get<HTMLInputElement>(field("offset.miterLimit")).disabled,
+      ).toBe(true);
       expect(panel.count("[data-draw-pathopts-offset-join-note]")).toBe(0);
       expect(OFFSET_JOIN_NOTE).toMatch(/0\.65/);
       expect(shapeOf(await tableOf(SQ))).toEqual(shapeOf(before));
@@ -452,9 +455,9 @@ describe("Path options panel — rendered against the engine", () => {
           miterLimit: 4,
         })}.`,
       );
-      expect(panel.get<HTMLInputElement>(field("outlineStroke.width")).disabled).toBe(
-        true,
-      );
+      expect(
+        panel.get<HTMLInputElement>(field("outlineStroke.width")).disabled,
+      ).toBe(true);
 
       await panel.click(apply("outlineStroke"));
       const own = boxOf(await tableOf(LN));
@@ -543,7 +546,12 @@ describe("Path options panel — rendered against the engine", () => {
       expect(created).toHaveLength(3 + 4);
       expect(panel.work.mutations).toEqual([{ op: "batch", ops: 7 }]);
       // Every line lies inside the box typed.
-      let box: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
+      let box: [number, number, number, number] = [
+        Infinity,
+        Infinity,
+        -Infinity,
+        -Infinity,
+      ];
       for (const id of created) {
         const b = boxOf(await tableOf(id));
         box = [
@@ -583,8 +591,14 @@ describe("Path options panel — rendered against the engine", () => {
       // No reference yet.
       expect(panel.disabled(apply("selectSameWeight"))).toBe(true);
       await drive(() => h.host.selection.set([LN]), panel.work);
-      expect(panel.get(apply("selectSameWeight")).textContent).toBe("Select matching");
-      const ids = () => h.host.selection.get().map((e) => e.id).sort();
+      expect(panel.get(apply("selectSameWeight")).textContent).toBe(
+        "Select matching",
+      );
+      const ids = () =>
+        h.host.selection
+          .get()
+          .map((e) => e.id)
+          .sort();
 
       panel.change(field("selectSameWeight.tolerance"), "0.6");
       panel.reset();
@@ -604,9 +618,10 @@ describe("Path options panel — rendered against the engine", () => {
       await drive(() => h.host.selection.set([LN]), panel.work);
       await drive(
         () =>
-          commandFor(h, "media.paged.draw.command.selectSameStrokeWeight").handler(
-            undefined,
-          ),
+          commandFor(
+            h,
+            "media.paged.draw.command.selectSameStrokeWeight",
+          ).handler(undefined),
         panel.work,
       );
       expect(ids()).toEqual(["ln"]);
@@ -625,7 +640,9 @@ describe("Path options panel — rendered against the engine", () => {
       panel.change(field("spiral.segmentsPerTurn"), "6");
       await panel.click(apply("spiral"));
       const withSpiral = await leafIds(h);
-      const spiral = withSpiral.find((id) => !before.some((b) => b.id === id.id))!;
+      const spiral = withSpiral.find(
+        (id) => !before.some((b) => b.id === id.id),
+      )!;
       // 2 turns × 6 segments = 12 segments = 13 anchors, starting 40 pt
       // right of the centre.
       const table = await tableOf(spiral);
@@ -681,7 +698,9 @@ describe("Path options panel — rendered against the engine", () => {
       await drive(() => h.host.document.undo(), panel.work);
       // Simplify is now "last used"; Offset was never applied.
       expect(lastUsedPathOptions(h.host).simplify.tolerance).toBe(0.5);
-      expect(lastUsedPathOptions(h.host).offset).toEqual(PATH_OPTIONS_DEFAULTS.offset);
+      expect(lastUsedPathOptions(h.host).offset).toEqual(
+        PATH_OPTIONS_DEFAULTS.offset,
+      );
       await panel.click(header("offset"));
       expect(valueOf(panel, "offset.delta")).toBe("33");
     });
@@ -751,7 +770,10 @@ describe("Path options panel — rendered against the engine", () => {
 
       // A payload still wins over what is remembered.
       await drive(
-        () => commandFor(h, OFFSET_PATH_COMMAND_ID).handler(undefined, { delta: 2 }),
+        () =>
+          commandFor(h, OFFSET_PATH_COMMAND_ID).handler(undefined, {
+            delta: 2,
+          }),
         panel.work,
       );
       expect(boxOf(await tableOf(SQ))[0]).toBeCloseTo(58, 3);
@@ -826,7 +848,9 @@ describe("Path options panel — rendered against the engine", () => {
         "Draw/Image trace…",
       ]);
       expect(
-        ellipsis.filter(([, suffix]) => !raisers.has(suffix)).map(([path]) => path),
+        ellipsis
+          .filter(([, suffix]) => !raisers.has(suffix))
+          .map(([path]) => path),
       ).toEqual(["Draw/Image trace…"]);
       // And nothing WITHOUT an ellipsis raises a dialog.
       expect(
@@ -870,7 +894,11 @@ describe("Path options panel — rendered against the engine", () => {
       expect(h.host.supports("shell.openPanel@1")).toBe(false);
       const before = await leafIds(h);
       const infos: string[] = [];
-      const log = override(h.host.log, "info", (m: string) => void infos.push(m));
+      const log = override(
+        h.host.log,
+        "info",
+        (m: string) => void infos.push(m),
+      );
       await openPathOptions(override(h.host, "log", log), "polarGrid");
       // 3 rings + 6 spokes: the command's defaults (never applied here).
       expect(await leafIds(h)).toHaveLength(before.length + 9);

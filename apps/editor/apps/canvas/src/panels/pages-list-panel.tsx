@@ -144,8 +144,12 @@ export function PagesListPanel() {
       ...(after ? { after: `page:${after.selfId}` } : {}),
     }).catch(() => {});
   };
-  const onMoveUp = at > 0 ? () => movePage(at >= 2 ? items[at - 2]! : null) : undefined;
-  const onMoveDown = at >= 0 && at < items.length - 1 ? () => movePage(items[at + 1]!) : undefined;
+  const onMoveUp =
+    at > 0 ? () => movePage(at >= 2 ? items[at - 2]! : null) : undefined;
+  const onMoveDown =
+    at >= 0 && at < items.length - 1
+      ? () => movePage(items[at + 1]!)
+      : undefined;
 
   return (
     <div data-pages-list-panel="ready">
@@ -161,20 +165,30 @@ export function PagesListPanel() {
         <ToolbarBtn
           icon="ui-component"
           label={
-            selectedPage ? "Duplicate page" : "Duplicate page (select one first)"
+            selectedPage
+              ? "Duplicate page"
+              : "Duplicate page (select one first)"
           }
           onClick={onDuplicate}
         />
         <ToolbarBtn
           icon="ui-chevron-left"
           testId="move-page-earlier"
-          label={onMoveUp ? "Move page earlier" : "Move page earlier (select one first)"}
+          label={
+            onMoveUp
+              ? "Move page earlier"
+              : "Move page earlier (select one first)"
+          }
           onClick={onMoveUp}
         />
         <ToolbarBtn
           icon="ui-chevron-right"
           testId="move-page-later"
-          label={onMoveDown ? "Move page later" : "Move page later (select one first)"}
+          label={
+            onMoveDown
+              ? "Move page later"
+              : "Move page later (select one first)"
+          }
           onClick={onMoveDown}
         />
       </PanelToolbar>

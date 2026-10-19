@@ -43,18 +43,30 @@ const silent = { debug() {}, info() {}, warn() {}, error() {} };
  *  previous child minted, and a `$h:` story address resolved to its story. */
 async function applyBatch(
   m: Mutation,
-  one: (m: Mutation) => Promise<{ applied: boolean; createdId?: unknown; error?: unknown }>,
+  one: (
+    m: Mutation,
+  ) => Promise<{ applied: boolean; createdId?: unknown; error?: unknown }>,
 ) {
   const ops = m.op === "batch" ? (m.args as { ops: Mutation[] }).ops : [];
   if (!ops.some((o) => o.op === "bindCreated")) return one(m);
-  const minted: { handle: string | null; element: unknown; storyId: string | null }[] = [];
+  const minted: {
+    handle: string | null;
+    element: unknown;
+    storyId: string | null;
+  }[] = [];
   let last: unknown = null;
   for (const raw of ops) {
     if (raw.op === "bindCreated") {
-      minted.push({ handle: (raw.args as { handle: string }).handle, element: last, storyId: "story-new" });
+      minted.push({
+        handle: (raw.args as { handle: string }).handle,
+        element: last,
+        storyId: "story-new",
+      });
       continue;
     }
-    const child = JSON.parse(JSON.stringify(raw).replace(/"\$h:frame"/g, '"story-new"')) as Mutation;
+    const child = JSON.parse(
+      JSON.stringify(raw).replace(/"\$h:frame"/g, '"story-new"'),
+    ) as Mutation;
     const out = await one(child);
     if (!out.applied) return out;
     if (out.createdId) last = out.createdId;
@@ -66,35 +78,65 @@ function fakeHost() {
   const mutations: Mutation[] = [];
   // The placeholder fields the host holds — insertField adds one, setFieldValue
   // updates it — so the session's fresh placeholders() read sees what it placed.
-  const fields: { storyId: string; offset: number; plugin: string; key: string; value: string | null }[] = [];
+  const fields: {
+    storyId: string;
+    offset: number;
+    plugin: string;
+    key: string;
+    value: string | null;
+  }[] = [];
   const host = {
     manifest: { id: "media.paged.data", version: "0.0.1" },
     log: silent,
     supports: () => true,
     selection: { get: () => [], set: async () => [] },
-    network: { consentedOrigins: () => [], requestConsent: async () => ({ granted: [], denied: [] }) },
+    network: {
+      consentedOrigins: () => [],
+      requestConsent: async () => ({ granted: [], denied: [] }),
+    },
     document: {
       onWillSave: () => ({ dispose() {} }),
-      mutate: async (batch: Mutation) => applyBatch(batch, async (m: Mutation) => {
-        mutations.push(m);
-        if (m.op === "insertTextFrame") {
-          return { applied: true, createdId: { kind: "textFrame", id: "frame-new" }, pageIds: [] };
-        }
-        if (m.op === "insertField" && typeof m.args.field === "object" && "placeholder" in m.args.field) {
-          const p = m.args.field.placeholder;
-          fields.push({ storyId: m.args.storyId, offset: m.args.offset, plugin: p.plugin, key: p.key, value: p.value ?? null });
-        }
-        if (m.op === "setFieldValue") {
-          const f = fields.find((x) => x.storyId === m.args.storyId && x.offset === m.args.offset);
-          if (!f) return { applied: false, error: "no placeholder field" };
-          f.value = m.args.value ?? null;
-        }
-        return { applied: true, createdId: null, pageIds: [] };
-      }),
+      mutate: async (batch: Mutation) =>
+        applyBatch(batch, async (m: Mutation) => {
+          mutations.push(m);
+          if (m.op === "insertTextFrame") {
+            return {
+              applied: true,
+              createdId: { kind: "textFrame", id: "frame-new" },
+              pageIds: [],
+            };
+          }
+          if (
+            m.op === "insertField" &&
+            typeof m.args.field === "object" &&
+            "placeholder" in m.args.field
+          ) {
+            const p = m.args.field.placeholder;
+            fields.push({
+              storyId: m.args.storyId,
+              offset: m.args.offset,
+              plugin: p.plugin,
+              key: p.key,
+              value: p.value ?? null,
+            });
+          }
+          if (m.op === "setFieldValue") {
+            const f = fields.find(
+              (x) => x.storyId === m.args.storyId && x.offset === m.args.offset,
+            );
+            if (!f) return { applied: false, error: "no placeholder field" };
+            f.value = m.args.value ?? null;
+          }
+          return { applied: true, createdId: null, pageIds: [] };
+        }),
       placeholders: async () => fields.map((f) => ({ ...f })),
       frameChain: async () => [],
       elementGeometry: async (ids: { id: string }[]) =>
-        ids.map((i) => ({ id: { kind: "textFrame", id: i.id }, pageId: "p1", bounds: [0, 0, 100, 200] })),
+        ids.map((i) => ({
+          id: { kind: "textFrame", id: i.id },
+          pageId: "p1",
+          bounds: [0, 0, 100, 200],
+        })),
       hitTest: async () => ({ storyId: "story-new" }),
       meta: async () => ({ activePage: "p1" }),
       collection: async () => [{ selfId: "p1" }],
@@ -118,8 +160,18 @@ function fakeEngine(over?: Partial<DataEngineLike>): DataEngineLike {
     governed_catalog: () => ({}),
     plan_batch: () => ({}),
     run_record_flow_batch: () => [],
-    evaluate_rule: () => ({ scope: "x", fires: [], apply: { action: "tableStyle", name: "s" }, total: 0 }),
-    lower_record_flow: () => ({ frames: [], overflow: false, placed: 0, total: 0 }),
+    evaluate_rule: () => ({
+      scope: "x",
+      fires: [],
+      apply: { action: "tableStyle", name: "s" },
+      total: 0,
+    }),
+    lower_record_flow: () => ({
+      frames: [],
+      overflow: false,
+      placed: 0,
+      total: 0,
+    }),
     sync_state: () => ({}),
     pin() {},
     mark_overridden() {},
@@ -143,7 +195,11 @@ async function sessionWith(host: BundleHost, engine: DataEngineLike, rows = 0) {
     ...actualDuckdb,
     bootDuckDB: async () => ({
       registerCsv: async () => {},
-      query: async () => ({ schema: { fields: [] }, columns: [], row_count: rows }),
+      query: async () => ({
+        schema: { fields: [] },
+        columns: [],
+        row_count: rows,
+      }),
       close: async () => {},
     }),
   }));
@@ -154,7 +210,9 @@ async function sessionWith(host: BundleHost, engine: DataEngineLike, rows = 0) {
 describe("data_bind_preview_step session lane (§9)", () => {
   it("recordCount reads the engine's of-N bound", async () => {
     const fake = fakeHost();
-    const engine = fakeEngine({ query_record_count: (q: string) => (q === "q_all" ? 5 : 0) });
+    const engine = fakeEngine({
+      query_record_count: (q: string) => (q === "q_all" ? 5 : 0),
+    });
     const s = await sessionWith(fake.host, engine);
     expect(await s.recordCount("q_all")).toBe(5);
     expect(await s.recordCount("other")).toBe(0);
@@ -185,7 +243,11 @@ describe("data_bind_preview_step session lane (§9)", () => {
       resolve_lowered_at: (id: string, record: number) => {
         seen.push(record);
         return id === "v_name"
-          ? { kind: "variable", text: ["ALPHA", "BETA", "GAMMA"][record] ?? "", hidden: false }
+          ? {
+              kind: "variable",
+              text: ["ALPHA", "BETA", "GAMMA"][record] ?? "",
+              hidden: false,
+            }
           : null;
       },
     });
@@ -195,15 +257,14 @@ describe("data_bind_preview_step session lane (§9)", () => {
     // First preview (record 0) places the field with the previewed value.
     await s.previewRecord("v_name", 0);
     const inserted = fake.mutations.find((m) => m.op === "insertField") as
-      | { args: { field: { placeholder: { value?: string } } } }
-      | undefined;
+      { args: { field: { placeholder: { value?: string } } } } | undefined;
     expect(inserted?.args.field.placeholder.value).toBe("ALPHA");
 
     // Stepping to record 2 re-resolves the SAME field to that record's value.
     await s.previewRecord("v_name", 2);
-    const set = fake.mutations.filter((m) => m.op === "setFieldValue").at(-1) as
-      | { args: { value: string | null } }
-      | undefined;
+    const set = fake.mutations
+      .filter((m) => m.op === "setFieldValue")
+      .at(-1) as { args: { value: string | null } } | undefined;
     expect(set?.args.value).toBe("GAMMA");
     expect(seen).toEqual([0, 2]);
   });
@@ -223,8 +284,7 @@ describe("data_bind_preview_step session lane (§9)", () => {
     await s.previewRecord("v0", 3);
     expect(calledAt).toBe(true);
     const inserted = fake.mutations.find((m) => m.op === "insertField") as
-      | { args: { field: { placeholder: { value?: string } } } }
-      | undefined;
+      { args: { field: { placeholder: { value?: string } } } } | undefined;
     expect(inserted?.args.field.placeholder.value).toBe("ZERO");
   });
 
@@ -243,7 +303,9 @@ describe("data_bind_preview_step session lane (§9)", () => {
       },
     } as Partial<DataEngineLike>);
     const s = await sessionWith(fake.host, engine);
-    s.addBarcodeBinding("bc1", "rect-1", "q_all", "ean13", "ean", { missing: "skip" });
+    s.addBarcodeBinding("bc1", "rect-1", "q_all", "ean13", "ean", {
+      missing: "skip",
+    });
     await s.previewRecord("bc1", 4);
     expect(seen).toEqual([4]);
     expect(fake.mutations.find((m) => m.op === "batch")).toBeDefined();
@@ -255,11 +317,21 @@ describe("data_bind_preview_step session lane (§9)", () => {
     const engine = fakeEngine({
       resolve_lowered_at: () => {
         resolved += 1;
-        return { kind: "table", region: "r", columns: [], rows: [], rules: [], text: "", bounds: { widthPt: 1, heightPt: 1 } };
+        return {
+          kind: "table",
+          region: "r",
+          columns: [],
+          rows: [],
+          rules: [],
+          text: "",
+          bounds: { widthPt: 1, heightPt: 1 },
+        };
       },
     });
     const s = await sessionWith(fake.host, engine);
-    s.addTableBinding("t1", "region", "q_all", [{ header: "SKU", expr: "sku" }]);
+    s.addTableBinding("t1", "region", "q_all", [
+      { header: "SKU", expr: "sku" },
+    ]);
     await s.previewRecord("t1", 0);
     await s.previewRecord("t1", 1);
     expect(fake.mutations).toEqual([]);
@@ -275,14 +347,21 @@ describe("data_bind_preview_step session lane (§9)", () => {
     let next = 0;
     const live = new Set<string>();
     const mutate = fake.host.document.mutate;
-    (fake.host.document as { mutate: unknown }).mutate = async (m: Mutation) => {
+    (fake.host.document as { mutate: unknown }).mutate = async (
+      m: Mutation,
+    ) => {
       const out = (await mutate(m)) as Record<string, unknown>;
       if (m.op !== "batch") return out;
       const ops = (m.args as { ops: Mutation[] }).ops;
-      for (const o of ops) if (o.op === "deleteFrame") live.delete(o.args.frameId);
+      for (const o of ops)
+        if (o.op === "deleteFrame") live.delete(o.args.frameId);
       const minted = ops
         .filter((o) => o.op === "insertPath")
-        .map(() => ({ handle: null, element: { kind: "polygon", id: `mod${next++}` }, storyId: null }));
+        .map(() => ({
+          handle: null,
+          element: { kind: "polygon", id: `mod${next++}` },
+          storyId: null,
+        }));
       for (const x of minted) live.add(x.element.id);
       return { ...out, minted };
     };
@@ -298,15 +377,21 @@ describe("data_bind_preview_step session lane (§9)", () => {
       }),
     } as Partial<DataEngineLike>);
     const s = await sessionWith(fake.host, engine);
-    s.addBarcodeBinding("bc1", "rect-1", "q_all", "code128", "sku", { missing: "skip" });
+    s.addBarcodeBinding("bc1", "rect-1", "q_all", "code128", "sku", {
+      missing: "skip",
+    });
     await s.previewRecord("bc1", 0);
     await s.previewRecord("bc1", 1);
     await s.previewRecord("bc1", 2);
     const batches = fake.mutations.filter((m) => m.op === "batch");
     expect(batches.length).toBe(3);
     // The second step removed exactly the first step's two modules.
-    const removed = (batches[1].args as { ops: Mutation[] }).ops.filter((o) => o.op === "deleteFrame");
-    expect(removed.map((o) => (o.args as { frameId: string }).frameId).sort()).toEqual(["mod0", "mod1"]);
+    const removed = (batches[1].args as { ops: Mutation[] }).ops.filter(
+      (o) => o.op === "deleteFrame",
+    );
+    expect(
+      removed.map((o) => (o.args as { frameId: string }).frameId).sort(),
+    ).toEqual(["mod0", "mod1"]);
     // One symbol's worth of modules is left.
     expect([...live].sort()).toEqual(["mod4", "mod5"]);
   });

@@ -159,7 +159,10 @@ export {
   coreCommandInfos,
   isCoreCommand,
 } from "./core-commands.js";
-export { CORE_WIRE_OPS, type CoreWireOpRow } from "./core-commands.generated.js";
+export {
+  CORE_WIRE_OPS,
+  type CoreWireOpRow,
+} from "./core-commands.generated.js";
 export {
   CORE_CATALOG_ROWS,
   CORE_PATHS,
@@ -203,6 +206,11 @@ export {
   CLICK_DRAG_THRESHOLD_PX,
   type PageDrag,
 } from "./gestures.js";
+// The gesture TEST kit (gestures.md "how gestures are tested"): a
+// recording fake editor, the gesture DSL with its unit backend, the
+// pointer-tape format and the universal invariants. Runner-agnostic; also
+// its own entry point, `@paged-media/plugin-sdk/gesture-kit`.
+export * from "./gesture-kit.js";
 export { contributeTool } from "./tools.js";
 export { contributePanel, contributeSchemaPanel } from "./panels.js";
 export {
@@ -217,7 +225,12 @@ export {
   type ValidatePanelSchemaOptions,
 } from "./panel-schema-check.js";
 // §12.8 — list / struct values on property rows: edits lowered to `set`s.
-export { applyValueEdit, defaultValueOf, editValue, planValueEdit } from "./value-edit.js";
+export {
+  applyValueEdit,
+  defaultValueOf,
+  editValue,
+  planValueEdit,
+} from "./value-edit.js";
 export {
   publishObjectList,
   type ObjectListRow,

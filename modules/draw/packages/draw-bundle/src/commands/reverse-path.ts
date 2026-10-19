@@ -131,7 +131,9 @@ export function reversePathBatchFor(
 export async function applyReversePath(host: BundleHost): Promise<ElementId[]> {
   const selected = host.selection.get().filter(supportsPathOps);
   if (selected.length === 0) {
-    host.log.debug(`${REVERSE_PATH_COMMAND_ID}: no path-bearing selection — no-op`);
+    host.log.debug(
+      `${REVERSE_PATH_COMMAND_ID}: no path-bearing selection — no-op`,
+    );
     return [];
   }
   const targets: [ElementId, AnchorTable][] = [];

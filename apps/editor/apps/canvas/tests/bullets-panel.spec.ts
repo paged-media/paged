@@ -39,7 +39,9 @@ const REPO_ROOT = pathResolve(__dirname, "..", "..", "..");
 const FIXTURE = `${REPO_ROOT}/corpus/idml/generated/text.idml`;
 const NUMBERING_FIXTURE = `${REPO_ROOT}/corpus/idml/generated/numbering.idml`;
 
-async function seedCaret(page: import("@playwright/test").Page): Promise<boolean> {
+async function seedCaret(
+  page: import("@playwright/test").Page,
+): Promise<boolean> {
   return page.evaluate(async () => {
     const c = (
       globalThis as unknown as {
@@ -166,7 +168,7 @@ test.describe("W2.10 — Bullets & Numbering list definitions (live CRUD)", () =
     await defs.locator('[data-toolbar-btn="new-numbering-list"]').click();
     await expect(defs.locator("[data-list-def]")).toHaveCount(2);
     await expect(
-      defs.locator('[data-list-def] [data-list-def-name]', {
+      defs.locator("[data-list-def] [data-list-def-name]", {
         hasText: "New list",
       }),
     ).toBeVisible();
@@ -175,7 +177,9 @@ test.describe("W2.10 — Bullets & Numbering list definitions (live CRUD)", () =
   test("AC-BN-LD-3 — continuity toggle flips and re-reads from the model @feat:editor-shell.panels.bullets-numbering @level:happy", async ({
     page,
   }) => {
-    const row = page.locator('[data-list-definitions="ready"] [data-list-def]').first();
+    const row = page
+      .locator('[data-list-definitions="ready"] [data-list-def]')
+      .first();
     const toggle = row.locator("[data-list-def-continuity]");
     await expect(toggle).toHaveAttribute("aria-checked", "true");
     await toggle.click();
@@ -184,7 +188,9 @@ test.describe("W2.10 — Bullets & Numbering list definitions (live CRUD)", () =
     await expect(toggle).toHaveAttribute("aria-checked", "false");
   });
 
-  test("AC-BN-LD-4 — delete removes a created list @feat:editor-shell.panels.bullets-numbering @level:happy", async ({ page }) => {
+  test("AC-BN-LD-4 — delete removes a created list @feat:editor-shell.panels.bullets-numbering @level:happy", async ({
+    page,
+  }) => {
     const defs = page.locator('[data-list-definitions="ready"]');
     await defs.locator('[data-toolbar-btn="new-numbering-list"]').click();
     await expect(defs.locator("[data-list-def]")).toHaveCount(2);
@@ -200,7 +206,9 @@ test.describe("W2.10 — Bullets & Numbering list definitions (live CRUD)", () =
   test("AC-BN-LD-5 — Assign is inert without a caret, active with one @feat:editor-shell.panels.bullets-numbering @level:gesture", async ({
     page,
   }) => {
-    const row = page.locator('[data-list-definitions="ready"] [data-list-def]').first();
+    const row = page
+      .locator('[data-list-definitions="ready"] [data-list-def]')
+      .first();
     // No content selection yet → assign disabled.
     await expect(row.locator("[data-list-def-assign]")).toBeDisabled();
     // Seed a caret in the first story.

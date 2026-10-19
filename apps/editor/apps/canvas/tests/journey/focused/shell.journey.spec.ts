@@ -109,7 +109,9 @@ test.describe("journey · editor shell", () => {
     expect(reg.tools, "tool rail registered").toBeGreaterThan(0);
     expect(reg.panels, "panel rail registered").toBeGreaterThan(0);
     expect(reg.keybindings, "keyboard shortcuts registered").toBeGreaterThan(0);
-    expect(reg.importers, "file-intake importers registered").toBeGreaterThan(0);
+    expect(reg.importers, "file-intake importers registered").toBeGreaterThan(
+      0,
+    );
     expect(reg.hasPluginCmd, "plugin bundle contributed a command").toBe(true);
   });
 });

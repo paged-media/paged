@@ -1,14 +1,41 @@
 {
   "name": "@paged-media/canvas-wasm",
   "version": "0.74.0-dev",
-  "description": "The paged engine for the editor's render worker: the wasm-bindgen surface of the Paged Web Canvas (wire types, document model, WebGPU rendering).",
+  "description": "The paged engine for the browser: the editing canvas (wire types, document model, WebGPU rendering), plus the engine's introspection (./introspect) and the document repository (./repo).",
   "type": "module",
   "main": "paged_canvas_wasm.js",
   "types": "paged_canvas_wasm.d.ts",
+  "exports": {
+    ".": {
+      "types": "./paged_canvas_wasm.d.ts",
+      "default": "./paged_canvas_wasm.js"
+    },
+    "./paged_canvas_wasm_bg.wasm": "./paged_canvas_wasm_bg.wasm",
+    "./paged_canvas_wasm.d.ts": "./paged_canvas_wasm.d.ts",
+    "./introspect": {
+      "types": "./introspect/paged_introspect_wasm.d.ts",
+      "default": "./introspect/paged_introspect_wasm.js"
+    },
+    "./introspect/paged_introspect_wasm_bg.wasm": "./introspect/paged_introspect_wasm_bg.wasm",
+    "./introspect/catalog.json": "./introspect/catalog.json",
+    "./repo": {
+      "types": "./repo/paged_repo_wasm.d.ts",
+      "default": "./repo/paged_repo_wasm.js"
+    },
+    "./repo/paged_repo_wasm_bg.wasm": "./repo/paged_repo_wasm_bg.wasm",
+    "./package.json": "./package.json"
+  },
   "files": [
     "paged_canvas_wasm.js",
     "paged_canvas_wasm_bg.wasm",
-    "paged_canvas_wasm.d.ts"
+    "paged_canvas_wasm.d.ts",
+    "introspect/paged_introspect_wasm.js",
+    "introspect/paged_introspect_wasm_bg.wasm",
+    "introspect/paged_introspect_wasm.d.ts",
+    "introspect/catalog.json",
+    "repo/paged_repo_wasm.js",
+    "repo/paged_repo_wasm_bg.wasm",
+    "repo/paged_repo_wasm.d.ts"
   ],
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",
   "repository": {

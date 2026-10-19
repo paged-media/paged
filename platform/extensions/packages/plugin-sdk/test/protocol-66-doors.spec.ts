@@ -64,8 +64,17 @@ function solid(w: number, h: number, v: number): Uint8Array {
 function sceneEditor(binary: boolean) {
   const fake = makeFakeEditor();
   const json: { id: string; layer: SceneLayer; caller?: string }[] = [];
-  const images: { id: string; image: SceneImage; caller?: string; transfer?: boolean }[] = [];
-  const tiles: { id: string; tiles: readonly SceneImageTile[]; transfer?: boolean }[] = [];
+  const images: {
+    id: string;
+    image: SceneImage;
+    caller?: string;
+    transfer?: boolean;
+  }[] = [];
+  const tiles: {
+    id: string;
+    tiles: readonly SceneImageTile[];
+    transfer?: boolean;
+  }[] = [];
   const sceneLayers: NonNullable<PagedEditor["sceneLayers"]> = {
     async submit(id, layer, caller) {
       json.push({ id, layer, caller });
@@ -73,7 +82,12 @@ function sceneEditor(binary: boolean) {
     async clear() {},
     ...(binary
       ? {
-          async submitImage(id: string, image: SceneImage, caller?: string, transfer?: boolean) {
+          async submitImage(
+            id: string,
+            image: SceneImage,
+            caller?: string,
+            transfer?: boolean,
+          ) {
             images.push({ id, image, caller, transfer });
           },
           async submitImageTiles(
@@ -87,8 +101,11 @@ function sceneEditor(binary: boolean) {
         }
       : {}),
   };
-  (fake.editor as unknown as { sceneLayers: unknown }).sceneLayers = sceneLayers;
-  const { host } = createBundleHost(() => fake.editor, MANIFEST, { console: silent });
+  (fake.editor as unknown as { sceneLayers: unknown }).sceneLayers =
+    sceneLayers;
+  const { host } = createBundleHost(() => fake.editor, MANIFEST, {
+    console: silent,
+  });
   return { host, json, images, tiles };
 }
 
@@ -110,7 +127,11 @@ describe("sceneLayer.submitImage / submitImageTiles", () => {
     ]);
     expect(json).toHaveLength(0);
     expect(images).toHaveLength(1);
-    expect(images[0]).toMatchObject({ id: "r1", caller: "media.paged.image", transfer: true });
+    expect(images[0]).toMatchObject({
+      id: "r1",
+      caller: "media.paged.image",
+      transfer: true,
+    });
     expect(tiles).toHaveLength(1);
     expect(tiles[0].transfer).toBe(false);
   });
@@ -147,15 +168,24 @@ describe("sceneLayer.submitImage / submitImageTiles", () => {
       const { host, json, tiles } = sceneEditor(binary);
       const s = host.contribute.sceneLayer();
       await expect(
-        s.submitImageTiles("r1", [{ x: 0, y: 0, width: 1, height: 1, rgba: solid(1, 1, 1) }]),
+        s.submitImageTiles("r1", [
+          { x: 0, y: 0, width: 1, height: 1, rgba: solid(1, 1, 1) },
+        ]),
       ).rejects.toThrow(/submitImage first/);
       await expect(
-        s.submitImage("r1", { rgba: new Uint8Array(3), width: 1, height: 1, dest: [0, 0, 1, 1] }),
+        s.submitImage("r1", {
+          rgba: new Uint8Array(3),
+          width: 1,
+          height: 1,
+          dest: [0, 0, 1, 1],
+        }),
       ).rejects.toThrow(/width\*height\*4/);
       await s.submitImage("r1", image());
       const sent = json.length + tiles.length;
       await expect(
-        s.submitImageTiles("r1", [{ x: 3, y: 0, width: 2, height: 1, rgba: solid(2, 1, 1) }]),
+        s.submitImageTiles("r1", [
+          { x: 3, y: 0, width: 2, height: 1, rgba: solid(2, 1, 1) },
+        ]),
       ).rejects.toThrow(/does not fit/);
       expect(json.length + tiles.length).toBe(sent);
     }
@@ -165,7 +195,9 @@ describe("sceneLayer.submitImage / submitImageTiles", () => {
 describe("parts.delete (storage.parts@2)", () => {
   it("deletes over the JSON message on a host without the binary lane", async () => {
     const fake = makeFakeEditor();
-    const { host } = createBundleHost(() => fake.editor, MANIFEST, { console: silent });
+    const { host } = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+    });
     expect(host.supports("storage.parts@2")).toBe(true);
     await host.parts.write("px/a.png", new Uint8Array([1]));
     expect(await host.parts.delete("px/a.png")).toBe(true);
@@ -196,7 +228,9 @@ describe("parts.delete (storage.parts@2)", () => {
         return store.delete(path);
       },
     };
-    const { host } = createBundleHost(() => fake.editor, MANIFEST, { console: silent });
+    const { host } = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+    });
     await host.parts.write("f/1/r1.json", new Uint8Array([7, 8]));
     expect(Array.from((await host.parts.read("f/1/r1.json"))!)).toEqual([7, 8]);
     expect(await host.parts.delete("f/1/r1.json")).toBe(true);
@@ -211,7 +245,9 @@ describe("parts.delete (storage.parts@2)", () => {
 describe("widgets.ColorPicker", () => {
   it("is always present; the flag tracks the host's injection", () => {
     const fake = makeFakeEditor();
-    const bare = createBundleHost(() => fake.editor, MANIFEST, { console: silent }).host;
+    const bare = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+    }).host;
     expect(typeof bare.widgets.ColorPicker).toBe("function");
     expect(bare.supports("widgets.colorPicker@1")).toBe(false);
     expect(bare.supports("widgets.codeEditor@1")).toBe(false);
@@ -257,7 +293,9 @@ describe("document.onWillSave", () => {
 
   it("holds a listener inertly without a backend", () => {
     const fake = makeFakeEditor();
-    const { host } = createBundleHost(() => fake.editor, MANIFEST, { console: silent });
+    const { host } = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+    });
     expect(host.supports("document.onWillSave@1")).toBe(false);
     const d = host.document.onWillSave(() => {});
     expect(typeof d.dispose).toBe("function");
@@ -286,28 +324,37 @@ describe("shell.enterEditContext", () => {
     });
     expect(host.supports("shell.enterEditContext@1")).toBe(true);
     const frame = { kind: "rectangle", id: "u1" } as never;
-    await expect(host.shell.enterEditContext("rasterImage", frame)).rejects.toThrow(
-      /registered no edit context/,
-    );
+    await expect(
+      host.shell.enterEditContext("rasterImage", frame),
+    ).rejects.toThrow(/registered no edit context/);
     host.contribute.editContext({ type: "rasterImage", entry: "doubleClick" });
     expect(await host.shell.enterEditContext("rasterImage", frame)).toBe(true);
     expect(entered).toEqual(["rasterImage:u1"]);
-    await expect(host.shell.enterEditContext("vectorGraphic", frame)).rejects.toThrow();
+    await expect(
+      host.shell.enterEditContext("vectorGraphic", frame),
+    ).rejects.toThrow();
   });
 
   it("answers false when the host cannot enter", async () => {
     const fake = makeFakeEditor();
-    const { host } = createBundleHost(() => fake.editor, MANIFEST, { console: silent });
+    const { host } = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+    });
     expect(host.supports("shell.enterEditContext@1")).toBe(false);
     host.contribute.editContext({ type: "rasterImage", entry: "doubleClick" });
     expect(
-      await host.shell.enterEditContext("rasterImage", { kind: "rectangle", id: "u1" } as never),
+      await host.shell.enterEditContext("rasterImage", {
+        kind: "rectangle",
+        id: "u1",
+      } as never),
     ).toBe(false);
   });
 
   it("carries undo labels through to the registry verbatim", () => {
     const fake = makeFakeEditor();
-    const { host } = createBundleHost(() => fake.editor, MANIFEST, { console: silent });
+    const { host } = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+    });
     host.contribute.editContext({
       type: "rasterImage",
       entry: "doubleClick",
@@ -344,12 +391,16 @@ describe("tools.settings", () => {
     sub.dispose();
     settings.set(brush, "size", 1);
     expect(seen).toHaveLength(2);
-    expect(() => host.tools.settings("media.paged.draw.tool.pen")).toThrow(/namespaced/);
+    expect(() => host.tools.settings("media.paged.draw.tool.pen")).toThrow(
+      /namespaced/,
+    );
   });
 
   it("answers {} without a backend", () => {
     const fake = makeFakeEditor();
-    const { host } = createBundleHost(() => fake.editor, MANIFEST, { console: silent });
+    const { host } = createBundleHost(() => fake.editor, MANIFEST, {
+      console: silent,
+    });
     expect(host.supports("tools.settings@1")).toBe(false);
     expect(host.tools.settings("media.paged.image.tool.brush")).toEqual({});
   });
@@ -358,7 +409,10 @@ describe("tools.settings", () => {
 describe("document.mutateWithBytes", () => {
   const WRITER: PluginManifest = {
     ...MANIFEST,
-    capabilities: { ...MANIFEST.capabilities, document: { read: "broad", write: "broad" } },
+    capabilities: {
+      ...MANIFEST.capabilities,
+      document: { read: "broad", write: "broad" },
+    },
   };
   const KEY = "x-paged:media.paged.image";
   const baked = () =>
@@ -369,7 +423,11 @@ describe("document.mutateWithBytes", () => {
           { op: "replaceImageBytes", args: { elementId: "r1", bytes: [] } },
           {
             op: "setPluginMetadata",
-            args: { elementId: { kind: "rectangle", id: "r1" }, key: KEY, value: "{}" },
+            args: {
+              elementId: { kind: "rectangle", id: "r1" },
+              key: KEY,
+              value: "{}",
+            },
           },
           { op: "replaceImageBytes", args: { elementId: "r2", bytes: [] } },
         ],
@@ -379,18 +437,24 @@ describe("document.mutateWithBytes", () => {
   /** A fake editor; `binary` wires the protocol-66 seam. */
   function writer(binary: boolean, manifest: PluginManifest = WRITER) {
     const fake = makeFakeEditor();
-    const calls: { mutation: unknown; bytes: Uint8Array; transfer?: boolean }[] = [];
+    const calls: {
+      mutation: unknown;
+      bytes: Uint8Array;
+      transfer?: boolean;
+    }[] = [];
     if (binary) {
-      (fake.editor as unknown as { mutateWithBytes: unknown }).mutateWithBytes = async (
-        mutation: unknown,
-        bytes: Uint8Array,
-        transfer?: boolean,
-      ) => {
-        calls.push({ mutation, bytes, transfer });
-        return { kind: "mutationApplied", payload: { createdId: null, pageIds: ["p1"] } };
-      };
+      (fake.editor as unknown as { mutateWithBytes: unknown }).mutateWithBytes =
+        async (mutation: unknown, bytes: Uint8Array, transfer?: boolean) => {
+          calls.push({ mutation, bytes, transfer });
+          return {
+            kind: "mutationApplied",
+            payload: { createdId: null, pageIds: ["p1"] },
+          };
+        };
     }
-    const { host } = createBundleHost(() => fake.editor, manifest, { console: silent });
+    const { host } = createBundleHost(() => fake.editor, manifest, {
+      console: silent,
+    });
     return { host, fake, calls };
   }
 
@@ -398,8 +462,14 @@ describe("document.mutateWithBytes", () => {
     const { host, fake, calls } = writer(true);
     expect(host.supports("document.mutateBinary@1")).toBe(true);
     const png = new Uint8Array([137, 80, 78, 71]);
-    const outcome = await host.document.mutateWithBytes(baked(), png, { transfer: true });
-    expect(outcome).toEqual({ applied: true, createdId: null, pageIds: ["p1"] });
+    const outcome = await host.document.mutateWithBytes(baked(), png, {
+      transfer: true,
+    });
+    expect(outcome).toEqual({
+      applied: true,
+      createdId: null,
+      pageIds: ["p1"],
+    });
     expect(fake.mutations).toHaveLength(0);
     expect(calls).toHaveLength(1);
     expect(calls[0].bytes).toBe(png);
@@ -412,8 +482,15 @@ describe("document.mutateWithBytes", () => {
     const { host, fake } = writer(false);
     expect(host.supports("document.mutateBinary@1")).toBe(false);
     const mutation = baked();
-    const outcome = await host.document.mutateWithBytes(mutation, new Uint8Array([1, 2, 255]));
-    expect(outcome).toEqual({ applied: true, createdId: null, pageIds: ["p1"] });
+    const outcome = await host.document.mutateWithBytes(
+      mutation,
+      new Uint8Array([1, 2, 255]),
+    );
+    expect(outcome).toEqual({
+      applied: true,
+      createdId: null,
+      pageIds: ["p1"],
+    });
     expect(fake.mutations).toHaveLength(1);
     const sent = fake.mutations[0] as {
       op: string;
@@ -426,8 +503,11 @@ describe("document.mutateWithBytes", () => {
     expect(sent.args.ops[2].args.bytes).toEqual([]);
     // The bundle's own mutation is not modified.
     expect(
-      (mutation as unknown as { args: { ops: { args: { bytes?: number[] } }[] } }).args.ops[0]
-        .args.bytes,
+      (
+        mutation as unknown as {
+          args: { ops: { args: { bytes?: number[] } }[] };
+        }
+      ).args.ops[0].args.bytes,
     ).toEqual([]);
   });
 
@@ -451,7 +531,9 @@ describe("document.mutateWithBytes", () => {
         new Uint8Array([1]),
       );
       expect(outcome.applied).toBe(false);
-      expect(String((outcome as { error: unknown }).error)).toMatch(/no replaceImageBytes/);
+      expect(String((outcome as { error: unknown }).error)).toMatch(
+        /no replaceImageBytes/,
+      );
       expect(fake.mutations).toHaveLength(0);
       expect(calls).toHaveLength(0);
     }
@@ -463,7 +545,10 @@ describe("document.mutateWithBytes", () => {
         ...MANIFEST,
         capabilities: { ...MANIFEST.capabilities, document: { read: "broad" } },
       });
-      const denied = await readOnly.host.document.mutateWithBytes(baked(), new Uint8Array([1]));
+      const denied = await readOnly.host.document.mutateWithBytes(
+        baked(),
+        new Uint8Array([1]),
+      );
       expect(denied.applied).toBe(false);
       expect(readOnly.calls).toHaveLength(0);
       expect(readOnly.fake.mutations).toHaveLength(0);
@@ -489,7 +574,9 @@ describe("document.mutateWithBytes", () => {
         new Uint8Array([1]),
       );
       expect(foreign.applied).toBe(false);
-      expect(String((foreign as { error: unknown }).error)).toMatch(/outside this plugin's namespace/);
+      expect(String((foreign as { error: unknown }).error)).toMatch(
+        /outside this plugin's namespace/,
+      );
       expect(calls).toHaveLength(0);
       expect(fake.mutations).toHaveLength(0);
     }
@@ -497,16 +584,27 @@ describe("document.mutateWithBytes", () => {
 
   it("reports an engine refusal and a channel failure as outcomes", async () => {
     const { host, fake } = writer(true);
-    (fake.editor as unknown as { mutateWithBytes: unknown }).mutateWithBytes = async () => ({
-      kind: "mutationFailed",
-      payload: { error: "not an image" },
+    (fake.editor as unknown as { mutateWithBytes: unknown }).mutateWithBytes =
+      async () => ({
+        kind: "mutationFailed",
+        payload: { error: "not an image" },
+      });
+    const refused = await host.document.mutateWithBytes(
+      baked(),
+      new Uint8Array([1]),
+    );
+    expect(refused).toEqual({
+      applied: false,
+      error: { error: "not an image" },
     });
-    const refused = await host.document.mutateWithBytes(baked(), new Uint8Array([1]));
-    expect(refused).toEqual({ applied: false, error: { error: "not an image" } });
-    (fake.editor as unknown as { mutateWithBytes: unknown }).mutateWithBytes = async () => {
-      throw new Error("dispatchError");
-    };
-    const failed = await host.document.mutateWithBytes(baked(), new Uint8Array([1]));
+    (fake.editor as unknown as { mutateWithBytes: unknown }).mutateWithBytes =
+      async () => {
+        throw new Error("dispatchError");
+      };
+    const failed = await host.document.mutateWithBytes(
+      baked(),
+      new Uint8Array([1]),
+    );
     expect(failed.applied).toBe(false);
   });
 });

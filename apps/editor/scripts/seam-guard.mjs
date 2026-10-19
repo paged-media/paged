@@ -167,7 +167,9 @@ const unregistered = [
     [...blob.matchAll(/["'`]([^"'`\n]{0,120}awaiting[^"'`\n]{0,120})["'`]/gi)]
       .map((m) => m[1].trim())
       .filter((t) => !/awaiting the user'/.test(t))
-      .filter((t) => !SEAMS.some((s) => t.includes(s.text) || s.text.includes(t))),
+      .filter(
+        (t) => !SEAMS.some((s) => t.includes(s.text) || s.text.includes(t)),
+      ),
   ),
 ];
 
@@ -183,7 +185,9 @@ if (inverted.length) {
       `SUPPORTED and the UI still says it is missing:\n`,
   );
   for (const s of inverted) {
-    console.error(`  "${s.text}"\n      waits on ${s.op}, which the matrix records as supported`);
+    console.error(
+      `  "${s.text}"\n      waits on ${s.op}, which the matrix records as supported`,
+    );
   }
   console.error("");
 }

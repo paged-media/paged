@@ -35,13 +35,13 @@
 
 import type { ComponentType, ReactNode } from "react";
 
-import type { Address, PropertyPathName, Selector } from "./object-model";
+import type { Address, PropertyPathName, Selector } from "./object-model.js";
 import type {
   PropertyFieldOption,
   PropertyFieldStyle,
   PropertyListPresentation,
   PropertySubField,
-} from "./panel-schema";
+} from "./panel-schema.js";
 
 /** Languages the host code editor highlights. `text` = no
  *  highlighting (line numbers + gutter only). Additive: a host MAY
@@ -120,7 +120,8 @@ export interface WidgetSurface {
  *  `kind` when given), a selector, or explicit addresses. (A schema row
  *  can also name a published binding; a React panel has its state at hand
  *  and passes the addresses.) */
-export type PropertyFieldTarget = "selection" | Selector | { addresses: readonly Address[] };
+export type PropertyFieldTarget =
+  "selection" | Selector | { addresses: readonly Address[] };
 
 /** Props of {@link WidgetSurface.PropertyField}. */
 export interface PropertyFieldProps {

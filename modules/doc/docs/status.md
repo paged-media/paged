@@ -21,7 +21,7 @@
   `quick-xml`, `bytes`, `flate2`) compiles to `wasm32-unknown-unknown`; the
   foundation is safe to build on the typed DOM.
 - **`paged-ooxml`** — OPC container over `zip` + `quick-xml`, `[Content_Types].xml`
-  + `_rels` graph, verbatim carry-through preservation, `ooxmlsdk` typed-DOM bridge.
+  - `_rels` graph, verbatim carry-through preservation, `ooxmlsdk` typed-DOM bridge.
 - **Tier-0 read path** — `docx-import` (WordprocessingML body + styles + section →
   `docx-core`) → `docx-lower` (→ `LoweredDoc` IR with synthesized direct-format
   styles + minted swatches) → `docx-js` (one wasm module).
@@ -82,7 +82,7 @@ conformance fixture).
   with body paragraphs in document order.
 - **Lowering → mutations.** `doc-host-model` emits `insertTable` (grid + column
   widths), then per cell an `insertText` addressed by `TextCellAddr{tableId,row,
-  col}` and a `setCellSpan` for merged cells — mirroring the proven `sheet`
+col}` and a `setCellSpan` for merged cells — mirroring the proven `sheet`
   table lane. Because `insertTable`'s outcome mints the table id, the host-model
   exposes a **phased story plan** (`buildStory`): text steps + table steps
   (`{insert, cells(tableId)}`), which the bundle executes in order.
@@ -119,7 +119,7 @@ conformance fixture).
   (`image_docx`).
 - **This required a core door (opened): `InsertAnchoredFrame`.** The anchored-image
   model, inline render path (`paged-renderer` `anchored.rs`), and property edits
-  already existed, but there was no *mutation to create* an anchored frame —
+  already existed, but there was no _mutation to create_ an anchored frame —
   `InsertFrame` is page-positioned only. Added `InsertAnchoredFrame` /
   `RemoveAnchoredFrame` (paged-mutate + wire + protocol **51 → 52**): it pushes an
   image-bearing anchored Rectangle onto the paragraph at a story offset
@@ -135,7 +135,7 @@ conformance fixture).
 - **`w:hyperlink` → native clickable link.** A hyperlink's `r:id` is resolved
   through the document rels to its external URL (or `#anchor` for an internal
   bookmark) and carried on the run. Two things happen at lowering: (1) the
-  conventional *look* — blue (`0000FF`) + underline — rides on a synthesized
+  conventional _look_ — blue (`0000FF`) + underline — rides on a synthesized
   character style (unless the run sets those directly); (2) the external URL is
   carried on `LoweredRun.hyperlink_url`, and `doc-host-model` emits an
   **`insertHyperlink`** over the run's story range so the span is genuinely
@@ -143,15 +143,15 @@ conformance fixture).
   the linked run carries the URL + the diagnostic reports it became a native link).
 - **This required a core door (opened): `InsertHyperlink`.** The IDML hyperlink
   model — a `HyperlinkTextSource` run tag + a designmap `Hyperlink{source,
-  destination}` + a `HyperlinkURLDestination` — parsed and rendered
-  (`links.rs`), but had no *create* mutation. Added `InsertHyperlink` /
+destination}` + a `HyperlinkURLDestination` — parsed and rendered
+  (`links.rs`), but had no _create_ mutation. Added `InsertHyperlink` /
   `RemoveHyperlink` (paged-mutate + wire + protocol **52 → 53**): it splits runs
   over `[start, end)`, tags the middle `hyperlink_source`, and registers the two
   designmap resources; the engine mints the three cross-referencing ids so the
   wire stays `{storyId, start, end, url}`. (Cross-repo, like the anchored-frame
   door: `plugin-doc` stays isolation-clean, `core` carries the door.)
 - **Both of Word's hyperlink forms.** Word writes links two ways: the
-  `w:hyperlink` element (above) AND a `HYPERLINK` *field* — either the complex
+  `w:hyperlink` element (above) AND a `HYPERLINK` _field_ — either the complex
   `fldChar begin / instrText / separate / result / end` run sequence (instruction
   may be split across several `w:instrText` runs) or the one-shot `w:fldSimple`.
   docx-import runs a field state machine over the paragraph's runs: control runs
@@ -187,7 +187,7 @@ range ops, so it sits entirely on the contiguous side.
   edits back into the retained `.docx` as a **byte-level targeted patch**: only the
   changed `<w:t>`/`<w:rPr>` subtrees are rewritten; every other part AND every
   untouched subtree of `word/document.xml` stays **byte-identical**. New crate
-  `docx-export` (`splice.rs`) uses quick-xml purely as a *locator* — it computes
+  `docx-export` (`splice.rs`) uses quick-xml purely as a _locator_ — it computes
   the source byte ranges to replace, raw-copies everything outside them, and splices
   hand-built fragments into the holes (byte-identity by construction). It never
   calls the ooxmlsdk serializer (`build-wasm.sh` guards this — linking `write_to`
@@ -270,14 +270,14 @@ ops use.)
   canvas-wasm v54 publish + SDK sync (a release step, not code).
 - **Standalone true-open** — degrades to embedded placement + a diagnostic when
   `document.openNative@1` is unwired (the common case today); the `docx →
-  native-bytes` producer is a future `plugin-publish` sibling.
+native-bytes` producer is a future `plugin-publish` sibling.
 - **Constructs still past the tier line** — tracked changes, floating
   (anchored-with-wrap) images and internal `#anchor` links (a renderer door) →
   surfaced as honest ADR-007 diagnostics on open, not silently dropped.
   (Page/column breaks, `w:pageBreakBefore` and odd/even sections now lower to
   the engine's break-before rule `paragraphStartParagraph`, core protocol 64,
   matched against Word's own page map `docx-conformance/fixtures/
-  breaks.word.json`; an older engine refuses the rule and loses only the
+breaks.word.json`; an older engine refuses the rule and loses only the
   breaks, with a warning. `continuous` / `nextColumn` sections now join the
   story of the page they continue, matched against Word's page map
   `docx-conformance/fixtures/continuous.word.json` (rules in
@@ -478,14 +478,14 @@ The structural diff paired story blocks BY INDEX, which quietly violated the
 preservation invariant on a very ordinary edit. Deleting a paragraph in the
 MIDDLE of a document produced the right text but kept the wrong `<w:p>`: with
 `[Plain, Heading, Mix]` → `[Plain, Mix]`, it deleted the trailing paragraph and
-rewrote the *heading's* node with Mix's runs — so the surviving paragraph still
+rewrote the _heading's_ node with Mix's runs — so the surviving paragraph still
 carried `<w:pStyle w:val="Heading1"/>`, and the third paragraph's own node (its
 `<w:pPr>`, rsids and any unmodelled children) was destroyed.
 
 Blocks are now aligned by an **LCS over a block identity key** (a paragraph's
 style + full text; a table's shape) rather than by position, so a deletion deletes
 that block and the survivors keep their own nodes. One post-pass matters: an
-adjacent Del+Ins is coalesced into a MATCH — without it, *editing* a paragraph's
+adjacent Del+Ins is coalesced into a MATCH — without it, _editing_ a paragraph's
 text changes its key and the pair would be reported as delete-then-insert,
 destroying the very `<w:p>` we want to patch in place. Coalescing keeps an edit an
 edit and leaves a true deletion a deletion.
@@ -691,7 +691,7 @@ On open (`fixtures/symbols.word.json`, `scripts/word-symbols-probe.sh`):
 - **Empty table cells.** Word lays a cell of one empty paragraph on that
   paragraph's line height. `insertTable` mints its cells with NO paragraph, so
   a caret there is refused (`caret offset 0 addresses no paragraph (story
-  length 0)`); the pour seeds the paragraph with an empty `insertText` and
+length 0)`); the pour seeds the paragraph with an empty `insertText` and
   then styles it with the cell caret.
 
 Editing several adjacent paragraphs in one save now patches each in place: the

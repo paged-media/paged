@@ -107,7 +107,8 @@ export function widgetFor(
   presentation?: FieldPresentation,
 ): FieldWidget {
   if (presentation?.style === "collection" && presentation.collection) {
-    if (type.kind === "color" || type.kind === "ref" || type.kind === "text") return "collection";
+    if (type.kind === "color" || type.kind === "ref" || type.kind === "text")
+      return "collection";
   }
   // A text / ref row — or a number row (a span count: 2…6, the engine's
   // "All") — the panel offers named values for is a select over them.
@@ -115,7 +116,8 @@ export function widgetFor(
     type.kind === "enum" ||
     ((type.kind === "text" || type.kind === "ref" || type.kind === "number") &&
       (presentation?.options?.length ?? 0) > 0);
-  if (offered) return presentation?.style === "segments" ? "segments" : "select";
+  if (offered)
+    return presentation?.style === "segments" ? "segments" : "select";
   switch (type.kind) {
     case "bool":
       return "toggle";
@@ -140,9 +142,12 @@ export function widgetFor(
       // A list of records (an appearance stack, gradient stops) — or any
       // list the panel gave an item presentation — is an item editor; a
       // list of scalars stays the typed text field ("0, 4, 2").
-      return type.of.kind === "struct" || presentation?.items ? "items" : "list";
+      return type.of.kind === "struct" || presentation?.items
+        ? "items"
+        : "list";
     case "struct":
-      return Object.keys(type.fields).length > 0 || (presentation?.fields?.length ?? 0) > 0
+      return Object.keys(type.fields).length > 0 ||
+        (presentation?.fields?.length ?? 0) > 0
         ? "struct"
         : "json";
     default:
@@ -159,9 +164,12 @@ export function optionsFor(
 ): FieldOption[] {
   const given = presentation?.options ?? [];
   if (type.kind === "number" && !nullable) {
-    return given.filter((o) => o.value !== CLEAR_OPTION).map((o) => ({ value: o.value, label: o.label ?? o.value }));
+    return given
+      .filter((o) => o.value !== CLEAR_OPTION)
+      .map((o) => ({ value: o.value, label: o.label ?? o.value }));
   }
-  if (type.kind !== "enum") return given.map((o) => ({ value: o.value, label: o.label ?? o.value }));
+  if (type.kind !== "enum")
+    return given.map((o) => ({ value: o.value, label: o.label ?? o.value }));
   // A segmented control is a curated set of icon buttons: it keeps the
   // panel's options (those the schema still has), where a select lists
   // every member. Listing all of them here grew Align and Position by
@@ -178,8 +186,12 @@ export function optionsFor(
   // A NULLABLE enum row can also be cleared (a paragraph back to its
   // style's value): the panel's empty-valued option names that, and the
   // field writes it as null (see CLEAR_OPTION).
-  const clear = nullable ? given.find((o) => o.value === CLEAR_OPTION) : undefined;
-  return clear ? [{ value: CLEAR_OPTION, label: clear.label ?? "[Default]" }, ...members] : members;
+  const clear = nullable
+    ? given.find((o) => o.value === CLEAR_OPTION)
+    : undefined;
+  return clear
+    ? [{ value: CLEAR_OPTION, label: clear.label ?? "[Default]" }, ...members]
+    : members;
 }
 
 /** The option value that clears a nullable row (writes `null`). */
@@ -188,9 +200,23 @@ export const CLEAR_OPTION = "";
 /** What picking `option` in a select writes: the clear option of a
  *  nullable row is null; a number row's numeric option is the number
  *  (anything else is written as picked and the row's validation answers). */
-export function optionValue(type: ShellValueType, option: string, nullable: boolean): unknown {
-  if (option === CLEAR_OPTION && nullable && (type.kind === "enum" || type.kind === "number")) return null;
-  if (type.kind === "number" && option.trim() !== "" && Number.isFinite(Number(option))) return Number(option);
+export function optionValue(
+  type: ShellValueType,
+  option: string,
+  nullable: boolean,
+): unknown {
+  if (
+    option === CLEAR_OPTION &&
+    nullable &&
+    (type.kind === "enum" || type.kind === "number")
+  )
+    return null;
+  if (
+    type.kind === "number" &&
+    option.trim() !== "" &&
+    Number.isFinite(Number(option))
+  )
+    return Number(option);
   return option;
 }
 
@@ -215,12 +241,15 @@ export function parseLength(text: string): number | null {
 }
 
 export type ParseResult =
-  | { ok: true; value: unknown }
-  | { ok: false; reason: string };
+  { ok: true; value: unknown } | { ok: false; reason: string };
 
 const NUMS = /[\s,;]+/;
 
-function numbers(text: string, n: number | null, each: (t: string) => number | null): number[] | null {
+function numbers(
+  text: string,
+  n: number | null,
+  each: (t: string) => number | null,
+): number[] | null {
   const trimmed = text.trim().replace(/^\[|\]$/g, "");
   const parts = trimmed === "" ? [] : trimmed.split(NUMS);
   if (n !== null && parts.length !== n) return null;
@@ -265,7 +294,8 @@ export function parseInput(
       if (type.keywords?.includes(t)) return { ok: true, value: t };
       const n = plainNumber(t.replace(/\s*%$/, "").replace(/\s*°$/, ""));
       if (n === null) return no(`"${text}" is not a number`);
-      if (type.integer && !Number.isInteger(n)) return no(`"${text}" is not a whole number`);
+      if (type.integer && !Number.isInteger(n))
+        return no(`"${text}" is not a whole number`);
       const e = inRange(n, row);
       return e ? no(e) : { ok: true, value: n };
     }
@@ -281,11 +311,15 @@ export function parseInput(
         : no(`"${text}" is not one of ${type.members.join(", ")}`);
     case "bounds": {
       const v = numbers(t, 4, parseLength);
-      return v ? { ok: true, value: v } : no("bounds are four lengths: top, left, bottom, right");
+      return v
+        ? { ok: true, value: v }
+        : no("bounds are four lengths: top, left, bottom, right");
     }
     case "transform": {
       const v = numbers(t, 6, plainNumber);
-      return v ? { ok: true, value: v } : no("a transform is six numbers: a b c d tx ty");
+      return v
+        ? { ok: true, value: v }
+        : no("a transform is six numbers: a b c d tx ty");
     }
     case "point": {
       const v = numbers(t, 2, parseLength);
@@ -294,8 +328,15 @@ export function parseInput(
     case "list": {
       const of = type.of;
       if (of.kind === "length" || of.kind === "number") {
-        const v = numbers(t, null, of.kind === "length" ? parseLength : plainNumber);
-        if (!v) return no(`"${text}" is not a list of ${of.kind === "length" ? "lengths" : "numbers"}`);
+        const v = numbers(
+          t,
+          null,
+          of.kind === "length" ? parseLength : plainNumber,
+        );
+        if (!v)
+          return no(
+            `"${text}" is not a list of ${of.kind === "length" ? "lengths" : "numbers"}`,
+          );
         if (type.maxItems !== undefined && v.length > type.maxItems) {
           return no(`at most ${type.maxItems} items`);
         }
@@ -338,9 +379,13 @@ export function formatValue(type: ShellValueType, value: unknown): string {
       return typeof value === "number" ? trim(value) : String(value);
     case "bounds":
     case "point":
-      return Array.isArray(value) ? value.map((n) => trim(Number(n))).join(", ") : String(value);
+      return Array.isArray(value)
+        ? value.map((n) => trim(Number(n))).join(", ")
+        : String(value);
     case "transform":
-      return Array.isArray(value) ? value.map((n) => trim(Number(n))).join(" ") : String(value);
+      return Array.isArray(value)
+        ? value.map((n) => trim(Number(n))).join(" ")
+        : String(value);
     case "list":
       if (
         Array.isArray(value) &&
@@ -433,7 +478,10 @@ export async function probeBound(
   if (!offered) return false;
   for (const address of addresses) {
     try {
-      const hits = await objects.invoke(PROPERTY_BINDINGS_COMMAND, { address, path });
+      const hits = await objects.invoke(PROPERTY_BINDINGS_COMMAND, {
+        address,
+        path,
+      });
       if (Array.isArray(hits) && hits.length > 0) return true;
     } catch {
       /* a failing query is "not known to be bound" */
@@ -447,7 +495,9 @@ export function oidEnvelope(oid: string): string {
   return JSON.stringify({ v: 1, data: { oid } });
 }
 
-export function oidFromEnvelope(text: string | null | undefined): string | null {
+export function oidFromEnvelope(
+  text: string | null | undefined,
+): string | null {
   if (!text) return null;
   try {
     const parsed = JSON.parse(text) as { data?: { oid?: unknown } };
@@ -599,7 +649,11 @@ export const BIND_PROPERTY_ARGS: ShellValueType = {
 /** A minimal structural check of command args against their declared
  *  type (the SDK's `validateValue` lives in plugin-sdk, which the shell
  *  does not depend on). `null` = conforms. */
-export function checkArgs(type: ShellValueType, value: unknown, at = "args"): string | null {
+export function checkArgs(
+  type: ShellValueType,
+  value: unknown,
+  at = "args",
+): string | null {
   switch (type.kind) {
     case "struct": {
       if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -632,10 +686,15 @@ export function checkArgs(type: ShellValueType, value: unknown, at = "args"): st
     case "bool":
       return typeof value === "boolean" ? null : `${at} must be a boolean`;
     case "number":
-      if (typeof value === "string" && type.keywords?.includes(value)) return null;
-      return typeof value === "number" && Number.isFinite(value) ? null : `${at} must be a number`;
+      if (typeof value === "string" && type.keywords?.includes(value))
+        return null;
+      return typeof value === "number" && Number.isFinite(value)
+        ? null
+        : `${at} must be a number`;
     case "length":
-      return typeof value === "number" && Number.isFinite(value) ? null : `${at} must be a number`;
+      return typeof value === "number" && Number.isFinite(value)
+        ? null
+        : `${at} must be a number`;
     case "enum":
       return typeof value === "string" && type.members.includes(value)
         ? null
@@ -694,7 +753,10 @@ export async function scopedBindTarget(
   objects: { query(selector: string): Promise<string[]> },
   address: string,
   scope: BindScope,
-  hostTarget: (host: { address: string; element: unknown }) => Promise<{ selector: string; wrote: boolean }>,
+  hostTarget: (host: {
+    address: string;
+    element: unknown;
+  }) => Promise<{ selector: string; wrote: boolean }>,
 ): Promise<string | null> {
   if (scope.selector) {
     const hit = await narrowTo(objects, scope.selector, address);
@@ -703,7 +765,9 @@ export async function scopedBindTarget(
   let chosen = scope.host;
   if (!chosen && scope.kind && scope.hostCandidates) {
     for (const h of scope.hostCandidates) {
-      const hits = await objects.query(`${h.address} > ${scope.kind}`).catch(() => [] as string[]);
+      const hits = await objects
+        .query(`${h.address} > ${scope.kind}`)
+        .catch(() => [] as string[]);
       if (hits.includes(address)) {
         chosen = h;
         break;
@@ -720,19 +784,23 @@ export async function scopedBindTarget(
   return null;
 }
 
-
 // ------------------------------------------- list / struct values (§12.8)
 
 /** The value a new item / an unset field starts from — the SDK's
  *  `defaultValueOf` (struct field defaults, the first enum member, 0, "",
  *  false, []). */
-export function defaultValueOf(type: ShellValueType, row?: { default?: unknown; range?: { min?: number } }): unknown {
+export function defaultValueOf(
+  type: ShellValueType,
+  row?: { default?: unknown; range?: { min?: number } },
+): unknown {
   if (row?.default !== undefined) return structuredClone(row.default);
   switch (type.kind) {
     case "bool":
       return false;
     case "number":
-      return row?.range?.min !== undefined && row.range.min > 0 ? row.range.min : 0;
+      return row?.range?.min !== undefined && row.range.min > 0
+        ? row.range.min
+        : 0;
     case "length":
       return 0;
     case "color":
@@ -764,17 +832,29 @@ export function defaultValueOf(type: ShellValueType, row?: { default?: unknown; 
 
 type EditResult = { ok: true; value: unknown } | { ok: false; reason: string };
 
-function withField(item: unknown, type: ShellValueType, field: string, value: unknown): EditResult {
-  if (type.kind !== "struct") return { ok: false, reason: `a ${type.kind} has no fields` };
+function withField(
+  item: unknown,
+  type: ShellValueType,
+  field: string,
+  value: unknown,
+): EditResult {
+  if (type.kind !== "struct")
+    return { ok: false, reason: `a ${type.kind} has no fields` };
   const f = type.fields[field];
   if (!f && !type.open) {
-    return { ok: false, reason: `no field "${field}" (${Object.keys(type.fields).join(", ")})` };
+    return {
+      ok: false,
+      reason: `no field "${field}" (${Object.keys(type.fields).join(", ")})`,
+    };
   }
   if (f && !(value === null && f.optional)) {
     const why = checkArgs(f, value, field);
     if (why) return { ok: false, reason: why };
   }
-  const base = item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : {};
+  const base =
+    item && typeof item === "object" && !Array.isArray(item)
+      ? (item as Record<string, unknown>)
+      : {};
   return { ok: true, value: { ...base, [field]: value } };
 }
 
@@ -784,38 +864,69 @@ const isIndex = (n: unknown, len: number): n is number =>
 /** Apply one edit to a list (or, for `fieldSet`, a struct) value — the
  *  host-side twin of plugin-sdk `applyValueEdit`, used when the host has
  *  no `editValue` door. Pure. */
-export function applyValueEdit(current: unknown, edit: ShellValueEdit, type: ShellValueType): EditResult {
+export function applyValueEdit(
+  current: unknown,
+  edit: ShellValueEdit,
+  type: ShellValueType,
+): EditResult {
   if (edit.edit === "fieldSet") {
-    if (type.kind !== "struct") return { ok: false, reason: `fieldSet needs a struct, not ${type.kind}` };
-    return withField(current ?? defaultValueOf(type), type, edit.field, edit.value);
+    if (type.kind !== "struct")
+      return { ok: false, reason: `fieldSet needs a struct, not ${type.kind}` };
+    return withField(
+      current ?? defaultValueOf(type),
+      type,
+      edit.field,
+      edit.value,
+    );
   }
-  if (type.kind !== "list") return { ok: false, reason: `${edit.edit} needs a list, not ${type.kind}` };
-  const list = Array.isArray(current) ? [...current] : current == null ? [] : null;
+  if (type.kind !== "list")
+    return { ok: false, reason: `${edit.edit} needs a list, not ${type.kind}` };
+  const list = Array.isArray(current)
+    ? [...current]
+    : current == null
+      ? []
+      : null;
   if (!list) return { ok: false, reason: "the current value is not a list" };
   switch (edit.edit) {
     case "add": {
       if (type.maxItems !== undefined && list.length >= type.maxItems) {
-        return { ok: false, reason: `the list is full (maxItems ${type.maxItems})` };
+        return {
+          ok: false,
+          reason: `the list is full (maxItems ${type.maxItems})`,
+        };
       }
       const at = edit.index ?? list.length;
-      if (!Number.isInteger(at) || at < 0 || at > list.length) return { ok: false, reason: `add: index ${at} is outside 0..${list.length}` };
-      list.splice(at, 0, edit.item !== undefined ? edit.item : defaultValueOf(type.of));
+      if (!Number.isInteger(at) || at < 0 || at > list.length)
+        return {
+          ok: false,
+          reason: `add: index ${at} is outside 0..${list.length}`,
+        };
+      list.splice(
+        at,
+        0,
+        edit.item !== undefined ? edit.item : defaultValueOf(type.of),
+      );
       return { ok: true, value: list };
     }
     case "remove":
-      if (!isIndex(edit.index, list.length)) return { ok: false, reason: `remove: no item ${edit.index}` };
+      if (!isIndex(edit.index, list.length))
+        return { ok: false, reason: `remove: no item ${edit.index}` };
       list.splice(edit.index, 1);
       return { ok: true, value: list };
     case "move": {
       if (!isIndex(edit.from, list.length) || !isIndex(edit.to, list.length)) {
-        return { ok: false, reason: `move: ${edit.from} → ${edit.to} is outside 0..${list.length - 1}` };
+        return {
+          ok: false,
+          reason: `move: ${edit.from} → ${edit.to} is outside 0..${list.length - 1}`,
+        };
       }
       const [item] = list.splice(edit.from, 1);
       list.splice(edit.to, 0, item);
       return { ok: true, value: list };
     }
     case "itemSet": {
-      if (!isIndex(edit.index, list.length)) return { ok: false, reason: `itemSet: no item ${edit.index}` };
+      if (!isIndex(edit.index, list.length))
+        return { ok: false, reason: `itemSet: no item ${edit.index}` };
       if (edit.field === undefined) {
         list[edit.index] = edit.value;
         return { ok: true, value: list };
@@ -830,7 +941,10 @@ export function applyValueEdit(current: unknown, edit: ShellValueEdit, type: She
 
 /** The items a list field shows, in DISPLAY order, each with its VALUE
  *  index (edits always name value indices). */
-export function listItems(value: unknown, items?: ListPresentation): { index: number; item: unknown }[] {
+export function listItems(
+  value: unknown,
+  items?: ListPresentation,
+): { index: number; item: unknown }[] {
   const list = Array.isArray(value) ? value : [];
   const out = list.map((item, index) => ({ index, item }));
   return items?.reversed ? out.reverse() : out;
@@ -848,8 +962,15 @@ export interface SubField {
 /** A field type for an OPEN struct's undeclared field, read off a value. */
 function inferredType(field: string, sample: unknown): ShellValueType {
   if (typeof sample === "boolean") return { kind: "bool" };
-  if (typeof sample === "number") return /pct$|percent$/i.test(field) ? { kind: "number", unit: "percent" } : { kind: "number" };
-  if (typeof sample === "string" && (/color$/i.test(field) || sample.startsWith("Color/"))) return { kind: "color" };
+  if (typeof sample === "number")
+    return /pct$|percent$/i.test(field)
+      ? { kind: "number", unit: "percent" }
+      : { kind: "number" };
+  if (
+    typeof sample === "string" &&
+    (/color$/i.test(field) || sample.startsWith("Color/"))
+  )
+    return { kind: "color" };
   return { kind: "text" };
 }
 
@@ -863,18 +984,35 @@ export function subFieldsOf(
 ): SubField[] {
   if (type.kind !== "struct") return [];
   const declared = type.fields;
-  const names = fields ?? Object.keys(declared).map((f) => f as string | SubFieldPresentation);
-  const rec = sample && typeof sample === "object" && !Array.isArray(sample) ? (sample as Record<string, unknown>) : {};
+  const names =
+    fields ??
+    Object.keys(declared).map((f) => f as string | SubFieldPresentation);
+  const rec =
+    sample && typeof sample === "object" && !Array.isArray(sample)
+      ? (sample as Record<string, unknown>)
+      : {};
   const out: SubField[] = [];
   for (const entry of names) {
-    const p: SubFieldPresentation = typeof entry === "string" ? { field: entry } : entry;
-    const t = declared[p.field] ?? (type.open || !Object.keys(declared).length ? inferredType(p.field, rec[p.field]) : null);
+    const p: SubFieldPresentation =
+      typeof entry === "string" ? { field: entry } : entry;
+    const t =
+      declared[p.field] ??
+      (type.open || !Object.keys(declared).length
+        ? inferredType(p.field, rec[p.field])
+        : null);
     if (!t) continue;
     out.push({
       field: p.field,
       label: p.label ?? p.field,
       type: t,
-      presentation: { options: p.options, style: p.style, collection: typeof p.props?.collectionName === "string" ? p.props.collectionName : undefined },
+      presentation: {
+        options: p.options,
+        style: p.style,
+        collection:
+          typeof p.props?.collectionName === "string"
+            ? p.props.collectionName
+            : undefined,
+      },
       props: p.props,
     });
   }
@@ -882,7 +1020,11 @@ export function subFieldsOf(
 }
 
 /** The text that titles one list item: its `itemLabel` field, else "#n". */
-export function itemTitle(item: unknown, index: number, items?: ListPresentation): string {
+export function itemTitle(
+  item: unknown,
+  index: number,
+  items?: ListPresentation,
+): string {
   const key = items?.itemLabel;
   if (key && item && typeof item === "object") {
     const v = (item as Record<string, unknown>)[key];
@@ -899,7 +1041,10 @@ export function listAffordances(
   writable: boolean,
   items?: ListPresentation,
 ): { add: boolean; remove: boolean; reorder: boolean } {
-  const full = type.kind === "list" && type.maxItems !== undefined && length >= type.maxItems;
+  const full =
+    type.kind === "list" &&
+    type.maxItems !== undefined &&
+    length >= type.maxItems;
   return {
     add: writable && items?.add !== false && !full,
     remove: writable && items?.remove !== false,

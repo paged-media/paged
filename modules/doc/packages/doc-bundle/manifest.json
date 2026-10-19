@@ -11,12 +11,8 @@
       "readNative": true,
       "openNative": true
     },
-    "rendering": [
-      "hitTest"
-    ],
-    "editContext": [
-      "wordDocument"
-    ],
+    "rendering": ["hitTest"],
+    "editContext": ["wordDocument"],
     "clipboard": "none",
     "wasm": [
       {
@@ -32,15 +28,9 @@
       "media.paged.doc.panel.outline",
       "media.paged.doc.panel.properties"
     ],
-    "commands": [
-      "media.paged.doc.command.placeDoc"
-    ],
-    "importers": [
-      "media.paged.doc.importer.docx"
-    ],
-    "exporters": [
-      "media.paged.doc.exporter.docx"
-    ],
+    "commands": ["media.paged.doc.command.placeDoc"],
+    "importers": ["media.paged.doc.importer.docx"],
+    "exporters": ["media.paged.doc.exporter.docx"],
     "editContexts": [
       {
         "type": "wordDocument",
@@ -183,11 +173,7 @@
               "path": "kind",
               "type": {
                 "kind": "enum",
-                "members": [
-                  "paragraph",
-                  "table",
-                  "image"
-                ]
+                "members": ["paragraph", "table", "image"]
               },
               "access": "readOnly",
               "title": "Kind"

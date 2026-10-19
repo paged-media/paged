@@ -75,7 +75,10 @@ interface Handle {
   };
   __paged: { client: Record<string, Fn> };
   __webTap?: {
-    layers: Record<string, { texts: SceneText[]; fontFallbacks: unknown; at: number }>;
+    layers: Record<
+      string,
+      { texts: SceneText[]; fontFallbacks: unknown; at: number }
+    >;
     cleared: Record<string, number>;
     mutations: Array<{ op: string; at: number }>;
     seq: number;
@@ -86,14 +89,18 @@ interface Handle {
  *  keybinding all do). */
 export async function invoke(page: Page, id: string): Promise<void> {
   await page.evaluate(
-    (c) => (globalThis as unknown as Handle).__canvas.registries.commands.invoke(c),
+    (c) =>
+      (globalThis as unknown as Handle).__canvas.registries.commands.invoke(c),
     id,
   );
 }
 
 /** Raw mutation through the worker client (setup steps that are not the
  *  step under test). Resolves with the reply envelope. */
-export async function mutate(page: Page, mutation: unknown): Promise<{
+export async function mutate(
+  page: Page,
+  mutation: unknown,
+): Promise<{
   kind?: string;
   payload?: { createdId?: ElementRef | null };
 }> {
@@ -105,7 +112,9 @@ export async function mutate(page: Page, mutation: unknown): Promise<{
 
 /** Document undo — the editor's undo (Cmd+Z outside any edit context). */
 export async function undo(page: Page): Promise<void> {
-  await page.evaluate(() => (globalThis as unknown as Handle).__canvas.client.undo());
+  await page.evaluate(() =>
+    (globalThis as unknown as Handle).__canvas.client.undo(),
+  );
 }
 
 /**
@@ -118,9 +127,12 @@ export async function tapSceneLayers(page: Page): Promise<void> {
   await page.evaluate(() => {
     const g = globalThis as unknown as Handle;
     if (g.__webTap) return;
-    const tap = { layers: {}, cleared: {}, mutations: [], seq: 0 } as NonNullable<
-      Handle["__webTap"]
-    >;
+    const tap = {
+      layers: {},
+      cleared: {},
+      mutations: [],
+      seq: 0,
+    } as NonNullable<Handle["__webTap"]>;
     g.__webTap = tap;
     const c = g.__paged.client;
     const submit = c.submitSceneLayer.bind(c);
@@ -128,7 +140,9 @@ export async function tapSceneLayers(page: Page): Promise<void> {
       const reply = (await submit(...args)) as { fontFallbacks?: unknown };
       const layer = args[1] as { items?: Array<{ kind?: string }> };
       tap.layers[String(args[0])] = {
-        texts: (layer.items ?? []).filter((i) => i.kind === "text") as SceneText[],
+        texts: (layer.items ?? []).filter(
+          (i) => i.kind === "text",
+        ) as SceneText[],
         fontFallbacks: reply?.fontFallbacks,
         at: ++tap.seq,
       };
@@ -142,7 +156,10 @@ export async function tapSceneLayers(page: Page): Promise<void> {
     };
     const mut = c.mutate.bind(c);
     c.mutate = async (...args: unknown[]) => {
-      tap.mutations.push({ op: String((args[0] as { op?: string })?.op), at: ++tap.seq });
+      tap.mutations.push({
+        op: String((args[0] as { op?: string })?.op),
+        at: ++tap.seq,
+      });
       return mut(...args);
     };
   });
@@ -150,9 +167,13 @@ export async function tapSceneLayers(page: Page): Promise<void> {
 
 /** The text runs the bundle last submitted for `frameId` (null when it
  *  holds no layer). */
-export async function sceneRuns(page: Page, frameId: string): Promise<SceneText[] | null> {
+export async function sceneRuns(
+  page: Page,
+  frameId: string,
+): Promise<SceneText[] | null> {
   return page.evaluate(
-    (id) => (globalThis as unknown as Handle).__webTap?.layers[id]?.texts ?? null,
+    (id) =>
+      (globalThis as unknown as Handle).__webTap?.layers[id]?.texts ?? null,
     frameId,
   );
 }
@@ -176,7 +197,10 @@ export async function sceneText(page: Page, frameId: string): Promise<string> {
 }
 
 /** Mutations the client sent since tap sequence `since`. */
-export async function mutationsSince(page: Page, since: number): Promise<string[]> {
+export async function mutationsSince(
+  page: Page,
+  since: number,
+): Promise<string[]> {
   return page.evaluate(
     (s) =>
       ((globalThis as unknown as Handle).__webTap?.mutations ?? [])
@@ -188,7 +212,9 @@ export async function mutationsSince(page: Page, since: number): Promise<string[
 
 /** The tap's current sequence number (a mark to count from). */
 export async function tapMark(page: Page): Promise<number> {
-  return page.evaluate(() => (globalThis as unknown as Handle).__webTap?.seq ?? 0);
+  return page.evaluate(
+    () => (globalThis as unknown as Handle).__webTap?.seq ?? 0,
+  );
 }
 
 export function words(s: string): string[] {
@@ -197,17 +223,28 @@ export function words(s: string): string[] {
 
 /** The frame's web source as the document holds it (inline label), or
  *  null when the element carries no paged.web label. */
-export async function webSource(page: Page, frame: ElementRef): Promise<WebSource | null> {
+export async function webSource(
+  page: Page,
+  frame: ElementRef,
+): Promise<WebSource | null> {
   return page.evaluate(
     async ({ id, key }) => {
       const c = (globalThis as unknown as Handle).__canvas.client;
       const props = (await c.elementProperties(id)) as {
-        entries?: Array<{ value?: { type?: string; value?: { key?: string; value?: string } } }>;
+        entries?: Array<{
+          value?: { type?: string; value?: { key?: string; value?: string } };
+        }>;
       } | null;
       for (const e of props?.entries ?? []) {
         const v = e.value;
-        if (v?.type === "pluginMetadata" && v.value?.key === key && typeof v.value.value === "string") {
-          const env = JSON.parse(v.value.value) as { data?: Record<string, unknown> };
+        if (
+          v?.type === "pluginMetadata" &&
+          v.value?.key === key &&
+          typeof v.value.value === "string"
+        ) {
+          const env = JSON.parse(v.value.value) as {
+            data?: Record<string, unknown>;
+          };
           const d = env.data ?? {};
           return {
             html: String(d.html ?? ""),
@@ -226,12 +263,16 @@ export async function webSource(page: Page, frame: ElementRef): Promise<WebSourc
  *  reopen; the label does not). */
 export async function webFrames(page: Page): Promise<ElementRef[]> {
   const items = await page.evaluate(async () => {
-    type Node = { id?: { kind: string; id: unknown } | null; children?: Node[] | null };
+    type Node = {
+      id?: { kind: string; id: unknown } | null;
+      children?: Node[] | null;
+    };
     const c = (globalThis as unknown as Handle).__canvas.client;
     const out: ElementRef[] = [];
     const walk = (nodes: Node[] | null | undefined) => {
       for (const n of nodes ?? []) {
-        if (n.id && typeof n.id.id === "string") out.push({ kind: n.id.kind, id: n.id.id });
+        if (n.id && typeof n.id.id === "string")
+          out.push({ kind: n.id.kind, id: n.id.id });
         walk(n.children);
       }
     };
@@ -247,7 +288,9 @@ export async function webFrames(page: Page): Promise<ElementRef[]> {
 export async function selectedElement(page: Page): Promise<ElementRef | null> {
   return page.evaluate(async () => {
     const c = (globalThis as unknown as Handle).__canvas.client;
-    const r = (await c.executeScript("paged.selection()")) as { output: string[] };
+    const r = (await c.executeScript("paged.selection()")) as {
+      output: string[];
+    };
     const ids = JSON.parse(r.output[0] ?? "[]") as ElementRef[];
     return ids.length === 1 ? ids[0] : null;
   });
@@ -269,7 +312,9 @@ export async function boundsOf(
 ): Promise<[number, number, number, number]> {
   return page.evaluate(async (id) => {
     const c = (globalThis as unknown as Handle).__canvas.client;
-    const g = (await c.elementGeometry([id])) as Array<{ bounds: [number, number, number, number] }>;
+    const g = (await c.elementGeometry([id])) as Array<{
+      bounds: [number, number, number, number];
+    }>;
     return g[0]!.bounds;
   }, frame);
 }
@@ -344,7 +389,8 @@ export async function screenPointInFrame(
       const item = (
         (await c.elementGeometry([id])) as Array<{
           bounds: [number, number, number, number];
-          itemTransform?: [number, number, number, number, number, number] | null;
+          itemTransform?:
+            [number, number, number, number, number, number] | null;
         }>
       )[0];
       if (!item) return null;

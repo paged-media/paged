@@ -31,10 +31,19 @@ import { createSession } from "../session";
 function fakeHost(grant: string[], wired = true): BundleHost {
   const consented = new Set<string>();
   return {
-    manifest: { id: "media.paged.data", name: "d", version: "0.0.1", apiVersion: "^0.2" },
+    manifest: {
+      id: "media.paged.data",
+      name: "d",
+      version: "0.0.1",
+      apiVersion: "^0.2",
+    },
     log: { debug() {}, info() {}, warn() {}, error() {} },
     // The document doors every host has; nothing here fires them.
-    document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }), onDidOpen: () => ({ dispose() {} }) },
+    document: {
+      onWillSave: () => ({ dispose() {} }),
+      onDidChange: () => ({ dispose() {} }),
+      onDidOpen: () => ({ dispose() {} }),
+    },
     supports: (f: string) => wired && f === "network.consent@1",
     network: {
       async requestConsent(origins: readonly string[]): Promise<ConsentResult> {
@@ -63,9 +72,17 @@ describe("session.requestNetworkConsent (D-03)", () => {
 
   it("returns [] when the host door throws (network undeclared, the M0 posture)", async () => {
     const throwing = {
-      manifest: { id: "media.paged.data", name: "d", version: "0.0.1", apiVersion: "^0.2" },
+      manifest: {
+        id: "media.paged.data",
+        name: "d",
+        version: "0.0.1",
+        apiVersion: "^0.2",
+      },
       log: { debug() {}, info() {}, warn() {}, error() {} },
-      document: { onWillSave: () => ({ dispose() {} }), onDidChange: () => ({ dispose() {} }) },
+      document: {
+        onWillSave: () => ({ dispose() {} }),
+        onDidChange: () => ({ dispose() {} }),
+      },
       supports: () => false,
       network: {
         async requestConsent(): Promise<ConsentResult> {
@@ -75,6 +92,8 @@ describe("session.requestNetworkConsent (D-03)", () => {
       },
     } as unknown as BundleHost;
     const session = createSession(throwing, 0);
-    expect(await session.requestNetworkConsent(["https://api.test"], "x")).toEqual([]);
+    expect(
+      await session.requestNetworkConsent(["https://api.test"], "x"),
+    ).toEqual([]);
   });
 });

@@ -60,7 +60,11 @@ async function findCell(page: Page): Promise<Cell> {
               kind: string;
               payload?: {
                 storyId?: string | null;
-                tableContext?: { tableId: string; row: number; col: number } | null;
+                tableContext?: {
+                  tableId: string;
+                  row: number;
+                  col: number;
+                } | null;
               };
             }>;
           };
@@ -78,7 +82,12 @@ async function findCell(page: Page): Promise<Cell> {
         const p = r.payload;
         // Row 1+ — a body cell, away from a header's edge cases.
         if (p?.tableContext && p.storyId && p.tableContext.row >= 1) {
-          return { storyId: p.storyId, ...p.tableContext, x: w * gx, y: h * gy };
+          return {
+            storyId: p.storyId,
+            ...p.tableContext,
+            x: w * gx,
+            y: h * gy,
+          };
         }
       }
     }
@@ -124,16 +133,24 @@ test.describe("ED-8 — table cells from the Selection tool and from automation"
     const at = await screenPoint(page, cell.x, cell.y);
     await page.mouse.dblclick(at.x, at.y);
 
-    await expect.poll(async () => (await state(page)).caret?.cell?.row ?? null).toBe(cell.row);
+    await expect
+      .poll(async () => (await state(page)).caret?.cell?.row ?? null)
+      .toBe(cell.row);
     const s = await state(page);
     expect(s.context, "no vector editing on a text frame's text").toBeNull();
     expect(s.tool).toBe("paged.tool.type");
     expect(s.caret?.storyId).toBe(cell.storyId);
-    expect(s.caret?.cell).toMatchObject({ tableId: cell.tableId, row: cell.row, col: cell.col });
+    expect(s.caret?.cell).toMatchObject({
+      tableId: cell.tableId,
+      row: cell.row,
+      col: cell.col,
+    });
 
     await openPanel(page, "paged.table");
     await expect(page.locator('[data-table-panel="ready"]')).toBeVisible();
-    await expect(page.locator("[data-table-cell-address]")).toHaveText(`R${cell.row} · C${cell.col}`);
+    await expect(page.locator("[data-table-cell-address]")).toHaveText(
+      `R${cell.row} · C${cell.col}`,
+    );
   });
 
   test("AC-TABLE-CARET-1 — a cell caret set through automation reaches the Table panel @feat:editor-shell.panels.table @level:edge", async ({
@@ -159,6 +176,8 @@ test.describe("ED-8 — table cells from the Selection tool and from automation"
     }, cell);
 
     await expect(page.locator('[data-table-panel="ready"]')).toBeVisible();
-    await expect(page.locator("[data-table-cell-address]")).toHaveText(`R${cell.row} · C${cell.col}`);
+    await expect(page.locator("[data-table-cell-address]")).toHaveText(
+      `R${cell.row} · C${cell.col}`,
+    );
   });
 });

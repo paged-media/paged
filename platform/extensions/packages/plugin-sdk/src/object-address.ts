@@ -53,9 +53,30 @@ export const PAGE_ITEM_KINDS: readonly PageItemKind[] = [
   "graphicLine",
   "group",
 ];
-const FAMILIES = new Set<StyleFamily>(["paragraph", "character", "object", "cell", "table"]);
-const ID_KINDS = new Set(["spread", "layer", "table", "guide", "section", "hyperlink", "textVariable"]);
-const REST_KINDS = new Set(["swatch", "gradient", "colorGroup", "numberingList", "condition", "conditionSet"]);
+const FAMILIES = new Set<StyleFamily>([
+  "paragraph",
+  "character",
+  "object",
+  "cell",
+  "table",
+]);
+const ID_KINDS = new Set([
+  "spread",
+  "layer",
+  "table",
+  "guide",
+  "section",
+  "hyperlink",
+  "textVariable",
+]);
+const REST_KINDS = new Set([
+  "swatch",
+  "gradient",
+  "colorGroup",
+  "numberingList",
+  "condition",
+  "conditionSet",
+]);
 
 // ------------------------------------------------------------- id escaping
 
@@ -72,7 +93,8 @@ function enc(id: string, delims: string): string {
   let out = "";
   for (const ch of id) {
     if (ch === "%" || delims.includes(ch)) {
-      for (const b of new TextEncoder().encode(ch)) out += "%" + b.toString(16).toUpperCase().padStart(2, "0");
+      for (const b of new TextEncoder().encode(ch))
+        out += "%" + b.toString(16).toUpperCase().padStart(2, "0");
     } else {
       out += ch;
     }
@@ -102,13 +124,16 @@ function dec(text: string): string {
     out.push(bytes[i]!);
   }
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array(out));
+    return new TextDecoder("utf-8", { fatal: true }).decode(
+      new Uint8Array(out),
+    );
   } catch {
     return text;
   }
 }
 
-const uint = (s: string): number | null => (/^[0-9]+$/.test(s) && Number(s) <= 0xffffffff ? Number(s) : null);
+const uint = (s: string): number | null =>
+  /^[0-9]+$/.test(s) && Number(s) <= 0xffffffff ? Number(s) : null;
 
 /** `<a>..<b>` with `b > a` → the pair, or null. */
 function parseRange(text: string): { start: number; end: number } | null {
@@ -154,7 +179,8 @@ export function parseAddress(text: string): ParsedAddress | null {
     const gt = rest.indexOf(MASTER_SCOPE);
     if (gt < 0) return { kind: "master", id: rest };
     const item = parseAddress(rest.slice(gt + MASTER_SCOPE.length));
-    if (gt === 0 || !item || (item.kind !== "item" && item.kind !== "frame")) return null;
+    if (gt === 0 || !item || (item.kind !== "item" && item.kind !== "frame"))
+      return null;
     return { kind: "onMaster", master: dec(rest.slice(0, gt)), item };
   }
   if (head === "story" || head === "storyRange" || head === "storyrange") {
@@ -163,7 +189,14 @@ export function parseAddress(text: string): ParsedAddress | null {
     if (at >= 0 && (rangeRequired || rest.slice(at + 1).includes(".."))) {
       if (at === 0) return null;
       const r = parseRange(rest.slice(at + 1));
-      return r ? { kind: "storyRange", story: dec(rest.slice(0, at)), start: r.start, end: r.end } : null;
+      return r
+        ? {
+            kind: "storyRange",
+            story: dec(rest.slice(0, at)),
+            start: r.start,
+            end: r.end,
+          }
+        : null;
     }
     return rangeRequired ? null : { kind: "story", id: rest };
   }
@@ -171,7 +204,9 @@ export function parseAddress(text: string): ParsedAddress | null {
     const at = rest.lastIndexOf("@");
     if (at <= 0) return null;
     const offset = uint(rest.slice(at + 1));
-    return offset === null ? null : { kind: "field", story: dec(rest.slice(0, at)), offset };
+    return offset === null
+      ? null
+      : { kind: "field", story: dec(rest.slice(0, at)), offset };
   }
   if (head === "cell") {
     const slash = rest.lastIndexOf("/");
@@ -181,20 +216,29 @@ export function parseAddress(text: string): ParsedAddress | null {
     if (comma < 0) return null;
     const row = uint(rc.slice(0, comma));
     const col = uint(rc.slice(comma + 1));
-    return row === null || col === null ? null : { kind: "cell", table: dec(rest.slice(0, slash)), row, col };
+    return row === null || col === null
+      ? null
+      : { kind: "cell", table: dec(rest.slice(0, slash)), row, col };
   }
   if (head === "style") {
     const slash = rest.indexOf("/");
     if (slash < 0) return null;
     const family = rest.slice(0, slash) as StyleFamily;
     const name = rest.slice(slash + 1);
-    return FAMILIES.has(family) && name.length > 0 ? { kind: "style", family, name } : null;
+    return FAMILIES.has(family) && name.length > 0
+      ? { kind: "style", family, name }
+      : null;
   }
   if (head === "plugin") {
     const a = rest.indexOf("/");
     const b = a < 0 ? -1 : rest.indexOf("/", a + 1);
     if (a <= 0 || b < 0 || b === a + 1 || b === rest.length - 1) return null;
-    return { kind: "plugin", plugin: dec(rest.slice(0, a)), objectKind: dec(rest.slice(a + 1, b)), id: rest.slice(b + 1) };
+    return {
+      kind: "plugin",
+      plugin: dec(rest.slice(0, a)),
+      objectKind: dec(rest.slice(a + 1, b)),
+      id: rest.slice(b + 1),
+    };
   }
   if (ID_KINDS.has(head)) return { kind: head, id: rest } as ParsedAddress;
   return null;
@@ -270,7 +314,10 @@ export function addressKindOf(a: ParsedAddress): string {
 export function toElementId(a: ParsedAddress): ElementId | null {
   if (a.kind === "item") return { kind: a.itemKind, id: a.id } as ElementId;
   if (a.kind === "storyRange") {
-    return { kind: "storyRange", id: { story_id: a.story, start: a.start, end: a.end } };
+    return {
+      kind: "storyRange",
+      id: { story_id: a.story, start: a.start, end: a.end },
+    };
   }
   return null;
 }
@@ -279,11 +326,21 @@ export function toElementId(a: ParsedAddress): ElementId | null {
 export function fromElementId(id: ElementId): string {
   switch (id.kind) {
     case "storyRange":
-      return formatAddress({ kind: "storyRange", story: id.id.story_id, start: id.id.start, end: id.id.end });
+      return formatAddress({
+        kind: "storyRange",
+        story: id.id.story_id,
+        start: id.id.start,
+        end: id.id.end,
+      });
     case "table":
       return formatAddress({ kind: "table", id: id.id.table_id });
     case "tableCell":
-      return formatAddress({ kind: "cell", table: id.id.table_id, row: id.id.row, col: id.id.col });
+      return formatAddress({
+        kind: "cell",
+        table: id.id.table_id,
+        row: id.id.row,
+        col: id.id.col,
+      });
     default:
       return formatAddress({ kind: "item", itemKind: id.kind, id: id.id });
   }
@@ -400,8 +457,10 @@ function parseStep(token: string): Omit<SelectorStep, "combinator"> | null {
   let preds = bracket < 0 ? "" : rest.slice(bracket);
   let head: SelectorHead;
   if (headText === "*") head = { type: "any" };
-  else if (SELECTOR_KINDS.has(headText)) head = { type: "kind", kind: headText };
-  else if (/^plugin:[^/]+\/[A-Za-z][A-Za-z0-9_-]*$/.test(headText)) head = { type: "kind", kind: headText };
+  else if (SELECTOR_KINDS.has(headText))
+    head = { type: "kind", kind: headText };
+  else if (/^plugin:[^/]+\/[A-Za-z][A-Za-z0-9_-]*$/.test(headText))
+    head = { type: "kind", kind: headText };
   else {
     const address = parseAddress(headText);
     if (!address) return null;
@@ -409,10 +468,17 @@ function parseStep(token: string): Omit<SelectorStep, "combinator"> | null {
   }
   const predicates: SelectorPredicate[] = [];
   while (preds.length > 0) {
-    const m = /^\[([^\]=!^*"]+?)(=|!=|\^=|\*=)("((?:[^"\\]|\\.)*)"|([^\]"]*))\]/.exec(preds);
+    const m =
+      /^\[([^\]=!^*"]+?)(=|!=|\^=|\*=)("((?:[^"\\]|\\.)*)"|([^\]"]*))\]/.exec(
+        preds,
+      );
     if (!m) return null;
     const value = m[4] !== undefined ? m[4].replace(/\\(.)/g, "$1") : m[5]!;
-    predicates.push({ key: m[1]!.trim(), op: m[2] as SelectorPredicate["op"], value });
+    predicates.push({
+      key: m[1]!.trim(),
+      op: m[2] as SelectorPredicate["op"],
+      value,
+    });
     preds = preds.slice(m[0].length);
   }
   const step: Omit<SelectorStep, "combinator"> = { head, predicates };
@@ -426,7 +492,9 @@ export function parseSelector(text: string): ParsedSelector | null {
   // The master-scoped address form contains " > " itself.
   const whole = parseAddress(text);
   if (whole && whole.kind === "onMaster") {
-    return { steps: [{ head: { type: "address", address: whole }, predicates: [] }] };
+    return {
+      steps: [{ head: { type: "address", address: whole }, predicates: [] }],
+    };
   }
   const tokens = tokenize(text.trim());
   if (!tokens || tokens.length === 0) return null;

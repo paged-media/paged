@@ -17,7 +17,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The journal envelope (ADR 025). ONE append-only event vocabulary, shared by
 // the shell, the client, the render worker, the engine and every plugin.
 //
@@ -55,12 +54,7 @@
 export type JournalSeverity = "debug" | "info" | "warn" | "error";
 
 /** Where an entry was minted. Closed set — a new origin is a code change. */
-export type JournalOrigin =
-  | "shell"
-  | "client"
-  | "worker"
-  | "engine"
-  | "plugin";
+export type JournalOrigin = "shell" | "client" | "worker" | "engine" | "plugin";
 
 export const SEVERITY_RANK: Readonly<Record<JournalSeverity, number>> = {
   debug: 0,

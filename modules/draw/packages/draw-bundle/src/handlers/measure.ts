@@ -175,7 +175,10 @@ export async function nearestPathPointOnPage(
     if (!local) return null;
     // ESCAPE HATCH (named, RFI K-14): no `document.nearestPathPoint`
     // facade — the read goes through the ONE guarded seam.
-    const result = await rawNearestPathPoint(host, target, [local[0], local[1]]);
+    const result = await rawNearestPathPoint(host, target, [
+      local[0],
+      local[1],
+    ]);
     // The reply's distance is LOCAL-space — scale the page-space
     // tolerance into local (the anchors.ts pick-tolerance idiom).
     if (!result || result.distance > tolerancePt / affineScale(matrix)) {
@@ -214,7 +217,9 @@ export function createMeasureHandler(host: BundleHost): GestureHandler {
     if (canDrawBoth) {
       // The line AND its readout, in one publish, live and frozen.
       host.overlay.setToolPreviews(
-        snapshot.readout ? [line, measureTextPreview(pageId, snapshot.readout)] : [line],
+        snapshot.readout
+          ? [line, measureTextPreview(pageId, snapshot.readout)]
+          : [line],
       );
     } else if (canDrawText && !snapshot.measuring && snapshot.readout) {
       // A single-slot host: the frozen numbers replace the frozen line.

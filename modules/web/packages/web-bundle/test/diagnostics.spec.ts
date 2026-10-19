@@ -53,14 +53,18 @@ const fakeEditor = {} as unknown as PagedEditor;
 
 describe("web linter → host.diagnostics fan-out (W-05)", () => {
   it("publishes the linter's findings to the host problems sink", () => {
-    const published: Array<{ bundleId: string; key: string; diags: Diagnostic[] }> =
-      [];
+    const published: Array<{
+      bundleId: string;
+      key: string;
+      diags: Diagnostic[];
+    }> = [];
     const cleared: Array<{ bundleId: string; key?: string }> = [];
     const { host } = createBundleHost(() => fakeEditor, manifest, {
       console: silent,
       storage: mapBacking(),
       diagnosticsSink: {
-        publish: (bundleId, key, diags) => published.push({ bundleId, key, diags }),
+        publish: (bundleId, key, diags) =>
+          published.push({ bundleId, key, diags }),
         clear: (bundleId, key) => cleared.push({ bundleId, key }),
       },
     });
@@ -81,9 +85,7 @@ describe("web linter → host.diagnostics fan-out (W-05)", () => {
     // A clean edit clears the source's diagnostics from the panel.
     host.diagnostics.set(key, diagnoseHtml("<p>ok</p>"));
     expect(published).toHaveLength(2);
-    expect(
-      published[1].diags.some((d) => d.severity === "error"),
-    ).toBe(false);
+    expect(published[1].diags.some((d) => d.severity === "error")).toBe(false);
 
     host.diagnostics.clear(key);
     expect(cleared).toEqual([{ bundleId: "media.paged.web", key }]);

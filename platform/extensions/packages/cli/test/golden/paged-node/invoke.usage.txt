@@ -1,0 +1,11 @@
+$ paged-node invoke <TMP>/fixture.paged
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "usage: paged-node invoke <doc> <commandId> [args.json|{json}]",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

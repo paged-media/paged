@@ -194,7 +194,11 @@ export function CanvasPanel(_props: PanelProps) {
       .then((items) => {
         const item = items[0];
         if (!item?.pageId) return;
-        tableSelection.selectCell({ ...base, pageId: item.pageId, cellRect: cellAabb(item) });
+        tableSelection.selectCell({
+          ...base,
+          pageId: item.pageId,
+          cellRect: cellAabb(item),
+        });
       })
       .catch(() => {});
   }, [client, contentSelection, tableSelection]);

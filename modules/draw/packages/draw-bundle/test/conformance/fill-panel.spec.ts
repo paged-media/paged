@@ -228,10 +228,7 @@ describe("draw conformance — fill panel + gradient-fill commands (B-03)", () =
       await h.host.selection.set([RECT] as never);
       await waitFor(() => bindingValue() === false);
 
-      const cmd = commandFor(
-        h,
-        "media.paged.draw.command.fillGradientLinear",
-      );
+      const cmd = commandFor(h, "media.paged.draw.command.fillGradientLinear");
       await cmd.handler(undefined);
 
       // The minted gradient landed in the collection…
@@ -255,10 +252,7 @@ describe("draw conformance — fill panel + gradient-fill commands (B-03)", () =
     it("with NO selection the gradient command is a no-op and the binding reads false", async () => {
       await h.host.selection.set([]);
       await waitFor(() => bindingValue() === false);
-      const cmd = commandFor(
-        h,
-        "media.paged.draw.command.fillGradientRadial",
-      );
+      const cmd = commandFor(h, "media.paged.draw.command.fillGradientRadial");
       await expect(cmd.handler(undefined)).resolves.toBeUndefined();
       expect(
         JSON.stringify(await h.host.document.collection("gradients")),

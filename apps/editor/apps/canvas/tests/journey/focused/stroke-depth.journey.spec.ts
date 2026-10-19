@@ -37,7 +37,12 @@ test.describe("journey · stroke & transparency depth", () => {
     await designer.open();
     await designer.newDocument();
 
-    const id = await designer.drawRectangle({ x0: 110, y0: 130, x1: 320, y1: 280 });
+    const id = await designer.drawRectangle({
+      x0: 110,
+      y0: 130,
+      x1: 320,
+      y1: 280,
+    });
     const ref = { kind: "rectangle", id };
 
     const set = async (path: string, value: unknown) => {
@@ -50,13 +55,22 @@ test.describe("journey · stroke & transparency depth", () => {
 
     await set("frameStrokeWeight", { type: "length", value: 6 });
     await set("frameStrokeJoin", { type: "text", value: "RoundEndJoin" });
-    await set("frameStrokeAlignment", { type: "text", value: "OutsideAlignment" });
+    await set("frameStrokeAlignment", {
+      type: "text",
+      value: "OutsideAlignment",
+    });
     // Dashed → striped, proving the stroke-style lane carries different kinds.
-    await set("frameStrokeType", { type: "text", value: "StrokeStyle/$ID/Dashed" });
+    await set("frameStrokeType", {
+      type: "text",
+      value: "StrokeStyle/$ID/Dashed",
+    });
     await set("frameStrokeType", {
       type: "text",
       value: "StrokeStyle/$ID/Thick - Thin",
     });
-    await set("frameStrokeGapColor", { type: "colorRef", value: "Color/Black" });
+    await set("frameStrokeGapColor", {
+      type: "colorRef",
+      value: "Color/Black",
+    });
   });
 });

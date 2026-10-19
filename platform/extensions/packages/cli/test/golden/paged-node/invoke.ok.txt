@@ -1,0 +1,20 @@
+$ paged-node invoke <TMP>/fixture.paged core.duplicatePage '{"page":"page:#1"}' -o <TMP>/dup.paged --no-plugins
+# exit 0
+# stdout
+{
+  "command": "core.duplicatePage",
+  "applied": true,
+  "result": {
+    "created": [
+      "page:u3"
+    ],
+    "undoSteps": 1
+  },
+  "saved": {
+    "path": "<TMP>/dup.paged",
+    "format": "paged",
+    "bytes": <N>
+  }
+}
+# stderr
+(empty)

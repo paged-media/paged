@@ -51,12 +51,20 @@
 // geometry ops (path points, outline/offset/simplify) — not schema rows;
 // they stay reachable by passing a raw wire `Value` (`{ type, value }`).
 
-import type { PropertyPath, PropertySchema, ValueType } from "@paged-media/plugin-api";
+import type {
+  PropertyPath,
+  PropertySchema,
+  ValueType,
+} from "@paged-media/plugin-api";
 
 // Named imports, so the bundler keeps only these two keys of the catalog.
-import { pathAliases, propertySchemas } from "../../plugin-api/src/catalog.json";
+import {
+  pathAliases,
+  propertySchemas,
+} from "../../plugin-api/src/catalog.json";
 
-export type CorePathScope = "frame" | "story" | "cell" | "table" | "layer" | "page";
+export type CorePathScope =
+  "frame" | "story" | "cell" | "table" | "layer" | "page";
 
 export interface CorePathRow {
   scope: CorePathScope;
@@ -72,14 +80,33 @@ const OP = { op: true } as const;
 const V71 = { since: 71 } as const;
 const PCT: ValueType = { kind: "number", unit: "percent" };
 
-export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP | typeof V71> = {
+export const CORE_PATHS: Record<
+  PropertyPath,
+  CorePathRow | typeof OP | typeof V71
+> = {
   frameBounds: { scope: "frame", wire: "bounds", type: { kind: "bounds" } },
   frameFillColor: { scope: "frame", wire: "colorRef", type: { kind: "color" } },
-  frameStrokeColor: { scope: "frame", wire: "colorRef", type: { kind: "color" } },
-  frameStrokeWeight: { scope: "frame", wire: "length", type: { kind: "length" } },
+  frameStrokeColor: {
+    scope: "frame",
+    wire: "colorRef",
+    type: { kind: "color" },
+  },
+  frameStrokeWeight: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
   frameOpacity: { scope: "frame", wire: "length", type: PCT },
-  frameTransform: { scope: "frame", wire: "transform", type: { kind: "transform" } },
-  imageContentTransform: { scope: "frame", wire: "transform", type: { kind: "transform" } },
+  frameTransform: {
+    scope: "frame",
+    wire: "transform",
+    type: { kind: "transform" },
+  },
+  imageContentTransform: {
+    scope: "frame",
+    wire: "transform",
+    type: { kind: "transform" },
+  },
   framePathPoint: OP,
   pathPointInsert: OP,
   pathPointRemove: OP,
@@ -88,26 +115,94 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP | typeof V
   layerLocked: { scope: "layer", wire: "bool", type: { kind: "bool" } },
   layerPrintable: { scope: "layer", wire: "bool", type: { kind: "bool" } },
   layerName: { scope: "layer", wire: "text", type: { kind: "text" } },
-  characterFontSize: { scope: "story", wire: "length", type: { kind: "length" } },
-  characterLeading: { scope: "story", wire: "length", type: { kind: "length" } },
-  characterTracking: { scope: "story", wire: "length", type: { kind: "number", unit: "em1000" } },
-  characterFillColor: { scope: "story", wire: "colorRef", type: { kind: "color" } },
-  paragraphSpaceBefore: { scope: "story", wire: "length", type: { kind: "length" } },
-  paragraphSpaceAfter: { scope: "story", wire: "length", type: { kind: "length" } },
-  paragraphFirstLineIndent: { scope: "story", wire: "length", type: { kind: "length" } },
-  appliedParagraphStyle: { scope: "story", wire: "text", type: { kind: "ref", to: "style:paragraph" } },
-  appliedCharacterStyle: { scope: "story", wire: "text", type: { kind: "ref", to: "style:character" } },
-  appliedObjectStyle: { scope: "frame", wire: "text", type: { kind: "ref", to: "style:object" } },
-  itemLayer: { scope: "frame", wire: "text", type: { kind: "ref", to: "layer" } },
-  appliedCellStyle: { scope: "cell", wire: "text", type: { kind: "ref", to: "style:cell" } },
-  appliedTableStyle: { scope: "table", wire: "text", type: { kind: "ref", to: "style:table" } },
+  characterFontSize: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  characterLeading: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  characterTracking: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "number", unit: "em1000" },
+  },
+  characterFillColor: {
+    scope: "story",
+    wire: "colorRef",
+    type: { kind: "color" },
+  },
+  paragraphSpaceBefore: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  paragraphSpaceAfter: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  paragraphFirstLineIndent: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  appliedParagraphStyle: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "ref", to: "style:paragraph" },
+  },
+  appliedCharacterStyle: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "ref", to: "style:character" },
+  },
+  appliedObjectStyle: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "ref", to: "style:object" },
+  },
+  itemLayer: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "ref", to: "layer" },
+  },
+  appliedCellStyle: {
+    scope: "cell",
+    wire: "text",
+    type: { kind: "ref", to: "style:cell" },
+  },
+  appliedTableStyle: {
+    scope: "table",
+    wire: "text",
+    type: { kind: "ref", to: "style:table" },
+  },
   framePath: OP,
   frameNonprinting: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   frameFillTint: { scope: "frame", wire: "length", type: PCT },
-  frameGradientFillAngle: { scope: "frame", wire: "length", type: { kind: "number", unit: "deg" } },
-  frameGradientFillLength: { scope: "frame", wire: "length", type: { kind: "length" } },
-  frameGradientStrokeAngle: { scope: "frame", wire: "length", type: { kind: "number", unit: "deg" } },
-  frameGradientStrokeLength: { scope: "frame", wire: "length", type: { kind: "length" } },
+  frameGradientFillAngle: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "number", unit: "deg" },
+  },
+  frameGradientFillLength: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  frameGradientStrokeAngle: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "number", unit: "deg" },
+  },
+  frameGradientStrokeLength: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
   pathOpenAt: OP,
   outlineStroke: OP,
   outlineStrokeVariable: OP,
@@ -117,133 +212,469 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP | typeof V
   frameGradientFeather: { scope: "frame", wire: "gradientFeather" },
   pageBounds: { scope: "page", wire: "bounds", type: { kind: "bounds" } },
   frameDropShadowMode: { scope: "frame", wire: "text", type: { kind: "text" } },
-  frameDropShadowXOffset: { scope: "frame", wire: "length", type: { kind: "length" } },
-  frameDropShadowYOffset: { scope: "frame", wire: "length", type: { kind: "length" } },
-  frameDropShadowSize: { scope: "frame", wire: "length", type: { kind: "length" } },
+  frameDropShadowXOffset: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  frameDropShadowYOffset: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  frameDropShadowSize: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
   frameDropShadowOpacity: { scope: "frame", wire: "length", type: PCT },
-  frameDropShadowColor: { scope: "frame", wire: "colorRef", type: { kind: "color" } },
+  frameDropShadowColor: {
+    scope: "frame",
+    wire: "colorRef",
+    type: { kind: "color" },
+  },
   frameDropShadow: { scope: "frame", wire: "bool", type: { kind: "bool" } },
-  frameFittingCrops: { scope: "frame", wire: "bounds", type: { kind: "bounds" } },
+  frameFittingCrops: {
+    scope: "frame",
+    wire: "bounds",
+    type: { kind: "bounds" },
+  },
   frameFittingType: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameTextWrapMode: { scope: "frame", wire: "text", type: { kind: "text" } },
-  frameTextWrapOffsets: { scope: "frame", wire: "bounds", type: { kind: "bounds" } },
-  frameTextWrapContourType: { scope: "frame", wire: "text", type: { kind: "text" } },
-  frameTextWrapContourIncludeInside: { scope: "frame", wire: "bool", type: { kind: "bool" } },
-  paragraphJustification: { scope: "story", wire: "text", type: { kind: "text" } },
-  paragraphStyleNextStyle: { scope: "story", wire: "text", type: { kind: "ref", to: "style:paragraph" } },
-  paragraphAppliedNumberingList: { scope: "story", wire: "text", type: { kind: "text" } },
+  frameTextWrapOffsets: {
+    scope: "frame",
+    wire: "bounds",
+    type: { kind: "bounds" },
+  },
+  frameTextWrapContourType: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  frameTextWrapContourIncludeInside: {
+    scope: "frame",
+    wire: "bool",
+    type: { kind: "bool" },
+  },
+  paragraphJustification: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  paragraphStyleNextStyle: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "ref", to: "style:paragraph" },
+  },
+  paragraphAppliedNumberingList: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "text" },
+  },
   frameStrokeEndCap: { scope: "frame", wire: "text", type: { kind: "text" } },
-  frameInsetSpacing: { scope: "frame", wire: "bounds", type: { kind: "bounds" } },
+  frameInsetSpacing: {
+    scope: "frame",
+    wire: "bounds",
+    type: { kind: "bounds" },
+  },
   appliedConditions: { scope: "story", wire: "text", type: { kind: "text" } },
   characterFontFamily: { scope: "story", wire: "text", type: { kind: "text" } },
   characterFontStyle: { scope: "story", wire: "text", type: { kind: "text" } },
-  characterKerningMethod: { scope: "story", wire: "text", type: { kind: "text" } },
+  characterKerningMethod: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "text" },
+  },
   characterCase: { scope: "story", wire: "text", type: { kind: "text" } },
   characterPosition: { scope: "story", wire: "text", type: { kind: "text" } },
   characterLanguage: { scope: "story", wire: "text", type: { kind: "text" } },
-  characterBaselineShift: { scope: "story", wire: "length", type: { kind: "length" } },
-  characterHorizontalScale: { scope: "story", wire: "length", type: { kind: "number", unit: "percent" } },
-  characterVerticalScale: { scope: "story", wire: "length", type: { kind: "number", unit: "percent" } },
-  characterSkew: { scope: "story", wire: "length", type: { kind: "number", unit: "deg" } },
+  characterBaselineShift: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  characterHorizontalScale: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "number", unit: "percent" },
+  },
+  characterVerticalScale: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "number", unit: "percent" },
+  },
+  characterSkew: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "number", unit: "deg" },
+  },
   characterUnderline: { scope: "story", wire: "bool", type: { kind: "bool" } },
   characterStrikethru: { scope: "story", wire: "bool", type: { kind: "bool" } },
   characterLigatures: { scope: "story", wire: "bool", type: { kind: "bool" } },
   characterNoBreak: { scope: "story", wire: "bool", type: { kind: "bool" } },
-  characterOtfFeatures: { scope: "story", wire: "text", type: { kind: "text" } },
-  paragraphLeftIndent: { scope: "story", wire: "length", type: { kind: "length" } },
-  paragraphRightIndent: { scope: "story", wire: "length", type: { kind: "length" } },
-  paragraphDropCapCharacters: { scope: "story", wire: "length", type: { kind: "number", integer: true } },
-  paragraphDropCapLines: { scope: "story", wire: "length", type: { kind: "number", integer: true } },
-  paragraphHyphenation: { scope: "story", wire: "bool", type: { kind: "bool" } },
-  paragraphHyphenationZone: { scope: "story", wire: "length", type: { kind: "length" } },
-  paragraphKeepLinesTogether: { scope: "story", wire: "bool", type: { kind: "bool" } },
-  paragraphKeepWithNext: { scope: "story", wire: "length", type: { kind: "number", integer: true } },
-  paragraphKeepAllLinesTogether: { scope: "story", wire: "bool", type: { kind: "bool" } },
-  paragraphKeepFirstLines: { scope: "story", wire: "length", type: { kind: "number", integer: true } },
-  paragraphKeepLastLines: { scope: "story", wire: "length", type: { kind: "number", integer: true } },
-  paragraphStartParagraph: { scope: "story", wire: "text", type: { kind: "text" } },
-  paragraphSpanColumnType: { scope: "story", wire: "text", type: { kind: "text" } },
-  paragraphSpanSplitColumnCount: { scope: "story", wire: "text", type: { kind: "text" } },
-  paragraphSpanColumnMinSpaceBefore: { scope: "story", wire: "length", type: { kind: "length" } },
-  paragraphSpanColumnMinSpaceAfter: { scope: "story", wire: "length", type: { kind: "length" } },
-  paragraphSplitColumnInsideGutter: { scope: "story", wire: "length", type: { kind: "length" } },
-  paragraphSplitColumnOutsideGutter: { scope: "story", wire: "length", type: { kind: "length" } },
+  characterOtfFeatures: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  paragraphLeftIndent: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  paragraphRightIndent: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  paragraphDropCapCharacters: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "number", integer: true },
+  },
+  paragraphDropCapLines: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "number", integer: true },
+  },
+  paragraphHyphenation: {
+    scope: "story",
+    wire: "bool",
+    type: { kind: "bool" },
+  },
+  paragraphHyphenationZone: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  paragraphKeepLinesTogether: {
+    scope: "story",
+    wire: "bool",
+    type: { kind: "bool" },
+  },
+  paragraphKeepWithNext: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "number", integer: true },
+  },
+  paragraphKeepAllLinesTogether: {
+    scope: "story",
+    wire: "bool",
+    type: { kind: "bool" },
+  },
+  paragraphKeepFirstLines: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "number", integer: true },
+  },
+  paragraphKeepLastLines: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "number", integer: true },
+  },
+  paragraphStartParagraph: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  paragraphSpanColumnType: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  paragraphSpanSplitColumnCount: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  paragraphSpanColumnMinSpaceBefore: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  paragraphSpanColumnMinSpaceAfter: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  paragraphSplitColumnInsideGutter: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  paragraphSplitColumnOutsideGutter: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "length" },
+  },
   paragraphRuleAbove: { scope: "story", wire: "paragraphRule" },
   paragraphRuleBelow: { scope: "story", wire: "paragraphRule" },
   paragraphTabStops: { scope: "story", wire: "tabStops" },
   paragraphListType: { scope: "story", wire: "text", type: { kind: "text" } },
-  paragraphBulletCharacter: { scope: "story", wire: "text", type: { kind: "text" } },
-  paragraphNumberingFormat: { scope: "story", wire: "text", type: { kind: "text" } },
-  paragraphBulletsTextAfter: { scope: "story", wire: "text", type: { kind: "text" } },
-  paragraphNumberingExpression: { scope: "story", wire: "text", type: { kind: "text" } },
-  paragraphNumberingStartAt: { scope: "story", wire: "length", type: { kind: "number", integer: true } },
-  paragraphNumberingContinue: { scope: "story", wire: "text", type: { kind: "text" } },
-  paragraphBulletsCharacterStyle: { scope: "story", wire: "text", type: { kind: "ref", to: "style:character" } },
-  paragraphNumberingCharacterStyle: { scope: "story", wire: "text", type: { kind: "ref", to: "style:character" } },
+  paragraphBulletCharacter: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  paragraphNumberingFormat: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  paragraphBulletsTextAfter: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  paragraphNumberingExpression: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  paragraphNumberingStartAt: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "number", integer: true },
+  },
+  paragraphNumberingContinue: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  paragraphBulletsCharacterStyle: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "ref", to: "style:character" },
+  },
+  paragraphNumberingCharacterStyle: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "ref", to: "style:character" },
+  },
   paragraphComposer: { scope: "story", wire: "text", type: { kind: "text" } },
   // core ADR 153 — a paragraph's line setting.
   paragraphAutoLeading: { scope: "story", wire: "length", type: PCT },
-  paragraphSingleWordJustification: { scope: "story", wire: "text", type: { kind: "text" } },
-  paragraphLastLineIndent: { scope: "story", wire: "length", type: { kind: "length" } },
-  paragraphBalanceRaggedLines: { scope: "story", wire: "text", type: { kind: "text" } },
+  paragraphSingleWordJustification: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  paragraphLastLineIndent: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  paragraphBalanceRaggedLines: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "text" },
+  },
   // core ADR 158 — a paragraph's level in a multi-level list; the restart
   // flag is tristate like NumberingContinue (Text("") clears).
-  paragraphNumberingLevel: { scope: "story", wire: "length", type: { kind: "number", integer: true } },
-  paragraphNumberingApplyRestartPolicy: { scope: "story", wire: "text", type: { kind: "text" } },
-  textFrameColumnCount: { scope: "frame", wire: "length", type: { kind: "number", integer: true } },
-  textFrameColumnGutter: { scope: "frame", wire: "length", type: { kind: "length" } },
-  textFrameColumnBalance: { scope: "frame", wire: "bool", type: { kind: "bool" } },
-  textFrameVerticalJustification: { scope: "frame", wire: "text", type: { kind: "text" } },
+  paragraphNumberingLevel: {
+    scope: "story",
+    wire: "length",
+    type: { kind: "number", integer: true },
+  },
+  paragraphNumberingApplyRestartPolicy: {
+    scope: "story",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  textFrameColumnCount: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "number", integer: true },
+  },
+  textFrameColumnGutter: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  textFrameColumnBalance: {
+    scope: "frame",
+    wire: "bool",
+    type: { kind: "bool" },
+  },
+  textFrameVerticalJustification: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
   textFrameAutoSizing: { scope: "frame", wire: "text", type: { kind: "text" } },
-  textFrameFirstBaseline: { scope: "frame", wire: "text", type: { kind: "text" } },
+  textFrameFirstBaseline: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
   textWrapInvert: { scope: "frame", wire: "bool", type: { kind: "bool" } },
-  frameFittingReferencePoint: { scope: "frame", wire: "text", type: { kind: "text" } },
+  frameFittingReferencePoint: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
   frameAutoFit: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   frameStrokeType: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameStrokeJoin: { scope: "frame", wire: "text", type: { kind: "text" } },
-  frameStrokeMiterLimit: { scope: "frame", wire: "length", type: { kind: "number" } },
-  frameStrokeAlignment: { scope: "frame", wire: "text", type: { kind: "text" } },
-  frameStrokeGapColor: { scope: "frame", wire: "colorRef", type: { kind: "color" } },
+  frameStrokeMiterLimit: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "number" },
+  },
+  frameStrokeAlignment: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  frameStrokeGapColor: {
+    scope: "frame",
+    wire: "colorRef",
+    type: { kind: "color" },
+  },
   frameStrokeGapTint: { scope: "frame", wire: "length", type: PCT },
-  frameStrokeDashArray: { scope: "frame", wire: "lengths", type: { kind: "list", of: { kind: "length" } } },
-  frameCornerOptionTopLeft: { scope: "frame", wire: "text", type: { kind: "text" } },
-  frameCornerOptionTopRight: { scope: "frame", wire: "text", type: { kind: "text" } },
-  frameCornerOptionBottomLeft: { scope: "frame", wire: "text", type: { kind: "text" } },
-  frameCornerOptionBottomRight: { scope: "frame", wire: "text", type: { kind: "text" } },
-  frameCornerRadiusTopLeft: { scope: "frame", wire: "length", type: { kind: "length" } },
-  frameCornerRadiusTopRight: { scope: "frame", wire: "length", type: { kind: "length" } },
-  frameCornerRadiusBottomLeft: { scope: "frame", wire: "length", type: { kind: "length" } },
-  frameCornerRadiusBottomRight: { scope: "frame", wire: "length", type: { kind: "length" } },
-  frameRotationAngle: { scope: "frame", wire: "length", type: { kind: "number", unit: "deg" } },
+  frameStrokeDashArray: {
+    scope: "frame",
+    wire: "lengths",
+    type: { kind: "list", of: { kind: "length" } },
+  },
+  frameCornerOptionTopLeft: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  frameCornerOptionTopRight: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  frameCornerOptionBottomLeft: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  frameCornerOptionBottomRight: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  frameCornerRadiusTopLeft: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  frameCornerRadiusTopRight: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  frameCornerRadiusBottomLeft: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  frameCornerRadiusBottomRight: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  frameRotationAngle: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "number", unit: "deg" },
+  },
   frameScaleX: { scope: "frame", wire: "length", type: { kind: "number" } },
   frameScaleY: { scope: "frame", wire: "length", type: { kind: "number" } },
   frameFlipH: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   frameFlipV: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   frameOverprintFill: { scope: "frame", wire: "bool", type: { kind: "bool" } },
-  frameOverprintStroke: { scope: "frame", wire: "bool", type: { kind: "bool" } },
-  frameInnerShadowEnabled: { scope: "frame", wire: "bool", type: { kind: "bool" } },
-  frameInnerShadowBlendMode: { scope: "frame", wire: "text", type: { kind: "text" } },
-  frameInnerShadowColor: { scope: "frame", wire: "colorRef", type: { kind: "color" } },
+  frameOverprintStroke: {
+    scope: "frame",
+    wire: "bool",
+    type: { kind: "bool" },
+  },
+  frameInnerShadowEnabled: {
+    scope: "frame",
+    wire: "bool",
+    type: { kind: "bool" },
+  },
+  frameInnerShadowBlendMode: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  frameInnerShadowColor: {
+    scope: "frame",
+    wire: "colorRef",
+    type: { kind: "color" },
+  },
   frameInnerShadowOpacity: { scope: "frame", wire: "length", type: PCT },
-  frameInnerShadowAngle: { scope: "frame", wire: "length", type: { kind: "number", unit: "deg" } },
-  frameInnerShadowDistance: { scope: "frame", wire: "length", type: { kind: "length" } },
-  frameInnerShadowSize: { scope: "frame", wire: "length", type: { kind: "length" } },
+  frameInnerShadowAngle: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "number", unit: "deg" },
+  },
+  frameInnerShadowDistance: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  frameInnerShadowSize: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
   frameInnerShadowChoke: { scope: "frame", wire: "length", type: PCT },
   frameInnerShadowNoise: { scope: "frame", wire: "length", type: PCT },
-  frameOuterGlowEnabled: { scope: "frame", wire: "bool", type: { kind: "bool" } },
-  frameOuterGlowBlendMode: { scope: "frame", wire: "text", type: { kind: "text" } },
-  frameOuterGlowColor: { scope: "frame", wire: "colorRef", type: { kind: "color" } },
+  frameOuterGlowEnabled: {
+    scope: "frame",
+    wire: "bool",
+    type: { kind: "bool" },
+  },
+  frameOuterGlowBlendMode: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  frameOuterGlowColor: {
+    scope: "frame",
+    wire: "colorRef",
+    type: { kind: "color" },
+  },
   frameOuterGlowOpacity: { scope: "frame", wire: "length", type: PCT },
   frameOuterGlowSpread: { scope: "frame", wire: "length", type: PCT },
-  frameOuterGlowSize: { scope: "frame", wire: "length", type: { kind: "length" } },
+  frameOuterGlowSize: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
   frameOuterGlowNoise: { scope: "frame", wire: "length", type: PCT },
-  frameInnerGlowEnabled: { scope: "frame", wire: "bool", type: { kind: "bool" } },
-  frameInnerGlowBlendMode: { scope: "frame", wire: "text", type: { kind: "text" } },
-  frameInnerGlowColor: { scope: "frame", wire: "colorRef", type: { kind: "color" } },
+  frameInnerGlowEnabled: {
+    scope: "frame",
+    wire: "bool",
+    type: { kind: "bool" },
+  },
+  frameInnerGlowBlendMode: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  frameInnerGlowColor: {
+    scope: "frame",
+    wire: "colorRef",
+    type: { kind: "color" },
+  },
   frameInnerGlowOpacity: { scope: "frame", wire: "length", type: PCT },
   frameInnerGlowChoke: { scope: "frame", wire: "length", type: PCT },
-  frameInnerGlowSize: { scope: "frame", wire: "length", type: { kind: "length" } },
-  frameInnerGlowSource: { scope: "frame", wire: "text", type: { kind: "text" } },
+  frameInnerGlowSize: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  frameInnerGlowSource: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
   frameInnerGlowNoise: { scope: "frame", wire: "length", type: PCT },
   frameBevelEnabled: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   frameBevelStyle: { scope: "frame", wire: "text", type: { kind: "text" } },
@@ -251,97 +682,285 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP | typeof V
   frameBevelDepth: { scope: "frame", wire: "length", type: PCT },
   frameBevelDirection: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameBevelSize: { scope: "frame", wire: "length", type: { kind: "length" } },
-  frameBevelSoften: { scope: "frame", wire: "length", type: { kind: "length" } },
-  frameBevelAngle: { scope: "frame", wire: "length", type: { kind: "number", unit: "deg" } },
-  frameBevelAltitude: { scope: "frame", wire: "length", type: { kind: "number", unit: "deg" } },
-  frameBevelHighlightColor: { scope: "frame", wire: "colorRef", type: { kind: "color" } },
-  frameBevelShadowColor: { scope: "frame", wire: "colorRef", type: { kind: "color" } },
+  frameBevelSoften: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  frameBevelAngle: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "number", unit: "deg" },
+  },
+  frameBevelAltitude: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "number", unit: "deg" },
+  },
+  frameBevelHighlightColor: {
+    scope: "frame",
+    wire: "colorRef",
+    type: { kind: "color" },
+  },
+  frameBevelShadowColor: {
+    scope: "frame",
+    wire: "colorRef",
+    type: { kind: "color" },
+  },
   frameBevelHighlightOpacity: { scope: "frame", wire: "length", type: PCT },
   frameBevelShadowOpacity: { scope: "frame", wire: "length", type: PCT },
   frameSatinEnabled: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   frameSatinBlendMode: { scope: "frame", wire: "text", type: { kind: "text" } },
-  frameSatinColor: { scope: "frame", wire: "colorRef", type: { kind: "color" } },
+  frameSatinColor: {
+    scope: "frame",
+    wire: "colorRef",
+    type: { kind: "color" },
+  },
   frameSatinOpacity: { scope: "frame", wire: "length", type: PCT },
-  frameSatinAngle: { scope: "frame", wire: "length", type: { kind: "number", unit: "deg" } },
-  frameSatinDistance: { scope: "frame", wire: "length", type: { kind: "length" } },
+  frameSatinAngle: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "number", unit: "deg" },
+  },
+  frameSatinDistance: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
   frameSatinSize: { scope: "frame", wire: "length", type: { kind: "length" } },
   frameSatinInvert: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   frameFeatherEnabled: { scope: "frame", wire: "bool", type: { kind: "bool" } },
-  frameFeatherWidth: { scope: "frame", wire: "length", type: { kind: "length" } },
-  frameFeatherCornerType: { scope: "frame", wire: "text", type: { kind: "text" } },
+  frameFeatherWidth: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  frameFeatherCornerType: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
   frameFeatherNoise: { scope: "frame", wire: "length", type: PCT },
   frameFeatherChoke: { scope: "frame", wire: "length", type: PCT },
-  frameDirectionalFeatherEnabled: { scope: "frame", wire: "bool", type: { kind: "bool" } },
-  frameDirectionalFeatherLeftWidth: { scope: "frame", wire: "length", type: { kind: "length" } },
-  frameDirectionalFeatherRightWidth: { scope: "frame", wire: "length", type: { kind: "length" } },
-  frameDirectionalFeatherTopWidth: { scope: "frame", wire: "length", type: { kind: "length" } },
-  frameDirectionalFeatherBottomWidth: { scope: "frame", wire: "length", type: { kind: "length" } },
-  frameDirectionalFeatherAngle: { scope: "frame", wire: "length", type: { kind: "number", unit: "deg" } },
+  frameDirectionalFeatherEnabled: {
+    scope: "frame",
+    wire: "bool",
+    type: { kind: "bool" },
+  },
+  frameDirectionalFeatherLeftWidth: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  frameDirectionalFeatherRightWidth: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  frameDirectionalFeatherTopWidth: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  frameDirectionalFeatherBottomWidth: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "length" },
+  },
+  frameDirectionalFeatherAngle: {
+    scope: "frame",
+    wire: "length",
+    type: { kind: "number", unit: "deg" },
+  },
   frameDirectionalFeatherNoise: { scope: "frame", wire: "length", type: PCT },
   frameDirectionalFeatherChoke: { scope: "frame", wire: "length", type: PCT },
   frameBlendMode: { scope: "frame", wire: "text", type: { kind: "text" } },
-  nextTextFrame: { scope: "frame", wire: "text", type: { kind: "ref", to: "frame" } },
-  previousTextFrame: { scope: "frame", wire: "text", type: { kind: "ref", to: "frame" } },
+  nextTextFrame: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "ref", to: "frame" },
+  },
+  previousTextFrame: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "ref", to: "frame" },
+  },
   cellFillColor: { scope: "cell", wire: "colorRef", type: { kind: "color" } },
   cellFillTint: { scope: "cell", wire: "length", type: PCT },
   cellInsetTop: { scope: "cell", wire: "length", type: { kind: "length" } },
   cellInsetLeft: { scope: "cell", wire: "length", type: { kind: "length" } },
   cellInsetBottom: { scope: "cell", wire: "length", type: { kind: "length" } },
   cellInsetRight: { scope: "cell", wire: "length", type: { kind: "length" } },
-  cellVerticalJustification: { scope: "cell", wire: "text", type: { kind: "text" } },
-  cellTopEdgeStrokeColor: { scope: "cell", wire: "colorRef", type: { kind: "color" } },
-  cellTopEdgeStrokeWeight: { scope: "cell", wire: "length", type: { kind: "length" } },
+  cellVerticalJustification: {
+    scope: "cell",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  cellTopEdgeStrokeColor: {
+    scope: "cell",
+    wire: "colorRef",
+    type: { kind: "color" },
+  },
+  cellTopEdgeStrokeWeight: {
+    scope: "cell",
+    wire: "length",
+    type: { kind: "length" },
+  },
   cellTopEdgeStrokeTint: { scope: "cell", wire: "length", type: PCT },
-  cellBottomEdgeStrokeColor: { scope: "cell", wire: "colorRef", type: { kind: "color" } },
-  cellBottomEdgeStrokeWeight: { scope: "cell", wire: "length", type: { kind: "length" } },
+  cellBottomEdgeStrokeColor: {
+    scope: "cell",
+    wire: "colorRef",
+    type: { kind: "color" },
+  },
+  cellBottomEdgeStrokeWeight: {
+    scope: "cell",
+    wire: "length",
+    type: { kind: "length" },
+  },
   cellBottomEdgeStrokeTint: { scope: "cell", wire: "length", type: PCT },
-  cellLeftEdgeStrokeColor: { scope: "cell", wire: "colorRef", type: { kind: "color" } },
-  cellLeftEdgeStrokeWeight: { scope: "cell", wire: "length", type: { kind: "length" } },
+  cellLeftEdgeStrokeColor: {
+    scope: "cell",
+    wire: "colorRef",
+    type: { kind: "color" },
+  },
+  cellLeftEdgeStrokeWeight: {
+    scope: "cell",
+    wire: "length",
+    type: { kind: "length" },
+  },
   cellLeftEdgeStrokeTint: { scope: "cell", wire: "length", type: PCT },
-  cellRightEdgeStrokeColor: { scope: "cell", wire: "colorRef", type: { kind: "color" } },
-  cellRightEdgeStrokeWeight: { scope: "cell", wire: "length", type: { kind: "length" } },
+  cellRightEdgeStrokeColor: {
+    scope: "cell",
+    wire: "colorRef",
+    type: { kind: "color" },
+  },
+  cellRightEdgeStrokeWeight: {
+    scope: "cell",
+    wire: "length",
+    type: { kind: "length" },
+  },
   cellRightEdgeStrokeTint: { scope: "cell", wire: "length", type: PCT },
   // A table row's own options, written through any cell of it (core
   // ADR 175); the catalog types rowStartRow's members.
   rowStartRow: { scope: "cell", wire: "text", type: { kind: "text" } },
   rowKeepWithNext: { scope: "cell", wire: "bool", type: { kind: "bool" } },
-  tableRowCount: { scope: "table", wire: "length", type: { kind: "number", integer: true }, inferred: true, readOnly: true },
-  tableColumnCount: { scope: "table", wire: "length", type: { kind: "number", integer: true }, inferred: true, readOnly: true },
+  tableRowCount: {
+    scope: "table",
+    wire: "length",
+    type: { kind: "number", integer: true },
+    inferred: true,
+    readOnly: true,
+  },
+  tableColumnCount: {
+    scope: "table",
+    wire: "length",
+    type: { kind: "number", integer: true },
+    inferred: true,
+    readOnly: true,
+  },
   // Core v0.71.13 (ADR 159): a table's header and footer bands, read-only and
   // unadvertised like the two counts above (the bands change through
   // insertHeaderRow / removeHeaderRow and their footer twins). An older
   // engine answers "no such readable path".
-  tableHeaderRowCount: { scope: "table", wire: "length", type: { kind: "number", integer: true }, inferred: true, readOnly: true },
-  tableFooterRowCount: { scope: "table", wire: "length", type: { kind: "number", integer: true }, inferred: true, readOnly: true },
+  tableHeaderRowCount: {
+    scope: "table",
+    wire: "length",
+    type: { kind: "number", integer: true },
+    inferred: true,
+    readOnly: true,
+  },
+  tableFooterRowCount: {
+    scope: "table",
+    wire: "length",
+    type: { kind: "number", integer: true },
+    inferred: true,
+    readOnly: true,
+  },
   pluginMetadata: OP,
   anchoredPosition: { scope: "frame", wire: "text", type: { kind: "text" } },
   anchorPoint: { scope: "frame", wire: "text", type: { kind: "text" } },
   anchoredXOffset: { scope: "frame", wire: "length", type: { kind: "length" } },
   anchoredYOffset: { scope: "frame", wire: "length", type: { kind: "length" } },
-  anchoredHorizontalReference: { scope: "frame", wire: "text", type: { kind: "text" } },
-  anchoredVerticalReference: { scope: "frame", wire: "text", type: { kind: "text" } },
-  anchoredHorizontalAlignment: { scope: "frame", wire: "text", type: { kind: "text" } },
-  anchoredVerticalAlignment: { scope: "frame", wire: "text", type: { kind: "text" } },
-  anchoredSpineRelative: { scope: "frame", wire: "bool", type: { kind: "bool" } },
-  anchoredLockPosition: { scope: "frame", wire: "bool", type: { kind: "bool" } },
+  anchoredHorizontalReference: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  anchoredVerticalReference: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  anchoredHorizontalAlignment: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  anchoredVerticalAlignment: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  anchoredSpineRelative: {
+    scope: "frame",
+    wire: "bool",
+    type: { kind: "bool" },
+  },
+  anchoredLockPosition: {
+    scope: "frame",
+    wire: "bool",
+    type: { kind: "bool" },
+  },
   elementVisible: { scope: "frame", wire: "bool", type: { kind: "bool" } },
   elementLocked: { scope: "frame", wire: "bool", type: { kind: "bool" } },
-  frameStrokeStartArrowhead: { scope: "frame", wire: "text", type: { kind: "text" } },
-  frameStrokeEndArrowhead: { scope: "frame", wire: "text", type: { kind: "text" } },
+  frameStrokeStartArrowhead: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  frameStrokeEndArrowhead: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
   // Core v0.71.7 (ADR 135): transparency per target and the effect attributes.
   frameFillOpacity: { scope: "frame", wire: "length", type: PCT },
   frameFillBlendMode: { scope: "frame", wire: "text", type: { kind: "text" } },
   frameStrokeOpacity: { scope: "frame", wire: "length", type: PCT },
-  frameStrokeBlendMode: { scope: "frame", wire: "text", type: { kind: "text" } },
+  frameStrokeBlendMode: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
   frameContentOpacity: { scope: "frame", wire: "length", type: PCT },
-  frameContentBlendMode: { scope: "frame", wire: "text", type: { kind: "text" } },
-  groupIsolateBlending: { scope: "frame", wire: "bool", type: { kind: "bool" } },
+  frameContentBlendMode: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
+  groupIsolateBlending: {
+    scope: "frame",
+    wire: "bool",
+    type: { kind: "bool" },
+  },
   groupKnockout: { scope: "frame", wire: "bool", type: { kind: "bool" } },
-  frameDropShadowBlendMode: { scope: "frame", wire: "text", type: { kind: "text" } },
+  frameDropShadowBlendMode: {
+    scope: "frame",
+    wire: "text",
+    type: { kind: "text" },
+  },
   frameDropShadowSpread: { scope: "frame", wire: "length", type: PCT },
   frameDropShadowNoise: { scope: "frame", wire: "length", type: PCT },
-  frameDropShadowKnockedOut: { scope: "frame", wire: "bool", type: { kind: "bool" } },
-  frameDropShadowUseGlobalLight: { scope: "frame", wire: "bool", type: { kind: "bool" } },
+  frameDropShadowKnockedOut: {
+    scope: "frame",
+    wire: "bool",
+    type: { kind: "bool" },
+  },
+  frameDropShadowUseGlobalLight: {
+    scope: "frame",
+    wire: "bool",
+    type: { kind: "bool" },
+  },
   // Protocol 71 (ADR 132): modelled fields that were unsettable before.
   pageMarginTop: V71,
   pageMarginBottom: V71,
@@ -409,9 +1028,13 @@ export const CORE_PATHS: Record<PropertyPath, CorePathRow | typeof OP | typeof V
 /** Ranges the SDK knows from core's PropertyPath docs: opacity / tint /
  *  noise / choke / spread percentages are 0–100; a miter limit is a
  *  multiple of the stroke width, 1–500 (InDesign's limits). */
-export function corePathRange(path: string): { min: number; max: number } | undefined {
+export function corePathRange(
+  path: string,
+): { min: number; max: number } | undefined {
   if (path === "frameStrokeMiterLimit") return { min: 1, max: 500 };
-  return /Opacity|Tint$|Noise$|Choke$|GlowSpread$/.test(path) ? { min: 0, max: 100 } : undefined;
+  return /Opacity|Tint$|Noise$|Choke$|GlowSpread$/.test(path)
+    ? { min: 0, max: 100 }
+    : undefined;
 }
 
 /** The catalog's advertised ALIASES (Boa names) → the wire path, mirrored
@@ -428,7 +1051,8 @@ export const CORE_PATH_ALIASES: Readonly<Record<string, PropertyPath>> = {
 };
 
 /** A core path name with its alias resolved. */
-export const canonicalCorePath = (path: string): string => CORE_PATH_ALIASES[path] ?? path;
+export const canonicalCorePath = (path: string): string =>
+  CORE_PATH_ALIASES[path] ?? path;
 
 // ------------------------------------------------- protocol 71: the catalog
 
@@ -437,7 +1061,14 @@ export interface CoreCatalogRow {
   addressKind: string;
   appliesTo?: readonly string[];
   path: string;
-  type: { kind: string; unit?: string; members?: readonly string[]; to?: string; of?: string; shape?: string };
+  type: {
+    kind: string;
+    unit?: string;
+    members?: readonly string[];
+    to?: string;
+    of?: string;
+    shape?: string;
+  };
   wire: string;
   nullable?: boolean;
   range?: { min?: number; max?: number; step?: number };
@@ -484,9 +1115,12 @@ export function normalizeCoreType(t: CoreCatalogRow["type"]): ValueType | null {
       // A number row's `members` are words it takes in place of a number
       // (a span count's "All"); dropping them made the row refuse them.
       const keywords = t.members?.length ? { keywords: [...t.members] } : {};
-      if (t.unit === "count") return { kind: "number", integer: true, ...keywords };
+      if (t.unit === "count")
+        return { kind: "number", integer: true, ...keywords };
       const unit = t.unit ? UNIT[t.unit] : undefined;
-      return unit ? { kind: "number", unit, ...keywords } : { kind: "number", ...keywords };
+      return unit
+        ? { kind: "number", unit, ...keywords }
+        : { kind: "number", ...keywords };
     }
     case "enum":
       return { kind: "enum", members: [...(t.members ?? [])] };
@@ -497,13 +1131,23 @@ export function normalizeCoreType(t: CoreCatalogRow["type"]): ValueType | null {
     case "ref":
       return { kind: "ref", to: t.to ?? "object" };
     case "struct":
-      return { kind: "struct", fields: {}, ...(t.shape ? { shape: t.shape } : {}), open: true };
+      return {
+        kind: "struct",
+        fields: {},
+        ...(t.shape ? { shape: t.shape } : {}),
+        open: true,
+      };
     case "list": {
       const of =
         t.of === "struct"
           ? t.shape === "swatch ref"
             ? ({ kind: "ref", to: "swatch" } as ValueType)
-            : ({ kind: "struct", fields: {}, ...(t.shape ? { shape: t.shape } : {}), open: true } as ValueType)
+            : ({
+                kind: "struct",
+                fields: {},
+                ...(t.shape ? { shape: t.shape } : {}),
+                open: true,
+              } as ValueType)
           : normalizeCoreType({ kind: t.of ?? "text" });
       return { kind: "list", of: of ?? { kind: "text" } };
     }
@@ -521,7 +1165,9 @@ function sdkKindsOf(row: CoreCatalogRow): string[] {
     case "group":
       return ["frame"];
     case "style":
-      return (row.appliesTo ?? ["paragraph", "character", "object", "cell", "table"]).map((f) => `style:${f}`);
+      return (
+        row.appliesTo ?? ["paragraph", "character", "object", "cell", "table"]
+      ).map((f) => `style:${f}`);
     default:
       return [row.addressKind];
   }
@@ -539,37 +1185,56 @@ let schema71: Map<string, Map<string, CoreRow71>> | null = null;
  *  claim a write that never lands. Remove an entry when core models the
  *  value (or flips the row itself). Empty since engine 0.71.11, which
  *  stores a cell's fill tint (`cell|cellFillTint`, the only entry it had). */
-export const CORE_UNSTORED_ROWS: ReadonlyMap<string, string> = new Map<string, string>([]);
+export const CORE_UNSTORED_ROWS: ReadonlyMap<string, string> = new Map<
+  string,
+  string
+>([]);
 
 /** The catalog names a few rows by their Boa ALIAS (`frameInnerShadow`);
  *  the SDK lists every core row under its WIRE path, as the registry
  *  canonicalises input (`canonicalCorePath`). */
 const CATALOG_ALIASES: ReadonlyMap<string, string> = new Map(
-  (pathAliases as { name: string; wire: string }[]).map((a) => [a.name, a.wire]),
+  (pathAliases as { name: string; wire: string }[]).map((a) => [
+    a.name,
+    a.wire,
+  ]),
 );
 
 /** Wire PropertyPaths core's catalog gives NO row (protocol 71): still
  *  reachable through `Set` / `RequestGet`, typed from the interim table
  *  and marked so. The SDK infers nothing else. */
-export const CORE_ROWLESS_PATHS: readonly string[] = Object.keys(CORE_PATHS).filter((p) => {
-  const row = (CORE_PATHS as Record<string, CorePathRow | { op: true } | { since: 71 }>)[p]!;
+export const CORE_ROWLESS_PATHS: readonly string[] = Object.keys(
+  CORE_PATHS,
+).filter((p) => {
+  const row = (
+    CORE_PATHS as Record<string, CorePathRow | { op: true } | { since: 71 }>
+  )[p]!;
   if ("op" in row || "since" in row || !row.type) return false;
-  return !CORE_CATALOG_ROWS.some((r) => (CATALOG_ALIASES.get(r.path) ?? r.path) === p);
+  return !CORE_CATALOG_ROWS.some(
+    (r) => (CATALOG_ALIASES.get(r.path) ?? r.path) === p,
+  );
 });
 
 /** SDK kind → path → normalised row, from the vendored catalog. Indexed
  *  core paths (`labels[key]`, `rows[i].height`) become `[]` rows. */
-export function coreSchema71(): ReadonlyMap<string, ReadonlyMap<string, CoreRow71>> {
+export function coreSchema71(): ReadonlyMap<
+  string,
+  ReadonlyMap<string, CoreRow71>
+> {
   if (schema71) return schema71;
   const out = new Map<string, Map<string, CoreRow71>>();
   for (const row of CORE_CATALOG_ROWS) {
     const type = normalizeCoreType(row.type);
     if (!type) continue;
-    const path = (CATALOG_ALIASES.get(row.path) ?? row.path).replace(/\[[^\]]*\]/g, "[]");
+    const path = (CATALOG_ALIASES.get(row.path) ?? row.path).replace(
+      /\[[^\]]*\]/g,
+      "[]",
+    );
     for (const kind of sdkKindsOf(row)) {
       const base = kind.startsWith("style:") ? "style" : kind;
       const schema: PropertySchema = { addressKind: base, path, type };
-      if (row.appliesTo && row.addressKind !== "style") schema.appliesTo = row.appliesTo;
+      if (row.appliesTo && row.addressKind !== "style")
+        schema.appliesTo = row.appliesTo;
       if (row.addressKind === "group") schema.appliesTo = ["group"];
       if (row.nullable !== undefined) schema.nullable = row.nullable;
       if (row.range) schema.range = row.range;
@@ -585,11 +1250,19 @@ export function coreSchema71(): ReadonlyMap<string, ReadonlyMap<string, CoreRow7
         schema.summary = unstored;
       }
       const m = out.get(kind) ?? new Map<string, CoreRow71>();
-      if (!m.has(path)) m.set(path, { schema, wire: row.wire, coreKind: row.addressKind });
+      if (!m.has(path))
+        m.set(path, { schema, wire: row.wire, coreKind: row.addressKind });
       out.set(kind, m);
     }
   }
-  const coreKindOfScope: Record<CorePathScope, string> = { frame: "frame", story: "storyRange", cell: "cell", table: "table", layer: "layer", page: "page" };
+  const coreKindOfScope: Record<CorePathScope, string> = {
+    frame: "frame",
+    story: "storyRange",
+    cell: "cell",
+    table: "table",
+    layer: "layer",
+    page: "page",
+  };
   for (const path of CORE_ROWLESS_PATHS) {
     const row = (CORE_PATHS as Record<string, CorePathRow>)[path]!;
     const schema: PropertySchema = {
@@ -597,11 +1270,17 @@ export function coreSchema71(): ReadonlyMap<string, ReadonlyMap<string, CoreRow7
       path,
       type: row.type!,
       nullable: true,
-      summary: "Not typed by core's catalog (protocol 71): typed from the SDK's interim table.",
+      summary:
+        "Not typed by core's catalog (protocol 71): typed from the SDK's interim table.",
     };
     if (row.readOnly) schema.access = "readOnly";
     const m = out.get(row.scope) ?? new Map<string, CoreRow71>();
-    m.set(path, { schema, wire: row.wire, coreKind: coreKindOfScope[row.scope], inferred: true });
+    m.set(path, {
+      schema,
+      wire: row.wire,
+      coreKind: coreKindOfScope[row.scope],
+      inferred: true,
+    });
     out.set(row.scope, m);
   }
   schema71 = out;
@@ -610,5 +1289,7 @@ export function coreSchema71(): ReadonlyMap<string, ReadonlyMap<string, CoreRow7
 
 /** The OPERATION paths of the catalog (raw wire values only). */
 export const CORE_OPERATION_PATHS: ReadonlySet<string> = new Set(
-  CORE_CATALOG_ROWS.filter((r) => r.type.kind === "operation").map((r) => r.path),
+  CORE_CATALOG_ROWS.filter((r) => r.type.kind === "operation").map(
+    (r) => r.path,
+  ),
 );

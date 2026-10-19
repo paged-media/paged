@@ -147,7 +147,9 @@ describe("LivePaintMachine", () => {
     m.setRegions([LEFT]);
     const s = m.handle({ type: "down", point: [50, 50] });
     (s.collected as string[]).push("bogus");
-    expect(m.handle({ type: "up", point: [50, 50] }).collected).toEqual(["0#0"]);
+    expect(m.handle({ type: "up", point: [50, 50] }).collected).toEqual([
+      "0#0",
+    ]);
   });
 
   // The lookup is the Shape Builder's (`region-lookup.ts`): flattened
@@ -173,7 +175,9 @@ describe("LivePaintMachine", () => {
       },
     ]);
     m.handle({ type: "down", point: [5, 0] });
-    expect(m.handle({ type: "up", point: [5, 0] }).collected).toEqual(["lens#0"]);
+    expect(m.handle({ type: "up", point: [5, 0] }).collected).toEqual([
+      "lens#0",
+    ]);
     expect(m.handle({ type: "move", point: [0.5, 3] }).hovered).toBeNull();
   });
 });

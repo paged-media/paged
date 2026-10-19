@@ -49,7 +49,12 @@ import type { DataEngineLike } from "../../src/engine";
 import type { DuckDBHandle } from "../../src/query/duckdb";
 import type { DataSourceSession } from "../../src/session";
 import manifest from "../../manifest.json";
-import { ENGINE_ANCHOR, ENGINE_PROTOCOL, openRealHost, REQUIRE_REAL_CORE } from "../real-core";
+import {
+  ENGINE_ANCHOR,
+  ENGINE_PROTOCOL,
+  openRealHost,
+  REQUIRE_REAL_CORE,
+} from "../real-core";
 import { type WorkLog } from "./counting-host";
 
 // bun:test hoists no vi.mock and has no vi.doMock / vi.resetModules: the
@@ -63,7 +68,15 @@ const PKG = join(HERE, "..", "..");
 const BIN = join(PKG, "bin");
 export const DATA_JS_WASM = join(BIN, "data_js_bg.wasm");
 const DUCK_WASM = join(BIN, "duckdb-engine.wasm");
-const DUCK_NODE_API = join(PKG, "..", "..", "vendor", "duckdb-wasm", "dist", "duckdb-node-blocking.cjs");
+const DUCK_NODE_API = join(
+  PKG,
+  "..",
+  "..",
+  "vendor",
+  "duckdb-wasm",
+  "dist",
+  "duckdb-node-blocking.cjs",
+);
 
 export const TODAY = 20613;
 
@@ -134,11 +147,15 @@ const OUT_METHODS = new Set([
  *  its DataEngine in a counting Proxy. */
 export async function bootCountedEngine(): Promise<CountedEngine> {
   if (!HAVE_ENGINE) {
-    throw new Error(`${DATA_JS_WASM} missing — run \`bash scripts/build-wasm.sh\``);
+    throw new Error(
+      `${DATA_JS_WASM} missing — run \`bash scripts/build-wasm.sh\``,
+    );
   }
   // A query string makes every boot a fresh module instance: counters and
   // memory start at zero, whatever ran before in this worker.
-  const glue = await import(/* @vite-ignore */ `${join(BIN, "data_js.js")}?boot=${bootSeq++}`);
+  const glue = await import(
+    /* @vite-ignore */ `${join(BIN, "data_js.js")}?boot=${bootSeq++}`
+  );
   glue.initSync({ module: readFileSync(DATA_JS_WASM) });
   const raw = new glue.DataEngine(TODAY) as DataEngineLike;
   let log: EngineLog = { calls: {}, cellsIn: 0, bytesIn: 0, bytesOut: 0 };
@@ -156,7 +173,8 @@ export async function bootCountedEngine(): Promise<CountedEngine> {
         if (prop.startsWith("push_")) {
           // The column door: typed buffers, counted by their byte length
           // (cellsIn counts per-cell objects, and the door sends none).
-          for (const a of args) if (ArrayBuffer.isView(a)) log.bytesIn += a.byteLength;
+          for (const a of args)
+            if (ArrayBuffer.isView(a)) log.bytesIn += a.byteLength;
         }
         const out = Reflect.apply(value, obj, args) as unknown;
         if (OUT_METHODS.has(prop) && out != null) {
@@ -208,14 +226,19 @@ function requireNodeDuckDB(): any {
  *  handle code, counted. */
 export async function bootCountedDuck(): Promise<CountedDuck> {
   if (!HAVE_DUCK) {
-    throw new Error(`${DUCK_WASM} or the Node API is missing — run \`bash scripts/vendor-duckdb.sh\``);
+    throw new Error(
+      `${DUCK_WASM} or the Node API is missing — run \`bash scripts/vendor-duckdb.sh\``,
+    );
   }
   const { duckdbHandle } = await import("../../src/query/duckdb");
   const { nodeBootSql } = await import("../duckdb-node-ext");
   const duckdb = requireNodeDuckDB();
   const db = await duckdb.createDuckDB(
     {
-      mvp: { mainModule: join(BIN, "duckdb-mvp.NOT-SHIPPED.wasm"), mainWorker: "" },
+      mvp: {
+        mainModule: join(BIN, "duckdb-mvp.NOT-SHIPPED.wasm"),
+        mainWorker: "",
+      },
       eh: { mainModule: DUCK_WASM, mainWorker: "" },
     },
     new duckdb.VoidLogger(),
@@ -225,7 +248,12 @@ export async function bootCountedDuck(): Promise<CountedDuck> {
   const conn = db.connect();
   for (const s of nodeBootSql()) conn.query(s); // as bootDuckDB does
   const inner = duckdbHandle(db, conn, () => db.reset?.());
-  let log: DuckLog = { registerCsv: 0, registerFileBuffer: 0, queries: 0, rowsOut: 0 };
+  let log: DuckLog = {
+    registerCsv: 0,
+    registerFileBuffer: 0,
+    queries: 0,
+    rowsOut: 0,
+  };
   const handle: DuckDBHandle = {
     async registerCsv(name, text) {
       log.registerCsv += 1;
@@ -327,7 +355,9 @@ export async function undoMark(h: HeadlessHost): Promise<number> {
   } as never)) as RawReply;
   const seq = reply.payload?.appliedSeq;
   if (reply.kind !== "mutationApplied" || typeof seq !== "number") {
-    throw new Error(`undoMark: the marker was refused (${JSON.stringify(reply)})`);
+    throw new Error(
+      `undoMark: the marker was refused (${JSON.stringify(reply)})`,
+    );
   }
   return seq;
 }
@@ -352,17 +382,26 @@ export async function undoStepsSince(
     const undone = reply.payload?.undoneSeq;
     if (undone === mark) return { steps, reached: true };
     if (typeof undone === "number" && undone < mark) {
-      throw new Error(`undoStepsSince: undo reverted seq ${undone}, older than the mark ${mark}`);
+      throw new Error(
+        `undoStepsSince: undo reverted seq ${undone}, older than the mark ${mark}`,
+      );
     }
   }
-  throw new Error(`undoStepsSince: the mark did not come back in ${limit} undos`);
+  throw new Error(
+    `undoStepsSince: the mark did not come back in ${limit} undos`,
+  );
 }
 
 /** {@link undoStepsSince}, requiring that the mark came back. */
-export async function undoSteps(h: HeadlessHost, mark: number): Promise<number> {
+export async function undoSteps(
+  h: HeadlessHost,
+  mark: number,
+): Promise<number> {
   const r = await undoStepsSince(h, mark);
   if (!r.reached) {
-    throw new Error(`undoSteps: the bounded history ran out after ${r.steps} undos, before the mark`);
+    throw new Error(
+      `undoSteps: the bounded history ran out after ${r.steps} undos, before the mark`,
+    );
   }
   return r.steps;
 }
@@ -444,7 +483,9 @@ export function report(
       doors,
       wasm: engine?.log.calls ?? {},
       engineCounters: engine?.counters() ?? null,
-      mutations: work.mutations.map((x) => (x.op === "batch" ? `batch(${x.ops})` : x.op)),
+      mutations: work.mutations.map((x) =>
+        x.op === "batch" ? `batch(${x.ops})` : x.op,
+      ),
       ...t.detail,
     })}`,
   );
@@ -471,7 +512,9 @@ export function printTable(): void {
 /** Engine protocol 69 behind a contract that forwards its doors: the
  *  session is labelled in the document (doc-label.ts), pages are named in a
  *  batch, and overset words are measured in one call per face. */
-export const LABELLED = ENGINE_PROTOCOL >= 69 && HOST_FEATURES.includes("document.documentMetadata@1");
+export const LABELLED =
+  ENGINE_PROTOCOL >= 69 &&
+  HOST_FEATURES.includes("document.documentMetadata@1");
 export const BATCH_MEASURE = HOST_FEATURES.includes("text.measureStrings@1");
 
 /** A budget pinned on protocol 68, with the counts protocol 69 changes. */
@@ -483,16 +526,25 @@ export function onLabelled(base: Measured, v69: Partial<Measured>): Measured {
 export const TEXT_VARIABLES = ENGINE_PROTOCOL >= 71;
 
 /** A budget with the counts protocol 71 changes (on top of `onLabelled`). */
-export function onTextVariables(budget: Measured, v71: Partial<Measured>): Measured {
+export function onTextVariables(
+  budget: Measured,
+  v71: Partial<Measured>,
+): Measured {
   return TEXT_VARIABLES ? { ...budget, ...v71 } : budget;
 }
 
-export function expectBudget(scenario: string, m: Measured, budget: Measured): void {
+export function expectBudget(
+  scenario: string,
+  m: Measured,
+  budget: Measured,
+): void {
   const moved: string[] = [];
   for (const k of Object.keys(budget) as (keyof Measured)[]) {
     if (m[k] !== budget[k]) {
       const dir =
-        typeof m[k] === "number" && typeof budget[k] === "number" && (m[k] as number) < (budget[k] as number)
+        typeof m[k] === "number" &&
+        typeof budget[k] === "number" &&
+        (m[k] as number) < (budget[k] as number)
           ? "UNDER budget — lower the pin in this commit"
           : "OVER budget";
       moved.push(`${k}: measured ${m[k]} vs budget ${budget[k]} (${dir})`);
@@ -512,7 +564,9 @@ export function shuffled(i: number, n: number): number {
 export function productCsv(n: number): string {
   const lines = ["sku,name,price"];
   for (let i = 0; i < n; i++) {
-    lines.push(`SKU-${String(shuffled(i, n)).padStart(6, "0")},item ${i},${(i * 1.25).toFixed(2)}`);
+    lines.push(
+      `SKU-${String(shuffled(i, n)).padStart(6, "0")},item ${i},${(i * 1.25).toFixed(2)}`,
+    );
   }
   return lines.join("\n") + "\n";
 }

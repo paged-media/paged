@@ -92,9 +92,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     setOn(kind, id, "itemLayer", { type: "text", value: contentLayer });
 
   // ── verso: the contact sheet ────────────────────────────────────
-  const head = await proseFrame(ctx, VERSO, [60, 54, 492, 88], [
-    { text: "Eight families, one square", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    VERSO,
+    [60, 54, 492, 88],
+    [{ text: "Eight families, one square", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
   for (const [i, family] of EFFECT_FAMILIES.entries()) {
@@ -151,9 +154,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   );
 
   // ── recto: the heroes ───────────────────────────────────────────
-  const headR = await proseFrame(ctx, RECTO, [48, 54, 480, 88], [
-    { text: "Effects in anger", style: STYLE.head1 },
-  ]);
+  const headR = await proseFrame(
+    ctx,
+    RECTO,
+    [48, 54, 480, 88],
+    [{ text: "Effects in anger", style: STYLE.head1 }],
+  );
   elements.push(headR.frameId);
 
   // Hero one — display type wearing shadow and glow on a slate field.
@@ -162,9 +168,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   elements.push(
     await plate(ctx, RECTO, [48, 100, 480, 320], SWATCH.slate, LAYER.content),
   );
-  const umbra = await proseFrame(ctx, RECTO, [84, 128, 456, 264], [
-    { text: "Umbra", style: STYLE.chapterNumber },
-  ]);
+  const umbra = await proseFrame(
+    ctx,
+    RECTO,
+    [84, 128, 456, 264],
+    [{ text: "Umbra", style: STYLE.chapterNumber }],
+  );
   elements.push(umbra.frameId);
   await doc.batch([
     setOn("textFrame", umbra.frameId, "frameDropShadow", {
@@ -240,17 +249,28 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     ),
     onContent("oval", moon),
   ]);
-  const capHero1 = await proseFrame(ctx, RECTO, [48, 324, 480, 346], [
-    {
-      text: "Display type carrying drop shadow and a screened glow; the moon layers bevel and satin on one oval.",
-      style: STYLE.caption,
-    },
-  ]);
+  const capHero1 = await proseFrame(
+    ctx,
+    RECTO,
+    [48, 324, 480, 346],
+    [
+      {
+        text: "Display type carrying drop shadow and a screened glow; the moon layers bevel and satin on one oval.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(capHero1.frameId);
 
   // Hero two — feathered forms sinking into a tinted band.
   elements.push(
-    await plate(ctx, RECTO, [48, 358, 480, 538], SWATCH.vermilionTint, LAYER.content),
+    await plate(
+      ctx,
+      RECTO,
+      [48, 358, 480, 538],
+      SWATCH.vermilionTint,
+      LAYER.content,
+    ),
   );
   const cloud = await doc.oval(rectoId, [76, 378, 268, 518]);
   const veil = await doc.rectangle(rectoId, [232, 390, 452, 508]);
@@ -321,12 +341,17 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     onContent("oval", cloud),
     onContent("rectangle", veil),
   ]);
-  const capHero2 = await proseFrame(ctx, RECTO, [48, 542, 480, 564], [
-    {
-      text: "A feathered slate cloud and a vermilion veil losing its top and bottom edges to the directional feather, shaded from within.",
-      style: STYLE.caption,
-    },
-  ]);
+  const capHero2 = await proseFrame(
+    ctx,
+    RECTO,
+    [48, 542, 480, 564],
+    [
+      {
+        text: "A feathered slate cloud and a vermilion veil losing its top and bottom edges to the directional feather, shaded from within.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(capHero2.frameId);
 
   // The ninth instrument — gradient feather, whole-struct.
@@ -350,12 +375,17 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     }),
     onContent("rectangle", fade),
   ]);
-  const capFade = await proseFrame(ctx, RECTO, [48, 618, 480, 638], [
-    {
-      text: "frameGradientFeather — the fade is alpha, not ink: one bar, opaque to absent.",
-      style: STYLE.caption,
-    },
-  ]);
+  const capFade = await proseFrame(
+    ctx,
+    RECTO,
+    [48, 618, 480, 638],
+    [
+      {
+        text: "frameGradientFeather — the fade is alpha, not ink: one bar, opaque to absent.",
+        style: STYLE.caption,
+      },
+    ],
+  );
   elements.push(capFade.frameId);
 
   elements.push(

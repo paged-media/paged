@@ -50,7 +50,10 @@ import { script } from "./harness/ui";
 
 type Page = import("@playwright/test").Page;
 
-const FIXTURE = pathResolve(dirname(fileURLToPath(import.meta.url)), "harness/doc-line-breaks.docx");
+const FIXTURE = pathResolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "harness/doc-line-breaks.docx",
+);
 const OPEN_COMMAND = "paged.file.openIdml";
 const IMPORTER_ID = "media.paged.doc.importer.docx";
 const EXPORTER_ID = "media.paged.doc.exporter.docx";
@@ -60,7 +63,10 @@ const EXPORTER_ID = "media.paged.doc.exporter.docx";
 function engineProtocol(): number {
   const require = createRequire(import.meta.url);
   const pkg = JSON.parse(
-    readFileSync(require.resolve("@paged-media/canvas-wasm/package.json"), "utf8"),
+    readFileSync(
+      require.resolve("@paged-media/canvas-wasm/package.json"),
+      "utf8",
+    ),
   ) as { version: string };
   return Number(pkg.version.split(/[.-]/)[1]);
 }
@@ -99,7 +105,9 @@ const ENGINE_MAP =
   engineProtocol() >= 65
     ? WORD_MAP
     : WORD_MAP.map((p, i) =>
-        i === 1 ? p.map(([l, n]): [string, number] => (l === "L10" ? [l, 3] : [l, n])) : p,
+        i === 1
+          ? p.map(([l, n]): [string, number] => (l === "L10" ? [l, 3] : [l, n]))
+          : p,
       );
 
 type Registries = {
@@ -116,7 +124,10 @@ type CanvasGlobal = { __canvas: { ready: boolean; registries: Registries } };
 
 const invoke = (page: Page, id: string) =>
   page.evaluate(
-    (cmd) => (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke(cmd),
+    (cmd) =>
+      (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke(cmd),
     id,
   );
 
@@ -125,7 +136,9 @@ const invoke = (page: Page, id: string) =>
  *  `requestStoryContent`; each U+2028-separated part is one line, and the
  *  engine's rect-per-line selection geometry names its page and top. Also
  *  returns the native paragraph texts (one per Word paragraph). */
-async function lineMap(page: Page): Promise<{ map: Array<Array<[string, number]>>; paragraphs: string[] }> {
+async function lineMap(
+  page: Page,
+): Promise<{ map: Array<Array<[string, number]>>; paragraphs: string[] }> {
   return page.evaluate(async () => {
     type Rect = { pageId: string; topPt: number };
     const c = (
@@ -134,7 +147,11 @@ async function lineMap(page: Page): Promise<{ map: Array<Array<[string, number]>
           client: {
             send: (m: unknown) => Promise<{
               kind: string;
-              payload?: { content?: { paragraphs?: Array<{ runs: Array<{ text: string }> }> } };
+              payload?: {
+                content?: {
+                  paragraphs?: Array<{ runs: Array<{ text: string }> }>;
+                };
+              };
             }>;
             selectionGeometry: (s: unknown) => Promise<Rect[]>;
             executeScript: (s: string) => Promise<{ output: string[] }>;
@@ -143,12 +160,16 @@ async function lineMap(page: Page): Promise<{ map: Array<Array<[string, number]>
       }
     ).__canvas.client;
     const pageIds = (
-      JSON.parse((await c.executeScript("paged.pages()")).output[0] ?? "[]") as Array<{
+      JSON.parse(
+        (await c.executeScript("paged.pages()")).output[0] ?? "[]",
+      ) as Array<{
         selfId: string;
       }>
     ).map((p) => p.selfId);
     const stories = (
-      JSON.parse((await c.executeScript("paged.stories()")).output[0] ?? "[]") as Array<{
+      JSON.parse(
+        (await c.executeScript("paged.stories()")).output[0] ?? "[]",
+      ) as Array<{
         selfId: string;
       }>
     )
@@ -158,7 +179,10 @@ async function lineMap(page: Page): Promise<{ map: Array<Array<[string, number]>
     const placed: Array<{ page: number; top: number; label: string }> = [];
     const paragraphs: string[] = [];
     for (const storyId of stories) {
-      const r = await c.send({ kind: "requestStoryContent", payload: { storyId } });
+      const r = await c.send({
+        kind: "requestStoryContent",
+        payload: { storyId },
+      });
       const paras = (r.payload?.content?.paragraphs ?? []).map((p) =>
         p.runs.map((run) => run.text).join(""),
       );
@@ -194,12 +218,19 @@ async function lineMap(page: Page): Promise<{ map: Array<Array<[string, number]>
       return here.map((p): [string, number] => [p.label, (p.top - first) / 12]);
     });
     const unplaced = placed.filter((p) => p.page < 0);
-    if (unplaced.length) map.push(unplaced.map((p): [string, number] => [`UNPLACED ${p.label}`, -1]));
+    if (unplaced.length)
+      map.push(
+        unplaced.map((p): [string, number] => [`UNPLACED ${p.label}`, -1]),
+      );
     return { map, paragraphs };
   });
 }
 
-type PageRow = { sizePt?: [number, number]; widthPt?: number; heightPt?: number };
+type PageRow = {
+  sizePt?: [number, number];
+  widthPt?: number;
+  heightPt?: number;
+};
 
 async function pages(page: Page): Promise<PageRow[]> {
   const raw = await script(page, "paged.pages()");
@@ -220,7 +251,11 @@ function documentXml(docx: Buffer): string {
     const local = docx.readUInt32LE(p + 42);
     const name = docx.subarray(p + 46, p + 46 + nameLen).toString("utf8");
     if (name === "word/document.xml") {
-      const dataAt = local + 30 + docx.readUInt16LE(local + 26) + docx.readUInt16LE(local + 28);
+      const dataAt =
+        local +
+        30 +
+        docx.readUInt16LE(local + 26) +
+        docx.readUInt16LE(local + 28);
       const data = docx.subarray(dataAt, dataAt + size);
       return (method === 8 ? inflateRawSync(data) : data).toString("utf8");
     }
@@ -246,9 +281,9 @@ async function openFixture(page: Page): Promise<string[]> {
       () =>
         page.evaluate(
           () =>
-            (globalThis as unknown as CanvasGlobal).__canvas.registries.importers.resolve(
-              "x.docx",
-            )?.id ?? null,
+            (
+              globalThis as unknown as CanvasGlobal
+            ).__canvas.registries.importers.resolve("x.docx")?.id ?? null,
         ),
       { timeout: 15_000 },
     )
@@ -263,7 +298,8 @@ async function openFixture(page: Page): Promise<string[]> {
   return logs;
 }
 
-const labels = (m: Array<Array<[string, number]>>) => m.map((p) => p.map(([l]) => l));
+const labels = (m: Array<Array<[string, number]>>) =>
+  m.map((p) => p.map(([l]) => l));
 
 test.describe("plugin-doc — Word's line breaks and blank lines", () => {
   test.setTimeout(120_000);
@@ -288,7 +324,9 @@ test.describe("plugin-doc — Word's line breaks and blank lines", () => {
     expect(paragraphs.length, "Word's 15 paragraphs").toBe(15);
     expect(paragraphs[1]).toBe("L02a before\u2028L02b after");
     expect(paragraphs[3]).toBe("L04a ends in br\u2028");
-    expect(paragraphs.filter((t) => t === "").length, "five blank lines").toBe(5);
+    expect(paragraphs.filter((t) => t === "").length, "five blank lines").toBe(
+      5,
+    );
     // Every line on Word's page ...
     expect(labels(raw), "every line on Word's page").toEqual(labels(WORD_MAP));
     // ... and every line the breaks make, up to the first blank paragraph
@@ -297,26 +335,40 @@ test.describe("plugin-doc — Word's line breaks and blank lines", () => {
     // break in its own run, a w:cr.
     const head = raw[0].slice(0, 10);
     for (const [label, top] of head) {
-      expect(Math.abs(top - Math.round(top)), `${label} on the 12 pt grid`).toBeLessThan(0.01);
+      expect(
+        Math.abs(top - Math.round(top)),
+        `${label} on the 12 pt grid`,
+      ).toBeLessThan(0.01);
     }
-    expect(head.map(([l, t]) => [l, Math.round(t)])).toEqual(WORD_MAP[0].slice(0, 10));
+    expect(head.map(([l, t]) => [l, Math.round(t)])).toEqual(
+      WORD_MAP[0].slice(0, 10),
+    );
 
     // The pour sent nothing the engine refused: no zero-length range (the
     // old "empty range"), and no caret over blank lines whose styles differ.
-    const refusals = logs.filter((l) => /empty range|rejected a pour op|current values differ/.test(l));
+    const refusals = logs.filter((l) =>
+      /empty range|rejected a pour op|current values differ/.test(l),
+    );
     expect(refusals, "no refused pour op").toEqual([]);
 
     // A zero-edit save writes Word's document back byte for byte: the
     // U+2028s read back match the import, so nothing is patched.
     const out = await page.evaluate(async (exporterId) => {
-      const exp = (globalThis as unknown as CanvasGlobal).__canvas.registries.exporters
+      const exp = (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.exporters
         ?.list()
         .find((e) => e.id === exporterId);
       const r = exp ? await exp.export() : null;
       return r ? { fileName: r.fileName, bytes: Array.from(r.bytes) } : null;
     }, EXPORTER_ID);
-    expect(out, "the Word exporter answers after a standalone open").not.toBeNull();
-    expect(documentXml(Buffer.from(out!.bytes))).toBe(documentXml(readFileSync(FIXTURE)));
+    expect(
+      out,
+      "the Word exporter answers after a standalone open",
+    ).not.toBeNull();
+    expect(documentXml(Buffer.from(out!.bytes))).toBe(
+      documentXml(readFileSync(FIXTURE)),
+    );
   });
 
   // A blank line has NO run, so its leading must come from its paragraph
@@ -334,9 +386,14 @@ test.describe("plugin-doc — Word's line breaks and blank lines", () => {
     console.log(`[AC-DOCLB-2] line tops (12 pt lines): ${JSON.stringify(raw)}`);
     // Word's lines sit on the exact 12 pt grid; so must the engine's.
     for (const [label, top] of raw.flat()) {
-      expect(Math.abs(top - Math.round(top)), `${label} on the 12 pt grid`).toBeLessThan(0.01);
+      expect(
+        Math.abs(top - Math.round(top)),
+        `${label} on the 12 pt grid`,
+      ).toBeLessThan(0.01);
     }
-    const map = raw.map((p) => p.map(([l, t]): [string, number] => [l, Math.round(t)]));
+    const map = raw.map((p) =>
+      p.map(([l, t]): [string, number] => [l, Math.round(t)]),
+    );
     expect(map, "every line on Word's page and line").toEqual(ENGINE_MAP);
   });
 });

@@ -17,7 +17,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // The journal ring buffer (ADR 025 §6/§7).
 //
 // Bounded, append-only, subscribable. One of these lives on the main thread
@@ -88,7 +87,8 @@ const DEFAULT_CAPACITY = 2048;
 function defaultNow(): number {
   // `performance` exists on the main thread and in workers; the guard is for
   // Node-based unit tests on older runtimes.
-  return typeof performance !== "undefined" && typeof performance.now === "function"
+  return typeof performance !== "undefined" &&
+    typeof performance.now === "function"
     ? performance.now()
     : Date.now();
 }

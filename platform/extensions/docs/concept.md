@@ -43,6 +43,7 @@ The contract follows a small set of rules:
   time; the manifest's `apiVersion` range answers "may I install?" at load.
 - **One namespace rule, plus the capability gate.** Every contributed id starts with the
   manifest id, and a door a bundle uses must be declared in its manifest.
+
 <!-- source: DESIGN.md:28-69 -->
 
 The implementation of the host object lives in this repository, not in the editor; the

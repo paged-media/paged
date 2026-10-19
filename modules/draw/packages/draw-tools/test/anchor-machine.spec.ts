@@ -44,7 +44,11 @@ function square(): AnchorTable {
 /** Open three-point polyline. */
 function polyline(): AnchorTable {
   return {
-    anchors: [cornerAnchor([0, 0]), cornerAnchor([10, 0]), cornerAnchor([20, 0])],
+    anchors: [
+      cornerAnchor([0, 0]),
+      cornerAnchor([10, 0]),
+      cornerAnchor([20, 0]),
+    ],
     subpathStarts: [0],
     subpathOpen: [true],
   };

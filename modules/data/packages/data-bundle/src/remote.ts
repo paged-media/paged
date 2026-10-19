@@ -78,7 +78,10 @@ export function validateRemoteUrl(url: string): string | null {
 
 /** Compose the request URL: descriptor params appended as query parameters in
  *  sorted key order (deterministic — matches the BTreeMap descriptor). */
-export function buildRemoteUrl(url: string, params: Record<string, string>): string {
+export function buildRemoteUrl(
+  url: string,
+  params: Record<string, string>,
+): string {
   const u = new URL(url);
   for (const key of Object.keys(params).sort()) {
     u.searchParams.set(key, params[key]);

@@ -58,11 +58,22 @@
 // document default face, which is that same face in a new document) and is
 // not reported.
 
-import type { BundleHost, Disposable, SceneLayerSubmitResult } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  Disposable,
+  SceneLayerSubmitResult,
+} from "@paged-media/plugin-api";
 import { ASSET_BUDGETS } from "@paged-media/plugin-sdk";
 import { familiesUsed, type WebDiagnostic } from "../../web-model/src";
 
-import { bytesHash, dataUrlBytes, fontFaceRules, fontFormat, sfntFamily, type CssFace } from "./css-faces";
+import {
+  bytesHash,
+  dataUrlBytes,
+  fontFaceRules,
+  fontFormat,
+  sfntFamily,
+  type CssFace,
+} from "./css-faces";
 import type { WebEngine } from "./engine-loader";
 import { readResourcePart } from "./source-part";
 
@@ -79,8 +90,14 @@ const facesAsked = new WeakMap<WebEngine, Set<string>>();
 
 /** Styles to ask the asset store for, beyond the family's default face. */
 function stylesUsed(doc: string): (string | undefined)[] {
-  const bold = /<(b|strong|h[1-6]|th)[\s>]|font-weight\s*:\s*(bold|bolder|[6-9]00)\b/i.test(doc);
-  const italic = /<(i|em|cite|var|dfn|address)[\s>]|font-style\s*:\s*(italic|oblique)\b/i.test(doc);
+  const bold =
+    /<(b|strong|h[1-6]|th)[\s>]|font-weight\s*:\s*(bold|bolder|[6-9]00)\b/i.test(
+      doc,
+    );
+  const italic =
+    /<(i|em|cite|var|dfn|address)[\s>]|font-style\s*:\s*(italic|oblique)\b/i.test(
+      doc,
+    );
   const out: (string | undefined)[] = [undefined];
   if (bold) out.push("Bold");
   if (italic) out.push("Italic");
@@ -92,7 +109,10 @@ function stylesUsed(doc: string): (string | undefined)[] {
 
 /** The faces this bundle handed a host's scene-layer face table, per host:
  *  `family\0style` → the registration (resolves `null` when refused). */
-const sceneFaces = new WeakMap<object, Map<string, Promise<Disposable | null>>>();
+const sceneFaces = new WeakMap<
+  object,
+  Map<string, Promise<Disposable | null>>
+>();
 
 function sceneFaceTable(host: object): Map<string, Promise<Disposable | null>> {
   let table = sceneFaces.get(host);
@@ -131,15 +151,20 @@ async function shareSceneFace(
     await table.get(key);
     return;
   }
-  const pending = host.assets.registerFont(bytes, family, style).catch((err: unknown) => {
-    host.log.warn(`web engine: the canvas cannot take the face ${family} ${style ?? ""}: ${String(err)}`);
-    return null;
-  });
+  const pending = host.assets
+    .registerFont(bytes, family, style)
+    .catch((err: unknown) => {
+      host.log.warn(
+        `web engine: the canvas cannot take the face ${family} ${style ?? ""}: ${String(err)}`,
+      );
+      return null;
+    });
   table.set(key, pending);
   await pending;
 }
 
-const faceKey = (family: string, style?: string) => `${family.toLowerCase()}\u0000${style ?? ""}`;
+const faceKey = (family: string, style?: string) =>
+  `${family.toLowerCase()}\u0000${style ?? ""}`;
 
 /** Whether the host's scene-layer face table holds the bundled face. */
 async function bundledFaceShared(host: object): Promise<boolean> {
@@ -150,7 +175,10 @@ async function bundledFaceShared(host: object): Promise<boolean> {
 const bundledShared = new WeakMap<object, boolean>();
 
 /** Hand the engine's bundled face to the host (once per host). */
-async function shareBundledFace(host: InputsHost, engine: WebEngine): Promise<void> {
+async function shareBundledFace(
+  host: InputsHost,
+  engine: WebEngine,
+): Promise<void> {
   if (!engine.bundledFont || !takesSceneFaces(host)) return;
   if (!sceneFaceTable(host).has(faceKey(BUNDLED_FAMILY))) {
     const bytes = engine.bundledFont();
@@ -203,13 +231,20 @@ function cssFaceState(host: object): CssFaceState {
 
 const MB = 1024 * 1024;
 
-const faceProblem = (message: string): WebDiagnostic => ({ severity: "warning", message, source: "render" });
+const faceProblem = (message: string): WebDiagnostic => ({
+  severity: "warning",
+  message,
+  source: "render",
+});
 
 /** The bytes of a rule's face: its first TrueType/OpenType source the
  *  document holds (a container part or a `data:` URL). `null` bytes with a
  *  diagnostic when the face cannot reach the canvas; `null` when nothing
  *  is held yet (not remembered, so a part stored later is read). */
-async function resolveFace(host: InputsHost, rule: CssFace): Promise<ResolvedFace | null> {
+async function resolveFace(
+  host: InputsHost,
+  rule: CssFace,
+): Promise<ResolvedFace | null> {
   let other: string | null = null;
   for (const src of rule.srcs) {
     let bytes: Uint8Array | null = null;
@@ -251,7 +286,11 @@ async function resolveFace(host: InputsHost, rule: CssFace): Promise<ResolvedFac
  *  host, family, style and bytes), recording them as used by `user` (a
  *  rendering frame). Answers the problems: faces that cannot reach the
  *  canvas. */
-async function shareCssFaces(host: InputsHost, rules: CssFace[], user: string | undefined): Promise<WebDiagnostic[]> {
+async function shareCssFaces(
+  host: InputsHost,
+  rules: CssFace[],
+  user: string | undefined,
+): Promise<WebDiagnostic[]> {
   if (rules.length === 0) {
     // Nothing to hand over: the frame now uses no face (no door is asked).
     if (user !== undefined) cssFaces.get(host)?.users.set(user, new Set());
@@ -260,9 +299,19 @@ async function shareCssFaces(host: InputsHost, rules: CssFace[], user: string | 
   if (!takesSceneFaces(host)) return [];
   const state = cssFaceState(host);
   const diagnostics: WebDiagnostic[] = [];
-  const faces: { key: string; family: string; style?: string; bytes: Uint8Array }[] = [];
+  const faces: {
+    key: string;
+    family: string;
+    style?: string;
+    bytes: Uint8Array;
+  }[] = [];
   for (const rule of rules) {
-    const ruleKey = [rule.family, rule.style ?? "", rule.base, ...rule.srcs].join("\u0000");
+    const ruleKey = [
+      rule.family,
+      rule.style ?? "",
+      rule.base,
+      ...rule.srcs,
+    ].join("\u0000");
     let resolved = state.resolved.get(ruleKey) ?? null;
     if (!resolved) {
       resolved = await resolveFace(host, rule);
@@ -277,19 +326,30 @@ async function shareCssFaces(host: InputsHost, rules: CssFace[], user: string | 
     // names a run shaped with an `@font-face` face by the face's own name.
     const own = sfntFamily(bytes);
     const families = [rule.family];
-    if (own && own.toLowerCase() !== rule.family.toLowerCase()) families.push(own);
+    if (own && own.toLowerCase() !== rule.family.toLowerCase())
+      families.push(own);
     for (const family of families) {
-      faces.push({ key: `${faceKey(family, rule.style)}\u0000${hash}`, family, style: rule.style, bytes });
+      faces.push({
+        key: `${faceKey(family, rule.style)}\u0000${hash}`,
+        family,
+        style: rule.style,
+        bytes,
+      });
     }
   }
-  if (user !== undefined) state.users.set(user, new Set(faces.map((f) => f.key)));
+  if (user !== undefined)
+    state.users.set(user, new Set(faces.map((f) => f.key)));
   for (const face of faces) {
     let pending = state.shared.get(face.key);
     if (!pending) {
-      pending = host.assets.registerFont(face.bytes, face.family, face.style).catch((err: unknown) => {
-        host.log.warn(`web engine: the canvas cannot take the face ${face.family} ${face.style ?? ""}: ${String(err)}`);
-        return null;
-      });
+      pending = host.assets
+        .registerFont(face.bytes, face.family, face.style)
+        .catch((err: unknown) => {
+          host.log.warn(
+            `web engine: the canvas cannot take the face ${face.family} ${face.style ?? ""}: ${String(err)}`,
+          );
+          return null;
+        });
       state.shared.set(face.key, pending);
     }
     await pending;
@@ -309,7 +369,11 @@ export interface HeldFace {
  *  CSS declares or the face's own, which is what a run shaped with it names).
  *  Empty when it holds none — a document face the asset store served is the
  *  document's already. */
-export function heldFaces(host: object, engine: WebEngine, family: string): HeldFace[] {
+export function heldFaces(
+  host: object,
+  engine: WebEngine,
+  family: string,
+): HeldFace[] {
   const want = family.toLowerCase();
   if (want === BUNDLED_FAMILY.toLowerCase()) {
     const bytes = engine.bundledFont?.() ?? null;
@@ -322,7 +386,8 @@ export function heldFaces(host: object, engine: WebEngine, family: string): Held
     if (!bytes) continue;
     const [declared, style] = ruleKey.split("\u0000");
     const own = sfntFamily(bytes);
-    if (declared.toLowerCase() !== want && own?.toLowerCase() !== want) continue;
+    if (declared.toLowerCase() !== want && own?.toLowerCase() !== want)
+      continue;
     const key = `${style}\u0000${bytesHash(bytes)}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -334,11 +399,15 @@ export function heldFaces(host: object, engine: WebEngine, family: string): Held
 /** Keep the `@font-face` faces the frames in `live` used at their last
  *  render and give back every other one (the auto renderer calls this after
  *  each pass with the web frames it found). */
-export async function retainSceneFaces(host: object, live: Iterable<string>): Promise<void> {
+export async function retainSceneFaces(
+  host: object,
+  live: Iterable<string>,
+): Promise<void> {
   const state = cssFaces.get(host);
   if (!state) return;
   const keep = new Set(live);
-  for (const user of [...state.users.keys()]) if (!keep.has(user)) state.users.delete(user);
+  for (const user of [...state.users.keys()])
+    if (!keep.has(user)) state.users.delete(user);
   const used = new Set<string>();
   for (const keys of state.users.values()) for (const k of keys) used.add(k);
   const gone: Promise<Disposable | null>[] = [];
@@ -381,7 +450,9 @@ export async function registerSourceFaces(
           await shareSceneFace(host, face.bytes, family, style);
         }
       } catch (err) {
-        host.log.debug(`web engine: no face for ${family} ${style ?? ""}: ${String(err)}`);
+        host.log.debug(
+          `web engine: no face for ${family} ${style ?? ""}: ${String(err)}`,
+        );
       }
     }
   }
@@ -389,13 +460,15 @@ export async function registerSourceFaces(
 
 // --------------------------------------------------------------- resources
 
-const SRC_ATTR = /<(?:img|source)\b[^>]*?\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+const SRC_ATTR =
+  /<(?:img|source)\b[^>]*?\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
 const LINK_TAG = /<link\b[^>]*>/gi;
 const HREF_ATTR = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i;
 const CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)\s]*))\s*\)/gi;
 const CSS_IMPORT = /@import\s+(?:"([^"]*)"|'([^']*)')/gi;
 
-const pick = (m: RegExpExecArray): string => (m[1] ?? m[2] ?? m[3] ?? "").trim();
+const pick = (m: RegExpExecArray): string =>
+  (m[1] ?? m[2] ?? m[3] ?? "").trim();
 
 /** The URLs a document (HTML with inline CSS) or a stylesheet writes, in
  *  order, deduplicated. A scanner, not a parser: it never throws. */
@@ -424,7 +497,12 @@ export function resourceUrls(text: string): string[] {
  *  against `base` (the directory of the stylesheet that wrote it); `null`
  *  for a URL with a scheme, a protocol-relative or fragment-only URL. */
 export function relativePath(url: string, base = ""): string | null {
-  if (/^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith("//") || url.startsWith("#")) return null;
+  if (
+    /^[a-z][a-z0-9+.-]*:/i.test(url) ||
+    url.startsWith("//") ||
+    url.startsWith("#")
+  )
+    return null;
   const clean = url.split(/[?#]/)[0];
   const parts = (clean.startsWith("/") ? clean : base + clean).split("/");
   const out: string[] = [];
@@ -449,7 +527,9 @@ export async function registerSourceResources(
 ): Promise<CssFace[]> {
   const faces: CssFace[] = [];
   if (!engine.registerResource) return faces;
-  const queue: { url: string; base: string }[] = resourceUrls(doc).map((url) => ({ url, base: "" }));
+  const queue: { url: string; base: string }[] = resourceUrls(doc).map(
+    (url) => ({ url, base: "" }),
+  );
   const seen = new Set<string>();
   while (queue.length > 0 && seen.size < MAX_RESOURCES) {
     const { url, base } = queue.shift()!;
@@ -481,7 +561,9 @@ export async function registerSourceResources(
         nested = resourceUrls(new TextDecoder().decode(bytes));
         sheetUrls(engine).set(key, nested);
       }
-      const dir = key.includes("/") ? key.slice(0, key.lastIndexOf("/") + 1) : "";
+      const dir = key.includes("/")
+        ? key.slice(0, key.lastIndexOf("/") + 1)
+        : "";
       for (const u of nested ?? []) queue.push({ url: u, base: dir });
       let rules = sheetFaces(engine).get(key);
       if (!rules && bytes) {
@@ -558,7 +640,9 @@ export function faceDiagnostics(
   host: object,
 ): WebDiagnostic[] {
   const raw: unknown = reply?.fontFallbacks;
-  const fallbacks = Array.isArray(raw) ? raw.filter((f): f is string => typeof f === "string") : [];
+  const fallbacks = Array.isArray(raw)
+    ? raw.filter((f): f is string => typeof f === "string")
+    : [];
   const bundledExpected = bundledShared.get(host) !== true;
   return fallbacks
     .filter((f) => !(bundledExpected && isBundledFace(f)))

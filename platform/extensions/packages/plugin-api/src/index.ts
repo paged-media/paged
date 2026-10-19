@@ -51,7 +51,7 @@ export type {
   DocumentsCapability,
   GpuCapability,
   ObjectModelDeclaration,
-} from "./manifest";
+} from "./manifest.js";
 
 // ADR 323 — the object model: addresses (ADR 131), schema rows (ADR 132),
 // the plugin contribution and the `host.objects` registry. DESIGN.md §21.
@@ -88,9 +88,9 @@ export type {
   ListEdit,
   StructEdit,
   ValueEdit,
-} from "./object-model";
+} from "./object-model.js";
 
-export type { BundleHandle, PagedBundle } from "./bundle";
+export type { BundleHandle, PagedBundle } from "./bundle.js";
 
 export type {
   BundleHost,
@@ -180,7 +180,7 @@ export type {
   ObjectTypeBaker,
   BakeContext,
   MenuContribution,
-} from "./host";
+} from "./host.js";
 
 export type {
   PanelSchema,
@@ -206,7 +206,7 @@ export type {
   PropertyFieldOption,
   PropertySubField,
   PropertyListPresentation,
-} from "./panel-schema";
+} from "./panel-schema.js";
 
 export type {
   WidgetSurface,
@@ -217,7 +217,7 @@ export type {
   PropertyFieldProps,
   PropertyFrameProps,
   PropertyFieldTarget,
-} from "./widgets";
+} from "./widgets.js";
 
 // ADR-023 phase A — BINDING PROVIDERS: one host-owned panel, and while
 // an edit context is active the owning plugin resolves what that panel
@@ -241,7 +241,7 @@ export type {
   BindingWriteResult,
   BindingCollectionResult,
   ActiveBindingProvider,
-} from "./binding-provider";
+} from "./binding-provider.js";
 
 export type {
   AssetSurface,
@@ -249,11 +249,11 @@ export type {
   DocumentFontOutcome,
   FontFaceAsset,
   FontFaceFormat,
-} from "./assets";
+} from "./assets.js";
 
 // C-6 (I-06) — the renderer resource-provider wire shape, re-exported
 // so the editor channel + the SDK adapter share one tile type.
-export type { ProviderTileWire, SnapshotPng } from "./wire";
+export type { ProviderTileWire, SnapshotPng } from "./wire.js";
 
 // v67 (RFI C-68) — `host.document.snapPoint`'s query and answer.
 export type {
@@ -265,17 +265,17 @@ export type {
   SnapExclude,
   SnapSource,
   SnapSettings,
-} from "./wire";
+} from "./wire.js";
 
 // One element a mutation minted (`MutationOutcome.minted`): the element,
 // the `bindCreated` handle that named it, and the story minted with it.
-export type { MintedElement } from "./wire";
+export type { MintedElement } from "./wire.js";
 
 export type {
   ClipboardSurface,
   ClipboardPayload,
   TabularClipboard,
-} from "./clipboard";
+} from "./clipboard.js";
 
-export type * from "./contributions";
-export type * from "./mutations";
+export type * from "./contributions.js";
+export type * from "./mutations.js";

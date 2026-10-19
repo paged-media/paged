@@ -16,7 +16,6 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-
 // @feat: plugin-platform.text-measurement
 //
 // D-28 — the headless host reports overset like the editor does. The engine
@@ -36,7 +35,11 @@ import { minimalIdml } from "./fixtures/minimal-idml";
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 // Space Grotesk (SIL OFL 1.1, test/fixtures/fonts/OFL-spacegrotesk.txt).
 const FONT = new Uint8Array(
-  readFileSync(fileURLToPath(new URL("./fixtures/fonts/SpaceGrotesk-VF.ttf", import.meta.url))),
+  readFileSync(
+    fileURLToPath(
+      new URL("./fixtures/fonts/SpaceGrotesk-VF.ttf", import.meta.url),
+    ),
+  ),
 );
 
 let live: HeadlessHost | null = null;
@@ -54,13 +57,20 @@ async function overfilled(h: HeadlessHost): Promise<boolean | undefined> {
       ops: [
         { op: "insertTextFrame", args: { pageId, bounds: [20, 20, 60, 60] } },
         { op: "bindCreated", args: { handle: "f" } },
-        { op: "insertText", args: { storyId: "$h:f", offset: 0, text: "overset ".repeat(200) } },
+        {
+          op: "insertText",
+          args: { storyId: "$h:f", offset: 0, text: "overset ".repeat(200) },
+        },
       ],
     },
   } as never);
   expect(out.applied).toBe(true);
-  const storyId = (out as { minted?: { storyId: string | null }[] }).minted?.[0]?.storyId;
-  const stories = await h.host.document.collection<{ selfId: string; overset?: boolean }>("stories" as never);
+  const storyId = (out as { minted?: { storyId: string | null }[] }).minted?.[0]
+    ?.storyId;
+  const stories = await h.host.document.collection<{
+    selfId: string;
+    overset?: boolean;
+  }>("stories" as never);
   return stories.find((s) => s.selfId === storyId)?.overset;
 }
 
@@ -80,7 +90,9 @@ describe("headless overset needs the default font (D-28)", () => {
     expect(await overfilled(live)).toBe(true);
     const copy = await live.host.documents.exportPaged();
     expect((await live.host.documents.open(copy)).opened).toBe(true);
-    const stories = await live.host.document.collection<{ overset?: boolean }>("stories" as never);
+    const stories = await live.host.document.collection<{ overset?: boolean }>(
+      "stories" as never,
+    );
     expect(stories.some((s) => s.overset)).toBe(true);
   });
 });

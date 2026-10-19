@@ -204,8 +204,13 @@ export function ConfirmButton(
     onConfirm: () => void;
   } & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "onClick">,
 ): React.ReactElement {
-  const { label, confirmLabel = "Confirm delete", onConfirm, title, ...rest } =
-    props;
+  const {
+    label,
+    confirmLabel = "Confirm delete",
+    onConfirm,
+    title,
+    ...rest
+  } = props;
   const [armed, setArmed] = React.useState(false);
   React.useEffect(() => {
     if (!armed) return;

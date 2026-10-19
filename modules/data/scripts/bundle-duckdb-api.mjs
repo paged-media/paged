@@ -30,13 +30,17 @@ let esbuild;
 try {
   esbuild = rootRequire("esbuild");
 } catch (err) {
-  console.error(`bundle-duckdb-api: esbuild not found — run \`bun install\` first (${err.message})`);
+  console.error(
+    `bundle-duckdb-api: esbuild not found — run \`bun install\` first (${err.message})`,
+  );
   process.exit(1);
 }
 try {
   createRequire(resolve(BUNDLE, "package.json")).resolve("apache-arrow");
 } catch {
-  console.error("bundle-duckdb-api: apache-arrow not installed in packages/data-bundle — run `bun install` first");
+  console.error(
+    "bundle-duckdb-api: apache-arrow not installed in packages/data-bundle — run `bun install` first",
+  );
   process.exit(1);
 }
 

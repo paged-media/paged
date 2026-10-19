@@ -187,7 +187,8 @@ function restatesStart(s: Subpath, startX: number, startY: number): boolean {
   }
   const allowed = CLOSE_DRIFT * reach;
   return (
-    Math.abs(last[0] - startX) <= allowed && Math.abs(last[1] - startY) <= allowed
+    Math.abs(last[0] - startX) <= allowed &&
+    Math.abs(last[1] - startY) <= allowed
   );
 }
 
@@ -387,15 +388,10 @@ export function parsePathData(d: string): AnchorTable {
           const sweep = num() !== 0;
           const ex = num() + (rel ? cx : 0);
           const ey = num() + (rel ? cy : 0);
-          const cubics = arcToCubics(
-            [cx, cy],
-            rx,
-            ry,
-            rot,
-            large,
-            sweep,
-            [ex, ey],
-          );
+          const cubics = arcToCubics([cx, cy], rx, ry, rot, large, sweep, [
+            ex,
+            ey,
+          ]);
           if (cubics.length === 0) {
             // Coincident endpoints: nothing to add.
           } else {
@@ -511,10 +507,7 @@ function fmt(n: number, precision: number): string {
  * handles collapsed) or a cubic `C`; a closed subpath ends with `Z`.
  * Coordinates are rounded to `precision` decimals (default 3).
  */
-export function serializePathData(
-  table: AnchorTable,
-  precision = 3,
-): string {
+export function serializePathData(table: AnchorTable, precision = 3): string {
   const { anchors, subpathStarts } = table;
   if (anchors.length === 0) return "";
   const open = table.subpathOpen ?? [];

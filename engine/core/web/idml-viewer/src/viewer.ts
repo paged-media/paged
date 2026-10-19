@@ -37,10 +37,7 @@ import type {
 } from "./session.js";
 
 /** Structured load/init failure. */
-export type ViewerErrorCode =
-  | "PARSE_ERROR"
-  | "UNSUPPORTED"
-  | "GPU_UNAVAILABLE";
+export type ViewerErrorCode = "PARSE_ERROR" | "UNSUPPORTED" | "GPU_UNAVAILABLE";
 
 export class ViewerError extends Error {
   readonly code: ViewerErrorCode;
@@ -230,8 +227,7 @@ export async function createViewer(
   function applyCamera(next: Camera, force = false): void {
     const clamped = clampScroll(next, activeLayout(), viewport());
     const zoomChanged = clamped.zoom !== camera.zoom;
-    const scrollChanged =
-      clamped.x !== camera.x || clamped.y !== camera.y;
+    const scrollChanged = clamped.x !== camera.x || clamped.y !== camera.y;
     if (!zoomChanged && !scrollChanged && !force) return;
     camera = clamped;
     if (zoomChanged) events.emit("zoomChanged", { zoom: camera.zoom });
@@ -332,7 +328,10 @@ export async function createViewer(
     },
     fit(fitMode) {
       const idx = mode === "single" ? 0 : page;
-      applyCamera(fitPage(activeLayout(), idx, fitMode, viewport(), limits), true);
+      applyCamera(
+        fitPage(activeLayout(), idx, fitMode, viewport(), limits),
+        true,
+      );
     },
     get minZoom() {
       return limits.min;
@@ -364,7 +363,13 @@ export async function createViewer(
       if (next && next !== mode) {
         mode = next;
         applyCamera(
-          fitPage(activeLayout(), mode === "single" ? 0 : page, "page", viewport(), limits),
+          fitPage(
+            activeLayout(),
+            mode === "single" ? 0 : page,
+            "page",
+            viewport(),
+            limits,
+          ),
           true,
         );
       }

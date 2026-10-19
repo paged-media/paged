@@ -53,10 +53,7 @@ import * as React from "react";
 
 import { INSERT_SHAPE_LIMITS } from "../commands/insert-shapes";
 import { dashArrayFrom, MAX_DASH_PAIRS } from "../commands/dash";
-import {
-  supportsDuplicate,
-  DUPLICATE_ENGINE,
-} from "../commands/transform";
+import { supportsDuplicate, DUPLICATE_ENGINE } from "../commands/transform";
 import { MAX_STROKE_WEIGHT_TOLERANCE } from "../commands/select-same";
 import {
   outlineParamsFrom,
@@ -134,8 +131,7 @@ export const REFLECT_SECTION_NOTE =
   "Draw ▸ Transform ▸ Transform again repeats it on whatever is selected next.";
 
 /** What the Reflect section says when the engine cannot copy. */
-export const REFLECT_COPY_UNAVAILABLE_NOTE =
-  `Copy needs a newer engine (version ${DUPLICATE_ENGINE} or later).`;
+export const REFLECT_COPY_UNAVAILABLE_NOTE = `Copy needs a newer engine (version ${DUPLICATE_ENGINE} or later).`;
 
 /** What the Select same stroke weight section says, verbatim (pinned by
  *  a test) — the colour half of the request, and why it is not here. */
@@ -235,7 +231,10 @@ export function makePathOptionsPanel(host: BundleHost): {
       const key = JSON.stringify(stored[section]);
       if (session.followed[section] === key) continue;
       session.followed[section] = key;
-      next = { ...(next ?? session.draft ?? stored), [section]: stored[section] };
+      next = {
+        ...(next ?? session.draft ?? stored),
+        [section]: stored[section],
+      };
     }
     if (next) session.draft = next;
     return next;
@@ -248,7 +247,9 @@ export function makePathOptionsPanel(host: BundleHost): {
     const [draft, setDraftState, followDraft] = useFollowedDraft<PathOptions>(
       session.draft as PathOptions,
     );
-    const [open, setOpenState] = React.useState<PathOptionSection>(session.open);
+    const [open, setOpenState] = React.useState<PathOptionSection>(
+      session.open,
+    );
     const [targets, setTargets] = React.useState(0);
     /** Everything selected, path or not — Select same's reference may be
      *  any kind that carries a stroke weight. */
@@ -258,7 +259,9 @@ export function makePathOptionsPanel(host: BundleHost): {
     /** Can this engine COPY (`duplicateElements`)? Probed when the
      *  Reflect section is first opened — never on a reload — and cached
      *  per host by the probe itself. Null until known. */
-    const [copyAvailable, setCopyAvailable] = React.useState<boolean | null>(null);
+    const [copyAvailable, setCopyAvailable] = React.useState<boolean | null>(
+      null,
+    );
 
     const setOpen = React.useCallback((section: PathOptionSection) => {
       session.open = section;
@@ -300,7 +303,8 @@ export function makePathOptionsPanel(host: BundleHost): {
     // the offset honour its join (OFFSET_JOIN_NOTE is only for an older
     // engine).
     React.useEffect(() => {
-      if ((open !== "reflect" && open !== "offset") || copyAvailable !== null) return;
+      if ((open !== "reflect" && open !== "offset") || copyAvailable !== null)
+        return;
       let live = true;
       void supportsDuplicate(host).then((ok) => {
         if (live) setCopyAvailable(ok);
@@ -340,16 +344,23 @@ export function makePathOptionsPanel(host: BundleHost): {
           const key = JSON.stringify([first.kind, String(first.id), dash]);
           if (key !== session.dashFollowed) {
             session.dashFollowed = key;
-            const base = (next ?? session.draft ?? lastUsedPathOptions(host)).dash;
+            const base = (next ?? session.draft ?? lastUsedPathOptions(host))
+              .dash;
             const read = dashOptionsFromLengths(dash, base);
             session.dashHidden = read.hiddenPairs;
             setDashHidden(read.hiddenPairs);
-            next = { ...(next ?? (session.draft as PathOptions)), dash: read.options };
+            next = {
+              ...(next ?? (session.draft as PathOptions)),
+              dash: read.options,
+            };
             session.draft = next;
           }
         }
         if (next) {
-          followDraft(JSON.stringify([session.followed, session.dashFollowed]), next);
+          followDraft(
+            JSON.stringify([session.followed, session.dashFollowed]),
+            next,
+          );
         }
       },
     );
@@ -360,7 +371,12 @@ export function makePathOptionsPanel(host: BundleHost): {
       section: S,
       key: keyof PathOptions[S] & string,
       label: string,
-      opts: { step?: number; min?: number; max?: number; disabled?: boolean } = {},
+      opts: {
+        step?: number;
+        min?: number;
+        max?: number;
+        disabled?: boolean;
+      } = {},
     ) => (
       <div style={rowStyle}>
         <span style={{ flex: 1 }}>{label}</span>
@@ -481,8 +497,18 @@ export function makePathOptionsPanel(host: BundleHost): {
                 min: 0,
                 disabled: !draft.outlineStroke.overrideWidth,
               })}
-              {selectRow("outlineStroke", "cap", "Caps", withElement(STROKE_CAPS))}
-              {selectRow("outlineStroke", "join", "Joins", withElement(STROKE_JOINS))}
+              {selectRow(
+                "outlineStroke",
+                "cap",
+                "Caps",
+                withElement(STROKE_CAPS),
+              )}
+              {selectRow(
+                "outlineStroke",
+                "join",
+                "Joins",
+                withElement(STROKE_JOINS),
+              )}
               {checkRow(
                 "outlineStroke",
                 "overrideMiterLimit",
@@ -500,12 +526,36 @@ export function makePathOptionsPanel(host: BundleHost): {
           return (
             <>
               {checkRow("dash", "dashed", "Dashed line")}
-              {numberRow("dash", "dash1", "Dash 1 (pt)", { step: 0.5, min: 0, disabled: off })}
-              {numberRow("dash", "gap1", "Gap 1 (pt)", { step: 0.5, min: 0, disabled: off })}
-              {numberRow("dash", "dash2", "Dash 2 (pt)", { step: 0.5, min: 0, disabled: off })}
-              {numberRow("dash", "gap2", "Gap 2 (pt)", { step: 0.5, min: 0, disabled: off })}
-              {numberRow("dash", "dash3", "Dash 3 (pt)", { step: 0.5, min: 0, disabled: off })}
-              {numberRow("dash", "gap3", "Gap 3 (pt)", { step: 0.5, min: 0, disabled: off })}
+              {numberRow("dash", "dash1", "Dash 1 (pt)", {
+                step: 0.5,
+                min: 0,
+                disabled: off,
+              })}
+              {numberRow("dash", "gap1", "Gap 1 (pt)", {
+                step: 0.5,
+                min: 0,
+                disabled: off,
+              })}
+              {numberRow("dash", "dash2", "Dash 2 (pt)", {
+                step: 0.5,
+                min: 0,
+                disabled: off,
+              })}
+              {numberRow("dash", "gap2", "Gap 2 (pt)", {
+                step: 0.5,
+                min: 0,
+                disabled: off,
+              })}
+              {numberRow("dash", "dash3", "Dash 3 (pt)", {
+                step: 0.5,
+                min: 0,
+                disabled: off,
+              })}
+              {numberRow("dash", "gap3", "Gap 3 (pt)", {
+                step: 0.5,
+                min: 0,
+                disabled: off,
+              })}
               <div style={mutedStyle} data-draw-pathopts-dash-pattern>
                 {dashPatternLabel(dashLengthsOf(draft.dash))}
               </div>
@@ -523,7 +573,10 @@ export function makePathOptionsPanel(host: BundleHost): {
         case "reflect":
           return (
             <>
-              {numberRow("reflect", "angleDeg", "Axis angle (°)", { min: -360, max: 360 })}
+              {numberRow("reflect", "angleDeg", "Axis angle (°)", {
+                min: -360,
+                max: 360,
+              })}
               {checkRow("reflect", "copy", "Copy (reflect a copy)", {
                 disabled: copyAvailable !== true,
               })}
@@ -628,7 +681,10 @@ export function makePathOptionsPanel(host: BundleHost): {
         data-draw-pathopts-panel={open}
         data-draw-pathopts-targets={targets}
       >
-        <PanelIntro summary={PATH_OPTIONS_SUMMARY} attr="data-draw-pathopts-intro" />
+        <PanelIntro
+          summary={PATH_OPTIONS_SUMMARY}
+          attr="data-draw-pathopts-intro"
+        />
         <Refusal text={refusal} />
         {PATH_OPTION_SECTIONS.map((section) => {
           const isOpen = section === open;
@@ -674,7 +730,9 @@ export function makePathOptionsPanel(host: BundleHost): {
                     data-draw-pathopts-apply={section}
                     disabled={needsSelection && have === 0}
                     onClick={() =>
-                      void run(() => applyPathOptions(host, section, draft[section]))
+                      void run(() =>
+                        applyPathOptions(host, section, draft[section]),
+                      )
                     }
                   >
                     {selects
@@ -682,8 +740,8 @@ export function makePathOptionsPanel(host: BundleHost): {
                       : reflects
                         ? `Reflect ${selected} object${selected === 1 ? "" : "s"}`
                         : needsSelection
-                        ? `Apply to ${targets} path${targets === 1 ? "" : "s"}`
-                        : "Insert"}
+                          ? `Apply to ${targets} path${targets === 1 ? "" : "s"}`
+                          : "Insert"}
                   </button>
                 </div>
               )}
@@ -691,7 +749,10 @@ export function makePathOptionsPanel(host: BundleHost): {
           );
         })}
 
-        <PanelAbout text={PATH_OPTIONS_PANEL_NOTE} attr="data-draw-pathopts-note" />
+        <PanelAbout
+          text={PATH_OPTIONS_PANEL_NOTE}
+          attr="data-draw-pathopts-note"
+        />
       </div>
     );
   };

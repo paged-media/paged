@@ -30,28 +30,39 @@ import type { PageContext, PageReport } from "../../types";
 export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(95);
 
-  const number = await proseFrame(ctx, page, [48, 100, 220, 196], [
-    { text: "16", style: STYLE.chapterNumber },
-  ]);
-  const title = await proseFrame(ctx, page, [48, 200, 480, 252], [
-    { text: "The Ledger", style: STYLE.chapterTitle },
-  ]);
-  const deck = await proseFrame(ctx, page, [48, 264, 448, 430], [
-    {
-      text:
-        "A spreadsheet in a page document leads two lives, and this chapter " +
-        "refuses to blur them. The live grid you can type into — the one " +
-        "that recalculates under your fingers — is a scene-layer session: " +
-        "it dies the moment the file is saved and reopened. What persists " +
-        "is the workbook itself, travelling in the container as a part, and " +
-        "everything the plugin LOWERS to native content: tables that are " +
-        "real tables, charts that are real paths and label frames. The " +
-        "pages that follow lower ten charts, pour a range, spill a formula, " +
-        "walk a day-book across a gutter, and end by asking the container " +
-        "what it actually carries.",
-      style: STYLE.deck,
-    },
-  ]);
+  const number = await proseFrame(
+    ctx,
+    page,
+    [48, 100, 220, 196],
+    [{ text: "16", style: STYLE.chapterNumber }],
+  );
+  const title = await proseFrame(
+    ctx,
+    page,
+    [48, 200, 480, 252],
+    [{ text: "The Ledger", style: STYLE.chapterTitle }],
+  );
+  const deck = await proseFrame(
+    ctx,
+    page,
+    [48, 264, 448, 430],
+    [
+      {
+        text:
+          "A spreadsheet in a page document leads two lives, and this chapter " +
+          "refuses to blur them. The live grid you can type into — the one " +
+          "that recalculates under your fingers — is a scene-layer session: " +
+          "it dies the moment the file is saved and reopened. What persists " +
+          "is the workbook itself, travelling in the container as a part, and " +
+          "everything the plugin LOWERS to native content: tables that are " +
+          "real tables, charts that are real paths and label frames. The " +
+          "pages that follow lower ten charts, pour a range, spill a formula, " +
+          "walk a day-book across a gutter, and end by asking the container " +
+          "what it actually carries.",
+        style: STYLE.deck,
+      },
+    ],
+  );
   const rule = await plate(ctx, page, [48, 440, 300, 442], SWATCH.vermilion);
 
   const label = await specLabel(ctx, page, [

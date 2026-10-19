@@ -90,10 +90,7 @@ import { openHost } from "./host";
 
 const PAGE = "usp";
 
-function pointer(
-  point: [number, number],
-  maxDelta = 0,
-): CanvasPointerEvent {
+function pointer(point: [number, number], maxDelta = 0): CanvasPointerEvent {
   return {
     pageId: PAGE,
     pagePoint: point,
@@ -120,9 +117,7 @@ async function until(predicate: () => Promise<boolean>): Promise<void> {
 /** The host's tool-settings store, as the editor hands it to a handler
  *  (`PagedEditor.toolSettings`): a per-tool key/value map with a `set`
  *  the popover writes through. `paged` is what `onActivate` receives. */
-function settingsStore(
-  initial: Record<string, Record<string, unknown>> = {},
-) {
+function settingsStore(initial: Record<string, Record<string, unknown>> = {}) {
   const data: Record<string, Record<string, unknown>> = {};
   for (const [tool, values] of Object.entries(initial)) {
     data[tool] = { ...values };
@@ -395,7 +390,9 @@ describe("tool options — the read door", () => {
 
   it("a read-only store (no `set`) still answers reads", () => {
     const paged = {
-      toolSettings: { getValue: (_t: string, k: string) => (k === "size" ? 9 : undefined) },
+      toolSettings: {
+        getValue: (_t: string, k: string) => (k === "size" ? 9 : undefined),
+      },
     };
     const reader = createToolOptionsReader(ERASER_OPTIONS);
     expect(() => reader.attach(paged)).not.toThrow();
@@ -435,7 +432,9 @@ describe("tool options — paintbrush + blob brush (real engine, F1)", () => {
    *  pressure, for a horizontal tangent. */
   const deposited = (size: number, angleDeg: number, roundnessPct: number) => {
     const r = roundnessPct / 100;
-    return size * (r + (1 - r) * Math.abs(Math.sin((-angleDeg * Math.PI) / 180)));
+    return (
+      size * (r + (1 - r) * Math.abs(Math.sin((-angleDeg * Math.PI) / 180)))
+    );
   };
 
   it("with no host store the stroke is the one the tool always made (the literal pre-options commit)", async () => {
@@ -520,7 +519,9 @@ describe("tool options — paintbrush + blob brush (real engine, F1)", () => {
     // θ = 0° along a horizontal stroke: |sin| = 0, so the width is
     // roundness · size — and a ROUND nib ignores the angle altogether.
     const id = PAINTBRUSH_OPTIONS.toolId;
-    const store = settingsStore({ [id]: { size: 20, angle: 0, roundness: 25 } });
+    const store = settingsStore({
+      [id]: { size: 20, angle: 0, roundness: 25 },
+    });
     const handler = createPaintbrushHandler(h.host);
     handler.onActivate(store.paged as never);
     const flat = boxOf((await sweepAndRead(h, handler, LINE)).table);
@@ -686,7 +687,11 @@ describe("tool options — pencil (real engine, F1)", () => {
     const store = settingsStore();
     const handler = createPencilHandler(h.host);
     handler.onActivate(store.paged as never);
-    const isCorner = (a: { anchor: number[]; left: number[]; right: number[] }) =>
+    const isCorner = (a: {
+      anchor: number[];
+      left: number[];
+      right: number[];
+    }) =>
       a.left[0] === a.anchor[0] &&
       a.left[1] === a.anchor[1] &&
       a.right[0] === a.anchor[0] &&

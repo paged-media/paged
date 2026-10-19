@@ -326,9 +326,12 @@ export async function build(ctx: PageContext): Promise<PageReport> {
       await page.locator("[data-data-bind-kind]").selectOption("table");
       await page.locator("[data-data-bind-field]").fill(TABLE_COLUMNS);
       await page.locator("[data-data-bind-add]").click();
-      await expect(page.locator("[data-data-bind-msg]")).toContainText(/^table binding /, {
-        timeout: 10_000,
-      });
+      await expect(page.locator("[data-data-bind-msg]")).toContainText(
+        /^table binding /,
+        {
+          timeout: 10_000,
+        },
+      );
       await page.getByRole("button", { name: /^lower to document$/i }).click();
       await settle(
         page,

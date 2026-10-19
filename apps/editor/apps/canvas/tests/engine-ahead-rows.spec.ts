@@ -58,37 +58,72 @@ interface AheadRow {
 /** The panels' `@feat` tags per family (spelled out, so the tag
  *  vocabulary guard reads them). */
 const TAGS = {
-  paragraph: { text: "@feat:editor-shell.panels.paragraph", style: "@feat:editor-shell.panels.paragraph-styles" },
-  character: { text: "@feat:editor-shell.panels.character", style: "@feat:editor-shell.panels.character-styles" },
+  paragraph: {
+    text: "@feat:editor-shell.panels.paragraph",
+    style: "@feat:editor-shell.panels.paragraph-styles",
+  },
+  character: {
+    text: "@feat:editor-shell.panels.character",
+    style: "@feat:editor-shell.panels.character-styles",
+  },
 } as const;
 
 const ROWS: AheadRow[] = [
-  { path: "paragraphAutoLeading", family: "paragraph", set: (f) => commitNumber(f, 135), expected: 135 },
+  {
+    path: "paragraphAutoLeading",
+    family: "paragraph",
+    set: (f) => commitNumber(f, 135),
+    expected: 135,
+  },
   {
     path: "paragraphSingleWordJustification",
     family: "paragraph",
     set: (f) => f.locator("select").selectOption("LeftAlign"),
     expected: "LeftAlign",
   },
-  { path: "paragraphLastLineIndent", family: "paragraph", set: (f) => commitNumber(f, 12), expected: 12 },
+  {
+    path: "paragraphLastLineIndent",
+    family: "paragraph",
+    set: (f) => commitNumber(f, 12),
+    expected: 12,
+  },
   {
     path: "paragraphBalanceRaggedLines",
     family: "paragraph",
     set: (f) => f.locator("select").selectOption("FullyBalanced"),
     expected: "FullyBalanced",
   },
-  { path: "characterNoBreak", family: "character", set: (f) => f.locator('[role="switch"]').click(), expected: true },
+  {
+    path: "characterNoBreak",
+    family: "character",
+    set: (f) => f.locator('[role="switch"]').click(),
+    expected: true,
+  },
 ];
 
 /** A field every target of the family always shows: once it carries its
  *  schema type, the schema the gated row would come from has loaded. */
-const SIBLING = { paragraph: "paragraphHyphenation", character: "characterLigatures" } as const;
+const SIBLING = {
+  paragraph: "paragraphHyphenation",
+  character: "characterLigatures",
+} as const;
 
-async function hiddenOrRoundTrip(page: Page, scope: Locator, address: string, row: AheadRow) {
-  await expect(fieldOf(scope, SIBLING[row.family])).toHaveAttribute("data-value-type", /.+/);
+async function hiddenOrRoundTrip(
+  page: Page,
+  scope: Locator,
+  address: string,
+  row: AheadRow,
+) {
+  await expect(fieldOf(scope, SIBLING[row.family])).toHaveAttribute(
+    "data-value-type",
+    /.+/,
+  );
   const field = fieldOf(scope, row.path);
   if (!(await engineHasPath(page, address, row.path))) {
-    test.info().annotations.push({ type: "engine", description: `the running engine has no ${row.path}: the row is hidden` });
+    test.info().annotations.push({
+      type: "engine",
+      description: `the running engine has no ${row.path}: the row is hidden`,
+    });
     await expect(field).toHaveCount(0);
     return;
   }
@@ -98,7 +133,9 @@ async function hiddenOrRoundTrip(page: Page, scope: Locator, address: string, ro
   ).toBeVisible();
   const before = await engineGet(page, address, row.path);
   await row.set(field);
-  await expect.poll(() => engineGet(page, address, row.path)).toEqual(row.expected);
+  await expect
+    .poll(() => engineGet(page, address, row.path))
+    .toEqual(row.expected);
   await undoOnce(page);
   await expect.poll(() => engineGet(page, address, row.path)).toEqual(before);
 }
@@ -110,7 +147,8 @@ test.describe("Rows ahead of the engine: a paragraph's line setting, a character
   });
 
   for (const row of ROWS) {
-    const panelId = row.family === "paragraph" ? "paged.paragraph" : "paged.character";
+    const panelId =
+      row.family === "paragraph" ? "paged.paragraph" : "paged.character";
     test(`AHEAD-text-${row.path} — the ${row.family} panel offers ${row.path} exactly when the running engine reads it; then UI → engine, one undo ${TAGS[row.family].text} @feat:round-tripping.undo-redo @level:edge`, async ({
       page,
     }) => {
@@ -122,7 +160,12 @@ test.describe("Rows ahead of the engine: a paragraph's line setting, a character
       await openPanel(page, panelId);
       const scope = page.locator(`[data-${row.family}-panel="ready"]`);
       await expect(scope).toBeVisible();
-      await hiddenOrRoundTrip(page, scope, `storyRange:${story.selfId}@0..${end}`, row);
+      await hiddenOrRoundTrip(
+        page,
+        scope,
+        `storyRange:${story.selfId}@0..${end}`,
+        row,
+      );
     });
 
     test(`AHEAD-style-${row.path} — ${row.family} Style Options offer ${row.path} exactly when the running engine reads it; then UI → engine, one undo @feat:styles.set-style-property ${TAGS[row.family].style} @feat:round-tripping.undo-redo @level:edge`, async ({
@@ -130,17 +173,29 @@ test.describe("Rows ahead of the engine: a paragraph's line setting, a character
     }) => {
       await loadIdml(page, generatedFixture("styles-cascade"));
       if (row.family === "character") {
-        await mutate(page, { op: "createCharacterStyle", args: { name: "Ahead" } });
+        await mutate(page, {
+          op: "createCharacterStyle",
+          args: { name: "Ahead" },
+        });
       }
       await openPanel(page, "paged.style-options");
       const panel = page.locator('[data-style-options-panel="ready"]');
       await expect(panel).toBeVisible();
-      await panel.locator(`[data-cockpit-action="style-family-${row.family}"]`).click();
+      await panel
+        .locator(`[data-cockpit-action="style-family-${row.family}"]`)
+        .click();
       await expect(panel).toHaveAttribute("data-style-family", row.family);
       await panel
         .locator("[data-style-options-select]")
-        .selectOption(row.family === "paragraph" ? "ParagraphStyle/Body" : { label: "Ahead" });
-      await expect(panel).toHaveAttribute("data-style-target", new RegExp(`^style:${row.family}/`));
+        .selectOption(
+          row.family === "paragraph"
+            ? "ParagraphStyle/Body"
+            : { label: "Ahead" },
+        );
+      await expect(panel).toHaveAttribute(
+        "data-style-target",
+        new RegExp(`^style:${row.family}/`),
+      );
       const address = (await panel.getAttribute("data-style-target"))!;
       await hiddenOrRoundTrip(page, panel, address, row);
     });

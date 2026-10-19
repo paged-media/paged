@@ -46,10 +46,20 @@ import { drawBundle } from "../../src";
 import { openHost } from "../conformance/host";
 import { caseById, authorCase, type AuthoredCase } from "./author";
 import { bothValues, classify, defectsOf, expand, report } from "./classify";
-import { FINDINGS, KNOWN_REIMPORT, REIMPORT_CASES, type FindingId } from "./findings";
+import {
+  FINDINGS,
+  KNOWN_REIMPORT,
+  REIMPORT_CASES,
+  type FindingId,
+} from "./findings";
 import { reexportPath } from "./indesign";
 import { unzip } from "./package";
-import { compareViews, engineView, type Difference, type ViewNode } from "./view";
+import {
+  compareViews,
+  engineView,
+  type Difference,
+  type ViewNode,
+} from "./view";
 
 /** The defect an engine that reads geometry in page space no longer has. */
 const FIXED_BY_PAGE_SPACE: FindingId = "itemTransformIsSpreadRelative";
@@ -74,20 +84,27 @@ for (const id of REIMPORT_CASES) {
       const theirs = await engineView(back);
       diffs = compareViews(ours, theirs);
       const metadataOf = (nodes: readonly ViewNode[]): unknown[] =>
-        nodes.flatMap((n) => (n.children ? metadataOf(n.children) : n.metadata ? [n.metadata] : []));
+        nodes.flatMap((n) =>
+          n.children ? metadataOf(n.children) : n.metadata ? [n.metadata] : [],
+        );
       labels = [metadataOf(ours), metadataOf(theirs)];
       // An engine that reads page space reports the page's origin beside it.
       type Node = { id?: ElementId | null; children?: readonly Node[] | null };
       const firstLeaf = (nodes: readonly Node[]): ElementId | null => {
         for (const n of nodes) {
-          const hit = n.children?.length ? firstLeaf(n.children) : (n.id ?? null);
+          const hit = n.children?.length
+            ? firstLeaf(n.children)
+            : (n.id ?? null);
           if (hit) return hit;
         }
         return null;
       };
-      const leaf = firstLeaf((await back.host.document.tree()) as readonly Node[]);
+      const leaf = firstLeaf(
+        (await back.host.document.tree()) as readonly Node[],
+      );
       const [g] = leaf ? await back.host.document.elementGeometry([leaf]) : [];
-      pageSpace = (g as { pageOrigin?: unknown } | undefined)?.pageOrigin !== undefined;
+      pageSpace =
+        (g as { pageOrigin?: unknown } | undefined)?.pageOrigin !== undefined;
     }, 60_000);
     afterAll(() => {
       authored?.h.dispose();
@@ -99,11 +116,15 @@ for (const id of REIMPORT_CASES) {
       // InDesign writes a metadata part and a colour-managed Document;
       // the engine's export of this lane's scaffold has neither.
       expect(parts.has("META-INF/metadata.xml")).toBe(true);
-      expect(new TextDecoder().decode(parts.get("designmap.xml")!)).toMatch(/<Document [^>]*CMYKProfile=/);
+      expect(new TextDecoder().decode(parts.get("designmap.xml")!)).toMatch(
+        /<Document [^>]*CMYKProfile=/,
+      );
     });
 
     it("the engine reads it back with the same items, kinds, grouping and stacking order", () => {
-      expect(diffs.filter((d) => d.field === "children" || d.field === "kind")).toEqual([]);
+      expect(
+        diffs.filter((d) => d.field === "children" || d.field === "kind"),
+      ).toEqual([]);
     });
 
     it("draw's metadata envelope rides InDesign's own export, item for item", () => {
@@ -113,7 +134,9 @@ for (const id of REIMPORT_CASES) {
     });
 
     it("every difference from the authored model is classified, with both values", () => {
-      const now = pageSpace ? known.filter((k) => k.finding !== FIXED_BY_PAGE_SPACE) : known;
+      const now = pageSpace
+        ? known.filter((k) => k.finding !== FIXED_BY_PAGE_SPACE)
+        : known;
       expect(report(classify(diffs, now))).toBe("");
     });
 
@@ -129,11 +152,16 @@ for (const id of REIMPORT_CASES) {
         });
         continue;
       }
-      it.failing(`DEFECT (${f.owner}) — ${f.title}: ${bothValues(entries, "re-imported")}`, () => {
-        for (const k of entries) {
-          expect(diffs.find((d) => d.at === k.at && d.field === k.field)).toBeUndefined();
-        }
-      });
+      it.failing(
+        `DEFECT (${f.owner}) — ${f.title}: ${bothValues(entries, "re-imported")}`,
+        () => {
+          for (const k of entries) {
+            expect(
+              diffs.find((d) => d.at === k.at && d.field === k.field),
+            ).toBeUndefined();
+          }
+        },
+      );
     }
   });
 }

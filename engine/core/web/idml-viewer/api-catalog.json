@@ -1,5 +1,5 @@
 {
-  "$comment": "Canonical SDK API catalog for @paged-media/idml-viewer (plus the underlying paged-sdk ViewerSession and introspect-wasm Inspector). The docs site pulls this file (docs sources.pin → sdk-catalog) to render the SDK reference, so this is the source of truth that lives next to the API. The co-located unit test (test/api-catalog.test.ts) asserts every export of src/index.ts appears here — update this file in the SAME PR as any public API change, or that test fails.",
+  "$comment": "Canonical SDK API catalog for @paged-media/idml-viewer (plus the underlying paged-sdk ViewerSession, its /session entry, and the canvas-wasm/introspect Inspector). The docs site pulls this file (docs sources.pin → sdk-catalog) to render the SDK reference, so this is the source of truth that lives next to the API. The co-located unit test (test/api-catalog.test.ts) asserts every export of src/index.ts appears here — update this file in the SAME PR as any public API change, or that test fails.",
   "package": "@paged-media/idml-viewer",
   "groups": [
     {
@@ -107,7 +107,7 @@
     },
     {
       "key": "session",
-      "title": "ViewerSession (low-level, @paged-media/sdk)",
+      "title": "ViewerSession (low-level, @paged-media/idml-viewer/session)",
       "summary": "The wasm session `createViewer` wraps. Use it directly only when you need raw control — most apps use the Viewer wrapper above.",
       "members": [
         { "name": "ViewerSession.new", "kind": "method", "signature": "static new(): Promise<ViewerSession>", "returns": "Promise<ViewerSession>", "summary": "Construct a session (acquires a WebGPU adapter)." },
@@ -125,7 +125,7 @@
     },
     {
       "key": "inspect",
-      "title": "Inspector (read-only, @paged-media/introspect-wasm)",
+      "title": "Inspector (read-only, @paged-media/canvas-wasm/introspect)",
       "summary": "Inspect a document's scene tree and properties, and render single pages, without a canvas — handy for tests and tooling.",
       "members": [
         { "name": "Inspector", "kind": "class", "signature": "new Inspector(idml: Uint8Array)", "returns": "Inspector", "summary": "Construct an inspector over a document's bytes." },

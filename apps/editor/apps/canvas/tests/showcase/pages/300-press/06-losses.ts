@@ -33,8 +33,21 @@
 
 import { expect } from "@playwright/test";
 
-import { assignLayer, marginNote, plate, proseFrame, specLabel } from "../../annual-support";
-import { GRADIENT_RAMP, LAYER, STYLE, SWATCH, contentBox, p } from "../../names-annual";
+import {
+  assignLayer,
+  marginNote,
+  plate,
+  proseFrame,
+  specLabel,
+} from "../../annual-support";
+import {
+  GRADIENT_RAMP,
+  LAYER,
+  STYLE,
+  SWATCH,
+  contentBox,
+  p,
+} from "../../names-annual";
 import type { PageContext, PageReport } from "../../types";
 import { dataTable } from "./00-support";
 
@@ -48,18 +61,25 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const pageId = ctx.pageIds[0];
   const [left, top, right] = contentBox(page);
 
-  const head = await proseFrame(ctx, page, [left, top, right, top + 32], [
-    { text: "The loss ledger", style: STYLE.head1 },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [left, top, right, top + 32],
+    [{ text: "The loss ledger", style: STYLE.head1 }],
+  );
   elements.push(head.frameId);
 
-  const intro = await proseFrame(ctx, page, [left, top + 40, right, top + 168], [
-    {
-      text:
-        "Two exports leave this document. The .paged container keeps everything — the native model part carries the whole scene, masks and all. The .idml interchange twin is for other hands, and its writer holds a harder line: an unmutated document round-trips byte-identically (measured on the real corpus: 99 of 99 packages, 11,876 entries, zero gaps), a mutated one differs only where the edit touched — and whatever IDML cannot express is not smuggled or silently dropped, it is NAMED, in the export reply itself.",
-      style: STYLE.bodyFirst,
-    },
-  ]);
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [left, top + 40, right, top + 168],
+    [
+      {
+        text: "Two exports leave this document. The .paged container keeps everything — the native model part carries the whole scene, masks and all. The .idml interchange twin is for other hands, and its writer holds a harder line: an unmutated document round-trips byte-identically (measured on the real corpus: 99 of 99 packages, 11,876 entries, zero gaps), a mutated one differs only where the edit touched — and whatever IDML cannot express is not smuggled or silently dropped, it is NAMED, in the export reply itself.",
+        style: STYLE.bodyFirst,
+      },
+    ],
+  );
   elements.push(intro.frameId);
 
   // ── the specimen: an opacity mask, resident ──────────────────────
@@ -94,8 +114,7 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     [left + 140, top + 186, right, top + 276],
     [
       {
-        text:
-          "The specimen: a vermilion plate fading through an opacity mask whose artwork is the Annual Ramp. It stays on this page — paged-native, resident, and named by the export below as exactly what the interchange twin cannot carry.",
+        text: "The specimen: a vermilion plate fading through an opacity mask whose artwork is the Annual Ramp. It stays on this page — paged-native, resident, and named by the export below as exactly what the interchange twin cannot carry.",
         style: STYLE.caption,
       },
     ],
@@ -115,7 +134,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const shown = lost.slice(0, MAX_ROWS);
   const rows: string[][] = shown.map((l, i) => [String(i + 1), l]);
   if (lost.length > MAX_ROWS) {
-    rows.push(["…", `${lost.length - MAX_ROWS} further entr(ies), same construct`]);
+    rows.push([
+      "…",
+      `${lost.length - MAX_ROWS} further entr(ies), same construct`,
+    ]);
   }
   const tableTop = top + 296;
   const table = await dataTable(
@@ -135,13 +157,17 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   elements.push(table.frameId);
   const tableBottom = Math.min(600, tableTop + 66 + rows.length * 52);
 
-  const closing = await proseFrame(ctx, page, [left, tableBottom + 12, right, 640], [
-    {
-      text:
-        `Each entry names its target, its mask artwork, and the lossless path (.paged). ${lost.length === 1 ? "The single entry above is this page's own specimen" : "Among the entries above is this page's own specimen"} — the ledger is reporting the rectangle beside it, which is what an honest loss report looks like: specific, addressed, and printed where the loss lives.`,
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const closing = await proseFrame(
+    ctx,
+    page,
+    [left, tableBottom + 12, right, 640],
+    [
+      {
+        text: `Each entry names its target, its mask artwork, and the lossless path (.paged). ${lost.length === 1 ? "The single entry above is this page's own specimen" : "Among the entries above is this page's own specimen"} — the ledger is reporting the rectangle beside it, which is what an honest loss report looks like: specific, addressed, and printed where the loss lives.`,
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(closing.frameId);
 
   elements.push(

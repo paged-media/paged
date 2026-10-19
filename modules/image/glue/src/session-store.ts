@@ -40,8 +40,13 @@ export interface CommittedMarker {
 }
 
 export async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const d = await globalThis.crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>);
-  return Array.from(new Uint8Array(d), (b) => b.toString(16).padStart(2, "0")).join("");
+  const d = await globalThis.crypto.subtle.digest(
+    "SHA-256",
+    bytes as Uint8Array<ArrayBuffer>,
+  );
+  return Array.from(new Uint8Array(d), (b) =>
+    b.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 export const blobPath = (sha: string) => `px/${sha}.bin`;
@@ -91,22 +96,31 @@ export async function readSession(
   parts: PartsSurface,
   path: string,
 ): Promise<
-  | { ok: true; record: SessionRecord; manifest: Uint8Array; buffers: Uint8Array[] }
+  | {
+      ok: true;
+      record: SessionRecord;
+      manifest: Uint8Array;
+      buffers: Uint8Array[];
+    }
   | { ok: false; reason: string }
 > {
   const raw = await parts.read(path);
-  if (!raw) return { ok: false, reason: `the stored session ${path} is missing` };
+  if (!raw)
+    return { ok: false, reason: `the stored session ${path} is missing` };
   let record: SessionRecord;
   try {
     record = JSON.parse(new TextDecoder().decode(raw)) as SessionRecord;
   } catch {
     return { ok: false, reason: `the stored session ${path} is not readable` };
   }
-  if (record.v !== 1) return { ok: false, reason: `stored session version ${record.v}` };
+  if (record.v !== 1)
+    return { ok: false, reason: `stored session version ${record.v}` };
   const fetch = async (sha: string) => {
     const b = await parts.read(blobPath(sha));
-    if (!b) throw new Error(`stored layer data ${sha.slice(0, 12)}… is missing`);
-    if ((await sha256Hex(b)) !== sha) throw new Error(`stored layer data ${sha.slice(0, 12)}… is damaged`);
+    if (!b)
+      throw new Error(`stored layer data ${sha.slice(0, 12)}… is missing`);
+    if ((await sha256Hex(b)) !== sha)
+      throw new Error(`stored layer data ${sha.slice(0, 12)}… is damaged`);
     return b;
   };
   try {
@@ -114,7 +128,10 @@ export async function readSession(
     const buffers = await Promise.all(record.buffers.map(fetch));
     return { ok: true, record, manifest, buffers };
   } catch (err) {
-    return { ok: false, reason: err instanceof Error ? err.message : String(err) };
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 

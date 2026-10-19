@@ -64,7 +64,8 @@ describe("svg-shapes — rectToPath (properties)", () => {
           [x + w, y + h],
           [x, y + h],
         ]);
-        for (const a of t.anchors) assertTrue(isCornerAnchor(a), "a sharp corner has handles");
+        for (const a of t.anchors)
+          assertTrue(isCornerAnchor(a), "a sharp corner has handles");
         // Clockwise in y-down space is the POSITIVE shoelace sign.
         assertClose(
           refSignedArea(t.anchors.map((a): Vec2 => a.anchor)),
@@ -78,47 +79,87 @@ describe("svg-shapes — rectToPath (properties)", () => {
   it("a non-positive width or height is no shape at all", () => {
     const nonPositive = real(-100, 0);
     fc.assert(
-      fc.property(coord, coord, nonPositive, side, radius, (x, y, bad, good, r) => {
-        expect(rectToPath(x, y, bad, good, r, r)).toEqual(EMPTY);
-        expect(rectToPath(x, y, good, bad, r, r)).toEqual(EMPTY);
-      }),
+      fc.property(
+        coord,
+        coord,
+        nonPositive,
+        side,
+        radius,
+        (x, y, bad, good, r) => {
+          expect(rectToPath(x, y, bad, good, r, r)).toEqual(EMPTY);
+          expect(rectToPath(x, y, good, bad, r, r)).toEqual(EMPTY);
+        },
+      ),
     );
   });
 
   it("a rounded rect is 8 anchors ON the rect's boundary, and stays inside the rect", () => {
     fc.assert(
-      fc.property(coord, coord, side, side, radius, radius, (x, y, w, h, rx, ry) => {
-        const t = rectToPath(x, y, w, h, rx, ry);
-        expect(t.anchors).toHaveLength(8);
-        expect(t.subpathOpen).toEqual([false]);
-        const slack = 1e-9 * Math.max(1, Math.abs(x), Math.abs(y), w, h);
-        const onEdge = (p: Vec2): boolean =>
-          Math.abs(p[0] - x) <= slack ||
-          Math.abs(p[0] - (x + w)) <= slack ||
-          Math.abs(p[1] - y) <= slack ||
-          Math.abs(p[1] - (y + h)) <= slack;
-        for (const a of t.anchors) {
-          assertTrue(onEdge(a.anchor), `anchor [${a.anchor}] is off the boundary`);
-        }
-        for (const p of flattenAnchorRun(t.anchors, FINE)) {
-          assertTrue(
-            p[0] >= x - slack && p[0] <= x + w + slack && p[1] >= y - slack && p[1] <= y + h + slack,
-            `[${p}] is outside the rect`,
-          );
-        }
-      }),
+      fc.property(
+        coord,
+        coord,
+        side,
+        side,
+        radius,
+        radius,
+        (x, y, w, h, rx, ry) => {
+          const t = rectToPath(x, y, w, h, rx, ry);
+          expect(t.anchors).toHaveLength(8);
+          expect(t.subpathOpen).toEqual([false]);
+          const slack = 1e-9 * Math.max(1, Math.abs(x), Math.abs(y), w, h);
+          const onEdge = (p: Vec2): boolean =>
+            Math.abs(p[0] - x) <= slack ||
+            Math.abs(p[0] - (x + w)) <= slack ||
+            Math.abs(p[1] - y) <= slack ||
+            Math.abs(p[1] - (y + h)) <= slack;
+          for (const a of t.anchors) {
+            assertTrue(
+              onEdge(a.anchor),
+              `anchor [${a.anchor}] is off the boundary`,
+            );
+          }
+          for (const p of flattenAnchorRun(t.anchors, FINE)) {
+            assertTrue(
+              p[0] >= x - slack &&
+                p[0] <= x + w + slack &&
+                p[1] >= y - slack &&
+                p[1] <= y + h + slack,
+              `[${p}] is outside the rect`,
+            );
+          }
+        },
+      ),
     );
   });
 
   it("radii are clamped to half the side, and a missing one mirrors the other", () => {
     fc.assert(
-      fc.property(coord, coord, side, side, radius, radius, (x, y, w, h, rx, ry) => {
-        const clamped = rectToPath(x, y, w, h, Math.min(rx, w / 2), Math.min(ry, h / 2));
-        expect(rectToPath(x, y, w, h, rx, ry)).toEqual(clamped);
-        // rx given, ry missing (0) ⇒ ry = rx — and the other way round.
-        expect(rectToPath(x, y, w, h, rx, 0)).toEqual(rectToPath(x, y, w, h, rx, rx));
-        expect(rectToPath(x, y, w, h, 0, ry)).toEqual(rectToPath(x, y, w, h, ry, ry));
-      }),
+      fc.property(
+        coord,
+        coord,
+        side,
+        side,
+        radius,
+        radius,
+        (x, y, w, h, rx, ry) => {
+          const clamped = rectToPath(
+            x,
+            y,
+            w,
+            h,
+            Math.min(rx, w / 2),
+            Math.min(ry, h / 2),
+          );
+          expect(rectToPath(x, y, w, h, rx, ry)).toEqual(clamped);
+          // rx given, ry missing (0) ⇒ ry = rx — and the other way round.
+          expect(rectToPath(x, y, w, h, rx, 0)).toEqual(
+            rectToPath(x, y, w, h, rx, rx),
+          );
+          expect(rectToPath(x, y, w, h, 0, ry)).toEqual(
+            rectToPath(x, y, w, h, ry, ry),
+          );
+        },
+      ),
     );
   });
 
@@ -129,7 +170,12 @@ describe("svg-shapes — rectToPath (properties)", () => {
         const ry = Math.min(ryIn, h / 2);
         const t = rectToPath(0, 0, w, h, rx, ry);
         const area = contourSignedArea(t.anchors, { samplesPerSegment: 64 });
-        assertClose(area, w * h - (4 - Math.PI) * rx * ry, 2e-3 * rx * ry + 1e-9 * w * h, "area");
+        assertClose(
+          area,
+          w * h - (4 - Math.PI) * rx * ry,
+          2e-3 * rx * ry + 1e-9 * w * h,
+          "area",
+        );
       }),
     );
   });
@@ -143,8 +189,12 @@ describe("svg-shapes — rectToPath (properties)", () => {
         expect(pointInAnchorPath([w / 2, h / 2], t.anchors)).toBe(true);
         // A point 5 % of the radii in from the corner: outside the
         // quarter ellipse (the ellipse is 29 % in at the diagonal).
-        expect(pointInAnchorPath([0.05 * rx, 0.05 * ry], t.anchors)).toBe(false);
-        expect(pointInAnchorPath([w - 0.05 * rx, h - 0.05 * ry], t.anchors)).toBe(false);
+        expect(pointInAnchorPath([0.05 * rx, 0.05 * ry], t.anchors)).toBe(
+          false,
+        );
+        expect(
+          pointInAnchorPath([w - 0.05 * rx, h - 0.05 * ry], t.anchors),
+        ).toBe(false);
       }),
     );
   });
@@ -182,7 +232,12 @@ describe("svg-shapes — ellipseToPath / circleToPath (properties)", () => {
       fc.property(coord, coord, radius, radius, (cx, cy, rx, ry) => {
         const t = ellipseToPath(cx, cy, rx, ry);
         for (const p of flattenAnchorRun(t.anchors, FINE)) {
-          assertClose(Math.hypot((p[0] - cx) / rx, (p[1] - cy) / ry), 1, 3e-4, "radial ratio");
+          assertClose(
+            Math.hypot((p[0] - cx) / rx, (p[1] - cy) / ry),
+            1,
+            3e-4,
+            "radial ratio",
+          );
         }
       }),
     );
@@ -237,7 +292,8 @@ describe("svg-shapes — lineToPath / polyToPath (properties)", () => {
           [x1, y1],
           [x2, y2],
         ]);
-        for (const a of t.anchors) assertTrue(isCornerAnchor(a), "a line end has handles");
+        for (const a of t.anchors)
+          assertTrue(isCornerAnchor(a), "a line end has handles");
       }),
     );
   });
@@ -253,7 +309,8 @@ describe("svg-shapes — lineToPath / polyToPath (properties)", () => {
         expect(t.subpathStarts).toEqual([0]);
         expect(t.subpathOpen).toEqual([!close]);
         expect(t.anchors.map((a) => a.anchor)).toEqual(pts);
-        for (const a of t.anchors) assertTrue(isCornerAnchor(a), "a polygon vertex has handles");
+        for (const a of t.anchors)
+          assertTrue(isCornerAnchor(a), "a polygon vertex has handles");
       }),
     );
   });

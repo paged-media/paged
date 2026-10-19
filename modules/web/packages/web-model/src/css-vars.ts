@@ -82,7 +82,12 @@ export function scanCssVars(css: string): CssVarDeclaration[] {
     }
     const ch = css[i];
     if (ch === "{") {
-      stack.push(css.slice(preludeStart, i).replace(/\/\*[\s\S]*?\*\//g, "").trim());
+      stack.push(
+        css
+          .slice(preludeStart, i)
+          .replace(/\/\*[\s\S]*?\*\//g, "")
+          .trim(),
+      );
       i += 1;
       preludeStart = statementStart = i;
       continue;
@@ -100,7 +105,15 @@ export function scanCssVars(css: string): CssVarDeclaration[] {
     }
     // A declaration starts at the first non-space, non-comment character of
     // a statement inside a block.
-    if (stack.length > 0 && ch === "-" && css.startsWith("--", i) && css.slice(statementStart, i).replace(/\/\*[\s\S]*?\*\//g, "").trim() === "") {
+    if (
+      stack.length > 0 &&
+      ch === "-" &&
+      css.startsWith("--", i) &&
+      css
+        .slice(statementStart, i)
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .trim() === ""
+    ) {
       const m = /^--[A-Za-z0-9_-]+/.exec(css.slice(i));
       let j = i + (m ? m[0].length : 0);
       while (j < css.length && /\s/.test(css[j])) j += 1;
@@ -134,7 +147,14 @@ export function scanCssVars(css: string): CssVarDeclaration[] {
         const lead = raw.length - raw.trimStart().length;
         const value = raw.trim();
         const start = valueFrom + lead;
-        out.push({ name: m[0], value, start, end: start + value.length, important, context: [...stack] });
+        out.push({
+          name: m[0],
+          value,
+          start,
+          end: start + value.length,
+          important,
+          context: [...stack],
+        });
         i = k;
         continue;
       }
@@ -147,7 +167,8 @@ export function scanCssVars(css: string): CssVarDeclaration[] {
 /** The distinct custom property names a css text declares, first-use order. */
 export function cssVarNames(css: string): string[] {
   const names: string[] = [];
-  for (const d of scanCssVars(css)) if (!names.includes(d.name)) names.push(d.name);
+  for (const d of scanCssVars(css))
+    if (!names.includes(d.name)) names.push(d.name);
   return names;
 }
 
@@ -155,15 +176,18 @@ export function cssVarNames(css: string): string[] {
  *  may not end the declaration or the block early, nor open a comment or a
  *  string it does not close. */
 export function cssVarValueProblem(value: string): string | null {
-  if (value.trim().length === 0) return "a custom property value may not be empty";
+  if (value.trim().length === 0)
+    return "a custom property value may not be empty";
   let i = 0;
   let depth = 0;
   while (i < value.length) {
-    if (value.startsWith("/*", i) || value.startsWith("*/", i)) return "a value may not contain a comment";
+    if (value.startsWith("/*", i) || value.startsWith("*/", i))
+      return "a value may not contain a comment";
     const c = value[i];
     if (c === '"' || c === "'") {
       const s = skipOpaque(value, i);
-      if (value[s - 1] !== c || s - 1 === i) return "a value may not leave a string open";
+      if (value[s - 1] !== c || s - 1 === i)
+        return "a value may not leave a string open";
       i = s;
       continue;
     }
@@ -171,7 +195,8 @@ export function cssVarValueProblem(value: string): string | null {
     if (c === "(" || c === "[" || c === "{") depth += 1;
     if (c === ")" || c === "]" || c === "}") {
       depth -= 1;
-      if (depth < 0) return `a value may not close a bracket it did not open ("${c}")`;
+      if (depth < 0)
+        return `a value may not close a bracket it did not open ("${c}")`;
     }
     i += 1;
   }
@@ -182,13 +207,19 @@ export function cssVarValueProblem(value: string): string | null {
  *  text byte-identical); a name the css does not declare is appended as a
  *  `:root` rule. Returns the reason instead when the name or value is not
  *  one we can splice safely. */
-export function setCssVar(css: string, name: string, value: string): { css: string } | { refused: string } {
-  if (!isCssVarName(name)) return { refused: `"${name}" is not a custom property name (--ident)` };
+export function setCssVar(
+  css: string,
+  name: string,
+  value: string,
+): { css: string } | { refused: string } {
+  if (!isCssVarName(name))
+    return { refused: `"${name}" is not a custom property name (--ident)` };
   const problem = cssVarValueProblem(value);
   if (problem) return { refused: problem };
   const v = value.trim();
   const first = scanCssVars(css).find((d) => d.name === name);
-  if (first) return { css: css.slice(0, first.start) + v + css.slice(first.end) };
+  if (first)
+    return { css: css.slice(0, first.start) + v + css.slice(first.end) };
   const sep = css.length === 0 || css.endsWith("\n") ? "" : "\n";
   return { css: `${css}${sep}:root { ${name}: ${v}; }\n` };
 }

@@ -28,10 +28,6 @@ jobs:
     name: bun fmt --check
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # NON-BLOCKING until the mass format (tooling/js/mass-format.sh) is on
-    # main: until then most files are unformatted and the job fails. Delete
-    # this line in the follow-up that makes it blocking.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 

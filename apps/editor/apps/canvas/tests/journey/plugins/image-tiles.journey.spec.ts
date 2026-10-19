@@ -135,17 +135,14 @@ test.describe("journey · the C-6 tile-fill loop", () => {
     //    is claim → ack → source → submit → rebuild, all async. ──
     await designer.runCommand(CMD_CLAIM);
     await expect
-      .poll(
-        async () => contentPixels(page, await designer.renderBytes()),
-        {
-          message:
-            "the plugin claimed the frame's image resource and served no " +
-            "tiles — the frame is blank. The claim evicts the cached " +
-            "tiles, so a fill loop that never runs is strictly worse than " +
-            "no claim at all",
-          timeout: 20_000,
-        },
-      )
+      .poll(async () => contentPixels(page, await designer.renderBytes()), {
+        message:
+          "the plugin claimed the frame's image resource and served no " +
+          "tiles — the frame is blank. The claim evicts the cached " +
+          "tiles, so a fill loop that never runs is strictly worse than " +
+          "no claim at all",
+        timeout: 20_000,
+      })
       .toBeGreaterThan(1000);
   });
 });

@@ -51,25 +51,33 @@ export function parseDataOrigins(raw: string | undefined): string[] {
   const out: string[] = [];
   for (const entry of raw.split(/[\s,]+/).filter(Boolean)) {
     if (entry.includes("*")) {
-      throw new Error(`${DATA_ORIGINS_ENV}: "${entry}" — wildcards are not allowed; list exact origins`);
+      throw new Error(
+        `${DATA_ORIGINS_ENV}: "${entry}" — wildcards are not allowed; list exact origins`,
+      );
     }
     let url: URL;
     try {
       url = new URL(entry);
     } catch {
-      throw new Error(`${DATA_ORIGINS_ENV}: "${entry}" is not an origin (expected https://host[:port])`);
+      throw new Error(
+        `${DATA_ORIGINS_ENV}: "${entry}" is not an origin (expected https://host[:port])`,
+      );
     }
     const secure = url.protocol === "https:";
     const localDev = url.protocol === "http:" && LOOPBACK.has(url.hostname);
     if (!secure && !localDev) {
-      throw new Error(`${DATA_ORIGINS_ENV}: "${entry}" — only https:// origins (http:// on loopback)`);
+      throw new Error(
+        `${DATA_ORIGINS_ENV}: "${entry}" — only https:// origins (http:// on loopback)`,
+      );
     }
     if (url.username || url.password) {
       throw new Error(`${DATA_ORIGINS_ENV}: "${entry}" carries credentials`);
     }
     const bare = entry.replace(/\/+$/, "");
     if (bare !== url.origin) {
-      throw new Error(`${DATA_ORIGINS_ENV}: "${entry}" is not an exact origin (did you mean ${url.origin}?)`);
+      throw new Error(
+        `${DATA_ORIGINS_ENV}: "${entry}" is not an exact origin (did you mean ${url.origin}?)`,
+      );
     }
     if (!out.includes(url.origin)) out.push(url.origin);
   }
@@ -78,7 +86,9 @@ export function parseDataOrigins(raw: string | undefined): string[] {
 
 /** The `connect-src` directive for a set of admitted data origins. */
 export function connectSrc(origins: readonly string[]): string {
-  return origins.length ? `${CONNECT_SRC_FLOOR} ${origins.join(" ")}` : CONNECT_SRC_FLOOR;
+  return origins.length
+    ? `${CONNECT_SRC_FLOOR} ${origins.join(" ")}`
+    : CONNECT_SRC_FLOOR;
 }
 
 /** Replace the `Content-Security-Policy:` line of a `_headers` file. Throws
@@ -92,6 +102,10 @@ export function rewriteHeadersCsp(headers: string, policy: string): string {
 }
 
 /** Whether the page's wall admits a consented origin. */
-export function wallAdmits(origin: string, admitted: readonly string[], self?: string): boolean {
+export function wallAdmits(
+  origin: string,
+  admitted: readonly string[],
+  self?: string,
+): boolean {
   return (self !== undefined && origin === self) || admitted.includes(origin);
 }

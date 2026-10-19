@@ -28,12 +28,24 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 
-import type { BundleHost, ElementId, MutationInput } from "@paged-media/plugin-api";
-import { createObjectRegistry, type CoreObjects, type HeadlessHost } from "@paged-media/plugin-sdk";
+import type {
+  BundleHost,
+  ElementId,
+  MutationInput,
+} from "@paged-media/plugin-api";
+import {
+  createObjectRegistry,
+  type CoreObjects,
+  type HeadlessHost,
+} from "@paged-media/plugin-sdk";
 import { DEFAULT_SOURCE } from "@paged-media/web-model";
 
 import { webBundle } from "../../src";
-import { createWebObjectModel, PLUGIN_ID, webAddress } from "../../src/object-model";
+import {
+  createWebObjectModel,
+  PLUGIN_ID,
+  webAddress,
+} from "../../src/object-model";
 import { openHost } from "../conformance/host";
 import { W1_EMPTY_PAGE } from "../fixtures/corpus";
 import { countingHost, settle } from "./counting-host";
@@ -71,12 +83,18 @@ describe("object model count budget @feat:plugin-web.object-model", () => {
           };
         }
         const v = Reflect.get(target, key, receiver) as unknown;
-        return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(target) : v;
+        return typeof v === "function"
+          ? (v as (...a: unknown[]) => unknown).bind(target)
+          : v;
       },
     });
     const { host, work } = countingHost(h.host as unknown as BundleHost);
     const registry = createObjectRegistry({ core: countedCore });
-    registry.register({ plugin: PLUGIN_ID, model: createWebObjectModel(host), parts: host.parts });
+    registry.register({
+      plugin: PLUGIN_ID,
+      model: createWebObjectModel(host),
+      parts: host.parts,
+    });
     await settle();
     work.reset();
 
@@ -96,14 +114,24 @@ describe("object model count budget @feat:plugin-web.object-model", () => {
     await settle();
     expect(out).toMatchObject({ applied: true, undoSteps: 1 });
 
-    if (process.env.PERF_SHOW) console.log("PERF objects.batch(10)", JSON.stringify(work.calls), commits.length);
+    if (process.env.PERF_SHOW)
+      console.log(
+        "PERF objects.batch(10)",
+        JSON.stringify(work.calls),
+        commits.length,
+      );
     expect(commits).toHaveLength(1);
     // The three labels ride that one commit.
-    expect(commits[0]!.filter((m) => m.op === "setPluginMetadata")).toHaveLength(3);
+    expect(
+      commits[0]!.filter((m) => m.op === "setPluginMetadata"),
+    ).toHaveLength(3);
     expect(work.count("document.mutate")).toBe(0);
     expect(work.count("document.tree")).toBe(1);
     expect(work.count("document.getMetadata")).toBe(3);
     expect(work.reads()).toBe(4);
-    expect(await registry.get(a[1]!, "vars")).toEqual({ kind: "value", value: { k: "v" } });
+    expect(await registry.get(a[1]!, "vars")).toEqual({
+      kind: "value",
+      value: { k: "v" },
+    });
   });
 });

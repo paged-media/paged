@@ -39,7 +39,9 @@ const NP = "--no-plugins";
 describe("paged ai", () => {
   it("reads the engine catalog published with this engine", () => {
     const c = loadCatalog();
-    expect(c.hostFunctions.some((f) => f.name === "paged.insertTextFrame")).toBe(true);
+    expect(
+      c.hostFunctions.some((f) => f.name === "paged.insertTextFrame"),
+    ).toBe(true);
     expect(c.settablePaths.length).toBeGreaterThan(100);
   });
 
@@ -47,10 +49,15 @@ describe("paged ai", () => {
     const s = await openSession(fx.paged, { plugins: [] });
     try {
       const engine = sessionEngine(s);
-      const run = await engine.runScript("console.log(JSON.parse(paged.pages()).length)");
+      const run = await engine.runScript(
+        "console.log(JSON.parse(paged.pages()).length)",
+      );
       expect(run).toMatchObject({ error: null, output: ["[log] 1"] });
       const png = await engine.renderPage!(1);
-      expect(png && [...png.subarray(1, 4)].map((b) => String.fromCharCode(b)).join("")).toBe("PNG");
+      expect(
+        png &&
+          [...png.subarray(1, 4)].map((b) => String.fromCharCode(b)).join(""),
+      ).toBe("PNG");
       expect(await engine.renderPage!(9)).toBeNull();
     } finally {
       s.dispose();
@@ -58,7 +65,15 @@ describe("paged ai", () => {
   });
 
   it("refuses a bad --mode before calling the model", async () => {
-    const r = await cli(["ai", fx.paged, "make it pop", "--mode", "poem", "--no-save", NP]);
+    const r = await cli([
+      "ai",
+      fx.paged,
+      "make it pop",
+      "--mode",
+      "poem",
+      "--no-save",
+      NP,
+    ]);
     expect(r.code).toBe(2);
     expect(r.json.error.message).toMatch(/--mode/);
   });
@@ -78,7 +93,16 @@ describe("paged ai", () => {
     const noOut = await cli(["ai", "--new", "a4", "a flyer", NP]);
     expect(noOut.code).toBe(2);
     expect(noOut.json.error.message).toMatch(/-o/);
-    const two = await cli(["ai", "--new", "a4", fx.paged, "a flyer", "-o", "x.paged", NP]);
+    const two = await cli([
+      "ai",
+      "--new",
+      "a4",
+      fx.paged,
+      "a flyer",
+      "-o",
+      "x.paged",
+      NP,
+    ]);
     expect(two.code).toBe(2);
     expect(two.json.error.message).toMatch(/only the brief/);
   });

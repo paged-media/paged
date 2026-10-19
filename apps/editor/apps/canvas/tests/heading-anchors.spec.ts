@@ -36,9 +36,14 @@ import { generatedFixture } from "./e2e/harness/fixtures";
 /** navigation.idml: two headings the resolver reports as anchors. */
 async function loadNavigation(page: Page): Promise<void> {
   await openCanvas(page);
-  await page.setInputFiles('input[type="file"]', generatedFixture("navigation"));
+  await page.setInputFiles(
+    'input[type="file"]',
+    generatedFixture("navigation"),
+  );
   await page.waitForFunction(
-    () => (globalThis as unknown as { __canvas?: { ready?: boolean } }).__canvas?.ready === true,
+    () =>
+      (globalThis as unknown as { __canvas?: { ready?: boolean } }).__canvas
+        ?.ready === true,
     null,
     { timeout: 30_000 },
   );
@@ -54,7 +59,9 @@ async function invoke(page: Page, id: string): Promise<void> {
     (cid) =>
       (
         globalThis as unknown as {
-          __canvas: { registries: { commands: { invoke: (id: string) => unknown } } };
+          __canvas: {
+            registries: { commands: { invoke: (id: string) => unknown } };
+          };
         }
       ).__canvas.registries.commands.invoke(cid),
     id,
@@ -71,7 +78,9 @@ test.describe("ED-20 — heading-anchor badges", () => {
     await expect(badges(page)).toHaveCount(0);
 
     await invoke(page, "paged.view.toggleHeadingAnchors");
-    await expect(badges(page).filter({ hasText: "Getting Started" })).toHaveCount(1);
+    await expect(
+      badges(page).filter({ hasText: "Getting Started" }),
+    ).toHaveCount(1);
     await invoke(page, "paged.view.toggleHeadingAnchors");
     await expect(badges(page)).toHaveCount(0);
   });
@@ -81,12 +90,16 @@ test.describe("ED-20 — heading-anchor badges", () => {
   }) => {
     await loadNavigation(page);
     await invoke(page, "paged.view.toggleHeadingAnchors");
-    await expect(badges(page).filter({ hasText: "1 — Getting Started" })).toHaveCount(1);
+    await expect(
+      badges(page).filter({ hasText: "1 — Getting Started" }),
+    ).toHaveCount(1);
 
     const reply = await page.evaluate(async () => {
       const c = (
         globalThis as unknown as {
-          __canvas: { client: { mutate: (m: unknown) => Promise<{ kind: string }> } };
+          __canvas: {
+            client: { mutate: (m: unknown) => Promise<{ kind: string }> };
+          };
         }
       ).__canvas;
       return (
@@ -97,9 +110,8 @@ test.describe("ED-20 — heading-anchor badges", () => {
       ).kind;
     });
     expect(reply).toBe("mutationApplied");
-    await expect(badges(page).filter({ hasText: "1 — Edited Getting Started" })).toHaveCount(
-      1,
-      { timeout: 10_000 },
-    );
+    await expect(
+      badges(page).filter({ hasText: "1 — Edited Getting Started" }),
+    ).toHaveCount(1, { timeout: 10_000 });
   });
 });

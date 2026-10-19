@@ -4,13 +4,13 @@ May 2026. Concept paper. Sections describe intent; where the implementation diff
 
 Sections not relevant outside the original planning context have been removed; numbering is unchanged.
 
-*Status note (2026-10-02): the two sections kept here are the ones that source comments cite by number (`crates/paged-canvas/src/gesture.rs`). What was built from them is recorded in [ADR 114](../adr/114-interaction-lives-in-the-engine.md) (hit testing, selection, gestures, snapping) and [ADR 110](../adr/110-one-undo-timeline.md) (the undo timeline). The companion concept is [canvas.md](canvas.md); its §11.3 defines the acceptance criterion AC-E-9 cited in §2.4.*
+_Status note (2026-10-02): the two sections kept here are the ones that source comments cite by number (`crates/paged-canvas/src/gesture.rs`). What was built from them is recorded in [ADR 114](../adr/114-interaction-lives-in-the-engine.md) (hit testing, selection, gestures, snapping) and [ADR 110](../adr/110-one-undo-timeline.md) (the undo timeline). The companion concept is [canvas.md](canvas.md); its §11.3 defines the acceptance criterion AC-E-9 cited in §2.4._
 
 ---
 
 ## 2. Architectural commitments (load-bearing)
 
-*Status note (2026-10-02): these commitments were built, with one difference in §2.1: the preview is not held in an ephemeral overlay. `update` writes the preview into the scene and rebuilds, and `commit` restores the snapshot and applies one operation (`crates/paged-canvas/src/gesture.rs`). See [ADR 114](../adr/114-interaction-lives-in-the-engine.md).*
+_Status note (2026-10-02): these commitments were built, with one difference in §2.1: the preview is not held in an ephemeral overlay. `update` writes the preview into the scene and rebuilds, and `commit` restores the snapshot and applies one operation (`crates/paged-canvas/src/gesture.rs`). See [ADR 114](../adr/114-interaction-lives-in-the-engine.md)._
 
 These are decided up front; everything below conforms to them.
 
@@ -38,7 +38,7 @@ in TS** beyond the camera viewport↔doc mapping that already exists.
 
 - **Document state** (persisted, undoable, in the scene graph, mutated
   only via Operations): frame bounds, `ItemTransform`, fill, z-order.
-- **Application state** (per-user, ephemeral, *not* in the Operation
+- **Application state** (per-user, ephemeral, _not_ in the Operation
   log): the element-selection set, the active tool, the viewport, and
   the in-flight gesture overlay. Element selection lives in the canvas
   app + a worker mirror (so geometry queries have a stable read), the
@@ -65,12 +65,12 @@ so everything is zoom-independent by construction (AC-E-9).
 
 ## 3. The mutation model for transforms
 
-*Status note (2026-10-02): this section predates the implementation; `apply.rs` is now the module `crates/paged-mutate/src/apply/`. `PropertyPath::FrameTransform` (§3.2) exists in `crates/paged-mutate/src/operation.rs`, and `crates/paged-mutate/src/apply/set_property.rs` handles frame bounds and frame transforms for text frames, rectangles, ovals, polygons and graphic lines (the transform also for groups). See [ADR 116](../adr/116-mutations-lowered-onto-operations.md).*
+_Status note (2026-10-02): this section predates the implementation; `apply.rs` is now the module `crates/paged-mutate/src/apply/`. `PropertyPath::FrameTransform` (§3.2) exists in `crates/paged-mutate/src/operation.rs`, and `crates/paged-mutate/src/apply/set_property.rs` handles frame bounds and frame transforms for text frames, rectangles, ovals, polygons and graphic lines (the transform also for groups). See [ADR 116](../adr/116-mutations-lowered-onto-operations.md)._
 
 ### 3.1 Move and resize reuse `FrameBounds` (no new Operation needed)
 
 A **move** shifts all four bounds by `(dx, dy)`; a **resize** changes
-the dragged edge(s). Both are expressible *today* as
+the dragged edge(s). Both are expressible _today_ as
 `SetProperty{ FrameBounds, Value::Bounds }` for TextFrame and
 Rectangle — `apply.rs` already implements it with inverse + the
 `frame_geometry` invalidation hint. This makes translate/resize the
@@ -82,7 +82,7 @@ frames carry both `bounds` (the content box) and an optional
 `item_transform` (placement + rotation + scale). For an
 **un-rotated** frame, editing bounds is exact and keeps text reflow
 intuitive. For a **rotated** frame, a screen-space translation must be
-applied in the *parent* space, i.e. composed into `item_transform.tx/ty`,
+applied in the _parent_ space, i.e. composed into `item_transform.tx/ty`,
 not into bounds (which live in the rotated content-box space). So:
 
 - Un-rotated frame, move/resize → `SetProperty{FrameBounds}`.
@@ -100,7 +100,7 @@ Add to `paged-mutate`:
   `None`), set the new matrix, return `Value::Transform(prev)` as the
   inverse value. `invert_set_property` already handles this generically.
 - Invalidation: `frame_geometry` (rotation/scale don't reflow text;
-  matrix scale of a text frame is a *visual* scale, not a reflow).
+  matrix scale of a text frame is a _visual_ scale, not a reflow).
 
 This is a contained, ~1-file extension mirroring the existing
 `FrameBounds` arm. Oval / Polygon / GraphicLine transform support
@@ -109,14 +109,14 @@ follows the same pattern when those node kinds graduate from
 
 ### 3.3 The gesture → Operation mapping
 
-| Gesture | Commit Operation |
-|---|---|
-| Translate (un-rotated) | `SetProperty{FrameBounds}` (shift all four) |
-| Translate (rotated) | `SetProperty{FrameTransform}` |
-| Resize edge/corner (text/rect) | `SetProperty{FrameBounds}` |
-| Rotate about pivot | `SetProperty{FrameTransform}` |
-| Scale about pivot | `SetProperty{FrameTransform}` (or `FrameBounds` for "resize" semantics) |
-| Multi-select any of the above | `Operation::Batch{ ops }` (one per node) |
+| Gesture                        | Commit Operation                                                        |
+| ------------------------------ | ----------------------------------------------------------------------- |
+| Translate (un-rotated)         | `SetProperty{FrameBounds}` (shift all four)                             |
+| Translate (rotated)            | `SetProperty{FrameTransform}`                                           |
+| Resize edge/corner (text/rect) | `SetProperty{FrameBounds}`                                              |
+| Rotate about pivot             | `SetProperty{FrameTransform}`                                           |
+| Scale about pivot              | `SetProperty{FrameTransform}` (or `FrameBounds` for "resize" semantics) |
+| Multi-select any of the above  | `Operation::Batch{ ops }` (one per node)                                |
 
 Scale's axes follow InDesign (`tools/indesign-export/scale-frame-probe.jsx`).
 One target, a frame or a group, scales along its own axes, so a rotated one
@@ -129,7 +129,7 @@ the anchor names (the opposite content handle) or the frame's centre.
 
 ### 3.4 Ephemeral overlay → preview rendering
 
-*Status note (2026-10-02): not built. A gesture preview is written into the scene and followed by a rebuild; the module comment of `crates/paged-canvas/src/gesture.rs` names the overlay as a later step. See [ADR 107](../adr/107-whole-document-build.md).*
+_Status note (2026-10-02): not built. A gesture preview is written into the scene and followed by a rebuild; the module comment of `crates/paged-canvas/src/gesture.rs` names the overlay as a later step. See [ADR 107](../adr/107-whole-document-build.md)._
 
 The gesture overlay is a small map `node_id → TransformOverride`
 (either a replacement `item_transform` or a replacement `bounds`) held
@@ -143,7 +143,7 @@ an extra lookup in the page slice.
 
 ### 3.5 Bridging the mutation-log fork
 
-*Status note (2026-10-02): built. `paged-canvas` depends on `paged-mutate`, and `LoggedMutation` in `crates/paged-canvas/src/model.rs` is the entry type of the one undo stack; text edits keep their own `TextOp` entries in it. See [ADR 110](../adr/110-one-undo-timeline.md).*
+_Status note (2026-10-02): built. `paged-canvas` depends on `paged-mutate`, and `LoggedMutation` in `crates/paged-canvas/src/model.rs` is the entry type of the one undo stack; text edits keep their own `TextOp` entries in it. See [ADR 110](../adr/110-one-undo-timeline.md)._
 
 `CanvasModel` currently owns a `TextOp` undo log; `paged-mutate` owns
 the `Operation` log; the two are disjoint and `paged-canvas` doesn't

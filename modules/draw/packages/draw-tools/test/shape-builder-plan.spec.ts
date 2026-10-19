@@ -76,14 +76,22 @@ const RIGHT = "1#1";
 
 /** Drag `from` → `to` through the machine over `faces`, sampling every 2 pt,
  *  the way pointer moves arrive. Returns what the gesture collected. */
-function drag(faces: readonly RegionFace[], from: [number, number], to: [number, number], alt = false) {
+function drag(
+  faces: readonly RegionFace[],
+  from: [number, number],
+  to: [number, number],
+  alt = false,
+) {
   const m = new ShapeBuilderMachine();
   m.setRegions(faces);
   m.handle({ type: "down", point: from, modifiers: { alt } });
   const steps = Math.ceil(Math.hypot(to[0] - from[0], to[1] - from[1]) / 2);
   for (let i = 1; i < steps; i++) {
     const t = i / steps;
-    m.handle({ type: "move", point: [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t] });
+    m.handle({
+      type: "move",
+      point: [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t],
+    });
   }
   return m.handle({ type: "up", point: to });
 }
@@ -92,14 +100,19 @@ function drag(faces: readonly RegionFace[], from: [number, number], to: [number,
  *  "merged", "kept by input i" (a rewrite), "inserted for input i", "under
  *  input i" (its owner was left untouched and still covers it), or
  *  "deleted". A face no one accounts for has VANISHED. */
-function fates(plan: ShapeBuildPlan, faces: readonly PlanarFaceRef[], swept: readonly string[]) {
+function fates(
+  plan: ShapeBuildPlan,
+  faces: readonly PlanarFaceRef[],
+  swept: readonly string[],
+) {
   const out = new Map<string, string>();
   for (const f of faces) {
     if (plan.merge?.faces.includes(f.id)) out.set(f.id, "merged");
     else if (swept.includes(f.id)) out.set(f.id, "deleted");
   }
   for (const r of plan.rewrites) out.set(r.face, `kept by ${r.input}`);
-  for (const ins of plan.inserts) out.set(ins.face, `inserted for ${ins.paintFrom}`);
+  for (const ins of plan.inserts)
+    out.set(ins.face, `inserted for ${ins.paintFrom}`);
   for (const f of faces) {
     if (!out.has(f.id) && plan.untouched.includes(faceOwner(f))) {
       out.set(f.id, `under ${faceOwner(f)}`);
@@ -121,7 +134,11 @@ describe("Shape Builder on a cross-shaped overlap [plugin-draw.shape-builder]", 
     expect(plan).not.toBeNull();
     // The merged path belongs to the vertical bar — the topmost input
     // covering a crossed face — and is carried by it.
-    expect(plan.merge).toEqual({ faces: [TOP, LEFT], owner: 0, carrier: "input" });
+    expect(plan.merge).toEqual({
+      faces: [TOP, LEFT],
+      owner: 0,
+      carrier: "input",
+    });
     // Nothing vanishes: every face is merged, kept or inserted.
     expect(Object.fromEntries(fates(plan, CROSS, swept))).toEqual({
       [TOP]: "merged",
@@ -203,7 +220,11 @@ describe("Shape Builder over ovals [plugin-draw.shape-builder]", () => {
 
   it("merging the left crescent and the lens: a fresh piece carries the merge, the right crescent stays", () => {
     const plan = planShapeBuild(2, OVALS, ["0#0", "0-1#0"], "keep", isPath)!;
-    expect(plan.merge).toEqual({ faces: ["0#0", "0-1#0"], owner: 0, carrier: "piece" });
+    expect(plan.merge).toEqual({
+      faces: ["0#0", "0-1#0"],
+      owner: 0,
+      carrier: "piece",
+    });
     expect(plan.rewrites).toEqual([]);
     expect(plan.inserts).toEqual([{ face: "1#0", paintFrom: 1 }]);
     expect(plan.deletes).toEqual([0, 1]);
@@ -211,7 +232,11 @@ describe("Shape Builder over ovals [plugin-draw.shape-builder]", () => {
 
   it("merging all three faces of two paths rewrites the front one and deletes the other", () => {
     const plan = planShapeBuild(2, OVALS, ["0#0", "0-1#0", "1#0"], "keep")!;
-    expect(plan.merge).toEqual({ faces: ["0#0", "0-1#0", "1#0"], owner: 0, carrier: "input" });
+    expect(plan.merge).toEqual({
+      faces: ["0#0", "0-1#0", "1#0"],
+      owner: 0,
+      carrier: "input",
+    });
     expect(plan.deletes).toEqual([1]);
   });
 

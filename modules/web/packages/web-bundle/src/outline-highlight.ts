@@ -32,8 +32,17 @@
 // paints no box for (`display: none`, an implied element) has nothing to
 // highlight.
 
-import type { BundleHost, ElementGeometryItem, ElementId } from "@paged-media/plugin-api";
-import { boxesForOutline, tagOutline, type InspectBox, type WebFrameSource } from "../../web-model/src";
+import type {
+  BundleHost,
+  ElementGeometryItem,
+  ElementId,
+} from "@paged-media/plugin-api";
+import {
+  boxesForOutline,
+  tagOutline,
+  type InspectBox,
+  type WebFrameSource,
+} from "../../web-model/src";
 
 import { resolveBindings } from "./bindings";
 import { engineDocument } from "./engine-document";
@@ -43,7 +52,11 @@ import { overlayChannel } from "./overlay-channel";
 const PX_PER_PT = 96 / 72;
 
 /** Frame-content point → page-local point. */
-export function contentToPage(g: ElementGeometryItem, x: number, y: number): [number, number] {
+export function contentToPage(
+  g: ElementGeometryItem,
+  x: number,
+  y: number,
+): [number, number] {
   const bx = g.bounds[1] + x;
   const by = g.bounds[0] + y;
   const m = g.itemTransform;
@@ -52,7 +65,10 @@ export function contentToPage(g: ElementGeometryItem, x: number, y: number): [nu
 }
 
 /** The page-local outlines of `boxes` in frame `g`. */
-export function boxOutlines(g: ElementGeometryItem, boxes: readonly InspectBox[]) {
+export function boxOutlines(
+  g: ElementGeometryItem,
+  boxes: readonly InspectBox[],
+) {
   if (!g.pageId) return [];
   const pageId = g.pageId;
   return boxes.map((b) => ({
@@ -67,7 +83,10 @@ export function boxOutlines(g: ElementGeometryItem, boxes: readonly InspectBox[]
   }));
 }
 
-function setOverlay(host: BundleHost, shapes: ReturnType<typeof boxOutlines> | null): void {
+function setOverlay(
+  host: BundleHost,
+  shapes: ReturnType<typeof boxOutlines> | null,
+): void {
   overlayChannel(host, "outline")(shapes);
 }
 
@@ -90,10 +109,18 @@ export async function highlightOutlineEntry(
   }
   const [g] = await host.document.elementGeometry([id]);
   if (!g?.bounds) return 0;
-  const widthPx = Math.round(Math.max(0, g.bounds[3] - g.bounds[1]) * PX_PER_PT);
-  const heightPx = Math.round(Math.max(0, g.bounds[2] - g.bounds[0]) * PX_PER_PT);
+  const widthPx = Math.round(
+    Math.max(0, g.bounds[3] - g.bounds[1]) * PX_PER_PT,
+  );
+  const heightPx = Math.round(
+    Math.max(0, g.bounds[2] - g.bounds[0]) * PX_PER_PT,
+  );
   const bound = (await resolveBindings(host, id, source)).vars;
-  const out = engine.renderInspected(engineDocument(source, bound).html, widthPx, heightPx);
+  const out = engine.renderInspected(
+    engineDocument(source, bound).html,
+    widthPx,
+    heightPx,
+  );
   if (!out) return 0;
   const boxes = boxesForOutline(out.boxes, tagOutline(source.html), index);
   setOverlay(host, boxOutlines(g, boxes));
@@ -111,7 +138,10 @@ type PickListener = (frameId: string, outlineIndex: number) => void;
 const pickListeners = new WeakMap<BundleHost, Set<PickListener>>();
 
 /** The panel follows presses on the canvas inside the frame's context. */
-export function onCanvasPick(host: BundleHost, listener: PickListener): () => void {
+export function onCanvasPick(
+  host: BundleHost,
+  listener: PickListener,
+): () => void {
   let set = pickListeners.get(host);
   if (!set) {
     set = new Set();
@@ -122,6 +152,10 @@ export function onCanvasPick(host: BundleHost, listener: PickListener): () => vo
 }
 
 /** Report the outline entry under a press in frame `frameId`. */
-export function reportCanvasPick(host: BundleHost, frameId: string, outlineIndex: number): void {
+export function reportCanvasPick(
+  host: BundleHost,
+  frameId: string,
+  outlineIndex: number,
+): void {
   for (const l of pickListeners.get(host) ?? []) l(frameId, outlineIndex);
 }

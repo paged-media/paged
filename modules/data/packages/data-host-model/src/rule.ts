@@ -60,5 +60,10 @@ export function toRuleApplication(result: RuleResult): RuleApplication {
       : result.apply.action === "paragraphStyle"
         ? ({ kind: "paragraph", name: result.apply.name } as const)
         : ({ kind: "table", name: result.apply.name } as const);
-  return { scope: result.scope, fires: result.fires, total: result.total, apply };
+  return {
+    scope: result.scope,
+    fires: result.fires,
+    total: result.total,
+    apply,
+  };
 }

@@ -113,7 +113,13 @@ interface CanvasRegistries {
     list(): Array<{ id: string; title: string; category?: string }>;
     get(id: string): { id: string; title: string } | undefined;
     invoke(id: string, payload?: unknown): Promise<unknown>;
-    observe(o: (e: { phase: string; invocation: { id: string }; error?: unknown }) => void): {
+    observe(
+      o: (e: {
+        phase: string;
+        invocation: { id: string };
+        error?: unknown;
+      }) => void,
+    ): {
       dispose(): void;
     };
   };
@@ -122,13 +128,23 @@ interface CanvasRegistries {
   menus: { list(): Array<{ path: string; command: string }> };
   keybindings: { list(): Array<{ key: string; command: string }> };
   importers: {
-    list(): Array<{ id: string; title: string; extensions: string[]; mimeTypes?: string[] }>;
+    list(): Array<{
+      id: string;
+      title: string;
+      extensions: string[];
+      mimeTypes?: string[];
+    }>;
     resolve(name: string, mime?: string): { id: string } | null;
     acceptExtensions(): string[];
   };
   exporters: { list(): Array<{ id: string }> };
   editContexts: {
-    list(): Array<{ type: string; entry: string; toolIds?: string[] | null; panelIds?: string[] | null }>;
+    list(): Array<{
+      type: string;
+      entry: string;
+      toolIds?: string[] | null;
+      panelIds?: string[] | null;
+    }>;
   };
   objectTypes: { list(): Array<{ type: string; editContextType?: string }> };
 }
@@ -139,14 +155,15 @@ interface CanvasGlobal {
     openPanel: (id: string) => void;
     registries: CanvasRegistries;
     client: {
-      executeScript: (s: string) => Promise<{ output: string[]; error: string | null }>;
+      executeScript: (
+        s: string,
+      ) => Promise<{ output: string[]; error: string | null }>;
       camera: { read: () => { scale: number; tx: number; ty: number } };
-      elementGeometry: (
-        ids: unknown[],
-      ) => Promise<
+      elementGeometry: (ids: unknown[]) => Promise<
         Array<{
           bounds: [number, number, number, number];
-          itemTransform?: [number, number, number, number, number, number] | null;
+          itemTransform?:
+            [number, number, number, number, number, number] | null;
         }>
       >;
     };
@@ -158,7 +175,10 @@ async function bootWithDocument(page: Page): Promise<void> {
   await page.setInputFiles('input[type="file"]', fixturePath("geometry"));
   await expect
     .poll(
-      () => page.evaluate(() => (globalThis as unknown as CanvasGlobal).__canvas.ready),
+      () =>
+        page.evaluate(
+          () => (globalThis as unknown as CanvasGlobal).__canvas.ready,
+        ),
       { timeout: 30_000 },
     )
     .toBe(true);
@@ -167,7 +187,10 @@ async function bootWithDocument(page: Page): Promise<void> {
 
 async function invoke(page: Page, id: string): Promise<void> {
   await page.evaluate(
-    (cid) => (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke(cid),
+    (cid) =>
+      (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke(cid),
     id,
   );
 }
@@ -182,9 +205,9 @@ async function openPanel(page: Page, id: string): Promise<void> {
 async function hidePanel(page: Page, id: string): Promise<void> {
   await page.evaluate(
     (pid) =>
-      (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke(
-        `paged.panel.hide.${pid}`,
-      ),
+      (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke(`paged.panel.hide.${pid}`),
     id,
   );
 }
@@ -201,8 +224,15 @@ async function frameCount(page: Page): Promise<number> {
       children?: unknown[];
     }>;
     let n = 0;
-    const visit = (node: { id?: { kind: string } | null; children?: unknown[] }) => {
-      if (node.id && (node.id.kind === "textFrame" || node.id.kind === "rectangle")) n += 1;
+    const visit = (node: {
+      id?: { kind: string } | null;
+      children?: unknown[];
+    }) => {
+      if (
+        node.id &&
+        (node.id.kind === "textFrame" || node.id.kind === "rectangle")
+      )
+        n += 1;
       for (const ch of (node.children ?? []) as typeof tree) visit(ch);
     };
     for (const root of tree) visit(root);
@@ -281,12 +311,16 @@ test.describe("plugin surface · paged.web", () => {
     expect([...c.panels].sort()).toEqual([...DECLARED.panels].sort());
     expect([...c.commands].sort()).toEqual([...DECLARED.commands].sort());
     expect([...c.importers]).toEqual([...DECLARED.importers]);
-    expect(c.editContexts.map((e) => e.type)).toEqual([...DECLARED.editContexts]);
+    expect(c.editContexts.map((e) => e.type)).toEqual([
+      ...DECLARED.editContexts,
+    ]);
     expect(c.objectTypes.map((o) => o.type)).toEqual([...DECLARED.objectTypes]);
 
     for (const id of c.panels) expect(live.panels, `panel ${id}`).toContain(id);
-    for (const id of c.commands) expect(live.commands, `command ${id}`).toContain(id);
-    for (const id of c.importers) expect(live.importers, `importer ${id}`).toContain(id);
+    for (const id of c.commands)
+      expect(live.commands, `command ${id}`).toContain(id);
+    for (const id of c.importers)
+      expect(live.importers, `importer ${id}`).toContain(id);
     for (const e of c.editContexts)
       expect(live.editContexts, `editContext ${e.type}`).toContain(e.type);
     for (const o of c.objectTypes)
@@ -295,7 +329,9 @@ test.describe("plugin surface · paged.web", () => {
     // paged.web declares NO exporter — a baked web frame leaves through
     // the host's own IDML/PDF writers, which is the ADR-020 Phase-C
     // design. Assert the absence so a silently-added one is noticed.
-    expect(live.exporters.filter((e) => e.startsWith("media.paged.web."))).toEqual([]);
+    expect(
+      live.exporters.filter((e) => e.startsWith("media.paged.web.")),
+    ).toEqual([]);
 
     // Same void the sheet manifest declares into: `partTypes` has no
     // registry on the host side. Declared, unreadable, unverifiable.
@@ -317,18 +353,28 @@ test.describe("plugin surface · paged.web", () => {
     // With nothing selected the panel mounts its EMPTY state — an honest
     // surface rather than a blank tab.
     await openPanel(page, SOURCE_PANEL);
-    await expect(page.locator('[data-web-panel="empty"]')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('[data-web-panel="empty"]')).toBeVisible({
+      timeout: 15_000,
+    });
     // …and the empty state offers the verb itself (2026-10-11 panel pass):
     // "Insert web frame" right where the designer is looking.
-    const insertButton = page.locator('[data-web-panel="empty"] [data-web-insert]');
+    const insertButton = page.locator(
+      '[data-web-panel="empty"] [data-web-insert]',
+    );
     await expect(insertButton).toHaveText("Insert web frame");
 
     // With a web frame selected it mounts the source editors. The empty
     // state's button inserts one and selects it.
     await insertButton.click();
-    await expect(page.locator('[data-web-panel="source"]')).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator("[data-web-html] [data-code-input]")).toBeVisible();
-    await expect(page.locator("[data-web-css] [data-code-input]")).toBeVisible();
+    await expect(page.locator('[data-web-panel="source"]')).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(
+      page.locator("[data-web-html] [data-code-input]"),
+    ).toBeVisible();
+    await expect(
+      page.locator("[data-web-css] [data-code-input]"),
+    ).toBeVisible();
   });
 
   // ── 3. COMMANDS ──────────────────────────────────────────────────
@@ -341,9 +387,15 @@ test.describe("plugin surface · paged.web", () => {
       return r.commands
         .list()
         .filter((c) => c.id.startsWith("media.paged.web.command."))
-        .map((c) => ({ id: c.id, title: c.title, category: c.category ?? null }));
+        .map((c) => ({
+          id: c.id,
+          title: c.title,
+          category: c.category ?? null,
+        }));
     });
-    expect(registered.map((c) => c.id).sort()).toEqual([...DECLARED.commands].sort());
+    expect(registered.map((c) => c.id).sort()).toEqual(
+      [...DECLARED.commands].sort(),
+    );
     for (const c of registered) {
       expect(c.title, `${c.id} has a palette title`).toBeTruthy();
       expect(c.category, `${c.id} is grouped under a category`).toBe("Web");
@@ -415,7 +467,10 @@ test.describe("plugin surface · paged.web", () => {
       return threw;
     }, FLOW_COMMANDS);
     expect(outcome, "the flow commands decline rather than throw").toEqual([]);
-    expect(await frameCount(page), "declining changed nothing on the page").toBe(before);
+    expect(
+      await frameCount(page),
+      "declining changed nothing on the page",
+    ).toBe(before);
 
     // With ONE web frame selected, threading still has nothing to thread
     // INTO — the second frame of a flow does not exist — so the same
@@ -435,7 +490,10 @@ test.describe("plugin surface · paged.web", () => {
       return threw;
     }, FLOW_COMMANDS);
     expect(outcome2).toEqual([]);
-    expect(await frameCount(page), "a lone frame is not silently threaded").toBe(withFrame);
+    expect(
+      await frameCount(page),
+      "a lone frame is not silently threaded",
+    ).toBe(withFrame);
 
     test.info().annotations.push({
       type: "surface-finding",
@@ -454,10 +512,16 @@ test.describe("plugin surface · paged.web", () => {
   }) => {
     const wiring = await page.evaluate(() => {
       const r = (globalThis as unknown as CanvasGlobal).__canvas.registries;
-      const entry = r.importers.list().find((i) => i.id === "media.paged.web.importer.html");
+      const entry = r.importers
+        .list()
+        .find((i) => i.id === "media.paged.web.importer.html");
       return {
         entry: entry
-          ? { title: entry.title, ext: entry.extensions, mime: entry.mimeTypes ?? [] }
+          ? {
+              title: entry.title,
+              ext: entry.extensions,
+              mime: entry.mimeTypes ?? [],
+            }
           : null,
         byHtml: r.importers.resolve("page.html")?.id ?? null,
         byHtm: r.importers.resolve("page.htm")?.id ?? null,
@@ -483,9 +547,13 @@ test.describe("plugin surface · paged.web", () => {
     const before = await frameCount(page);
     await page.evaluate(async () => {
       const r = (globalThis as unknown as CanvasGlobal).__canvas.registries;
-      const imp = r.importers.resolve("line-sheet.html", "text/html") as
-        | { import: (f: { name: string; bytes: Uint8Array; mimeType: string }) => Promise<void> }
-        | null;
+      const imp = r.importers.resolve("line-sheet.html", "text/html") as {
+        import: (f: {
+          name: string;
+          bytes: Uint8Array;
+          mimeType: string;
+        }) => Promise<void>;
+      } | null;
       if (!imp) throw new Error("no importer resolved for .html");
       const html =
         "<html><head><style>h1{color:#204}</style></head>" +
@@ -497,7 +565,9 @@ test.describe("plugin surface · paged.web", () => {
       });
     });
 
-    await expect.poll(() => frameCount(page), { timeout: 20_000 }).toBe(before + 1);
+    await expect
+      .poll(() => frameCount(page), { timeout: 20_000 })
+      .toBe(before + 1);
     const html = page.locator("[data-web-html] [data-code-input]");
     await expect(html).toBeVisible({ timeout: 15_000 });
     await expect(html).toHaveValue(/Imported line sheet/);
@@ -520,11 +590,15 @@ test.describe("plugin surface · paged.web", () => {
       };
     });
     expect(declared.entry).toBe("doubleClick");
-    expect(declared.objectRoutesTo, "the webFrame object type routes to its context").toBe(
-      "webFrame",
-    );
+    expect(
+      declared.objectRoutesTo,
+      "the webFrame object type routes to its context",
+    ).toBe("webFrame");
     expect(declared.panelIds).toEqual([SOURCE_PANEL]);
-    expect(declared.toolIds, "the webFrame context restricts the rail to nothing").toEqual([]);
+    expect(
+      declared.toolIds,
+      "the webFrame context restricts the rail to nothing",
+    ).toEqual([]);
 
     await invoke(page, INSERT);
     const frame = await expect
@@ -547,7 +621,9 @@ test.describe("plugin surface · paged.web", () => {
     await page.mouse.dblclick(at!.x, at!.y);
 
     await expect(breadcrumb).toBeVisible({ timeout: 15_000 });
-    await expect(breadcrumb.locator('[data-edit-context-crumb="webFrame"]')).toHaveCount(1);
+    await expect(
+      breadcrumb.locator('[data-edit-context-crumb="webFrame"]'),
+    ).toHaveCount(1);
     // onEnter raised the context's own panel.
     await expect(html).toBeVisible({ timeout: 10_000 });
     // The bar states where you are and that the rail is empty on purpose.
@@ -591,18 +667,28 @@ test.describe("plugin surface · paged.web", () => {
     // count it rather than asserting visibility.
     const caret = page.locator('svg polyline[stroke="var(--overlay-snap)"]');
     await expect
-      .poll(() => caret.count(), { timeout: 10_000, message: "entering places the caret" })
+      .poll(() => caret.count(), {
+        timeout: 10_000,
+        message: "entering places the caret",
+      })
       .toBeGreaterThan(0);
 
     await page.keyboard.press("Escape");
     await expect
-      .poll(() => caret.count(), { timeout: 10_000, message: "the first Esc ends the text edit" })
+      .poll(() => caret.count(), {
+        timeout: 10_000,
+        message: "the first Esc ends the text edit",
+      })
       .toBe(0);
     await expect(breadcrumb, "…and the context stays").toBeVisible();
-    await expect(breadcrumb.locator('[data-edit-context-crumb="webFrame"]')).toHaveCount(1);
+    await expect(
+      breadcrumb.locator('[data-edit-context-crumb="webFrame"]'),
+    ).toHaveCount(1);
 
     await page.keyboard.press("Escape");
-    await expect(breadcrumb, "the second Esc leaves the context").toHaveCount(0);
+    await expect(breadcrumb, "the second Esc leaves the context").toHaveCount(
+      0,
+    );
   });
 
   // ── 6. AUDIT — is any of this REACHABLE? ─────────────────────────
@@ -614,12 +700,28 @@ test.describe("plugin surface · paged.web", () => {
       const r = (globalThis as unknown as CanvasGlobal).__canvas.registries;
       const mine = (s: string) => s.startsWith("media.paged.web.");
       return {
-        tools: r.tools.list().map((t) => t.id).filter(mine),
-        pluginToolsTotal: r.tools.list().filter((t) => t.id.startsWith("media.paged.")).length,
-        menuItems: r.menus.list().filter((m) => mine(m.command)).map((m) => m.path),
-        keybindings: r.keybindings.list().filter((k) => mine(k.command)).map((k) => k.key),
-        railPanels: r.panels.list().filter((p) => p.rail).map((p) => p.id),
-        insertTitle: r.commands.get("media.paged.web.command.insertWebFrame")?.title ?? null,
+        tools: r.tools
+          .list()
+          .map((t) => t.id)
+          .filter(mine),
+        pluginToolsTotal: r.tools
+          .list()
+          .filter((t) => t.id.startsWith("media.paged.")).length,
+        menuItems: r.menus
+          .list()
+          .filter((m) => mine(m.command))
+          .map((m) => m.path),
+        keybindings: r.keybindings
+          .list()
+          .filter((k) => mine(k.command))
+          .map((k) => k.key),
+        railPanels: r.panels
+          .list()
+          .filter((p) => p.rail)
+          .map((p) => p.id),
+        insertTitle:
+          r.commands.get("media.paged.web.command.insertWebFrame")?.title ??
+          null,
         // For contrast: the HOST hand-curates its own creation verbs into
         // the Object menu, and even hand-curates one for a PLUGIN
         // (File ▸ Open PDF… routes to paged.pdf's importer).
@@ -627,12 +729,17 @@ test.describe("plugin surface · paged.web", () => {
           .list()
           .filter((m) => m.path.startsWith("Object/Insert"))
           .map((m) => m.path),
-        pdfCourtesyItem: r.menus.list().some((m) => m.path === "File/Open PDF…"),
+        pdfCourtesyItem: r.menus
+          .list()
+          .some((m) => m.path === "File/Open PDF…"),
       };
     });
 
     expect(reach.tools, "paged.web contributes no tool").toEqual([]);
-    expect(reach.pluginToolsTotal, "the tool door works — other bundles use it").toBeGreaterThan(10);
+    expect(
+      reach.pluginToolsTotal,
+      "the tool door works — other bundles use it",
+    ).toBeGreaterThan(10);
     // UPDATED 2026-08-22 by C1. This assertion used to read `.toEqual([])`
     // — "paged.web contributes no menu item" — and it was written to go
     // RED the day that stopped being true, which is exactly what it did.
@@ -665,11 +772,22 @@ test.describe("plugin surface · paged.web", () => {
       reach.menuItems.some((p) => p.startsWith("Web/")),
       "and the flow verbs get a top level of their own",
     ).toBe(true);
-    expect(reach.keybindings, "paged.web contributes no keybinding").toEqual([]);
-    expect(reach.railPanels, "no panel opted into the K-8 rail launcher").toEqual([]);
+    expect(reach.keybindings, "paged.web contributes no keybinding").toEqual(
+      [],
+    );
+    expect(
+      reach.railPanels,
+      "no panel opted into the K-8 rail launcher",
+    ).toEqual([]);
     expect(reach.insertTitle).toBe("Insert web frame");
-    expect(reach.hostInsertItems.length, "the host curates its OWN insert verbs").toBeGreaterThan(3);
-    expect(reach.pdfCourtesyItem, "the host even curates a menu item for paged.pdf").toBe(true);
+    expect(
+      reach.hostInsertItems.length,
+      "the host curates its OWN insert verbs",
+    ).toBeGreaterThan(3);
+    expect(
+      reach.pdfCourtesyItem,
+      "the host even curates a menu item for paged.pdf",
+    ).toBe(true);
 
     await expect(page.locator('[data-tool-rail="ready"]')).toBeVisible();
     await expect(
@@ -697,7 +815,9 @@ test.describe("plugin surface · paged.web", () => {
         .getByRole("button", { name: "Plugins" })
         .click();
       await page.locator('[data-menu-submenu="Web"]').hover();
-      await expect(page.getByRole("menuitem", { name: "Web source", exact: true })).toHaveCount(1);
+      await expect(
+        page.getByRole("menuitem", { name: "Web source", exact: true }),
+      ).toHaveCount(1);
     };
 
     await openWindowMenu();
@@ -714,7 +834,9 @@ test.describe("plugin surface · paged.web", () => {
     // carries no `when`. The two surfaces disagree.
     const paletteUngated = await page.evaluate(() => {
       const r = (globalThis as unknown as CanvasGlobal).__canvas.registries;
-      const cmd = r.commands.get("paged.panel.show.media.paged.web.panel.source");
+      const cmd = r.commands.get(
+        "paged.panel.show.media.paged.web.panel.source",
+      );
       return Boolean(cmd) && !("when" in (cmd ?? {}));
     });
     expect(paletteUngated).toBe(true);
@@ -730,13 +852,18 @@ test.describe("plugin surface · paged.web", () => {
     // beside the frame (the likely cause of this test's intermittent
     // failures; not reproduced locally). Wait for the panel, then re-read
     // the point on every attempt until the double-click enters the context.
-    await expect(page.locator("[data-web-html] [data-code-input]")).toBeVisible({
-      timeout: 10_000,
-    });
+    await expect(page.locator("[data-web-html] [data-code-input]")).toBeVisible(
+      {
+        timeout: 10_000,
+      },
+    );
     const breadcrumb = page.locator("[data-edit-context-breadcrumb]");
     await expect(async () => {
       const at = await elementScreenCenter(page, frame!);
-      expect(at, "the inserted web frame has on-screen geometry").not.toBeNull();
+      expect(
+        at,
+        "the inserted web frame has on-screen geometry",
+      ).not.toBeNull();
       await page.mouse.dblclick(at!.x, at!.y);
       await expect(breadcrumb).toBeVisible({ timeout: 3_000 });
     }).toPass({ timeout: 20_000 });

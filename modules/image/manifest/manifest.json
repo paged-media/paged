@@ -9,16 +9,8 @@
       "read": "broad",
       "write": "scoped"
     },
-    "rendering": [
-      "sceneLayer",
-      "hitTest",
-      "resourceProvider",
-      "overlay"
-    ],
-    "assets": [
-      "images",
-      "fonts"
-    ],
+    "rendering": ["sceneLayer", "hitTest", "resourceProvider", "overlay"],
+    "assets": ["images", "fonts"],
     "network": false,
     "workers": {
       "max": 4,
@@ -108,9 +100,7 @@
       "media.paged.image.tool.patch",
       "media.paged.image.tool.type"
     ],
-    "importers": [
-      "media.paged.image.importer.raster"
-    ],
+    "importers": ["media.paged.image.importer.raster"],
     "exporters": [
       "media.paged.image.exporter.psd",
       "media.paged.image.exporter.png",

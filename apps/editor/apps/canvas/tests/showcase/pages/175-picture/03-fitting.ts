@@ -67,19 +67,32 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   const page = p(74);
   const elements: string[] = [];
 
-  const head = await proseFrame(ctx, page, [60, 58, 492, 84], [
-    { text: "The fitting model, and the lane that lasts", style: STYLE.head1 },
-  ]);
-  const intro = await proseFrame(ctx, page, [60, 88, 492, 140], [
-    {
-      text:
-        "The same mountain ridge four times, in frames cut against its " +
-        "aspect on purpose. Each label names the properties that produced " +
-        "the geometry — the enum records the intent, the crops and the " +
-        "inner transform do the work.",
-      style: STYLE.bodySmall,
-    },
-  ]);
+  const head = await proseFrame(
+    ctx,
+    page,
+    [60, 58, 492, 84],
+    [
+      {
+        text: "The fitting model, and the lane that lasts",
+        style: STYLE.head1,
+      },
+    ],
+  );
+  const intro = await proseFrame(
+    ctx,
+    page,
+    [60, 88, 492, 140],
+    [
+      {
+        text:
+          "The same mountain ridge four times, in frames cut against its " +
+          "aspect on purpose. Each label names the properties that produced " +
+          "the geometry — the enum records the intent, the crops and the " +
+          "inner transform do the work.",
+        style: STYLE.bodySmall,
+      },
+    ],
+  );
   elements.push(head.frameId, intro.frameId);
 
   /** A placed exhibit: link + inline bytes + the given fitting decor. */
@@ -121,10 +134,16 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await exhibit(
     [60, 150, 60 + FRAME_W, 150 + FRAME_H],
     [
-      { path: "frameFittingType", value: { type: "text", value: "FillProportionally" } },
+      {
+        path: "frameFittingType",
+        value: { type: "text", value: "FillProportionally" },
+      },
       {
         path: "frameFittingCrops",
-        value: { type: "bounds", value: [0, -coverOverhang, 0, -coverOverhang] },
+        value: {
+          type: "bounds",
+          value: [0, -coverOverhang, 0, -coverOverhang],
+        },
       },
     ],
     [60, 304, 250, 352],
@@ -135,7 +154,10 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await exhibit(
     [292, 150, 292 + FRAME_W, 150 + FRAME_H],
     [
-      { path: "frameFittingType", value: { type: "text", value: "Proportionally" } },
+      {
+        path: "frameFittingType",
+        value: { type: "text", value: "Proportionally" },
+      },
       {
         path: "frameFittingCrops",
         value: { type: "bounds", value: [containBand, 0, containBand, 0] },
@@ -149,8 +171,14 @@ export async function build(ctx: PageContext): Promise<PageReport> {
   await exhibit(
     [60, 364, 60 + FRAME_W, 364 + FRAME_H],
     [
-      { path: "frameFittingType", value: { type: "text", value: "FitContentToFrame" } },
-      { path: "frameFittingReferencePoint", value: { type: "text", value: "BottomRightPoint" } },
+      {
+        path: "frameFittingType",
+        value: { type: "text", value: "FitContentToFrame" },
+      },
+      {
+        path: "frameFittingReferencePoint",
+        value: { type: "text", value: "BottomRightPoint" },
+      },
       { path: "frameAutoFit", value: { type: "bool", value: true } },
     ],
     [60, 518, 250, 566],
@@ -208,23 +236,32 @@ export async function build(ctx: PageContext): Promise<PageReport> {
     fit: null,
   });
   const beforeReplace = await doc.renderPage(page);
-  const inlineBytes = await replaceBytesFromFile(ctx, inline, derived("apples.webp"));
+  const inlineBytes = await replaceBytesFromFile(
+    ctx,
+    inline,
+    derived("apples.webp"),
+  );
   // Attribution: the pixels that arrive now are the REPLACE's.
   await doc.expectRenderChanged(page, beforeReplace);
   elements.push(inline);
 
-  const bandCaption = await proseFrame(ctx, page, [302, 570, 492, 638], [
-    {
-      text:
-        "Left: an image element whose link resolves to nothing — the " +
-        "placeholder is the engine saying so. Right: the same start, then " +
-        `${inlineBytes.toLocaleString("en-US")} bytes inline through ` +
-        "replaceImageBytes. The inline lane needs no resolver and " +
-        "survives the container round trip; every photograph in this " +
-        "chapter rides it.",
-      style: STYLE.specValue,
-    },
-  ]);
+  const bandCaption = await proseFrame(
+    ctx,
+    page,
+    [302, 570, 492, 638],
+    [
+      {
+        text:
+          "Left: an image element whose link resolves to nothing — the " +
+          "placeholder is the engine saying so. Right: the same start, then " +
+          `${inlineBytes.toLocaleString("en-US")} bytes inline through ` +
+          "replaceImageBytes. The inline lane needs no resolver and " +
+          "survives the container round trip; every photograph in this " +
+          "chapter rides it.",
+        style: STYLE.specValue,
+      },
+    ],
+  );
   elements.push(bandCaption.frameId);
   expect(inlineBytes).toBeGreaterThan(0);
 

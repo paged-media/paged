@@ -34,7 +34,9 @@ export interface LiveCall {
   run: string;
 }
 
-export type ToolContent = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
+export type ToolContent =
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mimeType: string };
 
 /** An MCP `CallToolResult`. */
 export interface ToolResult {
@@ -61,20 +63,29 @@ export async function connectLive(
   onState("connecting");
   const resp = await fetch(`${server}/v1/live`, {
     method: "POST",
-    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    headers: {
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+    },
     body: JSON.stringify(info),
   });
   if (!resp.ok) {
     onState("closed", `the server refused (${resp.status})`);
     throw new Error(`the server refused the connection (${resp.status})`);
   }
-  const { session, url } = (await resp.json()) as { session: string; url: string };
+  const { session, url } = (await resp.json()) as {
+    session: string;
+    url: string;
+  };
   const ws = new WebSocket(`${server.replace(/^http/, "ws")}${url}`);
   let alive: ReturnType<typeof setInterval> | undefined;
   ws.onopen = () => {
     onState("open");
     ws.send(JSON.stringify({ type: "hello", ...info }));
-    alive = setInterval(() => ws.readyState === WebSocket.OPEN && ws.send('{"type":"ping"}'), 30_000);
+    alive = setInterval(
+      () => ws.readyState === WebSocket.OPEN && ws.send('{"type":"ping"}'),
+      30_000,
+    );
   };
   ws.onclose = (e) => {
     clearInterval(alive);
@@ -92,9 +103,18 @@ export async function connectLive(
     try {
       result = await handle(msg as LiveCall);
     } catch (err) {
-      result = { content: [{ type: "text", text: err instanceof Error ? err.message : String(err) }], isError: true };
+      result = {
+        content: [
+          {
+            type: "text",
+            text: err instanceof Error ? err.message : String(err),
+          },
+        ],
+        isError: true,
+      };
     }
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "result", id: msg.id, result }));
+    if (ws.readyState === WebSocket.OPEN)
+      ws.send(JSON.stringify({ type: "result", id: msg.id, result }));
   };
   return {
     session,

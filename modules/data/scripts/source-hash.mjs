@@ -75,7 +75,9 @@ export function inputs() {
     }
   }
   files.push(
-    ...filesUnder(join(root, "registry", "functions")).filter((f) => f.endsWith(".yaml")),
+    ...filesUnder(join(root, "registry", "functions")).filter((f) =>
+      f.endsWith(".yaml"),
+    ),
   );
   for (const f of ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml"]) {
     files.push(join(root, f));

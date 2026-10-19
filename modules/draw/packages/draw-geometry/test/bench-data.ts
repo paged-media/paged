@@ -134,7 +134,10 @@ export type Cubic = [Vec2, Vec2, Vec2, Vec2];
 
 /** `segments` cubics along an S-curve, and a click 5 pt off each — the
  *  nearest-point search over a long path. */
-export function cubicRun(segments: number): { cubics: Cubic[]; clicks: Vec2[] } {
+export function cubicRun(segments: number): {
+  cubics: Cubic[];
+  clicks: Vec2[];
+} {
   const next = lcg(BENCH_SEED);
   const cubics: Cubic[] = [];
   const clicks: Vec2[] = [];

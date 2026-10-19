@@ -58,19 +58,15 @@ const MANIFEST = (gpu?: GpuCapability): PluginManifest => ({
 });
 
 function makeHost(gpu?: GpuCapability) {
-  return createBundleHost(
-    () => ({}) as unknown as PagedEditor,
-    MANIFEST(gpu),
-    {
-      console: silent,
-      storage: mapBacking(),
-      capabilityMode: "enforce",
-    },
-  );
+  return createBundleHost(() => ({}) as unknown as PagedEditor, MANIFEST(gpu), {
+    console: silent,
+    storage: mapBacking(),
+    capabilityMode: "enforce",
+  });
 }
 
 describe("capabilities.gpu (I-07 / C-1 Stage B realm-local)", () => {
-  it("supports(\"gpu@1\") reflects the DECLARATION (no host backend to wire)", () => {
+  it('supports("gpu@1") reflects the DECLARATION (no host backend to wire)', () => {
     // Declaring realm:"bundle" blesses the realm-local WebGPU usage — the
     // probe is true purely from the manifest (there is no device door whose
     // wiring it could depend on).

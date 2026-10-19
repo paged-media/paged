@@ -23,12 +23,21 @@
 // tarball with `npm publish <tgz>`, because npm does OIDC trusted publishing.
 
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 const [dirArg, destArg] = process.argv.slice(2);
 if (!dirArg || !destArg) {
-  console.error("usage: bun tooling/js/pack.mjs <package dir> <destination dir>");
+  console.error(
+    "usage: bun tooling/js/pack.mjs <package dir> <destination dir>",
+  );
   process.exit(2);
 }
 const dir = resolve(dirArg);
@@ -39,11 +48,32 @@ const REPO = resolve(dirname(new URL(import.meta.url).pathname), "..", "..");
 // The fields pnpm moves out of publishConfig, and the scripts it drops
 // (@pnpm/exportable-manifest).
 const PUBLISH_CONFIG_FIELDS = [
-  "bin", "type", "imports", "main", "module", "typings", "types", "exports",
-  "browser", "esnext", "es2015", "unpkg", "umd:main", "os", "cpu", "libc",
+  "bin",
+  "type",
+  "imports",
+  "main",
+  "module",
+  "typings",
+  "types",
+  "exports",
+  "browser",
+  "esnext",
+  "es2015",
+  "unpkg",
+  "umd:main",
+  "os",
+  "cpu",
+  "libc",
   "typesVersions",
 ];
-const PREPUBLISH_SCRIPTS = ["prepublishOnly", "prepack", "prepare", "postpack", "publish", "postpublish"];
+const PREPUBLISH_SCRIPTS = [
+  "prepublishOnly",
+  "prepack",
+  "prepare",
+  "postpack",
+  "publish",
+  "postpublish",
+];
 const isLicense = (name) => /^licen[cs]e(\..*)?$/i.test(name);
 
 const original = readFileSync(file, "utf8");

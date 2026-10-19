@@ -111,7 +111,9 @@ export class PencilMachine {
           this.options.minSampleDistance ?? DEFAULT_MIN_SAMPLE_DISTANCE;
         if (dist(event.point, last) >= floor) {
           this.samples.push(clone(event.point));
-          this.pressures.push(clampPressure(event.pressure ?? NEUTRAL_PRESSURE));
+          this.pressures.push(
+            clampPressure(event.pressure ?? NEUTRAL_PRESSURE),
+          );
         }
         return this.snapshot(null);
       }

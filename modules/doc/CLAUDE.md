@@ -42,7 +42,7 @@ Rules for every code change in this repo:
    ending in `__feat__<id_with_underscores>` or containing `[<id>]`. Otherwise an entry in
    `cockpit/test-map.yaml`.
 3. STATUS CHANGE → `claims:` in the feature file, never prose. "X is now shipped/partial" is a
-   claim edit; whether it *works* is computed from evidence and cannot be written.
+   claim edit; whether it _works_ is computed from evidence and cannot be written.
 4. BEFORE claiming a feature done: `cockpit feature <id> --json` (or its page in
    `cockpit serve`) — done means the linked tests are green and were produced after the
    latest implementation commit.

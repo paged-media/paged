@@ -1,0 +1,25 @@
+$ paged-node export <TMP>/min.idml -o <TMP>/out.paged --no-plugins
+# exit 0
+# stdout
+{
+  "path": "<TMP>/out.paged",
+  "format": "paged",
+  "bytes": <N>,
+  "diagnostics": []
+}
+# stderr
+(empty)
+# structure
+mimetype
+designmap.xml
+META-INF/container.xml
+Resources/Graphic.xml
+Resources/Styles.xml
+Resources/Fonts.xml
+Resources/Preferences.xml
+Spreads/Spread_us.xml
+XML/BackingStory.xml
+XML/Tags.xml
+MasterSpreads/MasterSpread_um.xml
+manifest.json
+paged/core/model/document.pgm

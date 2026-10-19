@@ -117,7 +117,11 @@ async function pathAnchorsOf(
   return page.evaluate(async (r) => {
     const c = (
       globalThis as unknown as {
-        __canvas: { client: { pathAnchors: (id: unknown) => Promise<PathAnchorsResult | null> } };
+        __canvas: {
+          client: {
+            pathAnchors: (id: unknown) => Promise<PathAnchorsResult | null>;
+          };
+        };
       }
     ).__canvas;
     return c.client.pathAnchors(r).catch(() => null);
@@ -178,7 +182,10 @@ test.describe("journey · paged.draw pro tools", () => {
     //    + fits the samples and commits ONE insertPath → a new path. ──
     const before = await designer.renderBytes();
     const polysBefore = await designer.count("polygon");
-    await invokeCommand(page, "paged.tool.activate.media.paged.draw.tool.pencil");
+    await invokeCommand(
+      page,
+      "paged.tool.activate.media.paged.draw.tool.pencil",
+    );
     const arc: Array<{ x: number; y: number }> = [];
     for (let i = 0; i <= 8; i++) {
       const t = i / 8;
@@ -225,14 +232,22 @@ test.describe("journey · paged.draw pro tools", () => {
     //    drag on canvas re-aims the axis (frameGradientFillAngle /
     //    Length). Assert one of the two axis props became a number. ──
     try {
-      const rid = await designer.drawRectangle({ x0: 160, y0: 520, x1: 420, y1: 660 });
+      const rid = await designer.drawRectangle({
+        x0: 160,
+        y0: 520,
+        x1: 420,
+        y1: 660,
+      });
       const rref = { kind: "rectangle", id: rid };
       await designer.selectElement("rectangle", rid);
       await invokeCommand(page, "media.paged.draw.command.fillGradientLinear");
       await expect
-        .poll(async () => (await propOf(page, rref, "frameFillColor"))?.value ?? "", {
-          timeout: 6_000,
-        })
+        .poll(
+          async () => (await propOf(page, rref, "frameFillColor"))?.value ?? "",
+          {
+            timeout: 6_000,
+          },
+        )
         .toEqual(expect.stringContaining("Gradient/"));
 
       await invokeCommand(
@@ -243,13 +258,18 @@ test.describe("journey · paged.draw pro tools", () => {
       const gTo = await screenPoint(page, 400, 640);
       await dragMouse(page, gFrom, gTo, { steps: 8, settleMs: 150 });
       await expect
-        .poll(async () => {
-          const a = await propOf(page, rref, "frameGradientFillAngle");
-          const l = await propOf(page, rref, "frameGradientFillLength");
-          const an = a?.type === "length" ? (a.value as number) : null;
-          const ln = l?.type === "length" ? (l.value as number) : null;
-          return (an != null && Number.isFinite(an)) || (ln != null && ln > 0);
-        }, { timeout: 6_000 })
+        .poll(
+          async () => {
+            const a = await propOf(page, rref, "frameGradientFillAngle");
+            const l = await propOf(page, rref, "frameGradientFillLength");
+            const an = a?.type === "length" ? (a.value as number) : null;
+            const ln = l?.type === "length" ? (l.value as number) : null;
+            return (
+              (an != null && Number.isFinite(an)) || (ln != null && ln > 0)
+            );
+          },
+          { timeout: 6_000 },
+        )
         .toBe(true);
     } catch (err) {
       collected.push(`gradient annotator: ${String(err).split("\n")[0]}`);
@@ -295,7 +315,12 @@ test.describe("journey · paged.draw pro tools", () => {
 
     // ── 1. KNIFE — drag a straight-ish freehand cut top → bottom through
     //    x = 250 across a 150..350 rectangle, overshooting both edges. ──
-    const rid = await designer.drawRectangle({ x0: 150, y0: 200, x1: 350, y1: 360 });
+    const rid = await designer.drawRectangle({
+      x0: 150,
+      y0: 200,
+      x1: 350,
+      y1: 360,
+    });
     const rect = { kind: "rectangle", id: rid };
     await designer.applyFill("rectangle", rid, "Color/Black");
     await designer.selectElement("rectangle", rid);
@@ -305,40 +330,61 @@ test.describe("journey · paged.draw pro tools", () => {
     expect(before![1]).toBeCloseTo(350, 0);
     const polysBefore = await treeIds(page, "polygon");
 
-    await invokeCommand(page, "paged.tool.activate.media.paged.draw.tool.knife");
+    await invokeCommand(
+      page,
+      "paged.tool.activate.media.paged.draw.tool.knife",
+    );
     const cut: Array<{ x: number; y: number }> = [];
-    for (const y of [170, 220, 270, 320, 390]) cut.push(await screenPoint(page, 250, y));
+    for (const y of [170, 220, 270, 320, 390])
+      cut.push(await screenPoint(page, 250, y));
     await freehand(page, cut);
 
     // The cut adds exactly ONE piece…
     await expect
-      .poll(async () => (await treeIds(page, "polygon")).length, { timeout: 10_000 })
+      .poll(async () => (await treeIds(page, "polygon")).length, {
+        timeout: 10_000,
+      })
       .toBe(polysBefore.length + 1);
     // …the rectangle keeps its id and is now the LEFT piece (150..250)…
     await expect
-      .poll(async () => JSON.stringify((await xExtentOf(page, rect))?.map(Math.round)), {
-        timeout: 8_000,
-      })
+      .poll(
+        async () =>
+          JSON.stringify((await xExtentOf(page, rect))?.map(Math.round)),
+        {
+          timeout: 8_000,
+        },
+      )
       .toBe(JSON.stringify([150, 250]));
     // …and the new path is the RIGHT piece (250..350), closed.
     const piece = (await treeIds(page, "polygon")).find(
       (p) => !polysBefore.some((b) => b.id === p.id),
     )!;
     const pieceX = await xExtentOf(page, piece);
-    expect(pieceX?.map(Math.round), "the new piece is the right half").toEqual([250, 350]);
+    expect(pieceX?.map(Math.round), "the new piece is the right half").toEqual([
+      250, 350,
+    ]);
     const pieceModel = await pathAnchorsOf(page, piece);
-    expect(pieceModel?.subpathOpen?.some(Boolean) ?? false, "the piece is closed").toBe(false);
+    expect(
+      pieceModel?.subpathOpen?.some(Boolean) ?? false,
+      "the piece is closed",
+    ).toBe(false);
 
     // ── 2. ONE UNDO — the whole cut is one step; the strip the knife
     //    probed with is not in the history. ──
     await designer.runCommand("paged.editor.undo");
     await expect
-      .poll(async () => (await treeIds(page, "polygon")).length, { timeout: 8_000 })
-      .toBe(polysBefore.length);
-    await expect
-      .poll(async () => JSON.stringify((await xExtentOf(page, rect))?.map(Math.round)), {
+      .poll(async () => (await treeIds(page, "polygon")).length, {
         timeout: 8_000,
       })
+      .toBe(polysBefore.length);
+    await expect
+      .poll(
+        async () =>
+          JSON.stringify((await xExtentOf(page, rect))?.map(Math.round)),
+        {
+          timeout: 8_000,
+        },
+      )
       .toBe(JSON.stringify([150, 350]));
 
     // ── 3. SCISSORS (ANY POINT) — click the MIDDLE of an open path's
@@ -356,15 +402,22 @@ test.describe("journey · paged.draw pro tools", () => {
     expect(uncut?.subpathStarts).toEqual([0]);
     const polysBeforeCut = await designer.count("polygon");
 
-    await invokeCommand(page, "paged.tool.activate.media.paged.draw.tool.scissorsAnyPoint");
+    await invokeCommand(
+      page,
+      "paged.tool.activate.media.paged.draw.tool.scissorsAnyPoint",
+    );
     const click = await screenPoint(page, 475, 450);
     await page.mouse.click(click.x, click.y);
 
     // One path, now TWO open runs that meet at the click.
     await expect
-      .poll(async () => JSON.stringify((await pathAnchorsOf(page, path))?.subpathStarts), {
-        timeout: 8_000,
-      })
+      .poll(
+        async () =>
+          JSON.stringify((await pathAnchorsOf(page, path))?.subpathStarts),
+        {
+          timeout: 8_000,
+        },
+      )
       .toBe(JSON.stringify([0, 2]));
     const opened = (await pathAnchorsOf(page, path))!;
     expect(opened.subpathOpen, "both runs are open").toEqual([true, true]);
@@ -374,14 +427,20 @@ test.describe("journey · paged.draw pro tools", () => {
       expect(opened.anchors[i]!.anchor[0]).toBeCloseTo(475, 0);
       expect(opened.anchors[i]!.anchor[1]).toBeCloseTo(450, 0);
     }
-    expect(await designer.count("polygon"), "scissors splits in place").toBe(polysBeforeCut);
+    expect(await designer.count("polygon"), "scissors splits in place").toBe(
+      polysBeforeCut,
+    );
 
     // ── 4. ONE UNDO — insert + open are one batch. ──
     await designer.runCommand("paged.editor.undo");
     await expect
-      .poll(async () => JSON.stringify((await pathAnchorsOf(page, path))?.subpathStarts), {
-        timeout: 8_000,
-      })
+      .poll(
+        async () =>
+          JSON.stringify((await pathAnchorsOf(page, path))?.subpathStarts),
+        {
+          timeout: 8_000,
+        },
+      )
       .toBe(JSON.stringify([0]));
     expect((await pathAnchorsOf(page, path))?.anchors).toHaveLength(3);
   });

@@ -47,7 +47,12 @@ annualChapter({
     // target carrying the story it was born with — 135-story's
     // oracle caught it, the manuscript logged it. Diagnose before
     // lifting this.
-    { id: "mp-manuscript", pages: [p(116), p(117)], build: manuscript , unbatched: true },
+    {
+      id: "mp-manuscript",
+      pages: [p(116), p(117)],
+      build: manuscript,
+      unbatched: true,
+    },
     { id: "mp-saveback", pages: [p(118)], build: saveback },
   ],
 });

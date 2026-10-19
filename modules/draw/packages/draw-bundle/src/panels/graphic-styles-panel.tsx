@@ -40,7 +40,11 @@
 //     Redefine overwrites overrides, so the number is the blast radius
 //     and the panel shows it before the click, not after.
 
-import type { BundleHost, ElementId, PanelProps } from "@paged-media/plugin-api";
+import type {
+  BundleHost,
+  ElementId,
+  PanelProps,
+} from "@paged-media/plugin-api";
 import * as React from "react";
 
 import {
@@ -229,7 +233,10 @@ export function makeGraphicStylesPanel(host: BundleHost): {
         data-draw-graphic-style-linked={link.ref?.id ?? ""}
         data-draw-graphic-style-overridden={link.overridden ? "true" : "false"}
       >
-        <PanelIntro summary={GRAPHIC_STYLES_SUMMARY} attr="data-draw-graphic-styles-intro" />
+        <PanelIntro
+          summary={GRAPHIC_STYLES_SUMMARY}
+          attr="data-draw-graphic-styles-intro"
+        />
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <span style={{ ...sectionStyle, paddingTop: 0 }}>
             Graphic styles ({styles.length})
@@ -386,7 +393,10 @@ export function makeGraphicStylesPanel(host: BundleHost): {
           })
         )}
 
-        <PanelAbout text={GRAPHIC_STYLES_NOTE} attr="data-draw-graphic-styles-note" />
+        <PanelAbout
+          text={GRAPHIC_STYLES_NOTE}
+          attr="data-draw-graphic-styles-note"
+        />
       </div>
     );
   };

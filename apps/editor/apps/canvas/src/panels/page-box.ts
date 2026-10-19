@@ -105,4 +105,3 @@ export function innerBoundsFor(
   const ty = leaf.transform?.[5] ?? 0;
   return [box.top - ty, box.left - tx, box.bottom - ty, box.right - tx];
 }
-

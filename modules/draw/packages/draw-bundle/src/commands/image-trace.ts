@@ -136,7 +136,12 @@ import { decodeRasterBytes, rasterDecoderAvailable } from "../io/raster-decode";
 
 import { DRAW_METADATA_KEY } from "./appearance-bake";
 import { framePathMutationFor } from "./compound-path";
-import { pageOriginOf, SPREAD_ORIGIN, spreadTableOf, type PageOrigin } from "../page-origin";
+import {
+  pageOriginOf,
+  SPREAD_ORIGIN,
+  spreadTableOf,
+  type PageOrigin,
+} from "../page-origin";
 import { groupMutationFor } from "./group";
 import { bindMinted, mintedLeaves, mutateMinting } from "./minted";
 import { insertPathMutationFor } from "../handlers/insert-path";
@@ -511,7 +516,10 @@ export function traceFinishBatchFor(args: {
       ops.push(
         framePathMutationFor(
           binding.keep,
-          spreadTableOf(binding.region.table, args.plan.pageOrigin ?? SPREAD_ORIGIN),
+          spreadTableOf(
+            binding.region.table,
+            args.plan.pageOrigin ?? SPREAD_ORIGIN,
+          ),
         ),
       );
       for (const id of binding.absorb) {
@@ -521,7 +529,9 @@ export function traceFinishBatchFor(args: {
     ops.push(colorRef(binding.keep, "frameFillColor", binding.region.swatchId));
     ops.push(colorRef(binding.keep, "frameStrokeColor", null));
   }
-  ops.push(stamp(args.plan.source, withImageTrace(args.sourceEnvelope, args.record)));
+  ops.push(
+    stamp(args.plan.source, withImageTrace(args.sourceEnvelope, args.record)),
+  );
   if (args.bindings.length >= 2) {
     ops.push(groupMutationFor(args.bindings.map((b) => b.keep)));
   }
@@ -545,7 +555,9 @@ export async function applyImageTracePlan(
 ): Promise<ElementId[]> {
   const label = IMAGE_TRACE_COMMAND_ID;
   if (plan.regions.length === 0) {
-    host.log.debug(`${label}: the trace produced no regions — nothing inserted`);
+    host.log.debug(
+      `${label}: the trace produced no regions — nothing inserted`,
+    );
     return [];
   }
   const inserted = await mutateMinting(host, traceInsertBatchFor(plan));
@@ -585,7 +597,12 @@ export async function applyImageTracePlan(
     truncated: plan.truncated,
     oneShot: true,
   };
-  const finish = traceFinishBatchFor({ plan, bindings, record, sourceEnvelope });
+  const finish = traceFinishBatchFor({
+    plan,
+    bindings,
+    record,
+    sourceEnvelope,
+  });
   const keeps = bindings.map((b) => b.keep);
   // Batch 2 creates ONE thing, and only with two or more regions: the
   // group. Then the seam says which id it got; otherwise nothing is
@@ -602,7 +619,9 @@ export async function applyImageTracePlan(
     );
     return keeps;
   }
-  const group = grouped ? (bindMinted(finished, finish)?.groups[0] ?? null) : null;
+  const group = grouped
+    ? (bindMinted(finished, finish)?.groups[0] ?? null)
+    : null;
   await host.selection.set(group ? [group] : keeps);
   if (plan.truncated > 0) {
     host.log.warn(
@@ -634,7 +653,8 @@ export function traceOptionsFrom(payload: unknown): Required<TraceOptions> {
   };
   const bool = (k: keyof TraceOptions) => {
     const v = p[k as string];
-    if (typeof v === "boolean") (out as Record<string, unknown>)[k as string] = v;
+    if (typeof v === "boolean")
+      (out as Record<string, unknown>)[k as string] = v;
   };
   if (p.mode === "color" || p.mode === "bw") out.mode = p.mode;
   if (p.pathMode === "spline" || p.pathMode === "polygon") {
@@ -804,7 +824,9 @@ export async function applyImageTrace(
         `${label}: ${source.uri} is ${raster.sourceWidth}×${raster.sourceHeight}, ` +
           `over the ${budget.maxPixels} px trace budget ` +
           `(maxTracePixels${
-            budget.maxPixels === limits.maxPixels ? ", at the kernel's hard cap" : ""
+            budget.maxPixels === limits.maxPixels
+              ? ", at the kernel's hard cap"
+              : ""
           }) — DOWNSAMPLED to ${raster.width}×${raster.height} ` +
           `(×${raster.scale.toFixed(3)}). Detail below the new sample grid is gone.`,
       );

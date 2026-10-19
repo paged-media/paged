@@ -143,9 +143,9 @@
 // implementation, not a contract change. Same exit as tool gesture
 // factories.
 
-import type { Disposable, MutationOutcome } from "./host";
-import type { MutationInput } from "./mutations";
-import type { CollectionName, ElementId, PropertyPath, Value } from "./wire";
+import type { Disposable, MutationOutcome } from "./host.js";
+import type { MutationInput } from "./mutations.js";
+import type { CollectionName, ElementId, PropertyPath, Value } from "./wire.js";
 
 // ---------------------------------------------------------------- targets
 
@@ -281,8 +281,7 @@ export interface BindingDecline {
  * this is stated as a requirement on the implementer, honestly.
  */
 export type BindingWrite =
-  | { kind: "applied"; outcome: MutationOutcome }
-  | BindingDecline;
+  { kind: "applied"; outcome: MutationOutcome } | BindingDecline;
 
 /** A provider's answer to a collection READ. `rows` MUST carry CORE's
  *  row shape for that collection (`LayerSummary` for `"layers"`,
@@ -294,8 +293,7 @@ export type BindingWrite =
  *  suppress a control it cannot serve is to leave that path OUT of
  *  `provides.paths` (see {@link BindingProviderScope}). */
 export type BindingCollection =
-  | { kind: "rows"; rows: readonly unknown[] }
-  | BindingDecline;
+  { kind: "rows"; rows: readonly unknown[] } | BindingDecline;
 
 // --------------------------------------------------------------- provider
 
@@ -420,9 +418,7 @@ export interface BindingProvider {
   ): BindingCollection | Promise<BindingCollection>;
   /** Take first refusal on a declared structural op. Required iff
    *  `provides.ops` is non-empty. */
-  applyMutation?(
-    mutation: MutationInput,
-  ): BindingWrite | Promise<BindingWrite>;
+  applyMutation?(mutation: MutationInput): BindingWrite | Promise<BindingWrite>;
 }
 
 /**

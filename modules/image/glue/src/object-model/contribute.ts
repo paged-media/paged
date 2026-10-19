@@ -46,14 +46,29 @@ const q = (kind: ImageKind) => `${KIND_PREFIX}${kind}`;
 /** The typed twins whose arguments differ from "none", and the new ones. */
 export const TYPED_ARGS: Record<string, { args: ValueType; title?: string }> = {
   "media.paged.image.command.addLayer": {
-    args: { kind: "struct", fields: { image: { kind: "ref", to: q("image") }, name: { kind: "text" } } },
+    args: {
+      kind: "struct",
+      fields: {
+        image: { kind: "ref", to: q("image") },
+        name: { kind: "text" },
+      },
+    },
   },
-  "media.paged.image.command.addLayerMask": { args: { kind: "struct", fields: { layer: LAYER_REF } } },
-  "media.paged.image.command.addLayerMaskHideAll": { args: { kind: "struct", fields: { layer: LAYER_REF } } },
-  "media.paged.image.command.convertLayerToSmart": { args: { kind: "struct", fields: { layer: LAYER_REF } } },
+  "media.paged.image.command.addLayerMask": {
+    args: { kind: "struct", fields: { layer: LAYER_REF } },
+  },
+  "media.paged.image.command.addLayerMaskHideAll": {
+    args: { kind: "struct", fields: { layer: LAYER_REF } },
+  },
+  "media.paged.image.command.convertLayerToSmart": {
+    args: { kind: "struct", fields: { layer: LAYER_REF } },
+  },
   "media.paged.image.command.replaceLayerPixels": {
     title: "Replace layer pixels",
-    args: { kind: "struct", fields: { layer: LAYER_REF, source: { kind: "asset" } } },
+    args: {
+      kind: "struct",
+      fields: { layer: LAYER_REF, source: { kind: "asset" } },
+    },
   },
 };
 
@@ -65,41 +80,63 @@ export function engineCodec(): () => Promise<ImageCodec> {
       decode(bytes: Uint8Array) {
         const d = e.decode(bytes);
         try {
-          return { width: d.width, height: d.height, rgba: e.tile(d.handle, 0, 0, d.width, d.height) };
+          return {
+            width: d.width,
+            height: d.height,
+            rgba: e.tile(d.handle, 0, 0, d.width, d.height),
+          };
         } finally {
           e.freeImage(d.handle);
         }
       },
-      encodePng: (rgba: Uint8Array, width: number, height: number) => e.encode(rgba, width, height, "png"),
+      encodePng: (rgba: Uint8Array, width: number, height: number) =>
+        e.encode(rgba, width, height, "png"),
     })));
 }
 
 const fail = (r: { applied: boolean; reason?: string; code?: string }) => {
-  if (!r.applied) throw new Error(`${r.code ?? "failed"}: ${r.reason ?? "not applied"}`);
+  if (!r.applied)
+    throw new Error(`${r.code ?? "failed"}: ${r.reason ?? "not applied"}`);
   return r;
 };
 
-function nativeHandlers(codec: () => Promise<ImageCodec>): Record<string, TypedCommandContribution["handler"]> {
+function nativeHandlers(
+  codec: () => Promise<ImageCodec>,
+): Record<string, TypedCommandContribution["handler"]> {
   const frameOf = (layer: string) => {
     const a = parseImageAddress(layer);
-    if (!a || a.kind !== "layer") throw new Error(`invalidValue: ${layer} is not a paged.image layer`);
+    if (!a || a.kind !== "layer")
+      throw new Error(`invalidValue: ${layer} is not a paged.image layer`);
     return a.frameId;
   };
   return {
     "media.paged.image.command.addLayer": async ({ objects }, args) => {
       const { image, name } = args as { image: string; name: string };
-      return fail(await objects.batch([{ op: "create", kind: q("layer"), within: image, props: { name } }]));
+      return fail(
+        await objects.batch([
+          { op: "create", kind: q("layer"), within: image, props: { name } },
+        ]),
+      );
     },
     "media.paged.image.command.addLayerMask": async ({ objects }, args) => {
       const { layer } = args as { layer: string };
       frameOf(layer);
-      return fail(await objects.batch([{ op: "create", kind: q("mask"), within: layer }]));
+      return fail(
+        await objects.batch([{ op: "create", kind: q("mask"), within: layer }]),
+      );
     },
-    "media.paged.image.command.addLayerMaskHideAll": async ({ objects }, args) => {
+    "media.paged.image.command.addLayerMaskHideAll": async (
+      { objects },
+      args,
+    ) => {
       const { layer } = args as { layer: string };
       const image = imageAddress(frameOf(layer));
-      const [w, h] = await Promise.all([objects.get(image, "width"), objects.get(image, "height")]);
-      if (w.kind !== "value" || h.kind !== "value") throw new Error(`unknownAddress: ${image}`);
+      const [w, h] = await Promise.all([
+        objects.get(image, "width"),
+        objects.get(image, "height"),
+      ]);
+      if (w.kind !== "value" || h.kind !== "value")
+        throw new Error(`unknownAddress: ${image}`);
       const [W, H] = [w.value as number, h.value as number];
       const black = new Uint8Array(W * H * 4);
       for (let i = 3; i < black.length; i += 4) black[i] = 255;
@@ -112,12 +149,22 @@ function nativeHandlers(codec: () => Promise<ImageCodec>): Record<string, TypedC
         ]),
       );
     },
-    "media.paged.image.command.convertLayerToSmart": async ({ objects }, args) => {
+    "media.paged.image.command.convertLayerToSmart": async (
+      { objects },
+      args,
+    ) => {
       const { layer } = args as { layer: string };
       frameOf(layer);
-      return fail(await objects.batch([{ op: "create", kind: q("smartObject"), within: layer }]));
+      return fail(
+        await objects.batch([
+          { op: "create", kind: q("smartObject"), within: layer },
+        ]),
+      );
     },
-    "media.paged.image.command.replaceLayerPixels": async ({ objects }, args) => {
+    "media.paged.image.command.replaceLayerPixels": async (
+      { objects },
+      args,
+    ) => {
       const { layer, source } = args as { layer: string; source: string };
       return fail(await objects.set(layer, "pixelSource", source));
     },
@@ -145,14 +192,21 @@ export function typedCommands(
   }));
   for (const [id, spec] of Object.entries(TYPED_ARGS)) {
     if (out.some((c) => c.id === id)) continue;
-    out.push({ id, title: spec.title ?? id, args: spec.args, handler: native[id]! });
+    out.push({
+      id,
+      title: spec.title ?? id,
+      args: spec.args,
+      handler: native[id]!,
+    });
   }
   return out;
 }
 
 /** `contributes.objectModel` as the manifest declares it (the kinds'
  *  rows live in `object-model/<kind>.json`, generated from KIND_ROWS). */
-export function manifestObjectModel(commands: readonly TypedCommandContribution[]) {
+export function manifestObjectModel(
+  commands: readonly TypedCommandContribution[],
+) {
   return {
     kinds: (Object.keys(KIND_ROWS) as ImageKind[]).map((kind) => ({
       kind,

@@ -105,7 +105,9 @@ export function ReplPanel(_: PanelProps) {
         {log.length === 0 && (
           <div className="text-muted-foreground text-xs">
             Try{" "}
-            <code className="bg-muted px-1 rounded">inspect textFrame:ua365e1</code>{" "}
+            <code className="bg-muted px-1 rounded">
+              inspect textFrame:ua365e1
+            </code>{" "}
             or{" "}
             <code className="bg-muted px-1 rounded">
               set textFrame:ua365e1 frameOpacity length:50

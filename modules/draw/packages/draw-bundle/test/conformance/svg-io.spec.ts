@@ -37,7 +37,11 @@
 import { describe, expect, it, beforeAll, afterAll } from "bun:test";
 import { waitFor } from "@paged-media/test-kit";
 
-import type { ElementId, Mutation, MutationInput } from "@paged-media/plugin-api";
+import type {
+  ElementId,
+  Mutation,
+  MutationInput,
+} from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 import {
   parseSvgDocument,
@@ -113,8 +117,14 @@ const swatchRows = async (h: HeadlessHost): Promise<SwatchRow[]> => [
 async function paintOf(
   h: HeadlessHost,
   id: ElementId,
-): Promise<{ fill: string | null; stroke: string | null; weight: number | null }> {
-  const names = new Map((await swatchRows(h)).map((sw) => [sw.selfId, sw.name]));
+): Promise<{
+  fill: string | null;
+  stroke: string | null;
+  weight: number | null;
+}> {
+  const names = new Map(
+    (await swatchRows(h)).map((sw) => [sw.selfId, sw.name]),
+  );
   const props = await h.host.document.elementProperties(id);
   const read = (path: string): unknown =>
     (props?.entries.find((e) => e.path === path)?.value as { value?: unknown })
@@ -226,11 +236,17 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
 
   it("styleDefaultsForShape with a palette creates a colour once and points at it again", () => {
     const palette = new Map<string, string>();
-    const first = styleDefaultsForShape({ fill: "#ff0000", stroke: "red" }, palette);
+    const first = styleDefaultsForShape(
+      { fill: "#ff0000", stroke: "red" },
+      palette,
+    );
     // `red` IS #ff0000: one swatch, and fill and stroke share it.
     expect(first.swatches).toHaveLength(1);
     expect(first.defaults.strokeColor).toBe(first.defaults.fillColor);
-    const second = styleDefaultsForShape({ fill: "#f00", stroke: "#0000ff" }, palette);
+    const second = styleDefaultsForShape(
+      { fill: "#f00", stroke: "#0000ff" },
+      palette,
+    );
     expect(second.swatches).toHaveLength(1); // only the blue is new
     expect(second.defaults.fillColor).toBe(first.defaults.fillColor);
     expect([...palette.keys()]).toEqual(["#ff0000", "#0000ff"]);
@@ -295,7 +311,9 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
       MutationInput,
       { op: "bindCreated" }
     >[];
-    expect(bound.map((m) => m.args.handle)).toEqual([0, 1, 2].map(svgImportHandle));
+    expect(bound.map((m) => m.args.handle)).toEqual(
+      [0, 1, 2].map(svgImportHandle),
+    );
 
     // Each contour is painted through ITS handle, all three properties.
     expect(writesOn(0).map((m) => [m.args.path, m.args.value])).toEqual([
@@ -305,8 +323,14 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
     ]);
     expect(writesOn(1).map((m) => [m.args.path, m.args.value])).toEqual([
       ["frameFillColor", { type: "colorRef", value: swatchId("#0088ff") }],
-      ["frameStrokeColor", { type: "colorRef", value: SVG_IMPORT_UNSTROKED.color }],
-      ["frameStrokeWeight", { type: "length", value: SVG_IMPORT_UNSTROKED.weight }],
+      [
+        "frameStrokeColor",
+        { type: "colorRef", value: SVG_IMPORT_UNSTROKED.color },
+      ],
+      [
+        "frameStrokeWeight",
+        { type: "length", value: SVG_IMPORT_UNSTROKED.weight },
+      ],
     ]);
     expect(writesOn(2).map((m) => [m.args.path, m.args.value])).toEqual([
       ["frameFillColor", { type: "colorRef", value: null }],
@@ -420,7 +444,13 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
     const leaves = await leafCount(h);
     const swatches = (await swatchRows(h)).length;
     const done = await commitSvgImport(h.host, file("undo.svg", FIXTURE_SVG));
-    expect(done).toEqual({ shapes: 3, elements: 3, swatches: 4, batches: 1, refused: 0 });
+    expect(done).toEqual({
+      shapes: 3,
+      elements: 3,
+      swatches: 4,
+      batches: 1,
+      refused: 0,
+    });
     expect(await leafCount(h)).toBe(leaves + 3);
     expect((await swatchRows(h)).length).toBe(swatches + 4);
 
@@ -489,7 +519,11 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
     // defaults write is app state: it is not an undo step.)
     await h.host.document.mutate({
       op: "setDocumentDefaults",
-      args: { fillColor: "Color/Black", strokeColor: "Color/Black", strokeWeight: 7 },
+      args: {
+        fillColor: "Color/Black",
+        strokeColor: "Color/Black",
+        strokeWeight: 7,
+      },
     });
     const users = await creationDefaults(h);
     expect(users).toEqual(["Color/Black", "Color/Black", 7]);
@@ -563,7 +597,13 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
     ]);
     const paints = [];
     for (const id of made) paints.push((await paintOf(h, id)).fill);
-    expect(paints).toEqual(["#101010", "#303030", "#404040", "#404040", "#202020"]);
+    expect(paints).toEqual([
+      "#101010",
+      "#303030",
+      "#404040",
+      "#404040",
+      "#202020",
+    ]);
 
     // The broken file pays for itself: one undo step per batch the
     // bisection had to commit — more than one, and exactly that many.
@@ -604,7 +644,9 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
   });
 
   it("File ▸ Open — the registered importer — commits the file in one undo step", async () => {
-    const importer = h.importersContributed().find((c) => c.id === SVG_IMPORTER_ID);
+    const importer = h
+      .importersContributed()
+      .find((c) => c.id === SVG_IMPORTER_ID);
     expect(importer).toBeDefined();
     const before = await leafCount(h);
     // The contribution does not hand its promise back; wait for the
@@ -662,7 +704,10 @@ describe("draw conformance — SVG import/export (Phase 8, K-2)", () => {
           args: { pageId: PAGE, anchors: dot(i), open: false },
         });
       }
-      const outcome = await own.host.document.mutate({ op: "batch", args: { ops } });
+      const outcome = await own.host.document.mutate({
+        op: "batch",
+        args: { ops },
+      });
       expect(outcome.applied).toBe(true);
       expect(await leafCount(own)).toBe(base + INSERTS);
 

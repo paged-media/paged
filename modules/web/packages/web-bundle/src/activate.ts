@@ -48,14 +48,15 @@ import {
   threadSelectedIntoNamedFlow,
   unthreadSelectedFromFlow,
 } from "./render-flow-command";
-import {
-  makeWebFrameEditContext,
-  webFrameObjectType,
-} from "./edit-context";
+import { makeWebFrameEditContext, webFrameObjectType } from "./edit-context";
 import { sourceFromHtmlFile } from "../../web-model/src";
 import { createInFrameEditSession } from "./in-frame-edit";
 import { createDraftSession } from "./panels/draft-store";
-import { makeWebSourcePanel, SOURCE_PANEL_ID, SOURCE_PANEL_TITLE } from "./panels/web-source-panel";
+import {
+  makeWebSourcePanel,
+  SOURCE_PANEL_ID,
+  SOURCE_PANEL_TITLE,
+} from "./panels/web-source-panel";
 import { contributeObjectModel } from "./object-model";
 import {
   PROPERTIES_PANEL_ID,
@@ -151,7 +152,10 @@ export function activate(host: BundleHost): BundleHandle {
   // In-frame text editing: a click on the rendered text of the entered frame
   // edits that text node in place (in-frame-edit.ts).
   const inFrame = createInFrameEditSession(host, drafts);
-  contributeEditContext(host, makeWebFrameEditContext(PANEL_ID, drafts, inFrame));
+  contributeEditContext(
+    host,
+    makeWebFrameEditContext(PANEL_ID, drafts, inFrame),
+  );
   // `.html` FILE intake (editor-ui-coverage S): File▸Open + drag-drop of
   // an .html file inserts a web frame with that file as its source —
   // <style> blocks land in the css lane, sanitize runs ON INGEST (§6.1:

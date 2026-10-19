@@ -1,0 +1,23 @@
+$ paged-node merge <CLI>/test/fixtures/indesign-merge/long-record-set.idml --data <CLI>/test/fixtures/indesign-merge/long-record-set.csv --out <TMP>/merged --format idml --records-per-page multiple --arrange columns --row-spacing 6 --column-spacing 12 --plugins=@paged-media/data
+# exit 0
+# stdout
+{
+  "records": 57,
+  "format": "idml",
+  "outputs": [
+    {
+      "path": "<TMP>/merged/long-record-set-merged.idml",
+      "pages": 3,
+      "records": 57,
+      "overset": [],
+      "bytes": <N>
+    }
+  ]
+}
+# stderr
+(empty)
+# structure
+designmap.xml
+Spreads/Spread_ucf.xml
+Spreads/Spread_u105.xml
+Spreads/Spread_u103.xml

@@ -76,7 +76,9 @@ describe("web conformance — flow lifecycle through the real host", () => {
     await h.host.selection.set([source]);
     // The command must complete without throwing — a loaded engine would
     // submit layers; here the honest not-loaded path is taken.
-    await expect(fire(h, "media.paged.web.command.renderWebFlow")).resolves.toBeUndefined();
+    await expect(
+      fire(h, "media.paged.web.command.renderWebFlow"),
+    ).resolves.toBeUndefined();
   });
 
   it("unthreadWebFlow removes the recipient — the chain no longer resolves", async () => {

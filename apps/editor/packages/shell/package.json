@@ -14,7 +14,8 @@
     "./styles/theme.css": "./src/styles/theme.css"
   },
   "scripts": {
-    "typecheck": "bun check -p tsconfig.json"
+    "typecheck": "bun check -p tsconfig.json && bun check -p test/tsconfig.json",
+    "test": "bun test --parallel --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts --path-ignore-patterns '**/*.dom.test.*'"
   },
   "peerDependencies": {
     "react": "^18.3.0",
@@ -45,6 +46,8 @@
     "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
+    "@paged-media/test-kit": "workspace:*",
+    "@types/bun": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "autoprefixer": "^10.5.5",

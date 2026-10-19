@@ -58,7 +58,11 @@ import { readZipText, zipEntryNames } from "../../e2e/harness/read-zip";
 import { openPanel } from "../../fidelity/canvas-driver";
 import { Designer } from "../driver/designer";
 import { skipWithoutDuckDB } from "./data-duckdb-gate";
-import { dataFields as engineDataFields, ENGINE_PROTOCOL, sessionLabel } from "./data-engine";
+import {
+  dataFields as engineDataFields,
+  ENGINE_PROTOCOL,
+  sessionLabel,
+} from "./data-engine";
 
 const CSV_FIXTURE = pathResolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -160,7 +164,8 @@ test.describe("journey · paged.data persistence", () => {
       .toEqual(["Ada Lovelace"]);
     const key = (await dataFields(page))[0].key;
     const labelled = ENGINE_PROTOCOL >= 69 ? await sessionLabel(page) : null;
-    if (ENGINE_PROTOCOL >= 69) expect(labelled, "the Lower carried the session label").not.toBeNull();
+    if (ENGINE_PROTOCOL >= 69)
+      expect(labelled, "the Lower carried the session label").not.toBeNull();
 
     // ── 2. SAVE — the session part is in the file ─────────────────────────
     const saved = await savePaged(designer, page);
@@ -175,7 +180,9 @@ test.describe("journey · paged.data persistence", () => {
     expect(part.data?.map((d) => d.source)).toEqual(["data_people"]);
     if (labelled) {
       // The labelled version travels with the file.
-      expect(zipEntryNames(saved)).toContain(`paged/media.paged.data/sessions/${labelled}.json`);
+      expect(zipEntryNames(saved)).toContain(
+        `paged/media.paged.data/sessions/${labelled}.json`,
+      );
     }
 
     // ── 3. REOPEN — File ▸ New, then File ▸ Open the saved file ───────────
@@ -216,7 +223,11 @@ test.describe("journey · paged.data persistence", () => {
       "data-data-persistence",
       "saved",
     );
-    if (labelled) expect(await sessionLabel(page), "the reopened document names the same version").toBe(labelled);
+    if (labelled)
+      expect(
+        await sessionLabel(page),
+        "the reopened document names the same version",
+      ).toBe(labelled);
 
     // ── 4. REFRESH — step to record 2: DuckDB re-runs the restored query ──
     await openPanel(page, BINDINGS_PANEL);

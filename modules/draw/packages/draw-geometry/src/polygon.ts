@@ -105,7 +105,10 @@ function flattenContours(
  *  crossing count. A ring's own parity is `pointInPolygon` — a ring of
  *  fewer than three points has no edge that can be crossed an odd number
  *  of times, which is exactly what that function's guard answers. */
-function insideRings(point: Vec2, rings: readonly (readonly Vec2[])[]): boolean {
+function insideRings(
+  point: Vec2,
+  rings: readonly (readonly Vec2[])[],
+): boolean {
   let inside = false;
   for (const ring of rings) {
     if (pointInPolygon(point, ring)) inside = !inside;
@@ -232,7 +235,10 @@ export function segmentsTouch(a: Vec2, b: Vec2, c: Vec2, d: Vec2): boolean {
   const d2 = orient(c, d, b);
   const d3 = orient(a, b, c);
   const d4 = orient(a, b, d);
-  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
+  if (
+    ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+    ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))
+  ) {
     return true;
   }
   if (d1 === 0 && onSegment(c, d, a)) return true;
@@ -287,7 +293,12 @@ export function polylineTouchesPolygon(
   };
   const pb = box(polygon);
   const lb = box(polyline);
-  if (lb.maxX < pb.minX || lb.minX > pb.maxX || lb.maxY < pb.minY || lb.minY > pb.maxY) {
+  if (
+    lb.maxX < pb.minX ||
+    lb.minX > pb.maxX ||
+    lb.maxY < pb.minY ||
+    lb.minY > pb.maxY
+  ) {
     return false;
   }
   for (const p of polyline) {

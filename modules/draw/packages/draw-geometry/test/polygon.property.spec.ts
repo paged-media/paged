@@ -54,10 +54,7 @@ import {
 
 /** A probe offset in units of the polygon's reach: covers the inside,
  *  the notches between the star's points, and the outside. */
-const probeOffset = fc.tuple(
-  real(-1.3, 1.3),
-  real(-1.3, 1.3),
-);
+const probeOffset = fc.tuple(real(-1.3, 1.3), real(-1.3, 1.3));
 
 /** A probe that is never on an integer lattice line, so it is never on a
  *  vertex of an integer ring (it can still be on an edge — `fc.pre`
@@ -75,7 +72,10 @@ describe("polygon — pointInPolygon (properties)", () => {
   it("on a SIMPLE polygon, agrees with the NON-ZERO winding rule (the engine's fill)", () => {
     fc.assert(
       fc.property(starPolygon, probeOffset, ({ center, ring, reach }, off) => {
-        const p: Vec2 = [center[0] + off[0] * reach, center[1] + off[1] * reach];
+        const p: Vec2 = [
+          center[0] + off[0] * reach,
+          center[1] + off[1] * reach,
+        ];
         fc.pre(refRingDistance(p, ring) > 1e-6 * reach);
         const winding = refWindingNumber(p, ring);
         assertTrue(
@@ -194,9 +194,9 @@ describe("polygon — pointInAnchorPath (properties)", () => {
             samplesPerSegment,
           });
           fc.pre(refRingDistance(p, ring) > 1e-7);
-          expect(
-            pointInAnchorPath(p, anchors, [], { samplesPerSegment }),
-          ).toBe(refEvenOddVertical(p, ring));
+          expect(pointInAnchorPath(p, anchors, [], { samplesPerSegment })).toBe(
+            refEvenOddVertical(p, ring),
+          );
         },
       ),
     );
@@ -278,7 +278,9 @@ describe("polygon — pointInAnchorPath (properties)", () => {
         (anchors, p) => {
           const ring = flattenAnchorRun(anchors, { close: true });
           fc.pre(refRingDistance(p, ring) > 1e-7);
-          expect(pointInAnchorPath(p, anchors)).toBe(refEvenOddVertical(p, ring));
+          expect(pointInAnchorPath(p, anchors)).toBe(
+            refEvenOddVertical(p, ring),
+          );
         },
       ),
     );

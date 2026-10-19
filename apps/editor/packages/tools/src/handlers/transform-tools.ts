@@ -82,8 +82,9 @@ interface Pivot {
 /** Half-size of the pivot marker, page pt. */
 const PIVOT_MARKER_PT = 4;
 
-const selectionKeyOf = (ids: readonly { kind: string; id: unknown }[]): string =>
-  ids.map((id) => `${id.kind}:${String(id.id)}`).join("|");
+const selectionKeyOf = (
+  ids: readonly { kind: string; id: unknown }[],
+): string => ids.map((id) => `${id.kind}:${String(id.id)}`).join("|");
 
 interface TransformDrag {
   handle: number | null;
@@ -135,7 +136,9 @@ export function createTransformGestureHandler(
    *  this page and this selection. */
   const livePivot = (pageId: string): Pivot | null => {
     if (!pivot || !paged) return null;
-    if (pivot.selectionKey !== selectionKeyOf(paged.selection.elementSelection)) {
+    if (
+      pivot.selectionKey !== selectionKeyOf(paged.selection.elementSelection)
+    ) {
       clearPivot();
       return null;
     }
@@ -213,7 +216,12 @@ export function createTransformGestureHandler(
             // Full drag finished before begin resolved: flush the
             // final delta, then commit.
             void paged!.client
-              .updateGesture(handle, state.pendingDelta, state.lastModifiers, "sab")
+              .updateGesture(
+                handle,
+                state.pendingDelta,
+                state.lastModifiers,
+                "sab",
+              )
               .catch(() => {})
               .then(() => finish(handle, true));
             return;
@@ -227,7 +235,12 @@ export function createTransformGestureHandler(
           const [dx, dy] = state.pendingDelta;
           if (dx !== 0 || dy !== 0) {
             void paged!.client
-              .updateGesture(handle, state.pendingDelta, state.lastModifiers, "sab")
+              .updateGesture(
+                handle,
+                state.pendingDelta,
+                state.lastModifiers,
+                "sab",
+              )
               .catch(() => {});
           }
         })

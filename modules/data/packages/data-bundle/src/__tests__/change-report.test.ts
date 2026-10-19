@@ -45,10 +45,17 @@ function fakeHost() {
     log: silent,
     supports: () => true,
     selection: { get: () => [], set: async () => [] },
-    network: { consentedOrigins: () => [], requestConsent: async () => ({ granted: [], denied: [] }) },
+    network: {
+      consentedOrigins: () => [],
+      requestConsent: async () => ({ granted: [], denied: [] }),
+    },
     document: {
       onWillSave: () => ({ dispose() {} }),
-      mutate: async (_m: Mutation) => ({ applied: true, createdId: null, pageIds: [] }),
+      mutate: async (_m: Mutation) => ({
+        applied: true,
+        createdId: null,
+        pageIds: [],
+      }),
       placeholders: async () => [],
       frameChain: async () => [],
       elementGeometry: async () => [],
@@ -98,7 +105,11 @@ async function sessionWith(host: BundleHost, engine: DataEngineLike) {
   }));
   mock.module("../query/duckdb", () => ({
     ...actualDuckdb,
-    bootDuckDB: async () => ({ registerCsv: async () => {}, query: async () => ({}), close: async () => {} }),
+    bootDuckDB: async () => ({
+      registerCsv: async () => {},
+      query: async () => ({}),
+      close: async () => {},
+    }),
   }));
   const { createSession: make } = await import("../session");
   return make(host, 20613);

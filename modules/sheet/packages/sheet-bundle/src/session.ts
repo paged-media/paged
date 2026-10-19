@@ -184,7 +184,13 @@ export function regionsOf(
   for (const { sheet, row, col } of cells) {
     const r = bySheet.get(sheet);
     if (!r) {
-      bySheet.set(sheet, { sheet, firstRow: row, firstCol: col, lastRow: row, lastCol: col });
+      bySheet.set(sheet, {
+        sheet,
+        firstRow: row,
+        firstCol: col,
+        lastRow: row,
+        lastCol: col,
+      });
       continue;
     }
     r.firstRow = Math.min(r.firstRow, row);
@@ -200,8 +206,9 @@ export function regionsOf(
  *  current microtask turn. A hidden tab never fires rAF, so a timeout
  *  races it: the work still lands, just not frame-aligned. */
 function nextFrame(cb: () => void): void {
-  const raf = (globalThis as { requestAnimationFrame?: (f: () => void) => unknown })
-    .requestAnimationFrame;
+  const raf = (
+    globalThis as { requestAnimationFrame?: (f: () => void) => unknown }
+  ).requestAnimationFrame;
   if (typeof raf !== "function") {
     queueMicrotask(cb);
     return;
@@ -441,8 +448,7 @@ export interface WorkbookSession {
    *  honest reason (no selection / no engine / the clipboard door denied).
    *  Never throws. */
   copySelection(): Promise<
-    | { ok: true; rows: number; cols: number }
-    | { ok: false; message: string }
+    { ok: true; rows: number; cols: number } | { ok: false; message: string }
   >;
   /** K-6 / S-14 — PASTE the system clipboard into the grid at the selection
    *  ANCHOR (`host.clipboard.read`). Prefers the rich `tabular` grid; falls
@@ -452,8 +458,7 @@ export interface WorkbookSession {
    *  row/col counts, or `ok:false` with an honest reason (no selection / no
    *  engine / nothing on the clipboard). Never throws. */
   pasteAtSelection(): Promise<
-    | { ok: true; rows: number; cols: number }
-    | { ok: false; message: string }
+    { ok: true; rows: number; cols: number } | { ok: false; message: string }
   >;
   /** The last answer of copy or paste, for the grid panel to show. Copy and
    *  paste are reached from the panel buttons, the grid keys, the in-frame
@@ -536,9 +541,7 @@ export interface WorkbookSession {
    *  Returns the outcome: the minted style id, the count of captured
    *  properties, and whether the apply-back took. `ok:false` carries the
    *  reason (no lowered table / no selection / mint rejected). Never throws. */
-  newCellStyleFromSelection(
-    name: string,
-  ): Promise<
+  newCellStyleFromSelection(name: string): Promise<
     | {
         ok: true;
         styleId: string;
@@ -584,7 +587,10 @@ export interface WorkbookSession {
    *  revision marks the sheet stale (logged "re-source to refresh"; NO
    *  auto-refetch — §1.1 / the RFC). A no-op (logged) when the provider is
    *  gone, the surface is absent, or the engine cannot boot. */
-  sourceFromDataset(providerId: string, opts?: { live?: boolean }): Promise<void>;
+  sourceFromDataset(
+    providerId: string,
+    opts?: { live?: boolean },
+  ): Promise<void>;
   /** ADR 323 — the object model's door into the session
    *  (`src/object-model.ts`). Not a panel API. */
   objectBridge(): ObjectBridge;
@@ -611,7 +617,9 @@ export interface WorkbookSession {
    *  a resize of a chain frame re-paginates (debounced) and REPLACES the
    *  tables; workbook edits refresh them too. `repeatHeaderRows` (Wave 6)
    *  repeats that many leading rows at the top of every frame. */
-  paginateSelection(opts?: { repeatHeaderRows?: number }): Promise<SessionResult>;
+  paginateSelection(opts?: {
+    repeatHeaderRows?: number;
+  }): Promise<SessionResult>;
   /** Bring every placed table, chart and paginated chain up to date with
    *  the workbook now (edits schedule this on their own, debounced). */
   refreshPlacements(): Promise<void>;
@@ -669,7 +677,11 @@ export interface WorkbookSession {
   names(): NameInfo[];
   /** Define (or redefine) `name` → `refersTo` (default: the format
    *  target); `sheetScoped` makes it local to the active sheet. */
-  defineName(name: string, refersTo?: string, sheetScoped?: boolean): SessionResult;
+  defineName(
+    name: string,
+    refersTo?: string,
+    sheetScoped?: boolean,
+  ): SessionResult;
   /** Delete a defined name (`scope` as `names()` reports it). */
   deleteName(name: string, scope?: number | null): SessionResult;
   /** Place a defined name or a table into a frame (like Lower to frame);
@@ -721,7 +733,11 @@ export interface WorkbookSession {
   /** Select + reveal the next (or previous) match after the active cell on
    *  the active sheet; remembered for {@link findAgain}. Null when nothing
    *  matches. */
-  findNext(needle: string, opts?: FindOptions, backwards?: boolean): FindMatch | null;
+  findNext(
+    needle: string,
+    opts?: FindOptions,
+    backwards?: boolean,
+  ): FindMatch | null;
   /** Repeat the last {@link findNext}. */
   findAgain(backwards?: boolean): FindMatch | null;
   /** Ask the grid panel to show its find field (bumps `findRequest`). */
@@ -729,7 +745,8 @@ export interface WorkbookSession {
 }
 
 /** Which edges `setBorders` draws. */
-export type BorderKind = "all" | "outline" | "top" | "bottom" | "left" | "right" | "none";
+export type BorderKind =
+  "all" | "outline" | "top" | "bottom" | "left" | "right" | "none";
 
 /** A resolved format target (0-based inclusive bounds). */
 export interface FormatTarget {
@@ -895,9 +912,12 @@ export function createWorkbookSession(
   // computed with (so a re-render keeps the same viewport) + the resolved
   // scene (so a content-space pointer can `hitCell` against it without
   // re-querying the engine). Both null until `showGridInFrame` runs.
-  let lastGridWindow:
-    | { firstRow: number; firstCol: number; wPt: number; hPt: number }
-    | null = null;
+  let lastGridWindow: {
+    firstRow: number;
+    firstCol: number;
+    wPt: number;
+    hPt: number;
+  } | null = null;
   let lastGridScene: GridScene | null = null;
   // The wheel's sub-step remainder in content points [x, y].
   let wheelCarry: [number, number] = [0, 0];
@@ -1023,7 +1043,9 @@ export function createWorkbookSession(
     input: string,
   ): string {
     const readPrev = () =>
-      cachedRead(`input:${sheet}:${row}:${col}`, () => engine.getCellInput(sheet, row, col));
+      cachedRead(`input:${sheet}:${row}:${col}`, () =>
+        engine.getCellInput(sheet, row, col),
+      );
     if (engine.setCells) {
       let res: ReturnType<NonNullable<SheetEngine["setCells"]>> | undefined;
       // An engine whose reply has no `prevInputs` must be read BEFORE the
@@ -1037,7 +1059,9 @@ export function createWorkbookSession(
       if (res) {
         const prev = res.prevInputs?.[0];
         if (prev !== undefined) return prev;
-        host.log.warn("setCells reply has no prevInputs — the journal reads the new input");
+        host.log.warn(
+          "setCells reply has no prevInputs — the journal reads the new input",
+        );
         return readPrev();
       }
     }
@@ -1048,7 +1072,11 @@ export function createWorkbookSession(
 
   /** Stamp the content version on the entries a commit just pushed. */
   function stampRev(): void {
-    for (let i = journalCursor - 1; i >= 0 && editJournal[i].rev === undefined; i--) {
+    for (
+      let i = journalCursor - 1;
+      i >= 0 && editJournal[i].rev === undefined;
+      i--
+    ) {
       editJournal[i].rev = revision;
     }
   }
@@ -1060,13 +1088,18 @@ export function createWorkbookSession(
     const engine = state.engine;
     if (!engine) return false;
     const undo = dir === "undo";
-    if (undo ? journalCursor === 0 : journalCursor >= editJournal.length) return false;
+    if (undo ? journalCursor === 0 : journalCursor >= editJournal.length)
+      return false;
     const first = undo ? journalCursor - 1 : journalCursor;
     const group = editJournal[first].batch;
     let last = first;
     if (group !== undefined) {
-      while (undo ? last > 0 && editJournal[last - 1].batch === group
-                  : last + 1 < editJournal.length && editJournal[last + 1].batch === group) {
+      while (
+        undo
+          ? last > 0 && editJournal[last - 1].batch === group
+          : last + 1 < editJournal.length &&
+            editJournal[last + 1].batch === group
+      ) {
         last += undo ? -1 : 1;
       }
     }
@@ -1120,7 +1153,9 @@ export function createWorkbookSession(
     journalCursor = undo ? last : last + 1;
     markEdited();
     emitter.emit(
-      steps.length > 0 ? undefined : { kind: "cells", regions: regionsOf(entries) },
+      steps.length > 0
+        ? undefined
+        : { kind: "cells", regions: regionsOf(entries) },
     );
     void submitInFrameGrid();
     return true;
@@ -1130,11 +1165,23 @@ export function createWorkbookSession(
    *  prev/next already faithful inputs) as ONE grouped batch: a single
    *  undo/redo step for the whole sort / replace-all. No-op when the op
    *  changed nothing. */
-  function journalBatch(edits: readonly CellEditRecord[], fmt?: FormatStep | null): void {
+  function journalBatch(
+    edits: readonly CellEditRecord[],
+    fmt?: FormatStep | null,
+  ): void {
     if (edits.length === 0 && !fmt) return;
     editJournal.length = journalCursor; // drop any redo tail
     const batch = nextJournalBatch++;
-    if (fmt) editJournal.push({ sheet: 0, row: 0, col: 0, prev: "", next: "", batch, fmt });
+    if (fmt)
+      editJournal.push({
+        sheet: 0,
+        row: 0,
+        col: 0,
+        prev: "",
+        next: "",
+        batch,
+        fmt,
+      });
     for (const e of edits) {
       editJournal.push({
         sheet: e.sheet,
@@ -1168,7 +1215,10 @@ export function createWorkbookSession(
       seal = capture(engine);
       edits = apply(engine) ?? [];
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) };
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      };
     }
     let step: FormatStep | null = null;
     try {
@@ -1184,7 +1234,11 @@ export function createWorkbookSession(
 
   /** The style-id snapshot step over `sheet`/`range` (null when the engine
    *  lacks the door): read now, read again once the change ran (`seal`). */
-  function styleSnapshot(engine: SheetEngine, sheet: number, range: string): (() => FormatStep) | null {
+  function styleSnapshot(
+    engine: SheetEngine,
+    sheet: number,
+    range: string,
+  ): (() => FormatStep) | null {
     if (!engine.getStyleIds || !engine.setStyleIds) return null;
     const before = engine.getStyleIds(sheet, range);
     return () => {
@@ -1210,7 +1264,9 @@ export function createWorkbookSession(
     if (!layout) return null;
     const had = new Map(axis === "col" ? layout.colWidths : layout.rowHeights);
     const set = (x: SheetEngine, a: number, b: number, v: number | null) =>
-      axis === "col" ? x.setColWidth!(sheet, a, b, v) : x.setRowHeight!(sheet, a, b, v);
+      axis === "col"
+        ? x.setColWidth!(sheet, a, b, v)
+        : x.setRowHeight!(sheet, a, b, v);
     return () => ({
       undo: (x) => {
         for (let i = first; i <= last; i++) set(x, i, i, had.get(i) ?? null);
@@ -1228,7 +1284,8 @@ export function createWorkbookSession(
     scope: number | null,
     redo: () => void,
   ): (() => FormatStep) | null {
-    if (!engine.listNames || !engine.defineName || !engine.deleteName) return null;
+    if (!engine.listNames || !engine.defineName || !engine.deleteName)
+      return null;
     const key = name.toLowerCase();
     const prior = engine
       .listNames()
@@ -1268,7 +1325,11 @@ export function createWorkbookSession(
     if (!cellEdit) {
       const at = activeOf();
       if (!at) return false;
-      cellEdit = { row: at.row, col: at.col, text: cellDisplay(at.row, at.col) };
+      cellEdit = {
+        row: at.row,
+        col: at.col,
+        text: cellDisplay(at.row, at.col),
+      };
       cellEditMode = "edit";
     }
     cellEdit = { ...cellEdit, text: cellEdit.text.slice(0, -1) };
@@ -1303,7 +1364,10 @@ export function createWorkbookSession(
     const sheet = state.activeSheet;
     if (state.engine && sheet !== null) {
       journaledSetCell(sheet, row, col, text);
-      emitter.emit({ kind: "cells", regions: regionsOf([{ sheet, row, col }]) });
+      emitter.emit({
+        kind: "cells",
+        regions: regionsOf([{ sheet, row, col }]),
+      });
     } else {
       emitter.emit();
     }
@@ -1328,7 +1392,8 @@ export function createWorkbookSession(
   // again), without writing the page the document just restored.
 
   async function followDocumentHistory(): Promise<void> {
-    if (!state.engine || loweredTables.size === 0 || !host.document.getMetadata) return;
+    if (!state.engine || loweredTables.size === 0 || !host.document.getMetadata)
+      return;
     let target: number | null = null;
     let from: number | null = null;
     const moved: string[] = [];
@@ -1336,7 +1401,10 @@ export function createWorkbookSession(
       if (info.contentVersion === undefined) continue;
       let shown: number | undefined;
       try {
-        const env = await host.document.getMetadata({ kind: "textFrame", id: frameId } as ElementId);
+        const env = await host.document.getMetadata({
+          kind: "textFrame",
+          id: frameId,
+        } as ElementId);
         shown = parseBinding(env)?.data.contentVersion;
       } catch (err) {
         host.log.debug("document-undo follower: binding read failed", err);
@@ -1424,9 +1492,16 @@ export function createWorkbookSession(
   /** Move the in-frame window (as little as possible) so `cell` shows. */
   function revealInFrame(cell: Cell): void {
     if (!lastGridWindow || !lastGridScene) return;
-    const vis = fullyVisible(lastGridScene, lastGridWindow.wPt, lastGridWindow.hPt);
+    const vis = fullyVisible(
+      lastGridScene,
+      lastGridWindow.wPt,
+      lastGridWindow.hPt,
+    );
     const next = scrollToShow(lastGridWindow, vis, cell);
-    if (next.firstRow !== lastGridWindow.firstRow || next.firstCol !== lastGridWindow.firstCol) {
+    if (
+      next.firstRow !== lastGridWindow.firstRow ||
+      next.firstCol !== lastGridWindow.firstCol
+    ) {
       lastGridWindow = { ...lastGridWindow, ...next };
     }
   }
@@ -1447,7 +1522,12 @@ export function createWorkbookSession(
     if (engine.setCells && targets.length > 0) {
       try {
         const res = engine.setCells(
-          targets.map((t) => ({ sheet: t.sheet, row: t.row, col: t.col, input: t.nextInput })),
+          targets.map((t) => ({
+            sheet: t.sheet,
+            row: t.row,
+            col: t.col,
+            input: t.nextInput,
+          })),
         );
         const prev = res.prevInputs;
         if (prev && prev.length === targets.length) {
@@ -1456,7 +1536,9 @@ export function createWorkbookSession(
             journaled: true,
           };
         }
-        host.log.warn(`${what}: setCells reply has no prevInputs — not journaled`);
+        host.log.warn(
+          `${what}: setCells reply has no prevInputs — not journaled`,
+        );
         return { written: [...targets], journaled: false };
       } catch (err) {
         host.log.debug(`${what}: batch write refused — per cell`, err);
@@ -1469,7 +1551,10 @@ export function createWorkbookSession(
         prevInput = engine.getCellInput(t.sheet, t.row, t.col);
         engine.setCell(t.sheet, t.row, t.col, t.nextInput);
       } catch (err) {
-        host.log.warn(`${what}: setCell(${t.sheet},${t.row},${t.col}) failed`, err);
+        host.log.warn(
+          `${what}: setCell(${t.sheet},${t.row},${t.col}) failed`,
+          err,
+        );
         continue;
       }
       written.push({ ...t, prevInput });
@@ -1488,21 +1573,38 @@ export function createWorkbookSession(
   ): SessionResult {
     const engine = state.engine;
     const sheet = state.activeSheet;
-    if (!engine || sheet === null) return { ok: false, message: "no workbook / sheet" };
+    if (!engine || sheet === null)
+      return { ok: false, message: "no workbook / sheet" };
     if (!engine.fillRange) {
-      return { ok: false, message: "engine wasm predates fill_range — rebuild it" };
+      return {
+        ok: false,
+        message: "engine wasm predates fill_range — rebuild it",
+      };
     }
     if (cellEdit) commitEdit();
     let res;
     try {
       res = engine.fillRange(
         sheet,
-        selectionRangeA1(source.anchorRow, source.anchorCol, source.rows, source.cols),
-        selectionRangeA1(target.anchorRow, target.anchorCol, target.rows, target.cols),
+        selectionRangeA1(
+          source.anchorRow,
+          source.anchorCol,
+          source.rows,
+          source.cols,
+        ),
+        selectionRangeA1(
+          target.anchorRow,
+          target.anchorCol,
+          target.rows,
+          target.cols,
+        ),
         series,
       );
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) };
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      };
     }
     // The formats the fill carried (the engine reports the style ids it
     // swapped) are part of the same step: one Cmd-Z undoes the whole fill.
@@ -1535,7 +1637,10 @@ export function createWorkbookSession(
       target = sel;
     } else {
       if ((down ? sel.anchorRow : sel.anchorCol) === 0) {
-        return { ok: false, message: `nothing ${down ? "above" : "to the left"} to fill from` };
+        return {
+          ok: false,
+          message: `nothing ${down ? "above" : "to the left"} to fill from`,
+        };
       }
       source = down
         ? { ...sel, anchorRow: sel.anchorRow - 1, rows: 1 }
@@ -1551,7 +1656,8 @@ export function createWorkbookSession(
     const engine = state.engine;
     const sheet = state.activeSheet;
     const sel = state.gridSelection;
-    if (!engine || sheet === null) return { ok: false, message: "no workbook / sheet" };
+    if (!engine || sheet === null)
+      return { ok: false, message: "no workbook / sheet" };
     if (!sel) return { ok: false, message: "select the cells to clear" };
     // Every cell of the selection written "" in ONE batch; the reply's
     // priors say which held something (only those journal).
@@ -1567,7 +1673,11 @@ export function createWorkbookSession(
         });
       }
     }
-    const { written, journaled } = writeTargets(engine, targets, "clearSelection");
+    const { written, journaled } = writeTargets(
+      engine,
+      targets,
+      "clearSelection",
+    );
     const cleared = written.filter((t) => t.prevInput !== "");
     if (journaled) journalBatch(cleared);
     else markEdited();
@@ -1599,7 +1709,8 @@ export function createWorkbookSession(
     const at = activeOf();
     const here = at ? key(at) : backwards ? Number.MAX_SAFE_INTEGER : -1;
     const hit = backwards
-      ? ([...sorted].reverse().find((h) => key(h) < here) ?? sorted[sorted.length - 1])
+      ? ([...sorted].reverse().find((h) => key(h) < here) ??
+        sorted[sorted.length - 1])
       : (sorted.find((h) => key(h) > here) ?? sorted[0]);
     applyModel(collapsed({ row: hit.row, col: hit.col }));
     return hit;
@@ -1622,7 +1733,11 @@ export function createWorkbookSession(
         if (!m) return false;
         const rows =
           lastGridScene && lastGridWindow
-            ? fullyVisible(lastGridScene, lastGridWindow.wPt, lastGridWindow.hPt).rows
+            ? fullyVisible(
+                lastGridScene,
+                lastGridWindow.wPt,
+                lastGridWindow.hPt,
+              ).rows
             : 20;
         if (lastGridWindow) {
           lastGridWindow = {
@@ -1635,7 +1750,11 @@ export function createWorkbookSession(
       }
       case "home":
         if (!m) return false;
-        applyModel(collapsed(a.origin ? { row: 0, col: 0 } : { row: m.active.row, col: 0 }));
+        applyModel(
+          collapsed(
+            a.origin ? { row: 0, col: 0 } : { row: m.active.row, col: 0 },
+          ),
+        );
         return true;
       case "edit":
         return openEdit();
@@ -1844,18 +1963,27 @@ export function createWorkbookSession(
     clear?: { rows: number; cols: number },
   ): { rows: number; cols: number } {
     const fields = records.schema.fields;
-    const extent = { rows: records.rowCount + 1, cols: Math.max(fields.length, records.columns.length) };
+    const extent = {
+      rows: records.rowCount + 1,
+      cols: Math.max(fields.length, records.columns.length),
+    };
     // Header row (row 0) — the schema field names; body rows 1.. — column-
     // major: columns[c][r] is the cell value for data-row r, which lands
     // on sheet row r + 1.
-    const inputs: { sheet: number; row: number; col: number; input: string }[] = [];
+    const inputs: { sheet: number; row: number; col: number; input: string }[] =
+      [];
     for (let c = 0; c < fields.length; c++) {
       inputs.push({ sheet: 0, row: 0, col: c, input: fields[c].name });
     }
     for (let c = 0; c < records.columns.length; c++) {
       const col = records.columns[c];
       for (let r = 0; r < records.rowCount; r++) {
-        inputs.push({ sheet: 0, row: r + 1, col: c, input: cellToString(col[r]) });
+        inputs.push({
+          sheet: 0,
+          row: r + 1,
+          col: c,
+          input: cellToString(col[r]),
+        });
       }
     }
     // A re-pull clears what the previous snapshot wrote beyond this one.
@@ -1899,16 +2027,38 @@ export function createWorkbookSession(
       host.log.warn(`dataset "${providerId}": re-pull failed`, err);
       return;
     }
-    if (!snapshot || state.engine !== engine || state.dataSource?.providerId !== providerId) return;
+    if (
+      !snapshot ||
+      state.engine !== engine ||
+      state.dataSource?.providerId !== providerId
+    )
+      return;
     const prev = seededExtent;
-    seededExtent = seedSheetFromRecords(engine, snapshot.records, prev ?? undefined);
-    state.dataSource = { providerId, revision: snapshot.revision, stale: false, live: true };
+    seededExtent = seedSheetFromRecords(
+      engine,
+      snapshot.records,
+      prev ?? undefined,
+    );
+    state.dataSource = {
+      providerId,
+      revision: snapshot.revision,
+      stale: false,
+      live: true,
+    };
     const rows = Math.max(seededExtent.rows, prev?.rows ?? 0);
     const cols = Math.max(seededExtent.cols, prev?.cols ?? 0);
     markEdited();
     emitter.emit({
       kind: "cells",
-      regions: [{ sheet: 0, firstRow: 0, firstCol: 0, lastRow: Math.max(rows - 1, 0), lastCol: Math.max(cols - 1, 0) }],
+      regions: [
+        {
+          sheet: 0,
+          firstRow: 0,
+          firstCol: 0,
+          lastRow: Math.max(rows - 1, 0),
+          lastCol: Math.max(cols - 1, 0),
+        },
+      ],
     });
   }
 
@@ -1940,19 +2090,22 @@ export function createWorkbookSession(
     if (!engine || sheet === null) return null;
     // Memoised until the next change signal (a selection change is one),
     // so callers must treat the scene as read-only.
-    return cachedRead(`scene:${sheet}:${firstRow}:${firstCol}:${wPt}:${hPt}`, () => {
-      let scene: GridScene;
-      try {
-        scene = engine.getGridScene(sheet, firstRow, firstCol, wPt, hPt, {
-          includeGridlines: true,
-        });
-      } catch (err) {
-        host.log.warn("gridScene: engine windowing failed", err);
-        return null;
-      }
-      if (state.gridSelection) scene.selection = state.gridSelection;
-      return scene;
-    });
+    return cachedRead(
+      `scene:${sheet}:${firstRow}:${firstCol}:${wPt}:${hPt}`,
+      () => {
+        let scene: GridScene;
+        try {
+          scene = engine.getGridScene(sheet, firstRow, firstCol, wPt, hPt, {
+            includeGridlines: true,
+          });
+        } catch (err) {
+          host.log.warn("gridScene: engine windowing failed", err);
+          return null;
+        }
+        if (state.gridSelection) scene.selection = state.gridSelection;
+        return scene;
+      },
+    );
   }
 
   /** S-08: persist the imported bytes + name (best-effort — never let a
@@ -2044,7 +2197,10 @@ export function createWorkbookSession(
     } catch (err) {
       // Keep the edit marked: the next edit or flush tries again.
       persistDirty = true;
-      host.log.warn("workbook persist: engine save failed (kept in memory)", err);
+      host.log.warn(
+        "workbook persist: engine save failed (kept in memory)",
+        err,
+      );
       return persistChain;
     }
     return enqueueWrite(bytes, state.fileName ?? "workbook.xlsx");
@@ -2058,7 +2214,9 @@ export function createWorkbookSession(
   const willSaveSub = host.supports("document.onWillSave@1")
     ? host.document.onWillSave(() =>
         Promise.all([
-          flushPersist().catch((err) => host.log.warn("workbook persist before save failed", err)),
+          flushPersist().catch((err) =>
+            host.log.warn("workbook persist before save failed", err),
+          ),
           flushPlacementRecords().catch((err) =>
             host.log.warn("placement records before save failed", err),
           ),
@@ -2134,7 +2292,11 @@ export function createWorkbookSession(
 
   /** Wave 4 — after a burst of edits, refresh what this session placed. */
   function scheduleRefresh(): void {
-    if (loweredTables.size === 0 && placedCharts.length === 0 && chains.size === 0) {
+    if (
+      loweredTables.size === 0 &&
+      placedCharts.length === 0 &&
+      chains.size === 0
+    ) {
       return;
     }
     if (suppressRefresh) return;
@@ -2158,98 +2320,108 @@ export function createWorkbookSession(
    *  (re-paginated over its own tables). Serialised: a refresh requested
    *  while one runs queues behind it. Never rejects. */
   function refreshPlacements(): Promise<void> {
-    refreshChain = refreshChain.then(async () => {
-      const engine = state.engine;
-      if (!engine) return;
-      const version = revision;
-      for (const [frameId, info] of [...loweredTables]) {
-        const name = sheetNameOf(info.sheet);
-        if (name === null) continue;
-        let next: LoweredContent;
-        try {
-          next = pageContent(engine, info.sheet, info.range);
-        } catch (err) {
-          host.log.warn(`refresh: could not lower ${info.range}`, err);
-          continue;
-        }
-        if (info.content) {
-          if (
-            info.contentVersion === version ||
-            JSON.stringify(next) === JSON.stringify(info.content)
-          ) {
+    refreshChain = refreshChain
+      .then(async () => {
+        const engine = state.engine;
+        if (!engine) return;
+        const version = revision;
+        for (const [frameId, info] of [...loweredTables]) {
+          const name = sheetNameOf(info.sheet);
+          if (name === null) continue;
+          let next: LoweredContent;
+          try {
+            next = pageContent(engine, info.sheet, info.range);
+          } catch (err) {
+            host.log.warn(`refresh: could not lower ${info.range}`, err);
             continue;
           }
-          // In place: only what changed is re-poured, and the table — its
-          // id, its column widths, anything the host formatted, a header or
-          // footer band the host added — stays. A table the document may
-          // have changed since this session last wrote it is checked first
-          // (one read), which also says where its rows sit now.
-          const bands = unverified.has(frameId)
-            ? await refreshBands(host, info, info.content)
-            : { header: info.headerRows ?? 0, footer: 0 };
-          if (bands) {
-            const banded = { ...info, headerRows: bands.header || undefined };
-            const updated = await ownWrite(() =>
-              refreshLoweredTable(host, banded, next, version, name),
-            );
-            loweredTables.set(frameId, updated);
-            unverified.delete(frameId);
-            if (lastLoweredTable?.frameId === frameId) lastLoweredTable = updated;
-            continue;
+          if (info.content) {
+            if (
+              info.contentVersion === version ||
+              JSON.stringify(next) === JSON.stringify(info.content)
+            ) {
+              continue;
+            }
+            // In place: only what changed is re-poured, and the table — its
+            // id, its column widths, anything the host formatted, a header or
+            // footer band the host added — stays. A table the document may
+            // have changed since this session last wrote it is checked first
+            // (one read), which also says where its rows sit now.
+            const bands = unverified.has(frameId)
+              ? await refreshBands(host, info, info.content)
+              : { header: info.headerRows ?? 0, footer: 0 };
+            if (bands) {
+              const banded = { ...info, headerRows: bands.header || undefined };
+              const updated = await ownWrite(() =>
+                refreshLoweredTable(host, banded, next, version, name),
+              );
+              loweredTables.set(frameId, updated);
+              unverified.delete(frameId);
+              if (lastLoweredTable?.frameId === frameId)
+                lastLoweredTable = updated;
+              continue;
+            }
           }
-        }
-        // Replaced whole, the one refresh that cannot write into rows that
-        // are not the workbook's: the page's content is unknown (a table
-        // placed before placement records were kept, or on a host without
-        // container parts), or the host reshaped the table
-        // (`refreshBands`).
-        const replaced = await ownWrite(() =>
-          replaceLoweredTable(host, engine, info, next, version, name),
-        );
-        loweredTables.delete(frameId);
-        unverified.delete(frameId);
-        if (replaced) loweredTables.set(replaced.frameId, replaced);
-        if (lastLoweredTable?.frameId === frameId) lastLoweredTable = replaced;
-        if (lastFrameId === frameId) lastFrameId = replaced?.frameId ?? null;
-      }
-      const charts: PlacedChart[] = [];
-      for (const placed of placedCharts) {
-        if (placed.contentVersion === version || placed.elementIds.length === 0) {
-          charts.push(placed);
-          continue;
-        }
-        let key: string;
-        try {
-          key = JSON.stringify(
-            engine.getChartGeometry(placed.chartIndex, ...chartSizeOf(placed.bounds)),
+          // Replaced whole, the one refresh that cannot write into rows that
+          // are not the workbook's: the page's content is unknown (a table
+          // placed before placement records were kept, or on a host without
+          // container parts), or the host reshaped the table
+          // (`refreshBands`).
+          const replaced = await ownWrite(() =>
+            replaceLoweredTable(host, engine, info, next, version, name),
           );
-        } catch {
-          charts.push(placed);
-          continue;
+          loweredTables.delete(frameId);
+          unverified.delete(frameId);
+          if (replaced) loweredTables.set(replaced.frameId, replaced);
+          if (lastLoweredTable?.frameId === frameId)
+            lastLoweredTable = replaced;
+          if (lastFrameId === frameId) lastFrameId = replaced?.frameId ?? null;
         }
-        if (key === placed.geometryKey) {
-          // The edit did not touch this chart's data: nothing to redraw.
-          charts.push({ ...placed, contentVersion: version });
-          continue;
+        const charts: PlacedChart[] = [];
+        for (const placed of placedCharts) {
+          if (
+            placed.contentVersion === version ||
+            placed.elementIds.length === 0
+          ) {
+            charts.push(placed);
+            continue;
+          }
+          let key: string;
+          try {
+            key = JSON.stringify(
+              engine.getChartGeometry(
+                placed.chartIndex,
+                ...chartSizeOf(placed.bounds),
+              ),
+            );
+          } catch {
+            charts.push(placed);
+            continue;
+          }
+          if (key === placed.geometryKey) {
+            // The edit did not touch this chart's data: nothing to redraw.
+            charts.push({ ...placed, contentVersion: version });
+            continue;
+          }
+          let replaced: PlacedChart | null = null;
+          await lowerChartToFrame(host, engine, placed.chartIndex, {
+            placement: { pageId: placed.pageId, bounds: placed.bounds },
+            contentVersion: version,
+            replaces: placed,
+            onLowered: (p) => {
+              replaced = p;
+            },
+          });
+          charts.push(replaced ?? { ...placed, elementIds: [] });
         }
-        let replaced: PlacedChart | null = null;
-        await lowerChartToFrame(host, engine, placed.chartIndex, {
-          placement: { pageId: placed.pageId, bounds: placed.bounds },
-          contentVersion: version,
-          replaces: placed,
-          onLowered: (p) => {
-            replaced = p;
-          },
-        });
-        charts.push(replaced ?? { ...placed, elementIds: [] });
-      }
-      placedCharts = charts;
-      for (const chain of chains.values()) {
-        await chain.sub.refresh();
-      }
-    }).catch((err) => {
-      host.log.warn("refresh of placed content failed", err);
-    });
+        placedCharts = charts;
+        for (const chain of chains.values()) {
+          await chain.sub.refresh();
+        }
+      })
+      .catch((err) => {
+        host.log.warn("refresh of placed content failed", err);
+      });
     return refreshChain;
   }
 
@@ -2277,7 +2449,8 @@ export function createWorkbookSession(
     const frames: string[] = [];
     const walk = (nodes: typeof roots) => {
       for (const n of nodes) {
-        if (n.id?.kind === "textFrame" && typeof n.id.id === "string") frames.push(n.id.id);
+        if (n.id?.kind === "textFrame" && typeof n.id.id === "string")
+          frames.push(n.id.id);
         if (n.children) walk(n.children);
       }
     };
@@ -2290,7 +2463,10 @@ export function createWorkbookSession(
       let binding: ReturnType<typeof parseBinding>;
       try {
         binding = parseBinding(
-          await host.document.getMetadata({ kind: "textFrame", id: frameId } as ElementId),
+          await host.document.getMetadata({
+            kind: "textFrame",
+            id: frameId,
+          } as ElementId),
         );
       } catch {
         continue;
@@ -2413,7 +2589,10 @@ export function createWorkbookSession(
     try {
       fn(state.engine);
     } catch (err) {
-      return { ok: false, message: err instanceof Error ? err.message : String(err) };
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      };
     }
     markEdited();
     emitter.emit();
@@ -2501,14 +2680,18 @@ export function createWorkbookSession(
     const frames: string[] = [];
     const walk = (nodes: typeof roots) => {
       for (const n of nodes) {
-        if (n.id?.kind === "textFrame" && typeof n.id.id === "string") frames.push(n.id.id);
+        if (n.id?.kind === "textFrame" && typeof n.id.id === "string")
+          frames.push(n.id.id);
         if (n.children) walk(n.children);
       }
     };
     walk(roots);
     for (const id of frames) {
       try {
-        const meta = await host.document.getMetadata({ kind: "textFrame", id } as ElementId);
+        const meta = await host.document.getMetadata({
+          kind: "textFrame",
+          id,
+        } as ElementId);
         if (parseBinding(meta)) return true;
       } catch {
         /* unreadable metadata is not a binding */
@@ -2522,7 +2705,9 @@ export function createWorkbookSession(
    *  `"always"` (the boot restore, S-08) or `"ifBound"` (a document open:
    *  only into a document that has a sheet frame). Overtaken (another
    *  document opened, a workbook imported) ⇒ loads nothing. */
-  async function restoreWorkbook(blobFallback: "always" | "ifBound"): Promise<boolean> {
+  async function restoreWorkbook(
+    blobFallback: "always" | "ifBound",
+  ): Promise<boolean> {
     const epoch = loadEpoch;
     let fromPart: { bytes: Uint8Array; name: string } | null = null;
     try {
@@ -2532,8 +2717,16 @@ export function createWorkbookSession(
     }
     if (epoch !== loadEpoch) return false;
     if (fromPart) {
-      const ok = await loadWorkbook(fromPart.bytes, fromPart.name, false, epoch);
-      if (ok) await rediscoverPlacements().catch((err) => host.log.warn("rediscover failed", err));
+      const ok = await loadWorkbook(
+        fromPart.bytes,
+        fromPart.name,
+        false,
+        epoch,
+      );
+      if (ok)
+        await rediscoverPlacements().catch((err) =>
+          host.log.warn("rediscover failed", err),
+        );
       return ok;
     }
 
@@ -2548,11 +2741,15 @@ export function createWorkbookSession(
       return false;
     }
     if (!bytes) return false; // nothing persisted — no engine boot
-    if (blobFallback === "ifBound" && !(await documentHasSheetFrame())) return false;
+    if (blobFallback === "ifBound" && !(await documentHasSheetFrame()))
+      return false;
     if (epoch !== loadEpoch) return false;
     const name = host.storage.get<string>(BLOB_NAME_KEY) ?? "workbook.xlsx";
     const ok = await loadWorkbook(bytes, name, false, epoch);
-    if (ok) await rediscoverPlacements().catch((err) => host.log.warn("rediscover failed", err));
+    if (ok)
+      await rediscoverPlacements().catch((err) =>
+        host.log.warn("rediscover failed", err),
+      );
     // One-time migration: lift the per-browser blob into the container so the
     // workbook now travels with the document on the next save.
     if (ok) {
@@ -2612,7 +2809,11 @@ export function createWorkbookSession(
     epoch: () => loadEpoch,
     afterWrite(regions) {
       markEdited();
-      emitter.emit(regions && regions.length > 0 ? { kind: "cells", regions } : OTHER_CHANGE);
+      emitter.emit(
+        regions && regions.length > 0
+          ? { kind: "cells", regions }
+          : OTHER_CHANGE,
+      );
     },
     loadVersion(bytes, name) {
       const engine = state.engine;
@@ -2620,7 +2821,10 @@ export function createWorkbookSession(
       try {
         engine.loadXlsx(bytes);
       } catch (err) {
-        host.log.error("object model: stored workbook version failed to load", err);
+        host.log.error(
+          "object model: stored workbook version failed to load",
+          err,
+        );
         return false;
       }
       state.fileName = name;
@@ -2650,7 +2854,9 @@ export function createWorkbookSession(
     },
     async discoverHostFrames() {
       if (loweredTables.size === 0 && state.engine) {
-        await rediscoverPlacements().catch((err) => host.log.warn("rediscover failed", err));
+        await rediscoverPlacements().catch((err) =>
+          host.log.warn("rediscover failed", err),
+        );
       }
       return bridge.hostFrames();
     },
@@ -2708,7 +2914,11 @@ export function createWorkbookSession(
       let placement;
       let content: LoweredContent;
       try {
-        content = pageContent(state.engine, state.activeSheet, state.selectedRange);
+        content = pageContent(
+          state.engine,
+          state.activeSheet,
+          state.selectedRange,
+        );
         placement = await placementForContent(host, content);
       } catch (err) {
         host.log.warn("lowerSelection: could not lower the range", err);
@@ -2773,7 +2983,8 @@ export function createWorkbookSession(
         host.log.debug("showGridInFrame: frame geometry read failed", err);
       }
       // Wave 5 — keep the window's scroll when re-showing the same frame.
-      const keep = lastGridWindow && prevFrame === target ? lastGridWindow : null;
+      const keep =
+        lastGridWindow && prevFrame === target ? lastGridWindow : null;
       lastGridWindow = {
         firstRow: keep?.firstRow ?? 0,
         firstCol: keep?.firstCol ?? 0,
@@ -2837,7 +3048,9 @@ export function createWorkbookSession(
       // …and the workbook part with them, not a debounce later: the host
       // has no will-save hook, so a save right after Esc otherwise ships
       // the pre-edit workbook beside the post-edit page.
-      void flushPersist().catch((err) => host.log.warn("workbook persist on exit failed", err));
+      void flushPersist().catch((err) =>
+        host.log.warn("workbook persist on exit failed", err),
+      );
     },
 
     listCharts() {
@@ -2958,7 +3171,10 @@ export function createWorkbookSession(
       if (!journaledSetCell(sheet, row, col, input)) return false;
       // The dirty cut recomputed in Rust; refresh the panel (it re-requests
       // the windowed scene on the next render).
-      emitter.emit({ kind: "cells", regions: regionsOf([{ sheet, row, col }]) });
+      emitter.emit({
+        kind: "cells",
+        regions: regionsOf([{ sheet, row, col }]),
+      });
       return true;
     },
 
@@ -3019,7 +3235,10 @@ export function createWorkbookSession(
             inputs: state.engine.getRangeInputs(state.activeSheet, range),
           };
         } catch (err) {
-          host.log.debug("copySelection: input snapshot failed (values only)", err);
+          host.log.debug(
+            "copySelection: input snapshot failed (values only)",
+            err,
+          );
         }
       }
       const tabular: TabularClipboard = { rows: grid };
@@ -3095,7 +3314,12 @@ export function createWorkbookSession(
         (sel.rows > bRows || sel.cols > bCols);
       const area: GridSelection = tile
         ? { ...sel }
-        : { anchorRow: sel.anchorRow, anchorCol: sel.anchorCol, rows: bRows, cols: bCols };
+        : {
+            anchorRow: sel.anchorRow,
+            anchorCol: sel.anchorCol,
+            rows: bRows,
+            cols: bCols,
+          };
       const targets: CellEditRecord[] = [];
       for (let tr = 0; tr < area.rows; tr += bRows) {
         for (let tc = 0; tc < area.cols; tc += bCols) {
@@ -3112,7 +3336,10 @@ export function createWorkbookSession(
               );
             } catch (err) {
               host.log.warn("pasteAtSelection: formula adjust failed", err);
-              return { ok: false as const, message: "the paste could not adjust its formulas" };
+              return {
+                ok: false as const,
+                message: "the paste could not adjust its formulas",
+              };
             }
           }
           rows.forEach((row, r) =>
@@ -3128,11 +3355,16 @@ export function createWorkbookSession(
           );
         }
       }
-      const { written: edits, journaled } = writeTargets(engine, targets, "pasteAtSelection");
+      const { written: edits, journaled } = writeTargets(
+        engine,
+        targets,
+        "pasteAtSelection",
+      );
       if (edits.length === 0) {
         return { ok: false as const, message: "the paste wrote no cells" };
       }
-      if (journaled) journalBatch(edits); // one grouped Cmd-Z undoes the whole paste
+      if (journaled)
+        journalBatch(edits); // one grouped Cmd-Z undoes the whole paste
       else markEdited();
       emitter.emit({ kind: "cells", regions: regionsOf(edits) });
       // The pasted cells become the selection (Excel).
@@ -3195,7 +3427,9 @@ export function createWorkbookSession(
     },
 
     canUndoCellEdit() {
-      return cellEdit !== null || journalCursor > (inFrameActive ? sessionFloor : 0);
+      return (
+        cellEdit !== null || journalCursor > (inFrameActive ? sessionFloor : 0)
+      );
     },
 
     canRedoCellEdit() {
@@ -3290,8 +3524,7 @@ export function createWorkbookSession(
       if (!lastLoweredTable) {
         return {
           ok: false as const,
-          message:
-            "place a range on the page first, then pick a cell in it",
+          message: "place a range on the page first, then pick a cell in it",
         };
       }
       const sel = state.gridSelection;
@@ -3322,10 +3555,12 @@ export function createWorkbookSession(
         );
       } catch (err) {
         host.log.warn("newCellStyleFromSelection: lower read failed", err);
-        return { ok: false as const, message: "could not read the placed range" };
+        return {
+          ok: false as const,
+          message: "could not read the placed range",
+        };
       }
-      const pos =
-        tableCellPositionOf(content, sel.anchorRow, sel.anchorCol) ??
+      const pos = tableCellPositionOf(content, sel.anchorRow, sel.anchorCol) ??
         // Outside the lowered range → first cell of the table (documented
         // residual: the per-cell mapping is exact for in-range cells; this
         // keeps the affordance honest rather than guessing).
@@ -3352,26 +3587,38 @@ export function createWorkbookSession(
         const props = await host.document.elementProperties(cellEid);
         entries = (props?.entries ?? []) as ReadEntry[];
       } catch (err) {
-        host.log.warn("newCellStyleFromSelection: elementProperties failed", err);
+        host.log.warn(
+          "newCellStyleFromSelection: elementProperties failed",
+          err,
+        );
       }
 
       // Mint + populate the style (these DO land). The id is ours (selfId) —
       // createCellStyle may return createdId:null for collection creates.
-      const styleId = `pgsheet.cellstyle.${Date.now().toString(36)}.${(
-        nextCellStyleSeq++
-      ).toString(36)}`;
+      const styleId = `pgsheet.cellstyle.${Date.now().toString(36)}.${(nextCellStyleSeq++).toString(
+        36,
+      )}`;
       const plan = planCellStyleFromEntries(styleId, name, entries);
 
       try {
         const created = await host.document.mutate(plan.createOp);
         if (!created.applied) {
-          host.log.warn("newCellStyleFromSelection: createCellStyle rejected", created);
-          return { ok: false as const, message: "the host rejected createCellStyle" };
+          host.log.warn(
+            "newCellStyleFromSelection: createCellStyle rejected",
+            created,
+          );
+          return {
+            ok: false as const,
+            message: "the host rejected createCellStyle",
+          };
         }
         for (const op of plan.propertyOps) {
           const r = await host.document.mutate(op);
           if (!r.applied) {
-            host.log.warn("newCellStyleFromSelection: setStyleProperty rejected", r);
+            host.log.warn(
+              "newCellStyleFromSelection: setStyleProperty rejected",
+              r,
+            );
           }
         }
       } catch (err) {
@@ -3393,8 +3640,7 @@ export function createWorkbookSession(
           host.log.info(`newCellStyleFromSelection: ${applyMessage}`);
         }
       } catch (err) {
-        applyMessage =
-          "style created but applying it threw (appliedCellStyle)";
+        applyMessage = "style created but applying it threw (appliedCellStyle)";
         host.log.info("newCellStyleFromSelection: apply-back threw", err);
       }
 
@@ -3405,7 +3651,8 @@ export function createWorkbookSession(
         capturedCount: plan.capturedPaths.length,
         applied,
         applyMessage:
-          applyMessage ?? (fromFirstCell ? "captured from the table's first cell" : null),
+          applyMessage ??
+          (fromFirstCell ? "captured from the table's first cell" : null),
       };
     },
 
@@ -3526,7 +3773,12 @@ export function createWorkbookSession(
       if (sel) {
         return {
           sheet: state.activeSheet,
-          range: selectionRangeA1(sel.anchorRow, sel.anchorCol, sel.rows, sel.cols),
+          range: selectionRangeA1(
+            sel.anchorRow,
+            sel.anchorCol,
+            sel.rows,
+            sel.cols,
+          ),
         };
       }
       // No cell picked yet — the panels are about the ENTERED frame's
@@ -3585,7 +3837,10 @@ export function createWorkbookSession(
       }
       const storyId = await storyOfFrame(host, frameId);
       if (!storyId) {
-        return { ok: false as const, message: "the selected frame has no story" };
+        return {
+          ok: false as const,
+          message: "the selected frame has no story",
+        };
       }
       const sheet = state.activeSheet;
       const range = state.selectedRange;
@@ -3675,14 +3930,16 @@ export function createWorkbookSession(
 
     renameSheet(id, name) {
       return structureVerb((e) => {
-        if (!e.renameSheet) throw new Error("engine wasm predates rename_sheet");
+        if (!e.renameSheet)
+          throw new Error("engine wasm predates rename_sheet");
         e.renameSheet(id, name);
       });
     },
 
     deleteSheet(id) {
       const r = structureVerb((e) => {
-        if (!e.deleteSheet) throw new Error("engine wasm predates delete_sheet");
+        if (!e.deleteSheet)
+          throw new Error("engine wasm predates delete_sheet");
         e.deleteSheet(id);
       });
       if (r.ok) {
@@ -3691,7 +3948,8 @@ export function createWorkbookSession(
         journalCursor = 0;
         for (const [k, info] of [...loweredTables]) {
           if (info.sheet === id) loweredTables.delete(k);
-          else if (info.sheet > id) loweredTables.set(k, { ...info, sheet: info.sheet - 1 });
+          else if (info.sheet > id)
+            loweredTables.set(k, { ...info, sheet: info.sheet - 1 });
         }
         state.activeSheet = 0;
         state.gridSelection = null;
@@ -3707,14 +3965,18 @@ export function createWorkbookSession(
         return { ok: false as const, message: "no sheet" };
       }
       if (!sel) {
-        return { ok: false as const, message: "select the rows or columns first" };
+        return {
+          ok: false as const,
+          message: "select the rows or columns first",
+        };
       }
       const rows = kind === "insertRows" || kind === "deleteRows";
       const at = rows ? sel.anchorRow : sel.anchorCol;
       const n = Math.max(1, rows ? sel.rows : sel.cols);
       const sheet = state.activeSheet;
       const r = structureVerb((e) => {
-        if (!e.structuralEdit) throw new Error("engine wasm predates structural_edit");
+        if (!e.structuralEdit)
+          throw new Error("engine wasm predates structural_edit");
         e.structuralEdit(sheet, kind, at, n);
       });
       if (r.ok) {
@@ -3742,7 +4004,8 @@ export function createWorkbookSession(
     setIterative(on) {
       return structureVerb((e) => {
         const cur = e.calcSettings?.();
-        if (!e.setIterative || !cur) throw new Error("engine wasm predates set_iterative");
+        if (!e.setIterative || !cur)
+          throw new Error("engine wasm predates set_iterative");
         e.setIterative(on, cur.maxIter, cur.maxChange);
       });
     },
@@ -3759,7 +4022,11 @@ export function createWorkbookSession(
 
     setStyle(patch) {
       const t = formatTarget();
-      if (!t) return { ok: false as const, message: "select cells or enter a range first" };
+      if (!t)
+        return {
+          ok: false as const,
+          message: "select cells or enter a range first",
+        };
       return journalFormat(
         (e) => styleSnapshot(e, t.sheet, t.range),
         (e) => {
@@ -3771,7 +4038,11 @@ export function createWorkbookSession(
 
     setBorders(kind, edge) {
       const t = formatTarget();
-      if (!t) return { ok: false as const, message: "select cells or enter a range first" };
+      if (!t)
+        return {
+          ok: false as const,
+          message: "select cells or enter a range first",
+        };
       // Pure A1 naming of the block's strips; every border rule is Rust's.
       const a1 = (r0: number, c0: number, r1: number, c1: number) =>
         `${columnLabel(c0)}${r0 + 1}:${columnLabel(c1)}${r1 + 1}`;
@@ -3784,14 +4055,36 @@ export function createWorkbookSession(
       const right = a1(t.top, t.right, t.bottom, t.right);
       switch (kind) {
         case "all":
-          calls.push([whole, { borderTop: edge, borderBottom: edge, borderLeft: edge, borderRight: edge }]);
+          calls.push([
+            whole,
+            {
+              borderTop: edge,
+              borderBottom: edge,
+              borderLeft: edge,
+              borderRight: edge,
+            },
+          ]);
           break;
         case "none":
-          calls.push([whole, { borderTop: none, borderBottom: none, borderLeft: none, borderRight: none }]);
+          calls.push([
+            whole,
+            {
+              borderTop: none,
+              borderBottom: none,
+              borderLeft: none,
+              borderRight: none,
+            },
+          ]);
           break;
         case "outline":
-          calls.push([top, { borderTop: edge }], [bottom, { borderBottom: edge }]);
-          calls.push([left, { borderLeft: edge }], [right, { borderRight: edge }]);
+          calls.push(
+            [top, { borderTop: edge }],
+            [bottom, { borderBottom: edge }],
+          );
+          calls.push(
+            [left, { borderLeft: edge }],
+            [right, { borderRight: edge }],
+          );
           break;
         case "top":
           calls.push([top, { borderTop: edge }]);
@@ -3830,7 +4123,11 @@ export function createWorkbookSession(
 
     mergeTarget() {
       const t = formatTarget();
-      if (!t) return { ok: false as const, message: "select cells or enter a range first" };
+      if (!t)
+        return {
+          ok: false as const,
+          message: "select cells or enter a range first",
+        };
       return journalFormat(
         (e) => {
           const before = e.getLayout?.(t.sheet).merges ?? null;
@@ -3853,14 +4150,21 @@ export function createWorkbookSession(
         },
         (e) => {
           if (!e.merge) throw new Error("engine wasm predates merge");
-          return (e.merge(t.sheet, t.range) as { edits?: CellEditRecord[] }).edits ?? [];
+          return (
+            (e.merge(t.sheet, t.range) as { edits?: CellEditRecord[] }).edits ??
+            []
+          );
         },
       );
     },
 
     unmergeTarget() {
       const t = formatTarget();
-      if (!t) return { ok: false as const, message: "select cells or enter a range first" };
+      if (!t)
+        return {
+          ok: false as const,
+          message: "select cells or enter a range first",
+        };
       let removed = 0;
       const r = journalFormat(
         (e) => {
@@ -3884,17 +4188,23 @@ export function createWorkbookSession(
           removed = e.unmerge(t.sheet, t.range);
         },
       );
-      if (r.ok && removed === 0) return { ok: false as const, message: "no merge there" };
+      if (r.ok && removed === 0)
+        return { ok: false as const, message: "no merge there" };
       return r;
     },
 
     setColumnWidth(width) {
       const t = formatTarget();
-      if (!t) return { ok: false as const, message: "select cells or enter a range first" };
+      if (!t)
+        return {
+          ok: false as const,
+          message: "select cells or enter a range first",
+        };
       return journalFormat(
         (e) => sizeStep(e, t.sheet, "col", t.left, t.right, width),
         (e) => {
-          if (!e.setColWidth) throw new Error("engine wasm predates set_col_width");
+          if (!e.setColWidth)
+            throw new Error("engine wasm predates set_col_width");
           e.setColWidth(t.sheet, t.left, t.right, width);
         },
       );
@@ -3902,11 +4212,16 @@ export function createWorkbookSession(
 
     setRowHeight(height) {
       const t = formatTarget();
-      if (!t) return { ok: false as const, message: "select cells or enter a range first" };
+      if (!t)
+        return {
+          ok: false as const,
+          message: "select cells or enter a range first",
+        };
       return journalFormat(
         (e) => sizeStep(e, t.sheet, "row", t.top, t.bottom, height),
         (e) => {
-          if (!e.setRowHeight) throw new Error("engine wasm predates set_row_height");
+          if (!e.setRowHeight)
+            throw new Error("engine wasm predates set_row_height");
           e.setRowHeight(t.sheet, t.top, t.bottom, height);
         },
       );
@@ -3921,7 +4236,10 @@ export function createWorkbookSession(
       const rows = frozen ? 0 : sel ? sel.anchorRow : 1;
       const cols = frozen ? 0 : sel ? sel.anchorCol : 0;
       if (!frozen && rows === 0 && cols === 0) {
-        return { ok: false as const, message: "select the cell below / right of the split" };
+        return {
+          ok: false as const,
+          message: "select the cell below / right of the split",
+        };
       }
       return journalFormat(
         () => {
@@ -3967,14 +4285,20 @@ export function createWorkbookSession(
       const sheet = state.activeSheet;
       if (sheet === null) return { ok: false as const, message: "no sheet" };
       const target = refersTo?.trim() || formatTarget()?.range;
-      if (!target) return { ok: false as const, message: "select cells or enter a range first" };
+      if (!target)
+        return {
+          ok: false as const,
+          message: "select cells or enter a range first",
+        };
       const scope = sheetScoped ? sheet : null;
       return journalFormat(
-        (e) => nameStep(e, sheet, name.trim(), scope, () => {
-          e.defineName!(sheet, name.trim(), target, scope);
-        }),
+        (e) =>
+          nameStep(e, sheet, name.trim(), scope, () => {
+            e.defineName!(sheet, name.trim(), target, scope);
+          }),
         (e) => {
-          if (!e.defineName) throw new Error("engine wasm predates define_name");
+          if (!e.defineName)
+            throw new Error("engine wasm predates define_name");
           e.defineName(sheet, name.trim(), target, scope);
         },
       );
@@ -3983,11 +4307,13 @@ export function createWorkbookSession(
     deleteName(name, scope) {
       const sheet = state.activeSheet ?? 0;
       return journalFormat(
-        (e) => nameStep(e, sheet, name, scope ?? null, () => {
-          e.deleteName!(sheet, name, scope ?? null);
-        }),
+        (e) =>
+          nameStep(e, sheet, name, scope ?? null, () => {
+            e.deleteName!(sheet, name, scope ?? null);
+          }),
         (e) => {
-          if (!e.deleteName) throw new Error("engine wasm predates delete_name");
+          if (!e.deleteName)
+            throw new Error("engine wasm predates delete_name");
           e.deleteName(sheet, name, scope ?? null);
         },
       );
@@ -4053,7 +4379,8 @@ export function createWorkbookSession(
       if (!hit) return false;
       if (drag.kind === "select") {
         const m = currentModel();
-        if (!m || (m.focus.row === hit.row && m.focus.col === hit.col)) return true;
+        if (!m || (m.focus.row === hit.row && m.focus.col === hit.col))
+          return true;
         applyModel(extendTo(m, hit));
         return true;
       }
@@ -4084,7 +4411,10 @@ export function createWorkbookSession(
       if (!lastGridWindow) return false;
       const firstRow = Math.max(0, lastGridWindow.firstRow + dRows);
       const firstCol = Math.max(0, lastGridWindow.firstCol + dCols);
-      if (firstRow === lastGridWindow.firstRow && firstCol === lastGridWindow.firstCol) {
+      if (
+        firstRow === lastGridWindow.firstRow &&
+        firstCol === lastGridWindow.firstCol
+      ) {
         return false;
       }
       lastGridWindow = { ...lastGridWindow, firstRow, firstCol };
@@ -4101,7 +4431,10 @@ export function createWorkbookSession(
       const atTop = lastGridWindow.firstRow === 0;
       const atLeft = lastGridWindow.firstCol === 0;
       // Toward an edge the window is already at: decline (the canvas pans).
-      if ((dyPt === 0 || (dyPt < 0 && atTop)) && (dxPt === 0 || (dxPt < 0 && atLeft))) {
+      if (
+        (dyPt === 0 || (dyPt < 0 && atTop)) &&
+        (dxPt === 0 || (dxPt < 0 && atLeft))
+      ) {
         wheelCarry = [0, 0];
         return false;
       }

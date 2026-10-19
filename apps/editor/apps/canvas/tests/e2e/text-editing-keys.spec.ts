@@ -120,9 +120,11 @@ async function docWithText(
   expect(storyId, "the new frame's story").toBeTruthy();
   await page.evaluate(
     async ({ sid, t }) => {
-      const c = (globalThis as unknown as {
-        __canvas: { client: { mutate: (m: unknown) => Promise<unknown> } };
-      }).__canvas.client;
+      const c = (
+        globalThis as unknown as {
+          __canvas: { client: { mutate: (m: unknown) => Promise<unknown> } };
+        }
+      ).__canvas.client;
       await c.mutate({
         op: "insertText",
         args: { storyId: sid, offset: 0, text: t },
@@ -153,7 +155,11 @@ async function clickCaret(
     { sid: storyId, off: offset },
   );
   expect(geo, "caret geometry").toBeTruthy();
-  const pt = await screenPoint(page, geo!.xPt + 0.5, geo!.topPt + geo!.heightPt / 2);
+  const pt = await screenPoint(
+    page,
+    geo!.xPt + 0.5,
+    geo!.topPt + geo!.heightPt / 2,
+  );
   await page.mouse.click(pt.x, pt.y);
   await expect
     .poll(async () => (await contentSelection(page))?.storyId ?? null)
@@ -217,7 +223,9 @@ test.describe("text editing keys (film defects)", () => {
     const { d, storyId } = await docWithText(page, "Hello world");
     await clickCaret(page, d, storyId, 5);
     await page.keyboard.press("End");
-    await expect.poll(async () => (await contentSelection(page))?.start).toBe(11);
+    await expect
+      .poll(async () => (await contentSelection(page))?.start)
+      .toBe(11);
 
     // Two lines in, two paragraphs out; CRLF from another app is one break.
     await page.evaluate(() =>
@@ -239,9 +247,11 @@ test.describe("text editing keys (film defects)", () => {
     // Copy a range, then cut it.
     await page.evaluate(
       ({ sid }) => {
-        const c = (globalThis as unknown as {
-          __canvas: { setContentSelection: (s: unknown) => void };
-        }).__canvas;
+        const c = (
+          globalThis as unknown as {
+            __canvas: { setContentSelection: (s: unknown) => void };
+          }
+        ).__canvas;
         c.setContentSelection({ storyId: sid, start: 0, end: 5 });
       },
       { sid: storyId },
@@ -325,18 +335,25 @@ test.describe("Select All (film defect ED-14)", () => {
     const d = new Designer(page);
     await d.open();
     await d.newDocument();
-    const { frameId } = await d.addTextFrame({ x0: 72, y0: 72, x1: 300, y1: 200 });
+    const { frameId } = await d.addTextFrame({
+      x0: 72,
+      y0: 72,
+      x1: 300,
+      y1: 200,
+    });
     const rectId = await page.evaluate(async () => {
-      const c = (globalThis as unknown as {
-        __canvas: {
-          handle: { pageIds: string[] };
-          client: {
-            mutate: (m: unknown) => Promise<{
-              payload?: { createdId?: { id?: string } | null };
-            }>;
+      const c = (
+        globalThis as unknown as {
+          __canvas: {
+            handle: { pageIds: string[] };
+            client: {
+              mutate: (m: unknown) => Promise<{
+                payload?: { createdId?: { id?: string } | null };
+              }>;
+            };
           };
-        };
-      }).__canvas;
+        }
+      ).__canvas;
       const r = await c.client.mutate({
         op: "insertFrame",
         args: { pageId: c.handle.pageIds[0], bounds: [300, 100, 400, 250] },
@@ -368,9 +385,9 @@ test.describe("Select All (film defect ED-14)", () => {
       await c.client.setElementSelection([], "replace");
     });
     await page.evaluate(async () => {
-      await (globalThis as unknown as CanvasGlobal).__canvas.registries.commands.invoke(
-        "paged.edit.selectAll",
-      );
+      await (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.registries.commands.invoke("paged.edit.selectAll");
     });
     await expect
       .poll(async () => (await elementSelection(page)).map((e) => e.id).sort())
@@ -385,7 +402,9 @@ test.describe("Select All (film defect ED-14)", () => {
     await d.newDocument();
     await d.addTextFrame({ x0: 72, y0: 72, x1: 300, y1: 200 });
     await page.evaluate(async () => {
-      await (globalThis as unknown as CanvasGlobal).__canvas.client.setElementSelection([], "replace");
+      await (
+        globalThis as unknown as CanvasGlobal
+      ).__canvas.client.setElementSelection([], "replace");
     });
 
     const field = page.locator("[data-document-map-search]").first();
@@ -399,7 +418,9 @@ test.describe("Select All (film defect ED-14)", () => {
       }),
       "the field's text is selected",
     ).toEqual([0, 5]);
-    expect(await elementSelection(page), "no page item was selected").toEqual([]);
+    expect(await elementSelection(page), "no page item was selected").toEqual(
+      [],
+    );
     await page.keyboard.type("x");
     await expect(field).toHaveValue("x");
   });

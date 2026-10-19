@@ -36,7 +36,12 @@ describe("paged.ai.complete", () => {
     const { host } = await headlessEngine();
     dispose = () => host.dispose();
     const prompts: string[] = [];
-    host.objects.register({ plugin: "paged.ai", model: aiObjectModel(async (p) => (prompts.push(p), { text: "Spring into tea" })) });
+    host.objects.register({
+      plugin: "paged.ai",
+      model: aiObjectModel(
+        async (p) => (prompts.push(p), { text: "Spring into tea" }),
+      ),
+    });
     const run = await host.runScript(`
       const page = JSON.parse(paged.pages())[0].selfId;
       const before = new Set(JSON.parse(paged.stories()).map(s => s.selfId));
@@ -49,27 +54,47 @@ describe("paged.ai.complete", () => {
     expect(run.output).toContain("[log] Spring into tea");
     expect(prompts).toEqual(["A four-word headline for a spring tea sale"]);
     expect(run.hostRounds).toBe(1);
-    const text = await host.runScript(`console.log(JSON.parse(paged.stories()).map(s => s.characterCount).join())`);
+    const text = await host.runScript(
+      `console.log(JSON.parse(paged.stories()).map(s => s.characterCount).join())`,
+    );
     expect(text.output[0]).toBe(`[log] ${"Spring into tea".length}`);
   });
 
   it("a refusal or a bad argument rejects the script's promise with a code", async () => {
     const { host } = await headlessEngine();
     dispose = () => host.dispose();
-    host.objects.register({ plugin: "paged.ai", model: aiObjectModel(async () => ({ text: "", refusal: { category: "cyber", explanation: null } })) });
-    const refused = await host.runScript(`try { await paged.invoke("paged.ai.complete", { prompt: "x" }); } catch (e) { console.log(String(e.message)); }`);
+    host.objects.register({
+      plugin: "paged.ai",
+      model: aiObjectModel(async () => ({
+        text: "",
+        refusal: { category: "cyber", explanation: null },
+      })),
+    });
+    const refused = await host.runScript(
+      `try { await paged.invoke("paged.ai.complete", { prompt: "x" }); } catch (e) { console.log(String(e.message)); }`,
+    );
     expect(refused.output.join()).toMatch(/refused: Claude declined/);
-    const bad = await host.runScript(`try { await paged.invoke("paged.ai.complete", { text: "x" }); } catch (e) { console.log(String(e.message)); }`);
+    const bad = await host.runScript(
+      `try { await paged.invoke("paged.ai.complete", { text: "x" }); } catch (e) { console.log(String(e.message)); }`,
+    );
     expect(bad.output.join()).toMatch(/invalidValue/);
   });
 
   it("limits calls per minute", async () => {
     let t = 0;
-    const model = aiObjectModel(async () => ({ text: "ok" }), () => t);
+    const model = aiObjectModel(
+      async () => ({ text: "ok" }),
+      () => t,
+    );
     const handler = model.commands![0]!.handler;
-    for (let i = 0; i < AI_COMPLETE_PER_MINUTE; i++) await handler({ objects: {} as never }, { prompt: "x" });
-    await expect(handler({ objects: {} as never }, { prompt: "x" })).rejects.toThrow(/rateLimited/);
+    for (let i = 0; i < AI_COMPLETE_PER_MINUTE; i++)
+      await handler({ objects: {} as never }, { prompt: "x" });
+    await expect(
+      handler({ objects: {} as never }, { prompt: "x" }),
+    ).rejects.toThrow(/rateLimited/);
     t += 61_000;
-    await expect(handler({ objects: {} as never }, { prompt: "x" })).resolves.toBe("ok");
+    await expect(
+      handler({ objects: {} as never }, { prompt: "x" }),
+    ).resolves.toBe("ok");
   });
 });

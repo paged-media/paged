@@ -28,7 +28,14 @@
 // engine enumerates), a two-input pair of ~300 faces (past its 256-face
 // cap), a 1 000-anchor comb and a 10 000-anchor spiral.
 
-import { afterAll, beforeAll, describe, expect, it, setDefaultTimeout } from "bun:test";
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  setDefaultTimeout,
+} from "bun:test";
 
 import { metadataReadsPerLeaf } from "../engine-reads";
 
@@ -37,7 +44,10 @@ import type {
   MutationInput,
   ToolPreviewShape,
 } from "@paged-media/plugin-api";
-import { pointInAnchorPath, type AnchorTriple } from "@paged-media/draw-geometry";
+import {
+  pointInAnchorPath,
+  type AnchorTriple,
+} from "@paged-media/draw-geometry";
 import type { MeasureReadout } from "@paged-media/draw-tools";
 
 import {
@@ -120,8 +130,12 @@ describe("perf budgets — the tools that read as they move", () => {
      *  the pointer: an outline that contains the last point. A stale
      *  face (an old answer delivered late) or a face found through the
      *  wrong transform does not. */
-    const expectFaceUnder = (highlight: ToolPreviewShape | null, point: Pt): void => {
-      const anchors = (highlight as { anchors?: AnchorTriple[] } | null)?.anchors;
+    const expectFaceUnder = (
+      highlight: ToolPreviewShape | null,
+      point: Pt,
+    ): void => {
+      const anchors = (highlight as { anchors?: AnchorTriple[] } | null)
+        ?.anchors;
       expect(anchors, "the hover ends over a face").toBeDefined();
       expect(pointInAnchorPath(point, anchors!)).toBe(true);
     };
@@ -347,7 +361,8 @@ describe("perf budgets — the tools that read as they move", () => {
         const END: Pt = [100, 100];
         const { work, highlight, hovered } = await hover(pacing, END, 40);
         expect(work.count("document.pathAnchors")).toBe(1);
-        const anchors = (highlight as { anchors?: AnchorTriple[] } | null)?.anchors;
+        const anchors = (highlight as { anchors?: AnchorTriple[] } | null)
+          ?.anchors;
         expect(anchors, "the hover ends over a face").toBeDefined();
         expect(pointInAnchorPath(END, anchors!)).toBe(true);
         // …and it is the face the engine itself names at that point.
@@ -452,7 +467,9 @@ describe("perf budgets — the tools that read as they move", () => {
       await settle();
       const counted = work.snapshot();
       // Read before the teardown deletes it.
-      const readout = w.h.host.bindings.get(BIND_MEASURE_READOUT) as MeasureReadout;
+      const readout = w.h.host.bindings.get(
+        BIND_MEASURE_READOUT,
+      ) as MeasureReadout;
       handler.onDeactivate("switch" as never);
       report(scenario, counted);
       return { work: counted, readout };
@@ -473,7 +490,10 @@ describe("perf budgets — the tools that read as they move", () => {
         from,
         w.h.host.viewport.pxToPt(8),
       );
-      expect(snapped, "the origin is within snap range of the path").not.toBeNull();
+      expect(
+        snapped,
+        "the origin is within snap range of the path",
+      ).not.toBeNull();
       return snapped!;
     };
 
@@ -507,7 +527,10 @@ describe("perf budgets — the tools that read as they move", () => {
     });
 
     it("from the 1 000-anchor comb: the same drag, and nothing read here either", async () => {
-      const { work, readout } = await measure("measure from comb", COMB_BODY_POINT);
+      const { work, readout } = await measure(
+        "measure from comb",
+        COMB_BODY_POINT,
+      );
       expect(work.count("editor.client.send")).toBe(1);
       // As found: 1 read, 1 000 anchors — the read scaled with the path;
       // what the tool needs from it never did.
@@ -545,10 +568,15 @@ describe("perf budgets — the tools that read as they move", () => {
           turn[1] * end[0] + turn[3] * end[1] + turn[5],
         ];
         // The end really is somewhere else now (≈ 29 pt away).
-        expect(Math.hypot(moved[0] - end[0], moved[1] - end[1])).toBeGreaterThan(20);
+        expect(
+          Math.hypot(moved[0] - end[0], moved[1] - end[1]),
+        ).toBeGreaterThan(20);
         const from = inward(moved);
 
-        const { work, readout } = await measure("measure from rotated spiral", from);
+        const { work, readout } = await measure(
+          "measure from rotated spiral",
+          from,
+        );
         expect(work.count("document.hitTest")).toBe(1);
         expect(work.count("document.pathAnchors")).toBe(0);
         expect(work.anchorsRead).toBe(0);
@@ -556,7 +584,9 @@ describe("perf budgets — the tools that read as they move", () => {
         const snapped = await snapByTable(w.spiral!, from);
         expect(readout.from).toEqual(snapped);
         // On the rotated path: within the offset of where its end went.
-        expect(Math.hypot(snapped[0] - moved[0], snapped[1] - moved[1])).toBeLessThan(2 * OFF_PATH);
+        expect(
+          Math.hypot(snapped[0] - moved[0], snapped[1] - moved[1]),
+        ).toBeLessThan(2 * OFF_PATH);
         expect(readout.from).not.toEqual(from);
       } finally {
         expect(await undoStepsSince(w, mark)).toBe(1);

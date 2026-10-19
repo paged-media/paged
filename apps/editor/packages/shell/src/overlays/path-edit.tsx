@@ -22,10 +22,7 @@ import { useSyncExternalStore } from "react";
 import type { ElementId } from "@paged-media/client";
 
 import type { OverlayContribution, OverlayProps } from "../registries/overlay";
-import type {
-  PathEditAnchor,
-  PathEditView,
-} from "../state/path-edit-session";
+import type { PathEditAnchor, PathEditView } from "../state/path-edit-session";
 import { useSelection } from "../state/selection-context";
 
 /**
@@ -151,9 +148,7 @@ const subscribeToNothing = () => () => {};
 const getNoView = (): PathEditView | null => null;
 
 function isExtended(a: PathEditAnchor, side: "left" | "right"): boolean {
-  return (
-    Math.hypot(a[side][0] - a.anchor[0], a[side][1] - a.anchor[1]) > 1e-3
-  );
+  return Math.hypot(a[side][0] - a.anchor[0], a[side][1] - a.anchor[1]) > 1e-3;
 }
 
 /** One `[start, end]` per segment: adjacent anchors within a contour,

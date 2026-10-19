@@ -70,7 +70,13 @@ export function CanvasSection({
       </div>
       <div style={row}>
         <span>Anchor</span>
-        <span style={{ display: "grid", gridTemplateColumns: "repeat(3, 18px)", gap: 2 }}>
+        <span
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 18px)",
+            gap: 2,
+          }}
+        >
           {[0, 1, 2].flatMap((ay) =>
             [0, 1, 2].map((ax) => (
               <button

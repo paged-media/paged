@@ -25,17 +25,33 @@ import { createBundleHost } from "@paged-media/plugin-sdk";
 import type { PluginManifest } from "@paged-media/plugin-api";
 import manifestJson from "@paged-media/image-manifest/manifest.json";
 
-import { averageRgba8, fromHex, swapped, toHex, DEFAULT_COLORS } from "../src/color-state";
+import {
+  averageRgba8,
+  fromHex,
+  swapped,
+  toHex,
+  DEFAULT_COLORS,
+} from "../src/color-state";
 import { createImageSession } from "../src/session";
-import { makeFakeEditor, mapBacking, psdBytes, shellStub, silentConsole } from "./helpers";
+import {
+  makeFakeEditor,
+  mapBacking,
+  psdBytes,
+  shellStub,
+  silentConsole,
+} from "./helpers";
 
 function open() {
   const fake = makeFakeEditor();
-  const handle = createBundleHost(() => fake.editor, manifestJson as PluginManifest, {
-    console: silentConsole,
-    storage: mapBacking(),
-    shell: shellStub(),
-  });
+  const handle = createBundleHost(
+    () => fake.editor,
+    manifestJson as PluginManifest,
+    {
+      console: silentConsole,
+      storage: mapBacking(),
+      shell: shellStub(),
+    },
+  );
   return { handle, session: createImageSession(handle.host) };
 }
 
@@ -54,7 +70,10 @@ describe("colour-state", () => {
   });
 
   it("swap exchanges, and the default is black on white", () => {
-    expect(swapped(DEFAULT_COLORS)).toEqual({ fg: [1, 1, 1, 1], bg: [0, 0, 0, 1] });
+    expect(swapped(DEFAULT_COLORS)).toEqual({
+      fg: [1, 1, 1, 1],
+      bg: [0, 0, 0, 1],
+    });
   });
 });
 
@@ -66,7 +85,10 @@ describe("the session's colours", () => {
     session.setBrushParams({ color: [0, 0, 1, 1] });
     expect(session.state().colors.fg).toEqual([0, 0, 1, 1]);
     session.swapColors();
-    expect(session.state().colors).toEqual({ fg: [1, 1, 1, 1], bg: [0, 0, 1, 1] });
+    expect(session.state().colors).toEqual({
+      fg: [1, 1, 1, 1],
+      bg: [0, 0, 1, 1],
+    });
     expect(session.state().brush.color).toEqual([1, 1, 1, 1]);
     session.resetColors();
     expect(session.state().colors).toEqual(DEFAULT_COLORS);

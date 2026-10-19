@@ -26,7 +26,11 @@ import { afterEach, describe, expect, it } from "bun:test";
 
 import type { PluginManifest } from "@paged-media/plugin-api";
 
-import { createBundleHost, PluginCapabilityError, type PagesBackend } from "../src";
+import {
+  createBundleHost,
+  PluginCapabilityError,
+  type PagesBackend,
+} from "../src";
 import { createHeadlessHost, type HeadlessHost } from "../src/harness";
 import { makeFakeEditor } from "./fake-editor";
 import { minimalIdml } from "./fixtures/minimal-idml";
@@ -34,7 +38,9 @@ import { minimalIdml } from "./fixtures/minimal-idml";
 const silent = { debug() {}, info() {}, warn() {}, error() {} };
 
 const manifest = (
-  capabilities: PluginManifest["capabilities"] = { document: { read: "broad" } },
+  capabilities: PluginManifest["capabilities"] = {
+    document: { read: "broad" },
+  },
 ): PluginManifest => ({
   id: "media.paged.test",
   name: "test",
@@ -50,7 +56,11 @@ afterEach(() => {
 });
 
 const isPng = (b: Uint8Array) =>
-  b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47;
+  b.length > 8 &&
+  b[0] === 0x89 &&
+  b[1] === 0x50 &&
+  b[2] === 0x4e &&
+  b[3] === 0x47;
 
 describe("host.render.snapshot (v70)", () => {
   it("renders a page, and leaves the named items out of that image only", async () => {
@@ -79,8 +89,12 @@ describe("host.render.snapshot (v70)", () => {
   it("answers null for an unknown page and refuses a bad width", async () => {
     live = await createHeadlessHost({ console: silent });
     await live.load(minimalIdml());
-    expect(await live.host.render.snapshot("nope", { widthPx: 100 })).toBeNull();
-    await expect(live.host.render.snapshot("nope", { widthPx: 0 })).rejects.toThrow(/widthPx/);
+    expect(
+      await live.host.render.snapshot("nope", { widthPx: 100 }),
+    ).toBeNull();
+    await expect(
+      live.host.render.snapshot("nope", { widthPx: 0 }),
+    ).rejects.toThrow(/widthPx/);
   });
 
   it("is a document read: refused without the read capability", async () => {
@@ -89,9 +103,9 @@ describe("host.render.snapshot (v70)", () => {
       console: silent,
       capabilityMode: "enforce",
     });
-    await expect(host.render.snapshot("p1", { widthPx: 10 })).rejects.toBeInstanceOf(
-      PluginCapabilityError,
-    );
+    await expect(
+      host.render.snapshot("p1", { widthPx: 10 }),
+    ).rejects.toBeInstanceOf(PluginCapabilityError);
   });
 });
 
@@ -148,7 +162,9 @@ describe("host.viewport page members (v70)", () => {
 
   it("answers the honest nothing without a backend", async () => {
     const fake = makeFakeEditor();
-    const { host } = createBundleHost(() => fake.editor, manifest(), { console: silent });
+    const { host } = createBundleHost(() => fake.editor, manifest(), {
+      console: silent,
+    });
     expect(host.supports("viewport.pages@1")).toBe(false);
     expect(await host.viewport.goToPage("p1")).toBe(false);
     expect(host.viewport.activePage()).toBeNull();

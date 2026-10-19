@@ -1,0 +1,29 @@
+$ paged-node ai <TMP>/fixture.paged 'add a text frame' -o <TMP>/ai.paged --no-plugins
+# exit 0
+# stdout
+{
+  "outcome": "done",
+  "summary": "Added a text frame.",
+  "turns": 2,
+  "usage": {
+    "inputTokens": 20,
+    "outputTokens": 10,
+    "cacheReadTokens": 0
+  },
+  "scripts": [
+    {
+      "source": "const pid = JSON.parse(paged.pages())[0].selfId;\npaged.insertTextFrame(pid, [72, 72, 200, 300]);\nconsole.log('framed');",
+      "error": null,
+      "output": [
+        "[log] framed"
+      ]
+    }
+  ],
+  "saved": {
+    "path": "<TMP>/ai.paged",
+    "format": "paged",
+    "bytes": <N>
+  }
+}
+# stderr
+(empty)

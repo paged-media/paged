@@ -153,7 +153,12 @@ async function addSwatch(page: Page, name: string): Promise<void> {
     await c.client.mutate({
       op: "createSwatch",
       args: {
-        spec: { name: n, space: "CMYK", value: [0, 0, 0, 50], model: "Process" },
+        spec: {
+          name: n,
+          space: "CMYK",
+          value: [0, 0, 0, 50],
+          model: "Process",
+        },
       },
     });
   }, name);
@@ -184,8 +189,7 @@ async function elementScreenCenter(
               Array<{
                 bounds: [number, number, number, number];
                 itemTransform?:
-                  | [number, number, number, number, number, number]
-                  | null;
+                  [number, number, number, number, number, number] | null;
               }>
             >;
           };

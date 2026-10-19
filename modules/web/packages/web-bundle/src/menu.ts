@@ -31,7 +31,12 @@ export function contributeMenu(host: BundleHost): Disposable {
     const n = (perGroup.get(group) ?? 0) + 1;
     perGroup.set(group, n);
     handles.push(
-      host.contribute.menu({ path, command: `${C}.${suffix}`, group, order: n * 10 }),
+      host.contribute.menu({
+        path,
+        command: `${C}.${suffix}`,
+        group,
+        order: n * 10,
+      }),
     );
   }
   host.log.info(`contributed ${handles.length} menu entries`);

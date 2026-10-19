@@ -86,11 +86,7 @@ import {
   type SelectionStats,
   type StrokeTool,
 } from "./engine";
-import {
-  imageToPage,
-  pageToImage,
-  resolveFrameFit,
-} from "./frame-fit";
+import { imageToPage, pageToImage, resolveFrameFit } from "./frame-fit";
 import { claimImageTiles } from "./tile-provider";
 import { readPgil } from "./object-model/pgil";
 import { collectGarbage } from "./session-store";
@@ -514,7 +510,10 @@ export interface ImageSession {
   commitToDocument(): Promise<boolean>;
   /** RED-EYE removal inside the ellipse that fits the box `(x, y, w, h)`
    *  (image px); `darken` 0–1 (default 0.5). */
-  applyRedEye(box: { x: number; y: number; w: number; h: number }, darken?: number): Promise<boolean>;
+  applyRedEye(
+    box: { x: number; y: number; w: number; h: number },
+    darken?: number,
+  ): Promise<boolean>;
   /** PATCH: replace the selection with the region (dx, dy) image px away,
    *  healed so it blends. Needs a selection. */
   patchSelection(dx: number, dy: number): Promise<boolean>;
@@ -526,7 +525,10 @@ export interface ImageSession {
   applyColorLookup(cubeText: string, name?: string): Promise<boolean>;
   /** The GRADIENT TOOL: foreground → background along the dragged line
    *  (image px), in `state().gradientKind`. */
-  fillGradientLine(from: [number, number], to: [number, number]): Promise<boolean>;
+  fillGradientLine(
+    from: [number, number],
+    to: [number, number],
+  ): Promise<boolean>;
   setGradientKind(kind: GradientKind): void;
   /** Edit ▸ Fill with the foreground colour (the selection, or everything). */
   fillForeground(): Promise<boolean>;
@@ -557,7 +559,11 @@ export interface ImageSession {
    * the foreground (or the background). Returns the colour, or null when
    * nothing is ingested or `at` is outside the image.
    */
-  sampleColor(at: [number, number], size?: SampleSize, target?: "fg" | "bg"): Rgba01 | null;
+  sampleColor(
+    at: [number, number],
+    size?: SampleSize,
+    target?: "fg" | "bg",
+  ): Rgba01 | null;
   /** Fill the selection with the defined pattern (Edit ▸ Fill ▸ Pattern). */
   fillWithPattern(scale?: number, opacity?: number): Promise<boolean>;
   /** Shape blur with the defined pattern as the blur's shape. */
@@ -572,17 +578,74 @@ export interface ImageSession {
   // FILTER GALLERY — twelve primitives spanning the six families.
   // `amount` 0 is the identity on every one of them.
   galleryKuwahara(radiusPx: number, amount: number): Promise<boolean>;
-  galleryPosterizeEdges(levels: number, edgeAmount: number, edgeThreshold: number, amount: number): Promise<boolean>;
-  galleryGlowingEdges(intensity: number, smoothness: number, amount: number): Promise<boolean>;
-  galleryHalftone(cellPx: number, angleDeg: number, contrast: number, amount: number): Promise<boolean>;
-  galleryGrain(seed: number, sizePx: number, mono: boolean, amount: number): Promise<boolean>;
-  galleryDiffuse(seed: number, radiusPx: number, angleDeg: number, anisotropy: number, amount: number): Promise<boolean>;
-  galleryCrosshatch(angleDeg: number, spacingPx: number, strength: number, sets: number, amount: number): Promise<boolean>;
-  galleryBasRelief(angleDeg: number, elevationDeg: number, height: number, amount: number): Promise<boolean>;
-  galleryThresholdInk(threshold: number, softness: number, amount: number): Promise<boolean>;
-  galleryStainedGlass(seed: number, cellPx: number, border: number, amount: number): Promise<boolean>;
-  galleryGlass(seed: number, scalePx: number, distortion: number, amount: number): Promise<boolean>;
-  galleryTexturizer(seed: number, kind: number, scalePx: number, relief: number, angleDeg: number, amount: number): Promise<boolean>;
+  galleryPosterizeEdges(
+    levels: number,
+    edgeAmount: number,
+    edgeThreshold: number,
+    amount: number,
+  ): Promise<boolean>;
+  galleryGlowingEdges(
+    intensity: number,
+    smoothness: number,
+    amount: number,
+  ): Promise<boolean>;
+  galleryHalftone(
+    cellPx: number,
+    angleDeg: number,
+    contrast: number,
+    amount: number,
+  ): Promise<boolean>;
+  galleryGrain(
+    seed: number,
+    sizePx: number,
+    mono: boolean,
+    amount: number,
+  ): Promise<boolean>;
+  galleryDiffuse(
+    seed: number,
+    radiusPx: number,
+    angleDeg: number,
+    anisotropy: number,
+    amount: number,
+  ): Promise<boolean>;
+  galleryCrosshatch(
+    angleDeg: number,
+    spacingPx: number,
+    strength: number,
+    sets: number,
+    amount: number,
+  ): Promise<boolean>;
+  galleryBasRelief(
+    angleDeg: number,
+    elevationDeg: number,
+    height: number,
+    amount: number,
+  ): Promise<boolean>;
+  galleryThresholdInk(
+    threshold: number,
+    softness: number,
+    amount: number,
+  ): Promise<boolean>;
+  galleryStainedGlass(
+    seed: number,
+    cellPx: number,
+    border: number,
+    amount: number,
+  ): Promise<boolean>;
+  galleryGlass(
+    seed: number,
+    scalePx: number,
+    distortion: number,
+    amount: number,
+  ): Promise<boolean>;
+  galleryTexturizer(
+    seed: number,
+    kind: number,
+    scalePx: number,
+    relief: number,
+    angleDeg: number,
+    amount: number,
+  ): Promise<boolean>;
   /** NOISE — despeckle; `amount` 0 is the identity. */
   applyDespeckle(edgeThreshold: number, amount: number): Promise<boolean>;
   /**
@@ -926,13 +989,17 @@ export function createImageSession(host: BundleHost): ImageSession {
     histogram: null,
     compositedFrame: null,
     busy: false,
-    status: "Select a placed image on the page, then choose Use selected frame.",
+    status:
+      "Select a placed image on the page, then choose Use selected frame.",
     psd: null,
     selection: null,
     pattern: null,
     colors: freshColors(),
     livePreview: true,
-    wand: { tolerance: WAND_TOLERANCE_DEFAULT, contiguous: WAND_CONTIGUOUS_DEFAULT },
+    wand: {
+      tolerance: WAND_TOLERANCE_DEFAULT,
+      contiguous: WAND_CONTIGUOUS_DEFAULT,
+    },
     editingAdjustment: null,
     gradientKind: "linear",
     committedRev: null,
@@ -1004,7 +1071,9 @@ export function createImageSession(host: BundleHost): ImageSession {
     try {
       engine.layersSetAdjustment(index, state.params);
     } catch (err) {
-      setStatus(`Adjustment edit failed: ${err instanceof Error ? err.message : err}`);
+      setStatus(
+        `Adjustment edit failed: ${err instanceof Error ? err.message : err}`,
+      );
       emit();
       return true;
     }
@@ -1031,13 +1100,16 @@ export function createImageSession(host: BundleHost): ImageSession {
   const reopenFromDocument = async (ref: ElementId, placed: Uint8Array) => {
     if (!engine) return;
     type Marker = { v?: number; data?: Partial<CommittedMarker> } | null;
-    const marker = (await host.document.getMetadata(ref).catch(() => null)) as unknown as Marker;
+    const marker = (await host.document
+      .getMetadata(ref)
+      .catch(() => null)) as unknown as Marker;
     if (marker?.v !== 2) return;
     // The frame HAS committed revisions whether or not their layers can be
     // restored below, so the next commit continues their numbering. Every
     // branch that opens flat used to leave this unset, and that commit
     // then rewrote r1.json, a record the document's undo can still reach.
-    if (typeof marker.data?.rev === "number") state.committedRev = marker.data.rev;
+    if (typeof marker.data?.rev === "number")
+      state.committedRev = marker.data.rev;
     if (!marker.data?.record) return;
     const data = marker.data as CommittedMarker;
     if ((await sha256Hex(placed)) !== data.baked) {
@@ -1063,7 +1135,10 @@ export function createImageSession(host: BundleHost): ImageSession {
     // replaced still carry the old render, and the frame still shows the
     // previous composite. This realm has the device — finish both, and
     // leave the result to be committed like any other edit.
-    const record = stored.record as { pending?: boolean; pendingRender?: number[] };
+    const record = stored.record as {
+      pending?: boolean;
+      pendingRender?: number[];
+    };
     let finished = false;
     if (record.pendingRender?.length) {
       const smart = readPgil(stored.manifest, stored.buffers).layers;
@@ -1075,12 +1150,15 @@ export function createImageSession(host: BundleHost): ImageSession {
           await engine.layerRenderSmart(index, scale);
           finished = true;
         } catch (err) {
-          host.log.warn(`image: re-rendering smart object ${id} failed: ${err}`);
+          host.log.warn(
+            `image: re-rendering smart object ${id} failed: ${err}`,
+          );
         }
       }
       if (finished) await engine.layersComposite();
     }
-    if (record.pending || (data as { pending?: boolean }).pending || finished) state.uncommitted = true;
+    if (record.pending || (data as { pending?: boolean }).pending || finished)
+      state.uncommitted = true;
     refreshLayers();
     refreshHistogram();
     bumpTiles();
@@ -1108,8 +1186,12 @@ export function createImageSession(host: BundleHost): ImageSession {
    *  the document's undo can still land on the old one. */
   const markerRevision = async (ref: ElementId): Promise<number | null> => {
     type Marker = { v?: number; data?: { rev?: unknown } } | null;
-    const marker = (await host.document.getMetadata(ref).catch(() => null)) as unknown as Marker;
-    return marker?.v === 2 && typeof marker.data?.rev === "number" ? marker.data.rev : null;
+    const marker = (await host.document
+      .getMetadata(ref)
+      .catch(() => null)) as unknown as Marker;
+    return marker?.v === 2 && typeof marker.data?.rev === "number"
+      ? marker.data.rev
+      : null;
   };
 
   /** The engine handle of the defined pattern (`definePattern`). */
@@ -1348,7 +1430,9 @@ export function createImageSession(host: BundleHost): ImageSession {
     try {
       run();
     } catch (err) {
-      setStatus(`Group edit failed: ${err instanceof Error ? err.message : err}`);
+      setStatus(
+        `Group edit failed: ${err instanceof Error ? err.message : err}`,
+      );
       return false;
     }
     return finishMaskEdit();
@@ -1650,12 +1734,18 @@ export function createImageSession(host: BundleHost): ImageSession {
    *  preview both land here, so they cannot lay pixels out differently. */
   /** What the frame's scene image last was, when it went through the
    *  image door — a brush sample may then patch only its tiles. */
-  let submitted: { target: string; width: number; height: number } | null = null;
+  let submitted: { target: string; width: number; height: number } | null =
+    null;
 
   /** Patch the rectangle a brush sample changed instead of resending the
    *  image. False when the last submission does not allow it (the caller
    *  then resends the whole image). */
-  const submitDirty = async (target: string, rgba: Uint8Array, width: number, height: number) => {
+  const submitDirty = async (
+    target: string,
+    rgba: Uint8Array,
+    width: number,
+    height: number,
+  ) => {
     const surface = scene();
     const rect = engine?.brushDirtyRect();
     if (
@@ -1727,7 +1817,12 @@ export function createImageSession(host: BundleHost): ImageSession {
 
   /** The resampled source the preview runs on, or null. Rebuilt when the
    *  source pixels or the wanted size change. */
-  let proxy: { handle: number; width: number; height: number; key: string } | null = null;
+  let proxy: {
+    handle: number;
+    width: number;
+    height: number;
+    key: string;
+  } | null = null;
 
   const freeProxy = () => {
     if (proxy && engine) engine.freeImage(proxy.handle);
@@ -2008,7 +2103,9 @@ export function createImageSession(host: BundleHost): ImageSession {
         if (!ok) return false;
         const decoded = `${name} — ${state.source?.width}×${state.source?.height} decoded`;
         if (!boundTo) {
-          setStatus(`${decoded}. Select an image frame and Apply to composite.`);
+          setStatus(
+            `${decoded}. Select an image frame and Apply to composite.`,
+          );
           return true;
         }
         // AN EMPTY FRAME RECEIVES THE IMAGE: it is placed there the way a
@@ -2036,10 +2133,14 @@ export function createImageSession(host: BundleHost): ImageSession {
           const reason = state.status;
           sourceRef = null;
           state.committedRev = null;
-          setStatus(`${decoded} into the selected frame, but not placed in it: ${reason}`);
+          setStatus(
+            `${decoded} into the selected frame, but not placed in it: ${reason}`,
+          );
           return true;
         }
-        setStatus(`${decoded} into the selected frame. Apply to composite, or paint on it.`);
+        setStatus(
+          `${decoded} into the selected frame. Apply to composite, or paint on it.`,
+        );
         return true;
       } finally {
         state.busy = false;
@@ -2066,13 +2167,22 @@ export function createImageSession(host: BundleHost): ImageSession {
     async applyRedEye(box, darken = 0.5) {
       if (box.w < 1 || box.h < 1) return false;
       return api.applyEffect("Red eye", (h) =>
-        engine!.applyRedEye(h, box.x + box.w / 2, box.y + box.h / 2, box.w / 2, box.h / 2, darken),
+        engine!.applyRedEye(
+          h,
+          box.x + box.w / 2,
+          box.y + box.h / 2,
+          box.w / 2,
+          box.h / 2,
+          darken,
+        ),
       );
     },
 
     async patchSelection(dx, dy) {
       if (!state.selection) {
-        setStatus("Patch needs a selection — select the area to replace, then drag it onto the source.");
+        setStatus(
+          "Patch needs a selection — select the area to replace, then drag it onto the source.",
+        );
         return false;
       }
       if (Math.round(dx) === 0 && Math.round(dy) === 0) return false;
@@ -2186,7 +2296,9 @@ export function createImageSession(host: BundleHost): ImageSession {
         return false;
       }
       api.refreshSelection();
-      setStatus(`Selection ${op === "border" ? "bordered" : `${op}ed`} by ${radius} px.`);
+      setStatus(
+        `Selection ${op === "border" ? "bordered" : `${op}ed`} by ${radius} px.`,
+      );
       return true;
     },
 
@@ -2349,8 +2461,8 @@ export function createImageSession(host: BundleHost): ImageSession {
       setStatus(
         accepted
           ? `${staged.fileName} handed to the host's save path ` +
-            "(a browser download cannot report a cancel, so this is " +
-            "delivery, not proof of a file on disk)."
+              "(a browser download cannot report a cancel, so this is " +
+              "delivery, not proof of a file on disk)."
           : `The host declined to save ${staged.fileName}.`,
       );
       return accepted;
@@ -2565,18 +2677,23 @@ export function createImageSession(host: BundleHost): ImageSession {
       if (!c) return null;
       if (target === "fg") api.setForeground(c);
       else api.setBackground(c);
-      setStatus(`Sampled ${toHex(c)} at ${px}, ${py}${size > 1 ? ` (${size}×${size} average)` : ""}.`);
+      setStatus(
+        `Sampled ${toHex(c)} at ${px}, ${py}${size > 1 ? ` (${size}×${size} average)` : ""}.`,
+      );
       emit();
       return c;
     },
 
     sourceElement: () => sourceRef,
-    colorPicker: () => (host.supports("widgets.colorPicker@1") ? host.widgets.ColorPicker : null),
+    colorPicker: () =>
+      host.supports("widgets.colorPicker@1") ? host.widgets.ColorPicker : null,
 
     async commitToDocument() {
       const src = state.source;
       if (!src || !engine || !src.elementId || !sourceRef) {
-        setStatus("Commit needs an image ingested from a frame in the document.");
+        setStatus(
+          "Commit needs an image ingested from a frame in the document.",
+        );
         emit();
         return false;
       }
@@ -2596,7 +2713,10 @@ export function createImageSession(host: BundleHost): ImageSession {
         // adjustments that were never applied are not part of it.
         const rgba = engine.tile(src.handle, 0, 0, src.width, src.height);
         const png = engine.encode(rgba, src.width, src.height, "png");
-        if (png.length > MAX_BAKED_BYTES && !host.supports("document.mutateBinary@1")) {
+        if (
+          png.length > MAX_BAKED_BYTES &&
+          !host.supports("document.mutateBinary@1")
+        ) {
           setStatus(
             `The baked image is ${(png.length / 1048576).toFixed(1)} MB; the ` +
               "host takes at most 8 MB per image until it accepts binary " +
@@ -2614,26 +2734,37 @@ export function createImageSession(host: BundleHost): ImageSession {
           { width: src.width, height: src.height },
           baked,
         );
-        const marker: CommittedMarker = { owns: "pixels", rev, record: path, baked };
+        const marker: CommittedMarker = {
+          owns: "pixels",
+          rev,
+          record: path,
+          baked,
+        };
         // The PNG crosses as bytes where the host takes them, else as the
         // JSON lane's number[] (the SDK's `mutateWithBytes` splices it in).
-        await host.document.mutateWithBytes({
-          op: "batch",
-          args: {
-            ops: [
-              { op: "replaceImageBytes", args: { elementId: src.elementId, bytes: [] } },
-              {
-                op: "setPluginMetadata",
-                args: {
-                  elementId: sourceRef,
-                  key: "x-paged:media.paged.image",
-                  value: JSON.stringify({ v: 2, data: marker }),
-                  caller: "media.paged.image",
+        await host.document.mutateWithBytes(
+          {
+            op: "batch",
+            args: {
+              ops: [
+                {
+                  op: "replaceImageBytes",
+                  args: { elementId: src.elementId, bytes: [] },
                 },
-              },
-            ],
+                {
+                  op: "setPluginMetadata",
+                  args: {
+                    elementId: sourceRef,
+                    key: "x-paged:media.paged.image",
+                    value: JSON.stringify({ v: 2, data: marker }),
+                    caller: "media.paged.image",
+                  },
+                },
+              ],
+            },
           },
-        }, png);
+          png,
+        );
         state.committedRev = rev;
         state.uncommitted = false;
         // Old revisions and the layer data only they used go (the
@@ -2647,7 +2778,9 @@ export function createImageSession(host: BundleHost): ImageSession {
           src.elementId,
           rev,
           KEEP_REVISIONS,
-        ).catch((err) => host.log.warn(`image: clearing old revisions failed: ${err}`));
+        ).catch((err) =>
+          host.log.warn(`image: clearing old revisions failed: ${err}`),
+        );
         setStatus(
           `Committed revision ${rev}: ${state.layers.layers.length} layer` +
             `${state.layers.layers.length === 1 ? "" : "s"} stored in the document ` +
@@ -2688,7 +2821,9 @@ export function createImageSession(host: BundleHost): ImageSession {
         emit();
         return true;
       } catch (err) {
-        setStatus(`Define pattern failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(
+          `Define pattern failed: ${err instanceof Error ? err.message : err}`,
+        );
         emit();
         return false;
       }
@@ -2705,7 +2840,9 @@ export function createImageSession(host: BundleHost): ImageSession {
 
     async shapeBlurWithPattern(radiusPx = 8) {
       if (patternHandle === null) {
-        setStatus("Shape blur uses the defined pattern as its shape — define one first.");
+        setStatus(
+          "Shape blur uses the defined pattern as its shape — define one first.",
+        );
         emit();
         return false;
       }
@@ -2724,7 +2861,13 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
     async galleryPosterizeEdges(levels, edgeAmount, edgeThreshold, amount) {
       return this.applyEffect("Poster edges", (h) =>
-        engine!.galleryPosterizeEdges(h, levels, edgeAmount, edgeThreshold, amount),
+        engine!.galleryPosterizeEdges(
+          h,
+          levels,
+          edgeAmount,
+          edgeThreshold,
+          amount,
+        ),
       );
     },
     async galleryGlowingEdges(intensity, smoothness, amount) {
@@ -2749,7 +2892,14 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
     async galleryCrosshatch(angleDeg, spacingPx, strength, sets, amount) {
       return this.applyEffect("Crosshatch", (h) =>
-        engine!.galleryCrosshatch(h, angleDeg, spacingPx, strength, sets, amount),
+        engine!.galleryCrosshatch(
+          h,
+          angleDeg,
+          spacingPx,
+          strength,
+          sets,
+          amount,
+        ),
       );
     },
     async galleryBasRelief(angleDeg, elevationDeg, height, amount) {
@@ -2774,7 +2924,15 @@ export function createImageSession(host: BundleHost): ImageSession {
     },
     async galleryTexturizer(seed, kind, scalePx, relief, angleDeg, amount) {
       return this.applyEffect("Texturizer", (h) =>
-        engine!.galleryTexturizer(h, seed, kind, scalePx, relief, angleDeg, amount),
+        engine!.galleryTexturizer(
+          h,
+          seed,
+          kind,
+          scalePx,
+          relief,
+          angleDeg,
+          amount,
+        ),
       );
     },
     async applyDespeckle(edgeThreshold, amount) {
@@ -2788,7 +2946,9 @@ export function createImageSession(host: BundleHost): ImageSession {
       );
     },
     async offsetLayer(dx, dy, edge = EdgePolicy.Transparent) {
-      return this.applyEffect("Move", (h) => engine!.applyOffset(h, dx, dy, edge));
+      return this.applyEffect("Move", (h) =>
+        engine!.applyOffset(h, dx, dy, edge),
+      );
     },
     async offsetFilter(dx, dy) {
       return this.applyEffect("Offset", (h) =>
@@ -2916,7 +3076,9 @@ export function createImageSession(host: BundleHost): ImageSession {
       if (channel === "rgb") {
         state.params = { ...state.params, curveLut: table };
       } else {
-        const rgb = [...state.params.curveLutRgb] as AdjustParams["curveLutRgb"];
+        const rgb = [
+          ...state.params.curveLutRgb,
+        ] as AdjustParams["curveLutRgb"];
         rgb[{ r: 0, g: 1, b: 2 }[channel]] = table;
         state.params = { ...state.params, curveLutRgb: rgb };
       }
@@ -3342,7 +3504,11 @@ export function createImageSession(host: BundleHost): ImageSession {
           state.type.underline ? 1 : 0,
           state.type.strikethrough ? 1 : 0,
           state.type.ligatures ? 1 : 0,
-          state.type.align === "center" ? 1 : state.type.align === "right" ? 2 : 0,
+          state.type.align === "center"
+            ? 1
+            : state.type.align === "right"
+              ? 2
+              : 0,
         );
       } catch (err) {
         setStatus(`Type failed: ${err instanceof Error ? err.message : err}`);
@@ -3428,7 +3594,9 @@ export function createImageSession(host: BundleHost): ImageSession {
                 library.sampleCount === 1 ? "" : "s"
               } (bitmap tips are not painted — the engine's tip is parametric)`
             : "") +
-          (warned > 0 ? `, ${warned} reader warning${warned === 1 ? "" : "s"}` : ""),
+          (warned > 0
+            ? `, ${warned} reader warning${warned === 1 ? "" : "s"}`
+            : ""),
       );
       return true;
     },
@@ -3464,7 +3632,9 @@ export function createImageSession(host: BundleHost): ImageSession {
       if (preset.diameter !== null && preset.diameterUnit === "#Pxl") {
         patch.size = Math.max(1, Math.round(preset.diameter));
       } else if (preset.diameter !== null) {
-        unapplied.push(`diameter in ${preset.diameterUnit ?? "an unknown unit"}`);
+        unapplied.push(
+          `diameter in ${preset.diameterUnit ?? "an unknown unit"}`,
+        );
       }
       if (preset.hardness !== null) {
         patch.hardness = Math.min(1, Math.max(0, preset.hardness));
@@ -3489,7 +3659,9 @@ export function createImageSession(host: BundleHost): ImageSession {
       state.brushPreset = index;
       setStatus(
         `Brush: ${preset.name}` +
-          (unapplied.length > 0 ? ` — not applied: ${unapplied.join("; ")}` : ""),
+          (unapplied.length > 0
+            ? ` — not applied: ${unapplied.join("; ")}`
+            : ""),
       );
       return true;
     },
@@ -3583,8 +3755,20 @@ export function createImageSession(host: BundleHost): ImageSession {
       // the adjusted composite back. Stated in the panel.
       if (strokeTarget && strokeBox) {
         // Only the dabs' rectangle crosses when the host takes tiles.
-        const patched = await submitDirty(strokeTarget, rgba, src.width, src.height);
-        if (!patched) await submitLayer(strokeTarget, rgba, src.width, src.height, strokeBox);
+        const patched = await submitDirty(
+          strokeTarget,
+          rgba,
+          src.width,
+          src.height,
+        );
+        if (!patched)
+          await submitLayer(
+            strokeTarget,
+            rgba,
+            src.width,
+            src.height,
+            strokeBox,
+          );
       }
       emit();
       return true;
@@ -3697,7 +3881,9 @@ export function createImageSession(host: BundleHost): ImageSession {
         if (!state.editingAdjustment) paramsBeforeBinding = state.params;
         state.editingAdjustment = { index, id: row.id };
         state.params = structuredClone(params);
-        setStatus(`Editing adjustment layer “${row.name}” — the sliders change it directly.`);
+        setStatus(
+          `Editing adjustment layer “${row.name}” — the sliders change it directly.`,
+        );
       } else if (state.editingAdjustment) {
         state.editingAdjustment = null;
         state.params = paramsBeforeBinding ?? freshIdentityParams();
@@ -3756,9 +3942,7 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         engine.layerSetClipped(index, clipped);
       } catch (err) {
-        setStatus(
-          `Clip failed: ${err instanceof Error ? err.message : err}`,
-        );
+        setStatus(`Clip failed: ${err instanceof Error ? err.message : err}`);
         return false;
       }
       return finishMaskEdit();
@@ -3782,7 +3966,9 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         engine.layersUngroup(id);
       } catch (err) {
-        setStatus(`Ungroup failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(
+          `Ungroup failed: ${err instanceof Error ? err.message : err}`,
+        );
         return false;
       }
       return finishMaskEdit();
@@ -3851,7 +4037,9 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         engine.layerAddMask(index, revealAll);
       } catch (err) {
-        setStatus(`Add layer mask failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(
+          `Add layer mask failed: ${err instanceof Error ? err.message : err}`,
+        );
         return false;
       }
       const ok = await finishMaskEdit();
@@ -3872,7 +4060,9 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         engine.layerSetEditTarget(index, target);
       } catch (err) {
-        setStatus(`Edit target failed: ${err instanceof Error ? err.message : err}`);
+        setStatus(
+          `Edit target failed: ${err instanceof Error ? err.message : err}`,
+        );
         return false;
       }
       refreshLayers();
@@ -3932,7 +4122,8 @@ export function createImageSession(host: BundleHost): ImageSession {
       try {
         const at = engine.layersAddAdjustment("", state.params);
         const id = engine.layers().layers[at]?.id;
-        if (id !== undefined) adjustmentParams.set(id, structuredClone(state.params));
+        if (id !== undefined)
+          adjustmentParams.set(id, structuredClone(state.params));
       } catch (err) {
         // Identity is the common refusal, and it is honest: a row that
         // adjusts nothing would just be clutter that looks like work.

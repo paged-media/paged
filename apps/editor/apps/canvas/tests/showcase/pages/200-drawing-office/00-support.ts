@@ -144,7 +144,11 @@ export const polygons = (ctx: PageContext): Promise<Ref[]> =>
 export const corner = (
   x: number,
   y: number,
-): { anchor: [number, number]; left: [number, number]; right: [number, number] } => ({
+): {
+  anchor: [number, number];
+  left: [number, number];
+  right: [number, number];
+} => ({
   anchor: [x, y],
   left: [x, y],
   right: [x, y],
@@ -331,9 +335,15 @@ export async function focusPageView(
     const dx = v.tx - targetTx;
     const dy = v.ty - targetTy;
     if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return true;
-    await ctx.page.mouse.move(v.wrapLeft + v.wrapW / 2, v.wrapTop + v.wrapH / 2);
+    await ctx.page.mouse.move(
+      v.wrapLeft + v.wrapW / 2,
+      v.wrapTop + v.wrapH / 2,
+    );
     // Chunked so a 50k-pt jump is not one implausible wheel event.
-    const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 15000));
+    const steps = Math.max(
+      1,
+      Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 15000),
+    );
     for (let s = 0; s < steps; s += 1) {
       await ctx.page.mouse.wheel(dx / steps, dy / steps);
       await ctx.page.waitForTimeout(60);
