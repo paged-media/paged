@@ -53,7 +53,7 @@ must not return it bare (the `await` of its caller would run it and get
   fast-check properties, the invariants per gesture kind, the findings as
   expected failures) and `test/gesture-fuzz.test.ts` (25 sequences a fixture
   in CI; `PAGED_GESTURE_FUZZ_N=200` locally; `PAGED_GESTURE_FUZZ_SEED=<n>`
-  replays one).
+  replays one). CI runs this package in the `extensions / bun test` job.
 - The browser: `apps/editor/apps/canvas/tests/e2e/gesture-dsl.spec.ts`,
   `gesture-fuzz.spec.ts`, `gesture-matrix.spec.ts`,
   `ux-audit-gestures.spec.ts`, over `tests/e2e/harness/gesture-kit.ts`.
