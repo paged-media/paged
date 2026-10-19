@@ -214,7 +214,7 @@ end of the work, both ways, every lane:
 | Lane | As written | Compiled |
 |---|---|---|
 | canvas DOM | 1,094 | 1,094 |
-| canvas unit / contracts / headless | 122 / 21 / 1,683 | 122 / 21 / 1,683 |
+| canvas unit / headless | 122 / 1,458 | 122 / 1,458 |
 | shell / shell DOM / tools | 200 / 95 / 144 | 200 / 95 / 144 |
 | data-bundle (+ DOM) | 264 + 173 skipped (0 + 5 skipped) | the same |
 | doc-bundle (+ DOM) | 54 (6) | 54 (6) |
@@ -224,6 +224,7 @@ end of the work, both ways, every lane:
 | slide-bundle (+ DOM) | 69 (13) | 69 (13) |
 | web-bundle (+ DOM) | 345 (5) | 345 (5) |
 | plugin-sdk | 755 | 755 |
+| root tests: contracts / system | 234 / 28 | 234 / 28 |
 
 (The data-bundle's 173 skipped are its DuckDB lanes, unavailable on the measuring machine; they
 skip the same way both ways. The data, image, sheet and web lanes also hold the wasm freshness
@@ -235,15 +236,75 @@ next to the production build with its compiler check.
 ### Playwright
 
 `@level:smoke` (chromium and journeys projects) and the plugin journeys, on the Vite dev server,
-headless Chromium without a WebGPU adapter. Before: origin/main at the base of this work
-(`5cfadb02b`), no compiler. After: this branch, compiler on (the dev server compiles like the
-build).
+headless Chromium without a WebGPU adapter. Before: main at the base of this work
+(`5cfadb02b`), no compiler. After: the last slice, compiler on (the dev server compiles like
+the build), with the hand-written memoization removed.
 
 | Run | Before | After |
 |---|---|---|
 | smoke | 63 passed | 63 passed |
-| plugin journeys | 73 passed, 1 flaky, 21 skipped | (pending) |
+| plugin journeys | 73 passed, 1 flaky, 21 skipped | 74 passed, 21 skipped |
+
+(The flaky one before was `sheet-edit-persist`, which passed on retry. Under heavy machine load
+the draw corner and draw panel journeys timed out once each, compiled and not; they pass on an
+idle run.)
 
 ## Measurements
 
-(pending)
+Before: main at the base of this work (`5cfadb02b`), no compiler. After: the last slice,
+compiled, with the hand-written memoization removed.
+
+### Re-render counts (DOM lane)
+
+`bun run test:render-counts` (canvas app) mounts four heavy panels on the panel lane's harness,
+over the real engine, drives the same interactions as written and compiled, and counts React's
+commits and the components it rendered (`test/measure`). The as-written figures equal main's
+before this work.
+
+| Panel | Interactions | Panel renders, as written → compiled | Commits | Mounted components with a compiler cache |
+|---|---:|---|---|---:|
+| Layers (select 6 frames, deselect) | 7 | 116 → 67 (−42%) | 10 → 10 | 36 of 46 |
+| Pages (jump to 4 pages, add 2) | 6 | 5.0 → 1.0 per commit | (a) | 27 of 37 |
+| Properties (select shapes, a group and two; set strokes; deselect) | 7 | 2,306 → 997 (−57%) | 29 → 32 | 25 of 35 |
+| Swatches (select, fill from swatches) | 6 | 267 → 88 (−67%) | 14 → 15 | 43 of 59 |
+
+(a) A page jump animates the view, so the number of commits depends on the time it takes; the
+panel renders per commit are the comparable figure. The fifth panel, image adjustments, needs
+the image module's wasm and a placed image and is measured by the latency probe below.
+
+### Interaction latency (production build)
+
+`tests/perf` (the `perf` Playwright project) against `vite build --mode demo` served by
+`vite preview`, headless Chromium without a WebGPU adapter, the same server for both builds.
+Each panel is driven 12 times per run; the runs alternated before, after, before, after, and
+the table pools both (24 interactions per panel). Next frame: from the input to the first frame
+after it (the INP-style figure). Settled: from the input to React's last commit for it, the
+render worker's round trips included. Renders: every component React rendered for the
+interaction, the whole app.
+
+| Panel | n | Next frame median, ms | Next frame p95, ms | Settled median, ms | Commits | Renders per interaction |
+|---|---:|---|---|---|---|---|
+| Layers (select a frame) | 24 | 14.0 → 8.6 | 17.6 → 15.6 | 4.1 → 4.3 | 6.3 → 6.7 | 981 → 511 (−48%) |
+| Pages (jump to a page) | 24 | 14.0 → 14.3 | 16.2 → 15.2 | 234.8 → 234.4 | 27.3 → 27.1 | 8,510 → 5,865 (−31%) |
+| Properties (select a frame) | 24 | 9.4 → 7.9 | 16.2 → 17.7 | 6.4 → 5.6 | 6.9 → 6.9 | 2,106 → 692 (−67%) |
+| Swatches (fill from a swatch) | 24 | 16.6 → 8.0 | 34.1 → 22.9 | 318.3 → 321.3 | 17.0 → 16.2 | 5,610 → 2,491 (−56%) |
+| Image adjustments (move a slider) | 24 | 9.9 → 10.1 | 14.8 → 16.5 | 0.8 → 0.4 | 2.7 → 2.8 | 823 → 279 (−66%) |
+
+What it says: the compiled build renders a third to two thirds fewer components for the same
+interactions with the same commits, and the next frame comes sooner where the re-render was
+the work (Layers, Swatches). Where the time after the input is spent outside React's rendering
+(the page jump's view animation, the swatch fill's round trip to the engine), settled is
+unchanged. Both runs agree on the direction of every renders figure. The next-frame medians of
+one build move by up to 10 ms between runs on a shared machine, so only the Layers and Swatches
+differences hold up; the rest are unchanged.
+
+### Memo census (the "Memo ✨" check)
+
+React DevTools marks a component whose fiber holds a compiler cache (`updateQueue.memoCache`)
+with "Memo ✨". The probe's census reads the same field on every mounted fiber, with the Layers,
+Pages, Properties and Swatches panels open and a frame selected: before, 0 of 518 mounted
+function components; after, 288 of 518. The rest are third-party components, the recorded
+bailouts and components that need no cache. To see it by hand: open the editor's dev server
+with the React DevTools extension, open the Components tab and look for the badge beside the
+panel components (`LayersPanel`, `PropertiesPanel`, …); `PAGED_REACT_COMPILER=0` takes it
+away.
