@@ -33,6 +33,10 @@ depend on, or every internal refactor turns into a contract change.
     `dml-chart`, and TS packages such as `wasm-boot`, `panel-kit` and `test-kit`.
   - **Extensions**, and everything published for them (`platform/extensions/*`), may use only
     the public contract. They never import `platform/shared/*` or a module's internals.
+  - **The engine** (`engine/core`) may use a `platform/shared` crate that depends on nothing
+    else in the repository. `fmt` is one (amended 2026-10-19, wave C2): the engine's date
+    variables read its calendar and month names, so the viewer built from the engine gains no
+    other internal dependency.
 - **Shared code is extracted only among built-ins**, and only where a measured duplicate
   exists. Each extraction keeps the most protective behaviour of the copies it replaces: the
   zip-bomb budget becomes the default for every OOXML reader.

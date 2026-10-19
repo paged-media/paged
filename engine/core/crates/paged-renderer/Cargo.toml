@@ -38,6 +38,9 @@ required-features = ["mutate-roundtrip"]
 
 [dependencies]
 paged-model = { path = "../paged-model" }
+# Calendar arithmetic and the English month and day names of the date
+# variables (platform/shared/fmt; standard library only).
+paged-fmt = { path = "../../../../platform/shared/fmt" }
 # Identities only — `PageId`. `default-features = false` keeps
 # `paged-mutate` out of this tree, and therefore out of the read-only
 # viewer SDK built on it (the publish workflow's subset audit).
