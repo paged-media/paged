@@ -1,0 +1,6 @@
+$ paged-plugin modules-upload <TMP>/upload-fails
+# exit 1
+# stdout
+(empty)
+# stderr
+::error::engine: upload to paged-modules/@paged-media/test-bundle/0.0.1-test.0/bin/engine.wasm failed: Command failed: npx -y wrangler@3 r2 object put paged-modules/@paged-media/test-bundle/0.0.1-test.0/bin/engine.wasm --file <TMP>/child-tmp/paged-modules-<RND>/module.wasm.br --content-type application/wasm --content-encoding br --cache-control public, max-age=31536000, immutable

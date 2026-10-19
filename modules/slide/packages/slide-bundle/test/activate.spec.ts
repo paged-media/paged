@@ -25,7 +25,7 @@
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "bun:test";
-import { waitFor } from "@paged-media/test-kit";
+import { covers, waitFor } from "@paged-media/test-kit";
 
 import type {
   BundleHost,
@@ -128,6 +128,7 @@ describe("paged.slide importer", () => {
   });
 
   it("opens the deck as a native document and keeps its source", async () => {
+    covers("importer:media.paged.slide.importer.pptx");
     const r = recordingHost((f) =>
       [
         "contribute.importer@1",
@@ -169,6 +170,7 @@ describe("paged.slide importer", () => {
   });
 
   it("refuses honestly on a host that cannot open native documents", async () => {
+    covers("importer:media.paged.slide.importer.pptx");
     const r = recordingHost((f) => f === "contribute.importer@1");
     activate(r.host);
     const bytes = new Uint8Array(readFileSync(FIXTURE));

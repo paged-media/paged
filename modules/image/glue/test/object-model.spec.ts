@@ -22,6 +22,7 @@ import {
   type HeadlessHost,
 } from "@paged-media/plugin-sdk";
 import type { BundleHost, PluginManifest } from "@paged-media/plugin-api";
+import { covers } from "@paged-media/test-kit";
 
 import { imageBundle } from "../src/index";
 import {
@@ -304,6 +305,7 @@ lane("the object model on the real plugin, headless", () => {
   });
 
   it("pixel replacement: bytes, a data: URL or a placed image, placed as is and centred", async () => {
+    covers("command:media.paged.image.command.replaceLayerPixels");
     const h = await imageDoc();
     const L = `${P}/layer/${FRAME}/1`;
     const red = dataUrl(png(2, 2, [255, 0, 0, 255]));

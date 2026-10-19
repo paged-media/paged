@@ -1,0 +1,50 @@
+$ paged-node describe --no-plugins
+# exit 0
+# stdout
+(projected)
+{
+  "engine": "<ENGINE_VERSION>",
+  "protocol": <PROTOCOL>,
+  "plugins": [],
+  "kinds": [
+    "doc",
+    "frame",
+    "story",
+    "page",
+    "spread",
+    "master",
+    "layer",
+    "table",
+    "cell",
+    "style",
+    "swatch",
+    "textVariable",
+    "gradient",
+    "colorGroup",
+    "numberingList",
+    "guide",
+    "condition",
+    "section",
+    "field"
+  ],
+  "verbs": [
+    "get <doc> <address|selector> [path]",
+    "set <doc> <address|selector> <path> <value>",
+    "create <doc> <kind> [props.json|{json}]",
+    "delete <doc> <address|selector>",
+    "query <doc> <selector>",
+    "schema <doc> [kind|address]",
+    "batch <doc> <ops.json>",
+    "commands [doc]",
+    "invoke <doc> <commandId> [args.json|{json}]",
+    "run <doc> <script.js> [-- args…]",
+    "ai <doc> <brief> | --new <size> <brief>",
+    "export <doc>",
+    "apply <doc>",
+    "merge <template>",
+    "plugins [doc]",
+    "describe [doc]"
+  ]
+}
+# stderr
+(empty)

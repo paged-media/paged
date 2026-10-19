@@ -1,0 +1,28 @@
+$ paged-node merge --help
+# exit 0
+# stdout
+paged-node merge <template>
+
+Data Merge: template + records → merged document(s) in --out, as pdf | idml | paged
+
+options:
+  --data <x.csv>                     the records (CSV/TSV/JSON/Parquet/XLSX through paged.data)
+  --query <sql>                      select the records (default SELECT * FROM "data")
+  --out <dir>                        output directory (required)
+  --format <pdf|idml|paged>          output format (default paged)
+  --per-record                       one document per record instead of one merged document
+  --records-per-page <single|multiple> Data Merge layout (default single)
+  --arrange <rows|columns>           multiple records: fill rows or columns first (default rows)
+  --row-spacing <pt>                 multiple records: spacing between rows
+  --column-spacing <pt>              multiple records: spacing between columns
+  --remove-blank-lines               drop lines whose only content is an empty field
+  --image-base <dir>                 where relative image fields resolve (default: the data file's directory)
+  --image-field <rectId=@field>      an image placeholder rectangle and its field (repeatable)
+  --plugins <a,b>                    load exactly these bundles (package names or paths) instead of discovering them
+  --no-plugins                       load no plugin bundles (core objects only)
+  --font <file.ttf>                  default font every load lays text out with
+  --engine-from <dir>                resolve @paged-media/canvas-wasm from this directory
+  --text                             human-readable output instead of JSON
+  -h, --help                         show help
+# stderr
+(empty)

@@ -1,0 +1,30 @@
+$ paged-node set <TMP>/fixture.paged rectangle:urect frameStrokeWeight 2mm -o <TMP>/set.paged --no-plugins
+# exit 0
+# stdout
+{
+  "targets": [
+    "rectangle:urect"
+  ],
+  "path": "frameStrokeWeight",
+  "value": 5.669291338582678,
+  "result": {
+    "applied": true,
+    "undoSteps": 1,
+    "outcome": {
+      "applied": true,
+      "createdId": null,
+      "pageIds": [
+        "usp"
+      ],
+      "minted": [],
+      "appliedSeq": 1
+    }
+  },
+  "saved": {
+    "path": "<TMP>/set.paged",
+    "format": "paged",
+    "bytes": <N>
+  }
+}
+# stderr
+(empty)

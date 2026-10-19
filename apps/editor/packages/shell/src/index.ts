@@ -185,6 +185,7 @@ export {
 } from "./state/paged-editor";
 
 export {
+  createShellRegistries,
   RegistriesProvider,
   useRegistries,
   type ShellRegistries,

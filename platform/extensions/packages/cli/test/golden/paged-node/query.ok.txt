@@ -1,0 +1,12 @@
+$ paged-node query <TMP>/fixture.paged swatch --no-plugins
+# exit 0
+# stdout
+{
+  "selector": "swatch",
+  "addresses": [
+    "swatch:Color/Black",
+    "swatch:Swatch/None"
+  ]
+}
+# stderr
+(empty)

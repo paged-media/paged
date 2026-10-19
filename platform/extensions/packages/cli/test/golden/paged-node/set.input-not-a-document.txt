@@ -1,0 +1,11 @@
+$ paged-node set <TMP>/notes.txt swatch:Black value '[0,0,0,1]'
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "<TMP>/notes.txt: not a .paged or .idml document",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

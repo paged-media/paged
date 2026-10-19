@@ -1,0 +1,11 @@
+$ paged-node batch <TMP>/fixture.paged <TMP>/bad-op.json --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "<TMP>/bad-op.json: ops[0].op must be set | create | delete | invoke",
+    "exit": 2
+  }
+}
+# stderr
+(empty)
