@@ -192,6 +192,121 @@ test("Layers: dragging a layer row onto another reorders the layers", async ({
     .toEqual([before[1], before[0]]);
 });
 
+const layerAction = (page: Page, id: string, command: string) =>
+  layerRow(page, id).locator(`[data-list-action="${command}"]`);
+
+interface LayerRow {
+  selfId: string;
+  name: string | null;
+  visible: boolean;
+  locked: boolean;
+  printable: boolean;
+}
+
+const layerById = async (page: Page, id: string) =>
+  ((await collection(page, "layers")) as unknown as LayerRow[]).find(
+    (l) => String(l.selfId) === id,
+  ) ?? null;
+
+const undo = (page: Page) =>
+  page.evaluate(() =>
+    (globalThis as unknown as CanvasGlobal).__canvas.client.undo(),
+  );
+
+test("Layers: New layer, then each row action changes the model, and one undo takes each back", async ({
+  page,
+}) => {
+  covers(
+    "panel:paged.layers",
+    "command:paged.layers.add",
+    "command:paged.layers.toggleVisible",
+    "command:paged.layers.toggleLocked",
+    "command:paged.layers.togglePrintable",
+    "command:paged.layers.rename",
+    "command:paged.layers.remove",
+  );
+  await openPanel(page, "paged.layers");
+  const before = (await collection(page, "layers")).map((l) =>
+    String(l.selfId),
+  );
+  await page
+    .locator('[data-panel-host="paged.layers"] [data-action="add-layer"]')
+    .click();
+  await expect
+    .poll(async () => (await collection(page, "layers")).length)
+    .toBe(before.length + 1);
+  const id = (await collection(page, "layers"))
+    .map((l) => String(l.selfId))
+    .find((x) => !before.includes(x))!;
+  expect((await layerById(page, id))?.name).toBe("Layer");
+  await expect(layerRow(page, id)).toBeVisible();
+
+  // The three toggles: one click flips the flag, one undo restores it.
+  for (const [command, flag] of [
+    ["paged.layers.toggleVisible", "visible"],
+    ["paged.layers.toggleLocked", "locked"],
+    ["paged.layers.togglePrintable", "printable"],
+  ] as const) {
+    const was = (await layerById(page, id))![flag];
+    await layerAction(page, id, command).click();
+    await expect
+      .poll(async () => (await layerById(page, id))?.[flag])
+      .toBe(!was);
+    await undo(page);
+    await expect
+      .poll(async () => (await layerById(page, id))?.[flag])
+      .toBe(was);
+  }
+
+  // Rename: double-click the name, type, Enter.
+  await layerRow(page, id).locator("[data-list-row-select]").dblclick();
+  const input = layerRow(page, id).locator("[data-list-rename]");
+  await expect(input).toHaveValue("Layer");
+  await input.fill("Renamed");
+  await input.press("Enter");
+  await expect
+    .poll(async () => (await layerById(page, id))?.name)
+    .toBe("Renamed");
+  await expect(layerRow(page, id)).toContainText("Renamed");
+  await undo(page);
+  await expect
+    .poll(async () => (await layerById(page, id))?.name)
+    .toBe("Layer");
+
+  // Delete: the layer and its row go; one undo brings both back.
+  await layerAction(page, id, "paged.layers.remove").click();
+  await expect.poll(() => layerById(page, id)).toBeNull();
+  await expect(layerRow(page, id)).toHaveCount(0);
+  await undo(page);
+  await expect
+    .poll(async () => (await layerById(page, id))?.name)
+    .toBe("Layer");
+  await expect(layerRow(page, id)).toBeVisible();
+});
+
+test("Layers: Move selection here puts the frame clicked on the canvas on the layer", async ({
+  page,
+}) => {
+  covers("panel:paged.layers", "command:paged.layers.assignSelection");
+  const [destination] = await twoLayers(page);
+  const frame = `rectangle:${GESTURE_TARGETS.frame.id.id}`;
+  const itemLayer = async () =>
+    ((await read(page, frame, "itemLayer")) as { value?: unknown } | null)
+      ?.value ?? null;
+  const was = await itemLayer();
+  const move = layerAction(page, destination, "paged.layers.assignSelection");
+  // Nothing selected: nothing to move.
+  await expect(move).toBeDisabled();
+  const g = browserGestures(page as unknown as BrowserPage);
+  const [x, y] = GESTURE_TARGETS.frame.at;
+  await g.tool("paged.tool.select").click([x, y]);
+  await expect(move).toBeEnabled();
+  await move.click();
+  await expect.poll(itemLayer).toBe(destination);
+  await undo(page);
+  await expect.poll(itemLayer).toBe(was);
+});
+
 // At the right dock's default width (1280 × 720 window), each layer row's
 // four buttons (Hide, Lock, Move selection here, Printable) take the whole
 // row and the name column is squeezed to nothing: no row says which layer
