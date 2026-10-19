@@ -92,57 +92,16 @@ export function valueToSwatchSpec(v: MixerValue, name?: string): SwatchSpec {
   };
 }
 
-/** `#rrggbb` → RGB channels (IDML 0..255), or null. */
-export function hexToRgb(hex: string): number[] | null {
-  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim());
-  if (!m) return null;
-  const n = parseInt(m[1], 16);
-  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
-}
-
-/** RGB channels (0..255) → `#rrggbb`. */
-export function rgbToHex(rgb: number[]): string {
-  const b = (v: number) =>
-    Math.round(Math.min(255, Math.max(0, v)))
-      .toString(16)
-      .padStart(2, "0");
-  return `#${b(rgb[0] ?? 0)}${b(rgb[1] ?? 0)}${b(rgb[2] ?? 0)}`;
-}
+// hexToRgb / rgbToHex and the naive CMYK pair below are the shared ones
+// (`@paged-media/helpers`): one implementation for the editor and the
+// built-ins. `hexToRgb` also reads the `#rgb` shorthand.
+export { cmykToRgb, hexToRgb, rgbToCmyk, rgbToHex } from "@paged-media/helpers";
 
 // Panel-gallery pass — naive client-side conversions for the colour
 // wheel's HEX · RGB · CMYK · HSL field round-trip. These are UI
 // approximations (device CMYK, no profile); the CMM-accurate path
 // stays `useColorCompute` / the engine's colorCompute and these
 // never cross the wire as authoritative values.
-
-/** RGB (0..255) → naive CMYK (0..100 each). */
-export function rgbToCmyk(rgb: number[]): [number, number, number, number] {
-  const r = (rgb[0] ?? 0) / 255;
-  const g = (rgb[1] ?? 0) / 255;
-  const b = (rgb[2] ?? 0) / 255;
-  const k = 1 - Math.max(r, g, b);
-  if (k >= 1) return [0, 0, 0, 100];
-  const d = 1 - k;
-  return [
-    Math.round(((1 - r - k) / d) * 100),
-    Math.round(((1 - g - k) / d) * 100),
-    Math.round(((1 - b - k) / d) * 100),
-    Math.round(k * 100),
-  ];
-}
-
-/** Naive CMYK (0..100 each) → RGB (0..255). */
-export function cmykToRgb(cmyk: number[]): [number, number, number] {
-  const c = Math.min(100, Math.max(0, cmyk[0] ?? 0)) / 100;
-  const m = Math.min(100, Math.max(0, cmyk[1] ?? 0)) / 100;
-  const y = Math.min(100, Math.max(0, cmyk[2] ?? 0)) / 100;
-  const k = Math.min(100, Math.max(0, cmyk[3] ?? 0)) / 100;
-  return [
-    Math.round(255 * (1 - c) * (1 - k)),
-    Math.round(255 * (1 - m) * (1 - k)),
-    Math.round(255 * (1 - y) * (1 - k)),
-  ];
-}
 
 /** RGB (0..255) → HSL (H 0..360, S/L 0..100). */
 export function rgbToHsl(rgb: number[]): [number, number, number] {

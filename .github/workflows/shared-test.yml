@@ -19,6 +19,7 @@ on:
   push:
     branches: [main]
     paths:
+      - "platform/shared/helpers/**"
       - "platform/shared/wasm-boot/**"
       # The TypeScript base every package's tsconfig extends.
       - "tsconfig.base.json"
@@ -31,6 +32,7 @@ on:
       - "tooling/js/bun-test-setup.ts"
   pull_request:
     paths:
+      - "platform/shared/helpers/**"
       - "platform/shared/wasm-boot/**"
       # The TypeScript base every package's tsconfig extends.
       - "tsconfig.base.json"
@@ -61,6 +63,6 @@ jobs:
       - name: bun install (root workspace)
         run: bun install --frozen-lockfile
       - name: typecheck
-        run: bun run --filter './platform/shared/wasm-boot' typecheck
+        run: bun run --filter './platform/shared/helpers' --filter './platform/shared/wasm-boot' typecheck
       - name: bun test
-        run: bun run --filter './platform/shared/wasm-boot' test
+        run: bun run --filter './platform/shared/helpers' --filter './platform/shared/wasm-boot' test

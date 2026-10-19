@@ -54,11 +54,16 @@ import {
   fromElementId,
   parseAddress,
 } from "@paged-media/plugin-sdk";
+import {
+  base64ToBytes,
+  labelKey,
+  sha256Hex,
+  sha256HexPrefix,
+} from "@paged-media/helpers";
 
 import {
   blobPath,
   readSession,
-  sha256Hex,
   type CommittedMarker,
   type SessionRecord,
 } from "../session-store";
@@ -80,7 +85,7 @@ import {
 } from "./pgil";
 
 export const PLUGIN_ID = "media.paged.image";
-export const LABEL_KEY = `x-paged:${PLUGIN_ID}`;
+export const LABEL_KEY = labelKey(PLUGIN_ID);
 export const KIND_PREFIX = `plugin:${PLUGIN_ID}/`;
 
 /** The engine's CPU codec — all the object model needs of the wasm. */
@@ -757,9 +762,7 @@ export function createImageObjects(
       const comma = src.indexOf(",");
       if (comma < 0 || !/;base64$/i.test(src.slice(0, comma)))
         throw new Refused("a data: URL source must be base64");
-      const bin = atob(src.slice(comma + 1));
-      bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      bytes = base64ToBytes(src.slice(comma + 1));
     } else if (typeof src === "string" && /^[a-z]+:\/\//i.test(src)) {
       throw new Refused(
         "loading an image from a network URL is not supported; " +
@@ -1214,7 +1217,7 @@ export function createImageObjects(
       const path = objectRecordPath(
         next.frame.frameId,
         rev,
-        (await sha256Hex(recordBytes)).slice(0, 16),
+        await sha256HexPrefix(recordBytes, 16),
       );
       parts.push({ path, bytes: recordBytes });
       const marker: ImageMarker = {

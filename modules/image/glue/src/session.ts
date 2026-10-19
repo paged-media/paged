@@ -34,12 +34,12 @@ import type {
   Disposable,
   ElementId,
 } from "@paged-media/plugin-api";
+import { sha256Hex } from "@paged-media/helpers";
 
 import { latestWins } from "./coalesce";
 import { parseCube, toKernelCube } from "./cube";
 import {
   readSession,
-  sha256Hex,
   writeSession,
   type CommittedMarker,
 } from "./session-store";
