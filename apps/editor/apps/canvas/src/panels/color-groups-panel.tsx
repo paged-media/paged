@@ -27,6 +27,7 @@
 
 import { useEffect, useState } from "react";
 
+import { IconButton, useDisclosure } from "@paged-media/panel-kit";
 import { Icon, useCanvasClient, useCollection } from "@paged-media/shell";
 import type { ColorGroupSummary, ColorPreview } from "@paged-media/client";
 
@@ -62,15 +63,14 @@ function GroupRow({
   group: ColorGroupSummary;
   onDelete: () => void;
 }) {
-  const [open, setOpen] = useState(true);
+  const { open, toggle, region } = useDisclosure(true);
   return (
     <div data-group-id={group.selfId} className="mb-[10px]">
       <div className="flex items-center gap-[7px]">
         <button
           type="button"
           data-group-toggle
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
+          {...toggle}
           className="flex min-w-0 flex-1 cursor-pointer items-center gap-[7px] border-0 bg-transparent text-left"
         >
           <Icon
@@ -93,8 +93,8 @@ function GroupRow({
             {group.members.length}
           </span>
         </button>
-        <button
-          type="button"
+        <IconButton
+          label="Delete group"
           title="Delete group (swatches stay)"
           data-group-delete
           onClick={onDelete}
@@ -102,10 +102,11 @@ function GroupRow({
           style={{ color: "var(--pg-muted-fg)" }}
         >
           <Icon name="ui-x" size={11} />
-        </button>
+        </IconButton>
       </div>
       {open && (
         <div
+          {...region}
           className="mt-[6px] flex flex-wrap gap-1 pl-[22px]"
           data-group-members
         >

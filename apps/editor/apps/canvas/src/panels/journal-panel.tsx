@@ -54,7 +54,7 @@ import {
   previewBundle,
   pullWorkerJournal,
 } from "../journal-sink";
-import { color, font, radius, space } from "@paged-media/panel-kit";
+import { color, Disclosure, font, radius, space } from "@paged-media/panel-kit";
 
 const DOT: Record<JournalSeverity, string> = {
   error: "var(--status-error)",
@@ -384,13 +384,11 @@ function UncapturedSection({
         </ul>
       )}
 
-      <details data-journal-blindspots>
-        <summary
-          style={{ ...mono, cursor: "pointer", color: "var(--pg-muted-fg)" }}
-        >
-          {KNOWN_BLIND_SPOTS.length} structural blind spots (always present, by
-          design)
-        </summary>
+      <Disclosure
+        data-journal-blindspots
+        summary={`${KNOWN_BLIND_SPOTS.length} structural blind spots (always present, by design)`}
+        summaryStyle={{ ...mono, color: "var(--pg-muted-fg)" }}
+      >
         <ul
           style={{
             listStyle: "none",
@@ -414,7 +412,7 @@ function UncapturedSection({
             </li>
           ))}
         </ul>
-      </details>
+      </Disclosure>
     </section>
   );
 }

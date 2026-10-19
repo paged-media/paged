@@ -22,9 +22,9 @@
 // Every new cockpit panel composes from these so density, borders
 // and the status language stay uniform.
 
-import { useId, useState, type ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
-import { LabelledBy, status } from "@paged-media/panel-kit";
+import { LabelledBy, status, useDisclosure } from "@paged-media/panel-kit";
 
 import { Icon } from "../../icons";
 
@@ -70,12 +70,12 @@ export function Section({
   right?: ReactNode;
   children?: ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const { open, toggle, region } = useDisclosure(defaultOpen);
   return (
     <div style={{ borderTop: "1px solid var(--pg-border)", padding: "0 14px" }}>
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        {...toggle}
         style={{
           display: "flex",
           width: "100%",
@@ -107,7 +107,11 @@ export function Section({
           />
         </span>
       </button>
-      {open && <div style={{ paddingBottom: 12 }}>{children}</div>}
+      {open && (
+        <div {...region} style={{ paddingBottom: 12 }}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }
