@@ -30,6 +30,8 @@ on:
       - "engine/core/scripts/build-wasm-packages.sh"
       - "engine/core/packages/**"
       - ".cargo/config.toml"
+      # The shared module wasm build every scripts/build-wasm.sh calls.
+      - "tooling/rust/build-wasm.sh"
       # The source hash the wasm is stamped with and its wasm-fresh spec checks.
       - "tooling/js/source-hash.mjs"
       - "tooling/bootstrap.sh"
@@ -59,6 +61,8 @@ on:
       - "engine/core/scripts/build-wasm-packages.sh"
       - "engine/core/packages/**"
       - ".cargo/config.toml"
+      # The shared module wasm build every scripts/build-wasm.sh calls.
+      - "tooling/rust/build-wasm.sh"
       # The source hash the wasm is stamped with and its wasm-fresh spec checks.
       - "tooling/js/source-hash.mjs"
       - "tooling/bootstrap.sh"

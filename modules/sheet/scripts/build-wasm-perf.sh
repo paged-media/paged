@@ -15,20 +15,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-OUT=packages/sheet-bundle/bin-perf
-TARGET_DIR=${CARGO_TARGET_DIR:-target}/wasm-perf
-
-cargo build --release --target wasm32-unknown-unknown -p sheet-js \
-  --features perf-counters --target-dir "$TARGET_DIR"
-
-LOCKED=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
-CLI=$(wasm-bindgen --version | awk '{print $2}')
-if [ "$LOCKED" != "$CLI" ]; then
-  echo "error: wasm-bindgen-cli $CLI != Cargo.lock wasm-bindgen $LOCKED" >&2
-  exit 1
-fi
-
-mkdir -p "$OUT"
-wasm-bindgen "$TARGET_DIR/wasm32-unknown-unknown/release/sheet_js.wasm" \
-  --target web --out-dir "$OUT"
-echo "counting wasm: $OUT/sheet_js_bg.wasm ($(wc -c < "$OUT/sheet_js_bg.wasm" | tr -d ' ') bytes)"
+exec bash ../../tooling/rust/build-wasm.sh \
+  --package sheet-js --artifact sheet_js --features perf-counters \
+  --target-dir "${CARGO_TARGET_DIR:-target}/wasm-perf" \
+  --out packages/sheet-bundle/bin-perf \
+  --no-wasm-opt --no-budget
