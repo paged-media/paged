@@ -492,7 +492,7 @@ describe("draw conformance — the minted seam (what did my write create)", () =
       expect(before).toBe("ua ub ue[uc ud]");
       const reply = await raw(batch(remove(a), remove(b), dissolve(g)));
       expect(refusal(reply)).toMatch(
-        /frame mutation failed: batch failed at index 2: node not found: Group\(\\"ue\\"\)/,
+        /"kind":"notFound","details":{"what":"group:ue"}/,
       );
       expect(await treeShape(h)).toBe(before);
 
