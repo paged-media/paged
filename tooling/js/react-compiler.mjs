@@ -64,11 +64,12 @@ export function compilerEnabled(env = process.env) {
 }
 
 // First-party React sources, relative to the repository root: the `src`
-// trees of the editor's apps and packages, of every module package and of
-// plugin-sdk. Not tests, not type declarations, not the render worker and
-// not packages/client (both React-free by lint, apps/editor ADR 206).
+// trees of the editor's apps and packages, of every module package, of the
+// internal shared packages and of plugin-sdk. Not tests, not type
+// declarations, not the render worker and not packages/client (both
+// React-free by lint, apps/editor ADR 206).
 const SOURCE_DIRS =
-  "(?:apps/editor/(?:apps|packages)/[^/]+|modules/[^/]+/(?:packages/[^/]+|glue|manifest)|platform/extensions/packages/plugin-sdk)/src/";
+  "(?:apps/editor/(?:apps|packages)/[^/]+|modules/[^/]+/(?:packages/[^/]+|glue|manifest)|platform/shared/[^/]+|platform/extensions/packages/plugin-sdk)/src/";
 const SOURCE_EXT = "\\.[cm]?[jt]sx?";
 const EXCLUDED_FILES = "(?:\\.d\\.[cm]?ts|\\.(?:test|spec)\\.[cm]?[jt]sx?)";
 const EXCLUDED_DIRS = "/(?:test|tests|__tests__)/";
