@@ -26,10 +26,13 @@
 import { PanelBindingScope } from "../catalog/panel-binding-surface";
 import { usePaged } from "../state/paged-editor";
 import { useRegistries } from "../state/registries-context";
+import { useRegistryView } from "../state/live";
 
 export function PanelHost({ id }: { id: string }) {
   const paged = usePaged();
-  const { panels } = useRegistries();
+  // A view (state/live.ts, ADR 229): the panel a mode slot names may
+  // register after this host first rendered.
+  const panels = useRegistryView(useRegistries().panels);
   const contribution = panels.get(id);
   if (!contribution) {
     return (

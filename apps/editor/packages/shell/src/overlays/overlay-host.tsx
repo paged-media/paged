@@ -63,6 +63,7 @@ export function OverlayHost(props: OverlayHostProps) {
     return () => off.dispose();
   }, [registries.overlays]);
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const sorted = useMemo<OverlayContribution[]>(() => {
     const list = registries.overlays.list().slice();
     list.sort((a, b) => (a.z ?? 100) - (b.z ?? 100));
@@ -71,6 +72,7 @@ export function OverlayHost(props: OverlayHostProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [registries.overlays, version]);
 
+  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
   const pageRects = useMemo<ReadonlyMap<PageId, OverlayPageRect>>(() => {
     const map = new Map<PageId, OverlayPageRect>();
     const n = Math.min(props.pageIds.length, props.pageRects.length);

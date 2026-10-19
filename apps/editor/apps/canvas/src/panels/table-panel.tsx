@@ -267,6 +267,7 @@ export function TablePanel() {
       }
     : null;
 
+  // eslint-disable-next-line no-restricted-syntax -- handed to a component that may compare it (ADR 229)
   const setCellProp = useCallback(
     (path: string, value: Value) => {
       cellFields[path]?.onCommit?.(value);
@@ -274,33 +275,27 @@ export function TablePanel() {
     [cellFields],
   );
 
-  const setTableStyle = useCallback(
-    (styleId: string) => {
-      tableFields.appliedTableStyle?.onCommit?.({
-        type: "text",
-        value: styleId,
-      } as Value);
-    },
-    [tableFields],
-  );
+  const setTableStyle = (styleId: string) => {
+    tableFields.appliedTableStyle?.onCommit?.({
+      type: "text",
+      value: styleId,
+    } as Value);
+  };
 
-  const tableLineOp = useCallback(
-    (
-      op:
-        | "insertTableRow"
-        | "deleteTableRow"
-        | "insertTableColumn"
-        | "deleteTableColumn",
-      at: number,
-    ) => {
-      if (!cell) return;
-      void client.mutate({
-        op,
-        args: { storyId: cell.storyId, tableId: cell.tableId, at },
-      } as never);
-    },
-    [client, cell],
-  );
+  const tableLineOp = (
+    op:
+      | "insertTableRow"
+      | "deleteTableRow"
+      | "insertTableColumn"
+      | "deleteTableColumn",
+    at: number,
+  ) => {
+    if (!cell) return;
+    void client.mutate({
+      op,
+      args: { storyId: cell.storyId, tableId: cell.tableId, at },
+    } as never);
+  };
 
   // ── Spans (v35 setCellSpan). No read-back path on the cell surface
   //    (probed), so the inputs are write-forward: seed 1×1 on each fresh
@@ -315,27 +310,24 @@ export function TablePanel() {
     setColumnSpan(1);
   }, [cell?.storyId, cell?.tableId, cell?.row, cell?.col]);
 
-  const applySpan = useCallback(
-    (nextRowSpan: number, nextColumnSpan: number) => {
-      if (!cell) return;
-      const rs = Math.max(1, Math.round(nextRowSpan));
-      const cs = Math.max(1, Math.round(nextColumnSpan));
-      setRowSpan(rs);
-      setColumnSpan(cs);
-      void client.mutate({
-        op: "setCellSpan",
-        args: {
-          storyId: cell.storyId,
-          tableId: cell.tableId,
-          row: cell.row,
-          col: cell.col,
-          rowSpan: rs,
-          columnSpan: cs,
-        },
-      });
-    },
-    [client, cell],
-  );
+  const applySpan = (nextRowSpan: number, nextColumnSpan: number) => {
+    if (!cell) return;
+    const rs = Math.max(1, Math.round(nextRowSpan));
+    const cs = Math.max(1, Math.round(nextColumnSpan));
+    setRowSpan(rs);
+    setColumnSpan(cs);
+    void client.mutate({
+      op: "setCellSpan",
+      args: {
+        storyId: cell.storyId,
+        tableId: cell.tableId,
+        row: cell.row,
+        col: cell.col,
+        rowSpan: rs,
+        columnSpan: cs,
+      },
+    });
+  };
 
   // ── Header / footer rows (v35). Header/footer rows count toward
   //    tableRowCount (probed); no separate count read exists, so we track
@@ -348,54 +340,42 @@ export function TablePanel() {
     setFooterApplied(0);
   }, [cell?.tableId]);
 
-  const headerFooterOp = useCallback(
-    (
-      op:
-        | "insertHeaderRow"
-        | "removeHeaderRow"
-        | "insertFooterRow"
-        | "removeFooterRow",
-    ) => {
-      if (!cell) return;
-      void client.mutate({
-        op,
-        args: { storyId: cell.storyId, tableId: cell.tableId },
-      } as never);
-      if (op === "insertHeaderRow") setHeaderApplied((n) => n + 1);
-      else if (op === "removeHeaderRow")
-        setHeaderApplied((n) => Math.max(0, n - 1));
-      else if (op === "insertFooterRow") setFooterApplied((n) => n + 1);
-      else setFooterApplied((n) => Math.max(0, n - 1));
-    },
-    [client, cell],
-  );
+  const headerFooterOp = (
+    op:
+      | "insertHeaderRow"
+      | "removeHeaderRow"
+      | "insertFooterRow"
+      | "removeFooterRow",
+  ) => {
+    if (!cell) return;
+    void client.mutate({
+      op,
+      args: { storyId: cell.storyId, tableId: cell.tableId },
+    } as never);
+    if (op === "insertHeaderRow") setHeaderApplied((n) => n + 1);
+    else if (op === "removeHeaderRow")
+      setHeaderApplied((n) => Math.max(0, n - 1));
+    else if (op === "insertFooterRow") setFooterApplied((n) => n + 1);
+    else setFooterApplied((n) => Math.max(0, n - 1));
+  };
 
   // ── Per-cell edge strokes (v35 cell edge-stroke paths). One commit
   //    per channel; read-back drives the inputs. ────────────────────
-  const setEdgeColor = useCallback(
-    (side: string, swatchId: string) => {
-      setCellProp(`cell${side}EdgeStrokeColor`, {
-        type: "colorRef",
-        value: swatchId === "" ? null : swatchId,
-      });
-    },
-    [setCellProp],
-  );
-  const setEdgeWeight = useCallback(
-    (side: string, weight: number) => {
-      setCellProp(`cell${side}EdgeStrokeWeight`, {
-        type: "length",
-        value: weight,
-      });
-    },
-    [setCellProp],
-  );
-  const setEdgeTint = useCallback(
-    (side: string, tint: number) => {
-      setCellProp(`cell${side}EdgeStrokeTint`, { type: "length", value: tint });
-    },
-    [setCellProp],
-  );
+  const setEdgeColor = (side: string, swatchId: string) => {
+    setCellProp(`cell${side}EdgeStrokeColor`, {
+      type: "colorRef",
+      value: swatchId === "" ? null : swatchId,
+    });
+  };
+  const setEdgeWeight = (side: string, weight: number) => {
+    setCellProp(`cell${side}EdgeStrokeWeight`, {
+      type: "length",
+      value: weight,
+    });
+  };
+  const setEdgeTint = (side: string, tint: number) => {
+    setCellProp(`cell${side}EdgeStrokeTint`, { type: "length", value: tint });
+  };
 
   if (!cell) {
     return (

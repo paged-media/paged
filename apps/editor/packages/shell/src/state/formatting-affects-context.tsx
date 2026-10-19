@@ -49,10 +49,12 @@ const Context = createContext<FormattingAffectsValue | null>(null);
 export function FormattingAffectsProvider({ children }: PropsWithChildren) {
   const [activeWell, setActiveWell] = useState<FillStrokeWell>("fill");
   const [affects, setAffects] = useState<FormattingAffects>("container");
+  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
   const toggleAffects = useCallback(
     () => setAffects((a) => (a === "container" ? "text" : "container")),
     [],
   );
+  // eslint-disable-next-line no-restricted-syntax -- its type argument types the value (ADR 229)
   const value = useMemo<FormattingAffectsValue>(
     () => ({ activeWell, setActiveWell, affects, setAffects, toggleAffects }),
     [activeWell, affects, toggleAffects],

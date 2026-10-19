@@ -78,7 +78,9 @@ export function makeSourcesPanel(
   host: BundleHost,
   session: DataSourceSession,
 ): () => ReactElement {
-  return function SourcesPanel(): ReactElement {
+  // A declaration, so the React Compiler sees the component (it cannot
+  // see `return function SourcesPanel()`, editor ADR 229).
+  function SourcesPanel(): ReactElement {
     const [snapshot, refresh] = useSessionSnapshot(session);
     const [remoteUrl, setRemoteUrl] = useState("");
     const [remoteFormat, setRemoteFormat] = useState<RemoteFormat>("csv");
@@ -414,5 +416,6 @@ export function makeSourcesPanel(
         </p>
       </div>
     );
-  };
+  }
+  return SourcesPanel;
 }

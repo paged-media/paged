@@ -24,8 +24,6 @@
 // auto-size / first baseline). W2.3 flipped the COLUMNS + justify +
 // auto-size + baseline rows live on protocol v28 (engine gap 13).
 
-import { useMemo } from "react";
-
 import {
   CatalogRegistryProvider,
   CockpitSection,
@@ -65,10 +63,7 @@ function FlowGrowSection() {
       ? [contentSelection.storyId]
       : [];
   const key = [...new Set(ids)].join(" ");
-  const targets = useMemo(
-    () => (key ? key.split(" ").map((id) => `story:${id}`) : []),
-    [key],
-  );
+  const targets = key ? key.split(" ").map((id) => `story:${id}`) : [];
   if (!targets.length) return null;
   return (
     <CockpitSection title="Page growth">

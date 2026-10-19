@@ -28,6 +28,8 @@ on:
   push:
     branches: [main]
     paths:
+      # The test fonts (Space Grotesk) are read from the engine's corpus.
+      - "engine/core/corpus/fonts/**"
       - "platform/extensions/**"
       # The TypeScript base every package's tsconfig extends.
       - "tsconfig.base.json"
@@ -38,6 +40,8 @@ on:
       # it builds: @paged-media/ai and paged-node.
       - "platform/shared/ai/**"
       - "apps/cli/**"
+      # paged-node's merge goldens read paged.data's InDesign Data Merge lane.
+      - "modules/data/conformance/indesign-merge/**"
       - ".github/workflows/extensions-vitest.yml"
       - "bun.lock"
       - "bunfig.toml"
@@ -55,6 +59,8 @@ on:
       - ".github/actions/wasm-tools/**"
   pull_request:
     paths:
+      # The test fonts (Space Grotesk) are read from the engine's corpus.
+      - "engine/core/corpus/fonts/**"
       - "platform/extensions/**"
       # The TypeScript base every package's tsconfig extends.
       - "tsconfig.base.json"
@@ -65,6 +71,8 @@ on:
       # it builds: @paged-media/ai and paged-node.
       - "platform/shared/ai/**"
       - "apps/cli/**"
+      # paged-node's merge goldens read paged.data's InDesign Data Merge lane.
+      - "modules/data/conformance/indesign-merge/**"
       - ".github/workflows/extensions-vitest.yml"
       - "bun.lock"
       - "bunfig.toml"

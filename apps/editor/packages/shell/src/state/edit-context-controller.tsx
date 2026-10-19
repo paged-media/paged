@@ -34,7 +34,7 @@
 // Renders nothing — mounted once inside the shell where the cockpit +
 // tool + selection contexts are available.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 import { useBindingProviderHost } from "../catalog/binding-providers";
 import { panelServedBy } from "../catalog/panel-binding-surface";
@@ -71,7 +71,9 @@ export function EditContextController() {
   // emitted (entering a context emits, by construction).
   const providerHost = useBindingProviderHost();
   const providerHostRef = useRef(providerHost);
-  providerHostRef.current = providerHost;
+  useLayoutEffect(() => {
+    providerHostRef.current = providerHost;
+  });
 
   // K-1 — keyboard routing while a context is active (capture phase so the
   // context wins over the palette / path-edit; the editable-target guard
@@ -87,13 +89,21 @@ export function EditContextController() {
   //   · any other key is OFFERED to `onContentKey` and kept from the
   //     host's bindings only when the context claims it (preventDefault).
   const activeRef = useRef(active);
-  activeRef.current = active;
+  useLayoutEffect(() => {
+    activeRef.current = active;
+  });
   const contributionRef = useRef(activeContribution);
-  contributionRef.current = activeContribution;
+  useLayoutEffect(() => {
+    contributionRef.current = activeContribution;
+  });
   const wantsCommitRef = useRef<boolean>(false);
-  wantsCommitRef.current = !!activeContribution?.onCommit;
+  useLayoutEffect(() => {
+    wantsCommitRef.current = !!activeContribution?.onCommit;
+  });
   const isDirtyRef = useRef(isActiveDirty);
-  isDirtyRef.current = isActiveDirty;
+  useLayoutEffect(() => {
+    isDirtyRef.current = isActiveDirty;
+  });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!activeRef.current) return; // no context → don't intercept
@@ -292,7 +302,9 @@ export function EditContextController() {
   // keeps the rule's intent exactly: it fires when the user PICKS a
   // tool outside the context's set, never mid-chord or mid-pan.
   const activeTool = tool?.toolState.base;
-  activeToolRef.current = activeTool ?? null;
+  useLayoutEffect(() => {
+    activeToolRef.current = activeTool ?? null;
+  });
   useEffect(() => {
     if (!active || !active.toolIds || !activeTool) return;
     // The enter effect owns the first tool and has not run yet.

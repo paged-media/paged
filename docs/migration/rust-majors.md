@@ -68,7 +68,7 @@ ten workspaces (draw had none):
 | base64 | 0.22 → 0.23 | core, doc, publish, server, slide | serialization | updated |
 | toml | 0.8 → 1 | core | serialization | updated |
 | compact_str | 0.8 → 0.10 | data, doc, sheet, slide | serialization | updated |
-| ooxmlsdk | 0.12 → 0.13 | doc, slide | ooxmlsdk | updated |
+| ooxmlsdk | 0.12 → 0.13 | doc, slide | ooxmlsdk | held, see below (landed, then went back for the wasm budget) |
 | ureq | 2 → 3 | server | server-net | updated |
 | tungstenite | 0.24 → 0.30 | server (dev) | server-net | updated |
 | criterion | 0.5 → 0.8 | core, data, image, sheet, web-render (dev) | tooling | updated |
@@ -94,7 +94,7 @@ One commit per family, in this order:
 7. **boa**: boa_engine 0.22 (core, data)
 8. **crypto**: sha2 0.11, hmac 0.13, aes-gcm 0.11, getrandom 0.4 (core, server, image)
 9. **serialization**: base64 0.23, toml 1, compact_str 0.10
-10. **ooxmlsdk**: 0.13 (doc, slide)
+10. **ooxmlsdk**: 0.13 (doc, slide): landed, then went back to 0.12, held below
 11. **server-net**: ureq 3, tungstenite 0.30 (server)
 12. **tooling**: criterion 0.8, lopdf 0.45, rqrr 0.11, syn 3
 13. **calamine**: calamine 0.37 with quick-xml 0.42 (data)
@@ -162,6 +162,34 @@ Moving onto the beta line is a decision about the engine of its own.
 
 So quick-xml 0.42 is a change of its own for engine/core, and one for
 doc, slide and sheet together once ooxmlsdk accepts it.
+
+### ooxmlsdk stays on 0.12
+
+The editor and every plugin share one wasm budget, 100 MB for the whole app
+(`bun run test:wasm-budget` in `editor / tests`). The seven families that went
+in together took it from 99,013,360 to 100,302,231 bytes. Building each
+artifact at every family's commit (wasm-release, `wasm-bindgen --target web`,
+`wasm-opt -Oz`, as CI does) puts the growth in two places:
+
+| Artifact | Before | After | Change | Family |
+| --- | ---: | ---: | ---: | --- |
+| `docx_js_bg.wasm` (doc) | 6,660,644 | 7,466,412 | +805,768 | ooxmlsdk 0.13 (+805,711), serialization (+57) |
+| `paged_canvas_wasm_bg.wasm` | 29,193,326 | 29,675,295 | +481,969 | boa 0.22 (+480,690), serialization (+1,279) |
+
+crypto, server-net, tooling and calamine leave both unchanged, and no other
+artifact moved. In docx_js nearly all of it is ooxmlsdk's own code: the
+generated readers of every schema grow (WordprocessingML alone by about
+250 KB before `wasm-opt`), and 0.13 adds a table of known namespaces (about
+210 KB) and the Office 2017 3D-model schema (about 70 KB). ooxmlsdk has no
+feature that leaves them out (`parts`, `mce`, `flat-opc` and `validators` are
+the same in 0.13), and doc already builds it at `opt-level = "z"`.
+
+So ooxmlsdk goes back to 0.12 in doc and slide, which takes the app to about
+99.50 MB. Moving it again wants room in the budget first, or a smaller
+ooxmlsdk; its 0.13 fixes (attribute whitespace and carriage returns kept
+through a read, case-insensitive content types and relationships) are not ones
+doc or slide relies on today. boa 0.22 stays: its 0.48 MB is Boa's own growth,
+and with ooxmlsdk back the app keeps about 0.50 MB of the budget free.
 
 ### moxcms stays on 0.8
 

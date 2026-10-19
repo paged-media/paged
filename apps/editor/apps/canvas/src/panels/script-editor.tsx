@@ -33,7 +33,7 @@
 // the log, so nothing it does is hidden, and every write undoes like a
 // hand-run script.
 
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   describeAiError,
@@ -70,41 +70,42 @@ export function ScriptEditorPanel(_: PanelProps) {
   const [asking, setAsking] = useState<AbortController | null>(null);
   const logRef = useRef<HTMLDivElement | null>(null);
 
-  const scrollLog = useCallback(() => {
+  const scrollLog = () => {
     requestAnimationFrame(() => {
       logRef.current?.scrollTo({
         top: logRef.current.scrollHeight,
         behavior: "smooth",
       });
     });
-  }, []);
+  };
 
-  const askClaude = useCallback(
-    async (requested?: string) => {
-      const prompt = (requested ?? ask).trim();
-      if (!prompt || asking || running) return;
-      const controller = new AbortController();
-      setAsking(controller);
-      const append = (entry: LogEntry) => {
-        setLog((prev) => [...prev, entry]);
-        scrollLog();
-      };
-      append({ source: "", output: [], error: null, note: `You: ${prompt}` });
-      try {
-        const result = await runEditorAgent(client, {
-          mode: "script",
-          prompt,
-          signal: controller.signal,
-          onEvent: (event) => {
-            if (event.type === "script") setSource(event.source);
-            else if (event.type === "scriptResult")
-              append({
-                source: event.source,
-                output: event.run.output,
-                error: event.run.error,
-              });
-          },
-        });
+  const askClaude = async (requested?: string) => {
+    const prompt = (requested ?? ask).trim();
+    if (!prompt || asking || running) return;
+    const controller = new AbortController();
+    setAsking(controller);
+    const append = (entry: LogEntry) => {
+      setLog((prev) => [...prev, entry]);
+      scrollLog();
+    };
+    append({ source: "", output: [], error: null, note: `You: ${prompt}` });
+    // A promise chain rather than try/finally: the React Compiler does
+    // not compile a component with a `finally` in it (ADR 229).
+    await runEditorAgent(client, {
+      mode: "script",
+      prompt,
+      signal: controller.signal,
+      onEvent: (event) => {
+        if (event.type === "script") setSource(event.source);
+        else if (event.type === "scriptResult")
+          append({
+            source: event.source,
+            output: event.run.output,
+            error: event.run.error,
+          });
+      },
+    })
+      .then((result) => {
         if (result.outcome === "refused")
           append({
             source: "",
@@ -126,43 +127,42 @@ export function ScriptEditorPanel(_: PanelProps) {
           });
         }
         setAsk("");
-      } catch (err) {
+      })
+      .catch((err: unknown) => {
         append({ source: "", output: [], error: describeAiError(err) });
-      } finally {
-        setAsking(null);
-      }
-    },
-    [ask, asking, running, client, scrollLog],
-  );
+      })
+      .finally(() => setAsking(null));
+  };
 
-  const run = useCallback(async () => {
+  const run = async () => {
     if (running) return;
     setRunning(true);
-    try {
-      const result = await client.executeScript(source);
-      setLog((prev) => [
-        ...prev,
-        { source, output: result.output, error: result.error },
-      ]);
-      requestAnimationFrame(() => {
-        logRef.current?.scrollTo({
-          top: logRef.current.scrollHeight,
-          behavior: "smooth",
+    await client
+      .executeScript(source)
+      .then((result) => {
+        setLog((prev) => [
+          ...prev,
+          { source, output: result.output, error: result.error },
+        ]);
+        requestAnimationFrame(() => {
+          logRef.current?.scrollTo({
+            top: logRef.current.scrollHeight,
+            behavior: "smooth",
+          });
         });
-      });
-    } catch (err) {
-      setLog((prev) => [
-        ...prev,
-        {
-          source,
-          output: [],
-          error: `dispatch failed: ${(err as Error).message}`,
-        },
-      ]);
-    } finally {
-      setRunning(false);
-    }
-  }, [client, source, running]);
+      })
+      .catch((err: unknown) => {
+        setLog((prev) => [
+          ...prev,
+          {
+            source,
+            output: [],
+            error: `dispatch failed: ${(err as Error).message}`,
+          },
+        ]);
+      })
+      .finally(() => setRunning(false));
+  };
 
   return (
     <div className="flex flex-col h-full text-sm" data-script-editor="ready">

@@ -60,17 +60,22 @@ plugin({
     build.onLoad({ filter: APP_SOURCE }, ({ path }) => {
       const source = readFileSync(path, "utf8");
       const loader = path.endsWith(".tsx") ? "tsx" : "ts";
-      if (!source.includes("import.meta.glob")) {
-        return { contents: source, loader };
-      }
       const dir = JSON.stringify(dirname(path));
-      return {
-        contents: source.replace(
-          /import\.meta\.glob(<[^>]*>)?\(/g,
-          `(globalThis as any).__pagedViteGlob(${dir}, `,
-        ),
-        loader,
-      };
+      const contents = source.includes("import.meta.glob")
+        ? source.replace(
+            /import\.meta\.glob(<[^>]*>)?\(/g,
+            `(globalThis as any).__pagedViteGlob(${dir}, `,
+          )
+        : source;
+      // Bun gives a file to the first plugin that matches it, so this one
+      // keeps the app's sources: under the React Compiler preload
+      // (tooling/js/bun-react-compiler.ts) it hands them on to be compiled.
+      const compile = (
+        globalThis as {
+          __pagedCompileReact?: (path: string, source: string) => string;
+        }
+      ).__pagedCompileReact;
+      return { contents: compile ? compile(path, contents) : contents, loader };
     });
   },
 });

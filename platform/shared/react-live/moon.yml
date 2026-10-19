@@ -1,0 +1,14 @@
+$schema: "../../../.moon/cache/schemas/project.json"
+
+# @paged-media/react-live: a mutable source as a React render value, for the
+# editor and the built-in modules (docs/adr/PM-0002, apps/editor ADR 229), a
+# private package of the root Bun workspace. js-check and js-test are the
+# inherited `bun run typecheck` and `bun run test`.
+language: "typescript"
+layer: "library"
+stack: "frontend"
+tags: ["node", "shared"]
+
+project:
+  title: "platform/shared/react-live"
+  description: "useLive: a registry, store or host surface as a render value that changes with its contents; never published."

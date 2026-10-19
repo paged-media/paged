@@ -27,6 +27,7 @@ import type { ReactNode } from "react";
 
 import { Icon, hasIcon } from "../icons";
 import { useRegistries } from "../state/registries-context";
+import { useRegistryView } from "../state/live";
 import { useOptionalTool } from "../state/tool-context";
 import { useWorkflowMode } from "../state/workflow-mode-context";
 import {
@@ -43,7 +44,9 @@ export interface ContextToolbarProps {
 
 export function ContextToolbar({ paged, right }: ContextToolbarProps) {
   const { mode } = useWorkflowMode();
-  const { modes, commands } = useRegistries();
+  const registries = useRegistries();
+  const { commands } = registries;
+  const modes = useRegistryView(registries.modes);
   const contribution = modes.get(mode);
   const Left = contribution?.toolbarLeft;
   // ADR 024 — the toolbar follows the CONTEXT when there is one.
@@ -145,7 +148,7 @@ export function contextSegmentModel(
  * is broken.
  */
 function ContextSegment({ frame }: { frame: EditContextFrame }) {
-  const { tools } = useRegistries();
+  const tools = useRegistryView(useRegistries().tools);
   const tool = useOptionalTool();
   const model = contextSegmentModel(frame, (id) => {
     const t = tools.get(id as never);

@@ -27,7 +27,9 @@ publish = false
 
 [workspace.dependencies]
 # OOXML typed part DOM (PresentationML, DrawingML main/chart/diagram/picture).
-ooxmlsdk = { version = "0.13", features = ["mce"] }
+# Held at 0.12: 0.13 makes docx_js 0.8 MB (12 %) larger, which the app-wide
+# wasm budget has no room for (docs/migration/rust-majors.md).
+ooxmlsdk = { version = "0.12", features = ["mce"] }
 zip = { version = "9", default-features = false, features = ["deflate"] }
 quick-xml = "0.41"
 serde = { version = "1", features = ["derive"] }

@@ -32,13 +32,7 @@
 // states the limit permanently AND reports, per recording, how many
 // uncapturable edits actually happened while it was running.
 
-import {
-  useCallback,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useRef, useState, type CSSProperties } from "react";
 
 import {
   CockpitPanelHeader,
@@ -89,12 +83,9 @@ export function ActionsPanel(_: PanelProps) {
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const recording = actions.recording;
-  const open = useMemo(
-    () => actions.actions.find((a) => a.id === openId) ?? null,
-    [actions.actions, openId],
-  );
+  const open = actions.actions.find((a) => a.id === openId) ?? null;
 
-  const stop = useCallback(() => {
+  const stop = () => {
     const created = actions.stopRecording(name);
     setName("");
     if (!created) {
@@ -105,20 +96,17 @@ export function ActionsPanel(_: PanelProps) {
     }
     setNotice(null);
     setOpenId(created.id);
-  }, [actions, name]);
+  };
 
-  const onImport = useCallback(
-    async (file: File | undefined) => {
-      if (!file) return;
-      const accepted = actions.importActions(await file.text());
-      setNotice(
-        accepted === 0
-          ? "Nothing imported — the file held no actions this build understands."
-          : `Imported ${accepted} action${accepted === 1 ? "" : "s"}.`,
-      );
-    },
-    [actions],
-  );
+  const onImport = async (file: File | undefined) => {
+    if (!file) return;
+    const accepted = actions.importActions(await file.text());
+    setNotice(
+      accepted === 0
+        ? "Nothing imported — the file held no actions this build understands."
+        : `Imported ${accepted} action${accepted === 1 ? "" : "s"}.`,
+    );
+  };
 
   return (
     <div
