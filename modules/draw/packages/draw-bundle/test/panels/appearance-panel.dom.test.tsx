@@ -60,6 +60,7 @@ import {
   PLAIN_LEAVES,
   RECORDS,
 } from "./harness";
+import { covers } from "@paged-media/test-kit";
 
 const R0 = { kind: "rectangle", id: "r0" } as ElementId;
 const R1 = { kind: "rectangle", id: "r1" } as ElementId;
@@ -167,6 +168,7 @@ describe("Appearance panel — rendered against the engine", () => {
     });
 
     it("shows the selection's stack FRONT-MOST FIRST, and marks what bakes", async () => {
+      covers("panel:media.paged.draw.panel.appearance");
       const out = await commitAppearance(
         h.host,
         R0,
@@ -211,6 +213,7 @@ describe("Appearance panel — rendered against the engine", () => {
     });
 
     it("Up reorders the stack in the document, and the bake follows the new front", async () => {
+      covers("panel:media.paged.draw.panel.appearance");
       await h.host.selection.set([R0]);
       const panel = await mountPanel(h, makeAppearancePanel);
       expect(await propertyOf(h, R0, "frameFillTint")).toEqual({
@@ -236,6 +239,7 @@ describe("Appearance panel — rendered against the engine", () => {
     });
 
     it("Remove drops one layer; + Fill and + Stroke add one", async () => {
+      covers("panel:media.paged.draw.panel.appearance");
       await h.host.selection.set([R0]);
       const panel = await mountPanel(h, makeAppearancePanel);
 
@@ -255,6 +259,7 @@ describe("Appearance panel — rendered against the engine", () => {
     });
 
     it("Bake lowers the stack onto real page items; Release takes it back", async () => {
+      covers("panel:media.paged.draw.panel.appearance");
       await h.host.selection.set([R0]);
       const panel = await mountPanel(h, makeAppearancePanel);
       expect(panel.disabled("[data-draw-appearance-release]")).toBe(true);
