@@ -1,0 +1,11 @@
+$ paged-node query <TMP>/fixture.paged
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "usage: paged-node query <doc> <selector>",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

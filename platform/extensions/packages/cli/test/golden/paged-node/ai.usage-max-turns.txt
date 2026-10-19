@@ -1,0 +1,11 @@
+$ paged-node ai <TMP>/fixture.paged 'a flyer' --max-turns many --no-save --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "--max-turns takes a whole number",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

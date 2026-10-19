@@ -1,0 +1,11 @@
+$ paged-node merge <TMP>/missing.idml --data <TMP>/records.csv --out <TMP>/merged --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "cannot read <TMP>/missing.idml: ENOENT: no such file or directory, open '<TMP>/missing.idml'",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

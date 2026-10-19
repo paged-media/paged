@@ -1,0 +1,7 @@
+$ paged-node plugins --plugins=<CLI>/test/fixtures/notes-plugin.ts --format text
+# exit 0
+# stdout
+engine @paged-media/canvas-wasm@<ENGINE_VERSION> (protocol <PROTOCOL>)
+acme.notes 0.0.0 (<CLI>/test/fixtures/notes-plugin.ts) kinds: plugin:acme.notes/note
+# stderr
+(empty)

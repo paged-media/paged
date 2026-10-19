@@ -33,8 +33,9 @@ import {
   type HeadlessHost,
 } from "@paged-media/plugin-sdk";
 import type { ValueType } from "@paged-media/plugin-api";
+import { covers } from "@paged-media/test-kit";
 
-import { publishBundle } from "../src/activate";
+import { publishBundle } from "../../src/activate";
 import {
   EXPORT_IDML_COMMAND,
   EXPORT_PAGED_COMMAND,
@@ -48,21 +49,21 @@ import {
   pdfExportArgs,
   pdfWireOptions,
   type PdfExportArgs,
-} from "../src/commands";
-import importResult from "../schema/import-result.json";
-import exportPdfArgsFile from "../schema/export-pdf.args.json";
-import exportIdmlArgsFile from "../schema/export-idml.args.json";
-import importIdmlArgsFile from "../schema/import-idml.args.json";
+} from "../../src/commands";
+import importResult from "../../schema/import-result.json";
+import exportPdfArgsFile from "../../schema/export-pdf.args.json";
+import exportIdmlArgsFile from "../../schema/export-idml.args.json";
+import importIdmlArgsFile from "../../schema/import-idml.args.json";
 import { fileURLToPath } from "node:url";
 
 // The engine is this package's own @paged-media/canvas-wasm devDependency.
 // Without an anchor the headless harness resolves it from plugin-sdk's
 // install location, which in the root Bun workspace is whichever version the
 // store hoists, not the one this package pins.
-const ENGINE_ANCHOR = fileURLToPath(new URL(".", import.meta.url));
+const ENGINE_ANCHOR = fileURLToPath(new URL("..", import.meta.url));
 
 const IDML = new URL(
-  "../../../../../engine/core/crates/idml-export/tests/fixtures/indesign-20.0.1-navigation.idml",
+  "../../../../../../engine/core/crates/idml-export/tests/fixtures/indesign-20.0.1-navigation.idml",
   import.meta.url,
 );
 
@@ -104,11 +105,13 @@ describe("[plugin-publish.typed-commands] import and export as typed commands", 
   });
 
   it("importIdml opens the document and answers its pages", async () => {
+    covers("command:media.paged.publish.importIdml");
     expect(pageCount).toBeGreaterThan(0);
     expect(await h.objects.query("page")).toHaveLength(pageCount);
   });
 
   it("exportPdf with the defaults writes a PDF of every page in the ExportResult shape", async () => {
+    covers("command:media.paged.publish.exportPdf");
     expect(
       validateValue(EXPORT_PDF_ARGS_TYPE, { ...PDF_EXPORT_DEFAULTS }),
     ).toBeNull();
@@ -124,6 +127,7 @@ describe("[plugin-publish.typed-commands] import and export as typed commands", 
   }, 60_000);
 
   it("exportPdf honours a page range and a title", async () => {
+    covers("command:media.paged.publish.exportPdf");
     const one = (await h.objects.invoke(
       EXPORT_PDF_COMMAND,
       pdfExportArgs({ pages: "1", title: "One page" }),
@@ -141,6 +145,10 @@ describe("[plugin-publish.typed-commands] import and export as typed commands", 
   }, 60_000);
 
   it("refuses args outside the schema, or a range the schema cannot carry — never coerced", async () => {
+    covers(
+      "command:media.paged.publish.exportPdf",
+      "command:media.paged.publish.importIdml",
+    );
     await expect(
       h.objects.invoke(EXPORT_PDF_COMMAND, { pages: 3 }),
     ).rejects.toThrow(/invalidValue/);
@@ -174,6 +182,10 @@ describe("[plugin-publish.typed-commands] import and export as typed commands", 
   });
 
   it("exportIdml and exportPaged answer the same shape; the .paged reopens", async () => {
+    covers(
+      "command:media.paged.publish.exportIdml",
+      "command:media.paged.publish.exportPaged",
+    );
     const idml = (await h.objects.invoke(
       EXPORT_IDML_COMMAND,
       {},
@@ -191,6 +203,7 @@ describe("[plugin-publish.typed-commands] import and export as typed commands", 
   }, 60_000);
 
   it("the File ▸ Export exporter shares the typed command's path", async () => {
+    covers("exporter:media.paged.publish.exporter.idml");
     const [exporter] = h.exportersContributed();
     const r = await exporter!.export();
     expect(r).not.toBeNull();
@@ -259,6 +272,7 @@ describe("[plugin-publish.typed-commands] partial args: struct defaults and opti
   });
 
   it("exportPdf with {} — the defaults fill in — writes every page", async () => {
+    covers("command:media.paged.publish.exportPdf");
     const out = (await h.objects.invoke(
       EXPORT_PDF_COMMAND,
       {},
@@ -268,6 +282,7 @@ describe("[plugin-publish.typed-commands] partial args: struct defaults and opti
   }, 60_000);
 
   it("exportPdf with only { pages, title }", async () => {
+    covers("command:media.paged.publish.exportPdf");
     const out = (await h.objects.invoke(EXPORT_PDF_COMMAND, {
       pages: "1",
       title: "Partial",
@@ -277,6 +292,7 @@ describe("[plugin-publish.typed-commands] partial args: struct defaults and opti
   }, 60_000);
 
   it("importIdml with only the bytes (name defaults)", async () => {
+    covers("command:media.paged.publish.importIdml");
     const out = (await h.objects.invoke(IMPORT_IDML_COMMAND, {
       bytes: new Uint8Array(readFileSync(IDML)),
     })) as { pages: string[] };
