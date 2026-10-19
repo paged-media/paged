@@ -39,6 +39,7 @@ import {
   type PendingConsent,
 } from "./plugin-consent";
 import { color, font, radius } from "@paged-media/panel-kit";
+import { FocusScope } from "@paged-media/shell";
 
 export function ConsentDialog({
   controller,
@@ -112,103 +113,107 @@ function ConsentPrompt({ pending }: { pending: PendingConsent }) {
           boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
         }}
       >
-        <h2 id="consent-title" style={{ margin: "0 0 4px", fontSize: 15 }}>
-          Allow network access?
-        </h2>
-        <p style={{ margin: "0 0 14px", color: color.mutedFg }}>
-          A plugin wants to reach the origins below.{" "}
-          <strong style={{ color: color.fg }}>{pending.purpose}</strong>
-        </p>
+        {/* ADR 234 — focus moves in on open, Tab stays inside, and
+            focus returns to the opener on close. */}
+        <FocusScope trap autoFocus restoreFocus>
+          <h2 id="consent-title" style={{ margin: "0 0 4px", fontSize: 15 }}>
+            Allow network access?
+          </h2>
+          <p style={{ margin: "0 0 14px", color: color.mutedFg }}>
+            A plugin wants to reach the origins below.{" "}
+            <strong style={{ color: color.fg }}>{pending.purpose}</strong>
+          </p>
 
-        <ul
-          data-testid="consent-origins"
-          style={{
-            listStyle: "none",
-            margin: "0 0 14px",
-            padding: 0,
-            display: "grid",
-            gap: 6,
-          }}
-        >
-          {pending.origins.map((origin) => (
-            <li key={origin}>
-              <label
-                style={{
-                  display: "flex",
-                  gap: 8,
-                  alignItems: "center",
-                  padding: "6px 8px",
-                  borderRadius: 6,
-                  border: `1px solid ${color.border}`,
-                  background: color.bg,
-                  cursor: "pointer",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  data-testid="consent-origin"
-                  data-origin={origin}
-                  checked={checked.has(origin)}
-                  onChange={() => toggle(origin)}
-                />
-                <code style={{ font: `12px ${font.mono}` }}>{origin}</code>
-              </label>
-              {reachableOrigin(origin) ? null : (
-                <p
-                  data-testid="consent-origin-blocked"
-                  data-origin={origin}
+          <ul
+            data-testid="consent-origins"
+            style={{
+              listStyle: "none",
+              margin: "0 0 14px",
+              padding: 0,
+              display: "grid",
+              gap: 6,
+            }}
+          >
+            {pending.origins.map((origin) => (
+              <li key={origin}>
+                <label
                   style={{
-                    margin: "4px 0 0 8px",
-                    fontSize: 12,
-                    color: color.mutedFg,
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "center",
+                    padding: "6px 8px",
+                    borderRadius: 6,
+                    border: `1px solid ${color.border}`,
+                    background: color.bg,
+                    cursor: "pointer",
                   }}
                 >
-                  This editor&apos;s network policy does not admit this origin.
-                  Allowing it records your consent, but requests to it stay
-                  blocked until the deployment lists it.
-                </p>
-              )}
-            </li>
-          ))}
-        </ul>
+                  <input
+                    type="checkbox"
+                    data-testid="consent-origin"
+                    data-origin={origin}
+                    checked={checked.has(origin)}
+                    onChange={() => toggle(origin)}
+                  />
+                  <code style={{ font: `12px ${font.mono}` }}>{origin}</code>
+                </label>
+                {reachableOrigin(origin) ? null : (
+                  <p
+                    data-testid="consent-origin-blocked"
+                    data-origin={origin}
+                    style={{
+                      margin: "4px 0 0 8px",
+                      fontSize: 12,
+                      color: color.mutedFg,
+                    }}
+                  >
+                    This editor&apos;s network policy does not admit this
+                    origin. Allowing it records your consent, but requests to it
+                    stay blocked until the deployment lists it.
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
 
-        <label
-          style={{
-            display: "flex",
-            gap: 8,
-            alignItems: "center",
-            margin: "0 0 16px",
-            color: color.mutedFg,
-          }}
-        >
-          <input
-            type="checkbox"
-            data-testid="consent-remember"
-            checked={remember}
-            onChange={(e) => setRemember(e.target.checked)}
-          />
-          Remember for this document
-        </label>
+          <label
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              margin: "0 0 16px",
+              color: color.mutedFg,
+            }}
+          >
+            <input
+              type="checkbox"
+              data-testid="consent-remember"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+            />
+            Remember for this document
+          </label>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button
-            type="button"
-            data-testid="consent-deny"
-            onClick={deny}
-            style={btnStyle(false)}
-          >
-            Deny
-          </button>
-          <button
-            type="button"
-            data-testid="consent-allow"
-            onClick={allow}
-            disabled={checked.size === 0}
-            style={btnStyle(true, checked.size === 0)}
-          >
-            Allow{checked.size > 0 ? ` ${checked.size}` : ""}
-          </button>
-        </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <button
+              type="button"
+              data-testid="consent-deny"
+              onClick={deny}
+              style={btnStyle(false)}
+            >
+              Deny
+            </button>
+            <button
+              type="button"
+              data-testid="consent-allow"
+              onClick={allow}
+              disabled={checked.size === 0}
+              style={btnStyle(true, checked.size === 0)}
+            >
+              Allow{checked.size > 0 ? ` ${checked.size}` : ""}
+            </button>
+          </div>
+        </FocusScope>
       </div>
     </div>
   );

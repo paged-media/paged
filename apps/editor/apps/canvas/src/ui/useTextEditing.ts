@@ -50,6 +50,23 @@
 // the frame that held it with the Selection tool in hand — instead of
 // leaving the caret live for the next key to type into.
 //
+// TEXT ARRIVES AS INPUT, NOT AS KEYS (F-36, ADR 234). While a caret is in
+// a story, focus sits on the text input surface (TextInputSurface.tsx), a
+// textarea at the caret. Its `beforeinput` carries every character the
+// operating system produces — a plain key, Option and AltGr characters,
+// the emoji picker, dictation — and its composition events carry input
+// method text (CJK, and dead keys: ´ then e is é), committed into the
+// story at `compositionend`. Keydown keeps navigation, deletion, Enter,
+// Tab and the chords; a key pressed during a composition is the IME's
+// and nothing here sees it. When focus is somewhere else that types
+// nothing (the page, a chrome button just clicked), a printable keydown
+// still types, and hands focus back to the surface for the next one.
+//
+// Enter is a paragraph break and Shift+Enter a forced line break
+// (U+2028), Tab a tab character — InDesign's keys. In a table cell Tab is
+// left alone: InDesign moves to the next cell there, which nothing does
+// yet.
+//
 // Paste (ED-2) arrives as the DOM `paste` event, whose plain-text payload
 // needs no clipboard permission; copy and cut read the range from the
 // engine and write it through `navigator.clipboard`.
@@ -80,6 +97,16 @@ import type {
   ContentSelection,
   Mutation,
 } from "@paged-media/client";
+import {
+  canvasKeyYields,
+  canvasSurfaceOf,
+  focusCanvasViewport,
+  insideKeyOwningContainer,
+  isCanvasSurface,
+  isFormField,
+} from "@paged-media/shell";
+
+import { textInputSurface } from "./TextInputSurface";
 
 export interface TextEditingContext {
   client: CanvasClient | null;
@@ -163,7 +190,9 @@ export function useTextEditing(ctx: TextEditingContext) {
     const stillAt = (sel: ContentSelection) => selRef.current === sel;
 
     const onKey = (e: KeyboardEvent) => {
-      if (isEditableTarget(e.target)) return;
+      // A field, a dialog, an open menu, a composition: not the text's
+      // (R9, R10).
+      if (canvasKeyYields(e)) return;
       const ctx = latest();
       const client = ctx.client;
       if (!client) return;
@@ -318,12 +347,38 @@ export function useTextEditing(ctx: TextEditingContext) {
         return;
       }
 
-      // Printable input. e.key is "a", "A", " ", etc. for character
-      // keys; "Enter" / "Tab" / arrow keys handled elsewhere.
-      if (key.length === 1 && !cmd && !e.altKey) {
+      // Printable input. On the text input surface the character arrives
+      // as `beforeinput` (below), so an input method, a dead key, Option
+      // or AltGr all reach the story the same way. Anywhere else (the
+      // page, a button just clicked) this key types it, and focus comes
+      // back to the surface for the next one.
+      if (isPrintable(e)) {
+        if (canvasSurfaceOf(e.target) === "text") return;
         e.preventDefault();
         anchorRef.current = null;
         enqueue((sel, c) => insertAt(c, sel, key, setSel));
+        focusTextSurface();
+        return;
+      }
+
+      // Enter: a paragraph break; Shift+Enter: a forced line break.
+      if (key === "Enter" && !cmd && !e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        anchorRef.current = null;
+        const text = e.shiftKey ? FORCED_LINE_BREAK : "\n";
+        enqueue((sel, c) => insertAt(c, sel, text, setSel));
+        return;
+      }
+
+      // Tab: a tab character in body text (InDesign). In a table cell it
+      // is left to move focus until cell navigation exists.
+      if (key === "Tab" && !cmd && !e.altKey && !e.shiftKey) {
+        if (selRef.current.cell) return;
+        e.preventDefault();
+        e.stopPropagation();
+        anchorRef.current = null;
+        enqueue((sel, c) => insertAt(c, sel, "\t", setSel));
         return;
       }
 
@@ -410,7 +465,7 @@ export function useTextEditing(ctx: TextEditingContext) {
     // permission prompt. Lands through the same insert as typing; a range
     // is replaced in ONE batch, so one undo takes the whole paste back.
     const onPaste = (e: ClipboardEvent) => {
-      if (isEditableTarget(e.target)) return;
+      if (isFormField(e.target) || insideKeyOwningContainer(e.target)) return;
       if (!selRef.current || leavingRef.current || !latest().client) return;
       const raw = e.clipboardData?.getData("text/plain") ?? "";
       if (!raw) return;
@@ -421,14 +476,115 @@ export function useTextEditing(ctx: TextEditingContext) {
       enqueue((sel, c) => insertAt(c, sel, text, setSel));
     };
 
+    // Text input (F-36). Everything the surface's `beforeinput` would put
+    // into the textarea goes into the story instead; the textarea stays
+    // empty. A composition is the exception: its text must show in the
+    // textarea while it is marked (that event cannot be cancelled), and
+    // lands in the story when it is committed.
+    const onBeforeInput = (e: InputEvent) => {
+      if (canvasSurfaceOf(e.target) !== "text") return;
+      switch (e.inputType) {
+        case "insertCompositionText":
+          return;
+        case "insertText":
+        case "insertReplacementText": {
+          e.preventDefault();
+          const text = e.data ?? e.dataTransfer?.getData("text/plain") ?? "";
+          if (!text || !selRef.current || leavingRef.current) return;
+          anchorRef.current = null;
+          enqueue((sel, c) => insertAt(c, sel, text, setSel));
+          return;
+        }
+        case "insertLineBreak":
+        case "insertParagraph": {
+          // Keydown takes Enter; this is a soft keyboard's.
+          e.preventDefault();
+          if (!selRef.current || leavingRef.current) return;
+          anchorRef.current = null;
+          enqueue((sel, c) => insertAt(c, sel, "\n", setSel));
+          return;
+        }
+        default:
+          // Deletion, history and formatting arrive as keys (handled
+          // above) or not at all: nothing may edit the textarea itself.
+          e.preventDefault();
+      }
+    };
+    const onCompositionEnd = (e: CompositionEvent) => {
+      if (canvasSurfaceOf(e.target) !== "text") return;
+      (e.target as HTMLTextAreaElement).value = "";
+      const text = e.data;
+      if (!text || !selRef.current || leavingRef.current) return;
+      anchorRef.current = null;
+      enqueue((sel, c) => insertAt(c, sel, text, setSel));
+    };
+    // Whatever reached the textarea without a cancellable beforeinput
+    // (a browser that commits a composition differently) is typed too,
+    // so nothing the user entered is dropped or left behind.
+    const onInput = (e: Event) => {
+      if (canvasSurfaceOf(e.target) !== "text") return;
+      if ((e as InputEvent).isComposing) return;
+      const area = e.target as HTMLTextAreaElement;
+      const text = area.value;
+      if (!text) return;
+      area.value = "";
+      if (!selRef.current || leavingRef.current) return;
+      anchorRef.current = null;
+      enqueue((sel, c) => insertAt(c, sel, text, setSel));
+    };
+    // Focus that drops to nothing (a click on a panel's background, a
+    // script's blur) comes back to the text while the caret is live, so
+    // the next key — or IME commit — has its target.
+    const onFocusOut = (e: FocusEvent) => {
+      if (canvasSurfaceOf(e.target) !== "text") return;
+      if (e.relatedTarget !== null) return;
+      queueMicrotask(() => {
+        if (!selRef.current || !document.hasFocus()) return;
+        const active = document.activeElement;
+        if (active === null || active === document.body) focusTextSurface();
+      });
+    };
+
     // Capture phase — preempt the bubble-phase page-nav shortcuts.
     window.addEventListener("keydown", onKey, true);
     window.addEventListener("paste", onPaste, true);
+    window.addEventListener("beforeinput", onBeforeInput, true);
+    window.addEventListener("compositionend", onCompositionEnd, true);
+    window.addEventListener("input", onInput, true);
+    window.addEventListener("focusout", onFocusOut, true);
     return () => {
       window.removeEventListener("keydown", onKey, true);
       window.removeEventListener("paste", onPaste, true);
+      window.removeEventListener("beforeinput", onBeforeInput, true);
+      window.removeEventListener("compositionend", onCompositionEnd, true);
+      window.removeEventListener("input", onInput, true);
+      window.removeEventListener("focusout", onFocusOut, true);
     };
   }, []);
+
+  // Keyboard focus follows the caret: a caret placed in a story takes
+  // focus for the text input surface when nothing else holds it (the
+  // page, the canvas), and a caret that goes away hands focus back to
+  // the canvas. Focus in a panel's field stays there — a caret placed
+  // from Find/Change does not steal it.
+  const hasCaret = ctx.selection !== null;
+  useEffect(() => {
+    const surface = textInputSurface();
+    if (!surface) return;
+    const active = document.activeElement;
+    if (hasCaret) {
+      if (active === surface) return;
+      if (
+        active === null ||
+        active === document.body ||
+        isCanvasSurface(active)
+      ) {
+        surface.focus({ preventScroll: true });
+      }
+    } else if (active === surface) {
+      focusCanvasViewport();
+    }
+  }, [hasCaret, ctx.selection]);
 }
 
 /** Insert `text` at the caret, or replace the range with it, and move
@@ -590,10 +746,21 @@ async function applyLineEdge(
   applyMove(sel, target, shift, anchorRef, caretFocus, setSelection);
 }
 
-function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  const tag = target.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  if (target.isContentEditable) return true;
-  return false;
+/** U+2028, the forced line break (InDesign's Shift+Return). */
+const FORCED_LINE_BREAK = "\u2028";
+
+/** A key that types one character: a single code point (an emoji is two
+ *  UTF-16 units), with no Cmd, and no Ctrl unless Alt rides along (AltGr
+ *  on Windows reports Ctrl+Alt). Option and AltGr characters type. */
+function isPrintable(e: KeyboardEvent): boolean {
+  if (e.metaKey || (e.ctrlKey && !e.altKey)) return false;
+  return [...e.key].length === 1;
+}
+
+/** Put keyboard focus on the text input surface, if one is mounted. */
+function focusTextSurface(): void {
+  const surface = textInputSurface();
+  if (surface && document.activeElement !== surface) {
+    surface.focus({ preventScroll: true });
+  }
 }

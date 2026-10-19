@@ -1,0 +1,10 @@
+# cargo-nextest configuration.
+#
+# CI (.github/workflows/shared-rust.yml) runs `--profile ci`, which writes
+# target/nextest/ci/junit.xml; the workflow uploads it as this crate's
+# test evidence.
+[profile.ci]
+fail-fast = false
+
+[profile.ci.junit]
+path = "junit.xml"

@@ -49,6 +49,37 @@
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
   }
+  /* ADR 234 — keyboard focus is always visible: one ring, in the theme's
+   * ring colour, on every control that takes focus. `:where()` keeps it
+   * at the weakest specificity, so a component that draws its own focus
+   * state (a menu row's highlight, a field's inset ring) keeps it. A
+   * pointer click does not match :focus-visible, so the ring appears only
+   * for the keyboard. */
+  :where(
+    a[href],
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    [tabindex],
+    [contenteditable="true"],
+    [role="button"],
+    [role="menuitem"],
+    [role="tab"],
+    [role="option"]
+  ):focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 1px;
+  }
+  /* The canvas viewport draws the ring inside its edge. */
+  [data-canvas-surface="viewport"]:focus-visible {
+    outline-offset: -2px;
+  }
+  /* The text editor's input is invisible: the caret is the canvas's. */
+  [data-canvas-surface="text"]:focus-visible {
+    outline: none;
+  }
 }
 
 @layer components {

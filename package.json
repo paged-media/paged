@@ -28,7 +28,8 @@
       "engine/core/web/idml-viewer",
       "engine/core/packages/*",
       "platform/shared/*",
-      "tests"
+      "tests",
+      "packages/*"
     ],
     "catalog": {
       "@babel/core": "^7.29.7",

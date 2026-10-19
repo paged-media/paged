@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="80" viewBox="0 0 240 80">
+  <!-- A coloured light: lighting-color is an sRGB colour, taken into the filter's linearRGB space. -->
+  <filter id="warm" x="0" y="0" width="1" height="1">
+    <feDiffuseLighting in="SourceAlpha" surfaceScale="0" lighting-color="#ffaa66"><feDistantLight azimuth="0" elevation="60"/></feDiffuseLighting>
+  </filter>
+  <filter id="cool" x="0" y="0" width="1" height="1">
+    <feSpecularLighting in="SourceAlpha" surfaceScale="2" specularConstant="1.2" specularExponent="6" lighting-color="#99ccff">
+      <feSpotLight x="200" y="0" z="50" pointsAtX="200" pointsAtY="80" pointsAtZ="0" specularExponent="2" limitingConeAngle="40"/>
+    </feSpecularLighting>
+  </filter>
+  <filter id="srgb" x="0" y="0" width="1" height="1" color-interpolation-filters="sRGB">
+    <feDiffuseLighting in="SourceAlpha" surfaceScale="0" lighting-color="#66aa33"><feDistantLight azimuth="0" elevation="45"/></feDiffuseLighting>
+  </filter>
+  <rect x="5" y="5" width="70" height="70" filter="url(#warm)"/>
+  <rect x="85" y="5" width="70" height="70" filter="url(#srgb)"/>
+  <rect x="165" y="5" width="70" height="70" filter="url(#cool)"/>
+</svg>

@@ -16,9 +16,16 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-/** The command's name: the npm bin and the prefix of every usage and error
- *  line. Not `paged`, which core's Rust CLI installs (ADR 324 §5). */
-export const BIN = "paged-node";
+/** Set by the npm build (`scripts/bundle.mjs --bin paged`), undefined here. */
+declare const __PAGED_CLI_BIN__: string | undefined;
+
+/** The command's name: the bin and the prefix of every usage and error
+ *  line. In the repository it is `paged-node`, so it never shadows core's
+ *  Rust `paged` in a checkout (ADR 324, its amendment); the published
+ *  `@paged-media/paged` installs the same program as `paged` (PM-0008,
+ *  amendment 3), and its build defines the name. */
+export const BIN: string =
+  typeof __PAGED_CLI_BIN__ === "string" ? __PAGED_CLI_BIN__ : "paged-node";
 
 /** Exit codes (ADR 324 §3): 0 ok, 1 a rejected write or failed check,
  *  2 usage or IO. */

@@ -117,7 +117,10 @@ is not written yet.
 | [186](186-a-mutation-names-the-pages-it-created.md) | A mutation names the pages it created | Accepted 2026-10-18 |
 | [187](187-the-wire-describes-itself-as-json-schema.md) | The wire describes itself as JSON Schema | Accepted 2026-10-18 |
 | [188](188-snapshots-draw-on-the-worker-gpu.md) | Snapshots draw on the worker's GPU, and a lost device is replaced | Accepted 2026-10-19 |
-| [189](189-one-rendering-model.md) | One rendering model: Vello on the GPU, vello_cpu on the CPU | Accepted 2026-10-19 |
+| [189](189-one-rendering-model.md) | One rendering model: Vello on the GPU, vello_cpu on the CPU | Accepted 2026-10-19 (amended 2026-10-19) |
+| [190](190-a-placed-svg-draws-its-filters.md) | A placed SVG draws its filters | Accepted 2026-10-19 |
+| [191](191-a-group-transforms-about-its-box.md) | A group transforms about its box | Accepted 2026-10-19 |
+| [192](192-a-reflection-reads-as-the-flip-with-the-smaller-turn.md) | A reflection reads as the flip with the smaller turn | Accepted 2026-10-19 |
 
 Decisions made in other repositories that this engine's code rests on are listed in
 [`../README.md`](../README.md).

@@ -3,5 +3,6 @@
 //! Each file in this directory is a module; nextest still runs every test in
 //! its own process. A new test file goes here and gets a `mod` line below.
 
+mod svg_reference;
 mod vello_effects;
 mod vello_image_atlas;

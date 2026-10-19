@@ -4993,11 +4993,16 @@ pub struct AppliedOperation {
 /// The decomposition is the standard QR-style polar form for the
 /// linear 2×2 block `[[a, c], [b, d]]`:
 ///
-/// 1. `flip_h` is read from the sign of the determinant — a negative
-///    determinant means the matrix includes a reflection. We fold the
-///    whole reflection into the X axis (`flip_h`) and keep `flip_v`
-///    addressable independently so the two editor toggles round-trip.
-/// 2. `angle_deg` is `atan2(b, a)` of the first basis vector.
+/// 1. A negative determinant means the matrix includes a reflection.
+///    One reflection has two readings: a mirror across the vertical
+///    axis turned by θ (`flip_h`) or a mirror across the horizontal axis
+///    turned by θ − 180° (`flip_v`), the same matrix. It reads as the
+///    one that needs the smaller turn, `flip_h` on a tie (|θ| = 90°), so
+///    an unturned item flipped vertically reads `flip_v` at 0°, not
+///    `flip_h` at 180° (ADR 192). Both flips together are a 180° turn
+///    and read as one.
+/// 2. `angle_deg` is `atan2(b, a)` of the first basis vector (of the
+///    de-reflected matrix), in (−180°, 180°].
 /// 3. `scale_x` is `‖(a, b)‖` (always ≥ 0; the sign lives in the
 ///    flip flags); `scale_y` is the height of the parallelogram
 ///    (`det / scale_x`), also taken as a magnitude.
@@ -5049,6 +5054,26 @@ pub fn decompose_transform(m: Option<[f32; 6]>) -> TransformDecomp {
     } else {
         (a2 * c + b2 * d) / (scale_x * scale_x)
     };
+    // The vertical reading of the same reflection: R(θ) = R(θ − 180°)
+    // · (−I), so `R(θ) · [[−sx, k·sy], [0, sy]]` is
+    // `R(θ − 180°) · [[sx, −k·sy], [0, −sy]]` — the same magnitudes and
+    // shear, the turn 180° less, the mirror on Y.
+    if flip_h && angle_deg.abs() > 90.0 + 1e-3 {
+        let turned = if angle_deg > 0.0 {
+            angle_deg - 180.0
+        } else {
+            angle_deg + 180.0
+        };
+        return TransformDecomp {
+            translate: [tx, ty],
+            angle_deg: turned,
+            scale_x,
+            scale_y,
+            shear,
+            flip_h: false,
+            flip_v: true,
+        };
+    }
     TransformDecomp {
         translate: [tx, ty],
         angle_deg,
@@ -5056,10 +5081,6 @@ pub fn decompose_transform(m: Option<[f32; 6]>) -> TransformDecomp {
         scale_y,
         shear,
         flip_h,
-        // `flip_v` is not derivable from a proper decomposition (a
-        // single reflection is fully captured by `flip_h`); it starts
-        // `false` and is toggled by the `FrameFlipV` path, which
-        // recompose honours by negating the Y scale.
         flip_v: false,
     }
 }
@@ -5160,11 +5181,57 @@ mod transform_decompose_tests {
         let mut d = decompose_transform(None);
         d.flip_v = true;
         approx(recompose_transform(&d), [1.0, 0.0, 0.0, -1.0, 0.0, 0.0]);
-        // Decomposing that y-mirror reads as a 180° rotation + flip_h
-        // (a single reflection is folded into X) — the matrix is the
-        // same either way, which is what round-trip fidelity needs.
+        // PN-202 — that y-mirror reads back as the vertical flip it was
+        // given, unturned, not as a horizontal flip turned 180°.
         let re = decompose_transform(Some([1.0, 0.0, 0.0, -1.0, 0.0, 0.0]));
+        assert!(re.flip_v && !re.flip_h, "{re:?}");
+        assert!(re.angle_deg.abs() < 1e-4, "{re:?}");
         approx(recompose_transform(&re), [1.0, 0.0, 0.0, -1.0, 0.0, 0.0]);
+        // Turning it off again is the identity.
+        let mut off = re;
+        off.flip_v = false;
+        approx(recompose_transform(&off), [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+    }
+
+    #[test]
+    fn a_reflection_reads_as_the_flip_with_the_smaller_turn() {
+        for deg in [-170.0_f32, -120.0, -60.0, 0.0, 30.0, 89.0, 135.0] {
+            let rad = deg.to_radians();
+            let (s, c) = rad.sin_cos();
+            // R(deg) · diag(1, -1): a vertical mirror turned by `deg`.
+            let m = [c, s, s, -c, 3.0, 4.0];
+            let d = decompose_transform(Some(m));
+            approx(recompose_transform(&d), m);
+            assert!(d.angle_deg.abs() <= 90.0 + 1e-3, "{deg}: {d:?}");
+            if deg.abs() <= 90.0 {
+                assert!(d.flip_v && !d.flip_h, "{deg}: {d:?}");
+                assert!((d.angle_deg - deg).abs() < 1e-3, "{deg}: {d:?}");
+            } else {
+                assert!(d.flip_h && !d.flip_v, "{deg}: {d:?}");
+            }
+        }
+        // Exactly 90° is a tie and keeps the horizontal reading.
+        let d = decompose_transform(Some([0.0, 1.0, 1.0, 0.0, 0.0, 0.0]));
+        assert!(d.flip_h && !d.flip_v, "{d:?}");
+    }
+
+    /// The flip InDesign names (`absoluteFlip`) for the matrices its own
+    /// Flip Vertical / Flip Horizontal made of items turned 0°, 30° and
+    /// 120° (`tools/indesign-export/flip-probe.json`).
+    #[test]
+    fn a_reflection_names_the_flip_indesign_names() {
+        let (c, s) = (0.866_025_4_f32, 0.5_f32);
+        for (m, vertical) in [
+            ([1.0, 0.0, 0.0, -1.0], true),
+            ([-1.0, 0.0, 0.0, 1.0], false),
+            ([c, s, s, -c], true),
+            ([-c, -s, -s, c], false),
+            ([-s, c, c, s], false),
+            ([s, -c, -c, -s], true),
+        ] {
+            let d = decompose_transform(Some([m[0], m[1], m[2], m[3], 0.0, 0.0]));
+            assert_eq!((d.flip_v, d.flip_h), (vertical, !vertical), "{m:?}: {d:?}");
+        }
     }
 
     #[test]

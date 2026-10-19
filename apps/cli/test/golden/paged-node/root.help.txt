@@ -22,12 +22,13 @@ verbs:
   merge <template>                              Data Merge: template + records → merged document(s) in --out, as pdf | idml | paged
   plugins [doc]                                 the discovered bundles, their versions and object kinds
   describe [doc]                                kinds × schemas × typed commands × verbs, as one JSON document (for agents and the docs)
+  mcp                                           serve the paged MCP tools over stdio, as the engine's Rust `paged mcp` does: a library's documents (store tools), and the engine run here (open_document, run_script, render_page, save_document)
 
 options (every verb):
   --plugins <a,b>                    load exactly these bundles (package names or paths) instead of discovering them
   --no-plugins                       load no plugin bundles (core objects only)
   --font <file.ttf>                  default font every load lays text out with
-  --engine-from <dir>                resolve @paged-media/canvas-wasm from this directory
+  --engine-from <dir>                resolve the engine (@paged-media/paged) from this directory
   --text                             human-readable output instead of JSON
   -h, --help                         show help
 
