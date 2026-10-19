@@ -68,16 +68,21 @@ The rules the gate enforces on them:
 
 **The layer comes from the file's path**, never from the call:
 
-| Layer       | Files                                                                                                                                |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `unit`      | every TypeScript test file not matched below                                                                                         |
-| `component` | `*.dom.test.ts(x)` (happy-dom)                                                                                                       |
-| `headless`  | a `headless/` directory or `*.headless.test.ts` (the headless editor)                                                                |
-| `e2e`       | Playwright: `apps/editor/apps/canvas/tests/**` (outside `headless/`) or an `e2e/` directory                                          |
-| `rust`      | a Rust test                                                                                                                          |
-| `golden`    | ALSO, in addition to the above: a path containing `golden` (`cli.golden.test.ts`, `tests/golden/…`, `tests/cli_golden.rs`)           |
-| `script`    | ALSO: a file name with the word `script`, `scripts` or `scripting` (`script-console.spec.ts`, `scripting.test.ts`, `script_host.rs`) |
-| `gesture`   | ALSO: a file that drives the gesture DSL (`gestures(…)`, `browserGestures(…)`, `createGestureDsl(…)`, `unitBackend(…)`)              |
+| Layer       | Files                                                                                                                                                |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unit`      | every TypeScript test file not matched below                                                                                                         |
+| `component` | `*.dom.test.ts(x)` (happy-dom)                                                                                                                       |
+| `headless`  | a `headless/` directory or `*.headless.test.ts` (the headless editor)                                                                                |
+| `e2e`       | Playwright: `apps/editor/apps/canvas/tests/**` (outside `headless/`) or an `e2e/` directory                                                          |
+| `rust`      | a Rust test                                                                                                                                          |
+| `golden`    | ALSO, in addition to the above: a path containing `golden` (`cli.golden.test.ts`, `tests/golden/…`, `tests/cli_golden.rs`)                           |
+| `script`    | ALSO: a path segment with the word `script`, `scripts` or `scripting` (`script-console.spec.ts`, `crates/paged-script/tests/…`, `scripting.test.ts`) |
+| `gesture`   | ALSO: a file that drives the gesture DSL (`gestures(…)`, `browserGestures(…)`, `createGestureDsl(…)`, `unitBackend(…)`)                              |
+
+What each kind requires, the families (`command:paged.panel.show.*`, …),
+the acknowledged-gap files (`apps/editor/scripts/surface-acknowledged/`,
+`--prune`) and how to read the report:
+[`apps/editor/docs/reference/surface-conformance.md`](../../../apps/editor/docs/reference/surface-conformance.md).
 
 ## The gesture kit
 
