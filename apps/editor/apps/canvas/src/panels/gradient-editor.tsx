@@ -36,6 +36,7 @@ import {
   useCanvasClient,
   type RampStop,
 } from "@paged-media/shell";
+import { IconButton, Segment } from "@paged-media/panel-kit";
 import { KitSelect } from "@paged-media/ui";
 import type {
   GradientDetail,
@@ -217,6 +218,7 @@ export function GradientEditor() {
       data-gradient-editor="ready"
     >
       <KitSelect
+        aria-label="Gradient"
         data-gradient-select
         value={activeId ?? ""}
         onChange={(e) => setActiveId(e.target.value || null)}
@@ -237,11 +239,10 @@ export function GradientEditor() {
           {(["linear", "radial"] as const).map((t, i) => {
             const active = kind === t;
             return (
-              <button
+              <Segment
                 key={t}
-                type="button"
+                pressed={active}
                 data-gradient-kind={t}
-                data-active={active ? "true" : "false"}
                 onClick={() => setType(t)}
                 className="flex-1 text-xs h-[27px] border-0 cursor-pointer"
                 style={{
@@ -255,19 +256,19 @@ export function GradientEditor() {
                 }}
               >
                 {t === "linear" ? "Linear" : "Radial"}
-              </button>
+              </Segment>
             );
           })}
         </div>
-        <button
-          type="button"
+        <IconButton
+          label="Reverse gradient"
           className="w-[30px] h-[29px] rounded-[6px] border border-input bg-background text-muted-foreground hover:text-foreground flex items-center justify-center"
           data-action="reverse-gradient"
           title="Reverse"
           onClick={reverse}
         >
           <Icon name="ui-return" size={14} />
-        </button>
+        </IconButton>
       </div>
 
       <GradientRamp
@@ -297,6 +298,7 @@ export function GradientEditor() {
               title={s.resolvedRgbHex}
             />
             <select
+              aria-label={`Stop ${i + 1} colour`}
               className="flex-1 min-w-0 text-xs h-[26px] px-1 rounded-[6px] border border-input bg-background"
               data-action="stop-swatch"
               value={s.stopColorRef}
@@ -314,6 +316,7 @@ export function GradientEditor() {
               max={100}
               defaultValue={Math.round(s.locationPct)}
               key={`loc-${i}-${Math.round(s.locationPct)}`}
+              aria-label={`Stop ${i + 1} location (%)`}
               data-stop-location
               className="w-[52px] text-xs h-[26px] px-1 text-center rounded-[6px] border border-input bg-background pg-value"
               onKeyDown={(e) => {
@@ -332,8 +335,8 @@ export function GradientEditor() {
                 }
               }}
             />
-            <button
-              type="button"
+            <IconButton
+              label={`Remove stop ${i + 1}`}
               className="w-[22px] h-[22px] rounded border-0 bg-transparent text-muted-foreground hover:text-foreground disabled:opacity-40"
               data-action="remove-stop"
               title={
@@ -343,7 +346,7 @@ export function GradientEditor() {
               onClick={() => removeStopAt(i)}
             >
               ✕
-            </button>
+            </IconButton>
           </div>
         ))}
       </div>

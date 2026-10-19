@@ -219,6 +219,7 @@ export function ScriptEditorPanel(_: PanelProps) {
         </button>
       </div>
       <textarea
+        aria-label="Script source"
         value={source}
         onChange={(e) => setSource(e.target.value)}
         className="font-mono text-xs p-2 flex-1 min-h-0 bg-background outline-none focus:ring-1 focus:ring-ring resize-none border-b border-input"

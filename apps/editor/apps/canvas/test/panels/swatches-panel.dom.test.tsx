@@ -384,17 +384,15 @@ describe("Swatches panel: controls", () => {
 });
 
 describe("Swatches panel: findings", () => {
-  // The delete control's accessible name is its glyph; the words are
-  // only in the title, which a name computed from content ignores.
-  test.failing(
-    'PN-155: a swatch\'s delete button is named in words, not "✕"',
-    async () => {
-      covers("panel:paged.swatches");
-      const h = await mount();
-      const del = row(h, h.scene.red).querySelector(
-        '[data-action="remove-swatch"]',
-      )!;
-      expect(del.getAttribute("aria-label") ?? del.textContent).not.toBe("✕");
-    },
-  );
+  // A swatch's delete button is named in words (the panel kit's
+  // IconButton: aria-label), not by its glyph.
+  test('PN-155: a swatch\'s delete button is named in words, not "✕"', async () => {
+    covers("panel:paged.swatches");
+    const h = await mount();
+    const del = row(h, h.scene.red).querySelector(
+      '[data-action="remove-swatch"]',
+    )!;
+    expect(del.getAttribute("aria-label") ?? del.textContent).not.toBe("✕");
+    expect(del.getAttribute("aria-label")).toBe("Delete swatch");
+  });
 });
