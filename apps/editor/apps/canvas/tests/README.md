@@ -122,13 +122,13 @@ await ed.select([T.frame.id]);
 await ed.invoke("paged.object.delete"); // the real command registry
 covers("command:paged.object.delete");
 expect(ed.problems()).toEqual([]);
-const dump = await ed.dump(); // canonical model JSON (test-kit modelDump)
+const dump = await ed.dump(); // canonical model JSON (`@paged-media/test-kit/headless` modelDump)
 await ed.dispose();
 ```
 
 Real: the canvas-wasm engine (one module per process, a fresh engine per
 editor), `CanvasClient` over an in-process render worker
-(`@paged-media/test-kit` `createEngineWorker`, which mirrors
+(`@paged-media/test-kit/headless` `createEngineWorker`, which mirrors
 `src/worker/worker.ts` message for message; painting is off), the shell
 registries (`createShellRegistries`), the app's command, menu and keybinding
 sets with their real runners (registered as `main.tsx` registers them: keep

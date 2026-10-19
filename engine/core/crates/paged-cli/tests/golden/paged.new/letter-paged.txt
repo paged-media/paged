@@ -1,0 +1,6 @@
+$ paged new -o letter.paged
+--- exit: 0
+--- stdout
+letter.paged — one 612 × 792 pt page, paged, <N> bytes
+--- stderr
+(empty)

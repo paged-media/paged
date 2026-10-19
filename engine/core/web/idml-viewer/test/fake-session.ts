@@ -53,6 +53,11 @@ export class FakeSession implements ViewerSessionLike {
   layout: SessionPagesLayout;
   loadResult: SessionDiagnostics = OK;
   bindResult: SessionDiagnostics = OK;
+  /** Presents that report a lost GPU device before presents work again. */
+  lostPresents = 0;
+  /** What `recoverGpu` resolves to; `recoveries` counts the calls. */
+  recoverResult = true;
+  recoveries = 0;
 
   constructor(layout: SessionPagesLayout = letterLayout()) {
     this.layout = layout;
@@ -85,7 +90,25 @@ export class FakeSession implements ViewerSessionLike {
     onlyPage?: number | null,
   ): SessionDiagnostics {
     this.presents.push({ zoom, scrollX, scrollY, dpr, onlyPage });
+    if (this.lostPresents > 0) {
+      this.lostPresents -= 1;
+      return {
+        ok: false,
+        messages: [
+          {
+            severity: "error",
+            code: "gpu_lost",
+            message: "GPU device lost: Unknown",
+          },
+        ],
+      };
+    }
     return OK;
+  }
+
+  recoverGpu(): Promise<boolean> {
+    this.recoveries += 1;
+    return Promise.resolve(this.recoverResult);
   }
 
   render_to_canvas_main(): Promise<SessionDiagnostics> {

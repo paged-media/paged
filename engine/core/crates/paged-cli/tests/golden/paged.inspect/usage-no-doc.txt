@@ -1,0 +1,11 @@
+$ paged inspect
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+
+Usage: paged inspect <DOC>
+
+For more information, try '--help'.

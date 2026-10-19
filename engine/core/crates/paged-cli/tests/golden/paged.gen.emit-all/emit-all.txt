@@ -1,0 +1,8 @@
+$ paged gen emit-all --out g
+--- exit: 0
+--- stdout
+g/geometry.idml — <N> bytes, 20 spread(s)
+<one line per sample>
+emitted <SAMPLES> sample(s) into g
+--- stderr
+(empty)

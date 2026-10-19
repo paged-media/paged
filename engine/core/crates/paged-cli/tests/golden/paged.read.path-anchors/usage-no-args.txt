@@ -1,0 +1,12 @@
+$ paged read path-anchors
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+  <ID>
+
+Usage: paged read path-anchors <DOC> <ID>
+
+For more information, try '--help'.

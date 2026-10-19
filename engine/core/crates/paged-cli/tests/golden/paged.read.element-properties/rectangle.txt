@@ -1,0 +1,214 @@
+$ paged read element-properties doc.paged rectangle:u5
+--- exit: 0
+--- stdout
+kind: "elementProperties"
+result (without entries): {"id":{"id":"u5","kind":"rectangle"},"kind":"Rectangle","name":null}
+entries: <some rows>
+rows with a value: [
+  {
+    "path": "frameBounds",
+    "value": {
+      "type": "bounds",
+      "value": [
+        300.0,
+        450.0,
+        500.0,
+        650.0
+      ]
+    }
+  },
+  {
+    "path": "frameTextWrapOffsets",
+    "value": {
+      "type": "bounds",
+      "value": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  {
+    "path": "frameTextWrapContourIncludeInside",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "elementVisible",
+    "value": {
+      "type": "bool",
+      "value": true
+    }
+  },
+  {
+    "path": "elementLocked",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "frameDropShadow",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "frameDropShadowMode",
+    "value": {
+      "type": "text",
+      "value": "Drop"
+    }
+  },
+  {
+    "path": "frameNonprinting",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "frameFittingCrops",
+    "value": {
+      "type": "bounds",
+      "value": [
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  {
+    "path": "frameAutoFit",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "frameOverprintFill",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "frameOverprintStroke",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "frameRotationAngle",
+    "value": {
+      "type": "length",
+      "value": 0.0
+    }
+  },
+  {
+    "path": "frameScaleX",
+    "value": {
+      "type": "length",
+      "value": 1.0
+    }
+  },
+  {
+    "path": "frameScaleY",
+    "value": {
+      "type": "length",
+      "value": 1.0
+    }
+  },
+  {
+    "path": "frameFlipH",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "frameFlipV",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "frameInnerShadowEnabled",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "frameOuterGlowEnabled",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "frameInnerGlowEnabled",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "frameBevelEnabled",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "frameSatinEnabled",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "frameSatinInvert",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "frameFeatherEnabled",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "frameDirectionalFeatherEnabled",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  },
+  {
+    "path": "frameDropShadowKnockedOut",
+    "value": {
+      "type": "bool",
+      "value": true
+    }
+  },
+  {
+    "path": "frameDropShadowUseGlobalLight",
+    "value": {
+      "type": "bool",
+      "value": false
+    }
+  }
+]
+--- stderr
+(empty)

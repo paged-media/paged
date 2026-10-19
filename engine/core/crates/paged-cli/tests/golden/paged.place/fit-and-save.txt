@@ -1,0 +1,6 @@
+$ paged place doc.paged rectangle:u5 pic.png --fit FillProportionally -o placed.paged
+--- exit: 0
+--- stdout
+rectangle:u5 ← pic.png (<N> bytes) → placed.paged — paged, <N> bytes
+--- stderr
+(empty)

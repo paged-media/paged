@@ -1,0 +1,10 @@
+$ paged read snap-point doc.paged usp 1 2 3
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: 2 values required for '[X] [Y]...' but 3 were provided
+
+Usage: paged read snap-point [OPTIONS] <DOC> <PAGE> [X] [Y]...
+
+For more information, try '--help'.

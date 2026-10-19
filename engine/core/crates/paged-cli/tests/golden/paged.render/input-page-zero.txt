@@ -1,0 +1,6 @@
+$ paged render doc.paged --page 0 -o p.png
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: --page is 1-based

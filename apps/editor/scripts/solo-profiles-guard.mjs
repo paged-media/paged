@@ -23,7 +23,7 @@
  * cause would have looked like a bundle failure.
  *
  * Checks every id in every profile against the code that registers it:
- *   · host panels → the `BUILT_IN_PANELS` literal in main.tsx
+ *   · host panels → the `BUILT_IN_PANELS` literal in panels/built-in-panels.tsx
  *   · host tools  → `packages/tools/src/built-in-tools.ts`
  *   · plugin panels → the bundle's own manifest, resolved through the
  *     canvas app's node_modules (NOT a store scan — the store holds
@@ -46,10 +46,12 @@ function die(msg) {
 
 // ── what exists ─────────────────────────────────────────────────────
 function hostPanels() {
-  const src = read(join(CANVAS, "src/main.tsx"));
+  const src = read(join(CANVAS, "src/panels/built-in-panels.tsx"));
   const start = src.indexOf("const BUILT_IN_PANELS");
   if (start < 0)
-    die("BUILT_IN_PANELS not found in main.tsx — extractor is stale");
+    die(
+      "BUILT_IN_PANELS not found in built-in-panels.tsx — extractor is stale",
+    );
   const block = src.slice(start, src.indexOf("\n];", start));
   return new Set([...block.matchAll(/id:\s*"([^"]+)"/g)].map((m) => m[1]));
 }

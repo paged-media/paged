@@ -1,0 +1,9 @@
+$ paged script doc.paged loop.js --timeout soon
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: --timeout wants milliseconds or "none", got "soon"
+
+Caused by:
+    invalid digit found in string

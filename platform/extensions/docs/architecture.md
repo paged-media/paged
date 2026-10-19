@@ -240,6 +240,10 @@ for a lazy registration and allowances that must give a reason.
 - Tests run under `bun test`, all in `packages/plugin-sdk/test` (35 spec files): the adapter against
   a fake editor, the harness against the real engine, the CLI as a subprocess, the two sync
   scripts, and the built `dist`. `.github/workflows/extensions-vitest.yml` runs them.
+- The two command lines have golden tests: `packages/cli/test/cli-golden.spec.ts`
+  (`paged-node`) and `packages/plugin-sdk/test/paged-plugin-golden.spec.ts` (`paged-plugin`),
+  goldens in each package's `test/golden/`, rewritten with `PAGED_UPDATE_GOLDEN=1`; see
+  [`docs/development/testing-cli-and-scripting.md`](../../../docs/development/testing-cli-and-scripting.md).
 - `.github/workflows/contract-guard.yml` requires that a change under
   `packages/plugin-api/src` or `packages/plugin-sdk/src` comes with a version change.
 - `.github/workflows/publish.yml` runs on every push to `main`: typecheck, build, test, the

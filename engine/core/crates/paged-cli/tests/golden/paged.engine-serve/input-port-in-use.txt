@@ -1,0 +1,9 @@
+$ paged engine-serve --port <PORT>
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: binding 127.0.0.1:<PORT>
+
+Caused by:
+    Address already in use (os error <N>)

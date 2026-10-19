@@ -1,0 +1,11 @@
+$ paged read story-content doc.paged Story/nope
+--- exit: 0
+--- stdout
+{
+  "kind": "storyContentResult",
+  "payload": {
+    "content": null
+  }
+}
+--- stderr
+(empty)

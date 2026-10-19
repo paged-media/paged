@@ -1,0 +1,17 @@
+$ paged read planar-regions doc.paged oval:nope
+--- exit: 0
+--- stdout
+{
+  "kind": "planarRegions",
+  "payload": {
+    "result": {
+      "complete": false,
+      "faces": [],
+      "found": false,
+      "inputCount": 0,
+      "reason": "Oval(\"nope\") carries no path geometry"
+    }
+  }
+}
+--- stderr
+(empty)

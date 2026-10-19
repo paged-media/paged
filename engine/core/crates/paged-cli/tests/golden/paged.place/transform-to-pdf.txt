@@ -1,0 +1,6 @@
+$ paged place doc.paged rectangle:u5 pic.png --transform 1,0,0,1,10,20 -o moved.pdf
+--- exit: 0
+--- stdout
+rectangle:u5 ← pic.png (<N> bytes) → moved.pdf — pdf, <N> bytes
+--- stderr
+(empty)

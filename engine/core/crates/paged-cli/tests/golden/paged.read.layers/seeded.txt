@@ -1,0 +1,21 @@
+$ paged read layers doc.paged
+--- exit: 0
+--- stdout
+{
+  "kind": "layers",
+  "payload": {
+    "items": [
+      {
+        "locked": false,
+        "name": "Art",
+        "parentId": null,
+        "printable": true,
+        "selfId": "Layer/u0",
+        "visible": true,
+        "z": 0
+      }
+    ]
+  }
+}
+--- stderr
+(empty)

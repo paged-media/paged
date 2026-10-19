@@ -1,0 +1,6 @@
+$ paged new --format pdf -o x.pdf
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: unsupported format "pdf" (idml|paged)

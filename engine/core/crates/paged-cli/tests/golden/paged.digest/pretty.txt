@@ -1,0 +1,12 @@
+$ paged digest doc.paged
+--- exit: 0
+--- stdout
+{
+  "combined": "<DIGEST>",
+  "pageDigests": {
+    "usp": "<DIGEST>"
+  },
+  "stateHash": "<DIGEST>"
+}
+--- stderr
+(empty)

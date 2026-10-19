@@ -1,0 +1,6 @@
+$ paged set doc.paged oval:u99 frameFillColor Color/u1
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: set frameFillColor: not implemented: frame mutation failed: node not found: Oval("u99")

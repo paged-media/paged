@@ -1,0 +1,6 @@
+$ paged place doc.paged rectangle:u5 pic.png --transform 1,2,3
+--- exit: 1
+--- stdout
+(empty)
+--- stderr
+Error: --transform wants six comma-separated numbers a,b,c,d,tx,ty, got "1,2,3"

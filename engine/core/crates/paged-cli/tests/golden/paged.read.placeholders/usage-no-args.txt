@@ -1,0 +1,11 @@
+$ paged read placeholders
+--- exit: 2
+--- stdout
+(empty)
+--- stderr
+error: the following required arguments were not provided:
+  <DOC>
+
+Usage: paged read placeholders <DOC>
+
+For more information, try '--help'.

@@ -1,0 +1,73 @@
+$ paged invoke --help
+--- exit: 0
+--- stdout
+Apply one wire operation to a document (`Mutation`, by its tag).
+
+OP is any operation the catalog lists (`paged ops`), so every op is a verb here, not only through `paged script`. ARGS are the op's arguments as the wire takes them: inline JSON (`'{"pageId":"u1","bounds":[0,0,100,100]}'`), `-` for stdin, or a JSON file; none means `{}`. Prints `{op, appliedSeq, createdId, minted}`. `bindCreated` is invoked only inside a `batch`.
+
+Usage: paged invoke [OPTIONS] <DOC> <OP> [ARGS]
+
+Arguments:
+  <DOC>
+          IDML or `.paged` document
+
+  <OP>
+          The operation's wire tag (`insertTextFrame`, `linkFrames`, …)
+          
+          [possible values: insertText, deleteRange, applyStyle, insertField, insertAnchoredFrame, insertHyperlink, insertFootnote, deleteFootnote, deleteHyperlink, editHyperlink, updateTableOfContents, generateIndex, updateCrossReferences, insertNote, editNote, deleteNote, acceptTrackedChange, rejectTrackedChange, convertNoteToText, createBookmark, deleteBookmark, renameBookmark, moveBookmark, insertEndnote, deleteEndnote, convertFootnoteToEndnote, setFieldValue, placeImage, replaceImageBytes, moveFrame, resizeFrame, linkFrames, unlinkFrames, insertPage, deletePage, resizePage, insertFrame, insertTextFrame, deleteFrame, insertLine, insertPath, setDocumentDefaults, setColorSettings, setProofSetup, importSwatchLibrary, setInkSetting, setUseStandardLabForSpots, pathPointInsert, pathPointRemove, pathOpenAt, outlineStroke, offsetPath, simplifyPath, closePath, joinPaths, pasteInto, releaseFrom, reorderElement, applyOpacityMask, releaseOpacityMask, attachTextToPath, detachTextFromPath, createGroup, dissolveGroup, duplicateElements, setGroupTransform, setPluginMetadata, setPageMetadata, setDocumentMetadata, createTextVariable, deleteTextVariable, pathPointCurveType, pathPointSet, batch, layerSetVisible, layerSetLocked, layerSetPrintable, layerSetName, layerMove, layerInsert, layerRemove, setElementProperty, set, pathfinderBoolean, pathfinderDivide, pathfinderTrim, pathfinderMerge, pathfinderCrop, pathfinderOutline, pathfinderMinusBack, pathfinderFaces, createSwatch, editSwatch, deleteSwatch, createGradient, editGradient, deleteGradient, createColorGroup, editColorGroup, deleteColorGroup, createNumberingList, editNumberingList, deleteNumberingList, createParagraphStyle, renameParagraphStyle, deleteParagraphStyle, createCharacterStyle, renameCharacterStyle, deleteCharacterStyle, createObjectStyle, renameObjectStyle, deleteObjectStyle, createCellStyle, renameCellStyle, deleteCellStyle, createTableStyle, renameTableStyle, deleteTableStyle, setStyleProperty, insertOval, insertGuide, moveGuide, deleteGuide, setConditionVisible, setFlowGrowRule, activateConditionSet, applyMasterToPage, duplicatePage, movePage, onMaster, createMaster, deleteMaster, renameMaster, insertSection, editSection, deleteSection, setRowHeight, setColumnWidth, insertTableRow, deleteTableRow, insertTableColumn, deleteTableColumn, insertHeaderRow, removeHeaderRow, insertFooterRow, removeFooterRow, setCellSpan, insertTable, deleteTable]
+
+  [ARGS]
+          The arguments: inline JSON, `-` for stdin, or a JSON file
+
+Options:
+  -o, --out <OUT>
+          Write the result here. The format follows the extension
+
+      --standard <STANDARD>
+          "pdf17" (default) or "pdfx4". X-4 needs a resolvable output intent — give one here or let the document's profile serve
+          
+          [default: pdf17]
+
+      --output-intent <OUTPUT_INTENT>
+          Output-intent profile NAME, resolved against what this run registered. Defaults to the working space
+
+      --output-condition <OUTPUT_CONDITION>
+          Human-readable output condition for the OutputIntent dict
+
+      --marks
+          Crop marks, registration marks, colour bars, page info
+
+      --pages <FROM-TO>
+          0-based inclusive page range, e.g. `0-9`
+
+      --bookmarks
+          Write the document's bookmarks as the PDF outline
+
+      --tagged
+          Create Tagged PDF: a structure tree of stories and paragraphs, as InDesign's "Create Tagged PDF" writes it
+
+      --fonts <DIR|FILE>
+          Font file or directory to make available, repeatable.
+          
+          A directory is read one level deep and each face is asked for its own family name, so a corpus directory needs no mapping.
+
+      --font-family <NAME[/STYLE]=PATH>
+          Bind one family (and optionally a style) to a file, repeatable: `--font-family "Fraunces/Italic=/path/Fraunces-Italic.ttf"`.
+          
+          Wins over `--fonts` for the same family and style — a scan is a convenience, this is the instrument.
+
+      --font <FILE>
+          Fallback face for text no registered family answers for. Absent, the face the CLI bundles (Inter) stands in
+
+      --no-default-font
+          No fallback face: text no registered family answers for is not set, and the run says so (to see what a document is missing)
+
+      --cmyk-profile <NAME|FILE>
+          CMYK profile: a file path, or a name to resolve against the host's installed profiles (e.g. "Coated FOGRA39").
+          
+          Absent, the document's own declared profile name is resolved and made the working space. Absent that too, colour is naive math and the run says so.
+
+  -h, --help
+          Print help (see a summary with '-h')
+--- stderr
+(empty)
