@@ -644,6 +644,15 @@ export {
   type EditorAgentRequest,
 } from "./ai/editor-ai";
 export {
+  AI_UNAVAILABLE_TEXT,
+  getAiAvailability,
+  probeAiService,
+  resetAiAvailability,
+  setAiAvailability,
+  useAiAvailability,
+  type AiAvailability,
+} from "./ai/availability";
+export {
   ListRows,
   PanelToolbar,
   ToolbarBtn,

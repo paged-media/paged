@@ -573,19 +573,16 @@ describe("paged.draw commands — recipes (real engine)", () => {
       });
     });
 
-    it.failing(
-      "DRW-3 — Redefine style with two linked elements is ONE undo step (it is one per element)",
-      async () => {
-        covers("command:media.paged.draw.command.redefineGraphicStyle");
-        await withStyle();
-        await rig.h.host.selection.set([POLY]);
-        await rig.run(`${C}.applyGraphicStyle`, { styleId: "gs-1" });
-        await rig.h.host.selection.set([el("graphicLine", "uline")]);
-        await brokenInvariant("INV-4", () =>
-          expectApplies(rig, `${C}.redefineGraphicStyle`, { styleId: "gs-1" }),
-        );
-      },
-    );
+    it("DRW-3 — Redefine style with two linked elements is ONE undo step", async () => {
+      covers("command:media.paged.draw.command.redefineGraphicStyle");
+      await withStyle();
+      await rig.h.host.selection.set([POLY]);
+      await rig.run(`${C}.applyGraphicStyle`, { styleId: "gs-1" });
+      await rig.h.host.selection.set([el("graphicLine", "uline")]);
+      await expectApplies(rig, `${C}.redefineGraphicStyle`, {
+        styleId: "gs-1",
+      });
+    });
 
     it("Break style link unlinks the selection from its style; an unlinked path is refused", async () => {
       covers("command:media.paged.draw.command.breakGraphicStyleLink");
@@ -622,20 +619,17 @@ describe("paged.draw commands — recipes (real engine)", () => {
   });
 
   describe("the appearance stack", () => {
-    // DRW-4: an appearance edit that leaves a stack to paint is two undo
-    // steps: the stack in the plugin metadata, then the batch that
-    // paints its front-most layer onto the frame.
+    // DRW-4 (fixed): an appearance edit writes the stack in the plugin
+    // metadata and paints its front-most layer onto the frame in ONE batch.
     it("Add fill refuses an empty selection", async () => {
       covers("command:media.paged.draw.command.appearanceAddFill");
       await expectRefuses(rig, F1(), [], `${C}.appearanceAddFill`);
     });
 
-    it.failing("DRW-4 — Add fill is ONE undo step (it is two)", async () => {
+    it("DRW-4 — Add fill is ONE undo step", async () => {
       covers("command:media.paged.draw.command.appearanceAddFill");
       await rig.open(F1(), [RECT]);
-      await brokenInvariant("INV-4", () =>
-        expectApplies(rig, `${C}.appearanceAddFill`),
-      );
+      await expectApplies(rig, `${C}.appearanceAddFill`);
     });
 
     it("Add stroke refuses an empty selection", async () => {
@@ -643,15 +637,13 @@ describe("paged.draw commands — recipes (real engine)", () => {
       await expectRefuses(rig, F1(), [], `${C}.appearanceAddStroke`);
     });
 
-    it.failing("DRW-4 — Add stroke is ONE undo step (it is two)", async () => {
+    it("DRW-4 — Add stroke is ONE undo step", async () => {
       covers("command:media.paged.draw.command.appearanceAddStroke");
       await rig.open(F1(), [RECT]);
-      await brokenInvariant("INV-4", () =>
-        expectApplies(rig, `${C}.appearanceAddStroke`),
-      );
+      await expectApplies(rig, `${C}.appearanceAddStroke`);
     });
 
-    it("DRW-4, measured: Add fill and Add stroke take two undo steps each", async () => {
+    it("DRW-4 (fixed): Add fill and Add stroke take one undo step each", async () => {
       covers(
         "command:media.paged.draw.command.appearanceAddFill",
         "command:media.paged.draw.command.appearanceAddStroke",
@@ -659,11 +651,11 @@ describe("paged.draw commands — recipes (real engine)", () => {
       await rig.open(F1(), [RECT]);
       expect(
         await undoStepsOf(rig, () => rig.run(`${C}.appearanceAddFill`)),
-      ).toBe(2);
+      ).toBe(1);
       await rig.open(F1(), [RECT]);
       expect(
         await undoStepsOf(rig, () => rig.run(`${C}.appearanceAddStroke`)),
-      ).toBe(2);
+      ).toBe(1);
     });
 
     it("Clear appearance empties the stack; nothing selected is refused", async () => {
@@ -697,7 +689,7 @@ describe("paged.draw commands — recipes (real engine)", () => {
       });
     });
 
-    it.failing("DRW-4 — Move layer is ONE undo step (it is two)", async () => {
+    it("DRW-4 — Move layer is ONE undo step", async () => {
       covers("command:media.paged.draw.command.appearanceMoveLayer");
       await rig.open(F1(), [RECT]);
       await rig.h.host.document.setMetadata(RECT, {
@@ -712,13 +704,11 @@ describe("paged.draw commands — recipes (real engine)", () => {
           },
         },
       });
-      await brokenInvariant("INV-4", () =>
-        expectApplies(rig, `${C}.appearanceMoveLayer`, {
-          kind: "fill",
-          index: 0,
-          delta: 1,
-        }),
-      );
+      await expectApplies(rig, `${C}.appearanceMoveLayer`, {
+        kind: "fill",
+        index: 0,
+        delta: 1,
+      });
     });
 
     // DRW-5: a bake is two batches and two undo steps (ADR 354 names the

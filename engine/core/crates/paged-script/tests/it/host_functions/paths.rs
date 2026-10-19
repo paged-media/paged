@@ -389,6 +389,11 @@ fn pathfinder_boolean() {
         &format!("paged.pathfinderBoolean('not an address', [{b:?}], 'union')"),
         "false",
     );
+    refuses(
+        &mut m,
+        &format!("paged.pathfinderBoolean({a:?}, [{b:?}, 'not an address'], 'union')"),
+        "false",
+    );
     throws(
         &mut m,
         &format!("paged.pathfinderBoolean(Symbol('k'), [{b:?}], 'union')"),
@@ -406,20 +411,12 @@ fn pathfinder_boolean() {
     );
 }
 
-/// finding SCR-2: an id list keeps only the entries that parse, so a typo
-/// in one of them runs the verb on the others; it should be refused, as
-/// `duplicateElements` refuses it. Asserts the CURRENT behaviour: `[a, bad]`
-/// does exactly what `[a]` does.
-fn drops_unparseable(call: impl Fn(&str, &str) -> String) {
-    let (mut with_bad, a, _) = pair();
-    let typo = js(&mut with_bad, &call(&a, "'not an address'"));
-    let (mut alone, a2, _) = pair();
-    let only = js(&mut alone, &call(&a2, ""));
-    assert_eq!((typo.output, typo.error), (only.output, only.error));
-    assert!(
-        snapshot(&with_bad) == snapshot(&alone),
-        "the unparseable id was dropped"
-    );
+/// SCR-2 (fixed): an id list with an entry that does not parse is
+/// refused (`false`, the document untouched), as `duplicateElements`
+/// refuses it, instead of running the verb on the entries that parse.
+fn refuses_unparseable(call: impl Fn(&str, &str) -> String) {
+    let (mut m, a, _) = pair();
+    refuses(&mut m, &call(&a, "'not an address'"), "false");
 }
 
 /// The six region verbs share `([id, …]) -> bool`.
@@ -432,7 +429,7 @@ fn region(verb: &str) {
         &format!("paged.{verb}(['not an address'])"),
         "false",
     );
-    drops_unparseable(|a, bad| {
+    refuses_unparseable(|a, bad| {
         let rest = if bad.is_empty() {
             String::new()
         } else {
@@ -502,7 +499,7 @@ fn pathfinder_faces() {
         &format!("paged.pathfinderFaces([{a:?}, {b:?}], [{face:?}])"),
         "false",
     );
-    drops_unparseable(|a, bad| {
+    refuses_unparseable(|a, bad| {
         let rest = if bad.is_empty() {
             String::new()
         } else {

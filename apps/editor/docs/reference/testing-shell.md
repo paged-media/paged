@@ -136,7 +136,7 @@ reason. The shell's findings (`SH-*`), with the UX audit
 | SH-13            | The sample bundle's manifest declares a menu path its kernel registers with other capitals                | `packages/shell/test/bundles/sample-bundle.test.ts`                                                     |
 | SH-101 to SH-106 | **Fixed 2026-10-19 (`907b1b153`, editor ADR 247, 248).** Settings and stores                              | `packages/shell/test/settings/`, `packages/shell/test/stores/`, `apps/canvas/test/unit/settings/`       |
 | SH-201 (F-28)    | No Cut, Copy, Paste or Duplicate for page items                                                           | `apps/canvas/test/unit/commands/edit-commands.test.ts`, `tests/e2e/shell-findings.spec.ts`              |
-| SH-202 to SH-205 | Command undo granularity                                                                                  | `apps/canvas/test/unit/commands/`, `tests/headless/commands-*.test.ts`, `packages/shell/test/commands/` |
+| SH-202 to SH-205 | Fixed (`653f6314d`, `89219f88e`): Command undo granularity and fidelity                                   | `apps/canvas/test/unit/commands/`, `tests/headless/commands-*.test.ts`, `packages/shell/test/commands/` |
 | WRK-1            | Fixed (`ef8c262bd`): A binary load whose dispatch throws is reported with no seq (the real render worker) | `tests/worker-boot.spec.ts`                                                                             |
 | WRK-2            | Fixed (`ef8c262bd`): The client settles no load on a `dispatchError`, even with its seq                   | `apps/canvas/test/unit/client/load-dispatch-error.test.ts`                                              |
 

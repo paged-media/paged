@@ -3492,8 +3492,18 @@ mod tests {
         // Run beyond the range is unchanged.
         assert_eq!(story.paragraphs[1].runs[0].point_size, Some(10.0));
 
-        // Inverse should be a Batch (two ops).
-        assert!(matches!(&applied.inverse, Operation::Batch { ops } if ops.len() == 2));
+        // The inverse puts the touched paragraph back whole.
+        assert!(matches!(
+            &applied.inverse,
+            Operation::RestoreParagraphs {
+                first: 0,
+                count: 1,
+                ..
+            }
+        ));
+        crate::apply(project.document_mut(), &applied.inverse).expect("undo");
+        let story = &project.document().stories[0].story;
+        assert_eq!(story.paragraphs[0].runs[0].point_size, Some(10.0));
     }
 
     /// SDK Phase 3.x — partial-range splitting. A range that cuts
@@ -3530,14 +3540,12 @@ mod tests {
         assert_eq!(story.paragraphs[0].runs[3].text, "world");
         assert_eq!(story.paragraphs[0].runs[3].point_size, Some(10.0));
 
-        // Inverse restores the mutated piece's point_size to 10.0.
-        // It addresses range [2, 4) — the same range the forward op
-        // mutated. Undo doesn't re-merge the splits; the document
-        // keeps the boundary structure.
+        // Undo puts the paragraph back as it was: the two original runs
+        // (findings SCR-10, SH-204: the splits used to stay).
         crate::apply(project.document_mut(), &applied.inverse).expect("undo");
         let story = &project.document().stories[0].story;
-        // Run count stays at 4 (no re-merge).
-        assert_eq!(story.paragraphs[0].runs.len(), 4);
+        assert_eq!(story.paragraphs[0].runs.len(), 2);
+        assert_eq!(story.paragraphs[0].runs[0].text, "Hello ");
         // Every run's point_size is back to 10.0.
         for run in &story.paragraphs[0].runs {
             assert_eq!(run.point_size, Some(10.0));
@@ -5114,23 +5122,12 @@ mod tests {
             project.document().stories[0].story.paragraphs[0].runs[1].ligatures_on,
             Some(false)
         );
-        // The inverse carries the EFFECTIVE prior value (ON), not the
-        // wrong-polarity `false`.
-        let Operation::SetProperty {
-            value: Value::Bool(inv),
-            ..
-        } = &applied.inverse
-        else {
-            panic!("inverse should be a Bool SetProperty");
-        };
-        assert!(*inv, "inverse must restore ligatures ON, not OFF");
-
         crate::apply(project.document_mut(), &applied.inverse).expect("undo");
-        // Undo restores the visible ON state.
+        // Undo restores the run exactly: the inherit default (ON), not OFF.
         assert_eq!(
             project.document().stories[0].story.paragraphs[0].runs[1].ligatures_on,
-            Some(true),
-            "undo must restore ligatures ON (the default), not leave them OFF"
+            None,
+            "undo must restore the inherit default (ligatures ON), not leave them OFF"
         );
     }
 
@@ -5166,11 +5163,14 @@ mod tests {
         assert_eq!(story.paragraphs[0].runs[2].font_style, None);
         assert_eq!(story.paragraphs[0].runs[3].text, "world");
 
-        // Undo restores the middle piece's prior None (splits stay).
+        // Undo restores the original runs, splits merged back.
         crate::apply(project.document_mut(), &applied.inverse).expect("undo");
         let story = &project.document().stories[0].story;
-        assert_eq!(story.paragraphs[0].runs.len(), 4);
-        assert_eq!(story.paragraphs[0].runs[1].font_style, None);
+        assert_eq!(story.paragraphs[0].runs.len(), 2);
+        assert!(story.paragraphs[0]
+            .runs
+            .iter()
+            .all(|r| r.font_style.is_none()));
     }
 
     // ---- W0.2: paragraph formatting paths ---------------------------------
@@ -6816,10 +6816,9 @@ mod tests {
     #[test]
     fn w03_frame_fitting_alignment_and_auto_fit_round_trip() {
         // Writing either knob materialises a `FrameFittingOption` if the
-        // prior was `None`; undo restores the *field* (reference_point /
-        // auto_fit) but leaves the now-present (all-None) struct — the
-        // same materialise-on-None lossiness as `FrameDropShadow`. The
-        // field value, not the struct presence, is what round-trips.
+        // prior was `None`; clearing the last knob drops it again. The
+        // reference point is stored in IDML's `AnchorPoint` names
+        // (`CenterPoint` is read as `CenterAnchor`).
         let mut p = Project::new(document_with_one_rectangle("Rectangle/r1"));
         let node = NodeId::Rectangle("Rectangle/r1".to_string());
         let applied = p
@@ -6835,16 +6834,15 @@ mod tests {
                 .as_ref()
                 .and_then(|ff| ff.reference_point.clone())
                 .as_deref(),
-            Some("CenterPoint")
+            Some("CenterAnchor")
         );
         assert_eq!(applied.invalidation.frame_style.len(), 1);
         crate::apply(p.document_mut(), &applied.inverse).unwrap();
-        assert_eq!(
+        assert!(
             p.document().spreads[0].spread.rectangles[0]
                 .frame_fitting
-                .as_ref()
-                .and_then(|ff| ff.reference_point.clone()),
-            None
+                .is_none(),
+            "undo leaves no empty fitting option"
         );
         let applied = p
             .apply(set_op(node, PropertyPath::FrameAutoFit, Value::Bool(true)))

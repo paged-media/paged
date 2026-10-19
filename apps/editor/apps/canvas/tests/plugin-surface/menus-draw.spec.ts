@@ -29,7 +29,7 @@
 // is judged on one known input:
 //
 //   · a verb that applies to it changes the document and ONE Undo takes the
-//     change back (MNU-2 records the entries where it takes several);
+//     change back (MNU-2, fixed: the entries that took several take one);
 //   · a "…" verb raises Path Options, where its parameters are set;
 //   · a verb about something the artwork does not contain (a blend, a
 //     repeat, a symbol instance, a pattern field, an appearance stack,
@@ -550,10 +550,6 @@ test.describe.serial("plugin menus — paged.draw", () => {
   });
 
   test("MNU-2 — Draw/Corners/Rounded: one Undo takes the click back", async () => {
-    test.fail(
-      true,
-      "MNU-2: one click on this entry is several undo steps (one per mutation the command emits, unbatched); Undo must take a menu action back in one step",
-    );
     const out = await clickEntry(
       live,
       "Draw/Corners/Rounded",
@@ -582,10 +578,6 @@ test.describe.serial("plugin menus — paged.draw", () => {
   });
 
   test("MNU-2 — Draw/Corners/Inverse rounded: one Undo takes the click back", async () => {
-    test.fail(
-      true,
-      "MNU-2: one click on this entry is several undo steps (one per mutation the command emits, unbatched); Undo must take a menu action back in one step",
-    );
     const out = await clickEntry(
       live,
       "Draw/Corners/Inverse rounded",
@@ -613,10 +605,6 @@ test.describe.serial("plugin menus — paged.draw", () => {
   });
 
   test("MNU-2 — Draw/Corners/Bevel: one Undo takes the click back", async () => {
-    test.fail(
-      true,
-      "MNU-2: one click on this entry is several undo steps (one per mutation the command emits, unbatched); Undo must take a menu action back in one step",
-    );
     const out = await clickEntry(
       live,
       "Draw/Corners/Bevel",
@@ -644,10 +632,6 @@ test.describe.serial("plugin menus — paged.draw", () => {
   });
 
   test("MNU-2 — Draw/Corners/Fancy: one Undo takes the click back", async () => {
-    test.fail(
-      true,
-      "MNU-2: one click on this entry is several undo steps (one per mutation the command emits, unbatched); Undo must take a menu action back in one step",
-    );
     const out = await clickEntry(
       live,
       "Draw/Corners/Fancy",
@@ -675,10 +659,6 @@ test.describe.serial("plugin menus — paged.draw", () => {
   });
 
   test("MNU-2 — Draw/Corners/None: one Undo takes the click back", async () => {
-    test.fail(
-      true,
-      "MNU-2: one click on this entry is several undo steps (one per mutation the command emits, unbatched); Undo must take a menu action back in one step",
-    );
     const out = await clickEntry(
       live,
       "Draw/Corners/None",
@@ -828,10 +808,6 @@ test.describe.serial("plugin menus — paged.draw", () => {
   });
 
   test("MNU-2 — Draw/Appearance/Add fill: one Undo takes the click back", async () => {
-    test.fail(
-      true,
-      "MNU-2: one click on this entry is several undo steps (one per mutation the command emits, unbatched); Undo must take a menu action back in one step",
-    );
     const out = await clickEntry(
       live,
       "Draw/Appearance/Add fill",
@@ -860,10 +836,6 @@ test.describe.serial("plugin menus — paged.draw", () => {
   });
 
   test("MNU-2 — Draw/Appearance/Add stroke: one Undo takes the click back", async () => {
-    test.fail(
-      true,
-      "MNU-2: one click on this entry is several undo steps (one per mutation the command emits, unbatched); Undo must take a menu action back in one step",
-    );
     const out = await clickEntry(
       live,
       "Draw/Appearance/Add stroke",
@@ -934,10 +906,6 @@ test.describe.serial("plugin menus — paged.draw", () => {
   });
 
   test("MNU-2 — Draw/Graphic style/Save from selection: one Undo takes the click back", async () => {
-    test.fail(
-      true,
-      "MNU-2: one click on this entry is several undo steps (one per mutation the command emits, unbatched); Undo must take a menu action back in one step",
-    );
     const out = await clickEntry(
       live,
       "Draw/Graphic style/Save from selection",

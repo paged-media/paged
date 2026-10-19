@@ -192,9 +192,12 @@ pub enum ReadCommand {
         on: ReadTarget,
         /// The page's `Self` id.
         page: String,
-        /// The point, page-local pt.
-        #[arg(num_args = 2, value_names = ["X", "Y"], allow_hyphen_values = true)]
-        point: Vec<f32>,
+        /// The point's x, page-local pt (negative values are numbers, not flags).
+        #[arg(value_name = "X", allow_negative_numbers = true)]
+        x: f32,
+        /// The point's y, page-local pt.
+        #[arg(value_name = "Y", allow_negative_numbers = true)]
+        y: f32,
         /// Screen px per pt (the tolerance is 4 screen px). Default 1.
         #[arg(long)]
         camera_scale: Option<f32>,
@@ -476,7 +479,8 @@ pub fn run(what: &ReadCommand) -> Result<()> {
         }
         ReadCommand::SnapPoint {
             page,
-            point,
+            x,
+            y,
             camera_scale,
             exclude,
             grid,
@@ -497,7 +501,7 @@ pub fn run(what: &ReadCommand) -> Result<()> {
             let reply = session.send(MainToWorkerKind::RequestSnapPoint {
                 query: paged_canvas::snap_point::SnapPointQuery {
                     page_id: paged_wire::PageId(page.clone()),
-                    point: [point[0], point[1]],
+                    point: [*x, *y],
                     camera_scale: *camera_scale,
                     exclude,
                     extra_points: Vec::new(),

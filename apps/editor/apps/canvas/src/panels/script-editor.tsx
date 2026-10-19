@@ -36,10 +36,12 @@
 import { useRef, useState } from "react";
 
 import {
+  AI_UNAVAILABLE_TEXT,
   describeAiError,
   plainSummary,
   PoweredByClaude,
   runEditorAgent,
+  useAiAvailability,
   useCanvasClient,
 } from "@paged-media/shell";
 
@@ -69,6 +71,8 @@ export function ScriptEditorPanel(_: PanelProps) {
   const [ask, setAsk] = useState("");
   const [asking, setAsking] = useState<AbortController | null>(null);
   const logRef = useRef<HTMLDivElement | null>(null);
+  // F-25 (PN-352): with no AI service, Ask says so before a request is typed.
+  const offline = useAiAvailability() === "unavailable";
 
   const scrollLog = () => {
     requestAnimationFrame(() => {
@@ -81,7 +85,7 @@ export function ScriptEditorPanel(_: PanelProps) {
 
   const askClaude = async (requested?: string) => {
     const prompt = (requested ?? ask).trim();
-    if (!prompt || asking || running) return;
+    if (!prompt || asking || running || offline) return;
     const controller = new AbortController();
     setAsking(controller);
     const append = (entry: LogEntry) => {
@@ -195,7 +199,8 @@ export function ScriptEditorPanel(_: PanelProps) {
         ) : (
           <button
             type="submit"
-            disabled={!ask.trim() || running}
+            disabled={!ask.trim() || running || offline}
+            title={offline ? AI_UNAVAILABLE_TEXT : undefined}
             className="px-2 py-0.5 rounded hover:bg-muted/60 disabled:opacity-50 text-xs"
             data-action="ask"
           >
@@ -204,6 +209,15 @@ export function ScriptEditorPanel(_: PanelProps) {
         )}
         <PoweredByClaude size={10} />
       </form>
+      {offline ? (
+        <div
+          role="status"
+          data-script-ai-unavailable
+          className="px-2 py-1 text-xs text-muted-foreground border-b border-input"
+        >
+          {AI_UNAVAILABLE_TEXT}
+        </div>
+      ) : null}
       <div className="flex items-center justify-between p-1 border-b border-input">
         <span className="text-xs text-muted-foreground px-1">
           JS — embedded Boa

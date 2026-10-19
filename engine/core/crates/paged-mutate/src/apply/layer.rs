@@ -1354,6 +1354,7 @@ pub(super) fn apply_set_group_transform(
     group_id: &str,
     transform: Option<[f32; 6]>,
     prev_arg: Option<[f32; 6]>,
+    restore_leaves: Option<&[Option<[f32; 6]>]>,
 ) -> Result<AppliedOperation, OperationError> {
     use crate::group_frame::{none_if_identity, out_of_frame, parent_frame};
     use crate::path_math::{affine_multiply, group_rebase_delta, AFFINE_IDENTITY};
@@ -1402,11 +1403,13 @@ pub(super) fn apply_set_group_transform(
                 group: group_id.to_string(),
                 transform,
                 prev: captured_prev,
+                leaves: None,
             },
             inverse: Operation::SetGroupTransform {
                 group: group_id.to_string(),
                 transform: captured_prev,
                 prev: transform,
+                leaves: None,
             },
             invalidation: InvalidationHint {
                 frame_geometry: vec![node],
@@ -1439,35 +1442,31 @@ pub(super) fn apply_set_group_transform(
     let rebase = |cur: Option<[f32; 6]>| -> Option<[f32; 6]> {
         none_if_identity(affine_multiply(delta, cur.unwrap_or(AFFINE_IDENTITY)))
     };
-    for leaf in &leaves {
-        match *leaf {
-            FrameRef::TextFrame(i) => {
-                if let Some(f) = spread.text_frames.get_mut(i) {
-                    f.item_transform = rebase(f.item_transform);
-                }
-            }
-            FrameRef::Rectangle(i) => {
-                if let Some(f) = spread.rectangles.get_mut(i) {
-                    f.item_transform = rebase(f.item_transform);
-                }
-            }
-            FrameRef::Oval(i) => {
-                if let Some(f) = spread.ovals.get_mut(i) {
-                    f.item_transform = rebase(f.item_transform);
-                }
-            }
-            FrameRef::GraphicLine(i) => {
-                if let Some(f) = spread.graphic_lines.get_mut(i) {
-                    f.item_transform = rebase(f.item_transform);
-                }
-            }
-            FrameRef::Polygon(i) => {
-                if let Some(f) = spread.polygons.get_mut(i) {
-                    f.item_transform = rebase(f.item_transform);
-                }
-            }
+    // An undo or redo carries the leaves' stored transforms from before
+    // the op it reverses and puts them back verbatim (finding SH-203).
+    let restore = restore_leaves.filter(|r| r.len() == leaves.len());
+    let mut captured_leaves: Vec<Option<[f32; 6]>> = Vec::with_capacity(leaves.len());
+    for (k, leaf) in leaves.iter().enumerate() {
+        let slot = match *leaf {
+            FrameRef::TextFrame(i) => spread.text_frames.get_mut(i).map(|f| &mut f.item_transform),
+            FrameRef::Rectangle(i) => spread.rectangles.get_mut(i).map(|f| &mut f.item_transform),
+            FrameRef::Oval(i) => spread.ovals.get_mut(i).map(|f| &mut f.item_transform),
+            FrameRef::GraphicLine(i) => spread
+                .graphic_lines
+                .get_mut(i)
+                .map(|f| &mut f.item_transform),
+            FrameRef::Polygon(i) => spread.polygons.get_mut(i).map(|f| &mut f.item_transform),
             FrameRef::Group(_) => unreachable!("walk descends into groups"),
-        }
+        };
+        let Some(slot) = slot else {
+            captured_leaves.push(None);
+            continue;
+        };
+        captured_leaves.push(*slot);
+        *slot = match restore {
+            Some(r) => r[k],
+            None => rebase(*slot),
+        };
     }
     spread.groups[group_idx].item_transform = transform;
 
@@ -1484,11 +1483,13 @@ pub(super) fn apply_set_group_transform(
             group: group_id.to_string(),
             transform,
             prev: captured_prev,
+            leaves: restore.map(<[Option<[f32; 6]>]>::to_vec),
         },
         inverse: Operation::SetGroupTransform {
             group: group_id.to_string(),
             transform: captured_prev,
             prev: transform,
+            leaves: Some(captured_leaves),
         },
         invalidation: InvalidationHint {
             frame_geometry: moved,

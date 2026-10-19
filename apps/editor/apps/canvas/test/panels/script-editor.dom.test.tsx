@@ -23,12 +23,16 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
+import { resetAiAvailability, setAiAvailability } from "@paged-media/shell";
 
 import { ScriptEditorPanel } from "../../src/panels/script-editor";
 import { richScene, type RichScene } from "./fixtures";
 import { mountPanel, unmountAll, type PanelHarness } from "./harness";
 
-afterEach(unmountAll);
+afterEach(() => {
+  unmountAll();
+  resetAiAvailability();
+});
 
 type H = PanelHarness<RichScene>;
 
@@ -107,6 +111,7 @@ describe("Script editor panel", () => {
 
   test("Ask is disabled until there is a request", async () => {
     covers("panel:paged.script-editor");
+    setAiAvailability("available");
     const h = await mount();
     const ask = h.root.querySelector<HTMLButtonElement>('[data-action="ask"]')!;
     expect(ask.disabled).toBe(true);
@@ -118,8 +123,10 @@ describe("Script editor panel", () => {
     expect(ask.disabled).toBe(false);
   });
 
-  test("Ask with no AI service: the request and a worded error in the log, no script run", async () => {
+  test("Ask the service refuses: the request and a worded error in the log, no script run", async () => {
     covers("panel:paged.script-editor");
+    // The probe said yes; the request itself fails (no proxy behind it).
+    setAiAvailability("available");
     const h = await mount();
     await h.user.type(
       h.view.getByRole("textbox", { name: "Ask Claude to write a script" }),
@@ -138,22 +145,20 @@ describe("Script editor panel", () => {
     expect(h.sent("executeScript", from)).toEqual([]);
   });
 
-  // UX audit F-25: AI entry points are offered when the service is
-  // unavailable; the user finds out only after asking.
-  test.failing(
-    "PN-352 (UX F-25): with no AI service, Ask says so before a request is typed",
-    async () => {
-      covers("panel:paged.script-editor");
-      const h = await mount();
-      await h.user.type(
-        h.view.getByRole("textbox", { name: "Ask Claude to write a script" }),
-        "make the frame red",
-      );
-      await h.settle();
-      const ask = h.root.querySelector<HTMLButtonElement>(
-        '[data-action="ask"]',
-      )!;
-      expect(ask.disabled).toBe(true);
-    },
-  );
+  // UX audit F-25 (fixed): with no AI service, Ask says so up front.
+  test("PN-352 (UX F-25): with no AI service, Ask says so before a request is typed", async () => {
+    covers("panel:paged.script-editor");
+    setAiAvailability("unavailable");
+    const h = await mount();
+    await h.user.type(
+      h.view.getByRole("textbox", { name: "Ask Claude to write a script" }),
+      "make the frame red",
+    );
+    await h.settle();
+    const ask = h.root.querySelector<HTMLButtonElement>('[data-action="ask"]')!;
+    expect(ask.disabled).toBe(true);
+    expect(
+      h.root.querySelector("[data-script-ai-unavailable]")?.textContent,
+    ).toContain("not available");
+  });
 });

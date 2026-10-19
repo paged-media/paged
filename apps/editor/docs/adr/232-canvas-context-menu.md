@@ -28,7 +28,7 @@ the same `when` predicates as the menus.
 
 ## Consequences
 
-- Lock / Hide rows wait for object lock (F-41); Fitting and Effects rows wait for commands that
-  open them. No module contributes a context menu today (none existed inside raster frames
+- Lock and Hide rows came with object lock (F-41, ADR 251); Fitting and Effects rows wait for
+  commands that open them. No module contributes a context menu today (none existed inside raster frames
   either); a contribution type for plugin rows is a later, contract-level decision.
 - Panel row context menus are not added: the audit asks for the canvas one.

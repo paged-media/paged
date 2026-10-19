@@ -53,6 +53,7 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { registerCommand } from "../command-registry";
+import { oneBatchFor } from "./batch-handles";
 export const PATH_OPS_COMMAND_CATEGORY = "Path";
 
 export const OUTLINE_STROKE_COMMAND_ID =
@@ -236,18 +237,22 @@ function pathTargets(host: BundleHost, commandId: string): ElementId[] {
   return targets;
 }
 
+/** Commit a command's per-element mutations as ONE batch: one undo step
+ *  for the whole selection (DRW-3). A refused element refuses the batch
+ *  whole, so the selection is never left half changed. */
 async function commitEach(
   host: BundleHost,
   commandId: string,
   mutations: Mutation[],
 ): Promise<void> {
-  for (const mutation of mutations) {
-    const outcome = await host.document.mutate(mutation);
-    if (!outcome.applied) {
-      host.log.warn(
-        `${commandId} rejected by engine: ${JSON.stringify(outcome.error)}`,
-      );
-    }
+  if (mutations.length === 0) return;
+  const outcome = await host.document.mutate(
+    mutations.length === 1 ? mutations[0]! : oneBatchFor(mutations),
+  );
+  if (!outcome.applied) {
+    host.log.warn(
+      `${commandId} rejected by engine: ${JSON.stringify(outcome.error)}`,
+    );
   }
 }
 

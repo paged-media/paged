@@ -66,9 +66,14 @@ fn insert_text() {
         json_of(&ok(&mut m, "paged.stories()"))[0]["characterCount"],
         11
     );
-    // finding SCR-1: a missing text inserts the word "undefined"; it should be refused.
-    writes(&mut m, &format!("paged.insertText({sid:?}, 0)"), "true");
-    assert!(story_text(&mut m, &sid).contains("undefinedHello world"));
+    // SCR-1 (fixed): a missing text is refused, the story untouched.
+    refuses(&mut m, &format!("paged.insertText({sid:?}, 0)"), "false");
+    refuses(
+        &mut m,
+        &format!("paged.insertText({sid:?}, 0, null)"),
+        "false",
+    );
+    assert!(!story_text(&mut m, &sid).contains("undefined"));
 }
 
 #[test]
@@ -139,19 +144,21 @@ fn apply_style() {
             .all(|r| r["character_style"].is_null()),
         "undo removes the style"
     );
-    // finding SCR-10: undo leaves the text split into the runs the edit made; it
-    // should restore the one run.
-    assert!(undone.as_array().map(Vec::len) > Some(1), "{undone}");
+    // SCR-10 (fixed): undo restores the one original run.
+    assert_eq!(undone, before, "undo restores the runs exactly");
     assert_eq!(ok(&mut m, "paged.redo()"), "true");
-    // finding SCR-9: a style the document does not have is applied as a dangling
-    // reference; it should be refused.
-    writes(
+    // SCR-9 (fixed): a style the document does not have is refused.
+    refuses(
         &mut m,
         &format!("paged.applyStyle({sid:?}, 0, 5, 'ParagraphStyle/NoSuchStyle')"),
-        "true",
+        "false",
     );
-    assert_eq!(paragraph(&m), "ParagraphStyle/NoSuchStyle");
-    assert!(!ok(&mut m, "paged.paragraphStyles()").contains("NoSuchStyle"));
+    refuses(
+        &mut m,
+        &format!("paged.applyStyle({sid:?}, 0, 5, 'CharacterStyle/NoSuchStyle')"),
+        "false",
+    );
+    assert_ne!(paragraph(&m), "ParagraphStyle/NoSuchStyle");
 }
 
 #[test]
@@ -275,11 +282,19 @@ fn insert_hyperlink() {
         "[]",
         "undo removes the link"
     );
-    // finding SCR-10: undo leaves the text split into the three runs the link made
-    // (identical attributes, no link); it should restore the one run.
+    // SCR-10 (fixed): undo restores the one original run; the model equals
+    // its before-state, and redo the linked one.
     let undone = snapshot(&m);
+    assert_eq!(runs(&m), 1);
+    assert!(undone == before, "{:?}", changed_paths(&before, &undone));
+    assert_eq!(ok(&mut m, "paged.redo()"), "true");
     assert_eq!(runs(&m), 3);
-    assert!(undone != before, "{:?}", changed_paths(&before, &undone));
+    assert_eq!(
+        json_of(&ok(&mut m, "paged.collection('hyperlinks')"))
+            .as_array()
+            .map(Vec::len),
+        Some(1)
+    );
 }
 
 #[test]

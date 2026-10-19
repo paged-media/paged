@@ -359,26 +359,26 @@ describe.skipIf(!docxPresent)(
       ]);
     });
 
-    // FINDING DOC-1: placing a Word document is not one undo step. The
-    // placement is some thirteen engine mutations (the frame, the styles,
-    // the pour, the label); one undo takes back only the last of them, so
-    // the frame and its text stay on the page, and the user needs as many
-    // undos as the bundle made mutations. Expected: one undo removes the
-    // placed document whole, as one batch would.
-    it.failing(
-      "DOC-1: placeDoc is one undo step: a single undo removes the placed document whole",
-      async () => {
-        covers("command:media.paged.doc.command.placeDoc");
-        const before = JSON.stringify(await host.document.tree());
-        await h.objects.invoke("media.paged.doc.command.placeDoc", {
-          bytes: fixture("merge-letter.docx"),
-          fileName: "second.docx",
-        });
-        expect(JSON.stringify(await host.document.tree())).not.toBe(before);
-        await host.document.undo();
-        expect(JSON.stringify(await host.document.tree())).toBe(before);
-      },
-    );
+    // DOC-1 (fixed): the placement — frame, styles, pour, label — is ONE
+    // batch, so a single undo removes the placed document whole.
+    it("DOC-1: placeDoc is one undo step: a single undo removes the placed document whole", async () => {
+      covers("command:media.paged.doc.command.placeDoc");
+      const before = JSON.stringify(await host.document.tree());
+      const placed = (await h.objects.invoke(
+        "media.paged.doc.command.placeDoc",
+        { bytes: fixture("merge-letter.docx"), fileName: "second.docx" },
+      )) as { document: string };
+      expect(JSON.stringify(await host.document.tree())).not.toBe(before);
+      // The label names no story (it was minted in the same batch); the
+      // document still reads its story, from the frame.
+      const stories = (await h.objects.get(placed.document, "stories")) as {
+        value: string[];
+      };
+      expect(stories.value).toHaveLength(1);
+      expect(stories.value[0]).toMatch(/^story:/);
+      await host.document.undo();
+      expect(JSON.stringify(await host.document.tree())).toBe(before);
+    });
 
     it("a page item scope lists that frame's objects only (the panel's selection, ADR 323 §4)", async () => {
       const out = (await h.objects.invoke("media.paged.doc.command.placeDoc", {

@@ -91,3 +91,19 @@ export function releaseFromMutationFor(childId: ElementId): Mutation {
 export function batchMutationFor(ops: readonly Mutation[]): Mutation {
   return { op: "batch", args: { ops: [...ops] } };
 }
+
+/** The children `m` contributes to an enclosing batch: a batch's own
+ *  children (flattened, so a command that gathers per-element batches
+ *  sends ONE flat batch), any other op as itself. */
+export function batchChildrenOf(m: Mutation): Mutation[] {
+  const batch = m as { op: string; args?: { ops?: Mutation[] } };
+  return batch.op === "batch" && Array.isArray(batch.args?.ops)
+    ? batch.args.ops.flatMap(batchChildrenOf)
+    : [m];
+}
+
+/** One flat batch over several mutations (batches among them inlined):
+ *  one undo step for a whole command invocation (R4). */
+export function oneBatchFor(mutations: readonly Mutation[]): Mutation {
+  return batchMutationFor(mutations.flatMap(batchChildrenOf));
+}

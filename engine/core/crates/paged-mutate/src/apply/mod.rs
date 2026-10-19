@@ -148,6 +148,20 @@ pub(crate) fn apply_inner(
             story_id,
             paragraphs_json,
         } => apply_replace_story_paragraphs(doc, story_id, paragraphs_json),
+        Operation::RestoreParagraphs {
+            story_id,
+            cell,
+            first,
+            count,
+            paragraphs_json,
+        } => story::apply_restore_paragraphs(
+            doc,
+            story_id,
+            cell.as_ref(),
+            *first,
+            *count,
+            paragraphs_json,
+        ),
         Operation::InsertPage {
             after_page_id,
             master_id,
@@ -297,7 +311,8 @@ pub(crate) fn apply_inner(
             group,
             transform,
             prev,
-        } => apply_set_group_transform(doc, group, *transform, *prev),
+            leaves,
+        } => apply_set_group_transform(doc, group, *transform, *prev, leaves.as_deref()),
         Operation::CreateGradient { spec } => apply_create_gradient(doc, spec),
         Operation::EditGradient { gradient_id, spec } => {
             apply_edit_gradient(doc, gradient_id, spec)

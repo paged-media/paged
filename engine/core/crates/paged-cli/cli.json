@@ -3067,16 +3067,29 @@
             },
             {
               "defaults": [],
-              "help": "The point, page-local pt",
+              "help": "The point's x, page-local pt (negative values are numbers, not flags)",
               "long": null,
-              "name": "point",
+              "name": "x",
               "positional": true,
-              "repeatable": true,
-              "required": false,
+              "repeatable": false,
+              "required": true,
               "short": null,
               "takesValues": true,
               "valueNames": [
-                "X",
+                "X"
+              ]
+            },
+            {
+              "defaults": [],
+              "help": "The point's y, page-local pt",
+              "long": null,
+              "name": "y",
+              "positional": true,
+              "repeatable": false,
+              "required": true,
+              "short": null,
+              "takesValues": true,
+              "valueNames": [
                 "Y"
               ]
             },

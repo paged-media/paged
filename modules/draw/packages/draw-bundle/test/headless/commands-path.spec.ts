@@ -29,7 +29,6 @@ import { covers } from "@paged-media/test-kit";
 
 import { F1_MULTI_SHAPE, F3_CURVED_OPEN, F4_OVERLAP } from "../fixtures/corpus";
 import {
-  brokenInvariant,
   commandRig,
   el,
   expectApplies,
@@ -92,39 +91,29 @@ describe("paged.draw commands — path, stroke and fill (real engine)", () => {
       await expectRefuses(rig, F1(), [], `${C}.fillGradientLinear`);
     });
 
-    it.failing(
-      "DRW-1 — Fill: Linear gradient is ONE undo step (it is four: swatches, gradient, fill)",
-      async () => {
-        covers("command:media.paged.draw.command.fillGradientLinear");
-        await rig.open(F1(), [RECT]);
-        await brokenInvariant("INV-4", () =>
-          expectApplies(rig, `${C}.fillGradientLinear`),
-        );
-      },
-    );
+    it("DRW-1 — Fill: Linear gradient is ONE undo step", async () => {
+      covers("command:media.paged.draw.command.fillGradientLinear");
+      await rig.open(F1(), [RECT]);
+      await expectApplies(rig, `${C}.fillGradientLinear`);
+    });
 
     it("Fill: Radial gradient refuses an empty selection", async () => {
       covers("command:media.paged.draw.command.fillGradientRadial");
       await expectRefuses(rig, F1(), [], `${C}.fillGradientRadial`);
     });
 
-    it.failing(
-      "DRW-1 — Fill: Radial gradient is ONE undo step (it is four)",
-      async () => {
-        covers("command:media.paged.draw.command.fillGradientRadial");
-        await rig.open(F1(), [RECT]);
-        await brokenInvariant("INV-4", () =>
-          expectApplies(rig, `${C}.fillGradientRadial`),
-        );
-      },
-    );
+    it("DRW-1 — Fill: Radial gradient is ONE undo step", async () => {
+      covers("command:media.paged.draw.command.fillGradientRadial");
+      await rig.open(F1(), [RECT]);
+      await expectApplies(rig, `${C}.fillGradientRadial`);
+    });
 
-    it("DRW-1, measured: a gradient preset takes four undo steps to take back", async () => {
+    it("DRW-1 (fixed): a gradient preset takes one undo step to take back", async () => {
       covers("command:media.paged.draw.command.fillGradientLinear");
       await rig.open(F1(), [RECT]);
       expect(
         await undoStepsOf(rig, () => rig.run(`${C}.fillGradientLinear`)),
-      ).toBe(4);
+      ).toBe(1);
     });
   });
 
@@ -182,158 +171,107 @@ describe("paged.draw commands — path, stroke and fill (real engine)", () => {
   });
 
   describe("live corners", () => {
-    // DRW-2: a corner preset is two undo steps — the corner geometry
-    // batch, then the live-corner marker in the plugin metadata — so one
-    // undo leaves the corners rounded and the marker gone.
+    // DRW-2 (fixed): a corner preset is ONE batch — the corner geometry
+    // and the live-corner marker in the plugin metadata together.
     it("Corners: Rounded refuses a graphic line (no corners to round)", async () => {
       covers("command:media.paged.draw.command.cornersRounded");
       await expectRefuses(rig, F1(), [LINE], `${C}.cornersRounded`);
     });
 
-    it.failing(
-      "DRW-2 — Corners: Rounded is ONE undo step (it is two)",
-      async () => {
-        covers("command:media.paged.draw.command.cornersRounded");
-        await rig.open(F1(), [RECT]);
-        await brokenInvariant("INV-4", () =>
-          expectApplies(rig, `${C}.cornersRounded`),
-        );
-      },
-    );
+    it("DRW-2 — Corners: Rounded is ONE undo step", async () => {
+      covers("command:media.paged.draw.command.cornersRounded");
+      await rig.open(F1(), [RECT]);
+      await expectApplies(rig, `${C}.cornersRounded`);
+    });
 
     it("Corners: Inverse rounded refuses a graphic line", async () => {
       covers("command:media.paged.draw.command.cornersInverseRounded");
       await expectRefuses(rig, F1(), [LINE], `${C}.cornersInverseRounded`);
     });
 
-    it.failing(
-      "DRW-2 — Corners: Inverse rounded is ONE undo step (it is two)",
-      async () => {
-        covers("command:media.paged.draw.command.cornersInverseRounded");
-        await rig.open(F1(), [RECT]);
-        await brokenInvariant("INV-4", () =>
-          expectApplies(rig, `${C}.cornersInverseRounded`),
-        );
-      },
-    );
+    it("DRW-2 — Corners: Inverse rounded is ONE undo step", async () => {
+      covers("command:media.paged.draw.command.cornersInverseRounded");
+      await rig.open(F1(), [RECT]);
+      await expectApplies(rig, `${C}.cornersInverseRounded`);
+    });
 
     it("Corners: Bevel refuses a graphic line", async () => {
       covers("command:media.paged.draw.command.cornersBevel");
       await expectRefuses(rig, F1(), [LINE], `${C}.cornersBevel`);
     });
 
-    it.failing(
-      "DRW-2 — Corners: Bevel is ONE undo step (it is two)",
-      async () => {
-        covers("command:media.paged.draw.command.cornersBevel");
-        await rig.open(F1(), [RECT]);
-        await brokenInvariant("INV-4", () =>
-          expectApplies(rig, `${C}.cornersBevel`),
-        );
-      },
-    );
+    it("DRW-2 — Corners: Bevel is ONE undo step", async () => {
+      covers("command:media.paged.draw.command.cornersBevel");
+      await rig.open(F1(), [RECT]);
+      await expectApplies(rig, `${C}.cornersBevel`);
+    });
 
     it("Corners: Fancy refuses a graphic line", async () => {
       covers("command:media.paged.draw.command.cornersFancy");
       await expectRefuses(rig, F1(), [LINE], `${C}.cornersFancy`);
     });
 
-    it.failing(
-      "DRW-2 — Corners: Fancy is ONE undo step (it is two)",
-      async () => {
-        covers("command:media.paged.draw.command.cornersFancy");
-        await rig.open(F1(), [RECT]);
-        await brokenInvariant("INV-4", () =>
-          expectApplies(rig, `${C}.cornersFancy`),
-        );
-      },
-    );
+    it("DRW-2 — Corners: Fancy is ONE undo step", async () => {
+      covers("command:media.paged.draw.command.cornersFancy");
+      await rig.open(F1(), [RECT]);
+      await expectApplies(rig, `${C}.cornersFancy`);
+    });
 
     it("Corners: None refuses a graphic line", async () => {
       covers("command:media.paged.draw.command.cornersNone");
       await expectRefuses(rig, F1(), [LINE], `${C}.cornersNone`);
     });
 
-    it.failing(
-      "DRW-2 — Corners: None is ONE undo step (it is two)",
-      async () => {
-        covers("command:media.paged.draw.command.cornersNone");
-        await rig.open(F1(), [RECT]);
-        await rig.run(`${C}.cornersRounded`);
-        await brokenInvariant("INV-4", () =>
-          expectApplies(rig, `${C}.cornersNone`),
-        );
-      },
-    );
+    it("DRW-2 — Corners: None is ONE undo step", async () => {
+      covers("command:media.paged.draw.command.cornersNone");
+      await rig.open(F1(), [RECT]);
+      await rig.run(`${C}.cornersRounded`);
+      await expectApplies(rig, `${C}.cornersNone`);
+    });
 
-    it("DRW-2, measured: a corner preset takes two undo steps to take back", async () => {
+    it("DRW-2 (fixed): a corner preset takes one undo step to take back", async () => {
       covers("command:media.paged.draw.command.cornersRounded");
       await rig.open(F1(), [RECT]);
       expect(await undoStepsOf(rig, () => rig.run(`${C}.cornersRounded`))).toBe(
-        2,
+        1,
       );
     });
   });
 
   describe("one undo step for the whole selection", () => {
-    // DRW-3: these commands commit once PER SELECTED ELEMENT, so with two
-    // elements selected one undo takes back only the second.
+    // DRW-3 (fixed): these commands commit the whole selection in ONE
+    // batch, so one undo takes both elements back.
     const TWO = [RECT, POLY];
 
-    it.failing(
-      "DRW-3 — Stroke: Dashed on two elements is ONE undo step (it is two)",
-      async () => {
-        covers("command:media.paged.draw.command.strokeDashDashed");
-        await rig.open(F1(), TWO);
-        await brokenInvariant("INV-4", () =>
-          expectApplies(rig, `${C}.strokeDashDashed`),
-        );
-      },
-    );
+    it("DRW-3 — Stroke: Dashed on two elements is ONE undo step", async () => {
+      covers("command:media.paged.draw.command.strokeDashDashed");
+      await rig.open(F1(), TWO);
+      await expectApplies(rig, `${C}.strokeDashDashed`);
+    });
 
-    it.failing(
-      "DRW-3 — Outline stroke on two paths is ONE undo step (it is two)",
-      async () => {
-        covers("command:media.paged.draw.command.outlineStroke");
-        await rig.open(F1(), TWO);
-        await brokenInvariant("INV-4", () =>
-          expectApplies(rig, `${C}.outlineStroke`),
-        );
-      },
-    );
+    it("DRW-3 — Outline stroke on two paths is ONE undo step", async () => {
+      covers("command:media.paged.draw.command.outlineStroke");
+      await rig.open(F1(), TWO);
+      await expectApplies(rig, `${C}.outlineStroke`);
+    });
 
-    it.failing(
-      "DRW-3 — Offset path on two paths is ONE undo step (it is two)",
-      async () => {
-        covers("command:media.paged.draw.command.offsetPath");
-        await rig.open(F4_OVERLAP.bytes(), [QUAD_A, QUAD_B]);
-        await brokenInvariant("INV-4", () =>
-          expectApplies(rig, `${C}.offsetPath`, { delta: 6 }),
-        );
-      },
-    );
+    it("DRW-3 — Offset path on two paths is ONE undo step", async () => {
+      covers("command:media.paged.draw.command.offsetPath");
+      await rig.open(F4_OVERLAP.bytes(), [QUAD_A, QUAD_B]);
+      await expectApplies(rig, `${C}.offsetPath`, { delta: 6 });
+    });
 
-    it.failing(
-      "DRW-3 — Simplify path on two paths is ONE undo step (it is two)",
-      async () => {
-        covers("command:media.paged.draw.command.simplifyPath");
-        await rig.open(F1(), TWO);
-        await brokenInvariant("INV-4", () =>
-          expectApplies(rig, `${C}.simplifyPath`, { tolerance: 250 }),
-        );
-      },
-    );
+    it("DRW-3 — Simplify path on two paths is ONE undo step", async () => {
+      covers("command:media.paged.draw.command.simplifyPath");
+      await rig.open(F1(), TWO);
+      await expectApplies(rig, `${C}.simplifyPath`, { tolerance: 250 });
+    });
 
-    it.failing(
-      "DRW-3 — Close path on two open paths is ONE undo step (it is two)",
-      async () => {
-        covers("command:media.paged.draw.command.closePath");
-        await rig.open(F1(), [POLY, LINE]);
-        await brokenInvariant("INV-4", () =>
-          expectApplies(rig, `${C}.closePath`),
-        );
-      },
-    );
+    it("DRW-3 — Close path on two open paths is ONE undo step", async () => {
+      covers("command:media.paged.draw.command.closePath");
+      await rig.open(F1(), [POLY, LINE]);
+      await expectApplies(rig, `${C}.closePath`);
+    });
 
     it("Reflect, Reverse path and Average endpoints ARE one step for two elements", async () => {
       covers(

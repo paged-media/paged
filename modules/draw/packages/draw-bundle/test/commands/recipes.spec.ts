@@ -628,7 +628,7 @@ describe("paged.draw commands, no engine — graphic styles", () => {
     await refuses([POLY], `${C}.applyGraphicStyle`, { styleId: "gs-404" });
   });
 
-  it("Redefine style updates the library and repaints each linked element (DRW-3: one write each); an unknown style sends nothing", async () => {
+  it("Redefine style updates the library and repaints each linked element (DRW-3: one batch); an unknown style sends nothing", async () => {
     covers("command:media.paged.draw.command.redefineGraphicStyle");
     const r = await styled();
     r.fake.setSelection([POLY]);
@@ -636,8 +636,8 @@ describe("paged.draw commands, no engine — graphic styles", () => {
     r.fake.setSelection([LINE]);
     r.reset();
     await r.run(`${C}.redefineGraphicStyle`, { styleId: "gs-1" });
-    // Two linked elements (the source and the polygon): two writes.
-    expect(r.steps()).toBe(2);
+    // Two linked elements (the source and the polygon): one batch.
+    expect(r.steps()).toBe(1);
     expect(count(r.leaves(), "setPluginMetadata")).toBe(2);
     await refuses([LINE], `${C}.redefineGraphicStyle`, { styleId: "gs-404" });
   });
@@ -686,21 +686,25 @@ describe("paged.draw commands, no engine — the appearance stack", () => {
       }
     )?.appearance;
 
-  it("Add fill stacks a fill seeded from the frame and paints the front-most layer (DRW-4: two writes); nothing selected sends nothing", async () => {
+  it("Add fill stacks a fill seeded from the frame and paints the front-most layer (DRW-4: one batch); nothing selected sends nothing", async () => {
     covers("command:media.paged.draw.command.appearanceAddFill");
     const r = unitRig(doc(), { selection: [A] });
     await r.run(`${C}.appearanceAddFill`);
     expect(stackOf(r)?.fills).toEqual([{ color: "Color/Black", tint: 100 }]);
-    expect(ops(r.sent())).toEqual(["setPluginMetadata", "batch"]);
+    expect(ops(r.sent())).toEqual(["batch"]);
+    expect(ops(r.leaves())[0]).toBe("setPluginMetadata");
+    expect(r.steps()).toBe(1);
     await refuses([], `${C}.appearanceAddFill`);
   });
 
-  it("Add stroke stacks a stroke seeded from the frame (DRW-4: two writes); nothing selected sends nothing", async () => {
+  it("Add stroke stacks a stroke seeded from the frame (DRW-4: one batch); nothing selected sends nothing", async () => {
     covers("command:media.paged.draw.command.appearanceAddStroke");
     const r = unitRig(doc(), { selection: [A] });
     await r.run(`${C}.appearanceAddStroke`);
     expect(stackOf(r)?.strokes).toEqual([{ color: "Color/Black", weight: 1 }]);
-    expect(ops(r.sent())).toEqual(["setPluginMetadata", "batch"]);
+    expect(ops(r.sent())).toEqual(["batch"]);
+    expect(ops(r.leaves())[0]).toBe("setPluginMetadata");
+    expect(r.steps()).toBe(1);
     await refuses([], `${C}.appearanceAddStroke`);
   });
 

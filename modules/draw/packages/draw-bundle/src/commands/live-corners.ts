@@ -62,6 +62,8 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { registerCommand } from "../command-registry";
+import { stampDrawMetadata } from "./appearance-bake";
+import { oneBatchFor } from "./batch-handles";
 export const LIVE_CORNERS_COMMAND_CATEGORY = "Corners";
 
 /** The IDML corner-option tokens the engine's `CornerOption::from_idml`
@@ -280,24 +282,22 @@ export async function applyLiveCornerPreset(
     );
     return;
   }
+  // ONE batch for the whole selection: each item's corner geometry and
+  // its live marker (a raw in-batch `setPluginMetadata`), so one undo
+  // takes the preset back whole (DRW-2, and MNU-2 over a selection).
+  const ops: Mutation[] = [];
   for (const id of targets) {
-    const outcome = await host.document.mutate(
+    const prev = await host.document.getMetadata(id).catch(() => null);
+    ops.push(
       cornerStyleMutationFor(id, preset),
+      stampDrawMetadata(id, withLiveCornerMarker(prev, preset)),
     );
-    if (!outcome.applied) {
-      host.log.warn(
-        `${preset.id} rejected by engine: ${JSON.stringify(outcome.error)}`,
-      );
-      continue;
-    }
-    // Stamp the §13.3 live marker (best-effort — a metadata failure does
-    // not undo the geometry; the baked corners are valid IDML regardless).
-    try {
-      const prev = await host.document.getMetadata(id);
-      await host.document.setMetadata(id, withLiveCornerMarker(prev, preset));
-    } catch {
-      /* the live marker is advisory; the baked corners stand */
-    }
+  }
+  const outcome = await host.document.mutate(oneBatchFor(ops));
+  if (!outcome.applied) {
+    host.log.warn(
+      `${preset.id} rejected by engine: ${JSON.stringify(outcome.error)}`,
+    );
   }
 }
 

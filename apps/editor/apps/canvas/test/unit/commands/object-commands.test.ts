@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// `paged.object.*` — the nineteen object verbs, invoked THROUGH the command
+// `paged.object.*` — the twenty-three object verbs, invoked THROUGH the command
 // registry (so each `when` gate is the one every surface shares), wired to
 // the real runners exactly as the canvas app wires them, over the recording
 // fake. Each verb is held to: the exact mutation it sends, ONE mutation (one
@@ -42,6 +42,8 @@ import {
   deleteKeyApplies,
   deleteSelection,
   groupSelection,
+  hideSelection,
+  lockSelection,
   makeClippingMask,
   nudgeKeyApplies,
   nudgeSelection,
@@ -49,7 +51,11 @@ import {
   OBJECT_METADATA_KEY,
   releaseClippingMask,
   selectParentGroup,
+  showAllOnSpread,
   ungroupSelection,
+  unlockAllOnSpread,
+  OBJECT_KEYBINDINGS,
+  OBJECT_MENU_ITEMS,
   type ObjectCommandDeps,
 } from "../../../src/object-commands";
 import {
@@ -83,6 +89,7 @@ function objects(
   doc: ScriptedDocument & {
     selection?: ElementId[];
     editContext?: { type: string } | null;
+    pageInView?: string | null;
     geometry?: (id: ElementId) => {
       id: ElementId;
       pageId: string;
@@ -123,6 +130,7 @@ function objects(
     refreshSelectionGeometry: async () => {
       refreshes++;
     },
+    pageInView: () => doc.pageInView ?? null,
   };
   // The canvas app's wiring (main.tsx): every verb runs its runner.
   const registry = createCommandRegistry(() => state);
@@ -138,6 +146,10 @@ function objects(
     nudge: (direction, large) => nudgeSelection(deps, direction, large),
     makeClippingMask: () => makeClippingMask(deps),
     releaseClippingMask: () => releaseClippingMask(deps),
+    lock: () => lockSelection(deps),
+    unlockAllOnSpread: () => unlockAllOnSpread(deps),
+    hide: () => hideSelection(deps),
+    showAllOnSpread: () => showAllOnSpread(deps),
   }))
     registry.register(c);
   return {
@@ -882,6 +894,160 @@ describe("Make / release clipping mask", () => {
 
 // ── ADR 024: the edit-context gate and the key-owner predicates ──────
 
+// ── Lock and hide (F-41, editor ADR 251) ───────────────────────────
+
+describe("Lock, Unlock all on spread, Hide, Show all on spread", () => {
+  const bool = (value: boolean) => ({ type: "bool", value });
+  const flags = (locked: boolean, visible: boolean): ElementProperties =>
+    ({
+      entries: [
+        { path: "elementLocked", value: bool(locked) },
+        { path: "elementVisible", value: bool(visible) },
+      ],
+    }) as unknown as ElementProperties;
+  const onSpread =
+    (spreadId: string, pageId = "p1") =>
+    (e: ElementId) => ({
+      id: e,
+      pageId,
+      spreadId,
+      bounds: [0, 0, 10, 10] as [number, number, number, number],
+      itemTransform: null,
+    });
+  const grouped = () => [
+    spread(
+      page(
+        group("uG", leaf("rectangle", "uA"), leaf("rectangle", "uB")),
+        leaf("oval", "uC"),
+      ),
+    ),
+  ];
+  const set = (elementId: ElementId, path: string, value: boolean) => ({
+    op: "setElementProperty",
+    args: { elementId, path, value: bool(value) },
+  });
+
+  test("Lock: a selected group locks every member, ONE batch; Cmd+L and the Object menu reach it", async () => {
+    covers(
+      "command:paged.object.lock",
+      "keybinding:cmd+l→paged.object.lock",
+      "keybinding:ctrl+l→paged.object.lock",
+    );
+    const h = objects({ tree: grouped(), selection: [G, C] });
+    await h.invoke("paged.object.lock");
+    expect(h.fake.mutations()).toEqual([
+      {
+        op: "batch",
+        args: {
+          ops: [
+            set(A, "elementLocked", true),
+            set(B, "elementLocked", true),
+            set(C, "elementLocked", true),
+          ],
+        },
+      },
+    ]);
+    expectOneCommit(h.fake, 0, "Lock");
+    expect(h.selection()).toEqual([G, C]);
+    expect(
+      OBJECT_KEYBINDINGS.filter((k) => k.command === "paged.object.lock").map(
+        (k) => k.key,
+      ),
+    ).toEqual(["cmd+l", "ctrl+l"]);
+    expect(OBJECT_MENU_ITEMS.map((m) => m.path)).toEqual(
+      expect.arrayContaining([
+        "Object/Lock",
+        "Object/Unlock all on spread",
+        "Object/Hide",
+        "Object/Show all on spread",
+      ]),
+    );
+  });
+
+  test("Hide: the selection is hidden in one batch and leaves the selection", async () => {
+    covers("command:paged.object.hide");
+    const h = objects({ tree: flat(), selection: [A, B] });
+    await h.invoke("paged.object.hide");
+    expect(h.fake.mutations()).toEqual([
+      {
+        op: "batch",
+        args: {
+          ops: [
+            set(A, "elementVisible", false),
+            set(B, "elementVisible", false),
+          ],
+        },
+      },
+    ]);
+    expectOneCommit(h.fake, 0, "Hide");
+    expect(h.selection()).toEqual([]);
+  });
+
+  test("Lock or Hide with nothing selected sends nothing", async () => {
+    covers("command:paged.object.lock", "command:paged.object.hide");
+    for (const command of ["paged.object.lock", "paged.object.hide"]) {
+      const h = objects({ tree: flat(), selection: [] });
+      await h.invoke(command);
+      expectNoCommit(h.fake, 0, command);
+    }
+  });
+
+  test("Unlock all on spread: only the locked items of the spread in view, one step", async () => {
+    covers("command:paged.object.unlockAllOnSpread");
+    const h = objects({
+      tree: flat(),
+      selection: [],
+      pageInView: "p1",
+      geometry: (e) =>
+        key(e) === "oval:uC" ? onSpread("s2", "p2")(e) : onSpread("s1")(e),
+      properties: {
+        "rectangle:uA": flags(false, true),
+        "rectangle:uB": flags(true, true),
+        "oval:uC": flags(true, true),
+      },
+    });
+    await h.invoke("paged.object.unlockAllOnSpread");
+    // C is locked too, but on another spread.
+    expect(h.fake.mutations()).toEqual([set(B, "elementLocked", false)]);
+    expectOneCommit(h.fake, 0, "Unlock all on spread");
+  });
+
+  test("Show all on spread: the hidden items of the selection's spread; none hidden is no step", async () => {
+    covers("command:paged.object.showAllOnSpread");
+    const h = objects({
+      tree: flat(),
+      selection: [B],
+      geometry: onSpread("s1"),
+      properties: {
+        "rectangle:uA": flags(false, false),
+        "rectangle:uB": flags(false, true),
+        "oval:uC": flags(false, false),
+      },
+    });
+    await h.invoke("paged.object.showAllOnSpread");
+    expect(h.fake.mutations()).toEqual([
+      {
+        op: "batch",
+        args: {
+          ops: [set(A, "elementVisible", true), set(C, "elementVisible", true)],
+        },
+      },
+    ]);
+    const none = objects({
+      tree: flat(),
+      selection: [B],
+      geometry: onSpread("s1"),
+      properties: {
+        "rectangle:uA": flags(false, true),
+        "rectangle:uB": flags(false, true),
+        "oval:uC": flags(false, true),
+      },
+    });
+    await none.invoke("paged.object.showAllOnSpread");
+    expectNoCommit(none.fake, 0, "Show all on spread");
+  });
+});
+
 describe("inside an edit context the object verbs do not apply", () => {
   const ALL = [
     "paged.object.bringToFront",
@@ -902,6 +1068,10 @@ describe("inside an edit context the object verbs do not apply", () => {
     "paged.object.nudgeDownLarge",
     "paged.object.makeClippingMask",
     "paged.object.releaseClippingMask",
+    "paged.object.lock",
+    "paged.object.unlockAllOnSpread",
+    "paged.object.hide",
+    "paged.object.showAllOnSpread",
   ];
 
   test("through the registry: every verb refuses silently (its `when` is false)", async () => {
@@ -924,6 +1094,10 @@ describe("inside an edit context the object verbs do not apply", () => {
       "command:paged.object.nudgeDownLarge",
       "command:paged.object.makeClippingMask",
       "command:paged.object.releaseClippingMask",
+      "command:paged.object.lock",
+      "command:paged.object.unlockAllOnSpread",
+      "command:paged.object.hide",
+      "command:paged.object.showAllOnSpread",
     );
     for (const command of ALL) {
       const h = objects({

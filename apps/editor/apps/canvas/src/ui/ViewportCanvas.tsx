@@ -145,7 +145,12 @@ export interface ViewportCanvasProps {
    * user actually clicked on. Phase H used this to expand the group
    * to its leaves; Track L uses it to ENTER the group (set
    * `activeGroup = groupId`) and select the hit leaf scoped within. */
-  onDoubleClickGroup?: (groupId: string, hitElement: ElementId | null) => void;
+  onDoubleClickGroup?: (
+    groupId: string,
+    hitElement: ElementId | null,
+    /** The hit's group chain, outermost first (what Escape climbs). */
+    groupChain?: readonly string[],
+  ) => void;
   /** Phase 2 (Concept 1) — when set, the effective tool carries a
    * gesture handler; ViewportCanvas resolves each pointer event to
    * document coordinates and routes it here, bypassing the
@@ -1557,7 +1562,7 @@ export function ViewportCanvas(props: ViewportCanvasProps) {
       // that shape (entering the group) before anything claims it; the
       // next double-click, inside the group, reaches its content.
       if (!inGroupScope) {
-        props.onDoubleClickGroup?.(chain[0], element);
+        props.onDoubleClickGroup?.(chain[0], element, chain);
         return;
       }
       // A frame holding a placed image is content, not vector artwork:

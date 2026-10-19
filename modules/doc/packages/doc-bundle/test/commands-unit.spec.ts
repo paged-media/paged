@@ -102,11 +102,14 @@ function boot(options: Partial<CreateBundleHostOptions> = {}) {
   };
 }
 
-/** The first mutation: the text frame a placement starts with. */
+/** The text frame a placement starts with: the first child of the ONE
+ *  batch the placement is (DOC-1: one undo step). */
 function frameOf(fake: ReturnType<typeof createFakeEditor>) {
   const [first] = fake.mutations();
-  expect(first?.op).toBe("insertTextFrame");
-  return (first as Extract<Mutation, { op: "insertTextFrame" }>).args;
+  expect(first?.op).toBe("batch");
+  const [frame] = (first as Extract<Mutation, { op: "batch" }>).args.ops;
+  expect(frame?.op).toBe("insertTextFrame");
+  return (frame as Extract<Mutation, { op: "insertTextFrame" }>).args;
 }
 
 describe("media.paged.doc.command.placeDoc — the palette command (unit)", () => {

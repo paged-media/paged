@@ -54,7 +54,7 @@ import {
   useSelection,
   type ShellPanelSchema,
 } from "@paged-media/shell";
-import type { Value } from "@paged-media/client";
+import type { Mutation, Value } from "@paged-media/client";
 
 import { appCatalogRegistry } from "./catalog-registry";
 
@@ -129,12 +129,15 @@ export function SchemaListDemoPanel() {
         const swatchId = typeof payload === "string" ? payload : null;
         if (!swatchId) return;
         const value = { type: "colorRef", value: swatchId } as Value;
-        for (const id of currentSelection()) {
-          void client.mutate({
-            op: "setElementProperty",
-            args: { elementId: id, path: "frameStrokeColor", value },
-          });
-        }
+        // One batch over the selection: one undo step (PN-356).
+        const ops: Mutation[] = currentSelection().map((id) => ({
+          op: "setElementProperty",
+          args: { elementId: id, path: "frameStrokeColor", value },
+        }));
+        if (ops.length === 0) return;
+        void client.mutate(
+          ops.length === 1 ? ops[0]! : { op: "batch", args: { ops } },
+        );
       },
     });
     return () => handle.dispose();

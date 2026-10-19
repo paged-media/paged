@@ -45,6 +45,7 @@ import type {
 } from "@paged-media/plugin-api";
 
 import { registerCommand } from "../command-registry";
+import { batchMutationFor } from "./batch-handles";
 /** The command category the gradient-fill presets group under. */
 export const FILL_COMMAND_CATEGORY = "Fill";
 
@@ -104,8 +105,7 @@ export function mintFillGradientIds(nonce?: string): {
  *  white), the gradient over them, then one `frameFillColor` ref
  *  assignment per selected element. Exported so the conformance spec
  *  asserts the EXACT wire shapes the live command emits (no second
- *  copy to drift from). Sequential single mutations — the engine-proven
- *  path (gradient-fill.spec); each is individually undoable. */
+ *  copy to drift from). The command sends them as ONE batch. */
 export function fillGradientMutationsFor(
   elementIds: ElementId[],
   preset: FillGradientPreset,
@@ -177,14 +177,14 @@ export async function applyFillGradientPreset(
     preset,
     mintFillGradientIds(),
   );
-  for (const mutation of mutations) {
-    const outcome = await host.document.mutate(mutation);
-    if (!outcome.applied) {
-      host.log.warn(
-        `${preset.id} rejected by engine at ${mutation.op}: ${JSON.stringify(outcome.error)}`,
-      );
-      return;
-    }
+  // ONE batch: one undo step for the swatches, the gradient and every
+  // fill (DRW-1); a refused child rolls the whole batch back, so no fill
+  // points at a gradient that failed to exist.
+  const outcome = await host.document.mutate(batchMutationFor(mutations));
+  if (!outcome.applied) {
+    host.log.warn(
+      `${preset.id} rejected by engine: ${JSON.stringify(outcome.error)}`,
+    );
   }
 }
 
