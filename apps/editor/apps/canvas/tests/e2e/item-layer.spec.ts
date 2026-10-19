@@ -267,14 +267,15 @@ test.describe("itemLayer — protocol 62 layer assignment", () => {
     // A visible layer offers to Hide it, and says its state in the DOM
     // so this asserts the decision rather than the label text.
     await expect(visToggle).toHaveAttribute("data-row-state", "on");
-    await expect(visToggle).toHaveText("Hide");
+    // A glyph button (PN-358): its label is its tooltip and its name.
+    await expect(visToggle).toHaveAttribute("title", "Hide");
 
     await visToggle.click();
     // Hidden now: the SAME control offers to Show it.
     await expect(visToggle).toHaveAttribute("data-row-state", "off", {
       timeout: 8_000,
     });
-    await expect(visToggle).toHaveText("Show");
+    await expect(visToggle).toHaveAttribute("title", "Show");
   });
 
   // TAGGED AGAIN, and it means something now.
