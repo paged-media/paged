@@ -8,11 +8,12 @@ import { GRADIENT_KINDS, type GradientKind, type Rgba01 } from "../../engine";
 import { fromHex, toHex, type ColorPair } from "../../color-state";
 import type { ImageSession } from "../../session";
 import { mono, note, row, sectionTitle } from "./styles";
+import { color } from "@paged-media/panel-kit";
 
 const swatch = (c: Rgba01) => ({
   width: 28,
   height: 20,
-  border: "1px solid var(--pg-border, rgba(127,127,127,0.5))",
+  border: `1px solid ${color.border}`,
   background: `rgba(${Math.round(c[0] * 255)}, ${Math.round(c[1] * 255)}, ${Math.round(
     c[2] * 255,
   )}, ${c[3]})`,

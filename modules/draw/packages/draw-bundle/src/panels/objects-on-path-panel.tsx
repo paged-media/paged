@@ -54,6 +54,8 @@ import {
 import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
 import {
   About,
+  color,
+  font,
   humanize,
   Refusal,
   useActionFeedback,
@@ -104,18 +106,18 @@ const rowStyle: React.CSSProperties = {
   alignItems: "center",
   gap: 6,
   padding: "3px 0",
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 const iconBtn: React.CSSProperties = {
   border: "none",
   background: "none",
   cursor: "pointer",
   padding: "0 3px",
-  font: "12px var(--font-sans, sans-serif)",
-  color: "var(--pg-fg, currentColor)",
+  font: `12px ${font.sans}`,
+  color: color.fg,
 };
 const sectionStyle: React.CSSProperties = {
-  font: "11px var(--font-sans, sans-serif)",
+  font: `11px ${font.sans}`,
   textTransform: "uppercase",
   letterSpacing: "0.04em",
   opacity: 0.65,
@@ -123,11 +125,11 @@ const sectionStyle: React.CSSProperties = {
 };
 const mutedStyle: React.CSSProperties = {
   opacity: 0.6,
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 const inputStyle: React.CSSProperties = {
   width: 64,
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 
 /** The one-line summary a row shows. Pure — exported so the conformance
@@ -287,7 +289,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
         <div style={rowStyle}>
           <span style={{ flex: 1 }}>By</span>
           <select
-            style={{ font: "12px var(--font-sans, sans-serif)" }}
+            style={{ font: `12px ${font.sans}` }}
             data-draw-onpath-distribute
             value={draft.distribute}
             onChange={(e) =>
@@ -334,7 +336,7 @@ export function makeObjectsOnPathPanel(host: BundleHost): {
         <div style={rowStyle}>
           <span style={{ flex: 1 }}>Pivot</span>
           <select
-            style={{ font: "12px var(--font-sans, sans-serif)" }}
+            style={{ font: `12px ${font.sans}` }}
             data-draw-onpath-pivot
             value={draft.pivot}
             onChange={(e) =>

@@ -32,6 +32,7 @@ import type {
   CommandContribution,
   MenuItemContribution,
 } from "@paged-media/shell";
+import { color, radius } from "@paged-media/panel-kit";
 
 export const GLOBAL_LIGHT_COMMAND = "paged.effects.globalLight";
 
@@ -111,10 +112,10 @@ function GlobalLightForm() {
         style={{
           width: "min(320px, 92vw)",
           padding: 16,
-          borderRadius: "var(--radius-lg, 10px)",
-          border: "1px solid var(--border, #2a2a2a)",
-          background: "var(--elevated, var(--background, #161616))",
-          color: "var(--fg, #e7e7e7)",
+          borderRadius: radius.lg,
+          border: `1px solid ${color.border}`,
+          background: color.elevated,
+          color: color.fg,
           boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
         }}
       >
@@ -162,7 +163,7 @@ const buttonStyle: CSSProperties = {
   borderRadius: 7,
   fontSize: 12,
   cursor: "pointer",
-  border: "1px solid var(--border, #2a2a2a)",
-  background: "var(--pg-primary, #4f7cff)",
-  color: "var(--pg-primary-fg, #fff)",
+  border: `1px solid ${color.border}`,
+  background: color.primary,
+  color: color.primaryFg,
 };

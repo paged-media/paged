@@ -42,6 +42,7 @@ import {
 } from "react";
 
 import { highlight, type CodeLanguage } from "./highlight";
+import { font, radius } from "@paged-media/panel-kit";
 
 export interface CodeEditorDiagnostic {
   severity: "error" | "warning" | "info";
@@ -60,7 +61,7 @@ export interface CodeEditorProps {
   ariaLabel?: string;
 }
 
-const FONT = "12px/1.5 var(--font-mono, monospace)";
+const FONT = `12px/1.5 ${font.mono}`;
 const PAD = 8;
 const GUTTER_W = 40; // line-number column
 const MARK_W = 14; // diagnostics dot column
@@ -155,7 +156,7 @@ export function CodeEditor({
         color: "var(--pg-fg)",
         background: "var(--pg-bg)",
         border: "1px solid var(--pg-border)",
-        borderRadius: "var(--radius-sm, 4px)",
+        borderRadius: radius.sm,
         overflow: "hidden",
       }}
     >
@@ -189,7 +190,7 @@ export function CodeEditor({
                     style={{
                       width: 7,
                       height: 7,
-                      borderRadius: "var(--radius-full, 999px)",
+                      borderRadius: radius.full,
                       background: DOT[d.severity],
                     }}
                   />

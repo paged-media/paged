@@ -277,6 +277,7 @@
       "version": "0.1.0-canary.17",
       "dependencies": {
         "@paged-media/helpers": "workspace:*",
+        "@paged-media/panel-kit": "workspace:*",
         "@paged-media/react-live": "workspace:*",
         "@paged-media/wasm-boot": "workspace:*",
       },
@@ -330,6 +331,7 @@
       "version": "0.1.0-canary.4",
       "dependencies": {
         "@paged-media/helpers": "workspace:*",
+        "@paged-media/panel-kit": "workspace:*",
         "@paged-media/react-live": "workspace:*",
         "@paged-media/wasm-boot": "workspace:*",
       },
@@ -584,6 +586,7 @@
       "version": "0.1.0-canary.1",
       "dependencies": {
         "@paged-media/helpers": "workspace:*",
+        "@paged-media/panel-kit": "workspace:*",
         "@paged-media/react-live": "workspace:*",
         "@paged-media/wasm-boot": "workspace:*",
       },

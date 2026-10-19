@@ -50,6 +50,7 @@ import {
 import type { Value } from "@paged-media/client";
 
 import { addressOfElement } from "../object-model";
+import { refusalText, status } from "@paged-media/panel-kit";
 
 // ADR 323 — every pill is an object-model field: reads/writes through
 // `host.objects` (one batch over a multi-selection = one undo step),
@@ -251,9 +252,7 @@ function LabelsSection() {
       EMPTY_ENVELOPE,
       { label: "labels" },
     );
-    setError(
-      r.applied ? null : `${r.code ?? "failed"}: ${r.reason ?? "refused"}`,
-    );
+    setError(r.applied ? null : refusalText(r));
     if (r.applied) setDraft("");
   };
   return (
@@ -318,7 +317,7 @@ function LabelsSection() {
         <div
           data-label-error=""
           className="text-[10.5px]"
-          style={{ color: "var(--status-error, var(--pg-destructive))" }}
+          style={{ color: status.error }}
         >
           {error}
         </div>

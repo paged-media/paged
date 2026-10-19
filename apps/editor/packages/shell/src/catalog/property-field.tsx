@@ -41,7 +41,7 @@ import { useEffect, useId, useState } from "react";
 
 import type { LeafProps } from "@paged-media/catalog";
 import type { Value } from "@paged-media/client";
-import { LabelledBy, NamedAs } from "@paged-media/panel-kit";
+import { IconButton, LabelledBy, NamedAs } from "@paged-media/panel-kit";
 
 import { Input } from "../components/ui/input";
 import { useOptionalCanvasClient } from "../state/canvas-client-context";
@@ -490,11 +490,10 @@ function ItemsField({
           {adornment}
         </span>
         {can.add ? (
-          <button
-            type="button"
+          <IconButton
+            label="Add an item"
             className={iconButton}
             data-list-add=""
-            title="Add an item"
             onClick={() =>
               run({
                 edit: "add",
@@ -505,7 +504,7 @@ function ItemsField({
             }
           >
             +
-          </button>
+          </IconButton>
         ) : null}
       </div>
       {value === null ? (
@@ -540,11 +539,10 @@ function ItemsField({
                 <span className="flex gap-1">
                   {can.reorder ? (
                     <>
-                      <button
-                        type="button"
+                      <IconButton
+                        label="Move up"
                         className={iconButton}
                         data-list-move-up=""
-                        title="Move up"
                         disabled={above === null}
                         onClick={() =>
                           above !== null &&
@@ -552,12 +550,11 @@ function ItemsField({
                         }
                       >
                         ↑
-                      </button>
-                      <button
-                        type="button"
+                      </IconButton>
+                      <IconButton
+                        label="Move down"
                         className={iconButton}
                         data-list-move-down=""
-                        title="Move down"
                         disabled={below === null}
                         onClick={() =>
                           below !== null &&
@@ -565,19 +562,18 @@ function ItemsField({
                         }
                       >
                         ↓
-                      </button>
+                      </IconButton>
                     </>
                   ) : null}
                   {can.remove ? (
-                    <button
-                      type="button"
+                    <IconButton
+                      label="Remove"
                       className={iconButton}
                       data-list-remove=""
-                      title="Remove"
                       onClick={() => run({ edit: "remove", index })}
                     >
                       ×
-                    </button>
+                    </IconButton>
                   ) : null}
                 </span>
               </div>

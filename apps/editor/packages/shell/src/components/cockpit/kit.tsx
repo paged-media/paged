@@ -24,7 +24,7 @@
 
 import { useId, useState, type ReactNode } from "react";
 
-import { LabelledBy } from "@paged-media/panel-kit";
+import { LabelledBy, status } from "@paged-media/panel-kit";
 
 import { Icon } from "../../icons";
 
@@ -212,12 +212,14 @@ export function Btn({
 
 export type StatusTone = "ready" | "ok" | "warn" | "error" | "info" | "draft";
 
+// The panel kit's status tokens (platform/shared/panel-kit), plus the
+// shell's own draft grey.
 const STATUS_COLOR: Record<StatusTone, string> = {
-  ready: "var(--status-approved)",
-  ok: "var(--status-approved)",
-  warn: "var(--status-review)",
-  error: "var(--status-error)",
-  info: "var(--status-info)",
+  ready: status.ok,
+  ok: status.ok,
+  warn: status.warn,
+  error: status.error,
+  info: status.info,
   draft: "var(--status-draft)",
 };
 

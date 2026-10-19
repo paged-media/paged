@@ -37,6 +37,7 @@ import {
   type Slide,
   type SlidesStore,
 } from "../slides-model.js";
+import { color } from "@paged-media/panel-kit";
 
 const list: React.CSSProperties = {
   display: "flex",
@@ -65,7 +66,7 @@ export function makeSlidesPanel(
       <div
         style={{
           aspectRatio: w > 0 && h > 0 ? `${w} / ${h}` : "16 / 9",
-          background: "var(--chrome-surface-2, #2a2a2a)",
+          background: color.muted,
           borderRadius: 2,
           overflow: "hidden",
           opacity: slide.state.hidden ? 0.4 : 1,
