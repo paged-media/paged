@@ -775,6 +775,22 @@
         "typescript": "catalog:",
       },
     },
+    "tests": {
+      "name": "paged-tests",
+      "version": "0.0.0",
+      "devDependencies": {
+        "@happy-dom/global-registrator": "catalog:",
+        "@paged-media/canvas-wasm": "workspace:*",
+        "@paged-media/client": "workspace:*",
+        "@paged-media/plugin-api": "workspace:*",
+        "@paged-media/plugin-sdk": "workspace:*",
+        "@paged-media/test-kit": "workspace:*",
+        "@types/bun": "catalog:",
+        "happy-dom": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+      },
+    },
   },
   "overrides": {
     "tsx": {
@@ -1414,6 +1430,8 @@
     "paged-media-sdk": ["paged-media-sdk@workspace:platform/extensions"],
 
     "paged-monorepo": ["paged-monorepo@workspace:apps/editor"],
+
+    "paged-tests": ["paged-tests@workspace:tests"],
 
     "pako": ["pako@1.0.11", "", {}, "sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw=="],
 
