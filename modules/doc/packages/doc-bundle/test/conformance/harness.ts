@@ -81,7 +81,7 @@ export async function openDoc(name: string): Promise<OpenedDoc> {
   try {
     engine.loadDocx(bytes);
     const ir = engine.lowered();
-    await h.load(engine.skeletonIdml(name));
+    await h.load(engine.skeletonPaged(name));
     h.loadBundle(docBundle);
     const host = h.host;
     const opened = await finishStandalone(
@@ -90,7 +90,7 @@ export async function openDoc(name: string): Promise<OpenedDoc> {
       ir,
       bytes,
       name,
-      (idml) => h.load(idml),
+      (paged) => h.load(paged),
     );
     return { h, host, opened };
   } finally {

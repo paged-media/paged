@@ -155,10 +155,14 @@ describe("paged.slide importer", () => {
     });
 
     expect(r.opened).toHaveLength(1);
-    // An IDML package: a zip whose first entry is the stored mimetype.
+    // A `.paged` package (ADR 708): a zip whose first entry is the stored
+    // mimetype, carrying the native model part the engine opens.
     const head = new TextDecoder().decode(r.opened[0].subarray(30, 38 + 43));
     expect(head).toContain("mimetype");
     expect(head).toContain("application/vnd.adobe.indesign-idml-package");
+    expect(new TextDecoder().decode(r.opened[0])).toContain(
+      "paged/core/model/document.pgm",
+    );
 
     expect(r.parts.get(SOURCE_PART)).toEqual(bytes);
     const report = JSON.parse(

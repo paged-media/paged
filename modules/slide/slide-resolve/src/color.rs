@@ -21,9 +21,12 @@
 //!
 //! The arithmetic follows how PowerPoint draws: luminance and saturation
 //! transforms work in HSL; `tint` and `shade` work on linear-light RGB
-//! (scRGB), which is why a 50 % shade of a mid grey is darker than halving
-//! its sRGB value. The PowerPoint oracle is the judge of each rule.
+//! (scRGB), so a 50 % shade of a mid grey is not half its sRGB value. The
+//! conversions are `paged_ooxml::colour`'s, shared with paged.sheet (whose
+//! SpreadsheetML `tint` is the HSL one, a different operation). The
+//! PowerPoint oracle is the judge of each rule.
 
+use paged_ooxml::colour::{dml_shade, dml_tint, hsl_to_rgb, linear_to_srgb, rgb_to_hsl};
 use pptx_core::{Color, ColorBase, ColorMap, Theme};
 
 /// A resolved colour: sRGB 0–1 and alpha 0–1.
@@ -63,74 +66,6 @@ pub struct ColorCtx<'a> {
     pub map: &'a ColorMap,
     /// `phClr` — the colour a style reference supplies.
     pub placeholder: Option<Rgba>,
-}
-
-fn to_linear(c: f64) -> f64 {
-    if c <= 0.04045 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
-    }
-}
-fn to_srgb(c: f64) -> f64 {
-    if c <= 0.003_130_8 {
-        c * 12.92
-    } else {
-        1.055 * c.powf(1.0 / 2.4) - 0.055
-    }
-}
-
-fn rgb_to_hsl(r: f64, g: f64, b: f64) -> (f64, f64, f64) {
-    let max = r.max(g).max(b);
-    let min = r.min(g).min(b);
-    let l = (max + min) / 2.0;
-    if (max - min).abs() < 1e-12 {
-        return (0.0, 0.0, l);
-    }
-    let d = max - min;
-    let s = if l > 0.5 {
-        d / (2.0 - max - min)
-    } else {
-        d / (max + min)
-    };
-    let h = if max == r {
-        (g - b) / d + if g < b { 6.0 } else { 0.0 }
-    } else if max == g {
-        (b - r) / d + 2.0
-    } else {
-        (r - g) / d + 4.0
-    };
-    (h / 6.0, s, l)
-}
-
-fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (f64, f64, f64) {
-    if s <= 0.0 {
-        return (l, l, l);
-    }
-    let q = if l < 0.5 {
-        l * (1.0 + s)
-    } else {
-        l + s - l * s
-    };
-    let p = 2.0 * l - q;
-    let hue = |mut t: f64| {
-        if t < 0.0 {
-            t += 1.0;
-        }
-        if t > 1.0 {
-            t -= 1.0;
-        }
-        if t < 1.0 / 6.0 {
-            p + (q - p) * 6.0 * t
-        } else if t < 0.5 {
-            q
-        } else if t < 2.0 / 3.0 {
-            p + (q - p) * (2.0 / 3.0 - t) * 6.0
-        } else {
-            p
-        }
-    };
-    (hue(h + 1.0 / 3.0), hue(h), hue(h - 1.0 / 3.0))
 }
 
 /// The preset colours DrawingML names (`a:prstClr`), the common subset.
@@ -214,9 +149,9 @@ pub fn resolve(c: &Color, ctx: &ColorCtx) -> Rgba {
             Rgba { r, g, b, a: 1.0 }
         }
         ColorBase::ScRgb(r, g, b) => Rgba {
-            r: to_srgb(*r as f64 / 100_000.0),
-            g: to_srgb(*g as f64 / 100_000.0),
-            b: to_srgb(*b as f64 / 100_000.0),
+            r: linear_to_srgb(*r as f64 / 100_000.0),
+            g: linear_to_srgb(*g as f64 / 100_000.0),
+            b: linear_to_srgb(*b as f64 / 100_000.0),
             a: 1.0,
         },
     };
@@ -242,7 +177,7 @@ pub fn resolve(c: &Color, ctx: &ColorCtx) -> Rgba {
                 rgba = Rgba { r, g, b, a: rgba.a };
             }
             "tint" => {
-                let f = |c: f64| to_srgb(to_linear(c) * v + (1.0 - v));
+                let f = |c: f64| dml_tint(c, v);
                 rgba = Rgba {
                     r: f(rgba.r),
                     g: f(rgba.g),
@@ -251,7 +186,7 @@ pub fn resolve(c: &Color, ctx: &ColorCtx) -> Rgba {
                 };
             }
             "shade" => {
-                let f = |c: f64| to_srgb(to_linear(c) * v);
+                let f = |c: f64| dml_shade(c, v);
                 rgba = Rgba {
                     r: f(rgba.r),
                     g: f(rgba.g),

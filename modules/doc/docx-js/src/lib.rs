@@ -69,15 +69,16 @@ mod wasm {
             self.session.as_ref().map(|s| s.block_count()).unwrap_or(0)
         }
 
-        /// ADR 029 — the page skeleton for standalone open, as an IDML package.
-        pub fn skeleton_idml(&self, name: &str) -> Result<Vec<u8>, JsValue> {
+        /// ADR 029 — the page skeleton for standalone open, as a native
+        /// `.paged` document (ADR 606).
+        pub fn skeleton_paged(&self, name: &str) -> Result<Vec<u8>, JsValue> {
             let session = self
                 .session
                 .as_ref()
                 .ok_or_else(|| JsValue::from_str("no document loaded"))?;
             session
                 .skeleton(name)
-                .map(|s| s.idml)
+                .map(|s| s.paged)
                 .map_err(|e| JsValue::from_str(&e))
         }
 

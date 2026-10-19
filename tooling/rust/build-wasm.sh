@@ -114,6 +114,13 @@ if [ -n "$HASH_MODULE" ]; then
   SOURCE_HASH=$(bun "$REPO/tooling/js/source-hash.mjs" "$HASH_MODULE")
 fi
 
+# Cargo names a crate outside the module's own workspace (platform/shared/*,
+# a path dependency) by its absolute path, so its panic locations would carry
+# the build machine's directory into the wasm, and the artifact's size would
+# depend on where the checkout is. Name those sources relative to the
+# repository, as cargo names the workspace's own crates.
+export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }--remap-path-prefix=$REPO/platform/shared/=platform/shared/"
+
 CARGO_ARGS=(build --profile "$PROFILE" --target "$TARGET")
 [ -n "$PACKAGE" ] && CARGO_ARGS+=(-p "$PACKAGE")
 [ -n "$FEATURES" ] && CARGO_ARGS+=(--features "$FEATURES")

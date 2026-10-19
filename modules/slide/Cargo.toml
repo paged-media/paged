@@ -1,19 +1,19 @@
 # paged.slide — Cargo workspace.
 #
-# Crates live at REPO TOP LEVEL (as in plugin-doc). `vendor/paged-ooxml` is a
-# vendored copy of plugin-doc's shared OOXML foundation (ADR 701); every crate
-# is AGPL-3.0-only OR PMEL (the workspace default below).
+# Crates live at REPO TOP LEVEL (as in plugin-doc). Every crate is
+# AGPL-3.0-only OR PMEL (the workspace default below). The OOXML foundation,
+# `paged-ooxml`, is platform/shared/ooxml, shared with doc and sheet
+# (modules ADR 607, which supersedes the vendored copy of ADR 701).
 [workspace]
 resolver = "2"
 members = [
-    "vendor/paged-ooxml",
     "pptx-core",
     "pptx-import",
     "pptx-fonts",
     "slide-geom",
     "slide-chart",
     "slide-resolve",
-    "slide-idml",
+    "slide-native",
     "pptx-export",
     "slide-js",
 ]
@@ -26,22 +26,21 @@ license = "AGPL-3.0-only OR LicenseRef-PMEL"
 publish = false
 
 [workspace.dependencies]
-# OOXML typed part DOM (PresentationML, DrawingML main/chart/diagram/picture).
-# Held at 0.12: 0.13 makes docx_js 0.8 MB (12 %) larger, which the app-wide
-# wasm budget has no room for (docs/migration/rust-majors.md).
-ooxmlsdk = { version = "0.12", features = ["mce"] }
+# The shared OOXML foundation: the OPC container (with its memory budget),
+# rels, the XML helpers and DrawingML colour. Without its `dom` feature, so
+# this workspace never compiles ooxmlsdk (slide reads parts as an element
+# tree, ADR 702). `deflate` keeps the zip backend this workspace always had.
+paged-ooxml = { path = "../../platform/shared/ooxml", features = ["deflate"] }
 zip = { version = "9", default-features = false, features = ["deflate"] }
 quick-xml = "0.41"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-compact_str = { version = "0.10", features = ["serde"] }
 base64 = "0.23"
 # wasm boundary (slide-js only).
 wasm-bindgen = "0.2"
 
 # Intra-workspace crates.
-paged-ooxml = { path = "vendor/paged-ooxml" }
 pptx-export = { path = "pptx-export" }
 pptx-core = { path = "pptx-core" }
 pptx-import = { path = "pptx-import" }
@@ -49,10 +48,16 @@ pptx-fonts = { path = "pptx-fonts" }
 slide-geom = { path = "slide-geom" }
 slide-chart = { path = "slide-chart" }
 slide-resolve = { path = "slide-resolve" }
-slide-idml = { path = "slide-idml" }
+slide-native = { path = "slide-native" }
 slide-js = { path = "slide-js" }
 # Optional test resources (docs/development/testing.md): dev-dependency only.
 paged-test-resources = { path = "../../platform/shared/test-resources" }
+# The engine's model crates, path-depended from the engine workspace at the
+# same commit (ADR 708): a deck is built as a native `paged_scene::Document`
+# and packaged by core's one `.paged` writer.
+paged-model = { path = "../../engine/core/crates/paged-model" }
+paged-scene = { path = "../../engine/core/crates/paged-scene" }
+paged-store = { path = "../../engine/core/crates/paged-store" }
 
 [workspace.lints.clippy]
 all = "warn"
@@ -61,3 +66,18 @@ all = "warn"
 opt-level = "s"
 lto = true
 codegen-units = 1
+
+# The native deck's model serializer (ADR 708): size-first codegen for the
+# engine's model crates and the builder, which build and write a deck once
+# per open. The wasm is built with this profile (scripts/build-wasm.sh).
+[profile.release.package.paged-model]
+opt-level = "z"
+
+[profile.release.package.paged-scene]
+opt-level = "z"
+
+[profile.release.package.paged-store]
+opt-level = "z"
+
+[profile.release.package.slide-native]
+opt-level = "z"

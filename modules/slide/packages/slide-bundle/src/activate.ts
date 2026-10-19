@@ -17,7 +17,8 @@
  */
 
 // activate(host) for paged.slide: File ▸ Open of a PowerPoint deck. The
-// engine writes the whole presentation as one IDML package (ADR 700): a
+// engine builds the whole presentation as one native document (ADR 700,
+// ADR 708), packaged as `.paged`: a
 // master spread per used layout, a page per slide, every shape, story and
 // picture with PowerPoint's inheritance already resolved. The host opens it
 // as the document. Each slide's notes, hidden flag and transition ride its
@@ -163,12 +164,12 @@ export function activate(host: BundleHost): BundleHandle {
   /** The door that replaces the active document: the native-document door
    *  (the editor), else the documents door (headless hosts, the Node CLI). */
   function openDoor():
-    ((idml: Uint8Array, name: string) => Promise<void>) | null {
+    ((paged: Uint8Array, name: string) => Promise<void>) | null {
     if (host.supports("document.openNative@1"))
-      return (idml) => host.nativeDocument.open(idml);
+      return (paged) => host.nativeDocument.open(paged);
     if (host.supports("documents.open@1")) {
-      return async (idml, name) => {
-        const r = await host.documents.open(idml, { name });
+      return async (paged, name) => {
+        const r = await host.documents.open(paged, { name });
         if (!r.opened) throw new Error(`the host declined to open ${name}`);
       };
     }
@@ -191,14 +192,14 @@ export function activate(host: BundleHost): BundleHandle {
       return null;
     }
     const engine = await slideEngine();
-    const { idml, report, fonts } = engine.importPptx(
+    const { paged, report, fonts } = engine.importPptx(
       bytes,
       documentName(name),
     );
     importing = true;
     let fontDiagnostics: Diagnostic[] = [];
     try {
-      await open(idml, documentName(name));
+      await open(paged, documentName(name));
       // The faces once the deck's document is open: a face belongs to the
       // document open when it is given and is dropped when that document
       // closes (plugin-sdk ADR 330), so one given before the open would go

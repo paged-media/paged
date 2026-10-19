@@ -209,6 +209,11 @@
     },
     {
       matchManagers: ["cargo"],
+      matchFileNames: ["platform/shared/ooxml/**"],
+      groupName: "rust: ooxml",
+    },
+    {
+      matchManagers: ["cargo"],
       matchFileNames: ["apps/server/**"],
       groupName: "rust: server",
     },

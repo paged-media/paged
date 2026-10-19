@@ -91,3 +91,12 @@ Three written claims do not match the code:
 - [ADR 007](https://github.com/paged-media/core/blob/main/docs/adr/007-carry-through-rendering-honesty.md) — carry-through as a platform rule
 - [ADR 503](https://github.com/paged-media/plugin-sheets/blob/main/docs/adr/503-xlsx-patched-not-regenerated.md) — the spreadsheet plugin's rule that XLSX is patched, never regenerated; `paged-ooxml/src/opc.rs:28` says this container mirrors that plugin's
 - [ADR 314](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/314-plugin-shape.md), [ADR 315](https://github.com/paged-media/plugin-sdk/blob/main/docs/adr/315-isolation-contract.md) — the plugin shape and the isolation contract
+
+## Amendment 2026-10-19
+
+The crate moved to `platform/shared/ooxml`, shared with slide and sheet (ADR 607); the paths
+above are relative to it now (`src/…`), not to `paged-ooxml/`. The decision stands. Two things
+changed: `OpcPackage::read` holds the read to a 1 GiB uncompressed budget and no longer
+pre-allocates the size an entry claims, and the typed DOM (`dom.rs`, `parse_root`, the
+`ooxmlsdk` re-export) is behind the crate's `dom` feature, which only this module enables.
+

@@ -10,9 +10,10 @@ WordprocessingML onto Paged's native text + flow model (styled paragraphs of run
 paragraph/character styles, sections), so you get native-quality editing and the
 engine's own pagination, print-correct by construction.
 
-Word content is parsed and re-serialized through a shared OOXML foundation
-(`paged-ooxml`, over the vendored [`ooxmlsdk`](https://github.com/KaiserY/ooxmlsdk)
-crate) with a **preservation invariant**: the original package is retained, and a
+Word content is parsed and re-serialized through the shared OOXML foundation
+(`paged-ooxml` in `platform/shared/ooxml`, with doc, slide and sheet; its typed DOM is
+the pinned [`ooxmlsdk`](https://github.com/KaiserY/ooxmlsdk) crate) with a
+**preservation invariant**: the original package is retained, and a
 zero-edit round-trip is byte-identical — Paged never destroys a document.
 
 ## Documentation
@@ -34,8 +35,8 @@ true standalone open are on the roadmap. See [`docs/status.md`](docs/status.md).
 
 ## Layout
 
-- `paged-ooxml/` — shared OPC container + carry-through + `ooxmlsdk` typed DOM
-  (AGPL-3.0-only OR PMEL).
+- `../../platform/shared/ooxml/` — `paged-ooxml`, the OPC container (with its memory
+  budget) + carry-through + `ooxmlsdk` typed DOM, shared with slide and sheet (ADR 607).
 - `docx-core/`, `docx-import/`, `docx-lower/`, `docx-js/`, `docx-conformance/` —
   the Word engine (AGPL-3.0-only OR PMEL).
 - `packages/doc-host-model/`, `packages/doc-bundle/` — the TS glue + the
@@ -54,5 +55,4 @@ bun install && bun run test       # the bundle glue
 ## License
 
 Dual-licensed **AGPL-3.0-only OR PMEL** (the Paged Media Enterprise License, a
-commercial license from And The Next GmbH), the shared `paged-ooxml` library
-included. See [`LICENSE.md`](LICENSE.md).
+commercial license from And The Next GmbH), as is the shared `paged-ooxml` library. See [`LICENSE.md`](LICENSE.md).

@@ -1,7 +1,8 @@
 $schema: "../../.moon/cache/schemas/project.json"
 
-# paged.doc: a Cargo workspace (docx-*, paged-ooxml) and JS packages
-# (doc-bundle, doc-host-model). apps/editor builds doc-bundle from source.
+# paged.doc: a Cargo workspace (docx-* crates) and JS packages (doc-bundle,
+# doc-host-model). apps/editor builds doc-bundle from source. The OOXML
+# foundation is the shared platform/shared/ooxml crate (a path dependency).
 language: "rust"
 layer: "library"
 stack: "systems"
@@ -11,10 +12,45 @@ project:
   title: "modules/doc"
   description: "Word/DOCX module: import, lowering, save-back."
 
-# validate:manifest runs the in-tree paged-plugin bin (plugin-sdk).
+# validate:manifest runs the in-tree paged-plugin bin (plugin-sdk);
+# docx-skeleton builds on the engine's model crates (ADR 606).
 dependsOn:
+  - id: "core"
+    scope: "production"
   - id: "extensions"
     scope: "development"
+  # paged-ooxml, a path dependency of the Cargo workspace.
+  - id: "ooxml"
+    scope: "production"
+
+# Path dependencies into the engine (docx-skeleton / slide-native build on
+# paged-model, paged-scene, paged-store; ADR 606 / ADR 708) and into
+# platform/shared/ooxml (paged-ooxml, doc ADR 607): their crates are inputs
+# here too, so `moon ci` re-runs this project when one it builds changes.
+# (Project file groups replace the workspace ones, so the defaults are
+# restated.)
+fileGroups:
+  rust-sources:
+    - "**/*.rs"
+    - "**/Cargo.toml"
+    - "Cargo.lock"
+    - "rust-toolchain*"
+    - "/.cargo/*.toml"
+    - "/engine/core/Cargo.toml"
+    - "/engine/core/crates/**/*.rs"
+    - "/engine/core/crates/**/Cargo.toml"
+    - "/platform/shared/ooxml/src/**/*.rs"
+    - "/platform/shared/ooxml/Cargo.toml"
+  rust-tests:
+    - "**/*"
+    - "!docs/**"
+    - "!**/*.md"
+    - "/.cargo/*.toml"
+    - "/engine/core/Cargo.toml"
+    - "/engine/core/crates/**/*.rs"
+    - "/engine/core/crates/**/Cargo.toml"
+    - "/platform/shared/ooxml/src/**/*.rs"
+    - "/platform/shared/ooxml/Cargo.toml"
 
 tasks:
   wasm:
