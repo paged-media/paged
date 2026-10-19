@@ -18,6 +18,18 @@ concurrency:
 # fidelity and corpus lanes; and no Rust task at all (runInCI: false in
 # .moon/tasks/rust.yml, step A10): each workspace's Rust workflow runs those
 # with a cache. No remote cache.
+#
+# Why the per-module workflows (data, doc, draw, sheet, slide, web: rust and
+# bun test) are not folded into this one yet (wave C7, 2026-10-19): this
+# workflow runs on pull requests only, and changes now go straight to main;
+# it builds no module wasm, so the real-engine specs those workflows hold to
+# REQUIRE_REAL_ENGINE=1 would skip here; it runs no Rust task (above), while
+# those workflows carry each module's own gates (dependency guards, coverage
+# gates, cargo-deny, the wasm size gates); and cockpit pulls their evidence by
+# workflow file and artifact name (nextest-junit, vitest-junit). What they
+# repeated is shared instead: .github/actions/wasm-tools for wasm-bindgen and
+# binaryen, tooling/rust/build-wasm.sh for the wasm build, and
+# .moon/tasks/*.yml for the task definitions `moon run` uses locally.
 on:
   pull_request:
   workflow_dispatch:
