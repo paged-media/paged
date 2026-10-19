@@ -23,7 +23,7 @@
 import { describe, expect, it, test } from "bun:test";
 
 import type { ElementId } from "@paged-media/client";
-import { expectNoCommit, expectOneCommit } from "@paged-media/test-kit";
+import { covers, expectNoCommit, expectOneCommit } from "@paged-media/test-kit";
 
 import { createPencilHandler } from "../src/handlers/pencil-tool";
 import { createPenHandler } from "../src/handlers/pen-tool";
@@ -43,6 +43,7 @@ const C: [number, number] = [150, 260];
 
 describe("Pen tool", () => {
   it("three clicks and Enter commit ONE open insertPath of three corner anchors (painted, selected) @level:gesture", async () => {
+    covers("tool:paged.tool.pen");
     const { fake, g } = harness();
     const mark = fake.mark();
     await g.tool(createPenHandler).click(A).settle().click(B).settle();
@@ -190,6 +191,7 @@ describe("Pen tool", () => {
 
 describe("Pencil tool", () => {
   it("previews the raw stroke and commits ONE smooth open insertPath of the simplified points @level:gesture", async () => {
+    covers("tool:paged.tool.pencil");
     const { fake, g } = harness();
     await g
       .tool(createPencilHandler)
@@ -305,6 +307,7 @@ describe("Pencil tool", () => {
 
 describe("Type tool (the drag)", () => {
   it("a drag pulls out ONE text frame, selects it, and puts the caret in its new story @level:gesture", async () => {
+    covers("tool:paged.tool.type");
     let stories = [{ selfId: "s0" }];
     const { fake, g } = harness({
       collections: {

@@ -26,7 +26,7 @@
 import { describe, expect, it, test } from "bun:test";
 
 import type { ElementId } from "@paged-media/client";
-import { expectNoCommit, expectOneCommit } from "@paged-media/test-kit";
+import { covers, expectNoCommit, expectOneCommit } from "@paged-media/test-kit";
 
 import { createPageHandler } from "../src/handlers/page-tool";
 import { createShearHandler } from "../src/handlers/shear-tool";
@@ -67,6 +67,9 @@ describe.each([
   ["shear", createShearHandler],
 ] as const)("%s tool", (kind, create) => {
   it(`a drag on a selection begins a ${kind} gesture anchored at the press, streams doc deltas over the SAB lane, commits once @level:gesture`, async () => {
+    if (kind === "rotate") covers("tool:paged.tool.rotate");
+    if (kind === "scale") covers("tool:paged.tool.scale");
+    if (kind === "shear") covers("tool:paged.tool.shear");
     const { fake, g } = harness({
       selection: [FRAME],
       geometry: (id) => ({ id, bounds: [0, 0, 10, 10] }),
@@ -257,6 +260,7 @@ describe("tool switching", () => {
 
 describe("Page tool", () => {
   it("a drag resizes the page to the drag end (72 pt floor), with a live rect preview @level:gesture", async () => {
+    covers("tool:paged.tool.page");
     const { fake, g } = harness();
     await g
       .tool(createPageHandler)
