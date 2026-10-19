@@ -100,7 +100,7 @@ pub struct DuplicateDemand {
     pub stories: usize,
 }
 
-fn refused(node: NodeId, reason: impl Into<String>) -> OperationError {
+pub(super) fn refused(node: NodeId, reason: impl Into<String>) -> OperationError {
     OperationError::InvalidValue {
         node,
         // The path is unused; `InvalidValue` is the kernel's "the node
@@ -110,7 +110,7 @@ fn refused(node: NodeId, reason: impl Into<String>) -> OperationError {
     }
 }
 
-fn ref_self_id(spread: &Spread, r: FrameRef) -> Option<&str> {
+pub(super) fn ref_self_id(spread: &Spread, r: FrameRef) -> Option<&str> {
     match r {
         FrameRef::TextFrame(i) => spread.text_frames.get(i)?.self_id.as_deref(),
         FrameRef::Rectangle(i) => spread.rectangles.get(i)?.self_id.as_deref(),
@@ -121,7 +121,7 @@ fn ref_self_id(spread: &Spread, r: FrameRef) -> Option<&str> {
     }
 }
 
-fn node_for(spread: &Spread, r: FrameRef) -> NodeId {
+pub(super) fn node_for(spread: &Spread, r: FrameRef) -> NodeId {
     let id = ref_self_id(spread, r).unwrap_or_default().to_string();
     match r {
         FrameRef::TextFrame(_) => NodeId::TextFrame(id),
@@ -134,7 +134,7 @@ fn node_for(spread: &Spread, r: FrameRef) -> NodeId {
 }
 
 /// `node`'s `FrameRef` on `spread`, for the six page-item kinds.
-fn ref_in_spread(spread: &Spread, node: &NodeId) -> Option<FrameRef> {
+pub(super) fn ref_in_spread(spread: &Spread, node: &NodeId) -> Option<FrameRef> {
     fn at<'a>(mut ids: impl Iterator<Item = Option<&'a str>>, want: &str) -> Option<usize> {
         ids.position(|s| s == Some(want))
     }
@@ -197,7 +197,7 @@ pub(super) fn story_blocker(story: &paged_model::Story) -> Option<&'static str> 
 
 /// Does a designmap `Source` ref (`HyperlinkTextSource/u1`, or InDesign's
 /// bare `u1`) name the run-level source `id` (spelled either way)?
-fn names_source(link_source: &str, id: &str) -> bool {
+pub(super) fn names_source(link_source: &str, id: &str) -> bool {
     let tail = |s: &str| s.rsplit('/').next().unwrap_or(s).to_string();
     link_source == id || tail(link_source) == tail(id)
 }
@@ -459,7 +459,7 @@ fn descendants(spread: &Spread, r: FrameRef, out: &mut Vec<FrameRef>) {
 
 /// The op's whole validation: every source located and cleared, and the
 /// ids the clones need. Writes nothing.
-fn validate(
+pub(super) fn validate(
     doc: &Document,
     sources: &[NodeId],
 ) -> Result<(Vec<(usize, FrameRef)>, DuplicateDemand), OperationError> {
@@ -506,7 +506,7 @@ pub fn duplicate_demand(
     validate(doc, sources).map(|(_, demand)| demand)
 }
 
-fn translated(m: Option<[f32; 6]>, dx: f32, dy: f32) -> Option<[f32; 6]> {
+pub(super) fn translated(m: Option<[f32; 6]>, dx: f32, dy: f32) -> Option<[f32; 6]> {
     match m {
         Some(mut m) => {
             m[4] += dx;
@@ -880,7 +880,7 @@ fn subtree_len(spread: &Spread, r: FrameRef) -> usize {
 /// Remove the item at `r` from its kind vec and from every list that
 /// can name it, closing the gap in all of them (the shared
 /// `unregister_frame_ref`, which C-74 made complete).
-fn remove_ref_everywhere(spread: &mut Spread, r: FrameRef) {
+pub(super) fn remove_ref_everywhere(spread: &mut Spread, r: FrameRef) {
     match r {
         FrameRef::TextFrame(i) => {
             spread.text_frames.remove(i);
@@ -904,14 +904,15 @@ fn remove_ref_everywhere(spread: &mut Spread, r: FrameRef) {
     unregister_frame_ref(spread, r, fr_index(&r));
 }
 
-pub(super) fn apply_remove_duplicates(
+/// Remove exactly the page items `ids` and the stories `story_ids` a
+/// duplicate or a paste minted, with the reference fix-up a removal needs,
+/// and the hyperlinks the copied stories' sources owned. Validates first:
+/// every id must be there, or nothing is removed.
+pub(super) fn remove_minted(
     doc: &mut Document,
-    sources: &[NodeId],
-    dx: f32,
-    dy: f32,
     ids: &[String],
     story_ids: &[String],
-) -> Result<AppliedOperation, OperationError> {
+) -> Result<(), OperationError> {
     // Validate first: every id this op is about to remove must be here.
     let find = |doc: &Document, id: &str| -> Option<(usize, FrameRef)> {
         doc.spreads.iter().enumerate().find_map(|(si, p)| {
@@ -955,6 +956,18 @@ pub(super) fn apply_remove_duplicates(
         unlink_copied_story(&mut doc.designmap, &parsed.story);
     }
     doc.stories.retain(|s| !story_ids.contains(&s.self_id));
+    Ok(())
+}
+
+pub(super) fn apply_remove_duplicates(
+    doc: &mut Document,
+    sources: &[NodeId],
+    dx: f32,
+    dy: f32,
+    ids: &[String],
+    story_ids: &[String],
+) -> Result<AppliedOperation, OperationError> {
+    remove_minted(doc, ids, story_ids)?;
 
     Ok(AppliedOperation {
         op: Operation::RemoveDuplicates {

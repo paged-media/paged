@@ -35,6 +35,20 @@ export {
 
 export type { LengthUnit } from "./inputs/units";
 export { convertLength, POINTS_PER_UNIT } from "./inputs/units";
+export {
+  DOCUMENT_UNITS,
+  documentUnit,
+  formatLength,
+  formatLengthPair,
+  isLengthUnit,
+  lengthIn,
+  parseLengthText,
+  resetDocumentUnit,
+  setDocumentUnit,
+  subscribeDocumentUnit,
+  unitDigits,
+  useDocumentUnit,
+} from "./inputs/document-unit";
 
 // Concept 2 — the colour mixer + its helpers.
 export { ColorMixer, type ColorMixerProps } from "./color/ColorMixer";

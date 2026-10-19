@@ -51,6 +51,7 @@ import {
 } from "@paged-media/panel-kit";
 import {
   BoundsInput,
+  isLengthUnit,
   KitSelect,
   LengthInput,
   ColorPicker,
@@ -185,6 +186,7 @@ export function LengthLeaf({ value, onCommit, props }: LeafProps) {
       <span data-seam={seam ? "true" : undefined} className="contents">
         <LengthInput
           valuePt={seam ? null : pointValue}
+          defaultUnit={isLengthUnit(props.unit) ? props.unit : undefined}
           icon={icon}
           prefix={strFromProps(props, "prefix")}
           showUnit={props.showUnit !== false}

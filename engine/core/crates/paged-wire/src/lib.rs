@@ -1791,6 +1791,28 @@ pub enum Mutation {
         element_ids: Vec<ElementId>,
         offset: (f32, f32),
     },
+    /// ADR 193 (rides v74, added before first consumer sync) — paste
+    /// page items copied with `exportElements`: `snippet` is the JSON that
+    /// request answered. The copies land on `page_id`'s spread, on top of
+    /// its z-order, as one undo step: centred on `center` (a point in
+    /// `page_id`'s page space; InDesign's Paste, at the centre of the
+    /// view), or with no `center` in place — at the position they had on
+    /// their own page, carried to this one (Paste in Place). A copy is
+    /// whole, as a duplicate is (every property, metadata, pasted-in
+    /// children, group members, a copy of each story), and works across
+    /// documents: the swatches, styles and conditions the items name are
+    /// added where this document lacks them; an item whose layer it lacks
+    /// goes to the default layer.
+    ///
+    /// The reply's `minted` lists the copies' roots, back to front;
+    /// `createdId` is the last. Refused, by name, for a snippet this
+    /// engine cannot read. Rides `Operation::InsertSnippet`.
+    PasteElements {
+        snippet: String,
+        page_id: PageId,
+        #[serde(default)]
+        center: Option<(f32, f32)>,
+    },
     /// W1.20 (groups v2, rides v35) — move/scale/rotate a group as a
     /// unit. The engine sets the group's own `ItemTransform` and
     /// rebases every descendant member's effective transform by the
@@ -2558,6 +2580,7 @@ mutation_vocabulary! {
     CreateGroup,
     DissolveGroup,
     DuplicateElements,
+    PasteElements,
     SetGroupTransform,
     SetPluginMetadata,
     SetPageMetadata,

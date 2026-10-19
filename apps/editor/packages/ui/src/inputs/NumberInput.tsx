@@ -61,12 +61,21 @@ export interface NumberInputProps {
   /** Full display override (read-only text like "Metrics") — used
    * by seams whose placeholder isn't numeric. */
   displayText?: string;
+  /** Reads typed text into a value; null when it is not one. Default: the
+   *  leading number (`parseFloat`). A length field passes the unit-aware
+   *  parser, so "10mm" in a pt field reads 28.35. */
+  parse?: (text: string) => number | null;
   /** Disabled flag — disables both the input and the scrub handle. */
   disabled?: boolean;
   /** Extra className applied to the wrapper. */
   className?: string;
   /** Aria-label for accessibility. */
   "aria-label"?: string;
+}
+
+function parseLeading(text: string): number | null {
+  const n = Number.parseFloat(text);
+  return Number.isFinite(n) ? n : null;
 }
 
 function fmt(v: number, precision: number): string {
@@ -100,6 +109,7 @@ export function NumberInput(props: NumberInputProps) {
     displayText,
     disabled = false,
     className = "",
+    parse = parseLeading,
   } = props;
 
   const mixed = value === null && displayText == null;
@@ -155,8 +165,8 @@ export function NumberInput(props: NumberInputProps) {
   });
 
   const commitText = () => {
-    const parsed = Number.parseFloat(text);
-    if (!Number.isFinite(parsed)) {
+    const parsed = parse(text);
+    if (parsed === null || !Number.isFinite(parsed)) {
       // Snap back to the last committed display on garbage input.
       setText(displayFor(lastCommittedRef.current));
       return;
@@ -235,8 +245,8 @@ export function NumberInput(props: NumberInputProps) {
         onChange={(e) => {
           setText(e.target.value);
           // Live-update if the partial value parses cleanly.
-          const parsed = Number.parseFloat(e.target.value);
-          if (Number.isFinite(parsed)) {
+          const parsed = parse(e.target.value);
+          if (parsed !== null && Number.isFinite(parsed)) {
             onChange(parsed);
           }
         }}

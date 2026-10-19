@@ -638,6 +638,27 @@ impl WorkerCore {
                 let content = model.story_content(&story_id);
                 WorkerToMainKind::StoryContentResult { content }
             }
+            MainToWorkerKind::ExportElements { element_ids } => {
+                let Some(model) = self.model.as_ref() else {
+                    reply!(WorkerToMainKind::MutationFailed {
+                        error: WorkerError::NoDocument,
+                    });
+                };
+                match model.export_elements(&element_ids) {
+                    Ok((snippet, text, count)) => WorkerToMainKind::ElementsExported {
+                        snippet: Some(snippet),
+                        text,
+                        count,
+                        refused: None,
+                    },
+                    Err(why) => WorkerToMainKind::ElementsExported {
+                        snippet: None,
+                        text: String::new(),
+                        count: 0,
+                        refused: Some(why),
+                    },
+                }
+            }
             MainToWorkerKind::RequestStyleProperties {
                 collection,
                 style_id,

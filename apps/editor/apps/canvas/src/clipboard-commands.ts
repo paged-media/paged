@@ -1,0 +1,580 @@
+/*
+ * This file is part of paged (https://paged.media), the commercial editor
+ * for the paged IDML engine.
+ *
+ * paged is free software: you may redistribute it and/or modify it under the
+ * terms of the GNU Affero General Public License, version 3, as published by
+ * the Free Software Foundation, OR under the Paged Media Enterprise License
+ * (PMEL), a commercial license available from And The Next GmbH. Full
+ * copyright and license information is available in LICENSE.md, distributed
+ * with this source code.
+ *
+ * paged is distributed in the hope that it will be useful, but WITHOUT ANY
+ * WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the licenses for details.
+ *
+ *  @copyright  Copyright (c) And The Next GmbH
+ *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
+ */
+
+// The page-item clipboard (ADR 231, finding F-28 / SH-201): Cut, Copy,
+// Paste, Paste in Place and Duplicate for page items, as InDesign has them.
+//
+// WHAT IS ON THE CLIPBOARD. Copy asks the engine for a SNIPPET of the
+// selection (`exportElements`, engine ADR 193): the items whole — a group
+// with its members, a frame with a copy of its story — plus the swatches
+// and styles they name. That JSON is the internal format, held here, so a
+// paste works after a Cut deleted the items and after another document was
+// opened in their place. The system clipboard gets two standard forms where
+// the browser allows a write: `text/plain` (the copied frames' text, for
+// any other application) and `text/html` carrying a marker of this copy (and
+// the snippet itself when it is small), so a paste can tell "still my copy"
+// from "the user copied something else since".
+//
+// PASTE. With a snippet that is still the clipboard's, Paste centres the
+// copies on the view (InDesign's Paste) and Paste in Place keeps their
+// position on the page; both land on the page in view, on top of its
+// stacking order, as one undo step, and select what they made. Text from
+// elsewhere becomes a new text frame at the centre of the view. With a text
+// caret the keys are the story's (`useTextEditing`): copy and cut a range,
+// paste text into the story.
+//
+// DUPLICATE (InDesign: Alt+Shift+Cmd+D) copies the selection in place,
+// offset by InDesign's default step of 1p0 (12 pt) right and down, directly
+// above each source, one undo step (`duplicateElements`).
+
+import type {
+  CommandContribution,
+  KeybindingContribution,
+  MenuItemContribution,
+  PagedEditor,
+} from "@paged-media/shell";
+import type { ElementId, Mutation, WorkerToMain } from "@paged-media/client";
+import { viewportToDoc } from "@paged-media/client";
+
+import { objectVerbApplies, refusalOf } from "./object-commands";
+import { currentPageTarget, TEXT_FRAME_SIZE_PT } from "./insert-commands";
+
+export const PAGED_EDIT_CUT = "paged.edit.cut";
+export const PAGED_EDIT_COPY = "paged.edit.copy";
+export const PAGED_EDIT_PASTE = "paged.edit.paste";
+export const PAGED_EDIT_PASTE_IN_PLACE = "paged.edit.pasteInPlace";
+export const PAGED_EDIT_DUPLICATE = "paged.edit.duplicate";
+
+export const CLIPBOARD_DIAGNOSTIC_SOURCE = "paged.clipboard";
+
+/** InDesign's Duplicate step (its Step and Repeat default, 1p0 each way). */
+export const DUPLICATE_OFFSET_PT: readonly [number, number] = [12, 12];
+
+/** The HTML attribute that marks a copy this editor wrote. */
+const MARKER_ATTR = "data-paged-clip";
+/** The HTML attribute that carries the snippet (small copies only). */
+const SNIPPET_ATTR = "data-paged-snippet";
+/** The largest snippet the HTML form carries (base64 grows it by a third;
+ *  a copy with photos stays internal). */
+const SNIPPET_IN_HTML_MAX = 512 * 1024;
+
+/** What Copy put on the clipboard. */
+export interface PageItemClip {
+  /** The engine's snippet JSON (the internal format). */
+  snippet: string;
+  /** The copied frames' text: the plain-text form. */
+  text: string;
+  /** How many items were copied (roots). */
+  count: number;
+  /** This copy's marker on the system clipboard. */
+  token: string;
+}
+
+/** Where the commands report: the Problems channel (`report` in main). */
+export type ClipboardReport = (
+  severity: "info" | "warning" | "error",
+  message: string,
+) => void;
+
+/** The system clipboard, as far as the browser lets us reach it. Injected
+ *  so tests (and a host without one) can stand in. */
+export interface SystemClipboard {
+  /** Write the plain-text and HTML forms; resolves false when refused. */
+  write(text: string, html: string): Promise<boolean>;
+  /** Read the plain-text and HTML forms; null when refused. */
+  read(): Promise<{ text: string; html: string } | null>;
+}
+
+const SESSION = Math.random().toString(36).slice(2, 10);
+let seq = 0;
+let clip: PageItemClip | null = null;
+const listeners = new Set<() => void>();
+
+/** The page-item clipboard (one per editor session). */
+export const pageItemClipboard = {
+  current(): PageItemClip | null {
+    return clip;
+  },
+  set(next: PageItemClip | null): void {
+    clip = next;
+    for (const l of [...listeners]) l();
+  },
+  subscribe(listener: () => void): () => void {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  },
+};
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function toBase64(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000)
+    bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+function fromBase64(s: string): string | null {
+  try {
+    const bin = atob(s);
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+/** The HTML form of a copy: its text, marked as this editor's. */
+export function clipHtml(c: PageItemClip): string {
+  const carry =
+    c.snippet.length <= SNIPPET_IN_HTML_MAX
+      ? ` ${SNIPPET_ATTR}="${toBase64(c.snippet)}"`
+      : "";
+  const body = escapeHtml(c.text).replace(/\n/g, "<br>");
+  return `<div ${MARKER_ATTR}="${c.token}"${carry}>${body}</div>`;
+}
+
+/** What a system clipboard's content is to this editor. */
+export type ClipboardContent =
+  | { kind: "items"; snippet: string }
+  | { kind: "text"; text: string }
+  | { kind: "empty" };
+
+/** Decide what a paste pastes. The system clipboard wins when it holds
+ *  something newer than our copy (no marker, or another copy's); our copy
+ *  (internal) when the clipboard still carries its marker, or when the
+ *  browser will not let us read the clipboard at all. */
+export function resolvePaste(
+  system: { text: string; html: string } | null,
+  internal: PageItemClip | null,
+): ClipboardContent {
+  if (system) {
+    const marker = new RegExp(`${MARKER_ATTR}="([^"]+)"`).exec(system.html);
+    if (marker) {
+      if (internal && marker[1] === internal.token)
+        return { kind: "items", snippet: internal.snippet };
+      const carried = new RegExp(`${SNIPPET_ATTR}="([^"]+)"`).exec(system.html);
+      const snippet = carried ? fromBase64(carried[1]) : null;
+      if (snippet) return { kind: "items", snippet };
+    }
+    if (system.text) {
+      // Our own plain text with the marker lost on the way (a browser
+      // that keeps text/plain only) is still our copy.
+      if (internal && !marker && system.text === internal.text && !system.html)
+        return { kind: "items", snippet: internal.snippet };
+      return { kind: "text", text: system.text.replace(/\r\n?/g, "\n") };
+    }
+    if (marker && internal) return { kind: "items", snippet: internal.snippet };
+  }
+  if (internal) return { kind: "items", snippet: internal.snippet };
+  return { kind: "empty" };
+}
+
+/** The browser's async clipboard (where it exists and the user allows). */
+export function browserClipboard(): SystemClipboard {
+  return {
+    async write(text, html) {
+      const nav = globalThis.navigator as Navigator | undefined;
+      const cb = nav?.clipboard;
+      if (!cb) return false;
+      try {
+        if (typeof ClipboardItem !== "undefined" && cb.write) {
+          await cb.write([
+            new ClipboardItem({
+              "text/plain": new Blob([text], { type: "text/plain" }),
+              "text/html": new Blob([html], { type: "text/html" }),
+            }),
+          ]);
+          return true;
+        }
+        await cb.writeText(text);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    async read() {
+      const cb = (globalThis.navigator as Navigator | undefined)?.clipboard;
+      if (!cb) return null;
+      try {
+        if (cb.read) {
+          const items = await cb.read();
+          let text = "";
+          let html = "";
+          for (const item of items) {
+            if (!text && item.types.includes("text/plain"))
+              text = await (await item.getType("text/plain")).text();
+            if (!html && item.types.includes("text/html"))
+              html = await (await item.getType("text/html")).text();
+          }
+          return { text, html };
+        }
+        return { text: await cb.readText(), html: "" };
+      } catch {
+        return null;
+      }
+    },
+  };
+}
+
+/** The deps the clipboard runners need beyond the live editor. */
+export interface ClipboardDeps {
+  report: ClipboardReport;
+  system: SystemClipboard;
+  /** Delete the selection as Object ▸ Delete does (Cut's second half). */
+  deleteSelection: () => Promise<void>;
+}
+
+const isPageItem = (id: ElementId): boolean =>
+  id.kind === "textFrame" ||
+  id.kind === "rectangle" ||
+  id.kind === "oval" ||
+  id.kind === "graphicLine" ||
+  id.kind === "polygon" ||
+  id.kind === "group";
+
+function selectedItems(paged: PagedEditor): ElementId[] {
+  return paged.selection.elementSelection.filter(isPageItem);
+}
+
+/** Copy the selection to the clipboard. Resolves the clip, or null when
+ *  nothing was copied (reported). */
+export async function copySelection(
+  paged: PagedEditor,
+  deps: ClipboardDeps,
+  verb = "Copy",
+): Promise<PageItemClip | null> {
+  const ids = selectedItems(paged);
+  if (ids.length === 0) {
+    deps.report("info", `${verb} needs a selected page item.`);
+    return null;
+  }
+  const reply = await paged.client.send({
+    kind: "exportElements",
+    payload: { elementIds: ids },
+  });
+  if (reply.kind !== "elementsExported") {
+    deps.report(
+      "error",
+      `${verb} refused: ${refusalOf(reply) ?? "the engine did not answer"}`,
+    );
+    return null;
+  }
+  const { snippet, refused } = reply.payload;
+  const text = reply.payload.text ?? "";
+  const count = reply.payload.count ?? 0;
+  if (!snippet) {
+    deps.report("error", `${verb} refused: ${refused ?? "nothing to copy"}`);
+    return null;
+  }
+  const next: PageItemClip = {
+    snippet,
+    text,
+    count,
+    token: `${SESSION}:${++seq}`,
+  };
+  pageItemClipboard.set(next);
+  // Best effort: the internal copy stands whether or not the browser lets
+  // us write the system clipboard.
+  await deps.system.write(text, clipHtml(next));
+  return next;
+}
+
+/** Cut: copy, then delete the selection (one undo step: the delete). */
+export async function cutSelection(
+  paged: PagedEditor,
+  deps: ClipboardDeps,
+): Promise<void> {
+  const copied = await copySelection(paged, deps, "Cut");
+  if (!copied) return;
+  await deps.deleteSelection();
+}
+
+/** The page in view and the view's centre on it, in page space. */
+function viewCentre(
+  paged: PagedEditor,
+): { pageId: string; center: [number, number] } | null {
+  const target = currentPageTarget(paged);
+  if (!target) return null;
+  const cam = paged.camera.camera;
+  const [vw, vh] = paged.camera.viewportSize;
+  if (!(cam.scale > 0) || vw <= 0 || vh <= 0)
+    return {
+      pageId: target.pageId,
+      center: [target.rect.w / 2, target.rect.h / 2],
+    };
+  const [x, y] = viewportToDoc(cam, vw / 2, vh / 2);
+  // The centre of the view, kept on the page in view (a view centred on
+  // the pasteboard pastes onto the nearest page's edge).
+  const cx = Math.min(Math.max(x - target.rect.x, 0), target.rect.w);
+  const cy = Math.min(Math.max(y - target.rect.y, 0), target.rect.h);
+  return { pageId: target.pageId, center: [cx, cy] };
+}
+
+async function selectMinted(
+  paged: PagedEditor,
+  reply: WorkerToMain,
+): Promise<void> {
+  if (reply.kind !== "mutationApplied") return;
+  const minted = (reply.payload.minted ?? []).map((m) => m.element);
+  const ids =
+    minted.length > 0
+      ? minted
+      : reply.payload.createdId
+        ? [reply.payload.createdId]
+        : [];
+  if (ids.length === 0) return;
+  try {
+    const selected = await paged.client.setElementSelection(ids, "replace");
+    paged.selection.setElementSelection(selected);
+    paged.selection.setElementGeometry(
+      await paged.client.elementGeometry(selected),
+    );
+  } catch {
+    /* the paste stands; the selection is a courtesy */
+  }
+}
+
+/** Paste: our copy centred on the view (or in place), or text from
+ *  elsewhere as a new text frame at the view's centre. */
+export async function pasteClipboard(
+  paged: PagedEditor,
+  deps: ClipboardDeps,
+  inPlace: boolean,
+): Promise<void> {
+  const verb = inPlace ? "Paste in place" : "Paste";
+  const handle = paged.document.handle;
+  if (!handle || handle.pageCount === 0) {
+    deps.report("info", `${verb} needs an open document.`);
+    return;
+  }
+  const at = viewCentre(paged);
+  if (!at) return;
+  const content = resolvePaste(
+    await deps.system.read(),
+    pageItemClipboard.current(),
+  );
+  if (content.kind === "empty") {
+    deps.report("info", `${verb}: the clipboard holds nothing to paste.`);
+    return;
+  }
+  let mutation: Mutation;
+  if (content.kind === "items") {
+    mutation = {
+      op: "pasteElements",
+      args: {
+        snippet: content.snippet,
+        pageId: at.pageId,
+        center: inPlace ? null : at.center,
+      },
+    };
+  } else {
+    const [w, h] = TEXT_FRAME_SIZE_PT;
+    const [cx, cy] = at.center;
+    mutation = {
+      op: "batch",
+      args: {
+        ops: [
+          {
+            op: "insertTextFrame",
+            args: {
+              pageId: at.pageId,
+              bounds: [cy - h / 2, cx - w / 2, cy + h / 2, cx + w / 2],
+            },
+          },
+          { op: "bindCreated", args: { handle: "pasted" } },
+          {
+            op: "insertText",
+            args: {
+              storyId: "$h:pasted",
+              offset: 0,
+              text: content.text,
+              cell: null,
+            },
+          },
+        ],
+      },
+    };
+  }
+  const reply = await paged.client.mutate(mutation);
+  const refusal = refusalOf(reply);
+  if (refusal) {
+    deps.report("error", `${verb} refused: ${refusal}`);
+    return;
+  }
+  await selectMinted(paged, reply);
+}
+
+/** Duplicate: a copy of each selected item, InDesign's step right and
+ *  down, directly above its source; one undo step. */
+export async function duplicateSelection(
+  paged: PagedEditor,
+  deps: ClipboardDeps,
+): Promise<void> {
+  const ids = selectedItems(paged);
+  if (ids.length === 0) {
+    deps.report("info", "Duplicate needs a selected page item.");
+    return;
+  }
+  const reply = await paged.client.mutate({
+    op: "duplicateElements",
+    args: { elementIds: ids, offset: [...DUPLICATE_OFFSET_PT] },
+  });
+  const refusal = refusalOf(reply);
+  if (refusal) {
+    deps.report("error", `Duplicate refused: ${refusal}`);
+    return;
+  }
+  await selectMinted(paged, reply);
+}
+
+/** The editor state the predicates read (structurally; total on a partial
+ *  handle). */
+interface ClipboardState {
+  selection?: { elementSelection?: readonly ElementId[] } | null;
+  document?: { handle?: { pageCount?: number } | null } | null;
+}
+
+const hasSelection = (state: unknown): boolean =>
+  ((state as ClipboardState | null)?.selection?.elementSelection ?? []).some(
+    isPageItem,
+  );
+
+const hasDocument = (state: unknown): boolean =>
+  ((state as ClipboardState | null)?.document?.handle?.pageCount ?? 0) > 0;
+
+/** Cut, Copy and Duplicate act on selected page items, outside an edit
+ *  context and outside text (where the caret's own keys apply). */
+export const clipboardSelectionApplies = (state: unknown): boolean =>
+  objectVerbApplies(state) && hasSelection(state);
+
+/** Paste needs a document, at the object level. */
+export const pasteApplies = (state: unknown): boolean =>
+  objectVerbApplies(state) && hasDocument(state);
+
+export function buildClipboardCommands(
+  deps: ClipboardDeps,
+): CommandContribution[] {
+  return [
+    {
+      id: PAGED_EDIT_CUT,
+      title: "Cut",
+      category: "Edit",
+      when: clipboardSelectionApplies,
+      handler: (paged) => cutSelection(paged as PagedEditor, deps),
+    },
+    {
+      id: PAGED_EDIT_COPY,
+      title: "Copy",
+      category: "Edit",
+      when: clipboardSelectionApplies,
+      handler: async (paged) => {
+        await copySelection(paged as PagedEditor, deps);
+      },
+    },
+    {
+      id: PAGED_EDIT_PASTE,
+      title: "Paste",
+      category: "Edit",
+      when: pasteApplies,
+      handler: (paged) => pasteClipboard(paged as PagedEditor, deps, false),
+    },
+    {
+      id: PAGED_EDIT_PASTE_IN_PLACE,
+      title: "Paste in place",
+      category: "Edit",
+      when: pasteApplies,
+      handler: (paged) => pasteClipboard(paged as PagedEditor, deps, true),
+    },
+    {
+      id: PAGED_EDIT_DUPLICATE,
+      title: "Duplicate",
+      category: "Edit",
+      when: clipboardSelectionApplies,
+      handler: (paged) => duplicateSelection(paged as PagedEditor, deps),
+    },
+  ];
+}
+
+/** Edit menu rows, after Undo / Redo and before Select all (InDesign's
+ *  order: the clipboard group, then Duplicate). */
+export const CLIPBOARD_MENU_ITEMS: MenuItemContribution[] = [
+  {
+    path: "Edit/Cut",
+    command: PAGED_EDIT_CUT,
+    order: 0,
+    group: "clipboard",
+    when: clipboardSelectionApplies,
+  },
+  {
+    path: "Edit/Copy",
+    command: PAGED_EDIT_COPY,
+    order: 1,
+    group: "clipboard",
+    when: clipboardSelectionApplies,
+  },
+  {
+    path: "Edit/Paste",
+    command: PAGED_EDIT_PASTE,
+    order: 2,
+    group: "clipboard",
+    when: pasteApplies,
+  },
+  {
+    path: "Edit/Paste in place",
+    command: PAGED_EDIT_PASTE_IN_PLACE,
+    order: 3,
+    group: "clipboard",
+    when: pasteApplies,
+  },
+  {
+    path: "Edit/Duplicate",
+    command: PAGED_EDIT_DUPLICATE,
+    order: 5,
+    group: "duplicate",
+    when: clipboardSelectionApplies,
+  },
+];
+
+/** The platform keys (InDesign's defaults), cmd and ctrl twins. Guarded:
+ *  with a caret the text's own copy, cut and paste take the keys. */
+export const CLIPBOARD_KEYBINDINGS: KeybindingContribution[] = (
+  [
+    ["x", PAGED_EDIT_CUT, clipboardSelectionApplies],
+    ["c", PAGED_EDIT_COPY, clipboardSelectionApplies],
+    ["v", PAGED_EDIT_PASTE, pasteApplies],
+    ["alt+shift+v", PAGED_EDIT_PASTE_IN_PLACE, pasteApplies],
+    ["alt+shift+d", PAGED_EDIT_DUPLICATE, clipboardSelectionApplies],
+  ] as const
+).flatMap(([key, command, when]) =>
+  (["cmd", "ctrl"] as const).map((mod) => ({
+    key: `${mod}+${key}`,
+    command,
+    when,
+  })),
+);

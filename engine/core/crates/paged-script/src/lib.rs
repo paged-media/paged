@@ -41,6 +41,8 @@
 //!   paged.applyStyle(storyId, start, end, styleRef) -> bool
 //!   paged.createGroup([id, ...]) -> bool
 //!   paged.duplicateElements([id, ...], dx, dy) -> address[] JSON | null
+//!   paged.copyElements([id, ...]) -> snippet JSON string | null
+//!   paged.pasteElements(snippet, pageId, cx?, cy?) -> address[] JSON | null
 //!   paged.inspect(idStr) -> ElementProperties JSON
 //!   paged.layers() -> LayerSummary[]
 //!   paged.tree() -> SceneTreeNode[]
@@ -799,6 +801,12 @@ fn install_bridge(ctx: &mut Context) -> JsResult<()> {
             guarded(paged_duplicate_elements),
             js_string!("duplicateElements"),
             3,
+        )
+        .function(guarded(paged_copy_elements), js_string!("copyElements"), 1)
+        .function(
+            guarded(paged_paste_elements),
+            js_string!("pasteElements"),
+            4,
         )
         .function(guarded(paged_undo), js_string!("undo"), 0)
         .function(guarded(paged_redo), js_string!("redo"), 0)
@@ -2251,6 +2259,73 @@ fn paged_duplicate_elements(
         Err(_) => None,
     });
     Ok(match clones {
+        Some(ids) => {
+            let addresses: Vec<String> = ids.iter().map(element_id_to_address).collect();
+            JsValue::from(js_string!(
+                serde_json::to_string(&addresses).unwrap_or_default()
+            ))
+        }
+        None => JsValue::null(),
+    })
+}
+
+/// `paged.copyElements([id, ...])` — ADR 193: a copy of page items, whole
+/// (the snippet `exportElements` answers): the JSON string
+/// `paged.pasteElements` takes, in this document or another. `null` when
+/// the engine refuses (a threaded text frame, items on two spreads, …) or
+/// an id does not parse. A read: nothing changes.
+fn paged_copy_elements(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let given = args
+        .get_or_undefined(0)
+        .as_object()
+        .and_then(|o| o.get(js_string!("length"), ctx).ok())
+        .and_then(|v| v.as_number())
+        .unwrap_or(0.0) as usize;
+    let element_ids = parse_element_id_array(args.get_or_undefined(0), ctx);
+    if element_ids.is_empty() || element_ids.len() != given {
+        return Ok(JsValue::null());
+    }
+    let snippet = with_model(|m| m.export_elements(&element_ids).ok());
+    Ok(match snippet {
+        Some((json, _, _)) => JsValue::from(js_string!(json)),
+        None => JsValue::null(),
+    })
+}
+
+/// `paged.pasteElements(snippet, pageId, cx?, cy?)` — ADR 193: paste a
+/// `paged.copyElements` copy on `pageId`'s spread, on top, in one undo
+/// step (`Mutation::PasteElements`): centred on `(cx, cy)` (page space),
+/// or with no centre in place. Selects the copies and returns their
+/// `kind:id` addresses as a JSON array; `null` when the engine refuses.
+fn paged_paste_elements(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let snippet = args
+        .get_or_undefined(0)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let page = args
+        .get_or_undefined(1)
+        .to_string(ctx)?
+        .to_std_string_escaped();
+    let (cx, cy) = (args.get_or_undefined(2), args.get_or_undefined(3));
+    let center = if cx.is_undefined() || cx.is_null() || cy.is_undefined() || cy.is_null() {
+        None
+    } else {
+        Some((cx.to_number(ctx)? as f32, cy.to_number(ctx)? as f32))
+    };
+    let mutation = Mutation::PasteElements {
+        snippet,
+        page_id: paged_canvas::PageId(page),
+        center,
+    };
+    let copies = with_model(|m| match m.apply_mutation(&mutation) {
+        Ok(outcome) => {
+            let ids: Vec<_> = outcome.minted.into_iter().map(|e| e.element).collect();
+            m.element_selection.ids = ids.clone();
+            Some(ids)
+        }
+        Err(_) => None,
+    });
+    Ok(match copies {
         Some(ids) => {
             let addresses: Vec<String> = ids.iter().map(element_id_to_address).collect();
             JsValue::from(js_string!(

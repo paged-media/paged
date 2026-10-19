@@ -493,11 +493,9 @@ describe("one gesture is one undo step; cancel commits nothing (model dumps)", (
   });
 });
 
-// The gesture fuzzer's findings (gesture-fuzz.test.ts, KNOWN). Each
-// failing commit is atomic today (the model is unchanged and the next
-// gesture begins), which the second test of each pair keeps true; the
-// first is the behaviour the engine should have, an expected failure
-// until it does.
+// The gesture fuzzer's findings (gesture-fuzz.test.ts, KNOWN) and the
+// gesture matrix's: each test is the behaviour the engine should have,
+// an expected failure until it does. GF-1, GF-2 and GF-3 commit now.
 describe("findings: the fuzzer's (GF) and the gesture matrix's (GM)", () => {
   const groupWidth = async () => {
     const b = box(await corners(GROUP));
@@ -517,49 +515,42 @@ describe("findings: the fuzzer's (GF) and the gesture matrix's (GM)", () => {
     expect(await groupWidth()).toBeCloseTo(w0 + 40, 1);
   });
 
-  test.failing(
-    "[GF-2] Alt-dragging a group duplicates the group @level:gesture",
-    async () => {
-      const before = (await sceneElementIds(send)).filter(
-        (id) => id.kind === "group",
-      ).length;
-      const reply = await gesture({
-        nodes: [GROUP],
-        gesture: { kind: "translate" },
-        deltas: [[0, 120]],
-        mods: { shift: false, alt: true, disableSnap: true },
-      });
-      expect(reply.kind).toBe("gestureCommitted");
-      expect(
-        (await sceneElementIds(send)).filter((id) => id.kind === "group")
-          .length,
-      ).toBe(before + 1);
-    },
-  );
+  test("[GF-2] Alt-dragging a group duplicates the group @level:gesture", async () => {
+    const before = (await sceneElementIds(send)).filter(
+      (id) => id.kind === "group",
+    ).length;
+    const reply = await gesture({
+      nodes: [GROUP],
+      gesture: { kind: "translate" },
+      deltas: [[0, 120]],
+      mods: { shift: false, alt: true, disableSnap: true },
+    });
+    expect(reply.kind).toBe("gestureCommitted");
+    expect(
+      (await sceneElementIds(send)).filter((id) => id.kind === "group").length,
+    ).toBe(before + 1);
+  });
 
-  test.failing(
-    "[GF-3] Alt pressed, released and pressed again while dragging a grouped item duplicates it @level:gesture",
-    async () => {
-      const before = (await sceneElementIds(send)).length;
-      const alt = (on: boolean) => ({
-        shift: false,
-        alt: on,
-        disableSnap: true,
-      });
-      const reply = await gesture({
-        nodes: [CHILD],
-        gesture: { kind: "translate" },
-        deltas: [
-          [20, 0],
-          [30, 0],
-          [40, 0],
-        ],
-        mods: [alt(true), alt(false), alt(true)],
-      });
-      expect(reply.kind).toBe("gestureCommitted");
-      expect((await sceneElementIds(send)).length).toBe(before + 1);
-    },
-  );
+  test("[GF-3] Alt pressed, released and pressed again while dragging a grouped item duplicates it @level:gesture", async () => {
+    const before = (await sceneElementIds(send)).length;
+    const alt = (on: boolean) => ({
+      shift: false,
+      alt: on,
+      disableSnap: true,
+    });
+    const reply = await gesture({
+      nodes: [CHILD],
+      gesture: { kind: "translate" },
+      deltas: [
+        [20, 0],
+        [30, 0],
+        [40, 0],
+      ],
+      mods: [alt(true), alt(false), alt(true)],
+    });
+    expect(reply.kind).toBe("gestureCommitted");
+    expect((await sceneElementIds(send)).length).toBe(before + 1);
+  });
 
   test.failing(
     "[GF-4] a rotated frame survives IDML save → load to a micro-point @level:gesture",
@@ -657,36 +648,5 @@ describe("findings: the fuzzer's (GF) and the gesture matrix's (GM)", () => {
     const c1 = centre(await corners(FRAME));
     expect(c1[0]).toBeCloseTo(c0[0], 3);
     expect(c1[1]).toBeCloseTo(c0[1], 3);
-  });
-
-  it("the failing commits are atomic: nothing changes and the next gesture begins @level:gesture", async () => {
-    const before = await model.dump();
-    const alt = (on: boolean) => ({ shift: false, alt: on, disableSnap: true });
-    await gesture({
-      nodes: [GROUP],
-      gesture: { kind: "translate" },
-      deltas: [[0, 120]],
-      mods: alt(true),
-    });
-    await gesture({
-      nodes: [CHILD],
-      gesture: { kind: "translate" },
-      deltas: [
-        [20, 0],
-        [30, 0],
-        [40, 0],
-      ],
-      mods: [alt(true), alt(false), alt(true)],
-    });
-    expect(await model.dump()).toBe(before);
-    expect(
-      (
-        await gesture({
-          nodes: [FRAME],
-          gesture: { kind: "translate" },
-          deltas: [[5, 5]],
-        })
-      ).kind,
-    ).toBe("gestureCommitted");
   });
 });

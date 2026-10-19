@@ -147,11 +147,21 @@ function parseCombo(key: string): KeyCombo {
 export type KeyEventLike = Pick<
   KeyboardEvent,
   "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey"
->;
+> &
+  Partial<Pick<KeyboardEvent, "code">>;
+
+/** A letter or digit binding with Alt in it matches by the physical key
+ *  as well: on a Mac, Option changes `key` (Option+Shift+V types "◊"), so
+ *  InDesign's ⌥⇧⌘V and ⌥⇧⌘D would otherwise never match. */
+function codeMatches(combo: KeyCombo, event: KeyEventLike): boolean {
+  if (!combo.alt || !event.code || !/^[a-z0-9]$/.test(combo.key)) return false;
+  const code = event.code.toLowerCase();
+  return code === `key${combo.key}` || code === `digit${combo.key}`;
+}
 
 function eventMatches(combo: KeyCombo, event: KeyEventLike): boolean {
   const eventKey = event.key.toLowerCase();
-  if (eventKey !== combo.key) return false;
+  if (eventKey !== combo.key && !codeMatches(combo, event)) return false;
   if (combo.cmd !== event.metaKey) return false;
   if (combo.ctrl !== event.ctrlKey) return false;
   if (combo.alt !== event.altKey) return false;

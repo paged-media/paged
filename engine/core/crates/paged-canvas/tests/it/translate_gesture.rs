@@ -427,21 +427,17 @@ fn alt_translate_duplicates_instead_of_moving() {
     .expect("update");
     let outcome = m.commit_gesture(h).expect("commit");
 
-    // Commit op is an InsertNode (or a Batch containing one).
+    // tf1 is threaded, which a whole copy refuses: the drag keeps the
+    // old drag-a-copy (sharing the story), its id off the document's line.
     assert!(matches!(
         outcome.applied.op,
         paged_mutate::Operation::Batch { .. } | paged_mutate::Operation::InsertNode { .. }
     ));
-
-    // Original tf1 unchanged.
     assert_eq!(tf_bounds(&m, "tf1"), before_tf);
-    // One more text frame in the spread.
     assert_eq!(
         m.scene().spreads[0].spread.text_frames.len(),
         original_count + 1
     );
-    // Find the duplicate — it has the same first 3 letters of the
-    // source's id followed by "_dup_".
     let dup = m.scene().spreads[0]
         .spread
         .text_frames
@@ -449,7 +445,7 @@ fn alt_translate_duplicates_instead_of_moving() {
         .find(|f| {
             f.self_id
                 .as_deref()
-                .is_some_and(|s| s.starts_with("tf1_dup_"))
+                .is_some_and(|s| s != "tf1" && s.starts_with('u'))
         })
         .expect("found duplicate");
     assert!((dup.bounds.top - before_tf[0] - 25.0).abs() < 1e-3);

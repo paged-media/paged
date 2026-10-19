@@ -184,6 +184,9 @@ function useReported(
 
 const UNIT_SUFFIX: Record<string, string> = { percent: "%", deg: "°" };
 
+/** Length paths that stay in points whatever the document unit (ADR 245). */
+const POINT_PATH = /point.?size|font.?size|leading|baseline.?shift|weight/i;
+
 function leafValue(
   type: ShellValueType,
   widget: string,
@@ -677,6 +680,11 @@ export function PropertyField(props: PropertyFieldProps) {
     const suffix = UNIT_SUFFIX[type.unit];
     if (suffix) chrome.suffix = suffix;
   }
+  // ADR 245 — geometry follows the document unit; a type size, leading,
+  // baseline shift or weight keeps points, as InDesign's separate Type and
+  // Stroke units do.
+  if (widget === "length" && !chrome.unit && POINT_PATH.test(path))
+    chrome.unit = "pt";
   if (widget === "select" || widget === "segments") chrome.options = options;
   if (widget === "collection") {
     chrome.collectionName = props.collection;
