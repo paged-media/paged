@@ -190,6 +190,8 @@ export {
   useRegistries,
   type ShellRegistries,
 } from "./state/registries-context";
+// ADR 228: read a registry during render through a view of it.
+export { useRegistryView } from "./state/live";
 
 // ── Registry primitives ────────────────────────────────────────
 export {

@@ -17,6 +17,9 @@ platform/extensions/packages/plugin-api/src/catalog.json
 **/catalog.provenance.json
 # scripts/client-api-catalog.mjs --check
 apps/editor/packages/client/api-catalog.json
+# tooling/js/react-compiler-coverage.mjs (--write writes them, the check
+# compares them)
+**/compiler-coverage.json
 # vendored from the feature registry; that repository's sync --check
 apps/editor/scripts/feat-vocabulary.json
 # hand-kept public API listing, read by docs tooling and api-catalog.test.ts

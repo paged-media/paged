@@ -50,6 +50,7 @@ import {
   nativeKey,
   prettyKey,
   useRegistries,
+  useRegistryView,
   type PanelProps,
 } from "@paged-media/shell";
 
@@ -117,7 +118,11 @@ const AD_HOC: { key: string; what: string; where: string }[] = [
 ];
 
 export function KeyboardShortcutsPanel(_props: PanelProps) {
-  const { keybindings, commands } = useRegistries();
+  // Views of the registries (ADR 228): the table follows what bundles
+  // register after it first rendered.
+  const registries = useRegistries();
+  const keybindings = useRegistryView(registries.keybindings);
+  const commands = useRegistryView(registries.commands);
 
   const rows = useMemo(() => {
     const titles = new Map(commands.list().map((c) => [c.id, c.title]));

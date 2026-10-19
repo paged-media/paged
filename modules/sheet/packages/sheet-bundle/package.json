@@ -50,5 +50,8 @@
     "type": "git",
     "url": "git+https://github.com/paged-media/paged.git",
     "directory": "modules/sheet/packages/sheet-bundle"
+  },
+  "dependencies": {
+    "@paged-media/react-live": "workspace:*"
   }
 }

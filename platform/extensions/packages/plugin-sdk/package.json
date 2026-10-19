@@ -11,7 +11,7 @@
   "scripts": {
     "typecheck": "bun check -p tsconfig.json",
     "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts",
-    "build": "rm -rf dist && bun build src/index.ts src/gesture-kit.ts --outdir dist --format esm --target node --packages external && tsc -p tsconfig.build.json",
+    "build": "bun scripts/build.mjs",
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
@@ -26,13 +26,15 @@
     }
   },
   "devDependencies": {
+    "@babel/core": "catalog:",
     "@paged-media/canvas-wasm": "workspace:*",
+    "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
+    "babel-plugin-react-compiler": "catalog:",
     "fast-check": "^4.10.2",
     "react": "catalog:",
-    "typescript": "catalog:",
-    "@types/bun": "catalog:"
+    "typescript": "catalog:"
   },
   "description": "The Paged plugin runtime: loadBundle, the in-process BundleHost adapter, the gesture kit, and version negotiation; and the paged-plugin CLI (validate a manifest, stamp and host its wasm).",
   "license": "AGPL-3.0-only OR LicenseRef-PMEL",

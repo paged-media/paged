@@ -32,6 +32,7 @@ import { createPortal } from "react-dom";
 import { applicabilityOf, applicabilityStyle } from "./applicability";
 
 import { useRegistries } from "../state/registries-context";
+import { useRegistryView } from "../state/live";
 import { useEditContextStack } from "../state/edit-context-stack";
 import { VIEW_TOOL_IDS, useTool } from "../state/tool-context";
 import { Icon, hasIcon } from "../icons";
@@ -250,26 +251,20 @@ export function ToolRail({
    *  no tool is treated as a plugin's (nothing is hidden). */
   hostToolIds?: ReadonlySet<string>;
 }) {
-  const { tools, editContexts: contextRegistry } = useRegistries();
+  const registries = useRegistries();
   const { effectiveTool, setBaseTool } = useTool();
 
   // Re-derive when the tool or edit-context registry changes (bundles
-  // add/remove tools; a context's `toolIds` decide undeclared clusters).
-  const [version, setVersion] = useState(0);
-  useEffect(() => {
-    const bump = () => setVersion((n) => n + 1);
-    const subs = [tools.onChange(bump), contextRegistry.onChange(bump)];
-    return () => subs.forEach((s) => s.dispose());
-  }, [tools, contextRegistry]);
+  // add/remove tools; a context's `toolIds` decide undeclared clusters):
+  // both are read through views that change with their contents
+  // (state/live.ts, ADR 228).
+  const tools = useRegistryView(registries.tools);
+  const contextRegistry = useRegistryView(registries.editContexts);
 
-  const sections = useMemo(
-    () => deriveSections(tools.groups()),
-    // `version` bumps on every registry change so the model re-derives.
-    [tools, version],
-  );
+  const sections = useMemo(() => deriveSections(tools.groups()), [tools]);
   const clusters = useMemo(
     () => deriveClusters(sections, contextRegistry.list()),
-    [sections, contextRegistry, version],
+    [sections, contextRegistry],
   );
   const clusterOf = useMemo(() => {
     const m = new Map<ToolGroupId, string>();
@@ -405,8 +400,7 @@ export function ToolRail({
     for (const ctx of contextRegistry.list())
       for (const id of ctx.toolIds ?? []) if (!hostToolIds.has(id)) ids.add(id);
     return ids;
-    // `version` bumps when a bundle registers or drops a context.
-  }, [hostToolIds, contextRegistry, version]);
+  }, [hostToolIds, contextRegistry]);
 
   const slotVisible = (slot: SlotModel): boolean => {
     if (slot.members.some((m) => m.id === effectiveTool)) return true;

@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import { type CSSProperties } from "react";
+import { useSyncExternalStore, type CSSProperties } from "react";
 
 import { useToolSettings } from "../state/tool-settings-context";
 import type { ToolOptionField, ToolOptionsSpec } from "../tools/tool-options";
@@ -49,7 +49,13 @@ export function ToolOptionsPopover({
 
 function Field({ toolId, field }: { toolId: string; field: ToolOptionField }) {
   const settings = useToolSettings();
-  const current = settings.getValue(toolId, field.key);
+  // The store's accessors are stable while its values change, so the value
+  // is read through a subscription: a field shows what was last written,
+  // and a memo over it (the React Compiler's, ADR 228) follows.
+  const current = useSyncExternalStore(
+    (onChange) => settings.subscribe(toolId, onChange),
+    () => settings.getValue(toolId, field.key),
+  );
 
   if (field.kind === "number") {
     const value = typeof current === "number" ? current : (field.min ?? 0);

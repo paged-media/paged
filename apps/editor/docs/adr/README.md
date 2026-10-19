@@ -43,6 +43,7 @@ and 024 predate that scheme and keep their numbers. Records 200–217 were writt
 | [225](225-the-local-library.md) | The local library: open is an import, save is a version | Proposed 2026-10-17 |
 | [226](226-contribution-types-have-one-definition.md) | Contribution types have one definition: the contract, extended by the shell | Accepted 2026-10-18 |
 | [227](227-surface-conformance.md) | Surface conformance: a surface counts as tested when a test asserts it under covers() | Accepted 2026-10-19 |
+| [228](228-react-compiler.md) | The React Compiler compiles every first-party React source | Accepted 2026-10-19 |
 
 Decisions made in other repositories that this editor's code rests on are listed in
 [`../README.md`](../README.md). Comments in the source also cite ADR 025 (the journal) and

@@ -41,5 +41,8 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "typescript": "catalog:"
+  },
+  "dependencies": {
+    "@paged-media/react-live": "workspace:*"
   }
 }

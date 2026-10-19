@@ -41,6 +41,7 @@ import {
   useDocument,
   useDocumentMeta,
   useRegistries,
+  useRegistryView,
   type PanelProps,
 } from "@paged-media/shell";
 
@@ -94,7 +95,7 @@ export function OutputsPanel(_props: PanelProps) {
   // K-2 / S-06 — plugin-registered exporters surface as one-click
   // outputs here (the host owns blob→download). The Export Center is the
   // one place documents AND plugin-contributed outputs are exported.
-  const { exporters } = useRegistries();
+  const exporters = useRegistryView(useRegistries().exporters);
   const pluginExporters = exporters.list();
   const [exportPhase, setExportPhase] = useState<{
     id: string;
