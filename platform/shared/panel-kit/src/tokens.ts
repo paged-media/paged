@@ -44,6 +44,20 @@ export const color = {
   primary: "var(--pg-primary, hsl(263 73% 43%))",
   /** Text on the primary action. */
   primaryFg: "var(--pg-primary-fg, #fafafa)",
+  /** The primary's tint: a selected row, an active chip. */
+  primarySoft: "var(--pg-primary-soft, hsl(263 73% 96%))",
+  /** A raised surface: a dialog, a popover. */
+  elevated: "var(--elevated, #ffffff)",
+} as const;
+
+/** The editor chrome's neutrals, where a panel draws chrome. */
+export const chrome = {
+  /** A divider between sections. */
+  divider: "var(--chrome-divider, #d4d4d8)",
+  /** A chrome hairline. */
+  border: "var(--chrome-border, #dddddd)",
+  /** A header or tab-strip background. */
+  panelBg: "var(--chrome-panel-bg, #fafafa)",
 } as const;
 
 /** The status signals: the outcome of an action, a finding, a state. */
@@ -65,4 +79,22 @@ export type Tone = keyof typeof status;
 export const font = {
   sans: "var(--font-sans, sans-serif)",
   mono: "var(--font-mono, monospace)",
+  /** The letter spacing of uppercase labels. */
+  trackingWide: "var(--tracking-wide, 0.14em)",
+} as const;
+
+/** The spacing rhythm. */
+export const space = {
+  1: "var(--space-1, 4px)",
+  2: "var(--space-2, 8px)",
+  3: "var(--space-3, 12px)",
+  4: "var(--space-4, 16px)",
+} as const;
+
+/** Corner radii. */
+export const radius = {
+  sm: "var(--radius-sm, 4px)",
+  md: "var(--radius-md, 6px)",
+  lg: "var(--radius-lg, 8px)",
+  full: "var(--radius-full, 999px)",
 } as const;

@@ -54,6 +54,7 @@ import {
   previewBundle,
   pullWorkerJournal,
 } from "../journal-sink";
+import { color, Disclosure, font, radius, space } from "@paged-media/panel-kit";
 
 const DOT: Record<JournalSeverity, string> = {
   error: "var(--status-error)",
@@ -63,15 +64,15 @@ const DOT: Record<JournalSeverity, string> = {
 };
 
 const kicker: React.CSSProperties = {
-  font: "700 10px var(--font-sans, sans-serif)",
-  letterSpacing: "var(--tracking-wide, 0.14em)",
+  font: `700 10px ${font.sans}`,
+  letterSpacing: font.trackingWide,
   textTransform: "uppercase",
   color: "var(--pg-muted-fg)",
-  margin: "0 0 var(--space-2, 8px)",
+  margin: `0 0 ${space[2]}`,
 };
 
 const mono: React.CSSProperties = {
-  font: "11px/1.5 var(--font-mono, monospace)",
+  font: `11px/1.5 ${font.mono}`,
   fontVariantNumeric: "tabular-nums",
 };
 
@@ -132,8 +133,8 @@ export function JournalPanel() {
     <div
       data-journal-panel
       style={{
-        padding: "var(--space-3, 12px)",
-        font: "12px var(--font-sans, sans-serif)",
+        padding: space[3],
+        font: `12px ${font.sans}`,
         color: "var(--pg-fg)",
       }}
     >
@@ -170,8 +171,8 @@ export function JournalPanel() {
               ...mono,
               background: "transparent",
               color: "var(--pg-fg)",
-              border: "1px solid var(--border, #2a2a2a)",
-              borderRadius: "var(--radius-sm, 4px)",
+              border: `1px solid ${color.border}`,
+              borderRadius: radius.sm,
               padding: "2px 4px",
             }}
           >
@@ -193,8 +194,8 @@ export function JournalPanel() {
               cursor: "pointer",
               background: "transparent",
               color: "var(--pg-fg)",
-              border: "1px solid var(--border, #2a2a2a)",
-              borderRadius: "var(--radius-sm, 4px)",
+              border: `1px solid ${color.border}`,
+              borderRadius: radius.sm,
               padding: "2px 8px",
             }}
           >
@@ -247,7 +248,7 @@ function JournalRow({ entry }: { entry: JournalEntry }) {
       style={{
         display: "flex",
         alignItems: "baseline",
-        gap: "var(--space-2, 8px)",
+        gap: space[2],
         padding: "3px 2px",
         ...mono,
       }}
@@ -257,7 +258,7 @@ function JournalRow({ entry }: { entry: JournalEntry }) {
         style={{
           width: 7,
           height: 7,
-          borderRadius: "var(--radius-full, 999px)",
+          borderRadius: radius.full,
           background: DOT[entry.severity],
           flex: "none",
           transform: "translateY(1px)",
@@ -342,9 +343,9 @@ function UncapturedSection({
     <section
       data-journal-uncaptured
       style={{
-        marginTop: "var(--space-4, 16px)",
-        paddingTop: "var(--space-3, 12px)",
-        borderTop: "1px solid var(--border, #2a2a2a)",
+        marginTop: space[4],
+        paddingTop: space[3],
+        borderTop: `1px solid ${color.border}`,
       }}
     >
       <div style={kicker}>What this cannot see</div>
@@ -383,13 +384,11 @@ function UncapturedSection({
         </ul>
       )}
 
-      <details data-journal-blindspots>
-        <summary
-          style={{ ...mono, cursor: "pointer", color: "var(--pg-muted-fg)" }}
-        >
-          {KNOWN_BLIND_SPOTS.length} structural blind spots (always present, by
-          design)
-        </summary>
+      <Disclosure
+        data-journal-blindspots
+        summary={`${KNOWN_BLIND_SPOTS.length} structural blind spots (always present, by design)`}
+        summaryStyle={{ ...mono, color: "var(--pg-muted-fg)" }}
+      >
         <ul
           style={{
             listStyle: "none",
@@ -413,7 +412,7 @@ function UncapturedSection({
             </li>
           ))}
         </ul>
-      </details>
+      </Disclosure>
     </section>
   );
 }
@@ -452,7 +451,7 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
         display: "grid",
         placeItems: "center",
         background: "rgba(0,0,0,0.6)",
-        font: "13px/1.5 var(--font-sans, system-ui, sans-serif)",
+        font: `13px/1.5 ${font.sans}`,
       }}
     >
       <div
@@ -466,10 +465,10 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
           display: "flex",
           flexDirection: "column",
           padding: 20,
-          borderRadius: "var(--radius-lg, 10px)",
-          border: "1px solid var(--border, #2a2a2a)",
-          background: "var(--elevated, var(--background, #161616))",
-          color: "var(--fg, #e7e7e7)",
+          borderRadius: radius.lg,
+          border: `1px solid ${color.border}`,
+          background: color.elevated,
+          color: color.fg,
           boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
         }}
       >
@@ -479,7 +478,7 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
         >
           Export journal bundle
         </h2>
-        <p style={{ margin: "0 0 12px", color: "var(--muted-fg, #9a9a9a)" }}>
+        <p style={{ margin: "0 0 12px", color: color.mutedFg }}>
           {bundle.counters.recorded} entries. Nothing has been sent anywhere —
           this writes a file to your machine. Below is exactly what it will
           contain.
@@ -495,7 +494,7 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
             />
             <span>
               Include crash stack traces
-              <span style={{ color: "var(--muted-fg, #9a9a9a)" }}>
+              <span style={{ color: color.mutedFg }}>
                 {" "}
                 — stack traces usually contain file paths from your disk.
               </span>
@@ -510,7 +509,7 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
             />
             <span>
               Include document shape
-              <span style={{ color: "var(--muted-fg, #9a9a9a)" }}>
+              <span style={{ color: color.mutedFg }}>
                 {" "}
                 — page/story counts and font names. No document text.
               </span>
@@ -527,9 +526,9 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
             overflow: "auto",
             margin: "0 0 12px",
             padding: 10,
-            background: "var(--background, #0f0f0f)",
-            border: "1px solid var(--border, #2a2a2a)",
-            borderRadius: "var(--radius-sm, 4px)",
+            background: color.bg,
+            border: `1px solid ${color.border}`,
+            borderRadius: radius.sm,
             whiteSpace: "pre",
           }}
         >
@@ -551,7 +550,7 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
             onClick={() => {
               void exportJournalBundleAsync(options).then(onClose);
             }}
-            style={{ ...buttonStyle, borderColor: "var(--accent, #6f9)" }}
+            style={{ ...buttonStyle, borderColor: color.primary }}
           >
             Save file
           </button>
@@ -562,12 +561,12 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
 }
 
 const buttonStyle: React.CSSProperties = {
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
   cursor: "pointer",
   background: "transparent",
-  color: "var(--fg, #e7e7e7)",
-  border: "1px solid var(--border, #2a2a2a)",
-  borderRadius: "var(--radius-sm, 4px)",
+  color: color.fg,
+  border: `1px solid ${color.border}`,
+  borderRadius: radius.sm,
   padding: "5px 12px",
 };
 

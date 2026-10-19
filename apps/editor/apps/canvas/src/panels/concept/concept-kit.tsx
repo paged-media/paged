@@ -24,8 +24,14 @@
 // top and the kit's "Target ·" end-state footnote pinned below —
 // the roadmap reads honestly, nothing fake-interactive.
 
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
+import {
+  FieldInput,
+  LabelledBy,
+  Segment,
+  useFieldName,
+} from "@paged-media/panel-kit";
 import { Icon, PanelTarget, StatusBadge } from "@paged-media/shell";
 import { KitSelect } from "@paged-media/ui";
 
@@ -70,10 +76,14 @@ export function Row({
   label: string;
   children: ReactNode;
 }) {
+  // The label names the row's controls (the panel kit's LabelledBy).
+  const labelId = useId();
   return (
     <div className="grid grid-cols-[92px_1fr] items-center gap-2">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      {children}
+      <span id={labelId} className="text-xs text-muted-foreground">
+        {label}
+      </span>
+      <LabelledBy id={labelId}>{children}</LabelledBy>
     </div>
   );
 }
@@ -101,7 +111,7 @@ export function SeamNum({ value, icon }: { value: string; icon?: string }) {
           <Icon name={icon} size={13} />
         </span>
       )}
-      <input
+      <FieldInput
         disabled
         value={value}
         readOnly
@@ -126,11 +136,10 @@ export function SeamSeg({
       data-seam
     >
       {options.map((o, i) => (
-        <button
+        <Segment
           key={o}
-          type="button"
+          pressed={o === active}
           disabled
-          data-active={o === active ? "true" : "false"}
           className="flex-1 text-xs h-[27px] border-0"
           style={{
             borderRight:
@@ -142,18 +151,21 @@ export function SeamSeg({
           }}
         >
           {o}
-        </button>
+        </Segment>
       ))}
     </div>
   );
 }
 
 export function SeamSwitch({ on }: { on?: boolean }) {
+  // Named by its row's label.
+  const named = useFieldName();
   return (
     <button
       type="button"
       role="switch"
       aria-checked={!!on}
+      {...named}
       disabled
       data-seam
       className="relative w-[30px] h-[17px] rounded-full border-0 opacity-55"

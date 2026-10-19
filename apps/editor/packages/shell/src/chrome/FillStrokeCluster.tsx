@@ -19,6 +19,7 @@
 
 import {
   useEffect,
+  useEffectEvent,
   useMemo,
   useRef,
   useState,
@@ -41,6 +42,7 @@ import {
   type FillStrokeWell,
 } from "../state/formatting-affects-context";
 import { contentSelectionInactive } from "../state/commands/tool-commands";
+import { IconButton } from "@paged-media/panel-kit";
 
 // Concept 1 (T3) — the fill/stroke/apply foot cluster. NOT a tool: a
 // small composition over Concept 2's colour model. The wells read +
@@ -82,7 +84,7 @@ export function FillStrokeCluster() {
 
   // Fill path follows the J toggle (container frame vs. the text
   // inside it); stroke stays frame-level (text stroke isn't a path).
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  // eslint-disable-next-line no-restricted-syntax -- handed to a hook that compares it (ADR 229)
   const fillBinding = useMemo(
     () =>
       affects === "text"
@@ -102,7 +104,7 @@ export function FillStrokeCluster() {
           },
     [affects],
   );
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  // eslint-disable-next-line no-restricted-syntax -- handed to a hook that compares it (ADR 229)
   const strokeBinding = useMemo(
     () => ({
       value: {
@@ -182,12 +184,15 @@ export function FillStrokeCluster() {
 
   // Remember the last solid colour / gradient applied, for the
   // `[colour]` / `[gradient]` buttons.
+  // The gradient is state: the [gradient] chip renders its stops.
   const lastSolid = useRef<string | null>(null);
-  const lastGradient = useRef<string | null>(null);
+  const [lastGradient, setLastGradient] = useState<string | null>(null);
+  if (fillRef?.startsWith("Gradient/") && fillRef !== lastGradient) {
+    setLastGradient(fillRef);
+  }
   useEffect(() => {
-    if (!fillRef) return;
-    if (fillRef.startsWith("Gradient/")) lastGradient.current = fillRef;
-    else lastSolid.current = fillRef;
+    if (fillRef && !fillRef.startsWith("Gradient/"))
+      lastSolid.current = fillRef;
   }, [fillRef]);
 
   // Editor-ops — the gradient list backs the `[gradient]` button
@@ -216,7 +221,7 @@ export function FillStrokeCluster() {
   // ACTUAL stops of its apply target (protocol 25's gradientDetail)
   // instead of a generic two-tone face.
   const [chipStops, setChipStops] = useState<RampStop[] | null>(null);
-  const chipTarget = lastGradient.current ?? gradients[0]?.selfId ?? null;
+  const chipTarget = lastGradient ?? gradients[0]?.selfId ?? null;
   useEffect(() => {
     let cancelled = false;
     if (!chipTarget) {
@@ -255,7 +260,7 @@ export function FillStrokeCluster() {
   const apply = (id: string | null) => applyTo(activeWell, id);
 
   const applyGradient = () => {
-    const id = lastGradient.current ?? gradients[0]?.selfId ?? null;
+    const id = lastGradient ?? gradients[0]?.selfId ?? null;
     if (id) apply(id);
   };
 
@@ -292,19 +297,21 @@ export function FillStrokeCluster() {
   // when the document has no Black swatch). Resolved lazily so a D
   // press right after document load doesn't race the swatches fetch.
   const blackId = useRef<string | null>(null);
-  const resolveBlack = async (): Promise<string | null> => {
-    if (blackId.current) return blackId.current;
-    try {
-      const list = await client.collection<SwatchSummary>("swatches");
-      blackId.current = list.find((s) => /black/i.test(s.name))?.selfId ?? null;
-    } catch {
-      /* keep null — stroke stays untouched */
-    }
-    return blackId.current;
+  const resolveBlack = (): Promise<string | null> => {
+    if (blackId.current) return Promise.resolve(blackId.current);
+    return client.collection<SwatchSummary>("swatches").then(
+      (list) => {
+        blackId.current =
+          list.find((s) => /black/i.test(s.name))?.selfId ?? null;
+        return blackId.current;
+      },
+      // keep null — stroke stays untouched
+      () => blackId.current,
+    );
   };
+  const prefetchBlack = useEffectEvent(() => void resolveBlack());
   useEffect(() => {
-    void resolveBlack();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    prefetchBlack();
   }, [client]);
 
   const applyDefault = () => {
@@ -339,13 +346,10 @@ export function FillStrokeCluster() {
 
   // X / D / J chrome keys — registered HERE (not the tool class) so the
   // handlers close over the live bindings; text-suppressed like tool
-  // shortcuts. Refs keep the registered handlers current.
-  const swapRef = useRef(swap);
-  swapRef.current = swap;
-  const defaultRef = useRef(applyDefault);
-  defaultRef.current = applyDefault;
-  const toggleAffectsRef = useRef(toggleAffects);
-  toggleAffectsRef.current = toggleAffects;
+  // shortcuts. Effect events keep the registered handlers current.
+  const onSwap = useEffectEvent(() => swap());
+  const onDefault = useEffectEvent(() => applyDefault());
+  const onToggleAffects = useEffectEvent(() => toggleAffects());
 
   const registries = useRegistries();
   useEffect(() => {
@@ -354,19 +358,19 @@ export function FillStrokeCluster() {
         id: "paged.fillStroke.swap",
         title: "Swap fill and stroke",
         category: "Color",
-        handler: () => swapRef.current(),
+        handler: () => onSwap(),
       }),
       registries.commands.register({
         id: "paged.fillStroke.default",
         title: "Default fill and stroke",
         category: "Color",
-        handler: () => defaultRef.current(),
+        handler: () => onDefault(),
       }),
       registries.commands.register({
         id: "paged.fillStroke.toggleAffects",
         title: "Toggle formatting affects container/text",
         category: "Color",
-        handler: () => toggleAffectsRef.current(),
+        handler: () => onToggleAffects(),
       }),
       registries.keybindings.register({
         key: "x",
@@ -430,17 +434,17 @@ export function FillStrokeCluster() {
 
       {/* Swap (X) + default (D). */}
       <div style={miniRow}>
-        <button
-          type="button"
+        <IconButton
+          label="Swap fill and stroke"
           title="Swap fill and stroke (X)"
           data-fs-swap
           onClick={swap}
           style={miniBtn}
         >
           ⇄
-        </button>
-        <button
-          type="button"
+        </IconButton>
+        <IconButton
+          label="Default fill and stroke"
           title="Default fill and stroke (D)"
           data-fs-default
           disabled={!fill.onCommit && !stroke.onCommit && !docDefaults}
@@ -448,13 +452,13 @@ export function FillStrokeCluster() {
           style={miniBtn}
         >
           ▣
-        </button>
+        </IconButton>
       </div>
 
       {/* Apply: [colour] · [gradient (disabled)] · [None]. */}
       <div style={miniRow}>
-        <button
-          type="button"
+        <IconButton
+          label="Apply last colour"
           title="Apply last colour"
           data-fs-apply-color
           disabled={!canApply}
@@ -466,7 +470,7 @@ export function FillStrokeCluster() {
           }}
         >
           ◼
-        </button>
+        </IconButton>
         <button
           type="button"
           title={
@@ -501,8 +505,8 @@ export function FillStrokeCluster() {
       </div>
 
       {/* J — formatting affects container vs. text. */}
-      <button
-        type="button"
+      <IconButton
+        label={`Formatting affects ${affects}`}
         title={`Formatting affects: ${affects} (J)`}
         data-fs-affects={affects}
         onClick={toggleAffects}
@@ -519,7 +523,7 @@ export function FillStrokeCluster() {
         }}
       >
         {affects === "text" ? "T" : "□"}
-      </button>
+      </IconButton>
 
       {!canApply && (
         <div style={hintStyle} title="Waiting for the document to load">

@@ -41,7 +41,14 @@ import {
   type ReactElement,
 } from "react";
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
-import { About, color, Disclosure, font } from "@paged-media/panel-kit";
+import {
+  About,
+  color,
+  Disclosure,
+  font,
+  radius,
+  space,
+} from "@paged-media/panel-kit";
 
 import type { BundleHost } from "@paged-media/plugin-api";
 import {
@@ -76,23 +83,23 @@ import {
 // ---------------------------------------------------------------- styles
 
 const kicker: CSSProperties = {
-  font: "700 10px var(--font-sans, sans-serif)",
-  letterSpacing: "var(--tracking-wide, 0.14em)",
+  font: `700 10px ${font.sans}`,
+  letterSpacing: font.trackingWide,
   textTransform: "uppercase",
   color: "var(--pg-muted-fg)",
-  margin: "0 0 var(--space-2, 8px)",
+  margin: `0 0 ${space[2]}`,
 };
 
 const note: CSSProperties = {
-  margin: "var(--space-3, 12px) 0 0",
-  font: "10px/1.5 var(--font-sans, sans-serif)",
+  margin: `${space[3]} 0 0`,
+  font: `10px/1.5 ${font.sans}`,
   color: "var(--pg-muted-fg)",
 };
 
 const editorInput: CSSProperties = {
   position: "absolute",
   boxSizing: "border-box",
-  font: "12px var(--font-mono, monospace)",
+  font: `12px ${font.mono}`,
   color: "var(--pg-fg)",
   background: "var(--pg-bg)",
   border: "1px solid var(--pg-primary)",
@@ -105,7 +112,7 @@ const editorInput: CSSProperties = {
 const formulaBarRow: CSSProperties = {
   display: "flex",
   alignItems: "stretch",
-  gap: "var(--space-1, 4px)",
+  gap: space[1],
   position: "relative",
 };
 
@@ -115,21 +122,21 @@ const cellRefBadge: CSSProperties = {
   justifyContent: "center",
   minWidth: 44,
   padding: "0 6px",
-  font: "11px var(--font-mono, monospace)",
+  font: `11px ${font.mono}`,
   color: "var(--pg-muted-fg)",
-  background: "var(--pg-subtle, var(--pg-bg))",
+  background: color.muted,
   border: "1px solid var(--pg-border)",
-  borderRadius: "var(--radius-sm, 4px)",
+  borderRadius: radius.sm,
 };
 
 const formulaInput: CSSProperties = {
   flex: 1,
   boxSizing: "border-box",
-  font: "12px var(--font-mono, monospace)",
+  font: `12px ${font.mono}`,
   color: "var(--pg-fg)",
   background: "var(--pg-bg)",
   border: "1px solid var(--pg-border)",
-  borderRadius: "var(--radius-sm, 4px)",
+  borderRadius: radius.sm,
   padding: "4px 6px",
   outline: "none",
 };
@@ -147,7 +154,7 @@ const completionList: CSSProperties = {
   overflowY: "auto",
   background: "var(--pg-bg)",
   border: "1px solid var(--pg-border)",
-  borderRadius: "var(--radius-sm, 4px)",
+  borderRadius: radius.sm,
   boxShadow: "var(--shadow-md, 0 4px 12px rgba(0,0,0,0.18))",
 };
 
@@ -627,7 +634,7 @@ export function makeGridPanel(
         <div
           ref={rootRef}
           data-sheet-panel="grid"
-          style={{ padding: "var(--space-3, 12px)" }}
+          style={{ padding: space[3] }}
         >
           <div style={kicker}>Grid</div>
           <p data-grid-empty style={{ ...note, marginTop: 0 }}>
@@ -640,7 +647,7 @@ export function makeGridPanel(
               type="button"
               data-grid-new
               onClick={() => void session.newWorkbook()}
-              style={{ ...scrollBtn, marginTop: "var(--space-2, 8px)" }}
+              style={{ ...scrollBtn, marginTop: space[2] }}
             >
               New blank workbook
             </button>
@@ -665,10 +672,10 @@ export function makeGridPanel(
         ref={rootRef}
         data-sheet-panel="grid"
         style={{
-          padding: "var(--space-3, 12px)",
+          padding: space[3],
           display: "flex",
           flexDirection: "column",
-          gap: "var(--space-2, 8px)",
+          gap: space[2],
         }}
       >
         <div style={kicker}>Grid</div>
@@ -716,15 +723,12 @@ export function makeGridPanel(
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
-                      gap: "var(--space-2, 8px)",
+                      gap: space[2],
                       width: "100%",
                       textAlign: "left",
-                      font: "12px var(--font-mono, monospace)",
+                      font: `12px ${font.mono}`,
                       color: "var(--pg-fg)",
-                      background:
-                        i === activeIdx
-                          ? "var(--pg-primary-subtle, var(--pg-subtle, transparent))"
-                          : "none",
+                      background: i === activeIdx ? color.primarySoft : "none",
                       border: "none",
                       padding: "4px 8px",
                       cursor: "pointer",
@@ -747,7 +751,7 @@ export function makeGridPanel(
           style={{
             display: "flex",
             flexWrap: "wrap",
-            gap: "var(--space-1, 4px)",
+            gap: space[1],
           }}
         >
           <input
@@ -818,7 +822,7 @@ export function makeGridPanel(
               data-find-status
               style={{
                 alignSelf: "center",
-                font: "11px var(--font-sans, sans-serif)",
+                font: `11px ${font.sans}`,
                 color: "var(--pg-muted-fg)",
               }}
             >
@@ -836,8 +840,8 @@ export function makeGridPanel(
             style={{
               display: "flex",
               flexWrap: "wrap",
-              gap: "var(--space-1, 4px)",
-              marginTop: "var(--space-1, 4px)",
+              gap: space[1],
+              marginTop: space[1],
             }}
           >
             <input
@@ -868,8 +872,8 @@ export function makeGridPanel(
             style={{
               display: "flex",
               flexWrap: "wrap",
-              gap: "var(--space-2, 8px)",
-              marginTop: "var(--space-1, 4px)",
+              gap: space[2],
+              marginTop: space[1],
             }}
           >
             {(
@@ -933,7 +937,7 @@ export function makeGridPanel(
               maxHeight: 160,
               overflowY: "auto",
               border: "1px solid var(--pg-border)",
-              borderRadius: "var(--radius-sm, 4px)",
+              borderRadius: radius.sm,
             }}
           >
             {hits.map((h, i) => (
@@ -946,7 +950,7 @@ export function makeGridPanel(
                     display: "block",
                     width: "100%",
                     textAlign: "left",
-                    font: "12px var(--font-sans, sans-serif)",
+                    font: `12px ${font.sans}`,
                     color: "var(--pg-fg)",
                     background: "none",
                     border: "none",
@@ -956,7 +960,7 @@ export function makeGridPanel(
                 >
                   <span
                     style={{
-                      fontFamily: "var(--font-mono, monospace)",
+                      fontFamily: font.mono,
                       fontSize: 11,
                     }}
                   >
@@ -975,7 +979,7 @@ export function makeGridPanel(
           style={{
             display: "flex",
             flexWrap: "wrap",
-            gap: "var(--space-1, 4px)",
+            gap: space[1],
           }}
         >
           <button
@@ -1022,7 +1026,7 @@ export function makeGridPanel(
             data-grid-origin
             style={{
               alignSelf: "center",
-              font: "11px var(--font-mono, monospace)",
+              font: `11px ${font.mono}`,
               color: "var(--pg-muted-fg)",
             }}
           >
@@ -1039,7 +1043,7 @@ export function makeGridPanel(
               sel ? "Copy the selected cells" : "Select cells to copy first"
             }
             onClick={() => void session.copySelection()}
-            style={{ ...scrollBtn, marginLeft: "var(--space-2, 8px)" }}
+            style={{ ...scrollBtn, marginLeft: space[2] }}
           >
             Copy
           </button>
@@ -1066,7 +1070,7 @@ export function makeGridPanel(
             role={notice.tone === "error" ? "alert" : "status"}
             style={{
               margin: 0,
-              font: "12px var(--font-sans, sans-serif)",
+              font: `12px ${font.sans}`,
               color:
                 notice.tone === "error"
                   ? "var(--status-error)"
@@ -1089,7 +1093,7 @@ export function makeGridPanel(
             maxWidth: "100%",
             height: hPx,
             border: "1px solid var(--pg-border)",
-            borderRadius: "var(--radius-sm, 4px)",
+            borderRadius: radius.sm,
             background: "var(--pg-bg)",
             overflow: "hidden",
           }}
@@ -1155,11 +1159,11 @@ export function makeGridPanel(
 }
 
 const scrollBtn: CSSProperties = {
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
   color: "var(--pg-fg)",
   background: "var(--pg-bg)",
   border: "1px solid var(--pg-border)",
-  borderRadius: "var(--radius-sm, 4px)",
+  borderRadius: radius.sm,
   padding: "2px 8px",
   cursor: "pointer",
 };

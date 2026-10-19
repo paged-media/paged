@@ -21,7 +21,15 @@
 // internal; importable by the built-ins and the editor, never by
 // platform/extensions). Record: docs/migration/shared-foundations.md, C10.
 
-export { color, font, status, type Tone } from "./tokens";
+export {
+  chrome,
+  color,
+  font,
+  radius,
+  space,
+  status,
+  type Tone,
+} from "./tokens";
 export {
   ARMED_TITLE,
   CONFIRM_MS,
@@ -52,7 +60,19 @@ export {
 export {
   IconButton,
   Segment,
+  Tab,
   type IconButtonProps,
   type SegmentProps,
+  type TabProps,
 } from "./controls";
+export {
+  FieldInput,
+  FieldSelect,
+  FieldTextarea,
+  LabelledBy,
+  NamedAs,
+  useFieldName,
+  useRowLabelId,
+  type FieldName,
+} from "./labels";
 export { humanize, refusalText } from "./text";

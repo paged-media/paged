@@ -76,6 +76,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useEffectEvent,
   type PropsWithChildren,
 } from "react";
 
@@ -137,16 +138,17 @@ export function useReportBindingSurface(
 ): void {
   const panelId = useContext(PanelIdContext);
   // Content identity: the arrays are rebuilt every render by their
-  // callers, so the effect keys off what is IN them, not the reference.
+  // callers, so the effect keys off what is IN them, not the reference,
+  // and records the arrays of the render it runs after.
   const key = `${collections.join(",")}|${paths.join(",")}`;
+  const surface = useEffectEvent(() => ({ collections, paths }));
   useEffect(() => {
     if (panelId === null) return;
     const token = Symbol("panel-binding-surface");
-    entries.set(token, { panelId, collections, paths });
+    entries.set(token, { panelId, ...surface() });
     return () => {
       entries.delete(token);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelId, key]);
 }
 

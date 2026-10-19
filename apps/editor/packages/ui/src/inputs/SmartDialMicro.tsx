@@ -30,6 +30,7 @@
 
 import {
   useEffect,
+  useEffectEvent,
   useId,
   useRef,
   useState,
@@ -116,20 +117,22 @@ export function SmartDialMicro({
 
   // Wheel steps need a non-passive listener (preventDefault).
   const dialRef = useRef<HTMLDivElement | null>(null);
+  // The step reads the dial's current value and handlers; the listener
+  // stays attached for as long as the dial is live.
+  const onWheel = useEffectEvent((e: WheelEvent) => {
+    e.preventDefault();
+    const m = e.shiftKey ? 0.1 : e.altKey ? 10 : 1;
+    const next = clamp(v + (e.deltaY < 0 ? m : -m));
+    onChange?.(next);
+    onCommit?.(next);
+  });
   useEffect(() => {
     const el = dialRef.current;
     if (!el || inert) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const m = e.shiftKey ? 0.1 : e.altKey ? 10 : 1;
-      const next = clamp(v + (e.deltaY < 0 ? m : -m));
-      onChange?.(next);
-      onCommit?.(next);
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inert, v, min, max]);
+    const listener = (e: WheelEvent) => onWheel(e);
+    el.addEventListener("wheel", listener, { passive: false });
+    return () => el.removeEventListener("wheel", listener);
+  }, [inert]);
 
   const grad = `paged-sd-grad-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 

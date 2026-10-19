@@ -81,6 +81,8 @@ import {
 import { useFollowedDraft, usePanelReload } from "./use-panel-reload";
 import {
   About,
+  color,
+  font,
   humanize,
   Refusal,
   useActionFeedback,
@@ -147,7 +149,7 @@ const rowStyle: React.CSSProperties = {
   alignItems: "center",
   gap: 6,
   padding: "3px 0",
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 const headerStyle: React.CSSProperties = {
   display: "flex",
@@ -155,31 +157,31 @@ const headerStyle: React.CSSProperties = {
   width: "100%",
   gap: 6,
   border: "none",
-  borderTop: "1px solid var(--pg-border, rgba(127,127,127,0.4))",
+  borderTop: `1px solid ${color.border}`,
   background: "none",
   cursor: "pointer",
   padding: "6px 0",
   textAlign: "left",
-  font: "11px var(--font-sans, sans-serif)",
+  font: `11px ${font.sans}`,
   textTransform: "uppercase",
   letterSpacing: "0.04em",
-  color: "var(--pg-fg, currentColor)",
+  color: color.fg,
 };
 const applyStyle: React.CSSProperties = {
   marginTop: 4,
   cursor: "pointer",
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 const mutedStyle: React.CSSProperties = {
   opacity: 0.6,
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 const inputStyle: React.CSSProperties = {
   width: 64,
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 const selectStyle: React.CSSProperties = {
-  font: "12px var(--font-sans, sans-serif)",
+  font: `12px ${font.sans}`,
 };
 
 /** "2 pt · butt · miter · limit 4" — what the selected element's own

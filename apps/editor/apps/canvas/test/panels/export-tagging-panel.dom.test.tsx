@@ -85,15 +85,12 @@ describe("Export Tagging", () => {
     expect(h.mutations(from)).toEqual([]);
   });
 
-  // The scope pair is a two-way toggle whose state lives only in colour
-  // and a data attribute; assistive technology cannot tell which is on.
-  test.failing(
-    "PN-213: the scope segments say which one is on (aria-pressed)",
-    async () => {
-      covers("panel:paged.export-tagging");
-      const h = await mount();
-      expect(scope(h, "Paragraph").getAttribute("aria-pressed")).toBe("true");
-      expect(scope(h, "Character").getAttribute("aria-pressed")).toBe("false");
-    },
-  );
+  // The scope pair is a two-way toggle: each segment says whether it is on
+  // with aria-pressed (the panel kit's Segment), beside its colour.
+  test("PN-213: the scope segments say which one is on (aria-pressed)", async () => {
+    covers("panel:paged.export-tagging");
+    const h = await mount();
+    expect(scope(h, "Paragraph").getAttribute("aria-pressed")).toBe("true");
+    expect(scope(h, "Character").getAttribute("aria-pressed")).toBe("false");
+  });
 });

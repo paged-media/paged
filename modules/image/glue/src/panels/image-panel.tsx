@@ -29,7 +29,14 @@
 import { Fragment, useState } from "react";
 import type { ReactNode } from "react";
 import { onDidChangeOf, useLive } from "@paged-media/react-live";
-import { About, Disclosure } from "@paged-media/panel-kit";
+import {
+  About,
+  color,
+  Disclosure,
+  font,
+  IconButton,
+  space,
+} from "@paged-media/panel-kit";
 
 import manifest from "../../manifest.json";
 
@@ -109,7 +116,7 @@ function Slider({
       <span
         style={{
           display: "flex",
-          gap: "var(--space-1, 4px)",
+          gap: space[1],
           alignItems: "center",
         }}
       >
@@ -158,7 +165,7 @@ function Num({
       title={title}
       disabled={disabled}
       onChange={(e) => onChange(Number(e.target.value))}
-      style={{ width, font: "11px var(--font-mono, monospace)" }}
+      style={{ width, font: `11px ${font.mono}` }}
       {...attrs}
     />
   );
@@ -167,7 +174,7 @@ function Num({
 /** A labelled row of compact numbers (the grid idiom's line). */
 function NumRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div style={{ ...row, gap: "var(--space-1, 4px)" }}>
+    <div style={{ ...row, gap: space[1] }}>
       <label style={{ flex: 1, minWidth: 0 }}>{label}</label>
       <span style={{ display: "flex", gap: 3 }}>{children}</span>
     </div>
@@ -195,7 +202,7 @@ function Gate({
         display: "flex",
         alignItems: "center",
         gap: 6,
-        font: "12px var(--font-sans, sans-serif)",
+        font: `12px ${font.sans}`,
       }}
     >
       <input
@@ -351,12 +358,7 @@ function CurveEditor({
         y2="0"
         stroke="rgba(127,127,127,0.3)"
       />
-      <path
-        d={line}
-        fill="none"
-        stroke="var(--pg-accent, #6ab0ff)"
-        strokeWidth="1.5"
-      />
+      <path d={line} fill="none" stroke={color.primary} strokeWidth="1.5" />
       {points.map((p, i) => {
         const s = toScreen(p);
         return (
@@ -365,7 +367,7 @@ function CurveEditor({
             cx={s[0]}
             cy={s[1]}
             r={5}
-            fill="var(--pg-accent, #6ab0ff)"
+            fill={color.primary}
             style={{ cursor: disabled ? "default" : "grab" }}
             onPointerDown={(e) => {
               if (disabled) return;
@@ -1301,15 +1303,15 @@ export function LayersSection({
                     >
                       {g.isolates ? "iso" : "pass"}
                     </button>
-                    <button
-                      type="button"
+                    <IconButton
+                      label="Dissolve group"
                       title="Dissolve this group (its layers stay)"
                       data-image-group-ungroup={g.id}
                       disabled={disabled}
                       onClick={() => onUngroup(g.id)}
                     >
                       ⌧
-                    </button>
+                    </IconButton>
                   </div>
                 ) : null;
               })()
@@ -1318,12 +1320,8 @@ export function LayersSection({
             data-image-layer-row={l.index}
             style={{
               ...row,
-              paddingLeft:
-                l.group !== null ? "var(--space-3, 12px)" : undefined,
-              background:
-                l.index === active
-                  ? "var(--pg-accent-soft, rgba(127,127,255,0.12))"
-                  : undefined,
+              paddingLeft: l.group !== null ? space[3] : undefined,
+              background: l.index === active ? color.primarySoft : undefined,
             }}
           >
             <span
@@ -1348,7 +1346,7 @@ export function LayersSection({
                 disabled={disabled}
                 onClick={() => onSelect(l.index)}
                 style={{
-                  font: "12px var(--font-sans, sans-serif)",
+                  font: `12px ${font.sans}`,
                   fontWeight: l.index === active ? 600 : 400,
                   background: "none",
                   border: "none",
@@ -1370,7 +1368,7 @@ export function LayersSection({
                 title="Blend mode"
                 onChange={(e) => onBlend(l.index, e.target.value)}
                 style={{
-                  font: "11px var(--font-sans, sans-serif)",
+                  font: `11px ${font.sans}`,
                   maxWidth: 96,
                 }}
               >
@@ -1448,40 +1446,44 @@ export function LayersSection({
                     disabled={disabled}
                     onChange={(e) => onMaskToggle(l.index, e.target.checked)}
                   />
-                  <button
-                    type="button"
+                  <IconButton
+                    label="Delete layer mask"
                     title="Delete this layer's mask (the coverage is lost)"
                     data-image-layer-mask-clear={l.index}
                     disabled={disabled}
                     onClick={() => onMaskClear(l.index)}
                   >
                     ⌫
-                  </button>
+                  </IconButton>
                 </>
               ) : (
                 <>
-                  <button
-                    type="button"
+                  <IconButton
+                    label="Selection to layer mask"
                     title="Make the current selection this layer's mask"
                     data-image-layer-mask-add={l.index}
                     disabled={disabled}
                     onClick={() => onMaskFromSelection(l.index)}
                   >
                     ⬚
-                  </button>
-                  <button
-                    type="button"
+                  </IconButton>
+                  <IconButton
+                    label="Add layer mask"
                     title="Add layer mask — reveal all (Alt-click: hide all)"
                     data-image-layer-mask-new={l.index}
                     disabled={disabled || !onAddMask}
                     onClick={(e) => onAddMask?.(l.index, !e.altKey)}
                   >
                     ◐
-                  </button>
+                  </IconButton>
                 </>
               )}
-              <button
-                type="button"
+              <IconButton
+                label={
+                  l.clipped
+                    ? "Release clipping mask"
+                    : "Clip to the layer below"
+                }
                 title={
                   l.clipped
                     ? "Clipped to the layer below — click to release"
@@ -1493,36 +1495,36 @@ export function LayersSection({
                 style={{ fontWeight: l.clipped ? 700 : undefined }}
               >
                 ⌐
-              </button>
-              <button
-                type="button"
+              </IconButton>
+              <IconButton
+                label="Move layer up"
                 title="Move up"
                 data-image-layer-up={l.index}
                 disabled={disabled || l.index === layers.length - 1}
                 onClick={() => onMove(l.index, l.index + 1)}
               >
                 ↑
-              </button>
-              <button
-                type="button"
+              </IconButton>
+              <IconButton
+                label="Move layer down"
                 title="Move down"
                 data-image-layer-down={l.index}
                 disabled={disabled || l.index === 0}
                 onClick={() => onMove(l.index, l.index - 1)}
               >
                 ↓
-              </button>
-              <button
-                type="button"
+              </IconButton>
+              <IconButton
+                label="Duplicate layer"
                 title="Duplicate"
                 data-image-layer-duplicate={l.index}
                 disabled={disabled}
                 onClick={() => onDuplicate(l.index)}
               >
                 ⧉
-              </button>
-              <button
-                type="button"
+              </IconButton>
+              <IconButton
+                label="Remove layer"
                 title={
                   multi
                     ? "Remove layer (Undo brings it back)"
@@ -1533,7 +1535,7 @@ export function LayersSection({
                 onClick={() => onRemove(l.index)}
               >
                 ✕
-              </button>
+              </IconButton>
             </span>
           </div>
         </Fragment>
@@ -1551,9 +1553,7 @@ export function LayersSection({
           </About>
         </div>
       ) : null}
-      <div
-        style={{ display: "flex", gap: 6, marginTop: "var(--space-1, 4px)" }}
-      >
+      <div style={{ display: "flex", gap: 6, marginTop: space[1] }}>
         <button
           type="button"
           title="Group the two layers below the active one"
@@ -1590,9 +1590,7 @@ export function LayersSection({
           Bake adjustments into layer
         </button>
       </div>
-      <div
-        style={{ display: "flex", gap: 6, marginTop: "var(--space-1, 4px)" }}
-      >
+      <div style={{ display: "flex", gap: 6, marginTop: space[1] }}>
         <button
           type="button"
           data-image-undo
@@ -1826,7 +1824,7 @@ export function makeImagePanel(session: ImageSession) {
     const machine = live.cropMachine();
 
     return (
-      <div style={{ padding: "var(--space-2, 8px)", fontSize: "12px" }}>
+      <div style={{ padding: space[2], fontSize: "12px" }}>
         <div style={panelTitle}>Image adjustments</div>
 
         {/* THE COMMIT BAR — sticky, so Apply, Reset and the status line
@@ -1838,7 +1836,7 @@ export function makeImagePanel(session: ImageSession) {
               display: "flex",
               flexWrap: "wrap",
               alignItems: "center",
-              gap: "var(--space-2, 8px)",
+              gap: space[2],
             }}
           >
             <button
@@ -1994,8 +1992,8 @@ export function makeImagePanel(session: ImageSession) {
         <div
           style={{
             display: "flex",
-            gap: "var(--space-2, 8px)",
-            marginTop: "var(--space-2, 8px)",
+            gap: space[2],
+            marginTop: space[2],
           }}
         >
           <button
@@ -2035,8 +2033,8 @@ export function makeImagePanel(session: ImageSession) {
             <div
               style={{
                 display: "flex",
-                gap: "var(--space-2, 8px)",
-                marginTop: "var(--space-1, 4px)",
+                gap: space[2],
+                marginTop: space[1],
               }}
             >
               <button
@@ -2250,9 +2248,7 @@ export function makeImagePanel(session: ImageSession) {
           onChange={(v) => setBase("vibrance", v)}
         />
 
-        <div style={{ ...kicker, marginTop: "var(--space-2, 8px)" }}>
-          Color balance
-        </div>
+        <div style={{ ...kicker, marginTop: space[2] }}>Color balance</div>
         <NumRow label="&nbsp;">
           <span
             style={{
@@ -2303,9 +2299,7 @@ export function makeImagePanel(session: ImageSession) {
           </NumRow>
         ))}
 
-        <div style={{ ...kicker, marginTop: "var(--space-2, 8px)" }}>
-          Photo filter
-        </div>
+        <div style={{ ...kicker, marginTop: space[2] }}>Photo filter</div>
         <div style={row}>
           <label htmlFor="pg-image-photofilter">Gel</label>
           <select
@@ -2366,9 +2360,7 @@ export function makeImagePanel(session: ImageSession) {
           }
         />
 
-        <div style={{ ...kicker, marginTop: "var(--space-2, 8px)" }}>
-          Channel mixer
-        </div>
+        <div style={{ ...kicker, marginTop: space[2] }}>Channel mixer</div>
         <NumRow label="&nbsp;">
           {["R", "G", "B", "+"].map((h) => (
             <span
@@ -2707,7 +2699,7 @@ export function makeImagePanel(session: ImageSession) {
             display: "flex",
             alignItems: "center",
             gap: 6,
-            font: "12px var(--font-sans, sans-serif)",
+            font: `12px ${font.sans}`,
           }}
         >
           <input
@@ -2730,7 +2722,7 @@ export function makeImagePanel(session: ImageSession) {
         <div
           style={{
             display: "flex",
-            gap: "var(--space-2, 8px)",
+            gap: space[2],
             flexWrap: "wrap",
           }}
         >
@@ -3152,7 +3144,7 @@ export function makeImagePanel(session: ImageSession) {
             display: "flex",
             alignItems: "center",
             gap: 6,
-            font: "12px var(--font-sans, sans-serif)",
+            font: `12px ${font.sans}`,
           }}
         >
           <input
@@ -3163,7 +3155,7 @@ export function makeImagePanel(session: ImageSession) {
             onChange={(e) =>
               setResizeW(Math.max(1, Number(e.target.value) | 0))
             }
-            style={{ width: 64, font: "11px var(--font-mono, monospace)" }}
+            style={{ width: 64, font: `11px ${font.mono}` }}
             disabled={disabled}
           />
           ×
@@ -3175,7 +3167,7 @@ export function makeImagePanel(session: ImageSession) {
             onChange={(e) =>
               setResizeH(Math.max(1, Number(e.target.value) | 0))
             }
-            style={{ width: 64, font: "11px var(--font-mono, monospace)" }}
+            style={{ width: 64, font: `11px ${font.mono}` }}
             disabled={disabled}
           />
           <select
@@ -3220,7 +3212,7 @@ export function makeImagePanel(session: ImageSession) {
                   display: "flex",
                   alignItems: "center",
                   gap: 6,
-                  font: "12px var(--font-sans, sans-serif)",
+                  font: `12px ${font.sans}`,
                   padding: "1px 0",
                 }}
               >
@@ -3251,7 +3243,7 @@ export function makeImagePanel(session: ImageSession) {
                   value={Math.round((l.opacity / 255) * 100)}
                   style={{
                     width: 52,
-                    font: "11px var(--font-mono, monospace)",
+                    font: `11px ${font.mono}`,
                   }}
                   title="Layer opacity (%)"
                   onChange={(e) =>
@@ -3261,8 +3253,8 @@ export function makeImagePanel(session: ImageSession) {
                     )
                   }
                 />
-                <button
-                  type="button"
+                <IconButton
+                  label="Remove layer from the PSD"
                   data-image-psd-remove
                   title="Remove layer (in the exported PSD)"
                   style={{
@@ -3274,14 +3266,14 @@ export function makeImagePanel(session: ImageSession) {
                   onClick={() => session.psdRemoveLayer(l.index)}
                 >
                   ✕
-                </button>
+                </IconButton>
               </div>
             ))}
             <p
               data-image-psd-note
               style={{
                 margin: "2px 0 0",
-                font: "10px/1.5 var(--font-sans, sans-serif)",
+                font: `10px/1.5 ${font.sans}`,
                 color: "var(--pg-muted-fg)",
               }}
             >
@@ -3295,7 +3287,7 @@ export function makeImagePanel(session: ImageSession) {
         <div
           style={{
             display: "flex",
-            gap: "var(--space-2, 8px)",
+            gap: space[2],
             alignItems: "flex-start",
           }}
         >
@@ -3363,8 +3355,8 @@ export function makeImagePanel(session: ImageSession) {
         <div
           style={{
             display: "flex",
-            gap: "var(--space-2, 8px)",
-            marginTop: "var(--space-1, 4px)",
+            gap: space[2],
+            marginTop: space[1],
           }}
         >
           <button
@@ -3394,7 +3386,7 @@ export function makeImagePanel(session: ImageSession) {
             Export Center was doing work the panel could do itself. The
             exporters remain the fallback for a host with no saver. */}
         <div style={sectionTitle}>Apply to file</div>
-        <div style={{ display: "flex", gap: "var(--space-2, 8px)" }}>
+        <div style={{ display: "flex", gap: space[2] }}>
           <button
             type="button"
             data-image-apply-to-file
@@ -3443,7 +3435,7 @@ export function makeImagePanel(session: ImageSession) {
             span/span shape: journeys read it by text. */}
         <Disclosure
           summary="Diagnostics"
-          style={{ ...note, marginTop: "var(--space-3, 12px)" }}
+          style={{ ...note, marginTop: space[3] }}
           data-image-diagnostics
         >
           <div style={row}>

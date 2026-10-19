@@ -38,6 +38,7 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 
 import type { PageId, WorkerToMain } from "@paged-media/client";
+import { createDebouncer } from "@paged-media/panel-kit";
 
 import { useCanvasClient } from "./canvas-client-context";
 import { useDocument } from "./document-context";
@@ -87,7 +88,9 @@ function startThumbnailQueue(
   queue: { current: ThumbnailQueue | null },
 ): () => void {
   const pending = new Set<PageId>();
-  let timer: ReturnType<typeof setTimeout> | null = null;
+  // A burst of dirty pages settles into one drain (the panel kit's
+  // trailing-edge debouncer).
+  const settle = createDebouncer(SETTLE_MS);
   let draining = false;
   let disposed = false;
 
@@ -146,11 +149,7 @@ function startThumbnailQueue(
 
   const schedule = (): void => {
     if (disposed) return;
-    if (timer != null) clearTimeout(timer);
-    timer = setTimeout(() => {
-      timer = null;
-      void drain();
-    }, SETTLE_MS);
+    settle.schedule(() => void drain());
   };
 
   queue.current = { pending, schedule };
@@ -164,7 +163,7 @@ function startThumbnailQueue(
   return () => {
     disposed = true;
     off();
-    if (timer != null) clearTimeout(timer);
+    settle.cancel();
     queue.current = null;
   };
 }

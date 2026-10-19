@@ -68,6 +68,7 @@ export function TableStylesPanel() {
           <span className="relative mb-3 inline-flex w-full">
             <select
               disabled
+              aria-label="Applied style"
               data-apply-select
               data-collection="tableStyles"
               className="h-[30px] w-full appearance-none rounded-[6px] border border-input bg-background pl-2.5 pr-7 text-[12.5px] opacity-55"

@@ -23,6 +23,19 @@
 // mount it disabled (honest seam) until that lands; the component
 // is already write-capable via `onChange` for that day.
 
+/** The cells' names, row-major. */
+const CELL_NAMES = [
+  "Top left",
+  "Top",
+  "Top right",
+  "Left",
+  "Center",
+  "Right",
+  "Bottom left",
+  "Bottom",
+  "Bottom right",
+] as const;
+
 /** Cell indices run row-major: 0 = top-left … 8 = bottom-right. */
 export function ReferencePointGrid({
   value = 0,
@@ -60,6 +73,7 @@ export function ReferencePointGrid({
             type="button"
             role="radio"
             aria-checked={on}
+            aria-label={CELL_NAMES[i]}
             disabled={inert}
             data-reference-cell={i}
             onClick={() => onChange?.(i)}

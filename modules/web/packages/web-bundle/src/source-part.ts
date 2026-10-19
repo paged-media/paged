@@ -55,6 +55,7 @@ import type {
   PluginMetadataEnvelope,
 } from "@paged-media/plugin-api";
 import { base64ToBytes, bytesToBase64 } from "@paged-media/helpers";
+import { refusalText } from "@paged-media/panel-kit";
 import {
   contentHash,
   isWebFrameEnvelope,
@@ -157,11 +158,9 @@ export function describeRefusal(error: unknown): string {
   if (error && typeof error === "object") {
     const m = (error as { message?: unknown }).message;
     if (typeof m === "string" && m.length > 0) return m;
-    try {
-      return JSON.stringify(error);
-    } catch {
-      // fall through
-    }
+    // An engine error in words (the panel kit's refusalText), never its
+    // JSON.
+    return refusalText(error);
   }
   return "the document refused the change";
 }

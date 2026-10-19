@@ -24,9 +24,12 @@ import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "bun:test";
 
 import {
+  chrome,
   color,
   createDebouncer,
   font,
+  radius,
+  space,
   humanize,
   refusalText,
   status,
@@ -65,6 +68,18 @@ describe("refusalText", () => {
       "Stroke miter limit does not apply to an oval.",
     );
     expect(refusalText(raw)).not.toContain("{");
+  });
+
+  // The draw commands log `<label>: rejected by engine: <the error's JSON>`.
+  it("reads an engine error behind words as the error", () => {
+    expect(
+      refusalText(
+        'Blend: rejected by engine: {"kind":"notImplemented","details":{"what":"frame mutation failed: property FrameFillColor is not supported on Group(\\"g1\\")"}}',
+      ),
+    ).toBe("Fill color does not apply to a group.");
+    expect(refusalText("Could not place {name} here")).toBe(
+      "Could not place {name} here.",
+    );
   });
 
   // PN-262: Intersect on a rectangle and an oval showed the variant name.
@@ -202,8 +217,11 @@ describe("tokens", () => {
   it("every token names a variable and exactly one fallback", () => {
     for (const value of [
       ...Object.values(color),
+      ...Object.values(chrome),
       ...Object.values(status),
       ...Object.values(font),
+      ...Object.values(space),
+      ...Object.values(radius),
     ]) {
       expect(value).toMatch(/^var\(--[a-z0-9-]+, [^,]+\)$/);
     }

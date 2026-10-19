@@ -14,17 +14,9 @@
       "count": 1
     },
     "react-hooks/refs": {
-      "count": 7
+      "count": 4
     },
     "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
-  "apps/editor/apps/canvas/src/panels/canvas-panel.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    },
-    "react-hooks/refs": {
       "count": 1
     }
   },
@@ -91,11 +83,6 @@
       "count": 1
     }
   },
-  "apps/editor/apps/canvas/src/panels/schema-list-demo-panel.tsx": {
-    "react-hooks/refs": {
-      "count": 1
-    }
-  },
   "apps/editor/apps/canvas/src/panels/schema-sections.tsx": {
     "react-hooks/set-state-in-effect": {
       "count": 1
@@ -127,31 +114,6 @@
   "apps/editor/apps/canvas/src/playground/PlaygroundController.tsx": {
     "react-hooks/set-state-in-effect": {
       "count": 1
-    }
-  },
-  "apps/editor/apps/canvas/src/ui/ViewportCanvas.tsx": {
-    "react-hooks/exhaustive-deps": {
-      "count": 5
-    }
-  },
-  "apps/editor/apps/canvas/src/ui/useAnimatedCamera.ts": {
-    "react-hooks/refs": {
-      "count": 2
-    }
-  },
-  "apps/editor/apps/canvas/src/ui/useGestureSpine.ts": {
-    "react-hooks/refs": {
-      "count": 5
-    }
-  },
-  "apps/editor/apps/canvas/src/ui/usePathEditMode.ts": {
-    "react-hooks/refs": {
-      "count": 1
-    }
-  },
-  "apps/editor/apps/canvas/src/ui/useTextEditing.ts": {
-    "react-hooks/refs": {
-      "count": 5
     }
   },
   "apps/editor/apps/devtools/src/App.tsx": {
@@ -205,9 +167,6 @@
     }
   },
   "apps/editor/packages/shell/src/chrome/FillStrokeCluster.tsx": {
-    "react-hooks/refs": {
-      "count": 7
-    },
     "react-hooks/set-state-in-effect": {
       "count": 2
     }
@@ -215,11 +174,6 @@
   "apps/editor/packages/shell/src/chrome/ToolRail.tsx": {
     "react-hooks/set-state-in-effect": {
       "count": 1
-    }
-  },
-  "apps/editor/packages/shell/src/cockpit/cockpit-state-context.tsx": {
-    "react-hooks/refs": {
-      "count": 7
     }
   },
   "apps/editor/packages/shell/src/overlays/thread-lines.tsx": {
@@ -289,7 +243,7 @@
   },
   "modules/web/packages/web-bundle/src/panels/web-source-panel.tsx": {
     "react-hooks/exhaustive-deps": {
-      "count": 14
+      "count": 11
     }
   }
 }

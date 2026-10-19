@@ -26,7 +26,7 @@
 // overlay to highlight the most recent hit) and the container
 // `<div>` ref for ResizeObserver bookkeeping.
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef } from "react";
 
 import {
   useCanvasClient,
@@ -112,7 +112,7 @@ export function CanvasPanel(_props: PanelProps) {
   // page-local frame AABB; try to refine the outline to the precise
   // per-cell rect via elementGeometry(cellElementId), falling back to
   // the frame AABB. A non-table hit clears any prior cell selection.
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  // eslint-disable-next-line no-restricted-syntax -- a dependency of a callback handed to a component that compares it (ADR 229)
   const resolveTableCell = useCallback(
     (s: SelectionState | null) => {
       if (!tableSelection) return;
@@ -252,7 +252,7 @@ export function CanvasPanel(_props: PanelProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [activeGroup, setActiveGroup]);
 
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  // eslint-disable-next-line no-restricted-syntax -- handed to a component that compares it (ADR 229)
   const onHit = useCallback(
     (
       s: SelectionState | null,
@@ -358,15 +358,18 @@ export function CanvasPanel(_props: PanelProps) {
     },
     [
       activeTool,
+      activeGroup,
       client,
       resolveTableCell,
+      setActiveGroup,
       setContentSelection,
       setElementGeometry,
       setElementSelection,
+      setHitSelection,
     ],
   );
 
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  // eslint-disable-next-line no-restricted-syntax -- handed to a component that compares it (ADR 229)
   const onMarquee = useCallback(
     (
       pageId: import("@paged-media/client").PageId,
@@ -391,7 +394,7 @@ export function CanvasPanel(_props: PanelProps) {
     [client, setElementGeometry, setElementSelection],
   );
 
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  // eslint-disable-next-line no-restricted-syntax -- handed to a component that compares it (ADR 229)
   const onGestureCommitted = useCallback(() => {
     if (elementSelection.length === 0) return;
     void client
@@ -406,8 +409,7 @@ export function CanvasPanel(_props: PanelProps) {
   // and inspectors reading the frame as it was before: a frame that had
   // just received a photo still said `hasImage: false`, and the
   // Properties panel kept calling it a Frame.
-  const selectionRef = useRef(elementSelection);
-  selectionRef.current = elementSelection;
+  const currentSelection = useEffectEvent(() => elementSelection);
   useEffect(
     () =>
       client.subscribe((msg) => {
@@ -418,14 +420,14 @@ export function CanvasPanel(_props: PanelProps) {
         ) {
           return;
         }
-        const ids = selectionRef.current;
+        const ids = currentSelection();
         if (ids.length === 0) return;
         const asked = JSON.stringify(ids);
         void client
           .elementGeometry(ids)
           .then((items) => {
             // A reply for a selection the user has since left is stale.
-            if (JSON.stringify(selectionRef.current) === asked) {
+            if (JSON.stringify(currentSelection()) === asked) {
               setElementGeometry(items);
             }
           })
@@ -454,7 +456,7 @@ export function CanvasPanel(_props: PanelProps) {
       .catch(() => {});
   }, [activeScopeRoot, client, setElementGeometry]);
 
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
+  // eslint-disable-next-line no-restricted-syntax -- handed to a component that compares it (ADR 229)
   const onDoubleClickGroup = useCallback(
     (
       groupId: string,

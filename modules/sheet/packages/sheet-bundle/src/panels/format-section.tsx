@@ -33,6 +33,7 @@ import { useState, type CSSProperties, type ReactElement } from "react";
 
 import type { CellStylePatch, EdgeStyle } from "../engine";
 import type { BorderKind, SessionResult, WorkbookSession } from "../session";
+import { font, space } from "@paged-media/panel-kit";
 
 /** Number-format presets — format CODES offered as a starting point (the
  *  engine renders them; "Custom" takes any code). */
@@ -149,7 +150,7 @@ export function FormatSection(props: {
       {openProperties ? (
         <p
           data-sheet-fmt-pointer
-          style={{ ...st.body, margin: "var(--space-1, 4px) 0 0" }}
+          style={{ ...st.body, margin: `${space[1]} 0 0` }}
         >
           Number format, font, fill, alignment and iterative calculation are in{" "}
           <button
@@ -557,7 +558,7 @@ function DuplicatedFormatRows(props: {
           display: "flex",
           gap: 6,
           alignItems: "center",
-          marginTop: "var(--space-1, 4px)",
+          marginTop: space[1],
         }}
       >
         <input
@@ -654,9 +655,7 @@ export function NamesSection(props: {
         >
           {names.map((n) => (
             <li key={`${n.name}:${n.scope ?? "wb"}`}>
-              <span style={{ fontFamily: "var(--font-mono, monospace)" }}>
-                {n.name}
-              </span>
+              <span style={{ fontFamily: font.mono }}>{n.name}</span>
               {n.scope != null ? " (this sheet)" : ""} = {n.refersTo}{" "}
               <button
                 type="button"

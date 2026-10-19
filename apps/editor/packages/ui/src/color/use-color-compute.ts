@@ -24,7 +24,7 @@
 // request carries a seq; stale replies (a fast scrub outrunning the
 // worker round-trip) are dropped so the preview chip never rewinds.
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { useCanvasClient } from "@paged-media/shell";
 
@@ -50,29 +50,36 @@ export function useColorCompute(value: MixerValue | null): ColorComputeResult {
   });
   const seqRef = useRef(0);
 
-  useEffect(() => {
+  // The request reads the value it is sent for when the debounce fires;
+  // the effect runs when what the value SAYS changes (a mixer hands a new
+  // object on every render), not when its identity does.
+  const request = useEffectEvent((seq: number) => {
     if (!value) return;
+    void client
+      .colorCompute({
+        space: value.space,
+        value: value.value,
+        tint: value.tint < 100 ? value.tint : null,
+      })
+      .then((reply) => {
+        if (seqRef.current !== seq) return; // stale
+        setResult({ ...reply, pending: false });
+      })
+      .catch(() => {
+        if (seqRef.current !== seq) return;
+        setResult((r) => ({ ...r, pending: false }));
+      });
+  });
+  const key = value
+    ? `${value.space}|${JSON.stringify(value.value)}|${value.tint}`
+    : null;
+  useEffect(() => {
+    if (key === null) return;
     const seq = ++seqRef.current;
     setResult((r) => ({ ...r, pending: true }));
-    const timer = setTimeout(() => {
-      void client
-        .colorCompute({
-          space: value.space,
-          value: value.value,
-          tint: value.tint < 100 ? value.tint : null,
-        })
-        .then((reply) => {
-          if (seqRef.current !== seq) return; // stale
-          setResult({ ...reply, pending: false });
-        })
-        .catch(() => {
-          if (seqRef.current !== seq) return;
-          setResult((r) => ({ ...r, pending: false }));
-        });
-    }, DEBOUNCE_MS);
+    const timer = setTimeout(() => request(seq), DEBOUNCE_MS);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, value?.space, JSON.stringify(value?.value), value?.tint]);
+  }, [client, key]);
 
   return result;
 }
