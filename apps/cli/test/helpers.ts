@@ -25,7 +25,7 @@ import { createHeadlessHost } from "@paged-media/plugin-sdk";
 
 import { main } from "../src/main";
 import { engineProtocolOnDisk, packageRoot } from "../src/session";
-import { minimalIdml } from "../../plugin-sdk/test/fixtures/minimal-idml";
+import { minimalIdml } from "../../../platform/extensions/packages/plugin-sdk/test/fixtures/minimal-idml";
 
 export const silent = { debug() {}, info() {}, warn() {}, error() {} };
 export const FIXTURES = fileURLToPath(new URL("./fixtures/", import.meta.url));

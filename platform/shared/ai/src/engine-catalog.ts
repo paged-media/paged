@@ -16,8 +16,17 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-// The SDK's reference object-model bundle (state in content-addressed parts +
-// a label hash), as a module the CLI loads with `--plugins <path>`.
-import { makeNotesBundle } from "../../../plugin-sdk/test/fixtures/notes-bundle";
+// The engine catalog, shipped with this package so a consumer does not have
+// to install @paged-media/canvas-wasm (its introspect entry alone is 11.5 MB of wasm) to read 140 KB of
+// JSON. It is plugin-api's vendored copy, which CI holds in lockstep with
+// the engine version the wire types were synced from (publish.yml). A
+// separate entry point: the editor loads it on the first AI request, not at
+// boot.
 
-export default makeNotesBundle();
+import catalog from "../../../extensions/packages/plugin-api/src/catalog.json";
+
+import type { ApiCatalog } from "./catalog";
+
+const ENGINE_CATALOG = catalog as unknown as ApiCatalog;
+
+export default ENGINE_CATALOG;

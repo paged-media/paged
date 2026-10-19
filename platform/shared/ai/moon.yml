@@ -1,0 +1,19 @@
+$schema: "../../../.moon/cache/schemas/project.json"
+
+# @paged-media/ai: Claude for paged (the authoring prompt, the script tools,
+# the agent loop and its transports), a private package of the root Bun
+# workspace used by the editor and paged-node (ADR 325 in
+# platform/extensions/docs/adr). js-check and js-test are the inherited
+# `bun run typecheck` and `bun run test`; the suite boots the engine.
+language: "typescript"
+layer: "library"
+stack: "frontend"
+tags: ["node", "shared"]
+
+project:
+  title: "platform/shared/ai"
+  description: "Claude for paged: prompt, script tools, agent loop, transports; never published."
+
+dependsOn:
+  - id: "core"
+    scope: "development"
