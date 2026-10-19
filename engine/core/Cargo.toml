@@ -72,7 +72,12 @@ bytes = "1"
 # included. Take `deflate-flate2` instead and ask for flate2's
 # `rust_backend` as zip 2's `deflate` did, so flate2's feature set, and
 # with it every deflated byte, stays what it was. Crates that depend on
-# `zip` list `flate2` beside it.
+# `zip` list `flate2` beside it. One crate outside our control adds a
+# backend: hayro-syntax (placed PDFs, through paged-renderer) turns on
+# flate2's `zlib-rs`, and flate2 prefers zlib-rs to miniz_oxide when both are
+# on. So a build that includes paged-renderer (the canvas wasm, paged-cli, a
+# workspace test run) deflates with zlib-rs, and one without it
+# (`-p idml-export` alone) with miniz_oxide; it was so before zip 9 as well.
 zip = { version = "9.0.4", default-features = false, features = ["deflate-flate2"] }
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
 quick-xml = { version = "0.41", features = ["serialize"] }
