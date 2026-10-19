@@ -1,0 +1,19 @@
+{
+  "$comment": "The components and hooks of this package the React Compiler leaves uncompiled: its bailouts (it could not prove the Rules of React; the reason is its own) and the functions it cannot see as components (notCompiled). Written by tooling/js/react-compiler-coverage.mjs --write; CI fails on a new one, and the lists only get shorter (apps/editor/docs/adr/228-react-compiler.md).",
+  "compiler": "babel-plugin-react-compiler@1.0.0",
+  "skipped": 2,
+  "bailouts": [
+    {
+      "file": "src/panels/web-source-panel.tsx",
+      "function": "SourceEditor",
+      "reason": "Suppression",
+      "detail": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
+    }
+  ],
+  "notCompiled": [
+    {
+      "file": "src/panels/web-source-panel.tsx",
+      "function": "WebSourcePanel"
+    }
+  ]
+}

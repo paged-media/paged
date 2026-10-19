@@ -85,6 +85,8 @@ on:
       - ".cargo/config.toml"
       - "tooling/bootstrap.sh"
       - "tooling/js/check-workspace-deps.mjs"
+      - "tooling/js/react-compiler.mjs"
+      - "tooling/js/bun-react-compiler.ts"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/module-wasm/**"
       - ".github/actions/wasm-tools/**"
@@ -118,6 +120,8 @@ on:
       - ".cargo/config.toml"
       - "tooling/bootstrap.sh"
       - "tooling/js/check-workspace-deps.mjs"
+      - "tooling/js/react-compiler.mjs"
+      - "tooling/js/bun-react-compiler.ts"
       - ".github/actions/engine-wasm/**"
       - ".github/actions/module-wasm/**"
       - ".github/actions/wasm-tools/**"
@@ -280,6 +284,39 @@ jobs:
       # each control sends, and the basics of keyboard and name reach.
       - name: panels and components, DOM lane (apps/canvas)
         run: bun run test:dom
+
+      # The same two DOM lanes on COMPILED code (ADR 228): the shell's and
+      # the canvas's sources through the React Compiler, with the build's
+      # own options (tooling/js/bun-react-compiler.ts). `bun test` above runs
+      # the sources as written; the app ships them compiled, and a component
+      # that reads a registry, a store or a module variable during render
+      # behaves differently once compiled. This is where that shows.
+      - name: react-live (platform/shared/react-live, the views of mutable sources)
+        working-directory: platform/shared/react-live
+        run: bun run test
+      - name: shell DOM lane, compiled (React Compiler)
+        run: bun run --filter ./packages/shell test:dom:compiled
+      - name: panels and components, DOM lane, compiled (React Compiler)
+        run: bun run --filter ./apps/canvas test:dom:compiled
+
+      # The production build, with the React Compiler (ADR 228). Its check
+      # (tooling/js/react-compiler.mjs) fails the build unless every module
+      # the compiler memoized imports react/compiler-runtime, there is one
+      # copy of it, and every chunk with compiled code reaches it; the
+      # report says how many components and hooks were compiled and skipped.
+      - name: production build (compiled chunks import react/compiler-runtime)
+        working-directory: apps/editor/apps/canvas
+        env:
+          PAGED_REACT_COMPILER_REPORT: ${{ runner.temp }}/react-compiler-build.json
+        run: bunx --bun vite build
+      - name: upload the React Compiler build report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: react-compiler-build
+          path: ${{ runner.temp }}/react-compiler-build.json
+          if-no-files-found: warn
+          retention-days: 30
 
       # Every gated fidelity pack must carry a threshold entry, or the
       # fidelity gate silently skips it.

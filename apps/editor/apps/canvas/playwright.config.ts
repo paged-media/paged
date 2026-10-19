@@ -122,6 +122,7 @@ export default defineConfig({
         "journey/**",
         "showcase/**",
         "films/**",
+        "perf/**",
       ],
       use: {
         ...devices["Desktop Chrome"],
@@ -259,6 +260,20 @@ export default defineConfig({
             "--use-angle=metal",
           ],
         },
+      },
+    },
+    {
+      // The React Compiler's latency probe (ADR 228): five heavy panels,
+      // the same interactions, latency and render counts per interaction.
+      // On demand only, and meant for the production build: `vite build
+      // --mode demo`, served by `vite preview` (docs/migration/
+      // react-compiler.md has the commands). Numbers, not assertions.
+      name: "perf",
+      testDir: "./tests/perf",
+      testMatch: "**/*.perf.spec.ts",
+      retries: 0,
+      use: {
+        ...devices["Desktop Chrome"],
       },
     },
     {

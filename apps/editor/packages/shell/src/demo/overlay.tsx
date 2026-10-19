@@ -25,7 +25,7 @@
 // Module-singleton controller (same pattern as CommandPalette's notifyPalette) so
 // the script runner — which lives outside React — can call it and await a promise.
 
-import { useEffect, useReducer } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 export interface DemoInfoRequest {
   title: string;
@@ -50,6 +50,14 @@ const subscribers = new Set<() => void>();
 function notify(): void {
   for (const fn of subscribers) fn();
 }
+
+const subscribeBox = (onChange: () => void) => {
+  subscribers.add(onChange);
+  return () => {
+    subscribers.delete(onChange);
+  };
+};
+const getBoxRequest = () => current?.req ?? null;
 
 /**
  * Show the narration box and resolve when the user advances. If a box is already
@@ -101,30 +109,56 @@ export function demoHighlight(selector: string | null): void {
   notifySpotlight();
 }
 
+// The box and the spotlight read module state, so they subscribe to it:
+// `useSyncExternalStore` hands the render the value itself. A component
+// that re-rendered through a counter and then read the module variable
+// would, compiled, keep what it derived from it the first time (ADR 228).
+const subscribeSpotlight = (onChange: () => void) => {
+  spotlightSubs.add(onChange);
+  return () => {
+    spotlightSubs.delete(onChange);
+  };
+};
+const getSpotlightSelector = () => spotlightSelector;
+
+/** The target's box, as a string so that an unchanged box is the same
+ *  snapshot: "left top width height", or "" when nothing matches. */
+function measureSpotlight(selector: string | null): string {
+  if (!selector) return "";
+  const el = document.querySelector(selector);
+  if (!el) return "";
+  const r = el.getBoundingClientRect();
+  return `${r.left} ${r.top} ${r.width} ${r.height}`;
+}
+
+/** Re-measure on resize, every 250 ms while active (panels animate in),
+ *  and when the target changes. */
+function subscribeSpotlightBox(onChange: () => void): () => void {
+  const off = subscribeSpotlight(onChange);
+  window.addEventListener("resize", onChange);
+  const t = setInterval(onChange, 250);
+  return () => {
+    off();
+    window.removeEventListener("resize", onChange);
+    clearInterval(t);
+  };
+}
+
 /** Mount once near the shell root. Renders the dim + cutout when a target is set. */
 export function DemoSpotlight(): React.ReactElement | null {
-  const [, force] = useReducer((x: number) => x + 1, 0);
-  useEffect(() => {
-    spotlightSubs.add(force);
-    return () => {
-      spotlightSubs.delete(force);
-    };
-  }, []);
-  // re-measure on resize/scroll while active
-  useEffect(() => {
-    if (!spotlightSelector) return;
-    window.addEventListener("resize", force);
-    const t = setInterval(force, 250); // cheap re-measure (panels animate in)
-    return () => {
-      window.removeEventListener("resize", force);
-      clearInterval(t);
-    };
-  }, []);
-
-  if (!spotlightSelector) return null;
-  const el = document.querySelector(spotlightSelector);
-  if (!el) return null;
-  const r = el.getBoundingClientRect();
+  const selector = useSyncExternalStore(
+    subscribeSpotlight,
+    getSpotlightSelector,
+    getSpotlightSelector,
+  );
+  const box = useSyncExternalStore(
+    selector ? subscribeSpotlightBox : subscribeSpotlight,
+    () => measureSpotlight(selector),
+    () => "",
+  );
+  if (!box) return null;
+  const [left, top, width, height] = box.split(" ").map(Number);
+  const r = { left, top, width, height };
   const pad = 6;
   return (
     <div
@@ -157,15 +191,7 @@ export function DemoSpotlight(): React.ReactElement | null {
  * narration box, if any. Fixed/high-z so it floats over the cockpit.
  */
 export function DemoOverlay(): React.ReactElement | null {
-  const [, force] = useReducer((x: number) => x + 1, 0);
-  useEffect(() => {
-    subscribers.add(force);
-    return () => {
-      subscribers.delete(force);
-    };
-  }, []);
-
-  const req = current?.req;
+  const req = useSyncExternalStore(subscribeBox, getBoxRequest, getBoxRequest);
   useEffect(() => {
     if (!req || !req.autoMs) return;
     const t = setTimeout(advance, req.autoMs);

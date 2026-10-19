@@ -19,7 +19,8 @@
 
 import { defineConfig } from "vite";
 import { buildModuleManifest, MODULE_HOST } from "./scripts/module-index.mjs";
-import react from "@vitejs/plugin-react";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
 import { resolve, sep } from "node:path";
 import {
   createReadStream,
@@ -35,6 +36,7 @@ import {
   parseDataOrigins,
   rewriteHeadersCsp,
 } from "./src/boot/network-policy";
+import { reactCompiler } from "../../../../tooling/js/react-compiler.mjs";
 
 // The monorepo root: apps/editor/apps/canvas → four levels up.
 const MONOREPO_ROOT = resolve(__dirname, "..", "..", "..", "..");
@@ -101,18 +103,29 @@ const DUCKDB_DIST = (() => {
 // allocate a SAB for the camera transform. Production hosts must
 // serve the same headers — without them, `new SharedArrayBuffer(...)`
 // throws `SecurityError`.
+function isolate(
+  _req: unknown,
+  res: { setHeader(name: string, value: string): void },
+  next: () => void,
+) {
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  // credentialless (lock-step with public/_headers) so the docs playground
+  // can embed the dev server cross-origin; still crossOriginIsolated for SAB.
+  res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
+  // Opt in to cross-origin embedding (a COEP parent blocks the iframe otherwise).
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  next();
+}
 const crossOriginIsolation = {
   name: "cross-origin-isolation-headers",
   configureServer(server: import("vite").ViteDevServer) {
-    server.middlewares.use((_req, res, next) => {
-      res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
-      // credentialless (lock-step with public/_headers) so the docs playground
-      // can embed the dev server cross-origin; still crossOriginIsolated for SAB.
-      res.setHeader("Cross-Origin-Embedder-Policy", "credentialless");
-      // Opt in to cross-origin embedding (a COEP parent blocks the iframe otherwise).
-      res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-      next();
-    });
+    server.middlewares.use(isolate);
+  },
+  // `vite preview` serves the production build with the same headers, so
+  // a built app boots locally (the React Compiler's latency probe runs
+  // against it, ADR 228).
+  configurePreviewServer(server: import("vite").PreviewServer) {
+    server.middlewares.use(isolate);
   },
 };
 
@@ -680,6 +693,10 @@ export default defineConfig({
   root: resolve(__dirname),
   plugins: [
     react(),
+    // The React Compiler (ADR 228) over every first-party package, the
+    // module bundles included: they resolve to their sources, so this build
+    // compiles them. `PAGED_REACT_COMPILER=0` turns it off.
+    ...reactCompiler({ reactCompilerPreset, babel }),
     crossOriginIsolation,
     networkConnectSrcPolicy,
     aiProxyDev(),

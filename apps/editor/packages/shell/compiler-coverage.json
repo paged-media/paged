@@ -1,0 +1,200 @@
+{
+  "$comment": "The components and hooks of this package the React Compiler leaves uncompiled: its bailouts (it could not prove the Rules of React; the reason is its own) and the functions it cannot see as components (notCompiled). Written by tooling/js/react-compiler-coverage.mjs --write; CI fails on a new one, and the lists only get shorter (apps/editor/docs/adr/228-react-compiler.md).",
+  "compiler": "babel-plugin-react-compiler@1.0.0",
+  "skipped": 32,
+  "bailouts": [
+    {
+      "file": "src/actions/actions-context.tsx",
+      "function": "ActionsProvider",
+      "reason": "Todo",
+      "detail": "(BuildHIR::lowerStatement) Handle TryStatement without a catch clause"
+    },
+    {
+      "file": "src/catalog/object-field.tsx",
+      "function": "useObjectBindings",
+      "reason": "Hooks",
+      "detail": "Hooks must always be called in a consistent order, and may not be called conditionally. See the Rules of Hooks (https://react.dev/warnings/invalid-hook-call-warning)"
+    },
+    {
+      "file": "src/catalog/object-property-field.tsx",
+      "function": "useFieldTargets",
+      "reason": "Suppression",
+      "detail": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
+    },
+    {
+      "file": "src/catalog/panel-binding-surface.tsx",
+      "function": "useReportBindingSurface",
+      "reason": "Suppression",
+      "detail": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
+    },
+    {
+      "file": "src/chrome/ExportPdfDialog.tsx",
+      "function": "ExportPdfDialog",
+      "reason": "Todo",
+      "detail": "(BuildHIR::lowerStatement) Handle TryStatement with a finalizer ('finally') clause"
+    },
+    {
+      "file": "src/chrome/FillStrokeCluster.tsx",
+      "function": "FillStrokeCluster",
+      "reason": "Suppression",
+      "detail": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
+    },
+    {
+      "file": "src/chrome/PanelRail.tsx",
+      "function": "PanelRail",
+      "reason": "Suppression",
+      "detail": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
+    },
+    {
+      "file": "src/chrome/SoftProofToggle.tsx",
+      "function": "SoftProofToggle",
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
+    },
+    {
+      "file": "src/chrome/ToolRail.tsx",
+      "function": "ToolRail",
+      "reason": "Todo",
+      "detail": "Support value blocks (conditional, logical, optional chaining, etc) within a try/catch statement"
+    },
+    {
+      "file": "src/chrome/ToolRail.tsx",
+      "function": "ToolSlot",
+      "reason": "PreserveManualMemo",
+      "detail": "Existing memoization could not be preserved"
+    },
+    {
+      "file": "src/cockpit/canvas-frame/GuideDragController.tsx",
+      "function": "GuideDragController",
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
+    },
+    {
+      "file": "src/cockpit/canvas-frame/ThreadingController.tsx",
+      "function": "ThreadingController",
+      "reason": "Todo",
+      "detail": "(BuildHIR::lowerExpression) Handle ||= operators in AssignmentExpression"
+    },
+    {
+      "file": "src/cockpit/cockpit-state-context.tsx",
+      "function": "CockpitStateProvider",
+      "reason": "Suppression",
+      "detail": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
+    },
+    {
+      "file": "src/gestures/use-scrub-gesture.ts",
+      "function": "useScrubGesture",
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
+    },
+    {
+      "file": "src/hooks/useFps.ts",
+      "function": "useFps",
+      "reason": "Suppression",
+      "detail": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
+    },
+    {
+      "file": "src/overlays/overlay-host.tsx",
+      "function": "OverlayHost",
+      "reason": "Suppression",
+      "detail": "React Compiler has skipped optimizing this component because one or more React ESLint rules were disabled"
+    },
+    {
+      "file": "src/overlays/thread-lines.tsx",
+      "function": "ThreadLinesRender",
+      "reason": "Todo",
+      "detail": "Support value blocks (conditional, logical, optional chaining, etc) within a try/catch statement"
+    },
+    {
+      "file": "src/PagedShell.tsx",
+      "function": "DebugContextProbe",
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
+    },
+    {
+      "file": "src/PagedShell.tsx",
+      "function": "ShellChrome",
+      "reason": "Todo",
+      "detail": "(BuildHIR::lowerStatement) Handle TryStatement with a finalizer ('finally') clause"
+    },
+    {
+      "file": "src/state/content-selection-context.tsx",
+      "function": "ContentSelectionProvider",
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
+    },
+    {
+      "file": "src/state/edit-context-controller.tsx",
+      "function": "EditContextController",
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
+    },
+    {
+      "file": "src/state/edit-context-stack.tsx",
+      "function": "EditContextStackProvider",
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
+    },
+    {
+      "file": "src/state/guide-drag-context.tsx",
+      "function": "GuideDragProvider",
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
+    },
+    {
+      "file": "src/state/page-thumbnails.ts",
+      "function": "usePageThumbnails",
+      "reason": "Todo",
+      "detail": "(BuildHIR::lowerStatement) Handle TryStatement without a catch clause"
+    },
+    {
+      "file": "src/state/paged-editor.tsx",
+      "function": "PagedEditorBinder",
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
+    },
+    {
+      "file": "src/state/registries-context.tsx",
+      "function": "RegistriesProvider",
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
+    },
+    {
+      "file": "src/state/selection-context.tsx",
+      "function": "SelectionProvider",
+      "reason": "PreserveManualMemo",
+      "detail": "Existing memoization could not be preserved"
+    },
+    {
+      "file": "src/state/threading-context.tsx",
+      "function": "ThreadingProvider",
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
+    },
+    {
+      "file": "src/state/tool-context.tsx",
+      "function": "ToolProvider",
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
+    },
+    {
+      "file": "src/state/tool-settings-context.tsx",
+      "function": "ToolSettingsProvider",
+      "reason": "Refs",
+      "detail": "Cannot access refs during render"
+    },
+    {
+      "file": "src/state/use-edit-context-entry.tsx",
+      "function": "useEditContextEntry",
+      "reason": "Todo",
+      "detail": "Support value blocks (conditional, logical, optional chaining, etc) within a try/catch statement"
+    },
+    {
+      "file": "src/state/use-selection-object-type.tsx",
+      "function": "useSelectionObjectType",
+      "reason": "Todo",
+      "detail": "Support value blocks (conditional, logical, optional chaining, etc) within a try/catch statement"
+    }
+  ],
+  "notCompiled": []
+}

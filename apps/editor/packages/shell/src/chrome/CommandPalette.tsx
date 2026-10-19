@@ -17,7 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   CommandDialog,
@@ -32,9 +32,11 @@ import { AI_ASK_COMMAND } from "../ai/editor-ai";
 import { PoweredByClaude } from "../ai/powered-by-claude";
 import { Icon } from "../icons";
 import { paletteScore } from "./palette-score";
-import type { CommandContribution } from "../registries";
+import type { CommandContribution, CommandRegistry } from "../registries";
 import { useRegistries } from "../state/registries-context";
+import { useRegistryView } from "../state/live";
 import { useOptionalPaged } from "../state/paged-editor";
+import type { PagedEditor } from "../state/paged-editor";
 import { isEnabled } from "../registries/types";
 import { useOptionalWorkflowMode } from "../state/workflow-mode-context";
 
@@ -150,23 +152,40 @@ function prettyKey(combo: string): string {
   return `${mods}${key.length === 1 ? key.toUpperCase() : key.charAt(0).toUpperCase() + key.slice(1)}`;
 }
 
+/** The commands the palette offers: those whose `when` applies where the
+ *  user is. Evaluated while the palette is open, so each opening reads the
+ *  editor state of that moment; a closed palette offers nothing. */
+function applicableCommands(
+  commands: CommandRegistry,
+  paged: PagedEditor | null,
+  open: boolean,
+): CommandContribution[] {
+  if (!open) return [];
+  return commands.list().filter((c) => isEnabled(c.when, () => paged));
+}
+
 export function CommandPalette() {
   const paged = useOptionalPaged();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const { commands, modes, keybindings } = useRegistries();
+  const registries = useRegistries();
+  // Read during render through views (state/live.ts, ADR 228): the
+  // registries keep their identity while bundles register into them, so a
+  // value computed from the registry itself would be kept for good.
+  const commands = useRegistryView(registries.commands);
+  const keybindings = useRegistryView(registries.keybindings);
+  const modes = useRegistryView(registries.modes);
 
   // E3 — command id -> the key that runs it. `KeybindingRegistry.list()`
   // is the same source `Help > Keyboard shortcuts` renders, so the two
   // cannot drift into disagreeing about what a key does. First binding
   // wins: cmd+ and ctrl+ are registered as SEPARATE contributions for
   // one command, and showing both would double the width of every row.
-  // NOT memoised on the registry. Its object identity never changes,
-  // while its CONTENTS grow as bundles load — so a memo keyed on it is
-  // built once at first render, before any plugin has registered a
-  // binding, and never recomputes. That is exactly what happened: 82
-  // bindings live and 0 accelerators drawn. Rebuilding per render costs
-  // one pass over ~80 entries, and only while the surface is open.
+  // Built from the keybinding VIEW. A value keyed on the registry object
+  // is built once at first render, before any plugin has registered a
+  // binding, and never recomputes: that is exactly what happened once,
+  // 82 bindings live and 0 accelerators drawn. The view is a new object
+  // after every registration.
   const keyFor = (() => {
     const byCommand = new Map<string, string>();
     for (const b of keybindings.list()) {
@@ -176,17 +195,13 @@ export function CommandPalette() {
   })();
   const workflowMode = useOptionalWorkflowMode();
   const [recents, setRecents] = useState<string[]>(loadRecents);
-  const [version, setVersion] = useState(0);
-  void version;
 
   useEffect(() => {
     const handler = (action: PaletteAction) => {
       if (action === "toggle") {
         setOpen((v) => !v);
-        setVersion((v) => v + 1);
       } else if (action === "open") {
         setOpen(true);
-        setVersion((v) => v + 1);
       } else {
         setOpen(false);
       }
@@ -208,20 +223,14 @@ export function CommandPalette() {
   // with no positions to preserve, and a dead hit is just a wrong
   // answer to a query. `paged` supplies both the predicate's state and
   // the re-render, since the handle is memoized on the active context.
-  const all = useMemo(
-    () => commands.list().filter((c) => isEnabled(c.when, () => paged)),
-    [commands, open, paged],
-  );
-  const byId = useMemo(
-    () => new Map(all.map((c) => [c.id, c] as const)),
-    [all],
-  );
-  const grouped = useMemo(() => groupByCategory(all), [all]);
+  const all = applicableCommands(commands, paged, open);
+  const byId = new Map(all.map((c) => [c.id, c] as const));
+  const grouped = groupByCategory(all);
 
   const run = (cmd: CommandContribution) => {
     setOpen(false);
     setRecents(pushRecent(cmd.id));
-    void commands.invoke(cmd.id);
+    void registries.commands.invoke(cmd.id);
   };
 
   const recentItems = recents
@@ -239,25 +248,22 @@ export function CommandPalette() {
 
   // Zero state stays curated (kit): the per-panel Show/Hide pairs
   // (~100 ids) only surface once the user types.
-  const visibleGroups = useMemo(
-    () =>
-      query.length > 0
-        ? grouped
-        : grouped
-            .map(
-              ([category, items]) =>
-                [
-                  category,
-                  items.filter(
-                    (c) =>
-                      !c.id.startsWith("paged.panel.show.") &&
-                      !c.id.startsWith("paged.panel.hide."),
-                  ),
-                ] as [string, CommandContribution[]],
-            )
-            .filter(([, items]) => items.length > 0),
-    [grouped, query],
-  );
+  const visibleGroups =
+    query.length > 0
+      ? grouped
+      : grouped
+          .map(
+            ([category, items]) =>
+              [
+                category,
+                items.filter(
+                  (c) =>
+                    !c.id.startsWith("paged.panel.show.") &&
+                    !c.id.startsWith("paged.panel.hide."),
+                ),
+              ] as [string, CommandContribution[]],
+          )
+          .filter(([, items]) => items.length > 0);
 
   return (
     <CommandDialog
@@ -285,7 +291,7 @@ export function CommandPalette() {
                 forceMount
                 onSelect={() => {
                   setOpen(false);
-                  void commands.invoke(AI_ASK_COMMAND, query);
+                  void registries.commands.invoke(AI_ASK_COMMAND, query);
                 }}
                 data-palette-ai
               >

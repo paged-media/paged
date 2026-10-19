@@ -28,6 +28,7 @@
 // instead of a second set of controls; where it does not, the controls
 // render here.
 
+import { onDidChangeOf, useLive } from "@paged-media/react-live";
 import { useState, type CSSProperties, type ReactElement } from "react";
 
 import type { CellStylePatch, EdgeStyle } from "../engine";
@@ -98,9 +99,12 @@ export function FormatSection(props: {
   const report = (r: SessionResult, done: string) =>
     setMsg(r.ok ? done : r.message);
 
-  const target = session.formatTarget();
-  const cur = session.styleAtTarget();
-  const layout = session.layout();
+  // Read the session during render through a view that changes with it
+  // (react-live, editor ADR 228): the session object itself never does.
+  const live = useLive(session, onDidChangeOf);
+  const target = live.formatTarget();
+  const cur = live.styleAtTarget();
+  const layout = live.layout();
 
   const [borderStyle, setBorderStyle] = useState("thin");
   const [borderColor, setBorderColor] = useState("#000000");
@@ -340,7 +344,8 @@ function DuplicatedFormatRows(props: {
   report: (r: SessionResult, done: string) => void;
 }): ReactElement {
   const { session, styles: st, apply, report } = props;
-  const cur = session.styleAtTarget();
+  const live = useLive(session, onDidChangeOf);
+  const cur = live.styleAtTarget();
   const [preset, setPreset] = useState("0.00");
   const [custom, setCustom] = useState("");
   const [fontName, setFontName] = useState("");
@@ -558,7 +563,7 @@ function DuplicatedFormatRows(props: {
         <input
           data-sheet-iterative
           type="checkbox"
-          checked={session.calcSettings()?.iterative ?? false}
+          checked={live.calcSettings()?.iterative ?? false}
           onChange={(e) =>
             report(
               session.setIterative(e.target.checked),
@@ -583,8 +588,9 @@ export function NamesSection(props: {
   const [msg, setMsg] = useState<string | null>(null);
   const report = (r: SessionResult, done: string) =>
     setMsg(r.ok ? done : r.message);
-  const target = session.formatTarget();
-  const names = session.names();
+  const live = useLive(session, onDidChangeOf);
+  const target = live.formatTarget();
+  const names = live.names();
   const [nameNew, setNameNew] = useState("");
   const [nameRefers, setNameRefers] = useState("");
   const [nameLocal, setNameLocal] = useState(false);

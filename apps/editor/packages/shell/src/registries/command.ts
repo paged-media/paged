@@ -103,6 +103,10 @@ export interface CommandRegistry extends Api.CommandRegistry {
    * so a broken watcher can never break a command.
    */
   observe(observer: CommandObserver): Disposable;
+  /** Called after a command is registered or unregistered, as the other
+   *  registries do: a component that lists commands during render reads
+   *  them through `useRegistryView` (state/live.ts, ADR 228). */
+  onChange(handler: () => void): Disposable;
 }
 
 /**
@@ -116,6 +120,10 @@ export function createCommandRegistry(
 ): CommandRegistry {
   const byId = new Map<string, CommandContribution>();
   const observers = new Set<CommandObserver>();
+  const changeListeners = new Set<() => void>();
+  const changed = () => {
+    for (const fn of [...changeListeners]) fn();
+  };
   let nextSeq = 1;
 
   const emit = (event: CommandInvocationEvent) => {
@@ -138,14 +146,15 @@ export function createCommandRegistry(
         );
       }
       byId.set(contribution.id, contribution);
+      changed();
       return {
         dispose() {
-          byId.delete(contribution.id);
+          if (byId.delete(contribution.id)) changed();
         },
       };
     },
     unregister(id) {
-      byId.delete(id);
+      if (byId.delete(id)) changed();
     },
     async invoke(id, payload) {
       const cmd = byId.get(id);
@@ -212,6 +221,14 @@ export function createCommandRegistry(
       return {
         dispose() {
           observers.delete(observer);
+        },
+      };
+    },
+    onChange(handler) {
+      changeListeners.add(handler);
+      return {
+        dispose() {
+          changeListeners.delete(handler);
         },
       };
     },

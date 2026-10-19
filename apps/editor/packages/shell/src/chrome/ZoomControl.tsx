@@ -26,6 +26,7 @@
 import { Icon } from "../icons";
 import { useCamera } from "../state/camera-context";
 import { useRegistries } from "../state/registries-context";
+import { useRegistryView } from "../state/live";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,11 +45,11 @@ export function ZoomControl({
   side = "bottom",
 }: { side?: "top" | "bottom" } = {}) {
   const { camera } = useCamera();
-  const { commands } = useRegistries();
+  // Read through a view of the registry (state/live.ts, ADR 228). A
+  // camera re-render alone would not do: compiled, `commands.get(id)` is
+  // kept for as long as the registry object is the same, and it always is.
+  const commands = useRegistryView(useRegistries().commands);
   const pct = Math.round(camera.scale * 100);
-  // No registry subscription needed: the camera context re-renders
-  // this control on every zoom/pan, re-evaluating `commands.get`
-  // long before the menu could be opened.
 
   return (
     <DropdownMenu>

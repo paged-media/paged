@@ -17,13 +17,7 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from "react";
+import { type CSSProperties, type ReactNode } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,6 +30,7 @@ import {
 } from "../components/ui/dropdown-menu";
 import type { MenuItemContribution } from "../registries";
 import { useRegistries } from "../state/registries-context";
+import { useRegistryView } from "../state/live";
 import { useOptionalPaged } from "../state/paged-editor";
 import { useOptionalEditContextStack } from "../state/edit-context-stack";
 import { useSelectionEditContext } from "../state/use-selection-object-type";
@@ -86,8 +81,17 @@ export const CORE_MENUS: readonly string[] = [
 const INSERT_VERB = /^Insert (.+)$/;
 
 export function MenuBar() {
-  const { menus, commands, keybindings, panels, tools, editContexts, modes } =
-    useRegistries();
+  const registries = useRegistries();
+  // Every registry this bar reads during render, as a view that changes
+  // with its contents (state/live.ts, ADR 228): bundles register menus,
+  // panels, tools and bindings after the bar first renders.
+  const menus = useRegistryView(registries.menus);
+  const keybindings = useRegistryView(registries.keybindings);
+  const panels = useRegistryView(registries.panels);
+  const tools = useRegistryView(registries.tools);
+  const editContexts = useRegistryView(registries.editContexts);
+  const modes = useRegistryView(registries.modes);
+  const { commands } = registries;
   const activeContext = useOptionalEditContextStack()?.active ?? null;
   const selectionContext = useSelectionEditContext();
   const { mode } = useWorkflowMode();
@@ -110,18 +114,13 @@ export function MenuBar() {
     }
     return null;
   };
-  const [version, setVersion] = useState(0);
   // ADR 024 — the menus reflect WHERE THE USER IS: `useOptionalPaged`
   // supplies the state `when` is evaluated against AND the re-render on
   // a selection or context change. Optional so a standalone mount
   // degrades to "everything enabled" rather than throwing.
   const paged = useOptionalPaged();
-  useEffect(() => {
-    const sub = menus.onChange(() => setVersion((v) => v + 1));
-    return () => sub.dispose();
-  }, [menus]);
 
-  const tree = useMemo(() => buildMenuTree(menus.list()), [menus, version]);
+  const tree = buildMenuTree(menus.list());
   if (tree.length === 0) return null;
 
   const applies = (leaf: MenuLeaf) =>

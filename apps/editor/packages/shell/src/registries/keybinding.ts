@@ -71,6 +71,9 @@ export interface KeybindingRegistry extends Api.KeybindingRegistry {
   /** The binding a key press would fire — with the live state, or with
    *  `state` when given (diagnostics, the registry invariants). */
   resolve(event: KeyEventLike, state?: unknown): KeybindingContribution | null;
+  /** Called after a binding is registered or removed (ADR 228: render-time
+   *  readers go through `useRegistryView`). */
+  onChange(handler: () => void): Disposable;
 }
 
 /** Internal: parsed key combo + the command to invoke. */
@@ -338,6 +341,10 @@ export function createKeybindingRegistry(
   getState?: () => unknown,
 ): KeybindingRegistry & Disposable {
   const bindings: ParsedBinding[] = [];
+  const changeListeners = new Set<() => void>();
+  const changed = () => {
+    for (const fn of [...changeListeners]) fn();
+  };
 
   const onKeyDown = (event: KeyboardEvent) => {
     // Skip when the focused widget consumes this key itself, so typing
@@ -369,10 +376,14 @@ export function createKeybindingRegistry(
       const combo = parseCombo(contribution.key);
       const entry: ParsedBinding = { contribution, combo };
       bindings.push(entry);
+      changed();
       return {
         dispose() {
           const idx = bindings.indexOf(entry);
-          if (idx >= 0) bindings.splice(idx, 1);
+          if (idx >= 0) {
+            bindings.splice(idx, 1);
+            changed();
+          }
         },
       };
     },
@@ -388,9 +399,19 @@ export function createKeybindingRegistry(
         state === undefined ? getState : () => state,
       );
     },
+    onChange(handler) {
+      changeListeners.add(handler);
+      return {
+        dispose() {
+          changeListeners.delete(handler);
+        },
+      };
+    },
     dispose() {
       detach();
+      const had = bindings.length > 0;
       bindings.length = 0;
+      if (had) changed();
     },
   };
 }

@@ -18,11 +18,14 @@
  */
 
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
+import { reactCompiler } from "../../../../tooling/js/react-compiler.mjs";
 
 // @paged-media/canvas-wasm is a workspace package (linked, so never
 // pre-bundled): its dynamic import and `?url` wasm asset resolve through the
 // module graph without an optimizeDeps exclude.
 export default defineConfig({
-  plugins: [react()],
+  // The React Compiler, configured once for every app (editor ADR 228).
+  plugins: [react(), ...reactCompiler({ reactCompilerPreset, babel })],
 });
