@@ -101,7 +101,8 @@ precondition, and asserts identical model dumps.
   and run as `test.failing`: it fails for the finding's reason today, and
   when the product is fixed the test passes, `test.failing` fails, and the
   entry is deleted with the fix. A disagreement not on record fails the
-  suite.
+  suite. The parity findings sit with every other layer's in
+  [conformance-findings-2026-10.md](conformance-findings-2026-10.md).
 - **Engine traps.** A case that makes the engine panic poisons its wasm
   instance; the suite records the trap and continues on a fresh editor.
 - **Gaps** (a surface with no door to an operation) and operations with no
