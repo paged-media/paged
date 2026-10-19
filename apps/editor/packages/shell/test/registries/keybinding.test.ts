@@ -31,12 +31,13 @@
 //   · the window listener: attach / detach / dispose, preventDefault on a
 //     match, nothing on a miss.
 //
-// UX findings F-49 (Tab) and F-36 (IME) are expected failures here (SH-2,
-// SH-3): they fail for the finding's reason and flip when it is fixed.
+// UX findings F-49 (Tab is the focused control's, SH-2) and F-36 (a
+// composition key fires no binding, SH-3) are asserted here since their
+// fix (ADR 234).
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
+import { covers, stubGlobal, unstubAllGlobals } from "@paged-media/test-kit";
 
 import { createCommandRegistry } from "../../src/registries/command";
 import {
@@ -68,15 +69,22 @@ function press(
   };
 }
 
-/** A DOM-ish element: tag, contenteditable, and the ancestor roles
- *  `closest` answers for. */
+/** A DOM-ish element: tag, contenteditable, its own attributes, and the
+ *  ancestor roles `closest` answers for. */
 function el(
   tagName: string,
-  options: { editable?: boolean; within?: string[] } = {},
+  options: {
+    editable?: boolean;
+    within?: string[];
+    attrs?: Record<string, string>;
+  } = {},
 ): HTMLElement {
+  const attrs = options.attrs ?? {};
   return {
     tagName,
     isContentEditable: options.editable ?? false,
+    getAttribute: (name: string) => attrs[name] ?? null,
+    hasAttribute: (name: string) => name in attrs,
     closest: (selector: string) =>
       (options.within ?? []).some((role) =>
         selector.includes(`[role="${role}"]`),
@@ -426,12 +434,16 @@ describe("the focused widget keeps the keys it consumes (targetOwnsKey)", () => 
         role,
         owns: true,
       });
-      // A letter is not the composite's.
-      expect(keyIn("v", inside)).toBe(false);
+      // A letter is not the composite's — except in a menu (typeahead)
+      // or a dialog, which own every key but a chord (R9).
+      expect({ role, owns: keyIn("v", inside) }).toEqual({
+        role,
+        owns: role === "menu" || role === "dialog",
+      });
     }
   });
 
-  test("a toolbar does NOT own the arrows: click a tool, then nudge", () => {
+  test("a toolbar does NOT own the arrows by role: its roving group prevents the default of the arrows it moves with", () => {
     expect(keyIn("ArrowLeft", el("BUTTON", { within: ["toolbar"] }))).toBe(
       false,
     );
@@ -453,25 +465,79 @@ describe("the focused widget keeps the keys it consumes (targetOwnsKey)", () => 
     expect(keyIn("ArrowLeft", {} as HTMLElement)).toBe(false);
   });
 
-  test("Tab, Enter, Escape and the function keys are not suppressed in a field (shipped behaviour)", () => {
-    for (const key of ["Tab", "Enter", "Escape", "F2"]) {
+  test("Enter, Escape and the function keys are not suppressed in a field (shipped behaviour)", () => {
+    for (const key of ["Enter", "Escape", "F2"]) {
       expect(keyIn(key, el("INPUT"))).toBe(false);
     }
   });
 
-  // Finding SH-2 (UX F-49): Tab is the chrome toggle and fires from
-  // anywhere a field is not focused, so keyboard focus can never move —
-  // not inside a dialog, not across the chrome. The rule that keeps a
-  // dialog's keys its own is this one; Tab is deliberately outside it.
-  test.failing(
-    "SH-2 (F-49): a dialog owns Tab, so focus can move between its controls",
-    () => {
-      expect(keyIn("Tab", el("BUTTON", { within: ["dialog"] }))).toBe(true);
-      expect(
-        keyIn("Tab", el("SELECT", { within: ["dialog"] }), { shiftKey: true }),
-      ).toBe(true);
-    },
-  );
+  // Finding SH-2 (UX F-49): Tab was the chrome toggle and fired from
+  // anywhere a field was not focused, so keyboard focus could never move —
+  // not inside a dialog, not across the chrome. Tab is now the focused
+  // control's everywhere but on a canvas surface (ADR 234).
+  test("SH-2 (F-49): a dialog owns Tab, so focus can move between its controls", () => {
+    covers("keybinding:tab→paged.chrome.toggleAll");
+    expect(keyIn("Tab", el("BUTTON", { within: ["dialog"] }))).toBe(true);
+    expect(
+      keyIn("Tab", el("SELECT", { within: ["dialog"] }), { shiftKey: true }),
+    ).toBe(true);
+  });
+
+  test("Tab moves focus from a field, a button and the page; only a canvas surface hands it to a binding", () => {
+    covers(
+      "keybinding:tab→paged.chrome.toggleAll",
+      "keybinding:shift+tab→paged.chrome.togglePanels",
+    );
+    expect(keyIn("Tab", el("INPUT"))).toBe(true);
+    expect(keyIn("Tab", el("BUTTON"))).toBe(true);
+    expect(keyIn("Tab", el("BODY"))).toBe(true);
+    const viewport = el("DIV", {
+      attrs: { "data-canvas-surface": "viewport" },
+    });
+    const textInput = el("TEXTAREA", {
+      attrs: { "data-canvas-surface": "text" },
+    });
+    expect(keyIn("Tab", viewport)).toBe(false);
+    expect(keyIn("Tab", viewport, { shiftKey: true })).toBe(false);
+    expect(keyIn("Tab", textInput)).toBe(false);
+  });
+
+  test("a dialog and an open menu own every key but a Cmd/Ctrl chord (R9)", () => {
+    for (const role of ["dialog", "alertdialog", "menu"]) {
+      const inside = el("BUTTON", { within: [role] });
+      for (const key of ["v", "Enter", " ", "Escape", "ArrowDown", "Home"]) {
+        expect(keyIn(key, inside), `${role} ${key}`).toBe(true);
+      }
+      // Cmd+K still opens the palette from a dialog's button.
+      expect(keyIn("k", inside, { metaKey: true }), role).toBe(false);
+    }
+    // A tab strip or a tree keeps the shortcut letters free, as before.
+    expect(keyIn("v", el("BUTTON", { within: ["tablist"] }))).toBe(false);
+    expect(keyIn("v", el("DIV", { within: ["tree"] }))).toBe(false);
+  });
+
+  test("Enter and Space on a focused button or link activate it, and fire no binding", () => {
+    expect(keyIn("Enter", el("BUTTON"))).toBe(true);
+    expect(keyIn(" ", el("BUTTON"))).toBe(true);
+    expect(keyIn("Enter", el("A", { attrs: { href: "#" } }))).toBe(true);
+    expect(keyIn("Enter", el("DIV", { attrs: { role: "button" } }))).toBe(true);
+    // The page and the canvas activate nothing.
+    expect(keyIn("Enter", el("BODY"))).toBe(false);
+    expect(
+      keyIn(
+        "Enter",
+        el("DIV", { attrs: { "data-canvas-surface": "viewport" } }),
+      ),
+    ).toBe(false);
+  });
+
+  test("an input method's keys are its own: isComposing, keyCode 229, Process", () => {
+    const body = el("BODY");
+    expect(keyIn("x", body, { isComposing: true })).toBe(true);
+    expect(keyIn("x", body, { keyCode: 229 })).toBe(true);
+    expect(keyIn("Process", body)).toBe(true);
+    expect(keyIn("x", body)).toBe(false);
+  });
 });
 
 describe("the window listener", () => {
@@ -590,17 +656,19 @@ describe("the window listener", () => {
 
   // Finding SH-3 (UX F-36): a keydown that belongs to an IME composition
   // (`isComposing`, `key` "Process" on Windows, keyCode 229) is the input
-  // method's, not a shortcut. The listener ignores `isComposing`, so a
-  // single-key tool shortcut fires mid-composition.
-  test.failing(
-    "SH-3 (F-36): a key pressed during IME composition fires no binding",
-    async () => {
-      const r = createKeybindingRegistry(commands);
-      r.register({ key: "v", command: "t.v" });
-      expect(keydown("v", { isComposing: true, keyCode: 229 })).toBe(false);
-      await flush();
-      expect(invoked).toEqual([]);
-      r.dispose();
-    },
-  );
+  // method's, not a shortcut. The listener used to ignore `isComposing`,
+  // so a single-key tool shortcut fired mid-composition.
+  test("SH-3 (F-36): a key pressed during IME composition fires no binding", async () => {
+    const r = createKeybindingRegistry(commands);
+    r.register({ key: "v", command: "t.v" });
+    expect(keydown("v", { isComposing: true, keyCode: 229 })).toBe(false);
+    expect(keydown("v", { keyCode: 229 })).toBe(false);
+    await flush();
+    expect(invoked).toEqual([]);
+    // The same key outside a composition is the shortcut.
+    expect(keydown("v")).toBe(true);
+    await flush();
+    expect(invoked).toEqual(["t.v"]);
+    r.dispose();
+  });
 });

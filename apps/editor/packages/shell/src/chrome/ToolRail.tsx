@@ -37,6 +37,8 @@ import { useEditContextStack } from "../state/edit-context-stack";
 import { VIEW_TOOL_IDS, useTool } from "../state/tool-context";
 import { Icon, hasIcon } from "../icons";
 import { ToolOptionsPopover } from "./ToolOptionsPopover";
+import { useRovingFocus } from "../focus/roving-focus";
+import { focusCanvasViewport } from "../focus/canvas-surface";
 import {
   BUILT_IN_TOOL_CLUSTERS,
   type ToolClusterId,
@@ -288,6 +290,14 @@ export function ToolRail({
   }, [clusters]);
 
   const tooltip = useRailTooltip();
+  // F-49 (ADR 234) — the tools are ONE tab stop: Tab lands on the tool in
+  // hand, the arrows walk the rail, Enter or Space picks. The foot (fill,
+  // stroke, proof, screen mode) is a second group.
+  const toolsRoving = useRovingFocus({
+    orientation: "both",
+    items: "[data-tool-slot]",
+  });
+  const footRoving = useRovingFocus({ orientation: "both", items: "button" });
 
   // Per-group "last used" face tool. Seeded from the group default;
   // updated whenever a member of the group becomes effective (click,
@@ -433,7 +443,14 @@ export function ToolRail({
       {/* The tools scroll on a short window; the foot (fill/stroke,
        *  proof, screen mode) stays pinned below them, never scrolled
        *  out of reach. */}
-      <div style={railToolsStyle} onScroll={tooltip.hide}>
+      <div
+        role="toolbar"
+        aria-label="Tools"
+        aria-orientation="vertical"
+        style={railToolsStyle}
+        onScroll={tooltip.hide}
+        {...toolsRoving}
+      >
         {visibleClusters.map((c, i) => (
           <div
             key={c.cluster}
@@ -472,7 +489,13 @@ export function ToolRail({
       </div>
       {tooltip.node}
       {foot != null && (
-        <div style={footStyle}>
+        <div
+          role="toolbar"
+          aria-label="Fill, stroke and view"
+          aria-orientation="vertical"
+          style={footStyle}
+          {...footRoving}
+        >
           <div style={dividerStyle} aria-hidden />
           {foot}
         </div>
@@ -627,6 +650,16 @@ function ToolSlot({
   const openedByHold = useRef(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const flyoutRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  // The flyout is a menu: opened from the keyboard (Shift+F10 or the
+  // context-menu key on a focused tool) it takes focus, walks with the
+  // arrows and typeahead, and Escape hands focus back to the tool.
+  const flyoutByKeyboard = useRef(false);
+  const flyoutRoving = useRovingFocus({
+    orientation: "vertical",
+    items: '[role="menuitem"]',
+    typeahead: true,
+  });
   const hasFlyout = slot.members.length > 1;
   const isActive = activeGroup === slot.group;
 
@@ -661,6 +694,10 @@ function ToolSlot({
       openedByHold.current = false;
       return;
     }
+    // A pointer click hands focus back to the document (ADR 234): the
+    // next arrow nudges, as it did before the rail was a toolbar. Enter
+    // or Space on a focused tool (`detail` 0) keeps focus on the rail.
+    if (e.detail > 0) focusCanvasViewport({ engaged: true });
     // Alt+click cycles the slot through its group's hidden tools —
     // the non-conflicting form of "cycle within a group" (the
     // Shift+key combos are real tool shortcuts of their own).
@@ -678,6 +715,14 @@ function ToolSlot({
     }
     onPick(face);
   };
+
+  useEffect(() => {
+    if (!flyoutOpen || !flyoutByKeyboard.current) return;
+    flyoutByKeyboard.current = false;
+    flyoutRef.current
+      ?.querySelector<HTMLElement>('[role="menuitem"]:not([aria-disabled])')
+      ?.focus();
+  }, [flyoutOpen]);
 
   // Close the flyout on a pointer-down OUTSIDE this slot. The
   // containment check keeps the opening gesture's own trailing pointer
@@ -707,6 +752,7 @@ function ToolSlot({
   return (
     <div ref={containerRef} style={{ position: "relative" }}>
       <button
+        ref={buttonRef}
         type="button"
         // The rail tooltip (useRailTooltip) replaces the native `title`:
         // that one waits ~1 s and can say no more than the name.
@@ -764,9 +810,20 @@ function ToolSlot({
           setFlyoutOpen(false);
           setOptionsOpen(true);
         }}
+        onKeyDown={(e) => {
+          // Shift+F10 and the context-menu key open the group's flyout
+          // (not every platform turns them into a contextmenu event).
+          if (!hasFlyout) return;
+          if (e.key !== "ContextMenu" && !(e.shiftKey && e.key === "F10"))
+            return;
+          e.preventDefault();
+          flyoutByKeyboard.current = true;
+          openFlyout();
+        }}
         onContextMenu={(e) => {
           if (!hasFlyout) return;
           e.preventDefault();
+          flyoutByKeyboard.current = e.currentTarget.matches(":focus-visible");
           openFlyout();
         }}
         style={{
@@ -788,14 +845,33 @@ function ToolSlot({
         flyoutPos &&
         createPortal(
           <div
-            ref={flyoutRef}
+            ref={(el) => {
+              flyoutRef.current = el;
+              const detach = flyoutRoving.ref(el);
+              return () => {
+                flyoutRef.current = null;
+                detach?.();
+              };
+            }}
             style={{ ...flyoutStyle, left: flyoutPos.left, top: flyoutPos.top }}
             role="menu"
+            aria-label={`${slot.defaultTool.title} tools`}
             data-tool-flyout={slot.group}
+            onFocus={flyoutRoving.onFocus}
+            onKeyDown={(e) => {
+              if (e.key === "Escape" || e.key === "Tab") {
+                e.preventDefault();
+                setFlyoutOpen(false);
+                buttonRef.current?.focus();
+                return;
+              }
+              flyoutRoving.onKeyDown(e);
+            }}
           >
             {onTearOff && (
               <button
                 type="button"
+                role="menuitem"
                 title="Tear off into a floating palette"
                 data-tool-tearoff={slot.group}
                 onClick={() => {
@@ -831,10 +907,12 @@ function ToolSlot({
                     appliesHere: !memberDimmed,
                     id: member.id,
                   })}
-                  onClick={() => {
+                  onClick={(e) => {
                     if (memberPlanned) return;
                     setFlyoutOpen(false);
                     onPick(member);
+                    if (e.detail > 0) focusCanvasViewport({ engaged: true });
+                    else buttonRef.current?.focus();
                   }}
                   style={{
                     ...(memberActive

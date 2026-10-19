@@ -21,6 +21,7 @@ import { useEffect, useEffectEvent, useMemo, useState } from "react";
 
 import {
   GestureSpine,
+  canvasKeyYields,
   resolveCursorCss,
   usePaged,
   useRegistryView,
@@ -49,14 +50,6 @@ export interface ToolGestureDispatch {
   /** Per-position cursor from the handler's `cursorAt`, resolved to a
    *  CSS string; undefined falls back to the tool's base cursor. */
   hoverCursor?: (e: CanvasPointerEvent) => string | undefined;
-}
-
-function isEditableTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  if (!el || !el.tagName) return false;
-  return (
-    el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable
-  );
 }
 
 export function useGestureSpine(): {
@@ -91,7 +84,7 @@ export function useGestureSpine(): {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!spine.hasActive()) return;
-      if (isEditableTarget(e.target)) return;
+      if (canvasKeyYields(e)) return;
       spine.key(e);
     };
     window.addEventListener("keydown", onKeyDown);

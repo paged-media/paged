@@ -211,6 +211,15 @@ test.describe("Concept 1 — tool rail", () => {
     page,
   }) => {
     await expect(page.locator('[data-tool-rail="ready"]')).toBeVisible();
+    // Tab hides the chrome on the canvas the user clicked into (ADR 234):
+    // a pointerdown on the viewport surface, as a click in it delivers.
+    await page.evaluate(() =>
+      document
+        .querySelector('[data-canvas-surface="viewport"]')
+        ?.dispatchEvent(
+          new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
+        ),
+    );
     await page.keyboard.press("Tab");
     await expect(page.locator('[data-tool-rail="ready"]')).toBeHidden();
     await page.keyboard.press("Tab");

@@ -17,7 +17,13 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import { type CSSProperties, type ReactNode } from "react";
+import {
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +43,7 @@ import { useSelectionEditContext } from "../state/use-selection-object-type";
 import { useWorkflowMode } from "../state/workflow-mode-context";
 import { isEnabled, type VisibilityPredicate } from "../registries/types";
 import { Icon, hasIcon } from "../icons";
+import { useRovingFocus } from "../focus/roving-focus";
 
 /**
  * Top-level menu bar. Reads from `MenuRegistry` and renders each
@@ -119,6 +126,18 @@ export function MenuBar() {
   // a selection or context change. Optional so a standalone mount
   // degrades to "everything enabled" rather than throwing.
   const paged = useOptionalPaged();
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  // How the open menu was opened and where focus was before it: read
+  // and written by the event handlers below, never during render.
+  const navRef = useRef<MenuNavigation>({
+    origin: "keyboard",
+    returnTo: null,
+    switching: false,
+  });
+  const roving = useRovingFocus({
+    orientation: "horizontal",
+    items: "[data-menu-trigger]",
+  });
 
   const tree = buildMenuTree(menus.list());
   if (tree.length === 0) return null;
@@ -174,16 +193,79 @@ export function MenuBar() {
     iconFor,
   };
 
+  // F-49 / R9 (ADR 234) — the bar is a WAI-ARIA menubar: one tab stop
+  // (roving tabindex over the triggers), ArrowLeft/Right between them,
+  // and with a menu open ArrowLeft/Right switch to the neighbouring menu.
+  // Inside a menu Radix gives the arrows, Home/End, typeahead and Escape.
+  // A menu opened with the POINTER hands focus back to where it was when
+  // it closes (the canvas, a caret), so the next arrow nudges or moves
+  // the caret as it did before the menu; one opened by keyboard returns
+  // focus to its trigger.
+  const labels = [...core, ...context].map(([label]) => label);
+  const neighbour = (label: string, delta: number) =>
+    labels[(labels.indexOf(label) + delta + labels.length) % labels.length];
+  const onContentKeyDown = (
+    e: ReactKeyboardEvent<HTMLDivElement>,
+    label: string,
+  ) => {
+    // A submenu trigger opened its submenu, or a submenu closed itself.
+    if (e.defaultPrevented) return;
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    e.preventDefault();
+    navRef.current.switching = true;
+    setOpenMenu(neighbour(label, e.key === "ArrowRight" ? 1 : -1));
+  };
+
   const menu = (label: string, nodes: MenuNode[], contextual: boolean) => (
-    <DropdownMenu key={label}>
+    <DropdownMenu
+      key={label}
+      open={openMenu === label}
+      onOpenChange={(open) => {
+        if (open) setOpenMenu(label);
+        else if (openMenu === label) setOpenMenu(null);
+      }}
+    >
       <DropdownMenuTrigger
+        role="menuitem"
         style={contextual ? contextTriggerStyle : triggerStyle}
         data-menu-trigger={label}
         data-menu-context={contextual ? "true" : undefined}
+        onPointerDown={(e) => {
+          if (e.button !== 0 || openMenu === label) return;
+          navRef.current.origin = "pointer";
+          navRef.current.returnTo = document.activeElement;
+        }}
+        onKeyDown={() => {
+          navRef.current.origin = "keyboard";
+          navRef.current.returnTo = null;
+        }}
       >
         {label}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" sideOffset={4} style={contentStyle}>
+      <DropdownMenuContent
+        align="start"
+        sideOffset={4}
+        style={contentStyle}
+        onKeyDown={(e) => onContentKeyDown(e, label)}
+        onCloseAutoFocus={(e) => {
+          const nav = navRef.current;
+          // The neighbour this menu switched to is opening and takes
+          // focus itself (Radix lands a keyboard-opened menu on its
+          // first item).
+          if (nav.switching) {
+            nav.switching = false;
+            e.preventDefault();
+            return;
+          }
+          if (nav.origin !== "pointer") return;
+          e.preventDefault();
+          const back = nav.returnTo;
+          nav.returnTo = null;
+          if (back instanceof HTMLElement && back.isConnected) {
+            back.focus({ preventScroll: true });
+          }
+        }}
+      >
         {renderNodes(nodes, ctx)}
       </DropdownMenuContent>
     </DropdownMenu>
@@ -191,15 +273,28 @@ export function MenuBar() {
 
   return (
     <nav aria-label="Main menu" style={menuBarStyle}>
-      {core.map(([label, nodes]) => menu(label, nodes, false))}
-      {context.length > 0 && (
-        <>
-          <span style={dividerStyle} aria-hidden />
-          {context.map(([label, nodes]) => menu(label, nodes, true))}
-        </>
-      )}
+      <div
+        role="menubar"
+        aria-label="Main menu"
+        style={menuBarStyle}
+        {...roving}
+      >
+        {core.map(([label, nodes]) => menu(label, nodes, false))}
+        {context.length > 0 && (
+          <>
+            <span style={dividerStyle} aria-hidden />
+            {context.map(([label, nodes]) => menu(label, nodes, true))}
+          </>
+        )}
+      </div>
     </nav>
   );
+}
+
+interface MenuNavigation {
+  origin: "pointer" | "keyboard";
+  returnTo: Element | null;
+  switching: boolean;
 }
 
 // ── model ──────────────────────────────────────────────────────────

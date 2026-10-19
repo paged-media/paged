@@ -31,6 +31,7 @@
 
 import type { ComponentType } from "react";
 
+import { canvasViewportSurfaceProps } from "../focus/canvas-surface";
 import type { PanelProps } from "../registries/panel";
 import { usePaged } from "../state/paged-editor";
 import { useRegistries } from "../state/registries-context";
@@ -140,6 +141,9 @@ export function CockpitLayout({
               coordinates against the same rect the canvas uses. */}
           <div
             data-paged-viewport
+            // ADR 234 — the document canvas is a keyboard surface: Tab
+            // reaches it, and a click in it makes Tab the chrome toggle.
+            {...(isOverride ? null : canvasViewportSurfaceProps)}
             style={{ flex: 1, minWidth: 0, position: "relative" }}
           >
             {isOverride ? (
