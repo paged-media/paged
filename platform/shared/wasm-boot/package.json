@@ -1,0 +1,21 @@
+{
+  "name": "@paged-media/wasm-boot",
+  "private": true,
+  "version": "0.0.0",
+  "license": "AGPL-3.0-only OR LicenseRef-PMEL",
+  "description": "Internal: how a built-in module boots its engine wasm, once per realm, in the browser and under Node (a single flight around the wasm-bindgen glue; the module passes its literal glue and `?url` imports as thunks). Never published (docs/adr/PM-0002).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "bun check -p tsconfig.json",
+    "test": "bun test --parallel --preload ../../../tooling/js/bun-test-setup.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

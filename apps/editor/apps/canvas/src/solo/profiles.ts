@@ -119,7 +119,8 @@ const DRAW_PROFILE: SoloProfile = {
     "paged.keyboard-shortcuts",
   ],
   toolIds: [
-    // Drawing primitives the HOST owns and draw builds on. draw's own 19
+    // Drawing primitives the HOST owns and draw builds on (the Pencil
+    // among them: draw retired its own into it, draw ADR 359). draw's own
     // tools arrive with the bundle.
     "paged.tool.pen",
     "paged.tool.pencil",

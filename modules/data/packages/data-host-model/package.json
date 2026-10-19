@@ -13,6 +13,7 @@
     "test": "bun test --parallel --preload ../../../../tooling/js/bun-test-setup.ts"
   },
   "dependencies": {
+    "@paged-media/helpers": "workspace:*",
     "@paged-media/plugin-api": "workspace:*"
   },
   "devDependencies": {

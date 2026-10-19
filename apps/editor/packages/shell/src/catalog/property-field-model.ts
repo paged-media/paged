@@ -29,6 +29,12 @@
 //
 // Types-only imports: node's type stripping runs this file as-is.
 
+import {
+  decodeEnvelope,
+  encodeEnvelope,
+  parseLength,
+} from "@paged-media/helpers";
+
 import type {
   ShellObjectOp,
   ShellObjectValue,
@@ -222,23 +228,9 @@ export function optionValue(
 
 // ------------------------------------------------------ parse / format
 
-/** Points per unit — the same table the SDK's `parseLength` uses. */
-const PT_PER_UNIT: Record<string, number> = {
-  pt: 1,
-  px: 0.75,
-  in: 72,
-  mm: 72 / 25.4,
-  cm: 72 / 2.54,
-  pc: 12,
-  p: 12,
-};
-
-export function parseLength(text: string): number | null {
-  const m = /^\s*(-?\d+(?:\.\d+)?|-?\.\d+)\s*([a-z]*)\s*$/i.exec(text);
-  if (!m) return null;
-  const factor = m[2] ? PT_PER_UNIT[m[2].toLowerCase()] : 1;
-  return factor === undefined ? null : Number(m[1]) * factor;
-}
+/** Lengths parse with the SDK's table (`@paged-media/helpers`; a test
+ *  there holds it equal to plugin-sdk's public `parseLength`). */
+export { parseLength };
 
 export type ParseResult =
   { ok: true; value: unknown } | { ok: false; reason: string };
@@ -492,19 +484,14 @@ export async function probeBound(
 
 /** The engine gates every `x-paged:` label value to `{ v, data }`. */
 export function oidEnvelope(oid: string): string {
-  return JSON.stringify({ v: 1, data: { oid } });
+  return encodeEnvelope({ oid });
 }
 
 export function oidFromEnvelope(
   text: string | null | undefined,
 ): string | null {
-  if (!text) return null;
-  try {
-    const parsed = JSON.parse(text) as { data?: { oid?: unknown } };
-    return typeof parsed.data?.oid === "string" ? parsed.data.oid : null;
-  } catch {
-    return null;
-  }
+  const oid = decodeEnvelope<{ oid?: unknown }>(text)?.data?.oid;
+  return typeof oid === "string" ? oid : null;
 }
 
 const PAGE_ITEM_KINDS = new Set([

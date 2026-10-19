@@ -20,6 +20,7 @@ import type {
   Mutation,
   MutationOutcome,
 } from "@paged-media/plugin-api";
+import { labelKey as sharedLabelKey } from "@paged-media/helpers";
 
 import { BINDING_KEY, asciiJson } from "../../data-host-model/src";
 
@@ -78,7 +79,7 @@ export function labelMutation(
 /** The label key of `host`'s plugin. */
 export function labelKey(host: BundleHost): string {
   const id = (host as { manifest?: { id?: string } }).manifest?.id;
-  return id ? `x-paged:${id}` : BINDING_KEY;
+  return id ? sharedLabelKey(id) : BINDING_KEY;
 }
 
 /** The session version a label envelope names, or null. */

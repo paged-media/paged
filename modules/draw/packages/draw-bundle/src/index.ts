@@ -123,7 +123,6 @@ export {
 // undeclared tool-settings store, and the live reader the handlers use.
 export {
   TOOL_OPTIONS,
-  PENCIL_OPTIONS,
   PAINTBRUSH_OPTIONS,
   BLOB_BRUSH_OPTIONS,
   ERASER_OPTIONS,
@@ -141,7 +140,6 @@ export {
   type SelectOption,
 } from "./tool-options";
 export { createCurvatureHandler } from "./handlers/curvature";
-export { createPencilHandler } from "./handlers/pencil";
 export {
   createMeasureHandler,
   nearestPathPointOnPage,

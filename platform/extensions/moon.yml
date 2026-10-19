@@ -9,7 +9,7 @@ tags: ["node", "sdk"]
 
 project:
   title: "platform/extensions"
-  description: "Extension contract (plugin-api), runtime SDK with the manifest CLI (paged-plugin), ai and cli packages."
+  description: "Extension contract (plugin-api) and the runtime SDK with the manifest CLI (paged-plugin)."
 
 # plugin-sdk's harness specs boot the engine's canvas-wasm (workspace:*);
 # scripts/sync-catalog.mjs reads engine/core's catalog.json,

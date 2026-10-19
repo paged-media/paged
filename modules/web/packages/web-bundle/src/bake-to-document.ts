@@ -42,6 +42,7 @@
 // bakes nothing and says why.
 
 import type { BundleHost, ElementId, PageId } from "@paged-media/plugin-api";
+import { PX_PER_PT } from "@paged-media/helpers";
 import { asFrameTarget, type WebDiagnostic } from "../../web-model/src";
 
 import { bakeWebFlow } from "./bake";
@@ -60,9 +61,6 @@ import { loadWebEngine, type WebEngine } from "./engine-loader";
 import { publishRenderReport } from "./render-report";
 import { resolveFlowChain } from "./render-flow-command";
 import { describeRefusal, loadWebSource } from "./source-part";
-
-/** CSS px per point (the engine lays out in px; frame geometry is in pt). */
-const PX_PER_PT = 96 / 72;
 
 /** The outcome of a bake-to-document — surfaced to the command handler. */
 export interface FrameBakeToDocOutcome {

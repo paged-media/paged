@@ -33,7 +33,7 @@ body, next to the assertions, with string literals. A built-in module imports it
 | manifest `importers` / `exporters`             | `importer:media.paged.slide.importer.pptx`                 | `any`: unit, headless or e2e                                     |
 | `contribute.menu({ path, command })`           | `menu:Sheet/Sort range…` (the path, exactly as registered) | `e2e`: Playwright                                                |
 | `contribute.keybinding({ key, command })`      | `keybinding:cmd+c→media.paged.sheet.command.copySelection` | `any`: unit, component or e2e                                    |
-| a tool's option fields                         | `setting:media.paged.draw.tool.pencil.fidelity`            | `unit` (unit, component)                                         |
+| a tool's option fields                         | `setting:media.paged.draw.tool.paintbrush.size`            | `unit` (unit, component)                                         |
 
 The layer comes from the file's path: `*.dom.test.tsx` is component, a file under a
 `headless/` directory or named `*.headless.test.ts` is headless, anything under
@@ -149,7 +149,9 @@ Findings so far, each an expected failure in those files:
 ## Findings on record
 
 Every finding is an expected failure in the test named, and fails for the stated reason. The
-host findings (HOST-1 to HOST-7) are in the table above.
+host findings (HOST-1 to HOST-7) are in the table above. All of the programme's findings, the
+plugins' included, are indexed with severities and shared root causes in
+[conformance-findings-2026-10.md](../../../docs/development/conformance-findings-2026-10.md).
 
 | Id    | Surface                                                                                 | What happens                                                                           | Test                                                                          |
 | ----- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |

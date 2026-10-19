@@ -255,3 +255,15 @@ export {
   type RepeatSteerModifiers,
   type RepeatGuideSpec,
 } from "./repeat-machine";
+
+// SNAPPING (RFI C-68, engine ADR 125) — the one client of the engine's
+// `requestSnapPoint` that the point-placing tools share: the host's Pen
+// and paged.draw's Curvature. The host supplies the transport and the
+// bypass.
+export {
+  createSnapper,
+  snapAnswered,
+  type SnapQuery,
+  type SnapRequest,
+  type Snapper,
+} from "./snapper";

@@ -19,8 +19,8 @@
 
 // The pure maths every drawing tool shares (shared.ts) as properties
 // (fast-check, fixed seed), the graphic-default paint, the post-insert
-// flow, and the host snapper (engine snap with the plugin-side
-// fallback).
+// flow, and the host snapper (the engine's snap, through paged.draw's
+// shared snapper).
 
 import { afterEach, describe, expect, it } from "bun:test";
 import fc from "fast-check";
@@ -47,7 +47,6 @@ import {
   createHostSnapper,
   engineSnapPoint,
   snappingOn,
-  SNAP_TOLERANCE_PX,
 } from "../src/handlers/snapper";
 import { harness } from "./support";
 
@@ -315,65 +314,56 @@ describe("the host snapper (RFI C-68)", () => {
   });
 
   it("engineSnapPoint: the engine's answer when it gives one; null for no answer, a zero tolerance or a throw", async () => {
-    const answer = { point: [10, 20], snapped: true, tolerancePt: 3 };
+    const answer = {
+      point: [10, 20],
+      snapped: true,
+      lines: [],
+      tolerancePt: 3,
+    };
+    // A scripted wire: `send` answers each case's reply.
+    const wire = (reply: () => Promise<unknown>) => reply as never;
     expect(
       await engineSnapPoint(
-        async () => ({ kind: "snapPoint", payload: { result: answer } }),
+        wire(async () => ({ kind: "snapPoint", payload: { result: answer } })),
         { pageId: "p", point: [9, 19], cameraScale: 1 },
       ),
-    ).toEqual(answer);
-    expect(
-      await engineSnapPoint(async () => ({ kind: "warning" }), {
-        pageId: "p",
-        point: [0, 0],
-        cameraScale: 1,
-      }),
-    ).toBeNull();
+    ).toEqual(answer as never);
     expect(
       await engineSnapPoint(
-        async () => ({
-          kind: "snapPoint",
-          payload: { result: { ...answer, tolerancePt: 0 } },
-        }),
+        wire(async () => ({ kind: "warning" })),
         { pageId: "p", point: [0, 0], cameraScale: 1 },
       ),
     ).toBeNull();
     expect(
-      await engineSnapPoint(() => Promise.reject(new Error("x")), {
-        pageId: "p",
-        point: [0, 0],
-        cameraScale: 1,
-      }),
+      await engineSnapPoint(
+        wire(async () => ({
+          kind: "snapPoint",
+          payload: { result: { ...answer, tolerancePt: 0 } },
+        })),
+        { pageId: "p", point: [0, 0], cameraScale: 1 },
+      ),
+    ).toBeNull();
+    expect(
+      await engineSnapPoint(
+        wire(() => Promise.reject(new Error("x"))),
+        { pageId: "p", point: [0, 0], cameraScale: 1 },
+      ),
     ).toBeNull();
   });
 
-  it("the fallback snaps to the page's corners, centre and edges within 6 screen px, and to the tool's own points", async () => {
-    const { fake } = harness();
-    const snapper = createHostSnapper(
-      () => fake.shell as unknown as PagedEditor,
-    );
-    await snapper.prepare("page-1");
-    // 1 pt per px: the page centre (306, 396) from 4 pt away.
-    expect(snapper.snap([303, 393], mouse(), 1)).toEqual([306, 396]);
-    expect(snapper.last()?.point).toEqual([306, 396]);
-    // Out of reach at 100% (10 px) — in reach at 25% (2.5 px).
-    expect(snapper.snap([296, 386], mouse(), 1)).toEqual([296, 386]);
-    expect(snapper.snap([296, 386], mouse(), 4)).toEqual([306, 396]);
-    expect(snapper.snap([152, 152], mouse(), 1, [[150, 150]])).toEqual([
-      150, 150,
-    ]);
-    expect(snapper.snap([303, 393], mouse(true), 1)).toEqual([303, 393]);
-    expect(SNAP_TOLERANCE_PX).toBe(6);
-  });
-
-  it("snapAsync uses the engine's resolver when it answers, the fallback when it does not", async () => {
+  it("snapAsync takes the engine's answer, with the zoom and the tool's own points in the query", async () => {
     const engine = harness({
       reply: (m) =>
         m.kind === ("requestSnapPoint" as never)
           ? {
               kind: "snapPoint",
               payload: {
-                result: { point: [1, 2], snapped: true, tolerancePt: 6 },
+                result: {
+                  point: [1, 2],
+                  snapped: true,
+                  lines: [],
+                  tolerancePt: 6,
+                },
               },
             }
           : undefined,
@@ -381,25 +371,90 @@ describe("the host snapper (RFI C-68)", () => {
     const s1 = createHostSnapper(
       () => engine.fake.shell as unknown as PagedEditor,
     );
-    expect(await s1.snapAsync("page-1", [100, 100], mouse(), 1)).toEqual([
-      1, 2,
-    ]);
+    expect(
+      await s1.snapAsync("page-1", [100, 100], mouse(), 0.5, [[150, 150]]),
+    ).toEqual([1, 2]);
+    expect(s1.last()?.point).toEqual([1, 2]);
     const asked = engine.fake
       .ofChannel("send")
-      .find((e) => (e.message as { kind: string }).kind === "requestSnapPoint");
+      .filter(
+        (e) => (e.message as { kind: string }).kind === "requestSnapPoint",
+      );
+    expect(asked).toHaveLength(1);
+    const query = (
+      asked[0]!.message as {
+        payload: {
+          query: {
+            pageId: string;
+            point: number[];
+            cameraScale: number;
+            extraPoints: number[][];
+          };
+        };
+      }
+    ).payload.query;
+    expect(query).toEqual({
+      pageId: "page-1",
+      point: [100, 100],
+      cameraScale: 2,
+      extraPoints: [[150, 150]],
+    });
+    s1.reset();
+    expect(s1.last()).toBeNull();
+  });
+
+  it("snapAsync leaves the point alone while bypassed (and does not ask), and when the engine does not answer", async () => {
+    const engine = harness({
+      reply: (m) =>
+        m.kind === ("requestSnapPoint" as never)
+          ? {
+              kind: "snapPoint",
+              payload: {
+                result: {
+                  point: [1, 2],
+                  snapped: true,
+                  lines: [],
+                  tolerancePt: 6,
+                },
+              },
+            }
+          : undefined,
+    });
+    const s1 = createHostSnapper(
+      () => engine.fake.shell as unknown as PagedEditor,
+    );
+    expect(await s1.snapAsync("page-1", [303, 393], mouse(true), 1)).toEqual([
+      303, 393,
+    ]);
     expect(
-      (asked?.message as { payload: { query: { cameraScale: number } } })
-        .payload.query.cameraScale,
-    ).toBe(1);
+      await s1.snapAsync("page-1", [303, 393], mouse(false, true), 1),
+    ).toEqual([303, 393]);
+    setViewToggle("snapToPoints", false);
+    expect(await s1.snapAsync("page-1", [303, 393], mouse(), 1)).toEqual([
+      303, 393,
+    ]);
+    expect(s1.last()).toBeNull();
+    expect(
+      engine.fake
+        .ofChannel("send")
+        .filter(
+          (e) => (e.message as { kind: string }).kind === "requestSnapPoint",
+        ),
+    ).toHaveLength(0);
+    // No engine answer (here: no reply at all) — the pointer's own point.
+    setViewToggle("snapToPoints", true);
     const none = harness();
     const s2 = createHostSnapper(
       () => none.fake.shell as unknown as PagedEditor,
     );
-    await s2.prepare("page-1");
     expect(await s2.snapAsync("page-1", [303, 393], mouse(), 1)).toEqual([
-      306, 396,
+      303, 393,
     ]);
-    s2.reset();
     expect(s2.last()).toBeNull();
+    // No editor at all.
+    const s3 = createHostSnapper(() => null);
+    expect(await s3.snapAsync("page-1", [303, 393], mouse(), 1)).toEqual([
+      303, 393,
+    ]);
   });
 });

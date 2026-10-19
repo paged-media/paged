@@ -562,16 +562,13 @@ function cliSurface(ev, root) {
   if (existsSync(join(root, "engine/core/crates/paged-run/Cargo.toml")))
     items.push({ id: "paged-run", source: "engine/core/crates/paged-run" });
   // paged-node: the TS CLI's verb table.
-  const verbsFile = "platform/extensions/packages/cli/src/verbs.ts";
+  const verbsFile = "apps/cli/src/verbs.ts";
   const verbs = constValue(ev, root, verbsFile, "VERBS");
   const verbNames = Array.isArray(verbs)
     ? verbs.map((v) => v?.name).filter((x) => typeof x === "string")
     : [];
   const cliPkg = JSON.parse(
-    readFileSync(
-      join(root, "platform/extensions/packages/cli/package.json"),
-      "utf8",
-    ),
+    readFileSync(join(root, "apps/cli/package.json"), "utf8"),
   );
   const nodeBin = Object.keys(cliPkg.bin ?? {})[0] ?? "paged-node";
   items.push({ id: nodeBin, source: verbsFile });

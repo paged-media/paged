@@ -38,6 +38,7 @@ import type {
   ElementId,
   PartChange,
 } from "@paged-media/plugin-api";
+import { sha256Hex } from "@paged-media/helpers";
 
 import { DocEngine } from "./engine.js";
 
@@ -175,17 +176,6 @@ export async function readLowered(
   return ir;
 }
 
-/** SHA-256 of `bytes`, lower-case hex. */
-export async function sha256(bytes: Uint8Array): Promise<string> {
-  const digest = await globalThis.crypto.subtle.digest(
-    "SHA-256",
-    bytes as Uint8Array<ArrayBuffer>,
-  );
-  return Array.from(new Uint8Array(digest), (b) =>
-    b.toString(16).padStart(2, "0"),
-  ).join("");
-}
-
 /** A new persisted state for an edited .docx: the content-addressed .docx and
  *  docLowered parts, and the label that names them. Remembers the lowering
  *  under the new label so the next read needs no part read. */
@@ -194,7 +184,7 @@ export async function plannedState(
   bytes: Uint8Array,
   ir: LoweredDoc,
 ): Promise<{ parts: PartChange[]; labelText: string }> {
-  const hash = await sha256(bytes);
+  const hash = await sha256Hex(bytes);
   const part = `sources/${hash}.docx`;
   const lowered = `lowered/${hash}.json`;
   const data: DocLabelData = {
