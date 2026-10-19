@@ -47,10 +47,12 @@
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useMemo,
   useReducer,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type ReactElement,
   type ReactNode,
@@ -471,10 +473,6 @@ export function makeWebSourcePanel(
     const [selection, setSelection] = useState<ElementId[]>(() =>
       host.selection.get(),
     );
-    // ADR-020 readout — re-render when a render/flow/bake command lands a
-    // new outcome (the report itself is read at render time).
-    const [, bumpReport] = useReducer((n: number) => n + 1, 0);
-    useEffect(() => subscribeRenderReport(bumpReport), []);
     // The PERSISTED source for the selected target (document metadata
     // truth). The editing draft lives in <SourceEditor>, which remounts
     // per target + per undo/redo revert (the `generation` key).
@@ -987,6 +985,14 @@ function SourceEditor({
   );
   // Why the last save was refused (shown beside the save button).
   const [saveError, setSaveError] = useState<string | null>(null);
+  // ADR-020 readout — the last render/flow/bake outcome, read through a
+  // subscription (module state read during render is computed once by the
+  // React Compiler, ADR 229).
+  const report = useSyncExternalStore(
+    subscribeRenderReport,
+    lastRenderReport,
+    lastRenderReport,
+  );
   const preview = useDebouncedValue(draft, PREVIEW_DEBOUNCE_MS);
   // Preview = canvas: the preview lays out at the frame's content size,
   // the box the engine lays out in. Re-read when the frame is resized (the
@@ -1016,11 +1022,7 @@ function SourceEditor({
   // provider announces a new revision — the preview substitutes them as
   // the canvas does.
   const { bindings, refresh: refreshBindings } = useBindings(host, id, preview);
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const rendered = useMemo(
-    () => renderWebFrameSource(preview, bindings.vars),
-    [preview, bindings],
-  );
+  const rendered = renderWebFrameSource(preview, bindings.vars);
   // W-06 — document faces the host asset store served BYTES for and we
   // composed into real `@font-face` rules (data URLs — see
   // font-resolution.ts for why data:, not blob:, in a sandboxed
@@ -1038,21 +1040,27 @@ function SourceEditor({
   // `@font-face` CSS lands in the srcdoc <style> — plain CSS with
   // inline data-url src, NO script, so `sandbox=""` is unchanged.
   // Keyed on the DEBOUNCED rendered css (no byte reads per keystroke).
+  // The family list arrives as a new array on every render; the effect
+  // runs when its contents change and reads the list it runs after.
   const cssForFonts = rendered.css;
+  const familiesKey = fontFamilies.join(" ");
+  const resolveFaces = useEffectEvent(
+    (css: string, isStale: () => boolean) =>
+      void resolvePreviewFontFaces(host, css, fontFamilies).then(
+        ({ faces, shown }) => {
+          if (isStale()) return;
+          setResolvedFaces(faces);
+          setShownFamilies(shown);
+        },
+      ),
+  );
   useEffect(() => {
     let stale = false;
-    void resolvePreviewFontFaces(host, cssForFonts, fontFamilies).then(
-      ({ faces, shown }) => {
-        if (stale) return;
-        setResolvedFaces(faces);
-        setShownFamilies(shown);
-      },
-    );
+    resolveFaces(cssForFonts, () => stale);
     return () => {
       stale = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cssForFonts, fontFamilies.join(" ")]);
+  }, [cssForFonts, familiesKey]);
 
   // The full diagnostic set: template-pass warnings (§6.2 slice) +
   // HTML policy/balance + CSS↔document font parity (W1). All lanes
@@ -1061,18 +1069,14 @@ function SourceEditor({
   // over the DEBOUNCED, RENDERED draft — the lint lane rides the same
   // ~300 ms cadence as the preview. W-06: a family whose bytes were
   // SHOWN drops its "not previewable" info (it IS previewable now).
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const diagnostics = useMemo<WebDiagnostic[]>(
-    () => [
-      ...rendered.diagnostics,
-      ...diagnoseHtml(rendered.html),
-      ...diagnoseFonts(rendered.css, fontFamilies, shownFamilies),
-      // Named-flow lint (flow-from without flow-into etc.) — built in
-      // web-model, wired here so it rides the same debounced cadence.
-      ...namedFlowDiagnostics(rendered.css),
-    ],
-    [rendered, fontFamilies, shownFamilies],
-  );
+  const diagnostics: WebDiagnostic[] = [
+    ...rendered.diagnostics,
+    ...diagnoseHtml(rendered.html),
+    ...diagnoseFonts(rendered.css, fontFamilies, shownFamilies),
+    // Named-flow lint (flow-from without flow-into etc.) — built in
+    // web-model, wired here so it rides the same debounced cadence.
+    ...namedFlowDiagnostics(rendered.css),
+  ];
   // Publish to the host problems lane on the same debounced cadence —
   // linting is analysis, not a document write, so it stays LIVE while
   // typing (unlike persistence, which waits for the explicit save).
@@ -1088,55 +1092,32 @@ function SourceEditor({
   // families are missing from the engine document (substitute
   // on-canvas too), and a matched family the host had no bytes for is
   // still a browser substitute HERE.
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const badge = useMemo(
-    () => previewFontBadge(rendered.css, fontFamilies, shownFamilies),
-    [rendered, fontFamilies, shownFamilies],
-  );
+  const badge = previewFontBadge(rendered.css, fontFamilies, shownFamilies);
   // Per-line markers for the HTML editor's gutter (the linter only
   // diagnoses HTML today; line-less policy notes don't carry a
   // gutter position so they're filtered out here but still show in
   // the summary list + the Problems panel). Rendered only by the
   // widget lane — the textarea fallback has no gutter and says so.
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const htmlGutter = useMemo<CodeEditorDiagnostic[]>(
-    () =>
-      diagnostics
-        .filter((d): d is typeof d & { line: number } => d.line !== undefined)
-        .map((d) => ({
-          severity: d.severity,
-          message: d.message,
-          line: d.line,
-        })),
-    [diagnostics],
-  );
+  const htmlGutter: CodeEditorDiagnostic[] = diagnostics
+    .filter((d): d is typeof d & { line: number } => d.line !== undefined)
+    .map((d) => ({
+      severity: d.severity,
+      message: d.message,
+      line: d.line,
+    }));
   // W-06: the served document faces become a real `@font-face` prelude
   // inside the srcdoc <style> (plain CSS + inline data-url src, NO
   // script — sandbox="" unchanged). The preview then uses the
   // document's actual faces for every resolved family. The srcdoc body
   // is the RENDERED source (template pass applied).
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const fontFaceCss = useMemo(
-    () => composeFontFaces(resolvedFaces),
-    [resolvedFaces],
-  );
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const srcdoc = useMemo(
-    () =>
-      composeSrcdoc(
-        { html: rendered.html, css: rendered.css, options: preview.options },
-        fontFaceCss,
-      ),
-    [rendered, preview.options, fontFaceCss],
+  const fontFaceCss = composeFontFaces(resolvedFaces);
+  const srcdoc = composeSrcdoc(
+    { html: rendered.html, css: rendered.css, options: preview.options },
+    fontFaceCss,
   );
 
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const dirty = useMemo(
-    () => JSON.stringify(draft) !== JSON.stringify(persisted),
-    [draft, persisted],
-  );
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const commit = useCallback(() => {
+  const dirty = JSON.stringify(draft) !== JSON.stringify(persisted);
+  const commit = () => {
     const next = draft;
     void persistDraft(host, id, next).then(({ applied, reason }) => {
       if (!applied) {
@@ -1152,25 +1133,23 @@ function SourceEditor({
       setPersisted(next);
       onPersisted(next);
     });
-  }, [draft, id, onPersisted]);
+  };
 
   // Seed the draft from a starter template — replaces html/css, keeps
   // the author's current frame OPTIONS (media/viewport). A draft edit
   // (not a document write): the explicit save still commits it.
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const seedTemplate = useCallback((templateId: string) => {
+  const seedTemplate = (templateId: string) => {
     const t = templateById(templateId);
     if (!t) return;
     setDraft((d) => sourceFromTemplate(t, d.options));
     setIngestNote(null);
-  }, []);
+  };
 
   // Paste-HTML ingestion — SANITIZE on the way in (§6.1: page JS never
   // runs, so strip it, don't just diagnose). Sets the draft html to the
   // cleaned markup and notes what was removed. Pure web-model strip via
   // `ingestHtml`; the linter still runs over the result downstream.
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const ingestInto = useCallback((raw: string) => {
+  const ingestInto = (raw: string) => {
     const { html, removed } = ingestHtml(raw);
     setDraft((d) => ({ ...d, html }));
     setIngestNote(
@@ -1178,12 +1157,11 @@ function SourceEditor({
         "Pasted HTML — nothing to clean (no scripts or handlers).",
     );
     setPasteOpen(false);
-  }, []);
+  };
 
   // Read from the K-6 system clipboard when wired; else open the paste
   // box (the affordance always available). Never throws.
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const pasteFromClipboard = useCallback(() => {
+  const pasteFromClipboard = () => {
     void ingestFromClipboard(host).then((result) => {
       if (!result) {
         // No backend / empty clipboard → fall back to the paste box.
@@ -1197,18 +1175,14 @@ function SourceEditor({
           "Pasted from clipboard — nothing to clean.",
       );
     });
-  }, []);
+  };
 
   // "Find in source" — the tag outline over the DRAFT html (the live
   // editor text, not the debounced preview). Clicking a tag selects its
   // source range in the bundle-owned textarea (fallback lane); in the
   // host-widget lane there is no selection prop, so it cannot move the
   // caret (the honest W-01 subset boundary — see find-in-source.ts).
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const outline = useMemo<TagOutlineEntry[]>(
-    () => tagOutline(draft.html),
-    [draft.html],
-  );
+  const outline: TagOutlineEntry[] = tagOutline(draft.html);
   // Outline ↔ canvas (outline-highlight.ts): a clicked tag also outlines
   // its painted box on the canvas; a press on the canvas inside the frame's
   // edit context marks the tag of the element under it.
@@ -1223,21 +1197,17 @@ function SourceEditor({
     [frameIdStr],
   );
   useEffect(() => () => clearOutlineHighlight(host), []);
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const findInSource = useCallback(
-    (entry: TagOutlineEntry, index: number) => {
-      setActiveTag(index);
-      void highlightOutlineEntry(host, id, { ...draft }, index).then((n) =>
-        setHighlightNote(
-          n > 0 ? null : `<${entry.tag}> paints no box on the canvas`,
-        ),
-      );
-      const el = htmlTextareaRef.current;
-      if (!el) return; // host-widget lane: no caret to drive
-      selectRange(el, entry.sourceStart, entry.sourceEnd);
-    },
-    [draft],
-  );
+  const findInSource = (entry: TagOutlineEntry, index: number) => {
+    setActiveTag(index);
+    void highlightOutlineEntry(host, id, { ...draft }, index).then((n) =>
+      setHighlightNote(
+        n > 0 ? null : `<${entry.tag}> paints no box on the canvas`,
+      ),
+    );
+    const el = htmlTextareaRef.current;
+    if (!el) return; // host-widget lane: no caret to drive
+    selectRange(el, entry.sourceStart, entry.sourceEnd);
+  };
 
   // §6.2 slice — the panel-edited variables map. Rows render in entry
   // order; a key rename rebuilds the object (a rename ONTO an existing
@@ -1246,15 +1216,14 @@ function SourceEditor({
   // which DISABLES the pass (placeholders then stay verbatim and stop
   // warning — the documented opt-in seam).
   const varEntries = Object.entries(draft.vars ?? {});
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const setVarEntries = useCallback((entries: Array<[string, string]>) => {
+  const setVarEntries = (entries: Array<[string, string]>) => {
     setDraft((d) => {
       const next = { ...d };
       if (entries.length === 0) delete next.vars;
       else next.vars = Object.fromEntries(entries);
       return next;
     });
-  }, []);
+  };
 
   const CodeEditor = lane.CodeEditor;
   // The preview IFRAME takes the frame's content size — an iframe's element
@@ -1818,7 +1787,6 @@ function SourceEditor({
         // visible only in the log + Problems lane. Honest numbers straight
         // from the command outcome: frames submitted, the flow's overset
         // flag, the bake's deferred-kind counts.
-        const report = lastRenderReport();
         if (!report) return null;
         const OP_LABEL: Record<string, string> = {
           renderFrame: "Render frame",

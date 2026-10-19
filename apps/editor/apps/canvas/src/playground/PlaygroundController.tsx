@@ -28,7 +28,7 @@
 // The live editor it drives is window.__canvas (exposed in the demo/dev build);
 // demo.highlight spotlights are rendered by the shell's <DemoSpotlight/>.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   DemoSession,
   type CanvasHandleLike,
@@ -113,9 +113,13 @@ export function PlaygroundController(): React.ReactElement | null {
     };
   }, [scriptId]);
 
-  // 2) (re)create the session whenever the running source changes
+  // 2) (re)create the session whenever the running source changes; it
+  // starts at the speed and autoplay of the render it runs after (the
+  // speed effect below follows later changes).
+  const startSettings = useEffectEvent(() => ({ speedMs, autoplay }));
   useEffect(() => {
     if (!current) return;
+    const { speedMs, autoplay } = startSettings();
     const read = () =>
       (window as unknown as { __canvas?: CanvasHandleLike }).__canvas;
     if (!read()) return;
@@ -140,7 +144,6 @@ export function PlaygroundController(): React.ReactElement | null {
       session.restart(); // abort any in-flight run
       sessionRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current]);
 
   useEffect(() => {
@@ -148,8 +151,7 @@ export function PlaygroundController(): React.ReactElement | null {
   }, [speedMs]);
 
   const playing = state.status === "playing";
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const toggle = useCallback(() => {
+  const toggle = () => {
     const s = sessionRef.current;
     if (!s) return;
     if (playing) s.pause();
@@ -157,67 +159,55 @@ export function PlaygroundController(): React.ReactElement | null {
       s.restart();
       s.play();
     } else s.play();
-  }, [playing, state.status]);
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const stepOnce = useCallback(() => sessionRef.current?.step(), []);
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const restart = useCallback(() => {
+  };
+  const stepOnce = () => sessionRef.current?.step();
+  const restart = () => {
     sessionRef.current?.restart();
-  }, []);
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const seekChapter = useCallback(
-    (i: number) => sessionRef.current?.seekToChapter(i),
-    [],
-  );
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const runEdited = useCallback(() => {
+  };
+  const seekChapter = (i: number) => sessionRef.current?.seekToChapter(i);
+  const runEdited = () => {
     setEditing(false);
     setCurrent(draft); // recreates the session (effect) → autoplay handled separately
     // play after the new session mounts
     setTimeout(() => sessionRef.current?.play(), 0);
-  }, [draft]);
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const copyAll = useCallback(
-    () => void navigator.clipboard?.writeText(current ?? ""),
-    [current],
-  );
+  };
+  const copyAll = () => void navigator.clipboard?.writeText(current ?? "");
 
-  // 3) keyboard transport
+  // 3) keyboard transport: one listener for the script's lifetime, which
+  // reads the session state of the latest render.
+  const onTransportKey = useEffectEvent((e: KeyboardEvent) => {
+    const tgt = e.target as HTMLElement | null;
+    if (
+      tgt &&
+      (tgt.tagName === "TEXTAREA" ||
+        tgt.tagName === "INPUT" ||
+        tgt.isContentEditable)
+    )
+      return;
+    const s = sessionRef.current;
+    if (!s) return;
+    if (e.code === "Space") {
+      e.preventDefault();
+      toggle();
+    } else if (e.code === "ArrowRight") {
+      e.preventDefault();
+      stepOnce();
+    } else if (e.code === "ArrowLeft") {
+      e.preventDefault();
+      seekChapter(Math.max(0, state.currentChapter - 1));
+    } else if (e.key === "r") {
+      restart();
+    }
+  });
   useEffect(() => {
     if (!scriptId) return;
-    const onKey = (e: KeyboardEvent) => {
-      const tgt = e.target as HTMLElement | null;
-      if (
-        tgt &&
-        (tgt.tagName === "TEXTAREA" ||
-          tgt.tagName === "INPUT" ||
-          tgt.isContentEditable)
-      )
-        return;
-      const s = sessionRef.current;
-      if (!s) return;
-      if (e.code === "Space") {
-        e.preventDefault();
-        toggle();
-      } else if (e.code === "ArrowRight") {
-        e.preventDefault();
-        stepOnce();
-      } else if (e.code === "ArrowLeft") {
-        e.preventDefault();
-        seekChapter(Math.max(0, state.currentChapter - 1));
-      } else if (e.key === "r") {
-        restart();
-      }
-    };
+    const onKey = (e: KeyboardEvent) => onTransportKey(e);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [scriptId, toggle, stepOnce, restart, seekChapter, state.currentChapter]);
+  }, [scriptId]);
 
-  // eslint-disable-next-line no-restricted-syntax -- the component is not compiled yet (compiler-coverage.json) (ADR 229)
-  const activeSpan = useMemo(() => {
-    const st = statements[state.currentIndex];
-    return st ? { from: st.lineStart, to: st.lineEnd } : null;
-  }, [statements, state.currentIndex]);
+  const st = statements[state.currentIndex];
+  const activeSpan = st ? { from: st.lineStart, to: st.lineEnd } : null;
 
   if (!scriptId) return null;
 

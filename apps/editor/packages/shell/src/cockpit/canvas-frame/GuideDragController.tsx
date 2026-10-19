@@ -51,7 +51,7 @@
 // same Operation channel as every other edit. The re-query is skipped
 // while a drag is live so it never clobbers an in-flight preview.
 
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 
 import type {
   GuideSummary,
@@ -140,30 +140,23 @@ async function guidesFromSpreads(
     return null;
   }
 }
+/** Is the client point over a ruler strip? Used to cancel a create
+ *  / delete a moved guide. */
+function overRulerAt(clientX: number, clientY: number): boolean {
+  const el = document.elementFromPoint(clientX, clientY);
+  return Boolean(el && el.closest("[data-h-ruler], [data-v-ruler]"));
+}
+
 export function GuideDragController() {
   const client = useCanvasClient();
   const { camera } = useCamera();
   const { handle } = useDocument();
-  const { drag, guides, updateDrag, clearDrag, setGuides } = useGuideDrag();
+  const { drag, updateDrag, clearDrag, setGuides } = useGuideDrag();
 
-  // Live refs so the once-per-drag window listeners read fresh values
-  // without re-subscribing every preview tick.
-  const cameraRef = useRef(camera);
-  useLayoutEffect(() => {
-    cameraRef.current = camera;
-  });
-  const handleRef = useRef(handle);
-  useLayoutEffect(() => {
-    handleRef.current = handle;
-  });
-  const dragRef = useRef<GuideDragState | null>(drag);
-  useLayoutEffect(() => {
-    dragRef.current = drag;
-  });
-  const guidesRef = useRef(guides);
-  useLayoutEffect(() => {
-    guidesRef.current = guides;
-  });
+  // The once-per-drag window listeners and the engine subscription read
+  // the latest render's values through effect events, without
+  // re-subscribing every preview tick.
+  const currentDrag = useEffectEvent(() => drag);
 
   // Spread ids for the loaded document, document order. Guides are
   // spread-scoped; a created guide lands on the spread that owns the
@@ -174,19 +167,15 @@ export function GuideDragController() {
    *  wire map we approximate by page order (one-spread-per-page is the
    *  common multi-spread shape); single-spread docs always return the
    *  first spread. Part of the documented wire gap. */
-  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
-  const spreadForPageId = useCallback(
-    (pageId: PageId | null): string | null => {
-      const ids = spreadIdsRef.current;
-      if (ids.length === 0) return null;
-      if (ids.length === 1 || !pageId) return ids[0];
-      const pages = handleRef.current?.pageIds ?? [];
-      const pageIdx = pages.indexOf(pageId);
-      if (pageIdx < 0) return ids[0];
-      return ids[Math.min(pageIdx, ids.length - 1)];
-    },
-    [],
-  );
+  const spreadForPageId = (pageId: PageId | null): string | null => {
+    const ids = spreadIdsRef.current;
+    if (ids.length === 0) return null;
+    if (ids.length === 1 || !pageId) return ids[0];
+    const pages = handle?.pageIds ?? [];
+    const pageIdx = pages.indexOf(pageId);
+    if (pageIdx < 0) return ids[0];
+    return ids[Math.min(pageIdx, ids.length - 1)];
+  };
 
   // ── engine-truth re-sync from `collection("spreads")` (W3.A2) ─────
   // Rebuild the mirror from each spread's live `guides` set. `pageIndex`
@@ -195,17 +184,12 @@ export function GuideDragController() {
   // GuideSummary already carries the engine's positional id, so we use
   // it directly (no reindex needed). Skipped while a drag is live so a
   // mid-drag Operation push never clobbers the preview.
-  // eslint-disable-next-line no-restricted-syntax -- handed to a hook that compares it (ADR 229)
-  const resyncFromSpreads = useCallback(async () => {
-    if (dragRef.current) return;
-    const read = await guidesFromSpreads(client, handleRef.current);
+  const resyncFromSpreads = useEffectEvent(async () => {
+    if (drag) return;
+    const read = await guidesFromSpreads(client, handle);
     if (!read) return; // worker reload / disconnect — keep the current mirror
     spreadIdsRef.current = read.spreadIds;
     setGuides(read.mirror);
-  }, [client, setGuides]);
-  const resyncRef = useRef(resyncFromSpreads);
-  useLayoutEffect(() => {
-    resyncRef.current = resyncFromSpreads;
   });
 
   // Seed on load + re-sync on every Operation push (mutationApplied /
@@ -220,7 +204,7 @@ export function GuideDragController() {
       seededSigRef.current = sig;
       void resyncFromSpreads();
     }
-  }, [handle, resyncFromSpreads]);
+  }, [handle]);
 
   useEffect(() => {
     const off = client.subscribe((msg) => {
@@ -229,7 +213,7 @@ export function GuideDragController() {
         msg.kind === "undoApplied" ||
         msg.kind === "redoApplied"
       ) {
-        void resyncRef.current();
+        void resyncFromSpreads();
       }
     });
     return off;
@@ -238,29 +222,18 @@ export function GuideDragController() {
   /** Convert a client (viewport) pointer position to a document-space
    *  point through the live camera + the viewport wrapper rect. The
    *  cockpit tags the wrapper `data-paged-viewport`. */
-  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
-  const clientToDoc = useCallback(
+  const clientToDoc = useEffectEvent(
     (clientX: number, clientY: number): [number, number] | null => {
       const wrap = document.querySelector("[data-paged-viewport]");
       if (!wrap) return null;
       const r = wrap.getBoundingClientRect();
-      const cam = cameraRef.current;
-      if (cam.scale <= 0) return null;
+      if (camera.scale <= 0) return null;
       return [
-        (clientX - r.left - cam.tx) / cam.scale,
-        (clientY - r.top - cam.ty) / cam.scale,
+        (clientX - r.left - camera.tx) / camera.scale,
+        (clientY - r.top - camera.ty) / camera.scale,
       ];
     },
-    [],
   );
-
-  /** Is the client point over a ruler strip? Used to cancel a create
-   *  / delete a moved guide. */
-  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
-  const overRulerAt = useCallback((clientX: number, clientY: number) => {
-    const el = document.elementFromPoint(clientX, clientY);
-    return Boolean(el && el.closest("[data-h-ruler], [data-v-ruler]"));
-  }, []);
 
   /** Resolve a client pointer position to the preview fields for a
    *  drag of the given orientation: which page + page-local coordinate
@@ -268,8 +241,7 @@ export function GuideDragController() {
    *  ruler. Pure read — both the live preview (onMove) and the commit
    *  (onUp) call it, so the release uses the freshest position rather
    *  than a possibly-stale React state snapshot. */
-  // eslint-disable-next-line no-restricted-syntax -- handed to a hook that compares it (ADR 229)
-  const resolvePreview = useCallback(
+  const resolvePreview = useEffectEvent(
     (
       orientation: "horizontal" | "vertical",
       clientX: number,
@@ -288,8 +260,8 @@ export function GuideDragController() {
           previewPosition: null,
         };
       }
-      const rects = layoutPageRects(handleRef.current?.pageSizesPt ?? []);
-      const pageIds = handleRef.current?.pageIds ?? [];
+      const rects = layoutPageRects(handle?.pageSizesPt ?? []);
+      const pageIds = handle?.pageIds ?? [];
       const hit = pageForDoc(rects, pageIds, doc[0], doc[1]);
       if (orientation === "horizontal") {
         return {
@@ -306,91 +278,71 @@ export function GuideDragController() {
         previewPosition: hit ? doc[0] - hit.rect.x : null,
       };
     },
-    [overRulerAt, clientToDoc],
   );
-  const resolvePreviewRef = useRef(resolvePreview);
-  useLayoutEffect(() => {
-    resolvePreviewRef.current = resolvePreview;
-  });
 
   /** Fire one guide mutation; resolve true on `mutationApplied`. */
-  // eslint-disable-next-line no-restricted-syntax -- keeps an effect dependency stable (ADR 229)
-  const dispatch = useCallback(
-    async (mutation: Mutation): Promise<boolean> => {
-      try {
-        const reply = await client.mutate(mutation);
-        return reply.kind === "mutationApplied";
-      } catch {
-        return false;
-      }
-    },
-    [client],
-  );
+  const dispatch = (mutation: Mutation): Promise<boolean> =>
+    client.mutate(mutation).then(
+      (reply) => reply.kind === "mutationApplied",
+      () => false,
+    );
 
   /** Commit the drag's terminal mutation (or none) + mirror it into
    *  the optimistic store. Exactly one of insertGuide / moveGuide /
    *  deleteGuide, or zero (cancel). */
-  // eslint-disable-next-line no-restricted-syntax -- handed to a hook that compares it (ADR 229)
-  const settle = useCallback(
-    async (d: GuideDragState, onRuler: boolean) => {
-      if (d.kind === "create") {
-        // GD-01: dropped back over the ruler, or never over a page →
-        // cancel (no insert).
-        if (onRuler || d.previewPageId == null || d.previewPosition == null) {
-          return;
-        }
-        const spreadId = spreadForPageId(d.previewPageId);
-        if (!spreadId) return;
-        const position = snapPt(d.previewPosition);
-        const pageId = d.previewPageId;
-        const ok = await dispatch({
-          op: "insertGuide",
-          args: { spreadId, orientation: d.orientation, position },
-        });
-        if (!ok) return;
-        setGuides((prev) =>
-          reindex([
-            ...prev,
-            { id: "", spreadId, orientation: d.orientation, pageId, position },
-          ]),
-        );
+  const settle = useEffectEvent(async (d: GuideDragState, onRuler: boolean) => {
+    if (d.kind === "create") {
+      // GD-01: dropped back over the ruler, or never over a page →
+      // cancel (no insert).
+      if (onRuler || d.previewPageId == null || d.previewPosition == null) {
         return;
       }
-      // MOVE
-      const target = d.guide;
-      if (!target) return;
-      // GD-02: dropped back over a ruler → delete.
-      if (onRuler) {
-        const ok = await dispatch({
-          op: "deleteGuide",
-          args: { guideId: target.id },
-        });
-        if (!ok) return;
-        setGuides((prev) => reindex(prev.filter((g) => g.id !== target.id)));
-        return;
-      }
-      // Over a page → moveGuide to the snapped position. Off every
-      // page (pasteboard) or unchanged → no-op (zero mutation).
-      if (d.previewPosition == null) return;
+      const spreadId = spreadForPageId(d.previewPageId);
+      if (!spreadId) return;
       const position = snapPt(d.previewPosition);
-      if (position === target.position) return;
-      const movedPage = d.previewPageId ?? target.pageId;
+      const pageId = d.previewPageId;
       const ok = await dispatch({
-        op: "moveGuide",
-        args: { guideId: target.id, position },
+        op: "insertGuide",
+        args: { spreadId, orientation: d.orientation, position },
       });
       if (!ok) return;
       setGuides((prev) =>
-        prev.map((g) =>
-          g.id === target.id ? { ...g, position, pageId: movedPage } : g,
-        ),
+        reindex([
+          ...prev,
+          { id: "", spreadId, orientation: d.orientation, pageId, position },
+        ]),
       );
-    },
-    [spreadForPageId, dispatch, setGuides],
-  );
-  const settleRef = useRef(settle);
-  useLayoutEffect(() => {
-    settleRef.current = settle;
+      return;
+    }
+    // MOVE
+    const target = d.guide;
+    if (!target) return;
+    // GD-02: dropped back over a ruler → delete.
+    if (onRuler) {
+      const ok = await dispatch({
+        op: "deleteGuide",
+        args: { guideId: target.id },
+      });
+      if (!ok) return;
+      setGuides((prev) => reindex(prev.filter((g) => g.id !== target.id)));
+      return;
+    }
+    // Over a page → moveGuide to the snapped position. Off every
+    // page (pasteboard) or unchanged → no-op (zero mutation).
+    if (d.previewPosition == null) return;
+    const position = snapPt(d.previewPosition);
+    if (position === target.position) return;
+    const movedPage = d.previewPageId ?? target.pageId;
+    const ok = await dispatch({
+      op: "moveGuide",
+      args: { guideId: target.id, position },
+    });
+    if (!ok) return;
+    setGuides((prev) =>
+      prev.map((g) =>
+        g.id === target.id ? { ...g, position, pageId: movedPage } : g,
+      ),
+    );
   });
 
   // ── window listeners, mounted only while a drag is live ──────────
@@ -399,26 +351,20 @@ export function GuideDragController() {
     if (!dragActive) return;
 
     const onMove = (e: PointerEvent) => {
-      const d = dragRef.current;
+      const d = currentDrag();
       if (!d) return;
-      updateDrag(
-        resolvePreviewRef.current(d.orientation, e.clientX, e.clientY),
-      );
+      updateDrag(resolvePreview(d.orientation, e.clientX, e.clientY));
     };
 
     const onUp = (e: PointerEvent) => {
-      const d = dragRef.current;
+      const d = currentDrag();
       clearDrag();
       if (!d) return;
       // Recompute the drop from the pointer-up position so the commit
       // never rides a stale preview (the last move may not have
       // re-rendered yet). Carry it into settle.
-      const resolved = resolvePreviewRef.current(
-        d.orientation,
-        e.clientX,
-        e.clientY,
-      );
-      void settleRef.current({ ...d, ...resolved }, resolved.overRuler);
+      const resolved = resolvePreview(d.orientation, e.clientX, e.clientY);
+      void settle({ ...d, ...resolved }, resolved.overRuler);
     };
 
     const onKey = (e: KeyboardEvent) => {
@@ -437,7 +383,7 @@ export function GuideDragController() {
       window.removeEventListener("keydown", onKey, true);
     };
     // Listeners read the live drag / preview-resolver / settle through
-    // refs, so they bind exactly once per drag (mount/unmount on
+    // effect events, so they bind exactly once per drag (mount/unmount on
     // dragActive).
   }, [dragActive, updateDrag, clearDrag]);
 

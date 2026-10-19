@@ -17,12 +17,13 @@
  *  @license    AGPL-3.0-only OR Paged Media Enterprise License (PMEL)
  */
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
 
 import {
   GestureSpine,
   resolveCursorCss,
   usePaged,
+  useRegistryView,
   type CanvasPointerEvent,
 } from "@paged-media/shell";
 
@@ -69,20 +70,21 @@ export function useGestureSpine(): {
   effectiveTool: string;
 } {
   const paged = usePaged();
-  const spineRef = useRef<GestureSpine | null>(null);
-  if (!spineRef.current) spineRef.current = new GestureSpine();
-  const spine = spineRef.current;
+  const [spine] = useState(() => new GestureSpine());
 
   const effectiveTool = paged.tool.effectiveTool;
   const lastReason = paged.tool.lastReason;
 
   // Activate/deactivate handlers as the effective tool changes. `paged`
-  // is read fresh at effect time (it carries the registry + client the
-  // handler needs); keying on effectiveTool/lastReason keeps the swap
+  // is read as it is when the swap runs (it carries the registry + client
+  // the handler needs); keying on effectiveTool/lastReason keeps the swap
   // aligned with the stack.
+  const activate = useEffectEvent(
+    (tool: typeof effectiveTool, reason: typeof lastReason) =>
+      spine.setEffectiveTool(tool, paged, reason),
+  );
   useEffect(() => {
-    spine.setEffectiveTool(effectiveTool, paged, lastReason);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    activate(effectiveTool, lastReason);
   }, [effectiveTool, lastReason]);
 
   // Keyboard → active handler (Escape cancels an in-flight gesture).
@@ -100,8 +102,11 @@ export function useGestureSpine(): {
   useEffect(() => () => spine.clear(), [spine]);
 
   // Resolve from the registry (synchronous + correct on the same render
-  // the tool changed, before the effect runs).
-  const contribution = paged.registries.tools.get(effectiveTool);
+  // the tool changed, before the effect runs), through a view that
+  // changes with the registry (ADR 229): a tool registered after the
+  // first render resolves.
+  const tools = useRegistryView(paged.registries.tools);
+  const contribution = tools.get(effectiveTool);
   const hasHandler = contribution?.gesture != null;
   const hasCursorAt = hasHandler;
   const cursor = contribution?.cursor

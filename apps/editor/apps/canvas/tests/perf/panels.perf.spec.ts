@@ -36,145 +36,25 @@
 // `vite preview`. Not a test of behaviour: the `perf` project runs it on
 // demand only, and the numbers go to `PAGED_PERF_OUT` (JSON) and stdout.
 
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { writeFileSync } from "node:fs";
 
-import { Designer } from "../journey/driver/designer";
-import { installRenderCounter, type RenderCounter } from "./render-counter";
-
-const ROUNDS = Number(process.env.PAGED_PERF_ROUNDS ?? 12);
-const OUT = process.env.PAGED_PERF_OUT;
-
-interface Sample {
-  nextFrame: number;
-  settled: number;
-  commits: number;
-  renders: number;
-}
-
-/** The input probe: the first pointerdown / keydown / change after a reset
- *  marks the input; the frame after it is timed with rAF + a task. */
-function installInputProbe(target: object): void {
-  const g = target as {
-    __pagedProbe?: unknown;
-    addEventListener: (t: string, f: () => void, o: boolean) => void;
-  };
-  const probe = {
-    inputAt: -1,
-    nextFrameAt: -1,
-    reset() {
-      probe.inputAt = -1;
-      probe.nextFrameAt = -1;
-    },
-    mark() {
-      if (probe.inputAt >= 0) return;
-      probe.inputAt = performance.now();
-      requestAnimationFrame(() =>
-        setTimeout(() => {
-          probe.nextFrameAt = performance.now();
-        }, 0),
-      );
-    },
-  };
-  g.__pagedProbe = probe;
-  for (const type of ["pointerdown", "keydown", "change", "input"]) {
-    g.addEventListener(type, () => probe.mark(), true);
-  }
-}
-
-type ProbeWindow = {
-  __pagedRenderCounter: RenderCounter;
-  __pagedProbe: {
-    inputAt: number;
-    nextFrameAt: number;
-    reset(): void;
-    mark(): void;
-  };
-};
-
-async function resetProbe(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const w = globalThis as unknown as ProbeWindow;
-    w.__pagedRenderCounter.reset();
-    w.__pagedProbe.reset();
-  });
-}
-
-/** Wait until React has not committed for `quietMs`, then read the sample. */
-async function sample(page: Page, quietMs = 300): Promise<Sample> {
-  return page.evaluate(async (quiet) => {
-    const w = globalThis as unknown as ProbeWindow;
-    const deadline = performance.now() + 5_000;
-    for (;;) {
-      const times = w.__pagedRenderCounter.counts().commitTimes;
-      const last = times.at(-1) ?? w.__pagedProbe.inputAt;
-      if (
-        w.__pagedProbe.nextFrameAt >= 0 &&
-        performance.now() - last >= quiet
-      ) {
-        break;
-      }
-      if (performance.now() > deadline) break;
-      await new Promise((r) => setTimeout(r, 25));
-    }
-    const c = w.__pagedRenderCounter.counts();
-    const t0 = w.__pagedProbe.inputAt;
-    const last = c.commitTimes.at(-1) ?? t0;
-    return {
-      nextFrame: w.__pagedProbe.nextFrameAt - t0,
-      settled: Math.max(0, last - t0),
-      commits: c.commits,
-      renders: c.renders,
-    };
-  }, quietMs);
-}
-
-/** A programmatic input: mark it in the page, then run it there. */
-async function selectInPage(
-  page: Page,
-  refs: Array<{ kind: string; id: string }>,
-): Promise<void> {
-  await page.evaluate((r) => {
-    const w = globalThis as unknown as ProbeWindow & {
-      __canvas: {
-        setContentSelection?: (s: null) => void;
-        setElementSelection?: (r: unknown[], mode: string) => void;
-      };
-    };
-    w.__pagedProbe.mark();
-    w.__canvas.setContentSelection?.(null);
-    w.__canvas.setElementSelection?.(r, "replace");
-  }, refs);
-}
+import {
+  OUT,
+  ROUNDS,
+  installInputProbe,
+  resetProbe,
+  sample,
+  seed,
+  selectInPage,
+  summarize,
+  type ProbeWindow,
+  type Sample,
+} from "./probe";
+import { installRenderCounter } from "./render-counter";
 
 const results: Record<string, Sample[]> = {};
 let census: unknown = null;
-
-function summarize(name: string, samples: Sample[]) {
-  const sorted = (xs: number[]) => [...xs].sort((a, b) => a - b);
-  const median = (xs: number[]) => {
-    const s = sorted(xs);
-    return s.length ? s[Math.floor(s.length / 2)] : 0;
-  };
-  const p95 = (xs: number[]) => {
-    const s = sorted(xs);
-    return s.length
-      ? s[Math.min(s.length - 1, Math.ceil(s.length * 0.95) - 1)]
-      : 0;
-  };
-  const mean = (xs: number[]) =>
-    xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
-  return {
-    panel: name,
-    interactions: samples.length,
-    nextFrameMedianMs: +median(samples.map((s) => s.nextFrame)).toFixed(1),
-    nextFrameP95Ms: +p95(samples.map((s) => s.nextFrame)).toFixed(1),
-    settledMedianMs: +median(samples.map((s) => s.settled)).toFixed(1),
-    settledP95Ms: +p95(samples.map((s) => s.settled)).toFixed(1),
-    commitsPerInteraction: +mean(samples.map((s) => s.commits)).toFixed(1),
-    rendersPerInteraction: +mean(samples.map((s) => s.renders)).toFixed(1),
-  };
-}
 
 test.describe.configure({ mode: "serial" });
 
@@ -195,34 +75,6 @@ test.afterAll(() => {
     );
   }
 });
-
-/** A document with what the five panels show: frames, layers, pages,
- *  swatches. */
-async function seed(page: Page) {
-  const d = new Designer(page);
-  await d.open();
-  await d.newDocument();
-  const frames: Array<{ kind: string; id: string }> = [];
-  for (let i = 0; i < 8; i++) {
-    const f = await d.addFrame({
-      x0: 40 + (i % 4) * 120,
-      y0: 60 + Math.floor(i / 4) * 160,
-      x1: 140 + (i % 4) * 120,
-      y1: 200 + Math.floor(i / 4) * 160,
-    });
-    if (f) frames.push(f);
-  }
-  const layers: string[] = [];
-  for (let i = 0; i < 6; i++) layers.push(await d.addLayer(`Layer ${i + 1}`));
-  for (let i = 0; i < 6; i++) await d.addPage();
-  const swatches: string[] = [];
-  for (let i = 0; i < 6; i++) {
-    swatches.push(
-      await d.createSwatch(`Swatch ${i + 1}`, [40 * i, 255 - 40 * i, 128]),
-    );
-  }
-  return { d, frames, layers, swatches };
-}
 
 test("layers", async ({ page }) => {
   const { d, frames } = await seed(page);
