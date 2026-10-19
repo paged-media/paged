@@ -592,11 +592,9 @@ fn place() {
     assert_pdf(&fx.read("moved.pdf"), 1);
 }
 
-/// finding CLI-5: a write to an object that does not exist is reported
-/// as "not implemented" — `place` says `not implemented:
-/// Mutation::ReplaceImageBytes`, `set` says `not implemented: frame
-/// mutation failed: node not found`. The read twin `get` says what is
-/// true (`the target does not exist (notFound)`); the writes should too.
+/// Finding CLI-5 (fixed): a write to an object that does not exist says
+/// the target does not exist (notFound), as the read twin `get` does —
+/// not "not implemented".
 #[test]
 fn writes_to_a_missing_object() {
     covers!("cli:paged place", "cli:paged set");
@@ -607,15 +605,24 @@ fn writes_to_a_missing_object() {
     let place = fx
         .run(&["place", "doc.paged", "oval:u77", "pic.png"])
         .code(1)
-        .golden("paged place", "finding-cli-5-missing-frame");
-    // finding CLI-5: says "not implemented" for a frame that is not there.
-    assert!(place.stderr.contains("not implemented"), "{}", place.stderr);
+        .golden("paged place", "missing-frame");
+    assert!(
+        place
+            .stderr
+            .contains("oval:u77: the target does not exist (notFound)"),
+        "{}",
+        place.stderr
+    );
     let set = fx
         .run(&["set", "doc.paged", "oval:u99", "frameFillColor", "Color/u1"])
         .code(1)
-        .golden("paged set", "finding-cli-5-missing-target");
-    // finding CLI-5: same for `set`.
-    assert!(set.stderr.contains("not implemented"), "{}", set.stderr);
+        .golden("paged set", "missing-target");
+    assert!(
+        set.stderr
+            .contains("oval:u99: the target does not exist (notFound)"),
+        "{}",
+        set.stderr
+    );
 }
 
 #[test]
@@ -946,13 +953,12 @@ fn digest() {
     );
 }
 
-/// finding CLI-6: `paged digest`'s `stateHash` is documented as "a second
-/// and independent equality signal", and it hashes only story text, text
-/// frame and rectangle bounds and transforms, and anchors: two documents
-/// that differ in an oval's fill (or position, or a swatch) hash equal. It
-/// should change with any change to the document.
+/// Finding CLI-6 (fixed): `paged digest`'s `stateHash`, "a second and
+/// independent equality signal", hashes every serialized field of the
+/// document, so an oval's fill change moves it (it once hashed only story
+/// text, rectangle geometry and anchors).
 #[test]
-fn digest_state_hash_misses_a_fill_change() {
+fn digest_state_hash_follows_a_fill_change() {
     covers!("cli:paged digest");
     let fx = Fx::new("digest-state-hash");
     fx.seeded("doc.paged");
@@ -968,13 +974,15 @@ fn digest_state_hash_misses_a_fill_change() {
     .code(0);
     fx.run(&["get", "red.paged", "oval:u2", "frameFillColor"])
         .code(0)
-        .golden("paged digest", "finding-cli-6-the-fill-is-written");
+        .golden("paged digest", "the-fill-is-written");
     let before = fx.run(&["digest", "doc.paged"]).code(0).json();
     let after = fx.run(&["digest", "red.paged"]).code(0).json();
     assert_ne!(
         before["pageDigests"], after["pageDigests"],
         "the pages differ"
     );
-    // finding CLI-6: the state hash does not.
-    assert_eq!(before["stateHash"], after["stateHash"]);
+    assert_ne!(
+        before["stateHash"], after["stateHash"],
+        "the state hash follows the fill"
+    );
 }

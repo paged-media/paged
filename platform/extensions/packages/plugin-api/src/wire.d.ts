@@ -2431,7 +2431,7 @@ export type PropertyPath = "frameBounds" | "frameFillColor" | "frameStrokeColor"
  * hit-tests, page requests all report through this. Variants are
  * kept stable across protocol versions.
  */
-export type WorkerError = { kind: "notImplemented"; details: { what: string } } | { kind: "unknownPage"; details: { pageId: PageId } } | { kind: "noDocument" };
+export type WorkerError = { kind: "notImplemented"; details: { what: string } } | { kind: "notFound"; details: { what: string } } | { kind: "unknownPage"; details: { pageId: PageId } } | { kind: "noDocument" };
 
 /**
  * W0.2 — wire mirror of `paged_model::ParagraphRule` (the

@@ -4265,6 +4265,11 @@ pub enum WorkerError {
     /// short identifier (e.g. `"Mutation::InsertText"`).
     #[error("not implemented: {what}")]
     NotImplemented { what: String },
+    /// The mutation's target is not in the document (finding CLI-5): a
+    /// frame id or address that resolves to nothing. `what` names it as
+    /// it was asked for.
+    #[error("{what}: the target does not exist (notFound)")]
+    NotFound { what: String },
     /// Requested page id is unknown — caller is using a stale id
     /// from before a page was deleted, or a typo.
     #[error("unknown page id: {page_id}")]

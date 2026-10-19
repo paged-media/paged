@@ -866,7 +866,7 @@ property_paths! {
         RowKeepWithNext => "rowKeepWithNext" : bool_().default_bool(false).idml(idml![attr(Row, KeepWithNextRow)]),
         PluginMetadata => "pluginMetadata" : structure("PluginMetadata", Wire::PluginMetadata).required(),
         AnchoredPosition => "anchoredPosition" : enum_open(ANCHORED_POSITIONS).default_text("InlinePosition").idml(idml![attr(AnchoredObjectSetting, AnchoredPosition)]),
-        AnchorPoint => "anchorPoint" : enum_open(REFERENCE_POINTS).idml(idml![attr(AnchoredObjectSetting, AnchorPoint)]),
+        AnchorPoint => "anchorPoint" : enum_open(ANCHOR_POINTS).idml(idml![attr(AnchoredObjectSetting, AnchorPoint)]),
         AnchoredXOffset => "anchoredXOffset" : length().default_num(0.0).idml(idml![attr(AnchoredObjectSetting, AnchorXoffset)]),
         AnchoredYOffset => "anchoredYOffset" : length().default_num(0.0).idml(idml![attr(AnchoredObjectSetting, AnchorYoffset)]),
         AnchoredHorizontalReference => "anchoredHorizontalReference" : text().idml(idml![attr(AnchoredObjectSetting, HorizontalReferencePoint)]),

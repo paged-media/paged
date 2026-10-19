@@ -32,7 +32,7 @@
 // (core-schema.ts `coreSchema71`). What core does NOT model as a property
 // stays on the pre-71 seam, which this one wraps: story `content` and its
 // counts, the `labels` map, page `index`, doc `pageCount` / `documentName`
-// / `dirty`, swatch `swatchKind`, style `name` / `basedOn`, spread and
+// / `dirty`, swatch `swatchKind`, style `basedOn`, spread and
 // master `label` / `pageCount`; and the two wire paths core's catalog
 // gives no row (CORE_ROWLESS_PATHS: `tableRowCount`, `tableColumnCount`),
 // which `RequestGet` cannot read. (`nextTextFrame` / `previousTextFrame`
@@ -84,7 +84,9 @@ const EXTRA: Record<string, ReadonlySet<string>> = {
   frame: new Set(["labels"]),
   story: new Set(["characterCount", "paragraphCount", "overset", "content"]),
   swatch: new Set(["swatchKind"]),
-  style: new Set(["name", "basedOn"]),
+  // A style's `name` is core's (the `rename<Family>Style` row, finding
+  // PN-168: served here it fell to the pre-71 table, which writes no name).
+  style: new Set(["basedOn"]),
   spread: new Set(["label", "pageCount"]),
   master: new Set(["label", "pageCount"]),
 };

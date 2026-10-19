@@ -550,11 +550,10 @@ fn measure_text() {
     .golden("paged read measure-text", "inter-hello-24pt");
 }
 
-/// finding CLI-2: `paged read placed-asset` takes the frame's bare `Self`
-/// id (`u5`). Given the `kind:id` address every other element argument
-/// takes (`rectangle:u5`, which the README promises for element
-/// arguments), it answers `found: false` and exits 0 for a frame that
-/// holds an image — a silent wrong answer rather than a refusal.
+/// `paged read placed-asset` takes the frame's bare `Self` id (`u5`) or
+/// the `kind:id` address every other element argument takes
+/// (`rectangle:u5`; finding CLI-2, fixed: the address once answered
+/// `found: false`).
 #[test]
 fn placed_asset() {
     covers!("cli:paged read placed-asset");
@@ -585,10 +584,9 @@ fn placed_asset() {
     );
     let addressed = fx
         .run(&["read", "placed-asset", "doc.paged", "rectangle:u5"])
-        .golden("paged read placed-asset", "finding-cli-2-address-form");
-    // finding CLI-2: the address form finds nothing, and says so with exit 0.
+        .golden("paged read placed-asset", "address-form");
     assert_eq!(addressed.code, Some(0));
-    assert_eq!(addressed.json()["payload"]["found"], false);
+    assert_eq!(addressed.json()["payload"]["found"], true);
 }
 
 #[test]

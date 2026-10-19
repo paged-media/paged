@@ -162,16 +162,11 @@ pub fn run(
     let mut session = Session::new();
     assets.open(&mut session, doc)?;
 
-    // The typed frame mutations match on the BARE self id —
-    // `CanvasModel::resolve_frame_node_id` keys off it — while
-    // `SetElementProperty` below takes the full address. The Boa bridge
-    // reconciles the two with its `bare_id` helper and this does the
-    // same, so one address form works at both doors. Handing
-    // `ReplaceImageBytes` the prefixed form makes the lowering resolve
-    // nothing, which surfaces as a misleading
-    // `not implemented: Mutation::ReplaceImageBytes`.
+    // The typed frame mutations take the `kind:id` address as it was
+    // given (`CanvasModel::resolve_frame_node_id` reads it with the one
+    // address parser), so a missing frame is answered by its address.
     let reply = session.send(MainToWorkerKind::Mutate(Mutation::ReplaceImageBytes {
-        element_id: element_id.raw_id().to_string(),
+        element_id: frame.to_string(),
         bytes: Some(bytes.clone().into()),
     }))?;
     applied(reply, "place the image")?;

@@ -6817,15 +6817,15 @@
       "type": {
         "kind": "enum",
         "members": [
-          "TopLeftPoint",
-          "TopCenterPoint",
-          "TopRightPoint",
-          "CenterLeftPoint",
-          "CenterPoint",
-          "CenterRightPoint",
-          "BottomLeftPoint",
-          "BottomCenterPoint",
-          "BottomRightPoint"
+          "TopLeftAnchor",
+          "TopCenterAnchor",
+          "TopRightAnchor",
+          "LeftCenterAnchor",
+          "CenterAnchor",
+          "RightCenterAnchor",
+          "BottomLeftAnchor",
+          "BottomCenterAnchor",
+          "BottomRightAnchor"
         ],
         "open": true
       },

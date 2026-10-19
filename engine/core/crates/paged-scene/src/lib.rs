@@ -38,6 +38,7 @@ use paged_model::{
 };
 
 pub mod anchors;
+mod canonical;
 pub mod grow;
 pub mod layer;
 pub mod value;
@@ -531,123 +532,29 @@ impl Document {
         &self.designmap.stories
     }
 
-    /// Stable 256-bit content hash of the editable parts of the
-    /// document (stories, spreads' frame definitions, anchor table).
+    /// Stable 256-bit content hash of the document: every field it
+    /// serializes (stories, spreads, masters, the design map, swatches,
+    /// styles).
     /// Phase 3 Item 6 — drives determinism tests for the mutation
     /// pipeline: applying the same mutation log to the same source
     /// bytes twice must produce identical hashes (AC-E-7).
     ///
-    /// Walks the document in **stable order** (parser-order Vecs;
-    /// sorted-key HashMaps) and feeds bytes into blake3. Skips
-    /// derived caches (`frame_for_story`, `text_frame_index`) since
-    /// they're functions of the underlying data. The hash is *not*
+    /// Streams the document's serde form into blake3 (parser-order
+    /// Vecs; maps folded independent of their order). Skips the
+    /// derived caches (`frame_for_story`, `text_frame_index`,
+    /// `anchors`) since they're functions of the underlying data. The hash is *not*
     /// guaranteed equal across renderer versions — only across runs
     /// of the same binary.
-    /// W1.13 — fold a run list's text + font + size into the canonical
-    /// hash. Shared by the body-paragraph and table-cell-paragraph
-    /// passes so both streams hash identically (a cell edit and the
-    /// same body edit produce the same per-run contribution).
-    fn hash_runs(h: &mut blake3::Hasher, runs: &[CharacterRun]) {
-        for (ri, r) in runs.iter().enumerate() {
-            h.update(b"\0r");
-            h.update(&(ri as u32).to_le_bytes());
-            h.update(b"\0t\0");
-            h.update(r.text.as_bytes());
-            if let Some(font) = r.font.as_deref() {
-                h.update(b"\0f\0");
-                h.update(font.as_bytes());
-            }
-            if let Some(size) = r.point_size {
-                h.update(b"\0sz\0");
-                h.update(&size.to_le_bytes());
-            }
-        }
-    }
-
     pub fn canonical_hash(&self) -> [u8; 32] {
         let mut h = blake3::Hasher::new();
-        // v2 (W1.13): cell-paragraph text now folds into the hash so
-        // table-cell edits + their undo are observable to determinism
-        // replay and the canvas undo gate. Bumped from v1 to invalidate
-        // any persisted v1 digests.
-        h.update(b"paged-scene-canonical-v2");
-
-        // Stories — text + style names, in document order.
-        h.update(b"stories:");
-        for s in &self.stories {
-            h.update(b"\0story\0");
-            h.update(s.self_id.as_bytes());
-            for (pi, p) in s.story.paragraphs.iter().enumerate() {
-                h.update(b"\0p");
-                h.update(&(pi as u32).to_le_bytes());
-                if let Some(style) = p.paragraph_style.as_deref() {
-                    h.update(b"\0ps\0");
-                    h.update(style.as_bytes());
-                }
-                Self::hash_runs(&mut h, &p.runs);
-                // W1.13 — table-cell paragraph text. A paragraph hosting
-                // a `<Table>` folds each cell's `(col,row)` + paragraph
-                // text into the hash so cell edits change the digest
-                // (and an undo restores it). Walks cells in document
-                // order; the per-cell `Name` keys the address so two
-                // cells with identical text stay distinguishable.
-                if let Some(table) = p.table.as_ref() {
-                    h.update(b"\0tbl\0");
-                    if let Some(tid) = table.self_id.as_deref() {
-                        h.update(tid.as_bytes());
-                    }
-                    for cell in &table.cells {
-                        h.update(b"\0cell\0");
-                        if let Some(name) = cell.name.as_deref() {
-                            h.update(name.as_bytes());
-                        }
-                        for (cpi, cp) in cell.paragraphs.iter().enumerate() {
-                            h.update(b"\0cp");
-                            h.update(&(cpi as u32).to_le_bytes());
-                            if let Some(style) = cp.paragraph_style.as_deref() {
-                                h.update(b"\0cps\0");
-                                h.update(style.as_bytes());
-                            }
-                            Self::hash_runs(&mut h, &cp.runs);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Spreads — frame bounds + transforms, in document order.
-        h.update(b"spreads:");
-        for ps in &self.spreads {
-            h.update(b"\0spread\0");
-            h.update(ps.src.as_bytes());
-            for f in &ps.spread.text_frames {
-                h.update(b"\0tf\0");
-                if let Some(id) = f.self_id.as_deref() {
-                    h.update(id.as_bytes());
-                }
-                hash_bounds(&mut h, &f.bounds);
-                hash_transform(&mut h, f.item_transform.as_ref());
-            }
-            for r in &ps.spread.rectangles {
-                h.update(b"\0rc\0");
-                if let Some(id) = r.self_id.as_deref() {
-                    h.update(id.as_bytes());
-                }
-                hash_bounds(&mut h, &r.bounds);
-                hash_transform(&mut h, r.item_transform.as_ref());
-            }
-        }
-
-        // Anchors — count + ids in stable order.
-        h.update(b"anchors:");
-        for a in &self.anchors {
-            h.update(b"\0a\0");
-            h.update(a.id.as_str().as_bytes());
-            h.update(b"\0s\0");
-            h.update(a.story_id.as_bytes());
-            h.update(&a.paragraph_index.to_le_bytes());
-        }
-
+        // v3 (finding CLI-6): every serialized field of the document — the
+        // model's truth, which a `.paged` save writes — so a change to a
+        // fill, an oval, a swatch or a style moves the hash, not only text
+        // and rectangle geometry (v2). The derived caches are
+        // `#[serde(skip)]` and stay out; maps hash independent of their
+        // iteration order (`canonical`).
+        h.update(b"paged-scene-canonical-v3");
+        canonical::hash_into(&mut h, self);
         *h.finalize().as_bytes()
     }
 
@@ -1734,24 +1641,6 @@ fn merge_border_attrs(c: &mut paged_model::ParagraphBorder, p: &paged_model::Par
 
 /// Derive a Story's `Self` id from its manifest src. Turns
 /// "Stories/Story_uXX.xml" → "uXX"; returns the stem otherwise.
-fn hash_bounds(h: &mut blake3::Hasher, b: &paged_model::Bounds) {
-    h.update(&b.top.to_le_bytes());
-    h.update(&b.left.to_le_bytes());
-    h.update(&b.bottom.to_le_bytes());
-    h.update(&b.right.to_le_bytes());
-}
-
-fn hash_transform(h: &mut blake3::Hasher, m: Option<&[f32; 6]>) {
-    if let Some(arr) = m {
-        h.update(b"\0t1\0");
-        for v in arr {
-            h.update(&v.to_le_bytes());
-        }
-    } else {
-        h.update(b"\0t0\0");
-    }
-}
-
 pub fn derive_story_id(src: &str) -> String {
     let stem = src.rsplit_once('/').map(|(_, t)| t).unwrap_or(src);
     let without_ext = stem.strip_suffix(".xml").unwrap_or(stem);
