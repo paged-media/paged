@@ -52,11 +52,11 @@ describe("host.viewport pages and revealText — the editor's canvas", () => {
   beforeAll(async () => {
     t = await editorAdapter();
   });
-  afterAll(() => {
+  afterAll(async () => {
     setPageGoTo(null);
     setTextReveal(null);
     publishActivePage(null);
-    t.dispose();
+    await t.dispose();
   });
 
   test("supports viewport.pages@1 and viewport.revealText@1", () => {
@@ -121,7 +121,9 @@ describe.each([
   beforeAll(async () => {
     t = await make();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("goToPage false, activePage null, revealText false; supports false", async () => {
     expect(t.host.supports("viewport.pages@1")).toBe(false);
@@ -151,7 +153,9 @@ describe("host.text.caret — the editor's content selection", () => {
   beforeAll(async () => {
     t = await editorAdapter();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("a collapsed caret answers its story and offset; a range answers its start", () => {
     expect(t.host.supports("text.caret@1")).toBe(true);
@@ -175,7 +179,9 @@ describe.each([
   beforeAll(async () => {
     t = await make();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("null, and supports(text.caret@1) false", () => {
     expect(t.host.supports("text.caret@1")).toBe(false);
@@ -210,7 +216,7 @@ describe("host.shell — the editor's cockpit, picker and saver", () => {
   });
   afterAll(async () => {
     await GlobalRegistrator.unregister();
-    t.dispose();
+    await t.dispose();
   });
 
   test("supports the shell doors", () => {
@@ -226,10 +232,12 @@ describe("host.shell — the editor's cockpit, picker and saver", () => {
   test("openPanel / closePanel reach the cockpit", () => {
     t.host.shell.openPanel(`${PROBE_ID}.panel.one`);
     t.host.shell.closePanel(`${PROBE_ID}.panel.one`);
-    expect(t.editorApp!.panelCalls).toEqual([
-      `open ${PROBE_ID}.panel.one`,
-      `close ${PROBE_ID}.panel.one`,
-    ]);
+    expect(t.editorApp!.opened.filter((o) => o.kind.endsWith("Panel"))).toEqual(
+      [
+        { kind: "openPanel", detail: `${PROBE_ID}.panel.one` },
+        { kind: "closePanel", detail: `${PROBE_ID}.panel.one` },
+      ],
+    );
   });
 
   test("pickFile opens a picker with the accept filter; a cancel resolves []", async () => {
@@ -288,8 +296,16 @@ describe("host.shell — the editor's cockpit, picker and saver", () => {
         id: "u1",
       } as never),
     ).toBe(true);
-    expect(t.editorApp!.entered).toEqual([
-      { type: "probeFrame", elementId: { kind: "rectangle", id: "u1" } },
+    expect(
+      t.editorApp!.opened.filter((o) => o.kind === "enterEditContext"),
+    ).toEqual([
+      {
+        kind: "enterEditContext",
+        detail: {
+          type: "probeFrame",
+          elementId: { kind: "rectangle", id: "u1" },
+        },
+      },
     ]);
     await expect(
       t.host.shell.enterEditContext("sheet", {
@@ -308,7 +324,9 @@ describe.each([
   beforeAll(async () => {
     t = await make();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("openPanel is ignored, pickFile resolves [], saveFile false; supports false", async () => {
     expect(t.host.supports("shell.openPanel@1")).toBe(false);
@@ -333,7 +351,9 @@ describe("host.modules — the editor's module manifest", () => {
   beforeAll(async () => {
     t = await editorAdapter();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("a declared artifact resolves to the dev server's /@fs/ URL with the measured integrity", async () => {
     expect(t.host.supports("modules@1")).toBe(true);
@@ -373,7 +393,9 @@ describe.each([
   beforeAll(async () => {
     t = await make();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("every answer is null and supports(modules@1) false", async () => {
     expect(t.host.supports("modules@1")).toBe(false);
@@ -396,7 +418,9 @@ describe("host.workers — the editor's worker backend", () => {
     t.editorApp!.workerResolvers[PROBE_ID] = (module) =>
       module === "workers/echo.js" ? ECHO : null;
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("concurrency is min(declared max, hardwareConcurrency, 8)", () => {
     expect(t.host.supports("workers@1")).toBe(true);
@@ -456,7 +480,9 @@ describe.each([
   beforeAll(async () => {
     t = await make();
   });
-  afterAll(() => t.dispose());
+  afterAll(async () => {
+    await t.dispose();
+  });
 
   test("spawn rejects, concurrency 0, supports(workers@1) false", async () => {
     expect(t.host.supports("workers@1")).toBe(false);
