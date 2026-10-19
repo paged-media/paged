@@ -600,6 +600,9 @@ fn sample(row: &SchemaRow, current: &Value, t: &Targets) -> Value {
             Value::Ref(id)
         }
         ValueType::Text => Value::Text("probe".into()),
+        // A span stays inside the probe's 2 × 2 table (finding SCR-8: a
+        // span past the edge is refused).
+        ValueType::Number if matches!(row.path, "rowSpan" | "columnSpan") => Value::Number(2.0),
         ValueType::Number | ValueType::Length => {
             let lo = row.range.as_ref().and_then(|r| r.min).unwrap_or(0.0);
             let hi = row.range.as_ref().and_then(|r| r.max).unwrap_or(500.0);

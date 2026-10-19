@@ -2256,6 +2256,20 @@ pub struct FrameFittingOption {
     pub auto_fit: Option<bool>,
 }
 
+impl FrameFittingOption {
+    /// No knob is set: the frame is as if it had no `<FrameFittingOption>`,
+    /// which is how a write that clears the last knob leaves it.
+    pub fn is_empty(&self) -> bool {
+        self.left_crop.is_none()
+            && self.top_crop.is_none()
+            && self.right_crop.is_none()
+            && self.bottom_crop.is_none()
+            && self.fitting_on_empty_frame.is_none()
+            && self.reference_point.is_none()
+            && self.auto_fit.is_none()
+    }
+}
+
 /// Axis-aligned ellipse — `<Oval>` in IDML. Same fill/stroke story as
 /// Rectangle; geometry is the ellipse inscribed in `GeometricBounds`.
 #[derive(Debug, Clone, Serialize, Deserialize)]

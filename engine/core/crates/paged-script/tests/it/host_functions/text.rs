@@ -140,9 +140,8 @@ fn apply_style() {
             .all(|r| r["character_style"].is_null()),
         "undo removes the style"
     );
-    // finding SCR-10: undo leaves the text split into the runs the edit made; it
-    // should restore the one run.
-    assert!(undone.as_array().map(Vec::len) > Some(1), "{undone}");
+    // SCR-10 (fixed): undo restores the one original run.
+    assert_eq!(undone, before, "undo restores the runs exactly");
     assert_eq!(ok(&mut m, "paged.redo()"), "true");
     // SCR-9 (fixed): a style the document does not have is refused.
     refuses(
@@ -279,11 +278,19 @@ fn insert_hyperlink() {
         "[]",
         "undo removes the link"
     );
-    // finding SCR-10: undo leaves the text split into the three runs the link made
-    // (identical attributes, no link); it should restore the one run.
+    // SCR-10 (fixed): undo restores the one original run; the model equals
+    // its before-state, and redo the linked one.
     let undone = snapshot(&m);
+    assert_eq!(runs(&m), 1);
+    assert!(undone == before, "{:?}", changed_paths(&before, &undone));
+    assert_eq!(ok(&mut m, "paged.redo()"), "true");
     assert_eq!(runs(&m), 3);
-    assert!(undone != before, "{:?}", changed_paths(&before, &undone));
+    assert_eq!(
+        json_of(&ok(&mut m, "paged.collection('hyperlinks')"))
+            .as_array()
+            .map(Vec::len),
+        Some(1)
+    );
 }
 
 #[test]
