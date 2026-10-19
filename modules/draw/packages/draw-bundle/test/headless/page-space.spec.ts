@@ -362,7 +362,10 @@ describe("draw conformance — page space on a page that does not start at its s
 /** "Ho" in Lora on the same page placement (`create-outlines.spec.ts`'s
  *  document, moved): the frame's box is page (40, 300)–(400, 380). */
 const LORA = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "../fixtures/fonts/Lora.ttf"),
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../../../../engine/core/corpus/fonts/Lora.ttf",
+  ),
 );
 const TEXT_DOC = () =>
   buildIdml([

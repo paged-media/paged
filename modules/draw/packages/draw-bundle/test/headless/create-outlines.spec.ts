@@ -92,12 +92,15 @@ const RESULT: TextOutlinesWire = {
   ],
 };
 
-/** Lora (OFL, `test/fixtures/fonts/OFL-lora.txt`). The headless host
+/** Lora (OFL, `engine/core/corpus/fonts/OFL-lora.txt`). The headless host
  *  loads with no fallback font, so text composes glyphs only in a family
  *  the font registry holds: the document below NAMES Lora, and the face
  *  is registered under that name BEFORE the load (fonts seed at load). */
 const LORA = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "../fixtures/fonts/Lora.ttf"),
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../../../../engine/core/corpus/fonts/Lora.ttf",
+  ),
 );
 
 /** One page; a text frame whose story is "Ho" in black then "o" in red,

@@ -19,6 +19,8 @@ on:
   push:
     branches: [main]
     paths:
+      # The test fonts (Roboto) are read from the engine's corpus.
+      - "engine/core/corpus/fonts/**"
       - "modules/image/**"
       # The TypeScript base every package's tsconfig extends.
       - "tsconfig.base.json"
@@ -58,6 +60,8 @@ on:
       - "!modules/image/docs/**/*.md"
   pull_request:
     paths:
+      # The test fonts (Roboto) are read from the engine's corpus.
+      - "engine/core/corpus/fonts/**"
       - "modules/image/**"
       # The TypeScript base every package's tsconfig extends.
       - "tsconfig.base.json"

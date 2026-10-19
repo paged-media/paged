@@ -40,6 +40,10 @@ bun run test:system          # needs the engine's and the modules' wasm built
   pixel gate, the text-layer gate, export-diff, the InDesign probes) stay in
   `engine/core`: they test the engine alone against InDesign and run from its
   Cargo workspace (`core / fidelity`).
+- **Shared fixtures.** A fixture that two components read is read from the
+  component that owns it (its conformance lane or test corpus), not copied:
+  `tests/fixtures/` is for fixtures that no component owns, and there is none
+  today (`docs/migration/test-inventory.md`, T1).
 
 ## Tiers
 
