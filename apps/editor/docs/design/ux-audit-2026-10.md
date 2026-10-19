@@ -639,6 +639,12 @@ Right-click on a frame, in text, on the page or on the pasteboard opens no edito
 
 **Screenshots:** `F-27-no-context-menu.png`
 
+**Fixed (2026-10-19, `fd16e431d`).** A right-click on the canvas opens the editor's menu
+(ADR 232): Cut, Copy, Paste, Paste in place, Duplicate, Arrange, Group, Ungroup, Delete, Select
+all, fed by the command registry and greyed by each command's `when`; it selects the item under
+the pointer first. Shift+F10 and the context-menu key open it from the keyboard. Not yet: Lock
+(F-41), Fitting and Effects rows, a text-specific menu, panel row menus.
+
 <a id="f-28"></a>
 
 #### F-28 · No Cut, Copy, Paste or Duplicate for page items
