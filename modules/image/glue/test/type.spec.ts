@@ -21,14 +21,14 @@
 // WHERE THE PROOFS LIVE, and why they are split. The Rust module
 // (`image-js/src/text.rs`) asserts the contract's edges — a non-font is
 // refused, a nonsensical size is refused, overlapping glyph coverage
-// takes the max — but it cannot assert PIXELS, because there is no font
-// in this repository. Fonts arrive from the HOST at runtime
+// takes the max — but it cannot assert PIXELS without a face, and the
+// bundle carries none. Fonts arrive from the HOST at runtime
 // (`assets.getFontFace`), which is the whole design: a bundle renders
 // only what the document already embeds and never fetches.
 //
-// So the font-shaped assertions live here, where a face can be supplied
-// to the door the way the host would, and the honest ones that need no
-// glyphs live in Rust.
+// So the font-shaped assertions live here, where a committed test face
+// (`fixtures/fonts/`) is supplied to the door the way the host would,
+// and the honest ones that need no glyphs live in Rust.
 
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -58,23 +58,18 @@ function geomFor(
   return { id: { kind: "rectangle", id } as never, pageId: "pg1", bounds };
 }
 
-/** A real TrueType face from the platform, standing in for the one the
- *  HOST would serve. Not committed to this repo — there is no font here
- *  by design — so a machine without it skips the pixel assertions loudly
- *  rather than passing vacuously. */
-function systemFace(): Uint8Array | null {
-  for (const p of [
-    "/System/Library/Fonts/Supplemental/Arial.ttf",
-    "/System/Library/Fonts/Helvetica.ttc",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-  ]) {
-    try {
-      return new Uint8Array(readFileSync(p));
-    } catch {
-      // next
-    }
-  }
-  return null;
+/** A real TrueType face standing in for the one the HOST would serve:
+ *  Roboto Regular (Apache-2.0, `fixtures/fonts/LICENSE-roboto.txt`),
+ *  committed beside this spec so every machine runs the font-shaped
+ *  assertions. It is a TEST fixture: the bundle itself still ships no
+ *  font and fetches none. */
+const FIXTURE_FACE = new URL(
+  "./fixtures/fonts/Roboto-Regular.ttf",
+  import.meta.url,
+);
+
+function fixtureFace(): Uint8Array {
+  return new Uint8Array(readFileSync(FIXTURE_FACE));
 }
 
 /** A session over the real wasm, with a host that serves `face`. */
@@ -125,11 +120,7 @@ async function withFont(face: Uint8Array | null, resolvedStyle?: string) {
 
 describe("the raster type lane", () => {
   it("asks the FACE DOOR for the style, and reports what came back", async () => {
-    const face = systemFace();
-    if (!face) {
-      console.warn("no system font available — skipping the style assertions");
-      return;
-    }
+    const face = fixtureFace();
     // The host resolves this request to REGULAR: a document that
     // embeds no bold face is the common case, and the interesting
     // behaviour is what the designer is told about it.
@@ -217,14 +208,7 @@ describe("the raster type lane", () => {
   });
 
   it("paints real glyphs into the image", async () => {
-    const face = systemFace();
-    if (!face) {
-      // Loudly, not silently: a machine with no system font cannot prove
-      // this half, and a quiet pass would read as coverage it does not
-      // have.
-      console.warn("no system font available — skipping the pixel assertion");
-      return;
-    }
+    const face = fixtureFace();
     const { session, handle } = await withFont(face);
     session.setType({ text: "Hi", family: "Test", sizePx: 20 });
     const ok = await session.paintText([1, 1], "Hi", "Test", 20);
