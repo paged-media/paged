@@ -1,0 +1,11 @@
+$ paged-node merge <TMP>/fixture.paged --no-plugins
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "merge needs --data <file> and --out <dir>",
+    "exit": 2
+  }
+}
+# stderr
+(empty)

@@ -1,0 +1,11 @@
+$ paged-node schema
+# exit 2
+# stdout
+{
+  "error": {
+    "message": "usage: paged-node schema <doc> [kind|address]",
+    "exit": 2
+  }
+}
+# stderr
+(empty)
