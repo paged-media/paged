@@ -26,6 +26,7 @@ import { useDocumentMeta } from "../../catalog/use-collection";
 import { useDocument } from "../../state/document-context";
 import { useWorkflowMode } from "../../state/workflow-mode-context";
 import { useRegistries } from "../../state/registries-context";
+import { useRegistryView } from "../../state/live";
 
 export function DocTitleBar() {
   const meta = useDocumentMeta();
@@ -34,8 +35,8 @@ export function DocTitleBar() {
   // honest fallback identity before "Untitled document".
   const { sourceName } = useDocument();
   const { mode } = useWorkflowMode();
-  const registries = useRegistries();
-  const modeTitle = registries.modes.get(mode)?.title;
+  const modes = useRegistryView(useRegistries().modes);
+  const modeTitle = modes.get(mode)?.title;
   const loaded = meta != null && meta.pageCount > 0;
 
   return (

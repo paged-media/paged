@@ -11,8 +11,10 @@
     "typecheck": "bun check -p tsconfig.json && bun check -p functions/tsconfig.json && bun check -p test/tsconfig.json && bun check -p tests/headless/tsconfig.json",
     "typecheck:tests": "bun check -p tsconfig.tests.json",
     "test:dom": "bun test --parallel --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts --preload ./test/vite-shim.ts .dom.test.",
+    "test:dom:compiled": "bun test --parallel --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts --preload ./test/vite-shim.ts --preload ../../../../tooling/js/bun-react-compiler.ts .dom.test.",
     "test:contracts": "bun test --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts ./test/contracts",
     "test:headless": "bun test --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts ./tests/headless",
+    "test:render-counts": "bun scripts/render-counts.mjs",
     "test:unit": "bun test --parallel --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts --path-ignore-patterns '**/*.dom.test.*' ./test/unit",
     "test:fidelity": "playwright test --config=playwright.config.ts",
     "test:journeys": "playwright test --project=journeys",
@@ -53,11 +55,15 @@
     "react-dom": "catalog:"
   },
   "devDependencies": {
+    "@babel/core": "catalog:",
     "@happy-dom/global-registrator": "catalog:",
+    "@paged-media/test-kit": "workspace:*",
     "@playwright/test": "^1.64.1",
+    "@rolldown/plugin-babel": "catalog:",
     "@testing-library/dom": "catalog:",
     "@testing-library/react": "catalog:",
     "@testing-library/user-event": "catalog:",
+    "@types/babel__core": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/pngjs": "^6.0.5",
@@ -65,6 +71,7 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "^6.1.2",
     "autoprefixer": "^10.6.1",
+    "babel-plugin-react-compiler": "catalog:",
     "dom-accessibility-api": "^0.5.16",
     "happy-dom": "catalog:",
     "pngjs": "^7.0.0",
@@ -72,7 +79,6 @@
     "tailwindcss": "^3.4.19",
     "tsx": "^4.23.15",
     "typescript": "catalog:",
-    "vite": "catalog:",
-    "@paged-media/test-kit": "workspace:*"
+    "vite": "catalog:"
   }
 }

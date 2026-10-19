@@ -23,6 +23,7 @@
 // from SlidesStore.
 
 import type { BundleHost, PanelProps } from "@paged-media/plugin-api";
+import { subscribeOf, useLive } from "@paged-media/react-live";
 import * as React from "react";
 
 import {
@@ -56,7 +57,9 @@ export function makeSlidesPanel(
       .catch((e) => host.log.warn(`paged.slide: ${String(e)}`));
 
   const Thumb: React.FC<{ slide: Slide }> = ({ slide }) => {
-    const url = store.thumbnail(slide.pageId);
+    // Its own view of the store: a thumbnail landing re-renders this
+    // thumbnail, not the list (react-live, editor ADR 229).
+    const url = useLive(store, subscribeOf).thumbnail(slide.pageId);
     const [w, h] = slide.sizePt;
     return (
       <div
@@ -138,12 +141,13 @@ export function makeSlidesPanel(
   };
 
   const Component: React.FC<PanelProps> = () => {
-    const [, force] = React.useReducer((n: number) => n + 1, 0);
-    React.useEffect(() => store.subscribe(force), []);
+    // The store as a render value (react-live, editor ADR 229): a new view
+    // after every change, so the list and the active slide are read again.
+    const live = useLive(store, subscribeOf);
     const [dragging, setDragging] = React.useState<string | null>(null);
     const [over, setOver] = React.useState<number | null>(null);
-    const slides = store.list();
-    const active = store.activePage();
+    const slides = live.list();
+    const active = live.activePage();
     const order = slides.map((s) => s.pageId);
 
     if (slides.length === 0) {

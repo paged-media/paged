@@ -22,6 +22,7 @@
 // notes move, duplicate and undo with their slide.
 
 import type { BundleHost, PanelProps } from "@paged-media/plugin-api";
+import { subscribeOf, useLive } from "@paged-media/react-live";
 import * as React from "react";
 
 import { setStateMutation, type SlidesStore } from "../slides-model.js";
@@ -31,9 +32,10 @@ export function makeNotesPanel(
   store: SlidesStore,
 ): React.ComponentType<PanelProps> {
   const Component: React.FC<PanelProps> = () => {
-    const [, force] = React.useReducer((n: number) => n + 1, 0);
-    React.useEffect(() => store.subscribe(force), []);
-    const slide = store.activeSlide();
+    // The store as a render value (react-live, editor ADR 229): a new view
+    // after every change, so what is read from it is read again.
+    const slides = useLive(store, subscribeOf);
+    const slide = slides.activeSlide();
     const saved = slide?.state.notes ?? "";
     const [draft, setDraft] = React.useState(saved);
     // Another slide, or the notes changed underneath (undo): show them.
