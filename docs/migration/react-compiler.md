@@ -230,6 +230,17 @@ end of the work, both ways, every lane:
 skip the same way both ways. The data, image, sheet and web lanes also hold the wasm freshness
 check, which needs wasm built from the current Rust and is left out of the counts.)
 
+The preload caches what it compiles by content (`node_modules/.cache/paged-react-compiler`,
+keyed on the compiler's version and options, the preload's and the configuration's code, the
+path and the source). `bun test --parallel` gives every test file a fresh module registry, so
+without it each file compiled the whole graph it imports again: run over the canvas app's tests
+with two workers, each worker compiled its 450-odd distinct sources 12,000 to 15,000 times in
+all, about 30 times each, and the compiled DOM lane on CI took 365 to 394 s against 165 s as
+written. The cost landed inside the first test of a file
+that imports lazily, which on a loaded runner went past the 30 s per-test timeout (the chrome
+toggles' first test, then the two after it, which a timed-out test's leftover work disturbs).
+With the cache the lane compiles each file once.
+
 CI runs the shell's and the canvas app's DOM lanes compiled (`editor / tests`, job `checks`),
 next to the production build with its compiler check.
 
