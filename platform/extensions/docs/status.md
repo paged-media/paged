@@ -127,6 +127,11 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
 - **Selection.** `host.selection.set` writes the engine's geometry for the applied ids to
   the host's selection mirror, so the selection box follows a selection a bundle makes
   (0.2.54-canary.0).
+- **The gesture test kit (0.2.73-canary.0; its own entry point `@paged-media/plugin-sdk/gesture-kit`
+  since 0.2.77-canary.0):** `createFakeEditor` (a recording `PagedEditor`), the gesture DSL
+  `gestures()` with its unit backend (a tool's handler driven in document points, against the
+  fake or the headless engine), pointer tapes (`parseTape` / `replayTape`) and the invariants
+  (`expectOneCommit`, `expectNoCommit`, `checkUndoRedo`, `checkCancel`, `engineModelChannel`).
 - **For bundle authors:** `DisposableStore`, the page-drag gesture helpers, the wasm
   fallbacks `resolveWasm` / `fetchWasm`, the object-model helpers (`applyDefaults`,
   `findRow`, `rowPathOf`, `ROW_PATH`), and `createHeadlessHost`, which runs bundles in Node
@@ -192,7 +197,8 @@ vendored from `@paged-media/canvas-wasm` and `@paged-media/introspect-wasm` 0.73
 - **The headless host** wires no scene-layer or tile channel, and no shell, consent,
   worker, native-document, journal, widget, diagnostics, module, page-navigation, text-reveal
   or caret backend. The engine text shaper is opt-in (`engineShaper`). Menu entries are not
-  recorded; gestures are not replayed.
+  recorded. Gestures replay through the gesture test kit's DSL against
+  `host.editor` (0.2.73-canary.0); the headless host itself drives no pointer.
 - **Two packages are not on npm, by decision.** `@paged-media/ai` and `@paged-media/cli` are
   private workspace packages (PM-0008); `release.yml` publishes only `plugin-api` and
   `plugin-sdk` of this directory.

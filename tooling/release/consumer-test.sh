@@ -159,32 +159,16 @@ JSON
   done
 }
 
-# The engine's generated wire declarations (canvas-wasm's .d.ts, its
-# introspect entry, and plugin-api's vendored wire.d.ts) name three types they
-# never declare: CellAddr, FlowGrowRule and TableLineRestoreJson. Published
-# releases have the same gap (0.73.4 included); a consumer with skipLibCheck
-# on, the common default, sees them as `any`. These errors, and only these,
-# are reported and tolerated; any other error fails the test.
-KNOWN_TS='(paged_canvas_wasm|paged_introspect_wasm|wire)\.d\.ts\([0-9]+,[0-9]+\): error TS2304: Cannot find name .(CellAddr|FlowGrowRule|TableLineRestoreJson).\.'
-
 typecheck() {
-  local dir="$1" pm="$2" out known other
+  local dir="$1" pm="$2"
   for ts in typescript ts5; do
     for res in nodenext bundler; do
       echo "== $pm: tsc ($ts $(node "$dir/node_modules/$ts/bin/tsc" --version | awk '{print $2}')) --moduleResolution $res"
-      out=$(cd "$dir" && node "node_modules/$ts/bin/tsc" -p "tsconfig.$res.json" 2>&1) || true
-      known=$(printf '%s\n' "$out" | grep -cE "$KNOWN_TS" || true)
-      other=$(printf '%s\n' "$out" | grep -E 'error TS' | grep -vE "$KNOWN_TS" || true)
-      if [ -n "$other" ]; then
-        printf '%s\n' "$other" >&2
+      if ! (cd "$dir" && node "node_modules/$ts/bin/tsc" -p "tsconfig.$res.json"); then
         echo "consumer-test: tsc ($ts, $res) failed" >&2
         exit 1
       fi
-      if [ "$known" -gt 0 ]; then
-        echo "   ok, with $known known error(s): the wire declarations' undeclared CellAddr/FlowGrowRule/TableLineRestoreJson"
-      else
-        echo "   ok"
-      fi
+      echo "   ok"
     done
   done
 }

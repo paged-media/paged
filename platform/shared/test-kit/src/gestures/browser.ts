@@ -56,7 +56,7 @@ import {
   type PointerTapeSample,
   type ToolRef,
   type WheelTapeSample,
-} from "@paged-media/plugin-sdk";
+} from "@paged-media/plugin-sdk/gesture-kit";
 
 /** The slice of a Playwright `Page` the backend drives. */
 export interface BrowserPage {
@@ -125,6 +125,8 @@ export function browserBackend(
   const gap = options.pageGapPt ?? 24;
   const timeoutMs = options.timeoutMs ?? 15_000;
   const held = new Set<ModifierName>();
+  /** Modifiers a key chord pressed, released with its key. */
+  const chordMods = new Map<string, ModifierName[]>();
   let cdp: { send(method: any, params?: any): Promise<any> } | null = null;
   let view: View | null = null;
 
@@ -168,6 +170,39 @@ export function browserBackend(
   ): Promise<[number, number]> => {
     const v = await current();
     return [v.left + pos[0] * v.scale + v.tx, v.top + pos[1] * v.scale + v.ty];
+  };
+
+  /** Before a press: when the point is outside the middle of the viewport
+   *  (off screen, or under the chrome along its edges), pan with a plain
+   *  wheel — the editor's own pan, exact in screen px — so the point sits
+   *  at 35 % / 35 % of the viewport and the drag that follows has room. */
+  const ensureVisible = async (pos: readonly [number, number]) => {
+    const v = await current();
+    const box: { w: number; h: number } = await page.evaluate((sel: string) => {
+      const r = document.querySelector(sel)!.getBoundingClientRect();
+      return { w: r.width, h: r.height };
+    }, hostSel);
+    const [x, y] = await toClient(pos);
+    const inside = (c: number, lo: number, len: number) =>
+      c >= lo + len * 0.2 && c <= lo + len * 0.8;
+    if (inside(x, v.left, box.w) && inside(y, v.top, box.h)) return;
+    const dx = x - (v.left + box.w * 0.35);
+    const dy = y - (v.top + box.h * 0.35);
+    await page.mouse.move(v.left + box.w / 2, v.top + box.h / 2);
+    await holdMods([]);
+    await page.mouse.wheel(dx, dy);
+    await page.evaluate(
+      async ({ tx, ty }: { tx: number; ty: number }) => {
+        const c = (globalThis as any).__canvas.client;
+        for (let k = 0; k < 120; k++) {
+          const cam = c.camera.read();
+          if (cam.tx !== tx || cam.ty !== ty) return;
+          await new Promise((r) => requestAnimationFrame(r));
+        }
+      },
+      { tx: v.tx, ty: v.ty },
+    );
+    invalidate();
   };
 
   /** Hold exactly `mods` (key presses), as the next sample needs. */
@@ -277,7 +312,10 @@ export function browserBackend(
       return [pg.x + p.at[0], pg.y + p.at[1]];
     },
     async pointer(s: PointerTapeSample) {
-      if (s.type === "pointerdown") invalidate();
+      if (s.type === "pointerdown") {
+        invalidate();
+        await ensureVisible(s.pos);
+      }
       const [x, y] = await toClient(s.pos);
       if (s.type === "pointercancel") {
         await page.evaluate(
@@ -306,6 +344,9 @@ export function browserBackend(
         } else {
           await page.mouse.move(x, y);
           await page.mouse.up({ button });
+          // The gesture is over: let go of its modifiers. A held Cmd would
+          // spring-load another tool for whatever comes next.
+          await holdMods([]);
         }
         return;
       }
@@ -349,10 +390,17 @@ export function browserBackend(
     async key(s: KeyTapeSample) {
       const mods = s.mods.filter((m) => KEY_OF[m] !== s.key);
       if (s.type === "keydown") {
-        await holdMods(mods);
+        // A chord: the modifiers the key brings are pressed for it and
+        // let go with it; ones a drag already holds stay held.
+        const added = mods.filter((m) => !held.has(m));
+        chordMods.set(s.key, added);
+        await holdMods([...held, ...added]);
         await page.keyboard.down(s.key);
       } else {
         await page.keyboard.up(s.key);
+        const added = chordMods.get(s.key) ?? [];
+        chordMods.delete(s.key);
+        await holdMods([...held].filter((m) => !added.includes(m)));
       }
       invalidate();
     },
@@ -365,6 +413,8 @@ export function browserBackend(
       invalidate();
     },
     async dblclick(s: DblclickTapeSample) {
+      invalidate();
+      await ensureVisible(s.pos);
       const [x, y] = await toClient(s.pos);
       await holdMods(s.mods);
       await page.mouse.dblclick(x, y);

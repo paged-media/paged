@@ -1,0 +1,708 @@
+{
+  "version": 1,
+  "dragPx": [120, 80],
+  "tools": [
+    {
+      "tool": "paged.tool.select",
+      "gesture": "drag",
+      "rows": [
+        {
+          "mods": "*",
+          "target": "empty",
+          "expect": {
+            "unchanged": "marquee"
+          }
+        },
+        {
+          "mods": "none",
+          "target": "*",
+          "expect": {
+            "moves": "target"
+          },
+          "known": "F-26",
+          "note": "a press on an unselected object starts a marquee"
+        },
+        {
+          "mods": "shift",
+          "target": "*",
+          "expect": {
+            "moves": "target",
+            "constraint": "axis"
+          },
+          "known": "F-26"
+        },
+        {
+          "mods": "alt",
+          "target": "*",
+          "expect": {
+            "duplicates": "target"
+          },
+          "known": "F-26"
+        },
+        {
+          "mods": "shift+alt",
+          "target": "*",
+          "expect": {
+            "duplicates": "target",
+            "constraint": "axis"
+          },
+          "known": "F-26"
+        },
+        {
+          "mods": "*",
+          "target": "locked",
+          "expect": {
+            "unchanged": "refused"
+          }
+        },
+        {
+          "mods": "*",
+          "target": "master",
+          "expect": {
+            "unchanged": "no-target"
+          },
+          "note": "a master item is not selectable on a document page"
+        }
+      ]
+    },
+    {
+      "tool": "paged.tool.directSelect",
+      "gesture": "drag",
+      "rows": [
+        {
+          "mods": "none",
+          "target": "empty",
+          "expect": {
+            "unchanged": "marquee"
+          }
+        },
+        {
+          "mods": "none",
+          "target": "frame",
+          "expect": {
+            "moves": "target"
+          },
+          "known": "F-26"
+        },
+        {
+          "mods": "none",
+          "target": "rotated",
+          "expect": {
+            "moves": "target"
+          },
+          "known": "F-26"
+        },
+        {
+          "mods": "none",
+          "target": "group",
+          "expect": {
+            "moves": "child"
+          },
+          "known": "F-26, F-29",
+          "note": "a press on an unselected object starts a marquee (F-26); Direct Selection must then reach the leaf, not the group (F-29)"
+        },
+        {
+          "mods": "none",
+          "target": "locked",
+          "expect": {
+            "unchanged": "refused"
+          }
+        },
+        {
+          "mods": "none",
+          "target": "master",
+          "expect": {
+            "unchanged": "no-target"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "paged.tool.page",
+      "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
+    },
+    {
+      "tool": "paged.tool.type",
+      "gesture": "drag",
+      "rows": [
+        {
+          "mods": "none",
+          "target": "*",
+          "expect": {
+            "creates": "textFrame",
+            "shape": "box"
+          }
+        },
+        {
+          "mods": "none",
+          "target": "*",
+          "zooms": [0.25],
+          "expect": {
+            "creates": "textFrame",
+            "shape": "box"
+          },
+          "known": "GT-3",
+          "note": "at 25% the drag ends on the pasteboard, and the Type tool reads the release point off the page under it"
+        }
+      ]
+    },
+    {
+      "tool": "paged.tool.line",
+      "gesture": "drag",
+      "rows": [
+        {
+          "mods": "none",
+          "target": "*",
+          "expect": {
+            "creates": "graphicLine",
+            "shape": "segment"
+          }
+        },
+        {
+          "mods": "shift",
+          "target": "*",
+          "expect": {
+            "creates": "graphicLine",
+            "shape": "45deg"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "paged.tool.pen",
+      "gesture": "pen-path",
+      "rows": [
+        {
+          "mods": "none",
+          "target": "*",
+          "expect": {
+            "creates": "polygon",
+            "shape": "path"
+          }
+        },
+        {
+          "mods": "shift",
+          "target": "*",
+          "expect": {
+            "creates": "polygon",
+            "shape": "45deg"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "paged.tool.pencil",
+      "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
+    },
+    {
+      "tool": "paged.tool.smooth",
+      "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
+    },
+    {
+      "tool": "paged.tool.rectangleFrame",
+      "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
+    },
+    {
+      "tool": "paged.tool.ellipseFrame",
+      "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
+    },
+    {
+      "tool": "paged.tool.polygonFrame",
+      "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
+    },
+    {
+      "tool": "paged.tool.rectangle",
+      "gesture": "drag",
+      "rows": [
+        {
+          "mods": "none",
+          "target": "*",
+          "expect": {
+            "creates": "rectangle",
+            "shape": "box"
+          }
+        },
+        {
+          "mods": "shift",
+          "target": "*",
+          "expect": {
+            "creates": "rectangle",
+            "shape": "square"
+          }
+        },
+        {
+          "mods": "alt",
+          "target": "*",
+          "expect": {
+            "creates": "rectangle",
+            "shape": "from-centre"
+          }
+        },
+        {
+          "mods": "shift+alt",
+          "target": "*",
+          "expect": {
+            "creates": "rectangle",
+            "shape": "square-from-centre"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "paged.tool.ellipse",
+      "gesture": "drag",
+      "rows": [
+        {
+          "mods": "none",
+          "target": "*",
+          "expect": {
+            "creates": "oval",
+            "shape": "box"
+          }
+        },
+        {
+          "mods": "shift",
+          "target": "*",
+          "expect": {
+            "creates": "oval",
+            "shape": "square"
+          }
+        },
+        {
+          "mods": "alt",
+          "target": "*",
+          "expect": {
+            "creates": "oval",
+            "shape": "from-centre"
+          }
+        },
+        {
+          "mods": "shift+alt",
+          "target": "*",
+          "expect": {
+            "creates": "oval",
+            "shape": "square-from-centre"
+          }
+        }
+      ]
+    },
+    {
+      "tool": "paged.tool.polygon",
+      "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
+    },
+    {
+      "tool": "paged.tool.scissors",
+      "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
+    },
+    {
+      "tool": "paged.tool.rotate",
+      "gesture": "select-then-drag",
+      "rows": [
+        {
+          "mods": "none",
+          "target": "*",
+          "expect": {
+            "rotates": "target"
+          }
+        },
+        {
+          "mods": "shift",
+          "target": "*",
+          "expect": {
+            "rotates": "target",
+            "snap": 15
+          }
+        },
+        {
+          "mods": "*",
+          "target": "empty",
+          "expect": {
+            "unchanged": "no-target"
+          }
+        },
+        {
+          "mods": "*",
+          "target": "master",
+          "expect": {
+            "unchanged": "no-target"
+          }
+        },
+        {
+          "mods": "*",
+          "target": "locked",
+          "expect": {
+            "unchanged": "refused"
+          }
+        },
+        {
+          "mods": "none",
+          "target": "group",
+          "expect": {
+            "rotates": "target"
+          },
+          "known": "GM-1",
+          "note": "the engine turns a group about the mean of its members and a phantom point at the origin, not about its centre"
+        },
+        {
+          "mods": "none",
+          "target": "frame",
+          "zooms": [0.25],
+          "expect": {
+            "rotates": "target"
+          },
+          "known": "GT-4",
+          "note": "at 25% the press lands on the pasteboard, and the tool begins nothing off a page"
+        },
+        {
+          "mods": "none",
+          "target": "rotated",
+          "zooms": [0.25],
+          "expect": {
+            "rotates": "target"
+          },
+          "known": "GT-4",
+          "note": "at 25% the press lands on the pasteboard, and the tool begins nothing off a page"
+        },
+        {
+          "mods": "shift",
+          "target": "group",
+          "expect": {
+            "rotates": "target",
+            "snap": 15
+          },
+          "known": "GM-1",
+          "note": "the engine turns a group about the mean of its members and a phantom point at the origin, not about its centre"
+        },
+        {
+          "mods": "shift",
+          "target": "frame",
+          "zooms": [0.25],
+          "expect": {
+            "rotates": "target",
+            "snap": 15
+          },
+          "known": "GT-4",
+          "note": "at 25% the press lands on the pasteboard, and the tool begins nothing off a page"
+        },
+        {
+          "mods": "shift",
+          "target": "rotated",
+          "zooms": [0.25],
+          "expect": {
+            "rotates": "target",
+            "snap": 15
+          },
+          "known": "GT-4",
+          "note": "at 25% the press lands on the pasteboard, and the tool begins nothing off a page"
+        }
+      ]
+    },
+    {
+      "tool": "paged.tool.scale",
+      "gesture": "select-then-drag",
+      "rows": [
+        {
+          "mods": "none",
+          "target": "*",
+          "expect": {
+            "scales": "target"
+          }
+        },
+        {
+          "mods": "shift",
+          "target": "*",
+          "expect": {
+            "scales": "target",
+            "uniform": true
+          }
+        },
+        {
+          "mods": "*",
+          "target": "empty",
+          "expect": {
+            "unchanged": "no-target"
+          }
+        },
+        {
+          "mods": "*",
+          "target": "master",
+          "expect": {
+            "unchanged": "no-target"
+          }
+        },
+        {
+          "mods": "*",
+          "target": "locked",
+          "expect": {
+            "unchanged": "refused"
+          }
+        },
+        {
+          "mods": "none",
+          "target": "group",
+          "expect": {
+            "scales": "target"
+          },
+          "known": "GM-1",
+          "note": "the engine turns a group about the mean of its members and a phantom point at the origin, not about its centre"
+        },
+        {
+          "mods": "none",
+          "target": "frame",
+          "zooms": [0.25],
+          "expect": {
+            "scales": "target"
+          },
+          "known": "GT-4",
+          "note": "at 25% the press lands on the pasteboard, and the tool begins nothing off a page"
+        },
+        {
+          "mods": "none",
+          "target": "rotated",
+          "zooms": [0.25],
+          "expect": {
+            "scales": "target"
+          },
+          "known": "GT-4",
+          "note": "at 25% the press lands on the pasteboard, and the tool begins nothing off a page"
+        },
+        {
+          "mods": "shift",
+          "target": "group",
+          "expect": {
+            "scales": "target",
+            "uniform": true
+          },
+          "known": "GM-1",
+          "note": "the engine turns a group about the mean of its members and a phantom point at the origin, not about its centre"
+        },
+        {
+          "mods": "shift",
+          "target": "frame",
+          "zooms": [0.25],
+          "expect": {
+            "scales": "target",
+            "uniform": true
+          },
+          "known": "GT-4",
+          "note": "at 25% the press lands on the pasteboard, and the tool begins nothing off a page"
+        },
+        {
+          "mods": "shift",
+          "target": "rotated",
+          "zooms": [0.25],
+          "expect": {
+            "scales": "target",
+            "uniform": true
+          },
+          "known": "GT-4",
+          "note": "at 25% the press lands on the pasteboard, and the tool begins nothing off a page"
+        }
+      ]
+    },
+    {
+      "tool": "paged.tool.shear",
+      "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
+    },
+    {
+      "tool": "paged.tool.gradientSwatch",
+      "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
+    },
+    {
+      "tool": "paged.tool.gradientFeather",
+      "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
+    },
+    {
+      "tool": "paged.tool.eyedropper",
+      "unspecified": "not specified yet: the starter set is selection, direct selection, rectangle, ellipse, line, rotate, scale, pen and type"
+    },
+    {
+      "tool": "paged.tool.hand",
+      "unspecified": "moves the camera, not the document: its cells belong to a camera assertion"
+    },
+    {
+      "tool": "paged.tool.zoom",
+      "unspecified": "moves the camera, not the document: its cells belong to a camera assertion"
+    },
+    {
+      "tool": "media.paged.draw.tool.addAnchor",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.deleteAnchor",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.convertAnchor",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.curvature",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.pencil",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.gradientAnnotator",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.measure",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.shapeBuilder",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.cornerRadius",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.paintbrush",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.blobBrush",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.eraserBrush",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.eyedropper",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.width",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.lassoSelect",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.livePaintBucket",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.livePaintSelect",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.typeOnPath",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.repeat",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.knife",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.draw.tool.scissorsAnyPoint",
+      "unspecified": "module tool: covered by its handler tests (modules/draw/packages/draw-bundle/test/gestures.spec.ts); matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.crop",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.move",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.marqueeRect",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.marqueeEllipse",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.lasso",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.polygonal-lasso",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.magicWand",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.quickSelect",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.brush",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.bucket",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.gradient",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.redEye",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.pencil",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.eraser",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.clone",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.heal",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.dodge",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.burn",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.sponge",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.blur",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.sharpen",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.spotHeal",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.patch",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    },
+    {
+      "tool": "media.paged.image.tool.type",
+      "unspecified": "module tool: acts inside the raster edit context; matrix rows are the follow-up"
+    }
+  ]
+}
