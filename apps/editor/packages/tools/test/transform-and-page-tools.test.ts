@@ -125,25 +125,31 @@ describe.each([
   });
 });
 
-// The handlers begin a worker gesture only for a press ON a page (the
-// anchor names one); a press on the pasteboard does nothing. InDesign's
+// The handlers began a worker gesture only for a press ON a page (the
+// anchor names one); a press on the pasteboard did nothing. InDesign's
 // Rotate / Scale / Shear take the drag anywhere. Found by the gesture
-// matrix at 25 % (GT-4).
-test.failing(
-  "[GT-4] a transform tool drag that starts on the pasteboard still transforms the selection @level:gesture",
-  async () => {
-    const { fake, g } = harness({ selection: [FRAME] });
-    await g
-      .tool(createRotateHandler)
-      .drag({ from: [700, 100], to: [760, 160] })
-      .settle();
-    expect(payloads(fake).map((m) => m.message)).toEqual([
-      "beginGesture",
-      "updateGesture",
-      "commitGesture",
-    ]);
-  },
-);
+// matrix at 25 % (GT-4); the anchor is now named on the selection's page.
+test("[GT-4] a transform tool drag that starts on the pasteboard still transforms the selection @level:gesture", async () => {
+  const { fake, g } = harness({ selection: [FRAME] });
+  await g
+    .tool(createRotateHandler)
+    .drag({ from: [700, 100], to: [760, 160] })
+    .settle();
+  const msgs = payloads(fake);
+  // One gesture: begun on the selection's page with the press in its
+  // space, streamed, committed once.
+  expect(msgs[0]).toMatchObject({
+    message: "beginGesture",
+    nodes: [FRAME],
+    anchor: { pageId: "page-1", pointInPage: [700, 100] },
+  });
+  const updates = msgs.filter((m) => m.message === "updateGesture");
+  expect(updates.length).toBeGreaterThan(0);
+  expect(updates.at(-1)).toMatchObject({ delta: [60, 60] });
+  expect(
+    msgs.map((m) => m.message).filter((m) => m !== "updateGesture"),
+  ).toEqual(["beginGesture", "commitGesture"]);
+});
 
 describe("the click-to-set pivot (RFI C-67)", () => {
   it("a click sets the pivot (a diamond marker) and the next drag sends it as pivotInPage @level:gesture", async () => {

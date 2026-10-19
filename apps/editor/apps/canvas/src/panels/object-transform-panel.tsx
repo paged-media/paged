@@ -38,16 +38,16 @@
 //   Rotate & scale (open disclosure)
 //     SmartDial micro Rotation          LIVE  (W2.3 decompose)
 //     [100 % | 100 %] scale 2-up        LIVE  (W2.3 decompose)
-//     [Flip H][Flip V] soft buttons     Flip H LIVE · Flip V seam
+//     [Flip H][Flip V] soft buttons     LIVE
 //
 // W2.3 (2026-06-06) — protocol v28 lands the transform-decompose
 // primitive (engine gap 6/16). Read = decomposed components of the
 // node's `item_transform`; write recomposes. `frameRotationAngle`
 // (deg) / `frameScaleX` / `frameScaleY` (multiplier; 1.0 = 100%) read
-// as `Value::Length`; `frameFlipH` as `Value::Bool`. NOTE Flip V:
-// `frameFlipV` is WRITE-only on the v28 wire — the read-side reflects
-// `frameFlipH` only — so the Flip V button stays a seam (it would
-// em-dash on read). All five apply to every path kind + Group.
+// as `Value::Length`; `frameFlipH` / `frameFlipV` as `Value::Bool`
+// (the engine reads the vertical flip too since engine ADR 192; Flip V
+// was a seam until then, PN-251). All six apply to every path kind +
+// Group.
 //
 // W2.4 (2026-06-07) — the 3×3 reference-point grid is now LIVE. The
 // anchor is UI state, NOT model state (InDesign keeps it as a panel
@@ -86,6 +86,7 @@ const BINDINGS = {
   scaleX: { scope: "element" as const, path: "frameScaleX" },
   scaleY: { scope: "element" as const, path: "frameScaleY" },
   flipH: { scope: "element" as const, path: "frameFlipH" },
+  flipV: { scope: "element" as const, path: "frameFlipV" },
 };
 
 function unwrapBounds(
@@ -130,10 +131,12 @@ export function ObjectTransformPanel() {
   const scaleX = unwrapLength(resolved.scaleX.value);
   const scaleY = unwrapLength(resolved.scaleY.value);
   const flipH = unwrapBool(resolved.flipH.value);
+  const flipV = unwrapBool(resolved.flipV.value);
   const canRotate = resolved.rotation.onCommit != null;
   const canScaleX = resolved.scaleX.onCommit != null;
   const canScaleY = resolved.scaleY.onCommit != null;
   const canFlipH = resolved.flipH.onCommit != null;
+  const canFlipV = resolved.flipV.onCommit != null;
 
   // X / Y: the selection's footprint on the page (see the header).
   const x = position.box ? position.box.left : null;
@@ -288,9 +291,7 @@ export function ObjectTransformPanel() {
           />
         </ObjectFieldFrame>
         {/* Rotate & scale — W2.3 transform-decompose. Read =
-            decomposed components of item_transform; write recomposes.
-            Flip V stays a seam: frameFlipV is write-only on the v28
-            wire (the read-side reflects frameFlipH only). */}
+            decomposed components of item_transform; write recomposes. */}
         <div
           className="-mx-3 border-t border-input px-3"
           data-section="Rotate & scale"
@@ -403,20 +404,34 @@ export function ObjectTransformPanel() {
                     Flip H
                   </button>
                 </ObjectFieldFrame>
-                <button
-                  type="button"
-                  disabled
-                  data-flip-v
-                  data-seam
-                  title="Flip vertical is not supported yet: the editor can set it but cannot read it back"
-                  className="h-[28px] flex-1 rounded-[6px] border-0 text-xs font-semibold opacity-55"
-                  style={{
-                    background: "var(--pg-muted)",
-                    color: "var(--pg-fg)",
-                  }}
+                <ObjectFieldFrame
+                  field={resolved.flipV}
+                  className="relative flex flex-1"
                 >
-                  Flip V
-                </button>
+                  <button
+                    type="button"
+                    disabled={!canFlipV}
+                    data-flip-v
+                    data-on={flipV === true ? "true" : "false"}
+                    title="Flip vertical"
+                    className="h-[28px] flex-1 rounded-[6px] border-0 text-xs font-semibold"
+                    style={{
+                      background: flipV
+                        ? "var(--pg-primary)"
+                        : "var(--pg-muted)",
+                      color: flipV ? "var(--pg-primary-fg)" : "var(--pg-fg)",
+                      opacity: canFlipV ? 1 : 0.55,
+                    }}
+                    onClick={() => {
+                      resolved.flipV.onCommit?.({
+                        type: "bool",
+                        value: !(flipV === true),
+                      } as Value);
+                    }}
+                  >
+                    Flip V
+                  </button>
+                </ObjectFieldFrame>
               </div>
             </div>
           )}

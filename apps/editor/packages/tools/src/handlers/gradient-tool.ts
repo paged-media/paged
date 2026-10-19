@@ -103,6 +103,8 @@ export function createGradientSwatchHandler(): GestureHandler {
       const targets = paged.selection.elementSelection.slice();
       const { angleDeg, lengthPt } = axisFor(e);
       cancel();
+      // A click is not a drag at any zoom (INV-6, GT-1).
+      if (e.maxDelta <= CLICK_DRAG_THRESHOLD_PX) return;
       if (lengthPt < MIN_LENGTH_PT || targets.length === 0) return;
       const ops: Mutation[] = targets.flatMap((elementId): Mutation[] => [
         {
