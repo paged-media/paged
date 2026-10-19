@@ -439,6 +439,11 @@ fn push_frame_ref(
     match fr {
         FrameRef::TextFrame(i) => {
             if let Some(f) = spread.text_frames.get(i) {
+                // A hidden item (Object ▸ Hide, IDML `Visible="false"`) is not
+                // drawn, so nothing may land on it (F-41).
+                if !f.visible {
+                    return;
+                }
                 let Some(id) = f.self_id.as_ref() else {
                     return;
                 };
@@ -459,6 +464,11 @@ fn push_frame_ref(
         }
         FrameRef::Rectangle(i) => {
             if let Some(f) = spread.rectangles.get(i) {
+                // A hidden item (Object ▸ Hide, IDML `Visible="false"`) is not
+                // drawn, so nothing may land on it (F-41).
+                if !f.visible {
+                    return;
+                }
                 let Some(id) = f.self_id.as_ref() else {
                     return;
                 };
@@ -479,6 +489,11 @@ fn push_frame_ref(
         }
         FrameRef::Oval(i) => {
             if let Some(f) = spread.ovals.get(i) {
+                // A hidden item (Object ▸ Hide, IDML `Visible="false"`) is not
+                // drawn, so nothing may land on it (F-41).
+                if !f.visible {
+                    return;
+                }
                 let Some(id) = f.self_id.as_ref() else {
                     return;
                 };
@@ -499,6 +514,11 @@ fn push_frame_ref(
         }
         FrameRef::GraphicLine(i) => {
             if let Some(f) = spread.graphic_lines.get(i) {
+                // A hidden item (Object ▸ Hide, IDML `Visible="false"`) is not
+                // drawn, so nothing may land on it (F-41).
+                if !f.visible {
+                    return;
+                }
                 let Some(id) = f.self_id.as_ref() else {
                     return;
                 };
@@ -519,6 +539,11 @@ fn push_frame_ref(
         }
         FrameRef::Polygon(i) => {
             if let Some(f) = spread.polygons.get(i) {
+                // A hidden item (Object ▸ Hide, IDML `Visible="false"`) is not
+                // drawn, so nothing may land on it (F-41).
+                if !f.visible {
+                    return;
+                }
                 let Some(id) = f.self_id.as_ref() else {
                     return;
                 };

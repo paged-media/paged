@@ -51,6 +51,7 @@ import {
   type AssistantStep,
 } from "../../ai/assistant-session";
 import { PoweredByClaude } from "../../ai/powered-by-claude";
+import { AI_UNAVAILABLE_TEXT, useAiAvailability } from "../../ai/availability";
 import {
   useCollection,
   useDocumentMeta,
@@ -464,8 +465,24 @@ function AskView({
   running: boolean;
   onAsk: (text: string) => void;
 }) {
+  // F-25 (PN-355): with no AI service, say so before a request is made.
+  const offline = useAiAvailability() === "unavailable";
+  const blocked = running || offline;
+  const ask = (text: string) => {
+    if (!offline) onAsk(text);
+  };
   return (
     <div style={{ padding: "0 14px 14px" }}>
+      {offline ? (
+        <div
+          role="status"
+          data-ai-unavailable
+          className="pg-ui-xs"
+          style={{ marginBottom: 12, color: "var(--pg-muted-fg)" }}
+        >
+          {AI_UNAVAILABLE_TEXT}
+        </div>
+      ) : null}
       <div
         data-ai-diagnosis
         style={{
@@ -509,8 +526,8 @@ function AskView({
           <button
             type="button"
             key={label}
-            disabled={running}
-            onClick={() => onAsk(label)}
+            disabled={blocked}
+            onClick={() => ask(label)}
             data-ai-suggestion={label}
             style={{
               display: "flex",
@@ -524,8 +541,8 @@ function AskView({
               background: "transparent",
               border: "none",
               color: "inherit",
-              cursor: running ? "default" : "pointer",
-              opacity: running ? 0.5 : 1,
+              cursor: blocked ? "default" : "pointer",
+              opacity: blocked ? 0.5 : 1,
             }}
           >
             <Icon
@@ -541,7 +558,7 @@ function AskView({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          onAsk(draft);
+          ask(draft);
         }}
         style={{ display: "flex", flexDirection: "column", gap: 8 }}
       >
@@ -551,7 +568,7 @@ function AskView({
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              onAsk(draft);
+              ask(draft);
             }
           }}
           disabled={running}
@@ -565,8 +582,8 @@ function AskView({
           <Btn
             sm
             primary
-            disabled={running || !draft.trim()}
-            onClick={() => onAsk(draft)}
+            disabled={blocked || !draft.trim()}
+            onClick={() => ask(draft)}
             testId="ai-ask"
           >
             Ask Claude

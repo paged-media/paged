@@ -67,16 +67,17 @@ const cells = (h: H) => [
 const fillButton = (h: H) =>
   h.root.querySelector<HTMLButtonElement>("[data-fill-proportionally]")!;
 
+// IDML's AnchorPoint names, which FittingAlignment takes (engine ADR 196).
 const ANCHORS = [
-  "TopLeftPoint",
-  "TopCenterPoint",
-  "TopRightPoint",
-  "CenterLeftPoint",
-  "CenterPoint",
-  "CenterRightPoint",
-  "BottomLeftPoint",
-  "BottomCenterPoint",
-  "BottomRightPoint",
+  "TopLeftAnchor",
+  "TopCenterAnchor",
+  "TopRightAnchor",
+  "LeftCenterAnchor",
+  "CenterAnchor",
+  "RightCenterAnchor",
+  "BottomLeftAnchor",
+  "BottomCenterAnchor",
+  "BottomRightAnchor",
 ];
 
 describe("Frame Fitting panel: states", () => {

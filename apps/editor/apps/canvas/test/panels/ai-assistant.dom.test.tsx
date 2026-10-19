@@ -24,7 +24,12 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import { covers } from "@paged-media/test-kit";
-import { AIAssistant, dismissAssistantRun } from "@paged-media/shell";
+import {
+  AIAssistant,
+  dismissAssistantRun,
+  resetAiAvailability,
+  setAiAvailability,
+} from "@paged-media/shell";
 
 import { richScene } from "./fixtures";
 import { mountPanel, unmountAll, type PanelHarness } from "./harness";
@@ -33,6 +38,7 @@ import { structureIdml } from "./support/structure";
 afterEach(() => {
   unmountAll();
   dismissAssistantRun();
+  resetAiAvailability();
 });
 
 type H = PanelHarness<unknown>;
@@ -71,6 +77,7 @@ describe("AI Assistant panel", () => {
 
   test("Ask is disabled until there is a request", async () => {
     covers("panel:paged.ai-assistant");
+    setAiAvailability("available");
     const h = await mountPanel(AIAssistant, {
       id: "paged.ai-assistant",
       scene: richScene,
@@ -87,8 +94,10 @@ describe("AI Assistant panel", () => {
     expect(ask.disabled).toBe(false);
   });
 
-  test("a request with no AI service ends in a worded error, and Done clears it", async () => {
+  test("a request the service refuses ends in a worded error, and Done clears it", async () => {
     covers("panel:paged.ai-assistant");
+    // The probe said yes; the request itself fails (no proxy behind it).
+    setAiAvailability("available");
     const h = await mountPanel(AIAssistant, {
       id: "paged.ai-assistant",
       scene: richScene,
@@ -112,25 +121,25 @@ describe("AI Assistant panel", () => {
     expect(h.root.querySelector("[data-ai-error]")).toBeNull();
   });
 
-  // UX audit F-25: the AI entry points are offered when the service is
-  // unavailable; the panel says nothing until a request fails.
-  test.failing(
-    "PN-355 (UX F-25): with no AI service, the panel says so before a request is made",
-    async () => {
-      covers("panel:paged.ai-assistant");
-      const h = await mountPanel(AIAssistant, {
-        id: "paged.ai-assistant",
-        scene: richScene,
-      });
-      await h.user.type(
-        h.view.getByRole("textbox", { name: "Ask the AI Assistant" }),
-        "make this calmer",
-      );
-      await h.settle();
-      const ask = h.view.getByRole("button", {
-        name: "Ask Claude",
-      }) as HTMLButtonElement;
-      expect(ask.disabled).toBe(true);
-    },
-  );
+  // UX audit F-25 (fixed): with no AI service the panel says so up front.
+  test("PN-355 (UX F-25): with no AI service, the panel says so before a request is made", async () => {
+    covers("panel:paged.ai-assistant");
+    setAiAvailability("unavailable");
+    const h = await mountPanel(AIAssistant, {
+      id: "paged.ai-assistant",
+      scene: richScene,
+    });
+    await h.user.type(
+      h.view.getByRole("textbox", { name: "Ask the AI Assistant" }),
+      "make this calmer",
+    );
+    await h.settle();
+    const ask = h.view.getByRole("button", {
+      name: "Ask Claude",
+    }) as HTMLButtonElement;
+    expect(ask.disabled).toBe(true);
+    expect(h.root.querySelector("[data-ai-unavailable]")?.textContent).toContain(
+      "not available",
+    );
+  });
 });

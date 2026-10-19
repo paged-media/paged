@@ -204,6 +204,8 @@ import {
   buildObjectCommands,
   deleteSelection,
   groupSelection,
+  hideSelection,
+  lockSelection,
   makeClippingMask,
   nudgeSelection,
   OBJECT_DIAGNOSTIC_SOURCE,
@@ -211,7 +213,9 @@ import {
   OBJECT_MENU_ITEMS,
   releaseClippingMask,
   selectParentGroup,
+  showAllOnSpread,
   ungroupSelection,
+  unlockAllOnSpread,
   type ObjectCommandDeps,
 } from "./object-commands";
 import {
@@ -1214,6 +1218,10 @@ function CanvasAppIntegration() {
     const objectDeps: ObjectCommandDeps = {
       client,
       getSelection: () => currentSelection().elementSelection,
+      // F-41 — the spread "Unlock all / Show all on spread" act on when
+      // nothing is selected: the page at the viewport's centre.
+      pageInView: () =>
+        pageTargetFor({ handle, camera, viewportSize })?.pageId ?? null,
       // ADR 024 — read through the SAME ref the undo routing uses, so
       // the two cannot disagree about which context is active.
       activeEditContext: () => currentEditContext().active,
@@ -1268,6 +1276,10 @@ function CanvasAppIntegration() {
         fresh(() => nudgeSelection(objectDeps, direction, large))(),
       makeClippingMask: fresh(() => makeClippingMask(objectDeps)),
       releaseClippingMask: fresh(() => releaseClippingMask(objectDeps)),
+      lock: fresh(() => lockSelection(objectDeps)),
+      unlockAllOnSpread: fresh(() => unlockAllOnSpread(objectDeps)),
+      hide: fresh(() => hideSelection(objectDeps)),
+      showAllOnSpread: fresh(() => showAllOnSpread(objectDeps)),
     });
     // `paged.insert.*` — the object-authoring verbs (U7). Unlike the
     // object layer's deps bag, every runner reads its state (camera,

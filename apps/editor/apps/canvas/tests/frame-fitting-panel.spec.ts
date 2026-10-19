@@ -223,7 +223,8 @@ test.describe("Phase 5 — Frame Fitting panel", () => {
       return { before, after, restored };
     });
 
-    expect(result.after.ref).toBe("CenterPoint");
+    // The engine stores IDML's AnchorPoint name for the older spelling.
+    expect(result.after.ref).toBe("CenterAnchor");
     expect(result.after.autoFit).toBe(true);
     expect(result.restored).toEqual(result.before);
   });
