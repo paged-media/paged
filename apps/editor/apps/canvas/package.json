@@ -11,7 +11,7 @@
     "typecheck": "bun check -p tsconfig.json && bun check -p functions/tsconfig.json && bun check -p test/tsconfig.json && bun check -p tests/headless/tsconfig.json",
     "typecheck:tests": "bun check -p tsconfig.tests.json",
     "test:dom": "bun test --parallel --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts --preload ./test/happydom.ts --preload ./test/vite-shim.ts .dom.test.",
-    "test:contracts": "bun test --preload ../../../../tooling/js/bun-test-setup.ts ./test/contracts",
+    "test:contracts": "bun test --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts ./test/contracts",
     "test:headless": "bun test --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts ./tests/headless",
     "test:unit": "bun test --parallel --timeout 30000 --preload ../../../../tooling/js/bun-test-setup.ts --path-ignore-patterns '**/*.dom.test.*' ./test/unit",
     "test:fidelity": "playwright test --config=playwright.config.ts",

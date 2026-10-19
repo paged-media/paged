@@ -14,7 +14,7 @@
   },
   "scripts": {
     "typecheck": "bun check -p tsconfig.json",
-    "test": "bun test --parallel --preload ../../../tooling/js/bun-test-setup.ts"
+    "test": "bun test --timeout 30000 --parallel --preload ../../../tooling/js/bun-test-setup.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.135.0",

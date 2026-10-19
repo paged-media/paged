@@ -180,6 +180,7 @@ on its retry fails the run (`failOnFlakyTests`); locally it prints as `flaky`.
   `added`. `bun run test:quarantine` (apps/editor) checks the list, the expiry and that the
   list and the tags name the same tests. CI runs quarantined tests apart, with retries, and
   never gates on them.
+
 - **Measure.** `bun scripts/flake-rate.mjs <report.json>...` (apps/editor) prints the flake
   rate of any Playwright JSON report. For a local measurement run the suite with
   `--repeat-each=3 --retries=0 --reporter=json`; repeats that disagree count as flaky. CI
