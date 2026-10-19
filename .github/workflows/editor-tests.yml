@@ -892,8 +892,11 @@ jobs:
         run: |
           bunx --no-install playwright merge-reports --reporter=json ${{ github.workspace }}/quarantine-blobs \
             > /dev/null
+      # Only over a merged report: when the shards produced none, the merge
+      # step above is the red, and a rate over nothing would be a number
+      # that means nothing.
       - name: flake rate
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && hashFiles('playwright-results.json') != '' }}
         run: |
           reports=("$GITHUB_WORKSPACE/playwright-results.json")
           if [ -s "$GITHUB_WORKSPACE/playwright-quarantine.json" ]; then
@@ -903,7 +906,7 @@ jobs:
             --json-out "$GITHUB_WORKSPACE/flake-rate.json" \
             --md-out "$GITHUB_STEP_SUMMARY"
       - name: upload the flake rate
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && hashFiles('flake-rate.json') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: playwright-flake-rate
