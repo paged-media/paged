@@ -15,9 +15,8 @@
 //     comes back from the document label in designmap.xml, and its text
 //     variable is still in the text.
 //
-// Every test here needs engine protocol 71; on an older engine the suite is
-// skipped (the 0.70 lane keeps the placeholder field, the two-step swatch and
-// the setElementProperty rule path — covered by the other real-core specs).
+// Every test here needs engine protocol 71 or later, which the workspace
+// engine speaks.
 
 import {
   afterEach,
@@ -34,12 +33,7 @@ import { existsSync } from "node:fs";
 import type { BundleHost } from "@paged-media/plugin-api";
 import type { HeadlessHost } from "@paged-media/plugin-sdk";
 
-import {
-  ENGINE_ANCHOR,
-  ENGINE_PROTOCOL,
-  openRealHost,
-  REQUIRE_REAL_CORE,
-} from "./real-core";
+import { ENGINE_ANCHOR, openRealHost, REQUIRE_REAL_CORE } from "./real-core";
 import {
   bootRealDuckDB,
   bootRealEngine,
@@ -66,7 +60,6 @@ const ready =
   probe.handle !== undefined &&
   existsSync(DATA_JS_WASM);
 const required = REQUIRE_REAL_CORE || REQUIRE_REAL_DUCKDB;
-const v71 = ENGINE_PROTOCOL >= 71;
 
 async function loadBundleModule() {
   mock.module("../src/engine", () => ({
@@ -104,7 +97,7 @@ async function exportPaged(host: BundleHost): Promise<Uint8Array> {
 // 4-core runner when the whole suite runs in parallel (the publish job).
 // (bun's describe takes no options; the file's one block gets 30 s this way.)
 setDefaultTimeout(30_000);
-describe.skipIf(!v71 || (!ready && !required))(
+describe.skipIf(!ready && !required)(
   "engine protocol 71: text variables, creates in the batch, cell addresses [data.bind.property]",
   () => {
     const hosts: HeadlessHost[] = [];

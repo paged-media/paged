@@ -173,7 +173,7 @@ application on the main thread; no bundle is discovered or loaded from a URL at 
   worker backend, consent and secret stores with their dialogs, the native-document door, a
   font asset source, a diagnostics sink, the schema-panel renderer, and the data-provider and
   binding-provider registries. The BundleHost contract tests
-  (`apps/canvas/test/contracts/bundle-host/`) build the same options, so what the editor
+  (`tests/contracts/bundle-host/` at the repository root) build the same options, so what the editor
   wires and what they prove cannot drift apart.
   The shell's registry types are the contract's contribution types, used as is or extended
   with editor-only optional fields ([ADR 226](adr/226-contribution-types-have-one-definition.md));
@@ -265,7 +265,7 @@ the dev server with one worker ([ADR 216](adr/216-test-tiers.md)).
 - **`journeys-gpu`**, **`showcase`**: run in real Chrome for a WebGPU
   adapter. The showcase builds one large reference document through the editor
   ([ADR 217](adr/217-showcase-reference-document.md)); `showcase-nightly.yml` runs it on macOS.
-- **Fidelity** (`tests/fidelity.spec.ts`): page renders against reference PDFs from a
+- **Fidelity** (`/tests/fidelity/editor-packs.spec.ts`, the root tests' `fidelity` project): page renders against reference PDFs from a
   fixture corpus that is not part of this repository; CI drops it.
 
 `.github/workflows/tests.yml` runs on pushes to `main` and on path-filtered pull requests.

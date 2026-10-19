@@ -30,7 +30,10 @@ import { silentConsole as silent } from "../src/testing";
 const FONT = new Uint8Array(
   readFileSync(
     fileURLToPath(
-      new URL("./fixtures/fonts/SpaceGrotesk-VF.ttf", import.meta.url),
+      new URL(
+        "../../../../../engine/core/corpus/fonts/SpaceGrotesk-VF.ttf",
+        import.meta.url,
+      ),
     ),
   ),
 );

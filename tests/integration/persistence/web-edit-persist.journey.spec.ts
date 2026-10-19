@@ -36,8 +36,8 @@
 
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
-import { fitFirstPage } from "../../fidelity/canvas-driver";
-import { Designer } from "../driver/designer";
+import { fitFirstPage } from "../../../apps/editor/apps/canvas/tests/fidelity/canvas-driver";
+import { Designer } from "../../../apps/editor/apps/canvas/tests/journey/driver/designer";
 import {
   insertWebFrameWith,
   saveSource,
@@ -46,7 +46,7 @@ import {
   undo,
   webFrames,
   webSource,
-} from "./web-kit";
+} from "../../../apps/editor/apps/canvas/tests/journey/plugins/web-kit";
 
 const CSS =
   "p { margin: 0; font: 22px/30px Inter, sans-serif; color: #101820; }";

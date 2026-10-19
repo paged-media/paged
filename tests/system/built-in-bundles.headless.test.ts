@@ -28,7 +28,7 @@
 // that is there. This is the editor surface as the app enumerates it, so a
 // bundle missing here is missing in the editor.
 //
-// (bundle-registrations.test.ts checks each manifest against what the bundle
+// (tests/contracts/bundle-registrations.test.ts checks each manifest against what the bundle
 // registers on the SDK's headless host; this checks the same declarations
 // against the EDITOR's registries, after all nine are live together.)
 
@@ -36,10 +36,13 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import type { BundleHost, PluginManifest } from "@paged-media/plugin-api";
 
-import { PLUGIN_BUNDLES } from "../../src/plugin-bundle-table";
-import { objectRegistry } from "../../src/object-model";
+import { PLUGIN_BUNDLES } from "../../apps/editor/apps/canvas/src/plugin-bundle-table";
+import { objectRegistry } from "../../apps/editor/apps/canvas/src/object-model";
 
-import { createHeadlessEditor, type HeadlessEditor } from "./harness";
+import {
+  createHeadlessEditor,
+  type HeadlessEditor,
+} from "../../apps/editor/apps/canvas/tests/headless/harness";
 
 /** The nine, pinned: a bundle leaving the table, or a tenth joining it
  *  without a row here, fails the first test. */

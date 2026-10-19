@@ -45,7 +45,6 @@ import { expect, test, type Page } from "@playwright/test";
 import { openPanel } from "../../fidelity/canvas-driver";
 import { Designer } from "../driver/designer";
 import { skipWithoutDuckDB } from "./data-duckdb-gate";
-import { ENGINE_PROTOCOL } from "./data-engine";
 
 const HARNESS = pathResolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -236,11 +235,9 @@ test.describe("journey · paged.data merge into a new document", () => {
     });
 
     // ── UNDO — the copy starts with an empty history; the merge undoes back
-    // to the template (one step on protocol 69, two before).
-    for (let i = 0; i < (ENGINE_PROTOCOL >= 69 ? 1 : 2); i++) {
-      await designer.runCommand(CMD.undo);
-      await page.waitForTimeout(250);
-    }
+    // to the template in one step.
+    await designer.runCommand(CMD.undo);
+    await page.waitForTimeout(250);
     await expect
       .poll(async () => (await pageTexts(page)).flat(), { timeout: 30_000 })
       .toEqual(["<<name>>\nSKU: <<sku>>\nStock: <<stock>>"]);

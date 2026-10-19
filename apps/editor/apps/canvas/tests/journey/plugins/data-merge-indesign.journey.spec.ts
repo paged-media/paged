@@ -52,7 +52,6 @@ import { expect, test, type Page } from "@playwright/test";
 import { openPanel } from "../../fidelity/canvas-driver";
 import { Designer } from "../driver/designer";
 import { skipWithoutDuckDB } from "./data-duckdb-gate";
-import { ONE_STEP_MERGE } from "./data-engine";
 
 const HARNESS = pathResolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -224,34 +223,14 @@ test.describe("journey · paged.data Data Merge", () => {
       .poll(async () => pageTexts(page), { timeout: 30_000 })
       .toEqual(expected);
 
-    // ── UNDO — one step per merge on engine protocol 69 (pages and content
-    // in one batch), two before (pages, then content) ──────────────────────
+    // ── UNDO — one step per merge (pages and content in one batch) ────────
     // Undoing the re-merge brings the first merge's output back.
-    for (let i = 0; i < (ONE_STEP_MERGE ? 1 : 2); i++) {
-      await designer.runCommand(CMD.undo);
-      await page.waitForTimeout(250);
-    }
+    await designer.runCommand(CMD.undo);
+    await page.waitForTimeout(250);
     await expect
       .poll(async () => pageTexts(page), { timeout: 30_000 })
       .toEqual(expected);
-    if (ONE_STEP_MERGE) {
-      // One more undo takes the first merge back whole: the template page.
-      await designer.runCommand(CMD.undo);
-      await expect
-        .poll(async () => (await pageTexts(page)).flat(), { timeout: 30_000 })
-        .toEqual(["<<name>>\nSKU: <<sku>>\nStock: <<stock>>"]);
-      return;
-    }
-    // One more takes the first merge's content back: its pages stay, empty.
-    await designer.runCommand(CMD.undo);
-    await expect
-      .poll(async () => (await pageTexts(page)).map((p) => p.length), {
-        timeout: 30_000,
-      })
-      .toEqual([0, 0, 0]);
-    // And the last one, the first merge's pages: the template is back — one
-    // page, its one frame, its placeholders (D-29: the editor used to bring
-    // the first merge's 57 frames back here).
+    // One more undo takes the first merge back whole: the template page.
     await designer.runCommand(CMD.undo);
     await expect
       .poll(async () => (await pageTexts(page)).flat(), { timeout: 30_000 })
