@@ -1,0 +1,27 @@
+[package]
+name = "slide-native"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "paged.slide: a resolved deck as a native document (the engine's model: masters, spreads, stories, swatches, styles, images), packaged as .paged."
+
+[lints]
+workspace = true
+
+[dependencies]
+slide-resolve.workspace = true
+slide-geom.workspace = true
+paged-model.workspace = true
+paged-scene.workspace = true
+paged-store.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+pptx-import.workspace = true
+paged-ooxml.workspace = true
+slide-idml.workspace = true
+idml-import.workspace = true
+paged-test-resources.workspace = true
+zip.workspace = true
