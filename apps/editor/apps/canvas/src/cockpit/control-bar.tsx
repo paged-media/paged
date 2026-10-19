@@ -61,6 +61,13 @@ import {
   useScreenMode,
   useSelection,
 } from "@paged-media/shell";
+import {
+  formatLengthPair,
+  parseLengthText,
+  POINTS_PER_UNIT,
+  unitDigits,
+  useDocumentUnit,
+} from "@paged-media/ui";
 
 import { ALIGN_COMMAND, type AlignKind } from "../align-plan";
 import { usePagePosition } from "../panels/page-position";
@@ -108,6 +115,7 @@ function DocumentControls() {
   const { handle } = useDocument();
   const { camera, viewportSize } = useCamera();
   const screenMode = useScreenMode();
+  const unit = useDocumentUnit();
   const sizes = handle?.pageSizesPt ?? [];
   if (!handle || sizes.length === 0) {
     return (
@@ -163,7 +171,7 @@ function DocumentControls() {
         title="Page size"
         style={{ ...valueText, color: "var(--pg-muted-fg)" }}
       >
-        {fmt(w, 0)} × {fmt(h, 0)} pt
+        {formatLengthPair(w, h, unit)}
       </span>
       <Sep />
       <Chip
@@ -258,6 +266,7 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
         onCommit={box ? (x) => moveBy(x - box.left, 0) : null}
         onStep={(d) => moveBy(d, 0)}
         testId="x"
+        length
       />
       <NumField
         label="Y"
@@ -267,6 +276,7 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
         onCommit={box ? (y) => moveBy(0, y - box.top) : null}
         onStep={(d) => moveBy(0, d)}
         testId="y"
+        length
       />
       <NumField
         label="W"
@@ -280,6 +290,7 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
             : null
         }
         testId="w"
+        length
       />
       <NumField
         label="H"
@@ -293,6 +304,7 @@ function ObjectControls({ ids }: { ids: readonly ElementId[] }) {
             : null
         }
         testId="h"
+        length
       />
       <Sep />
       <PropertyNum
@@ -604,10 +616,25 @@ function NumField(p: {
   /** Relative write for a step (a move by `delta`), where an absolute
    *  commit would be computed against a position not yet re-read. */
   onStep?: (delta: number) => void;
+  /** A geometry length: shown and stepped in the document unit (ADR 245);
+   *  `value`, `min` and the commits stay in points. */
+  length?: boolean;
 }) {
-  const digits = p.digits ?? 1;
+  const docUnit = useDocumentUnit();
+  const lengthUnit = p.length ? docUnit : null;
+  // Points per shown unit: 1 for every field that is not a geometry length.
+  const per = lengthUnit ? POINTS_PER_UNIT[lengthUnit] : 1;
+  const digits = lengthUnit ? unitDigits(lengthUnit) : (p.digits ?? 1);
+  const unitLabel = lengthUnit ?? p.unit;
+  const title = lengthUnit
+    ? p.title.replace("(pt)", `(${lengthUnit})`)
+    : p.title;
   const shown =
-    p.value === "mixed" ? "—" : p.value === null ? "" : fmt(p.value, digits);
+    p.value === "mixed"
+      ? "—"
+      : p.value === null
+        ? ""
+        : fmt(p.value / per, digits);
   const [text, setText] = useState(shown);
   const [editing, setEditing] = useState(false);
   // Only TYPED text commits on blur — a step already wrote itself, and
@@ -618,8 +645,14 @@ function NumField(p: {
   }, [shown, editing]);
   const clamp = (n: number) =>
     Math.min(p.max ?? Infinity, Math.max(p.min ?? -Infinity, n));
+  // A length (and a point-valued field: a stroke, a type size) reads a
+  // typed unit, "10mm" or "1p"; anything else keeps its plain number.
+  const read = (raw: string): number =>
+    lengthUnit || p.unit === "pt"
+      ? (parseLengthText(raw, lengthUnit ?? "pt") ?? Number.NaN)
+      : Number(raw.replace(",", ".").replace(/[^\d.+-]/g, ""));
   const commit = (raw: string) => {
-    const n = Number(raw.replace(",", ".").replace(/[^\d.+-]/g, ""));
+    const n = read(raw);
     if (!p.onCommit || raw.trim() === "" || !Number.isFinite(n)) {
       setText(shown);
       return;
@@ -643,17 +676,23 @@ function NumField(p: {
       p.onCommit
     ) {
       e.preventDefault();
+      // One step is one shown unit (a millimetre in a mm document).
       const step =
-        (p.step ?? 1) * (e.shiftKey ? 10 : 1) * (e.key === "ArrowUp" ? 1 : -1);
+        (p.step ?? 1) *
+        per *
+        (e.shiftKey ? 10 : 1) *
+        (e.key === "ArrowUp" ? 1 : -1);
       // Step from what the field SHOWS: a second press can land before
       // the first one's re-read, and `p.value` would still be the old one.
       const shownNow = Number(text);
       const base =
-        Number.isFinite(shownNow) && text.trim() !== "" ? shownNow : p.value;
+        Number.isFinite(shownNow) && text.trim() !== ""
+          ? shownNow * per
+          : p.value;
       const next = clamp(base + step);
       // The field is focused, so it is not following `shown`; show the
       // stepped value now rather than when focus leaves.
-      setText(fmt(next, digits));
+      setText(fmt(next / per, digits));
       if (p.onStep) p.onStep(next - base);
       else p.onCommit(next);
     }
@@ -662,7 +701,7 @@ function NumField(p: {
   const readOnly = !p.onCommit || p.value === null;
   return (
     <label
-      title={p.title}
+      title={title}
       data-control-field={p.testId}
       data-field-state={p.fieldState}
       style={{
@@ -675,7 +714,7 @@ function NumField(p: {
         value={text}
         placeholder={p.placeholder}
         readOnly={readOnly && !p.placeholder}
-        aria-label={p.title}
+        aria-label={title}
         onFocus={(e) => {
           setEditing(true);
           setTyped(false);
@@ -696,7 +735,7 @@ function NumField(p: {
           color: readOnly ? "var(--pg-muted-fg)" : "var(--pg-fg)",
         }}
       />
-      <span style={fieldUnit}>{p.unit}</span>
+      <span style={fieldUnit}>{unitLabel}</span>
     </label>
   );
 }

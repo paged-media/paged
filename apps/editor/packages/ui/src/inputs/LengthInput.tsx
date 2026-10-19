@@ -19,6 +19,7 @@
 
 import { useState } from "react";
 
+import { parseLengthText, unitDigits, useDocumentUnit } from "./document-unit";
 import { NumberInput, type NumberInputProps } from "./NumberInput";
 import { convertLength, type LengthUnit } from "./units";
 
@@ -28,8 +29,10 @@ export interface LengthInputProps extends Omit<
 > {
   /** Value in points (the IDML-native unit). `null` = mixed. */
   valuePt: number | null;
-  /** Initial display unit. The user can change it via the picker;
-   * the underlying canonical value stays in points. */
+  /** The display unit. Default: the document unit (ADR 245), followed as it
+   * changes; a field that always reads in one unit (a type size in points)
+   * names it. With the picker, the picker's choice wins. The canonical
+   * value stays in points, and a typed unit ("10mm") is converted. */
   defaultUnit?: LengthUnit;
   /** Show the legacy unit-picker select. Default FALSE — the kit's
    * metric fields carry the unit INSIDE the value ("16 pt"). */
@@ -41,7 +44,7 @@ export interface LengthInputProps extends Omit<
   onCommitPt?: (valuePt: number) => void;
 }
 
-const UNITS: LengthUnit[] = ["pt", "px", "mm", "cm", "in"];
+const UNITS: LengthUnit[] = ["pt", "pc", "px", "mm", "cm", "in"];
 
 /**
  * Numeric input displaying in a length unit while the canonical
@@ -53,7 +56,7 @@ const UNITS: LengthUnit[] = ["pt", "px", "mm", "cm", "in"];
 export function LengthInput(props: LengthInputProps) {
   const {
     valuePt,
-    defaultUnit = "pt",
+    defaultUnit,
     unitPicker = false,
     showUnit = true,
     onChangePt,
@@ -61,7 +64,9 @@ export function LengthInput(props: LengthInputProps) {
     suffix,
     ...rest
   } = props;
-  const [unit, setUnit] = useState<LengthUnit>(defaultUnit);
+  const docUnit = useDocumentUnit();
+  const [picked, setUnit] = useState<LengthUnit | null>(null);
+  const unit = (unitPicker ? picked : null) ?? defaultUnit ?? docUnit;
 
   const displayValue =
     valuePt === null ? null : convertLength(valuePt, "pt", unit);
@@ -72,8 +77,13 @@ export function LengthInput(props: LengthInputProps) {
     // than holding the input's intrinsic ~160 px and running off the edge.
     <div className="inline-flex items-stretch gap-1 min-w-0 max-w-full">
       <NumberInput
+        precision={unitDigits(unit)}
         {...rest}
         suffix={suffix ?? (showUnit && !unitPicker ? unit : undefined)}
+        parse={(text) => {
+          const pt = parseLengthText(text, unit);
+          return pt === null ? null : convertLength(pt, "pt", unit);
+        }}
         value={displayValue}
         onChange={(next) => onChangePt(convertLength(next, unit, "pt"))}
         onCommit={

@@ -34,10 +34,14 @@ import {
   type PanelProps,
 } from "@paged-media/shell";
 import type { FontSummary, LinkSummary } from "@paged-media/client";
+import { formatLength, useDocumentUnit } from "@paged-media/ui";
 
 /** Low-res convention shared with Preflight/Health — placements below
  *  this effective PPI warn (the editor's "warn, not fail" floor). */
 const LOW_RES_PPI = 150;
+
+/** The prepress bleed the checklist asks for: 3 mm (8.5 pt). */
+const BLEED_PT = (3 * 72) / 25.4;
 
 /** Placements with no pixel grid of their own — a resolution check
  *  does not apply to them. */
@@ -90,6 +94,7 @@ interface ReadinessCheck {
  *  (`LinkSummary.status` / `.effectivePpi`). Bleed stays an HONEST
  *  seam until the engine grows a bleed-coverage accessor. */
 export function OutputReadinessPanel(_props: PanelProps) {
+  const unit = useDocumentUnit();
   const meta = useDocumentMeta();
   const fonts = useCollection<FontSummary>("fonts");
   const links = useCollection<LinkSummary>("links");
@@ -168,7 +173,11 @@ export function OutputReadinessPanel(_props: PanelProps) {
               : "ok",
     },
     // HONEST seam — no bleed-coverage accessor on the wire yet.
-    { key: "bleed", label: "Bleed 3 mm", pass: null },
+    {
+      key: "bleed",
+      label: `Bleed ${formatLength(BLEED_PT, unit)}`,
+      pass: null,
+    },
   ];
 
   // The X-4 verdict is the AND of the live checks (seams don't block).

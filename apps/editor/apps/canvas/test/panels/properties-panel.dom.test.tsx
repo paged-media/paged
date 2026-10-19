@@ -273,15 +273,12 @@ describe("Properties panel: findings", () => {
     },
   );
 
-  // UX audit F-39: the Page summary reads "8.5 in × 11 in" while every
-  // other length in the editor is in points.
-  test.failing(
-    "PN-24 (UX F-39): the page size reads in the document's unit, like every other length",
-    async () => {
-      covers("panel:paged.properties");
-      const h = await mount();
-      await h.steer("page");
-      expect(root(h).textContent).not.toContain(" in ×");
-    },
-  );
+  // UX audit F-39 (fixed, ADR 245): the Page summary read "8.5 in × 11 in"
+  // while every other length was in points.
+  test("PN-24 (UX F-39): the page size reads in the document's unit, like every other length", async () => {
+    covers("panel:paged.properties");
+    const h = await mount();
+    await h.steer("page");
+    expect(root(h).textContent).not.toContain(" in ×");
+  });
 });
