@@ -69,6 +69,8 @@ on:
     branches: [main]
     paths:
       - "apps/editor/**"
+      # The TypeScript base every package's tsconfig extends.
+      - "tsconfig.base.json"
       # Everything the editor consumes through the workspace: every module
       # bundle (and the Rust it builds its wasm from), the extension
       # contract and ai, and the engine's wasm packages with what builds
@@ -99,6 +101,8 @@ on:
   pull_request:
     paths:
       - "apps/editor/apps/canvas/**"
+      # The TypeScript base every package's tsconfig extends.
+      - "tsconfig.base.json"
       - "apps/editor/packages/**"
       - "apps/editor/package.json"
       - "apps/editor/scripts/**"

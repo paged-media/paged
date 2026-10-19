@@ -51,7 +51,7 @@ tasks:
     inputs:
       - "@group(web-render-sources)"
       - "scripts/build-wasm.sh"
-      - "scripts/source-hash.mjs"
+      - "/tooling/js/source-hash.mjs"
       - "packages/web-bundle/manifest.json"
     outputs:
       - "packages/web-bundle/bin/blitz_web*"
